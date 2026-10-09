@@ -150,11 +150,11 @@ export function missCopy(reason: TrailMissReason): string | null {
 }
 
 /** The one note to show after a sync: the biggest miss that has words. */
-export function missNote(sync: TrailSyncResult | undefined): { steps: number; text: string } | null {
+export function missNote(sync: TrailSyncResult | undefined): { steps: number; text: string; reason: TrailMissReason } | null {
   if (!sync) return null;
   const worded = sync.missed
-    .map(m => ({ steps: m.steps, text: missCopy(m.reason) }))
-    .filter((m): m is { steps: number; text: string } => !!m.text && m.steps >= 20)
+    .map(m => ({ steps: m.steps, text: missCopy(m.reason), reason: m.reason }))
+    .filter((m): m is { steps: number; text: string; reason: TrailMissReason } => !!m.text && m.steps >= 20)
     .sort((a, b) => b.steps - a.steps);
   return worded[0] ?? null;
 }
@@ -190,6 +190,8 @@ export interface TrailSegment {
   readonly started_at: number;
   readonly ended_at: number;
   steps: number | null;
+  /** Closed windows over 30 min: the phone's steps per hour from the start (server counts the right part). */
+  steps_by_hour?: number[];
   readonly gps_m: number;
   readonly start: TrailPoint;
   readonly end: TrailPoint;

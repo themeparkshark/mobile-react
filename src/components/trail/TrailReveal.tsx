@@ -226,9 +226,9 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
         {showRewards && (
           <Animated.View entering={FadeIn.delay(reduced ? 0 : 300 + rewards.length * 320 + 400)} style={{ width: '100%', alignItems: 'center' }}>
             {box.tier !== 'gold' && goldIn != null && (
-              <View style={styles.pity} accessible accessibilityLabel={goldIn <= 1 ? 'Your next box is a Gold Box' : `A Gold Box is coming within ${goldIn} boxes`}>
+              <View style={styles.pity} accessible accessibilityLabel={goldIn <= 1 ? 'Your next new box is a Gold Box' : `A new Gold Box is coming within ${goldIn} boxes you earn`}>
                 <Image source={BOX_ART.gold} style={{ width: 26, height: 26 }} contentFit="contain" />
-                <Text style={styles.pityText}>{goldIn <= 1 ? 'NEXT BOX IS GOLD!' : `GOLD BOX IN ${goldIn} OR LESS`}</Text>
+                <Text style={styles.pityText}>{goldIn <= 1 ? 'YOUR NEXT NEW BOX IS GOLD!' : `NEW GOLD BOX IN ${goldIn} OR LESS`}</Text>
               </View>
             )}
             {left === 0 && !!nextHint && <Text style={styles.hint}>{nextHint}</Text>}

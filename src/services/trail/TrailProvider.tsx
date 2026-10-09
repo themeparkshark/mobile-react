@@ -79,7 +79,18 @@ async function stepsFor(seg: TrailSegment): Promise<number | null> {
   try {
     if (!P || !(await P.getPermissionsAsync()).granted) return null;
     const res = await P.getStepCountAsync(new Date(seg.started_at), new Date(seg.ended_at));
-    return Math.max(0, Math.round(res.steps));
+    const total = Math.max(0, Math.round(res.steps));
+    // App closed a long time: hourly buckets, so the server credits the steps really taken in the part
+    // it counts (the walk out of the park), not an average over a hotel evening.
+    if (seg.source !== 'live' && seg.ended_at - seg.started_at > 30 * 60_000) {
+      const buckets: number[] = [];
+      for (let t = seg.started_at; t < seg.ended_at && buckets.length < 24; t += 3_600_000) {
+        const r = await P.getStepCountAsync(new Date(t), new Date(Math.min(seg.ended_at, t + 3_600_000)));
+        buckets.push(Math.max(0, Math.round(r.steps)));
+      }
+      seg.steps_by_hour = buckets;
+    }
+    return total;
   } catch {
     return null;
   }

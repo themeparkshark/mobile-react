@@ -1,6 +1,8 @@
 import { Image } from 'expo-image';
 import { memo, useEffect, useMemo, useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { playSfx } from '../../gamekit/SFX';
 import { openAppSettings } from '../../services/external';
@@ -103,7 +105,7 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
                 <Image source={STEPS_ART} style={{ width: 44, height: 44 }} contentFit="contain" />
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={styles.cardTitle}>Grown-ups: count pocket steps?</Text>
-                  <Text style={styles.body}>Allow Motion & Fitness so boxes keep opening while the app is closed. Steps stay on this phone.</Text>
+                  <Text style={styles.body}>Boxes keep opening with the app closed.</Text>
                   <GameButton label="Count my steps" size="compact" onPress={onAskMotion} style={{ marginTop: 8, alignSelf: 'flex-start' }} />
                 </View>
               </View>
@@ -114,8 +116,11 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
               </Pressable>
             )}
             {!!note && (
-              <View style={[styles.card, styles.noteCard]}>
-                <Text style={styles.body}><Text style={styles.bold}>{formatSteps(note.steps)} STEPS NOT COUNTED. </Text>{note.text}</Text>
+              <View style={[styles.card, styles.noteCard, styles.rowLead]}>
+                {note.reason === 'ride' ? <GameIcon name="ride" size={28} />
+                  : <Image source={note.reason === 'try_wheels' ? WHEELS_ART : note.reason === 'outside' || note.reason === 'left_early' ? PARK_ART : STEPS_ART}
+                      style={{ width: 28, height: 28 }} contentFit="contain" />}
+                <Text style={[styles.body, { flex: 1 }]}><Text style={styles.bold}>{formatSteps(note.steps)} STEPS NOT COUNTED. </Text>{note.text}</Text>
               </View>
             )}
 
@@ -171,7 +176,7 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
                         accessibilityLabel={`${boxName(b)}, ${formatSteps(b.goal_steps)} steps.${i > 0 ? ' Tap to walk it next' : ' Walks next'}`}
                         onPress={() => { playSfx('ui.select'); setPicked(picked === b.id ? null : b.id); }}
                         style={[styles.waitBox, picked === b.id && styles.waitPicked]}>
-                        <TrailBoxArt tier={b.tier} size={52} active={false} />
+                        <TrailBoxArt tier={b.tier} size={40} active={false} />
                         <Text style={styles.waitText}>{formatSteps(b.goal_steps)}</Text>
                       </Pressable>
                     ))}
@@ -206,16 +211,7 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
 
             <Text style={styles.section}>Weekly goal</Text>
             {state.week.goal_steps ? (
-              <View style={styles.card}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={styles.cardTitle}>{state.week.goal_hit ? 'Goal reached!' : `${formatSteps(state.week.steps)} of ${formatSteps(state.week.goal_steps)}`}</Text>
-                  <Pressable onPress={() => void changeGoal()} accessibilityRole="button" accessibilityLabel="Change your weekly goal" style={styles.smallChip}>
-                    <Text style={styles.smallChipText}>CHANGE</Text>
-                  </Pressable>
-                </View>
-                <View style={{ marginTop: 6 }}><TrailPath fraction={Math.min(1, state.week.steps / state.week.goal_steps)} ready={state.week.goal_hit} height={14} seenKey="week" /></View>
-                <Text style={styles.footnote}>{state.week.goal_hit ? 'You earned a Blue Box this week. Nice walking!' : 'Reach it this week (Monday to Sunday) for a Blue Box.'}</Text>
-              </View>
+              <GoalCard state={state} visible={visible} onChange={() => void changeGoal()} />
             ) : (
               <View style={styles.card}>
                 <Text style={styles.body}>Pick a goal if you like. Reach it in a week for a Blue Box.</Text>
@@ -280,6 +276,52 @@ function StepsToGo({ box, visible }: { readonly box: TrailBox; readonly visible:
   return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><CountUpText value={value} durationMs={900} punch={1} style={styles.toGo} /></View>;
 }
 
+/** Monday (yyyy-mm-dd) of the week holding a park day, for the once-a-week goal celebration. */
+function weekOf(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  const dow = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Weekly goal: a path to the goal; the first time you see it reached that week, it pops with a cheer. */
+function GoalCard({ state, visible, onChange }: { readonly state: TrailState; readonly visible: boolean; readonly onChange: () => void }) {
+  const goal = state.week.goal_steps ?? 1;
+  const pop = useSharedValue(1);
+  const glow = useSharedValue(0);
+  useEffect(() => {
+    if (!visible || !state.week.goal_hit) return;
+    const key = `goal:${weekOf(state.today.park_day)}`;
+    if (getSeen(key) != null) return;
+    setSeen(key, 1);
+    const t = setTimeout(() => {
+      pop.value = withSequence(withTiming(1.06, { duration: 160 }), withSpring(1, { damping: 8, stiffness: 220 }));
+      glow.value = withSequence(withTiming(1, { duration: 200 }), withTiming(0, { duration: 1400 }));
+      playSfx('fx.reward');
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    }, 700);
+    return () => clearTimeout(t);
+  }, [visible, state.week.goal_hit, state.today.park_day, pop, glow]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value }));
+  return (
+    <Animated.View style={[styles.card, state.week.goal_hit && styles.goalHit, popStyle]}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.goalGlow, glowStyle]} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+          {state.week.goal_hit && <GameIcon name="star" size={26} />}
+          <Text style={styles.cardTitle}>{state.week.goal_hit ? 'Goal reached!' : `${formatSteps(state.week.steps)} of ${formatSteps(goal)}`}</Text>
+        </View>
+        <Pressable onPress={onChange} accessibilityRole="button" accessibilityLabel="Change your weekly goal" style={styles.smallChip}>
+          <Text style={styles.smallChipText}>CHANGE</Text>
+        </Pressable>
+      </View>
+      <View style={{ marginTop: 6 }}><TrailPath fraction={Math.min(1, state.week.steps / goal)} ready={state.week.goal_hit} height={14} seenKey="week" /></View>
+      <Text style={styles.footnote}>{state.week.goal_hit ? 'You earned a Blue Box this week. Nice walking!' : 'Reach it this week (Monday to Sunday) for a Blue Box.'}</Text>
+    </Animated.View>
+  );
+}
+
 function cheer(steps: number): string {
   if (steps >= 15000) return 'What a park day! Look at you go.';
   if (steps >= 10000) return 'Ten thousand steps! Amazing.';
@@ -332,7 +374,7 @@ function Inside({ state }: { readonly state: TrailState }) {
           </View>
         ))}
       </View>
-      <Text style={styles.footnote}>{state.gold_in > 1 ? `A Gold Box is coming within ${state.gold_in} boxes!` : 'Your next box is a Gold Box!'} Arriving at the park gives a Blue Box.</Text>
+      <Text style={styles.footnote}>{state.gold_in > 1 ? `A new Gold Box is coming within ${state.gold_in} boxes you earn!` : 'Your next new box is a Gold Box!'} Arriving at the park gives a Blue Box.</Text>
       {tiers.map(t => <TierCard key={t.tier} tier={t.tier} t={t} />)}
     </ScrollView>
   );
@@ -378,6 +420,7 @@ const styles = StyleSheet.create({
   parkOnlyText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft },
   section: { fontFamily: 'Shark', fontSize: 16, color: BRAND.blue, textTransform: 'uppercase', marginTop: 14, marginBottom: 6 },
   card: { backgroundColor: BRAND.white, borderRadius: RADIUS.lg, borderWidth: 2.5, borderColor: BRAND.sky, padding: 12 },
+  rowLead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   rowCard: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
   askCard: { flexDirection: 'row', borderColor: BRAND.skyDeep, marginBottom: 8 },
   noteCard: { backgroundColor: BRAND.sky, borderColor: BRAND.sky, marginBottom: 8 },
@@ -395,10 +438,10 @@ const styles = StyleSheet.create({
   toGo: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 2, textShadowOffset: { width: 0, height: 0 }, minWidth: 80 },
   toGoUnit: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft, marginTop: -2 },
   footnote: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft, marginTop: 6 },
-  waitBox: { width: '31%', alignItems: 'center', borderRadius: RADIUS.md, borderWidth: 2.5, borderColor: 'transparent', paddingVertical: 4 },
+  waitBox: { width: '31%', height: 66, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, borderWidth: 2.5, borderColor: BRAND.sky, backgroundColor: BRAND.cream },
   waitPicked: { borderColor: BRAND.gold, backgroundColor: BRAND.cream },
   rackGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 6, paddingVertical: 4 },
-  rackEmpty: { width: '31%', height: 78, borderRadius: RADIUS.md, borderWidth: 2, borderStyle: 'dashed', borderColor: BRAND.skyDeep },
+  rackEmpty: { width: '31%', height: 66, borderRadius: RADIUS.md, borderWidth: 2, borderStyle: 'dashed', borderColor: BRAND.skyDeep },
   waitText: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   todayCard: { flexDirection: 'row', alignItems: 'center' },
   bigNumber: { fontFamily: 'Shark', fontSize: 36, color: BRAND.blue },
@@ -408,6 +451,8 @@ const styles = StyleSheet.create({
   bestLabel: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   bestNum: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
   cheer: { fontFamily: 'Shark', fontSize: 16, color: BRAND.blue, marginTop: 6, textAlign: 'center', textTransform: 'uppercase' },
+  goalHit: { borderColor: BRAND.gold, borderWidth: 3 },
+  goalGlow: { backgroundColor: BRAND.goldLight, borderRadius: RADIUS.lg },
   smallChip: { minHeight: 44, minWidth: 88, paddingHorizontal: 12, borderRadius: RADIUS.pill, backgroundColor: BRAND.sky,
     borderWidth: 2, borderColor: BRAND.skyDeep, alignItems: 'center', justifyContent: 'center' },
   smallChipText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },

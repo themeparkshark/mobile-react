@@ -43,12 +43,26 @@ export interface CountUpTextProps {
   onTick?: () => void;
   onDone?: () => void;
   reducedMotion?: boolean;
+  /** 'short' shows 950, 1.2k, 12k (tight pills). Default: full number with commas. */
+  format?: 'full' | 'short';
   style?: StyleProp<TextStyle>;
+}
+
+/** 950, 1.2k, 12k: same rule as trailModel.shortSteps, as a worklet. */
+export function shortCount(value: number): string {
+  'worklet';
+  const v = Math.max(0, Math.round(value));
+  if (v < 1000) return String(v);
+  if (v < 10000) {
+    const t = Math.floor(v / 100) / 10;
+    return (t === Math.floor(t) ? String(t) : t.toFixed(1)) + 'k';
+  }
+  return String(Math.floor(v / 1000)) + 'k';
 }
 
 export function CountUpText({
   value, durationMs, delayMs = 0, prefix = '', suffix = '', punch = 1.12, tickEvery = 0,
-  onTick, onDone, reducedMotion = false, style,
+  onTick, onDone, reducedMotion = false, format = 'full', style,
 }: CountUpTextProps) {
   const shown = useSharedValue(value);
   const scale = useSharedValue(1);
@@ -92,7 +106,7 @@ export function CountUpText({
   );
 
   const animatedProps = useAnimatedProps(() => {
-    const text = prefix + formatScore(shown.value) + suffix;
+    const text = prefix + (format === 'short' ? shortCount(shown.value) : formatScore(shown.value)) + suffix;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return { text, defaultValue: text } as any;
   });
@@ -104,7 +118,7 @@ export function CountUpText({
       caretHidden
       pointerEvents="none"
       underlineColorAndroid="transparent"
-      defaultValue={prefix + formatScore(value) + suffix}
+      defaultValue={prefix + (format === 'short' ? shortCount(value) : formatScore(value)) + suffix}
       animatedProps={animatedProps}
       style={[styles.text, style, animatedStyle]}
     />

@@ -58,7 +58,7 @@ function TrailHost({ active, inPark = true, preview }: {
         onGoal={g => act(() => trail.setGoal(g))}
         onWheels={on => act(() => trail.setWheels(on))}
         onAskMotion={() => void trail.askMotion()} initialView={preview === 'inside' ? 'inside' : 'boxes'} />
-      {opening && <TrailReveal boxes={opening} onOpen={openBox} nextHint={nextHint} goldIn={trail.state?.gold_in ?? null}
+      {opening && <TrailReveal boxes={opening} onOpen={openBox} nextHint={nextHint} goldIn={trail.state && ![...trail.state.walking, ...trail.state.waiting].some(b => b.tier === 'gold') ? trail.state.gold_in : null}
         onClose={() => { setOpening(null); void trail.refresh(); }} />}
     </>
   );
