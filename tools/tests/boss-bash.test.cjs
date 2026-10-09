@@ -48,7 +48,7 @@ test('balance: beginners matter, skill pays, mashing puffers does not', ()=>{
   assert.ok(e>=740&&e<=1150,`expert ${e}`);
   assert.ok(m>=360&&m<=650,`median ${m}`);
   assert.ok(y>=0.25*e,`young ${y} vs expert ${e}`);
-  assert.ok(x<0.75*e,`masher ${x} should trail expert ${e}`);
+  assert.ok(x<0.6*e,`masher ${x} should trail expert ${e}`);
 });
 test('the hit cap absorbs bonks visibly and scores 0', ()=>{
   const s=play(3,{...BOTS.expert,maxHits:10});
@@ -94,4 +94,18 @@ test('no ink while the shark is seeing stars (a block is always possible)', ()=>
   s=b.tick(s,b.INK_FIRST_MS).state;assert.equal(s.ink,null);
   s=b.tick(s,b.INK_FIRST_MS+500).state;assert.equal(s.ink,null);
   s=b.tick(s,b.INK_FIRST_MS+720).state;assert.ok(s.ink);
+});
+
+test('the ring sits on the core for exactly the PERFECT band (the picture equals the scoring)', ()=>{
+  for(const ms of [1000,9000,15000]){const band=b.perfectBand(ms);
+    assert.ok(b.ringScaleAt(band[0]-0.01,band)>1);assert.equal(b.ringScaleAt(band[0],band),1);
+    assert.equal(b.ringScaleAt(band[1],band),1);assert.ok(b.ringScaleAt(band[1]+0.01,band)<1);}
+});
+test('filling the fins during an ink delays the ink, it is not lost', ()=>{
+  let s={...b.createBash(6),ink:{from:8000,until:9150},power:2,up:[{id:1,spot:0,kind:'tentacle',at:7900,until:9900}],ms:8100};
+  const r=b.tapPopup(s,1,8200);assert.ok(r.state.dizzy);assert.equal(r.state.ink,null);assert.equal(r.state.nextInkAt,r.state.dizzy.until+400);
+});
+test('mashing empty water holds longer each time', ()=>{
+  let s={...b.createBash(2),ms:100};const a=b.tapWater(s,0,100).state;const c=b.tapWater(a,0,a.splashUntil+10).state;
+  assert.ok(c.splashUntil-(a.splashUntil+10)>a.splashUntil-100);
 });

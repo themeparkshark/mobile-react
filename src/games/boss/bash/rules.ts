@@ -95,6 +95,9 @@ export interface BashState {
   readonly blocks: number;
   readonly inked: number;
   readonly splashUntil: number;
+  /** Empty-water taps in a row: each one holds the next tap a little longer (mashing loses to aiming). */
+  readonly splashChain: number;
+  readonly inks: number;
   readonly hits: number;
   readonly weak: number;
   readonly bonks: number;
@@ -144,7 +147,7 @@ export function createBash(seed: number): BashState {
   return { seed, rng: next((seed >>> 0) * 2654435761 + 1), ms: 0, nextId: 1, nextSpawnAt: 450, lastSpot: -1, up: [],
     power: 0, headStart: 0, dizzy: null, ouchUntil: -1, hits: 0, weak: 0, bonks: 0, smashes: 0, perfects: 0, ouches: 0,
     missedDizzy: 0, streak: 0, bestStreak: 0, capped: 0, ink: null, nextInkAt: INK_FIRST_MS, inkedUntil: -1, blocks: 0, inked: 0,
-    splashUntil: -1 };
+    splashUntil: -1, splashChain: 0, inks: 0 };
 }
 
 /** Fins to fill for the next dizzy (the head start counts as a filled fin). */
@@ -183,7 +186,7 @@ export function tick(state: BashState, ms: number): { state: BashState; events: 
     else if (ms < s.ouchUntil + 300) s = { ...s, nextInkAt: s.ouchUntil + 300 };
     else {
       const ink = { from: ms, until: ms + INK_TELL_MS };
-      s = { ...s, ink, nextInkAt: ms + INK_EVERY_MS };
+      s = { ...s, ink, nextInkAt: ms + INK_EVERY_MS, inks: s.inks + 1 };
       events.push({ type: 'inkTell', ...ink });
     }
   }
@@ -252,13 +255,16 @@ function goDizzy(s: BashState, ms: number, events: BashEvent[]): BashState {
   const dizzy = { from: ms + DIZZY_DROP_MS, until: ms + DIZZY_DROP_MS + rule.dizzyMs };
   s.up.forEach(p => events.push({ type: 'sink', popup: p }));
   events.push({ type: 'dizzy', ...dizzy });
-  return { ...s, dizzy, up: [], ink: null };
+  // A live ink is not lost when the fins fill first: it comes back right after the smash.
+  return { ...s, dizzy, up: [], ink: null, nextInkAt: s.ink ? dizzy.until + 400 : s.nextInkAt };
 }
 
 /** A tap on empty water: a splash, and a short hold so mashing is slower than aiming. */
 export function tapWater(state: BashState, lane: number, ms: number): { state: BashState; events: BashEvent[] } {
   if (ms < state.ouchUntil || state.dizzy || ms >= ROUND_MS || ms < state.splashUntil) return { state, events: [] };
-  return { state: { ...state, splashUntil: ms + SPLASH_MS }, events: [{ type: 'splash', lane }] };
+  const chain = state.splashUntil > 0 && ms - state.splashUntil < 600 ? state.splashChain + 1 : 0;
+  return { state: { ...state, splashUntil: ms + SPLASH_MS * (1 + Math.min(3, chain) * 0.5), splashChain: chain },
+    events: [{ type: 'splash', lane }] };
 }
 
 /** Where the dizzy ring is: 0 just opened, 1 about to close. */
@@ -288,7 +294,8 @@ export function tapBoss(state: BashState, ms: number, maxHits = Number.POSITIVE_
   const weakOk = counted && state.weak + 1 <= Math.floor(hits / 3);
   const weak = state.weak + (weakOk ? 1 : 0);
   const p = dizzyProgress(state, ms);
-  const perfect = p >= PERFECT_FROM && p <= PERFECT_UNTIL;
+  const band = perfectBand(ms);
+  const perfect = p >= band[0] && p <= band[1];
   const damage = (counted ? w.per_hit : 0) + (weakOk ? w.per_weak_hit : 0);
   const headStart = perfect ? 1 : 0;
   const s: BashState = { ...state, hits, weak, dizzy: null, power: headStart, headStart, smashes: state.smashes + 1,
@@ -309,4 +316,21 @@ export function bashStars(state: Pick<BashState, 'hits' | 'weak'>, w: Weights = 
   const d = bashDamage(state.hits, state.weak, 1, w);
   if (state.hits <= 0) return 0;
   return d >= STAR_DAMAGE[2] ? 3 : d >= STAR_DAMAGE[1] ? 2 : 1;
+}
+
+/** The PERFECT slice of the dizzy window; FURY is tighter so a chain stays earned late in the round. */
+export function perfectBand(ms: number): readonly [number, number] {
+  'worklet';
+  return ms >= 13_500 ? [0.28, 0.4] : [PERFECT_FROM, PERFECT_UNTIL];
+}
+
+/**
+ * The closing ring's size at progress p: closes from 2x onto the core, sits ON the core (1.0) for the
+ * whole PERFECT band, then shrinks inside it. The picture and the scoring use the same band.
+ */
+export function ringScaleAt(p: number, band: readonly [number, number]): number {
+  'worklet';
+  if (p < band[0]) return 2 - p / band[0];
+  if (p <= band[1]) return 1;
+  return Math.max(0.45, 1 - (p - band[1]) * 1.2);
 }
