@@ -93,6 +93,14 @@ export interface BossBashProps {
   /** Result screen "Attack again": submit this round, then start the next. */
   readonly onAgain?: (meta: Record<string, unknown>) => void;
   readonly onQuit?: (resume: () => void) => void;
+  /** Play is live (not paused, not on the result): the raid flow polls the team's hits only then. */
+  readonly onActiveChange?: (active: boolean) => void;
+  /** Sent at the bell, so a closed app or an idle result card never loses the round. */
+  readonly onRoundEnd?: (meta: Record<string, unknown>) => void;
+  /** What the server said about the round sent at the bell (result card line). */
+  readonly receipt?: 'saving' | 'saved' | 'error' | null;
+  readonly receiptNote?: string | null;
+  /** Your best damage on this boss so far (a target to beat during the round). */
   /** Dev capture: autoplay with this skill (0 = off). */
   readonly autoplay?: number;
   /** Dev capture: force the first-time intro. */
@@ -100,7 +108,8 @@ export interface BossBashProps {
 }
 
 export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fighters = 0, endsAt, damageRate = 1,
-  damage: weightsIn, maxHits, next, rewards, capLeft, onComplete, onClose, onAgain, onQuit, autoplay = 0, forceIntro = false }: BossBashProps) {
+  damage: weightsIn, maxHits, next, rewards, capLeft, onComplete, onClose, onAgain, onQuit, onActiveChange, onRoundEnd, receipt = null, receiptNote = null,
+  autoplay = 0, forceIntro = false }: BossBashProps) {
   const weights = weightsIn ?? DEFAULT_WEIGHTS;
   const skin = BOSS_SKINS[boss];
   const reduced = useReducedGameMotion();
@@ -137,19 +146,34 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const firstBonked = useRef(false), firstSmashed = useRef(false), idleSince = useRef(0), blocks = useRef(0);
   const startHp = useRef(hpLeft), seenHp = useRef(hpLeft);
   const introDone = useRef(false);
+  const heldRef = useRef(false), goPending = useRef(false);
+  /** Your best on this boss: a target in the header while you play. */
+  const [best, setBest] = useState(0);
+  useEffect(() => {
+    if (!visible) return;
+    void AsyncStorage.getItem(`boss_bash_best_${boss}`).then(v => setBest(Number(v ?? 0) || 0)).catch(() => undefined);
+  }, [visible, boss]);
   const clock = useSharedValue(0);
   const bossFlinch = useSharedValue(0);
   const bossDrop = useSharedValue(0), bossHit = useSharedValue(0), bossRise = useSharedValue(0), bossShake = useSharedValue(0);
   const cam = useSharedValue(1), fury = useSharedValue(0), hatPop = useSharedValue(0), bossPuff = useSharedValue(0);
   const countdown = useRef(4);
   const hintRef = useRef<'none' | 'tentacle' | 'head' | 'ink'>('none');
+  /** The id of a streak word (drawn low, small) vs a smash/phase word (drawn high in the sky). */
+  const streakWord = useRef(-1);
+  const perfectChain = useRef(0);
   const shake = useShake(), flash = useFlash();
 
   const addFx = useCallback((item: FxIn, life = 900) => {
     const id = ++fxId.current;
-    // One hero wordmark at a time: a new one replaces the old, never stacks. Expiry is one sweeper, not a timer each.
-    setFx(list => [...list.filter(f => !(item.t === 'wm' && f.t === 'wm') && !(item.t === 'count' && f.t === 'count')).slice(-12),
-      { ...item, id, until: Date.now() + life } as FxLive]);
+    // One word on screen at a time (wordmark, bubble or countdown): a new word replaces the old one, never stacks.
+    // In the last 3 seconds the countdown owns the slot; only FINISH! may replace it. Expiry is one sweeper.
+    const word = (t: Fx['t']) => t === 'wm' || t === 'bubble' || t === 'count';
+    setFx(list => {
+      const counting = list.some(f => f.t === 'count' && f.until > Date.now());
+      if (counting && word(item.t) && item.t !== 'count' && !(item.t === 'wm' && item.wm === 'finish')) return list;
+      return [...list.filter(f => !(word(item.t) && word(f.t))).slice(-12), { ...item, id, until: Date.now() + life } as FxLive];
+    });
   }, []);
   useEffect(() => {
     if (!visible) return;
@@ -193,6 +217,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     timers.current.forEach(clearTimeout); timers.current = [];
     if (raf.current !== null) cancelAnimationFrame(raf.current);
     raf.current = null; playing.current = false; finished.current = false; played.current = 0;
+    heldRef.current = false; goPending.current = false; perfectChain.current = 0;
     seedRef.current = (seedRef.current * 7919 + 17) % 1000003;
     engine.current = createBash(seedRef.current);
     shownTotal.current = 0;
@@ -292,6 +317,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     haptic('tapLight');
     if (e.streak === 6 || e.streak === 12 || e.streak === 20) {
       addFx({ t: 'wm', wm: e.streak === 6 ? 'nice' : e.streak === 12 ? 'great' : 'superb' }, 900);
+      streakWord.current = fxId.current;
       setPose('cheer'); later(700, () => setPose(cur => (cur === 'cheer' ? 'idle' : cur)));
     }
   };
@@ -347,7 +373,14 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     frozenUntil.current = Date.now() + SMASH_STOP_MS;
     addFx({ t: 'burst', src: BASH_ART.impact, x, y, size: L.bossSize * 0.7, spin: true }, 500);
     addFx({ t: 'num', text: `+${dealt()}`, x, y: y - 10, big: true }, 1300);
-    addFx({ t: 'wm', wm: e.perfect ? 'perfect' : e.final ? 'superb' : 'great' }, 1000);
+    if (e.perfect) {
+      perfectChain.current += 1;
+      if (perfectChain.current === 1) addFx({ t: 'wm', wm: 'perfect' }, 900);
+      else addFx({ t: 'bubble', text: `PERFECT x${perfectChain.current}`, x: L.w / 2, y: L.h * 0.08 + 40, tone: 'gold' }, 800);
+    } else {
+      perfectChain.current = 0;
+      addFx({ t: 'bubble', text: 'SMASH!', x: L.w / 2, y: L.h * 0.08 + 40, tone: 'white' }, 700);
+    }
     if (!reduced) {
       particles.current?.burst({ x, y, preset: 'burst', count: 16, colors: [BRAND.gold, BRAND.white, BRAND.goldLight], speed: 1.3 });
       shake.shake(e.perfect ? 10 : 7, 200);
@@ -360,9 +393,6 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     sfx('bo_crit', 'fx.coin', { pitch: e.perfect ? 7 : 2, volume: 1 });
     sfx('bo_kraken_slam', 'fx.firework', { volume: 0.8 });
     haptic(e.perfect ? 'comboHeavy' : 'hitMedium');
-    // Knocked out by your own hit: the shared HP is gone.
-    const total = bashScore(engine.current, damageRate, weights);
-    if (hpLeft > 0 && total >= hpLeft) addFx({ t: 'wm', wm: 'knockout' }, 1400);
   };
 
   const onShakeOff = () => {
@@ -472,7 +502,10 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     bossRise.value = reduced ? withTiming(2.2, { duration: 200 }) : withDelay(250, withTiming(2.2, { duration: 550, easing: Easing.in(Easing.back(1.4)) }));
     sfx('bo_ko_kraken', 'fx.reveal', { volume: 0.9 });
     haptic('success');
-    later(reduced ? 400 : 1000, () => setResult(buildResult(s)));
+    const built = buildResult(s);
+    onActiveChange?.(false);
+    if (s.hits > 0) onRoundEnd?.(built.meta ?? {});
+    later(reduced ? 400 : 1000, () => setResult(built));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [damageRate, weights, reduced]);
 
@@ -531,12 +564,14 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       flashFace('roar', 1100);
       sfx(`bo_enter_${boss === 'kraken' ? 'kraken' : boss === 'robo_shark' ? 'robo' : 'ghost'}`, 'fx.whoosh', { volume: 1 });
       if (!reduced) later(380, () => { shake.shake(7, 260); haptic('hitMedium'); });
-      later(reduced ? 150 : first ? 600 : 350, () => setIntro('teach'));
-      if (!first) later(reduced ? 700 : 1100, goNow);
+      later(reduced ? 150 : first ? 600 : 250, () => setIntro('teach'));
+      if (!first) later(reduced ? 500 : 650, goNow);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduced, boss, forceIntro]);
   const goNow = useCallback(() => {
+    // Paused (or the app is away): GO waits for the resume.
+    if (heldRef.current) { goPending.current = true; return; }
     setIntro(cur => {
       if (cur === 'off' || cur === 'go') return cur;
       void AsyncStorage.setItem(SEEN_KEY, '1').catch(() => undefined);
@@ -547,7 +582,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => { if (intro === 'off' && introDone.current && visible && !finished.current && !playing.current) run(); }, [intro, run, visible]);
+  useEffect(() => {
+    if (intro === 'off' && introDone.current && visible && !finished.current && !playing.current && !heldRef.current) run();
+  }, [intro, run, visible]);
 
   // --- Input ---------------------------------------------------------------------
   const tapLane = (lane: number) => {
@@ -622,7 +659,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     return { transform: [{ translateY: -up * L.bossSize * 0.06 }, { rotate: `${up * 14 * Math.sin(v * 9)}deg` }] };
   });
 
-  const hpNow = Math.max(0, hpLeft - hud.damage);
+  const hpNow = Math.max(0, hpLeft - (capLeft === undefined ? hud.damage : Math.min(hud.damage, capLeft)));
   // Every face is mounted once and cross-cut by opacity: no decode hitch on a swap.
   const faces = ([['angry', skin.body], ['dizzy', skin.dizzy], ['hurt', skin.hurt], ['laugh', skin.laugh], ['roar', skin.roar]] as const)
     .filter((f): f is readonly [Face, number] => f[1] !== null);
@@ -634,7 +671,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const renderResults = (args: ShellResultsArgs) => (
     <BashResults args={args} bossName={bossName} boss={boss} rideName={rideName ?? null} startHp={hpLeft} capLeft={capLeft}
       hpMax={hpMax} damage={args.result.score} rate={damageRate} meta={args.result.meta ?? {}} fighters={fighters}
-      endsAt={endsAt} next={next} rewards={rewards}
+      endsAt={endsAt} next={next} rewards={rewards} receipt={receipt} receiptNote={receiptNote}
       onAgain={onAgain && args.result.meta ? () => onAgain(args.result.meta!) : undefined} />
   );
 
@@ -652,12 +689,15 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       renderResults={renderResults}
       gameId="boss_bash"
       onStart={startIntro}
-      onPause={() => { halt(); setHeld(true); }}
-      onResume={() => { setHeld(false); if (introDone.current) run(); }}
+      onPause={() => { halt(); heldRef.current = true; setHeld(true); onActiveChange?.(false); }}
+      onResume={() => {
+        heldRef.current = false; setHeld(false); onActiveChange?.(true);
+        if (goPending.current) { goPending.current = false; goNow(); } else if (introDone.current) run();
+      }}
       hideHeaderScore={!!result}
       headerScore={<View style={styles.dmgChip} accessible accessibilityLabel={`Damage ${hud.damage}`}>
-        <Text style={styles.dmgLabel} maxFontSizeMultiplier={1.1}>DAMAGE</Text>
-        <Text style={styles.dmgNum} maxFontSizeMultiplier={1.1}>{hud.damage.toLocaleString()}</Text>
+        <Text style={styles.dmgLabel} maxFontSizeMultiplier={1.1}>{best > 0 ? `DAMAGE  ·  BEST ${best.toLocaleString()}` : 'DAMAGE'}</Text>
+        <Text style={styles.dmgNum} maxFontSizeMultiplier={1.1}>{(capLeft === undefined ? hud.damage : Math.min(hud.damage, capLeft)).toLocaleString()}</Text>
       </View>}
       onWrapUp={() => {
         // Boarding the ride mid-round keeps what you earned (the server needs at least 12 s since FIGHT, which the intro covers).
@@ -706,7 +746,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
               hint={hint === 'tentacle' && !exit && popup.kind === 'tentacle' && actors.find(a => !a.exit && a.popup.kind === 'tentacle')?.popup.id === popup.id} />;
           })}
 
-          {dizzy && <DizzyTarget x={L.head.x} y={L.head.y + L.dropBy} size={L.bossSize * 0.34} from={dizzy.from} until={dizzy.until}
+          {dizzy && <DizzyTarget x={L.head.x} y={L.head.y + L.dropBy} size={L.bossSize * 0.34} from={dizzy.from} until={dizzy.until} paused={held}
             clock={clock} reduced={reduced} />}
           {dizzy && hint === 'head' && <TapHand x={L.head.x + 18} y={L.head.y + L.dropBy + 4} reduced={reduced} size={72} />}
           {inkTell && hint === 'ink' && <TapHand x={L.head.x + 18} y={L.head.y + L.bossSize * 0.18} reduced={reduced} size={72} />}
@@ -735,14 +775,14 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           {fx.map(f => f.t === 'num' ? <DamageNumber key={f.id} text={f.text} x={f.x} y={f.y} big={f.big} toX={scoreTarget.x} toY={scoreTarget.y} reduced={reduced} />
             : f.t === 'burst' ? (reduced ? null : <Burst key={f.id} src={f.src} x={f.x} y={f.y} size={f.size} spin={f.spin} reduced={reduced} />)
               : f.t === 'wm' ? <Wordmark key={f.id} id={f.wm} x={L.w / 2}
-                y={f.wm === 'nice' || f.wm === 'great' || f.wm === 'superb' && !flopped ? L.h * 0.76 : L.h * 0.24}
-                width={f.wm === 'nice' || f.wm === 'great' ? L.w * 0.42 : L.w * 0.66} reduced={reduced} />
+                y={streakWord.current === f.id ? L.h * 0.76 : L.h * 0.08 + 40}
+                width={streakWord.current === f.id ? L.w * 0.44 : L.w * 0.6} reduced={reduced} />
                 : f.t === 'ink' ? <InkSplat key={f.id} x={f.x} y={f.y} size={f.size} rot={f.rot} life={INKED_MS} reduced={reduced} />
                   : f.t === 'count' ? <CountBeat key={f.id} text={f.text} x={L.w - 58} y={L.h * 0.2} reduced={reduced} />
                     : <Bubble key={f.id} text={f.text} tone={f.tone} reduced={reduced}
                       // Every word stays inside the stage, below the HUD (never cut by an edge).
                       x={Math.max(126, Math.min(L.w - 126, f.x))} y={Math.max(L.h * 0.14, Math.min(L.h * 0.9, f.y))} />)}
-          {!reduced && <ParticleField ref={particles} width={L.w} height={L.h} paused={held} />}
+          {!reduced && <ParticleField ref={particles} width={L.w} height={L.h} paused={held || !!result} />}
           </View>
         </Animated.View>}
 

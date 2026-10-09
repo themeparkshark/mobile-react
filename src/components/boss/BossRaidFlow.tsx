@@ -163,6 +163,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   currentView.current = { contextKey, open, focused };
   const presented = useRef(new Set<string>());
   const recovery = useBossAttackRecovery({ playerId, parkId, onResult: (checkpoint, result) => {
+    if (sentAtBell.current) setReceipt(result.ok ? { state: 'saved', note: null } : { state: 'error', note: ERRORS[result.error] });
     if (result.ok) {
       onState(result.state);
       setNote(`Confirmed! You hit ${BOSS_NAMES[checkpoint.boss]} for ${result.damage.toLocaleString()}.`);
@@ -231,17 +232,26 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   const closeSheet = () => { round.current = null; setFighting(false); if (celebrate) dismissCelebration(); else onClose(); };
   // Result screen "Attack again": send this round, then start the next one once it is confirmed.
   const [againPending, setAgainPending] = useState(false);
-  const submit = (expectedRound: typeof round.current, meta?: Record<string, unknown>) => {
+  // The round is sent at the bell (keepOpen) so the result card can show what the server said and an idle
+  // result card or a closed app never loses it; Done / Attack again then only close the fight.
+  const sentAtBell = useRef(false);
+  const [receipt, setReceipt] = useState<{ state: 'saving' | 'saved' | 'error'; note: string | null } | null>(null);
+  const [liveActive, setLiveActive] = useState(false);
+  const submit = (expectedRound: typeof round.current, meta?: Record<string, unknown>, keepOpen = false) => {
     const finished = round.current;
     if (!finished || finished !== expectedRound) return;
     round.current = null; // Consume the round synchronously, even on rapid result taps.
-    setFighting(false);
+    if (!keepOpen) setFighting(false);
     if (!meta || finished.playerId !== playerId || finished.parkId !== parkId || finished.raidId !== raid?.id) return;
     if (Number(meta.hits ?? 0) <= 0) { setNote('No hits landed. Give it another try. No Energy was spent.'); return; }
     const fitted = fitToRound({ hits: Number(meta.hits), weak_hits: Number(meta.weak_hits),
       duration_ms: Number(meta.duration_ms) }, roundLimits.current, raid?.damage ?? DEFAULT_DAMAGE);
+    if (keepOpen) { sentAtBell.current = true; setReceipt({ state: 'saving', note: null }); }
     void recovery.capture({ ...finished, savedAt: Date.now(), body: { ...finished.body, ...fitted } })
-      .catch(() => { setNote('That round couldn’t be saved. No attack was sent.'); });
+      .catch(() => {
+        setNote('That round couldn’t be saved. No attack was sent.');
+        if (keepOpen) setReceipt({ state: 'error', note: 'That round could not be saved. No Energy was spent.' });
+      });
   };
 
   const sheetVisible = open && focused && !!parkId;
@@ -293,15 +303,17 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
         ...(result.round.remote ? { remote: true } : {}) } };
     setRoundRate(result.round.damage_rate);
     roundLimits.current = { max_ms: result.round.max_ms, max_hits: result.round.max_hits };
+    sentAtBell.current = false; setReceipt(null); setLiveActive(true);
     setFighting(true);
   };
   const renderedRound = round.current;
   const liveRefresh = useRef(onLiveRefresh); liveRefresh.current = onLiveRefresh;
   useEffect(() => {
-    if (!fighting) return;
+    // Only while play is live: never on the pause sheet or the result card.
+    if (!fighting || !liveActive) return;
     const id = setInterval(() => liveRefresh.current?.(), 6000);
     return () => clearInterval(id);
-  }, [fighting]);
+  }, [fighting, liveActive]);
   useEffect(() => {
     if (!againPending || fighting || starting) return;
     if (!open || !focused) { setAgainPending(false); return; }
@@ -353,8 +365,17 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             rewards={rewards ?? undefined}
             capLeft={Math.max(0, MAX_DAMAGE_PER_PLAYER - raid.you.damage)}
             autoplay={__DEV__ ? devAutoplay : 0}
-            onComplete={(_, meta) => submit(renderedRound, meta)}
-            onAgain={meta => { setAgainPending(true); submit(renderedRound, meta); }}
+            onRoundEnd={meta => submit(renderedRound, meta, true)}
+            onActiveChange={setLiveActive}
+            receipt={receipt?.state ?? null}
+            receiptNote={receipt?.note ?? null}
+            onComplete={(_, meta) => {
+              if (sentAtBell.current) { sentAtBell.current = false; setFighting(false); } else submit(renderedRound, meta);
+            }}
+            onAgain={meta => {
+              setAgainPending(true);
+              if (sentAtBell.current) { sentAtBell.current = false; setFighting(false); } else submit(renderedRound, meta);
+            }}
             onClose={() => { if (round.current === renderedRound) { round.current = null; setFighting(false); } }}
           />}
           {winView ?? (raid ? <View style={[styles.sheet, styles.sheetFrame]}>
@@ -362,7 +383,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
               <View style={styles.grabber} />
               <MatchLinkBanner phase={link} onRetry={() => onRetryLink?.()} onLeave={closeSheet} leaveLabel="Leave fight" />
               <BossJoinCard raid={raid} remote={remote} walkCloser={walkCloser} energy={energy} tickets={tickets}
-                endsAt={raid.ends_at} now={now} rewards={rewards!} onClose={closeSheet} note={note} />
+                endsAt={raid.ends_at} now={now} rewards={rewards!} onClose={closeSheet} note={note} paused={fighting} />
               {receiptBlocked && recovery.snapshot && !againPending &&
                 <BossAttackStatus snapshot={recovery.snapshot} onRetry={() => { void recovery.retry(); }} />}
               {raid.you.attacks > 0 && <View style={{ marginTop: 6 }}><PushSoftAsk /></View>}
@@ -381,7 +402,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             {!(receiptBlocked && recovery.snapshot && !againPending) && <View style={styles.footer}>
               <BossJoinCta raid={raid} remote={remote} energy={energy} tickets={tickets}
                 blocked={!active ? (raid.status === 'defeated' ? 'Your team beat it!' : 'The fight is over.') : againPending ? 'Sending your attack...' : blocked}
-                starting={starting || againPending} onFight={() => { void startBrawl(); }} onClose={closeSheet} />
+                starting={starting || againPending} onFight={() => { void startBrawl(); }} onClose={closeSheet} paused={fighting} />
             </View>}
           </View> : emptyView)}
       </Modal>

@@ -33,9 +33,11 @@ export function Wallet({ energy, tickets, showTickets, short }: {
   </View>;
 }
 
-export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets, endsAt, now, rewards, onClose, note }: {
+export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets, endsAt, now, rewards, onClose, note, paused = false }: {
   raid: BossRaid; remote: boolean; walkCloser: boolean; energy: number; tickets: number; endsAt: string; now: number;
   rewards: RewardPreview; onClose: () => void; note: string | null;
+  /** The fight is up on top: stop the idle loops underneath. */
+  paused?: boolean;
 }) {
   const reduced = useReducedGameMotion();
   const cost = joinCost(raid, remote, energy, tickets);
@@ -46,9 +48,9 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
   const enter = useSharedValue(reduced ? 1 : 0);
   const greeted = useRef(false);
   useEffect(() => {
-    if (!reduced) bob.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }), -1, true);
+    if (!reduced && !paused) bob.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }), -1, true);
     return () => cancelAnimation(bob);
-  }, [reduced, bob]);
+  }, [reduced, bob, paused]);
   useEffect(() => {
     // The boss arrives with a short sting and one tick (sound follows the player's settings; motion respects Reduce Motion).
     if (greeted.current) return;
@@ -103,7 +105,7 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
             <Text style={styles.bigPct} maxFontSizeMultiplier={1}>{Math.round(raid.remote.damage_rate * 100)}%</Text>
             <View style={styles.mvp}>
               <View><GameIcon name="crown" size={14} /><View style={styles.crossOut} /></View>
-              <Text style={styles.tileSmall} maxFontSizeMultiplier={1.2}>{raid.remote.joined ? 'Ticket paid' : 'no MVP'}</Text>
+              <Text style={styles.tileSmall} maxFontSizeMultiplier={1.2}>no MVP</Text>
             </View>
           </Tile>
           : <Tile label="AT THE RIDE" tone="park" a11y="At the ride you hit at full power and can be MVP">
@@ -129,9 +131,9 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
 }
 
 /** The one button, with the cost on it and your Energy after. Pinned to the bottom of the sheet. */
-export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, onFight, onClose }: {
+export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, onFight, onClose, paused = false }: {
   raid: BossRaid; remote: boolean; energy: number; tickets: number; blocked: string | null; starting: boolean;
-  onFight: () => void; onClose: () => void;
+  onFight: () => void; onClose: () => void; paused?: boolean;
 }) {
   const reduced = useReducedGameMotion();
   const cost = joinCost(raid, remote, energy, tickets);
@@ -141,10 +143,10 @@ export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, 
   const [how, setHow] = useState(false);
   const pulse = useSharedValue(1);
   useEffect(() => {
-    if (!reduced && !off) pulse.value = withRepeat(withSequence(withTiming(1.03, { duration: 520 }), withTiming(1, { duration: 520 })), -1, false);
+    if (!reduced && !off && !paused) pulse.value = withRepeat(withSequence(withTiming(1.03, { duration: 520 }), withTiming(1, { duration: 520 })), -1, false);
     else { cancelAnimation(pulse); pulse.value = 1; }
     return () => cancelAnimation(pulse);
-  }, [reduced, off, pulse]);
+  }, [reduced, off, pulse, paused]);
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   return (
     <View>
@@ -179,6 +181,7 @@ export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, 
           <Text style={styles.after} maxFontSizeMultiplier={1.3}>After</Text>
           <GameIcon name="energy" size={18} /><Text style={styles.afterNum} maxFontSizeMultiplier={1.3}>{cost.energyAfter}</Text>
           {cost.ticket > 0 && <><GameIcon name="ticket" size={18} /><Text style={styles.afterNum} maxFontSizeMultiplier={1.3}>{cost.ticketsAfter}</Text></>}
+          {remote && raid.remote.joined && <><GameIcon name="ticket" size={18} /><Text style={styles.after} maxFontSizeMultiplier={1.3}>paid</Text></>}
           <Text style={styles.after} maxFontSizeMultiplier={1.3}>  ·  Attack {raid.you.attacks + 1} of {raid.max_attacks ?? 5}</Text>
         </View>}
       <Pressable accessibilityRole="button" onPress={onClose} style={styles.notNow} hitSlop={6}>

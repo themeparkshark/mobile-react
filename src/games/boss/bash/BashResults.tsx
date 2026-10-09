@@ -48,12 +48,16 @@ export function creditedDamage(damage: number, capLeft: number | undefined): num
   return capLeft === undefined ? damage : Math.max(0, Math.min(damage, capLeft));
 }
 
-export default function BashResults({ args, bossName, boss, startHp, hpMax, damage: rawDamage, capLeft, rate, meta, fighters, endsAt, next, rewards, onAgain }: {
+export default function BashResults({ args, bossName, boss, startHp, hpMax, damage: rawDamage, capLeft, rate, meta, fighters, endsAt, next, rewards, onAgain,
+  receipt = null, receiptNote = null }: {
   args: ShellResultsArgs; bossName: string; boss: BossId; rideName: string | null; startHp: number; hpMax: number; damage: number;
   /** Per-player raid cap left before this round (config boss.max_damage_per_player_per_raid). */
   capLeft?: number;
   rate: number; meta: Record<string, unknown>; fighters: number; endsAt?: string; next?: BashNext; rewards?: BashRewards;
   onAgain?: () => void;
+  /** The round was sent at the bell: what the server said. */
+  receipt?: 'saving' | 'saved' | 'error' | null;
+  receiptNote?: string | null;
 }) {
   const { stars, claim, reducedMotion: reduced } = args;
   const damage = creditedDamage(rawDamage, capLeft);
@@ -141,6 +145,11 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
         </View>
       </View>}
 
+      {receipt && !noHits && <View style={[styles.receipt, receipt === 'error' && styles.receiptErr]} accessibilityLiveRegion="polite">
+        <GameIcon name={receipt === 'saved' ? 'check' : receipt === 'error' ? 'info' : 'timer'} size={18} />
+        <Text style={styles.receiptText} maxFontSizeMultiplier={1.3}>
+          {receipt === 'saved' ? 'Saved! Your hits count for the team.' : receipt === 'saving' ? 'Sending your hits...' : receiptNote ?? 'Not saved yet. We will keep trying.'}</Text>
+      </View>}
       <View style={styles.chips}>
         <Chip label="Bonks" value={Number(meta.bonks ?? 0)} />
         <Chip label="Smashes" value={Number(meta.smashes ?? 0)} />
@@ -200,6 +209,9 @@ const styles = StyleSheet.create({
   lootRow: { flexDirection: 'row', gap: 16, marginTop: 4 },
   lootItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   lootNum: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy },
+  receipt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8 },
+  receiptErr: { backgroundColor: '#ffe3df', borderRadius: 10, padding: 4 },
+  receiptText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, flexShrink: 1, textAlign: 'center' },
   chips: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 10 },
   chip: { flex: 1, alignItems: 'center', backgroundColor: BRAND.sky, borderRadius: 12, paddingVertical: 4 },
   chipNum: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },

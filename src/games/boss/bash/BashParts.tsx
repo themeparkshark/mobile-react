@@ -150,15 +150,23 @@ function Fin({ filled, bonus, size, reduced, popKey }: { filled: boolean; bonus:
  * and a white ring closing onto it. While the ring sits on the core it turns
  * gold and the core pulses: that is PERFECT (shape and motion, not colour alone).
  */
-export function DizzyTarget({ x, y, size, from, until, clock, reduced }: {
-  x: number; y: number; size: number; from: number; until: number; clock: SharedValue<number>; reduced: boolean;
+export function DizzyTarget({ x, y, size, from, until, reduced, paused }: {
+  x: number; y: number; size: number; from: number; until: number; clock?: SharedValue<number>; reduced: boolean; paused?: boolean;
 }) {
   const appear = useSharedValue(0);
+  // The ring runs its own UI-thread timer, so a JS hitch never freezes the PERFECT timing.
+  const prog = useSharedValue(0);
   useEffect(() => {
     appear.value = reduced ? 1 : withSpring(1, { damping: 9, stiffness: 240 });
   }, [appear, reduced]);
+  useEffect(() => {
+    if (paused) { cancelAnimation(prog); return; }
+    const left = Math.max(1, (until - from) * (1 - prog.value));
+    prog.value = withTiming(1, { duration: left, easing: Easing.linear });
+    return () => cancelAnimation(prog);
+  }, [from, until, paused, prog]);
   const ring = useAnimatedStyle(() => {
-    const p = Math.max(0, Math.min(1, (clock.value - from) / Math.max(1, until - from)));
+    const p = prog.value;
     const on = p >= PERFECT_FROM && p <= PERFECT_UNTIL;
     // Closes from 2x to the core across the perfect band, then shrinks inside it.
     const scale = p <= PERFECT_UNTIL ? 2 - (p / PERFECT_UNTIL) : Math.max(0.45, 1 - (p - PERFECT_UNTIL) * 1.2);
@@ -166,9 +174,9 @@ export function DizzyTarget({ x, y, size, from, until, clock, reduced }: {
       transform: [{ scale: scale * appear.value }] };
   });
   const core = useAnimatedStyle(() => {
-    const p = Math.max(0, Math.min(1, (clock.value - from) / Math.max(1, until - from)));
+    const p = prog.value;
     const on = p >= PERFECT_FROM && p <= PERFECT_UNTIL;
-    return { transform: [{ scale: appear.value * (on && !reduced ? 1 + Math.sin(clock.value / 45) * 0.06 : 1) }] };
+    return { transform: [{ scale: appear.value * (on && !reduced ? 1 + Math.sin(p * 60) * 0.06 : 1) }] };
   });
   return <View pointerEvents="none" style={{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size }}>
     <Animated.View style={[styles.targetCore, { borderRadius: size / 2 }, core]}>
@@ -179,7 +187,7 @@ export function DizzyTarget({ x, y, size, from, until, clock, reduced }: {
 }
 
 /** Ink on the lens: splats in, wobbles, fades away (looks only). */
-export function InkSplat({ x, y, size, rot, life, reduced }: { x: number; y: number; size: number; rot: number; life: number; reduced: boolean }) {
+export const InkSplat = memo(function InkSplat({ x, y, size, rot, life, reduced }: { x: number; y: number; size: number; rot: number; life: number; reduced: boolean }) {
   const p = useSharedValue(0);
   useEffect(() => {
     p.value = reduced ? withSequence(withTiming(1, { duration: 60 }), withDelay(life - 400, withTiming(2, { duration: 300 })))
@@ -193,10 +201,10 @@ export function InkSplat({ x, y, size, rot, life, reduced }: { x: number; y: num
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size }, style]}>
     <Image source={BASH_ART.ink} style={StyleSheet.absoluteFill} contentFit="contain" />
   </Animated.View>;
-}
+});
 
 /** 3, 2, 1: the last seconds, big and short. */
-export function CountBeat({ text, x, y, reduced }: { text: string; x: number; y: number; reduced: boolean }) {
+export const CountBeat = memo(function CountBeat({ text, x, y, reduced }: { text: string; x: number; y: number; reduced: boolean }) {
   const p = useSharedValue(0);
   useEffect(() => {
     p.value = reduced ? withSequence(withTiming(1, { duration: 60 }), withDelay(500, withTiming(2, { duration: 200 })))
@@ -208,7 +216,7 @@ export function CountBeat({ text, x, y, reduced }: { text: string; x: number; y:
     alignItems: 'center', justifyContent: 'center' }, style]}>
     <Text style={styles.countText} maxFontSizeMultiplier={1}>{text}</Text>
   </Animated.View>;
-}
+});
 
 /** Stars circling a dizzy head. */
 export function DizzyStars({ x, y, r, reduced }: { x: number; y: number; r: number; reduced: boolean }) {
@@ -234,7 +242,7 @@ function OrbitStar({ t, phase, r }: { t: SharedValue<number>; phase: number; r: 
 export type WordmarkId = keyof typeof BASH_ART.wm;
 
 /** One hero callout at a time: a drawn wordmark that slams in and lifts away. */
-export function Wordmark({ id, x, y, width, reduced }: { id: WordmarkId; x: number; y: number; width: number; reduced: boolean }) {
+export const Wordmark = memo(function Wordmark({ id, x, y, width, reduced }: { id: WordmarkId; x: number; y: number; width: number; reduced: boolean }) {
   const p = useSharedValue(0);
   useEffect(() => {
     p.value = 0;
@@ -250,10 +258,10 @@ export function Wordmark({ id, x, y, width, reduced }: { id: WordmarkId; x: numb
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - width / 2, top: y - h / 2, width, height: h }, style]}>
     <Image source={BASH_ART.wm[id]} style={StyleSheet.absoluteFill} contentFit="contain" />
   </Animated.View>;
-}
+});
 
 /** A word bubble in the house font (for words with no drawn wordmark). */
-export function Bubble({ text, x, y, tone = 'white', reduced }: { text: string; x: number; y: number; tone?: 'white' | 'gold' | 'red'; reduced: boolean }) {
+export const Bubble = memo(function Bubble({ text, x, y, tone = 'white', reduced }: { text: string; x: number; y: number; tone?: 'white' | 'gold' | 'red'; reduced: boolean }) {
   const p = useSharedValue(0);
   useEffect(() => {
     p.value = 0;
@@ -265,7 +273,7 @@ export function Bubble({ text, x, y, tone = 'white', reduced }: { text: string; 
       <Text style={[styles.bubbleText, tone === 'white' && { color: BRAND.navy }]} maxFontSizeMultiplier={1.2}>{text}</Text>
     </View>
   </Animated.View>;
-}
+});
 
 /** A damage number that pops at the hit and flies up to the score. */
 export const DamageNumber = memo(function DamageNumber({ text, x, y, big, toX, toY, reduced }: {
