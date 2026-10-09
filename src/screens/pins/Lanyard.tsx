@@ -58,7 +58,7 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
   }, [still, active, sway]);
 
   const swayStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${sway.value * 0.9}deg` }] }));
-  const pinSize = Math.min(76, Math.round(width / 5.2));
+  const pinSize = Math.min(70, Math.round(width / 5.6));
   const strapW = 22;
   // The strap path: two parallel curves (a ribbon), drawn once.
   const steps = 24;
@@ -67,8 +67,8 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
   const stitch: string[] = [];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    const p = strapPoint(t, width, height * 0.62);
-    const q = strapPoint(Math.min(1, t + 0.001), width, height * 0.62);
+    const p = strapPoint(t, width, height * 0.78);
+    const q = strapPoint(Math.min(1, t + 0.001), width, height * 0.78);
     const dx = q.x - p.x; const dy = q.y - p.y; const len = Math.hypot(dx, dy) || 1;
     const nx = -dy / len; const ny = dx / len;
     outer.push(`${i === 0 ? 'M' : 'L'}${(p.x + nx * strapW / 2).toFixed(1)},${(p.y + ny * strapW / 2).toFixed(1)}`);
@@ -78,8 +78,8 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
   const stitch2: string[] = [];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    const p = strapPoint(t, width, height * 0.62);
-    const q = strapPoint(Math.min(1, t + 0.001), width, height * 0.62);
+    const p = strapPoint(t, width, height * 0.78);
+    const q = strapPoint(Math.min(1, t + 0.001), width, height * 0.78);
     const dx = q.x - p.x; const dy = q.y - p.y; const len = Math.hypot(dx, dy) || 1;
     const nx = -dy / len; const ny = dx / len;
     stitch2.push(`${i === 0 ? 'M' : 'L'}${(p.x - nx * (strapW / 2 - 4)).toFixed(1)},${(p.y - ny * (strapW / 2 - 4)).toFixed(1)}`);
@@ -95,7 +95,7 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
         <Path d={stitch2.join(' ')} stroke={BRAND.gold} strokeWidth={1.6} strokeDasharray="5 5" fill="none" />
       </Svg>
       {slots.map((pin, i) => {
-        const p = strapPoint(SLOT_T[i] ?? 0.5, width, height * 0.62);
+        const p = strapPoint(SLOT_T[i] ?? 0.5, width, height * 0.78);
         const tilt = ((i * 37) % 11) - 5;
         if (!pin && !showEmpty) return null;
         return (

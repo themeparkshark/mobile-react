@@ -250,9 +250,10 @@ export default function PinsScreen() {
                 <View style={styles.grid}>
                   {owned.map((p, i) => {
                     const on = lanyardIds.includes(p.item_id);
-                    const size = Math.floor((width - SPACE.lg * 2 - SPACE.md * 2) / 4) - 18;
+                    const cellW = Math.floor((width - SPACE.lg * 2 - SPACE.md * 2 - OUTLINE.thick * 2 - 6 * 3) / 4);
+                    const size = cellW - 22;
                     return (
-                      <Pressable key={p.item_id} onPress={() => toggleWear(p)} style={[styles.cell, on && styles.cellOn]}
+                      <Pressable key={p.item_id} onPress={() => toggleWear(p)} style={[styles.cell, { width: cellW }, on && styles.cellOn]}
                         accessibilityRole="button" accessibilityState={{ selected: on }}
                         accessibilityLabel={`${p.name}${p.is_chaser ? ', chaser' : ''}${p.tradable ? ', can trade' : ', park only'}${on ? ', on your lanyard' : ''}`}>
                         <PinTile uri={p.icon_url} size={size} owned kind={p.kind} tradable={p.tradable} chaser={p.is_chaser} spares={p.spares}
