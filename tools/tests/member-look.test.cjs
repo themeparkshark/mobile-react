@@ -82,7 +82,7 @@ test('try-on: an owned member piece while lapsed asks a grown-up instead of fail
   const shelves = loadTs('src/helpers/shopShelves.ts');
   const base = { owned: true, worn: false, vipLocked: true, short: 0, phase: 'idle', wear: 'idle', finishes: false, cost: 140 };
   assert.deepEqual(plain(shelves.tryOnCta({ ...base, wearLocked: true })),
-    { label: 'Ask a grown-up', action: 'vip', note: COPY, look: 'go' });
+    { label: 'See VIP', action: 'vip', note: COPY, look: 'go' });
   assert.equal(shelves.tryOnCta({ ...base, wearLocked: false }).action, 'wear');
   assert.equal(shelves.tryOnCta({ ...base, wearLocked: true, worn: true }).action, 'close', 'taking it off always works');
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');

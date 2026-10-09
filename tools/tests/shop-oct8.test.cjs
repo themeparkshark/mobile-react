@@ -120,3 +120,12 @@ test('round 3: filter chips (All, each slot on the shelf, Can buy) and one word 
   assert.equal(shelves.slotWord(7), 'Skin');
   assert.equal(shelves.slotWord(null), null);
 });
+
+test('money stream hand-off: out of coins shows the need and the top-up offer, never jumps to the map; VIP doors say See VIP', () => {
+  const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
+  assert.match(sheet, /case 'earn': break;/);
+  assert.match(sheet, /<CoinTopUpOffer need=\{short\} reason="gear" tone="onBlue"/);
+  assert.match(sheet, /return `VIP is \$\{priceText\(plan\)\}\.`;/, 'the VIP price only from the loaded App Store plans');
+  assert.match(sheet, /accessibilityLabel="See VIP">\s*<GameIcon name="member"/);
+  assert.equal(shelves.tryOnCta({ owned: false, worn: false, vipLocked: true, secret: true, short: 0, phase: 'idle', wear: 'idle', finishes: false, cost: 140, paused: false, wearLocked: false }).label, 'See VIP');
+});

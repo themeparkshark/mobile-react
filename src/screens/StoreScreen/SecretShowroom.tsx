@@ -10,7 +10,7 @@
  *    twinkling stars. Picking a piece puts it on with its own moment and sound; a tap on the shark
  *    plays it again. One small chip says which shelf it is from and when that shelf changes.
  * 3. The plate: name, what it does in one line, the price and one button (Get it, Wear it, or for
- *    a guest "Ask a grown-up", which goes through the grown-up gate).
+ *    a guest "See VIP", the VIP pitch; the grown-up gate sits on its purchase tap).
  * 4. The picker: every piece in the room in one row of animated tiles. Tap one to put it on.
  *
  * Buying, wearing and the member rules stay in the try-on sheet (MEMBER_WEAR_LOCK, the
@@ -314,8 +314,8 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
               <View style={{ flex: 1 }} />
               {owned ? (worn ? null : <ShopCta label="Wear it" icon="check" width={170} still={still} onPress={() => onOpen(item, { bought: true })} />)
                 : member ? <ShopCta label="Get it" width={170} still={still} onPress={() => onOpen(item, { confirm: true })} />
-                : <VaultSecondaryButton label="Ask a grown-up" icon="lock" onPress={() => { void openMembership(); }}
-                    accessibilityLabel="Ask a grown-up about VIP" />}
+                : <VaultSecondaryButton label="See VIP" icon="member" onPress={() => { void openMembership(); }}
+                    accessibilityLabel="See VIP" />}
             </View>
           </View>
         </VaultPanel>

@@ -255,7 +255,7 @@ test('round 4: wear failure has its own message and retry, never a buy', () => {
   assert.equal(shelves.tryOnCta(idle).label, 'Buy for 200');
   assert.equal(shelves.tryOnCta({ ...idle, finishes: true }).label, 'Complete the look: 200');
   assert.equal(shelves.tryOnCta({ ...idle, phase: 'confirm' }).action, 'buy');
-  assert.equal(shelves.tryOnCta({ ...idle, short: 120 }).label, 'Go win 120 coins');
+  assert.equal(shelves.tryOnCta({ ...idle, short: 120 }).label, 'Need 120 more coins');
   assert.doesNotMatch(shelves.tryOnCta({ ...idle, short: 120 }).note, /ride coins/, 'glossary: ride coins are the collectible');
   assert.equal(shelves.tryOnCta({ ...idle, phase: 'unknown' }).action, 'recheck');
 });

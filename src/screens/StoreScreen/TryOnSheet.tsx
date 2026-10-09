@@ -45,12 +45,14 @@ import {
 import { isItemWorn, itemDisplayName, slotForItem, wearableBadge } from '../../helpers/wardrobe';
 import { InventoryType } from '../../models/inventory-type';
 import { ShopItem, ShopSetPiece, ShopSetReward, ShopSetSummary } from '../../models/shop-today';
-import * as RootNavigation from '../../RootNavigation';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
 import { CoinArc, LandFlash, MAX_FONT, PieceChip, REVEAL_NAVY, SHOP_SURFACE, Sheen, ShopCta, ShopStage, WishHeart } from './shopUi';
 import { wearItem } from './inventoryQueue';
 import { isMemberWearItem, memberWearLocked, useMemberWearLock } from '../../services/memberLook';
 import { TileArt } from './ShopTile';
+// The money stream's offer; a no-op shim on this branch until integration (see coinTopUpShim.tsx).
+import CoinTopUpOffer from './coinTopUpShim';
+import { cachedVipPlans, priceText } from '../../services/purchases';
 import { useWished, wishStore } from './wishStore';
 
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
@@ -343,6 +345,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   // The kid-fair promise, in a 7-year-old's words (kids UX round 1).
   // A member already is one: the promise alone. Guests hear the VIP rule (kids UX round 2).
   const keepLine = player?.is_subscribed ? MEMBER_KEEP : MEMBER_PROMISE;
+  const vipLine = vipPriceLine(cachedVipPlans());
   const card = secret ? SECRET_CARD : solo ? SOLO_CARD : CARD;
   const boughtNow = landed > 0;
 
@@ -444,7 +447,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       case 'vip': afterHiddenRef.current = () => { void openMembership(); }; closeAnimated(); break;
       case 'recheck': void settleUnknown('recheck'); break;
       case 'none': break;
-      case 'earn': onClose(); RootNavigation.navigate('Explore'); break;
+      // Short of coins: the top-up offer under the button has both paths (buy coins, or win them free).
+      case 'earn': break;
       case 'buy': void buy(); break;
       case 'ask':
         playSound(require('../../../assets/sounds/purchase_item_prompt.mp3'));
@@ -562,6 +566,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{FX_BLURB[fxKey]}</Text></View>
                     <View style={styles.fxRow}><View style={styles.lifeIcon}><GameIcon name="check" size={20} /></View>
                       <Text maxFontSizeMultiplier={MAX_FONT} style={goingAway || rarity ? styles.fxText : styles.fxKeep}>{keepLine}</Text></View>
+                    {/* Non-members: the real VIP price from the App Store, once it has loaded (never a guess). */}
+                    {!player?.is_subscribed && vipLine && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.vipPrice}>{vipLine}</Text>}
                     {rarity && <View style={styles.fxRow}><View style={styles.lifeIcon}><Image source={PEARLS[pearlFor(rarity.tier)]} style={styles.lifePearl} contentFit="contain" /></View>
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{sentence(rarity.label)}</Text></View>}
                   </View>
@@ -621,13 +627,19 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 {cta.action === 'vip' && secretItem ? (
                   // Not the gold Buy face: this door leads to a grown-up, not to buying (kids UX round 2).
                   <Pressable onPress={press} disabled={hold} style={({ pressed }) => [styles.grownUp, { width: PRIMARY_W }, pressed && { opacity: 0.8 }]}
-                    accessibilityRole="button" accessibilityLabel="Ask a grown-up about VIP">
-                    <GameIcon name="lock" size={24} />
+                    accessibilityRole="button" accessibilityLabel="See VIP">
+                    <GameIcon name="member" size={24} />
                     <Text maxFontSizeMultiplier={MAX_FONT} style={styles.grownUpText}>{cta.label.toUpperCase()}</Text>
                   </Pressable>
+                ) : cta.action === 'earn' ? (
+                  // Not a button: how many more you need. The offer below is what to tap.
+                  <View style={[styles.needPill, { width: PRIMARY_W }]} accessible accessibilityLabel={cta.label}>
+                    <GameIcon name="coins" size={22} />
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.needText}>{cta.label}</Text>
+                  </View>
                 ) : (
                 <View style={{ overflow: 'hidden', borderRadius: 18 }}>
-                  <ShopCta label={cta.label} icon={owned ? 'shark' : cta.action === 'earn' ? 'coins' : cta.action === 'vip' ? (secretItem ? 'lock' : 'member') : 'coins'}
+                  <ShopCta label={cta.label} icon={owned ? 'shark' : cta.action === 'vip' ? 'member' : 'coins'}
                     width={PRIMARY_W} onPress={press} still={still}
                     loading={cta.look === 'busy' || cta.look === 'checking'} muted={cta.look === 'paused' || cta.look === 'checking'}
                     disabled={hold || wear === 'spinning' || cta.look === 'paused' || cta.look === 'checking'} />
@@ -641,6 +653,10 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   </Pressable>
                 )}
               </View>
+              {/* Out of coins (money stream): the cheapest pack that covers it, behind the grown-up gate, plus the free path. */}
+              {cta.action === 'earn' && (
+                <CoinTopUpOffer need={short} reason="gear" tone="onBlue" onDone={() => { void refreshPlayer().catch(() => undefined); }} />
+              )}
             </View>
             <CoinArc from={{ x: 60, y: 44 }} to={{ x: (SCREEN_W - 28) / 2 + 14, y: STAGE_TOP + stageH * 0.5 }} still={still} trigger={coins} />
           </Animated.View>
@@ -649,6 +665,13 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       </ModalLayerContext.Provider>
     </Modal>
   );
+}
+
+/** "VIP is $4.99 a month" from the loaded App Store plans (monthly first); null until they load. */
+export function vipPriceLine(plans: readonly { price: string; period: string }[] | null | undefined): string | null {
+  if (!plans?.length) return null;
+  const plan = plans.find(p => p.period === 'month') ?? plans[0];
+  return `VIP is ${priceText(plan)}.`;
 }
 
 function CoinAmount({ n, label }: { n: number; label?: string }) {
@@ -751,6 +774,10 @@ const styles = StyleSheet.create({
   secondary: { minHeight: 48, minWidth: 96, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderRadius: 24,
     borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.75)' },
   slotLine: { fontFamily: FONT.body, fontSize: 17, lineHeight: 21, color: S.inkSoft, marginTop: -2 },
+  needPill: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 18,
+    borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.6)', backgroundColor: 'rgba(5,30,70,0.35)' },
+  needText: { fontFamily: FONT.display, fontSize: 18, color: S.ink },
+  vipPrice: { fontFamily: FONT.body, fontSize: 15, color: SECRET_THEME.inkSoft, marginLeft: 34 },
   secondaryText: { fontFamily: FONT.display, fontSize: 16, color: S.ink, textTransform: 'uppercase' },
   op: { fontFamily: FONT.display, fontSize: 22, color: S.inkSoft },
   amount: { flexDirection: 'row', alignItems: 'center', gap: 3 },

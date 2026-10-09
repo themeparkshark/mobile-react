@@ -335,7 +335,7 @@ test('Reduce Motion is read inside the shark stage and every tile, so no screen 
 test('the try-on says "Unlock with VIP" on Secret pieces, and a members_only 403 flips it', () => {
   const shelves = loadTs('src/helpers/shopShelves.ts');
   const base = { owned: false, worn: false, vipLocked: true, short: 0, phase: 'idle', wear: 'idle', finishes: false, cost: 280 };
-  assert.equal(shelves.tryOnCta({ ...base, secret: true }).label, 'Ask a grown-up');
+  assert.equal(shelves.tryOnCta({ ...base, secret: true }).label, 'See VIP');
   assert.equal(shelves.tryOnCta({ ...base, secret: true }).action, 'vip');
   assert.match(shelves.tryOnCta({ ...base, secret: true }).note, /VIP members can buy/);
   const tryOn = src('src/screens/StoreScreen/TryOnSheet.tsx');
@@ -409,7 +409,7 @@ test('non-members window-shop: the Profile tile opens the Secret Shop when the f
   // Non-members get one calm note and the grown-up door in the showroom (Oct 8), never a buy button.
   const showroom = src('src/screens/StoreScreen/SecretShowroom.tsx');
   assert.match(showroom, /\{!member && \(/);
-  assert.match(showroom, /<VaultSecondaryButton label="Ask a grown-up" icon="lock" onPress=\{\(\) => \{ void openMembership\(\); \}\}/);
+  assert.match(showroom, /<VaultSecondaryButton label="See VIP" icon="member" onPress=\{\(\) => \{ void openMembership\(\); \}\}/);
   const ui = loadSecretUi();
   assert.match(ui.SECRET_PREVIEW_COPY.body, /yours forever/);
   assert.doesNotMatch(ui.SECRET_PREVIEW_COPY.body + ui.SECRET_PREVIEW_COPY.title, /hurry|last chance|only \d|left!/i, 'calm copy, no pressure');

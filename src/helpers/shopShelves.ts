@@ -475,12 +475,12 @@ export type TryOnAction = 'wear' | 'close' | 'vip' | 'recheck' | 'earn' | 'buy' 
  */
 export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; note: string | null; look: 'go' | 'busy' | 'paused' | 'checking' } {
   if (s.owned) {
-    if (s.wearLocked && !s.worn) return { label: 'Ask a grown-up', action: 'vip', note: MEMBER_PROMISE, look: 'go' };
+    if (s.wearLocked && !s.worn) return { label: 'See VIP', action: 'vip', note: MEMBER_PROMISE, look: 'go' };
     if (s.wear === 'failed') return { label: 'Try again', action: 'wear', note: 'Couldn’t put it on. Try again.', look: 'go' };
     if (s.wear === 'spinning' || s.worn) return { label: 'Wearing it', action: 'close', note: null, look: 'go' };
     return { label: 'Wear it now', action: 'wear', note: null, look: s.wear === 'busy' ? 'busy' : 'go' };
   }
-  if (s.vipLocked && s.secret) return { label: 'Ask a grown-up', action: 'vip', note: 'VIP members can buy Secret Shop pieces.', look: 'go' };
+  if (s.vipLocked && s.secret) return { label: 'See VIP', action: 'vip', note: 'VIP members can buy Secret Shop pieces.', look: 'go' };
   if (s.vipLocked) return { label: 'VIP only: see VIP', action: 'vip', note: null, look: 'go' };
   // Its own state: asking the server never shows "Yes, buy it!".
   if (s.phase === 'checking') return { label: 'Checking…', action: 'none', note: 'Asking the shop if it went through.', look: 'checking' };
@@ -489,8 +489,8 @@ export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; n
   // Never a silent re-buy: "Check again" only asks the server what happened.
   if (s.phase === 'unknown') return { label: 'Check again', action: 'recheck', note: 'We couldn’t reach the shop. Let’s check if it went through.', look: 'go' };
   if (s.phase === 'buying' || s.phase === 'landing') return { label: 'Yes, buy it!', action: 'none', note: null, look: 'busy' };
-  // Says what the tap does and how many (kids UX round 2); "ride coins" are the shelf collectible, not money.
-  if (s.short > 0) return { label: `Go win ${formatCoins(s.short)} coins`, action: 'earn', note: 'Win coins at rides or open your daily chest.', look: 'go' };
+  // Short: say how many; the coin top-up offer (money stream) sits under it with the free path. "Ride coins" are the shelf collectible, not money.
+  if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more coins`, action: 'earn', note: 'Win coins at rides or open your daily chest.', look: 'go' };
   if (s.paused) return { label: 'Opening soon', action: 'none', note: 'Today’s shop is opening in a moment. Buying is back right after.', look: 'paused' };
   if (s.phase === 'confirm') return { label: 'Yes, buy it!', action: 'buy', note: null, look: 'go' };
   return { label: s.finishes ? `Complete the look: ${formatCoins(s.cost)}` : `Buy for ${formatCoins(s.cost)}`, action: 'ask', note: null, look: 'go' };
