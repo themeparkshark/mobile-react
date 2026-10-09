@@ -44,8 +44,10 @@ const closeSound = require('../../../assets/sounds/modal_close.mp3');
 export type HelpSheetPage = HelpPage & { readonly heroData?: HeroData };
 export type HelpSheetContent = Omit<HelpSheetSpec, 'pages'> & { readonly pages: readonly HelpSheetPage[] };
 
-const SPRING_IN = { damping: 19, stiffness: 210, mass: 0.9 } as const;
+/** A small overshoot and settle, like the game's popups. */
+const SPRING_IN = { damping: 14, stiffness: 260, mass: 0.85 } as const;
 const OUT_MS = 190;
+const seatTick = () => { void Haptics.selectionAsync().catch(() => undefined); };
 const SIDE = 16;
 /** The sheet's white side border; pages are exactly the space inside it, so a swiped page lands centered. */
 const BORDER = 3;
@@ -85,7 +87,10 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
       reveal.value = 0;
       playSound(openSound);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-      open.value = reduced ? withTiming(1, { duration: 180 }) : withSpring(1, SPRING_IN);
+      open.value = reduced ? withTiming(1, { duration: 180 }) : withSpring(1, SPRING_IN, done => {
+        // A soft tick when the sheet seats.
+        if (done) runOnJS(seatTick)();
+      });
       reveal.value = reduced ? 1 : withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
     } else if (mounted && !closing.current) {
       closing.current = true;
@@ -180,6 +185,8 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
       }
     }), [close, drag]);
 
+  // The footer arrives with the points, after the gold button art has decoded, so it never shows empty.
+  const footerStyle = useAnimatedStyle(() => ({ opacity: interpolate(reveal.value, [0.42, 0.72], [0, 1], 'clamp') }));
   const scrim = useAnimatedStyle(() => ({
     opacity: Math.min(1, open.value) * interpolate(drag.value, [0, 300], [1, 0.4], 'clamp'),
   }));
@@ -222,7 +229,7 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
               <SharkLoader state={state === 'error' ? 'error' : 'loading'} title={state === 'error' ? 'Couldn\'t load this' : undefined} onRetry={onRetry} />
             </View>
           )}
-          <View style={styles.footer}>
+          <Animated.View style={[styles.footer, footerStyle]}>
             {/* Always the same slot, so the button sits at one height on every sheet. */}
             <View style={styles.dots}>
               {ready && pages.length > 1 && pages.map((p, index) => (
@@ -244,7 +251,7 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
                 ))}
               </View>
             )}
-          </View>
+          </Animated.View>
         </Animated.View>
       </GestureDetector>
     </View>

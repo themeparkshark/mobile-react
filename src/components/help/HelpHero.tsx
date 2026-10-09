@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import { useEffect, type ReactNode } from 'react';
 import { ImageBackground, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, interpolate, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withTiming,
+  cancelAnimation, Easing, interpolate, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
@@ -95,6 +95,9 @@ export interface HeroData {
   readonly odds?: readonly { readonly tier: RarityTier; readonly percent: number }[];
 }
 
+/** Scenes already watched this session (they reopen on their payoff). */
+const SEEN = new Set<HelpHeroKey>();
+
 /** 0..1 repeating while running; parked on the scene's still frame otherwise. */
 function useLoop(hero: HelpHeroKey, running: boolean, reduced: boolean): SharedValue<number> {
   const { ms, rest } = LOOP[hero];
@@ -102,10 +105,18 @@ function useLoop(hero: HelpHeroKey, running: boolean, reduced: boolean): SharedV
   useEffect(() => {
     cancelAnimation(t);
     if (!running || reduced) { t.value = rest; return undefined; }
-    t.value = 0;
-    t.value = withRepeat(withTiming(1, { duration: ms, easing: Easing.linear }), -1, false);
+    const loop = withRepeat(withTiming(1, { duration: ms, easing: Easing.linear }), -1, false);
+    if (SEEN.has(hero)) {
+      // Seen before this session: open on the payoff, then keep looping, so the 10th open is not a rerun.
+      t.value = rest;
+      t.value = withSequence(withTiming(1, { duration: ms * (1 - rest), easing: Easing.linear }), withTiming(0, { duration: 0 }), loop);
+    } else {
+      SEEN.add(hero);
+      t.value = 0;
+      t.value = loop;
+    }
     return () => cancelAnimation(t);
-  }, [running, reduced, ms, rest, t]);
+  }, [hero, running, reduced, ms, rest, t]);
   return t;
 }
 
@@ -123,7 +134,10 @@ export default function HelpHero({ hero, width, height, running, reduced, data }
   const cork = hero === 'pins_swap' || hero === 'pins_clock';
   const sp = { t, w: width, h: height };
   return (
-    <View style={[styles.stage, { width, height }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <View style={[styles.stage, { width, height }]}
+      {...(hero === 'odds' && data?.odds?.length
+        ? { accessible: true, accessibilityLabel: data.odds.map(row => `${RARITY_LOOK[row.tier].label} ${row.percent} percent`).join(', ') }
+        : { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const })}>
       {cork
         // The board's own cork, tiled at its drawn size so it stays crisp (never stretched).
         ? <ImageBackground source={ART.corkTile} style={[StyleSheet.absoluteFill, { backgroundColor: '#c99a63' }]} resizeMode="repeat" />
@@ -197,7 +211,7 @@ function MiniRow({ rank, face, you, name, children, width, height }: {
         <Image source={ART.sharks[face]} style={{ width: '120%', height: '120%', marginTop: '18%' }} contentFit="cover" />
       </View>
       {/* Fixed sample names in the board's own type, never real players. */}
-      <Text numberOfLines={1} style={[styles.youName, !you && { color: BRAND.navySoft }]}>{you ? 'You' : name ?? ''}</Text>
+      <Text allowFontScaling={false} numberOfLines={1} style={[styles.youName, !you && { color: BRAND.navySoft }]}>{you ? 'You' : name ?? ''}</Text>
       <View style={{ flex: 1 }} />
       <GameIcon name="ride" size={height * 0.5} />
       <View style={{ width: height * 0.62, alignItems: 'center' }}>{children}</View>
@@ -215,8 +229,8 @@ function Swap({ t, a, b, from, to, style }: {
   });
   return (
     <View>
-      <Animated.Text style={[style, out]}>{from}</Animated.Text>
-      <Animated.Text style={[style, StyleSheet.absoluteFill, { textAlign: 'center' }, inn]}>{to}</Animated.Text>
+      <Animated.Text allowFontScaling={false} style={[style, out]}>{from}</Animated.Text>
+      <Animated.Text allowFontScaling={false} style={[style, StyleSheet.absoluteFill, { textAlign: 'center' }, inn]}>{to}</Animated.Text>
     </View>
   );
 }
@@ -252,11 +266,11 @@ function ClimbScene({ t, w, h }: SceneProps) {
   return (
     <>
       <Abs x={x0} y={y0} w={bw} h={rowH}>
-        <MiniRow width={bw} height={rowH} face={2} name="TOONS" rank={<Text style={rankStyle}>3</Text>}><Text style={countStyle}>7</Text></MiniRow>
+        <MiniRow width={bw} height={rowH} face={2} name="TOONS" rank={<Text allowFontScaling={false} style={rankStyle}>3</Text>}><Text allowFontScaling={false} style={countStyle}>9</Text></MiniRow>
       </Abs>
       <Abs x={x0} y={y0 + step} w={bw} h={rowH} style={midStyle}>
         <MiniRow width={bw} height={rowH} face={5} name="SURFKING" rank={<Swap t={t} a={0.52} b={0.6} from="4" to="5" style={rankStyle} />}>
-          <Text style={countStyle}>6</Text>
+          <Text allowFontScaling={false} style={countStyle}>6</Text>
         </MiniRow>
       </Abs>
       <Abs x={x0} y={y0 + step * 2} w={bw} h={rowH} style={youStyle}>
@@ -265,7 +279,7 @@ function ClimbScene({ t, w, h }: SceneProps) {
         </MiniRow>
       </Abs>
       <Abs x={x0 + bw * 0.4} y={y0 + step * 2 - rowH * 0.5} w={78} h={30} style={upChip}>
-        <View style={styles.upChip}><GameIcon name="arrow" size={16} style={{ transform: [{ rotate: '-90deg' }] }} /><Text style={styles.upText}>Up 1</Text></View>
+        <View style={styles.upChip}><GameIcon name="arrow" size={16} style={{ transform: [{ rotate: '-90deg' }] }} /><Text allowFontScaling={false} style={styles.upText}>Up 1</Text></View>
       </Abs>
       <Abs x={0} y={0} w={36} h={36} style={flyer}><GameIcon name="ride" size={34} /></Abs>
     </>
@@ -363,7 +377,7 @@ function BoardCard({ t, i, x, y, w, h, board }: {
     <Abs x={x} y={y} w={w} h={h} style={[styles.boardCard, card]}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.boardRing, ring]} />
       <GameIcon name={board.icon} size={icon} />
-      <Text numberOfLines={1} adjustsFontSizeToFit style={styles.boardLabel}>{board.label}</Text>
+      <Text allowFontScaling={false} numberOfLines={1} adjustsFontSizeToFit style={styles.boardLabel}>{board.label}</Text>
       <View style={styles.boardScore}>
         {board.faces.map((face, n) => (
           <View key={face} style={[styles.boardFace, n > 0 && { marginLeft: -8 }]}>
@@ -371,7 +385,7 @@ function BoardCard({ t, i, x, y, w, h, board }: {
           </View>
         ))}
         <GameIcon name={board.unit} size={18} />
-        <Text style={styles.boardNum}>{board.score}</Text>
+        <Text allowFontScaling={false} style={styles.boardNum}>{board.score}</Text>
       </View>
     </Abs>
   );
@@ -530,7 +544,7 @@ function DailyScene({ t, w, h }: SceneProps) {
     <>
       {tiles.map((tile, i) => <DailyTile key={i} t={t} x={x0 + i * (tw + gap)} y={y0} tw={tw} th={th} {...tile} w={w} />)}
       <Abs x={w / 2 - 60} y={y0 - 34} w={120} h={28}>
-        <View style={styles.dailyPill}><GameIcon name="timer" size={18} /><Text style={styles.dailyText}>Daily</Text></View>
+        <View style={styles.dailyPill}><GameIcon name="timer" size={18} /><Text allowFontScaling={false} style={styles.dailyText}>Daily</Text></View>
       </Abs>
     </>
   );
@@ -575,7 +589,7 @@ function SuppliesScene({ t, w, h }: SceneProps) {
       <Abs x={cx - cw / 2} y={cy} w={cw} h={ch}><Art source={ART.chestOpen} w={cw} h={ch} /></Abs>
       {items.map((item, i) => <Burst key={i} t={t} cx={cx} cy={cy + ch * 0.3} reach={cw * 0.55} {...item} />)}
       <Abs x={w - 132} y={h - 40} w={120} h={30}>
-        <View style={styles.grownUp}><GameIcon name="lock" size={16} /><Text style={styles.grownUpText}>Grown-ups</Text></View>
+        <View style={styles.grownUp}><GameIcon name="lock" size={16} /><Text allowFontScaling={false} style={styles.grownUpText}>Grown-ups</Text></View>
       </Abs>
     </>
   );
@@ -704,8 +718,8 @@ function LevelPill({ t, i, n, cx, y, name, level, deep }: {
   return (
     <Abs x={cx - 90} y={y} w={180} h={30} style={[{ alignItems: 'center' }, style]}>
       <View style={[styles.levelPill, { borderColor: deep }]}>
-        <Text style={styles.levelNum}>Lv {level}</Text>
-        <Text style={styles.levelName}>{name}</Text>
+        <Text allowFontScaling={false} style={styles.levelNum}>Lv {level}</Text>
+        <Text allowFontScaling={false} style={styles.levelName}>{name}</Text>
       </View>
     </Abs>
   );
@@ -825,7 +839,7 @@ function PostCard({ t, at, x, y, w, h, face, art, icon, likes, likeAt, caption }
     <Abs x={x} y={y} w={w} h={h} style={style}>
       <View style={[styles.post, { height: h }]}>
         <View style={styles.postFace}><Image source={ART.sharks[face]} style={{ width: '120%', height: '120%', marginTop: '18%' }} contentFit="cover" /></View>
-        <Text numberOfLines={1} style={styles.postCaption}>{caption}</Text>
+        <Text allowFontScaling={false} numberOfLines={1} style={styles.postCaption}>{caption}</Text>
         {art != null ? <Image source={art} style={{ width: h * 0.62, height: h * 0.62 }} contentFit="contain" /> : <GameIcon name={icon ?? 'ride'} size={h * 0.56} />}
         <View style={styles.likeChip}>
           <Animated.View style={heart}><GameIcon name="heart" size={16} /></Animated.View>
@@ -883,7 +897,7 @@ function TermScene({ t, w, h, icon, caption }: SceneProps & { readonly icon: Gam
       <Abs x={w / 2 - size / 2} y={cy - size / 2} w={size} h={size} style={bob}><GameIcon name={icon} size={size} /></Abs>
       {caption ? (
         <Abs x={w / 2 - 110} y={cy + size * 0.62} w={220} h={32} style={{ alignItems: 'center' }}>
-          <View style={styles.captionPill}><Text style={styles.captionText} numberOfLines={1}>{caption}</Text></View>
+          <View style={styles.captionPill}><Text allowFontScaling={false} style={styles.captionText} numberOfLines={1}>{caption}</Text></View>
         </Abs>
       ) : null}
     </>
@@ -920,12 +934,12 @@ function OddsBar({ t, i, x, y, w, h, tier, percent, max }: {
     <Abs x={x} y={y} w={w} h={h}>
       <View style={{ flexDirection: 'row', alignItems: 'center', height: h }}>
         <View style={[styles.oddsLabel, { width: labelW, height: h, backgroundColor: look.chip, borderColor: look.frame }]}>
-          <Text numberOfLines={1} style={[styles.oddsLabelText, { color: look.ink }]}>{look.label}</Text>
+          <Text allowFontScaling={false} numberOfLines={1} style={[styles.oddsLabelText, { color: look.ink }]}>{look.label}</Text>
         </View>
         <View style={[styles.oddsTrack, { width: trackW, height: h * 0.62 }]}>
           <Animated.View style={[{ height: '100%', borderRadius: h, backgroundColor: look.frame }, grow]} />
         </View>
-        <Text style={styles.oddsPct}>{percent}%</Text>
+        <Text allowFontScaling={false} style={styles.oddsPct}>{percent}%</Text>
       </View>
     </Abs>
   );
@@ -1012,7 +1026,7 @@ const styles = StyleSheet.create({
   },
   captionText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 2 },
   oddsLabel: { borderRadius: 999, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-  oddsLabelText: { fontFamily: 'Shark', fontSize: 14, marginTop: 2 },
+  oddsLabelText: { fontFamily: 'Shark', fontSize: 15, marginTop: 2 },
   oddsTrack: { borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.6)', overflow: 'hidden', justifyContent: 'center' },
   oddsPct: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, width: 42, textAlign: 'right' },
 });

@@ -28,8 +28,8 @@ export function oddsInfoSheet(info: HomeHuntInfo | null | undefined) {
   const rows = oddsRows(info);
   const odds = info?.odds;
   const local: SheetPoint[] = odds ? [
-    ...(Number(odds.focus) > 0 ? [{ icon: 'star' as const, text: `Focus a set: ${Number(odds.focus)}% of finds come from it.` }] : []),
-    ...(Number(odds.missing_multiplier) > 1 ? [{ icon: 'new' as const, text: `New-to-you items show up ${Number(odds.missing_multiplier)} times more.` }] : []),
+    ...(Number(odds.focus) > 0 ? [{ icon: 'star' as const, text: 'Pick a set to focus. Most finds come from it.' }] : []),
+    ...(Number(odds.missing_multiplier) > 1 ? [{ icon: 'new' as const, text: 'Items you don\'t have yet show up more often.' }] : []),
       ] : points(clean(info?.odds_lines).slice(0, 3), 'sparkle');
   return {
     id: 'odds', name: 'Drop odds',

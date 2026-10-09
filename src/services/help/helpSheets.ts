@@ -176,7 +176,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         points: [
           { icon: 'heart', text: 'Nice words only. Mean posts get removed.' },
           { icon: 'lock', text: 'Keep your name, school and address private.' },
-          { icon: 'bell', text: 'Tap the dots on a post to report it.' },
+          { icon: 'info', text: 'Tap the dots on a post, then Report.' },
         ] },
     ],
   },
