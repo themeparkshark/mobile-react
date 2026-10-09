@@ -15,7 +15,8 @@ import { buyPack, outcomeMessage, useSupplies } from '../../services/money/suppl
 import { storeAvailable } from '../../services/purchases';
 import { trackImpression } from '../../services/money/track';
 import { BRAND, FONT, gameAlert } from '../../ui';
-import { CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, Sticker } from './moneyUi';
+import { GotIt } from './moneyUi';
+import BundleCard from './BundleCard';
 
 const SEEN_KEY = 'money:starter-offer-seen';
 
@@ -66,34 +67,13 @@ export default function StarterOfferCard({ ready, onShown }: { ready: boolean; o
   };
 
   return (
-    <Animated.View entering={FadeInUp.delay(400).springify().damping(15)} style={st.wrap}>
-      <Pressable onPress={() => void buy()} disabled={busy} accessibilityRole="button"
-        accessibilityLabel={`Starter Pack, just once. ${price.price}, real money, a grown-up buys it.${worth ? ` Worth ${worth.worth}.` : ''}`}
-        style={({ pressed }) => [st.lip, pressed && st.lipPressed]}>
-        <View style={st.card}>
-          <PackArt art="chest" size={70} />
-          <View style={{ flex: 1, gap: 4, paddingVertical: 8 }}>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.title}>STARTER PACK · JUST ONCE</Text>
-            {worth && <Text maxFontSizeMultiplier={MAX_FONT} style={st.worth}>{`Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}`}</Text>}
-            <Contents grants={starter.grants} size="tight" />
-          </View>
-          <View style={st.priceCol}><PriceBar price={price.price} busy={busy} /></View>
-          {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: 2, left: 2 }} />}
-        </View>
-      </Pressable>
+    <View style={st.wrap}>
+      <BundleCard product={starter} price={price.price} worth={worth} busy={busy} disabled={busy} onBuy={() => void buy()} compact />
       <GotIt grants={landed} art="chest" onDone={() => setLanded(null)} />
-    </Animated.View>
+    </View>
   );
 }
 
 const st = StyleSheet.create({
-  wrap: { alignSelf: 'stretch', gap: 4, marginTop: 8 },
-  kicker: { fontFamily: FONT.display, fontSize: 13, color: BRAND.navy, textAlign: 'center', letterSpacing: 0.6 },
-  lip: { borderRadius: 16, backgroundColor: CARD.lip, paddingBottom: 5 },
-  lipPressed: { paddingBottom: 1, marginTop: 4 },
-  card: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 16, borderWidth: 3, borderColor: '#ffd84a',
-    backgroundColor: CARD.bottom, overflow: 'hidden', paddingLeft: 6 },
-  title: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
-  worth: { fontFamily: FONT.display, fontSize: 13, color: '#ffe07a' },
-  priceCol: { width: 96, alignSelf: 'stretch', justifyContent: 'center' },
+  wrap: { alignSelf: 'stretch', marginTop: 8 },
 });

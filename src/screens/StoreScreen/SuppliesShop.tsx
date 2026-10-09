@@ -43,6 +43,7 @@ import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from
 import { openMembership } from '../../components/GrownUpGate';
 import { useHelp } from '../../components/help/HelpProvider';
 import SharkPassBanner from '../../components/money/SharkPassBanner';
+import BundleCard from '../../components/money/BundleCard';
 import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../../services/money/flags';
 import {
   Band, CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, packArtKey, unitWord, type PackArtKey,
@@ -223,11 +224,11 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
 
           <View onLayout={onSection('featured')} style={{ gap: 12 }}>
             {starter && starter.available && priced(starter) && (
-              <StarterCard product={starter} price={prices[starter.product_id]?.price} worth={bundleWorth(starter, prices, rates)}
+              <BundleCard product={starter} price={prices[starter.product_id]?.price} worth={bundleWorth(starter, prices, rates)}
                 busy={busy === starter.product_id} disabled={!!busy} onBuy={() => void buy(starter, 'chest')} />
             )}
             {bigBundles.filter(priced).map(p => (
-              <StarterCard key={p.product_id} product={p} price={prices[p.product_id]?.price} worth={bundleWorth(p, prices, rates)}
+              <BundleCard key={p.product_id} product={p} price={prices[p.product_id]?.price} worth={bundleWorth(p, prices, rates)}
                 busy={busy === p.product_id} disabled={!!busy} onBuy={() => void buy(p, 'bag')}
                 band={`${p.title.toUpperCase()} · FOR A PARK TRIP`} art="bag" />
             ))}
@@ -304,34 +305,6 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
 
       <GotIt grants={landed?.grants ?? null} art={landed?.art ?? 'gift'} onDone={() => setLanded(null)} />
     </ScrollView>
-  );
-}
-
-/** The one-time Starter Pack: Alex's big card, his open chest, the honest worth. */
-function StarterCard({ product, price, worth, busy, disabled, onBuy, band = 'STARTER PACK · JUST ONCE', art = 'chest' }: {
-  product: ShopProduct; price?: string; worth: ReturnType<typeof bundleWorth>; busy: boolean; disabled: boolean; onBuy: () => void;
-  band?: string; art?: PackArtKey;
-}) {
-  return (
-    <Animated.View entering={FadeInUp.delay(60).springify().damping(15)}>
-      <ShopCard onPress={onBuy} disabled={disabled || !price} glow
-        accessibilityLabel={`${product.title}${product.limit === 'once' ? ', just once' : ''}. ${price ? `${price}, real money, a grown-up buys it.` : ''}${worth ? ` Worth ${worth.worth} in regular packs.` : ''}`}>
-        <Band text={band} color={art === 'chest' ? 'gold' : 'blue'} size={18} />
-        <View style={st.starterBody}>
-          <View style={st.starterArt}><PackArt art={art} size={118} /></View>
-          <View style={{ flex: 1, gap: 6 }}>
-            {worth && (
-              <Text maxFontSizeMultiplier={MAX_FONT} style={st.worth}>
-                {`Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}`}
-              </Text>
-            )}
-            <Contents grants={product.grants} size="small" />
-          </View>
-        </View>
-        <PriceBar price={price} busy={busy} big />
-        {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: 30, left: 8 }} />}
-      </ShopCard>
-    </Animated.View>
   );
 }
 

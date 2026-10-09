@@ -128,6 +128,13 @@ function Flake({ x, size, dur, delay, drift, height, running }: { x: number; siz
 const CELL_W = 92;
 const stepLabel = (n: number) => `Step ${n}`;
 
+/** Up to 3 rewards for the payoff, the best in the middle (items, then coins, tickets...). */
+function pickTrio(rewards: readonly SharkPassReward[]): SharkPassReward[] {
+  const rank: Record<string, number> = { item: 0, coins: 1, tickets: 2, rescue_passes: 3, mystery_box: 4, energy: 5 };
+  const best = [...rewards].sort((a, b) => (rank[a.type] ?? 9) - (rank[b.type] ?? 9)).slice(0, 3);
+  return best.length === 3 ? [best[1], best[0], best[2]] : best;
+}
+
 /** For the grown-up holding the phone: what the Shark Pass is, in plain words. All true of the server rules. */
 const PASS_GROWN_UP_NOTES = [
   'One buy for this season. It never renews and is never charged again.',
@@ -147,7 +154,7 @@ export default function SharkPassScreen() {
   const [price, setPrice] = useState<ShopPrice | null>(null);
   const [plusPrice, setPlusPrice] = useState<ShopPrice | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [landed, setLanded] = useState<{ reward: SharkPassReward; title: string; caption?: string; itemId?: number; emblem?: boolean } | null>(null);
+  const [landed, setLanded] = useState<{ reward: SharkPassReward; title: string; caption?: string; itemId?: number; emblem?: boolean; group?: SharkPassReward[]; twin?: string; locked?: SharkPassReward[] } | null>(null);
   const buying = useRef(false);
   const list = useRef<FlatList<SharkPassTier>>(null);
 
@@ -211,7 +218,7 @@ export default function SharkPassScreen() {
       const itemId = Number((res.granted as { item_id?: unknown }).item_id) || undefined;
       // Royal Pass beat: after a free claim, the same step's Shark Pass reward, calm, no timer.
       const passTwin = track === 'free' && !premium ? `With the Shark Pass this step also gives ${rewardWords(tier.paid)}.` : null;
-      setLanded({ reward, title: reward.type === 'item' ? 'New season pin!' : 'You got it!', itemId,
+      setLanded({ reward, title: reward.type === 'item' ? (reward.slot === 'background' ? 'New scene!' : 'New season pin!') : 'You got it!', itemId,
         caption: passTwin ? `${rewardWords(reward)}. ${passTwin}` : undefined });
       void refreshPlayer?.().catch(() => undefined);
     } catch (error) {
@@ -234,8 +241,10 @@ export default function SharkPassScreen() {
       const rewards = res.claimed.map(c => c.reward);
       const hero = rewards.find(r => r.type === 'item') ?? rewards.find(r => r.type === 'coins') ?? rewards[0];
       const twin = res.pass.enabled && res.pass.tiers ? passTwinLine(res.pass.tiers, !!res.pass.progress?.premium) : null;
+      const locked = res.pass.enabled && res.pass.tiers && !res.pass.progress?.premium
+        ? res.pass.tiers.filter(t => t.unlocked && !t.paid_claimed && t.paid.type === 'item').map(t => t.paid).slice(0, 3) : [];
       if (hero) setLanded({ reward: hero, title: rewards.length > 1 ? `${rewards.length} rewards!` : 'You got it!',
-        caption: twin ? `${claimedLine(rewards)}. ${twin}` : claimedLine(rewards) });
+        caption: claimedLine(rewards), group: pickTrio(rewards), twin: twin ?? undefined, locked });
       void refreshPlayer?.().catch(() => undefined);
     } catch {
       gameAlert('That didn’t work', 'Check your internet and try again.');
@@ -554,13 +563,30 @@ export default function SharkPassScreen() {
       </SafeAreaView>
       {climbed && !landed && (
         <GotIt grants={{}} art="gift" title={`Step ${climbed.to}!`} onDone={() => setClimbed(null)}
-          picture={<Image source={EMBLEM} style={{ width: 170, height: 170 }} contentFit="contain" />}
+          picture={heroLook ? (
+            <View style={{ width: 170, height: 190 }}><Playercard inventory={heroLook} showBackground={false} pinAnchor="body" still={reduced} style={StyleSheet.absoluteFill} /></View>
+          ) : <Image source={EMBLEM} style={{ width: 170, height: 170 }} contentFit="contain" />}
           caption={`You climbed ${climbed.to - climbed.from} ${climbed.to - climbed.from === 1 ? 'step' : 'steps'}. ${progress?.claimable ? `${progress.claimable} ${progress.claimable === 1 ? 'reward is' : 'rewards are'} ready.` : 'Keep going!'}`} />
       )}
       {landed && (
-        <GotIt grants={{}} art="gift" title={landed.title} onDone={() => setLanded(null)} picture={landed.emblem ? <Image source={EMBLEM} style={{ width: 180, height: 180 }} contentFit="contain" /> : <RewardPicture reward={landed.reward} size={180} />}
+        <GotIt grants={{}} art="gift" title={landed.title} onDone={() => setLanded(null)} picture={landed.emblem ? <Image source={EMBLEM} style={{ width: 180, height: 180 }} contentFit="contain" />
+            : landed.group && landed.group.length > 1 ? (
+              <View style={s.trio}>
+                {landed.group.map((r, i) => <View key={i} style={i === 1 ? s.trioMid : s.trioSide}><RewardPicture reward={r} size={i === 1 ? 150 : 96} /></View>)}
+              </View>
+            ) : <RewardPicture reward={landed.reward} size={180} />}
+          footer={landed.twin ? (
+            <View style={s.twin}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={s.twinText}>WITH THE SHARK PASS YOU’D ALSO HAVE</Text>
+              <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+                {(landed.locked ?? []).map((r, i) => (
+                  <View key={i} style={s.twinCell}><RewardPicture reward={r} size={44} /><View style={s.twinLock}><GameIcon name="lock" size={16} /></View></View>
+                ))}
+              </View>
+            </View>
+          ) : undefined}
           caption={landed.caption ?? rewardWords(landed.reward)}
-          action={landed.itemId ? { label: 'Wear it now', onPress: () => {
+          action={landed.itemId ? { label: landed.reward.type === 'item' && landed.reward.slot === 'background' ? 'Set as my scene' : 'Wear it now', onPress: () => {
             const id = landed.itemId!;
             setLanded(null);
             void wearItem({ id }).then(() => refreshPlayer?.()).then(() => gameAlert('Looking sharp!', 'Your shark is wearing it now. Everyone can see it.'))
@@ -657,6 +683,13 @@ const s = StyleSheet.create({
   barFill: { height: '100%', backgroundColor: BRAND.gold, borderRadius: 6 },
   points: { fontFamily: FONT.body, fontSize: 14, color: '#ffffff' },
   ended: { marginHorizontal: 14, borderRadius: 20, borderWidth: 3, borderColor: BRAND.gold, backgroundColor: '#123f80', padding: 14, gap: 6, alignItems: 'center' },
+  trio: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 4 },
+  trioMid: { zIndex: 2 },
+  trioSide: { marginBottom: 10, opacity: 0.95 },
+  twin: { marginTop: 10, alignItems: 'center', gap: 6 },
+  twinText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.gold, letterSpacing: 0.5 },
+  twinCell: { width: 56, height: 56, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', opacity: 0.85 },
+  twinLock: { position: 'absolute', top: -6, right: -6 },
   nextPrize: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: 8 },
   nextCircle: { width: 62, height: 62, borderRadius: 31, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 3, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center' },
   nextKicker: { fontFamily: FONT.display, fontSize: 12, color: BRAND.gold, letterSpacing: 0.6 },
