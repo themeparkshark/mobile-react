@@ -6,14 +6,14 @@ import type { EventChest, EventReward, LiveEvent, TeamKey } from '../../api/endp
 import { TEAMS, TEAM_ORDER } from '../../constants/teams';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
-import { clockTime, frenzyLine, nextStepHint, ordinal, rewardChips, teamPlace, timeLine } from '../../services/liveEvents/model';
+import { clockTime, frenzyLine, goalWord, nextStepHint, ordinal, rewardChips, starTimes, teamPlace, timeLine } from '../../services/liveEvents/model';
 import { useOpenChest } from '../../services/liveEvents/useLiveEvent';
 import { BRAND, GameIcon } from '../../ui';
 import ChestReveal from './ChestReveal';
 import ChestTrack from './ChestTrack';
 import { eventArt, type EventArt } from './eventArt';
 
-type Opened = { key: string; rewards: EventReward | null };
+type Opened = { key: string; rewards: EventReward | null; already?: boolean; failed?: boolean };
 
 function Section({ title, children }: { readonly title: string; readonly children: React.ReactNode }) {
   return (
@@ -43,7 +43,10 @@ function Peek({ chest, track }: { readonly chest: EventChest | null; readonly tr
 }
 
 /** Three pictures, three words each: what to do, what it fills, what you get. */
-function HowTo({ art }: { readonly art: EventArt }) {
+const HOW_TO_DEFAULT = ['Win and find', 'Fill the reef', 'Open chests'];
+
+function HowTo({ art, steps }: { readonly art: EventArt; readonly steps: readonly { readonly text: string }[] }) {
+  const words = [0, 1, 2].map(i => steps[i]?.text?.trim() || HOW_TO_DEFAULT[i]);
   const step = (picture: React.ReactNode, text: string, last = false) => (
     <>
       <View style={styles.step} accessible accessibilityLabel={text}>
@@ -55,9 +58,9 @@ function HowTo({ art }: { readonly art: EventArt }) {
   );
   return (
     <View style={styles.howRow}>
-      {step(<View style={styles.pair}><GameIcon name="coin" size={30} /><GameIcon name="ride" size={30} /></View>, 'Win and find')}
-      {step(<Image source={art.emblem} style={styles.stepImg} contentFit="contain" />, 'Fill the reef')}
-      {step(<Image source={art.chestOpen} style={styles.stepImg} contentFit="contain" />, 'Open chests', true)}
+      {step(<View style={styles.pair}><GameIcon name="coin" size={30} /><GameIcon name="ride" size={30} /></View>, words[0])}
+      {step(<Image source={art.emblem} style={styles.stepImg} contentFit="contain" />, words[1])}
+      {step(<Image source={art.chestOpen} style={styles.stepImg} contentFit="contain" />, words[2], true)}
     </View>
   );
 }
@@ -70,7 +73,7 @@ function TeamRace({ event }: { readonly event: LiveEvent }) {
   const winner = race.winners.length === 1 ? race.winners[0] : null;
   const line = ended
     ? winner ? `${TEAMS[winner].name} won!` : race.winners.length ? 'A tie at the top!' : 'Race over'
-    : place ? `Your team: ${ordinal(place)}` : event.me.team ? 'Help your team!' : 'Join a team to race';
+    : place ? `Your team: ${ordinal(place)}` : event.me.team ? 'Help your team!' : '';
   return (
     <View>
       {TEAM_ORDER.map((team: TeamKey) => {
@@ -90,7 +93,7 @@ function TeamRace({ event }: { readonly event: LiveEvent }) {
           </View>
         );
       })}
-      <Text style={styles.line}>{line}</Text>
+      {!!line && <Text style={styles.line}>{line}</Text>}
     </View>
   );
 }
@@ -121,13 +124,20 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
   const onOpen = useCallback(async (key: string) => {
     haptic('tapLight');
     setOpened({ key, rewards: null });
-    const rewards = openOverride ? await openOverride(key) : (await open(event.id, key))?.rewards ?? null;
+    let rewards: EventReward | null = null;
+    let already = false;
+    if (openOverride) rewards = await openOverride(key);
+    else {
+      const result = await open(event.id, key);
+      rewards = result?.rewards ?? null;
+      already = !!result?.already;
+    }
     if (!rewards) {
-      setOpened(null);
       playSfx('fail');
+      setOpened({ key, rewards: null, failed: true });
       return;
     }
-    setOpened({ key, rewards });
+    setOpened({ key, rewards, already });
   }, [event.id, open, openOverride]);
 
   const frenzy = frenzyLine(event);
@@ -140,12 +150,12 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
   const doNow: { icon: 'chest' | 'star' | 'ride' | 'coin'; text: string; go?: () => void } | null = readyCount > 0
     ? { icon: 'chest', text: readyCount === 1 ? 'Open your chest below' : `Open ${readyCount} chests below` }
     : !live ? null
-      : firstStar ? { icon: 'star', text: `Win a Star Ride: x${event.points.spotlight_win / Math.max(1, event.points.ride_win)}`, go: onShowRide ? () => { onClose(); onShowRide(firstStar.task_id); } : undefined }
+      : firstStar ? { icon: 'star', text: `Win a Star Ride: x${starTimes(event)}`, go: onShowRide ? () => { onClose(); onShowRide(firstStar.task_id); } : undefined }
         : hint ? { icon: atPark && event.here ? 'ride' : 'coin', text: hint } : null;
   const nextFrenzy = live && atPark && event.here && !frenzy && event.frenzy.next_starts_at ? `Next Frenzy ${clockTime(event.frenzy.next_starts_at)}` : null;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} onDismiss={() => setOpened(null)} onShow={() => setOpened(null)} statusBarTranslucent>
       <View style={styles.scrim}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close event" accessibilityRole="button" />
         <View style={[styles.sheet, { marginTop: insets.top + 24, paddingBottom: insets.bottom + 12 }]}>
@@ -171,11 +181,11 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
                 )}
               </View>
             )}
-            <HowTo art={art} />
+            <HowTo art={art} steps={event.how_to} />
             {frenzy && (
-              <View style={styles.frenzy} accessible accessibilityLabel={`Frenzy! Everything ${frenzy}`}>
+              <View style={styles.frenzy} accessible accessibilityLabel={`Frenzy! ${frenzy}`}>
                 <GameIcon name="rush" size={26} />
-                <Text style={styles.frenzyText}>Frenzy! All {frenzy}</Text>
+                <Text style={styles.frenzyText}>Frenzy! {frenzy}</Text>
               </View>
             )}
             <Section title="YOUR CHESTS">
@@ -186,13 +196,13 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
                 : hint ?? (event.me.chests.every(c => c.claimed) ? 'All your chests opened!' : 'Open your chests!')}</Text>
             </Section>
             {together.chests.length > 0 && (
-              <Section title="EVERYONE'S REEF">
+              <Section title={`EVERYONE'S ${goalWord(event).toUpperCase()}`}>
                 <ChestTrack chests={together.chests} value={together.total} art={art} onOpen={onOpen} opening={opening} label="Everyone's chests"
                   onPeek={chest => setPeek(p => (p?.chest.key === chest.key ? null : { track: 'together', chest }))} />
                 <Peek chest={peek?.track === 'together' ? peek.chest : null} track="Everyone's" />
                 <View style={styles.helpedRow}>
                   {event.me.helped ? <><GameIcon name="check" size={20} /><Text style={styles.line}>You helped!</Text></>
-                    : <Text style={styles.line}>{together.min_personal <= 1 ? 'Help 1 time to share' : 'Help to share these'}</Text>}
+                    : <Text style={styles.line}>{together.min_personal <= 1 ? 'Win or find 1 time to share' : 'Play to share these'}</Text>}
                 </View>
               </Section>
             )}
@@ -210,7 +220,7 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
                   <View key={ride.task_id} style={styles.starRow}>
                     <GameIcon name="star" size={26} />
                     <Text style={styles.starName} numberOfLines={1}>{ride.name}</Text>
-                    <Text style={styles.x2}>x2</Text>
+                    <Text style={styles.x2}>x{starTimes(event)}</Text>
                     {onShowRide && (
                       <Pressable accessibilityRole="button" accessibilityLabel={`Show ${ride.name} on the map`} hitSlop={6}
                         onPress={() => { onClose(); onShowRide(ride.task_id); }} style={styles.show}>
@@ -238,7 +248,8 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
           </ScrollView>
         </View>
         {opened && (
-          <ChestReveal art={art} rewards={opened.rewards} onDone={() => setOpened(null)}
+          <ChestReveal art={art} rewards={opened.rewards} onDone={() => setOpened(null)} already={opened.already} failed={opened.failed}
+            onRetry={() => { void onOpen(opened.key); }}
             title={opened.key === 'team' ? (event.team_race?.you_won ? 'Your team won!' : 'Team chest') : 'You got'} />
         )}
       </View>

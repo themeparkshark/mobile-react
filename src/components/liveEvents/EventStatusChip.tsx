@@ -16,8 +16,10 @@ import { eventArt } from './eventArt';
  *   otherwise        -> your chest bar
  * The emblem hops only while a chest is ready (UI thread; still under reduced motion).
  */
-function EventStatusChip({ event, onPress, inline = false, now = Date.now() }: {
+function EventStatusChip({ event, onPress, inline = false, paused = false, now = Date.now() }: {
   readonly event: LiveEvent;
+  /** The map is covered or blurred: the hop rests. */
+  readonly paused?: boolean;
   readonly onPress: () => void;
   readonly inline?: boolean;
   readonly now?: number;
@@ -26,7 +28,7 @@ function EventStatusChip({ event, onPress, inline = false, now = Date.now() }: {
   const s = chipState(event, now);
   const reduced = useReducedGameMotion();
   const hop = useSharedValue(0);
-  const hopping = s.kind === 'open' && !reduced;
+  const hopping = s.kind === 'open' && !reduced && !paused;
   useEffect(() => {
     if (!hopping) { cancelAnimation(hop); hop.value = 0; return; }
     hop.value = withRepeat(withSequence(withTiming(1, { duration: 240, easing: Easing.out(Easing.quad) }),
@@ -37,9 +39,9 @@ function EventStatusChip({ event, onPress, inline = false, now = Date.now() }: {
 
   const title = event.title.toUpperCase();
   const label = s.kind === 'open' ? `${event.title}: ${s.count === 1 ? 'a chest is' : `${s.count} chests are`} ready. Open.`
-    : s.kind === 'frenzy' ? `${event.title}: Frenzy, everything ${s.line}. Open event.`
+    : s.kind === 'frenzy' ? `${event.title}: Frenzy, ${s.line}. Open event.`
       : s.kind === 'upcoming' ? `${event.title}: ${s.line}. Open event.`
-        : `${event.title}: fill the reef to open your chests. Open event.`;
+        : `${event.title}: play to open your chests. Open event.`;
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
       style={({ pressed }) => [styles.pill, inline && styles.inline, s.kind === 'open' && styles.pillReady, pressed && styles.pressed]}>

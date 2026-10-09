@@ -46,7 +46,7 @@ test('chipState: chest ready beats Frenzy beats progress; upcoming says when', (
   assert.equal(m.chipState(ev({ mine: 13, claimed: 1 }), NOW).kind, 'open');
   const frenzy = m.chipState(ev({ mine: 9, claimed: 2, total: 20, frenzy: true }), NOW);
   assert.equal(frenzy.kind, 'frenzy');
-  assert.match(frenzy.line, /^x2 until \d{1,2}(:\d\d)? (AM|PM)$/);
+  assert.match(frenzy.line, /^Rides x2 until \d{1,2}(:\d\d)? (AM|PM)$/);
   const p = m.chipState(ev({ mine: 9, claimed: 2, total: 20 }), NOW);
   assert.equal(p.kind, 'progress');
   assert.ok(p.fill > 0.25 && p.fill < 0.5);
@@ -67,6 +67,16 @@ test('next step hint counts actions, not points', () => {
   assert.equal(m.nextStepHint(e, true), 'Win 1 ride');
   assert.equal(m.nextStepHint(e, false), 'Find 3 snacks');
   assert.equal(m.nextStepHint(ev({ mine: 60, claimed: 4 }), true), null);
+  // Never more snacks than a day can count; a park-only event says so.
+  assert.equal(m.nextStepHint(ev({ mine: 31, claimed: 3 }), false), 'Find 8 snacks today');
+  assert.equal(m.nextStepHint({ ...e, include_home: false }, false), 'Win rides at a park');
+});
+
+test('star times are whole numbers and the goal word has a fallback', () => {
+  assert.equal(m.starTimes(ev({})), 2);
+  assert.equal(m.starTimes({ ...ev({}), star_times: undefined, points: { home_find: 1, ride_win: 4, spotlight_win: 10, boss_hit: 1 } }), 3);
+  assert.equal(m.goalWord({ ...ev({}), goal_word: 'reef' }), 'reef');
+  assert.equal(m.goalWord({ ...ev({}), goal_word: '' }), 'event');
 });
 
 test('team place shares ties and needs a team', () => {

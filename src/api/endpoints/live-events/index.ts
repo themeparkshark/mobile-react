@@ -41,6 +41,10 @@ export interface LiveEvent {
   readonly daily_caps: Readonly<Record<string, number>>;
   /** The park asked about is part of this event. */
   readonly here: boolean;
+  /** Star Ride win vs a normal win, rounded (2 = "x2"). */
+  readonly star_times?: number;
+  /** The event's goal in one word ("reef"); empty for a plain event. */
+  readonly goal_word?: string;
   readonly include_home: boolean;
   readonly frenzy: {
     readonly active: boolean;
@@ -81,7 +85,7 @@ export interface OpenChestResult {
   readonly event: LiveEvent;
 }
 
-export async function openEventChest(eventId: number, key: string): Promise<OpenChestResult> {
-  const { data } = await client.post<{ data: OpenChestResult }>(`/live-events/${eventId}/open`, { key }, { timeout: 8000 });
+export async function openEventChest(eventId: number, key: string, parkId: number | null = null): Promise<OpenChestResult> {
+  const { data } = await client.post<{ data: OpenChestResult }>(`/live-events/${eventId}/open`, parkId ? { key, park_id: parkId } : { key }, { timeout: 8000 });
   return data.data;
 }

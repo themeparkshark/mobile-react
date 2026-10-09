@@ -7,8 +7,8 @@ import useLivePoll from '../../hooks/useLivePoll';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon, isGameIconName } from '../../ui';
 
-/** Once a minute while the map is focused and awake; slower when the server has nothing (switch off). */
-export const NEXT_UP_POLL_MS = 60_000;
+/** Every 3 minutes while the map is focused and awake (the host also refreshes after a chest opens or a sheet closes); slower when the server has nothing. */
+export const NEXT_UP_POLL_MS = 180_000;
 export const NEXT_UP_IDLE_MS = 10 * 60_000;
 
 /**

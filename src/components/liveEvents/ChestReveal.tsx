@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, FadeIn, ZoomIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, FadeIn, ZoomIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import type { EventReward } from '../../api/endpoints/live-events';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
@@ -31,8 +31,13 @@ function Burst({ i, go }: { readonly i: number; readonly go: boolean }) {
  * to the open chest, coins burst out, then each prize lands one beat apart
  * with a tick. Only what the server paid is shown.
  */
-function ChestReveal({ art, rewards, onDone, title = 'You got' }: {
+function ChestReveal({ art, rewards, onDone, title = 'You got', already = false, failed = false, onRetry }: {
   readonly art: EventArt;
+  /** The server had already paid this chest (shows "Already opened"). */
+  readonly already?: boolean;
+  /** The open did not go through: a closed chest and Try again. */
+  readonly failed?: boolean;
+  readonly onRetry?: () => void;
   /** Null while the server is still paying (the chest wobbles). */
   readonly rewards: EventReward | null;
   readonly onDone: () => void;
@@ -45,10 +50,11 @@ function ChestReveal({ art, rewards, onDone, title = 'You got' }: {
   const shake = useSharedValue(0);
   const flash = useSharedValue(0);
   useEffect(() => {
-    if (reduced) return;
+    if (reduced || failed) { cancelAnimation(shake); shake.value = 0; return; }
     shake.value = withRepeat(withSequence(withTiming(1, { duration: 70 }), withTiming(-1, { duration: 140 }), withTiming(0, { duration: 70 }),
       withTiming(0, { duration: 220 })), -1, false);
-  }, [reduced, shake]);
+    return () => cancelAnimation(shake);
+  }, [reduced, failed, shake]);
   useEffect(() => {
     if (!rewards) return;
     const id = setTimeout(() => {
@@ -69,12 +75,12 @@ function ChestReveal({ art, rewards, onDone, title = 'You got' }: {
   }, [open, skip]); // eslint-disable-line react-hooks/exhaustive-deps
   const chestStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${shake.value * 7}deg` }, { scale: 1 + Math.abs(shake.value) * 0.04 }] }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
-  const empty = !!rewards && chips.length === 0;
+  const empty = already && !!rewards;
 
   return (
     <Pressable style={styles.scrim} accessibilityViewIsModal onPress={() => { if (open) setSkip(true); }} accessible={false}>
       <View style={styles.card}>
-        <Text style={styles.title}>{!rewards ? 'Opening...' : title}</Text>
+        <Text style={styles.title}>{failed ? 'Not yet' : !rewards ? 'Opening...' : title}</Text>
         <View style={styles.stage}>
           {!reduced && Array.from({ length: COINS }, (_, i) => <Burst key={i} i={i} go={open} />)}
           <Animated.View style={chestStyle}>
@@ -91,6 +97,12 @@ function ChestReveal({ art, rewards, onDone, title = 'You got' }: {
           ))}
           {open && empty && <Text style={styles.chipText}>Already opened</Text>}
         </View>
+        {failed && (
+          <View style={styles.failRow}>
+            <Pressable accessibilityRole="button" onPress={onDone} style={[styles.button, styles.quiet]}><Text style={styles.buttonText}>CLOSE</Text></Pressable>
+            {onRetry && <Pressable accessibilityRole="button" onPress={onRetry} style={styles.button}><Text style={styles.buttonText}>TRY AGAIN</Text></Pressable>}
+          </View>
+        )}
         {open && (
           <Animated.View entering={FadeIn.delay(reduced || skip ? 0 : 350 + chips.length * 260)}>
             <Pressable accessibilityRole="button" onPress={onDone} style={({ pressed }) => [styles.button, pressed && { transform: [{ scale: 0.96 }] }]}>
@@ -119,5 +131,7 @@ const styles = StyleSheet.create({
   chipText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
   button: { marginTop: 14, backgroundColor: BRAND.gold, borderRadius: 18, borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 6,
     borderBottomColor: BRAND.goldLip, paddingHorizontal: 40, paddingVertical: 8, minHeight: 48, justifyContent: 'center' },
+  failRow: { flexDirection: 'row', gap: 10 },
+  quiet: { backgroundColor: BRAND.white, borderBottomColor: BRAND.creamDeep, paddingHorizontal: 18 },
   buttonText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
 });

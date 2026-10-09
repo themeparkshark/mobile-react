@@ -13,7 +13,7 @@ import { eventArt } from './eventArt';
  * pops in, holds 2 s, leaves. Coin tick + light success haptic.
  * Place it near the top of the map, under the status row.
  */
-function EventGainToast({ gained, gainedAt, artKey }: { readonly gained: number; readonly gainedAt: number; readonly artKey: string | null }) {
+function EventGainToast({ gained, gainedAt, artKey, word = 'reef' }: { readonly gained: number; readonly gainedAt: number; readonly artKey: string | null; readonly word?: string }) {
   const reduced = useReducedGameMotion();
   const [shown, setShown] = useState<{ n: number; at: number } | null>(null);
   const lastAt = useRef(gainedAt);
@@ -34,10 +34,10 @@ function EventGainToast({ gained, gainedAt, artKey }: { readonly gained: number;
   if (!shown) return null;
   return (
     <Animated.View style={[styles.toast, style]} pointerEvents="none" accessibilityLiveRegion="polite"
-      accessibilityLabel={`Plus ${shown.n} to the reef`}>
+      accessibilityLabel={`Plus ${shown.n} to the ${word}`}>
       <Image source={eventArt(artKey).emblem} style={styles.emblem} contentFit="contain" />
       <Text style={styles.plus}>+{shown.n}</Text>
-      <View><Text style={styles.line}>to the reef!</Text></View>
+      <View><Text style={styles.line}>to the {word}!</Text></View>
     </Animated.View>
   );
 }

@@ -32,6 +32,7 @@ let state: State = { parkId: null, event: null, fetchedAt: 0, failed: false, gai
 const listeners = new Set<() => void>();
 let inFlight: Promise<void> | null = null;
 let inFlightPark: number | null | undefined;
+let reqSeq = 0;
 
 function set(next: Partial<State>): void {
   state = { ...state, ...next };
@@ -50,14 +51,17 @@ export function liveEventSnapshot(): State {
 export async function refreshLiveEvent(parkId: number | null, read: typeof getLiveEvents = getLiveEvents): Promise<void> {
   if (inFlight && inFlightPark === parkId) return inFlight;
   inFlightPark = parkId;
-  inFlight = read(parkId).then(events => {
+  const seq = ++reqSeq;
+  const p: Promise<void> = read(parkId).then(events => {
+    if (seq !== reqSeq) return; // a newer request (another park) owns the store
     const event = pickEvent(events);
     const gained = state.parkId === parkId || state.event?.id === event?.id ? pointsGained(state.event, event) : 0;
     set({ parkId, event, fetchedAt: Date.now(), failed: false, ...(gained > 0 ? { gained, gainedAt: Date.now() } : {}) });
   }).catch(() => {
-    set({ parkId, failed: true, fetchedAt: Date.now() });
-  }).finally(() => { inFlight = null; });
-  return inFlight;
+    if (seq === reqSeq) set({ parkId, failed: true, fetchedAt: Date.now() });
+  }).finally(() => { if (inFlight === p) { inFlight = null; inFlightPark = undefined; } });
+  inFlight = p;
+  return p;
 }
 
 /** After a chest opens, the server sends the fresh event back. */
@@ -109,7 +113,7 @@ export function useOpenChest() {
   const open = useCallback(async (eventId: number, key: string): Promise<OpenChestResult | null> => {
     setOpening(key);
     try {
-      const result = await openEventChest(eventId, key);
+      const result = await openEventChest(eventId, key, state.parkId);
       applyOpenResult(result);
       return result;
     } catch {

@@ -48,7 +48,8 @@ function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label }: {
   useEffect(() => {
     width.value = reduced ? fill : withTiming(fill, { duration: 700, easing: Easing.out(Easing.cubic) });
   }, [fill, reduced, width]);
-  const fillStyle = useAnimatedStyle(() => ({ width: `${Math.max(0.03, width.value) * 100}%` }));
+  // scaleX from the left edge: no layout pass per frame.
+  const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.03, width.value) }] }));
   return (
     <View style={styles.wrap} accessibilityLabel={`${label}: ${chests.filter(c => c.reached).length} of ${chests.length} chests reached`}>
       <View style={styles.track}>
@@ -82,12 +83,12 @@ export default memo(ChestTrack);
 const styles = StyleSheet.create({
   wrap: { height: 62, marginHorizontal: 8, marginRight: 24, justifyContent: 'center' },
   track: { height: 16, borderRadius: 8, backgroundColor: BRAND.sky, borderWidth: 3, borderColor: BRAND.navy, overflow: 'hidden' },
-  fill: { height: '100%', backgroundColor: BRAND.gold, borderRightWidth: 2, borderRightColor: BRAND.goldLip },
+  fill: { width: '100%', height: '100%', backgroundColor: BRAND.gold, transformOrigin: 'left center' },
   chestSlot: { position: 'absolute', top: 2, width: CHEST, height: CHEST + 18, marginLeft: -CHEST / 2, alignItems: 'center' },
   chest: { width: CHEST, height: CHEST },
   locked: { opacity: 0.55 },
   dot: { position: 'absolute', top: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: BRAND.red, borderWidth: 2, borderColor: BRAND.white },
   badge: { position: 'absolute', top: 24, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: BRAND.white,
     borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
-  openTag: { fontFamily: 'Shark', fontSize: 11, color: BRAND.red, marginTop: -2 },
+  openTag: { fontFamily: 'Shark', fontSize: 13, color: BRAND.red, marginTop: -3 },
 });

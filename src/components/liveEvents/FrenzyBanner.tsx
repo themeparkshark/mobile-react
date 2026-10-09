@@ -14,7 +14,7 @@ export function resetFrenzyBannerForTests(): void { announced.clear(); }
 
 /**
  * The Frenzy moment: when a Frenzy hour starts at your park (or you open the
- * map during one), a gold banner drops in once, "FRENZY! Everything x2 until
+ * map during one), a gold banner drops in once, "FRENZY! Rides x2 until
  * 1 PM", then tucks away into the event chip. No map tint, no timer.
  */
 function FrenzyBanner({ event }: { readonly event: LiveEvent | null }) {
@@ -38,11 +38,11 @@ function FrenzyBanner({ event }: { readonly event: LiveEvent | null }) {
   if (!showing) return null;
   return (
     <Animated.View style={[styles.banner, style]} pointerEvents="none" accessibilityLiveRegion="polite"
-      accessibilityLabel={`Frenzy! Everything ${showing}`}>
+      accessibilityLabel={`Frenzy! ${showing}`}>
       <View style={styles.bolt}><GameIcon name="rush" size={30} /></View>
       <View>
         <Text style={styles.big}>FRENZY!</Text>
-        <Text style={styles.small}>Everything {showing}</Text>
+        <Text style={styles.small}>{showing}</Text>
       </View>
     </Animated.View>
   );

@@ -23,9 +23,8 @@ export function pickEvent(events: readonly LiveEvent[] | null | undefined): Live
 /** "1 PM", "1:30 PM" in the phone's own time. */
 export function clockTime(iso: string, timeZone?: string): string {
   const d = new Date(iso);
-  const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: d.getMinutes() ? '2-digit' : undefined, timeZone };
   try {
-    return d.toLocaleTimeString('en-US', opts).replace(':00', '');
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone }).replace(':00', '');
   } catch {
     const h = d.getHours() % 12 || 12;
     const m = d.getMinutes();
@@ -103,7 +102,7 @@ export const TEAM_LABEL: Record<TeamKey, string> = { mouse: 'Team Mouse', globe:
 export function frenzyLine(event: LiveEvent): string | null {
   if (event.phase !== 'live' || !event.frenzy.active || !event.frenzy.ends_at) return null;
   const times = event.frenzy.multiplier;
-  return `x${times} until ${clockTime(event.frenzy.ends_at)}`;
+  return `Rides x${times} until ${clockTime(event.frenzy.ends_at)}`;
 }
 
 export type ChipState =
@@ -139,7 +138,11 @@ export function nextStepHint(event: LiveEvent, atPark: boolean): string | null {
     const wins = Math.ceil(need / Math.max(1, event.points.ride_win));
     return wins === 1 ? 'Win 1 ride' : `Win ${wins} rides`;
   }
-  const finds = Math.ceil(need / Math.max(1, event.points.home_find));
+  if (!event.include_home) return 'Win rides at a park';
+  const perFind = Math.max(1, event.points.home_find);
+  const finds = Math.ceil(need / perFind);
+  const cap = Math.floor((event.daily_caps.home_find ?? 0) / perFind);
+  if (cap > 0 && finds > cap) return `Find ${cap} snacks today`;
   return finds === 1 ? 'Find 1 snack' : `Find ${finds} snacks`;
 }
 
@@ -158,6 +161,16 @@ export function rewardChips(r: LiveEvent['me']['chests'][number]['reward']): { i
   if (r.energy) out.push({ icon: 'energy', text: `${r.energy}` });
   if (r.xp) out.push({ icon: 'xp', text: `${r.xp}` });
   return out;
+}
+
+/** "x2" for a Star Ride (server-rounded; never "x2.5"). */
+export function starTimes(event: LiveEvent): number {
+  return Math.max(1, Math.round(event.star_times ?? event.points.spotlight_win / Math.max(1, event.points.ride_win)));
+}
+
+/** The event's goal word ("reef"), or a plain fallback. */
+export function goalWord(event: LiveEvent | null | undefined): string {
+  return event?.goal_word?.trim() || 'event';
 }
 
 /** Star Rides at this park as a Set for marker lookups. */
