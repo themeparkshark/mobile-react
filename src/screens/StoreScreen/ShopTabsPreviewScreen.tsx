@@ -105,7 +105,8 @@ function route(fx: Fixture, config: AxiosRequestConfig): { status: number; data:
   }
   const buy = /^\/me\/inventory\/items\/(\d+)\/purchase/.exec(url);
   if (buy) {
-    const item = LEGACY_ITEMS.find(i => i.id === Number(buy[1]));
+    const all = [...LEGACY_ITEMS, ...sharkToday().sections.flatMap(x => x.items), ...fixtureToday(1, 0).sections.flatMap(x => x.items)];
+    const item = all.find(i => i.id === Number(buy[1]));
     fx.player = { ...fx.player, coins: Number(fx.player.coins ?? 0) - (item?.cost ?? 0) } as PlayerType;
     fx.wallet = { ...fx.wallet, coins: Number(fx.player.coins) };
     return { status: 200, data: { data: { ...(item ?? { id: Number(buy[1]) }), has_purchased: true }, set_reward: null } };
