@@ -186,6 +186,18 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
       }
     }), [close, drag]);
 
+  const linkRow = links?.length ? (
+              <View style={styles.links}>
+                {links.map(link => (
+                  <Pressable key={link.label} onPress={link.onPress} accessibilityRole="button" accessibilityLabel={link.label} hitSlop={6}
+                    style={({ pressed }) => [styles.more, pressed && { opacity: 0.6 }]}>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.moreText}>{link.label}</Text>
+                    <GameIcon name="arrow" size={16} />
+                  </Pressable>
+                ))}
+              </View>
+            
+  ) : null;
   // The footer arrives with the points, after the gold button art has decoded, so it never shows empty.
   const footerStyle = useAnimatedStyle(() => ({ opacity: interpolate(reveal.value, [0.42, 0.72], [0, 1], 'clamp') }));
   const scrim = useAnimatedStyle(() => ({
@@ -234,6 +246,8 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
           <Animated.View style={[styles.footer, footerStyle]}>
             {/* Always the same slot, so the button sits at one height on every sheet. */}
             <View style={styles.dots}>
+              {/* One-page sheets put their quiet links in this slot, so the gold button sits where it does everywhere. */}
+              {ready && pages.length <= 1 && !!links?.length && linkRow}
               {ready && pages.length > 1 && pages.map((p, index) => (
                 <Dot key={p.key} index={index} width={pageW} scrollX={scrollX} count={pages.length} onPress={() => goTo(index)} />
               ))}
@@ -242,17 +256,7 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
               icon={!ready || last ? undefined : 'arrow'}
               accessibilityHint={!ready || last ? 'Closes help' : `Shows page ${page + 2} of ${pages.length}`}
               style={{ alignSelf: 'center', width: Math.min(pageW - SIDE * 4, 300) }} />
-            {!!links?.length && (
-              <View style={styles.links}>
-                {links.map(link => (
-                  <Pressable key={link.label} onPress={link.onPress} accessibilityRole="button" accessibilityLabel={link.label} hitSlop={6}
-                    style={({ pressed }) => [styles.more, pressed && { opacity: 0.6 }]}>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.moreText}>{link.label}</Text>
-                    <GameIcon name="arrow" size={16} />
-                  </Pressable>
-                ))}
-              </View>
-            )}
+            {!!links?.length && pages.length > 1 && linkRow}
           </Animated.View>
         </Animated.View>
       </GestureDetector>
@@ -360,7 +364,7 @@ const styles = StyleSheet.create({
   pointIconSmall: { width: 30, height: 30, borderRadius: 15 },
   pointTextSmall: { fontSize: 16, lineHeight: 20 },
   footer: { paddingTop: 4, gap: 6, alignItems: 'center' },
-  dots: { flexDirection: 'row', gap: 2, alignItems: 'center', justifyContent: 'center', height: 30 },
+  dots: { flexDirection: 'row', gap: 2, alignItems: 'center', justifyContent: 'center', minHeight: 30 },
   dot: { height: 10, borderRadius: 5 },
   links: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
   more: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 12 },

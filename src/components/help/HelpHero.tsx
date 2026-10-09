@@ -895,6 +895,10 @@ function TermScene({ t, w, h, icon, caption }: SceneProps & { readonly icon: Gam
         <View style={styles.termGlow} />
       </Abs>
       <Abs x={w / 2 - size / 2} y={cy - size / 2} w={size} h={size} style={bob}><GameIcon name={icon} size={size} /></Abs>
+      {[0, 1, 2, 3].map(i => (
+        <Sparkle key={i} t={t} at={0.08 + i * 0.22} size={i % 2 ? 18 : 24}
+          x={w / 2 + Math.cos(i * 1.9 + 0.6) * size * 0.95} y={cy + Math.sin(i * 1.9 + 0.6) * size * 0.62} />
+      ))}
       {caption ? (
         <Abs x={w / 2 - 110} y={cy + size * 0.62} w={220} h={32} style={{ alignItems: 'center' }}>
           <View style={styles.captionPill}><Text allowFontScaling={false} style={styles.captionText} numberOfLines={1}>{caption}</Text></View>
