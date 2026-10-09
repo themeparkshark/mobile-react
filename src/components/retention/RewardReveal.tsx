@@ -54,7 +54,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const size = Math.min(width * 0.44, height * (compact ? 0.17 : 0.21), 190);
   // Rows get a fixed area (scrolls only on small phones), so the card never changes height.
   // Sized so the ribbon always clears the Dynamic Island on a Pro and gear plus four rows fit whole.
-  const rowsHeight = compact ? Math.max(200, height - size - 300) : Math.max(200, Math.min(330, height - size - 350));
+  const rowsHeight = compact ? Math.max(200, height - size - 300) : Math.max(200, Math.min(300, height - size - 380));
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
   const pop = useSharedValue(1);
