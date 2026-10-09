@@ -25,7 +25,7 @@ import Animated, {
   Easing, interpolate, runOnJS, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { playSfx } from '../../gamekit/SFX';
 import type { HelpPage, HelpSheetSpec } from '../../services/help/helpSheets';
@@ -93,12 +93,15 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
 
   return (
     <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        {mounted && sheet && (
-          <SheetBody sheet={sheet} open={open} drag={drag} reveal={reveal} reduced={reduced} active={visible}
-            onClose={onClose} state={state} onRetry={onRetry} pageFooter={pageFooter} more={more} />
-        )}
-      </GestureHandlerRootView>
+      {/* Its own safe-area root: the sheet also renders from HelpProvider, above the app's SafeAreaProvider. */}
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          {mounted && sheet && (
+            <SheetBody sheet={sheet} open={open} drag={drag} reveal={reveal} reduced={reduced} active={visible}
+              onClose={onClose} state={state} onRetry={onRetry} pageFooter={pageFooter} more={more} />
+          )}
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
     </Modal>
   );
 }
