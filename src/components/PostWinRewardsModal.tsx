@@ -1,5 +1,8 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { openMembership } from './GrownUpGate';
+import StarterOfferCard from './money/StarterOfferCard';
+import { vipWinLine } from '../services/money/offers';
+import { vipRideMultiplierNow, warmVipPerks } from '../services/money/vipPerks';
 import OneTimeTip from './help/OneTimeTip';
 import PerkChipRow from './coin/PerkChip';
 import type { PerkChipData } from './coin/progressionModel';
@@ -228,6 +231,8 @@ export default function PostWinRewardsModal({
   useEffect(() => () => { afterHide.current = null; }, []);
   const closeTo = (destination: () => void) => { afterHide.current = destination; onClose(); };
   const isVip = !!player?.is_subscribed;
+  // The VIP line quotes the server's own multiplier; loaded once per run.
+  useEffect(() => { if (!isVip) void warmVipPerks(); }, [isVip]);
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
@@ -510,11 +515,14 @@ export default function PostWinRewardsModal({
                   onPress={() => closeTo(() => { void openMembership(); })}>
                   <GameIcon name="member" size={26} />
                   <Text style={styles.vipChipText} numberOfLines={1}>
-                    VIP members get extra XP and coins
+                    {vipWinLine(coinsEarned, xpEarned, vipRideMultiplierNow()) ?? 'VIP members get extra XP and coins'}
                   </Text>
                   <GameIcon name="arrow" size={20} />
                 </Pressable>
               )}
+
+              {/* The Starter Pack, once ever, at the first win: an earned moment, never a pop-up. */}
+              {!isVip && coinsEarned > 0 && <StarterOfferCard ready={visible} />}
 
               {nextUnlock && <Text style={styles.hint}>{nextUnlock}</Text>}
             </Animated.View>

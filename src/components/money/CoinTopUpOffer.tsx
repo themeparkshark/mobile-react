@@ -29,9 +29,9 @@ import { buyPack, outcomeMessage, useSupplies } from '../../services/money/suppl
 import { storeAvailable } from '../../services/purchases';
 import { BRAND, FONT, GameIcon, gameAlert } from '../../ui';
 import { CARD, GotIt, MAX_FONT, PackArt, PriceBar, currencyIcon, packArtKey, unitWord, type PackArtKey } from './moneyUi';
+import { topUpHeadline, type TopUpCurrency, type TopUpReason } from '../../services/money/copy';
 
-export type TopUpReason = 'gear' | 'mystery-box' | 'ride' | 'level-up' | 'raid' | (string & {});
-export type TopUpCurrency = Extract<ShopCurrency, 'coins' | 'tickets' | 'energy'>;
+export type { TopUpCurrency, TopUpReason };
 
 const FREE_PATH: Record<TopUpCurrency, string> = {
   coins: 'Or win ride coins at the park and open your daily chest. Free.',
@@ -39,19 +39,7 @@ const FREE_PATH: Record<TopUpCurrency, string> = {
   energy: 'Or grab home finds near you for free energy.',
 };
 
-/** The headline: what is missing, in the player's words. Exported for tests. */
-export function topUpHeadline(need: number, kind: TopUpCurrency, reason: TopUpReason): string {
-  const n = Math.max(1, Math.ceil(need));
-  const amount = `${n.toLocaleString('en-US')} more ${unitWord(kind, n)}`;
-  if (kind === 'tickets' && reason === 'ride') return n === 1 ? 'Out of tickets?' : `Need ${amount}?`;
-  switch (reason) {
-    case 'gear': return `Need ${amount} for this?`;
-    case 'mystery-box': return `Need ${amount} for this box?`;
-    case 'level-up': return `Need ${amount} to level up?`;
-    case 'raid': return `Need ${amount} to attack?`;
-    default: return `Need ${amount}?`;
-  }
-}
+export { topUpHeadline };
 
 export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins', tone = 'onLight', style }: {
   need: number; reason: TopUpReason; onDone?: () => void; currency?: TopUpCurrency;
