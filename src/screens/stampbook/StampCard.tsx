@@ -591,7 +591,6 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
       <View style={styles.howBox}>
         <View style={styles.howHead}>
           <GameIcon name={stamp.earned ? 'check' : stamp.secret ? 'sparkle' : req.icon} size={22} />
-          {!stamp.earned && !stamp.secret && req.count !== null && <Text style={styles.howCount}>x{req.count.toLocaleString('en-US')}</Text>}
           <Text style={styles.howText} maxFontSizeMultiplier={1.3}>{stamp.howTo}</Text>
           {!stamp.earned && !stamp.secret && <WhereChip where={whereFor(stamp.metric)} />}
         </View>
