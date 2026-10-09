@@ -327,7 +327,8 @@ function BoardsScene({ t, w, h }: SceneProps) {
   const railH = 44;
   const seg3 = (bw - 12) / 3;
   const x0 = (w - bw) / 2;
-  const y0 = h * 0.16;
+  // Below the sheet's close button, which sits on the window's top-right corner.
+  const y0 = Math.max(48, h * 0.27);
   // The pill rests on a tab for a beat, then springs to the next one, like the real rail.
   const pos = (v: number) => {
     'worklet';
@@ -342,7 +343,7 @@ function BoardsScene({ t, w, h }: SceneProps) {
           {BOARDS.map((board, i) => <RailTab key={board.label} t={t} i={i} width={seg3} board={board} pos={pos} />)}
         </View>
       </Abs>
-      {BOARDS.map((board, i) => <BoardChip key={board.label} t={t} i={i} pos={pos} cx={w / 2} y={y0 + railH + h * 0.13} board={board} />)}
+      {BOARDS.map((board, i) => <BoardChip key={board.label} t={t} i={i} pos={pos} cx={w / 2} y={y0 + railH + 14} board={board} />)}
     </>
   );
 }
@@ -957,7 +958,7 @@ const styles = StyleSheet.create({
   },
   upText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, marginTop: 2 },
   rail: {
-    flexDirection: 'row', padding: 4, paddingHorizontal: 4, borderRadius: 16, backgroundColor: 'rgba(5,52,110,0.35)',
+    flexDirection: 'row', padding: 4, paddingHorizontal: 4, borderRadius: 16, backgroundColor: 'rgba(5,52,110,0.62)',
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.45)', alignItems: 'center',
   },
   railPill: { position: 'absolute', left: 4, top: 4, borderRadius: 12, backgroundColor: BRAND.white, borderBottomWidth: 3, borderBottomColor: BRAND.sky },

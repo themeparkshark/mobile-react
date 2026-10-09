@@ -32,6 +32,7 @@ import type { HelpPage, HelpSheetSpec } from '../../services/help/helpSheets';
 import { BRAND, GameButton, GameIcon, SharkLoader } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import HelpHero, { type HeroData } from './HelpHero';
+import { HELP_TOUR_ON, onTourNext } from './helpTour';
 
 const openSound = require('../../../assets/sounds/modal_open.mp3');
 const closeSound = require('../../../assets/sounds/modal_close.mp3');
@@ -145,6 +146,12 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
       void Haptics.selectionAsync().catch(() => undefined);
     }
   }, [page, pageW, pages.length]);
+
+  useEffect(() => {
+    if (!HELP_TOUR_ON) return undefined;
+    onTourNext(() => goTo(page + 1));
+    return () => onTourNext(null);
+  }, [goTo, page]);
 
   const onScroll = useAnimatedScrollHandler(event => { scrollX.value = event.contentOffset.x; });
 

@@ -24,6 +24,7 @@ import {
 import { useTutorial } from '../Tutorial';
 import { helpSheet, type HelpSheetId } from '../../services/help/helpSheets';
 import HelpSheet from './HelpSheet';
+import { startHelpTour } from './helpTour';
 import TermSheet from './TermSheet';
 
 /** How long a shown tip may be hidden by a busy blink before it is dropped. */
@@ -141,6 +142,12 @@ export default function HelpProvider({ children }: { readonly children: React.Re
     setHelpId(null);
     RootNavigation.navigate('HowToPlay', topic ? { topic } : undefined);
   }, []);
+
+  // Dev-only capture tour (EXPO_PUBLIC_HELP_TOUR); a no-op otherwise.
+  useEffect(() => startHelpTour({
+    open: openHelpSheet, explain: () => setSheet({ key: 'keys', count: 0 }),
+    close: () => { setHelpId(null); setSheet(null); }, pages: id => helpSheet(id).pages.length,
+  }, playerId), [openHelpSheet, playerId]);
 
   const hasSeenTip = useCallback((id: TipId) => seenRef.current.has(id), []);
 
