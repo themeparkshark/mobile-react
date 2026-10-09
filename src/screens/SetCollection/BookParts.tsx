@@ -45,7 +45,7 @@ const BROWN = '#7a3d00';
 const BODY_SCALE = 1.45;
 
 export const SHELF_CARD_W = 102;
-export const SHELF_CARD_H = 122;
+export const SHELF_CARD_H = 128;
 export const SHELF_GAP = 12;
 
 const finishedOf = (set: Pick<DexSet, 'reward'>) => set.reward.status === 'claimed' || set.reward.status === 'pending';
@@ -318,12 +318,6 @@ export function PrizeChips({ reward, titleChip = false }: { readonly reward: Dex
   if (chips.length === 0 && !reward.title) return <Text style={styles.chipText}>A surprise</Text>;
   return (
     <View style={styles.chips}>
-      {titleChip && !!reward.title && (
-        <View style={[styles.chip, styles.chipTitle]}>
-          <GameIcon name="crown" size={24} />
-          <Text style={[styles.chipText, styles.chipTitleText]} numberOfLines={1} maxFontSizeMultiplier={1.3}>Title: {reward.title}</Text>
-        </View>
-      )}
       {chips.map(chip => {
         const words = chip.icon === 'energy' ? `${chip.value} Energy` : chip.icon === 'ticket' ? `${chip.value} ${chip.label.endsWith('Ticket') ? 'Ticket' : 'Tickets'}`
           : chip.icon === 'xp' ? `${chip.value} XP` : chip.icon === 'coins' ? `${chip.value} Coins` : chip.value;
@@ -334,6 +328,12 @@ export function PrizeChips({ reward, titleChip = false }: { readonly reward: Dex
           </View>
         );
       })}
+      {titleChip && !!reward.title && (
+        <View style={[styles.chip, styles.chipTitle, { alignSelf: 'flex-start' }]}>
+          <GameIcon name="crown" size={24} />
+          <Text style={[styles.chipText, styles.chipTitleText]} numberOfLines={1} maxFontSizeMultiplier={1.3}>Title: {reward.title}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -558,10 +558,10 @@ const styles = StyleSheet.create({
   cardFaceGold: { borderColor: BRAND.gold, borderBottomColor: BRAND.goldLip, borderWidth: 4, borderBottomWidth: 7 },
   gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '46%' },
   cardWell: {
-    width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.95)', alignItems: 'center', justifyContent: 'center',
+    width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(255,255,255,0.95)', alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: 'rgba(5,52,110,0.25)',
   },
-  cardBadge: { width: 44, height: 44 },
+  cardBadge: { width: 40, height: 40 },
   cardName: {
     fontFamily: 'Shark', fontSize: 14, lineHeight: 16, color: BRAND.white, marginTop: 4, paddingHorizontal: 6, textAlign: 'center',
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 1, minHeight: 32,
