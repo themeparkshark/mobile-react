@@ -68,8 +68,15 @@ export function useSupplies(enabled = true): SuppliesState {
     if (!enabled) return undefined;
     listeners.add(setNow);
     setNow(state);
-    void refreshSupplies();
-    return () => { listeners.delete(setNow); };
+    // A slow or dropped first load tries again (4 s, then 12 s), so an offer never stays blank.
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    void refreshSupplies().then((first) => {
+      if (first.catalog) return;
+      timers.push(setTimeout(() => void refreshSupplies(true).then((second) => {
+        if (!second.catalog) timers.push(setTimeout(() => void refreshSupplies(true), 12_000));
+      }), 4_000));
+    });
+    return () => { listeners.delete(setNow); timers.forEach(clearTimeout); };
   }, [enabled]);
   return now;
 }
