@@ -84,13 +84,16 @@ export function buildFeedRows({ entries, lead, now, searchLabel, loadingMore, fa
     rows.push({ type: 'search', key: 'search', label: `${entries.length} ${entries.length === 1 ? 'story' : 'stories'} for "${searchLabel}"` });
   }
   let lastDay = '';
+  const dayCount = new Map<string, number>();
   let sinceFeature = 0;
   for (const entry of rest) {
     if (!searchLabel) {
       const day = dayLabel(entry.date, now);
       if (day !== lastDay) {
-        // A label can only repeat if the list is out of order; the index keeps keys unique regardless.
-        rows.push({ type: 'day', key: `day-${day}-${rows.length}`, label: day });
+        // A label can only repeat if the list is out of order; counting each label keeps keys unique and stable.
+        const seenDay = (dayCount.get(day) ?? 0) + 1;
+        dayCount.set(day, seenDay);
+        rows.push({ type: 'day', key: `day-${day}-${seenDay}`, label: day });
         lastDay = day;
       }
     }
