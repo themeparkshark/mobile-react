@@ -29,16 +29,25 @@ export default function StarterOfferCard({ ready, onShown }: { ready: boolean; o
 
   useEffect(() => {
     if (!ready || !canBuy || show !== null) return;
-    void AsyncStorage.getItem(SEEN_KEY).then((seen) => {
-      setShow(!seen);
-      if (!seen) void AsyncStorage.setItem(SEEN_KEY, String(Date.now())).catch(() => undefined);
-    }).catch(() => setShow(false));
+    void AsyncStorage.getItem(SEEN_KEY).then((seen) => setShow(!seen)).catch(() => setShow(false));
   }, [ready, canBuy, show]);
 
   const starter = catalog?.enabled ? catalog.products.find(p => p.limit === 'once' && p.available) : undefined;
   const price = starter ? prices[starter.product_id] : undefined;
   const visible = !!(show && starter && price);
-  useEffect(() => { onShown?.(visible); }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Seen only once it really showed with its price: a slow store or no signal never burns the one-time offer.
+  useEffect(() => {
+    if (visible) void AsyncStorage.setItem(SEEN_KEY, String(Date.now())).catch(() => undefined);
+  }, [visible]);
+  // The sheet's one money offer is decided before anything else renders: tell the sheet as soon as we know.
+  const decided = !ready ? null : !canBuy || show === false ? false : visible ? true : null;
+  useEffect(() => { if (decided !== null) onShown?.(decided); }, [decided]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // Prices that never come (no store, no signal): give the sheet back its VIP line after a short wait.
+    if (!ready || decided !== null) return undefined;
+    const t = setTimeout(() => onShown?.(false), 2500);
+    return () => clearTimeout(t);
+  }, [ready, decided]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!show || !starter || !price) return null;
   const worth = bundleWorth(starter, prices, baseRates(catalog!.products, prices));
   trackImpression('postwin.starter', starter.product_id);

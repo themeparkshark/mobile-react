@@ -234,7 +234,8 @@ export default function PostWinRewardsModal({
   const isVip = !!player?.is_subscribed;
   // The VIP line quotes the server's own multiplier; loaded once per run.
   useEffect(() => { if (!isVip) void warmVipPerks(); }, [isVip]);
-  const [starterShown, setStarterShown] = useState(false);
+  // null until the Starter card has decided; the VIP line waits for it, so it never flashes and vanishes.
+  const [starterShown, setStarterShown] = useState<boolean | null>(null);
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
@@ -512,7 +513,7 @@ export default function PostWinRewardsModal({
               )}
 
               {/* One money offer per sheet: the once-ever Starter Pack takes the VIP line's place. */}
-              {!isVip && !starterShown && (xpEarned > 0 || coinsEarned > 0) && (
+              {!isVip && (starterShown === false || coinsEarned <= 0) && (xpEarned > 0 || coinsEarned > 0) && (
                 <Pressable style={styles.vipChip} accessibilityRole="button"
                   accessibilityLabel="VIP members get extra XP and coins when they win. Tap to learn about VIP."
                   onPress={() => closeTo(() => { void openMembership(); })}>
