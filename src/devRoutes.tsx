@@ -61,6 +61,7 @@ export function devInitialRoute(): string | null {
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
     [!!process.env.EXPO_PUBLIC_SHOP_LIFE_PREVIEW, 'ShopLifecyclePreview'],
+    [on(process.env.EXPO_PUBLIC_PINS_PREVIEW), 'PinCollections'],
     [on(process.env.EXPO_PUBLIC_HOME_CATCH_PREVIEW), 'HomeCatchPreview'],
     [on(process.env.EXPO_PUBLIC_MAP_ALIVE_PREVIEW), 'MapAlivePreview'],
     [on(process.env.EXPO_PUBLIC_DECLUTTER_PREVIEW), 'MapDeclutterPreview'],
