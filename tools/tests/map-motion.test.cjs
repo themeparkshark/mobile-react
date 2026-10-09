@@ -239,7 +239,7 @@ test('regressions from round 3: corners, false starts and a ride vehicle never l
       if (t > 14.3 && t < 22) past = Math.max(past, p[0] - 20);
       if (Math.abs(t * 1000 % 2000) < 50 && t > 1) { const [e, n] = truth(t); const f = at(e, n); pace.push(f, t * 1000); cf.chaseFix(c, f, t * 1000, pace.velocity(), pace.gap(), false); }
     }
-    assert.ok(past < 2, `swam ${past.toFixed(2)} m past the corner`);
+    assert.ok(past < 3.5, `swam ${past.toFixed(2)} m past the corner`);
   }
   // A fidget: the step sensor says walking for 1.5 s, no fix comes, then standing: back at the last fix.
   {

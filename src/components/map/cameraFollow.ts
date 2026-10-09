@@ -213,16 +213,11 @@ function followTarget(c: Chaser, tMs: number): [GlidePoint, number, number] {
   return [move(c.fix, re * s, rn * s), running ? re : 0, running ? rn : 0];
 }
 /**
- * The run-on's velocity. Walking (step sensor) with the phone pointed well away from the pace (over 50
- * degrees): you turned a corner, and the phone turned with you, so the run-on follows the phone at the
- * same pace instead of carrying on into a building until the GPS notices.
+ * The run-on's velocity. The compass never steers it: people look around while they walk, and the round 4
+ * frame model showed a compass-steered shark zigzagging on a walk where the phone pointed elsewhere.
  */
 function runDirection(c: Chaser): [number, number] {
-  const sp = Math.hypot(c.re, c.rn);
-  if (c.walking !== true || c.hx === null || c.hy === null || sp < 0.2) return [c.re, c.rn];
-  const cos = (c.re * c.hx + c.rn * c.hy) / sp;
-  if (cos > Math.cos(50 * Math.PI / 180)) return [c.re, c.rn];
-  return [c.hx * sp, c.hy * sp];
+  return [c.re, c.rn];
 }
 /** The phone's heading (degrees), for the run-on at corners; smoothed here, cheap to call every tick. */
 export function chaseHeading(c: Chaser, deg: number | null): void {
@@ -289,6 +284,7 @@ export const FOLLOW_R_M = 1.6;
 export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, _rate: readonly [number, number], gapS: number, jump: boolean): void {
   chaseAdvance(c, tMs);
   const first = !c.lastFix || c.lastFix === c.fix && c.lastFixT === c.fixT && c.kP === null;
+  const prevFix = c.lastFix, prevT = c.lastFixT;
   c.lastFix = fix; c.lastFixT = tMs;
   if (jump || first || c.kP === null) {
     if (jump) { c.p = fix; c.ve = 0; c.vn = 0; }
@@ -315,6 +311,19 @@ export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, _rate: readonl
   c.kP = [(1 - k0) * p00, (1 - k0) * p01, p10 - k1 * p00, p11 - k1 * p01];
   const sp = Math.hypot(re, rn);
   if (sp > GLIDE_MAX_CARRY_MPS) { re *= GLIDE_MAX_CARRY_MPS / sp; rn *= GLIDE_MAX_CARRY_MPS / sp; }
+  // A corner the phone confirms: the newest step turns away from the estimate (over 35 degrees) and the
+  // phone points along that step (within 45). Take the step's direction now instead of a fix later. The
+  // compass never steers on its own (people look around while walking); it only confirms what GPS shows.
+  if (prevFix && c.walking === true && c.hx !== null && c.hy !== null) {
+    const sdt = Math.max(0.3, (tMs - prevT) / 1000);
+    const [se, sn] = enM(prevFix, fix);
+    const sl = Math.hypot(se, sn), v = Math.hypot(re, rn);
+    if (sl >= FOLLOW_TURN_STEP_M && v > 0.3) {
+      const offPace = (re * se + rn * sn) / (v * sl) < Math.cos(35 * Math.PI / 180);
+      const phoneAlong = (c.hx * se + c.hy * sn) / sl > Math.cos(45 * Math.PI / 180);
+      if (offPace && phoneAlong) { const pace = Math.min(v, sl / sdt); re = (se / sl) * pace; rn = (sn / sl) * pace; }
+    }
+  }
   c.kX = est; c.kT = tMs;
   // Carried (standing, yet the estimate keeps moving for two fixes in a row): the run-on comes back.
   const fast = Math.hypot(re, rn) > 0.8;
