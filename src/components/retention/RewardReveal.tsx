@@ -49,10 +49,12 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const ambient = useAmbient();
   const { width, height } = useWindowDimensions();
   // The chest never resizes at the reveal (no jump); the rows area takes the rest of the screen.
-  const size = Math.min(width * 0.44, height * 0.21, 190);
+  // Small phones (SE) get a compact layout so every prize shows without scrolling.
+  const compact = height < 720;
+  const size = Math.min(width * 0.44, height * (compact ? 0.17 : 0.21), 190);
   // Rows get a fixed area (scrolls only on small phones), so the card never changes height.
   // Sized so the ribbon always clears the Dynamic Island on a Pro and gear plus four rows fit whole.
-  const rowsHeight = Math.max(200, Math.min(330, height - size - 350));
+  const rowsHeight = compact ? Math.max(200, height - size - 300) : Math.max(200, Math.min(330, height - size - 350));
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
   const pop = useSharedValue(1);
@@ -167,7 +169,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
               <Text style={styles.hint}>{stalled ? 'Still opening...' : opening ? 'Opening...' : 'Tap to open!'}</Text>
             </View>
           ) : rows.map((row, i) => (
-            <Row key={row.kind} row={row} shown={i < landed} reducedMotion={reducedMotion}
+            <Row key={row.kind} row={row} shown={i < landed} reducedMotion={reducedMotion} compact={compact}
               onWear={row.kind === 'item' ? onWear : undefined} onPins={row.kind === 'mystery_boxes' ? onPins : undefined} />
           ))}
         </ScrollView>
@@ -221,8 +223,8 @@ function useCountUp(target: number, run: boolean, instant: boolean): number {
   return n;
 }
 
-function Row({ row, shown, reducedMotion, onWear, onPins }: {
-  readonly row: RewardRow; readonly shown: boolean; readonly reducedMotion: boolean;
+function Row({ row, shown, reducedMotion, onWear, onPins, compact = false }: {
+  readonly row: RewardRow; readonly shown: boolean; readonly reducedMotion: boolean; readonly compact?: boolean;
   readonly onWear?: () => void; readonly onPins?: () => void;
 }) {
   const big = isBigReward(row.kind);
@@ -247,7 +249,7 @@ function Row({ row, shown, reducedMotion, onWear, onPins }: {
     // Laid out from the start (no jump); the face is a plain View (iOS clips a scaled bordered background).
     <Animated.View style={style}>
       {big && <Animated.View pointerEvents="none" style={[styles.beam, beamStyle]} />}
-      <View style={[styles.row, big && styles.rowBig]}>
+      <View style={[styles.row, big && styles.rowBig, compact && styles.rowCompact]}>
         <View style={[styles.rowIcon, big && styles.rowIconBig]}>{rowIcon(row)}</View>
         {big ? (
           <View style={{ flex: 1, gap: 4 }}>
@@ -282,6 +284,7 @@ const styles = StyleSheet.create({
   hint: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold, textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14,
     paddingHorizontal: 10, paddingVertical: 2 },
+  rowCompact: { minHeight: 0, paddingVertical: 0 },
   rowBig: { backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold, paddingVertical: 8 },
   rowIcon: { width: 58, alignItems: 'center' },
   rowIconBig: { width: 84 },
@@ -293,7 +296,7 @@ const styles = StyleSheet.create({
   smallBtn: { alignSelf: 'flex-start', backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 5,
     borderBottomWidth: 3, borderBottomColor: BRAND.goldLip },
   smallBtnText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
-  bottom: { alignSelf: 'stretch', minHeight: 104, justifyContent: 'flex-end', gap: 8, marginTop: 6 },
+  bottom: { alignSelf: 'stretch', minHeight: 96, justifyContent: 'flex-end', gap: 8, marginTop: 6 },
   button: { alignSelf: 'stretch', backgroundColor: BRAND.gold, borderRadius: 16, paddingVertical: 12,
     alignItems: 'center', borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },
   buttonPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },

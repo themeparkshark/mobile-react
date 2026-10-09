@@ -108,7 +108,7 @@ export function tomorrowLine(s: DailyThreeState): string {
 export function milestoneLine(s: DailyThreeState): string | null {
   const m = s.streak.next_milestone;
   if (!m || !m.days_away || m.days_away < 1) return null;
-  return m.days_away === 1 ? `Tomorrow: ${m.label}!` : `${m.days_away} more days: ${m.label}`;
+  return m.days_away === 1 ? `Tomorrow: ${m.label}!` : `${m.days_away} more days: ${m.label.toLowerCase()}`;
 }
 
 /** Under the streak when it is 0: keep the record, never shame. */

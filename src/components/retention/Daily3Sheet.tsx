@@ -62,7 +62,7 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
           {tease && (
             <View style={styles.tease}>
               <GameIcon name="gift" size={18} />
-              <Text style={styles.teaseText} numberOfLines={1}>{tease}</Text>
+              <Text style={styles.teaseText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{tease}</Text>
             </View>
           )}
         </View>
@@ -101,7 +101,7 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
             state.week.claimable && state.claimable && styles.weeklyWaiting]}>
           <Image source={WEEKLY} style={styles.weeklyArt} contentFit="contain" />
           <Text style={[styles.weeklyText, state.week.claimable && !state.claimable && styles.weeklyTextReady]}>
-            {state.week.claimed ? 'DONE' : state.week.claimable ? 'OPEN' : `${Math.min(state.week.done, state.week.needed)}/${state.week.needed}`}
+            {state.week.claimed ? 'DONE' : state.week.claimable ? 'OPEN' : 'GIFT'}
           </Text>
         </Pressable>
       </View>
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
   heroText: { flex: 1, gap: 1 },
   streakBig: { fontFamily: 'Shark', fontSize: 23, color: BRAND.gold },
   streakSub: { fontFamily: 'Knockout', fontSize: 15, color: '#e4f7ff' },
-  tease: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', backgroundColor: BRAND.navy, borderRadius: 10,
+  tease: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', maxWidth: '100%', backgroundColor: BRAND.navy, borderRadius: 10,
     paddingHorizontal: 6, paddingVertical: 2, marginTop: 2 },
   teaseText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.gold, marginTop: 1 },
   freezes: { gap: 4, alignItems: 'center' },
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
   laterText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.white },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, paddingHorizontal: 4 },
   reset: { fontFamily: 'Knockout', fontSize: 13, color: '#a9d6f7' },
-  bell: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 32 },
+  bell: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 4 },
   bellOff: { opacity: 0.45 },
   coachScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5, 52, 110, 0.82)', justifyContent: 'center', padding: 14 },
   coachCard: { backgroundColor: BRAND.white, borderRadius: 20, padding: 14, gap: 8, borderWidth: 3, borderColor: BRAND.gold },

@@ -138,7 +138,7 @@ test('closing beats point at tomorrow and the next milestone, and a lost streak 
   const s = state({ done: true, claimed: true, streak: { ...state().streak, days: 6, next_milestone: { day: 7, gear: true, mystery_boxes: 0, label: 'New gear', days_away: 1 } } });
   assert.equal(L.tomorrowLine(s), 'Come back tomorrow: Day 7 holds new gear!');
   assert.equal(L.milestoneLine(s), 'Tomorrow: New gear!');
-  assert.equal(L.milestoneLine(state({ streak: { ...state().streak, next_milestone: { day: 7, gear: true, mystery_boxes: 0, label: 'New gear', days_away: 4 } } })), '4 more days: New gear');
+  assert.equal(L.milestoneLine(state({ streak: { ...state().streak, next_milestone: { day: 7, gear: true, mystery_boxes: 0, label: 'New gear', days_away: 4 } } })), '4 more days: new gear');
   assert.equal(L.streakSubline(state({ streak: { ...state().streak, days: 0, best: 5, at_risk: false } })), 'Best: 5 days. Start a new flame!');
   assert.equal(L.sameJson({ a: 1 }, { a: 1 }), true);
 });
