@@ -23,7 +23,8 @@ import BossJoinCard, { BossJoinCta } from './BossJoinCard';
 import { MAX_DAMAGE_PER_PLAYER, joinCost, rewardPreview, shortfallCopy } from './joinModel';
 import BossWinCard from './BossWinCard';
 import PushSoftAsk from '../PushSoftAsk';
-import useLivePoll from '../../hooks/useLivePoll';
+import useLivePoll, { useAppActive } from '../../hooks/useLivePoll';
+import { useBudgetedPoll } from '../../power';
 import useMatchLink from '../../hooks/useMatchLink';
 import MatchLinkBanner from '../match/MatchLinkBanner';
 import { LINK_COPY, type LinkPhase } from '../../services/match/matchLink';
@@ -139,6 +140,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   readonly onRetryLink?: () => void;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
+  const appActive = useAppActive();
   const { location } = useContext(LocationContext);
   const [fighting, setFighting] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -198,9 +200,10 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   useEffect(() => {
     if (!open) return;
     setNow(Date.now());
+    if (!appActive || !focused) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [open]);
+  }, [open, appActive, focused]);
 
   // Once a raid you fought ends, celebrate it once.
   useEffect(() => {
@@ -311,12 +314,8 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   };
   const renderedRound = round.current;
   const liveRefresh = useRef(onLiveRefresh); liveRefresh.current = onLiveRefresh;
-  useEffect(() => {
-    // Only while play is live: never on the pause sheet or the result card.
-    if (!fighting || !liveActive) return;
-    const id = setInterval(() => liveRefresh.current?.(), 6000);
-    return () => clearInterval(id);
-  }, [fighting, liveActive]);
+  // Only while play is live: never on the pause sheet or the result card (shared, budgeted poll).
+  useBudgetedPoll(() => liveRefresh.current?.(), 6000, { enabled: fighting && liveActive, immediate: false, key: 'boss-live' });
   useEffect(() => {
     if (!againPending || fighting || starting) return;
     if (!open || !focused) { setAgainPending(false); return; }

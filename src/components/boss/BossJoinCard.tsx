@@ -19,6 +19,7 @@ import { GameAudio } from '../../gamekit/audio/GameAudio';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
 import { BOSS_ART } from './bossArt';
+import { usePowerBudget } from '../../power';
 import { BossHpBar } from './BossSheetParts';
 import { joinCost, joinLabel, minutesLeft, type RewardPreview } from './joinModel';
 
@@ -42,6 +43,7 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
   paused?: boolean;
 }) {
   const reduced = useReducedGameMotion();
+  const { ambient } = usePowerBudget();
   const cost = joinCost(raid, remote, energy, tickets);
   const name = BOSS_NAMES[raid.boss];
   const repeat = raid.you.attacks > 0;
@@ -50,9 +52,9 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
   const enter = useSharedValue(reduced ? 1 : 0);
   const greeted = useRef(false);
   useEffect(() => {
-    if (!reduced && !paused) bob.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }), -1, true);
+    if (!reduced && !paused && ambient) bob.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }), -1, true);
     return () => cancelAnimation(bob);
-  }, [reduced, bob, paused]);
+  }, [reduced, bob, paused, ambient]);
   useEffect(() => {
     // The boss arrives with a short sting and one tick (sound follows the player's settings; motion respects Reduce Motion).
     if (greeted.current) return;
@@ -139,6 +141,7 @@ export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, 
   onFight: () => void; onClose: () => void; paused?: boolean;
 }) {
   const reduced = useReducedGameMotion();
+  const { ambient } = usePowerBudget();
   const cost = joinCost(raid, remote, energy, tickets);
   const short = cost.short;
   const label = short && !starting ? `NEED ${short.need - short.have} ${short.kind === 'energy' ? 'ENERGY' : short.need - short.have === 1 ? 'TICKET' : 'TICKETS'}`
@@ -147,10 +150,10 @@ export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, 
   const [how, setHow] = useState(false);
   const pulse = useSharedValue(1);
   useEffect(() => {
-    if (!reduced && !off && !paused) pulse.value = withRepeat(withSequence(withTiming(1.03, { duration: 520 }), withTiming(1, { duration: 520 })), -1, false);
+    if (!reduced && !off && !paused && ambient) pulse.value = withRepeat(withSequence(withTiming(1.03, { duration: 520 }), withTiming(1, { duration: 520 })), -1, false);
     else { cancelAnimation(pulse); pulse.value = 1; }
     return () => cancelAnimation(pulse);
-  }, [reduced, off, pulse, paused]);
+  }, [reduced, off, pulse, paused, ambient]);
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   return (
     <View>

@@ -116,6 +116,7 @@ function flow({reduced=false,round,stubs={}}={}){
    startRaidRound:async(id,body)=>{rounds.push([id,body]);return answer(body);},acknowledgeRaid:async id=>{acks.push(id);return true;}},
   './bossArt':{BOSS_ART:{kraken:1}},'../../games/boss/bash/BossBash':{BossBash:'BossBrawl'},
   './BossJoinCard':{default:'BossJoinCard',BossJoinCta:'BossJoinCta'},'./joinModel':joinModel,
+  '../../power':{useBudgetedPoll(){}},
   '../../ui':{BRAND:{},GameButton:'GameButton',GameIcon:'GameIcon'},
   './BossSheetParts':{AttackPips:'AttackPips',BossSheetSkeleton:'BossSheetSkeleton',TeamDamage:'TeamDamage',TopFighters:'TopFighters'},
   './BossWinCard':{default:'BossWinCard'},

@@ -12,6 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BRAND } from '../../../ui/tokens';
 import { BASH_ART, WM_ASPECT } from './art';
+import { usePowerBudget } from '../../../power';
 import { DIZZY_DROP_MS, ringScaleAt, type Kind } from './rules';
 
 export type ActorExit = null | 'bonk' | 'sink' | 'ouch' | 'dive';
@@ -21,6 +22,7 @@ export const PopupActor = memo(function PopupActor({ kind, x, baseY, height, lim
   kind: Kind; x: number; baseY: number; height: number; limb: number; limbAspect: number; exit: ActorExit; reduced: boolean;
   ghostly: boolean; hint: boolean;
 }) {
+  const { animate } = usePowerBudget();
   const rise = useSharedValue(reduced ? 1 : 0);
   const sway = useSharedValue(0);
   const squash = useSharedValue(1);
@@ -34,9 +36,9 @@ export const PopupActor = memo(function PopupActor({ kind, x, baseY, height, lim
     if (reduced) { rise.value = withTiming(1, { duration: 120 }); return; }
     rise.value = withSpring(1, { damping: 11, stiffness: 190, mass: 0.7 });
     foam.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: 520 }));
-    sway.value = withDelay(220, withRepeat(withTiming(1, { duration: isPuffer ? 520 : 820, easing: Easing.inOut(Easing.sin) }), -1, true));
+    if (animate) sway.value = withDelay(220, withRepeat(withTiming(1, { duration: isPuffer ? 520 : 820, easing: Easing.inOut(Easing.sin) }), -1, true));
     return () => { cancelAnimation(sway); cancelAnimation(rise); };
-  }, [reduced, rise, sway, foam, isPuffer]);
+  }, [reduced, rise, sway, foam, isPuffer, animate]);
 
   useEffect(() => {
     if (!exit) return;
@@ -89,9 +91,10 @@ export const PopupActor = memo(function PopupActor({ kind, x, baseY, height, lim
 
 /** The pointing hand that shows a first-timer what to tap. */
 export function TapHand({ x, y, reduced, size = 64 }: { x: number; y: number; reduced: boolean; size?: number }) {
+  const { animate } = usePowerBudget();
   const t = useSharedValue(0);
   useEffect(() => {
-    if (!reduced) t.value = withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(0, { duration: 420 })), -1, false);
+    if (!reduced && animate) t.value = withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(0, { duration: 420 })), -1, false);
     return () => cancelAnimation(t);
   }, [t, reduced]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: -t.value * 14 }, { scale: 1 - t.value * 0.06 }] }));
@@ -104,9 +107,10 @@ export function TapHand({ x, y, reduced, size = 64 }: { x: number; y: number; re
 export const FinMeter = memo(function FinMeter({ power, need, headStart, popKey, ready, size, reduced }: {
   power: number; need: number; headStart: number; popKey: number; ready: boolean; size: number; reduced: boolean;
 }) {
+  const { animate } = usePowerBudget();
   const glow = useSharedValue(0);
   useEffect(() => {
-    if (ready && !reduced) glow.value = withRepeat(withSequence(withTiming(1, { duration: 180 }), withTiming(0.35, { duration: 220 })), -1, false);
+    if (ready && !reduced && animate) glow.value = withRepeat(withSequence(withTiming(1, { duration: 180 }), withTiming(0.35, { duration: 220 })), -1, false);
     else { cancelAnimation(glow); glow.value = withTiming(0, { duration: 120 }); }
     return () => cancelAnimation(glow);
   }, [ready, reduced, glow]);
@@ -222,9 +226,10 @@ export const CountBeat = memo(function CountBeat({ text, x, y, reduced }: { text
 
 /** Stars circling a dizzy head. */
 export function DizzyStars({ x, y, r, reduced }: { x: number; y: number; r: number; reduced: boolean }) {
+  const { animate } = usePowerBudget();
   const t = useSharedValue(0);
   useEffect(() => {
-    if (!reduced) t.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1, false);
+    if (!reduced && animate) t.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1, false);
     return () => cancelAnimation(t);
   }, [t, reduced]);
   return <View pointerEvents="none" style={{ position: 'absolute', left: x, top: y }}>

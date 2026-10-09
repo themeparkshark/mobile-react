@@ -31,6 +31,7 @@ import { registerStudioAudio } from '../../../gamekit/audio/studioLibrary';
 import { useGameMusic } from '../../../gamekit/audio/useGameMusic';
 import { BASH_ART, BOSS_SKINS } from './art';
 import WaterFront from './WaterFront';
+import { usePowerBudget } from '../../../power';
 import {
   Bubble, Burst, CountBeat, DamageNumber, DizzyStars, DizzyTarget, FinMeter, InkSplat, PopupActor, TapHand, Wordmark, type ActorExit,
   type WordmarkId,
@@ -126,6 +127,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const weights = weightsIn ?? DEFAULT_WEIGHTS;
   const skin = BOSS_SKINS[boss];
   const reduced = useReducedGameMotion();
+  const power = usePowerBudget();
   const shellRef = useRef<GameShellV2Handle>(null);
   const particles = useRef<ParticleHandle>(null);
   const cap = maxHits && maxHits > 0 ? maxHits : Number.POSITIVE_INFINITY;
@@ -202,14 +204,16 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       return [...list.filter(f => !(word(item.t) && word(f.t))).slice(-12), { ...item, id, until: Date.now() + life } as FxLive];
     });
   }, []);
+  // One timer to the next expiry (none at all when nothing is on screen): no idle re-renders.
   useEffect(() => {
-    if (!visible) return;
-    const id = setInterval(() => setFx(list => {
+    if (!visible || fx.length === 0) return;
+    const next = Math.min(...fx.map(f => f.until));
+    const id = setTimeout(() => setFx(list => {
       const now = Date.now();
       return list.some(f => f.until <= now) ? list.filter(f => f.until > now) : list;
-    }), 200);
-    return () => clearInterval(id);
-  }, [visible]);
+    }), Math.max(16, next - Date.now()));
+    return () => clearTimeout(id);
+  }, [visible, fx]);
   /** Sweep finished timers so the list never grows during a round. */
   const later = (ms: number, f: () => void) => {
     const t = setTimeout(() => { timers.current = timers.current.filter(x => x !== t); f(); }, ms);
@@ -377,7 +381,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
         addFx({ t: 'burst', src: BASH_ART.splash, x: L.w * 0.7, y: L.waterY + 30, size: L.w * 0.3 }, 420);
         shake.shake(6, 160);
       });
-      bossShake.value = withDelay(160, withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(-1, { duration: 260 })), -1, true));
+      if (power.animate) bossShake.value = withDelay(160, withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(-1, { duration: 260 })), -1, true));
     }
     addFx({ t: 'bubble', text: 'SMASH IT!', x: L.w / 2 + side * L.w * 0.13, y: Math.min(L.h * 0.8, L.head.y + L.dropBy + L.bossSize * 0.3), tone: 'gold' }, 1000);
     if (!firstSmashed.current) setHint('head');
@@ -449,7 +453,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const onInkTell = () => {
     setInkTell(true);
     flashFace('puff', 1150);
-    if (!reduced) bossPuff.value = withRepeat(withSequence(withTiming(1, { duration: 280 }), withTiming(0.6, { duration: 200 })), -1, false);
+    if (!reduced && power.animate) bossPuff.value = withRepeat(withSequence(withTiming(1, { duration: 280 }), withTiming(0.6, { duration: 200 })), -1, false);
     addFx({ t: 'bubble', text: 'BLOCK IT!', x: L.w / 2, y: L.bossTop + L.bossSize * 0.62, tone: 'red' }, 1150);
     if (!firstBlocked.current) setHint('ink');
     sfx('bo_laser_charge', 'fx.inZone', { volume: 0.9 });
@@ -583,6 +587,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   }, [visible, frame, intro]);
   const halt = useCallback(() => {
     playing.current = false;
+    // Held or backgrounded: the looping wobbles stop too (they restart with the next tell).
+    cancelAnimation(bossShake); cancelAnimation(bossPuff);
     if (raf.current !== null) cancelAnimationFrame(raf.current);
     raf.current = null;
   }, []);
@@ -784,7 +790,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
           {/* The water in front of the boss (hides its lower half). */}
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 2 }]}>
-            <WaterFront width={L.w} height={L.h} top={L.waterY} reduced={reduced} running={visible && !result && !held} />
+            <WaterFront width={L.w} height={L.h} top={L.waterY} reduced={reduced} running={visible && !result && !held && power.animate} />
           </View>
           <Image source={BASH_ART.beach} pointerEvents="none" contentFit="cover" contentPosition="bottom"
             style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: L.w * 0.66, zIndex: 2 }} />
