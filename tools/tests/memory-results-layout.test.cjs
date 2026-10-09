@@ -91,7 +91,7 @@ test('faces draw from one shared decoded sheet per board, with a preload fallbac
   assert.match(game, /const mainSheetImg = useImage\(/);
   assert.match(game, /const extraSheetImg = useImage\(/);
   assert.match(game, /shared=\{sharedSheets\}/);
-  assert.match(card, /if \(sharedReady\(shared\) && !failed\) \{/);
+  assert.match(card, /if \(sharedReady\(shared\) && !failed && \(!known \|\| sharedImg\)\) \{/);
   assert.match(card, /<SkImg image=\{img\} fit="fill"/);
   // The canvas is mounted from the deal on, even before the face is known.
   assert.match(card, /\{img \? \(\s*<Group clip=\{clip\}>/);

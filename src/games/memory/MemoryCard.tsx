@@ -491,8 +491,12 @@ export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function Memo
     // Shared path: one small canvas per card, drawing from the board's
     // decoded sheets. The canvas is mounted from the deal on (empty until
     // the face is known), so a flip only changes what it draws.
-    if (sharedReady(shared) && !failed) {
-      const img = face.sheet != null && face.slot != null ? sharedSheetFor(shared, face.sheet) : null;
+    const known = face.sheet != null && face.slot != null;
+    const sharedImg = known ? sharedSheetFor(shared, face.sheet) : null;
+    // A known face on a sheet the board did not share falls through to the
+    // per-card Image path below instead of drawing a blank card.
+    if (sharedReady(shared) && !failed && (!known || sharedImg)) {
+      const img = sharedImg;
       const cols = face.cols ?? 4;
       const rows = face.rows ?? 2;
       const slot = face.slot ?? 0;
