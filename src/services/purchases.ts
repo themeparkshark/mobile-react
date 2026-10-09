@@ -478,7 +478,7 @@ function deliverPass(store: Iap, purchase: StorePurchase): Promise<SharkPassStat
 /** Apple's localized price for this season's Shark Pass, or null. */
 export async function loadSharkPassPrice(productId: string): Promise<ShopPrice | null> {
   if (!isSharkPassProduct(productId)) return null;
-  if (__DEV__) { const cap = devCapture(); if (cap?.capturePrices()) return { productId, price: '$4.99', amount: 4.99 }; }
+  if (__DEV__) { const cap = devCapture(); if (cap?.capturePrices()) return /sharkpass_plus/.test(productId) ? { productId, price: '$9.99', amount: 9.99 } : { productId, price: '$4.99', amount: 4.99 }; }
   const store = await connect();
   const [product] = await store.getProducts({ skus: [productId] });
   return product?.localizedPrice ? { productId, price: product.localizedPrice, amount: Number(product.price) || 0 } : null;
