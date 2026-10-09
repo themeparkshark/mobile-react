@@ -17,7 +17,10 @@ import { PIN_ART } from './PinArt';
 import type { LanyardPin } from './pinsModel';
 
 export default function ProfileLanyardCard({ playerId, own }: { playerId: number; own: boolean }) {
-  const [data, setData] = useState<{ lanyard: LanyardPin[]; pins: number; sets_done: number; chasers?: number; best_serial?: number | null } | null>(null);
+  const [data, setData] = useState<{
+    lanyard: LanyardPin[]; pins: number; sets_done: number; chasers?: number; best_serial?: number | null;
+    completers?: { item_id: number; name: string; icon_url: string | null }[]; first_finds?: number;
+  } | null>(null);
   const { width } = useWindowDimensions();
   const still = useUiReducedMotion();
   const focused = useIsFocused();
@@ -36,8 +39,15 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
         <View style={styles.chip}><Image source={PIN_ART.seal} style={styles.icon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>{data.sets_done}</Text></View>
         {chasers > 0 && <View style={styles.chip}><Image source={PIN_ART.chaser} style={styles.icon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>{chasers}</Text></View>}
         {!!data.best_serial && <View style={[styles.chip, styles.serialChip]}><Text maxFontSizeMultiplier={1.1} style={[styles.chipText, { color: BRAND.gold }]}>#{data.best_serial}</Text></View>}
+        {!!data.first_finds && <View style={[styles.chip, { backgroundColor: BRAND.gold }]} accessible accessibilityLabel={`First to find ${data.first_finds} park pins`}><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>#1 x{data.first_finds}</Text></View>}
         <Text maxFontSizeMultiplier={1.1} style={styles.count}>{data.pins} pins</Text>
       </View>
+      {!!data.completers?.length && (
+        // Completer medals: the sets and series they finished, shown to everyone.
+        <View style={styles.medals} accessible accessibilityLabel={`Completer medals: ${data.completers.map(c => c.name).join(', ')}`}>
+          {data.completers.map(c => c.icon_url && <Image key={c.item_id} source={c.icon_url} style={{ width: 40, height: 40 }} contentFit="contain" />)}
+        </View>
+      )}
       {data.lanyard.length > 0 ? (
         <Lanyard pins={data.lanyard} width={width - 32 - SPACE.md * 2} height={140} still={still} active={focused} />
       ) : (
@@ -62,5 +72,6 @@ const styles = StyleSheet.create({
   icon: { width: 18, height: 18 },
   serialChip: { backgroundColor: '#3b2a05', borderColor: BRAND.gold },
   count: { marginLeft: 'auto', fontFamily: FONT.body, fontSize: 16, color: '#e2f6ff' },
+  medals: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, backgroundColor: 'rgba(5,52,110,0.35)', borderRadius: 12, padding: 6 },
   empty: { fontFamily: FONT.body, fontSize: 18, color: '#e2f6ff', textAlign: 'center', paddingVertical: SPACE.lg },
 });

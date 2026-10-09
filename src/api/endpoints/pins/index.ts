@@ -27,7 +27,7 @@ export async function saveLanyard(itemIds: number[]): Promise<LanyardPin[]> {
   return data.data.lanyard;
 }
 
-export async function getPlayerLanyard(playerId: number): Promise<{ lanyard: LanyardPin[]; pins: number; sets_done: number; chasers?: number; best_serial?: number | null }> {
+export async function getPlayerLanyard(playerId: number): Promise<{ lanyard: LanyardPin[]; pins: number; sets_done: number; chasers?: number; best_serial?: number | null; completers?: { item_id: number; name: string; icon_url: string | null }[]; first_finds?: number }> {
   const { data } = await client.get(`/players/${playerId}/lanyard`);
   return data.data;
 }

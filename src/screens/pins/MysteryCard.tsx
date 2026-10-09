@@ -228,9 +228,11 @@ type Props = {
   readonly onPick: (series: MysterySeries) => void;
   /** The server said coins were short (a stale balance): show the top-up right here. */
   readonly serverShort?: number | null;
+  /** The live or upcoming series the meter moves to when this one ends. */
+  readonly nextSeriesName?: string | null;
 };
 
-function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onOpen, onPick, serverShort }: Props) {
+function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onOpen, onPick, serverShort, nextSeriesName }: Props) {
   const tone = boxTone(series.theme_color);
   const free = nextFreeBox(series);
   const progress = seriesProgress(series);
@@ -257,7 +259,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
     const end = new Date(series.ends_at);
     const days = (end.getTime() - Date.now()) / 86400000;
     if (days > 14 || days < 0) return null;
-    return 'Your chaser meter moves to the next series';
+    return nextSeriesName ? `Your chaser meter moves to ${nextSeriesName}` : 'Your chaser meter waits for the next series';
   })();
 
   const tryOpen = (count: number) => {

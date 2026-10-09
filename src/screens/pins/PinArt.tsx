@@ -70,9 +70,11 @@ type Props = {
   readonly flat?: boolean;
   /** Smaller corner badge (crowded strips like the lanyard). */
   readonly badgeScale?: number;
+  /** A park pin you caught: your finder number that day (#1 = first). */
+  readonly finder?: number | null;
 };
 
-function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, tilt = 0, badge = true, shine, lag, lagSpan, surface = 'panel', style, serial, flat, badgeScale = 1 }: Props) {
+function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, tilt = 0, badge = true, shine, lag, lagSpan, surface = 'panel', style, serial, flat, badgeScale = 1, finder }: Props) {
   const b = badgeFor(kind, tradable);
   const badgeSize = Math.max(16, Math.round(size * 0.34 * badgeScale));
   return (
@@ -110,6 +112,12 @@ function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, til
           <Text maxFontSizeMultiplier={1} style={styles.serialText}>#{serial}</Text>
         </View>
       )}
+      {!!finder && owned && !serial && (
+        // The finder stamp: "#1" means you were the first to find it that day.
+        <View style={[styles.finder, finder === 1 && styles.finderFirst]} accessible accessibilityLabel={`Finder number ${finder}`}>
+          <Text maxFontSizeMultiplier={1} style={[styles.finderText, finder === 1 && { color: BRAND.navy }]}>#{finder}</Text>
+        </View>
+      )}
       {spares > 0 && owned && (
         <View style={[styles.spares, { left: -4, bottom: -4 }]}>
           <Text maxFontSizeMultiplier={1} style={styles.sparesText}>x{spares + 1}</Text>
@@ -134,5 +142,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#3b2a05', borderWidth: 2, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '6deg' }],
   },
   serialText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.gold, paddingTop: 2 },
+  finder: { position: 'absolute', left: -4, top: -6, height: 20, minWidth: 24, paddingHorizontal: 4, borderRadius: 6, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
+  finderFirst: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
+  finderText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, paddingTop: 2 },
   sparesText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.navy, paddingTop: 2 },
 });

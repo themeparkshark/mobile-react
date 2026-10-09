@@ -32,7 +32,7 @@ import BoxReveal, { preloadRevealAudio, type RevealPull } from './BoxReveal';
 import HuntSheet from './HuntSheet';
 import { Lanyard } from './Lanyard';
 import { MysteryCard, setBankedFrom } from './MysteryCard';
-import { boxTone, PIN_ART, PinTile } from './PinArt';
+import { BOX_ART, boxTone, PIN_ART, PinTile } from './PinArt';
 import { ParkSetCard } from './ParkSetCard';
 import {
   coinsShort, deviceRegion, freeFromLabel, initialTab, myPins, newRequestId, PINS_COPY, toggleLanyard,
@@ -275,7 +275,7 @@ export default function PinsScreen() {
   const owned = useMemo(() => (home ? myPins(home) : []), [home]);
   const byId = useMemo(() => new Map(owned.map(p => [p.item_id, p])), [owned]);
   const lanyardPins = useMemo(() => lanyardIds.map(id => byId.get(id)).filter((p): p is PinRow => !!p).map(p => ({
-    item_id: p.item_id, name: p.name, icon_url: p.icon_url, kind: p.kind, is_chaser: !!p.is_chaser, tradable: p.tradable, serial: p.serial,
+    item_id: p.item_id, name: p.name, icon_url: p.icon_url, kind: p.kind, is_chaser: !!p.is_chaser, tradable: p.tradable, serial: p.serial, found: p.found,
   })), [lanyardIds, byId]);
   /** "Wear it" from a reveal: saves now; a full lanyard swaps out its last pin. True once saved. */
   const wear = useCallback(async (itemId: number): Promise<{ ok: boolean; removed?: string | null }> => {
@@ -382,12 +382,19 @@ export default function PinsScreen() {
             {/* Tabs stay mounted once visited (no rebuild on every switch). */}
             {visited.has('mystery') && (
               <View style={[styles.list, tab !== 'mystery' && styles.hidden]} onLayout={e => { listY.current = e.nativeEvent.layout.y; }}>
+                {(home.meter_carried ?? []).map(c => (
+                  <View key={`carry${c.to}`} style={styles.carried}>
+                    <Image source={PIN_ART.chaser} style={{ width: 26, height: 26 }} contentFit="contain" />
+                    <Text maxFontSizeMultiplier={1.3} style={styles.carriedText}>Your chaser meter moved: +{c.boxes}</Text>
+                  </View>
+                ))}
                 {home.mystery.map(s => (
                   <View key={s.id} onLayout={e => { cardY.current[s.id] = e.nativeEvent.layout.y; }}>
                   <MysteryCard key={s.id} series={s} coins={coins} busy={!!busy && (busy.startsWith(`${s.id}:`) || busy === `pick:${s.id}`)}
                     active={visible && tab === 'mystery'} still={still} shine={tab === 'mystery' ? shine : undefined}
                     fresh={fresh?.seriesId === s.id ? fresh.ids : undefined} onOpen={open}
                     serverShort={serverShort?.seriesId === s.id ? serverShort.need : null}
+                    nextSeriesName={[...home.mystery.filter(o => o.id !== s.id && o.open && (o.ends_at ?? '') > (s.ends_at ?? '')), ...(home.upcoming ?? [])][0]?.name ?? null}
                     onPick={series => {
                       // A finished series turns 5 extras into a free box; otherwise pick a missing pin.
                       if (series.pins.every(p => p.is_chaser || p.owned)) void extrasForBox(series); else setPicking(series);
@@ -396,6 +403,21 @@ export default function PinsScreen() {
                 ))}
               </View>
             )}
+
+            {tab === 'mystery' && (home.upcoming ?? []).map(u => (
+              <View key={`up${u.id}`} style={styles.upcoming} accessible accessibilityLabel={`${u.name} opens ${u.starts_at ? new Date(u.starts_at).toLocaleString('en-US', { month: 'short', day: 'numeric' }) : 'soon'}`}>
+                <Image source={BOX_ART[boxTone(u.theme_color)].closed} style={{ width: 70, height: 70, opacity: 0.85 }} contentFit="contain" />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text maxFontSizeMultiplier={1.3} style={styles.upName}>{u.name}</Text>
+                  <View style={styles.upPins}>
+                    {u.pins.map(p => (
+                      <Image key={p.item_id} source={p.icon_url ?? undefined} tintColor={p.is_chaser ? '#c99a1e' : '#7cc6f5'} style={{ width: 26, height: 26 }} contentFit="contain" />
+                    ))}
+                  </View>
+                  <Text maxFontSizeMultiplier={1.3} style={styles.upDate}>Opens {u.starts_at ? new Date(u.starts_at).toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles' }) : 'soon'}</Text>
+                </View>
+              </View>
+            ))}
 
             {visited.has('sets') && (
               <View style={[styles.list, tab !== 'sets' && styles.hidden]}>
@@ -424,7 +446,7 @@ export default function PinsScreen() {
                         accessibilityRole="button" accessibilityState={{ selected: on }}
                         accessibilityLabel={`${p.name}${p.is_chaser ? ', chaser' : ''}${p.tradable ? ', can trade' : ', park only'}${on ? ', on your lanyard' : ''}`}>
                         <PinTile uri={p.icon_thumb_url ?? p.icon_url} size={size} owned kind={p.kind} tradable={p.tradable} chaser={p.is_chaser} spares={p.spares}
-                          serial={p.serial} tilt={((i * 23) % 9) - 4} flat badgeScale={0.8} />
+                          serial={p.serial} finder={p.found?.order} tilt={((i * 23) % 9) - 4} flat badgeScale={0.8} />
                         {on && <View style={styles.onCheck}><GameIcon name="check" size={16} /></View>}
                       </Pressable>
                     );
@@ -467,6 +489,12 @@ export default function PinsScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   hidden: { display: 'none' },
+  carried: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'center', backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 4 },
+  carriedText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy, paddingTop: 3 },
+  upcoming: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, backgroundColor: 'rgba(5,52,110,0.35)', borderRadius: RADIUS.lg, borderWidth: 3, borderColor: 'rgba(255,255,255,0.5)', borderStyle: 'dashed', padding: SPACE.md },
+  upName: { fontFamily: FONT.display, fontSize: 22, color: BRAND.white, paddingTop: 3 },
+  upPins: { flexDirection: 'row', gap: 4, flexWrap: 'wrap' },
+  upDate: { fontFamily: FONT.display, fontSize: 16, color: BRAND.goldLight, paddingTop: 2 },
   helpBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.blue, alignItems: 'center', justifyContent: 'center' },
   wearHint: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy, textAlign: 'center', paddingTop: 2 },
   scroll: { paddingHorizontal: SPACE.lg, paddingTop: SPACE.md, paddingBottom: 48, gap: SPACE.md },

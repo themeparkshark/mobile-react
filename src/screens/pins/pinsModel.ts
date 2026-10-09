@@ -112,6 +112,7 @@ export interface LanyardPin {
   readonly is_chaser: boolean;
   readonly tradable: boolean;
   readonly serial?: number | null;
+  readonly found?: { day: string; order: number } | null;
 }
 
 export interface PinHome {
@@ -124,6 +125,10 @@ export interface PinHome {
   readonly park_sets: ParkSet[];
   /** Daily pips toward a free box: one per day you visit, 7 = a box; never reset by a missed day. */
   readonly pips?: { filled: number; of: number; new_today?: boolean } | null;
+  /** Chaser meter moved from an ended series on this visit ("+N carried"). */
+  readonly meter_carried?: { to: number; boxes: number }[];
+  /** Series that open later: a closed box with silhouettes and a real opening day. */
+  readonly upcoming?: { id: number; name: string; theme_color: string | null; starts_at: string | null; pins: { item_id: number; icon_url: string | null; is_chaser: boolean }[] }[];
   /** Pin of the Day at each park today (null when the feature is off). */
   readonly pin_days?: PinDay[] | null;
   readonly mystery: MysterySeries[];
