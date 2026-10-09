@@ -14,6 +14,7 @@
 import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import Animated, { cancelAnimation, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -41,7 +42,7 @@ import { showToast } from '../utils/toast';
 import GiftPrepVariantPanel from './GiftPrepVariantPanel';
 import { itemArt, setBadge } from './SetCollection/DexParts';
 import {
-  BOOK_BG, BookHeader, FindsHeader, PrizeRows, RareBanner, RarityHeading, SHEET, SHELF_CARD_H, SHELF_CARD_W, SHELF_GAP, ShelfCard, ShelfEventCard,
+  BOOK_BG, BookHeader, FindsHeader, PrizeRows, RareShelfCard, RarityHeading, SHEET, SHELF_CARD_H, SHELF_CARD_W, SHELF_GAP, ShelfCard, ShelfEventCard,
 } from './SetCollection/BookParts';
 import { ItemCard } from './SetCollection/DexItemCard';
 import { RewardReveal } from './SetCollection/DexReveal';
@@ -235,6 +236,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   }, [slug, loadDetail, preview, previewDetails, previewDexDetails, player?.id]);
 
   const set = useMemo(() => sets.find(entry => entry.slug === slug) ?? null, [sets, slug]);
+  // Today's rare is worth a trip until it is caught: not spawned yet (available) or waiting on the map (onMap).
+  const daily = !!book.dailyRare && !book.dailyRare.caughtToday && (book.dailyRare.available || book.dailyRare.onMap);
   const items = detail && detail.slug === slug ? detail.items : null;
   const spares = detail && detail.slug === slug ? detail.spares : set?.spares ?? 0;
 
@@ -266,8 +269,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     if (slugIndex < 0) return;
     // Land on a whole-card stop (the snap grid) with the card before it in view, never a card cut mid-word on the left.
     const step = SHELF_CARD_W + 6 + SHELF_GAP;
-    pickerRef.current?.scrollTo({ x: Math.max(0, slugIndex - 1) * step, animated });
-  }, [slugIndex, width]);
+    pickerRef.current?.scrollTo({ x: Math.max(0, slugIndex + (daily ? 1 : 0) - 1) * step, animated });
+  }, [slugIndex, daily]);
   useEffect(() => { centerPicker(!reduced); }, [centerPicker, reduced]);
 
   const reloadAll = useCallback(async () => {
@@ -462,8 +465,6 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     if (next !== stuckRef.current) { stuckRef.current = next; setStuck(next); }
   }, []);
   const tile = Math.floor((width - SIDE * 2 - CELL_GAP * (COLUMNS - 1)) / COLUMNS);
-  // Today's rare is worth a trip until it is caught: not spawned yet (available) or waiting on the map (onMap).
-  const daily = !!book.dailyRare && !book.dailyRare.caughtToday && (book.dailyRare.available || book.dailyRare.onMap);
   // Extras: copies past the first, counted from the tiles when they are loaded (one number everywhere).
   const extras = items ? items.reduce((sum, item) => sum + (item.found ? item.spares : 0), 0) : spares;
   const canShare = !(preview && process.env.EXPO_PUBLIC_CREW_GIFT_PREVIEW !== '1');
@@ -473,18 +474,18 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     <View>
       <ScrollView ref={pickerRef} horizontal onLayout={event => { shelfH.current = event.nativeEvent.layout.height; }} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelf} snapToInterval={SHELF_CARD_W + 6 + SHELF_GAP} decelerationRate="fast"
         onContentSizeChange={() => centerPicker(false)}>
+        {daily && <RareShelfCard onPress={goToMap} />}
         {sets.map(entry => <ShelfCard key={entry.slug} set={entry} selected={entry.slug === slug} onPress={chooseSet} active={active} />)}
         {eventsReady && events.cards.map(card => <ShelfEventCard key={`event-${card.eventSlug}`} card={card} onPress={openEvent} />)}
       </ScrollView>
-      {daily && <RareBanner onPress={goToMap} />}
       <View style={styles.sheetTop}>
         {set && (
           <>
             <View onLayout={event => { stickAt.current = shelfH.current + event.nativeEvent.layout.y + event.nativeEvent.layout.height - 40; }}>
-            <BookHeader set={set} stamp={stamp?.slug === set.slug ? stamp.title : null} focusBusy={busy === 'focus'}
+            <BookHeader set={set} busyId={busy} onClaim={reward => void claim(reward)} stamp={stamp?.slug === set.slug ? stamp.title : null} focusBusy={busy === 'focus'}
               onFocus={!set.isComplete && (set.status === 'active' || set.status === 'resting') ? () => void toggleFocus() : null} />
             </View>
-            <PrizeRows set={set} busyId={busy} onClaim={reward => void claim(reward)}
+            <PrizeRows set={set}
               titleWorn={!!set.reward.title && wornTitle === set.reward.title} titleBusy={busy === 'title'}
               onTitle={set.reward.title ? () => void toggleTitle() : null} popKey={popKey} active={active} />
             {claimResult && (
@@ -635,7 +636,8 @@ function StickyBar({ set, reduced, onTop }: { readonly set: DexSet; readonly red
         </View>
         <Text style={styles.stickyName} numberOfLines={1} maxFontSizeMultiplier={1.2}>{set.name}</Text>
         <Text style={styles.stickyCount} maxFontSizeMultiplier={1.2}>{set.found}/{set.total}</Text>
-        <GameIcon name="arrow" size={20} />
+        <View style={{ transform: [{ rotate: '-90deg' }] }}><GameIcon name="arrow" size={20} /></View>
+        <Text style={styles.stickyTop} maxFontSizeMultiplier={1.2}>Top</Text>
       </Pressable>
     </Animated.View>
   );
@@ -720,7 +722,9 @@ function SparesSheet({ visible, items, onClose, onShare }: {
             <GameIcon name="heart" size={24} />
             <Text style={styles.sparesBody}>Tap one to give it to a friend!</Text>
           </View>
-          <ScrollView style={{ maxHeight: 300, alignSelf: 'stretch' }} contentContainerStyle={styles.sparesGrid}>
+          {/* Whole rows only (two at a time) and a soft fade at the edge, so it plainly scrolls. */}
+          <View style={{ alignSelf: 'stretch' }}>
+          <ScrollView style={{ maxHeight: 268, alignSelf: 'stretch' }} contentContainerStyle={styles.sparesGrid}>
             {list.map(item => (
               <Pressable key={item.id} accessibilityRole="button" disabled={!onShare}
                 accessibilityLabel={`${item.name}, ${item.spares} extra. Give one to a friend.`}
@@ -733,6 +737,8 @@ function SparesSheet({ visible, items, onClose, onShare }: {
               </Pressable>
             ))}
           </ScrollView>
+          {list.length > 6 && <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', SHEET]} style={styles.sparesFade} />}
+          </View>
           <View style={styles.sparesMap}>
             <GameIcon name="map" size={26} />
             <Text style={styles.sparesMapText}>New finds come from the map</Text>
@@ -746,7 +752,9 @@ function SparesSheet({ visible, items, onClose, onShare }: {
 
 const styles = StyleSheet.create({
   // Inside the page, just under the header bar.
-  sticky: { position: 'absolute', left: 12, right: 12, top: 16, zIndex: 5 },
+  // A cream band behind the bar, so whatever scrolls under it disappears cleanly.
+  sticky: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 5, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 8, backgroundColor: SHEET },
+  stickyTop: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft },
   stickyInner: {
     flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: 10, borderRadius: 24,
     backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#efe1b8', borderBottomWidth: 4, ...SHADOW.card,
@@ -787,7 +795,8 @@ const styles = StyleSheet.create({
   sparesHint: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, marginBottom: 12 },
   sparesBody: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.navy, textAlign: 'center', flexShrink: 1 },
   sparesGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, paddingVertical: 6 },
-  spareTile: { width: 76, alignItems: 'center' },
+  spareTile: { width: 76, height: 122, alignItems: 'center' },
+  sparesFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 28 },
   spareName: { fontFamily: 'Knockout', fontSize: 14, lineHeight: 16, color: BRAND.navy, textAlign: 'center', marginTop: 8 },
   spareArtWrap: { width: 72, height: 72, justifyContent: 'center' },
   sparesArt: { width: 54, height: 54 },

@@ -644,3 +644,14 @@ test('swaps are retired: rare finds are earned on the map, spares stay a count, 
   // A missing find gets one big way to the map in the slot the Swap button used.
   assert.match(card, /\(!item\.found \|\| item\.foundInWorld === false\) && \([\s\S]{0,120}'Catch one on the map' : 'Find it on the map'\} icon="map" onPress=\{onFind\}/);
 });
+
+test('R4: the ready prize claims from the set header (always on the first screen); rare find is a shelf card; worn finish folds', () => {
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(parts, /const readyEntry = prizeList\(set\)\.find\(entry => entry\.reward\.status === 'claimable'\)/);
+  assert.match(parts, /label=\{readyEntry\.reward\.needsPick \? 'Pick and claim' : 'Claim prize!'\}/);
+  assert.match(screen, /<BookHeader set=\{set\} busyId=\{busy\} onClaim=\{reward => void claim\(reward\)\}/);
+  assert.doesNotMatch(screen, /RareBanner/);
+  assert.match(screen, /\{daily && <RareShelfCard onPress=\{goToMap\} \/>\}/);
+  assert.match(parts, /state\.kind === 'done' && \(!final \|\| !reward\.title \|\| titleWorn\)/);
+});

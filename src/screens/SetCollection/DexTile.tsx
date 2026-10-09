@@ -149,8 +149,8 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
     <SpringPress onPress={() => onPress(item)} accessibilityLabel={label} accessibilityHint="Double-tap to see it." style={{ width, height: tileHeight(width) }}>
       <Animated.View style={flipStyle}>
         {item.found ? (
-          <View style={[styles.sticker, { width, height: width, backgroundColor: look.frame, transform: [{ rotate: `${tilt}deg` }] }]}>
-            <View style={[styles.stickerFace, sheen && styles.clip]}>
+          <View style={[styles.sticker, { width, height: width, transform: [{ rotate: `${tilt}deg` }] }]}>
+            <View style={[styles.stickerFace, { borderColor: look.frame }, sheen && styles.clip]}>
               <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(5,52,110,0.07)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
               <Animated.View style={[StyleSheet.absoluteFill, styles.center, colorStyle]}>
                 <Image source={art} contentFit="contain" allowDownscaling recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
@@ -183,10 +183,10 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
           </View>
         )}
       </Animated.View>
-      {/* Every tile keeps the same label plate, so the grid stays even: the name when found, "???" when not. */}
+      {/* Every tile keeps the same label height (tileHeight), so the grid stays even; a missing find leaves it blank. */}
       {item.found
         ? <Text numberOfLines={2} style={styles.name} maxFontSizeMultiplier={1.15}>{item.name}</Text>
-        : <Text style={[styles.name, styles.nameMissing]} maxFontSizeMultiplier={1.15} importantForAccessibility="no">???</Text>}
+        : null}
     </SpringPress>
   );
 }, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress && a.active === b.active);
@@ -194,15 +194,9 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
   // A found sticker: a rarity-colored die-cut edge, a thick white border, a lip and a soft lift off the page.
-  // Navy ink line, then the rarity color, then a thick white face: a die-cut sticker.
-  sticker: {
-    borderRadius: 18, padding: 3, borderWidth: 1.5, borderColor: BRAND.navy,
-    ...SHADOW.card, shadowOpacity: 0.2, shadowRadius: 3, shadowOffset: { width: 0, height: 3 },
-  },
-  stickerFace: {
-    flex: 1, borderRadius: 15, backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 5,
-    borderBottomColor: '#e6eef7',
-  },
+  // One sticker: a thick even rarity frame on a white face, a soft navy shadow under it, a slight tilt.
+  sticker: { borderRadius: 18, ...SHADOW.card, shadowOpacity: 0.22, shadowRadius: 2, shadowOffset: { width: 0, height: 3 } },
+  stickerFace: { flex: 1, borderRadius: 18, backgroundColor: BRAND.white, borderWidth: 4 },
   // Only a sticker with a moving sheen needs the mask (the art already fits inside).
   clip: { overflow: 'hidden' },
   // An empty slot pressed into the album page: dashed edge, the shape faded in navy.
@@ -219,6 +213,5 @@ const styles = StyleSheet.create({
   shine: { position: 'absolute', width: 60, left: '35%' },
   rim: { ...StyleSheet.absoluteFillObject, borderRadius: 18, borderWidth: 4, borderColor: '#ffe07a' },
   name: { fontFamily: 'Knockout', fontSize: 14, lineHeight: 16, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
-  nameMissing: { color: SLOT_COLORS.edge },
   foil: { position: 'absolute', top: 4, right: 4 },
 });

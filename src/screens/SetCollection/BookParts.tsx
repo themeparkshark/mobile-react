@@ -39,7 +39,7 @@ export const SHEET = BRAND.cream;
 /** An empty sticker slot printed in the album. */
 const SLOT = '#f1e4c0';
 const SLOT_EDGE = '#d6bf85';
-export const SLOT_COLORS = { fill: SLOT, edge: SLOT_EDGE, ink: BRAND.blue, inkOpacity: 0.2 } as const;
+export const SLOT_COLORS = { fill: SLOT, edge: SLOT_EDGE, ink: BRAND.navy, inkOpacity: 0.18 } as const;
 const BROWN = '#7a3d00';
 /** Dynamic Type room for body copy (cards grow in height instead of clipping). */
 const BODY_SCALE = 1.45;
@@ -140,13 +140,21 @@ export const ShelfEventCard = memo(function ShelfEventCard({ card, onPress }: {
   );
 });
 
-/** Today's rare find, only while it is worth a trip. */
-export function RareBanner({ onPress }: { readonly onPress: () => void }) {
+/** Today's rare find as the first card on the shelf (only while it is worth a trip): one tap opens the map. */
+export function RareShelfCard({ onPress }: { readonly onPress: () => void }) {
   return (
-    <SpringPress onPress={onPress} accessibilityLabel="A rare find is out today. Open the map." style={styles.rare}>
-      <GameIcon name="sparkle" size={28} />
-      <Text style={styles.rareText} numberOfLines={1} maxFontSizeMultiplier={1.2}>A rare find is out today!</Text>
-      <View style={styles.rareGo}><Text style={styles.rareGoText} maxFontSizeMultiplier={1.2}>Find it</Text></View>
+    <SpringPress onPress={onPress} accessibilityLabel="A rare find is out today. Open the map to find it." style={{ marginRight: SHELF_GAP }}>
+      <View style={styles.cardRing}>
+        <View style={[styles.cardFace, styles.rareFace]}>
+          <LinearGradient colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']} style={styles.gloss} pointerEvents="none" />
+          <View style={[styles.cardWell, { borderColor: BRAND.goldLip }]}><GameIcon name="star" size={34} /></View>
+          <Text numberOfLines={2} style={[styles.cardName, styles.rareName]} maxFontSizeMultiplier={1.15}>Rare find today!</Text>
+          <View style={[styles.cardBand, styles.rareBand]}>
+            <GameIcon name="map" size={18} />
+            <Text style={styles.rareGo} maxFontSizeMultiplier={1.15}>Find it</Text>
+          </View>
+        </View>
+      </View>
     </SpringPress>
   );
 }
@@ -180,8 +188,10 @@ function PrizeBar({ set, reduced }: { readonly set: DexSet; readonly reduced: bo
 }
 
 /** The open set in one white card: name and count, the prize bar, the next goal, when, and the Hunt switch. */
-export function BookHeader({ set, onFocus, focusBusy, stamp }: {
+export function BookHeader({ set, onFocus, focusBusy, stamp, onClaim, busyId }: {
   readonly set: DexSet; readonly onFocus: (() => void) | null; readonly focusBusy: boolean;
+  /** The ready prize's Claim lives here, so it is always on the first screen. */
+  readonly onClaim: (reward: DexReward) => void; readonly busyId: string | null;
   /** A title just won: stamps onto the header after the reveal closes. */
   readonly stamp?: string | null;
 }) {
@@ -203,8 +213,9 @@ export function BookHeader({ set, onFocus, focusBusy, stamp }: {
   const [badgeFailed, setBadgeFailed] = useState(false);
   useEffect(() => { setBadgeFailed(false); }, [set.slug]);
   // The header says only what no row says: a prize is waiting, or the set is done. "N to go" lives on its prize row.
-  const pill = ready ? 'Prize ready!' : finished || set.isComplete ? 'All found!' : null;
+  const pill = ready ? 'Prize ready!' : null;
   const complete = finished || set.isComplete;
+  const readyEntry = prizeList(set).find(entry => entry.reward.status === 'claimable') ?? null;
   return (
     <Animated.View style={[styles.header, complete && styles.headerDone, enterStyle]}>
       <View style={styles.headerTop}>
@@ -228,6 +239,11 @@ export function BookHeader({ set, onFocus, focusBusy, stamp }: {
         </View>
       </View>
       <PrizeBar set={set} reduced={reduced} />
+      {readyEntry && (
+        <GameButton label={readyEntry.reward.needsPick ? 'Pick and claim' : 'Claim prize!'} icon="gift" loading={busyId === readyEntry.reward.id}
+          onPress={() => onClaim(readyEntry.reward)} style={{ marginTop: 6 }}
+          accessibilityLabel={`Claim the ${readyEntry.final ? `Find all ${set.total}` : `Find ${readyEntry.reward.target}`} prize: ${readyEntry.reward.prize}`} />
+      )}
       {complete ? null : (
       <View style={styles.headerRow}>
         <View style={styles.when} accessible accessibilityLabel={`${when}${open === false ? '. Not right now' : open ? '. On now' : ''}`}>
@@ -353,8 +369,8 @@ function TitleRibbon({ title }: { readonly title: string }) {
 }
 
 /** Every prize for the set, in target order. A won step folds to one slim line; the finish prize is the hero row. */
-export function PrizeRows({ set, busyId, onClaim, titleWorn, titleBusy, onTitle, popKey, active }: {
-  readonly set: DexSet; readonly busyId: string | null; readonly onClaim: (reward: DexReward) => void;
+export function PrizeRows({ set, titleWorn, titleBusy, onTitle, popKey, active }: {
+  readonly set: DexSet;
   readonly titleWorn: boolean; readonly titleBusy: boolean; readonly onTitle: (() => void) | null; readonly popKey: number;
   readonly active: boolean;
 }) {
@@ -368,16 +384,16 @@ export function PrizeRows({ set, busyId, onClaim, titleWorn, titleBusy, onTitle,
   return (
     <Animated.View style={[styles.prizes, popStyle]}>
       {prizeList(set).map(({ reward, final }) => (
-        <PrizeRow key={reward.id} set={set} reward={reward} final={final} busy={busyId === reward.id} onClaim={onClaim}
+        <PrizeRow key={reward.id} set={set} reward={reward} final={final}
           titleWorn={titleWorn} titleBusy={titleBusy} onTitle={final ? onTitle : null} reduced={reduced} active={active} />
       ))}
     </Animated.View>
   );
 }
 
-function PrizeRow({ set, reward, final, busy, onClaim, titleWorn, titleBusy, onTitle, reduced, active }: {
-  readonly set: DexSet; readonly reward: DexReward; readonly final: boolean; readonly busy: boolean;
-  readonly onClaim: (reward: DexReward) => void; readonly titleWorn: boolean; readonly titleBusy: boolean;
+function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, active }: {
+  readonly set: DexSet; readonly reward: DexReward; readonly final: boolean;
+  readonly titleWorn: boolean; readonly titleBusy: boolean;
   readonly onTitle: (() => void) | null; readonly reduced: boolean; readonly active: boolean;
 }) {
   const state = prizeState(reward, set.found);
@@ -411,13 +427,19 @@ function PrizeRow({ set, reward, final, busy, onClaim, titleWorn, titleBusy, onT
     if (!reduced) wiggle.value = withSequence(withTiming(-10, { duration: 60 }), withTiming(10, { duration: 80 }), withTiming(-6, { duration: 70 }), withSpring(0, { damping: 8 }));
   };
 
-  // A won step folds to one slim line: nothing to do there any more.
-  if (!final && state.kind === 'done') {
+  // A won step folds to one slim line: nothing to do there any more. So does the won finish prize once its
+  // title is worn (the page then opens on the trophy case).
+  if (state.kind === 'done' && (!final || !reward.title || titleWorn)) {
     return (
       <View style={styles.slim} accessible accessibilityLabel={`${heading}: you got ${reward.prize}`}>
         <Animated.View style={[styles.slimMedal, checkStyle]}><GameIcon name="check" size={20} /></Animated.View>
         <Text style={styles.slimText} maxFontSizeMultiplier={BODY_SCALE}>{heading}</Text>
         <PrizeMini reward={reward} />
+        {final && !!reward.title && onTitle && (
+          <Pressable onPress={onTitle} accessibilityRole="button" accessibilityLabel={`Wearing the ${reward.title} title. Tap to take it off.`} hitSlop={8}>
+            <GameIcon name="crown" size={24} />
+          </Pressable>
+        )}
         <View style={[styles.state, styles.stateDone]}><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
       </View>
     );
@@ -447,10 +469,6 @@ function PrizeRow({ set, reward, final, busy, onClaim, titleWorn, titleBusy, onT
         </View>
       </View>
       {!!reward.title && state.kind !== 'locked' && <TitleRibbon title={reward.title} />}
-      {state.kind === 'claim' && (
-        <GameButton label={reward.needsPick ? 'Pick and claim' : 'Claim!'} icon="gift" loading={busy}
-          onPress={() => onClaim(reward)} style={{ marginTop: 10 }} accessibilityLabel={`Claim the ${heading} prize: ${reward.prize}`} />
-      )}
       {state.kind === 'pending' && <Text style={styles.prizeNote} maxFontSizeMultiplier={BODY_SCALE}>Your shark item is on the way.</Text>}
       {state.kind === 'done' && onTitle && reward.title && (
         titleWorn ? (
@@ -585,13 +603,10 @@ const styles = StyleSheet.create({
   },
   eventFace: { backgroundColor: '#1b1747', borderColor: '#8f7cff' },
   eventWell: { backgroundColor: 'rgba(15,22,54,0.85)' },
-  rare: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 12, minHeight: 50, paddingLeft: 10, paddingRight: 6,
-    borderRadius: 18, backgroundColor: BRAND.gold, borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 6, borderBottomColor: BRAND.goldLip,
-  },
-  rareText: { flex: 1, fontFamily: 'Shark', fontSize: 17, color: BROWN },
-  rareGo: { paddingHorizontal: 12, height: 36, borderRadius: 18, backgroundColor: BRAND.white, justifyContent: 'center', borderWidth: 2, borderColor: BROWN },
-  rareGoText: { fontFamily: 'Shark', fontSize: 16, color: BROWN },
+  rareFace: { backgroundColor: BRAND.gold, borderColor: BRAND.goldLip },
+  rareName: { color: BROWN, textShadowColor: 'rgba(255,255,255,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
+  rareBand: { backgroundColor: BRAND.white, justifyContent: 'center' },
+  rareGo: { fontFamily: 'Shark', fontSize: 15, color: BROWN },
   header: {
     marginHorizontal: 12, marginTop: 12, padding: 12, borderRadius: 22, backgroundColor: BRAND.white,
     borderWidth: 2, borderColor: '#efe1b8', borderBottomWidth: 5,
@@ -681,7 +696,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#e7d7a8',
   },
   state: { paddingHorizontal: 10, height: 30, borderRadius: 15, justifyContent: 'center', backgroundColor: '#eef4fb' },
-  stateDone: { backgroundColor: BRAND.gold },
+  // Settled, not a button: cream with a gold edge.
+  stateDone: { backgroundColor: '#fff8e4', borderWidth: 2, borderColor: '#f1dca0' },
   stateText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy },
   stateDoneText: { color: BROWN },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
