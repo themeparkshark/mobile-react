@@ -11,6 +11,8 @@ import { setDevModeEnabled, setDevLocation as setGlobalDevLocation } from '../he
 import { nextParkPresence, NO_PARK_PRESENCE, shouldRefreshParkLookup, type ParkLookupRecord,
   type ParkPresence } from './parkLookupPolicy';
 import { gpsWatchSettings } from './gpsWatchPolicy';
+import { budgetedInterval, markMoved, usePowerBudget } from '../power';
+import { useAppActive } from '../hooks/useLivePoll';
 import { PositionFilter } from './positionFilter';
 import { probeCount } from '../dev/motionProbe';
 
@@ -304,8 +306,13 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   // Subscribe to heading updates when enabled
+  // The compass rests in the background (budget.compass): a map left open in
+  // a pocket no longer streams magnetometer readings all day.
+  const power = usePowerBudget();
+  const appActive = useAppActive();
+  const compassOn = headingEnabled && power.compass;
   useEffect(() => {
-    if (!headingEnabled || !permissionGranted) {
+    if (!compassOn || !permissionGranted) {
       // Cleanup subscription if disabled
       if (headingSubscriptionRef.current) {
         headingSubscriptionRef.current.remove();
@@ -348,7 +355,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         headingSubscriptionRef.current = null;
       }
     };
-  }, [headingEnabled, permissionGranted]);
+  }, [compassOn, permissionGranted]);
 
   const getCurrentLocation = async () => {
     // In dev mode, return the mock location
@@ -473,15 +480,18 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   // A stationary guest still needs to recover from a failed check and refresh
   // a verified outside-park status when the park boundary may have changed.
   useEffect(() => {
-    if (!player?.id || !permissionGranted || !location) return;
+    // A cheap local check (the lookup itself only fires on a real move), but it
+    // still wakes JS: off in the background, slower while idle or on Saver.
+    const lookupEvery = budgetedInterval(5000, power);
+    if (!player?.id || !permissionGranted || !location || !appActive || lookupEvery === null) return;
     const timer = setInterval(() => {
       if (!parkLookupPromiseRef.current &&
           shouldRefreshParkLookup(location, parkLookupRef.current)) {
         void lookupParkAt(location);
       }
-    }, 5000);
+    }, lookupEvery);
     return () => clearInterval(timer);
-  }, [player?.id, permissionGranted, location?.latitude, location?.longitude]);
+  }, [player?.id, permissionGranted, location?.latitude, location?.longitude, appActive, power.pollMultiplier]);
 
   // How hard the watcher works depends on what is on screen (gpsWatchPolicy):
   // full precision for a map or a queue, coarser steps elsewhere in a park,
@@ -491,6 +501,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     queueTracking: accuracyMode === 'queue',
     inPark: !!park,
     confirmedOutside: !park && parkLookupRecord?.outcome === 'outside',
+    appActive,
+    rest: power.gpsRest,
   });
 
   // Continuous position watcher — streams GPS updates from the OS
@@ -498,7 +510,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   // This is what makes the shark actively follow you as you walk.
   useEffect(() => {
     // Don't start watcher in dev mode (joystick handles it) or without permissions
-    if ((devMode && simulationAllowed) || !permissionGranted || !player?.username) {
+    if ((devMode && simulationAllowed) || !permissionGranted || !player?.username || watch.tier === 'off') {
       return;
     }
 
@@ -548,6 +560,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
             if (verdict.kind !== 'publish') return;
 
             lastLocationRef.current = verdict.position;
+            markMoved(verdict.position);
             debouncedSetLocation(verdict.position);
           },
           restartAfterError,
@@ -572,7 +585,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         positionSubscriptionRef.current = null;
       }
     };
-  }, [devMode, simulationAllowed, permissionGranted, player?.username, watch.accuracy, watch.distanceInterval, watch.timeInterval, watchEpoch]);
+  }, [devMode, simulationAllowed, permissionGranted, player?.username, watch.tier, watch.accuracy, watch.distanceInterval, watch.timeInterval, watchEpoch]);
 
   // Fallback poll — only fires if watchPositionAsync somehow stalls
   // (some Android devices throttle background location callbacks)
@@ -583,7 +596,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       }
     },
     10000,
-    Boolean(player && permissionGranted && player.username),
+    Boolean(player && permissionGranted && player.username && appActive),
     true
   );
 

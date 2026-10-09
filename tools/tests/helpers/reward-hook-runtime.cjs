@@ -56,7 +56,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
   const code = transpile(fs.readFileSync(path.join(root, file), 'utf8'));
   // Shared app hooks that every poll uses run for real in the component's realm.
   const realModules = { useLivePoll: 'src/hooks/useLivePoll.ts', livePollPolicy: 'src/hooks/livePollPolicy.ts',
-    gpsWatchPolicy: 'src/context/gpsWatchPolicy.ts', positionFilter: 'src/context/positionFilter.ts', useUserIdle: 'src/hooks/useUserIdle.ts',
+    gpsWatchPolicy: 'src/context/gpsWatchPolicy.ts', positionFilter: 'src/context/positionFilter.ts', useUserIdle: 'src/hooks/useUserIdle.ts', powerPolicy: 'src/power/powerPolicy.ts',
     matchLink: 'src/services/match/matchLink.ts', useMatchLink: 'src/hooks/useMatchLink.ts' };
   const realCache = new Map();
   let sandbox;
@@ -95,6 +95,10 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)services\/ads$/.test(name)) return { adsAvailable: () => false, rewardText: () => '',
         watchForReward: async () => ({ status: 'unavailable' }) };
       if (/(^|\/)services\/purchases$/.test(name)) return { storeAvailable: () => false };
+      // The power budget (src/power) reads as full power unless a test stubs it.
+      if (/(^|\/)power$/.test(name)) return { usePowerBudget: () => ({ level: 'full', ambient: true, animate: true,
+        pollMultiplier: 1, particleScale: 1, gpsRest: false, compass: true, lowPower: false, idle: false, stationary: false }),
+        markMoved() {}, useBudgetedPoll() {}, budgetedInterval: (ms, b) => (Number.isFinite(b.pollMultiplier) && ms > 0 ? ms * Math.max(1, b.pollMultiplier) : null), useBatterySaver: () => false, setBatterySaver() {} };
       if (name.includes('assets/')) return name;
       return { default: name };
     },

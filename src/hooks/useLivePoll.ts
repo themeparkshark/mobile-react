@@ -10,6 +10,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { pollDelay, pollIntervalFor } from './livePollPolicy';
+import { usePowerBudget } from '../power';
 
 let appStateNow: AppStateStatus | undefined = AppState.currentState;
 const appStateListeners = new Set<() => void>();
@@ -57,6 +58,10 @@ export interface LivePollOptions {
 export default function useLivePoll(run: () => unknown, intervalMs: number, options: LivePollOptions = {}): void {
   const { enabled = true, focused = true, backgroundMs = null, key = null, immediate = true } = options;
   const appActive = useAppActive();
+  // Battery Saver stretches every live poll. Only Saver: idle slow-down is
+  // already applied by callers (idlePollInterval), so the two never stack.
+  const { lowPower, pollMultiplier } = usePowerBudget();
+  const scaled = lowPower && Number.isFinite(pollMultiplier) ? Math.round(intervalMs * Math.max(1, pollMultiplier)) : intervalMs;
   const runRef = useRef(run);
   runRef.current = run;
   const lastRunAt = useRef<number | null>(immediate ? null : Date.now());
@@ -67,7 +72,7 @@ export default function useLivePoll(run: () => unknown, intervalMs: number, opti
   }
 
   useEffect(() => {
-    const interval = pollIntervalFor({ enabled, appActive, focused }, intervalMs, backgroundMs);
+    const interval = pollIntervalFor({ enabled, appActive, focused }, scaled, backgroundMs);
     if (interval === null) return undefined;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let stopped = false;
@@ -93,5 +98,5 @@ export default function useLivePoll(run: () => unknown, intervalMs: number, opti
       stopped = true;
       if (timer) clearTimeout(timer);
     };
-  }, [enabled, appActive, focused, intervalMs, backgroundMs, key]);
+  }, [enabled, appActive, focused, scaled, backgroundMs, key]);
 }

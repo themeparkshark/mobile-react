@@ -9,7 +9,10 @@
  */
 import { useEffect, useState } from 'react';
 
-export const USER_IDLE_MS = 2 * 60_000;
+import { IDLE_AFTER_MS } from '../power/powerPolicy';
+
+/** One idle constant app-wide (power budget and idle-aware polls agree). */
+export const USER_IDLE_MS = IDLE_AFTER_MS;
 
 let lastActivityAt = Date.now();
 const wakeListeners = new Set<() => void>();

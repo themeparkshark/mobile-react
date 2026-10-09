@@ -83,6 +83,8 @@ export interface StorageLike {
 }
 
 export interface AppStateLike {
+  /** Optional: the state when the client is built (React Native AppState has it). */
+  readonly currentState?: string | null;
   addEventListener(event: 'change', cb: (state: string) => void): { remove(): void };
 }
 
@@ -194,6 +196,7 @@ export class PartyClient {
       this.now,
       (ms) => new Promise((done) => this.setTimer(() => done(), ms)),
     );
+    this.backgrounded = opts.appState?.currentState === 'background';
     this.appStateSub = opts.appState?.addEventListener('change', (s) => this.onAppState(s)) ?? null;
   }
 
@@ -678,11 +681,13 @@ export class PartyClient {
     // background (home, lock, pocket, call) hands the seat to the ghost, because
     // iOS may suspend JS any moment after that.
     if (next === 'inactive') return;
+    this.backgrounded = next !== 'active';
     if (next !== 'active') {
       if (this.local && !this.local.ended) this.hold('background');
       return;
     }
     if (this.local?.heldAt != null && this.state.hold?.reason === 'background') this.release();
+    // Back in front: the safety poll wakes again; refresh() below catches up now.
     if (this.state.room) {
       void this.clock.sync(3, 100).then(() => this.set({ ...this.state, clockOffsetMs: this.clock.offsetMs }));
       this.refresh();
@@ -736,8 +741,11 @@ export class PartyClient {
   }
 
   /** Safety poll: every 1.25 s without a socket, every 5 s with one; any fresh snapshot resets the wait. */
+  /** In the background nobody sees the room; the safety poll rests (heartbeats keep the seat). Resume refreshes at once. */
+  private backgrounded = false;
+
   private pollIfNeeded = (): void => {
-    if (!this.state.room) return;
+    if (!this.state.room || this.backgrounded) return;
     const every = this.state.connection === 'live' ? POLL_LIVE_MS : POLL_FALLBACK_MS;
     if (this.now() - this.lastSyncAt < every - 50) return;
     this.lastSyncAt = this.now();

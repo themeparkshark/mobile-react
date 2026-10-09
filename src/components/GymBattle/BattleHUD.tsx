@@ -15,6 +15,7 @@ import { getGym, GymData } from '../../api/endpoints/gym-battle';
 import { battleHUDEvents } from './battleHUDEvents';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import { GameIcon, GameRichText } from '../../ui';
+import { useBudgetedPoll } from '../../power';
 
 // Format seconds into H:MM:SS or MM:SS
 function formatCountdown(totalSeconds: number): string {
@@ -74,12 +75,9 @@ export default function BattleHUD({ parkId }: Props) {
     }
   }, [parkId]);
 
-  // Poll every 10s for near-real-time score updates
-  useEffect(() => {
-    fetchGym();
-    const interval = setInterval(fetchGym, 10000);
-    return () => clearInterval(interval);
-  }, [fetchGym]);
+  // Poll every 10s for near-real-time score updates, on the app's one poll
+  // clock: paused in the background, slower while idle or on Battery Saver.
+  useBudgetedPoll(fetchGym, 10000, { key: parkId });
 
   // Refresh immediately when returning from GymBattleScreen
   const navigation = useNavigation();
