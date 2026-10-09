@@ -1,4 +1,5 @@
 import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
+import ProfileLanyardCard from './pins/ProfileLanyardCard';
 import { openMembership } from '../components/GrownUpGate';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -541,6 +542,8 @@ export default function ProfileScreen() {
                 <View style={{ marginTop: 12 }}>
                   <ProfileShortcuts items={shortcuts} loading={loading} />
                 </View>
+                {/* Pins v2: the lanyard, the flex other players see too. */}
+                <ProfileLanyardCard playerId={player.id} own />
                 <StatusBadges isVip={!!player.is_subscribed} isVerified={!!player.verified_at} own />
                 {/* The showcase coin sits under the shortcuts so the row is visible on first view. */}
                 {!!player.featured_ride_coin && (
