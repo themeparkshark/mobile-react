@@ -260,9 +260,9 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
       {!member && (
         <Animated.View entering={still ? undefined : FadeInDown.delay(60).duration(240)} style={styles.guest}
           accessible accessibilityLabel={`${SECRET_PREVIEW_COPY.title} ${SECRET_PREVIEW_COPY.body}`}>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.guestText}>
-            <Text style={styles.guestStrong}>{SECRET_PREVIEW_COPY.title} </Text>{SECRET_PREVIEW_COPY.body}
-          </Text>
+          {/* Two balanced lines: the invite, then the promise (no lone word wrapping). */}
+          <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.guestText, styles.guestStrong]}>{SECRET_PREVIEW_COPY.title}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={styles.guestText}>{SECRET_PREVIEW_COPY.body}</Text>
         </Animated.View>
       )}
 

@@ -10,6 +10,7 @@
  *   EXPO_PUBLIC_SHOP_TABS_PREVIEW=supplies-buy   Supplies; the grown-up gate auto-passes after 1.2 s so the buy moment can be recorded
  *   EXPO_PUBLIC_SHOP_TABS_PREVIEW=secret         The Secret Shop (secret_shop_v2 on), as a member
  *   EXPO_PUBLIC_SHOP_TABS_PREVIEW=secret-guest   The Secret Shop as a non-member
+ *   append -low to any mode for a player with 120 coins
  *
  * Switch modes without a Metro restart: xcrun simctl openurl <udid> "themeparkshark://x?stmode=<mode>", or serve the
  * mode as plain text at http://127.0.0.1:8806/mode (polled every 0.5 s).
@@ -179,13 +180,17 @@ export default function ShopTabsPreviewScreen() {
   return <View key={mode} style={{ flex: 1 }}><Body mode={mode} /></View>;
 }
 
-function Body({ mode }: { mode: string }) {
+function Body({ mode: raw }: { mode: string }) {
+  // "-low": a player with 120 coins (short tiles, the try-on's out-of-coins step).
+  const low = raw.endsWith('-low');
+  const mode = raw.replace(/-low$/, '');
   const member = mode === 'supplies-vip' || mode === 'secret';
   const [ready, setReady] = useState(false);
   const fx = useMemo<Fixture>(() => {
-    const player = { ...fixturePlayer(member), coins: 1240, tickets: 7, energy: 85, rescue_passes: 1 } as unknown as PlayerType;
-    return { mode, player, wallet: { tickets: 7, coins: 1240, energy: 85, rescue_passes: 1 } };
-  }, [mode]);
+    const coins = low ? 120 : 1240;
+    const player = { ...fixturePlayer(member), coins, tickets: 7, energy: 85, rescue_passes: 1 } as unknown as PlayerType;
+    return { mode, player, wallet: { tickets: 7, coins, energy: 85, rescue_passes: 1 } };
+  }, [mode, low]);
   const [player, setPlayer] = useState(fx.player);
   useEffect(() => {
     current = fx;
