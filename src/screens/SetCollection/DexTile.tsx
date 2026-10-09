@@ -64,12 +64,14 @@ function nextFlipDelay(): { delay: number; lead: boolean } {
 
 /** Height of a tile row: the sticker plus its one-line name. */
 export const tileHeight = (width: number) => width + NAME_H;
-const NAME_H = 38;
+const NAME_H = 40;
 
-export const ItemTile = memo(function ItemTile({ item, width, onPress, active = true }: {
+export const ItemTile = memo(function ItemTile({ item, width, onPress, active = true, slot = 0 }: {
   readonly item: DexItem; readonly width: number; readonly onPress: (item: DexItem) => void;
   /** False while the screen is covered: the sheen loops stop. */
   readonly active?: boolean;
+  /** The find's number in its set (shown on a missing slot's plate: "#14"). */
+  readonly slot?: number;
 }) {
   const reduced = useUiReducedMotion();
   const look = rarityLook(item.rarity);
@@ -186,10 +188,10 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
       {/* Every tile keeps the same label height (tileHeight), so the grid stays even; a missing find leaves it blank. */}
       {item.found
         ? <Text numberOfLines={2} style={styles.name} maxFontSizeMultiplier={1.15}>{item.name}</Text>
-        : null}
+        : <View style={styles.plate}><Text style={styles.plateText} maxFontSizeMultiplier={1.15} importantForAccessibility="no">#{slot}</Text></View>}
     </SpringPress>
   );
-}, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress && a.active === b.active);
+}, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress && a.active === b.active && a.slot === b.slot);
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
@@ -212,6 +214,8 @@ const styles = StyleSheet.create({
   newTag: { position: 'absolute', top: -6, left: -6 },
   shine: { position: 'absolute', width: 60, left: '35%' },
   rim: { ...StyleSheet.absoluteFillObject, borderRadius: 18, borderWidth: 4, borderColor: '#ffe07a' },
-  name: { fontFamily: 'Knockout', fontSize: 14, lineHeight: 16, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
+  plate: { alignSelf: 'center', marginTop: 5, paddingHorizontal: 8, height: 20, borderRadius: 10, backgroundColor: '#f3e7c6', justifyContent: 'center' },
+  plateText: { fontFamily: 'Knockout', fontSize: 14, color: '#a8925c' },
+  name: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 17, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
   foil: { position: 'absolute', top: 4, right: 4 },
 });

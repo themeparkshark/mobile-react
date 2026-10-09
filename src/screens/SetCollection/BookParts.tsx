@@ -39,7 +39,8 @@ export const SHEET = BRAND.cream;
 /** An empty sticker slot printed in the album. */
 const SLOT = '#f1e4c0';
 const SLOT_EDGE = '#d6bf85';
-export const SLOT_COLORS = { fill: SLOT, edge: SLOT_EDGE, ink: BRAND.navy, inkOpacity: 0.18 } as const;
+/** The missing shape: one solid ink blended into the slot (never a low-opacity navy, which reads grey). */
+export const SLOT_COLORS = { fill: SLOT, edge: SLOT_EDGE, ink: '#bfb08a', inkOpacity: 1, label: '#c9b78a' } as const;
 const BROWN = '#7a3d00';
 /** Dynamic Type room for body copy (cards grow in height instead of clipping). */
 const BODY_SCALE = 1.45;
@@ -172,7 +173,7 @@ function PrizeBar({ set, reduced }: { readonly set: DexSet; readonly reduced: bo
   return (
     <View style={styles.barWrap} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <View style={styles.bar}>
-        <Animated.View style={[styles.barFill, { backgroundColor: finished ? BRAND.gold : set.color }, fillStyle]} />
+        <Animated.View style={[styles.barFill, { backgroundColor: finished || set.isComplete ? BRAND.gold : set.color }, fillStyle]} />
       </View>
       {prizeMarks(set).map(mark => {
         const done = mark.status === 'claimed' || mark.status === 'pending';
@@ -280,7 +281,7 @@ export function HuntSwitch({ on, busy, onPress, reduced }: { readonly on: boolea
   const knobStyle = useAnimatedStyle(() => ({ transform: [{ translateX: knob.value * 24 }] }));
   return (
     <Pressable accessibilityRole="switch" accessibilityState={{ checked: on, busy }} disabled={busy} onPress={onPress} hitSlop={6}
-      accessibilityLabel={`Hunt this set, ${on ? 'on' : 'off'}. Its finds show up more on your map.`}
+      accessibilityLabel={`Hunt this set, ${on ? 'on' : 'off'}. Its finds show up more on your map. You can hunt one set at a time.`}
       style={({ pressed }) => [styles.hunt, on && styles.huntOn, pressed && { transform: [{ scale: 0.97 }] }]}>
       <View style={{ flexShrink: 1 }}>
         <View style={styles.huntTitleRow}>
@@ -436,8 +437,10 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
         <Text style={styles.slimText} maxFontSizeMultiplier={BODY_SCALE}>{heading}</Text>
         <PrizeMini reward={reward} />
         {final && !!reward.title && onTitle && (
-          <Pressable onPress={onTitle} accessibilityRole="button" accessibilityLabel={`Wearing the ${reward.title} title. Tap to take it off.`} hitSlop={8}>
-            <GameIcon name="crown" size={24} />
+          <Pressable onPress={onTitle} accessibilityRole="button" accessibilityLabel={`Wearing the ${reward.title} title. Tap to take it off.`} hitSlop={8}
+            style={styles.wearingPill}>
+            <GameIcon name="crown" size={18} />
+            <Text style={styles.wearingText} maxFontSizeMultiplier={1.3}>Wearing</Text>
           </Pressable>
         )}
         <View style={[styles.state, styles.stateDone]}><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
@@ -452,7 +455,7 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
       accessibilityLabel={`${heading}: ${reward.prize}.${status ? ` ${status}` : ''}`}>
       <View style={styles.prizeTop}>
         <Animated.View style={[styles.medal, hero && styles.medalHero, state.kind === 'claim' && styles.medalReady, state.kind === 'done' && styles.medalDone, medalStyle]}>
-          <GameIcon name={final ? 'trophy' : 'gift'} size={hero ? 44 : 34} />
+          <GameIcon name={final ? 'trophy' : 'gift'} size={hero ? 50 : 34} />
           {state.kind === 'done' && <Animated.View style={[styles.medalCheck, checkStyle]}><GameIcon name="check" size={20} /></Animated.View>}
           {state.kind === 'locked' && <View style={styles.medalCheck}><GameIcon name="lock" size={18} /></View>}
         </Animated.View>
@@ -465,7 +468,17 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
               </View>
             )}
           </View>
-          <PrizeChips reward={reward} titleChip={state.kind === 'locked'} />
+          {state.kind === 'locked' && hero ? (
+            <View style={{ gap: 6 }}>
+              <PrizeMini reward={reward} />
+              {!!reward.title && (
+                <View style={[styles.chip, styles.chipTitle, { alignSelf: 'flex-start' }]}>
+                  <GameIcon name="crown" size={22} />
+                  <Text style={[styles.chipText, styles.chipTitleText]} numberOfLines={1} maxFontSizeMultiplier={1.3}>Title: {reward.title}</Text>
+                </View>
+              )}
+            </View>
+          ) : <PrizeChips reward={reward} />}
         </View>
       </View>
       {!!reward.title && state.kind !== 'locked' && <TitleRibbon title={reward.title} />}
@@ -520,7 +533,7 @@ export function FindsHeader({ set, extras, onExtras }: {
     <View style={styles.finds}>
       <SectionTitle icon="chest" text="Your finds" right={extras > 0 && onExtras ? (
         <SpringPress onPress={onExtras} accessibilityLabel={`${extras} ${extras === 1 ? 'extra' : 'extras'}. Give one to a friend.`} style={styles.extras}>
-          <GameIcon name="heart" size={22} />
+          <GameIcon name="gift" size={22} />
           <Text style={styles.extrasText} maxFontSizeMultiplier={1.3}>{extras} {extras === 1 ? 'extra' : 'extras'} to give</Text>
         </SpringPress>
       ) : null} />
@@ -688,7 +701,7 @@ const styles = StyleSheet.create({
     width: 62, height: 62, borderRadius: 31, backgroundColor: '#fff6d8', borderWidth: 3, borderColor: '#f1dca0',
     alignItems: 'center', justifyContent: 'center',
   },
-  medalHero: { width: 66, height: 66, borderRadius: 33, borderColor: BRAND.gold, backgroundColor: '#fff3c4' },
+  medalHero: { width: 64, height: 64, borderRadius: 32, borderColor: BRAND.goldLip, backgroundColor: BRAND.white, borderWidth: 3 },
   medalReady: { backgroundColor: '#fff3c4', borderColor: BRAND.gold },
   medalDone: { backgroundColor: '#fff3c4', borderColor: BRAND.gold },
   medalCheck: {
@@ -726,11 +739,13 @@ const styles = StyleSheet.create({
   },
   slimMedal: { width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.gold },
   slimText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
-  mini: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  mini: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  wearingPill: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 30, paddingHorizontal: 8, borderRadius: 15, backgroundColor: '#fff3c4', borderWidth: 2, borderColor: BRAND.gold },
+  wearingText: { fontFamily: 'Knockout', fontSize: 15, color: BROWN },
   miniChip: { flexDirection: 'row', alignItems: 'center', gap: 1 },
   miniText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
   finds: { paddingHorizontal: 16, marginTop: 6 },
-  sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, minHeight: 48 },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, minHeight: 46 },
   sectionText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy },
   extras: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, minHeight: 46, borderRadius: 23,

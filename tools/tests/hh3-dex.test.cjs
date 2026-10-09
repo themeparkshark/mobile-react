@@ -655,3 +655,17 @@ test('R4: the ready prize claims from the set header (always on the first screen
   assert.match(screen, /\{daily && <RareShelfCard onPress=\{goToMap\} \/>\}/);
   assert.match(parts, /state\.kind === 'done' && \(!final \|\| !reward\.title \|\| titleWorn\)/);
 });
+
+test('R5: solid slot ink, numbered slot plates, compact locked finish row, Wearing pill, gold bar at 40/40, one-hunt toast', () => {
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  const tile = read('src/screens/SetCollection/DexTile.tsx');
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(parts, /ink: '#bfb08a', inkOpacity: 1/);
+  assert.match(tile, />#\{slot\}<\/Text>/);
+  assert.match(screen, /slot=\{slotOf\.get\(item\.id\) \?\? 0\}/);
+  assert.match(parts, /state\.kind === 'locked' && hero \? \(/);
+  assert.match(parts, />Wearing<\/Text>/);
+  assert.match(parts, /finished \|\| set\.isComplete \? BRAND\.gold : set\.color/);
+  assert.match(screen, /Now hunting \$\{set\.name\} instead of \$\{before\.name\}\./);
+  assert.doesNotMatch(parts + screen, /name="heart"/);
+});

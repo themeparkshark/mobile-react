@@ -408,7 +408,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     playSfx('ui.select', 0.6);
     void Haptics.selectionAsync().catch(() => undefined);
     setBook(current => ({ ...current, sets: current.sets.map(entry => ({ ...entry, focused: desired && entry.slug === set.slug })) }));
-    if (desired) showToast(`${set.name} finds will show up more on your map.`, 'success');
+    // One set is hunted at a time: say so when this switch takes over from another set.
+    const before = book.sets.find(entry => entry.focused && entry.slug !== set.slug);
+    if (desired) showToast(before ? `Now hunting ${set.name} instead of ${before.name}.` : `${set.name} finds will show up more on your map.`, 'success');
     try {
       if (!preview) {
         if (desired) await focusPrepItemSet(set.slug);
@@ -421,7 +423,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     } finally {
       setBusy(null);
     }
-  }, [set, busy, preview, loadSets]);
+  }, [set, busy, preview, loadSets, book.sets]);
 
   const openItem = useCallback((item: DexItem) => {
     // Layered: a tap, then a pluck pitched by rarity for a find you own.
@@ -469,6 +471,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const extras = items ? items.reduce((sum, item) => sum + (item.found ? item.spares : 0), 0) : spares;
   const canShare = !(preview && process.env.EXPO_PUBLIC_CREW_GIFT_PREVIEW !== '1');
   const rows = useMemo(() => (items ? findRows(items, COLUMNS) : null), [items]);
+  const slotOf = useMemo(() => new Map((items ?? []).map((item, index) => [item.id, index + 1])), [items]);
 
   const header = (
     <View>
@@ -478,6 +481,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         {sets.map(entry => <ShelfCard key={entry.slug} set={entry} selected={entry.slug === slug} onPress={chooseSet} active={active} />)}
         {eventsReady && events.cards.map(card => <ShelfEventCard key={`event-${card.eventSlug}`} card={card} onPress={openEvent} />)}
       </ScrollView>
+      {/* Soft edges, so a card cut by the screen edge reads as "scroll for more", not a clipped word. */}
+      <LinearGradient pointerEvents="none" start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} colors={['rgba(47,150,214,0.85)', 'rgba(47,150,214,0)']} style={[styles.shelfFade, { left: 0 }]} />
+      <LinearGradient pointerEvents="none" start={{ x: 1, y: 0.5 }} end={{ x: 0, y: 0.5 }} colors={['rgba(47,150,214,0.85)', 'rgba(47,150,214,0)']} style={[styles.shelfFade, { right: 0 }]} />
       <View style={styles.sheetTop}>
         {set && (
           <>
@@ -565,7 +571,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
                 </View>
               ) : (
                 <View style={styles.tileRow}>
-                  {entry.items.map(item => <ItemTile key={item.id} item={item} width={tile} onPress={openItem} active={active} />)}
+                  {entry.items.map(item => <ItemTile key={item.id} item={item} width={tile} onPress={openItem} active={active} slot={slotOf.get(item.id) ?? 0} />)}
                 </View>
               )
             )}
@@ -639,6 +645,7 @@ function StickyBar({ set, reduced, onTop }: { readonly set: DexSet; readonly red
         <View style={{ transform: [{ rotate: '-90deg' }] }}><GameIcon name="arrow" size={20} /></View>
         <Text style={styles.stickyTop} maxFontSizeMultiplier={1.2}>Top</Text>
       </Pressable>
+      <LinearGradient pointerEvents="none" colors={[SHEET, 'rgba(255,248,228,0)']} style={styles.stickyFade} />
     </Animated.View>
   );
 }
@@ -719,7 +726,7 @@ function SparesSheet({ visible, items, onClose, onShare }: {
         <View style={styles.sparesCard} accessibilityViewIsModal>
           <Text style={styles.sparesTitle} accessibilityRole="header">Your extras</Text>
           <View style={styles.sparesHint}>
-            <GameIcon name="heart" size={24} />
+            <GameIcon name="gift" size={24} />
             <Text style={styles.sparesBody}>Tap one to give it to a friend!</Text>
           </View>
           {/* Whole rows only (two at a time) and a soft fade at the edge, so it plainly scrolls. */}
@@ -754,6 +761,8 @@ const styles = StyleSheet.create({
   // Inside the page, just under the header bar.
   // A cream band behind the bar, so whatever scrolls under it disappears cleanly.
   sticky: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 5, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 8, backgroundColor: SHEET },
+  shelfFade: { position: 'absolute', top: 0, width: 18, height: SHELF_CARD_H + 30 },
+  stickyFade: { position: 'absolute', left: 0, right: 0, bottom: -12, height: 12 },
   stickyTop: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft },
   stickyInner: {
     flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: 10, borderRadius: 24,

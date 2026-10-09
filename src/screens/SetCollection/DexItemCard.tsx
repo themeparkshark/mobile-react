@@ -110,7 +110,7 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
                   <RidePhoto grade={photo} art={itemArt(item)} photoUrl={item.photoUrl} width={Math.min(300, width - 110)} />
                 ) : (
                   <Image source={itemArt(item)} contentFit="contain" tintColor={item.found ? undefined : SLOT_COLORS.ink}
-                    style={{ width: Math.min(190, height * 0.22), height: Math.min(190, height * 0.22), opacity: item.found ? 1 : 0.28 }} />
+                    style={{ width: Math.min(190, height * 0.22), height: Math.min(190, height * 0.22), opacity: 1 }} />
                 )}
                 {item.goldenHour && <View style={styles.goldenTag}><GameIcon name="sparkle" size={18} /><Text style={styles.goldenText}>Golden Hour</Text></View>}
               </View>
