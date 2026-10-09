@@ -226,10 +226,13 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     ...(team ? [{ key: 'team' as FeedTab, label: 'Team', badge: team.badge }] : []),
   ];
 
-  const header = (
+  // The header only changes with the player, the tab or the team: a chest tap or the sheet never rebuilds it.
+  const actions = useRef({ openComposer, pickTab });
+  actions.current = { openComposer, pickTab };
+  const header = useMemo(() => (
     <View>
       {player ? (
-        <PressScale onPress={() => void openComposer()} scaleTo={0.97} haptic="medium" sound="none" style={styles.compose} accessibilityLabel="Write a post" accessibilityHint="Opens the new post screen">
+        <PressScale onPress={() => void actions.current.openComposer()} scaleTo={0.97} haptic="medium" sound="none" style={styles.compose} accessibilityLabel="Write a post" accessibilityHint="Opens the new post screen">
           <Avatar player={player as ThreadType['player']} size="sm" />
           <View style={styles.composeField}>
             <Text style={styles.composeText} numberOfLines={1}>{DEFAULT_PROMPT}</Text>
@@ -244,7 +247,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
           return (
             <PressScale
               key={item.key}
-              onPress={() => pickTab(item.key)}
+              onPress={() => actions.current.pickTab(item.key)}
               accessibilityRole="tab"
               accessibilityState={{ selected: on }}
               accessibilityLabel={item.key === 'team' && team ? `${team.name} posts` : `${item.label} posts`}
@@ -263,7 +266,8 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
       </View>
 
     </View>
-  );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [player, tab, team]);
 
   const empty = status === 'loading' ? (
     <SharkLoader tone="onLight" onRetry={() => void load(1, 'replace')} style={styles.state} />
@@ -359,6 +363,8 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         animationIn={reduced ? 'fadeIn' : 'slideInUp'}
         animationOut={reduced ? 'fadeOut' : 'slideOutDown'}
         useNativeDriverForBackdrop
+        // The backdrop finishes fading before the sheet is gone, so it never blinks back for a frame on close.
+        backdropTransitionOutTiming={160}
       >
         <View style={[styles.shortcuts, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.handle} />

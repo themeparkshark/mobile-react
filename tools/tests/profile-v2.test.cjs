@@ -101,7 +101,7 @@ test('VIP and Verified are solid badges with a meaning line, never a fading puls
 
 test('the XP bar pauses off screen, in the background, when covered and under Reduce Motion', () => {
   const potion = read('src/components/XpBar.tsx');
-  assert.match(potion, /setActive\(!paused && reduced === false && appActive\.current && width > 0\)/);
+  assert.match(potion, /setActive\(!asleep\.current && !paused && reduced === false && appActive\.current && width > 0\)/);
   assert.match(potion, /AppState\.addEventListener/);
   assert.match(potion, /useFrameCallback\([\s\S]*?, false\)/, 'the clock starts stopped');
   assert.equal((potion.match(/<Canvas/g) || []).length, 1, 'one canvas');

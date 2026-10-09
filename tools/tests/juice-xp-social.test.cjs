@@ -56,8 +56,9 @@ test('XP bar is cheap: one canvas, reused paths, a stopped clock that pauses, no
   assert.doesNotMatch(bar, /BlurMask|setInterval/);
   assert.doesNotMatch(read('src/components/Experience.tsx'), /setInterval/, 'no 30 Hz React count-up');
   assert.match(bar, /count\.value = withTiming\(now\.current/, 'the XP counts on the UI thread');
-  assert.match(bar, /if \(!active && !shining && acc\.value < \(sleepy \? SLEEPY_FRAME_MS : IDLE_FRAME_MS\)\) return;/, 'calm idle frame rate, sleepier after a while');
-  assert.match(bar, /const shining = !sleepy &&/, 'the idle shine never keeps the bar awake');
+  assert.match(bar, /if \(!active && !shining && quiet\.value > SLEEPY_AFTER_S\) \{[\s\S]{0,80}runOnJS\(sleep\)\(\);/, 'a quiet bar stops its clock (between shines)');
+  assert.match(bar, /function playKind\(kind: PotionTransition, next: PotionState\) \{\n\s+wake\(\);/, 'any change wakes it');
+  assert.match(bar, /if \(!active && !shining && acc\.value < IDLE_FRAME_MS\) return;/, 'calm idle frame rate');
   assert.match(bar, /createPotionDriver/, 'same level-up rules as the potion (tested in profile-v2)');
   const card = read('src/components/Experience.tsx');
   assert.match(card, /const barTransition = useCallback\(\(kind: PotionTransition\) => handlers\.current\.onTransition\(kind\), \[\]\)/);
@@ -80,7 +81,7 @@ test('XP level up: gold hold with a pulse, bounded stars, LEVEL UP!, refill show
   assert.match(card, /announceForAccessibility\(`Level \$\{level\}!`\)/);
   assert.match(card, /toValue: 1\.3, duration: 140/, 'badge pop');
   // The refill reads the latest props, so a refetch during the celebration never leaves stale numbers.
-  assert.match(bar, /function startRefill\(latest: PotionState\) \{\n\s+const now = latestXp\.current;/);
+  assert.match(bar, /function startRefill\(latest: PotionState\) \{\n\s+wake\(\);\n\s+const now = latestXp\.current;/);
   // Brim + gold hold + drain end before the driver refills.
   const hold = Number(/const GOLD_HOLD_MS = (\d+);/.exec(bar)[1]);
   const drain = Number(/const DRAIN_MS = (\d+);/.exec(bar)[1]);
@@ -91,7 +92,7 @@ test('XP level up: gold hold with a pulse, bounded stars, LEVEL UP!, refill show
   const sparks = [...bar.matchAll(/\{ dx: (-?[\d.]+), dy: (-?[\d.]+), s: ([\d.]+) \}/g)].map((m) => m.slice(1).map(Number));
   assert.ok(sparks.length >= 5);
   for (const [, dy, size] of sparks) {
-    const above = -dy + size;
+    const above = -dy + size * 1.15; // at the peak of the grow overshoot
     assert.ok(above <= Math.min(18, padTop), `star reaches ${above} pt above the bar`);
   }
   for (let i = 1; i < sparks.length; i++) {
@@ -101,7 +102,8 @@ test('XP level up: gold hold with a pulse, bounded stars, LEVEL UP!, refill show
   }
   const starMs = Number(/const STAR_MS = (\d+);/.exec(bar)[1]);
   assert.ok(starMs <= Number(/const GOLD_HOLD_MS = (\d+);/.exec(bar)[1]), 'the stars are gone before the drain');
-  assert.match(bar, /withDelay\(GOLD_HOLD_MS \+ DRAIN_MS - 60, withTiming\(0, \{ duration: 80 \}\)\)/, 'gold drains as gold, never olive');
+  assert.match(bar, /flash\.value = 1;\n\s+flash\.value = withDelay\(GOLD_HOLD_MS \+ DRAIN_MS - 60, withTiming\(0, \{ duration: 80 \}\)\)/, 'gold snaps on at the brim (no lime) and drains as gold (no olive)');
+  assert.doesNotMatch(bar, /BURST_AT_MS - 40/, 'no gold pre-fade over green');
 });
 
 test('XP numbers format on the UI thread', () => {
@@ -190,4 +192,39 @@ test('the bar holds changes while hidden and never replays on return', () => {
   const card = read('src/components/Experience.tsx');
   assert.match(card, /if \(own && !hidden\) \{/, 'no sound or haptic for a level up that lands on a hidden screen');
   assert.doesNotMatch(card, /useEffect\(\(\) => \{\n\s+seen\.set/, 'last seen is recorded when the bar plays, not on data change');
+});
+
+test('driver + gate on a fake clock: a level up refills once, at the drain, with the latest data', () => {
+  const { createPotionDriver, createCelebrationGate, BURST_AT_MS, REFILL_AT_MS } = require('./helpers/ts-module.cjs').loadTs('src/components/xpPotionModel.ts');
+  const DRAIN_END = 1380; // BURST_AT_MS + GOLD_HOLD_MS + DRAIN_MS in XpBar
+  for (const drainFirst of [true, false]) {
+    let now = 0;
+    let queue = [];
+    const at = (ms, fn) => { const h = { at: ms, fn }; queue.push(h); return h; };
+    const run = (until) => { for (;;) { queue.sort((a, b) => a.at - b.at); const n = queue[0]; if (!n || n.at > until) break; queue.shift(); now = n.at; n.fn(); } now = until; };
+    const gate = createCelebrationGate();
+    const refills = [];
+    let latestData = { level: 6, progress: 0.1 };
+    const driver = createPotionDriver({ level: 5, progress: 0.8 }, {
+      setTimer: (fn, ms) => at(now + ms, fn), clearTimer: (h) => { queue = queue.filter((x) => x !== h); },
+      burst: () => {},
+      play: (kind) => {
+        if (kind !== 'levelUp') return;
+        const t = gate.start();
+        // The UI-thread drain callback (it lands a little before or after the driver's refill time).
+        at(drainFirst ? DRAIN_END : REFILL_AT_MS + 30, () => { const r = gate.drained(t, latestData); if (r) refills.push(['drain', r]); });
+      },
+      refill: (latest) => { const r = gate.due(latest); if (r) refills.push(['driver', r]); },
+    });
+    assert.equal(driver.update({ level: 6, progress: 0.1 }, false), 'levelUp');
+    run(BURST_AT_MS + 300);
+    // A refetch mid celebration: deferred by the driver, shown by the refill.
+    latestData = { level: 6, progress: 0.25 };
+    assert.equal(driver.update(latestData, false), 'defer');
+    run(3000);
+    assert.equal(refills.length, 1, 'exactly one refill');
+    assert.equal(refills[0][1].progress, 0.25, 'with the latest data');
+    assert.equal(refills[0][0], 'drain', 'the refill always waits for the drain, whichever lands first');
+    assert.equal(gate.celebrating, false);
+  }
 });

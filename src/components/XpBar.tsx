@@ -31,7 +31,7 @@
  * Decorative for VoiceOver: the parent row carries the label.
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { AppState, View, useWindowDimensions, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import {
   Canvas,
   Group,
@@ -80,14 +80,14 @@ const PAD_X = 16;
 const PAD_TOP = 22;
 const PAD_BOTTOM = 10;
 const IDLE_FRAME_MS = 50;
-/** After this long with nothing happening the idle drops to about 10 redraws a second. */
+/** After this long with nothing happening the bar rests: the clock stops until something changes. */
 const SLEEPY_AFTER_S = 15;
-const SLEEPY_FRAME_MS = 100;
 /** The full number shows this long before LEVEL UP! replaces it. */
 const BANNER_LAG_MS = 90;
 /** The stars' whole life: up, hold, gone before the drain (GOLD_HOLD_MS). */
 const STAR_MS = 440;
 const FONT_PX = 15;
+const MAX_FONT_SCALE = 1.2;
 /** Idle shine: one soft sweep every SHINE_EVERY seconds. */
 const SHINE_EVERY = 7.5;
 const SHINE_FOR = 0.9;
@@ -109,11 +109,11 @@ const BUBBLES = [
  * 18 pt above the bar (clear of the title pill).
  */
 export const SPARKS = [
-  { dx: -72, dy: -4, s: 6.5 },
-  { dx: -54, dy: -9, s: 7.5 },
-  { dx: -36, dy: -10, s: 8 },
-  { dx: -18, dy: -9, s: 7.5 },
-  { dx: 0, dy: -4, s: 6.5 },
+  { dx: -76, dy: -7, s: 6.5 },
+  { dx: -57, dy: -9, s: 7.5 },
+  { dx: -38, dy: -9, s: 7.5 },
+  { dx: -19, dy: -9, s: 7.5 },
+  { dx: -2, dy: -7, s: 6.5 },
 ];
 
 function clamp01(n: number) {
@@ -155,7 +155,10 @@ function XpBarImpl({
 }: XpBarProps) {
   const reduced = useReduceMotionPreference();
   const target = clamp01(progress);
-  const font = useFont(require('../../assets/fonts/shark-random-funnyness-2.ttf'), FONT_PX);
+  // The XP numbers follow the system text size, capped so they still fit on the bar.
+  const { fontScale } = useWindowDimensions();
+  const fontPx = Math.round(FONT_PX * Math.max(1, Math.min(MAX_FONT_SCALE, fontScale)) * 2) / 2;
+  const font = useFont(require('../../assets/fonts/shark-random-funnyness-2.ttf'), fontPx);
   const [width, setWidth] = useState(0);
   const w = useSharedValue(0);
 
@@ -216,6 +219,7 @@ function XpBarImpl({
         if (reducedRef.current) { startRefill(latest); return; }
         const now = gate.due(latest);
         if (now) { startRefill(now); return; }
+        if (!gate.celebrating) return;
         // If the drain never reports (its animation was replaced), refill anyway shortly after.
         const token = gate.token;
         setTimeout(() => { const late = gate.fallback(token); if (late) startRefill(late); }, 600);
@@ -228,6 +232,7 @@ function XpBarImpl({
   ), []);
 
   function startRefill(latest: PotionState) {
+    wake();
     const now = latestXp.current;
     banner.value = 0;
     shownNeeded.value = now.needed;
@@ -252,6 +257,7 @@ function XpBarImpl({
   }
 
   function playKind(kind: PotionTransition, next: PotionState) {
+    wake();
     cbs.current.onTransition?.(kind);
     const now = latestXp.current;
     if (reducedRef.current) {
@@ -282,6 +288,8 @@ function XpBarImpl({
           if (!finished) return; // a cancelled run-up never pays out
           // First full frame: the full number shows for a beat, then LEVEL UP!; badge, sound and haptic one hop later.
           banner.value = withDelay(BANNER_LAG_MS, withTiming(1, { duration: 0 }));
+          flash.value = 1;
+          flash.value = withDelay(GOLD_HOLD_MS + DRAIN_MS - 60, withTiming(0, { duration: 80 }));
           runOnJS(onBrim)(token);
         }),
         withDelay(GOLD_HOLD_MS, withTiming(0, { duration: DRAIN_MS, easing: Easing.inOut(Easing.quad) }, (finished) => {
@@ -292,13 +300,11 @@ function XpBarImpl({
         withTiming(0, { duration: 1300 }));
       fizz.value = withSequence(withTiming(1.4, { duration: BURST_AT_MS - 200 }), withTiming(3, { duration: 200 }),
         withTiming(1, { duration: 1800 }));
-      flash.value = withSequence(
-        withDelay(BURST_AT_MS - 40, withTiming(1, { duration: 40 })),
-        // The gold drains as gold, then flips back to green in 80 ms as the bar empties (never olive).
-        withDelay(GOLD_HOLD_MS + DRAIN_MS - 60, withTiming(0, { duration: 80 })),
-      );
+      // Gold snaps on at the brim (set in the brim callback, never a fade over green), drains as gold,
+      // then flips back to green in 80 ms as the bar empties (never lime, never olive).
+      flash.value = 0;
       // One bright pulse on the gold (no scaling, so the bar never touches the badge or the cap).
-      whiteFlash.value = withDelay(BURST_AT_MS, withSequence(withTiming(0.5, { duration: 90 }), withTiming(0, { duration: 260 })));
+      whiteFlash.value = withDelay(BURST_AT_MS, withSequence(withTiming(0.3, { duration: 90 }), withTiming(0, { duration: 240 })));
       sweep.value = 0;
       sweep.value = withDelay(BURST_AT_MS + 60, withTiming(1, { duration: GOLD_HOLD_MS - 60, easing: Easing.inOut(Easing.quad) }, (done) => {
         if (done) sweep.value = 0;
@@ -352,21 +358,42 @@ function XpBarImpl({
     const active = slosh.value > 0.05 || fizz.value > 1.05 || glint.value > 0 || burst.value > 0 || flash.value > 0;
     if (active) quiet.value = 0;
     else quiet.value += Math.min(dt, 100) / 1000;
-    const sleepy = quiet.value > SLEEPY_AFTER_S;
-    // The idle shine glides at the display rate, but only until the bar goes sleepy (then no shine at all).
-    const shining = !sleepy && time.value % SHINE_EVERY < SHINE_FOR + 0.1;
-    if (!active && !shining && acc.value < (sleepy ? SLEEPY_FRAME_MS : IDLE_FRAME_MS)) return;
+    // The idle shine glides at the display rate.
+    const shining = time.value % SHINE_EVERY < SHINE_FOR + 0.1;
+    // Long quiet: the bar rests completely (the clock stops) between shines; any change wakes it.
+    if (!active && !shining && quiet.value > SLEEPY_AFTER_S) {
+      quiet.value = 0;
+      runOnJS(sleep)();
+      return;
+    }
+    if (!active && !shining && acc.value < IDLE_FRAME_MS) return;
     time.value += acc.value / 1000;
     acc.value = 0;
   }, false);
   const frameRef = useRef(frame);
   frameRef.current = frame;
   const appActive = useRef(AppState.currentState === 'active');
+  const asleep = useRef(false);
+  const applyClock = useRef(() => {});
+  applyClock.current = () => frameRef.current.setActive(!asleep.current && !paused && reduced === false && appActive.current && width > 0);
+  function sleep() {
+    asleep.current = true;
+    applyClock.current();
+  }
+  function wake() {
+    if (!asleep.current) return;
+    asleep.current = false;
+    quiet.value = 0;
+    applyClock.current();
+  }
   useEffect(() => {
-    const apply = () => frameRef.current.setActive(!paused && reduced === false && appActive.current && width > 0);
+    // Coming back into view (or the app returning) wakes a resting bar.
+    asleep.current = false;
+    const apply = () => applyClock.current();
     apply();
     const sub = AppState.addEventListener('change', (state) => {
       appActive.current = state === 'active';
+      if (appActive.current) asleep.current = false;
       apply();
     });
     return () => {
@@ -468,7 +495,6 @@ function XpBarImpl({
     if (sweep.value > 0) {
       x = x0 - 20 + sweep.value * span;
     } else {
-      if (quiet.value > SLEEPY_AFTER_S) return;
       const phase = time.value % SHINE_EVERY;
       if (phase > SHINE_FOR) return;
       x = x0 - 20 + (phase / SHINE_FOR) * span;
@@ -488,10 +514,14 @@ function XpBarImpl({
     const top = PAD_TOP;
     const e = 1 - (1 - Math.min(1, q * 2.2)) * (1 - Math.min(1, q * 2.2));
     // Grow fast (visible within ~2 frames), hold, shrink out before the drain starts.
-    const size = Math.min(1, q * 7) * (1 - Math.max(0, q - 0.6) / 0.4);
+    // Grow with a little overshoot (1.15x, then settle), hold, shrink out.
+    const g = Math.min(1, q * 7);
+    const pop = g < 1 ? g * 1.15 : 1 + 0.15 * Math.max(0, 1 - (q - 1 / 7) * 8);
+    const size = pop * (1 - Math.max(0, q - 0.6) / 0.4);
     for (let i = 0; i < SPARKS.length; i++) {
       const s = SPARKS[i];
-      const x = cx + s.dx;
+      // A small outward drift from the middle star, like a pop.
+      const x = cx + s.dx + (s.dx + 38) * 0.12 * e;
       const y = top + 6 + (s.dy - 6) * e;
       const r = s.s * size;
       if (r < 4) continue; // small stars would be all outline: skip them
@@ -529,7 +559,7 @@ function XpBarImpl({
     const slashAt = cx - total / 2 + finalLeft;
     return slashAt - font.getTextWidth(label.slice(0, slash));
   });
-  const textY = PAD_TOP + XP_BAR_HEIGHT / 2 + FONT_PX * 0.36;
+  const textY = PAD_TOP + XP_BAR_HEIGHT / 2 + fontPx * 0.36;
 
 
   const canvasW = width + PAD_X * 2;

@@ -133,8 +133,9 @@ export default function Experience({
   }, [own, reduced, shake, pop, level]);
 
   const onRefill = useCallback(() => {
+    remember(); // the refill shows the latest data, including gains that landed during the celebration
     if (own) playSfx('ui.select', 0.4);
-  }, [own]);
+  }, [own, remember]);
 
   // Stable handlers for the bar (it reads the latest through this ref), so a new render never re-renders it.
   const handlers = useRef({ onTransition, onBurst, onRefill });
