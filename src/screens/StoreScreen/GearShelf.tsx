@@ -269,12 +269,15 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
         <View style={styles.stage}>
           {BUBBLES.map((b, i) => <Bubble key={i} {...b} still={stageStill} />)}
           <Shopkeeper imageUrl={promoUrl} still={stageStill} />
+          {/* The restock day rides on the stage's corner: small, calm, out of the shelf's way. */}
+          <View style={styles.restock}><RestockChip nextAt={nextRotationAt} offset={offset} onElapsed={onRestockElapsed} /></View>
         </View>
         <Animated.View entering={still ? undefined : FadeInUp.duration(260)} style={styles.panel}>
-          <View style={styles.header}>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title} accessibilityRole="header">ON THE SHELF</Text>
-            <RestockChip nextAt={nextRotationAt} offset={offset} onElapsed={onRestockElapsed} />
-          </View>
+          {filters.length === 0 && (
+            <View style={styles.header}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title} accessibilityRole="header">ON THE SHELF</Text>
+            </View>
+          )}
           {filters.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters} accessibilityRole="tablist">
               {filters.map(f => {
@@ -323,7 +326,8 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
 const styles = StyleSheet.create({
   scroll: {},
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 22 },
-  filters: { gap: 8, paddingHorizontal: 12, paddingTop: 10 },
+  filters: { gap: 8, paddingHorizontal: 12, paddingTop: 12 },
+  restock: { position: 'absolute', top: 8, left: 10 },
   filter: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, paddingHorizontal: 13, borderRadius: 17,
     backgroundColor: 'rgba(5,52,110,0.65)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
   filterOn: { backgroundColor: '#ffcf3b', borderColor: '#ffffff' },
