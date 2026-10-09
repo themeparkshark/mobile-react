@@ -54,7 +54,9 @@ function haptic(level: number) {
  * of the box one by one with their own sound. Coins count up. A Trail Exclusive
  * comes out last, alone, with a ring and a firework. Reduce Motion: a soft fade.
  */
-export default function TrailReveal({ boxes, onOpen, onClose, nextHint }: {
+export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }: {
+  /** Boxes until the Gold guarantee, after this open (a progress tick even on a small box). */
+  readonly goldIn?: number | null;
   readonly boxes: readonly TrailBox[];
   readonly onOpen: (boxId: number) => Promise<readonly TrailReward[]>;
   readonly onClose: () => void;
@@ -223,6 +225,12 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint }: {
         </View>
         {showRewards && (
           <Animated.View entering={FadeIn.delay(reduced ? 0 : 300 + rewards.length * 320 + 400)} style={{ width: '100%', alignItems: 'center' }}>
+            {box.tier !== 'gold' && goldIn != null && (
+              <View style={styles.pity} accessible accessibilityLabel={goldIn <= 1 ? 'Your next box is a Gold Box' : `A Gold Box is coming within ${goldIn} boxes`}>
+                <Image source={BOX_ART.gold} style={{ width: 26, height: 26 }} contentFit="contain" />
+                <Text style={styles.pityText}>{goldIn <= 1 ? 'NEXT BOX IS GOLD!' : `GOLD BOX IN ${goldIn} OR LESS`}</Text>
+              </View>
+            )}
             {left === 0 && !!nextHint && <Text style={styles.hint}>{nextHint}</Text>}
             <GameButton label={left > 0 ? `Next box (${left})` : 'Nice!'} onPress={next} />
           </Animated.View>
@@ -361,6 +369,9 @@ const styles = StyleSheet.create({
   later: { minHeight: 44, minWidth: 120, paddingHorizontal: 20, borderRadius: 22, borderWidth: 2.5, borderColor: BRAND.sky,
     alignItems: 'center', justifyContent: 'center' },
   laterText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.sky, letterSpacing: 1 },
+  pity: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,224,122,0.16)', borderRadius: 16,
+    borderWidth: 2, borderColor: BRAND.goldLight, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 8 },
+  pityText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.goldLight, letterSpacing: 1 },
   hint: { fontFamily: 'Knockout', fontSize: 18, color: BRAND.sky, marginBottom: 8, textAlign: 'center' },
   error: { fontFamily: 'Knockout', fontSize: 18, color: BRAND.white, marginBottom: 12, textAlign: 'center' },
 });

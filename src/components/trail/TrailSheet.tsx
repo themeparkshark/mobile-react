@@ -351,7 +351,7 @@ function TierCard({ tier, t }: { readonly tier: TrailTier; readonly t: TrailStat
       <OddsRow icon="coins" label={`${formatSteps(t.coins)} Coins`} pct="ALWAYS" />
       {t.always.map((a, i) => <OddsRow key={`a${i}`} icon={KIND_ICON[a.kind]} label={bonusLabel(a.kind, a.amount)} pct="ALWAYS" />)}
       <Text style={[styles.earnSub, { marginTop: 6 }]}>Plus one of these:</Text>
-      {t.bonus.map((b, i) => <OddsRow key={i} icon={KIND_ICON[b.kind]} label={bonusLabel(b.kind, b.amount)} pct={percent(b.chance_bp)} />)}
+      {t.bonus.map((b, i) => <OddsRow key={i} icon={KIND_ICON[b.kind]} label={b.note === 'owns_all_exclusives' ? `${formatSteps(b.amount)} Coins (you have every Trail Exclusive!)` : bonusLabel(b.kind, b.amount)} pct={percent(b.chance_bp)} />)}
     </View>
   );
 }

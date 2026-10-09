@@ -38,7 +38,7 @@ export interface TrailOddsTier {
   readonly coins: number;
   readonly chance_bp: number;
   readonly always: readonly { readonly kind: TrailRewardKind; readonly amount: number }[];
-  readonly bonus: readonly { readonly kind: TrailRewardKind; readonly amount: number; readonly chance_bp: number }[];
+  readonly bonus: readonly { readonly kind: TrailRewardKind; readonly amount: number; readonly chance_bp: number; readonly note?: string }[];
 }
 
 export interface TrailState {

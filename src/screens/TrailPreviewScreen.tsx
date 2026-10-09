@@ -53,7 +53,7 @@ function fixture(scene: string, step: number): TrailState {
           { kind: 'tickets', amount: 2, chance_bp: 3000 }, { kind: 'mystery_box', amount: 1, chance_bp: 2500 },
           { kind: 'energy', amount: 25, chance_bp: 2500 }, { kind: 'exclusive', amount: 1, chance_bp: 2000 }] },
         { tier: 'gold', goal_steps: 10000, coins: 175, chance_bp: 1000, always: [{ kind: 'mystery_box', amount: 1 }], bonus: [
-          { kind: 'exclusive', amount: 1, chance_bp: 5500 }, { kind: 'mystery_box', amount: 1, chance_bp: 2500 }, { kind: 'tickets', amount: 3, chance_bp: 2000 }] },
+          { kind: 'exclusive', amount: 1, chance_bp: 5500 }, { kind: 'mystery_box', amount: 1, chance_bp: 1500 }, { kind: 'tickets', amount: 3, chance_bp: 3000 }] },
       ],
     },
     exclusives: [
