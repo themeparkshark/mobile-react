@@ -51,12 +51,15 @@ export function tryCardSchedule(pairs: number): { pips: number[]; puff: number |
   };
 }
 
-export function TryCard({ copy, pairs, total, left, top, enter, reducedMotion, onTryAgain, onDone }: {
+export function TryCard({ copy, pairs, total, left, bottom, compact = false, enter, reducedMotion, onTryAgain, onDone }: {
   copy: { title: string; line: string };
   pairs: number;
   total: number;
   left: number;
-  top: number;
+  /** Anchored to the board's bottom edge, so it never runs off a short phone. */
+  bottom: number;
+  /** Short screens (SE-size): tighter spacing, same parts. */
+  compact?: boolean;
   enter: SharedValue<number>;
   reducedMotion: boolean;
   onTryAgain: () => void;
@@ -111,8 +114,8 @@ export function TryCard({ copy, pairs, total, left, top, enter, reducedMotion, o
   }));
 
   return (
-    <Animated.View style={[styles.pos, { top }, cardSt]} accessibilityViewIsModal>
-      <View style={styles.card}>
+    <Animated.View style={[styles.pos, { bottom }, cardSt]} accessibilityViewIsModal>
+      <View style={[styles.card, compact && styles.cardCompact]}>
         <Animated.View style={[styles.banner, bannerSt]}>
           <Image source={BANNER} style={styles.bannerImg} resizeMode="stretch" />
           <Animated.View style={[styles.bannerFlash, flashSt]} />
@@ -124,20 +127,20 @@ export function TryCard({ copy, pairs, total, left, top, enter, reducedMotion, o
               reducedMotion={reducedMotion} />
           ))}
         </View>
-        <Animated.Text style={[styles.line, lineSt]}>{copy.line}</Animated.Text>
+        <Animated.Text style={[styles.line, compact && styles.lineCompact, lineSt]}>{copy.line}</Animated.Text>
         <Animated.View style={[styles.actions, buttonSt]}>
           {canRetry ? (
-            <Pressable onPress={onTryAgain} style={({ pressed }) => [styles.btn, pressed && styles.down]}
+            <Pressable onPress={onTryAgain} style={({ pressed }) => [styles.btn, compact && styles.btnCompact, pressed && styles.down]}
               accessibilityRole="button" accessibilityLabel={`Try again. ${triesLeftLine(left)}`}>
               <GameIcon name="retry" size={26} />
               <Text style={styles.btnText}>TRY AGAIN</Text>
             </Pressable>
           ) : null}
-          <View style={styles.leftRow}>
+          <View style={[styles.leftRow, compact && styles.leftRowCompact]}>
             <GameIcon name="ticket" size={24} />
             <Text style={styles.leftText}>{triesLeftLine(left)}</Text>
           </View>
-          <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? styles.done : styles.btn, pressed && styles.down]}
+          <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? [styles.done, compact && styles.doneCompact] : styles.btn, pressed && styles.down]}
             accessibilityRole="button" accessibilityLabel="Done">
             <Text style={canRetry ? styles.doneText : styles.btnText}>{canRetry ? 'Done' : 'DONE'}</Text>
           </Pressable>
@@ -188,6 +191,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center' },
   pipCoin: { position: 'absolute', width: 30, height: 30 },
   spark: { position: 'absolute', width: 7, height: 7, borderRadius: 4, backgroundColor: MM.gold, borderWidth: 1.5, borderColor: '#ffffff' },
+  cardCompact: { paddingBottom: 10 },
+  lineCompact: { fontSize: 17, lineHeight: 20, marginBottom: 8 },
+  btnCompact: { paddingVertical: 9 },
+  leftRowCompact: { marginTop: 6 },
+  doneCompact: { marginTop: 6 },
   line: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: MM.navyText, textAlign: 'center', marginBottom: 12 },
   actions: { alignItems: 'center', alignSelf: 'stretch' },
   btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: MM.gold, borderRadius: 18,

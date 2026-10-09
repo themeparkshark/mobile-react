@@ -39,3 +39,9 @@ test('feel: ribbon impact, per-pip sound ladder + tick, breathing TRY AGAIN, all
   assert.match(src, /cancelAnimation\(breathe\)/, 'the loop stops when the card goes away');
   assert.doesNotMatch(src, /shadowOffset|shadowRadius|shadowOpacity|elevation\s*:/);
 });
+
+test('the card is anchored to the board bottom and compacts on short phones (no clipping on SE)', () => {
+  const game = fs.readFileSync(path.join(root, 'src/games/memory/MemoryGame.tsx'), 'utf8');
+  assert.match(game, /bottom=\{Math\.max\(8, g\.H - \(g\.felt\.y \+ g\.felt\.h\) \+ 6\)\} compact=\{g\.H < 600\}/);
+  assert.match(src, /styles\.pos, \{ bottom \}/);
+});

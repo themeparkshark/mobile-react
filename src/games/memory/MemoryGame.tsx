@@ -2431,7 +2431,7 @@ export default function MemoryGame({
 
             {tryScreen ? (
               <TryCard copy={memoryLossCopy(tryScreen.pairs, tryScreen.total, tryScreen.out, tryScreen.flipped)} pairs={tryScreen.pairs}
-                total={tryScreen.total} left={tryScreen.left} top={g.felt.y + g.felt.h * 0.2}
+                total={tryScreen.total} left={tryScreen.left} bottom={Math.max(8, g.H - (g.felt.y + g.felt.h) + 6)} compact={g.H < 600}
                 enter={tryCardIn} reducedMotion={reducedMotion} onTryAgain={tryAgain} onDone={giveUp} />
             ) : null}
           </>
