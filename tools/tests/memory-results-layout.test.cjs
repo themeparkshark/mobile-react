@@ -24,7 +24,7 @@ test('front: banner, one counting number, crowns, new cards, one button; stats b
 });
 
 test('win scrim is navy, PERFECT gets one capped coin burst, and the shell scrim never flashes first', () => {
-  assert.match(src, /scrim: \{ \.\.\.StyleSheet\.absoluteFillObject, backgroundColor: 'rgba\(4,38,86,0\.62\)' \}/);
+  assert.match(src, /colors=\{\['rgba\(4,38,86,0\.08\)', 'rgba\(4,38,86,0\.08\)', 'rgba\(4,38,86,0\.62\)'\]\}/);
   assert.match(src, /export const PERFECT_COINS = 10;/);
   assert.match(src, /<CoinBurst fire \/>/);
   assert.match(game, /resultsScrim=\{resultData \? 'none' : undefined\}/);
@@ -43,17 +43,19 @@ test('game feel pass: combo ribbon escalates above the awning, bold link arc, co
   assert.match(mode, /const swap = 320;/);
 });
 
-test('combo callouts are paced: never over SWEET RUN, one at a time, even steps from x6', () => {
+test('combo callouts are paced and always match the flame', () => {
   const { loadTs } = require('./helpers/ts-module.cjs');
-  const { shouldCallCombo } = loadTs('src/games/memory/comboCallout.ts');
+  const { comboCall, shouldCallCombo } = loadTs('src/games/memory/comboCallout.ts');
   const none = { at: 0, sweet: false };
-  assert.equal(shouldCallCombo(2, 10000, none), false);
+  assert.equal(comboCall(2, 10000, none), null);
+  assert.equal(comboCall(3, 10000, none), 'show');
+  assert.equal(comboCall(4, 10100, { at: 10000, sweet: true }), null, 'SWEET RUN stays readable');
+  assert.equal(comboCall(4, 11300, { at: 10000, sweet: true }), 'show');
+  assert.equal(comboCall(5, 10500, { at: 10000, sweet: false }), 'retext', 'a rise while up retexts in place');
+  assert.equal(comboCall(7, 20000, none), null, 'odd steps from x6 stay quiet when nothing is up');
+  assert.equal(comboCall(8, 20000, none), 'show');
   assert.equal(shouldCallCombo(3, 10000, none), true);
-  assert.equal(shouldCallCombo(4, 10100, { at: 10000, sweet: true }), false, 'SWEET RUN stays readable');
-  assert.equal(shouldCallCombo(4, 11300, { at: 10000, sweet: true }), true);
-  assert.equal(shouldCallCombo(4, 10500, { at: 10000, sweet: false }), false, 'one ribbon at a time');
-  assert.equal(shouldCallCombo(7, 20000, none), false, 'odd steps from x6 stay quiet');
-  assert.equal(shouldCallCombo(8, 20000, none), true);
+  assert.match(game, /awning\.current\?\.retext\(`COMBO x\$\{chain\}`/);
 });
 
 test('results: ribbon on the first frame, card rises, visible PERFECT burst, kid words', () => {
@@ -63,4 +65,11 @@ test('results: ribbon on the first frame, card rises, visible PERFECT burst, kid
   assert.match(src, /'MEMORY'\}/);
   assert.doesNotMatch(src, /EDITION\$\{/);
   assert.match(game, /`\+\$\{xp\} XP`/);
+});
+
+test('round 3 timing: banner visible on frame 0, short flash, upward burst, results saved while the coin flies', () => {
+  assert.match(src, /useSharedValue\(reducedMotion \? 1 : 0\.6\)/);
+  assert.match(src, /withTiming\(0\.8, \{ duration: 16 \}\), withTiming\(0, \{ duration: 110 \}\)/);
+  assert.match(src, /const a = Math\.PI \+ \(k \/ \(PERFECT_COINS - 1\)\) \* Math\.PI;/);
+  assert.match(game, /later\(420, \(\) => finishRun\(won\)\);/);
 });

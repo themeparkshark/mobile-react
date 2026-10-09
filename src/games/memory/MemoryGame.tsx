@@ -56,7 +56,7 @@ import {
 } from '../../gamekit';
 import { memoryLossBanner, memoryLossCopy } from './lossCopy';
 import { TryCard } from './TryCard';
-import { shouldCallCombo } from './comboCallout';
+import { comboCall } from './comboCallout';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MemoryCard, makeCardValues, type CardValues, type MemoryCardHandle, type ShimmerState } from './MemoryCard';
@@ -1099,9 +1099,10 @@ export default function MemoryGame({
       fx.current?.burst('stars', mx, my, { count: reducedMotion ? 6 : 12 });
       stage.current?.pose('coin');
     });
+    // Results are saved while the coin flies, so the card arrives as the coin lands (no empty-board hold).
+    later(420, () => finishRun(won));
     later(600, () => {
       coinFly.value = withTiming(1, { duration: 280, easing: Easing.in(Easing.cubic) });
-      finishRun(won);
     });
   }, [coin, coinFly, coinShake, finishRun, later, reducedMotion]);
 
@@ -1580,7 +1581,13 @@ export default function MemoryGame({
             }
             // Combo callout: from 3 remembered in a row, each step lands bigger.
             // Paced so every callout reads once and the stage breathes.
-            if (grade === 'recall' && ev.tierUp !== 3 && shouldCallCombo(chain, Date.now(), calloutAt.current)) {
+            const call = grade === 'recall' && ev.tierUp !== 3 ? comboCall(chain, Date.now(), calloutAt.current) : null;
+            if (call === 'retext') {
+              // Keep the ribbon in step with the flame: punch the new number in place.
+              awning.current?.retext(`COMBO x${chain}`, chain - 2);
+              GameAudio.playLadder('mm_sharp_twinkle', Math.min(9, degree + 1), { volume: 0.6 });
+              calloutAt.current = { at: Date.now(), sweet: false };
+            } else if (call === 'show') {
               awning.current?.ribbon(`COMBO x${chain}`, chain - 2);
               calloutAt.current = { at: Date.now(), sweet: false };
             }

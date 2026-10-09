@@ -29,6 +29,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { GameAudio, Haptic } from '../../gamekit';
 import GameIcon from '../../ui/GameIcon';
 import type { CoinEdition, Grade } from './engine';
@@ -151,7 +152,9 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
 
   return (
     <View style={[styles.wrap, { width: win.width, height: win.height }]} pointerEvents="box-none">
-      <View style={styles.scrim} />
+      {/* Light at the top so the barker's coin payoff stays full color; navy behind the card. */}
+      <LinearGradient pointerEvents="none" style={StyleSheet.absoluteFill}
+        colors={['rgba(4,38,86,0.08)', 'rgba(4,38,86,0.08)', 'rgba(4,38,86,0.62)']} locations={[0, 0.3, 0.42]} />
       {/* Tall phones: the card sits lower so the barker's celebration stays in view above it. */}
       <Animated.View style={[styles.card, { maxHeight: win.height * 0.8, marginTop: win.height > 800 ? 90 : 0 }, riseSt, frontSt]} pointerEvents={flipped ? 'none' : 'auto'}>
         <ScrollView contentContainerStyle={styles.cardInner} showsVerticalScrollIndicator={false} bounces={false}>
@@ -244,24 +247,27 @@ function CoinBurst({ fire }: { fire: boolean }) {
   return <View pointerEvents="none" style={styles.burst}>{Array.from({ length: PERFECT_COINS }, (_, k) => <BurstCoin key={k} k={k} t={t} />)}</View>;
 }
 function BurstCoin({ k, t }: { k: number; t: import('react-native-reanimated').SharedValue<number> }) {
-  const a = (k / PERFECT_COINS) * Math.PI * 2 + (k % 2) * 0.2;
-  const r = 90 + (k % 3) * 15;
+  // An upward fan from the ribbon, so the MEMORY count-up below stays readable.
+  const a = Math.PI + (k / (PERFECT_COINS - 1)) * Math.PI;
+  const r = 100 + (k % 3) * 18;
   const st = useAnimatedStyle(() => ({
     opacity: t.value > 0 && t.value < 1 ? 1 - t.value * t.value * t.value : 0,
     // Out on an arc, then a little gravity.
-    transform: [{ translateX: Math.cos(a) * r * t.value }, { translateY: Math.sin(a) * r * 0.75 * t.value - Math.sin(Math.PI * t.value) * 30 + t.value * t.value * 70 },
+    transform: [{ translateX: Math.cos(a) * r * t.value }, { translateY: Math.sin(a) * r * 0.8 * t.value + t.value * t.value * 45 },
       { rotateZ: `${t.value * 360 * (k % 2 ? 1 : -1)}deg` }, { scale: 0.6 + (1 - t.value) * 0.5 }],
   }));
   return <Animated.Image source={COIN} style={[styles.burstCoin, st]} resizeMode="contain" />;
 }
 
 function Banner({ text, show, reducedMotion }: { text: string; show: boolean; reducedMotion: boolean }) {
-  const drop = useSharedValue(reducedMotion ? 1 : 0);
+  // Visible on the card's first frame (never an empty card), then it slams.
+  const drop = useSharedValue(reducedMotion ? 1 : 0.6);
   const impact = useSharedValue(0);
   useEffect(() => {
     if (!show || reducedMotion) return;
     drop.value = withSequence(withTiming(1.08, { duration: 140, easing: Easing.in(Easing.quad) }), withTiming(1, { duration: 80 }));
-    impact.value = withDelay(140, withSequence(withTiming(1, { duration: 1 }), withTiming(1, { duration: 16 }), withTiming(0, { duration: 120 })));
+    // A 1-2 frame white impact, so PERFECT! never looks washed out.
+    impact.value = withDelay(140, withSequence(withTiming(0.8, { duration: 16 }), withTiming(0, { duration: 110 })));
   }, [show, reducedMotion, drop, impact]);
   const st = useAnimatedStyle(() => ({ opacity: drop.value > 0 ? 1 : 0, transform: [{ translateY: (1 - Math.min(1, drop.value)) * -40 }, { scale: drop.value || 1 }] }));
   const flash = useAnimatedStyle(() => ({ opacity: impact.value }));
@@ -445,7 +451,7 @@ const styles = StyleSheet.create({
   // Navy, not milky white: the shark and board stay readable behind a win.
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,38,86,0.62)' },
   reveal: { alignSelf: 'stretch', alignItems: 'center' },
-  burst: { position: 'absolute', left: 0, right: 0, top: 70, height: 60, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
+  burst: { position: 'absolute', left: 0, right: 0, top: -10, height: 50, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
   burstCoin: { position: 'absolute', width: 38, height: 38 },
   card: {
     width: '90%', maxWidth: 400, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,

@@ -360,6 +360,8 @@ function RailToken({ geo, rail, reducedMotion }: { geo: BoothGeo; rail: NonNulla
 export interface AwningCalloutsHandle {
   /** level > 0: a combo step; each one lands bigger than the last. */
   ribbon: (text: string, level?: number) => void;
+  /** Change the text of a ribbon that is up, with a scale punch (no exit). */
+  retext: (text: string, level?: number) => void;
   sign: (text: string) => void;
 }
 
@@ -378,7 +380,17 @@ export const AwningCallouts = forwardRef<AwningCalloutsHandle, { geo: BoothGeo; 
       // Unfurl 180ms from centre, hold 600ms, roll up 160ms.
       unfurl.value = withSequence(
         withTiming(1, { duration: reducedMotion ? 60 : 180, easing: Easing.out(Easing.back(1.2)) }),
-        withDelay(600, withTiming(0, { duration: 160, easing: Easing.in(Easing.quad) })),
+        withDelay(level > 0 ? 480 : 600, withTiming(0, { duration: 160, easing: Easing.in(Easing.quad) })),
+      );
+    },
+    retext(text, level = 0) {
+      setRibbonText(text);
+      cancelAnimation(unfurl);
+      const target = 1 + Math.min(0.3, level * 0.08);
+      peak.value = reducedMotion ? 1 : withSequence(withTiming(target + 0.14, { duration: 70 }), withTiming(target, { duration: 120 }));
+      unfurl.value = withSequence(
+        withTiming(1, { duration: 60 }),
+        withDelay(480, withTiming(0, { duration: 160, easing: Easing.in(Easing.quad) })),
       );
     },
     sign(text) {
