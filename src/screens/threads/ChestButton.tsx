@@ -51,7 +51,7 @@ const spring = (c: { damping: number; stiffness: number; mass?: number }) =>
 /** Alex's chest, open and empty (it opens a menu, not a payout). GPT Image from chest_closed.png; see juice/art/ART_QA.md. */
 const OPEN_ART = require('../../../assets/images/social/chest_open_empty.png');
 const SIZE = 36;
-const OPEN_SIZE = 42;
+const OPEN_SIZE = 35;
 const FX = 96; // the star canvas, centred on the chest
 const STARS = [
   { a: -2.45, d: 28, s: 5.5 },
@@ -228,7 +228,7 @@ export default function ChestButton({
 const styles = StyleSheet.create({
   hit: { alignItems: 'center', minWidth: 48 },
   chest: { width: SIZE, height: SIZE },
-  open: { position: 'absolute', left: -1, top: -8 },
+  open: { position: 'absolute', left: 1, top: -2 },
   fx: { position: 'absolute', width: FX, height: FX, left: 24 - FX / 2, top: SIZE / 2 - FX / 2 },
   text: { fontFamily: 'Shark', fontSize: 11, color: BRAND.white, marginTop: -2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
 });
