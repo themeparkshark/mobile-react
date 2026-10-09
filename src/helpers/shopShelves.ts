@@ -168,8 +168,9 @@ export function shelfFilters(items: readonly { item_type?: { id: number } | null
   if (slots.length < 2 && canBuy === items.length) return [];
   return [
     { key: 'all', label: 'All', count: items.length },
-    ...slots.map(id => ({ key: `slot:${id}`, label: SLOT_WORDS[id][1], count: counts.get(id) ?? 0 })),
+    // "Can buy" second, on screen without scrolling (shop critic round 3).
     ...(canBuy > 0 ? [{ key: 'can_buy', label: 'Can buy', count: canBuy }] : []),
+    ...slots.map(id => ({ key: `slot:${id}`, label: SLOT_WORDS[id][1], count: counts.get(id) ?? 0 })),
   ];
 }
 

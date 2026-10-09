@@ -113,7 +113,7 @@ test('round 3: filter chips (All, each slot on the shelf, Can buy) and one word 
     { id: 3, item_type: { id: 6 }, cost: 80 }, { id: 4, item_type: { id: 5 }, cost: 280 },
   ];
   const f = shelves.shelfFilters(items, 100);
-  assert.deepEqual(plain(f.map(x => [x.label, x.count])), [['All', 4], ['Held', 1], ['Backdrops', 1], ['Skins', 2], ['Can buy', 2]]);
+  assert.deepEqual(plain(f.map(x => [x.label, x.count])), [['All', 4], ['Can buy', 2], ['Held', 1], ['Backdrops', 1], ['Skins', 2]]);
   assert.equal(items.filter(i => shelves.passesFilter(i, 'can_buy', 100)).length, 2);
   assert.equal(items.filter(i => shelves.passesFilter(i, 'slot:7', 100)).length, 2);
   assert.deepEqual(plain(shelves.shelfFilters([{ id: 1, item_type: { id: 1 }, cost: 1 }], 10)), [], 'one slot, all affordable: no chips');

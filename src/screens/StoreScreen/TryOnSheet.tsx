@@ -74,7 +74,7 @@ const SECRET_CARD = stageCard(SCREEN_W - 28 - 6, SECRET_STAGE_H - 6, HOP + 0.04 
 const SECRET_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SECRET_CARD.box };
 // A piece with no set strip (most classic-catalog gear) gets the room the strip would use: a bigger stage,
 // no dead gap above the buttons (art director, Oct 8 round 1).
-const SOLO_STAGE_H = Math.round(Math.min(440, SHEET_H * 0.56));
+const SOLO_STAGE_H = Math.round(Math.min(500, SHEET_H * 0.64));
 const SOLO_CARD = stageCard(SCREEN_W - 28 - 6, SOLO_STAGE_H - 6, HOP + 0.04 * (SOLO_STAGE_H / 2) + 4);
 const SOLO_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SOLO_CARD.box };
 /** The sheet's spring has settled by about now: moments wait for it, so every open shows a whole moment. */
@@ -761,7 +761,8 @@ const styles = StyleSheet.create({
   fxCard: { gap: 8, padding: 12, borderRadius: 16, backgroundColor: SECRET_THEME.card },
   fxRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   fxText: { flex: 1, fontFamily: FONT.display, fontSize: 17, lineHeight: 21, color: SECRET_THEME.ink },
-  fxKeep: { flex: 1, fontFamily: FONT.body, fontSize: 15, color: SECRET_THEME.inkSoft },
+  // One font in the card (shop critic round 3): the condensed display face, softer ink.
+  fxKeep: { flex: 1, fontFamily: FONT.display, fontSize: 15, lineHeight: 19, color: SECRET_THEME.inkSoft },
   actions: { paddingHorizontal: 16, paddingTop: 6, gap: 6 },
   note: { textAlign: 'center', fontFamily: FONT.body, fontSize: 15, color: S.inkSoft },
   alert: { alignSelf: 'center', backgroundColor: S.alert, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 2, borderColor: S.border },

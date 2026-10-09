@@ -26,7 +26,7 @@ import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { formatCoins, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
 import { useAnyModalLayer } from '../../ui/modalLayers';
 import Playercard from '../../components/Playercard';
-import { itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
+import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import { previewLook } from './TryOnSheet';
 import type { ItemType } from '../../models/item-type';
 import type { ShopItem } from '../../models/shop-today';
@@ -114,6 +114,7 @@ const StarTile = memo(function StarTile({ item, balance, still, onOpen, onWish }
   const look = useMemo(() => previewLook(player?.inventory, [{ id: item.id, name: item.name, icon_url: item.icon_url, paper_url: item.paper_url,
     no_eye_url: item.no_eye_url, item_type: item.item_type, fx_key: item.fx_key ?? null }], 'player'), [player?.inventory, item.id]);
   const short = Math.max(0, item.cost - balance);
+  const worn = isItemWorn(player?.inventory, item);
   const name = itemDisplayName(item);
   const rim = badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border;
   return (
@@ -136,15 +137,22 @@ const StarTile = memo(function StarTile({ item, balance, still, onOpen, onWish }
           <Text maxFontSizeMultiplier={1.1} style={styles.starRarityText}>{badge.label}</Text></View> : null}
         {slotLine(item.item_type?.id) && <Text maxFontSizeMultiplier={1.1} numberOfLines={2} style={styles.starSlot}>{slotLine(item.item_type?.id)}</Text>}
         <View style={{ flex: 1 }} />
-        <View style={styles.starPrice}>
-          <GameIcon name="coins" size={17} />
-          <Text maxFontSizeMultiplier={1.15} style={styles.starPriceText}>{short > 0 ? `Need ${formatCoins(short)} more` : formatCoins(item.cost)}</Text>
-        </View>
+        {owned ? (
+          <View style={styles.starPrice}>
+            <GameIcon name="check" size={17} />
+            <Text maxFontSizeMultiplier={1.15} style={[styles.starPriceText, styles.starYours]}>{worn ? 'Wearing' : 'Yours'}</Text>
+          </View>
+        ) : (
+          <View style={styles.starPrice}>
+            <GameIcon name="coins" size={17} />
+            <Text maxFontSizeMultiplier={1.15} style={styles.starPriceText}>{short > 0 ? `Need ${formatCoins(short)} more` : formatCoins(item.cost)}</Text>
+          </View>
+        )}
       </View>
-      <Pressable onPress={() => onWish(item)} hitSlop={10} style={styles.starHeart} accessibilityRole="button" accessibilityState={{ selected: wished }}
+      {!owned && <Pressable onPress={() => onWish(item)} hitSlop={10} style={styles.starHeart} accessibilityRole="button" accessibilityState={{ selected: wished }}
         accessibilityLabel={wished ? `Remove ${name} from Favorites` : `Save ${name} to Favorites`}>
         <View style={[styles.heartDot, wished && styles.heartDotOn]}><WishHeart on={wished} size={18} /></View>
-      </Pressable>
+      </Pressable>}
     </Pressable>
   );
 });
@@ -336,7 +344,7 @@ const styles = StyleSheet.create({
   star: { flex: 1, minHeight: 186, borderRadius: 16, borderWidth: 3, backgroundColor: '#ffffff', flexDirection: 'row', ...SHADOW.card },
   starClip: { ...StyleSheet.absoluteFillObject, borderRadius: 13, overflow: 'hidden' },
   starGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },
-  starArt: { width: '50%', marginVertical: 6 },
+  starArt: { width: '54%', marginVertical: 2 },
   starText: { flex: 1, paddingTop: 12, paddingBottom: 10, paddingRight: 10, gap: 4 },
   starKicker: { alignSelf: 'flex-start', backgroundColor: '#0a2350', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
   starKickerText: { fontFamily: FONT.display, fontSize: 12, color: '#ffe07a', letterSpacing: 0.8 },
@@ -346,7 +354,8 @@ const styles = StyleSheet.create({
   starSlot: { fontFamily: FONT.body, fontSize: 14, lineHeight: 17, color: '#34506f' },
   starPrice: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   starPriceText: { fontFamily: FONT.display, fontSize: 17, color: '#0a2350' },
-  starHeart: { position: 'absolute', top: -9, right: -9 },
+  starHeart: { position: 'absolute', top: 4, right: 4 },
+  starYours: { color: '#1b7f45' },
   heartDot: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: '#ff9bbf' },
   heartDotOn: { borderColor: '#ff4f8b', backgroundColor: '#fff0f5' },
   stage: { height: GEAR_STAGE_H, overflow: 'hidden', paddingTop: 6 },

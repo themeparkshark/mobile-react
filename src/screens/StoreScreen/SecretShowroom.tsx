@@ -131,7 +131,8 @@ const RailTile = memo(function RailTile({ entry, selected, owned, member, still,
 }) {
   const lift = useSharedValue(selected ? 1 : 0);
   useEffect(() => { lift.value = still ? (selected ? 1 : 0) : withSpring(selected ? 1 : 0, { damping: 12, stiffness: 220 }); }, [selected, still]);
-  const style = useAnimatedStyle(() => ({ transform: [{ translateY: -4 * lift.value }, { scale: 1 + 0.06 * lift.value }] }));
+  // Same baseline for every tile: the gold ring marks the pick, plus a small settle (no lift, no slab).
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.03 * lift.value }] }));
   const { item } = entry;
   const name = itemDisplayName(item);
   return (
@@ -217,15 +218,28 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
     if (index >= 0) rail.current?.scrollTo({ x: Math.max(0, index * (TILE + 12) + RAIL_PAD - (SCREEN_W - TILE) / 2), animated: !still });
   }, []);
 
+  // The room waits for its art (every piece, your shark) so nothing pops in mid-entry: at most 700 ms,
+  // then the reveal plays once (art director / shop critic round 3).
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const urls = [...entries.flatMap(e => [e.item.paper_url, e.item.icon_url]), player?.inventory?.skin_item?.no_eye_url]
+      .filter((u): u is string => typeof u === 'string' && u.length > 0);
+    const cap = setTimeout(() => { if (live) setReady(true); }, 700);
+    void Image.prefetch([...new Set(urls)], 'memory-disk').catch(() => undefined).finally(() => { if (live) setReady(true); });
+    return () => { live = false; clearTimeout(cap); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // The room's "you're in" moment: a soft cue and one tap of haptics with the gold light sweep.
   useEffect(() => {
-    if (still) return;
+    if (still || !ready) return;
     const t = setTimeout(() => {
       soundRef.current(require('../../../assets/sounds/reveal.mp3'), { volume: 0.35 });
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     }, 350);
     return () => clearTimeout(t);
-  }, []);
+  }, [ready]);
 
   const ownedCount = entries.filter(e => !!(e.item.shop?.is_owned ?? e.item.has_purchased) || bought.includes(e.item.id)).length;
   if (!entry || !item) return null;
@@ -266,7 +280,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
         </Animated.View>
       )}
 
-      <Animated.View entering={still ? undefined : FadeInDown.duration(280)}>
+      <Animated.View key={ready ? 'room' : 'wait'} entering={still || !ready ? undefined : FadeInDown.duration(280)} style={!ready && { opacity: 0 }}>
         <VaultPanel padded={false} style={styles.panelWrap}>
           <Animated.View style={[{ height: stageH }, stageStyle]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
@@ -281,7 +295,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
               </ShopStage>
             </Pressable>
             {/* The entry moment: one gold light sweep across the room. */}
-            {!still && <View pointerEvents="none" style={StyleSheet.absoluteFill}><Sheen still={false} delay={350} width={INNER_W + 120} /></View>}
+            {!still && ready && <View pointerEvents="none" style={StyleSheet.absoluteFill}><Sheen still={false} delay={350} width={INNER_W + 120} /></View>}
             <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flare, flareStyle]} />
             <View style={styles.stageTop} pointerEvents="box-none">
               <ShelfChip entry={entry} offset={offset} />
