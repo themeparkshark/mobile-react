@@ -129,6 +129,12 @@ interface Props {
   h: number;
   back: ImageSourcePropType;
   face: CardFace;
+  /**
+   * The deck's face sheet, mounted (hidden) from the deal on. The face is
+   * then already decoded when the card flips: no blank cream frame while a
+   * fresh sprite-sheet Image loads mid-flip.
+   */
+  preloadSheet?: ImageSourcePropType;
   goldBack?: boolean;
   reducedMotion: boolean;
   sv: CardValues;
@@ -139,7 +145,7 @@ interface Props {
 const INK = '#0B5CAD';
 
 export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function MemoryCard(
-  { w, h, back, face, goldBack, reducedMotion, sv, shimmer, id },
+  { w, h, back, face, preloadSheet, goldBack, reducedMotion, sv, shimmer, id },
   ref,
 ) {
   const v = useMemo(() => ({
@@ -453,21 +459,27 @@ export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function Memo
         </View>
       );
     }
-    if (face.sheet != null && face.slot != null && !failed) {
-      const cols = face.cols ?? 4;
-      const rows = face.rows ?? 2;
+    // One stable sheet Image per card: mounted at the deal with the deck's
+    // sheet (hidden), then only moved to its slot when the face is known.
+    const sheet = face.sheet ?? preloadSheet;
+    if (sheet != null && !failed) {
+      const known = face.sheet != null && face.slot != null;
+      const slot = known ? face.slot! : 0;
+      const cols = known ? face.cols ?? 4 : 4;
+      const rows = known ? face.rows ?? 2 : 2;
       return (
         <View style={[size, styles.clip, { backgroundColor: MM.cream }]}>
           <Image
-            source={face.sheet}
+            source={sheet}
             resizeMode="stretch"
             onError={() => setFailed(true)}
             style={{
               position: 'absolute',
               width: w * cols,
               height: h * rows,
-              left: -(face.slot % cols) * w,
-              top: -Math.floor(face.slot / cols) * h,
+              left: -(slot % cols) * w,
+              top: -Math.floor(slot / cols) * h,
+              opacity: known ? 1 : 0,
             }}
           />
         </View>
@@ -475,7 +487,7 @@ export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function Memo
     }
     return <View style={[size, styles.plate, { backgroundColor: MM.cream }]} />;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [face, failed, w, h]);
+  }, [face, preloadSheet, failed, w, h]);
 
   const pip = Math.max(8, Math.round(w * 0.12));
   return (

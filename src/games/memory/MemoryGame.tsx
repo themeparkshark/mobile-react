@@ -2324,6 +2324,7 @@ export default function MemoryGame({
                   w={g.cw}
                   h={g.ch}
                   back={CARD_BACK}
+                  preloadSheet={deck.faceSheet}
                   face={cardFaceFor(id)}
                   goldBack={faces[id] === FACE_GOLD}
                   reducedMotion={reducedMotion}
