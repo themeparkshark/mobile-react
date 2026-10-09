@@ -295,6 +295,7 @@ function XpBarImpl({
   }
   useEffect(() => () => {
     driver.dispose();
+    party.current.token = -1; // a brim or drain callback landing after unmount does nothing
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
   }, [driver]);
 
