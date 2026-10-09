@@ -173,23 +173,6 @@ export default function StampBookScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devHooks, status]);
 
-  // Dev-only capture driver (Metro inspector): globalThis.__stampBook.open('explorer'), .titles(), .scroll(600), .tab('hunt'), .close().
-  useEffect(() => {
-    if (!devHooks) return;
-    const g = globalThis as unknown as { __stampBook?: object };
-    g.__stampBook = {
-      open: (slug: string) => { const s = sections.flatMap(x => x.stamps).find(x => x.slug === slug); if (s) open(s); return !!s; },
-      fresh: (slug: string) => { const s = sections.flatMap(x => x.stamps).find(x => x.slug === slug); if (s) { setFresh(true); setSelected(s); } return !!s; },
-      titles: () => setTitlesOpen(true),
-      closeTitles: () => setTitlesOpen(false),
-      scroll: (y: number) => scroller.current?.scrollTo({ y, animated: false }),
-      tab: (key: string) => setFilter(key),
-      close: () => closeRef.current(),
-      claimNext: () => openNextClaim(),
-    };
-    return () => { delete g.__stampBook; };
-  }, [devHooks, sections, open, openNextClaim]);
-  const closeRef = useRef<() => void>(() => undefined);
 
   // Section completion moment: once per section per device.
   useEffect(() => {
@@ -266,6 +249,7 @@ export default function StampBookScreen() {
     flushSeen();
   }, [flushPatches, flushSeen]);
 
+  const closeRef = useRef<() => void>(() => undefined);
   closeRef.current = close;
 
   const nextClaim = useMemo(() => {
@@ -288,6 +272,22 @@ export default function StampBookScreen() {
     handoffTimer.current = setTimeout(go, 350);
   }, [queue, selected, open]);
 
+  // Dev-only capture driver (Metro inspector): globalThis.__stampBook.open('explorer'), .titles(), .scroll(600), .tab('hunt'), .close().
+  useEffect(() => {
+    if (!devHooks) return;
+    const g = globalThis as unknown as { __stampBook?: object };
+    g.__stampBook = {
+      open: (slug: string) => { const s = sections.flatMap(x => x.stamps).find(x => x.slug === slug); if (s) open(s); return !!s; },
+      fresh: (slug: string) => { const s = sections.flatMap(x => x.stamps).find(x => x.slug === slug); if (s) { setFresh(true); setSelected(s); } return !!s; },
+      titles: () => setTitlesOpen(true),
+      closeTitles: () => setTitlesOpen(false),
+      scroll: (y: number) => scroller.current?.scrollTo({ y, animated: false }),
+      tab: (key: string) => setFilter(key),
+      close: () => closeRef.current(),
+      claimNext: () => openNextClaim(),
+    };
+    return () => { delete g.__stampBook; };
+  }, [devHooks, sections, open, openNextClaim]);
   const claim = useCallback(async (): Promise<ClaimResult> => {
     if (!selected || claimingRef.current) return { ok: false };
     if (previewMode) { pendingPatch.current.push(selected.id); return { ok: true }; }

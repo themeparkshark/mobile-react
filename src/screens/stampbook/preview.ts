@@ -935,6 +935,68 @@ const STAMPS: StampData[] = [
   "icon_url": null,
   "how_to": "Play on a holiday",
   "short_name": "Holiday Shark"
+ },
+ {
+  "id": 929,
+  "slug": "trail-walker",
+  "name": "Trail Walker",
+  "category": "steps",
+  "goal": "Open your first Trail Box",
+  "metric": "trail_boxes_opened",
+  "target_value": 1,
+  "rarity": "common",
+  "image_key": null,
+  "emoji": null,
+  "is_hidden": false,
+  "sort_order": 30,
+  "progress": 0,
+  "target": 1,
+  "progress_percentage": 0,
+  "progress_text": "0/1",
+  "is_earned": false,
+  "earned_at": null,
+  "reward_claimed": false,
+  "rewards": {
+   "energy": 40,
+   "tickets": 5,
+   "xp": 400,
+   "coins": 0,
+   "title": null
+  },
+  "icon_url": null,
+  "how_to": "Open your first Trail Box",
+  "short_name": "Trail Walker"
+ },
+ {
+  "id": 930,
+  "slug": "marathon-shark",
+  "name": "Marathon Shark",
+  "category": "steps",
+  "goal": "Walk 42.2 km in parks",
+  "metric": "park_distance_m",
+  "target_value": 42200,
+  "rarity": "epic",
+  "image_key": null,
+  "emoji": null,
+  "is_hidden": false,
+  "sort_order": 30,
+  "progress": 12400,
+  "target": 42200,
+  "progress_percentage": 29,
+  "progress_text": "12400/42200",
+  "is_earned": false,
+  "earned_at": null,
+  "reward_claimed": false,
+  "rewards": {
+   "energy": 40,
+   "tickets": 5,
+   "xp": 400,
+   "coins": 0,
+   "title": "Marathon Shark"
+  },
+  "icon_url": null,
+  "how_to": "Walk 42.2 km in parks",
+  "short_name": "Marathon Shark"
  }
 ];
 

@@ -450,3 +450,18 @@ test('v3: a claimed title stamp makes Wear title the main button; the book unloc
   // Wearing refreshes the player so the profile pill matches.
   assert.match(screen, /await equipStampTitle\(stampId\);\s*await refreshPlayer\(\);/);
 });
+
+test('v3: a stamp the app has never heard of still renders: star pictogram, plain count, km for distance, fallback art', () => {
+  const unknown = model.toBookStamp(stamp({ metric: 'brand_new_metric', target_value: 5, target: 5, progress: 2 }));
+  assert.equal(model.requirement(unknown).icon, 'star');
+  assert.equal(model.remainingLine(unknown), '3 to go!');
+  assert.equal(model.progressLabel(unknown), '2 / 5');
+  const walk = model.toBookStamp(stamp({ metric: 'park_distance_m', target_value: 42200, target: 42200, progress: 12400 }));
+  assert.equal(model.progressLabel(walk), '12.4 / 42.2 km');
+  assert.equal(model.remainingLine(walk), '29.8 km to go!');
+  assert.equal(model.whereFor('park_distance_m'), 'park');
+  assert.equal(model.requirement(model.toBookStamp(stamp({ metric: 'trail_boxes_opened' }))).icon, 'gift');
+  // No section from the server: the metric rules put it on the Special page; no art: the bundled fallback.
+  assert.equal(model.toBookStamp(stamp({ metric: 'trail_boxes_opened' })).section, 'special');
+  assert.match(read('src/screens/stampbook/art.ts'), /return \{ source: FALLBACK_ART, ghostIsReal: false \};/);
+});

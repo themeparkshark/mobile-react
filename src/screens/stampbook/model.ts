@@ -248,10 +248,20 @@ export function requirement(s: Pick<BookStamp, 'metric' | 'target'>): Requiremen
   if (m === 'night_show') return r('moon', ['night', 'nights'], 'Explore', null);
   if (m === 'holiday_login') return r('gift', ['holiday', 'holidays'], null, null);
   if (m.startsWith('fright_')) return r('pumpkin', ['haunt', 'haunts'], null);
+  if (/^trail_box/.test(m)) return r('gift', ['box', 'boxes'], 'Explore');
+  if (isMeters(m)) return r('map', ['km', 'km'], 'Explore', null);
   if (m === 'total_experience' || m === 'experience_level') return r('xp', ['XP', 'XP'], 'Explore');
   if (m === 'coins_earned' || m === 'coins_held') return r('coins', ['coin', 'coins'], 'Explore');
-  return r('star', ['step', 'steps'], null, null);
+  // Unknown (newer server) metric: a star, a plain count and no unit word, so it never needs an app update.
+  return r('star', ['', ''], null, null);
 }
+
+/** Distance metrics count meters (e.g. `park_distance_m`); the book shows kilometres. */
+export function isMeters(metric: string): boolean {
+  return /(_m|_meters)$/.test(metric) || /distance/.test(metric);
+}
+
+const km = (meters: number) => (Math.floor(meters / 100) / 10).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /** A positive "how close" line for a locked card: "3 more days!", "11 more finds!". */
 export function remainingLine(s: Pick<BookStamp, 'metric' | 'target' | 'progress' | 'earned' | 'secret'>): string {
@@ -260,8 +270,10 @@ export function remainingLine(s: Pick<BookStamp, 'metric' | 'target' | 'progress
   const req = requirement(s);
   const left = Math.max(0, s.target - s.progress);
   if (req.unit[0] === 'percent') return left > 0 ? `${left}% to go!` : 'Almost there!';
+  if (isMeters(s.metric)) return left > 0 ? `${km(left)} km to go!` : 'Almost there!';
   if (s.target <= 1 || left <= 0) return s.progress > 0 ? 'Almost there!' : "Let's go!";
   const fmt = left.toLocaleString('en-US');
+  if (!req.unit[0]) return `${fmt} to go!`;
   return `${fmt} more ${left === 1 ? req.unit[0] : req.unit[1]}!`;
 }
 
@@ -270,7 +282,8 @@ export function tileLabel(s: BookStamp): string {
   if (s.earned) return `${s.name}. Earned${s.claimable ? '. Rewards ready to claim' : ''}.`;
   if (s.secret) return 'Secret stamp. Keep playing to discover it.';
   const req = requirement(s);
-  const prog = req.unit[0] === 'percent' ? `${Math.min(100, s.progress)} percent` : `${Math.min(s.progress, s.target)} of ${s.target}`;
+  const prog = req.unit[0] === 'percent' ? `${Math.min(100, s.progress)} percent` : isMeters(s.metric) ? progressLabel(s).replace('/', 'of')
+    : `${Math.min(s.progress, s.target)} of ${s.target}`;
   return `${s.name}. Locked. ${prog}. ${s.howTo}`;
 }
 
@@ -305,7 +318,8 @@ export function earnedDate(iso: string | null): string | null {
 }
 
 /** "3 / 10" for a count, "40%" for a percent-based passport. */
-export function progressLabel(stamp: Pick<BookStamp, 'progress' | 'target'>): string {
+export function progressLabel(stamp: Pick<BookStamp, 'progress' | 'target'> & { readonly metric?: string }): string {
+  if (stamp.metric && isMeters(stamp.metric)) return `${km(Math.min(stamp.progress, stamp.target))} / ${km(stamp.target)} km`;
   if (stamp.target === 100 && stamp.progress <= 100) return `${Math.min(100, stamp.progress)}%`;
   const fmt = (n: number) => n.toLocaleString('en-US');
   return `${fmt(Math.min(stamp.progress, stamp.target))} / ${fmt(stamp.target)}`;
@@ -346,7 +360,7 @@ export type Where = 'park' | 'anywhere';
 
 export function whereFor(metric: string): Where {
   if (/^(visited_|park_shelf:|ride_passport_|park_coins_|ride_coins_|ride_boss|verified_lineplay|trivia_|line_bonus)/.test(metric)) return 'park';
-  if (['parks_visited', 'night_show', 'night_owl'].includes(metric)) return 'park';
+  if (['parks_visited', 'night_show', 'night_owl'].includes(metric) || /^(park_distance|trail_box)/.test(metric)) return 'park';
   return 'anywhere';
 }
 
