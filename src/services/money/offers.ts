@@ -97,7 +97,8 @@ export type BundleWorth = {
 
 /** A bundle's honest worth. Null unless it is at least 1.5x its own price. */
 export function bundleWorth(product: ShopProduct, prices: PriceMap, rates: Partial<Record<ShopCurrency, number>>): BundleWorth | null {
-  if (singleCurrency(product.grants)) return null;
+  // A regular single-currency pack shows its bonus instead; featured deals (a Coin Chest) show their worth.
+  if (singleCurrency(product.grants) && product.section !== 'featured') return null;
   const price = prices[product.product_id];
   const value = regularValue(product.grants, rates);
   if (!price || price.amount <= 0 || !value || value < price.amount * 1.5) return null;

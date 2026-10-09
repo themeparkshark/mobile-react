@@ -146,7 +146,7 @@ export function vipPriceLine(plans: readonly { price: string; trial: string | nu
   return parts.map((part, i) => (i === 0 ? part : `Or ${part}`)).join('. ') + '.';
 }
 
-async function vipDoorReason(): Promise<GateReason> {
+export async function vipDoorReason(): Promise<GateReason> {
   if (!showGate) return VIP_DOOR;
   try {
     // Loaded here, not at the top: the gate stays light for every other door and for tests.
@@ -173,13 +173,10 @@ export function openMembership(options: { devPreview?: boolean } = {}): Promise<
   return doorInFlight;
 }
 
-async function openMembershipOnce(options: { devPreview?: boolean }): Promise<boolean> {
-  const skip = vipMember || (options.devPreview === true && __DEV__);
-  if (!skip) {
-    if (!(await askGrownUp(await vipDoorReason()))) return false;
-    // The pass covers this flow's next step only: the paywall's Buy.
-    pass = { flow: 'vip', until: Date.now() + GATE_PASS_MS };
-  }
+async function openMembershipOnce(_options: { devPreview?: boolean }): Promise<boolean> {
+  // Pitch first (Oct 8 2026, money stream): anyone may SEE what VIP gives and costs. The grown-up
+  // gate sits on the paywall's Buy, the one real-money step (grownUpForNextStep in MembershipScreen),
+  // and restates the plan and price there. Members land on their perks page.
   RootNavigation.navigate('Membership');
   return true;
 }

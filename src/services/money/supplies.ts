@@ -122,7 +122,7 @@ export async function buyPack(product: ShopProduct, options: { onStart?: () => v
 async function purchaseNow(product: ShopProduct, catalog: ShopCatalog | null): Promise<ShopPurchaseOutcome> {
   if (__DEV__) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const fake = (require('../../dev/moneyPreview') as typeof import('../../dev/moneyPreview')).captureBuy();
+    const fake = (require('../../../tools/capture/moneyCapture') as typeof import('../../../tools/capture/moneyCapture')).captureBuy();
     if (fake === 'success') return { status: 'success', result: { results: [{ transaction_id: 'dev', product_id: product.product_id, granted: product.grants, replay: false, revoked: false }], wallet: catalog?.wallet ?? { tickets: 0, coins: 0, energy: 0, rescue_passes: 0 } } };
     if (fake) return { status: fake };
   }

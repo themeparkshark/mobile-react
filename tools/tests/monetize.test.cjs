@@ -221,7 +221,7 @@ test('offers live on result and recap screens only, never inside a game or a mov
 
 test('the shop copy is honest: real prices, no random rewards, Parts never sold, no em dashes', () => {
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
-  assert.match(shop, /price\.price/, 'Apple localized price on every button');
+  assert.match(shop, /price=\{prices\[p\.product_id\]\?\.price\}/, 'Apple localized price on every button');
   assert.doesNotMatch(shop, /—/);
   for (const file of ['src/services/ads.ts', 'src/screens/LinePlay/components/LineSnackOffer.tsx', 'src/components/PostWinRewardsModal.tsx']) {
     assert.doesNotMatch(read(file), /—/, file);

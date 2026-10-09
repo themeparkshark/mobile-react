@@ -325,18 +325,19 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
   const deal = !!product.deal_key || product.product_id.endsWith('.deal.daily');
   return (
     <Animated.View entering={FadeInUp.delay(120 + index * 70).springify().damping(15)} style={{ flex: 1 }}>
-      <ShopCard onPress={onBuy} disabled={disabled || !price || !!note} style={{ flex: 1 }}
+      <ShopCard onPress={onBuy} disabled={disabled || !price || !!note} style={{ flex: 1 }} fill
         accessibilityLabel={`${product.title}. ${deal ? 'A new deal every day.' : 'One a day.'} ${price ?? ''}, real money.`}>
         <Band text={deal ? 'TODAY’S DEAL' : 'PARK DAY'} color={deal ? 'green' : 'blue'} size={15} />
         <View style={st.dayBody}>
           <PackArt art={packArtKey(product)} size={64} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{product.title.toUpperCase()}</Text>
-          <Contents grants={product.grants} size="small" />
+          <View style={{ flex: 1, justifyContent: 'center' }}><Contents grants={product.grants} size="small" /></View>
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>
             {worth ? `Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}` : deal ? 'New deal every day' : 'One a day'}
           </Text>
         </View>
         <PriceBar price={price} busy={busy} note={note} />
+        {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: 34, right: 4 }} />}
       </ShopCard>
     </Animated.View>
   );
@@ -356,18 +357,13 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
         accessibilityLabel={`${n.toLocaleString('en-US')} ${unitWord(main, n)}. ${price ?? ''}, real money, a grown-up buys it.${bonus ? ` ${bonus}% more than the smallest pack.` : ''}${best ? ' Best value.' : ''}`}>
         <View style={[st.packArtWell, wide && st.packArtWide]}>
           <PackArt art={packArtKey(product, tier)} size={wide ? 70 : columns === 2 ? 82 : 64} bob={false} />
-          {wide && (
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.wideNote}>{`${n} ${unitWord(main, n)}`}</Text>
-          )}
         </View>
-        <Band text={best ? 'BEST VALUE' : `${n.toLocaleString('en-US')} ${main === 'rescue_passes' ? 'PASSES' : unitWord(main, n).toUpperCase()}`}
+        <Band text={`${n.toLocaleString('en-US')} ${main === 'rescue_passes' ? (n === 1 ? 'RESCUE PASS' : 'RESCUE PASSES') : unitWord(main, n).toUpperCase()}`}
           color={best ? 'gold' : 'navy'} size={columns === 3 ? 14 : 16} />
-        {best && (
-          <Text maxFontSizeMultiplier={MAX_FONT} style={st.bestAmount}>{`${n.toLocaleString('en-US')} ${unitWord(main, n)}`}</Text>
-        )}
         <PriceBar price={price} busy={busy} note={note} />
         {bonus && <Sticker text={`+${bonus}% MORE`} style={{ top: 6, right: 4 }} />}
       </ShopCard>
+      {best && <View style={st.bestPill} pointerEvents="none"><Text maxFontSizeMultiplier={1.1} style={st.bestPillText}>BEST VALUE</Text></View>}
     </View>
   );
 }
@@ -391,8 +387,8 @@ function VipCard({ perks }: { perks: VipPerk[] | null }) {
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipRowText} numberOfLines={1}>{perk.title}</Text>
           </View>
         ))}
-        <GameButton label="Ask a grown-up" icon="lock" size="compact" onPress={() => { void openMembership(); }}
-          accessibilityLabel="See VIP. A grown-up opens it." style={{ alignSelf: 'center', marginTop: 4 }} />
+        <GameButton label="See VIP" icon="member" size="compact" onPress={() => { void openMembership(); }}
+          accessibilityLabel="See everything VIP gives" style={{ alignSelf: 'center', marginTop: 4 }} />
       </View>
     </Animated.View>
   );
@@ -435,13 +431,16 @@ const st = StyleSheet.create({
     textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0 },
   sectionRule: { flex: 1, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.75)' },
   sectionNote: { fontFamily: FONT.body, fontSize: 15, color: '#e2f6ff', marginTop: -4 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  col3: { width: '31.2%', flexGrow: 1 },
-  col2: { width: '47.5%', flexGrow: 1 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 10, rowGap: 16, paddingTop: 6 },
+  col3: { width: '31.2%', flexGrow: 1, alignItems: 'stretch' },
+  col2: { width: '47.5%', flexGrow: 1, alignItems: 'stretch' },
   col1: { width: '100%' },
   packArtWell: { height: 92, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', paddingTop: 6 },
   packArtWide: { flexDirection: 'row', gap: 12, height: 86 },
   wideNote: { fontFamily: FONT.display, fontSize: 22, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  bestPill: { position: 'absolute', top: -11, alignSelf: 'center', backgroundColor: '#ffcf3b', borderRadius: 10, borderWidth: 2,
+    borderColor: '#ffffff', paddingHorizontal: 8, paddingVertical: 1 },
+  bestPillText: { fontFamily: FONT.display, fontSize: 12, color: '#6a3b00' },
   bestAmount: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff', paddingVertical: 2, alignSelf: 'stretch', textAlign: 'center',
     backgroundColor: CARD.band.navy },
   vipLip: { borderRadius: 22, backgroundColor: '#5a3a00', paddingBottom: 6 },

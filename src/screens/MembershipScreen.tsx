@@ -289,7 +289,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
 const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
   { icon: 'play', text: 'No ads. VIP gets every bonus without watching one.' },
   { icon: 'lock', text: 'Every real-money buy asks a grown-up first. Ask to Buy works too.' },
-  { icon: 'check', text: 'Gear stays in the closet for good. Members can wear VIP pieces.' },
+  { icon: 'check', text: 'Everything you earn or buy stays in your closet for good.' },
   { icon: 'settings', text: 'Turn VIP off anytime in Apple\u00A0ID settings.' },
 ];
 

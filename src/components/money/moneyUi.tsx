@@ -88,8 +88,10 @@ export function unitWord(kind: keyof ShopGrants, n: number): string {
 }
 
 /** Alex's card: blue gradient, white rim, navy lip; press sinks into the lip. */
-export function ShopCard({ children, onPress, disabled, style, accessibilityLabel, glow }: {
+export function ShopCard({ children, onPress, disabled, style, accessibilityLabel, glow, fill }: {
   children: ReactNode; onPress?: () => void; disabled?: boolean; style?: StyleProp<ViewStyle>; accessibilityLabel?: string;
+  /** Stretch to the parent's height (cards side by side line up). */
+  fill?: boolean;
   /** A gold rim for the one card a section recommends ("Best value"). */
   glow?: boolean;
 }) {
@@ -98,7 +100,7 @@ export function ShopCard({ children, onPress, disabled, style, accessibilityLabe
       accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [s.lip, style, pressed && !disabled && s.lipPressed]}>
       {({ pressed }) => (
-        <View style={[s.card, glow && s.cardGlow, pressed && !disabled && s.cardPressed]}>
+        <View style={[s.card, fill && { flex: 1 }, glow && s.cardGlow, pressed && !disabled && s.cardPressed]}>
           <LinearGradient pointerEvents="none" colors={[CARD.top, CARD.bottom]} style={StyleSheet.absoluteFill} />
           <View pointerEvents="none" style={s.gloss} />
           {children}

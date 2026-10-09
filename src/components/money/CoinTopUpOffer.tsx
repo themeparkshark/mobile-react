@@ -40,10 +40,10 @@ const FREE_PATH: Record<TopUpCurrency, string> = {
 };
 
 /** The headline: what is missing, in the player's words. Exported for tests. */
-export function topUpHeadline(need: number, currency: TopUpCurrency, reason: TopUpReason): string {
+export function topUpHeadline(need: number, kind: TopUpCurrency, reason: TopUpReason): string {
   const n = Math.max(1, Math.ceil(need));
-  const amount = `${n.toLocaleString('en-US')} more ${unitWord(currency, n)}`;
-  if (currency === 'tickets' && reason === 'ride') return n === 1 ? 'Out of tickets?' : `Need ${amount}?`;
+  const amount = `${n.toLocaleString('en-US')} more ${unitWord(kind, n)}`;
+  if (kind === 'tickets' && reason === 'ride') return n === 1 ? 'Out of tickets?' : `Need ${amount}?`;
   switch (reason) {
     case 'gear': return `Need ${amount} for this?`;
     case 'mystery-box': return `Need ${amount} for this box?`;
@@ -59,6 +59,7 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
   tone?: 'onLight' | 'onBlue'; style?: StyleProp<ViewStyle>;
 }) {
   const blue = tone === 'onBlue';
+  const kind = currency;
   const { player, refreshPlayer } = useContext(AuthContext);
   const canBuy = !!player && storeAvailable();
   const { catalog, prices } = useSupplies(canBuy);
@@ -66,11 +67,11 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
   const [landed, setLanded] = useState<{ grants: Record<string, number>; art: PackArtKey } | null>(null);
   if (!canBuy || need <= 0) return null;
 
-  const pack = catalog?.enabled ? pickTopUp(need, currency, catalog.products, prices) : null;
+  const pack = catalog?.enabled ? pickTopUp(need, kind, catalog.products, prices) : null;
   const price = pack ? prices[pack.product_id] : undefined;
   const tier = pack && pack.section !== 'featured'
     ? catalog!.products.filter(p => p.section === pack.section).findIndex(p => p.product_id === pack.product_id) : 0;
-  const amount = pack?.grants[currency] ?? 0;
+  const amount = pack?.grants[kind] ?? 0;
 
   const buy = async () => {
     if (!pack || busy) return;
@@ -86,28 +87,28 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
     if (message) gameAlert(message.title, message.body);
   };
 
-  const seeAll = () => RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies', focus: currency === 'tickets' ? 'tickets' : currency === 'coins' ? 'coins' : 'featured' });
+  const seeAll = () => RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies', focus: kind === 'tickets' ? 'tickets' : kind === 'coins' ? 'coins' : 'featured' });
 
   return (
     <Animated.View entering={FadeIn.duration(180)} style={[st.wrap, blue && st.wrapBlue, style]}>
       <View style={st.head}>
-        <GameIcon name={currencyIcon(currency)} size={26} />
-        <Text maxFontSizeMultiplier={MAX_FONT} style={[st.headline, blue && st.inkBlue]} numberOfLines={2}>{topUpHeadline(need, currency, reason)}</Text>
+        <GameIcon name={currencyIcon(kind)} size={26} />
+        <Text maxFontSizeMultiplier={MAX_FONT} style={[st.headline, blue && st.inkBlue]} numberOfLines={2}>{topUpHeadline(need, kind, reason)}</Text>
       </View>
       {pack && (
         <Pressable onPress={() => void buy()} disabled={busy || !price}
           accessibilityRole="button"
-          accessibilityLabel={price ? `Get ${amount.toLocaleString('en-US')} ${unitWord(currency, amount)} for ${price.price}. Real money. A grown-up buys it.` : 'Loading the price'}
+          accessibilityLabel={price ? `Get ${amount.toLocaleString('en-US')} ${unitWord(kind, amount)} for ${price.price}. Real money. A grown-up buys it.` : 'Loading the price'}
           style={({ pressed }) => [st.lip, pressed && st.lipPressed]}>
           <View style={st.card}>
             <View style={st.artWell}><PackArt art={packArtKey(pack, Math.max(0, tier))} size={58} /></View>
             <View style={{ flex: 1, paddingVertical: 8 }}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={st.packName} numberOfLines={1}>
-                {pack.section === 'featured' ? pack.title : `${amount.toLocaleString('en-US')} ${unitWord(currency, amount)}`}
+                {pack.section === 'featured' ? pack.title : `${amount.toLocaleString('en-US')} ${unitWord(kind, amount)}`}
               </Text>
               {pack.section === 'featured' && (
                 <Text maxFontSizeMultiplier={MAX_FONT} style={st.packSub} numberOfLines={1}>
-                  {`${amount.toLocaleString('en-US')} ${unitWord(currency, amount)} and more`}
+                  {`${amount.toLocaleString('en-US')} ${unitWord(kind, amount)} and more`}
                 </Text>
               )}
               <Text maxFontSizeMultiplier={MAX_FONT} style={st.packSub}>A grown-up buys it</Text>
@@ -116,7 +117,7 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
           </View>
         </Pressable>
       )}
-      <Text maxFontSizeMultiplier={MAX_FONT} style={[st.free, blue && st.inkSoftBlue]}>{FREE_PATH[currency]}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT} style={[st.free, blue && st.inkSoftBlue]}>{FREE_PATH[kind]}</Text>
       {pack && (
         <Pressable onPress={seeAll} hitSlop={8} accessibilityRole="button" style={st.more}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={[st.moreText, blue && st.inkBlue]}>See all packs</Text>
