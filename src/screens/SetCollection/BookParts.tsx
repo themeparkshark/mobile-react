@@ -389,12 +389,23 @@ function TitleRibbon({ title }: { readonly title: string }) {
  */
 export function visiblePrizes(set: DexSet): { readonly reward: DexReward; readonly final: boolean }[] {
   let nextShown = false;
-  return prizeList(set).filter(({ reward, final }) => {
+  const all = prizeList(set);
+  // Two or more won steps fold into one strip (the bar's checked notches already show each one).
+  const won = all.filter(({ reward, final }) => !final && (reward.status === 'claimed' || reward.status === 'pending'));
+  const folded = won.length >= 2 ? new Set(won.slice(0, -1).map(entry => entry.reward.id)) : new Set<string>();
+  return all.filter(({ reward, final }) => {
+    if (folded.has(reward.id)) return false;
     if (final || reward.status !== 'locked') return true;
     if (nextShown) return false;
     nextShown = true;
     return true;
   });
+}
+
+/** How many won steps fold into this one (the last won step carries the strip). */
+function foldedBefore(set: DexSet, id: string): number {
+  const won = prizeList(set).filter(({ reward, final }) => !final && (reward.status === 'claimed' || reward.status === 'pending'));
+  return won.length >= 2 && won[won.length - 1].reward.id === id ? won.length - 1 : 0;
 }
 
 /** Every prize for the set, in target order. A won step folds to one slim line; the finish prize is the hero row. */
@@ -412,15 +423,17 @@ export function PrizeRows({ set, titleWorn, titleBusy, onTitle, popKey }: {
   return (
     <Animated.View style={[styles.prizes, popStyle]}>
       {visiblePrizes(set).map(({ reward, final }) => (
-        <PrizeRow key={reward.id} set={set} reward={reward} final={final}
-          titleWorn={titleWorn} titleBusy={titleBusy} onTitle={final ? onTitle : null} reduced={reduced} />
+        <PrizeRow key={reward.id} set={set} reward={reward} final={final} wonBefore={final ? 0 : foldedBefore(set, reward.id)}
+          titleWorn={titleWorn} titleBusy={titleBusy} onTitle={final ? onTitle : null} reduced={reduced} popKey={popKey} />
       ))}
     </Animated.View>
   );
 }
 
-function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced }: {
-  readonly set: DexSet; readonly reward: DexReward; readonly final: boolean;
+function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, popKey, wonBefore = 0 }: {
+  readonly set: DexSet; readonly reward: DexReward; readonly final: boolean; readonly popKey: number;
+  /** Won steps folded into this row (it then reads "4 prizes won"). */
+  readonly wonBefore?: number;
   readonly titleWorn: boolean; readonly titleBusy: boolean;
   readonly onTitle: (() => void) | null; readonly reduced: boolean;
 }) {
@@ -428,21 +441,26 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced }
   const wiggle = useSharedValue(0);
   const stampIn = useSharedValue(1);
   const lastKind = useRef(state.kind);
-  // Won just now (the reveal closed): the check stamps onto the medal with a thud.
+  const pendingStamp = useRef(false);
+  // Won while the reveal covers the page: remember it, and stamp when the player is back (popKey bumps on close).
   useEffect(() => {
     const was = lastKind.current;
     lastKind.current = state.kind;
-    if (state.kind !== 'done' || was === 'done') return;
+    if (state.kind === 'done' && was !== 'done') pendingStamp.current = true;
+  }, [state.kind]);
+  useEffect(() => {
+    if (!pendingStamp.current || popKey === 0) return;
+    pendingStamp.current = false;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     playSfx('fx.hit', 0.45);
     if (reduced) return;
     stampIn.value = 2.2;
     stampIn.value = withSequence(withTiming(1, { duration: 180, easing: Easing.in(Easing.quad) }), withSpring(1, { damping: 8, stiffness: 300 }));
-  }, [state.kind, reduced, stampIn]);
+  }, [popKey, reduced, stampIn]);
   // The ready step stays quiet (CLAIM PRIZE above owns the motion); the medal only wiggles when tapped early.
   const medalStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value}deg` }] }));
   const checkStyle = useAnimatedStyle(() => ({ transform: [{ scale: stampIn.value }] }));
-  const heading = final ? `Find all ${set.total}` : `Find ${reward.target}`;
+  const heading = final ? `Find all ${set.total}` : wonBefore > 0 ? `${wonBefore + 1} prizes won` : `Find ${reward.target}`;
   const status = state.kind === 'done' ? 'Got it!' : state.kind === 'pending' ? 'On the way' : state.kind === 'locked' ? `${state.toGo} to go` : 'Ready!';
   // Not yet: a tap still answers (a wiggle, a tick and the count left in the pill).
   const nudge = () => {
@@ -460,10 +478,23 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced }
         <View style={styles.slimLine}>
           <Animated.View style={[styles.slimMedal, checkStyle]}><GameIcon name="check" size={20} /></Animated.View>
           <Text style={styles.slimText} maxFontSizeMultiplier={BODY_SCALE}>{heading}</Text>
-          <PrizeMini reward={reward} />
+          {wonBefore > 0 ? <View style={{ flex: 1 }} /> : <PrizeMini reward={reward} />}
           <View style={[styles.state, styles.stateDone, styles.stateRow]}><GameIcon name="check" size={16} /><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
         </View>
       </View>
+    );
+  }
+  // The next step is one slim line (gift, "Find 16", its prizes, "1 to go"), the same shape as a won row.
+  if (!final && state.kind === 'locked') {
+    return (
+      <Pressable onPress={nudge} style={[styles.slim, styles.slimNext]} accessible accessibilityLabel={`${heading}: ${reward.prize}. ${status}`}>
+        <View style={styles.slimLine}>
+          <Animated.View style={[styles.slimMedal, styles.slimMedalNext, medalStyle]}><GameIcon name="gift" size={20} /></Animated.View>
+          <Text style={styles.slimText} maxFontSizeMultiplier={BODY_SCALE}>{heading}</Text>
+          <PrizeMini reward={reward} />
+          <View style={styles.state}><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>{status}</Text></View>
+        </View>
+      </Pressable>
     );
   }
   const hero = final;
@@ -817,6 +848,8 @@ const styles = StyleSheet.create({
   },
   slimMedal: { width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.gold },
   slimText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
+  slimNext: { backgroundColor: BRAND.white, borderColor: '#efe1b8' },
+  slimMedalNext: { borderColor: '#f1dca0', backgroundColor: '#fff6d8' },
   slimLine: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   mini: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   words: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 10, rowGap: 2 },
