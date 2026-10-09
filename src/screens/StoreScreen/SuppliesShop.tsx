@@ -334,7 +334,7 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
         <View style={st.dayBody}>
           <PackArt art={packArtKey(product)} size={64} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{product.title.toUpperCase()}</Text>
-          <View style={{ flex: 1, justifyContent: 'center' }}><Contents grants={product.grants} size="small" /></View>
+          <View style={{ flex: 1, justifyContent: 'center', alignSelf: 'stretch' }}><Contents grants={product.grants} size="tight" /></View>
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>
             {worth ? `Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}` : deal ? 'New deal every day' : 'One a day'}
           </Text>
