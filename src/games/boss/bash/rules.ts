@@ -42,13 +42,13 @@ export interface PhaseRule {
 export const PHASES: readonly PhaseRule[] = [
   { id: 'warm', from: 0, visible: 3, gapMs: 150, upMs: 2400, puffer: 0, dizzyMs: 1900, need: 3 },
   { id: 'angry', from: 6_500, visible: 3, gapMs: 130, upMs: 1900, puffer: 0.3, dizzyMs: 1650, need: 3 },
-  { id: 'fury', from: 13_500, visible: 3, gapMs: 110, upMs: 1600, puffer: 0.34, dizzyMs: 1450, need: 2 },
+  { id: 'fury', from: 13_500, visible: 3, gapMs: 100, upMs: 1500, puffer: 0.34, dizzyMs: 1250, need: 2 },
 ];
 /** The head drops for this long before it can be smashed (the dizzy wobble). */
 export const DIZZY_DROP_MS = 150;
 /** A PERFECT smash: tap while the closing ring sits on the gold core (this slice of the dizzy window). */
-export const PERFECT_FROM = 0.22;
-export const PERFECT_UNTIL = 0.45;
+export const PERFECT_FROM = 0.25;
+export const PERFECT_UNTIL = 0.42;
 /** INK attack: the boss puffs up for this long (the tell). Tap the boss to block it; miss it and you get inked. */
 export const INK_TELL_MS = 1150;
 /** First ink, then one every INK_EVERY_MS (never in the last INK_LAST_MS). */

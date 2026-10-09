@@ -45,6 +45,8 @@ const SEEN_KEY = 'boss_bash_seen_v1';
 /** Hit-stop on a smash: the whole stage holds this long. */
 const SMASH_STOP_MS = 85;
 const LANES = [0.2, 0.5, 0.8] as const;
+/** Big words sit in a band below the HUD labels (HP row, chips), never on them. */
+const SKY_WORD_Y = 128;
 
 type SharkPose = 'idle' | 'cheer' | 'bonked' | 'dizzy';
 type Face = 'angry' | 'dizzy' | 'hurt' | 'laugh' | 'roar';
@@ -158,6 +160,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const firstBonked = useRef(false), firstSmashed = useRef(false), idleSince = useRef(0), blocks = useRef(0);
   const startHp = useRef(hpLeft), seenHp = useRef(hpLeft);
   const introDone = useRef(false);
+  const hpLeftRef = useRef(hpLeft); hpLeftRef.current = hpLeft;
   const heldRef = useRef(false), goPending = useRef(false);
   /** Your best on this boss: a target in the header while you play. */
   const [best, setBest] = useState(0);
@@ -169,6 +172,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const bossFlinch = useSharedValue(0);
   const bossDrop = useSharedValue(0), bossHit = useSharedValue(0), bossRise = useSharedValue(0), bossShake = useSharedValue(0);
   const flopX = useSharedValue(0);
+  const bossFade = useSharedValue(1);
   const cam = useSharedValue(1), fury = useSharedValue(0), hatPop = useSharedValue(0), bossPuff = useSharedValue(0);
   const countdown = useRef(4);
   const hintRef = useRef<'none' | 'tentacle' | 'head' | 'ink'>('none');
@@ -237,7 +241,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     timers.current.forEach(clearTimeout); timers.current = [];
     if (raf.current !== null) cancelAnimationFrame(raf.current);
     raf.current = null; playing.current = false; finished.current = false; played.current = 0;
-    heldRef.current = false; goPending.current = false; perfectChain.current = 0;
+    heldRef.current = false; goPending.current = false; perfectChain.current = 0; hpAtBell.current = null;
     seedRef.current = (seedRef.current * 7919 + 17) % 1000003;
     engine.current = createBash(seedRef.current);
     shownTotal.current = 0;
@@ -247,7 +251,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setTeamHit(null);
     setHud({ power: 0, need: 3, headStart: 0, popKey: 0, damage: 0, phase: 'warm' });
     cancelAnimation(bossShake); cancelAnimation(bossPuff);
-    clock.value = 0; bossDrop.value = 0; bossHit.value = 0; bossRise.value = 0; fury.value = 0; cam.value = 1; hatPop.value = 0;
+    clock.value = 0; bossFade.value = 1; bossDrop.value = 0; bossHit.value = 0; bossRise.value = 0; fury.value = 0; cam.value = 1; hatPop.value = 0;
     bossShake.value = 0; bossPuff.value = 0; setInkTell(false); setFlopped(false); setStunned(false); setHeld(false); flopCount.current = 0; setFlopSide(0); flopX.value = 0; countdown.current = 4;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hpLeft]);
@@ -398,10 +402,10 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     if (e.perfect) {
       perfectChain.current += 1;
       if (perfectChain.current === 1) addFx({ t: 'wm', wm: 'perfect' }, 900);
-      else addFx({ t: 'bubble', text: `PERFECT x${perfectChain.current}`, x: L.w / 2, y: L.h * 0.08 + 40, tone: 'gold' }, 800);
+      else addFx({ t: 'bubble', text: `PERFECT x${perfectChain.current}`, x: L.w / 2, y: SKY_WORD_Y, tone: 'gold' }, 800);
     } else {
       perfectChain.current = 0;
-      addFx({ t: 'bubble', text: 'SMASH!', x: L.w / 2, y: L.h * 0.08 + 40, tone: 'white' }, 700);
+      addFx({ t: 'bubble', text: 'SMASH!', x: L.w / 2, y: SKY_WORD_Y, tone: 'white' }, 700);
     }
     if (!reduced) {
       particles.current?.burst({ x, y, preset: 'burst', count: 16, colors: [BRAND.gold, BRAND.white, BRAND.goldLight], speed: 1.3 });
@@ -507,7 +511,10 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
         best_streak: s.bestStreak, game: 'boss_bash_v2' },
     };
   };
+  /** HP as it was at the bell: the server's confirmed HP (which already includes this round) must not be subtracted twice. */
+  const hpAtBell = useRef<number | null>(null);
   const finish = useCallback(() => {
+    hpAtBell.current = hpLeftRef.current;
     if (finished.current) return;
     finished.current = true;
     playing.current = false;
@@ -522,6 +529,12 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setFx(list => list.filter(f => f.t === 'num'));
     addFx({ t: 'wm', wm: 'finish' }, 1000);
     bossRise.value = reduced ? withTiming(2.2, { duration: 200 }) : withDelay(250, withTiming(2.2, { duration: 550, easing: Easing.in(Easing.back(1.4)) }));
+    // It dives all the way under (no see-through ghost under the water): fade as it goes, then a big splash.
+    bossFade.value = withDelay(reduced ? 0 : 450, withTiming(0, { duration: reduced ? 150 : 300 }));
+    if (!reduced) later(700, () => {
+      addFx({ t: 'burst', src: BASH_ART.splash, x: L.w / 2, y: L.waterY + 10, size: L.w * 0.5 }, 500);
+      sfx('bo_kraken_slam', 'fx.whoosh', { volume: 0.8 });
+    });
     sfx('bo_ko_kraken', 'fx.reveal', { volume: 0.9 });
     haptic('success');
     const built = buildResult(s);
@@ -661,6 +674,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
   // --- Styles ----------------------------------------------------------------------
   const bossStyle = useAnimatedStyle(() => ({
+    opacity: bossFade.value,
     transform: [
       { translateX: bossDrop.value * flopX.value * L.w * 0.13 },
       { translateY: bossDrop.value * L.dropBy + bossRise.value * L.bossSize * 0.32 },
@@ -692,7 +706,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const finSize = Math.min(54, L.w * 0.13);
 
   const renderResults = (args: ShellResultsArgs) => (
-    <BashResults args={args} bossName={bossName} boss={boss} rideName={rideName ?? null} startHp={hpLeft} capLeft={capLeft}
+    <BashResults args={args} bossName={bossName} boss={boss} rideName={rideName ?? null} startHp={hpAtBell.current ?? hpLeft} capLeft={capLeft}
       hpMax={hpMax} damage={args.result.score} rate={damageRate} meta={args.result.meta ?? {}} fighters={fighters}
       endsAt={endsAt} next={next} rewards={rewards} receipt={receipt} receiptNote={receiptNote}
       onAgain={onAgain && args.result.meta ? () => onAgain(args.result.meta!) : undefined} />
@@ -798,8 +812,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           {fx.map(f => f.t === 'num' ? <DamageNumber key={f.id} text={f.text} x={f.x} y={f.y} big={f.big} toX={scoreTarget.x} toY={scoreTarget.y} reduced={reduced} />
             : f.t === 'burst' ? (reduced ? null : <Burst key={f.id} src={f.src} x={f.x} y={f.y} size={f.size} spin={f.spin} reduced={reduced} />)
               : f.t === 'wm' ? <Wordmark key={f.id} id={f.wm} x={L.w / 2}
-                y={streakWord.current === f.id ? L.h * 0.76 : L.h * 0.08 + 40}
-                width={streakWord.current === f.id ? L.w * 0.44 : L.w * 0.6} reduced={reduced} />
+                y={streakWord.current === f.id ? L.h - 104 : SKY_WORD_Y + 12}
+                width={streakWord.current === f.id ? L.w * 0.34 : L.w * 0.56} reduced={reduced} />
                 : f.t === 'ink' ? <InkSplat key={f.id} x={f.x} y={f.y} size={f.size} rot={f.rot} life={INKED_MS} reduced={reduced} />
                   : f.t === 'count' ? <CountBeat key={f.id} text={f.text} x={L.w - 58} y={L.h * 0.2} reduced={reduced} />
                     : <Bubble key={f.id} text={f.text} tone={f.tone} reduced={reduced}
