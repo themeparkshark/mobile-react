@@ -34,6 +34,7 @@ import Animated, {
   withDelay,
   withRepeat,
   withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { Canvas, Group, Path, Skia } from '@shopify/react-native-skia';
@@ -53,6 +54,8 @@ import {
   type FxStageHandle,
   type GameResult,
 } from '../../gamekit';
+import GameIcon from '../../ui/GameIcon';
+import { memoryLossBanner, memoryLossCopy, triesLeftLine } from './lossCopy';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MemoryCard, makeCardValues, type CardValues, type MemoryCardHandle, type ShimmerState } from './MemoryCard';
@@ -342,6 +345,7 @@ export default function MemoryGame({
     strikes: 0, pairs: 0, total: 8, board: 1, turns: 0, turnsLeft: null as number | null,
   });
   const [tryScreen, setTryScreen] = useState<{ pairs: number; total: number; left: number } | null>(null);
+  const tryCardIn = useSharedValue(0);
   const [unlock, setUnlock] = useState<{ kicker: string; title: string; hint?: string } | null>(null);
   const [tip, setTip] = useState<{ text: string; kind: 'scout' | 'slip' } | null>(null);
   const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -916,13 +920,15 @@ export default function MemoryGame({
     const chargedMs = Math.round(chargedElapsed(e));
     void (async () => {
       const pbKey = r.mode === 'ride' ? 0 : r.mode === 'daily' ? 2 : r.mode === 'warmup' ? 3 : 1;
-      const pb = await savePersonalBest(pbKey, finalScore);
+      // Saving bests and records is on-device and best effort: a storage
+      // failure must never leave the player on a dead board with no result.
+      const pb = await savePersonalBest(pbKey, finalScore).catch(() => ({ best: finalScore, isNewBest: false }));
       const { rewards, daily: dailySum } = await collectRewards(r, won, perfect, stars);
       let edition: CoinEdition | null = null;
       let upgraded = false;
       let ridePb: number | null = null;
       let newRidePb = false;
-      if (r.mode === 'ride') {
+      if (r.mode === 'ride') try {
         const rec = await loadRideRecord(rideKey);
         const minted = won ? editionForStars(stars) : 'none';
         const up = upgradeEdition(rec.edition, minted);
@@ -931,15 +937,17 @@ export default function MemoryGame({
         newRidePb = won && !r.signal && (rec.bestMs == null || chargedMs < rec.bestMs);
         ridePb = newRidePb ? chargedMs : rec.bestMs;
         await saveRideRecord(rideKey, { bestMs: ridePb, edition: up.edition });
+      } catch {
+        edition = won ? editionForStars(stars) : null;
       }
       if (r.mode === 'timeAttack') {
-        await pushRankHistory(e.board);
-        await saveTaRuns((await loadTaRuns()) + 1);
+        await pushRankHistory(e.board).catch(() => undefined);
+        await saveTaRuns((await loadTaRuns().catch(() => 0)) + 1).catch(() => undefined);
       }
       if (runRef.current !== r) return;
       const par = r.mode === 'daily' ? fairParFor(e.pairsTotal) : parFor(e.pairsTotal);
       const numbers: ResultsNumber[] = [];
-      let banner = won ? 'CLEARED!' : `SO CLOSE ${e.pairs}/${e.pairsTotal}`;
+      let banner = won ? 'CLEARED!' : memoryLossBanner(e.pairs, e.pairsTotal);
       let tally: MemoryResultsData['tally'] = null;
       let chipText: string | null = null;
       if (r.mode === 'ride') {
@@ -967,10 +975,12 @@ export default function MemoryGame({
       if (upgraded && edition) extra.push(`UPGRADED TO ${edition.toUpperCase()}`);
       if (r.mode === 'timeAttack' || r.mode === 'ride' || r.mode === 'daily') {
         const xp = xpFor(r.mode, { boardsCleared: r.cleared, cleared: won, stars });
-        if (xp > 0) {
+        if (xp > 0) try {
           const m = addXp(await loadMastery(), deck.id, xp);
           await saveMastery(m.mastery);
           extra.push(m.after > m.before ? `${deck.label.toUpperCase()} MASTERY LEVEL ${m.after}` : `+${xp} MASTERY XP`);
+        } catch {
+          // Mastery waits for the next run.
         }
       }
       const data: MemoryResultsData = {
@@ -1155,29 +1165,40 @@ export default function MemoryGame({
     GameAudio.play(out ? 'mm_strike' : 'sh_whistle');
     later(260, () => GameAudio.play('mm_lose'));
     Haptic.warning();
+    // Show where every card was, but only cards whose picture we know: a
+    // server board can keep its layout until it settles, and flipping a card
+    // with no picture showed a blank white card (a dead-looking board).
     const layout = r.src.endReveal(r.eng.ids);
-    if (layout) {
-      const map: Record<number, number> = {};
-      r.eng.ids.forEach((id, s) => { map[id] = layout[s]; });
-      setFaces((m) => ({ ...m, ...map }));
-    }
+    const known: Record<number, number> = {};
+    r.eng.ids.forEach((id, s) => {
+      const face = layout?.[s] ?? r.eng.faces[s];
+      if (typeof face === 'number' && face >= 0) known[id] = face;
+    });
+    if (Object.keys(known).length) setFaces((m) => ({ ...m, ...known }));
     let k = 0;
     for (let s = 0; s < r.eng.n; s++) {
       if (r.eng.know[s] === K_MATCHED) continue;
       const id = r.eng.ids[s];
+      if (known[id] == null) continue;
       later(120 + (k++) * 30, () => cards.current[id]?.timeoutReveal(0));
     }
-    wash.value = withDelay(200, withTiming(1, { duration: 300 }));
+    // A light veil only: the cards stay readable behind the end card.
+    wash.value = withDelay(200, withTiming(0.4, { duration: 300 }));
     stage.current?.hatGag(false);
     stage.current?.tumble();
     rope.urgent.value = 0;
     const left = RIDE_TRIES - 1 - r.tryIndex;
     later(1000, () => {
-      if (r.mode === 'ride' && left > 0) setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left });
-      else finishRun(false);
+      // Ride challenge: every try ends on the same end card (TRY AGAIN while
+      // the Ticket has tries, then Done), right over the board.
+      if (r.mode === 'ride') {
+        setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left });
+        tryCardIn.value = 0;
+        tryCardIn.value = reducedMotion ? 1 : withSpring(1, { damping: 13, stiffness: 190 });
+      } else finishRun(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finishRun, later, wash]);
+  }, [finishRun, later, wash, reducedMotion]);
 
   // ---------------------------------------------------------------------------
   // Memory Race (house crew seats on the same board, design 4.7)
@@ -2128,7 +2149,8 @@ export default function MemoryGame({
   // ---------------------------------------------------------------------------
   const tryAgain = useCallback(() => {
     const prev = runRef.current;
-    if (!prev) return;
+    if (!prev || RIDE_TRIES - 1 - prev.tryIndex <= 0) return;
+    Haptic.tapLight();
     clearTimers();
     setTryScreen(null);
     const r = buildRun({ runIndex: prev.runIndex, tryIndex: prev.tryIndex + 1 });
@@ -2143,9 +2165,20 @@ export default function MemoryGame({
   }, [beginPlay, buildRun, clearTimers, later, newBoardView, resetScene, syncHud, wash]);
 
   const giveUp = useCallback(() => {
+    Haptic.tapLight();
     setTryScreen(null);
+    // In a ride challenge the ride screen owns the loss card (Ticket, retry
+    // offers): go straight there in one tap instead of a second results card.
+    const r = runRef.current;
+    if (rideChallenge && r?.mode === 'ride') {
+      r.ended = true;
+      r.playing = false;
+      GameAudio.music.stop(300);
+      onClose();
+      return;
+    }
     finishRun(false);
-  }, [finishRun]);
+  }, [finishRun, rideChallenge, onClose]);
 
   const onRematch = useCallback(() => {
     setRunIndex((k) => k + 1);
@@ -2219,9 +2252,9 @@ export default function MemoryGame({
   const ids = useMemo(() => Array.from({ length: n }, (_, i) => i), [n]);
   const r = runRef.current;
   const g = geo;
-  const title = mode === 'ride' ? 'Ride Sprint' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : mode === 'warmup' ? 'Memory Warm-up' : 'Memory Match';
+  const title = mode === 'ride' ? 'Memory Match' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : mode === 'warmup' ? 'Memory Warm-up' : 'Memory Match';
   const subtitle = mode === 'ride'
-    ? `${deck.label}${r && r.tryIndex > 0 ? ` · Try ${r.tryIndex + 1} of ${RIDE_TRIES}` : ''}${r?.signal ? ' · Low signal' : ''}`
+    ? `${taskName || deck.label}${r && r.tryIndex > 0 ? ` · Try ${r.tryIndex + 1} of ${RIDE_TRIES}` : ''}${r?.signal ? ' · Low signal' : ''}`
     : mode === 'timeAttack' ? `${deck.label} · Board ${hud.board}`
     : mode === 'daily' ? `${deck.label} · ${daily?.ranked && runIndex === 0 ? 'Ranked' : 'Practice'}`
     : mode === 'race' ? `${deck.label} · Practice race` : deck.label;
@@ -2391,17 +2424,9 @@ export default function MemoryGame({
             ) : null}
 
             {tryScreen ? (
-              <View style={[styles.tryWrap, { top: g.felt.y + g.felt.h * 0.24 }]}>
-                <Text style={styles.tryTitle}>SO CLOSE</Text>
-                <Text style={styles.tryPairs}>{`${tryScreen.pairs}/${tryScreen.total} PAIRS`}</Text>
-                <Pressable onPress={tryAgain} style={styles.tryBtn} accessibilityRole="button">
-                  <Text style={styles.tryBtnText}>TRY AGAIN</Text>
-                </Pressable>
-                <Text style={styles.tryLeft}>{`${tryScreen.left} ${tryScreen.left === 1 ? 'try' : 'tries'} left on this ticket`}</Text>
-                <Pressable onPress={giveUp} hitSlop={10} accessibilityRole="button">
-                  <Text style={styles.tryQuit}>End challenge</Text>
-                </Pressable>
-              </View>
+              <TryCard copy={memoryLossCopy(tryScreen.pairs, tryScreen.total)} pairs={tryScreen.pairs}
+                total={tryScreen.total} left={tryScreen.left} top={g.felt.y + g.felt.h * 0.2}
+                enter={tryCardIn} onTryAgain={tryAgain} onDone={giveUp} />
             ) : null}
           </>
         ) : null}
@@ -2411,6 +2436,48 @@ export default function MemoryGame({
 }
 
 const EMPTY_FACE = {};
+
+/**
+ * The end of a Memory Match try: an honest title, the pairs found as gold
+ * pips, TRY AGAIN while the Ticket has tries, and a real Done button. The
+ * board stays visible behind it (light veil, revealed cards).
+ */
+function TryCard({ copy, pairs, total, left, top, enter, onTryAgain, onDone }: {
+  copy: { title: string; line: string }; pairs: number; total: number; left: number; top: number;
+  enter: import('react-native-reanimated').SharedValue<number>; onTryAgain: () => void; onDone: () => void;
+}) {
+  // Opacity and a short rise only: a scaled, shadowed layer smeared its own background on iOS.
+  const style = useAnimatedStyle(() => ({ opacity: Math.min(1, enter.value * 1.6), transform: [{ translateY: (1 - enter.value) * 24 }] }));
+  const canRetry = left > 0;
+  return (
+    <Animated.View style={[styles.tryPos, { top }, style]} accessibilityViewIsModal>
+     <View style={styles.tryWrap}>
+      <Text style={styles.tryTitle} accessibilityRole="header">{copy.title}</Text>
+      <View style={styles.tryPips} accessible accessibilityLabel={`${pairs} of ${total} pairs found`}>
+        {Array.from({ length: total }, (_, i) => (
+          <View key={i} style={[styles.tryPip, i < pairs && styles.tryPipOn]} />
+        ))}
+      </View>
+      <Text style={styles.tryLine}>{copy.line}</Text>
+      {canRetry ? (
+        <Pressable onPress={onTryAgain} style={({ pressed }) => [styles.tryBtn, pressed && styles.tryBtnDown]}
+          accessibilityRole="button" accessibilityLabel={`Try again. ${triesLeftLine(left)}`}>
+          <GameIcon name="retry" size={24} />
+          <Text style={styles.tryBtnText}>TRY AGAIN</Text>
+        </Pressable>
+      ) : null}
+      <View style={styles.tryLeftRow}>
+        <GameIcon name="ticket" size={18} />
+        <Text style={styles.tryLeft}>{triesLeftLine(left)}</Text>
+      </View>
+      <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? styles.tryDone : styles.tryBtn, pressed && styles.tryBtnDown]}
+        accessibilityRole="button" accessibilityLabel="Done">
+        <Text style={canRetry ? styles.tryDoneText : styles.tryBtnText}>{canRetry ? 'Done' : 'DONE'}</Text>
+      </Pressable>
+     </View>
+    </Animated.View>
+  );
+}
 
 /** Showtime rays: 12 hard-edged wedges, cream and gold with an ink outline, rotating 6deg/s. */
 const Rays = React.memo(function Rays({ cx, cy, r, amount, still }: { cx: number; cy: number; r: number; amount: import('react-native-reanimated').SharedValue<number>; still: boolean }) {
@@ -2491,11 +2558,18 @@ const styles = StyleSheet.create({
   unlockKicker: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, letterSpacing: 1 },
   unlockText: { fontFamily: 'Shark', fontSize: 28, color: MM.navyText },
   unlockHint: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, marginTop: 2 },
-  tryWrap: { position: 'absolute', left: 36, right: 36, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 22, borderWidth: 3, borderColor: MM.ink, paddingVertical: 16 },
-  tryTitle: { fontFamily: 'Shark', fontSize: 36, color: MM.navyText },
-  tryPairs: { fontFamily: 'Shark', fontSize: 20, color: MM.coral, marginBottom: 10 },
-  tryBtn: { backgroundColor: MM.gold, borderRadius: 16, paddingHorizontal: 36, paddingVertical: 12, borderBottomWidth: 4, borderBottomColor: MM.goldDeep },
+  tryPos: { position: 'absolute', left: 26, right: 26 },
+  tryWrap: { alignItems: 'center', backgroundColor: '#fffdf4', borderRadius: 24, borderWidth: 3, borderColor: MM.ink, paddingTop: 16, paddingBottom: 16, paddingHorizontal: 18, borderBottomWidth: 6 },
+  tryTitle: { fontFamily: 'Shark', fontSize: 36, color: MM.navyText, textAlign: 'center' },
+  tryPips: { flexDirection: 'row', gap: 6, marginTop: 6, marginBottom: 6 },
+  tryPip: { width: 18, height: 18, borderRadius: 9, borderWidth: 2.5, borderColor: MM.ink, backgroundColor: '#dbe9f5' },
+  tryPipOn: { backgroundColor: MM.gold, borderColor: MM.goldDeep },
+  tryLine: { fontFamily: 'Knockout', fontSize: 18, lineHeight: 22, color: MM.navyText, textAlign: 'center', marginBottom: 12 },
+  tryBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: MM.gold, borderRadius: 16, paddingHorizontal: 30, paddingVertical: 12, borderWidth: 3, borderColor: MM.ink, borderBottomWidth: 6, borderBottomColor: MM.goldDeep, minWidth: 210, justifyContent: 'center' },
+  tryBtnDown: { transform: [{ translateY: 2 }, { scale: 0.98 }] },
   tryBtnText: { fontFamily: 'Shark', fontSize: 24, color: '#075083' },
-  tryLeft: { fontFamily: 'Knockout', fontSize: 15, color: MM.navyText, marginTop: 8 },
-  tryQuit: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, marginTop: 8, textDecorationLine: 'underline' },
+  tryLeftRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  tryLeft: { fontFamily: 'Knockout', fontSize: 15, color: MM.navyText },
+  tryDone: { marginTop: 10, minWidth: 160, minHeight: 44, borderRadius: 14, borderWidth: 2.5, borderColor: MM.ink, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  tryDoneText: { fontFamily: 'Shark', fontSize: 20, color: MM.navyText },
 });
