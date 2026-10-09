@@ -157,7 +157,7 @@ export class ExpoAvBackend implements AudioBackend {
   async init(): Promise<void> {
     if (this.ready) return;
     try {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false });
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: false, staysActiveInBackground: false });
     } catch {
       // Non-fatal.
     }
@@ -395,7 +395,7 @@ export class AudioApiBackend implements AudioBackend {
     if (this.ctx) return;
     this.ctx = new this.mod.AudioContext();
     try {
-      this.mod.AudioManager?.setAudioSessionOptions?.({ iosCategory: 'playback', iosMode: 'default', iosOptions: ['mixWithOthers'], iosAllowHaptics: true });
+      this.mod.AudioManager?.setAudioSessionOptions?.({ iosCategory: 'ambient', iosMode: 'default', iosOptions: ['mixWithOthers'], iosAllowHaptics: true });
     } catch {
       // Older API surface: defaults are fine.
     }

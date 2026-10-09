@@ -135,7 +135,8 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (initializedRef.current) return;
     initializedRef.current = true;
 
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    // Ambient: game sound follows the iPhone silent switch (Dustin, Oct 9 2026).
+    await Audio.setAudioModeAsync({ playsInSilentModeIOS: false });
     // Crossfade from login music (if playing) to game rotation
     await withLock(async () => {
       await cleanup(true);
@@ -219,8 +220,8 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           try { await s.unloadAsync(); } catch {}
         }
 
-        // Start login music
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+        // Start login music. Ambient: game sound follows the iPhone silent switch (Dustin, Oct 9 2026).
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: false });
         const { sound } = await Audio.Sound.createAsync(LOGIN_TRACK, {
           isLooping: true,
           volume: 0,

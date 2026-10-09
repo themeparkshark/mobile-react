@@ -5,7 +5,7 @@
  * silently: audio is decoration.
  *
  * Silent switch: the app's audio session plays in silent mode
- * (MusicProvider sets playsInSilentModeIOS: true) and expo-av cannot read the
+ * (MusicProvider sets playsInSilentModeIOS: false: sound follows the silent switch) and expo-av cannot read the
  * ringer switch, so the bed cannot follow it without a native module. It
  * follows the sound effects setting and the Spooky effects toggle instead.
  */

@@ -131,7 +131,7 @@ export default function DefendMiniGameModal({
     const loadSounds = async () => {
       try {
         // We'll use haptics as primary feedback, sounds as bonus
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: false });
       } catch (e) {
         // Sounds optional
       }
