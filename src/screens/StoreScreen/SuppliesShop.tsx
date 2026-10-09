@@ -33,7 +33,7 @@ import { getAdSummary, type AdSummary } from '../../api/endpoints/me/ad-rewards'
 import getVipPerks, { type VipPerk } from '../../api/endpoints/economy/vip-perks';
 import { onShopDelivered, storeAvailable } from '../../services/purchases';
 import { adsAvailable, rewardText, watchForReward } from '../../services/ads';
-import { baseRates, bonusPercent, bundleWorth } from '../../services/money/offers';
+import { baseRates, bonusPercent, bundleWorth, gearLine } from '../../services/money/offers';
 import { buyPack, outcomeMessage, refreshSupplies, useSupplies } from '../../services/money/supplies';
 import { trackImpression } from '../../services/money/track';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../../ui';
@@ -344,15 +344,17 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
   const n = product.grants[main] ?? 0;
   const best = product.badge === 'Best value';
   const wide = columns === 1;
+  const gear = main === 'coins' ? gearLine(product.buys) : null;
   return (
     <View style={[columns === 3 ? st.col3 : columns === 2 ? st.col2 : st.col1]}>
       <ShopCard onPress={onBuy} disabled={disabled || !price || !!note} glow={best}
-        accessibilityLabel={`${n.toLocaleString('en-US')} ${unitWord(main, n)}. ${price ?? ''}, real money, a grown-up buys it.${bonus ? ` ${bonus}% more than the smallest pack.` : ''}${best ? ' Best value.' : ''}`}>
+        accessibilityLabel={`${n.toLocaleString('en-US')} ${unitWord(main, n)}.${gear ? ` ${gear}.` : ''} ${price ?? ''}, real money, a grown-up buys it.${bonus ? ` ${bonus}% more than the smallest pack.` : ''}${best ? ' Best value.' : ''}`}>
         <View style={[st.packArtWell, wide && st.packArtWide]}>
           <PackArt art={packArtKey(product, tier)} size={wide ? 70 : columns === 2 ? 82 : 64} bob={false} />
         </View>
         <Band text={`${n.toLocaleString('en-US')} ${main === 'rescue_passes' ? (n === 1 ? 'RESCUE PASS' : 'RESCUE PASSES') : unitWord(main, n).toUpperCase()}`}
           color={best ? 'gold' : 'navy'} size={columns === 3 ? 14 : 16} />
+        {gear && <Text maxFontSizeMultiplier={MAX_FONT} style={st.gearLine} numberOfLines={2}>{gear}</Text>}
         <PriceBar price={price} busy={busy} note={note} />
         {bonus && <Sticker text={`+${bonus}% MORE`} style={{ top: 6, right: 4 }} />}
       </ShopCard>
@@ -432,6 +434,7 @@ const st = StyleSheet.create({
   col3: { width: '31.2%', flexGrow: 1, alignItems: 'stretch' },
   col2: { width: '48.5%', alignItems: 'stretch' },
   col1: { width: '100%' },
+  gearLine: { fontFamily: FONT.display, fontSize: 13, color: CARD.lip, textAlign: 'center', paddingHorizontal: 6, marginTop: 2 },
   packArtWell: { height: 92, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', paddingTop: 6 },
   packArtWide: { flexDirection: 'row', gap: 12, height: 86 },
   wideNote: { fontFamily: FONT.display, fontSize: 22, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },

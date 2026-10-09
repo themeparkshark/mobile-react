@@ -166,3 +166,9 @@ export function untilText(endsAtIso: string | null | undefined, now: number = Da
   const m = minutes % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
+
+/** "Buys about 4 pieces of gear" for a coin pack, from the server's median gear price. Null when unknown. */
+export function gearLine(buys: { gear: number; gear_price: number } | null | undefined): string | null {
+  if (!buys || buys.gear < 1) return null;
+  return `Buys about ${buys.gear} ${buys.gear === 1 ? 'piece' : 'pieces'} of gear`;
+}

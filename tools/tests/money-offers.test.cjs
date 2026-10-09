@@ -134,3 +134,12 @@ test('no countdown on a real-money offer, no pressure words in the money kit', (
     assert.doesNotMatch(code, /—/, `${file}: no em dashes`);
   }
 });
+
+test('coin packs say what they buy from the server median gear price, never invented', () => {
+  assert.equal(offers.gearLine({ gear: 4, gear_price: 120 }), 'Buys about 4 pieces of gear');
+  assert.equal(offers.gearLine({ gear: 1, gear_price: 400 }), 'Buys about 1 piece of gear');
+  assert.equal(offers.gearLine(null), null);
+  assert.equal(offers.gearLine(undefined), null);
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  assert.match(shop, /main === 'coins' \? gearLine\(product\.buys\)/);
+});
