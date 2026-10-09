@@ -28,6 +28,8 @@ export interface PinRow {
   readonly chance_bp?: number;
   /** Park pins: how often it hides as Pin of the Day (rare = fewer days). */
   readonly rarity?: 'common' | 'uncommon' | 'rare';
+  /** Chasers: your lowest serial number for this pin (#3), the flex. */
+  readonly serial?: number | null;
 }
 
 export interface PinDay {
@@ -90,6 +92,13 @@ export interface MysterySeries {
   readonly chasers_pulled: number;
   readonly my_chaser_serials: number[];
   readonly tradable: true;
+  /** Coin boxes are allowed where you are (free boxes always open). */
+  readonly paid_allowed?: boolean;
+  /** Trade in traders: points from spares; a missing regular pin costs pick_cost. */
+  readonly points?: number;
+  readonly pick_cost?: number;
+  /** Finishing the series pays this pin. */
+  readonly completer?: PinRow | null;
   readonly pins: PinRow[];
 }
 
@@ -100,6 +109,7 @@ export interface LanyardPin {
   readonly kind: PinKind;
   readonly is_chaser: boolean;
   readonly tradable: boolean;
+  readonly serial?: number | null;
 }
 
 export interface PinHome {
@@ -284,6 +294,36 @@ export function warmthView(w: HuntStatus['warmth']): { word: string; fill: numbe
     case 'cold': return { word: 'Cold', fill: 0.2, color: '#7cc6f5' };
     default: return { word: 'Finding you\u2026', fill: 0.05, color: '#bfe5ff' };
   }
+}
+
+/**
+ * Bundle reveal order: new pins first, then traders, the chaser last (every
+ * pin is already granted, so order is presentation only: the big one ends it).
+ */
+export function revealOrder<T extends { is_chaser: boolean; duplicate: boolean; id: number }>(pulls: readonly T[]): T[] {
+  const rank = (p: T) => (p.is_chaser ? 2 : p.duplicate ? 1 : 0);
+  return [...pulls].sort((a, b) => rank(a) - rank(b) || a.id - b.id);
+}
+
+/** "Free box Mon": when the next weekly free box arrives (park time). */
+export function nextFreeLabel(resetsAt: string | null | undefined): string | null {
+  if (!resetsAt) return null;
+  const d = new Date(resetsAt);
+  if (Number.isNaN(d.getTime())) return null;
+  return `Free box ${d.toLocaleString('en-US', { weekday: 'short', timeZone: 'America/Los_Angeles' })}`;
+}
+
+/** Points toward picking a missing pin, as a 0..1 fill and whether a pick is ready. */
+export function pointsView(series: Pick<MysterySeries, 'points' | 'pick_cost' | 'pins'>): { points: number; cost: number; fill: number; ready: boolean; missing: number } {
+  const cost = series.pick_cost ?? 5;
+  const points = series.points ?? 0;
+  const missing = series.pins.filter(p => !p.is_chaser && !p.owned).length;
+  return { points, cost, fill: Math.min(1, points / cost), ready: points >= cost && missing > 0, missing };
+}
+
+/** Coins saved by the bundle against single boxes. */
+export function bundleSaving(series: Pick<MysterySeries, 'price' | 'bundle'>): number {
+  return Math.max(0, series.price * series.bundle.count - series.bundle.price);
 }
 
 /** Which tab opens first: Mystery when a free box waits, else Park Sets if one is ready to claim, else Mystery. */

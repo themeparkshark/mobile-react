@@ -42,6 +42,24 @@ export function strapPoint(t: number, w: number, h: number): { x: number; y: num
 /** Where the 6 pins sit along the strap (even spacing, clear of the ends). */
 export const SLOT_T = [0.14, 0.285, 0.43, 0.57, 0.715, 0.86] as const;
 
+/**
+ * Slot positions spaced evenly by distance along the strap (not by curve
+ * parameter), so pins never bunch in the bottom of the U and never overlap.
+ */
+export function slotPoints(count: number, w: number, h: number, from = 0.1, to = 0.9): { x: number; y: number }[] {
+  const steps = 200;
+  const pts = Array.from({ length: steps + 1 }, (_, i) => strapPoint(i / steps, w, h));
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  const total = cum[cum.length - 1];
+  return Array.from({ length: count }, (_, k) => {
+    const target = total * (from + (to - from) * (count === 1 ? 0.5 : k / (count - 1)));
+    const j = Math.max(1, cum.findIndex(c => c >= target));
+    const f = (target - cum[j - 1]) / Math.max(1e-6, cum[j] - cum[j - 1]);
+    return { x: pts[j - 1].x + (pts[j].x - pts[j - 1].x) * f, y: pts[j - 1].y + (pts[j].y - pts[j - 1].y) * f };
+  });
+}
+
 function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, onPressSlot, still = false, active = true, shine }: Props) {
   const sway = useSharedValue(0);
   useEffect(() => {
@@ -58,7 +76,11 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
   }, [still, active, sway]);
 
   const swayStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${sway.value * 0.9}deg` }] }));
-  const pinSize = Math.min(70, Math.round(width / 5.6));
+  const curveH = height * 0.8;
+  const slotsAt = slotPoints(max, width, curveH);
+  // Pins sized to the gap between slots so neighbours never overlap.
+  const gap = slotsAt.length > 1 ? Math.hypot(slotsAt[1].x - slotsAt[0].x, slotsAt[1].y - slotsAt[0].y) : width;
+  const pinSize = Math.min(64, Math.floor(gap - 8));
   const strapW = 22;
   // The strap path: two parallel curves (a ribbon), drawn once.
   const steps = 24;
@@ -67,8 +89,8 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
   const stitch: string[] = [];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    const p = strapPoint(t, width, height * 0.78);
-    const q = strapPoint(Math.min(1, t + 0.001), width, height * 0.78);
+    const p = strapPoint(t, width, curveH);
+    const q = strapPoint(Math.min(1, t + 0.001), width, curveH);
     const dx = q.x - p.x; const dy = q.y - p.y; const len = Math.hypot(dx, dy) || 1;
     const nx = -dy / len; const ny = dx / len;
     outer.push(`${i === 0 ? 'M' : 'L'}${(p.x + nx * strapW / 2).toFixed(1)},${(p.y + ny * strapW / 2).toFixed(1)}`);
@@ -78,13 +100,26 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
   const stitch2: string[] = [];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    const p = strapPoint(t, width, height * 0.78);
-    const q = strapPoint(Math.min(1, t + 0.001), width, height * 0.78);
+    const p = strapPoint(t, width, curveH);
+    const q = strapPoint(Math.min(1, t + 0.001), width, curveH);
     const dx = q.x - p.x; const dy = q.y - p.y; const len = Math.hypot(dx, dy) || 1;
     const nx = -dy / len; const ny = dx / len;
     stitch2.push(`${i === 0 ? 'M' : 'L'}${(p.x - nx * (strapW / 2 - 4)).toFixed(1)},${(p.y - ny * (strapW / 2 - 4)).toFixed(1)}`);
   }
   const ribbon = `${outer.join(' ')} ${inner.join(' ')} Z`;
+  const weave: string[] = [];
+  for (let i = 1; i < 40; i++) {
+    const t = i / 40;
+    const p = strapPoint(t, width, curveH);
+    const q = strapPoint(Math.min(1, t + 0.001), width, curveH);
+    const dx = q.x - p.x; const dy = q.y - p.y; const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len; const ny = dx / len; const tx = dx / len; const ty = dy / len;
+    const a = { x: p.x + nx * 6 - tx * 3, y: p.y + ny * 6 - ty * 3 };
+    const b = { x: p.x - nx * 6 + tx * 3, y: p.y - ny * 6 + ty * 3 };
+    weave.push(`M${a.x.toFixed(1)},${a.y.toFixed(1)} L${b.x.toFixed(1)},${b.y.toFixed(1)}`);
+  }
+  const clipL = strapPoint(0.035, width, curveH);
+  const clipR = strapPoint(0.965, width, curveH);
 
   const slots = Array.from({ length: max }, (_, i) => pins[i] ?? null);
   return (
@@ -93,9 +128,13 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
         <Path d={ribbon} fill="#0b4c9c" stroke={BRAND.navy} strokeWidth={3} strokeLinejoin="round" />
         <Path d={stitch.join(' ')} stroke={BRAND.gold} strokeWidth={1.6} strokeDasharray="5 5" fill="none" />
         <Path d={stitch2.join(' ')} stroke={BRAND.gold} strokeWidth={1.6} strokeDasharray="5 5" fill="none" />
+        {/* Woven look: short light ticks across the strap. */}
+        <Path d={weave.join(' ')} stroke="rgba(255,255,255,0.22)" strokeWidth={2} fill="none" />
+        {/* Gold clips where the strap leaves the card. */}
+        <Path d={`M${clipL.x - 9},${clipL.y - 4} h18 v14 h-18 Z M${clipR.x - 9},${clipR.y - 4} h18 v14 h-18 Z`} fill={BRAND.gold} stroke={BRAND.navy} strokeWidth={2.5} />
       </Svg>
       {slots.map((pin, i) => {
-        const p = strapPoint(SLOT_T[i] ?? 0.5, width, height * 0.78);
+        const p = slotsAt[i] ?? strapPoint(0.5, width, curveH);
         const tilt = ((i * 37) % 11) - 5;
         if (!pin && !showEmpty) return null;
         return (
@@ -107,10 +146,12 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
             style={{ position: 'absolute', left: p.x - pinSize / 2, top: p.y - pinSize * 0.42, width: pinSize, height: pinSize }}>
             {pin ? (
               <PinTile uri={pin.icon_url} size={pinSize} owned kind={pin.kind} tradable={pin.tradable}
-                chaser={pin.is_chaser} badge={!pin.tradable} tilt={tilt} shine={pin.is_chaser || i % 2 === 0 ? shine : undefined}
+                chaser={pin.is_chaser} badge={!pin.tradable} badgeScale={0.75} serial={pin.serial} tilt={tilt} shine={pin.is_chaser || i % 2 === 0 ? shine : undefined}
                 lag={i * 0.12} lagSpan={0.6} surface="panel" />
             ) : (
-              <View style={[styles.empty, { width: pinSize - 8, height: pinSize - 8, borderRadius: (pinSize - 8) / 2 }]}>
+              // An empty spot reads as a pin back waiting on the strap.
+              <View style={[styles.empty, { width: pinSize * 0.62, height: pinSize * 0.62, borderRadius: pinSize * 0.31, marginTop: pinSize * 0.12, alignSelf: 'center' }]}>
+                <View style={styles.pinBack} />
                 <Text maxFontSizeMultiplier={1} style={styles.plus}>+</Text>
               </View>
             )}
@@ -125,8 +166,9 @@ export const Lanyard = memo(LanyardBase);
 
 const styles = StyleSheet.create({
   empty: {
-    margin: 4, borderWidth: 3, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.75)',
-    backgroundColor: 'rgba(5,52,110,0.35)', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, borderColor: BRAND.gold, backgroundColor: '#e9c157', alignItems: 'center', justifyContent: 'center',
+    shadowColor: BRAND.navy, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 0,
   },
-  plus: { fontFamily: FONT.display, fontSize: 24, color: BRAND.white, paddingTop: 3 },
+  pinBack: { position: 'absolute', top: -10, width: 4, height: 12, borderRadius: 2, backgroundColor: '#b8892a' },
+  plus: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, paddingTop: 3 },
 });
