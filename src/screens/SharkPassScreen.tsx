@@ -48,6 +48,7 @@ const SEASON_ART: Record<string, number> = {
   'polar-puffer': require('../../assets/images/sharkpass/polar-puffer.webp'),
   'northern-lights': require('../../assets/images/sharkpass/northern-lights.webp'),
   'pom-hat': require('../../assets/images/sharkpass/pom-hat.webp'),
+  'finisher-medal': require('../../assets/images/sharkpass/finisher-medal.webp'),
 };
 const EMBLEM = require('../../assets/images/sharkpass/pass-emblem.webp');
 
