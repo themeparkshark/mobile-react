@@ -79,7 +79,7 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
 
   const swayStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${sway.value * 0.9}deg` }] }));
   const curveH = height * 0.8;
-  const slotsAt = slotPoints(max, width, curveH);
+  const slotsAt = slotPoints(max, width, curveH, 0.15, 0.85);
   // Pins sized to the gap between slots so neighbours never overlap.
   const gap = slotsAt.length > 1 ? Math.hypot(slotsAt[1].x - slotsAt[0].x, slotsAt[1].y - slotsAt[0].y) : width;
   const pinSize = Math.min(62, Math.floor(gap - 16));

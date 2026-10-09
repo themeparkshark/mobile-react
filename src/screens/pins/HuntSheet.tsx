@@ -10,7 +10,7 @@
 import { Image } from 'expo-image';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { AppState, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { catchPinOfTheDay, getPinOfTheDay } from '../../api/endpoints/pins';
 import { LocationContext } from '../../context/LocationProvider';
@@ -94,6 +94,9 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
   const fillStyle = useAnimatedStyle(() => ({ width: `${Math.max(6, fill.value * 100)}%` }));
 
   const hold = useSharedValue(0);
+  const notYet = useSharedValue(0);
+  const notYetStyle = useAnimatedStyle(() => ({ transform: [{ translateX: notYet.value }] }));
+  const [holdHint, setHoldHint] = useState(false);
   const holdTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => holdTimers.current.forEach(clearTimeout), []);
   const holdStyle = useAnimatedStyle(() => ({ width: `${hold.value * 100}%` }));
@@ -106,8 +109,10 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
   };
   const endHold = () => {
     if (hold.value > 0.97) return;
+    const quick = hold.value < 0.5;
     holdTimers.current.forEach(clearTimeout); holdTimers.current = [];
     hold.value = withTiming(0, { duration: 150 });
+    if (quick) { setHoldHint(true); holdTimers.current.push(setTimeout(() => setHoldHint(false), 1400)); }
   };
 
   const tryCatch = async () => {
@@ -129,29 +134,29 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
     <Modal transparent visible animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + SPACE.lg }]}>
-        <View style={styles.sealWrap}>
-          {hunting && !still && <Sonar warmth={status?.warmth ?? null} color={view.color} />}
-          <Image source={PIN_ART.seal} style={styles.seal} contentFit="contain" />
-        </View>
+        <Pressable onPress={onClose} hitSlop={10} style={styles.x} accessibilityRole="button" accessibilityLabel="Close">
+          <GameIcon name="close" size={34} />
+        </Pressable>
         <Text maxFontSizeMultiplier={1.35} style={styles.title}>
           {status?.status === 'none' ? 'No pin today' : status?.status === 'caught' ? 'You got today’s pin!' : 'A pin is hiding!'}
         </Text>
         <Text maxFontSizeMultiplier={1.35} style={styles.sub}>{set.park_name ?? set.name}</Text>
+        {/* Warmer / colder in the medallion: the rings change colour and ping faster as you get close. */}
+        <View style={styles.medal} accessible accessibilityLabel={hunting ? view.word : 'Pin of the Day'}>
+          {hunting && !still && <Sonar warmth={status?.warmth ?? null} color={view.color} />}
+          {hunting && <View style={[styles.medalRing, { borderColor: view.color }]} />}
+          <Image source={PIN_ART.seal} style={styles.seal} contentFit="contain" />
+        </View>
         {hunting && (
           <>
-            <View style={styles.meter} accessible accessibilityLabel={view.word}>
-              <Animated.View style={[styles.meterFill, { backgroundColor: view.color }, fillStyle]} />
-              <View style={styles.meterIcons} pointerEvents="none">
-                <View style={styles.coldDot} />
-                <GameIcon name="streak" size={22} />
-              </View>
-            </View>
             <Text maxFontSizeMultiplier={1.35} style={[styles.word, { color: status?.warmth === 'here' ? BRAND.red : BRAND.navy }]}>{view.word}</Text>
             {!status?.here && <Text maxFontSizeMultiplier={1.35} style={styles.note}>Get inside the park to hunt.</Text>}
-            {miss && <Text maxFontSizeMultiplier={1.3} style={styles.note}>Not here yet. Follow the bar!</Text>}
+            {miss && <Text maxFontSizeMultiplier={1.3} style={styles.note}>Not here yet. Watch the rings!</Text>}
             <Text maxFontSizeMultiplier={1.3} style={styles.note}>Look up while you walk!</Text>
             {status?.warmth === 'here' ? (
               // Hold to catch: a gold bar fills with rising ticks, then it's yours (let go early to wait).
+              <View style={{ width: '100%' }}>
+              {holdHint && <View style={styles.holdHint} pointerEvents="none"><Text maxFontSizeMultiplier={1.3} style={styles.holdHintText}>Hold it down!</Text></View>}
               <Pressable onPressIn={startHold} onPressOut={endHold} disabled={busy}
                 style={[styles.catchBtn, busy && { opacity: 0.6 }]} accessibilityRole="button" accessibilityLabel="Hold to catch it"
                 accessibilityActions={[{ name: 'activate' }]} onAccessibilityAction={() => void tryCatch()}>
@@ -159,14 +164,20 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
                 <GameIcon name="search" size={28} />
                 <Text maxFontSizeMultiplier={1.3} style={styles.catchText}>{busy ? 'Catching\u2026' : 'Hold to catch!'}</Text>
               </Pressable>
+              </View>
             ) : (
-              <GameButton label="Get closer" icon="search" disabled={busy}
-                onPress={() => { queueHaptic('failBuzz', 1); setMiss(true); }} />
+              // Not there yet: a dashed "not yet" slot that wiggles softly (no buzz, nothing to mash).
+              <Animated.View style={[{ width: '100%' }, notYetStyle]}>
+                <Pressable onPress={() => { queueHaptic('tapLight', 1); setMiss(true); notYet.value = withSequence(withTiming(-4, { duration: 60 }), withTiming(4, { duration: 70 }), withTiming(0, { duration: 60 })); }}
+                  style={styles.notYet} accessibilityRole="button" accessibilityLabel="Not here yet. Watch the rings">
+                  <GameIcon name="search" size={26} />
+                  <Text maxFontSizeMultiplier={1.3} style={styles.notYetText}>Not here yet</Text>
+                </Pressable>
+              </Animated.View>
             )}
           </>
         )}
         {status?.status === 'none' && <Text maxFontSizeMultiplier={1.35} style={styles.note}>Check back tomorrow. Every day is a new chance.</Text>}
-        <GameButton variant="ghost" label="Close" onPress={onClose} />
       </View>
     </Modal>
   );
@@ -178,10 +189,12 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.cream, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, borderWidth: OUTLINE.heavy,
     borderColor: BRAND.navy, borderBottomWidth: 0, alignItems: 'center', paddingHorizontal: SPACE.lg, paddingTop: SPACE.lg, gap: SPACE.sm,
   },
-  sealWrap: { marginTop: -54, width: 76, height: 76, alignItems: 'center', justifyContent: 'center' },
-  seal: { width: 76, height: 76 },
-  sonar: { position: 'absolute', width: 76, height: 76, alignItems: 'center', justifyContent: 'center' },
-  ring: { position: 'absolute', width: 76, height: 76, borderRadius: 38, borderWidth: 4 },
+  x: { position: 'absolute', top: 12, right: 12, zIndex: 3, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  medal: { width: 150, height: 150, alignItems: 'center', justifyContent: 'center', marginVertical: SPACE.sm },
+  medalRing: { position: 'absolute', width: 130, height: 130, borderRadius: 65, borderWidth: 8, opacity: 0.85 },
+  seal: { width: 96, height: 96 },
+  sonar: { position: 'absolute', width: 130, height: 130, alignItems: 'center', justifyContent: 'center' },
+  ring: { position: 'absolute', width: 130, height: 130, borderRadius: 65, borderWidth: 6 },
   title: { fontFamily: FONT.display, fontSize: 30, color: BRAND.navy, paddingTop: 4 },
   sub: { fontFamily: FONT.body, fontSize: 18, color: BRAND.navySoft },
   meter: { width: '100%', height: 30, borderRadius: 15, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.white, overflow: 'hidden', marginTop: SPACE.sm, justifyContent: 'center' },
@@ -191,9 +204,14 @@ const styles = StyleSheet.create({
   word: { fontFamily: FONT.display, fontSize: 28, paddingTop: 3 },
   catchBtn: {
     width: '100%', minHeight: 64, borderRadius: RADIUS.lg, borderWidth: 4, borderColor: BRAND.navy, backgroundColor: BRAND.gold,
+    shadowColor: BRAND.goldLip, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 1, shadowRadius: 0,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden',
   },
-  catchFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#ffe9a3' },
+  catchFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#ffae00' },
+  holdHint: { position: 'absolute', top: -36, alignSelf: 'center', zIndex: 2, backgroundColor: BRAND.navy, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 3 },
+  holdHintText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.white, paddingTop: 3 },
+  notYet: { minHeight: 64, borderRadius: RADIUS.lg, borderWidth: 3, borderStyle: 'dashed', borderColor: '#9fb3cb', backgroundColor: '#eef6ff', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  notYetText: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navySoft, paddingTop: 3 },
   catchText: { fontFamily: FONT.display, fontSize: 26, color: BRAND.navy, paddingTop: 4 },
   note: { fontFamily: FONT.body, fontSize: 17, color: BRAND.navySoft, textAlign: 'center' },
 });

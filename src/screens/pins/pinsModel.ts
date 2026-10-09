@@ -123,7 +123,7 @@ export interface PinHome {
   readonly counts: { pins: number; sets_done: number; sets: number; traders: number; chasers: number };
   readonly park_sets: ParkSet[];
   /** Daily pips toward a free box: one per day you visit, 7 = a box; never reset by a missed day. */
-  readonly pips?: { filled: number; of: number } | null;
+  readonly pips?: { filled: number; of: number; new_today?: boolean } | null;
   /** Pin of the Day at each park today (null when the feature is off). */
   readonly pin_days?: PinDay[] | null;
   readonly mystery: MysterySeries[];
@@ -324,11 +324,11 @@ export function warmthView(w: HuntStatus['warmth']): { word: string; fill: numbe
 }
 
 /**
- * Bundle reveal order: new pins first, then traders, the chaser last (every
- * pin is already granted, so order is presentation only: the big one ends it).
+ * Bundle reveal order: extras first, then new pins, the chaser last (every
+ * pin is already granted, so order is presentation only: it builds to the best one).
  */
 export function revealOrder<T extends { is_chaser: boolean; duplicate: boolean; id: number }>(pulls: readonly T[]): T[] {
-  const rank = (p: T) => (p.is_chaser ? 2 : p.duplicate ? 1 : 0);
+  const rank = (p: T) => (p.is_chaser ? 2 : p.duplicate ? 0 : 1);
   return [...pulls].sort((a, b) => rank(a) - rank(b) || a.id - b.id);
 }
 

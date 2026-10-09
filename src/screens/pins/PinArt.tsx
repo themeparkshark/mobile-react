@@ -97,7 +97,7 @@ function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, til
           style={[styles.badge, { width: badgeSize, height: badgeSize, right: -badgeSize * 0.18, bottom: -badgeSize * 0.12 }]}
           contentFit="contain" accessibilityIgnoresInvertColors />
       )}
-      {chaser && (
+      {chaser && !(serial && owned) && (
         <Image source={PIN_ART.chaser}
           style={[styles.badge, { width: badgeSize * 0.92, height: badgeSize * 0.92, left: -badgeSize * 0.2, top: -badgeSize * 0.18 }]}
           contentFit="contain" />

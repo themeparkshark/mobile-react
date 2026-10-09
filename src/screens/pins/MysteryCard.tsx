@@ -59,7 +59,7 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
               {isFresh && <View style={[styles.freshRing, { width: size + 8, height: size + 8, borderRadius: (size + 8) / 2 }]} />}
               <PinTile uri={p.icon_url} size={size} owned={p.owned} kind={p.kind} tradable={p.tradable} spares={p.spares}
                 badge={false} tilt={((i * 29) % 9) - 4} flat shine={undefined} />
-              <Text maxFontSizeMultiplier={1.3} style={styles.pct}>{formatChance(p.chance_bp)}</Text>
+              <View style={styles.pctRow}><View style={styles.pctDot} /><Text maxFontSizeMultiplier={1.3} style={styles.pct}>{formatChance(p.chance_bp)}</Text></View>
             </Animated.View>
           );
         })}
@@ -305,7 +305,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
                   accessibilityRole="button" accessibilityLabel={shortOne > 0 ? `Need ${shortOne} more coins` : `Open one box for ${series.price} coins`}>
                   <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
                   <Text maxFontSizeMultiplier={1.1} style={styles.openOneText}>x1</Text>
-                  <View style={[styles.price, shortOne > 0 && styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{shortOne > 0 ? `+${shortOne}` : series.price}</Text></View>
+                  <View style={[styles.price, shortOne > 0 && styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{shortOne > 0 ? `${shortOne} more` : series.price}</Text></View>
                 </Pressable>
                 </Animated.View>
                 {shortFive > 0 ? (
@@ -315,7 +315,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
                     accessibilityRole="button" accessibilityLabel={`Need ${shortFive} more coins for five boxes`}>
                     <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
                     <Text maxFontSizeMultiplier={1.1} style={styles.openFiveText}>x5</Text>
-                    <View style={[styles.price, styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>+{shortFive.toLocaleString('en-US')}</Text></View>
+                    <View style={[styles.price, styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{shortFive.toLocaleString('en-US')} more</Text></View>
                   </Pressable>
                 ) : (
                   <HoldToOpen label={series.bundle.price.toLocaleString('en-US')} saving={bundleSaving(series)} disabled={busy} tone={tone}
@@ -325,7 +325,8 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
             ) : (
               <Text maxFontSizeMultiplier={1.3} style={styles.closed}>Free boxes only here</Text>
             )}
-            {paid && <Text maxFontSizeMultiplier={1.3} style={styles.floorNote}>x5 = at least 1 new pin</Text>}
+            {/* The bundle floor holds only while a regular pin is missing (same rule as the server). */}
+            {paid && <Text maxFontSizeMultiplier={1.3} style={styles.floorNote}>{progress.have < progress.total ? 'x5 = at least 1 new pin' : 'You have them all: boxes give extras'}</Text>}
             {nextFree && !free && <Text maxFontSizeMultiplier={1.3} style={styles.nextFree}>{nextFree}</Text>}
             {topUp !== null && topUp > 0 && (
               <Animated.View entering={FadeIn.duration(160)}>
@@ -364,6 +365,8 @@ const styles = StyleSheet.create({
   oddsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', rowGap: 6 },
   oddsCell: { alignItems: 'center', gap: 2 },
   freshRing: { position: 'absolute', top: -4, borderWidth: 3, borderColor: BRAND.gold, backgroundColor: 'rgba(255,207,59,0.25)' },
+  pctRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  pctDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: BRAND.skyDeep, borderWidth: 1, borderColor: BRAND.navy },
   pct: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navySoft, paddingTop: 2 },
   chaserSlot: {
     flexDirection: 'row', alignItems: 'center', gap: SPACE.md, backgroundColor: '#fff1c2', borderColor: BRAND.goldLip,
@@ -401,13 +404,13 @@ const styles = StyleSheet.create({
   openFiveText: { fontFamily: FONT.display, fontSize: 22, color: BRAND.white, paddingTop: 3 },
   price: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.cream, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
   priceText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy, paddingTop: 2 },
-  save: { position: 'absolute', top: -2, right: -2, backgroundColor: BRAND.red, borderBottomLeftRadius: 10, paddingHorizontal: 7, paddingVertical: 2, borderLeftWidth: 2, borderBottomWidth: 2, borderColor: BRAND.white },
-  saveText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, paddingTop: 2 },
+  save: { position: 'absolute', top: -2, right: -2, backgroundColor: BRAND.gold, borderBottomLeftRadius: 10, paddingHorizontal: 7, paddingVertical: 2, borderLeftWidth: 2, borderBottomWidth: 2, borderColor: BRAND.white },
+  saveText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.navy, paddingTop: 2 },
   freeChip: { backgroundColor: BRAND.green, borderRadius: 999, borderWidth: 2, borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 2 },
   freeText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, paddingTop: 2 },
   nextFree: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft, textAlign: 'center', paddingTop: 2 },
-  priceShort: { backgroundColor: '#ffe3df', borderColor: BRAND.red },
-  meterEnds: { fontFamily: FONT.display, fontSize: 14, color: BRAND.red, textAlign: 'center', marginTop: -6, paddingTop: 2 },
+  priceShort: { backgroundColor: BRAND.sky, borderColor: BRAND.navy },
+  meterEnds: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, textAlign: 'center', marginTop: -6, paddingTop: 2 },
   floorNote: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navySoft, textAlign: 'center', paddingTop: 2 },
   closed: { fontFamily: FONT.body, fontSize: 17, color: BRAND.navySoft, textAlign: 'center' },
 });

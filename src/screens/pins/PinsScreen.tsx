@@ -259,17 +259,21 @@ export default function PinsScreen() {
     item_id: p.item_id, name: p.name, icon_url: p.icon_url, kind: p.kind, is_chaser: !!p.is_chaser, tradable: p.tradable, serial: p.serial,
   })), [lanyardIds, byId]);
   /** "Wear it" from a reveal: saves now; a full lanyard swaps out its last pin. True once saved. */
-  const wear = useCallback(async (itemId: number): Promise<boolean> => {
-    if (lanyardIds.includes(itemId)) return true;
+  const wear = useCallback(async (itemId: number): Promise<{ ok: boolean; removed?: string | null }> => {
+    if (lanyardIds.includes(itemId)) return { ok: true };
     const max = home?.lanyard_max ?? 6;
-    const ids = lanyardIds.length >= max ? [...lanyardIds.slice(0, max - 1), itemId] : [...lanyardIds, itemId];
+    const base = lanyardIds.length >= max ? lanyardIds.slice(0, max - 1) : [...lanyardIds];
+    // A gold chaser takes the middle of the strap, the spot everyone looks at first.
+    const isChaser = !!byId.get(itemId)?.is_chaser || !!home?.mystery.some(s => s.pins.some(p => p.item_id === itemId && p.is_chaser));
+    const ids = isChaser ? [...base.slice(0, 2), itemId, ...base.slice(2)] : [...base, itemId];
     try {
       const l = await saveLanyard(ids);
       setLanyardIds(l.map(p => p.item_id));
       setHome(h => h && ({ ...h, lanyard: l }));
-      return l.some(p => p.item_id === itemId);
-    } catch { return false; }
-  }, [lanyardIds, home?.lanyard_max]);
+      const removedId = lanyardIds.find(id => !ids.includes(id));
+      return { ok: l.some(p => p.item_id === itemId), removed: removedId ? byId.get(removedId)?.name ?? null : null };
+    } catch { return { ok: false }; }
+  }, [lanyardIds, home?.lanyard_max, byId, home?.mystery]);
   const dayFor = useCallback((set: ParkSet) => home?.pin_days?.find(d => d.park_id === set.park_id), [home?.pin_days]);
 
   if (state === 'legacy') return <LegacyPinPacks />;
@@ -343,7 +347,7 @@ export default function PinsScreen() {
               <View style={styles.pips} accessible accessibilityLabel={`Daily visits: ${home.pips.filled} of ${home.pips.of}. Seven fills a free box`}>
                 <Text maxFontSizeMultiplier={1.3} style={styles.pipsLabel}>Daily</Text>
                 {Array.from({ length: home.pips.of }, (_, i) => (
-                  <Animated.View key={`${i}:${i < home.pips!.filled ? 1 : 0}`} entering={!still && i === home.pips!.filled - 1 ? ZoomIn.springify().damping(8).delay(300) : undefined}
+                  <Animated.View key={`${i}:${i < home.pips!.filled ? 1 : 0}`} entering={!still && home.pips!.new_today && i === home.pips!.filled - 1 ? ZoomIn.springify().damping(8).delay(300) : undefined}
                     style={[styles.pip, i < home.pips!.filled && styles.pipOn]} />
                 ))}
                 <Image source={require('../../../assets/images/pins/box-blue-closed.webp')} style={{ width: 30, height: 30 }} contentFit="contain" />
@@ -352,7 +356,7 @@ export default function PinsScreen() {
 
             <View style={styles.tabs} accessibilityRole="tablist">
               <TabButton label={PINS_COPY.tabMystery} icon={require('../../../assets/images/pins/box-blue-closed.webp')} active={tab === 'mystery'} badge={freeWaiting} onPress={() => setTab('mystery')} />
-              <TabButton label={PINS_COPY.tabSets} icon={PIN_ART.seal} active={tab === 'sets'} badge={claimWaiting || huntToday} onPress={() => setTab('sets')} />
+              <TabButton label={PINS_COPY.tabSets} icon={PIN_ART.seal} active={tab === 'sets'} badge={!freeWaiting && (claimWaiting || huntToday)} onPress={() => setTab('sets')} />
               <TabButton label={PINS_COPY.tabMine} icon={require('../../../assets/images/pins/box-blue-lid.webp')} active={tab === 'mine'} onPress={() => setTab('mine')} />
             </View>
 
@@ -396,7 +400,7 @@ export default function PinsScreen() {
                         accessibilityRole="button" accessibilityState={{ selected: on }}
                         accessibilityLabel={`${p.name}${p.is_chaser ? ', chaser' : ''}${p.tradable ? ', can trade' : ', park only'}${on ? ', on your lanyard' : ''}`}>
                         <PinTile uri={p.icon_thumb_url ?? p.icon_url} size={size} owned kind={p.kind} tradable={p.tradable} chaser={p.is_chaser} spares={p.spares}
-                          serial={p.serial} tilt={((i * 23) % 9) - 4} flat />
+                          serial={p.serial} tilt={((i * 23) % 9) - 4} flat badgeScale={0.8} />
                         {on && <View style={styles.onCheck}><GameIcon name="check" size={16} /></View>}
                       </Pressable>
                     );

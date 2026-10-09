@@ -121,3 +121,16 @@ test('the first tab: Mystery when a free box waits, Park Sets when a reward wait
   assert.equal(m.initialTab({ mystery: [series({ free_now: true })], park_sets: [] }), 'mystery');
   assert.equal(m.initialTab({ mystery: [series()], park_sets: [{ complete: true, claimed: false }] }), 'sets');
 });
+
+test('bundles build to the best pin: extras, then new, the chaser last', () => {
+  const pulls = [{ id: 1, is_chaser: false, duplicate: false }, { id: 2, is_chaser: true, duplicate: false }, { id: 3, is_chaser: false, duplicate: true }];
+  assert.deepEqual(plain(m.revealOrder(pulls).map(p => p.id)), [3, 1, 2]);
+});
+
+test('the "at least 1 new" note only shows while a regular pin is missing (the server rule)', () => {
+  const card = fs.readFileSync('src/screens/pins/MysteryCard.tsx', 'utf8');
+  assert.match(card, /progress\.have < progress\.total \? 'x5 = at least 1 new pin'/);
+  const server = fs.existsSync(`${process.env.HOME}/apps/tps-ws/fb-pins-be/app/Domains/PinTrading/Services/MysteryBoxService.php`)
+    ? fs.readFileSync(`${process.env.HOME}/apps/tps-ws/fb-pins-be/app/Domains/PinTrading/Services/MysteryBoxService.php`, 'utf8') : '';
+  if (server) assert.match(server, /\$missing->isNotEmpty\(\)/);
+});

@@ -63,7 +63,7 @@ type Props = {
   readonly subtitleFor?: (pull: RevealPull) => string | null;
   /** Offer "Wear it" for this pull (chaser, park pin): puts it on the lanyard. */
   /** Puts the pin on the lanyard; resolves true once saved (a full lanyard swaps out its last pin). */
-  readonly onWear?: (pull: RevealPull) => Promise<boolean>;
+  readonly onWear?: (pull: RevealPull) => Promise<{ ok: boolean; removed?: string | null }>;
   readonly canWear?: (pull: RevealPull) => boolean;
   /** The box is on stage while the server answers; a tap waits for it, then opens. */
   readonly waiting?: boolean;
@@ -187,8 +187,10 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const phaseRef = useRef<Phase>('drop');
   const setPhase = (p: Phase) => { phaseRef.current = p; setPhaseState(p); };
   const [worn, setWorn] = useState<Set<number>>(new Set());
+  const [swappedOut, setSwappedOut] = useState<string | null>(null);
   const pull = pulls[Math.min(index, pulls.length - 1)];
-  const gold = !!pull?.is_chaser || !!pull?.rare;
+  // Gold moments: the chaser, rare park pins, and every in-person catch.
+  const gold = !!pull?.is_chaser || !!pull?.rare || isCatch;
   const art = BOX_ART[tone];
   const boxSize = Math.min(240, width * 0.58);
   const pinSize = Math.min(210, width * 0.52);
@@ -215,6 +217,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const seal = useSharedValue(0);
   const stamp = useSharedValue(0);
   const plusOne = useSharedValue(0);
+  const wearFly = useSharedValue(0);
   const popped = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = (ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); };
@@ -223,8 +226,10 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
   const confetti = useMemo(() => pieces((pull?.id ?? 1) * 7919, gold), [pull?.id, gold]);
 
+  const shownAt = useRef(0);
   const showPin = useCallback(() => {
     clearTimers();
+    shownAt.current = Date.now();
     setPhase('show');
     const p = pulls[index];
     if (!still) {
@@ -257,7 +262,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     clearTimers();
     setPhase('pop');
     const p = pulls[index];
-    const isGold = !!p?.is_chaser || !!p?.rare;
+    const isGold = !!p?.is_chaser || !!p?.rare || isCatch;
     cancelAnimation(shake); shake.value = 0;
     lift.value = withTiming(0, { duration: 160 });
     dim.value = withTiming(0, { duration: 200 });
@@ -282,9 +287,17 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       play('fx.reward'); later(110, () => play('fx.firework'));
       queueHaptic('comboHeavy', 2); later(260, () => queueHaptic('success', 2));
     } else {
-      play('fx.reveal');
-      queueHaptic('hitMedium', 2);
-      if (!p?.duplicate) later(240, () => queueHaptic('success', 1));
+      if (p?.duplicate) {
+        // An extra: a softer, lower pop (the +1 tick follows).
+        play('fx.hit', { pitch: 0.75, volume: 0.9 });
+        queueHaptic('tapLight', 2);
+      } else {
+        // A new pin: the bright reveal plus a rising sparkle.
+        play('fx.reveal');
+        later(200, () => play('fx.coinTick', { pitch: 1.6, volume: 0.8 }));
+        queueHaptic('hitMedium', 2);
+        later(240, () => queueHaptic('success', 1));
+      }
     }
     later(still ? 240 : 620, showPin);
   }, [index, pulls, showPin, still]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -337,7 +350,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (!pull) return;
     clearTimers();
     popped.current = false;
-    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, lift, plusOne].forEach(v => { cancelAnimation(v); v.value = 0; });
+    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, lift, plusOne, wearFly].forEach(v => { cancelAnimation(v); v.value = 0; });
     punch.value = 1;
     setPhase('drop');
     if (noBox) {
@@ -388,10 +401,18 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
   const onBackdrop = () => {
     const phase = phaseRef.current;
-    if (phase === 'ready') open();
-    // Tapping through speeds it up but never mutes it: the payoff still fires.
-    else if (phase === 'shake' || phase === 'hold') pop();
-    else if (phase === 'show') next();
+    const p = pulls[index];
+    const isGold = !!p?.is_chaser || !!p?.rare || isCatch;
+    if (phase === 'ready') {
+      // Waiting for the server: the box answers the tap with a wiggle.
+      if (waitingRef.current) { shake.value = withSequence(withTiming(-5, { duration: 50 }), withTiming(5, { duration: 60 }), withTiming(0, { duration: 50 })); }
+      open();
+    }
+    // Tapping through speeds it up but never mutes it. A gold pull still gets its held breath.
+    else if (phase === 'shake') { if (isGold) holdBreath(); else pop(); }
+    else if (phase === 'hold') { /* the breath is short; let it land */ }
+    // The result screen ignores stray taps for a moment; gold pins and catches close only with a button.
+    else if (phase === 'show' && !isGold && Date.now() - shownAt.current > 700) next();
   };
 
   const stageStyle = useAnimatedStyle(() => ({ transform: [{ scale: punch.value }] }));
@@ -419,11 +440,13 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       { translateY: interpolate(rise.value, [0, 1], [boxSize * 0.15, -boxSize * 0.5]) + settle.value * -8 },
       { perspective: 600 },
       { rotateY: `${(1 - flip.value) * 540}deg` },
-      { scale: still ? 1 : interpolate(rise.value, [0, 1], [0.35, 1]) },
+      { scale: (still ? 1 : interpolate(rise.value, [0, 1], [0.35, 1])) * (1 - wearFly.value * 0.75) },
+      { translateY: -wearFly.value * height * 0.9 },
     ],
   }));
   const stampStyle = useAnimatedStyle(() => ({ opacity: stamp.value > 0 ? 1 : 0, transform: [{ scale: interpolate(stamp.value, [0, 1], [2.4, 1]) }, { rotate: '-8deg' }] }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+  const backerStyle = useAnimatedStyle(() => ({ opacity: settle.value * (1 - wearFly.value), transform: [{ scale: 0.9 + settle.value * 0.1 }] }));
   // rotateY = (1 - flip) * 540: the front faces you when cos(angle) > 0.
   const frontStyle = useAnimatedStyle(() => ({ opacity: Math.cos(((1 - flip.value) * 540 * Math.PI) / 180) >= 0 ? 1 : 0 }));
   const backStyle = useAnimatedStyle(() => ({ opacity: Math.cos(((1 - flip.value) * 540 * Math.PI) / 180) < 0 ? 1 : 0 }));
@@ -498,6 +521,12 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               <Image source={PIN_ART.seal} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
             </Animated.View>
           )}
+          {/* A Disney-style pin card behind a regular pin once it lands (gold moments keep their rays). */}
+          {!gold && (phase === 'show' || phase === 'pop') && (
+            <Animated.View style={[styles.backer, { width: pinSize * 1.25, height: pinSize * 1.3, top: (boxSize - pinSize) / 2 - boxSize * 0.5 - pinSize * 0.14 }, backerStyle]}>
+              <View style={styles.backerHole} />
+            </Animated.View>
+          )}
           {/* The pin is mounted (and its art decoding) from the start, hidden until it rises. */}
           <Animated.View style={[styles.pin, { width: pinSize, height: pinSize, top: (boxSize - pinSize) / 2 }, pinStyle]}>
             <Animated.View style={[StyleSheet.absoluteFill, frontStyle]}>
@@ -536,7 +565,9 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             )}
             {pull.is_chaser && pull.by_pity && <Text maxFontSizeMultiplier={1.1} style={styles.guaranteed}>Guaranteed!</Text>}
             <Text maxFontSizeMultiplier={1.35} style={styles.name} numberOfLines={2}>{pull.name}</Text>
-            {subtitle && <Text maxFontSizeMultiplier={1.35} style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>}
+            {subtitle && (isCatch
+              ? <View style={styles.ticket}><Image source={PIN_ART.seal} style={{ width: 22, height: 22 }} contentFit="contain" /><Text maxFontSizeMultiplier={1.3} style={styles.ticketText} numberOfLines={1}>{subtitle}</Text></View>
+              : <Text maxFontSizeMultiplier={1.35} style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>)}
             {pull.duplicate && !isCatch && (
               <Animated.View pointerEvents="none" style={[styles.plusOne, plusStyle]}>
                 <Image source={PIN_ART.trade} style={{ width: 26, height: 26 }} contentFit="contain" />
@@ -590,13 +621,24 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             )}
             {phase === 'show' && wearable && (
               <Pressable onPress={() => {
-                void onWear?.(pull).then(ok => { if (ok) { queueHaptic('success', 1); play('fx.coinTick', { pitch: 1.5 }); setWorn(w => new Set(w).add(pull.item_id)); } });
+                void onWear?.(pull).then(({ ok, removed }) => {
+                  if (!ok) return;
+                  setSwappedOut(removed ?? null);
+                  queueHaptic('success', 1); play('fx.whoosh', { volume: 0.6 }); later(380, () => play('fx.hit', { pitch: 1.4 }));
+                  // The pin flies up to your lanyard, then comes back to rest.
+                  if (!still) wearFly.value = withSequence(withTiming(1, { duration: 380, easing: Easing.in(Easing.quad) }), withDelay(250, withTiming(0, { duration: 1 })), withSpring(0));
+                  setWorn(w => new Set(w).add(pull.item_id));
+                });
               }}
                 style={({ pressed }) => [styles.wear, pressed && { transform: [{ scale: 0.96 }] }]} accessibilityRole="button" accessibilityLabel="Wear it on your lanyard">
                 <Text maxFontSizeMultiplier={1.1} style={styles.wearText}>Wear it</Text>
               </Pressable>
             )}
-            {phase === 'show' && worn.has(pull.item_id) && <Text maxFontSizeMultiplier={1.1} style={styles.wornText}>On your lanyard!</Text>}
+            {phase === 'show' && worn.has(pull.item_id) && (
+              <View style={styles.wornChip}>
+                <Text maxFontSizeMultiplier={1.2} style={styles.wornText}>On your lanyard!{swappedOut ? ` ${swappedOut} came off.` : ''}</Text>
+              </View>
+            )}
             <GameButton label={index < pulls.length - 1 ? 'Next box' : pulls.length > 1 && phase === 'show' ? 'See all' : 'Done'}
               icon={index < pulls.length - 1 ? 'gift' : 'check'} onPress={next} />
           </View>
@@ -630,6 +672,13 @@ const styles = StyleSheet.create({
   guaranteed: { fontFamily: FONT.display, fontSize: 22, color: BRAND.gold, paddingTop: 2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   name: { fontFamily: FONT.display, fontSize: 32, color: BRAND.white, textAlign: 'center', textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   subtitle: { fontFamily: FONT.body, fontSize: 18, color: '#cfeaff' },
+  ticket: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.cream, borderColor: BRAND.goldLip, borderWidth: 3, borderStyle: 'dashed',
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, maxWidth: '96%',
+  },
+  ticketText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 3, flexShrink: 1 },
+  backer: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center' },
+  backerHole: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#021a45', marginTop: 10 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 3, paddingHorizontal: 14, paddingVertical: 4 },
   tagNew: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
   tagGold: { backgroundColor: BRAND.goldLight, borderColor: BRAND.navy },
@@ -657,5 +706,6 @@ const styles = StyleSheet.create({
   plusText: { fontFamily: FONT.display, fontSize: 24, color: BRAND.goldLight, paddingTop: 3, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   wear: { minHeight: 44, paddingHorizontal: 22, borderRadius: 999, borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.blueBright, alignItems: 'center', justifyContent: 'center' },
   wearText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.white, paddingTop: 3 },
-  wornText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.goldLight, paddingTop: 2 },
+  wornChip: { backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 4 },
+  wornText: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy, paddingTop: 2 },
 });
