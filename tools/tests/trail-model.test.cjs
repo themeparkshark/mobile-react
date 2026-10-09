@@ -152,3 +152,26 @@ test('recorder: backgrounding right after a fresh window still remembers the par
   assert.ok(r.away);
   assert.equal(r.fix(PARK, A, 600_000)[0].source, 'closed');
 });
+
+const flag = loadTs('src/services/trail/trailFlag.ts');
+
+test('the flag never switches Trail Boxes off on a failed check (R4 blocker)', async () => {
+  let t = 0;
+  let answer = true;
+  let fail = false;
+  let calls = 0;
+  const f = flag.createTrailFlag(async () => { calls += 1; if (fail) throw new Error('no signal'); return answer; }, () => t);
+  assert.equal(await f(), true);
+  t += 5 * 60_000;
+  assert.equal(await f(), true);
+  assert.equal(calls, 1); // cached
+  t += 6 * 60_000; fail = true;
+  assert.equal(await f(), true); // no signal in a queue: keeps the last answer
+  fail = false; answer = false; t += 11 * 60_000;
+  assert.equal(await f(), false); // a real "off" from the server turns it off
+});
+
+test('no answer yet means no change (null), not off', async () => {
+  const f = flag.createTrailFlag(async () => { throw new Error('offline'); }, () => 0);
+  assert.equal(await f(), null);
+});

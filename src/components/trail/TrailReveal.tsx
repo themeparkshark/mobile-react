@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing, FadeIn, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence,
@@ -209,7 +209,7 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint }: {
               </Circle>
             </Canvas>
           </Animated.View>
-          {box.tier === 'gold' && <GoldRays size={g * 1.05} top={(size * 1.05 - g * 1.05) / 2} reduced={reduced} />}
+          {box.tier === 'gold' && <GoldRays size={g * 0.9} top={(size * 1.05 - g * 0.9) / 2} reduced={reduced} />}
           <Animated.View style={boxStyle}>
             <Image source={opened ? BOX_OPEN_ART[box.tier] : BOX_ART[box.tier]}
               style={{ width: size, height: size }} contentFit="contain" />
@@ -282,14 +282,14 @@ function RewardCard({ reward, tier, order, delay, hero, reduced }: {
   return (
     <Animated.View style={[styles.cardWrap, style]}>
       {hero && <HeroRing ring={ring} />}
-      <View style={[styles.card, hero && styles.cardHero]}>
+      <View style={[styles.card, hero && styles.cardHero]} accessible accessibilityLabel={reward.kind === 'coins' ? `Plus ${reward.amount} coins` : rewardLabel(reward)}>
         <View style={[styles.strip, { backgroundColor: hero ? BRAND.gold : STRIP[tier] }]} />
         {reward.kind === 'exclusive' && reward.icon_url
           ? <Image source={{ uri: reward.icon_url }} style={{ width: 60, height: 60 }} contentFit="contain" />
           : <GameIcon name={ICON[reward.kind]} size={50} />}
         {reward.kind === 'coins'
-          ? <CountUpText value={coinValue} durationMs={650} prefix="+" suffix=" COINS" punch={1.08} reducedMotion={reduced}
-              style={styles.coinText} />
+          ? <View accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden><CountUpText value={coinValue} durationMs={650} prefix="+" suffix=" COINS" punch={1.08} reducedMotion={reduced}
+              style={styles.coinText} /></View>
           : <Text style={styles.cardText} numberOfLines={2} adjustsFontSizeToFit maxFontSizeMultiplier={1.3}>{rewardLabel(reward)}</Text>}
         {hero && <Text style={styles.badge}>TRAIL ONLY</Text>}
       </View>
@@ -297,7 +297,11 @@ function RewardCard({ reward, tier, order, delay, hero, reduced }: {
   );
 }
 
-/** Gold only: soft pale-gold sun rays turning slowly behind the box (warmth without a muddy halo). */
+/**
+ * Gold only: warm sun rays turning slowly behind the box. Each wedge fades from
+ * gold at the centre to nothing before the halo's edge (never a hard slate
+ * wedge over navy), and the rays sit inside the halo, under the title.
+ */
 function GoldRays({ size, top, reduced }: { readonly size: number; readonly top: number; readonly reduced: boolean }) {
   const spin = useSharedValue(0);
   useEffect(() => {
@@ -305,24 +309,28 @@ function GoldRays({ size, top, reduced }: { readonly size: number; readonly top:
     spin.value = withRepeat(withTiming(360, { duration: 24000, easing: Easing.linear }), -1, false);
     return () => cancelAnimation(spin);
   }, [reduced, spin]);
-  const path = (() => {
+  const path = useMemo(() => {
     const p = Skia.Path.Make();
     const c = size / 2;
+    const r = c * 0.9;
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2;
-      const w = Math.PI / 26;
+      const w = Math.PI / 24;
       p.moveTo(c, c);
-      p.lineTo(c + Math.cos(a - w) * c, c + Math.sin(a - w) * c);
-      p.lineTo(c + Math.cos(a + w) * c, c + Math.sin(a + w) * c);
+      p.lineTo(c + Math.cos(a - w) * r, c + Math.sin(a - w) * r);
+      p.lineTo(c + Math.cos(a + w) * r, c + Math.sin(a + w) * r);
       p.close();
     }
     return p;
-  })();
+  }, [size]);
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
   return (
     <Animated.View pointerEvents="none" style={[{ position: 'absolute', top, width: size, height: size, alignSelf: 'center' }, style]}>
       <Canvas style={{ width: size, height: size }}>
-        <Path path={path} color="#fff3c4" opacity={0.22} />
+        <Path path={path}>
+          <RadialGradient c={vec(size / 2, size / 2)} r={size * 0.45}
+            colors={['#ffe58a73', '#ffe58a40', '#ffe58a00']} positions={[0.15, 0.55, 1]} />
+        </Path>
       </Canvas>
     </Animated.View>
   );

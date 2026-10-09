@@ -17,6 +17,8 @@ import TrailPath from './TrailPath';
 
 const KIND_ICON: Record<string, GameIconName> = { coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star' };
 const RANK: Record<TrailTier, number> = { blue: 0, red: 1, gold: 2 };
+/** The park plaza landmark from the map: a picture for "only steps in the park count". */
+const PARK_ART = require('../../../assets/images/map/landmarks/plaza@3x.png');
 const LOCALE = (() => { try { return Intl.DateTimeFormat().resolvedOptions().locale; } catch { return 'en-US'; } })();
 
 
@@ -78,7 +80,10 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text accessibilityRole="header" style={styles.title}>{view === 'inside' ? 'What\'s inside' : 'Trail Boxes'}</Text>
             {view === 'inside' ? <Text style={styles.subtitle}>Every box, every chance</Text> : (
-              <Text style={styles.parkOnlyText}>Walk in the park to open them</Text>
+              <View style={styles.parkOnly} accessible accessibilityLabel="Only steps in the park count">
+                <Image source={PARK_ART} style={{ width: 24, height: 24 }} contentFit="contain" />
+                <Text style={styles.parkOnlyText}>Park steps only</Text>
+              </View>
             )}
           </View>
           {view === 'inside'
@@ -97,8 +102,8 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
               <View style={[styles.card, styles.askCard]}>
                 <Image source={STEPS_ART} style={{ width: 44, height: 44 }} contentFit="contain" />
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.cardTitle}>Grown-ups: count steps in a pocket?</Text>
-                  <Text style={styles.body}>Allow Motion & Fitness and the phone counts steps while the app is closed, so boxes open on their own. Steps stay on this phone.</Text>
+                  <Text style={styles.cardTitle}>Grown-ups: count pocket steps?</Text>
+                  <Text style={styles.body}>Allow Motion & Fitness so boxes keep opening while the app is closed. Steps stay on this phone.</Text>
                   <GameButton label="Count my steps" size="compact" onPress={onAskMotion} style={{ marginTop: 8, alignSelf: 'flex-start' }} />
                 </View>
               </View>
@@ -160,7 +165,7 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
               <>
                 <Text style={styles.section}>Next up ({state.waiting.length} of {state.rack})</Text>
                 <View style={[styles.card, { paddingVertical: 6 }]}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+                  <View style={styles.rackGrid}>
                     {state.waiting.map((b, i) => (
                       <Pressable key={b.id} accessibilityRole="button"
                         accessibilityLabel={`${boxName(b)}, ${formatSteps(b.goal_steps)} steps.${i > 0 ? ' Tap to walk it next' : ' Walks next'}`}
@@ -173,7 +178,7 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
                     {Array.from({ length: Math.max(0, state.rack - state.waiting.length) }, (_, i) => (
                       <View key={`open-${i}`} style={styles.rackEmpty} accessibilityElementsHidden />
                     ))}
-                  </ScrollView>
+                  </View>
                   {picked != null && state.waiting[0]?.id !== picked && (
                     <GameButton label="Walk this one next" size="compact" variant="secondary" onPress={() => { onFront(picked); setPicked(null); }}
                       style={{ alignSelf: 'center', marginTop: 4 }} />
@@ -241,7 +246,7 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
               <Image source={WHEELS_ART} style={{ width: 34, height: 34 }} contentFit="contain" />
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>Rolling</Text>
-                <Text style={styles.body}>Wheelchair, scooter or stroller? Your path on the map counts while the map is open.</Text>
+                <Text style={styles.body}>Wheelchair, scooter or stroller? Your map path counts.</Text>
               </View>
               <View style={[styles.toggle, state.wheels && styles.toggleOn]}>
                 <View style={[styles.knob, state.wheels && styles.knobOn]} />
@@ -272,7 +277,7 @@ function StepsToGo({ box, visible }: { readonly box: TrailBox; readonly visible:
     setSeen(`n:${box.id}`, target);
     setValue(target);
   }, [box.id, target, visible]);
-  return <CountUpText value={value} durationMs={900} punch={1} style={styles.toGo} />;
+  return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><CountUpText value={value} durationMs={900} punch={1} style={styles.toGo} /></View>;
 }
 
 function cheer(steps: number): string {
@@ -390,9 +395,10 @@ const styles = StyleSheet.create({
   toGo: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 2, textShadowOffset: { width: 0, height: 0 }, minWidth: 80 },
   toGoUnit: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft, marginTop: -2 },
   footnote: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft, marginTop: 6 },
-  waitBox: { width: 70, alignItems: 'center', borderRadius: RADIUS.md, borderWidth: 2.5, borderColor: 'transparent', paddingVertical: 4 },
+  waitBox: { width: '31%', alignItems: 'center', borderRadius: RADIUS.md, borderWidth: 2.5, borderColor: 'transparent', paddingVertical: 4 },
   waitPicked: { borderColor: BRAND.gold, backgroundColor: BRAND.cream },
-  rackEmpty: { width: 62, height: 70, marginHorizontal: 4, borderRadius: RADIUS.md, borderWidth: 2, borderStyle: 'dashed', borderColor: BRAND.skyDeep },
+  rackGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 6, paddingVertical: 4 },
+  rackEmpty: { width: '31%', height: 78, borderRadius: RADIUS.md, borderWidth: 2, borderStyle: 'dashed', borderColor: BRAND.skyDeep },
   waitText: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   todayCard: { flexDirection: 'row', alignItems: 'center' },
   bigNumber: { fontFamily: 'Shark', fontSize: 36, color: BRAND.blue },

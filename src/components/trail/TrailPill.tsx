@@ -6,6 +6,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { boxFraction, headlineBox, milestonesCrossed, missNote, shortSteps, stepsToGo, type TrailState } from '../../services/trail/trailModel';
 import { BRAND, SHADOW } from '../../ui';
 import TrailBoxArt from './TrailBoxArt';
+import { CountUpText } from '../../gamekit/fx/CountUpText';
 
 /**
  * The map's Trail Box pill, in the same capsule language as the Energy pill
@@ -52,16 +53,11 @@ function TrailPill({ state, active, onPress, inPark = true }: {
     prev.current = { count, fraction, id: box?.id ?? 0, ready, toGo: newlyReady ? p.toGo : toGoNow };
     if (newlyReady && shownReady === 0 && active && !reduced && inPark) {
       // Sweep to full while the number counts down to 0, gold wipe across the capsule, then OPEN! springs in.
-      const fromSteps = p.toGo;
-      const t0 = Date.now();
-      const tick = () => {
-        const k = Math.min(1, (Date.now() - t0) / 380);
-        setSweepSteps(Math.round(fromSteps * (1 - k)));
-        if (k < 1) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
+      setSweepSteps(p.toGo);
+      requestAnimationFrame(() => setSweepSteps(0)); // CountUpText runs 1.1k -> 0 on the UI thread
       fill.value = withTiming(1, { duration: 380 }, () => {
         wipe.value = 0;
+        // OPEN! is crossfaded on the UI thread the moment the wipe ends (no JS round trip, no stale frame).
         wipe.value = withTiming(1, { duration: 280 }, done => { if (done) runOnJS(finishSweep)(ready); });
       });
       return;
@@ -88,12 +84,13 @@ function TrailPill({ state, active, onPress, inPark = true }: {
   const wrapStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.04, Math.min(1, fill.value)) }] }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: 0.35 + glow.value * 0.65 }));
+  const openNowStyle = useAnimatedStyle(() => ({ opacity: wipe.value >= 1 ? 1 : 0 }));
   const wipeStyle = useAnimatedStyle(() => ({ opacity: wipe.value > 0 && wipe.value < 1 ? 1 : 0, transform: [{ translateX: -40 + wipe.value * 160 }, { skewX: '-20deg' }] }));
 
   const waiting = state.walking.length + state.waiting.length;
   const shown = shownReady ? state.ready.length : 0;
   const home = !inPark && !shown;
-  const label = shown ? (shown > 1 ? `OPEN ${shown}` : 'OPEN!') : home ? `${waiting} WAITING` : sweepSteps != null ? shortSteps(sweepSteps) : box && box.status !== 'ready' ? shortSteps(stepsToGo(box)) : box ? shortSteps(prev.current.toGo) : 'Walk';
+  const label = shown ? (shown > 1 ? `OPEN ${shown}` : 'OPEN!') : home ? `${waiting} WAITING` : box && box.status !== 'ready' ? shortSteps(stepsToGo(box)) : box ? shortSteps(prev.current.toGo) : 'Walk';
   const dropped = missNote(state.sync);
   const a11y = home ? `${waiting} Trail ${waiting === 1 ? 'Box waits' : 'Boxes wait'} for your next park day` : dropped && !ready ? `Trail Box: ${box ? stepsToGo(box) : 0} steps to go. Some steps did not count, tap to see why` : ready
     ? `${ready} Trail ${ready === 1 ? 'Box is' : 'Boxes are'} ready to open`
@@ -107,7 +104,14 @@ function TrailPill({ state, active, onPress, inPark = true }: {
           {!shown && !home && <View style={styles.track}><Animated.View style={[styles.fill, fillStyle]} /></View>}
           {!!shown && <Animated.View style={[StyleSheet.absoluteFill, styles.glow, glowStyle]} />}
           <Animated.View pointerEvents="none" style={[styles.wipe, wipeStyle]} />
-          <Text style={[styles.count, shown ? styles.countReady : null, home ? styles.countHome : null]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
+          {sweepSteps != null && (
+            <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.openNow, openNowStyle]}>
+              <Text style={[styles.count, styles.countReady]}>OPEN!</Text>
+            </Animated.View>
+          )}
+          {sweepSteps != null
+            ? <CountUpText value={sweepSteps} durationMs={380} punch={1} style={styles.countUp} />
+            : <Text style={[styles.count, shown ? styles.countReady : null, home ? styles.countHome : null]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>}
           {!shown && !home && !!box && <Text style={styles.unit}>steps to go</Text>}
         </View>
         {!!missNote(state.sync) && !shown && !home && <View style={styles.dot} accessibilityElementsHidden />}
@@ -130,6 +134,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center', ...SHADOW.card },
   pillReady: { backgroundColor: BRAND.gold, borderColor: BRAND.white },
   pillHome: { backgroundColor: BRAND.blue },
+  openNow: { backgroundColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', paddingLeft: 26 },
+  countUp: { fontSize: 18, padding: 0, marginBottom: 3, minWidth: 44, textShadowOffset: { width: 1, height: 2 } },
   countHome: { fontSize: 15 },
   wipe: { position: 'absolute', top: -4, bottom: -4, left: 0, width: 26, backgroundColor: BRAND.goldLight },
   track: { position: 'absolute', left: 24, right: 10, bottom: 3, height: 5, borderRadius: 3, backgroundColor: BRAND.blueLip, overflow: 'hidden' },

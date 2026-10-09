@@ -6,6 +6,7 @@ import { frontTrailBox, getTrail, openTrailBox, postTrailWalk, putTrailSettings 
 import { AuthContext } from '../../context/AuthProvider';
 import { LocationContext, LocationStatusContext } from '../../context/LocationProvider';
 import { hydrateTrailSeen } from './trailSeen';
+import { createTrailFlag } from './trailFlag';
 import { TrailRecorder, type TrailAway, type TrailSegment, type TrailState } from './trailModel';
 
 /**
@@ -50,20 +51,9 @@ const PENDING_KEY = 'trail.pending.v1';
 const AWAY_KEY = 'trail.away.v1';
 const MAX_PENDING = 40;
 
-let flagCache: boolean | null = null;
-let flagAt = 0;
-const FLAG_TTL_MS = 10 * 60_000;
-async function trailFlag(): Promise<boolean> {
-  if (__DEV__ && process.env.EXPO_PUBLIC_TRAIL_FORCE === '1') return true;
-  if (flagCache !== null && Date.now() - flagAt < FLAG_TTL_MS) return flagCache;
-  flagAt = Date.now();
-  try {
-    flagCache = (await getFeatureFlags()).flags.trail_boxes === true;
-  } catch {
-    return false;
-  }
-  return flagCache;
-}
+const trailFlag = (__DEV__ && process.env.EXPO_PUBLIC_TRAIL_FORCE === '1')
+  ? async () => true
+  : createTrailFlag(async () => (await getFeatureFlags()).flags.trail_boxes === true);
 
 function pedometer(): any | null {
   try { return require('expo-sensors').Pedometer; } catch { return null; }
@@ -115,7 +105,7 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
 
-  useEffect(() => { let on = true; void trailFlag().then(v => { if (on) setFlag(v); }); return () => { on = false; }; }, [player?.id]);
+  useEffect(() => { let on = true; void trailFlag().then(v => { if (on && v !== null) setFlag(v); }); return () => { on = false; }; }, [player?.id]);
   useEffect(() => { if (enabled) { void readMotion().then(setMotion); void hydrateTrailSeen(); } }, [enabled]);
 
   // Restore what a killed app left behind: windows not yet sent, and where it went to sleep.
@@ -221,7 +211,7 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
         }
       } else if (s === 'active') {
         void readMotion().then(setMotion);
-        void trailFlag().then(setFlag);
+        void trailFlag().then(v => { if (v !== null) setFlag(v); });
         // A FRESH fix decides where the closed window ends (in the park, or "left"); never the
         // pre-background spot. The phone's last known fix counts only if it is newer than when we
         // went to sleep, so the walk lands at once instead of waiting for the next GPS update.
@@ -230,7 +220,9 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
           try {
             const Location = require('expo-location');
             const last = await Location.getLastKnownPositionAsync({ maxAge: 120_000 });
-            if (last && since && last.timestamp > since) onFix(last.coords.latitude, last.coords.longitude);
+            // Only a sharp fix (<= 50 m): a vague one could call an in-park walk a "left" walk.
+            const acc = last?.coords?.accuracy;
+            if (last && since && last.timestamp > since && typeof acc === 'number' && acc > 0 && acc <= 50) onFix(last.coords.latitude, last.coords.longitude);
           } catch { /* the next fix does it */ }
           void refresh();
         })();
