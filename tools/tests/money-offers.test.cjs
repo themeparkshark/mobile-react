@@ -59,7 +59,8 @@ test('the top-up picks the cheapest pack that covers the gap, bundles included',
   const noDeal = CATALOG.filter(p => !p.deal_key);
   assert.equal(id(offers.pickTopUp(120, 'coins', noDeal, PRICES)), 'coins.500');
   assert.equal(id(offers.pickTopUp(830, 'coins', CATALOG, PRICES)), 'deal.daily', 'the $0.99 deal covers 830 coins');
-  assert.equal(id(offers.pickTopUp(1100, 'coins', CATALOG, PRICES)), 'coins.1200', 'a 5-box bundle (1,100) needs the 1,200 pack');
+  assert.equal(id(offers.pickTopUp(1100, 'coins', CATALOG, PRICES)), 'pack.starter', '$1.99 either way: the Starter Pack gives more');
+  assert.equal(id(offers.pickTopUp(1100, 'coins', noDeal.filter(p => p.limit !== 'once'), PRICES)), 'coins.1200', 'a 5-box bundle (1,100) needs the 1,200 pack');
   assert.equal(id(offers.pickTopUp(1, 'tickets', CATALOG, PRICES)), 'tickets.5');
   assert.equal(id(offers.pickTopUp(40, 'energy', CATALOG, PRICES)), 'pack.starter', 'energy is only in bundles');
   assert.equal(id(offers.pickTopUp(99999, 'coins', CATALOG, PRICES)), 'coins.7000', 'nothing covers it: the biggest');
