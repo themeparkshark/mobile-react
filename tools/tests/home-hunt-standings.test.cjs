@@ -156,14 +156,20 @@ test('the week answer is cached once, errors are not cached, and another player 
   assert.equal(cache.homeHuntEnabled(null), false);
 });
 
-test('info sheet shows the server lines verbatim and omits empty sections', () => {
+test('info sheets show the server lines verbatim, odds as bars, and drop empty pages', () => {
   const info = loadTs('src/components/home/homeHuntInfoModel.ts');
-  const sections = plain(info.standingsInfoSections({
-    odds_lines: ['Each item that appears: Common 55%.'], point_lines: ['Any home find: 5 points.'], tiebreak_lines: [],
-    tier_lines: ['Hunter: 60+ points.'], fairness_line: 'Free and VIP rank the same.',
+  const sheet = plain(info.homeHuntInfoSheet({
+    odds_lines: ['Each item that appears: Common 55%.', 'With a set focused, 65% of items come from it.'], point_lines: ['Any home find: 5 points.'],
+    tiebreak_lines: [], tier_lines: ['Hunter: 60+ points.'], fairness_line: 'Free and VIP rank the same.',
+    odds: { common: 55, uncommon: 28, rare: 12, epic: 4, legendary: 1, focus: 65, missing_multiplier: 3 },
   }));
-  assert.deepEqual(sections.map(section => section.key), ['points', 'tiers', 'fairness', 'odds']);
-  assert.deepEqual(sections.find(section => section.key === 'odds').lines, ['Each item that appears: Common 55%.']);
-  assert.equal(info.standingsInfoSections(null).length, 0);
-  assert.equal(info.oddsInfoSections({ odds_lines: ['a'] }).length, 1);
+  assert.deepEqual(sheet.pages.map(page => page.key), ['points', 'tiers', 'odds']);
+  assert.deepEqual(sheet.pages[1].points.map(point => point.text), ['Hunter: 60+ points.', 'Free and VIP rank the same.']);
+  const odds = sheet.pages[2];
+  assert.deepEqual(odds.heroData.odds.map(row => row.percent), [55, 28, 12, 4, 1]);
+  // The bars already say the first line; the rest stay verbatim.
+  assert.deepEqual(odds.points.map(point => point.text), ['With a set focused, 65% of items come from it.']);
+  assert.equal(info.homeHuntInfoSheet(null).pages.length, 0);
+  assert.deepEqual(plain(info.oddsInfoSheet({ odds_lines: ['a'] })).pages[0].points.map(point => point.text), ['a']);
 });
+
