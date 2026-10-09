@@ -67,11 +67,15 @@ test('XP level up: gold hold with a pulse, bounded stars, LEVEL UP!, refill show
   const card = read('src/components/Experience.tsx');
   assert.match(bar, /if \(banner\.value\) return 'LEVEL UP!'/);
   assert.match(card, /HapticPatterns\.levelUp\(\)/);
-  assert.match(card, /assets\/sounds\/reward\.mp3/);
+  assert.match(card, /playSfx\('fx\.reward'\)/, 'preloaded reward cue');
+  // The payoff lands on the first full frame (UI thread), and the refill waits for the drain.
+  assert.match(bar, /withTiming\(1, \{ duration: BURST_AT_MS, easing: Easing\.in\(Easing\.quad\) \}, \(\) => \{\n\s+\/\/ First full frame[\s\S]*?runOnJS\(onBrim\)\(token\)/);
+  assert.match(bar, /if \(!reducedRef\.current && !party\.current\.drained\) \{ party\.current\.pending = latest; return; \}/);
+  assert.doesNotMatch(bar, /pulse\.value|scale: pulse/, 'no scaling pulse that could touch the badge or cap');
   assert.match(card, /announceForAccessibility\(`Level \$\{level\}!`\)/);
   assert.match(card, /toValue: 1\.3, duration: 140/, 'badge pop');
   // The refill reads the latest props, so a refetch during the celebration never leaves stale numbers.
-  assert.match(bar, /refill: \(latest\) => \{\n\s+const now = latestXp\.current;/);
+  assert.match(bar, /function startRefill\(latest: PotionState\) \{\n\s+party\.current\.pending = null;\n\s+const now = latestXp\.current;/);
   // Brim + gold hold + drain end before the driver refills.
   const hold = Number(/const GOLD_HOLD_MS = (\d+);/.exec(bar)[1]);
   const drain = Number(/const DRAIN_MS = (\d+);/.exec(bar)[1]);
@@ -112,7 +116,9 @@ test('Social chest: squash on press, lid pop, wiggle, stars, haptic, Chris sound
   assert.match(chest, /CHEST_OPEN_CUE = 'fx\.hit'/, "Chris's clack, a shipped cue");
   assert.match(chest, /if \(!reduced\) \{\n\s+lift\.value/, 'Reduce Motion: no hop or stars');
   const social = read('src/screens/SocialScreen.tsx');
-  assert.match(social, /<ChestButton open=\{shortcuts\} onPress=\{\(\) => setShortcuts\(true\)\} label="More" accessibilityLabel="More"/);
+  assert.match(social, /<ChestButton open=\{shortcuts\} onPress=\{\(\) => \{ setTileClosed\(false\); setShortcuts\(true\); \}\} label="More" accessibilityLabel="More"/);
+  assert.match(social, /quietClose=\{tileClosed\}/, 'a tile tap already clicked: no second sound when the sheet closes');
+  assert.match(chest, /if \(reduced\) \{ dim\.value = withTiming\(0\.7/, 'Reduce Motion press dim');
 });
 
 test('every Social tap clicks once: PressScale clicks by default, actions with their own sound opt out', () => {

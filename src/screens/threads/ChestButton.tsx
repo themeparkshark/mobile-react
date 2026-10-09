@@ -67,6 +67,7 @@ export default function ChestButton({
   onPress,
   accessibilityLabel,
   accessibilityHint,
+  quietClose = false,
 }: {
   /** Short word under the chest ("More" or "VIP"). */
   readonly label: string;
@@ -75,6 +76,8 @@ export default function ChestButton({
   readonly onPress: () => void;
   readonly accessibilityLabel: string;
   readonly accessibilityHint?: string;
+  /** The sheet is closing because a shortcut was picked (that tap already clicked): shut without a sound. */
+  readonly quietClose?: boolean;
 }) {
   const reduced = useUiReducedMotion();
   const [lidOpen, setLidOpen] = useState(false);
@@ -88,6 +91,8 @@ export default function ChestButton({
   const lift = useSharedValue(0);
   const tilt = useSharedValue(0);
   const burst = useSharedValue(0);
+  const dim = useSharedValue(1);
+  const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
 
   useEffect(() => () => {
     if (pending.current) clearTimeout(pending.current);
@@ -105,14 +110,16 @@ export default function ChestButton({
     if (wasOpen.current && !open) {
       locked.current = false;
       setLidOpen(false);
-      playSfx(CHEST_SHUT_CUE, 0.6);
-      void Haptics.impactAsync('light');
+      if (!quietClose) {
+        playSfx(CHEST_SHUT_CUE, 0.6);
+        void Haptics.impactAsync('light');
+      }
       if (!reduced) {
         sy.value = withSequence(withTiming(0.9, { duration: ms(70) }), withSpring(1, spring({ damping: 7, stiffness: 320 })));
       }
     }
     wasOpen.current = open;
-  }, [open, reduced, sy, lift, tilt]);
+  }, [open, reduced, sy, lift, tilt, quietClose]);
 
   const chestStyle = useAnimatedStyle(() => ({
     transform: [
@@ -146,7 +153,8 @@ export default function ChestButton({
   });
 
   const pressIn = () => {
-    if (reduced || locked.current) return;
+    if (locked.current) return;
+    if (reduced) { dim.value = withTiming(0.7, { duration: 60 }); return; }
     cancelAnimation(sx);
     cancelAnimation(sy);
     sx.value = withTiming(1.14, { duration: ms(70), easing: Easing.out(Easing.quad) });
@@ -154,7 +162,7 @@ export default function ChestButton({
   };
 
   const pressOut = () => {
-    if (reduced) return;
+    if (reduced) { dim.value = withTiming(1, { duration: 120 }); return; }
     sx.value = withSpring(1, spring({ damping: 6, stiffness: 340, mass: 0.6 }));
     sy.value = withSpring(1, spring({ damping: 6, stiffness: 340, mass: 0.6 }));
   };
@@ -206,13 +214,13 @@ export default function ChestButton({
           </Group>
         </Canvas>
       </View>
-      <Animated.View style={[styles.chest, chestStyle]}>
+      <Animated.View style={[styles.chest, chestStyle, dimStyle]}>
         {lidOpen
           // The open art has a taller canvas: drawn larger and lifted so its box matches the closed chest.
           ? <Image source={OPEN_ART} style={[styles.open, { width: OPEN_SIZE, height: OPEN_SIZE }]} contentFit="contain" />
           : <GameIcon name="chest" size={SIZE} />}
       </Animated.View>
-      <Text style={styles.text}>{label}</Text>
+      <Text style={styles.text} maxFontSizeMultiplier={1.2}>{label}</Text>
     </Pressable>
   );
 }

@@ -43,10 +43,10 @@ import {
   useFont,
   usePathValue,
 } from '@shopify/react-native-skia';
-import Animated, {
+import {
   Easing,
   cancelAnimation,
-  useAnimatedStyle,
+  runOnJS,
   useDerivedValue,
   useFrameCallback,
   useSharedValue,
@@ -97,12 +97,12 @@ const BUBBLES = [
 ];
 /** Stars puff out of the end of the bar, up and back along it: never more than ~16 pt above the bar. */
 export const SPARKS = [
-  { a: -2.85, d: 30, s: 6.5 },
-  { a: -2.4, d: 24, s: 8 },
-  { a: -1.95, d: 21, s: 7 },
-  { a: -1.5, d: 19, s: 8.5 },
-  { a: -1.05, d: 20, s: 7 },
-  { a: -0.6, d: 18, s: 6 },
+  { a: -3.0, d: 34, s: 7 },
+  { a: -2.6, d: 27, s: 9 },
+  { a: -2.2, d: 22, s: 8 },
+  { a: -1.8, d: 20, s: 9.5 },
+  { a: -1.4, d: 21, s: 8 },
+  { a: -1.0, d: 16, s: 6.5 },
 ];
 
 function clamp01(n: number) {
@@ -157,7 +157,8 @@ function XpBarImpl({
   const burst = useSharedValue(0);
   const flash = useSharedValue(0);
   const sweep = useSharedValue(0);
-  const pulse = useSharedValue(1);
+  const whiteFlash = useSharedValue(0);
+  const rmGold = useSharedValue(0);
   const banner = useSharedValue(0);
   // The numbers on the bar: they lag the data through a level up and count on gains.
   const count = useSharedValue(initial?.xp ? initial.xp.current : xp.current);
@@ -170,6 +171,9 @@ function XpBarImpl({
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // One celebration at a time: the burst lands on the first full frame (UI thread), and the refill waits
+  // for both the driver's refill time and the end of the drain, so the new XP never counts over a falling bar.
+  const party = useRef({ token: 0, drained: false, pending: null as PotionState | null });
 
   const driver = useMemo(() => createPotionDriver(
     initial ? { level: initial.level, progress: clamp01(initial.progress) } : null,
@@ -177,87 +181,118 @@ function XpBarImpl({
       setTimer: (fn, ms) => setTimeout(fn, ms),
       clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
       burst: () => {
+        // Motion: the burst is fired by the fill reaching the brim (onBrim), never by this JS timer.
+        if (!reducedRef.current) return;
+        // Reduce Motion: the whole bar fades to gold and back, numbers set at once, the banner for 1.6 s.
         banner.value = 1;
-        if (reducedRef.current) {
-          // Reduce Motion: a fade to gold and back, numbers set at once, the banner for 1.6 s.
-          flash.value = withSequence(withTiming(1, { duration: 150 }), withDelay(500, withTiming(0, { duration: 300 })));
-          const now = latestXp.current;
-          shownNeeded.value = now.needed;
-          count.value = now.current;
-          if (bannerTimer.current) clearTimeout(bannerTimer.current);
-          bannerTimer.current = setTimeout(() => { banner.value = 0; }, 1600);
-        }
+        rmGold.value = withSequence(withTiming(1, { duration: 150 }), withDelay(600, withTiming(0, { duration: 300 })));
+        const now = latestXp.current;
+        shownNeeded.value = now.needed;
+        count.value = now.current;
+        if (bannerTimer.current) clearTimeout(bannerTimer.current);
+        bannerTimer.current = setTimeout(() => { banner.value = 0; }, 1600);
         cbs.current.onLevelUpBurst?.();
       },
       // The refill always shows the latest data, even if it changed during the celebration.
       refill: (latest) => {
-        const now = latestXp.current;
-        banner.value = 0;
-        shownNeeded.value = now.needed;
-        count.value = 0;
-        count.value = withTiming(now.current, { duration: 700, easing: Easing.out(Easing.cubic) });
-        fill.value = withSpring(latest.progress, { damping: 16, stiffness: 70 });
-        slosh.value = withSequence(withTiming(1.4, { duration: 200 }), withTiming(0, { duration: 1200 }));
-        fizz.value = withSequence(withTiming(2, { duration: 150 }), withTiming(1, { duration: 1400 }));
-        cbs.current.onRefill?.();
+        if (!reducedRef.current && !party.current.drained) { party.current.pending = latest; return; }
+        startRefill(latest);
       },
       play: (kind, next) => {
-        cbs.current.onTransition?.(kind);
-        const now = latestXp.current;
-        if (reducedRef.current) {
-          cancelAnimation(fill);
-          fill.value = next.progress;
-          slosh.value = 0;
-          burst.value = 0;
-          if (kind !== 'levelUp') {
-            shownNeeded.value = now.needed;
-            count.value = now.current;
-          }
-          return;
-        }
-        if (kind === 'levelUp') {
-          // Anticipation: rush to the brim and fizz harder in the last 200 ms.
-          fill.value = withSequence(
-            withTiming(1, { duration: BURST_AT_MS, easing: Easing.in(Easing.quad) }),
-            withDelay(GOLD_HOLD_MS, withTiming(0, { duration: DRAIN_MS, easing: Easing.inOut(Easing.quad) })),
-          );
-          slosh.value = withSequence(withTiming(0.6, { duration: BURST_AT_MS - 200 }), withTiming(2.2, { duration: 200 }),
-            withTiming(0, { duration: 1300 }));
-          fizz.value = withSequence(withTiming(1.4, { duration: BURST_AT_MS - 200 }), withTiming(3, { duration: 200 }),
-            withTiming(1, { duration: 1800 }));
-          flash.value = withSequence(
-            withTiming(0.25, { duration: BURST_AT_MS - 40 }),
-            withTiming(1, { duration: 40 }),
-            withDelay(GOLD_HOLD_MS - 120, withTiming(0, { duration: DRAIN_MS })),
-          );
-          pulse.value = withDelay(BURST_AT_MS, withSequence(withTiming(1.045, { duration: 110 }), withSpring(1, { damping: 8, stiffness: 260 })));
-          sweep.value = 0;
-          sweep.value = withDelay(BURST_AT_MS + 60, withTiming(1, { duration: GOLD_HOLD_MS - 60, easing: Easing.inOut(Easing.quad) }, (done) => {
-            if (done) sweep.value = 0;
-          }));
-          burst.value = 0;
-          burst.value = withDelay(BURST_AT_MS, withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) }, (done) => {
-            if (done) burst.value = 0;
-          }));
-          return;
-        }
-        fill.value = withSpring(next.progress, { damping: 15, stiffness: kind === 'pour' ? 45 : 75 });
-        shownNeeded.value = now.needed;
-        if (kind === 'gain' || kind === 'pour') {
-          if (kind === 'pour') count.value = 0;
-          count.value = withTiming(now.current, { duration: kind === 'pour' ? 800 : 600, easing: Easing.out(Easing.cubic) });
-          slosh.value = withSequence(withTiming(kind === 'gain' ? 2 : 1.3, { duration: 200 }), withTiming(0, { duration: 1300 }));
-          fizz.value = withSequence(withTiming(kind === 'gain' ? 2.4 : 1.6, { duration: 160 }), withTiming(1, { duration: 1600 }));
-        } else {
-          count.value = now.current;
-        }
-        if (kind === 'gain') {
-          glint.value = withDelay(120, withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 650 })));
-        }
+        playKind(kind, next);
       },
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ), []);
+
+  function startRefill(latest: PotionState) {
+    party.current.pending = null;
+    const now = latestXp.current;
+    banner.value = 0;
+    shownNeeded.value = now.needed;
+    count.value = 0;
+    count.value = withTiming(now.current, { duration: 700, easing: Easing.out(Easing.cubic) });
+    fill.value = withSpring(latest.progress, { damping: 16, stiffness: 70 });
+    slosh.value = withSequence(withTiming(1.4, { duration: 200 }), withTiming(0, { duration: 1200 }));
+    fizz.value = withSequence(withTiming(2, { duration: 150 }), withTiming(1, { duration: 1400 }));
+    cbs.current.onRefill?.();
+  }
+
+  function onBrim(token: number) {
+    if (token !== party.current.token) return;
+    cbs.current.onLevelUpBurst?.();
+  }
+  function onDrained(token: number) {
+    if (token !== party.current.token) return;
+    party.current.drained = true;
+    if (party.current.pending) startRefill(party.current.pending);
+  }
+
+  function playKind(kind: PotionTransition, next: PotionState) {
+    cbs.current.onTransition?.(kind);
+    const now = latestXp.current;
+    if (reducedRef.current) {
+      cancelAnimation(fill);
+      fill.value = next.progress;
+      slosh.value = 0;
+      burst.value = 0;
+      if (kind !== 'levelUp') {
+        shownNeeded.value = now.needed;
+        count.value = now.current;
+      }
+      return;
+    }
+    if (kind === 'levelUp') {
+      // Anticipation: rush to the brim and fizz harder in the last 200 ms.
+      const token = party.current.token + 1;
+      party.current = { token, drained: false, pending: null };
+      // The numbers race to full with the liquid.
+      count.value = withTiming(shownNeeded.value, { duration: BURST_AT_MS, easing: Easing.in(Easing.quad) });
+      fill.value = withSequence(
+        withTiming(1, { duration: BURST_AT_MS, easing: Easing.in(Easing.quad) }, () => {
+          // First full frame: LEVEL UP! on the bar now, badge, sound and haptic one hop later.
+          banner.value = 1;
+          runOnJS(onBrim)(token);
+        }),
+        withDelay(GOLD_HOLD_MS, withTiming(0, { duration: DRAIN_MS, easing: Easing.inOut(Easing.quad) }, () => {
+          runOnJS(onDrained)(token);
+        })),
+      );
+      slosh.value = withSequence(withTiming(0.6, { duration: BURST_AT_MS - 200 }), withTiming(2.2, { duration: 200 }),
+        withTiming(0, { duration: 1300 }));
+      fizz.value = withSequence(withTiming(1.4, { duration: BURST_AT_MS - 200 }), withTiming(3, { duration: 200 }),
+        withTiming(1, { duration: 1800 }));
+      flash.value = withSequence(
+        withTiming(0.25, { duration: BURST_AT_MS - 40 }),
+        withTiming(1, { duration: 40 }),
+        withDelay(GOLD_HOLD_MS - 120, withTiming(0, { duration: DRAIN_MS })),
+      );
+      // One bright pulse on the gold (no scaling, so the bar never touches the badge or the cap).
+      whiteFlash.value = withDelay(BURST_AT_MS, withSequence(withTiming(0.5, { duration: 90 }), withTiming(0, { duration: 260 })));
+      sweep.value = 0;
+      sweep.value = withDelay(BURST_AT_MS + 60, withTiming(1, { duration: GOLD_HOLD_MS - 60, easing: Easing.inOut(Easing.quad) }, (done) => {
+        if (done) sweep.value = 0;
+      }));
+      burst.value = 0;
+      burst.value = withDelay(BURST_AT_MS, withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) }, (done) => {
+        if (done) burst.value = 0;
+      }));
+      return;
+    }
+    fill.value = withSpring(next.progress, { damping: 15, stiffness: kind === 'pour' ? 45 : 75 });
+    shownNeeded.value = now.needed;
+    if (kind === 'gain' || kind === 'pour') {
+      if (kind === 'pour') count.value = 0;
+      count.value = withTiming(now.current, { duration: kind === 'pour' ? 800 : 600, easing: Easing.out(Easing.cubic) });
+      slosh.value = withSequence(withTiming(kind === 'gain' ? 2 : 1.3, { duration: 200 }), withTiming(0, { duration: 1300 }));
+      fizz.value = withSequence(withTiming(kind === 'gain' ? 2.4 : 1.6, { duration: 160 }), withTiming(1, { duration: 1600 }));
+    } else {
+      count.value = now.current;
+    }
+    if (kind === 'gain') {
+      glint.value = withDelay(120, withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 650 })));
+    }
+  }
   useEffect(() => () => {
     driver.dispose();
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
@@ -273,7 +308,9 @@ function XpBarImpl({
     const dt = info.timeSincePreviousFrame;
     if (dt == null) return;
     acc.value += Math.min(dt, 100);
-    const busy = slosh.value > 0.05 || fizz.value > 1.05 || glint.value > 0 || burst.value > 0 || flash.value > 0;
+    // The idle shine also runs at the display rate, so it glides instead of stepping.
+    const shining = time.value % SHINE_EVERY < SHINE_FOR + 0.1;
+    const busy = shining || slosh.value > 0.05 || fizz.value > 1.05 || glint.value > 0 || burst.value > 0 || flash.value > 0;
     if (!busy && acc.value < IDLE_FRAME_MS) return;
     time.value += acc.value / 1000;
     acc.value = 0;
@@ -401,7 +438,7 @@ function XpBarImpl({
     'worklet';
     const q = burst.value;
     if (q <= 0) return;
-    const cx = x0 + Math.max(1, w.value - INSET * 2) - 4;
+    const cx = x0 + Math.max(1, w.value - INSET * 2) - 12;
     const cy = y0 + innerH / 2;
     for (let i = 0; i < SPARKS.length; i++) {
       const s = SPARKS[i];
@@ -409,7 +446,7 @@ function XpBarImpl({
       const x = cx + Math.cos(s.a) * s.d * e;
       const y = cy + Math.sin(s.a) * s.d * e + q * q * 6;
       const r = s.s * Math.sin(Math.min(1, q * 1.2) * Math.PI);
-      if (r < 0.6) continue;
+      if (r < 2.5) continue; // tiny stars would be all outline: skip them
       // Four-point star.
       p.moveTo(x, y - r);
       p.quadTo(x, y, x + r, y);
@@ -449,7 +486,6 @@ function XpBarImpl({
   });
   const textY = PAD_TOP + XP_BAR_HEIGHT / 2 + FONT_PX * 0.36;
 
-  const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
 
   const canvasW = width + PAD_X * 2;
   const canvasH = XP_BAR_HEIGHT + XP_BAR_LIP + PAD_TOP + PAD_BOTTOM;
@@ -461,13 +497,13 @@ function XpBarImpl({
   }, [width, x0, y0, innerW, innerH]);
 
   return (
-    <Animated.View
+    <View
       pointerEvents="none"
       accessible={false}
       importantForAccessibility="no-hide-descendants"
       accessibilityElementsHidden
       onLayout={onLayout}
-      style={[{ height: XP_BAR_HEIGHT + XP_BAR_LIP, alignSelf: 'stretch' }, style, pulseStyle]}
+      style={[{ height: XP_BAR_HEIGHT + XP_BAR_LIP, alignSelf: 'stretch' }, style]}
     >
       {width > 0 && (
         <Canvas style={{ position: 'absolute', left: -PAD_X, top: -PAD_TOP, width: canvasW, height: canvasH }}>
@@ -492,11 +528,17 @@ function XpBarImpl({
                 <Rect x={x0} y={y0} width={innerW} height={innerH} color={GOLD} />
                 <Rect x={x0} y={deepTop} width={innerW} height={innerH} color={GOLD_DEEP} />
               </Group>
+              <Rect x={x0} y={y0} width={innerW} height={innerH} color="#ffffff" opacity={whiteFlash} />
               <Path path={bubbles} color="rgba(255,255,255,0.85)" />
               <Path path={shine} color={shineColor} />
             </Group>
             <Path path={edge} style="stroke" strokeWidth={2} strokeCap="round" color={LIQUID_TOP} />
             <Path path={edge} style="stroke" strokeWidth={4} strokeCap="round" color="#ffffff" opacity={glintOpacity} />
+            {/* Reduce Motion level up: the whole track fades to gold and back */}
+            <Group opacity={rmGold}>
+              <Rect x={x0} y={y0} width={innerW} height={innerH} color={GOLD} />
+              <Rect x={x0} y={deepTop} width={innerW} height={innerH} color={GOLD_DEEP} />
+            </Group>
             {/* Glass gloss across the top */}
             <RoundedRect x={x0 + 6} y={y0 + 1.5} width={Math.max(0, innerW - 12)} height={2.6} r={1.3} color="rgba(255,255,255,0.7)" />
           </Group>
@@ -508,10 +550,10 @@ function XpBarImpl({
           ) : null}
           {/* Level-up stars */}
           <Path path={sparks} color={GOLD} />
-          <Path path={sparks} style="stroke" strokeWidth={1.5} color={GOLD_INK} />
+          <Path path={sparks} style="stroke" strokeWidth={1.2} strokeJoin="round" color={GOLD_INK} />
         </Canvas>
       )}
-    </Animated.View>
+    </View>
   );
 }
 

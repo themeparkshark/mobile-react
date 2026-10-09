@@ -72,8 +72,10 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   // iOS can't present Safari or push a screen while this sheet is still sliding away,
   // so a shortcut closes the sheet first and runs its action once the sheet is hidden.
   const afterShortcutsHide = useRef<(() => void) | null>(null);
+  const [tileClosed, setTileClosed] = useState(false);
   const runAfterShortcuts = useCallback((action: () => void) => {
     afterShortcutsHide.current = action;
+    setTileClosed(true); // that tile already clicked: the chest shuts quietly
     setShortcuts(false);
   }, []);
   const [rules, setRules] = useState(false);
@@ -286,8 +288,9 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <ChestButton open={shortcuts} onPress={() => setShortcuts(true)} label="More" accessibilityLabel="More"
-            accessibilityHint={player && !player.is_subscribed ? 'Pin Trading, Coin Codes, Merch, VIP and Watch' : 'Pin Trading, Coin Codes, Merch and Watch'} />
+          <ChestButton open={shortcuts} onPress={() => { setTileClosed(false); setShortcuts(true); }} label="More" accessibilityLabel="More"
+            quietClose={tileClosed}
+            accessibilityHint={!player || !player.is_subscribed ? 'Pin Trading, Coin Codes, Merch, VIP and Watch' : 'Pin Trading, Coin Codes, Merch and Watch'} />
         </TopbarColumn>
         <TopbarColumn><TopbarText>Social</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false}><SocialHelp /></TopbarColumn>

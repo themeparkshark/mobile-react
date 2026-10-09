@@ -1,8 +1,7 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, StyleSheet, Text, View } from 'react-native';
 import { vsprintf } from 'sprintf-js';
 import { nextLevelCaption } from '../constants/levelUnlocks';
-import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffectProvider';
 import HapticPatterns from '../helpers/hapticPatterns';
 import { selectionAsync } from '../helpers/haptics';
 import { GameAudio } from '../gamekit/audio/GameAudio';
@@ -61,7 +60,6 @@ export default function Experience({
   const { rideBoss } = useProgressionFlags();
   // Three states, like the potion: null means not known yet (decide nothing).
   const reduced = useReduceMotionPreference() === true;
-  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const { level, current, needed, percent } = experienceProgress(player);
   const progress = percent / 100;
   const before = useRef(seen.get(player.id)).current;
@@ -70,6 +68,7 @@ export default function Experience({
   // The level on the badge lags the data through a level up (until the burst). The XP numbers live in
   // the bar and count up on the UI thread.
   const [shownLevel, setShownLevel] = useState(before?.level ?? level);
+  const announced = useRef(0);
   const pop = useRef(new Animated.Value(1)).current;
   const wiggle = useRef(new Animated.Value(0)).current;
 
@@ -84,7 +83,7 @@ export default function Experience({
     void (async () => {
       try {
         if (!GameAudio.backend) await GameAudio.init();
-        await GameAudio.preload(['ui.select']);
+        await GameAudio.preload(['ui.select', 'fx.reward']);
       } catch { /* sound is decoration */ }
     })();
   }, [own]);
@@ -115,8 +114,12 @@ export default function Experience({
     setShownLevel(level);
     if (own) {
       HapticPatterns.levelUp();
-      playSound(require('../../assets/sounds/reward.mp3'));
-      AccessibilityInfo.announceForAccessibility(`Level ${level}!`);
+      playSfx('fx.reward');
+      // Once per level, even if a refetch replays a celebration.
+      if (announced.current !== level) {
+        announced.current = level;
+        AccessibilityInfo.announceForAccessibility(`Level ${level}!`);
+      }
     }
     if (reduced) return;
     pop.setValue(1);
@@ -125,7 +128,7 @@ export default function Experience({
       Animated.spring(pop, { toValue: 1, friction: 4, tension: 160, useNativeDriver: true }),
     ]).start();
     shake(true);
-  }, [own, playSound, reduced, shake, pop, level]);
+  }, [own, reduced, shake, pop, level]);
 
   const onRefill = useCallback(() => {
     if (own) playSfx('ui.select', 0.4);
