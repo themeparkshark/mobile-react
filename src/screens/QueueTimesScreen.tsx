@@ -9,7 +9,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
+import { useAppActive } from '../hooks/useLivePoll';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -265,8 +266,14 @@ export default function QueueTimesScreen({ route }: { route: any }) {
     setSelectedPark(parkId);
   };
 
-  // Auto-refresh every 60s
+  // Auto-refresh every 60s, only while this screen is on screen and the app is
+  // in front (a 1 s countdown plus a fetch kept running under other screens
+  // and in a pocket). Coming back past due refreshes at once.
+  const screenFocused = useIsFocused();
+  const appActive = useAppActive();
+  const ticking = screenFocused && appActive;
   useEffect(() => {
+    if (!ticking) return undefined;
     timerRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -279,7 +286,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [fetchData]);
+  }, [fetchData, ticking]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

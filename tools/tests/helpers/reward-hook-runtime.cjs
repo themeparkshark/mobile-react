@@ -95,6 +95,10 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)services\/ads$/.test(name)) return { adsAvailable: () => false, rewardText: () => '',
         watchForReward: async () => ({ status: 'unavailable' }) };
       if (/(^|\/)services\/purchases$/.test(name)) return { storeAvailable: () => false };
+      // The power budget (src/power) reads as full power unless a test stubs it.
+      if (/(^|\/)power$/.test(name)) return { usePowerBudget: () => ({ level: 'full', ambient: true, animate: true,
+        pollMultiplier: 1, particleScale: 1, gpsRest: false, compass: true, lowPower: false, idle: false, stationary: false }),
+        markMoved() {}, useBudgetedPoll() {}, useBatterySaver: () => false, setBatterySaver() {} };
       if (name.includes('assets/')) return name;
       return { default: name };
     },

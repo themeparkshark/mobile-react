@@ -678,6 +678,7 @@ export class PartyClient {
     // background (home, lock, pocket, call) hands the seat to the ghost, because
     // iOS may suspend JS any moment after that.
     if (next === 'inactive') return;
+    this.backgrounded = next !== 'active';
     if (next !== 'active') {
       if (this.local && !this.local.ended) this.hold('background');
       return;
@@ -736,8 +737,11 @@ export class PartyClient {
   }
 
   /** Safety poll: every 1.25 s without a socket, every 5 s with one; any fresh snapshot resets the wait. */
+  /** In the background nobody sees the room; the safety poll rests (heartbeats keep the seat). Resume refreshes at once. */
+  private backgrounded = false;
+
   private pollIfNeeded = (): void => {
-    if (!this.state.room) return;
+    if (!this.state.room || this.backgrounded) return;
     const every = this.state.connection === 'live' ? POLL_LIVE_MS : POLL_FALLBACK_MS;
     if (this.now() - this.lastSyncAt < every - 50) return;
     this.lastSyncAt = this.now();

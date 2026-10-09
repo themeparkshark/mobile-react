@@ -33,6 +33,7 @@ import {
   type AppleReconfirm,
 } from './Settings/accountDeletion';
 import { copyrightLine } from '../api/platform';
+import { setBatterySaver, useBatterySaver } from '../power';
 
 /** Settings-only art (GPT Image 2.5 from Alex's references, see tps-prime-time-audit/art-ws8). */
 const SETTINGS_ART = {
@@ -136,6 +137,7 @@ export default function SettingsScreen() {
   const navigation = useNavigation();
   const { player, logout, refreshPlayer } = useContext(AuthContext);
   const [enabledMusic, setEnabledMusic] = useState<boolean>();
+  const batterySaver = useBatterySaver();
   const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>();
   const [backgroundLocationEnabled, setBackgroundLocationEnabled] = useState(false);
   const [backgroundLocationBusy, setBackgroundLocationBusy] = useState(false);
@@ -376,8 +378,18 @@ export default function SettingsScreen() {
             detail={backgroundLocationBusy ? 'Checking...'
               : backgroundLocationEnabled ? 'On: finds rides while your phone is locked'
                 : 'Off: tap to turn on for park days'}
-            isLast
             onPress={enableBackgroundLocation}
+          />
+          {/* Battery Saver (src/power): every feature stays; the game rests its
+              extra motion and checks for news less often. */}
+          <SettingsRow
+            art="star"
+            title="Battery Saver"
+            detail={batterySaver ? 'On: calmer map, longer park days' : 'Off: full sparkle'}
+            isLast
+            accessory={
+              <BrandSwitch label="Battery saver" value={batterySaver} onValueChange={() => setBatterySaver(!batterySaver)} />
+            }
           />
         </Section>
 

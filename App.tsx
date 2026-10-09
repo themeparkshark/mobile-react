@@ -86,6 +86,7 @@ import { TutorialProvider } from './src/components/Tutorial';
 import HelpProvider from './src/components/help/HelpProvider';
 import LinePlayRewardRecovery from './src/services/lineplay/LinePlayRewardRecovery';
 import RemintNoticeModal from './src/components/RemintNoticeModal';
+import { PowerProvider } from './src/power';
 
 export default function App() {
   if (__DEV__ && process.env.EXPO_PUBLIC_ERROR_FALLBACK_PREVIEW === '1') {
@@ -95,6 +96,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
     {/* @ts-ignore */}
     <ErrorBoundary FallbackComponent={ErrorFallback} onError={reportBoundaryError}>
+      <PowerProvider>
       <AuthProvider>
         <LinePlayRewardRecovery />
         <SoundEffectProvider>
@@ -129,6 +131,7 @@ export default function App() {
           </MusicProvider>
         </SoundEffectProvider>
       </AuthProvider>
+      </PowerProvider>
     </ErrorBoundary>
     </GestureHandlerRootView>
   );

@@ -19,7 +19,7 @@
  * iOS ignores `timeInterval`; Android uses it as the sampling period.
  */
 
-export type GpsWatchTier = 'map' | 'park' | 'away';
+export type GpsWatchTier = 'map' | 'park' | 'away' | 'off';
 
 export interface GpsWatchInputs {
   /** A map screen holds the compass claim (it is focused). */
@@ -30,6 +30,20 @@ export interface GpsWatchInputs {
   readonly inPark: boolean;
   /** The last park lookup answered "outside" (a verified non-park position). */
   readonly confirmedOutside: boolean;
+  /**
+   * The app is in the foreground. Default true. In the background the
+   * foreground watcher stops: ride detection and LinePlay run their own
+   * background tasks, and the watcher restarts on return (watchEpoch).
+   * Before this, a map left open kept 3 m High fixes running in a pocket.
+   */
+  readonly appActive?: boolean;
+  /**
+   * Power budget says rest (standing still for a while, or Battery Saver on).
+   * A map that is not tracking a queue takes 6 m steps instead of 3 m: fewer
+   * JS wakeups and map re-renders while you stand, same accuracy, and the
+   * first real step still moves the shark.
+   */
+  readonly rest?: boolean;
 }
 
 export interface GpsWatchSettings {
@@ -41,7 +55,10 @@ export interface GpsWatchSettings {
   readonly timeInterval: number;
 }
 
-export const GPS_WATCH: Readonly<Record<GpsWatchTier, Omit<GpsWatchSettings, 'tier'>>> = {
+/** Map step while resting (standing still or Battery Saver), metres. */
+export const MAP_REST_DISTANCE_M = 6;
+
+export const GPS_WATCH: Readonly<Record<Exclude<GpsWatchTier, 'off'>, Omit<GpsWatchSettings, 'tier'>>> = {
   map: { accuracy: 'high', distanceInterval: 3, timeInterval: 500 },
   park: { accuracy: 'high', distanceInterval: 10, timeInterval: 2000 },
   away: { accuracy: 'balanced', distanceInterval: 50, timeInterval: 10_000 },
@@ -51,6 +68,7 @@ export const GPS_WATCH: Readonly<Record<GpsWatchTier, Omit<GpsWatchSettings, 'ti
 export const QUEUE_ANDROID_TIME_INTERVAL_MS = 3000;
 
 export function gpsWatchTier(input: GpsWatchInputs): GpsWatchTier {
+  if (input.appActive === false) return 'off';
   if (input.mapOnScreen || input.queueTracking) return 'map';
   if (input.inPark || !input.confirmedOutside) return 'park';
   return 'away';
@@ -58,7 +76,10 @@ export function gpsWatchTier(input: GpsWatchInputs): GpsWatchTier {
 
 export function gpsWatchSettings(input: GpsWatchInputs): GpsWatchSettings {
   const tier = gpsWatchTier(input);
+  if (tier === 'off') return { tier, ...GPS_WATCH.away, distanceInterval: 0, timeInterval: 0 };
   const base = GPS_WATCH[tier];
   const timeInterval = input.queueTracking ? QUEUE_ANDROID_TIME_INTERVAL_MS : base.timeInterval;
-  return { tier, ...base, timeInterval };
+  const distanceInterval = tier === 'map' && input.rest && !input.queueTracking
+    ? Math.max(base.distanceInterval, MAP_REST_DISTANCE_M) : base.distanceInterval;
+  return { tier, ...base, distanceInterval, timeInterval };
 }
