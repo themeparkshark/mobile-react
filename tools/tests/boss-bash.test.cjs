@@ -88,3 +88,10 @@ test('a tap on empty water splashes and holds the next tap briefly', ()=>{
   const w=b.tapWater(s,0,100);assert.equal(w.events[0].type,'splash');
   assert.equal(b.tapPopup(w.state,5,150).events.length,0);assert.equal(b.tapPopup(w.state,5,100+b.SPLASH_MS).events[0].type,'bonk');
 });
+
+test('no ink while the shark is seeing stars (a block is always possible)', ()=>{
+  let s={...b.createBash(4),ouchUntil:b.INK_FIRST_MS+400};
+  s=b.tick(s,b.INK_FIRST_MS).state;assert.equal(s.ink,null);
+  s=b.tick(s,b.INK_FIRST_MS+500).state;assert.equal(s.ink,null);
+  s=b.tick(s,b.INK_FIRST_MS+720).state;assert.ok(s.ink);
+});

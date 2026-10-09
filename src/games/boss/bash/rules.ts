@@ -58,9 +58,9 @@ export const INK_LAST_MS = 1_800;
 /** Ink on the screen lasts this long (looks only; it never changes the score). */
 export const INKED_MS = 2_000;
 /** A tap on empty water splashes and holds the next tap this long (mashing is slower than aiming). */
-export const SPLASH_MS = 220;
+export const SPLASH_MS = 350;
 /** Bonking a pufferfish stuns the shark this long (taps are ignored, shown by the bonked pose). */
-export const OUCH_MS = 1200;
+export const OUCH_MS = 1000;
 /** No new pop-ups in the last moment, so nothing sinks unseen at the bell. */
 export const LAST_SPAWN_MS = ROUND_MS - 700;
 /** Smallest cycle the server accepts: one weak hit per three hits. */
@@ -179,6 +179,8 @@ export function tick(state: BashState, ms: number): { state: BashState; events: 
   if (!s.ink && ms >= s.nextInkAt) {
     if (ms >= ROUND_MS - INK_LAST_MS) s = { ...s, nextInkAt: Number.POSITIVE_INFINITY };
     else if (s.dizzy) s = { ...s, nextInkAt: s.dizzy.until + 500 };
+    // Never while the shark is seeing stars: a block must always be possible.
+    else if (ms < s.ouchUntil + 300) s = { ...s, nextInkAt: s.ouchUntil + 300 };
     else {
       const ink = { from: ms, until: ms + INK_TELL_MS };
       s = { ...s, ink, nextInkAt: ms + INK_EVERY_MS };
