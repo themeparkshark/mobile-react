@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
   yoursChip: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 9, borderRadius: 13, backgroundColor: 'rgba(5,52,110,0.84)' },
   yoursChipText: { fontFamily: FONT.display, fontSize: 13, color: '#ffffff' },
   chipFade: { position: 'absolute', right: 0, top: 10, width: 28, height: 40, borderTopRightRadius: 19 },
-  filter: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, paddingHorizontal: 13, borderRadius: 17,
+  filter: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, paddingHorizontal: 10, borderRadius: 17,
     backgroundColor: 'rgba(5,52,110,0.65)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
   filterOn: { backgroundColor: '#ffcf3b', borderColor: '#ffffff' },
   filterText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },

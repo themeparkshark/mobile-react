@@ -28,7 +28,7 @@ import { Image } from 'expo-image';
 import { PEARLS, leavingIcon, lifeLines, pearlFor, retiringWishHint, sentence } from '../../helpers/shopLifecycle';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing, FadeIn, Keyframe, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
@@ -390,6 +390,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     setDropping(false);
     setLanded(l => l + 1);
     setPhase('bought');
+    AccessibilityInfo.announceForAccessibility(`${itemDisplayName(item)} is yours.`);
     if (!firstBuyDone) { setFirstBuyDone(true); void AsyncStorage.setItem(FIRST_BUY_KEY, '1').catch(() => undefined); }
     playSound(require('../../../assets/sounds/purchase_item_success.mp3'));
     if (bigLanding) {
@@ -691,7 +692,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     if (t.touches.length > 1 || (s0 && Math.hypot(t.pageX - s0.x, t.pageY - s0.y) > 10)) touchVoid.current = true; }}>
                   <ShopCta label={cta.label} icon={owned ? 'shark' : cta.action === 'vip' ? 'member' : 'coins'}
                     width={PRIMARY_W} onPress={press} still={still}
-                    accessibilityHint={direct && phase === 'idle' ? `Buys it now. You will have ${formatCoins(balance - item.cost)} left.` : undefined}
+                    accessibilityHint={direct && phase === 'idle' ? `Buys ${itemDisplayName(item)} now. You will have ${formatCoins(balance - item.cost)} left.` : undefined}
                     loading={cta.look === 'busy' || cta.look === 'checking'} muted={cta.look === 'paused' || cta.look === 'checking'}
                     disabled={hold || wear === 'spinning' || cta.look === 'paused' || cta.look === 'checking' || (direct && phase === 'idle' && !armed)} />
                   {cta.action === 'ask' && finishes && <Sheen still={still} delay={500} width={360} />}
