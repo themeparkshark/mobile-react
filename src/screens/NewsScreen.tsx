@@ -72,6 +72,8 @@ type ListState = {
   readonly failed: boolean;
 };
 const VIEWABILITY = { itemVisiblePercentThreshold: 90 };
+/** Dev only: EXPO_PUBLIC_NEWS_TOAST_MS holds the toast longer for slow simulator screenshots. */
+const TOAST_MS = (__DEV__ && Number(process.env.EXPO_PUBLIC_NEWS_TOAST_MS)) || 3000;
 const rowKey = (row: FeedRow) => row.key;
 const rowType = (row: FeedRow) => row.type;
 const FOOTER = <View style={{ height: BOTTOM_BAR_OVERHANG + 24, backgroundColor: BRAND.cream }} />;
@@ -355,7 +357,7 @@ export default function NewsScreen() {
   refreshRef.current = onRefresh;
   useEffect(() => {
     if (!toast) return;
-    const id = setTimeout(() => setToast(null), 3000);
+    const id = setTimeout(() => setToast(null), TOAST_MS);
     return () => clearTimeout(id);
   }, [toast]);
 
