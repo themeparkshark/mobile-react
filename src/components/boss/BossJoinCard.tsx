@@ -109,7 +109,7 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
             <Text style={styles.homeWhy} maxFontSizeMultiplier={1.2}>Not at the park</Text>
             <Text style={styles.bigPct} maxFontSizeMultiplier={1}>{Math.round(raid.remote.damage_rate * 100)}%</Text>
             <View style={styles.mvp}>
-              <View><GameIcon name="crown" size={18} /><View style={styles.crossOut} /></View>
+              <View><GameIcon name="crown" size={28} /><View style={styles.crossOut} /></View>
               <Text style={styles.tileSmall} maxFontSizeMultiplier={1.2}>no MVP</Text>
             </View>
           </Tile>
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   homeWhy: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
   bigPct: { fontFamily: 'Shark', fontSize: 30, lineHeight: 34, color: BRAND.navy },
   mvp: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  crossOut: { position: 'absolute', left: -2, top: 7, width: 22, height: 4, borderRadius: 2, backgroundColor: BRAND.red, transform: [{ rotate: '-35deg' }] },
+  crossOut: { position: 'absolute', left: -3, top: 11, width: 34, height: 5, borderRadius: 2, backgroundColor: BRAND.red, transform: [{ rotate: '-35deg' }] },
   teamDots: { flexDirection: 'row', marginTop: 2 },
   teamDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: BRAND.sky, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   lootGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 4 },

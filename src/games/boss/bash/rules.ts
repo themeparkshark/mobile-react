@@ -66,7 +66,7 @@ export const OUCH_MS = 1000;
 export const LAST_SPAWN_MS = ROUND_MS - 700;
 /** Gold tentacle: how often it appears beside a pufferfish, and how briefly. */
 export const GOLD_CHANCE = 0.55;
-export const GOLD_UP_MS = 1000;
+export const GOLD_UP_MS = 1250;
 /** Smallest cycle the server accepts: one weak hit per three hits. */
 export const MIN_BONKS = 2;
 
@@ -160,9 +160,11 @@ export function createBash(seed: number): BashState {
 }
 
 /** Fins to fill for the next dizzy (the head start counts as a filled fin). */
-export function finsNeeded(state: Pick<BashState, 'headStart'>, ms: number): number {
-  // Fins shown = head start + bonks; at least MIN_BONKS real bonks before every dizzy.
-  return Math.max(phaseAt(ms).need, state.headStart + MIN_BONKS);
+export function finsNeeded(state: Pick<BashState, 'headStart'> & Partial<Pick<BashState, 'power' | 'bonksSince'>>, ms: number): number {
+  // Fins shown = free fins (head start, gold bonus) + bonks; at least MIN_BONKS real bonks before every dizzy, so
+  // full fins always mean dizzy right now (a gold bonus can add a fin to the row, never a full row that waits).
+  const free = Math.max(state.headStart, (state.power ?? 0) - (state.bonksSince ?? 0));
+  return Math.max(phaseAt(ms).need, free + MIN_BONKS);
 }
 
 /** The server formula, rounded once after the home rate. */
@@ -258,9 +260,10 @@ export function tapPopup(state: BashState, id: number, ms: number, maxHits = Num
   const counted = state.hits < maxHits;
   const hits = state.hits + (counted ? 1 : 0);
   const streak = state.streak + 1;
-  const need = finsNeeded(state, ms);
-  const power = Math.min(need, state.power + (popup.kind === 'gold' ? 2 : 1));
   const bonksSince = state.bonksSince + (counted ? 1 : 0);
+  const raw = state.power + (popup.kind === 'gold' ? 2 : 1);
+  const need = finsNeeded({ headStart: state.headStart, power: raw, bonksSince }, ms);
+  const power = Math.min(need, raw);
   let s: BashState = { ...state, up, hits, bonks: state.bonks + 1, streak, bestStreak: Math.max(state.bestStreak, streak),
     power, bonksSince, golds: state.golds + (popup.kind === 'gold' ? 1 : 0), capped: state.capped + (counted ? 0 : 1),
     nextSpawnAt: Math.min(state.nextSpawnAt, ms + 60) };

@@ -16,6 +16,8 @@ import { BRAND } from '../../../ui/tokens';
 import GameIcon from '../../../ui/GameIcon';
 import { BASH_ART } from './art';
 
+const CHEST_OPEN = require('../../../../assets/images/daily/chest-open.png');
+
 export interface BashNext {
   /** Attacks left before this round is sent. */
   readonly attacksLeft: number;
@@ -139,6 +141,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       </View>
 
       {rewards && <View style={styles.loot} accessible accessibilityLabel={`If your team beats it you get ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`}>
+        {ko && <ChestPop />}
         <Text style={styles.lootTitle}>{ko ? 'Your loot is on the way' : 'Team wins, you get'}</Text>
         <View style={styles.lootRow}>
           <Loot icon="coins" n={rewards.coins} />
@@ -209,6 +212,7 @@ const styles = StyleSheet.create({
   hpRed: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.red },
   raidLine: { marginTop: 4, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, textAlign: 'center' },
   loot: { marginTop: 10, backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 2, borderColor: BRAND.sky, paddingVertical: 8, alignItems: 'center' },
+  chest: { position: 'absolute', right: 6, top: -34, width: 64, height: 64 },
   lootTitle: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft },
   lootRow: { flexDirection: 'row', gap: 16, marginTop: 4 },
   lootItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -231,3 +235,17 @@ const styles = StyleSheet.create({
   done: { alignSelf: 'center', marginTop: 6, minHeight: 44, minWidth: 120, alignItems: 'center', justifyContent: 'center' },
   doneText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navySoft, textDecorationLine: 'underline' },
 });
+
+/** Team win: the loot chest pops open over the loot row (a reason to come back to the next raid). */
+function ChestPop() {
+  const v = useSharedValue(0);
+  useEffect(() => {
+    v.value = withDelay(700, withSpring(1, { damping: 6, stiffness: 220 }));
+    const t = setTimeout(() => { GameAudio.play('fx.coin', { volume: 1, pitch: 7 }); haptic('success'); }, 760);
+    return () => clearTimeout(t);
+  }, [v]);
+  const style = useAnimatedStyle(() => ({ opacity: v.value > 0.02 ? 1 : 0, transform: [{ scale: v.value }, { rotate: `${(1 - v.value) * -20}deg` }] }));
+  return <Animated.View style={[styles.chest, style]} pointerEvents="none">
+    <Image source={CHEST_OPEN} style={StyleSheet.absoluteFill} contentFit="contain" />
+  </Animated.View>;
+}

@@ -84,6 +84,7 @@ export const PopupActor = memo(function PopupActor({ kind, x, baseY, height, lim
           {isGold && !goldLimb && <Image source={limbSrc} style={[StyleSheet.absoluteFill, { opacity: 0.62 }]} contentFit="contain" tintColor="#ffcf3b" />}
           {isGold && <Image source={BASH_ART.sparkle} style={{ position: 'absolute', width: w * 0.55, height: w * 0.55, left: -w * 0.1, top: h * 0.05 }} contentFit="contain" />}
           {isGold && <Image source={BASH_ART.sparkle} style={{ position: 'absolute', width: w * 0.4, height: w * 0.4, right: -w * 0.05, top: h * 0.4 }} contentFit="contain" />}
+          {isGold && <View style={[styles.x2, { left: w * 0.55, top: -4 }]}><Text style={styles.x2Text} maxFontSizeMultiplier={1}>x2</Text></View>}
           <Animated.View style={[StyleSheet.absoluteFill, white]}>
             <Image source={limbSrc} style={StyleSheet.absoluteFill} contentFit="contain" tintColor="#ffffff" />
           </Animated.View>
@@ -321,6 +322,23 @@ export const DamageNumber = memo(function DamageNumber({ text, x, y, big, badge 
   </Animated.View>;
 });
 
+/** A filled fin flying in an arc from a gold tentacle into the fin row (Reduce Motion: appears at the row). */
+export const FinFly = memo(function FinFly({ x, y, toX, toY, delay, size, reduced }: {
+  x: number; y: number; toX: number; toY: number; delay: number; size: number; reduced: boolean;
+}) {
+  const p = useSharedValue(reduced ? 1 : 0);
+  useEffect(() => { if (!reduced) p.value = withDelay(delay, withTiming(1, { duration: 440, easing: Easing.in(Easing.quad) })); }, [p, reduced, delay]);
+  const style = useAnimatedStyle(() => {
+    const v = p.value;
+    return { opacity: v > 0.92 ? (1 - v) / 0.08 : 1,
+      transform: [{ translateX: (toX - x) * v }, { translateY: (toY - y) * v - Math.sin(v * Math.PI) * 90 }, { scale: 1.25 - v * 0.35 },
+        { rotate: `${v * 360}deg` }] };
+  });
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size }, style]}>
+    <Image source={BASH_ART.finFull} style={StyleSheet.absoluteFill} contentFit="contain" />
+  </Animated.View>;
+});
+
 /** A one-shot sprite (impact star, splash, puff) that pops and fades. */
 export const Burst = memo(function Burst({ src, x, y, size, reduced, spin = false }: {
   src: number; x: number; y: number; size: number; reduced: boolean; spin?: boolean;
@@ -350,6 +368,9 @@ const styles = StyleSheet.create({
   bubbleText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, letterSpacing: 0.5, textAlign: 'center' },
   dmg: { fontFamily: 'Shark', fontSize: 26, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 },
     textShadowRadius: 0 },
+  x2: { position: 'absolute', paddingHorizontal: 7, paddingVertical: 1, borderRadius: 12, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.gold,
+    transform: [{ rotate: '-8deg' }] },
+  x2Text: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   dmgBig: { color: BRAND.white },
   dmgOutline: { position: 'absolute', color: BRAND.navy, textShadowRadius: 0, textShadowOffset: { width: 0, height: 0 } },
   dmgBadge: { position: 'absolute', width: 64, height: 64, top: -14 },

@@ -239,7 +239,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   // result card or a closed app never loses it; Done / Attack again then only close the fight.
   const sentAtBell = useRef(false);
   const [showTeams, setShowTeams] = useState(false);
-  const atStart = useRef<{ energy: number; attacksLeft: number } | null>(null);
+  const atStart = useRef<{ energy: number; attacksLeft: number; attacks: number } | null>(null);
   const [receipt, setReceipt] = useState<{ state: 'saving' | 'saved' | 'error'; note: string | null } | null>(null);
   const [liveActive, setLiveActive] = useState(false);
   const submit = (expectedRound: typeof round.current, meta?: Record<string, unknown>, keepOpen = false) => {
@@ -309,7 +309,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     setRoundRate(result.round.damage_rate);
     roundLimits.current = { max_ms: result.round.max_ms, max_hits: result.round.max_hits };
     sentAtBell.current = false; setReceipt(null); setLiveActive(true);
-    atStart.current = { energy, attacksLeft: raid.you.attacks_left };
+    atStart.current = { energy, attacksLeft: raid.you.attacks_left, attacks: raid.you.attacks };
     setFighting(true);
   };
   const renderedRound = round.current;
@@ -368,6 +368,8 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             rewards={rewards ?? undefined}
             capLeft={Math.max(0, MAX_DAMAGE_PER_PLAYER - raid.you.damage)}
             teamDamage={raid.teams.mouse + raid.teams.globe + raid.teams.shark}
+            // Come-back reward: from your 4th attack on this raid you start with a free fin.
+            warmStart={(atStart.current?.attacks ?? raid.you.attacks) >= 3}
             autoplay={__DEV__ ? devAutoplay : 0}
             onRoundEnd={meta => submit(renderedRound, meta, true)}
             onActiveChange={setLiveActive}

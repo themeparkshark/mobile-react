@@ -38,6 +38,7 @@ import { usePowerBudget } from '../../../power';
 import {
   Bubble, Burst, CountBeat, DamageNumber, DizzyStars, DizzyTarget, FinMeter, InkSplat, PopupActor, TapHand, Wordmark, type ActorExit,
   type WordmarkId,
+  FinFly,
 } from './BashParts';
 import BashResults, { type BashNext, type BashRewards } from './BashResults';
 import {
@@ -56,6 +57,7 @@ type SharkPose = 'idle' | 'cheer' | 'bonked' | 'dizzy';
 type Face = 'angry' | 'dizzy' | 'hurt' | 'laugh' | 'roar' | 'puff';
 type Fx =
   | { id: number; t: 'num'; text: string; x: number; y: number; big: boolean }
+  | { id: number; t: 'fin'; x: number; y: number; toX: number; toY: number; delay: number }
   | { id: number; t: 'burst'; src: number; x: number; y: number; size: number; spin?: boolean }
   | { id: number; t: 'wm'; wm: WordmarkId }
   | { id: number; t: 'bubble'; text: string; x: number; y: number; tone: 'white' | 'gold' | 'red' }
@@ -118,6 +120,8 @@ export interface BossBashProps {
   readonly receipt?: 'saving' | 'saved' | 'error' | null;
   readonly receiptNote?: string | null;
   /** Your best damage on this boss so far (a target to beat during the round). */
+  /** 3+ attacks on this raid already: start with a free head-start fin. */
+  readonly warmStart?: boolean;
   /** Dev capture: autoplay with this skill (0 = off). */
   readonly autoplay?: number;
   /** Dev capture: force the first-time intro. */
@@ -126,7 +130,7 @@ export interface BossBashProps {
 
 export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fighters = 0, endsAt, damageRate = 1,
   damage: weightsIn, maxHits, next, rewards, capLeft, teamDamage = 0, onComplete, onClose, onAgain, onQuit, onActiveChange, onRoundEnd, receipt = null, receiptNote = null,
-  autoplay = 0, forceIntro = false }: BossBashProps) {
+  warmStart = false, autoplay = 0, forceIntro = false }: BossBashProps) {
   const weights = weightsIn ?? DEFAULT_WEIGHTS;
   const skin = BOSS_SKINS[boss];
   const reduced = useReducedGameMotion();
@@ -255,13 +259,13 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     heldRef.current = false; goPending.current = false; perfectChain.current = 0; hpAtBell.current = null;
     shownStage.current = 0; setHatGone(false); hatOff.value = 0;
     seedRef.current = (seedRef.current * 7919 + 17) % 1000003;
-    engine.current = createBash(seedRef.current);
+    engine.current = warmStart ? { ...createBash(seedRef.current), headStart: 1, power: 1 } : createBash(seedRef.current);
     shownTotal.current = 0;
     firstBonked.current = false; firstSmashed.current = false; blocks.current = 0; idleSince.current = 0; introDone.current = false;
     startHp.current = hpLeft; seenHp.current = hpLeft;
     setActors([]); setFx([]); setDizzy(null); setPose('idle'); setFace('angry'); setHint('none'); setResult(null); setEnding(false);
     setTeamHit(null);
-    setHud({ power: 0, need: 3, headStart: 0, popKey: 0, damage: 0, phase: 'warm' });
+    setHud({ power: warmStart ? 1 : 0, need: 3, headStart: warmStart ? 1 : 0, popKey: 0, damage: 0, phase: 'warm' });
     cancelAnimation(bossShake); cancelAnimation(bossPuff);
     clock.value = 0; bossFade.value = 1; bossDrop.value = 0; bossHit.value = 0; bossRise.value = 0; fury.value = 0; cam.value = 1; hatPop.value = 0;
     bossShake.value = 0; bossPuff.value = 0; setInkTell(false); setFlopped(false); setStunned(false); setHeld(false); flopCount.current = 0; setFlopSide(0); flopX.value = 0; countdown.current = 4;
@@ -281,6 +285,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     seenHp.current = hpLeft;
     if (drop > 0 && playing.current) {
       setTeamHit(drop);
+      if (!reduced) particles.current?.burst({ x: 12 + (L.w - 96) * Math.min(1, Math.max(0, hpLeft / Math.max(1, hpMax))), y: 40, preset: 'burst', count: 10, colors: [BRAND.gold, BRAND.white, BRAND.goldLight], speed: 0.9 });
       later(1800, () => setTeamHit(null));
       if (L.w) addFx({ t: 'burst', src: BASH_ART.sparkle, x: L.w * 0.86, y: L.bossTop + 30, size: 60 }, 500);
     }
@@ -345,8 +350,12 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     const d = dealt();
     addFx({ t: 'num', text: e.counted ? `+${d}` : 'MAX', x: p.x, y: tipY - 20, big: false }, 900);
     if (e.popup.kind === 'gold') {
-      addFx({ t: 'bubble', text: 'GOLD! 2 FINS', x: p.x, y: tipY - 50, tone: 'gold' }, 900);
-      GameAudio.play('fx.coin', { volume: 1, pitch: 5 });
+      // Two fins fly from the gold tentacle into the fin row, each landing with its own coin pling (no words to read).
+      const toY = L.h - 14 - 6 - finSize / 2;
+      for (const k of [0, 1]) {
+        addFx({ t: 'fin', x: p.x + (k ? 14 : -14), y: tipY, toX: L.w / 2 + (k ? 18 : -18), toY, delay: k * 110 }, 900);
+        later(reduced ? 0 : 420 + k * 110, () => GameAudio.play('fx.coin', { volume: 1, pitch: 5 + k * 4 }));
+      }
       haptic('hitMedium');
     }
     if (!reduced) {
@@ -524,7 +533,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const shownStage = useRef(0);
   const stageNow = hpLeft / Math.max(1, hpMax) < 0.25 ? 2 : hpLeft / Math.max(1, hpMax) < 0.5 ? 1 : 0;
   useEffect(() => {
-    if (!visible || intro === 'rise' || intro === 'teach' || !L.w) return;
+    // Never on top of GO: the stage moment waits until the intro has fully cleared.
+    if (!visible || intro !== 'off' || !introDone.current || !L.w) return;
     if (stageNow <= shownStage.current) return;
     const from = shownStage.current;
     shownStage.current = stageNow;
@@ -661,7 +671,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setIntro(cur => {
       if (cur === 'off' || cur === 'go') return cur;
       void AsyncStorage.setItem(SEEN_KEY, '1').catch(() => undefined);
-      later(380, () => { introDone.current = true; setIntro('off'); });
+      later(380, () => { introDone.current = true; setIntro('off');
+        if (warmStart && LRef.current.w) addFx({ t: 'bubble', text: '3 ATTACKS! FREE FIN', x: LRef.current.w / 2, y: LRef.current.h - 110, tone: 'gold' }, 1200); });
       sfx('sh_go_horn', 'ui.confirm', { volume: 0.9 });
       haptic('tickSelection');
       return 'go';
@@ -716,7 +727,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       const s = engine.current, ms = played.current;
       if (s.dizzy) {
         // Capture bot: sometimes early, sometimes on the gold core, sometimes late (kids vary).
-        if (dizzyAt.from !== s.dizzy.from) dizzyAt = { from: s.dizzy.from, at: s.dizzy.from + (s.dizzy.until - s.dizzy.from) * (autoplay > 0.8 ? 0.3 : [0.12, 0.33, 0.6][Math.floor(Math.random() * 3)]) };
+        if (dizzyAt.from !== s.dizzy.from) dizzyAt = { from: s.dizzy.from, at: s.dizzy.from + (s.dizzy.until - s.dizzy.from) * (autoplay > 0.8 ? 0.325 + (Math.random() - 0.5) * 0.2 : [0.12, 0.33, 0.6][Math.floor(Math.random() * 3)]) };
         if (ms >= dizzyAt.at) tapHeadRef.current();
         return;
       }
@@ -833,6 +844,10 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
           {dizzy && <DizzyTarget x={L.head.x + flopSide * L.w * 0.13} y={L.head.y + L.dropBy} size={L.bossSize * 0.34} from={dizzy.from} until={dizzy.until} paused={held} band={perfectBand(dizzy.from)}
             clock={clock} reduced={reduced} />}
+          {dizzy && !firstSmashed.current && <View pointerEvents="none" style={[styles.bang, { left: L.head.x + flopSide * L.w * 0.13 - 20, top: L.head.y + L.dropBy - L.bossSize * 0.3 }]}>
+            <Image source={BASH_ART.sparkle} style={styles.bangSpark} contentFit="contain" />
+            <Text style={styles.bangText} maxFontSizeMultiplier={1}>!</Text>
+          </View>}
           {dizzy && hint === 'head' && <TapHand x={L.head.x + flopSide * L.w * 0.13 + 18} y={L.head.y + L.dropBy + 4} reduced={reduced} size={72} />}
           {inkTell && hint === 'ink' && <TapHand x={L.head.x + 18} y={L.head.y + L.bossSize * 0.18} reduced={reduced} size={72} />}
 
@@ -858,6 +873,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
           {/* Effects (one message on the boss at a time: no gold badge while PERFECT shows). */}
           {fx.map(f => f.t === 'num' ? <DamageNumber key={f.id} text={f.text} x={f.x} y={f.y} big={f.big} badge={!perfectShowing} toX={scoreTarget.x} toY={scoreTarget.y} reduced={reduced} />
+            : f.t === 'fin' ? <FinFly key={f.id} x={f.x} y={f.y} toX={f.toX} toY={f.toY} delay={f.delay} size={finSize} reduced={reduced} />
             : f.t === 'burst' ? (reduced ? null : <Burst key={f.id} src={f.src} x={f.x} y={f.y} size={f.size} spin={f.spin} reduced={reduced} />)
               : f.t === 'wm' ? <Wordmark key={f.id} id={f.wm} x={L.w / 2}
                 y={streakWord.current === f.id ? L.h - 104 : SKY_WORD_Y + 12}
@@ -943,6 +959,12 @@ function IntroCard({ phase, firstTime, skin, limbWord, reduced, onGo }: {
             <Image source={BASH_ART.tapHand} style={{ width: 20, height: 26, marginLeft: -12, marginTop: 10 }} contentFit="contain" />
             <Text style={styles.inkText} maxFontSizeMultiplier={1.2}>Puffs up? Tap it!</Text>
           </View>
+          <View style={styles.inkTip}>
+            <Image source={skin.goldLimb ?? skin.limb} style={{ width: 16, height: 36 }} contentFit="contain" tintColor={skin.goldLimb ? undefined : BRAND.gold} />
+            <Image source={BASH_ART.finFull} style={{ width: 18, height: 18 }} contentFit="contain" />
+            <Image source={BASH_ART.finFull} style={{ width: 18, height: 18, marginLeft: -6 }} contentFit="contain" />
+            <Text style={styles.inkText} maxFontSizeMultiplier={1.2}>Gold = 2 fins!</Text>
+          </View>
         </View>
         <View style={[styles.goBtn, !firstTime && styles.goBtnQuiet]}>
           <Text style={styles.goText}>{firstTime ? 'TAP TO START' : 'GET READY...'}</Text>
@@ -992,6 +1014,10 @@ const styles = StyleSheet.create({
   teamText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
   homeChip: { marginTop: 6, backgroundColor: 'rgba(5,52,110,0.75)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
   homeText: { fontFamily: 'Knockout', fontSize: 13, color: BRAND.white },
+  bang: { position: 'absolute', width: 40, height: 40, borderRadius: 20, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.gold,
+    alignItems: 'center', justifyContent: 'center', zIndex: 6 },
+  bangSpark: { position: 'absolute', width: 64, height: 64, left: -15, top: -15 },
+  bangText: { fontFamily: 'Shark', fontSize: 30, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   finDock: { position: 'absolute', bottom: 14, alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 26,
     backgroundColor: 'rgba(255,255,255,0.88)', borderWidth: 3, borderColor: BRAND.navy },
   introWrap: { alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 26, backgroundColor: 'rgba(8,56,128,0.18)' },
@@ -1009,7 +1035,7 @@ const styles = StyleSheet.create({
   arrow: { width: 16, height: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 26 },
   arrowHead: { width: 0, height: 0, borderTopWidth: 8, borderBottomWidth: 8, borderLeftWidth: 11, borderTopColor: 'transparent',
     borderBottomColor: 'transparent', borderLeftColor: BRAND.navy },
-  extraRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  extraRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 10 },
   inkTip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 2, borderColor: BRAND.navy,
     paddingVertical: 4, paddingHorizontal: 8 },
   inkText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
