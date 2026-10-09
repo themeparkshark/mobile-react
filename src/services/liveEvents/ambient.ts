@@ -2,7 +2,7 @@ import { useAppActive } from '../../hooks/useLivePoll';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 
 /**
- * Shim with the fb-battery API shape (`usePowerBudget().ambient`): decorative
+ * TODO(integration): replace with usePowerBudget(). Shim with the fb-battery API shape (`usePowerBudget().ambient`): decorative
  * loops run only in the foreground without Reduce Motion. At integration swap
  * the body for `return usePowerBudget();` from src/power (it also rests when idle or in Saver).
  */

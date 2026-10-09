@@ -541,6 +541,8 @@ export class PartyClient {
         ...base, board, spawns: round.game === 'bonk_race' ? (board as Spawn[]) : [],
         goAt, lateStart, ended: false, submitted: false,
       };
+      // A round just began: wake now so its 3 s heartbeat starts on time.
+      if (this.state.room && !this.backgrounded) this.startLoops();
       this.clearTimers(this.holdTimers);
       if (this.state.hold) this.set({ ...this.state, hold: null });
       this.log('round scheduled', { round: round.round_no, inMs: Math.round(goAt - nowPerf), lateStart });
@@ -680,12 +682,18 @@ export class PartyClient {
     if (next === 'inactive') return;
     if (next !== 'active') {
       if (this.local && !this.local.ended) this.hold('background');
+      this.backgrounded = true;
+      this.loopTimers.forEach((t) => this.clearTimer(t));
+      this.loopTimers = [];
       // Battery: no open socket in the background; resume reconnects and one snapshot catches up.
       if (this.socket && this.socket.connection.state !== 'disconnected') this.socket.disconnect();
       return;
     }
+    const wasBackgrounded = this.backgrounded;
+    this.backgrounded = false;
     if (this.local?.heldAt != null && this.state.hold?.reason === 'background') this.release();
     if (this.state.room) {
+      if (wasBackgrounded) this.startLoops();
       void this.clock.sync(3, 100).then(() => this.set({ ...this.state, clockOffsetMs: this.clock.offsetMs }));
       this.refresh();
       if (this.socket && this.socket.connection.state !== 'connected') this.socket.connect();
@@ -700,6 +708,8 @@ export class PartyClient {
       .catch((e) => this.handleError(e));
   };
 
+  /** In the background: no socket and no timers (resume restarts both). */
+  private backgrounded = false;
   private lastBeatAt = 0;
   /** Last time any request brought back a room snapshot (a heartbeat counts as a poll). */
   private lastSyncAt = 0;
@@ -731,9 +741,14 @@ export class PartyClient {
     const beatEvery = inRound ? ROUND_HEARTBEAT_MS : HEARTBEAT_MS;
     const pollEvery = this.state.connection === 'live' ? POLL_LIVE_MS : POLL_FALLBACK_MS;
     const now = this.now();
-    const due = Math.min(this.lastBeatAt + beatEvery, this.lastSyncAt + pollEvery) - now;
-    // At most 1 s, so a round that starts mid-wait gets its 3 s heartbeat on time.
-    return Math.max(LOOP_MS, Math.min(due, 1000));
+    let due = Math.min(this.lastBeatAt + beatEvery, this.lastSyncAt + pollEvery) - now;
+    // Counting down to GO: wake right at GO so the round's first scored heartbeat is on time.
+    if (r && !r.ended && !inRound) {
+      const toGo = r.goAt - this.perfNow();
+      if (toGo > 0) due = Math.min(due, toGo + 20);
+    }
+    // A new round restarts the loop (startLoops), so no short cap is needed here.
+    return Math.max(LOOP_MS, Math.min(due, POLL_LIVE_MS));
   }
 
   private startLoops(): void {
@@ -741,7 +756,7 @@ export class PartyClient {
     this.loopTimers = [];
     const tick = () => {
       this.loopTimers = [];
-      if (this.destroyed || !this.state.room) return;
+      if (this.destroyed || !this.state.room || this.backgrounded) return;
       this.heartbeat();
       this.pollIfNeeded();
       this.loopTimers = [this.setTimer(tick, this.nextDueMs())];

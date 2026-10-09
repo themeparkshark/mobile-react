@@ -662,3 +662,71 @@ test('during a round the heartbeat carries my live score every 3 s, and the whol
   assert.ok(http.calls.filter(([, u]) => u.endsWith('/heartbeat')).length - idle <= 1);
   c.destroy();
 });
+
+// ------------------------------------------------------------ battery (director)
+
+test('battery: one loop timer at a time, a lobby wakes at most every 5 s', async () => {
+  const w = world();
+  const http = fakeHttp(w);
+  const socket = fakeSocket();
+  const c = await joined(w, http, socket);
+  const before = http.calls.length;
+  await w.advance(30_000, 50);
+  // Socket live: a 10 s heartbeat and a 5 s safety poll at most, never 4 wakes a second.
+  const calls = http.calls.length - before;
+  assert.ok(calls <= 10, `lobby made ${calls} calls in 30 s`);
+  assert.ok(c.loopTimers.length <= 1, 'one live loop timer');
+  c.destroy();
+});
+
+test('battery: background drops the socket and every timer call; resume reconnects with one catch-up', async () => {
+  const w = world();
+  const http = fakeHttp(w);
+  const socket = fakeSocket();
+  let connects = 0;
+  socket.connect = () => { connects++; };
+  const c = await joined(w, http, socket);
+  c.goBackground();
+  socket.setState('disconnected');
+  assert.equal(socket.disconnected, true);
+  const before = http.calls.filter(([m, u]) => u.startsWith('/party/rooms')).length;
+  await w.advance(30_000, 100);
+  const during = http.calls.filter(([m, u]) => u.startsWith('/party/rooms')).length - before;
+  assert.equal(during, 0, 'no room calls while backgrounded');
+  c.goActive();
+  await w.flush();
+  assert.equal(connects, 1, 'socket reconnects on resume');
+  assert.ok(http.calls.filter(([m, u]) => m === 'GET' && u.startsWith('/party/rooms')).length > 0, 'one catch-up snapshot');
+  await w.advance(6000, 100);
+  assert.ok(c.loopTimers.length <= 1);
+  c.destroy();
+});
+
+test('battery: destroy mid-wait leaves no timer firing', async () => {
+  const w = world();
+  const http = fakeHttp(w);
+  const c = await joined(w, http, fakeSocket());
+  c.destroy();
+  const before = http.calls.length;
+  await w.advance(20_000, 100);
+  assert.equal(http.calls.length, before);
+});
+
+test('battery: a round that starts mid-wait gets its first scored heartbeat within about 3 s of GO', async () => {
+  const w = world();
+  const http = fakeHttp(w);
+  const socket = fakeSocket();
+  const c = await joined(w, http, socket);
+  await w.advance(4000, 50); // the lobby loop is mid-wait
+  const ch = 'presence-party.11111111-1111-4111-8111-111111111111';
+  const start = w.serverNow() + 1500;
+  const round = roundAt(start, { sim_version: sim.BONK_RACE_VERSION, duration_ms: sim.ROUND_MS, end_at_ms: start + sim.ROUND_MS });
+  http.setRoom(snapshot({ version: 3, status: 'countdown', round_no: 1, round, you: { user_id: 7, seat: 0, submitted: false } }));
+  socket.emit(ch, 'round.scheduled', { round });
+  await w.advance(1500, 50);
+  const t0 = w.now();
+  const seen = () => http.calls.some(([m, u, b]) => m === 'POST' && u.endsWith('/heartbeat') && b && typeof b.live_score === 'number');
+  for (let i = 0; i < 100 && !seen(); i++) await w.advance(50, 50);
+  assert.ok(seen() && w.now() - t0 <= 3500, `first scored heartbeat ${w.now() - t0} ms after GO`);
+  c.destroy();
+});

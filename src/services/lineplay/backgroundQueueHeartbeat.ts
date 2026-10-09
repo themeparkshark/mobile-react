@@ -219,8 +219,9 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
         ...(typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy >= 0
           ? { accuracy_meters: Math.min(10_000, accuracy) } : {}),
       }, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 });
-      // Battery: any finished session ends the background task at once.
-      if (['completed', 'ended', 'expired', 'cancelled', 'abandoned'].includes(String(response.data?.status ?? ''))) {
+      // Battery: any session the server no longer calls 'active' ends the background task at once.
+      const sessionStatus = response.data?.status;
+      if (typeof sessionStatus === 'string' && sessionStatus !== 'active') {
         await AsyncStorage.removeItem(STORAGE_KEY);
         await stopTask();
         return;
