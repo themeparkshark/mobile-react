@@ -327,7 +327,7 @@ export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, _rate: readonl
   const r = still ? FOLLOW_R_M * 2 : FOLLOW_R_M;
   const S = p00 + r * r;
   const near = Math.hypot(...enM(c.kX, fix)) < FOLLOW_STILL_DEADZONE_M;
-  const k0 = (p00 / S) * (still && near ? 0.1 : 1), k1 = still ? 0 : p10 / S;
+  const k0 = (p00 / S) * (still ? (near ? 0.1 : 0.25) : 1), k1 = still ? 0 : p10 / S;
   const est = move(pred, k0 * ye, k0 * yn);
   let re = vre + k1 * ye, rn = vrn + k1 * yn;
   c.kP = [(1 - k0) * p00, (1 - k0) * p01, p10 - (p10 / S) * p00, p11 - (p10 / S) * p01];
@@ -363,22 +363,24 @@ export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, _rate: readonl
   const lead = agree ? leadFor(c, speed, gapS) : 0;
   c.leadS = sideways ? Math.min(lead, Math.max(0.5, gapS), FOLLOW_MAX_LEAD_M / Math.max(0.3, speed)) : lead;
 }
-/** Carried: the last fixes (3 or more) moved over 4 m net, nearly in a line (net over 80 % of the path). */
+/** Carried: the last 4 fixes moved over 5 m net, nearly in a line (net over 80 % of the path). */
 function carriedBy(recent: readonly { p: GlidePoint; t: number }[]): boolean {
-  if (recent.length < 3) return false;
+  if (recent.length < 4) return false;
   let path = 0;
   for (let i = 1; i < recent.length; i++) { const [e, n] = enM(recent[i - 1].p, recent[i].p); path += Math.hypot(e, n); }
   const [ne, nn] = enM(recent[0].p, recent[recent.length - 1].p);
   const net = Math.hypot(ne, nn);
-  return net > 4 && net > 0.8 * path;
+  return net > 6 && net > 0.85 * path;
 }
-/** The last two steps point the same way (within 45 degrees) and each is at least 1.5 m. */
+/** A walk the GPS alone shows: the last three steps point the same way (within 35 degrees), each at least 1.5 m. */
 function stepsAgree(recent: readonly { p: GlidePoint; t: number }[]): boolean {
-  if (recent.length < 3) return false;
-  const [a, b, d] = recent.slice(-3).map(x => x.p);
-  const [e1, n1] = enM(a, b), [e2, n2] = enM(b, d);
-  const l1 = Math.hypot(e1, n1), l2 = Math.hypot(e2, n2);
-  return l1 >= 1.5 && l2 >= 1.5 && (e1 * e2 + n1 * n2) / (l1 * l2) > Math.cos(45 * Math.PI / 180);
+  if (recent.length < 4) return false;
+  const pts = recent.slice(-4).map(x => x.p);
+  const steps = [enM(pts[0], pts[1]), enM(pts[1], pts[2]), enM(pts[2], pts[3])];
+  if (steps.some(([e, n]) => Math.hypot(e, n) < 1.5)) return false;
+  const cosOk = (a: [number, number], b: [number, number]) =>
+    (a[0] * b[0] + a[1] * b[1]) / (Math.hypot(...a) * Math.hypot(...b)) > Math.cos(35 * Math.PI / 180);
+  return cosOk(steps[0], steps[1]) && cosOk(steps[1], steps[2]);
 }
 /** Still moving at `tMs` (not yet at rest on its target). */
 export function chaseActive(c: Chaser | null, tMs: number): boolean {

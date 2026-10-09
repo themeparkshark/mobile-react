@@ -263,3 +263,29 @@ test('regressions from round 3: corners, false starts and a ride vehicle never l
     assert.ok(worst < 5, `vehicle: ${worst.toFixed(2)} m behind`);
   }
 });
+
+test('standing in a queue with GPS scatter: the shark stays put (seeded noise, map just opened and sensor standing)', () => {
+  const k = 111320, kl = k * Math.cos(33.8122 * Math.PI / 180);
+  const at = (e, n) => ({ latitude: 33.8122 + n / k, longitude: -117.919 + e / kl });
+  const g = gaussFrom(rng(11));
+  for (const sensor of [null, false]) {
+    // The chaser starts at the first fix (as the map does), then 40 scattered fixes arrive.
+    // Phone-like wander: time-correlated (AR(1) 0.9 per fix), 2 m spread, a fix every 3 s.
+    let we = g() * 2, wn = g() * 2;
+    const f0 = at(we, wn);
+    const c = cf.newChaser(f0, 0), pace = new cf.WalkPace(); pace.push(f0, 0);
+    cf.chaseFix(c, f0, 0, [0, 0], 0, false);
+    if (sensor === false) cf.chaseWalk(c, false, 10);
+    let travel = 0, prev = cf.chaseAdvance(c, 0);
+    for (let i = 1; i <= 40; i++) {
+      we = 0.9 * we + g() * 2 * Math.sqrt(0.19); wn = 0.9 * wn + g() * 2 * Math.sqrt(0.19);
+      const f = at(we, wn); pace.push(f, i * 3000); cf.chaseFix(c, f, i * 3000, pace.velocity(), pace.gap(), false);
+      for (let t = i * 3000; t < (i + 1) * 3000; t += 100) {
+        const p = cf.chaseAdvance(c, t);
+        travel += Math.hypot((p.latitude - prev.latitude) * k, (p.longitude - prev.longitude) * kl);
+        prev = p;
+      }
+    }
+    assert.ok(travel < 4, `sensor ${sensor}: shark travelled ${travel.toFixed(2)} m in 2 min standing`);
+  }
+});
