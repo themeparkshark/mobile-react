@@ -3,6 +3,9 @@ import { balanceLine, LOCAL_GLOSSARY, type GlossaryKey, type GlossaryTerm } from
 import { HELP_LIMITS, wordCount } from '../../services/help/helpSheets';
 import HelpSheet, { type HelpSheetContent } from './HelpSheet';
 
+/** Words whose sheet links to Supplies (the money stream's ask). */
+export const GET_MORE_KEYS: readonly GlossaryKey[] = ['coins', 'tickets'];
+
 /** A server line only when it is as short as the sheet's rule; otherwise the local line. */
 function brief(line: string, local: string): string {
   return wordCount(line) <= HELP_LIMITS.pointWords ? line : local;
@@ -30,13 +33,15 @@ export function termSheetContent(term: GlossaryTerm, count?: number | null): Hel
  * "What's this?" for one term (tap a currency, badge or game word). Same
  * HelpSheet as every "?" in the app.
  */
-export default function TermSheet({ visible, term, count, onClose, onOpenGuide }: {
+export default function TermSheet({ visible, term, count, onClose, onOpenGuide, onGetMore }: {
   readonly visible: boolean;
   readonly term: GlossaryTerm | null;
   readonly count?: number | null;
   readonly glossary?: Readonly<Record<GlossaryKey, GlossaryTerm>>;
   readonly onOpenTerm?: (key: GlossaryKey) => void;
   readonly onOpenGuide?: () => void;
+  /** Coins and Tickets: open Supplies at that pack (only when the store can sell). */
+  readonly onGetMore?: (key: GlossaryKey) => void;
   readonly onClose: () => void;
 }) {
   // Keep the last word on screen while the sheet slides away.
@@ -44,6 +49,9 @@ export default function TermSheet({ visible, term, count, onClose, onOpenGuide }
   useEffect(() => { if (term) setShown({ term, count: count ?? null }); }, [term, count]);
   return (
     <HelpSheet visible={visible && !!term} sheet={shown ? termSheetContent(shown.term, shown.count) : null} onClose={onClose}
-      more={onOpenGuide ? { label: 'How to play', onPress: onOpenGuide } : undefined} />
+      links={[
+        ...(onGetMore && shown && GET_MORE_KEYS.includes(shown.term.key) ? [{ label: 'Get more', onPress: () => onGetMore(shown.term.key) }] : []),
+        ...(onOpenGuide ? [{ label: 'How to play', onPress: onOpenGuide }] : []),
+      ]} />
   );
 }

@@ -52,7 +52,9 @@ const BORDER = 3;
 /** Text never grows past this, so a page never needs to scroll at large text sizes. */
 const MAX_FONT = 1.25;
 
-export default function HelpSheet({ visible, sheet, onClose, state = 'ready', onRetry, pageFooter, more }: {
+export interface HelpLink { readonly label: string; readonly onPress: () => void }
+
+export default function HelpSheet({ visible, sheet, onClose, state = 'ready', onRetry, pageFooter, links }: {
   readonly visible: boolean;
   readonly sheet: HelpSheetContent | null;
   readonly onClose: () => void;
@@ -61,8 +63,8 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
   readonly onRetry?: () => void;
   /** Extra controls under one page's points (Shark Social's safety links). */
   readonly pageFooter?: (page: HelpSheetPage) => ReactNode;
-  /** A quiet link under the main button, e.g. the full How to play guide. */
-  readonly more?: { readonly label: string; readonly onPress: () => void };
+  /** Quiet links under the main button (How to play, Get more), secondary to the explanation. */
+  readonly links?: readonly HelpLink[];
 }) {
   const [mounted, setMounted] = useState(visible);
   const reduced = useUiReducedMotion();
@@ -103,7 +105,7 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
         <GestureHandlerRootView style={{ flex: 1 }}>
           {mounted && sheet && (
             <SheetBody sheet={sheet} open={open} drag={drag} reveal={reveal} reduced={reduced} active={visible}
-              onClose={onClose} state={state} onRetry={onRetry} pageFooter={pageFooter} more={more} />
+              onClose={onClose} state={state} onRetry={onRetry} pageFooter={pageFooter} links={links} />
           )}
         </GestureHandlerRootView>
       </SafeAreaProvider>
@@ -111,7 +113,7 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
   );
 }
 
-function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state, onRetry, pageFooter, more }: {
+function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state, onRetry, pageFooter, links }: {
   readonly sheet: HelpSheetContent;
   readonly open: SharedValue<number>;
   readonly drag: SharedValue<number>;
@@ -122,7 +124,7 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
   readonly state: 'ready' | 'loading' | 'error';
   readonly onRetry?: () => void;
   readonly pageFooter?: (page: HelpSheetPage) => ReactNode;
-  readonly more?: { readonly label: string; readonly onPress: () => void };
+  readonly links?: readonly HelpLink[];
 }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -231,12 +233,16 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
               icon={!ready || last ? undefined : 'arrow'}
               accessibilityHint={!ready || last ? 'Closes help' : `Shows page ${page + 2} of ${pages.length}`}
               style={{ alignSelf: 'center', width: Math.min(pageW - SIDE * 4, 300) }} />
-            {more && (
-              <Pressable onPress={more.onPress} accessibilityRole="button" accessibilityLabel={more.label} hitSlop={6}
-                style={({ pressed }) => [styles.more, pressed && { opacity: 0.6 }]}>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.moreText}>{more.label}</Text>
-                <GameIcon name="arrow" size={16} />
-              </Pressable>
+            {!!links?.length && (
+              <View style={styles.links}>
+                {links.map(link => (
+                  <Pressable key={link.label} onPress={link.onPress} accessibilityRole="button" accessibilityLabel={link.label} hitSlop={6}
+                    style={({ pressed }) => [styles.more, pressed && { opacity: 0.6 }]}>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.moreText}>{link.label}</Text>
+                    <GameIcon name="arrow" size={16} />
+                  </Pressable>
+                ))}
+              </View>
             )}
           </View>
         </Animated.View>
@@ -347,7 +353,8 @@ const styles = StyleSheet.create({
   footer: { paddingTop: 4, gap: 6, alignItems: 'center' },
   dots: { flexDirection: 'row', gap: 2, alignItems: 'center', justifyContent: 'center', height: 30 },
   dot: { height: 10, borderRadius: 5 },
-  more: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 12 },
+  links: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  more: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 12 },
   moreText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.blue, marginTop: 2 },
   close: { position: 'absolute', right: 10, top: -2, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });

@@ -87,6 +87,16 @@ test('every glossary line fits the word sheet: 12 words at most', () => {
   assert.equal(help.termSheetContent(long, 3).pages[0].heroData.caption, 'You have 3 Energy');
 });
 
+test('Coins and Tickets sheets link to Supplies only when the store can sell and the player is signed in', () => {
+  const provider = read('src/components/help/HelpProvider.tsx');
+  assert.match(provider, /onGetMore=\{playerId != null && storeAvailable\(\) \?/);
+  assert.match(provider, /navigate\('Store', \{ store: 'shark-shop', tab: 'supplies', focus: key \}\)/);
+  assert.deepEqual(plain(loadTs('src/components/help/TermSheet.tsx', {
+    './HelpSheet': { default: () => null }, react: { useEffect: () => undefined, useState: v => [v, () => undefined] },
+    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'F' },
+  }).GET_MORE_KEYS), ['coins', 'tickets']);
+});
+
 test('the pin hold copy matches the trading screen constant', () => {
   const pins = loadTs('src/screens/pinTrading/pinTradeModel.ts');
   const text = sheets.HELP_SHEETS.pins.pages.flatMap(page => page.points.map(point => point.text)).join(' ');

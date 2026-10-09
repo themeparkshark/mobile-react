@@ -25,6 +25,7 @@ import { useTutorial } from '../Tutorial';
 import { helpSheet, type HelpSheetId } from '../../services/help/helpSheets';
 import HelpSheet from './HelpSheet';
 import { startHelpTour } from './helpTour';
+import { storeAvailable } from '../../services/purchases';
 import TermSheet from './TermSheet';
 
 /** How long a shown tip may be hidden by a busy blink before it is dropped. */
@@ -197,9 +198,13 @@ export default function HelpProvider({ children }: { readonly children: React.Re
         glossary={glossary}
         onOpenTerm={key => setSheet({ key, count: null })}
         onOpenGuide={term ? () => openHowToPlay(term.topic) : undefined}
+        onGetMore={playerId != null && storeAvailable() ? key => {
+          setSheet(null);
+          RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies', focus: key });
+        } : undefined}
         onClose={() => setSheet(null)} />
       <HelpSheet visible={helpId != null} sheet={lastHelpId ? helpSheet(lastHelpId) : null} onClose={() => setHelpId(null)}
-        more={lastHelpId === 'park_map' ? { label: 'How to play', onPress: () => openHowToPlay('park') } : undefined} />
+        links={lastHelpId === 'park_map' ? [{ label: 'How to play', onPress: () => openHowToPlay('park') }] : undefined} />
     </HelpContext.Provider>
   );
 }
