@@ -57,16 +57,18 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
           const owned = entry.state === 'wearing' || entry.state === 'ready';
           const open = () => onOpenStamp(entry.stamp);
           return (
-            <Pressable key={entry.title} style={({ pressed }) => [styles.row, entry.state === 'wearing' && styles.rowWearing, pressed && styles.pressed]}
-              onPress={open} accessibilityRole="button"
-              accessibilityLabel={`${entry.title} title. ${titleLine(entry)}. Opens the ${entry.stamp.name} stamp.`}>
-              <View style={styles.thumb}>
-                <StampArt stamp={entry.stamp} size="thumb" />
-              </View>
-              <View style={styles.mid}>
-                <TitlePillText title={entry.title} owned={owned} />
-                <Text style={styles.line} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.2}>{titleLine(entry)}</Text>
-              </View>
+            // The row (art and words) opens the stamp; the action is a sibling so VoiceOver reaches both.
+            <View key={entry.title} style={[styles.row, entry.state === 'wearing' && styles.rowWearing]}>
+              <Pressable style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]} onPress={open} accessibilityRole="button"
+                accessibilityLabel={`${entry.title} title. ${titleLine(entry)}. Opens the ${entry.stamp.name} stamp.`}>
+                <View style={styles.thumb}>
+                  <StampArt stamp={entry.stamp} size="thumb" />
+                </View>
+                <View style={styles.mid}>
+                  <TitlePillText title={entry.title} owned={owned} />
+                  <Text style={styles.line} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.2}>{titleLine(entry)}</Text>
+                </View>
+              </Pressable>
               {entry.state === 'wearing' ? (
                 <SmallButton label={busy === '__remove' ? 'Saving...' : 'Remove'} kind="quiet" onPress={onRemove} a11y={`Remove the title ${entry.title}`} />
               ) : entry.state === 'ready' ? (
@@ -76,7 +78,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
               ) : (
                 <View style={styles.lockDot} accessible={false}><GameIcon name="lock" size={16} /></View>
               )}
-            </Pressable>
+            </View>
           );
         })}
       </ScrollView>
@@ -132,6 +134,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6, paddingHorizontal: 8, minHeight: 64,
   },
   rowWearing: { borderColor: GOLD, borderWidth: 3 },
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 50 },
   pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   thumb: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
   mid: { flex: 1, gap: 3 },
