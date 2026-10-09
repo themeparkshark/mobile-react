@@ -50,7 +50,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
             <View style={styles.thumb}><GameIcon name="crown" size={34} /></View>
             <View style={styles.mid}>
               <TitlePillText title={worn as string} owned />
-              <Text style={styles.line} numberOfLines={1} maxFontSizeMultiplier={1.2}>On your profile now</Text>
+              <Text style={styles.line} numberOfLines={1} maxFontSizeMultiplier={1.4}>On your profile now</Text>
             </View>
             <SmallButton label={busy === '__remove' ? 'Saving...' : 'Take off'} icon="close" kind="quiet" onPress={onRemove} a11y={`Take off the title ${worn}`} />
           </View>
@@ -68,7 +68,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
                 </View>
                 <View style={styles.mid}>
                   <TitlePillText title={entry.title} owned={owned} />
-                  <Text style={styles.line} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.2}>{titleLine(entry)}</Text>
+                  <Text style={styles.line} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.4}>{titleLine(entry)}</Text>
                 </View>
               </Pressable>
               {entry.state === 'wearing' ? (
@@ -86,7 +86,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
           );
         })}
       </ScrollView>
-      {!!message && <Text style={styles.message} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.3}>{message}</Text>}
+      {!!message && <Text style={styles.message} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.5}>{message}</Text>}
     </GameDialog>
   );
 }
@@ -95,7 +95,7 @@ function Step({ icon, label }: { icon: 'medal1' | 'gift' | 'crown'; label: strin
   return (
     <View style={styles.step}>
       <View style={styles.stepDisc}><GameIcon name={icon} size={30} /></View>
-      <Text style={styles.stepText} maxFontSizeMultiplier={1.2}>{label}</Text>
+      <Text style={styles.stepText} maxFontSizeMultiplier={1.4}>{label}</Text>
     </View>
   );
 }
@@ -106,7 +106,7 @@ function TitlePillText({ title, owned }: { title: string; owned: boolean }) {
     <View style={[styles.pill, !owned && styles.pillLocked]}>
       <GameIcon name="crown" size={16} />
       <Text style={[styles.pillText, !owned && styles.pillTextLocked]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}
-        maxFontSizeMultiplier={1.2}>{title}</Text>
+        maxFontSizeMultiplier={1.4}>{title}</Text>
     </View>
   );
 }
@@ -118,7 +118,7 @@ function SmallButton({ label, icon, kind, onPress, a11y }: {
     <Pressable onPress={() => { haptic('tapLight'); playSfx('ui.tap', 0.6); onPress(); }} hitSlop={6} accessibilityRole="button" accessibilityLabel={a11y}
       style={({ pressed }) => [styles.btn, kind === 'gold' && styles.btnGold, kind === 'red' && styles.btnRed, kind === 'quiet' && styles.btnQuiet, pressed && styles.pressed]}>
       {!!icon && <GameIcon name={icon} size={16} />}
-      <Text style={[styles.btnText, kind === 'gold' && styles.btnTextGold, kind === 'quiet' && styles.btnTextQuiet]} maxFontSizeMultiplier={1.2}>{label}</Text>
+      <Text style={[styles.btnText, kind === 'gold' && styles.btnTextGold, kind === 'quiet' && styles.btnTextQuiet]} maxFontSizeMultiplier={1.4}>{label}</Text>
     </Pressable>
   );
 }

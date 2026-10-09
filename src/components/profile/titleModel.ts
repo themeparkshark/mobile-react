@@ -69,11 +69,12 @@ export function bookNoun(bookName: string): string {
 }
 
 export function starterMeaning(bookName: string, target: number): string {
-  return `You found ${target} ${bookNoun(bookName)} in your ${clean(bookName)} book.`;
+  // Short on purpose (a title row is art + title + a few words): "8 churros found".
+  return `${target} ${bookNoun(bookName)} found`;
 }
 
 export function completeMeaning(bookName: string, total: number): string {
-  return `You found all ${total} ${bookNoun(bookName)} and finished your ${clean(bookName)} book.`;
+  return `All ${total} ${bookNoun(bookName)} found`;
 }
 
 export function stampMeaning(stamp: StampLike | undefined): string {

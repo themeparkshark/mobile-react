@@ -641,13 +641,13 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
                 strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={offset} rotation={-90} origin="43, 43" />
             </Svg>
             <View style={styles.coverCount}>
-              <Text style={styles.coverNum} maxFontSizeMultiplier={1.2}>{earned}</Text>
-              <Text style={styles.coverOf} maxFontSizeMultiplier={1.2}>of {total}</Text>
+              <Text style={styles.coverNum} maxFontSizeMultiplier={1.4}>{earned}</Text>
+              <Text style={styles.coverOf} maxFontSizeMultiplier={1.4}>of {total}</Text>
             </View>
           </View>
           <View style={styles.coverText}>
-            <Text style={styles.coverTitle} maxFontSizeMultiplier={1.2}>My Stamps</Text>
-            <Text style={styles.coverPct} maxFontSizeMultiplier={1.2}>{pct}% stamped</Text>
+            <Text style={styles.coverTitle} maxFontSizeMultiplier={1.4}>My Stamps</Text>
+            <Text style={styles.coverPct} maxFontSizeMultiplier={1.4}>{pct}% stamped</Text>
           </View>
           <Pressable onPress={onTitles} style={({ pressed }) => [styles.sharkTitle, pressed && styles.pressed]} hitSlop={4}
             accessibilityRole="button"
@@ -657,7 +657,7 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
             <View style={[styles.titlePill, !worn && styles.titlePillEmpty]}>
               <GameIcon name="crown" size={16} />
               <Text style={[styles.titlePillText, !worn && styles.titlePillTextEmpty]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}
-                maxFontSizeMultiplier={1.2}>{worn ?? 'No title'}</Text>
+                maxFontSizeMultiplier={1.4}>{worn ?? 'No title'}</Text>
             </View>
             <View style={styles.titlesBadge}><Text style={styles.titlesBadgeText} maxFontSizeMultiplier={1.1}>Titles {titlesOwned}/{titlesTotal}</Text></View>
           </Pressable>
@@ -668,7 +668,7 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
               accessibilityLabel={`Claim rewards from ${toClaim} ${toClaim === 1 ? 'stamp' : 'stamps'}`}>
               <View style={styles.claimAllFace}>
                 <Animated.View style={!fx.reducedMotion && bounce}><GameIcon name="gift" size={30} /></Animated.View>
-                <Text style={styles.claimAllText} maxFontSizeMultiplier={1.2}>{toClaim === 1 ? 'Claim your reward!' : `Claim all ${toClaim}!`}</Text>
+                <Text style={styles.claimAllText} maxFontSizeMultiplier={1.4}>{toClaim === 1 ? 'Claim your reward!' : `Claim all ${toClaim}!`}</Text>
               </View>
               <View style={styles.badge}><Text style={styles.badgeText} maxFontSizeMultiplier={1}>{toClaim}</Text></View>
             </Pressable>
@@ -691,7 +691,7 @@ function AlmostThere({ stamps, accentFor, onOpen }: { stamps: readonly BookStamp
     <View style={styles.almost}>
       <View style={styles.almostHead}>
         <GameIcon name="star" size={20} />
-        <Text style={styles.almostTitle} maxFontSizeMultiplier={1.2}>Almost there</Text>
+        <Text style={styles.almostTitle} maxFontSizeMultiplier={1.4}>Almost there</Text>
       </View>
       <View style={styles.almostRow}>
         {stamps.map(s => (
@@ -701,10 +701,10 @@ function AlmostThere({ stamps, accentFor, onOpen }: { stamps: readonly BookStamp
               <View style={styles.almostGhost}><StampArt stamp={s} size="thumb" fallbackIcon={requirement(s).icon} /></View>
               <MiniRing fraction={s.percent / 100} color={accentFor(s.section)} />
             </View>
-            <Text style={styles.almostName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.2}>{s.shortName}</Text>
+            <Text style={styles.almostName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.4}>{s.shortName}</Text>
             <View style={styles.almostCount}>
               <GameIcon name={requirement(s).icon} size={14} />
-              <Text style={styles.almostCountText} maxFontSizeMultiplier={1.2}>{progressLabel(s)}</Text>
+              <Text style={styles.almostCountText} maxFontSizeMultiplier={1.4}>{progressLabel(s)}</Text>
             </View>
           </Pressable>
         ))}
@@ -735,8 +735,8 @@ function Tab({ label, color, icon, active, earned, total, dot, onPress, onLayout
       accessibilityLabel={`${label}, ${earned} of ${total}${dot ? ', rewards to claim' : ''}`}
       style={[styles.tab, active && { backgroundColor: color === '#FFFFFF' ? PAPER : color, borderColor: '#FFFFFF' }]}>
       <GameIcon name={icon} size={20} />
-      <Text style={[styles.tabText, active && styles.tabTextActive]} maxFontSizeMultiplier={1.2}>{label}</Text>
-      <Text style={[styles.tabCount, active && styles.tabTextActive]} maxFontSizeMultiplier={1.2}>{earned}/{total}</Text>
+      <Text style={[styles.tabText, active && styles.tabTextActive]} maxFontSizeMultiplier={1.4}>{label}</Text>
+      <Text style={[styles.tabCount, active && styles.tabTextActive]} maxFontSizeMultiplier={1.4}>{earned}/{total}</Text>
       {done && <GameIcon name="check" size={18} />}
       {dot && <View style={styles.dot} />}
     </Pressable>
@@ -765,8 +765,8 @@ const SectionPage = memo(function SectionPage({ section, width, boardTop, onTop,
         <View style={styles.pageHead}>
           <View style={[styles.sectionBadge, { backgroundColor: section.color }]}><GameIcon name={SECTION_ICON[section.key] ?? 'star'} size={24} /></View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>{section.label}</Text>
-            <Text style={styles.sectionBlurb} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.2}>{section.blurb}</Text>
+            <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.4}>{section.label}</Text>
+            <Text style={styles.sectionBlurb} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.4}>{section.blurb}</Text>
           </View>
           {complete ? (
             <View style={styles.seal} accessible accessibilityLabel="Page complete"><GameIcon name="check" size={22} /><Text style={styles.sealText} maxFontSizeMultiplier={1.1}>DONE</Text></View>
@@ -778,7 +778,7 @@ const SectionPage = memo(function SectionPage({ section, width, boardTop, onTop,
           <View style={styles.sectionBar}>
             <View style={[styles.sectionFill, { width: `${Math.max(pct, 0)}%`, backgroundColor: section.color }]} />
           </View>
-          <Text style={styles.sectionBarText} maxFontSizeMultiplier={1.2}>{section.earned} / {section.total}</Text>
+          <Text style={styles.sectionBarText} maxFontSizeMultiplier={1.4}>{section.earned} / {section.total}</Text>
         </View>
         <View style={styles.grid} onLayout={(e: LayoutChangeEvent) => { gridLocal.value = e.nativeEvent.layout.y; }}>
           {section.stamps.map((stamp, i) => (

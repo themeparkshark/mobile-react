@@ -126,7 +126,7 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
             {kinds.map(k => (
               <View key={k} style={styles.total}>
                 <View style={styles.disc}><GameIcon name={TOTAL_ICON[k]} size={24} /></View>
-                <Text style={styles.totalText} maxFontSizeMultiplier={1.2}>+{compactCount(phase === 'ready' ? all[k] : got[k])}</Text>
+                <Text style={styles.totalText} maxFontSizeMultiplier={1.4}>+{compactCount(phase === 'ready' ? all[k] : got[k])}</Text>
               </View>
             ))}
           </View>
@@ -140,15 +140,15 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
                       <Image source={SHARK} style={styles.shark} contentFit="contain" />
                       <View style={styles.pill}>
                         <GameIcon name="crown" size={16} />
-                        <Text style={styles.pillText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.2}>{s.rewards.title}</Text>
+                        <Text style={styles.pillText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.4}>{s.rewards.title}</Text>
                       </View>
                     </View>
-                    <Text style={styles.newTitle} maxFontSizeMultiplier={1.2}>New title!</Text>
+                    <Text style={styles.newTitle} maxFontSizeMultiplier={1.4}>New title!</Text>
                     <Pressable disabled={isWorn} accessibilityRole="button" accessibilityLabel={isWorn ? `Wearing ${s.rewards.title}` : `Wear the title ${s.rewards.title}`}
                       onPress={() => { setWearing(s.rewards.title); haptic('success'); playSfx('ui.confirm', 0.8); void onWear(s); }}
                       style={({ pressed }) => [styles.wear, isWorn && styles.wearOn, pressed && styles.pressed]}>
                       <GameIcon name={isWorn ? 'check' : 'crown'} size={16} />
-                      <Text style={styles.wearText} maxFontSizeMultiplier={1.2}>{isWorn ? 'Wearing' : 'Wear'}</Text>
+                      <Text style={styles.wearText} maxFontSizeMultiplier={1.4}>{isWorn ? 'Wearing' : 'Wear'}</Text>
                     </Pressable>
                   </View>
                 );

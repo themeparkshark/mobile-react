@@ -141,7 +141,7 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
               <View style={styles.reqCol}>
                 <View style={styles.reqRow}>
                   <GameIcon name={req.icon} size={15} />
-                  <Text style={styles.count} maxFontSizeMultiplier={1.2}>{progressLabel(stamp)}</Text>
+                  <Text style={styles.count} maxFontSizeMultiplier={1.4}>{progressLabel(stamp)}</Text>
                 </View>
                 <View style={styles.pips}>
                   {Array.from({ length: stamp.target }, (_, i) => (
@@ -154,14 +154,14 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
               <View style={styles.reqCol}>
                 <View style={styles.reqRow}>
                   <GameIcon name={req.icon} size={15} />
-                  <Text style={styles.count} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.2}>{progressLabel(stamp)}</Text>
+                  <Text style={styles.count} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.4}>{progressLabel(stamp)}</Text>
                 </View>
                 <View style={styles.bar}>
                   <View style={[styles.barFill, { width: `${Math.max(stamp.percent, 0)}%`, backgroundColor: accent }]} />
                 </View>
               </View>
             ))}
-            {state === 'secret' && <Text style={styles.secretHint} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.2}>{secretHint(stamp)}</Text>}
+            {state === 'secret' && <Text style={styles.secretHint} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.4}>{secretHint(stamp)}</Text>}
           </View>
         )}
 
@@ -181,12 +181,12 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
         {tag === 'claim' ? (
           <Pulsing top={top} height={height} kind="bob" style={styles.claim} still={fx.reducedMotion}>
             <GameIcon name="gift" size={15} />
-            <Text style={styles.claimText} maxFontSizeMultiplier={1.2}>CLAIM!</Text>
+            <Text style={styles.claimText} maxFontSizeMultiplier={1.4}>CLAIM!</Text>
           </Pulsing>
         ) : tag === 'new' ? (
           <View style={styles.newTag} pointerEvents="none"><GameIcon name="sparkle" size={14} /><Text style={styles.newText} maxFontSizeMultiplier={1.1}>NEW</Text></View>
         ) : tag === 'almost' ? (
-          <View style={styles.almost}><Text style={styles.almostText} maxFontSizeMultiplier={1.2}>Almost!</Text></View>
+          <View style={styles.almost}><Text style={styles.almostText} maxFontSizeMultiplier={1.4}>Almost!</Text></View>
         ) : null}
       </Pressable>
     </Animated.View>

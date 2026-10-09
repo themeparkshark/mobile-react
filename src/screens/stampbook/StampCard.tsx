@@ -260,7 +260,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
                 hudLayout.current.hud[kind] = { x: x + width / 2, y: y + height / 2 };
               }}>
                 <GameIcon name={KIND_ICON[kind]} size={22} />
-                <Text style={styles.hudText} maxFontSizeMultiplier={1.2}>{shown[kind].toLocaleString('en-US')}</Text>
+                <Text style={styles.hudText} maxFontSizeMultiplier={1.4}>{shown[kind].toLocaleString('en-US')}</Text>
               </View>
             ))}
           </View>
@@ -291,7 +291,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
                 {!!shownStatus && (
                   <View style={styles.status} accessible accessibilityRole="text" accessibilityLabel={shownStatus}>
                     <GameIcon name="check" size={26} />
-                    <Text style={styles.statusText} maxFontSizeMultiplier={1.2}>{shownStatus}</Text>
+                    <Text style={styles.statusText} maxFontSizeMultiplier={1.4}>{shownStatus}</Text>
                   </View>
                 )}
               </View>
@@ -592,11 +592,11 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
       {/* Short phones: rarity and the earned date share one row, so the stamp art can stay big. */}
       <View style={[styles.rarityCol, stageScale < 0.6 && stamp.earned && styles.rarityRow]}>
       <View style={[styles.rarity, { backgroundColor: tone.chip, borderColor: tone.frame }, pillGold && styles.rarityGold]}>
-        <Text style={styles.rarityText} maxFontSizeMultiplier={1.2}>{tone.label.toUpperCase()}</Text>
+        <Text style={styles.rarityText} maxFontSizeMultiplier={1.4}>{tone.label.toUpperCase()}</Text>
       </View>
 
       {stamp.earned ? (
-        <Animated.Text style={[styles.earned, stageScale < 0.6 && styles.earnedInline, dateStyle]} maxFontSizeMultiplier={1.3}>
+        <Animated.Text style={[styles.earned, stageScale < 0.6 && styles.earnedInline, dateStyle]} maxFontSizeMultiplier={1.5}>
           {`Earned ${earnedDate(stamp.earnedAt) ?? ''}`.trim()}
         </Animated.Text>
       ) : null}
@@ -604,14 +604,14 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
       {stamp.earned ? null : (
         <View style={styles.remainingRow}>
           {!stamp.secret && <GameIcon name={req.icon} size={26} />}
-          <Text style={styles.remaining} maxFontSizeMultiplier={1.3}>{remainingLine(stamp)}</Text>
+          <Text style={styles.remaining} maxFontSizeMultiplier={1.5}>{remainingLine(stamp)}</Text>
         </View>
       )}
 
-      <View style={[styles.howBox, stageScale < 0.6 && styles.howBoxCompact]}>
+      {!stamp.secret && <View style={[styles.howBox, stageScale < 0.6 && styles.howBoxCompact]}>
         <View style={styles.howHead}>
           <GameIcon name={stamp.earned ? 'check' : stamp.secret ? 'sparkle' : req.icon} size={22} />
-          <Text style={styles.howText} maxFontSizeMultiplier={1.3}>{stamp.howTo}</Text>
+          <Text style={styles.howText} maxFontSizeMultiplier={1.5}>{stamp.howTo}</Text>
           {!stamp.earned && !stamp.secret && <WhereChip where={whereFor(stamp.metric)} />}
         </View>
         {!stamp.earned && !stamp.secret && (
@@ -619,10 +619,10 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
             <View style={styles.bar}>
               <View style={[styles.barFill, { width: `${Math.max(4, stamp.percent)}%`, backgroundColor: accent }]} />
             </View>
-            <Text style={styles.barText} maxFontSizeMultiplier={1.2}>{progressLabel(stamp)}</Text>
+            <Text style={styles.barText} maxFontSizeMultiplier={1.4}>{progressLabel(stamp)}</Text>
           </View>
         )}
-      </View>
+      </View>}
 
       {!!stamp.rewards.title && !stamp.secret && (
         <TitleBox title={stamp.rewards.title} state={!stamp.earned ? 'locked' : !claimed ? 'claim' : wearingTitle ? 'wearing' : 'ready'}
@@ -647,7 +647,7 @@ function WhereChip({ where }: { where: Where }) {
   return (
     <View style={styles.where} accessible accessibilityLabel={where === 'park' ? 'At a park' : 'Anywhere'}>
       <GameIcon name={where === 'park' ? 'map' : 'shark'} size={16} />
-      <Text style={styles.whereText} maxFontSizeMultiplier={1.2}>{where === 'park' ? 'At a park' : 'Anywhere'}</Text>
+      <Text style={styles.whereText} maxFontSizeMultiplier={1.4}>{where === 'park' ? 'At a park' : 'Anywhere'}</Text>
     </View>
   );
 }
@@ -681,10 +681,10 @@ function TitleBox({ title, state, reducedMotion, smallShark }: { title: string; 
         <View style={[styles.titlePill, !owned && styles.titlePillLocked]}>
           <GameIcon name="crown" size={18} />
           <Text style={[styles.titlePillText, !owned && styles.titlePillTextLocked]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}
-            maxFontSizeMultiplier={1.2}>{title}</Text>
+            maxFontSizeMultiplier={1.4}>{title}</Text>
         </View>
       </Animated.View>
-      <Text style={styles.titleLine} numberOfLines={2} maxFontSizeMultiplier={1.2}>{line}</Text>
+      <Text style={styles.titleLine} numberOfLines={2} maxFontSizeMultiplier={1.4}>{line}</Text>
     </View>
   );
 }
@@ -701,7 +701,7 @@ function Token({ kind, label, done, pop, index, onLayout }: {
   return (
     <Animated.View style={[styles.token, style]} onLayout={onLayout} accessible accessibilityLabel={label.replace('+', 'plus ')}>
       <View style={styles.disc}><GameIcon name={KIND_ICON[kind]} size={24} /></View>
-      <Text style={styles.tokenText} numberOfLines={1} maxFontSizeMultiplier={1.2}>{kind === 'title' ? 'Title' : `+${amount}`}</Text>
+      <Text style={styles.tokenText} numberOfLines={1} maxFontSizeMultiplier={1.4}>{kind === 'title' ? 'Title' : `+${amount}`}</Text>
       {done && <View style={styles.tokenCheck}><GameIcon name="check" size={16} /></View>}
     </Animated.View>
   );
@@ -846,8 +846,8 @@ function LevelUp({ level, reducedMotion, onDone }: { level: number; reducedMotio
       {!reducedMotion && <View style={styles.levelUpConfetti}><Confetti width={300} height={240} seed={level} count={24} /></View>}
       <View style={styles.levelUpPlate}>
         <GameIcon name="xp" size={48} />
-        <Text style={styles.levelUpTitle} maxFontSizeMultiplier={1.2}>LEVEL UP!</Text>
-        <View style={styles.levelUpPill}><Text style={styles.levelUpLevel} maxFontSizeMultiplier={1.2}>Level {level}</Text></View>
+        <Text style={styles.levelUpTitle} maxFontSizeMultiplier={1.4}>LEVEL UP!</Text>
+        <View style={styles.levelUpPill}><Text style={styles.levelUpLevel} maxFontSizeMultiplier={1.4}>Level {level}</Text></View>
       </View>
     </Animated.View>
   );

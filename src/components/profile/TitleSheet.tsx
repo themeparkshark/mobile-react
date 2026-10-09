@@ -161,7 +161,7 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
             <GameButton label="Change title" tone="onBlue" icon="swap" disabled={!!busy}
               onPress={() => setMode('change')} accessibilityHint="Shows the titles you have and where to get more" />
             {!!worn && (
-              <GameButton label={busy === 'remove' ? 'Saving...' : 'Take off'} icon="close" variant="secondary" tone="onBlue"
+              <GameButton label={busy === 'remove' ? 'Saving...' : 'Take off'} icon="close" variant="secondary" size="compact" tone="onBlue"
                 loading={busy === 'remove'} disabled={!!busy || earned === null} onPress={() => { void remove(); }}
                 accessibilityLabel="Take off title" accessibilityHint="Takes the title off your profile" />
             )}

@@ -42,9 +42,9 @@ test('a title says how you earned it in kid-simple words', () => {
     unlocked_titles: [{ stamp_id: 4, title: 'Coaster Champ' }, { stamp_id: 9, title: 'Churro Collection Scout' }] };
   const earned = plain(m.earnedTitles(sets, stamps));
   assert.deepEqual(earned.map((e) => e.title), ['Churro Collection Scout', 'Night Light Legend', 'Coaster Champ'], 'claimed only, no duplicates');
-  assert.equal(earned[0].meaning, 'You found 8 churros in your Churro Collection book.');
+  assert.equal(earned[0].meaning, '8 churros found');
   assert.deepEqual(earned[0].equip, { kind: 'set', slug: 'churro_collection', tier: 'starter' });
-  assert.equal(earned[1].meaning, 'You found all 16 finds and finished your Night Lights book.');
+  assert.equal(earned[1].meaning, 'All 16 finds found');
   assert.equal(earned[2].meaning, 'Ride 10 coasters!'); // one line, the how-to (the stamp art sits above it)
   assert.deepEqual(earned[2].equip, { kind: 'stamp', stampId: 4 });
   // The worn title explains itself even before the lists load.
@@ -52,7 +52,7 @@ test('a title says how you earned it in kid-simple words', () => {
   assert.equal(m.describeTitle('Churro Finder', []), 'You found your first churros in your Churro book.', 'the new server name');
   assert.equal(m.findEarned('Coaster Champ', earned).key, 'stamp:4');
   assert.equal(m.findEarned('Nope', earned), null);
-  assert.equal(m.describeTitle('Churro Collection Scout', earned), 'You found 8 churros in your Churro Collection book.');
+  assert.equal(m.describeTitle('Churro Collection Scout', earned), '8 churros found');
   assert.equal(m.bookNoun('Pretzel Collection'), 'pretzels');
   assert.equal(m.titleBadgeSlug('Churro Finder'), 'churro_collection', 'the profile pill finds the book art from the name alone');
   assert.equal(m.titleBadgeSlug('Night Lights Finder'), 'night_lights');
