@@ -27,6 +27,8 @@ import {
 import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import { perMonthText } from '../services/money/offers';
 import MemberStage from '../components/money/MemberStage';
+import { trackImpression, trackMoney } from '../services/money/track';
+import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../services/money/flags';
 
 // Every line here is backed by live server logic: ride wins pay VIP double
 // (CompleteTaskAction), VIP home maps spawn two extra finds and double their
@@ -38,17 +40,31 @@ import MemberStage from '../components/money/MemberStage';
 export const VIP_BENEFITS: { icon: GameIconName; title: string; body: string }[] = [
   { icon: 'xp', title: '2x XP and coins', body: 'Every time you win a ride coin at the park.' },
   { icon: 'search', title: '2 extra finds on every home hunt', body: '2x energy, tickets and XP from every find.' },
-  { icon: 'ticket', title: 'A free ticket every day', body: 'Claim it in Supplies. No ad to watch.' },
   { icon: 'member', title: 'VIP badge on your profile', body: 'Everyone can see you’re VIP.' },
 ];
 
 const APP_STORE_URL = 'itms-apps://apps.apple.com/app/id6758812566';
 
+const TRIAL_DAYS: Record<string, number> = { day: 1, week: 7, month: 30 };
+const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** "Thursday, October 15": the day the free trial ends, from its length ("One week free"). Null if unknown. */
+export function trialEndText(trial: string | null, now: Date = new Date()): string | null {
+  const m = trial?.toLowerCase().match(/^(\w+) (day|week|month)s? free$/);
+  const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+  const n = m ? words.indexOf(m[1]) : -1;
+  if (!m || n <= 0) return null;
+  const end = new Date(now.getTime() + n * TRIAL_DAYS[m[2]] * 86_400_000);
+  return `${WEEKDAY[end.getDay()]}, ${MONTH[end.getMonth()]} ${end.getDate()}`;
+}
+
 /** "Free for 1 week. Then $4.99 a month." The deal, said once, right above the button. */
 export function dealLine(plan: Pick<VipPlan, 'price' | 'period' | 'trial'>): string {
   const billing = priceText(plan);
+  const until = trialEndText(plan.trial);
   return plan.trial
-    ? `${capitalize(plan.trial)}. Then ${billing}.`
+    ? `${capitalize(plan.trial)}${until ? `, until ${until}` : ''}. Then ${billing}.`
     : `${billing}.`;
 }
 /** The buy button: the free part first when there is one. */
@@ -82,6 +98,8 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const [perks, setPerks] = useState<VipPerk[]>(VIP_BENEFITS);
   const canBuy = storeAvailable();
   const member = player?.is_subscribed === true;
+  // Pins: VIP gets a free Mystery Pin Box every week, listed only while boxes are live.
+  const boxesLive = useMoneyFlag('pin_mystery_boxes');
   useEffect(() => {
     let live = true;
     getVipPerks().then(next => { if (live && next) setPerks(next); }).catch(() => undefined);
@@ -104,6 +122,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   }, [player?.id, attempt, canBuy, member]);
 
   const plan = plans.find(p => p.productId === selectedId) ?? plans[0] ?? null;
+  useEffect(() => { if (plans.length && !member) trackImpression('vip'); }, [plans.length, member]);
 
   const celebrate = async () => {
     await refreshPlayer().catch(() => undefined);
@@ -128,7 +147,9 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
       if (!(await grownUpForNextStep('vip', Date.now(), vipGateReason(plan)))) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setBusy('buy');
+      trackMoney('gate_passed', 'vip', plan.productId);
       const outcome = await buyVip(plan);
+      trackMoney(outcome === 'success' ? 'bought' : outcome === 'pending' ? 'pending' : outcome === 'cancelled' ? 'cancelled' : 'failed', 'vip', plan.productId);
       setBusy(null);
       await reportBuy(outcome);
     } finally {
@@ -179,9 +200,9 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
           </Animated.Text>
 
           <View style={s.benefits}>
-            {perks.map((b, i) => (
+            {(boxesLive ? [...perks, VIP_WEEKLY_BOX_PERK as VipPerk] : perks).map((b, i, all) => (
               <Animated.View key={b.title} entering={FadeInUp.delay(280 + i * 70).springify().damping(15)}
-                style={[s.benefit, perks.length % 2 === 1 && i === perks.length - 1 && s.benefitWide]}>
+                style={[s.benefit, all.length % 2 === 1 && i === all.length - 1 && s.benefitWide]}>
                 <View style={s.benefitIcon}><GameIcon name={b.icon} size={36} /></View>
                 <Text maxFontSizeMultiplier={1.25} style={s.benefitTitle}>{b.title}</Text>
                 <Text maxFontSizeMultiplier={1.25} style={s.benefitBody}>{b.body}</Text>

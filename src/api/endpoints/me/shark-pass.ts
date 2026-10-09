@@ -29,9 +29,21 @@ export type SharkPassSeasonInfo = {
   readonly days_left: number;
   readonly points_per_tier: number;
   readonly tier_count: number;
+  /** Over: no more points or sale; reached rewards stay claimable until claim_until. */
+  readonly ended?: boolean;
+  readonly claim_until?: string;
+  /** The last full day a claim works ('YYYY-MM-DD'). */
+  readonly claim_last_day?: string;
+  /** For sale: running, and every season item exists on the server. */
+  readonly on_sale?: boolean;
 };
 
 export type SharkPassEvent = { readonly event: string; readonly points: number; readonly count_today: number; readonly points_today: number; readonly cap: number | null };
+
+export type SharkPassQuest = {
+  readonly key: string; readonly label: string; readonly count: number; readonly bonus: number;
+  readonly scope: 'day' | 'week'; readonly progress: number; readonly done: boolean;
+};
 
 export type SharkPassState =
   | { readonly enabled: false }
@@ -42,8 +54,10 @@ export type SharkPassState =
     readonly progress?: {
       readonly points: number; readonly tier: number; readonly points_into_tier: number; readonly premium: boolean;
       readonly vip: boolean; readonly vip_bonus_percent: number; readonly claimable: number; readonly today: readonly SharkPassEvent[];
+      readonly catch_up?: boolean; readonly catch_up_percent?: number; readonly top_prize?: SharkPassReward | null;
     };
     readonly tiers?: readonly SharkPassTier[];
+    readonly quests?: { readonly daily: readonly SharkPassQuest[]; readonly weekly: SharkPassQuest | null };
     readonly account_token?: string;
   };
 

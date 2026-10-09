@@ -145,7 +145,20 @@ export function Sticker({ text, style, tone = 'red' }: { text: string; style?: S
 }
 
 /** What's inside, as picture + count chips. */
-export function Contents({ grants, size = 'big', tone = 'onBlue' }: { grants: ShopGrants; size?: 'big' | 'small'; tone?: 'onBlue' | 'onLight' }) {
+export function Contents({ grants, size = 'big', tone = 'onBlue' }: { grants: ShopGrants; size?: 'big' | 'small' | 'tight'; tone?: 'onBlue' | 'onLight' }) {
+  if (size === 'tight') {
+    // Narrow cards: picture and number in a 2-column grid (the picture says what it is).
+    return (
+      <View style={s.tightGrid}>
+        {ORDER.filter(k => (grants[k] ?? 0) > 0).map(k => (
+          <View key={k} style={s.tightChip} accessible accessibilityLabel={`${grants[k]} ${unitWord(k, grants[k] ?? 0)}`}>
+            <GameIcon name={CURRENCY_ICON[k]} size={20} />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={s.tightText}>{(grants[k] ?? 0).toLocaleString('en-US')}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
   return (
     <View style={s.contents}>
       {ORDER.filter(k => (grants[k] ?? 0) > 0).map(k => (
@@ -183,10 +196,12 @@ const RAYS = require('../../../assets/images/reveal/rays.webp');
  * The payoff after a purchase lands: rays turn behind the pack art, the art
  * pops, confetti bursts, the contents slide in, one cue and one buzz.
  */
-export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption }: {
+export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption, action }: {
   grants: ShopGrants | null; art: PackArtKey; title?: string; onDone: () => void;
   /** A custom picture instead of the pack art (a season item), and one line under the title. */
   picture?: ReactNode; caption?: string;
+  /** A second button, e.g. "Wear it now" for a pin. */
+  action?: { label: string; onPress: () => void };
 }) {
   const still = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
@@ -221,8 +236,9 @@ export function GotIt({ grants, art, title = 'You got it!', onDone, picture, cap
         <Animated.View entering={still ? undefined : FadeInDown.delay(420).springify().damping(14)}>
           {caption ? <Text maxFontSizeMultiplier={MAX_FONT} style={s.gotCaption}>{caption}</Text> : <Contents grants={grants} />}
         </Animated.View>
-        <Animated.View entering={still ? undefined : FadeIn.delay(700)} style={{ marginTop: 18, width: 240 }}>
-          <GameButton label="Awesome" onPress={onDone} />
+        <Animated.View entering={still ? undefined : FadeIn.delay(700)} style={{ marginTop: 18, width: 240, gap: 8 }}>
+          {action && <GameButton label={action.label} icon="pin" onPress={action.onPress} />}
+          <GameButton label={action ? 'Later' : 'Awesome'} variant={action ? 'ghost' : 'primary'} tone="onBlue" onPress={onDone} />
         </Animated.View>
       </Pressable>
     </Modal>
@@ -250,6 +266,10 @@ const s = StyleSheet.create({
   stickerText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
   stickerTextGold: { color: '#6a3b00' },
   contents: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center' },
+  tightGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 4, alignSelf: 'stretch' },
+  tightChip: { width: '47%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, backgroundColor: 'rgba(5,52,110,0.55)',
+    borderRadius: 10, paddingVertical: 3, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
+  tightText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(5,52,110,0.55)', borderRadius: 12,
     paddingHorizontal: 8, paddingVertical: 4, borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
   chipLight: { backgroundColor: '#eef6ff', borderColor: '#cfe4fb' },

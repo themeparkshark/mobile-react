@@ -58,3 +58,53 @@ export function passSummary(tiers: readonly SharkPassTier[]): string {
   return parts.length ? `${parts.join(', ')} and more` : 'A reward on every step';
 }
 
+
+/** The next item reward on either row the player hasn't reached yet, and how far it is. */
+export function nextBigPrize(tiers: readonly SharkPassTier[], points: number, perStep: number):
+  { tier: number; reward: SharkPassReward; pass: boolean; pointsAway: number } | null {
+  for (const t of tiers) {
+    if (t.unlocked) continue;
+    const reward = t.free?.type === 'item' ? t.free : t.paid.type === 'item' ? t.paid : null;
+    if (!reward) continue;
+    return { tier: t.tier, reward, pass: reward === t.paid, pointsAway: Math.max(0, t.tier * perStep - points) };
+  }
+  return null;
+}
+
+/** "You'd get 7 rewards right now: Frosty Scarf Pin, 450 coins and more" for the unlock panel. */
+export function readyNowLine(tiers: readonly SharkPassTier[]): string | null {
+  const ready = tiers.filter(t => t.unlocked).map(t => t.paid);
+  if (!ready.length) return null;
+  const items = ready.filter(r => r.type === 'item').map(r => rewardWords(r));
+  const coins = ready.reduce((n, r) => n + (r.type === 'coins' ? r.amount : 0), 0);
+  const boxes = ready.reduce((n, r) => n + (r.type === 'mystery_box' ? r.boxes : 0), 0);
+  const parts = [...items, boxes ? `${boxes} Mystery Pin ${boxes === 1 ? 'Box' : 'Boxes'}` : null, coins ? `${coins.toLocaleString('en-US')} coins` : null]
+    .filter(Boolean).slice(0, 3);
+  return `Get ${ready.length} Shark Pass ${ready.length === 1 ? 'reward' : 'rewards'} right away: ${parts.join(', ')}${ready.length > parts.length ? ' and more' : ''}.`;
+}
+
+/** What a "Claim all" landed, in words: the first three, then "and N more". */
+export function claimedLine(rewards: readonly SharkPassReward[]): string {
+  const words = rewards.map(rewardWords);
+  return words.length <= 3 ? words.join(', ') : `${words.slice(0, 3).join(', ')} and ${words.length - 3} more`;
+}
+
+/** "With the Shark Pass you'd also have: Frosty Scarf Pin, Cocoa Mug Pin and 4 more." for steps already reached. */
+export function passTwinLine(tiers: readonly SharkPassTier[], premium: boolean): string | null {
+  if (premium) return null;
+  const waiting = tiers.filter(t => t.unlocked && !t.paid_claimed).map(t => t.paid);
+  if (!waiting.length) return null;
+  const items = waiting.filter(r => r.type === 'item');
+  const lead = [...items, ...waiting.filter(r => r.type !== 'item')].slice(0, 2).map(rewardWords);
+  return `With the Shark Pass you’d also have ${lead.join(', ')}${waiting.length > lead.length ? ` and ${waiting.length - lead.length} more` : ''}.`;
+}
+
+/** The Shark Pass row's coins, tickets and Rescue Passes added up (energy and pins are listed apart). */
+export function passGrants(tiers: readonly SharkPassTier[]): { coins: number; tickets: number; rescue_passes: number; pins: number } {
+  const out = { coins: 0, tickets: 0, rescue_passes: 0, pins: 0 };
+  for (const { paid } of tiers) {
+    if (paid.type === 'item') out.pins += 1;
+    else if (paid.type === 'coins' || paid.type === 'tickets' || paid.type === 'rescue_passes') out[paid.type] += paid.amount;
+  }
+  return out;
+}

@@ -20,7 +20,9 @@ import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { AppState, FlatList, Image as RNImage, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import Playercard from '../components/Playercard';
+import type { InventoryType } from '../models/inventory-type';
 import Animated, {
   Easing, FadeInDown, FadeInUp, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
@@ -38,7 +40,11 @@ import * as RootNavigation from '../RootNavigation';
 import { buySharkPass, loadSharkPassPrice, onSharkPassDelivered, restoreSharkPass, storeAvailable, type ShopPrice } from '../services/purchases';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import { EVENT_COPY, lastDayText, passSummary, rewardWords } from '../services/money/sharkPassModel';
+import { EVENT_COPY, claimedLine, passGrants, passTwinLine, lastDayText, nextBigPrize, passSummary, readyNowLine, rewardWords } from '../services/money/sharkPassModel';
+import { wearItem } from './StoreScreen/inventoryQueue';
+import { trackImpression, trackMoney } from '../services/money/track';
+import { baseRates, formatLike, regularValue } from '../services/money/offers';
+import { useSupplies } from '../services/money/supplies';
 
 const SEASON_ART: Record<string, number> = {
   'frosty-scarf': require('../../assets/images/sharkpass/frosty-scarf.webp'),
@@ -48,8 +54,23 @@ const SEASON_ART: Record<string, number> = {
   'polar-puffer': require('../../assets/images/sharkpass/polar-puffer.webp'),
   'northern-lights': require('../../assets/images/sharkpass/northern-lights.webp'),
   'pom-hat': require('../../assets/images/sharkpass/pom-hat.webp'),
+  'finisher-medal': require('../../assets/images/sharkpass/finisher-medal.webp'),
+  'cocoa-mug': require('../../assets/images/sharkpass/cocoa-mug.webp'),
+  'snow-sled': require('../../assets/images/sharkpass/snow-sled.webp'),
+  'ice-skates': require('../../assets/images/sharkpass/ice-skates.webp'),
+  'snowman-buddy': require('../../assets/images/sharkpass/snowman-buddy.webp'),
+  'frost-crown': require('../../assets/images/sharkpass/frost-crown.webp'),
 };
 const EMBLEM = require('../../assets/images/sharkpass/pass-emblem.webp');
+
+/** The player's own look with a season pin on its pin spot (nothing is saved): the hero's "this could be you". */
+function withSeasonPin(base: InventoryType | undefined, reward: SharkPassReward | null | undefined): InventoryType | null {
+  if (!base?.skin_item || !reward || reward.type !== 'item') return base ?? null;
+  const bundled = SEASON_ART[reward.art];
+  const uri = bundled ? RNImage.resolveAssetSource(bundled)?.uri : reward.icon_url;
+  if (!uri) return base;
+  return { ...base, pin_item: { id: -1, name: reward.name, icon_url: uri, paper_url: null, item_type: { id: 8 } } } as unknown as InventoryType;
+}
 
 function rewardArt(reward: SharkPassReward): { kind: 'art'; key: PackArtKey } | { kind: 'image'; source: number | { uri: string } } | { kind: 'icon'; name: GameIconName } {
   switch (reward.type) {
@@ -101,6 +122,14 @@ function Flake({ x, size, dur, delay, drift, height, running }: { x: number; siz
 
 const CELL_W = 92;
 
+/** For the grown-up holding the phone: what the Shark Pass is, in plain words. All true of the server rules. */
+const PASS_GROWN_UP_NOTES = [
+  'One buy for this season. It never renews and is never charged again.',
+  'Steps come only from playing. Points are never sold. VIP members earn 25% more points.',
+  'Nothing in the Shark Pass row is random. Every reward is shown above.',
+  'Every real-money buy asks a grown-up first. Ask to Buy works too.',
+];
+
 export default function SharkPassScreen() {
   const { player, refreshPlayer } = useContext(AuthContext);
   const reduced = useUiReducedMotion();
@@ -111,7 +140,7 @@ export default function SharkPassScreen() {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [price, setPrice] = useState<ShopPrice | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [landed, setLanded] = useState<{ reward: SharkPassReward; title: string } | null>(null);
+  const [landed, setLanded] = useState<{ reward: SharkPassReward; title: string; caption?: string; itemId?: number; emblem?: boolean } | null>(null);
   const buying = useRef(false);
   const list = useRef<FlatList<SharkPassTier>>(null);
 
@@ -136,6 +165,7 @@ export default function SharkPassScreen() {
   const tiers = (state && state.enabled ? state.tiers : undefined) ?? [];
   const premium = !!progress?.premium;
 
+  useEffect(() => { if (season && !premium && price) trackImpression('sharkpass', season.product_id); }, [season?.product_id, premium, price]);
   useEffect(() => {
     if (!season || premium || !storeAvailable()) return;
     void loadSharkPassPrice(season.product_id).then(setPrice).catch(() => setPrice(null));
@@ -158,7 +188,11 @@ export default function SharkPassScreen() {
     try {
       const res = await claimSharkPassReward(tier.tier, track);
       setState(res.pass);
-      setLanded({ reward, title: reward.type === 'item' ? 'New season item!' : 'You got it!' });
+      const itemId = Number((res.granted as { item_id?: unknown }).item_id) || undefined;
+      // Royal Pass beat: after a free claim, the same step's Shark Pass reward, calm, no timer.
+      const passTwin = track === 'free' && !premium ? `With the Shark Pass this step also gives ${rewardWords(tier.paid)}.` : null;
+      setLanded({ reward, title: reward.type === 'item' ? 'New season pin!' : 'You got it!', itemId,
+        caption: passTwin ? `${rewardWords(reward)}. ${passTwin}` : undefined });
       void refreshPlayer?.().catch(() => undefined);
     } catch (error) {
       const code = sharkPassErrorCode(error);
@@ -177,8 +211,11 @@ export default function SharkPassScreen() {
     try {
       const res = await claimAllSharkPass();
       setState(res.pass);
-      const first = res.claimed[0];
-      if (first) setLanded({ reward: first.reward, title: res.claimed.length > 1 ? `${res.claimed.length} rewards!` : 'You got it!' });
+      const rewards = res.claimed.map(c => c.reward);
+      const hero = rewards.find(r => r.type === 'item') ?? rewards.find(r => r.type === 'coins') ?? rewards[0];
+      const twin = res.pass.enabled && res.pass.tiers ? passTwinLine(res.pass.tiers, !!res.pass.progress?.premium) : null;
+      if (hero) setLanded({ reward: hero, title: rewards.length > 1 ? `${rewards.length} rewards!` : 'You got it!',
+        caption: twin ? `${claimedLine(rewards)}. ${twin}` : claimedLine(rewards) });
       void refreshPlayer?.().catch(() => undefined);
     } catch {
       gameAlert('That didn’t work', 'Check your internet and try again.');
@@ -192,14 +229,25 @@ export default function SharkPassScreen() {
     buying.current = true;
     try {
       // Real money: a grown-up answers first, and the gate says the price and what it is.
+      trackMoney('tap', 'sharkpass', season.product_id);
+      trackMoney('gate_shown', 'sharkpass', season.product_id);
       if (!(await askGrownUp({ kind: 'money', price: price.price, gets: `the Shark Pass for ${season.title}. One time. It doesn’t renew` }))) return;
       haptic('hitMedium');
       setBusy('buy');
+      trackMoney('gate_passed', 'sharkpass', season.product_id);
       const outcome = await buySharkPass(season.product_id, state && state.enabled ? state.account_token : null);
+      trackMoney(outcome.status === 'success' ? 'bought' : outcome.status === 'pending' ? 'pending' : outcome.status === 'cancelled' ? 'cancelled' : 'failed', 'sharkpass', season.product_id);
       if (outcome.status === 'success') {
         setState(outcome.state);
         haptic('success');
-        setLanded({ reward: tiers.find(t => t.paid.type === 'item')?.paid ?? tiers[0].paid, title: 'Shark Pass on!' });
+        // Everything already reached lands at once, and the first season pin can go straight on the shark.
+        const res = await claimAllSharkPass().catch(() => null);
+        if (res) setState(res.pass);
+        const rewards = res?.claimed.map(c => c.reward) ?? [];
+        const pin = res?.claimed.find(c => c.reward.type === 'item');
+        const pinId = Number((pin as { granted?: { item_id?: unknown } } | undefined)?.granted?.item_id) || undefined;
+        setLanded(pin ? { reward: pin.reward, title: 'Shark Pass on!', caption: claimedLine(rewards), itemId: pinId }
+          : { reward: { type: 'coins', amount: 0, ready: true }, title: 'Shark Pass on!', caption: rewards.length ? claimedLine(rewards) : 'Every Shark Pass reward you reach is yours.', emblem: true });
       } else if (outcome.status === 'pending') gameAlert('Waiting for a grown-up', 'A grown-up needs to say yes on their phone. Your Shark Pass turns on after that.');
       else if (outcome.status === 'unverified') gameAlert('Almost there', 'It worked! Your Shark Pass turns on in a minute. If not, it turns on next time you open the game.');
       else if (outcome.status === 'other_account') gameAlert('Bought on another account', 'This Shark Pass belongs to a different Theme Park Shark account. Sign in to that account to use it.');
@@ -228,6 +276,22 @@ export default function SharkPassScreen() {
   const perStep = season?.points_per_tier ?? 1;
   const into = progress?.points_into_tier ?? 0;
   const summary = useMemo(() => passSummary(tiers), [tiers]);
+  const nextPrize = progress ? nextBigPrize(tiers, progress.points, perStep) : null;
+  const nextStep = nextPrize?.tier ?? 0;
+  const heroLook = useMemo(() => withSeasonPin(player?.inventory as InventoryType | undefined, nextPrize?.reward ?? progress?.top_prize),
+    [player?.inventory, nextPrize?.reward, progress?.top_prize]);
+  const readyNow = useMemo(() => readyNowLine(tiers), [tiers]);
+  // The honest worth of the Shark Pass row: its coins, tickets and Rescue Passes at Supplies' regular
+  // pack prices (Apple's prices, rounded down), pins and energy listed apart. Shown only when every part has a price.
+  const supplies = useSupplies(!premium && !!season);
+  const worthLine = useMemo(() => {
+    if (!price || !supplies.catalog) return null;
+    const g = passGrants(tiers);
+    const value = regularValue({ coins: g.coins, tickets: g.tickets, rescue_passes: g.rescue_passes }, baseRates(supplies.catalog.products, supplies.prices));
+    if (!value || value < price.amount * 1.5) return null;
+    const worth = formatLike(price.price, Math.floor(value * 100) / 100);
+    return worth ? `The coins, tickets and Rescue Passes alone are worth ${worth} in Supplies. Plus ${g.pins} season pins.` : null;
+  }, [tiers, price, supplies.catalog, supplies.prices]);
   const nextPaid = tiers.filter(t => !t.unlocked || !premium).filter(t => t.paid.type === 'item' || t.paid.type === 'mystery_box').slice(0, 3);
 
   return (
@@ -260,7 +324,18 @@ export default function SharkPassScreen() {
             {/* Season hero: the emblem, the season, the real last day, the climb. */}
             <Animated.View entering={reduced ? undefined : FadeInDown.springify().damping(15)} style={s.heroLip}>
               <View style={s.hero}>
-                <Image source={EMBLEM} style={s.emblem} contentFit="contain" />
+                <View style={s.heroStage}>
+                  <View style={s.heroSnow} />
+                  {heroLook ? (
+                    <Playercard inventory={heroLook} showBackground={false} pinAnchor="body" still={reduced} style={StyleSheet.absoluteFill} />
+                  ) : (
+                    <Image source={EMBLEM} style={s.emblem} contentFit="contain" />
+                  )}
+                  <Image source={EMBLEM} style={s.heroBadge} contentFit="contain" />
+                  {nextPrize?.reward.type === 'item' && (
+                    <View style={s.heroPin}><RewardPicture reward={nextPrize.reward} size={46} /></View>
+                  )}
+                </View>
                 <View style={{ flex: 1, gap: 4 }}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.season}>{season.title.toUpperCase()}</Text>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.ends}>{`Ends ${lastDayText(season.last_day)}`}</Text>
@@ -274,7 +349,16 @@ export default function SharkPassScreen() {
                   </Text>
                 </View>
               </View>
+              {nextPrize && nextStep > 0 && (
+                <View style={s.nextPrize}>
+                  <RewardPicture reward={nextPrize.reward} size={40} />
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
+                    {`${nextPrize.pointsAway.toLocaleString('en-US')} points to the ${rewardWords(nextPrize.reward)} at step ${nextStep}${nextPrize.pass && !premium ? ' (Shark Pass)' : ''}`}
+                  </Text>
+                </View>
+              )}
               {progress.vip && <Text maxFontSizeMultiplier={MAX_FONT} style={s.vipLine}>{`VIP: +${progress.vip_bonus_percent}% points on everything`}</Text>}
+              {progress.catch_up && <Text maxFontSizeMultiplier={MAX_FONT} style={s.vipLine}>{`Catch-up boost on: +${progress.catch_up_percent}% points until you’re back on pace`}</Text>}
               {progress.claimable > 0 && (
                 <GameButton label={progress.claimable === 1 ? 'Claim 1 reward' : `Claim ${progress.claimable} rewards`} icon="gift"
                   loading={busy === 'all'} disabled={!!busy} onPress={() => void claimAll()} style={{ marginTop: 6 }} />
@@ -299,14 +383,21 @@ export default function SharkPassScreen() {
                   }} />
               )} />
 
-            {!premium && (
+            {season.ended && (
+              <View style={s.ended}>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyTitle}>THIS SEASON IS OVER</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>
+                  {season.claim_last_day ? `Claim what you reached by ${lastDayText(season.claim_last_day)}.` : 'Claim what you reached soon.'}
+                </Text>
+              </View>
+            )}
+            {!premium && !season.ended && season.on_sale !== false && (
               <Animated.View entering={reduced ? undefined : FadeInUp.delay(200).springify().damping(15)} style={s.buyLip}>
                 <View style={s.buy}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyTitle}>UNLOCK THE SHARK PASS ROW</Text>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{`A reward on all ${steps} steps: ${summary}.`}</Text>
-                  {progress.tier > 0 && (
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{`You’re on step ${step}, so those Shark Pass rewards are ready right away.`}</Text>
-                  )}
+                  {worthLine && <Text maxFontSizeMultiplier={MAX_FONT} style={[s.buyBody, s.readyNow]}>{worthLine}</Text>}
+                  {readyNow && <Text maxFontSizeMultiplier={MAX_FONT} style={[s.buyBody, s.readyNow]}>{readyNow}</Text>}
                   <View style={s.preview}>
                     {nextPaid.map(t => (
                       <View key={t.tier} style={s.previewCell}>
@@ -336,6 +427,24 @@ export default function SharkPassScreen() {
               </Animated.View>
             )}
 
+            {/* Today's Pass quests: 3 a day (the first always doable at home) and one for the week. */}
+            {state.enabled && state.quests && !season.ended && (
+              <View style={s.quests}>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questsTitle}>TODAY’S PASS QUESTS</Text>
+                {[...state.quests.daily, ...(state.quests.weekly ? [state.quests.weekly] : [])].map(q => (
+                  <View key={`${q.scope}:${q.key}`} style={[s.questRow, q.done && s.questDone]}>
+                    <GameIcon name={q.done ? 'check' : q.scope === 'week' ? 'ride' : 'star'} size={24} />
+                    <View style={{ flex: 1 }}>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.questLabel}>{q.label}</Text>
+                      <View style={s.questBar}><View style={[s.questFill, { width: `${(q.progress / Math.max(1, q.count)) * 100}%` }]} /></View>
+                    </View>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? 'Done!' : `+${q.bonus}`}</Text>
+                  </View>
+                ))}
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>New quests every day. Skipping a day is fine.</Text>
+              </View>
+            )}
+
             {/* How to climb: the server's own point table, with today's count. */}
             <View style={s.earn}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={s.earnTitle}>HOW TO CLIMB</Text>
@@ -349,6 +458,18 @@ export default function SharkPassScreen() {
               ))}
             </View>
 
+            {!premium && !season.ended && (
+              <View style={s.grownUps} accessible accessibilityLabel={`For grown-ups. ${PASS_GROWN_UP_NOTES.join(' ')}`}>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.grownUpsHead}>FOR GROWN-UPS</Text>
+                {PASS_GROWN_UP_NOTES.map(line => (
+                  <View key={line} style={s.grownUpRow}>
+                    <GameIcon name="check" size={18} />
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.grownUpText}>{line}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <Text maxFontSizeMultiplier={MAX_FONT} style={s.fine}>
               {`Everything you claim is yours to keep. Season items never come back after ${lastDayText(season.last_day)}.`}
             </Text>
@@ -356,8 +477,14 @@ export default function SharkPassScreen() {
         )}
       </SafeAreaView>
       {landed && (
-        <GotIt grants={{}} art="gift" title={landed.title} onDone={() => setLanded(null)} picture={<RewardPicture reward={landed.reward} size={180} />}
-          caption={rewardWords(landed.reward)} />
+        <GotIt grants={{}} art="gift" title={landed.title} onDone={() => setLanded(null)} picture={landed.emblem ? <Image source={EMBLEM} style={{ width: 180, height: 180 }} contentFit="contain" /> : <RewardPicture reward={landed.reward} size={180} />}
+          caption={landed.caption ?? rewardWords(landed.reward)}
+          action={landed.itemId ? { label: 'Wear it now', onPress: () => {
+            const id = landed.itemId!;
+            setLanded(null);
+            void wearItem({ id }).then(() => refreshPlayer?.()).then(() => gameAlert('Looking sharp!', 'Your shark is wearing it now. Everyone can see it.'))
+              .catch(() => gameAlert('That didn’t work', 'Find it in your closet and put it on there.'));
+          } } : undefined} />
       )}
     </View>
   );
@@ -382,6 +509,10 @@ const TierColumn = memo(function TierColumn({ tier, current, premium, busy, puls
     <View style={s.col}>
       <Cell reward={tier.free} claimed={tier.free_claimed} ready={freeReady} locked={!tier.unlocked} pass={false}
         pulse={pulse} busy={busy === `${tier.tier}:free`} onPress={() => (freeReady ? onClaim('free') : onLocked())} />
+      {/* The rail runs through every step: gold up to where the player is. */}
+      <View style={s.railWrap} pointerEvents="none">
+        <View style={[s.rail, tier.unlocked && s.railOn]} />
+      </View>
       <View style={[s.node, tier.unlocked && s.nodeOn, tier.tier === current && s.nodeNow]}>
         <Text maxFontSizeMultiplier={1.1} style={[s.nodeText, tier.unlocked && s.nodeTextOn]}>{tier.tier}</Text>
       </View>
@@ -429,6 +560,11 @@ const s = StyleSheet.create({
   heroLip: { marginHorizontal: 14, borderRadius: 22, backgroundColor: BRAND.navy, paddingBottom: 6 },
   hero: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 22, borderWidth: 4, borderColor: '#ffffff', backgroundColor: '#1680d8', padding: 12 },
   emblem: { width: 96, height: 96 },
+  heroStage: { width: 116, height: 132, alignItems: 'center', justifyContent: 'flex-end' },
+  heroSnow: { position: 'absolute', bottom: 2, width: 104, height: 26, borderRadius: 52, backgroundColor: '#eaf6ff', borderWidth: 3, borderColor: '#ffffff' },
+  heroPin: { position: 'absolute', right: -8, bottom: 24, width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: BRAND.gold },
+  heroBadge: { position: 'absolute', top: -4, left: -6, width: 38, height: 38 },
   season: { fontFamily: FONT.display, fontSize: 24, color: BRAND.gold, textShadowColor: '#5a3a00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   ends: { fontFamily: FONT.body, fontSize: 15, color: '#e2f6ff' },
   stepRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
@@ -437,6 +573,10 @@ const s = StyleSheet.create({
   bar: { height: 16, borderRadius: 8, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: '#ffffff', overflow: 'hidden' },
   barFill: { height: '100%', backgroundColor: BRAND.gold, borderRadius: 6 },
   points: { fontFamily: FONT.body, fontSize: 14, color: '#ffffff' },
+  ended: { marginHorizontal: 14, borderRadius: 20, borderWidth: 3, borderColor: BRAND.gold, backgroundColor: '#123f80', padding: 14, gap: 6, alignItems: 'center' },
+  nextPrize: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: 'rgba(5,52,110,0.35)', borderRadius: 12, padding: 6 },
+  nextPrizeText: { flex: 1, fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
+  readyNow: { fontFamily: FONT.display, color: '#7dffb0' },
   vipLine: { fontFamily: FONT.display, fontSize: 14, color: BRAND.gold, textAlign: 'center', marginTop: 6 },
   trackHead: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: -6 },
   rowLabelFree: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
@@ -453,6 +593,9 @@ const s = StyleSheet.create({
   badge: { position: 'absolute', top: -8, right: -6 },
   claimTag: { position: 'absolute', bottom: -10, backgroundColor: '#2fb44a', borderRadius: 8, borderWidth: 2, borderColor: '#ffffff', paddingHorizontal: 6 },
   claimTagText: { fontFamily: FONT.display, fontSize: 11, color: '#ffffff' },
+  railWrap: { position: 'absolute', left: 0, right: 0, top: 6 + 104 + 6 + 17 - 4, height: 8, justifyContent: 'center' },
+  rail: { height: 8, backgroundColor: 'rgba(5,52,110,0.7)', borderTopWidth: 2, borderBottomWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
+  railOn: { backgroundColor: BRAND.gold, borderColor: '#ffffff' },
   node: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(5,52,110,0.7)', borderWidth: 3, borderColor: 'rgba(255,255,255,0.5)', alignItems: 'center', justifyContent: 'center' },
   nodeOn: { backgroundColor: BRAND.gold, borderColor: '#ffffff' },
   nodeNow: { transform: [{ scale: 1.18 }], borderColor: '#7dffb0' },
@@ -472,6 +615,19 @@ const s = StyleSheet.create({
   ctaSub: { fontFamily: FONT.body, fontSize: 14, color: '#6a3b00' },
   realMoney: { fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff' },
   restore: { fontFamily: FONT.body, fontSize: 15, color: '#ffffff', textDecorationLine: 'underline' },
+  quests: { marginHorizontal: 14, backgroundColor: '#123f80', borderRadius: 20, padding: 12, gap: 8, borderWidth: 3, borderColor: '#7dffb0' },
+  questsTitle: { fontFamily: FONT.display, fontSize: 17, color: '#7dffb0' },
+  questRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 8 },
+  questDone: { opacity: 0.75 },
+  questLabel: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
+  questBar: { height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.8)', marginTop: 4, overflow: 'hidden' },
+  questFill: { height: '100%', backgroundColor: '#7dffb0', borderRadius: 4 },
+  questBonus: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold, minWidth: 54, textAlign: 'right' },
+  questFoot: { fontFamily: FONT.body, fontSize: 13, color: '#e2f6ff', textAlign: 'center' },
+  grownUps: { marginHorizontal: 14, backgroundColor: BRAND.cream, borderRadius: 18, padding: 12, gap: 6, borderWidth: 3, borderColor: BRAND.navy },
+  grownUpsHead: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, letterSpacing: 0.6 },
+  grownUpRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  grownUpText: { flex: 1, fontFamily: FONT.body, fontSize: 14, color: BRAND.navy, lineHeight: 18 },
   earn: { marginHorizontal: 14, backgroundColor: BRAND.cream, borderRadius: 20, padding: 12, gap: 6, borderWidth: 3, borderColor: BRAND.navy },
   earnTitle: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy },
   earnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

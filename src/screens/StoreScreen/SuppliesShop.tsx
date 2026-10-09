@@ -35,6 +35,7 @@ import { onShopDelivered, storeAvailable } from '../../services/purchases';
 import { adsAvailable, rewardText, watchForReward } from '../../services/ads';
 import { baseRates, bonusPercent, bundleWorth } from '../../services/money/offers';
 import { buyPack, outcomeMessage, refreshSupplies, useSupplies } from '../../services/money/supplies';
+import { trackImpression } from '../../services/money/track';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../../ui';
 import { haptic } from '../../gamekit/Haptics';
 import OneTimeTip from '../../components/help/OneTimeTip';
@@ -42,6 +43,7 @@ import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from
 import { openMembership } from '../../components/GrownUpGate';
 import { useHelp } from '../../components/help/HelpProvider';
 import SharkPassBanner from '../../components/money/SharkPassBanner';
+import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../../services/money/flags';
 import {
   Band, CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, packArtKey, unitWord, type PackArtKey,
 } from '../../components/money/moneyUi';
@@ -82,6 +84,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const canBuy = storeAvailable();
   const vip = !!player?.is_subscribed;
   const { catalog, prices, status } = useSupplies(!!player);
+  const boxesLive = useMoneyFlag('pin_mystery_boxes');
   const [ads, setAds] = useState<AdSummary | null>(null);
   const [perks, setPerks] = useState<VipPerk[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -111,6 +114,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
     }
   };
 
+  useEffect(() => { if (catalog && Object.keys(prices).length) trackImpression('supplies'); }, [catalog, prices]);
   const rates = useMemo(() => baseRates(catalog?.products ?? [], prices), [catalog, prices]);
   const sections = useMemo(() => {
     const bySection = new Map<string, ShopProduct[]>();
@@ -123,7 +127,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
     haptic('tapLight');
     // The one gated way to buy (services/money/supplies.ts): a grown-up answers first, and the gate
     // says what they are saying yes to: the price and what's in the pack.
-    const outcome = await buyPack(product, { onStart: () => setBusy(product.product_id) });
+    const outcome = await buyPack(product, { onStart: () => setBusy(product.product_id), placement: 'supplies' });
     setBusy(null);
     if (outcome.status === 'success') {
       setLanded({ grants: outcome.result.results[0]?.granted ?? product.grants, art });
@@ -233,7 +237,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
         </>
       )}
 
-      {!vip && <VipCard perks={perks} />}
+      {!vip && <VipCard perks={perks && boxesLive ? [...perks, VIP_WEEKLY_BOX_PERK as VipPerk] : perks} />}
 
       {showDaily && (
         <Animated.View entering={FadeInUp.springify().damping(15)} style={st.freeCard}>
@@ -267,6 +271,9 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
               <View style={st.sectionRule} />
             </View>
             {SECTION_NOTE[key] && <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionNote}>{SECTION_NOTE[key]}</Text>}
+            {key === 'coins' && boxesLive && (
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionNote}>Coins can open Mystery Pin Boxes. Odds are shown on each box.</Text>
+            )}
             <View style={st.grid}>
               {packs.map((p, i) => (
                 <PackCard key={p.product_id} product={p} tier={i} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 1 : 3}
@@ -334,7 +341,7 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
         <View style={st.dayBody}>
           <PackArt art={packArtKey(product)} size={64} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{product.title.toUpperCase()}</Text>
-          <View style={{ flex: 1, justifyContent: 'center' }}><Contents grants={product.grants} size="small" /></View>
+          <View style={{ flex: 1, justifyContent: 'center', alignSelf: 'stretch' }}><Contents grants={product.grants} size="tight" /></View>
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>
             {worth ? `Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}` : deal ? 'New deal every day' : 'One a day'}
           </Text>
