@@ -124,6 +124,10 @@ export const PIN_TRADE_COPY = {
   backToBoard: 'Back to board',
   notNow: 'Not now',
   confirmMessage: (give: string, get: string) => `Give your ${give} for the ${get}? You can’t undo a trade.`,
+  /** Pins v2: say plainly when the trade gives away your last copy or a numbered gold pin. */
+  confirmKeeper: (give: string) => `It’s your only ${give}.`,
+  confirmSpare: 'You keep one!',
+  confirmSerial: (n: number) => `Your gold #${n} goes too.`,
   confirmLabel: 'Yes, trade!',
   sendingLabel: 'Trading...',
   confirmBack: 'Wait, go back',

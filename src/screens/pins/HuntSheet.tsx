@@ -10,7 +10,7 @@
 import { Image } from 'expo-image';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { AppState, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { catchPinOfTheDay, getPinOfTheDay } from '../../api/endpoints/pins';
 import { LocationContext } from '../../context/LocationProvider';
@@ -19,7 +19,27 @@ import { BRAND, FONT, GameButton, GameIcon, OUTLINE, RADIUS, SPACE } from '../..
 import { PIN_ART } from './PinArt';
 import { warmthView, type HuntStatus, type ParkSet } from './pinsModel';
 
-const POLL_MS = 6000;
+const POLL_MS = 3000;
+const SONAR_MS = { here: 500, hot: 800, warm: 1300, cold: 2000 } as const;
+
+/** Sonar rings around the seal: they ping faster and turn warmer as you get close. */
+function Sonar({ warmth, color }: { warmth: HuntStatus['warmth']; color: string }) {
+  const t = useSharedValue(0);
+  const ms = warmth ? SONAR_MS[warmth] : 2400;
+  useEffect(() => {
+    t.value = 0;
+    t.value = withRepeat(withTiming(1, { duration: ms, easing: Easing.out(Easing.quad) }), -1, false);
+    return () => cancelAnimation(t);
+  }, [ms, t]);
+  const a = useAnimatedStyle(() => ({ opacity: 1 - t.value, transform: [{ scale: 0.6 + t.value * 1.4 }] }));
+  const b = useAnimatedStyle(() => { const v = (t.value + 0.5) % 1; return { opacity: 1 - v, transform: [{ scale: 0.6 + v * 1.4 }] }; });
+  return (
+    <View pointerEvents="none" style={styles.sonar}>
+      <Animated.View style={[styles.ring, { borderColor: color }, a]} />
+      <Animated.View style={[styles.ring, { borderColor: color }, b]} />
+    </View>
+  );
+}
 
 type Props = {
   readonly set: ParkSet;
@@ -50,6 +70,8 @@ export default function HuntSheet({ set, onClose, onCaught }: Props) {
         const s = await getPinOfTheDay(set.park_id!, l ? { latitude: l.latitude, longitude: l.longitude } : null);
         if (!live) return;
         setStatus(s);
+        // Nothing left to hunt today: stop asking.
+        if (s.status !== 'hunt') return;
         if (s.warmth && s.warmth !== last) {
           queueHaptic(s.warmth === 'here' ? 'success' : 'tickSelection', 1);
           last = s.warmth;
@@ -83,7 +105,10 @@ export default function HuntSheet({ set, onClose, onCaught }: Props) {
     <Modal transparent visible animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + SPACE.lg }]}>
-        <Image source={PIN_ART.seal} style={styles.seal} contentFit="contain" />
+        <View style={styles.sealWrap}>
+          {hunting && <Sonar warmth={status?.warmth ?? null} color={view.color} />}
+          <Image source={PIN_ART.seal} style={styles.seal} contentFit="contain" />
+        </View>
         <Text maxFontSizeMultiplier={1.2} style={styles.title}>
           {status?.status === 'none' ? 'No pin today' : status?.status === 'caught' ? 'You got today’s pin!' : 'A pin is hiding!'}
         </Text>
@@ -93,7 +118,7 @@ export default function HuntSheet({ set, onClose, onCaught }: Props) {
             <View style={styles.meter} accessible accessibilityLabel={view.word}>
               <Animated.View style={[styles.meterFill, { backgroundColor: view.color }, fillStyle]} />
               <View style={styles.meterIcons} pointerEvents="none">
-                <GameIcon name="moon" size={22} />
+                <View style={styles.coldDot} />
                 <GameIcon name="streak" size={22} />
               </View>
             </View>
@@ -116,12 +141,16 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.cream, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, borderWidth: OUTLINE.heavy,
     borderColor: BRAND.navy, borderBottomWidth: 0, alignItems: 'center', paddingHorizontal: SPACE.lg, paddingTop: SPACE.lg, gap: SPACE.sm,
   },
-  seal: { width: 76, height: 76, marginTop: -54 },
+  sealWrap: { marginTop: -54, width: 76, height: 76, alignItems: 'center', justifyContent: 'center' },
+  seal: { width: 76, height: 76 },
+  sonar: { position: 'absolute', width: 76, height: 76, alignItems: 'center', justifyContent: 'center' },
+  ring: { position: 'absolute', width: 76, height: 76, borderRadius: 38, borderWidth: 4 },
   title: { fontFamily: FONT.display, fontSize: 30, color: BRAND.navy, paddingTop: 4 },
   sub: { fontFamily: FONT.body, fontSize: 18, color: BRAND.navySoft },
   meter: { width: '100%', height: 30, borderRadius: 15, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.white, overflow: 'hidden', marginTop: SPACE.sm, justifyContent: 'center' },
   meterFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 12 },
-  meterIcons: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 6 },
+  meterIcons: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 6 },
+  coldDot: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#7cc6f5', borderWidth: 2, borderColor: BRAND.navy },
   word: { fontFamily: FONT.display, fontSize: 28, paddingTop: 3 },
   note: { fontFamily: FONT.body, fontSize: 17, color: BRAND.navySoft, textAlign: 'center' },
 });

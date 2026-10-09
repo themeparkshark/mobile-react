@@ -31,7 +31,6 @@ function TodayChip({ day, still, onHunt }: { day: PinDay; still: boolean; onHunt
   if (day.status === 'none') {
     return (
       <View style={[styles.today, styles.todayNone]} accessible accessibilityLabel="No pin hiding here today. Check back tomorrow">
-        <GameIcon name="moon" size={18} />
         <Text maxFontSizeMultiplier={1.1} style={[styles.todayText, { color: BRAND.navySoft }]}>No pin today</Text>
       </View>
     );
@@ -44,9 +43,18 @@ function TodayChip({ day, still, onHunt }: { day: PinDay; still: boolean; onHunt
       </View>
     );
   }
+  if (!day.here) {
+    // Away from the park: a plain note (not a button) that today is a pin day there.
+    return (
+      <View style={[styles.today, styles.todayAway]} accessible accessibilityLabel="A pin is hiding in this park today">
+        <Image source={PIN_ART.seal} style={{ width: 20, height: 20 }} contentFit="contain" />
+        <Text maxFontSizeMultiplier={1.1} style={[styles.todayText, { color: BRAND.navy }]}>Pin day today</Text>
+      </View>
+    );
+  }
   return (
     <Animated.View style={style}>
-      <Pressable onPress={onHunt} disabled={!onHunt} style={[styles.today, styles.todayHunt]} accessibilityRole={onHunt ? 'button' : 'text'}
+      <Pressable onPress={onHunt} disabled={!onHunt} hitSlop={6} style={[styles.today, styles.todayHunt, { minHeight: 44 }]} accessibilityRole={onHunt ? 'button' : 'text'}
         accessibilityLabel={day.here ? 'A pin is hiding in this park today. Hunt for it' : 'A pin is hiding in this park today'}>
         <Image source={PIN_ART.seal} style={{ width: 22, height: 22 }} contentFit="contain" />
         <Text maxFontSizeMultiplier={1.1} style={[styles.todayText, { color: BRAND.navy }]}>{day.here ? 'Hunt today’s pin!' : 'Pin hiding today'}</Text>
@@ -69,7 +77,7 @@ type Props = {
 
 function ParkSetCardBase({ set, today, busy, still, shine, onClaim, onPin, onHunt }: Props) {
   const season = seasonLabel(set);
-  const pinSize = 56;
+  const pinSize = set.reward.completer ? 48 : 56;
   return (
     <View style={[styles.card, SHADOW.card, set.complete && styles.cardDone]}>
       <View style={styles.head}>
@@ -101,6 +109,12 @@ function ParkSetCardBase({ set, today, busy, still, shine, onClaim, onPin, onHun
               </Pressable>
             );
           })}
+          {set.reward.completer && (
+            <View style={styles.prizeSlot} accessible accessibilityLabel={set.reward.completer.owned ? 'Completer pin won' : 'Finish the set to win this Completer pin'}>
+              <PinTile uri={set.reward.completer.icon_url} size={58} owned={set.reward.completer.owned} kind="park" tradable={false} badge={false} flat />
+              {!set.reward.completer.owned && <View style={styles.prizeTag}><Text maxFontSizeMultiplier={1} style={styles.rareText}>PRIZE</Text></View>}
+            </View>
+          )}
         </View>
       </ImageBackground>
 
@@ -141,14 +155,17 @@ const styles = StyleSheet.create({
   seasonText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.white, paddingTop: 2 },
   cork: { marginHorizontal: SPACE.sm, borderRadius: RADIUS.md, borderWidth: 3, borderColor: '#8a5a2b', overflow: 'hidden' },
   corkImage: { borderRadius: RADIUS.md - 3 },
-  pins: { flexDirection: 'row', justifyContent: 'space-evenly', paddingVertical: 12, paddingHorizontal: 4 },
+  pins: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 2 },
+  prizeSlot: { alignItems: 'center', paddingLeft: 6, marginLeft: 2, borderLeftWidth: 2, borderLeftColor: 'rgba(138,90,43,0.5)', borderStyle: 'dashed' },
+  prizeTag: { position: 'absolute', bottom: -8, backgroundColor: BRAND.blueBright, borderColor: BRAND.white, borderWidth: 2, borderRadius: 6, paddingHorizontal: 5 },
   slot: { alignItems: 'center', minWidth: 48, minHeight: 60 },
   rare: { position: 'absolute', bottom: -8, backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 2, borderRadius: 6, paddingHorizontal: 5 },
   rareText: { fontFamily: FONT.display, fontSize: 11, color: BRAND.navy, paddingTop: 2 },
-  foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACE.md, paddingVertical: SPACE.sm, gap: SPACE.sm, minHeight: 56 },
+  foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', paddingHorizontal: SPACE.md, paddingVertical: SPACE.sm, gap: SPACE.sm, minHeight: 56 },
   today: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 2, paddingHorizontal: 10, paddingVertical: 5 },
   todayHunt: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
   todayNone: { backgroundColor: BRAND.white, borderColor: '#c4d3e6' },
+  todayAway: { backgroundColor: '#fff1c2', borderColor: BRAND.goldLip, borderStyle: 'dashed' },
   todayCaught: { backgroundColor: BRAND.green, borderColor: BRAND.white },
   todayText: { fontFamily: FONT.display, fontSize: 15, paddingTop: 2 },
   claimed: { flexDirection: 'row', alignItems: 'center', gap: 4 },

@@ -209,8 +209,10 @@ function TradeSheet(props: TradeSheetProps) {
                   <EnamelPin uri={selected.icon_url} size={compact ? 34 : 42} surface="none" recyclingKey={`mine-${selected.id}`} />
                   <GameIcon name="arrow" size={26} />
                   <EnamelPin uri={swap.pin.item.icon_url} size={compact ? 34 : 42} surface="none" recyclingKey={`board-${swap.id}`} />
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.confirmLine} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.confirmLine} numberOfLines={4} adjustsFontSizeToFit minimumFontScale={0.75}>
                     {COPY.confirmMessage(pinName(selected), pinName(swap.pin.item))}
+                    {selected.spares === undefined ? '' : (selected.spares ?? 0) > 0 ? ` ${COPY.confirmSpare}` : ` ${COPY.confirmKeeper(pinName(selected))}`}
+                    {selected.serial && !(selected.spares ?? 0) ? ` ${COPY.confirmSerial(selected.serial)}` : ''}
                   </Text>
                 </View>
               )}

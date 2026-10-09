@@ -327,6 +327,9 @@ export const PickPin = memo(function PickPin({ item, size, selected, still, onPr
           <EnamelPin uri={item.icon_url} size={Math.round(size * 0.74)} tilt={pinTilt(item.id, 5)} surface="none" flat recyclingKey={`mine-${item.id}`} />
         </Animated.View>
         <Animated.View style={[styles.pickBadge, badge]} pointerEvents="none"><GameIcon name="check" size={24} /></Animated.View>
+        {/* Pins v2: spares show as x2 (give one, keep yours); a gold serial shows its number. */}
+        {(item.spares ?? 0) > 0 && <View style={styles.pickSpares} pointerEvents="none"><Text maxFontSizeMultiplier={1} style={styles.pickSparesText}>x{(item.spares ?? 0) + 1}</Text></View>}
+        {!!item.serial && <View style={styles.pickSerial} pointerEvents="none"><Text maxFontSizeMultiplier={1} style={styles.pickSerialText}>#{item.serial}</Text></View>}
       </Animated.View>
     </Pressable>
   );
@@ -338,6 +341,10 @@ export function PageWash() {
 }
 
 const styles = StyleSheet.create({
+  pickSpares: { position: 'absolute', left: 2, bottom: 2, minWidth: 24, height: 20, borderRadius: 10, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  pickSparesText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.navy, paddingTop: 2 },
+  pickSerial: { position: 'absolute', right: 2, top: 2, height: 18, borderRadius: 5, backgroundColor: '#3b2a05', borderWidth: 2, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  pickSerialText: { fontFamily: FONT.display, fontSize: 11, color: BRAND.gold, paddingTop: 2 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
     paddingHorizontal: SPACE.md, paddingVertical: 5, borderRadius: RADIUS.pill, borderWidth: OUTLINE.thin,
