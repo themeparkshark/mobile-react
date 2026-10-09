@@ -51,7 +51,7 @@ const DEV_OFFLINE = __DEV__ && process.env.EXPO_PUBLIC_NEWS_OFFLINE === '1';
 function devOffline(): void {
   if (DEV_OFFLINE) throw new Error('offline (dev flag)');
 }
-/** Dev only: EXPO_PUBLIC_NEWS_SLOW=1 holds the first page 6 s, to record the loading skeleton. */
+/** Dev only: EXPO_PUBLIC_NEWS_SLOW=1 holds the first page 90 s, to record the loading skeleton. */
 const DEV_SLOW = __DEV__ && process.env.EXPO_PUBLIC_NEWS_SLOW === '1';
 
 /** Remembered for the session: does the game server page and filter (v2)? */
@@ -154,7 +154,7 @@ async function fromServer(query: NewsQuery): Promise<NewsPage> {
  * WordPress otherwise (or when the server fails).
  */
 export async function fetchNewsPage(query: NewsQuery): Promise<NewsPage> {
-  if (DEV_SLOW && query.page === 1) await new Promise(resolve => setTimeout(resolve, 6000));
+  if (DEV_SLOW && query.page === 1) await new Promise(resolve => setTimeout(resolve, 90000));
   const plain = query.filter === 'all' && !query.search && query.page === 1;
   if (plain || serverV2) {
     try {
