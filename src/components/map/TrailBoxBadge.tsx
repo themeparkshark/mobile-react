@@ -51,7 +51,7 @@ export function TrailBoxBadge({ trail, live }: { readonly trail: MapTrail | null
 const styles = StyleSheet.create({
   // On the shark's back (upper right of its 100 x 110 box).
   badge: { position: 'absolute', left: 64, top: 44, alignItems: 'center' },
-  box: { width: 22, height: 22, borderRadius: 7, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
-  track: { marginTop: 2, width: 22, height: 4, borderRadius: 2, backgroundColor: 'rgba(5,52,110,0.35)', overflow: 'hidden' },
-  fill: { width: 22, height: 4, borderRadius: 2, backgroundColor: BRAND.gold, transformOrigin: 'left' },
+  box: { width: 24, height: 24, borderRadius: 7, borderWidth: 2.5, borderColor: BRAND.navy, borderBottomWidth: 4, alignItems: 'center', justifyContent: 'center' },
+  track: { marginTop: 2, width: 24, height: 7, borderRadius: 3.5, borderWidth: 1.5, borderColor: BRAND.navy, backgroundColor: BRAND.cream, overflow: 'hidden' },
+  fill: { width: 21, height: 4, borderRadius: 2, backgroundColor: BRAND.gold, borderBottomWidth: 1.5, borderBottomColor: BRAND.goldLip, transformOrigin: 'left' },
 });

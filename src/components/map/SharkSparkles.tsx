@@ -14,7 +14,7 @@ function Sparkle({ burst, angle, i }: { readonly burst: SharedValue<number>; rea
     return { opacity: p < 0.2 ? p * 5 : 1 - (p - 0.2) / 0.8,
       transform: [{ translateX: Math.cos(angle) * r }, { translateY: Math.sin(angle) * r }, { scale: 0.55 + 0.5 * Math.sin(p * Math.PI) }] };
   });
-  return <Reanimated.View style={[styles.spark, style]}><GameIcon name="sparkle" size={18} /></Reanimated.View>;
+  return <Reanimated.View style={[styles.spark, style]}><GameIcon name="sparkle" size={26} /></Reanimated.View>;
 }
 
 export function SharkSparkles({ burst }: { readonly burst: SharedValue<number> }) {
@@ -28,5 +28,5 @@ export function SharkSparkles({ burst }: { readonly burst: SharedValue<number> }
 const styles = StyleSheet.create({
   // Around the shark's head in its 100 x 110 box.
   origin: { position: 'absolute', left: 50, top: 62, width: 0, height: 0 },
-  spark: { position: 'absolute', left: -9, top: -9, width: 18, height: 18 },
+  spark: { position: 'absolute', left: -13, top: -13, width: 26, height: 26 },
 });
