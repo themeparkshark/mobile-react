@@ -234,7 +234,9 @@ export function FeedSkeleton() {
   return (
     <View accessibilityLabel="Loading news" style={{ flex: 1 }}>
       <Animated.View style={[{ marginHorizontal: SIDE, marginTop: 6, marginBottom: 14, borderRadius: RADIUS.lg, backgroundColor: 'rgba(255,255,255,0.75)', borderWidth: 3, borderColor: BRAND.white, overflow: 'hidden' }, style]}>
-        <View style={{ width: '100%', aspectRatio: 2.4, backgroundColor: 'rgba(5,52,110,0.08)' }} />
+        <View style={{ width: '100%', aspectRatio: 2.4, backgroundColor: 'rgba(5,52,110,0.08)', alignItems: 'center', justifyContent: 'center' }}>
+          <Image source={TPS_SHARK} style={{ width: 72, height: 72, opacity: 0.85 }} contentFit="contain" accessibilityLabel="Loading news" />
+        </View>
         <View style={{ padding: 14, gap: 10 }}>
           <View style={{ width: 110, height: 18, borderRadius: 9, backgroundColor: 'rgba(5,52,110,0.08)' }} />
           <View style={{ width: '92%', height: 22, borderRadius: 11, backgroundColor: 'rgba(5,52,110,0.08)' }} />
