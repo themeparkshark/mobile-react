@@ -46,7 +46,12 @@ export interface HelpSheetSpec {
 /** Brevity rules, checked by tools/tests/help-sheets.test.cjs. */
 export const HELP_LIMITS = { pages: 3, points: 3, pointWords: 12, headlineWords: 5 } as const;
 
-/** How long a picked pin is held for you (the server's default hold, see pinTradeModel). */
+/**
+ * How long a picked pin is held for you (the server's default hold, see pinTradeModel).
+ * TODO(server field): read the hold length and the Standings prize titles (Ride Champ, Ride Ace,
+ * Ride Star from config/standings.php week_rewards) from the server once it sends them. Hard-coded
+ * for now by decision (Oct 9).
+ */
 const PIN_HOLD_MINUTES = 2;
 const PIN_HOLD_WORD = 'Two';
 
