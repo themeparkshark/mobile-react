@@ -40,7 +40,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
   afterBuyError, completesSet, stageCard, formatCoins, lastChanceLine, pieceState, recoveredSetOutcome, revealHoldMs, setProgressText, settleBuyError,
-  MEMBER_PROMISE, shortfall as shortBy, slotLine, tryOnCta, tryOnLayout, wearingIds, wishHintCopy, type TryOnPhase,
+  MEMBER_KEEP, MEMBER_PROMISE, shortfall as shortBy, slotLine, tryOnCta, tryOnLayout, wearingIds, wishHintCopy, type TryOnPhase,
 } from '../../helpers/shopShelves';
 import { isItemWorn, itemDisplayName, slotForItem, wearableBadge } from '../../helpers/wardrobe';
 import { InventoryType } from '../../models/inventory-type';
@@ -72,7 +72,7 @@ const SECRET_CARD = stageCard(SCREEN_W - 28 - 6, SECRET_STAGE_H - 6, HOP + 0.04 
 const SECRET_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SECRET_CARD.box };
 // A piece with no set strip (most classic-catalog gear) gets the room the strip would use: a bigger stage,
 // no dead gap above the buttons (art director, Oct 8 round 1).
-const SOLO_STAGE_H = Math.round(Math.min(400, SHEET_H * 0.5));
+const SOLO_STAGE_H = Math.round(Math.min(440, SHEET_H * 0.56));
 const SOLO_CARD = stageCard(SCREEN_W - 28 - 6, SOLO_STAGE_H - 6, HOP + 0.04 * (SOLO_STAGE_H / 2) + 4);
 const SOLO_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SOLO_CARD.box };
 /** The sheet's spring has settled by about now: moments wait for it, so every open shows a whole moment. */
@@ -341,7 +341,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const solo = !secret && !(set && pieces.length > 1);
   const stageH = secret ? SECRET_STAGE_H : solo ? SOLO_STAGE_H : STAGE_H;
   // The kid-fair promise, in a 7-year-old's words (kids UX round 1).
-  const keepLine = MEMBER_PROMISE;
+  // A member already is one: the promise alone. Guests hear the VIP rule (kids UX round 2).
+  const keepLine = player?.is_subscribed ? MEMBER_KEEP : MEMBER_PROMISE;
   const card = secret ? SECRET_CARD : solo ? SOLO_CARD : CARD;
   const boughtNow = landed > 0;
 
@@ -598,7 +599,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   </View>
                 )}
                 {/* A Secret piece with a leaving line fills the body: the heart button speaks for itself there, so no hint rests under the fade. */}
-                {!owned && phase === 'idle' && (!vipLocked || secretItem) && !(lapsed && vipLocked) && !(fxKey && goingAway) && (
+                {!owned && phase === 'idle' && !solo && (!vipLocked || secretItem) && !(lapsed && vipLocked) && !(fxKey && goingAway) && (
                   <Text maxFontSizeMultiplier={MAX_FONT} style={styles.wishHint}>{goingAway?.forever ? retiringWishHint(wished) : wishHintCopy(wished, wishStore.alerts())}</Text>
                 )}
               </ScrollView>
@@ -733,7 +734,8 @@ const styles = StyleSheet.create({
   lockPrice: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
     backgroundColor: SECRET_THEME.well, borderWidth: 2, borderColor: SECRET_THEME.accent },
   lockPriceText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
-  fxCard: { gap: 8, padding: 12, borderRadius: 16, backgroundColor: SECRET_THEME.card, borderWidth: 2, borderColor: SECRET_THEME.accent },
+  // One soft card, no second outline inside the sheet's gold rim (art director round 2).
+  fxCard: { gap: 8, padding: 12, borderRadius: 16, backgroundColor: SECRET_THEME.card },
   fxRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   fxText: { flex: 1, fontFamily: FONT.display, fontSize: 17, lineHeight: 21, color: SECRET_THEME.ink },
   fxKeep: { flex: 1, fontFamily: FONT.body, fontSize: 15, color: SECRET_THEME.inkSoft },

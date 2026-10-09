@@ -4,7 +4,8 @@
  */
 import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { AuthContext } from '../../context/AuthProvider';
 import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +23,8 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
   readonly onOpenItem: (id: number) => void;
 }) {
   const insets = useSafeAreaInsets();
+  // Saved and affordable says so (monetization round 2: the honest reason to come back).
+  const balance = Number(useContext(AuthContext).player?.coins ?? 0);
   // A sheet layer: dialogs and the grown-up gate wait until it is gone (ui/modalLayers.ts).
   const layerUp = useModalLayer(visible, 'show');
   const [items, setItems] = useState<WishlistItem[] | null>(null);
@@ -78,7 +81,7 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
                   <View style={{ flex: 1 }}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={styles.name} numberOfLines={1}>{item.name}</Text>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.state, item.in_shop_today && styles.stateIn]}>
-                      {item.in_shop_today ? `In the shop today: ${formatCoins(item.cost)}` : 'Comes back later'}</Text>
+                      {item.in_shop_today ? (balance >= item.cost ? `You can get it now: ${formatCoins(item.cost)}` : `In the shop today: ${formatCoins(item.cost)}. Need ${formatCoins(item.cost - balance)} more.`) : 'Comes back later'}</Text>
                   </View>
                   <Pressable onPress={() => void unheart(item.id)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Remove ${item.name}`}>
                     <WishHeart on size={24} />

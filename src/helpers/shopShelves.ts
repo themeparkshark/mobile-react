@@ -144,6 +144,42 @@ export function slotLine(itemTypeId: number | null | undefined): string | null {
   }
 }
 
+const SLOT_WORDS: Record<number, [string, string]> = {
+  1: ['Hat', 'Hats'], 2: ['Face', 'Faces'], 3: ['Back', 'Back'], 4: ['Outfit', 'Outfits'],
+  5: ['Held', 'Held'], 6: ['Backdrop', 'Backdrops'], 7: ['Skin', 'Skins'], 8: ['Pin', 'Pins'],
+};
+
+/** One word for a piece's slot ("Hat", "Skin"), for the tile and the filter chips. */
+export function slotWord(itemTypeId: number | null | undefined): string | null {
+  return itemTypeId != null && SLOT_WORDS[itemTypeId] ? SLOT_WORDS[itemTypeId][0] : null;
+}
+
+export type ShelfFilter = { key: string; label: string; count: number };
+
+/**
+ * The classic shelf's filter chips: All, then each slot on the shelf (in slot order), then
+ * "Can buy" (not owned and affordable). Only slots that are there; none when there is one slot.
+ */
+export function shelfFilters(items: readonly { item_type?: { id: number } | null; cost: number; has_purchased?: boolean }[], balance: number): ShelfFilter[] {
+  const counts = new Map<number, number>();
+  for (const i of items) if (i.item_type?.id && SLOT_WORDS[i.item_type.id]) counts.set(i.item_type.id, (counts.get(i.item_type.id) ?? 0) + 1);
+  const slots = [...counts.keys()].sort((a, b) => a - b);
+  const canBuy = items.filter(i => !i.has_purchased && i.cost <= balance).length;
+  if (slots.length < 2 && canBuy === items.length) return [];
+  return [
+    { key: 'all', label: 'All', count: items.length },
+    ...slots.map(id => ({ key: `slot:${id}`, label: SLOT_WORDS[id][1], count: counts.get(id) ?? 0 })),
+    ...(canBuy > 0 ? [{ key: 'can_buy', label: 'Can buy', count: canBuy }] : []),
+  ];
+}
+
+/** Whether a piece passes a shelf filter. */
+export function passesFilter(item: { item_type?: { id: number } | null; cost: number; has_purchased?: boolean }, key: string, balance: number): boolean {
+  if (key === 'all') return true;
+  if (key === 'can_buy') return !item.has_purchased && item.cost <= balance;
+  return key === `slot:${item.item_type?.id}`;
+}
+
 /** The classic shelf's star: the rarest piece you don't own yet (first on ties); null when you own them all. */
 export function starPick<T extends { id: number; rarity?: number; has_purchased?: boolean; is_member_item?: boolean }>(items: readonly T[], member: boolean): T | null {
   let best: T | null = null;
@@ -321,6 +357,8 @@ export function lastChanceLine(season: string | null | undefined): string {
  * rule): it stays owned forever, and members can wear it. True whether or not the wear lock is on.
  */
 export const MEMBER_PROMISE = 'VIP members can wear this. It stays in your closet forever.';
+/** The promise to a member, who already is one. */
+export const MEMBER_KEEP = 'It stays in your closet forever.';
 
 /**
  * Honest Favorites copy (one name everywhere for the heart): it says where they went, and
@@ -451,7 +489,8 @@ export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; n
   // Never a silent re-buy: "Check again" only asks the server what happened.
   if (s.phase === 'unknown') return { label: 'Check again', action: 'recheck', note: 'We couldn’t reach the shop. Let’s check if it went through.', look: 'go' };
   if (s.phase === 'buying' || s.phase === 'landing') return { label: 'Yes, buy it!', action: 'none', note: null, look: 'busy' };
-  if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more coins`, action: 'earn', note: 'Win ride coins at the park or open your daily chest.', look: 'go' };
+  // Says what the tap does and how many (kids UX round 2); "ride coins" are the shelf collectible, not money.
+  if (s.short > 0) return { label: `Go win ${formatCoins(s.short)} coins`, action: 'earn', note: 'Win coins at rides or open your daily chest.', look: 'go' };
   if (s.paused) return { label: 'Opening soon', action: 'none', note: 'Today’s shop is opening in a moment. Buying is back right after.', look: 'paused' };
   if (s.phase === 'confirm') return { label: 'Yes, buy it!', action: 'buy', note: null, look: 'go' };
   return { label: s.finishes ? `Complete the look: ${formatCoins(s.cost)}` : `Buy for ${formatCoins(s.cost)}`, action: 'ask', note: null, look: 'go' };

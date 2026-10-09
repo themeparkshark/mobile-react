@@ -104,5 +104,19 @@ test('round 2: the try-on lands in one beat and opens on confirm only when asked
   assert.match(sheet, /accessibilityLabel=\{`\$\{formatCoins\(balanceAfter \?\? balance\)\} coins`\}/);
   const room = src('src/screens/StoreScreen/SecretShowroom.tsx');
   assert.match(room, /const resting = still \|\| paused \|\| covered \|\| !focused;/, 'the room rests under any sheet, dialog or the gate');
-  assert.match(room, /<TileArt item=\{item\} size=\{TILE - 18\} still=\{still\} \/>/, 'every piece in the picker moves');
+  assert.match(room, /<TileArt item=\{item\} size=\{TILE - 22\} still=\{still\} \/>/, 'every piece in the picker moves');
+});
+
+test('round 3: filter chips (All, each slot on the shelf, Can buy) and one word per slot', () => {
+  const items = [
+    { id: 1, item_type: { id: 7 }, cost: 50 }, { id: 2, item_type: { id: 7 }, cost: 50, has_purchased: true },
+    { id: 3, item_type: { id: 6 }, cost: 80 }, { id: 4, item_type: { id: 5 }, cost: 280 },
+  ];
+  const f = shelves.shelfFilters(items, 100);
+  assert.deepEqual(plain(f.map(x => [x.label, x.count])), [['All', 4], ['Held', 1], ['Backdrops', 1], ['Skins', 2], ['Can buy', 2]]);
+  assert.equal(items.filter(i => shelves.passesFilter(i, 'can_buy', 100)).length, 2);
+  assert.equal(items.filter(i => shelves.passesFilter(i, 'slot:7', 100)).length, 2);
+  assert.deepEqual(plain(shelves.shelfFilters([{ id: 1, item_type: { id: 1 }, cost: 1 }], 10)), [], 'one slot, all affordable: no chips');
+  assert.equal(shelves.slotWord(7), 'Skin');
+  assert.equal(shelves.slotWord(null), null);
 });

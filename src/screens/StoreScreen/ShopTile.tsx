@@ -2,7 +2,7 @@
  * One Shark Shop v2 tile, in fixed lanes:
  * - rarity chip top-left (hidden when a time ribbon shows: the backplate still says rarity)
  * - heart (or the owned check) top-right
- * - one full-width top ribbon for a time tag: LAST CHANCE, BACK AGAIN or NEW
+ * - one full-width top ribbon for a time tag: LEAVING SOON, BACK AGAIN or NEW
  * - SET chip on the art's bottom-left corner
  * Owned has one look: the check badge plus a dimmed "Owned" line. A tile
  * bought this visit slams an OWNED stamp for a second, then settles into it.
@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState } from 'react';
 import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { formatCoins, tileBand, tileLanes, type TileRibbon } from '../../helpers/shopShelves';
+import { formatCoins, slotWord, tileBand, tileLanes, type TileRibbon } from '../../helpers/shopShelves';
 import { itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import { ShopItem } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
@@ -31,7 +31,8 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 import { leavingIcon, leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 
 const RIBBON: Record<Exclude<TileRibbon, null>, { label: string; color: string; ink: string }> = {
-  last_chance: { label: 'LAST CHANCE', color: BRAND.red, ink: BRAND.white },
+  // Calm like LEAVING, never a red hurry (kids UX round 2).
+  last_chance: { label: 'LEAVING SOON', color: BRAND.navy, ink: BRAND.gold },
   // Calm on purpose: navy and gold, never red. The label comes from the item (LEAVING or RETIRING) with its icon.
   leaving: { label: 'LEAVING', color: BRAND.navy, ink: BRAND.gold },
   returning: { label: 'BACK AGAIN', color: '#7c4dff', ink: BRAND.white },
@@ -72,7 +73,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   readonly still: boolean;
   /** Bought this visit: a one-second OWNED slam, then the normal owned look. */
   readonly justBought?: boolean;
-  /** The banner already says LAST CHANCE: no red ribbon on this tile. */
+  /** The banner already says it is the last chance: no ribbon on this tile. */
   readonly quiet?: boolean;
   readonly onOpen: (item: ShopItem) => void;
   readonly onWish: (item: ShopItem) => void;
@@ -165,6 +166,10 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       {/* Secret tiles carry their badge in the corner tag, so the chip band shrinks (no dead gap under the art). */}
       <View style={[styles.band, secret && !set && { height: 6 }]}>
         {/* When rarity plus SET would not fit the measured tile, rarity shows as a dot (the label still says it). */}
+        {/* No rarity to show: say what it is in one word (kids UX / shop critic, Oct 8). */}
+        {!badge.label && !secret && slotWord(item.item_type?.id) && (
+          <View style={styles.slot}><Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.slotText}>{slotWord(item.item_type?.id)}</Text></View>
+        )}
         {badge.label && !owned && !secret && (band === 'dot' ? (
           <View style={[styles.rarityDot, { backgroundColor: badge.labelColor }]} accessibilityLabel={badge.label} />
         ) : (
@@ -256,8 +261,11 @@ const styles = StyleSheet.create({
   setChip: { flexDirection: 'row', alignItems: 'center', gap: 2,
     borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1.5, borderColor: BRAND.white },
   setChipText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.navy },
-  corner: { position: 'absolute', top: -9, right: -9 },
-  heart: { width: 30, height: 30, borderRadius: 15, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
+  // Inside the tile corner, never straddling the border (art director round 2).
+  corner: { position: 'absolute', top: 4, right: 4 },
+  slot: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1, backgroundColor: 'rgba(10,35,80,0.1)' },
+  slotText: { fontFamily: FONT.display, fontSize: 12, color: '#34506f', letterSpacing: 0.4 },
+  heart: { width: 28, height: 28, borderRadius: 14, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
     borderWidth: 2.5, borderColor: '#ff9bbf' },
   heartOn: { borderColor: '#ff4f8b', backgroundColor: '#fff0f5' },
   stamp: { position: 'absolute', top: '32%', alignSelf: 'center', borderWidth: 3, borderColor: BRAND.greenLip, borderRadius: 8,

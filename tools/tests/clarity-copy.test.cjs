@@ -41,7 +41,6 @@ const PENDING = [
   // Unreachable since the server stopped sending section last_chance (clarity-pass-be); the line goes with S8.
   { file: 'src/helpers/shopShelves.ts', text: 'LAST CHANCE', spec: 'AUDIT.md S8' },
   // claude/cp-catalogs already replaces this ribbon with a calm navy LEAVING tag.
-  { file: 'src/screens/StoreScreen/ShopTile.tsx', text: 'LAST CHANCE', spec: 'AUDIT.md S11' },
 ];
 
 test('every player line follows the glossary and has no jargon or pressure words', () => {

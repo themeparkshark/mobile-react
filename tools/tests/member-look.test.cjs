@@ -88,7 +88,7 @@ test('try-on: an owned member piece while lapsed asks a grown-up instead of fail
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
   assert.match(sheet, /phase === 'confirm' && memberItem && !fxKey \? \{ \.\.\.lapsedCta, note: MEMBER_PROMISE \}/, 'buy confirmation says it (a Secret piece says it once, in its card)');
   assert.match(sheet, /\{!fxKeyOf\(item\) && memberItem && \(/, 'the item card says it on VIP gear too');
-  assert.match(sheet, /const keepLine = MEMBER_PROMISE;/, 'and on every Secret piece');
+  assert.match(sheet, /const keepLine = player\?\.is_subscribed \? MEMBER_KEEP : MEMBER_PROMISE;/, 'and on every Secret piece');
 });
 
 test('Inventory: lock badge on owned member pieces, a tap explains and offers the gated join', () => {

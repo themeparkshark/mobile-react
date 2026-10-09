@@ -38,9 +38,9 @@ import { FxSceneBackdrop } from '../../fx/FxSolo';
 import { FxPauseContext } from '../../fx/FxStage';
 import { FX_BLURB, fxKeyOf } from '../../fx/registry';
 import { SECRET_THEME as V } from '../../fx/secretTheme';
-import { formatCoins, stageCard } from '../../helpers/shopShelves';
+import { formatCoins, shortDate, stageCard } from '../../helpers/shopShelves';
 import { showroomEntries, showroomStageH, shelfWhen, type ShowroomEntry, type ShowroomKind } from '../../helpers/shopShowroom';
-import { leavingIcon, leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
+import { leavingIcon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 import { isItemWorn, itemDisplayName } from '../../helpers/wardrobe';
 import type { ShopItem, ShopSection } from '../../models/shop-today';
 import { FONT, GameIcon, type GameIconName } from '../../ui';
@@ -54,7 +54,7 @@ import { useWishCount, useWished } from './wishStore';
 const SCREEN_W = Dimensions.get('window').width;
 const PANEL_W = SCREEN_W - 20;
 const INNER_W = PANEL_W - 6;
-const TILE = 100;
+const TILE = 108;
 const RAIL_PAD = 18;
 const KIND: Record<ShowroomKind, { icon: GameIconName; name: (s: ShopSection) => string }> = {
   vault: { icon: 'crown', name: () => 'The Vault' },
@@ -141,9 +141,8 @@ const RailTile = memo(function RailTile({ entry, selected, owned, member, still,
         <View style={styles.tileClip} pointerEvents="none">
           <LinearGradient colors={[...V.tilePlate]} style={StyleSheet.absoluteFill} />
           <LinearGradient colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)']} style={styles.tileGloss} />
-          <View style={styles.tileArt}><TileArt item={item} size={TILE - 18} still={still} /></View>
+          <View style={styles.tileArt}><TileArt item={item} size={TILE - 22} still={still} /></View>
         </View>
-        <View style={styles.tileKind} pointerEvents="none"><ShelfMark entry={entry} size={13} /></View>
         <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.tileName}>{name}</Text>
         <View style={[styles.tilePrice, owned && styles.tileOwned]} pointerEvents="none">
           {owned ? <GameIcon name="check" size={13} /> : <GameIcon name="coins" size={13} />}
@@ -228,6 +227,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
     return () => clearTimeout(t);
   }, []);
 
+  const ownedCount = entries.filter(e => !!(e.item.shop?.is_owned ?? e.item.has_purchased) || bought.includes(e.item.id)).length;
   if (!entry || !item) return null;
   const owned = !!(item.shop?.is_owned ?? item.has_purchased) || bought.includes(item.id);
   const worn = isItemWorn(player?.inventory, item);
@@ -301,13 +301,14 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
                 <View style={styles.price} accessible accessibilityLabel={`${formatCoins(item.cost)} coins${member ? '' : ', VIP members can buy'}`}>
                   <GameIcon name="coins" size={20} />
                   <Text maxFontSizeMultiplier={MAX_FONT} style={styles.priceText}>{formatCoins(item.cost)}</Text>
-                  {!member && <GameIcon name="lock" size={16} />}
+                  {!member && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.priceVip}>for VIP</Text>}
                 </View>
               )}
               {leaving && !owned && (
                 <View style={styles.leaving} accessible accessibilityLabel={leavingSay(leaving)}>
                   <GameIcon name={leavingIcon(leaving)} size={13} />
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leavingText}>{leavingRibbon(leaving)}</Text>
+                  {/* Always with its day, never a bare LEAVING (monetization round 2). */}
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leavingText}>{`${leaving.forever ? 'LAST DAY' : 'LEAVES'} ${(shortDate(leaving.on) ?? '').toUpperCase()}`.trim()}</Text>
                 </View>
               )}
               <View style={{ flex: 1 }} />
@@ -323,7 +324,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
       <Animated.View entering={still ? undefined : FadeInUp.delay(120).duration(260)}>
         <View style={styles.railHead}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.railTitle}>IN THE ROOM TODAY</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.railHint}>Tap one to put it on</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.railHint}>{ownedCount > 0 ? `${ownedCount} of ${entries.length} are yours` : 'Tap one to put it on'}</Text>
         </View>
         <ScrollView ref={rail} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
           {entries.map(e => (
@@ -339,8 +340,8 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
 const styles = StyleSheet.create({
   scroll: { paddingTop: 8, gap: 10 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, minHeight: 40 },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 6, paddingRight: 12, height: 36, borderRadius: 18,
-    backgroundColor: V.well, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
+  // A plain label, not a second chip next to the shelf chip (art director round 2).
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 2, paddingRight: 6, height: 36 },
   badgeText: { fontFamily: FONT.display, fontSize: 14, color: V.inkGold, letterSpacing: 0.8 },
   favs: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 36, paddingHorizontal: 10, borderRadius: 18,
     backgroundColor: '#fff0f5', borderWidth: 2, borderColor: '#ff4f8b' },
@@ -369,8 +370,9 @@ const styles = StyleSheet.create({
     textShadowColor: V.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   blurb: { fontFamily: FONT.body, fontSize: 16, lineHeight: 20, color: V.inkSoft, textAlign: 'center' },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, minHeight: 50 },
-  price: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 40, borderRadius: 20,
-    backgroundColor: V.well, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
+  // Plain price text, so the button is the one tappable thing in the row (kids UX round 2).
+  price: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4, height: 40 },
+  priceVip: { fontFamily: FONT.display, fontSize: 13, color: V.inkSoft },
   priceText: { fontFamily: FONT.display, fontSize: 21, color: V.inkGold },
   yours: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 8, paddingRight: 14, height: 40, borderRadius: 20,
     backgroundColor: '#1f9d55', borderWidth: 2, borderColor: '#ffffff' },
@@ -387,7 +389,7 @@ const styles = StyleSheet.create({
   tileOn: { borderWidth: 3.5, borderColor: V.gold },
   tileClip: { ...StyleSheet.absoluteFillObject, borderRadius: 16, overflow: 'hidden' },
   tileGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },
-  tileArt: { position: 'absolute', left: 0, right: 0, top: 6, height: TILE - 14, alignItems: 'center', justifyContent: 'center' },
+  tileArt: { position: 'absolute', left: 0, right: 0, top: 4, height: TILE - 22, alignItems: 'center', justifyContent: 'center' },
   tileKind: { position: 'absolute', top: 5, left: 5, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(5,12,34,0.8)' },
   tileName: { position: 'absolute', left: 4, right: 4, bottom: 30, textAlign: 'center', fontFamily: FONT.display, fontSize: 12, color: '#ffffff' },

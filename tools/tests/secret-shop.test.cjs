@@ -340,7 +340,7 @@ test('the try-on says "Unlock with VIP" on Secret pieces, and a members_only 403
   assert.match(shelves.tryOnCta({ ...base, secret: true }).note, /VIP members can buy/);
   const tryOn = src('src/screens/StoreScreen/TryOnSheet.tsx');
   // DESIGN.md 6.7 with Dustin's member rule: one promise on every Secret piece, members and not.
-  assert.match(tryOn, /const keepLine = MEMBER_PROMISE;/, 'the member promise on every Secret try-on');
+  assert.match(tryOn, /const keepLine = player\?\.is_subscribed \? MEMBER_KEEP : MEMBER_PROMISE;/, 'the member promise on every Secret try-on');
   assert.equal(shelves.MEMBER_PROMISE, 'VIP members can wear this. It stays in your closet forever.');
   assert.match(tryOn, /case 'vip': afterHiddenRef\.current = \(\) => \{ void openMembership\(\); \}; closeAnimated\(\);/, 'the paywall is behind a grown-up, after the sheet hides');
   assert.match(tryOn, /cta\.action === 'vip' && secretItem \? \(\s*\/\/ Not the gold Buy face/, 'the grown-up button is violet, not the Buy face');

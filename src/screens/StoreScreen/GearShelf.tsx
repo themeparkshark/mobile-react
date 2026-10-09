@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addToWishlist, getWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
-import { formatCoins, restockPill, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
+import { formatCoins, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
 import { useAnyModalLayer } from '../../ui/modalLayers';
 import Playercard from '../../components/Playercard';
 import { itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
@@ -196,6 +196,14 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
 
   // Bought this visit: stays where the kid saw it until the next open.
   const shelf = useMemo(() => shelfOrder(items, bought), [items, bought]);
+  // Filter chips: All, each slot on the shelf, Can buy (shop critic round 2: "hats I can afford" in two taps).
+  const filters = useMemo(() => shelfFilters(items, balance), [items, balance]);
+  const [filter, setFilter] = useState('all');
+  const pickFilter = useCallback((key: string) => {
+    void Haptics.selectionAsync().catch(() => undefined);
+    soundRef.current(require('../../../assets/sounds/tap.mp3'));
+    setFilter(key);
+  }, []);
   // The shelf's star: the rarest piece you can still get, two tiles wide, on your own shark. Chosen once
   // per visit (it doesn't jump away when you buy it).
   const starRef = useRef<number | null>(null);
@@ -267,16 +275,30 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
             <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title} accessibilityRole="header">ON THE SHELF</Text>
             <RestockChip nextAt={nextRotationAt} offset={offset} onElapsed={onRestockElapsed} />
           </View>
+          {filters.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters} accessibilityRole="tablist">
+              {filters.map(f => {
+                const on = f.key === filter;
+                return (
+                  <Pressable key={f.key} onPress={() => pickFilter(f.key)} hitSlop={6} accessibilityRole="tab" accessibilityState={{ selected: on }}
+                    accessibilityLabel={`${f.label}, ${f.count}`} style={[styles.filter, on && styles.filterOn]}>
+                    {f.key === 'can_buy' && <GameIcon name="coins" size={15} />}
+                    <Text maxFontSizeMultiplier={1.2} style={[styles.filterText, on && styles.filterTextOn]}>{f.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
           {shelf.length === 0 ? (
             <SharkLoader tone="onBlue" state="empty" compact title="New gear is on the way" message="New gear comes soon. Check back later." />
           ) : (
             <View style={styles.grid}>
-              {star && (
+              {star && filter === 'all' && (
                 <Animated.View key={`star-${star.id}`} entering={still ? undefined : FadeIn.delay(40).duration(180)} style={{ width: 2 * TILE_W + GAP }}>
                   <StarTile item={star as ShopItem} balance={balance} still={still || !focused || !!open || covered} onOpen={openItem} onWish={wish} />
                 </Animated.View>
               )}
-              {shelf.filter(i => i.id !== star?.id).map((item, i) => (
+              {shelf.filter(i => (filter !== 'all' || i.id !== star?.id) && passesFilter(i, filter, balance)).map((item, i) => (
                 <Animated.View key={item.id} entering={still || !firstIds.current?.has(item.id) ? undefined : FadeIn.delay(60 + Math.min(i, 8) * 30).duration(180)}>
                   <ShopTile item={item as ShopItem} width={TILE_W} still={still} vipLocked={!!item.is_member_item && !vip}
                     affordable={balance >= item.cost} balance={balance} justBought={bought.includes(item.id)} onOpen={openItem} onWish={wish} />
@@ -301,6 +323,12 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
 const styles = StyleSheet.create({
   scroll: {},
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 22 },
+  filters: { gap: 8, paddingHorizontal: 12, paddingTop: 10 },
+  filter: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, paddingHorizontal: 13, borderRadius: 17,
+    backgroundColor: 'rgba(5,52,110,0.65)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
+  filterOn: { backgroundColor: '#ffcf3b', borderColor: '#ffffff' },
+  filterText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
+  filterTextOn: { color: '#0a2350' },
   star: { flex: 1, minHeight: 186, borderRadius: 16, borderWidth: 3, backgroundColor: '#ffffff', flexDirection: 'row', ...SHADOW.card },
   starClip: { ...StyleSheet.absoluteFillObject, borderRadius: 13, overflow: 'hidden' },
   starGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },
