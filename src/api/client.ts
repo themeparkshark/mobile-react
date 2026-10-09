@@ -7,6 +7,7 @@ import { reportReachable, reportUnreachable } from '../services/connectivity';
 import { httpStatus, isNetworkFailure, isTimeout, withGetRetry } from './getRetry';
 import { withInflightDedupe } from './dedupeGet';
 import { withOwnStack } from '../utils/hermesSafeError';
+import { isNonJsonBody, nonJsonError } from './jsonGuard';
 
 const client = axios.create({
   baseURL: config.apiUrl,
@@ -57,6 +58,13 @@ let consecutiveTimeouts = 0;
 
 client.interceptors.response.use(
   (response: AxiosResponse) => {
+    // A captive-portal page (hotel or park Wi-Fi sign-in) is not the server:
+    // reject it like a dropped connection so no caller ever reads HTML as data.
+    if (isNonJsonBody(response)) {
+      reportUnreachable();
+      recordCoreLoopResponse(response.config?.method, response.config?.url, undefined);
+      return Promise.reject(withOwnStack(nonJsonError(response)));
+    }
     consecutiveTimeouts = 0;
     reportReachable();
     recordCoreLoopResponse(response.config?.method, response.config?.url, response.status);
@@ -85,6 +93,12 @@ client.interceptors.response.use(
 );
 
 // The default axios instance (the News feed) gets the same Hermes-safe stack.
-axios.interceptors.response.use(undefined, (error: unknown) => Promise.reject(withOwnStack(error)));
+// It also gets the non-JSON guard: a portal page is never a news feed.
+axios.interceptors.response.use(
+  (response: AxiosResponse) => (isNonJsonBody(response)
+    ? Promise.reject(withOwnStack(nonJsonError(response)))
+    : response),
+  (error: unknown) => Promise.reject(withOwnStack(error)),
+);
 
 export default client;

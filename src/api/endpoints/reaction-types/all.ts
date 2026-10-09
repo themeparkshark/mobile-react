@@ -7,5 +7,7 @@ export default async function all(): Promise<ReactionTypeType[]> {
     '/reaction-types'
   );
 
-  return data.data;
+  // Runs at every launch from ForumProvider: anything but a list (an odd
+  // proxy reply, an old server) means "no reactions", never a crash.
+  return Array.isArray(data?.data) ? data.data : [];
 }
