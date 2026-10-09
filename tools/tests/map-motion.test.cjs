@@ -12,6 +12,7 @@ const root = path.resolve(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const hf = loadTs('src/components/map/headingFilter.ts');
 const cf = loadTs('src/components/map/cameraFollow.ts');
+const { PositionFilter } = loadTs('src/context/positionFilter.ts');
 const ad = (a, b) => hf.angleDelta(a, b);
 
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -288,4 +289,31 @@ test('standing in a queue with GPS scatter: the shark stays put (seeded noise, m
     }
     assert.ok(travel < 4.5, `sensor ${sensor}: shark travelled ${travel.toFixed(2)} m in 2 min standing`);
   }
+});
+
+test('a straight walk with GPS scatter: even pace (CV under 0.2) and the shark never slides backward', () => {
+  const k = 111320, kl = k * Math.cos(33.8122 * Math.PI / 180);
+  const at = (e, n) => ({ latitude: 33.8122 + n / k, longitude: -117.919 + e / kl });
+  const en = p => [(p.longitude + 117.919) * kl, (p.latitude - 33.8122) * k];
+  const cvs = [];
+  for (let seed = 1; seed <= 6; seed++) {
+    const g = gaussFrom(rng(seed));
+    const c = cf.newChaser(at(0, 0), 0), pace = new cf.WalkPace(); pace.push(at(0, 0), 0);
+    const pf = new PositionFilter(); pf.push({ ...at(0, 0), accuracy: 5, speed: 0, timestamp: 0 });
+    cf.chaseWalk(c, true, 500, 90);
+    let prev = null, backs = 0, nextFix = 1; const sp = [];
+    for (let t = 0.5; t < 40; t += 1 / 60) {
+      // Raw fixes go through the app's PositionFilter first, as on the phone.
+      if (t >= nextFix) { nextFix += 1; const v = pf.push({ ...at(1.4 * t + g() * 1.2, g() * 1.2), accuracy: 5, speed: 1.4, timestamp: t * 1000 });
+        if (v.kind === 'publish') { const f = v.position; pace.push(f, t * 1000); cf.chaseFix(c, f, t * 1000, pace.velocity(), pace.gap(), false); } }
+      const p = en(cf.chaseAdvance(c, t * 1000));
+      if (prev && t > 10) { const dx = (p[0] - prev[0]) * 60; if (dx < -0.05) backs++; sp.push(Math.hypot(p[0] - prev[0], p[1] - prev[1]) * 60); }
+      prev = p;
+    }
+    assert.equal(backs, 0, `seed ${seed}: slid backward`);
+    const mu = sp.reduce((a, b) => a + b, 0) / sp.length;
+    cvs.push(Math.sqrt(sp.reduce((a, b) => a + (b - mu) ** 2, 0) / sp.length) / mu);
+  }
+  cvs.sort((a, b) => a - b);
+  assert.ok(cvs[3] < 0.2, `walk pace CV median ${cvs[3].toFixed(2)}`);
 });
