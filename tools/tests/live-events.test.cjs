@@ -147,6 +147,6 @@ test('event art ships at drawn size and every screen piece stays self-contained'
 test('copy stays short: how-to steps are 3 words or fewer', () => {
   const steps = plain(ev({}).how_to).map(s => s.text);
   const sheet = src('src/components/liveEvents/EventSheet.tsx');
-  for (const t of ['Win and find', 'Fill the reef', 'Open chests']) assert.ok(sheet.includes(`'${t}'`));
+  for (const t of ['Win and find', 'Fill the bar', 'Open chests']) assert.ok(sheet.includes(`'${t}'`), t);
   for (const s of steps) assert.ok(s.split(' ').length <= 3, s);
 });

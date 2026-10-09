@@ -36,7 +36,7 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
   /** The server had already paid this chest (shows "Already opened"). */
   readonly already?: boolean;
   /** The open did not go through: a closed chest and Try again. */
-  readonly failed?: boolean;
+  readonly failed?: 'not_ready' | 'network' | false;
   readonly onRetry?: () => void;
   /** Null while the server is still paying (the chest wobbles). */
   readonly rewards: EventReward | null;
@@ -80,7 +80,7 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
   return (
     <Pressable style={styles.scrim} accessibilityViewIsModal onPress={() => { if (open) setSkip(true); }} accessible={false}>
       <View style={styles.card}>
-        <Text style={styles.title}>{failed ? 'Not yet' : !rewards ? 'Opening...' : title}</Text>
+        <Text style={styles.title}>{failed === 'network' ? 'No signal' : failed ? 'Not ready yet' : !rewards ? 'Opening...' : title}</Text>
         <View style={styles.stage}>
           {!reduced && Array.from({ length: COINS }, (_, i) => <Burst key={i} i={i} go={open} />)}
           <Animated.View style={chestStyle}>
@@ -100,7 +100,7 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
         {failed && (
           <View style={styles.failRow}>
             <Pressable accessibilityRole="button" onPress={onDone} style={[styles.button, styles.quiet]}><Text style={styles.buttonText}>CLOSE</Text></Pressable>
-            {onRetry && <Pressable accessibilityRole="button" onPress={onRetry} style={styles.button}><Text style={styles.buttonText}>TRY AGAIN</Text></Pressable>}
+            {onRetry && failed === 'network' && <Pressable accessibilityRole="button" onPress={onRetry} style={styles.button}><Text style={styles.buttonText}>TRY AGAIN</Text></Pressable>}
           </View>
         )}
         {open && (

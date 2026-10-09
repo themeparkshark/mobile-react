@@ -66,6 +66,7 @@ export async function refreshLiveEvent(parkId: number | null, read: typeof getLi
 
 /** After a chest opens, the server sends the fresh event back. */
 export function applyOpenResult(result: OpenChestResult): void {
+  ++reqSeq; // a poll that started before the open must not put the chest back
   set({ event: result.event, gained: 0 });
 }
 
@@ -76,6 +77,9 @@ export function resetLiveEvent(next?: Partial<State>): void {
   inFlightPark = undefined;
   listeners.forEach(fn => fn());
 }
+
+/** Why a chest did not open: the server said not yet, or the request never made it. */
+export type OpenError = { readonly error: 'not_ready' | 'network' };
 
 export function pollIntervalForState(s: Pick<State, 'event' | 'failed'>): number {
   if (s.failed) return ERROR_POLL_MS;
@@ -110,14 +114,15 @@ export function useOpenChest() {
   const [opening, setOpening] = useState<string | null>(null);
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
-  const open = useCallback(async (eventId: number, key: string): Promise<OpenChestResult | null> => {
+  const open = useCallback(async (eventId: number, key: string): Promise<OpenChestResult | OpenError> => {
     setOpening(key);
     try {
       const result = await openEventChest(eventId, key, state.parkId);
       applyOpenResult(result);
       return result;
-    } catch {
-      return null;
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      return { error: status === 409 || status === 404 ? 'not_ready' : 'network' };
     } finally {
       if (alive.current) setOpening(null);
     }

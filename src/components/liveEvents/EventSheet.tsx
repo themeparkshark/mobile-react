@@ -13,7 +13,7 @@ import ChestReveal from './ChestReveal';
 import ChestTrack from './ChestTrack';
 import { eventArt, type EventArt } from './eventArt';
 
-type Opened = { key: string; rewards: EventReward | null; already?: boolean; failed?: boolean };
+type Opened = { key: string; rewards: EventReward | null; already?: boolean; failed?: 'not_ready' | 'network' | false };
 
 function Section({ title, children }: { readonly title: string; readonly children: React.ReactNode }) {
   return (
@@ -43,7 +43,7 @@ function Peek({ chest, track }: { readonly chest: EventChest | null; readonly tr
 }
 
 /** Three pictures, three words each: what to do, what it fills, what you get. */
-const HOW_TO_DEFAULT = ['Win and find', 'Fill the reef', 'Open chests'];
+const HOW_TO_DEFAULT = ['Win and find', 'Fill the bar', 'Open chests'];
 
 function HowTo({ art, steps }: { readonly art: EventArt; readonly steps: readonly { readonly text: string }[] }) {
   const words = [0, 1, 2].map(i => steps[i]?.text?.trim() || HOW_TO_DEFAULT[i]);
@@ -121,24 +121,31 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
   const [peek, setPeek] = useState<{ track: 'me' | 'together'; chest: EventChest } | null>(null);
   const [opened, setOpened] = useState<Opened | null>(null);
   const { open, opening } = useOpenChest();
+  /** Every way out clears the reveal, so a reopened sheet never flashes an old one. */
+  const close = useCallback(() => { setOpened(null); setPeek(null); onClose(); }, [onClose]);
   const onOpen = useCallback(async (key: string) => {
+    if (opening) return; // one open at a time (a double tap on Try again never sends two)
     haptic('tapLight');
     setOpened({ key, rewards: null });
     let rewards: EventReward | null = null;
     let already = false;
+    let failed: 'not_ready' | 'network' = 'not_ready';
     if (openOverride) rewards = await openOverride(key);
     else {
       const result = await open(event.id, key);
-      rewards = result?.rewards ?? null;
-      already = !!result?.already;
+      if ('error' in result) failed = result.error;
+      else {
+        rewards = result.rewards;
+        already = result.already;
+      }
     }
     if (!rewards) {
       playSfx('fail');
-      setOpened({ key, rewards: null, failed: true });
+      setOpened({ key, rewards: null, failed });
       return;
     }
     setOpened({ key, rewards, already });
-  }, [event.id, open, openOverride]);
+  }, [event.id, open, openOverride, opening]);
 
   const frenzy = frenzyLine(event);
   const hint = event.phase === 'live' ? nextStepHint(event, atPark && event.here) : null;
@@ -150,14 +157,14 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
   const doNow: { icon: 'chest' | 'star' | 'ride' | 'coin'; text: string; go?: () => void } | null = readyCount > 0
     ? { icon: 'chest', text: readyCount === 1 ? 'Open your chest below' : `Open ${readyCount} chests below` }
     : !live ? null
-      : firstStar ? { icon: 'star', text: `Win a Star Ride: x${starTimes(event)}`, go: onShowRide ? () => { onClose(); onShowRide(firstStar.task_id); } : undefined }
+      : firstStar ? { icon: 'star', text: `Win a Star Ride: x${starTimes(event)}`, go: onShowRide ? () => { close(); onShowRide(firstStar.task_id); } : undefined }
         : hint ? { icon: atPark && event.here ? 'ride' : 'coin', text: hint } : null;
   const nextFrenzy = live && atPark && event.here && !frenzy && event.frenzy.next_starts_at ? `Next Frenzy ${clockTime(event.frenzy.next_starts_at)}` : null;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} onDismiss={() => setOpened(null)} onShow={() => setOpened(null)} statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
       <View style={styles.scrim}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close event" accessibilityRole="button" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close event" accessibilityRole="button" />
         <View style={[styles.sheet, { marginTop: insets.top + 24, paddingBottom: insets.bottom + 12 }]}>
           <View style={styles.header}>
             <Image source={art.emblem} style={styles.headerEmblem} contentFit="contain" />
@@ -165,7 +172,7 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
               <Text style={styles.title} accessibilityRole="header">{event.title}</Text>
               <Text style={styles.when}>{timeLine(event, now)}</Text>
             </View>
-            <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close" style={styles.close}>
+            <Pressable onPress={close} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close" style={styles.close}>
               <GameIcon name="close" size={26} />
             </Pressable>
           </View>
@@ -223,7 +230,7 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
                     <Text style={styles.x2}>x{starTimes(event)}</Text>
                     {onShowRide && (
                       <Pressable accessibilityRole="button" accessibilityLabel={`Show ${ride.name} on the map`} hitSlop={6}
-                        onPress={() => { onClose(); onShowRide(ride.task_id); }} style={styles.show}>
+                        onPress={() => { close(); onShowRide(ride.task_id); }} style={styles.show}>
                         <Text style={styles.showText}>SHOW</Text>
                       </Pressable>
                     )}
