@@ -231,6 +231,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
   const paused = useContext(FxPauseContext);
   const covered = useAnyModalLayer();
   const { idle, wake } = useIdleRest(10000);
+  const power = usePowerBudget();
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const member = !!player?.is_subscribed;
@@ -312,7 +313,6 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
   const blurb = fx ? FX_BLURB[fx] : 'A members-only piece for your shark.';
   const leaving = visibleLeaving(item.shop, { secret: true, vipLocked: !member });
   // The room's ambient loops (twinkles, rays, rail rigs, the shark's idle) rest after 10 s untouched (performance r8).
-  const power = usePowerBudget();
   const resting = still || paused || covered || !focused || idle || !power.ambient;
 
   return (
