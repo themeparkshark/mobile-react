@@ -129,7 +129,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
             accessibilityRole={onOpenRidePassport ? 'button' : undefined}
             accessibilityLabel={`Rides: ${parts.rides.collected} of ${parts.rides.available}${onOpenRidePassport ? '. Show rides only.' : ''}`}
             onPress={onOpenRidePassport}>
-            <GameIcon name="ride" size={20} />
+            <GameIcon name="ride" size={18} />
             <Text style={styles.chipText}>RIDES {parts.rides.collected}/{parts.rides.available}</Text>
           </Pressable>}
         {parts?.sights && <View style={styles.chip} accessible
@@ -191,8 +191,8 @@ const styles = StyleSheet.create({
   track: { height: 12, backgroundColor: '#bfe5ff', borderWidth: 2, borderColor: '#fff',
     borderRadius: 7, overflow: 'hidden', marginTop: 5, marginRight: 70 },
   fill: { height: '100%', backgroundColor: '#ffcf3b', borderRadius: 7 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 7 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4,
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 7 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 4,
     backgroundColor: '#fff8e4', borderWidth: 2, borderColor: '#ffcf3b', borderRadius: 12 },
   chipText: { fontFamily: 'Shark', color: '#05346e', fontSize: 14 },
   lower: { paddingHorizontal: 8, paddingVertical: 7 },

@@ -42,11 +42,14 @@ const disneylandTasks: TaskType[] = [
 
 /** Sample-only view of the park collection entry and real mystery-coin modal. */
 export default function ParkChecklistPreviewScreen() {
+  // Capture fixture: the audit's real split (15/35 coins, 9 of 25 rides, 0 of 5 limited).
+  const coinSplitPreview = __DEV__ && process.env.EXPO_PUBLIC_PARK_COIN_SPLIT_PREVIEW === '1';
   const cleanArrivalPreview = __DEV__ && process.env.EXPO_PUBLIC_PARK_ARRIVAL_PREVIEW === '1';
   const cleanRescueGoalPreview = __DEV__ && process.env.EXPO_PUBLIC_PARK_RESCUE_GOAL_PREVIEW === '1';
   const cleanDownPreview = __DEV__ && process.env.EXPO_PUBLIC_PARK_DOWN_PREVIEW === '1';
   const cleanPassportPreview = __DEV__ && process.env.EXPO_PUBLIC_PARK_PASSPORT_PREVIEW === '1';
   const cleanCompletePreview = __DEV__ && process.env.EXPO_PUBLIC_PARK_PASSPORT_COMPLETE_PREVIEW === '1';
+  // Capture fixture: the audit's real split (15/35 coins, 9 of 25 rides, 0 of 5 limited).
   const [previewMode, setPreviewMode] = useState(cleanDownPreview || cleanRescueGoalPreview || cleanArrivalPreview ? 1 : 0);
   const [reportedDown, setReportedDown] = useState(cleanDownPreview);
   const [rideOnly, setRideOnly] = useState(cleanPassportPreview);
@@ -57,7 +60,7 @@ export default function ParkChecklistPreviewScreen() {
   const fanView = previewMode === 3;
   const showSavedGoal = previewMode === 1 || previewMode === 2;
   const ownsGoal = previewMode >= 2;
-  const disneylandPreview = cleanDownPreview || cleanPassportPreview || cleanCompletePreview;
+  const disneylandPreview = cleanDownPreview || cleanPassportPreview || cleanCompletePreview || coinSplitPreview;
   const previewTasks = disneylandPreview ? disneylandTasks : sampleTasks;
   const parkName = disneylandPreview ? 'Disneyland' : 'Magic Kingdom';
   const goalTask = disneylandPreview ? disneylandTasks[10] : sampleTasks[0];
@@ -107,11 +110,12 @@ export default function ParkChecklistPreviewScreen() {
             {reportedDown ? 'Show ride operating' : 'Show reported ride downtime'}
           </Text>
         </Pressable>}
-        <ParkCollectionHeader parkName={parkName} available={previewTasks.length} isOwnPark={!fanView}
+        <ParkCollectionHeader parkName={parkName} available={coinSplitPreview ? 35 : previewTasks.length} isOwnPark={!fanView}
           completionRate={cleanCompletePreview ? 94 : ownsGoal ? 14 : 0}
-          collected={cleanCompletePreview ? 15 : ownsGoal ? 1 : 0}
-          ridePassportAvailable={disneylandPreview ? 15 : 7}
-          ridePassportCollected={cleanCompletePreview ? 15 : ownsGoal ? 1 : 0}
+          collected={coinSplitPreview ? 15 : cleanCompletePreview ? 15 : ownsGoal ? 1 : 0}
+          ridePassportAvailable={coinSplitPreview ? 25 : disneylandPreview ? 15 : 7}
+          ridePassportCollected={coinSplitPreview ? 9 : cleanCompletePreview ? 15 : ownsGoal ? 1 : 0}
+          limitedCollected={coinSplitPreview ? 0 : undefined} limitedAvailable={coinSplitPreview ? 5 : undefined}
           onOpenRidePassport={() => setRideOnly(true)}
           onOpenStampBook={cleanCompletePreview ? () => {} : undefined}
           nextRideName={showSavedGoal ? 'Space Mountain' : null} nextRideOwned={ownsGoal}
