@@ -81,3 +81,7 @@ test('three crowns never read as "not perfect"; both face sheets are preloaded',
   assert.match(card, /if \(preloadExtraSheet != null\) sheets\.push/);
   assert.match(game, /preloadExtraSheet=\{deck\.extraFaceSheet\}/);
 });
+
+test('the flame pill hides while the results card is up', () => {
+  assert.match(game, /\{resultData \? null : <ChainPlate ref=\{chainPlate\}/);
+});

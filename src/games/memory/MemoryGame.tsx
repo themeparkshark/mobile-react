@@ -2422,8 +2422,9 @@ export default function MemoryGame({
               ) : mode === 'daily' ? (
                 <View style={styles.parPlate}><Text style={styles.parText}>{`TURN ${hud.turns} · PAR ${fairParFor(hud.total)}`}</Text></View>
               ) : null}
-              <ChainPlate ref={chainPlate} chain={hud.chain} gauge={hud.gauge} showtime={hud.showtime} showWarn={hud.showWarn} showLeft={hud.showLeft}
-                gaugeOn={!!r?.eng.cfg.gauge} strikes={mode === 'daily' ? hud.strikes : null} strikesMax={2} reducedMotion={reducedMotion} />
+              {/* Hidden under the results card so the card never clips it. */}
+              {resultData ? null : <ChainPlate ref={chainPlate} chain={hud.chain} gauge={hud.gauge} showtime={hud.showtime} showWarn={hud.showWarn} showLeft={hud.showLeft}
+                gaugeOn={!!r?.eng.cfg.gauge} strikes={mode === 'daily' ? hud.strikes : null} strikesMax={2} reducedMotion={reducedMotion} />}
               <View style={styles.chipAnchor}>
                 <VerdictChip ref={chip} reducedMotion={reducedMotion} />
               </View>
