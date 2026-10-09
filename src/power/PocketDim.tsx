@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
-import { lastUserActivityAt, onUserActivity } from '../hooks/useUserIdle';
+import { lastUserTouchAt, onUserTouch } from '../hooks/useUserIdle';
 import { POCKET_START, nextPocketState, toIosTilt, type PocketState } from './pocketPolicy';
 
 const SAMPLE_MS = 500;
@@ -18,14 +18,14 @@ export default function PocketDim({ enabled }: { readonly enabled: boolean }) {
     if (!enabled) { setDim(false); return undefined; }
     let state: PocketState = POCKET_START;
     let sub: { remove(): void } | null = null;
-    const offTouch = onUserActivity(() => {
+    const offTouch = onUserTouch(() => {
       state = POCKET_START;
       setDim(false);
     });
     try {
       Accelerometer.setUpdateInterval(SAMPLE_MS);
       sub = Accelerometer.addListener(sample => {
-        const next = nextPocketState(state, toIosTilt(sample, Platform.OS), Date.now(), lastUserActivityAt());
+        const next = nextPocketState(state, toIosTilt(sample, Platform.OS), Date.now(), lastUserTouchAt());
         if (next.dim !== state.dim) setDim(next.dim);
         state = next;
       });

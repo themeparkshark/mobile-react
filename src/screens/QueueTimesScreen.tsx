@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
-import { useAppActive } from '../hooks/useLivePoll';
+import { useAppActive } from '../hooks/appActive';
 
 const QUEUE_TIMES_REFRESH_MS = 60_000;
 import Topbar, { BackButton } from '../components/Topbar';

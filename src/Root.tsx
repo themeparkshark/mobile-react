@@ -36,7 +36,7 @@ import { ShareStudioHost } from './share';
 import { DEV_SCREENS, devInitialRoute } from './devRoutes';
 import { releaseNativeSplash } from './nativeSplash';
 import { addBreadcrumb } from './services/telemetry';
-import { markUserActivity } from './hooks/useUserIdle';
+import { markUserTouch } from './hooks/useUserIdle';
 
 const Stack = createNativeStackNavigator();
 
@@ -336,7 +336,7 @@ export default function App() {
 }
 
 /** Any touch in the app counts as activity for idle-aware polls (useUserIdle). */
-const onAnyTouch = () => markUserActivity();
+const onAnyTouch = () => markUserTouch();
 
 /** Runs ride detection. Its own component, so a GPS step re-renders only this. */
 function RideDetectionDriver({ enabled, parkId }: { readonly enabled: boolean; readonly parkId: number | null }) {

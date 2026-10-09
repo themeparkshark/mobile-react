@@ -23,6 +23,8 @@ export const GENERATED_ICON_NAMES = [
   'crown', 'streak', 'timer',
   'rush', 'wrench', 'pin', 'medal1', 'medal2', 'medal3', 'dice', 'sparkle', 'ride', 'camera',
   'pause', 'play', 'retry', 'arrow', 'swap', 'moon', 'pumpkin',
+  // Battery Saver (Settings). Codex GPT Image from Alex refs; gate sheet in dustin-feedback-oct8/battery/art.
+  'battery',
 ] as const;
 
 export type GameIconName = typeof ORIGINAL_ICON_NAMES[number] | typeof GENERATED_ICON_NAMES[number];

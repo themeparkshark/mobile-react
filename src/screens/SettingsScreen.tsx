@@ -383,7 +383,7 @@ export default function SettingsScreen() {
           {/* Battery Saver (src/power): every feature stays; the game rests its
               extra motion, checks for news less often and dims face down. */}
           <SettingsRow
-            art="energy"
+            art="battery"
             title="Battery Saver"
             detail={batterySaver ? 'On: lasts longer. Screen goes dark face down, flip it up to play' : 'Off: tap to make your battery last longer'}
             isLast

@@ -21,14 +21,24 @@ const wakeListeners = new Set<() => void>();
 export function markUserActivity(now = Date.now()): void {
   lastActivityAt = now;
   if (wakeListeners.size) wakeListeners.forEach(fn => fn());
-  if (activityListeners.size) activityListeners.forEach(fn => fn());
 }
 
-/** Hear every touch or step (cheap: one Set). Returns the unsubscribe. */
-const activityListeners = new Set<() => void>();
-export function onUserActivity(listener: () => void): () => void {
-  activityListeners.add(listener);
-  return () => { activityListeners.delete(listener); };
+/**
+ * Touches only (not steps). Pocket dim must keep dimming while the player
+ * walks with the phone in a pocket, so it listens to this clock, not to
+ * activity (ExploreScreen marks every GPS step as activity).
+ */
+let lastTouchAt = 0;
+const touchListeners = new Set<() => void>();
+export function markUserTouch(now = Date.now()): void {
+  lastTouchAt = now;
+  markUserActivity(now);
+  if (touchListeners.size) touchListeners.forEach(fn => fn());
+}
+export function lastUserTouchAt(): number { return lastTouchAt; }
+export function onUserTouch(listener: () => void): () => void {
+  touchListeners.add(listener);
+  return () => { touchListeners.delete(listener); };
 }
 
 export function lastUserActivityAt(): number {

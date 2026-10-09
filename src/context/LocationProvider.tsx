@@ -12,7 +12,7 @@ import { nextParkPresence, NO_PARK_PRESENCE, shouldRefreshParkLookup, type ParkL
   type ParkPresence } from './parkLookupPolicy';
 import { gpsWatchSettings } from './gpsWatchPolicy';
 import { budgetedInterval, usePowerBudget } from '../power';
-import { useAppActive } from '../hooks/useLivePoll';
+import { useAppActive } from '../hooks/appActive';
 import { PositionFilter } from './positionFilter';
 
 // Smoothing factor for heading (lower = smoother but laggier, higher = more responsive but jittery)

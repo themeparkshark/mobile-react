@@ -77,7 +77,7 @@ test('QueueTimesScreen: the countdown only ticks on screen in the foreground, an
   let focused = true; let active = true;
   const view = runtime('src/screens/QueueTimesScreen.tsx', {
     '@react-navigation/native': { useIsFocused: () => focused, useNavigation: () => ({ navigate() {}, goBack() {} }) },
-    '../hooks/useLivePoll': { useAppActive: () => active },
+    '../hooks/appActive': { useAppActive: () => active },
     '../api/endpoints/parks/queue-times/getWikiTimes': { default: async park => { loads.push([park, now]); return []; }, __esModule: true },
     '../context/LocationProvider': { LocationContext: { value: { location: null } } },
     '@shopify/flash-list': { FlashList: 'FlashList' },
@@ -124,4 +124,69 @@ test('LocationProvider policy: the foreground GPS watcher is off in the backgrou
   for (const mapOnScreen of [true, false]) for (const queueTracking of [true, false]) {
     assert.equal(gps.gpsWatchSettings({ mapOnScreen, queueTracking, inPark: true, confirmedOutside: false, appActive: false }).tier, 'off');
   }
+});
+
+test('LocationProvider (mounted): backgrounding removes the GPS watcher and starts none; returning restarts one', async () => {
+  const watchers = []; const appListeners = [];
+  const AppState = { currentState: 'active', addEventListener: (_e, fn) => { appListeners.push(fn); return { remove() { appListeners.splice(appListeners.indexOf(fn), 1); } }; } };
+  const Location = {
+    Accuracy: { Balanced: 3, High: 4, Highest: 5, BestForNavigation: 6 },
+    getForegroundPermissionsAsync: async () => ({ status: 'granted', canAskAgain: true }),
+    requestForegroundPermissionsAsync: async () => ({ status: 'granted' }),
+    watchHeadingAsync: async () => ({ remove() {} }),
+    watchPositionAsync: async (options, onLocation, onError) => {
+      const sub = { options, onLocation, onError, removed: false, remove() { this.removed = true; } };
+      watchers.push(sub); return sub;
+    },
+    getCurrentPositionAsync: async () => ({ coords: { latitude: 1, longitude: 2 } }),
+  };
+  const app = runtime('src/context/LocationProvider.tsx', {
+    'expo-location': Location,
+    'react-native': { Platform: { OS: 'ios' }, Linking: { openURL: async () => undefined }, AppState },
+    rooks: { useAsyncEffect: () => undefined, useDebounce: fn => fn, useIntervalWhen: () => undefined },
+    '../api/endpoints/me/current-park': { default: async () => null },
+    './AuthProvider': { AuthContext: { value: { player: { id: 16, username: 'thedoc' }, refreshPlayer: async () => undefined } } },
+    '../helpers/dev-location-store': { setDevModeEnabled() {}, setDevLocation() {} },
+    './parkLookupPolicy': loadTs('src/context/parkLookupPolicy.ts'),
+  }, { children: 'map' }, { setInterval: () => 0, clearInterval() {}, console: { ...console, warn() {}, error() {} } },
+  { exportName: 'LocationProvider' });
+  const settle = async () => { for (let i = 0; i < 4; i++) { app.render(); await app.settle(); } };
+  const live = () => watchers.filter(w => !w.removed);
+  await app.tree.props.value.requestPermission(); await settle();
+  assert.equal(live().length, 1, 'foreground: one watcher');
+  const started = watchers.length;
+  AppState.currentState = 'background';
+  [...appListeners].forEach(fn => fn('background')); await settle();
+  assert.equal(live().length, 0, 'background: watcher removed');
+  assert.equal(watchers.length, started, 'and no new watcher started in the pocket');
+  AppState.currentState = 'active';
+  [...appListeners].forEach(fn => fn('active')); await settle();
+  assert.equal(live().length, 1, 'back in front: one watcher again');
+  app.unmount();
+});
+
+test('useLivePoll (mounted): an idle caller (90 s) on Battery Saver schedules 180 s, not more', () => {
+  const AppState = { currentState: 'active', addEventListener: () => ({ remove() {} }) };
+  const view = runtime('src/hooks/useLivePoll.ts', {
+    'react-native': { AppState },
+    '../power': { usePowerBudget: () => ({ lowPower: true, idle: true, pollMultiplier: 3 }) },
+  }, { run: () => {}, ms: 90000, opts: {} }, { Date: { now: () => 1_000_000 } },
+  { arguments: props => [props.run, props.ms, props.opts] });
+  assert.deepEqual([...view.delays.values()], [180000]);
+  view.unmount();
+});
+
+test('pocket dim listens to touches only: walking (GPS activity) never resets the wait', () => {
+  const idle = loadTs('src/hooks/useUserIdle.ts', { react: { useEffect() {}, useState: v => [v, () => {}] } });
+  const p = loadTs('src/power/pocketPolicy.ts');
+  idle.markUserTouch(0);
+  let s = p.POCKET_START;
+  for (let t = 4000; t <= 8000; t += 1000) {
+    idle.markUserActivity(t); // a GPS step, as ExploreScreen reports
+    s = p.nextPocketState(s, { x: 0, y: 0.95, z: 0 }, t, idle.lastUserTouchAt());
+  }
+  assert.equal(s.dim, true, 'walking with the phone in a pocket still dims');
+  idle.markUserTouch(8500);
+  s = p.nextPocketState(s, { x: 0, y: 0.95, z: 0 }, 9000, idle.lastUserTouchAt());
+  assert.equal(s.dim, false, 'a touch still wakes it');
 });
