@@ -382,6 +382,10 @@ const TierColumn = memo(function TierColumn({ tier, current, premium, busy, puls
     <View style={s.col}>
       <Cell reward={tier.free} claimed={tier.free_claimed} ready={freeReady} locked={!tier.unlocked} pass={false}
         pulse={pulse} busy={busy === `${tier.tier}:free`} onPress={() => (freeReady ? onClaim('free') : onLocked())} />
+      {/* The rail runs through every step: gold up to where the player is. */}
+      <View style={s.railWrap} pointerEvents="none">
+        <View style={[s.rail, tier.unlocked && s.railOn]} />
+      </View>
       <View style={[s.node, tier.unlocked && s.nodeOn, tier.tier === current && s.nodeNow]}>
         <Text maxFontSizeMultiplier={1.1} style={[s.nodeText, tier.unlocked && s.nodeTextOn]}>{tier.tier}</Text>
       </View>
@@ -453,6 +457,9 @@ const s = StyleSheet.create({
   badge: { position: 'absolute', top: -8, right: -6 },
   claimTag: { position: 'absolute', bottom: -10, backgroundColor: '#2fb44a', borderRadius: 8, borderWidth: 2, borderColor: '#ffffff', paddingHorizontal: 6 },
   claimTagText: { fontFamily: FONT.display, fontSize: 11, color: '#ffffff' },
+  railWrap: { position: 'absolute', left: 0, right: 0, top: 6 + 104 + 6 + 17 - 4, height: 8, justifyContent: 'center' },
+  rail: { height: 8, backgroundColor: 'rgba(5,52,110,0.7)', borderTopWidth: 2, borderBottomWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
+  railOn: { backgroundColor: BRAND.gold, borderColor: '#ffffff' },
   node: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(5,52,110,0.7)', borderWidth: 3, borderColor: 'rgba(255,255,255,0.5)', alignItems: 'center', justifyContent: 'center' },
   nodeOn: { backgroundColor: BRAND.gold, borderColor: '#ffffff' },
   nodeNow: { transform: [{ scale: 1.18 }], borderColor: '#7dffb0' },
