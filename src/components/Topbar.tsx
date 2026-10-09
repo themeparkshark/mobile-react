@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { ReactNode, useContext, useRef, useState } from 'react';
 import { Animated, Dimensions, ImageBackground, Pressable, SafeAreaView, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as RootNavigation from '../RootNavigation';
 import { ThemeContext } from '../context/ThemeProvider';
 import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffectProvider';
@@ -88,6 +89,7 @@ export function BackButton({ onPress }: { readonly onPress?: () => void }) {
 export default function Topbar({
   children,
   purple = false,
+  night = false,
 }: {
   readonly children?: ReactNode;
   readonly informationModalId?: number | null;
@@ -95,6 +97,8 @@ export default function Topbar({
   readonly leftButton?: ReactNode | null;
   readonly text?: string | null;
   readonly purple?: boolean;
+  /** The Secret Shop: the same bar and layout at midnight (a navy wash over Alex's bar, a thin gold line). */
+  readonly night?: boolean;
   readonly showBackButton?: boolean;
   readonly showCurrencies?: boolean;
   readonly parkCoin?: string | null;
@@ -136,6 +140,12 @@ export default function Topbar({
         {!purple && !!theme?.top_bar_url && (
           <Image source={{ uri: theme.top_bar_url }} cachePolicy="disk" contentFit="cover" transition={0}
             style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} accessibilityIgnoresInvertColors />
+        )}
+        {night && (
+          <>
+            <LinearGradient pointerEvents="none" colors={['rgba(5,12,34,0.72)', 'rgba(10,22,54,0.82)']} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+            <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: '#ffcf3b' }} />
+          </>
         )}
         <SafeAreaView>
           <View

@@ -517,7 +517,7 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       <Reanimated.View style={v2 ? titleStyle : undefined}
         onLayout={e => { if (!barH) setBarH(e.nativeEvent.layout.height); }}>
       {/* The vault keeps the house top bar (navy, not the legacy purple one): the shelves carry the midnight. */}
-      <Topbar purple={(currentStore?.is_secret_store ?? false) && !secretShelves}>
+      <Topbar purple={(currentStore?.is_secret_store ?? false) && !secretShelves} night={secretShelves}>
         <TopbarColumn stretch={false}>
           {v2 ? <View style={{ width: 35 }} /> : <BackButton />}
         </TopbarColumn>
