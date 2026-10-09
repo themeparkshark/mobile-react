@@ -54,8 +54,8 @@ import {
   type FxStageHandle,
   type GameResult,
 } from '../../gamekit';
-import GameIcon from '../../ui/GameIcon';
-import { memoryLossBanner, memoryLossCopy, triesLeftLine } from './lossCopy';
+import { memoryLossBanner, memoryLossCopy } from './lossCopy';
+import { TryCard } from './TryCard';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MemoryCard, makeCardValues, type CardValues, type MemoryCardHandle, type ShimmerState } from './MemoryCard';
@@ -2432,7 +2432,7 @@ export default function MemoryGame({
             {tryScreen ? (
               <TryCard copy={memoryLossCopy(tryScreen.pairs, tryScreen.total, tryScreen.out, tryScreen.flipped)} pairs={tryScreen.pairs}
                 total={tryScreen.total} left={tryScreen.left} top={g.felt.y + g.felt.h * 0.2}
-                enter={tryCardIn} onTryAgain={tryAgain} onDone={giveUp} />
+                enter={tryCardIn} reducedMotion={reducedMotion} onTryAgain={tryAgain} onDone={giveUp} />
             ) : null}
           </>
         ) : null}
@@ -2442,48 +2442,6 @@ export default function MemoryGame({
 }
 
 const EMPTY_FACE = {};
-
-/**
- * The end of a Memory Match try: an honest title, the pairs found as gold
- * pips, TRY AGAIN while the Ticket has tries, and a real Done button. The
- * board stays visible behind it (light veil, revealed cards).
- */
-function TryCard({ copy, pairs, total, left, top, enter, onTryAgain, onDone }: {
-  copy: { title: string; line: string }; pairs: number; total: number; left: number; top: number;
-  enter: import('react-native-reanimated').SharedValue<number>; onTryAgain: () => void; onDone: () => void;
-}) {
-  // Opacity and a short rise only: a scaled, shadowed layer smeared its own background on iOS.
-  const style = useAnimatedStyle(() => ({ opacity: Math.min(1, enter.value * 1.6), transform: [{ translateY: (1 - enter.value) * 24 }] }));
-  const canRetry = left > 0;
-  return (
-    <Animated.View style={[styles.tryPos, { top }, style]} accessibilityViewIsModal>
-     <View style={styles.tryWrap}>
-      <Text style={styles.tryTitle} accessibilityRole="header">{copy.title}</Text>
-      <View style={styles.tryPips} accessible accessibilityLabel={`${pairs} of ${total} pairs found`}>
-        {Array.from({ length: total }, (_, i) => (
-          <View key={i} style={[styles.tryPip, i < pairs && styles.tryPipOn]} />
-        ))}
-      </View>
-      <Text style={styles.tryLine}>{copy.line}</Text>
-      {canRetry ? (
-        <Pressable onPress={onTryAgain} style={({ pressed }) => [styles.tryBtn, pressed && styles.tryBtnDown]}
-          accessibilityRole="button" accessibilityLabel={`Try again. ${triesLeftLine(left)}`}>
-          <GameIcon name="retry" size={24} />
-          <Text style={styles.tryBtnText}>TRY AGAIN</Text>
-        </Pressable>
-      ) : null}
-      <View style={styles.tryLeftRow}>
-        <GameIcon name="ticket" size={24} />
-        <Text style={styles.tryLeft}>{triesLeftLine(left)}</Text>
-      </View>
-      <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? styles.tryDone : styles.tryBtn, pressed && styles.tryBtnDown]}
-        accessibilityRole="button" accessibilityLabel="Done">
-        <Text style={canRetry ? styles.tryDoneText : styles.tryBtnText}>{canRetry ? 'Done' : 'DONE'}</Text>
-      </Pressable>
-     </View>
-    </Animated.View>
-  );
-}
 
 /** Showtime rays: 12 hard-edged wedges, cream and gold with an ink outline, rotating 6deg/s. */
 const Rays = React.memo(function Rays({ cx, cy, r, amount, still }: { cx: number; cy: number; r: number; amount: import('react-native-reanimated').SharedValue<number>; still: boolean }) {
@@ -2564,18 +2522,4 @@ const styles = StyleSheet.create({
   unlockKicker: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, letterSpacing: 1 },
   unlockText: { fontFamily: 'Shark', fontSize: 28, color: MM.navyText },
   unlockHint: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, marginTop: 2 },
-  tryPos: { position: 'absolute', left: 26, right: 26 },
-  tryWrap: { alignItems: 'center', backgroundColor: '#fffdf4', borderRadius: 24, borderWidth: 3, borderColor: MM.ink, paddingTop: 16, paddingBottom: 16, paddingHorizontal: 18, borderBottomWidth: 6 },
-  tryTitle: { fontFamily: 'Shark', fontSize: 36, color: MM.navyText, textAlign: 'center' },
-  tryPips: { flexDirection: 'row', gap: 6, marginTop: 6, marginBottom: 6 },
-  tryPip: { width: 18, height: 18, borderRadius: 9, borderWidth: 2.5, borderColor: MM.ink, backgroundColor: '#dbe9f5' },
-  tryPipOn: { backgroundColor: MM.gold, borderColor: MM.goldDeep },
-  tryLine: { fontFamily: 'Knockout', fontSize: 18, lineHeight: 22, color: MM.navyText, textAlign: 'center', marginBottom: 12 },
-  tryBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: MM.gold, borderRadius: 16, paddingHorizontal: 30, paddingVertical: 12, borderWidth: 3, borderColor: MM.ink, borderBottomWidth: 6, borderBottomColor: MM.goldDeep, minWidth: 210, justifyContent: 'center' },
-  tryBtnDown: { transform: [{ translateY: 2 }, { scale: 0.98 }] },
-  tryBtnText: { fontFamily: 'Shark', fontSize: 24, color: '#075083' },
-  tryLeftRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
-  tryLeft: { fontFamily: 'Knockout', fontSize: 15, color: MM.navyText },
-  tryDone: { marginTop: 10, minWidth: 160, minHeight: 44, borderRadius: 14, borderWidth: 2.5, borderColor: MM.ink, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  tryDoneText: { fontFamily: 'Shark', fontSize: 20, color: MM.navyText },
 });

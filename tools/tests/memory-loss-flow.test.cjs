@@ -34,7 +34,7 @@ test('the results banner and end card use the honest copy', () => {
   assert.doesNotMatch(src, />SO CLOSE</);
   assert.doesNotMatch(src, />End challenge</);
   assert.match(src, /<TryCard copy=\{memoryLossCopy\(tryScreen\.pairs, tryScreen\.total, tryScreen\.out, tryScreen\.flipped\)\}/);
-  assert.match(src, /accessibilityLabel="Done"/);
+  assert.match(fs.readFileSync(path.join(root, 'src/games/memory/TryCard.tsx'), 'utf8'), /accessibilityLabel="Done"/);
 });
 
 test('cards stay visible: only known faces flip, under a light veil', () => {
