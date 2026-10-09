@@ -40,7 +40,10 @@ export default function Broadcasts() {
           shadowRadius: 3,
         }}
       >
+        {/* Capped: the resting banner hides behind the header art; at the largest text size an uncapped empty line
+            made it taller than the header, so a pale box peeked out under every screen title. */}
         <Text
+          maxFontSizeMultiplier={1.2}
           style={{
             textAlign: 'center',
             fontFamily: 'Knockout',

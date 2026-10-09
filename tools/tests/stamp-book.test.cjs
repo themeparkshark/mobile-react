@@ -500,3 +500,7 @@ test('round 5: the unlock sparkle plays only on claim, never on taking a title o
   // The header title stops growing at 1.2x so it never outgrows its art at the largest text size.
   assert.match(read('src/components/Topbar/TopbarText.tsx'), /maxFontSizeMultiplier=\{1\.2\}/);
 });
+
+test('round 6: the resting broadcast banner stays hidden behind the header at the largest text size', () => {
+  assert.match(read('src/components/Broadcasts.tsx'), /<Text\s+maxFontSizeMultiplier=\{1\.2\}/);
+});
