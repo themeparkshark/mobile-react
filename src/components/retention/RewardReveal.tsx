@@ -68,6 +68,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const [stalled, setStalled] = useState(false);
   // The button appears a beat after the last prize (600 ms after a hero card) and ignores taps for 400 ms after a skip.
   const [buttonReady, setButtonReady] = useState(false);
+  const [replay, setReplay] = useState(0);
   const openedAt = useRef(0);
   const [stage, setStage] = useState<{ x: number; y: number } | null>(null);
   const rows = rewards ? rewardRows(rewards) : [];
@@ -122,7 +123,11 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     if (reducedMotion) {
       setSwapped(true);
       haptic('success'); playSfx('fx.reward');
-      rows.forEach((row, i) => later(() => { setLanded(n => Math.max(n, i + 1)); if (isBigReward(row.kind)) scroll.current?.scrollToEnd({ animated: false }); }, 120 * (i + 1)));
+      rows.forEach((row, i) => later(() => {
+        setLanded(n => Math.max(n, i + 1));
+        haptic(isBigReward(row.kind) ? 'comboHeavy' : 'tickSelection');
+        if (isBigReward(row.kind)) scroll.current?.scrollToEnd({ animated: false });
+      }, 120 * (i + 1)));
       later(() => setButtonReady(true), 120 * rows.length + 300);
       return;
     }
@@ -149,6 +154,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealed, reducedMotion]);
 
+  // The chest glow flares again when a hero card lands.
+  const pulseGlow = () => { if (!reducedMotion) glow.value = withSequence(withTiming(1.6, { duration: 120 }), withTiming(1, { duration: 300 })); };
   const chestStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: bob.value - drop.value * 140 }, { rotate: `${shake.value}deg` }, { scale: pop.value },
       { scaleY: squash.value }],
@@ -161,6 +168,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     if (!revealed || allIn || Date.now() - openedAt.current < 350) return;
     timers.current.forEach(clearTimeout); timers.current = [];
     setLanded(rows.length); setSwapped(true);
+    // Skipping still lands the last hero with a short slam (repeat openers mostly see this version).
+    setReplay(k => k + 1);
+    const last = rows[rows.length - 1];
+    if (last && isBigReward(last.kind)) { haptic('comboHeavy'); playSfx('fx.firework', 0.8); }
     later(() => setButtonReady(true), 400);
   };
 
@@ -185,6 +196,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
             </View>
           ) : rows.map((row, i) => (
             <Row key={row.kind} row={row} shown={i < landed} reducedMotion={reducedMotion} compact={compact}
+              slamKey={i === rows.length - 1 ? replay : 0} onLand={isBigReward(row.kind) ? pulseGlow : undefined}
               onWear={row.kind === 'item' ? onWear : undefined} onPins={row.kind === 'mystery_boxes' ? onPins : undefined} />
           ))}
         </ScrollView>
@@ -248,8 +260,9 @@ function useCountUp(target: number, run: boolean, instant: boolean): number {
   return n;
 }
 
-function Row({ row, shown, reducedMotion, onWear, onPins, compact = false }: {
+function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamKey = 0, onLand }: {
   readonly row: RewardRow; readonly shown: boolean; readonly reducedMotion: boolean; readonly compact?: boolean;
+  readonly slamKey?: number; readonly onLand?: () => void;
   readonly onWear?: () => void; readonly onPins?: () => void;
 }) {
   const big = isBigReward(row.kind);
@@ -261,8 +274,14 @@ function Row({ row, shown, reducedMotion, onWear, onPins, compact = false }: {
     // Hero cards: slam past rest (scale 0.96), a 90 ms hit-stop, then spring back to 1.
     t.value = big ? withSequence(withTiming(1.114, { duration: 120, easing: Easing.in(Easing.quad) }), withDelay(90, withSpring(1, { damping: 7, stiffness: 260 })))
       : withSpring(1, { damping: 10, stiffness: 220 });
-    if (big) beam.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: 900 }));
-  }, [shown, reducedMotion, big, t, beam]);
+    if (big) { beam.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: 900 })); onLand?.(); }
+  }, [shown, reducedMotion, big, t, beam]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A skip replays a short slam on the last hero (250 ms).
+  useEffect(() => {
+    if (!slamKey || !big || reducedMotion) return;
+    t.value = withSequence(withTiming(1.08, { duration: 90 }), withSpring(1, { damping: 8, stiffness: 300 }));
+    onLand?.();
+  }, [slamKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const style = useAnimatedStyle(() => ({
     opacity: Math.min(1, t.value),
     transform: big

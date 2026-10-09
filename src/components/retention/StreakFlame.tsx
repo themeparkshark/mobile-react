@@ -1,8 +1,12 @@
+import { Image } from 'expo-image';
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
+
+/** A resting flame (best streak): Alex's flame recoloured slate, outline kept, never a faded copy. */
+const BEST = require('../../../assets/images/retention/streak-best.png');
 
 /**
  * The Daily 3 flame badge for other screens (Profile, a player's page, friend
@@ -38,8 +42,8 @@ export default function StreakFlame({ streak, best = 0, size = 28, still = false
   const pill = Math.max(16, Math.round(size * 0.62));
   return (
     <View style={styles.row} accessible accessibilityLabel={label}>
-      <Animated.View style={[!lit && styles.resting, style]}>
-        <GameIcon name="streak" size={size} />
+      <Animated.View style={style}>
+        {lit ? <GameIcon name="streak" size={size} /> : <Image source={BEST} style={{ width: size, height: size }} contentFit="contain" />}
       </Animated.View>
       <View style={[styles.pill, { height: pill, minWidth: pill, borderRadius: pill / 2, marginLeft: -size * 0.28 }, !lit && styles.pillBest]}>
         <Text style={[styles.text, { fontSize: Math.round(pill * 0.62) }, !lit && styles.textBest]} allowFontScaling={false}>
@@ -52,7 +56,6 @@ export default function StreakFlame({ streak, best = 0, size = 28, still = false
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-end' },
-  resting: { opacity: 0.55 },
   pill: { backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
   pillBest: { backgroundColor: '#e3eef8', borderColor: '#6d8fb0' },
   text: { fontFamily: 'Shark', color: BRAND.navy, marginTop: 1 },

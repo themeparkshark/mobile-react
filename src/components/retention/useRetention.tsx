@@ -348,6 +348,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         <View style={styles.nextRow}>
           <Image source={WEEKLY} style={{ width: 28, height: 28 }} contentFit="contain" />
           <Text style={styles.nextText}>Next box: 5 flames next week</Text>
+          <View style={styles.pips}>{[0, 1, 2, 3, 4].map(i => <View key={i} style={styles.pip} />)}</View>
         </View>
       )
       : daily ? (
@@ -453,6 +454,8 @@ function XpBar({ pct, reducedMotion }: { readonly pct: number; readonly reducedM
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center' },
   nextBlock: { gap: 6 },
+  pips: { flexDirection: 'row', gap: 3 },
+  pip: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: BRAND.gold },
   xpTrack: { height: 16, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'visible', justifyContent: 'center',
     marginHorizontal: 18, paddingLeft: 0 },
   xpFill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 8, backgroundColor: BRAND.gold },

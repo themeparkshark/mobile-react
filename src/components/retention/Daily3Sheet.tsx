@@ -101,7 +101,7 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
             state.week.claimable && state.claimable && styles.weeklyWaiting]}>
           <Image source={WEEKLY} style={styles.weeklyArt} contentFit="contain" />
           <Text style={[styles.weeklyText, state.week.claimable && !state.claimable && styles.weeklyTextReady]}>
-            {state.week.claimed ? 'DONE' : state.week.claimable ? 'OPEN' : 'GIFT'}
+            {state.week.claimed ? 'DONE' : state.week.claimable ? (state.claimable ? 'NEXT' : 'OPEN') : 'GIFT'}
           </Text>
         </Pressable>
       </View>
