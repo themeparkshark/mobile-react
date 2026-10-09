@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject }
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { createHeadingFilter, angleDelta } from './headingFilter';
-import { CAM_MODE_SPIN_MS, CAM_RECENTER_MS, CAM_TICK_MS, camChanged, chaseActive, chaseAdvance, chaseFix, chasePeek, chaseWalk, newChaser,
+import { CAM_MODE_SPIN_MS, CAM_RECENTER_MS, CAM_TICK_MS, camChanged, chaseActive, chaseAdvance, chaseFix, chaseHeading, chasePeek, chaseWalk, newChaser,
   targetBearing, segmentGap, segmentMs, walkGlideMs, WalkPace, type Chaser, type CamStop, type FollowMode } from './cameraFollow';
 import { GLIDE_MAX_M, GLIDE_MIN_M, glideMeters, type GlidePoint } from './glide';
 import { probeCount } from '../../dev/motionProbe';
@@ -106,7 +106,7 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
       const mapBearing = following ? (target ?? 0) : freeBearing.current;
       animateFacing(mode.current === 'heading' && following ? 0 : angleDelta(mapBearing, h), seg);
     }
-    if (chaser.current) chaseAdvance(chaser.current, now);
+    if (chaser.current) { chaseHeading(chaser.current, h); chaseAdvance(chaser.current, now); }
     if (quiet.current < 3 || chaseActive(chaser.current, now) || !filter.settled()) schedule(CAM_TICK_MS);
   };
   const schedule = (ms: number) => {

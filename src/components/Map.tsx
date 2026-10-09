@@ -13,7 +13,7 @@ import { SharkSparkles } from './map/SharkSparkles';
 import { TrailBoxBadge, type MapTrail } from './map/TrailBoxBadge';
 import { CHEER_REPEAT_MS, nextFidget, FIDGET_GAP_MS, tapTrick, type SharkMood } from './map/sharkLife';
 import { useFxClock, useFxKick } from '../fx/FxStage';
-import { useWalkSense } from '../gamekit/motion/useWalkSense';
+import { useMapWalkSense } from './map/useMapWalkSense';
 import { wornFx } from '../fx/FxLayers';
 import type { FollowMode } from './map/cameraFollow';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -68,8 +68,8 @@ const FOLLOW_MODE_KEY = 'tps_map_follow_mode_v1';
 const FOLLOW_ZOOM_MIN = 14;
 const FOLLOW_ZOOM_MAX = 20;
 const WHOOSH = require('../../assets/sounds/whoosh.mp3');
-/** Walk detection for the map: walking after 2 steps, standing 0.9 s after the last step. */
-const WALK_SENSE_MAP = { startSteps: 2, stopAfterMs: 900 } as const;
+/** Walk detection for the map: walking after 3 steps (a fidget is not a walk), standing 0.9 s after the last step. */
+const WALK_SENSE_MAP = { startSteps: 3, stopAfterMs: 900 } as const;
 const SHARK_TAP_SOUND = require('../../assets/sounds/inventory_item_tap.mp3');
 
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
@@ -291,8 +291,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   useEffect(() => { cam.setRunning(screenFocused && appActive); }, [screenFocused, appActive, cam.setRunning]); // eslint-disable-line react-hooks/exhaustive-deps
   // The step sensor: the shark sets off the moment you do and settles the moment you stop (the GPS
   // only reports every few metres). Accelerometer at 25 Hz, only while this map is on screen.
-  useWalkSense({ active: compassOn && !!location, intervalMs: 40, config: WALK_SENSE_MAP,
-    onWalkChange: walking => {
+  useMapWalkSense(compassOn && !!location, 40, WALK_SENSE_MAP, walking => {
       cam.onWalk(walking);
       // Setting off: the waddle and wake start with your first steps, not at the next GPS fix.
       if (walking && !reducedMotion) { wake.value = withTiming(1, { duration: 250 }); runStride(1.2, 60_000); }
@@ -302,7 +301,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         strideMs.current = 0; cancelAnimation(stride); stride.value = withTiming(0, { duration: 250 });
         wake.value = withTiming(0, { duration: 500 });
       }
-    } });
+    });
   // Fin-ister layers place chips with the map's bearing (it used to be the compass, back when the map always turned with it).
   const frightBearing = useRef(createBearingStore()).current;
 

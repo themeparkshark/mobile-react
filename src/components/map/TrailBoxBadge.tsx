@@ -36,7 +36,8 @@ export function TrailBoxBadge({ trail, live }: { readonly trail: MapTrail | null
     if (ready > 0 && live) pop.value = withSequence(withTiming(1.35, { duration: 120 }), withSpring(1, { damping: 6, stiffness: 260 }));
   }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
   const wrap = useAnimatedStyle(() => ({ opacity: show.value, transform: [{ scale: (0.6 + 0.4 * show.value) * pop.value }] }));
-  const bar = useAnimatedStyle(() => ({ width: `${Math.round(fill.value * 100)}%` }));
+  // scaleX, not width: no layout pass per frame.
+  const bar = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.001, fill.value) }] }));
   return (
     <Reanimated.View pointerEvents="none" style={[styles.badge, wrap]}>
       <View style={[styles.box, { backgroundColor: trail?.tier ? TIER[trail.tier] : BRAND.blueBright }]}>
@@ -52,5 +53,5 @@ const styles = StyleSheet.create({
   badge: { position: 'absolute', left: 64, top: 44, alignItems: 'center' },
   box: { width: 22, height: 22, borderRadius: 7, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   track: { marginTop: 2, width: 22, height: 4, borderRadius: 2, backgroundColor: 'rgba(5,52,110,0.35)', overflow: 'hidden' },
-  fill: { height: 4, borderRadius: 2, backgroundColor: BRAND.gold },
+  fill: { width: 22, height: 4, borderRadius: 2, backgroundColor: BRAND.gold, transformOrigin: 'left' },
 });

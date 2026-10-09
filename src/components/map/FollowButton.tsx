@@ -9,8 +9,7 @@ import type { FollowMode } from './cameraFollow';
 
 const ROSE = require('../../../assets/images/map/compass-rose.png');
 /** Panned away the button shows your own shark (its look), or Alex's Classic: "take me back to it". */
-const CLASSIC = require('../../../assets/images/screens/inventory/classic-no-eye.png');
-const EYES = require('../../../assets/images/screens/inventory/blink.png');
+const CLASSIC = require('../../../assets/images/map/follow-shark-classic.png');
 
 /** What the map's top-right button is doing right now. */
 export type FollowButtonState = 'away' | FollowMode;
@@ -151,12 +150,7 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
         <Reanimated.View style={[styles.button, state === 'north' && styles.north, state === 'away' && styles.away, buttonStyle]}>
           {state === 'away' ? (
             <Reanimated.View style={[styles.sharkBox, nudgeStyle]}>
-              {awayArt ?? (
-                <>
-                  <Image source={CLASSIC} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
-                  <Image source={EYES} autoplay={false} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
-                </>
-              )}
+              {awayArt ?? <Image source={CLASSIC} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />}
             </Reanimated.View>
           ) : (
             <Reanimated.View style={[styles.rose, roseStyle]}>
