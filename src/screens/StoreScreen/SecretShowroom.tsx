@@ -52,11 +52,11 @@ import { useWishCount, useWished } from './wishStore';
 const SCREEN_W = Dimensions.get('window').width;
 const PANEL_W = SCREEN_W - 20;
 const INNER_W = PANEL_W - 6;
-const TILE = 86;
+const TILE = 100;
 const KIND: Record<ShowroomKind, { icon: GameIconName; name: (s: ShopSection) => string }> = {
   vault: { icon: 'crown', name: () => 'The Vault' },
   season: { icon: 'sparkle', name: s => s.title || 'Season drop' },
-  tonight: { icon: 'moon', name: () => "Tonight's Pick" },
+  tonight: { icon: 'star', name: () => "Tonight's Pick" },
 };
 
 /** A season drop's drawn art (Alex-style pipeline art, wave 2), shown in its shelf chip and tile badge. */
@@ -138,7 +138,7 @@ const RailTile = memo(function RailTile({ entry, selected, owned, member, still,
         <View style={styles.tileClip} pointerEvents="none">
           <LinearGradient colors={[...V.tilePlate]} style={StyleSheet.absoluteFill} />
           <LinearGradient colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)']} style={styles.tileGloss} />
-          <View style={styles.tileArt}><TileArt item={item} size={TILE - 14} still={still || !selected} /></View>
+          <View style={styles.tileArt}><TileArt item={item} size={TILE - 18} still={still} /></View>
         </View>
         <View style={styles.tileKind} pointerEvents="none"><ShelfMark entry={entry} size={13} /></View>
         <View style={[styles.tilePrice, owned && styles.tileOwned]} pointerEvents="none">
@@ -243,7 +243,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
           <Animated.View style={[{ height: stageH }, stageStyle]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
               accessibilityLabel={`${name} on your shark. Tap to see it up close.`}>
-              <ShopStage rim={V.gold} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={[...V.sky]} rays={V.inkGold}
+              <ShopStage rim={V.gold} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={false} rays={V.inkGold}
                 still={resting} plinth={stage?.scene ? 'none' : 'secret'}
                 backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={resting} /> : undefined}>
                 {!stage?.scene && <StarMotes still={resting} />}
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
   scroll: { paddingTop: 8, gap: 10 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, minHeight: 40 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 6, paddingRight: 12, height: 36, borderRadius: 18,
-    backgroundColor: V.well, borderWidth: 2, borderColor: V.gold },
+    backgroundColor: V.well, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
   badgeText: { fontFamily: FONT.display, fontSize: 14, color: V.inkGold, letterSpacing: 0.8 },
   favs: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 36, paddingHorizontal: 10, borderRadius: 18,
     backgroundColor: '#fff0f5', borderWidth: 2, borderColor: '#ff4f8b' },
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     backgroundColor: V.card, borderWidth: 2, borderColor: '#ffffff' },
   coinsText: { fontFamily: FONT.display, fontSize: 16, color: '#ffffff' },
   guest: { marginHorizontal: 14, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: 'rgba(8,22,56,0.75)',
-    borderWidth: 1.5, borderColor: 'rgba(255,207,59,0.45)' },
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
   guestText: { fontFamily: FONT.body, fontSize: 15, lineHeight: 19, color: V.inkSoft, textAlign: 'center' },
   guestStrong: { fontFamily: FONT.display, color: V.ink },
   panelWrap: { marginBottom: 0 },
@@ -327,20 +327,20 @@ const styles = StyleSheet.create({
   flare: { borderTopLeftRadius: 21, borderTopRightRadius: 21, borderWidth: 5, borderColor: V.gold, borderBottomWidth: 0 },
   stageTop: { position: 'absolute', top: 10, left: 10, right: 10, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
   shelfChip: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, height: 32, paddingLeft: 8, paddingRight: 12, borderRadius: 16,
-    backgroundColor: 'rgba(5,12,34,0.72)', borderWidth: 1.5, borderColor: 'rgba(255,207,59,0.6)' },
+    backgroundColor: 'rgba(5,12,34,0.72)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.45)' },
   shelfName: { fontFamily: FONT.display, fontSize: 13, color: V.inkGold, letterSpacing: 0.8, flexShrink: 1 },
   shelfDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: V.inkSoft, opacity: 0.8 },
   shelfWhen: { fontFamily: FONT.display, fontSize: 13, color: V.ink },
   heart: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.94)',
     borderWidth: 2, borderColor: '#ff9fbf' },
   heartOn: { borderColor: '#ff4f8b' },
-  plate: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16, gap: 4 },
+  plate: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 14, gap: 4 },
   name: { fontFamily: FONT.display, fontSize: 28, lineHeight: 33, color: V.ink, textAlign: 'center', letterSpacing: 0.4,
     textShadowColor: V.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
-  blurb: { fontFamily: FONT.body, fontSize: 16, lineHeight: 20, color: V.inkSoft, textAlign: 'center', minHeight: 40 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, minHeight: 56 },
+  blurb: { fontFamily: FONT.body, fontSize: 16, lineHeight: 20, color: V.inkSoft, textAlign: 'center' },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, minHeight: 50 },
   price: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 40, borderRadius: 20,
-    backgroundColor: V.well, borderWidth: 2, borderColor: V.gold },
+    backgroundColor: V.well, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
   priceText: { fontFamily: FONT.display, fontSize: 21, color: V.inkGold },
   yours: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 8, paddingRight: 14, height: 40, borderRadius: 20,
     backgroundColor: '#1f9d55', borderWidth: 2, borderColor: '#ffffff' },
@@ -350,15 +350,15 @@ const styles = StyleSheet.create({
   leavingText: { fontFamily: FONT.display, fontSize: 12, color: V.inkGold, letterSpacing: 0.6 },
   railHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, marginTop: 4 },
   railTitle: { fontFamily: FONT.display, fontSize: 16, color: V.inkGold, letterSpacing: 1 },
-  railHint: { fontFamily: FONT.body, fontSize: 14, color: V.inkSoft },
-  rail: { gap: 12, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8 },
-  tile: { width: TILE, height: TILE + 18, borderRadius: 18, borderWidth: 2, borderColor: 'rgba(255,207,59,0.45)', backgroundColor: V.panelDeep },
+  railHint: { fontFamily: FONT.body, fontSize: 15, color: V.inkSoft },
+  rail: { gap: 12, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 8 },
+  tile: { width: TILE, height: TILE + 18, borderRadius: 18, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)', backgroundColor: V.panelDeep },
   tileOn: { borderWidth: 3, borderColor: V.gold, shadowColor: V.gold, shadowOpacity: 0.8, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
   tileClip: { ...StyleSheet.absoluteFillObject, borderRadius: 16, overflow: 'hidden' },
   tileGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },
   tileArt: { position: 'absolute', left: 0, right: 0, top: 8, height: TILE - 10, alignItems: 'center', justifyContent: 'center' },
-  tileKind: { position: 'absolute', top: -7, left: -7, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: V.well, borderWidth: 2, borderColor: V.gold },
+  tileKind: { position: 'absolute', top: 5, left: 5, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(5,12,34,0.8)' },
   tilePrice: { position: 'absolute', bottom: 6, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, height: 22,
     borderRadius: 11, backgroundColor: V.well },
   tileOwned: { backgroundColor: '#1f9d55' },

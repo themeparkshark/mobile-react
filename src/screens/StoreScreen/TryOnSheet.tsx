@@ -70,6 +70,11 @@ const PLAYERCARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 const SECRET_STAGE_H = Math.round(Math.min(430, SHEET_H * 0.52));
 const SECRET_CARD = stageCard(SCREEN_W - 28 - 6, SECRET_STAGE_H - 6, HOP + 0.04 * (SECRET_STAGE_H / 2) + 4);
 const SECRET_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SECRET_CARD.box };
+// A piece with no set strip (most classic-catalog gear) gets the room the strip would use: a bigger stage,
+// no dead gap above the buttons (art director, Oct 8 round 1).
+const SOLO_STAGE_H = Math.round(Math.min(400, SHEET_H * 0.5));
+const SOLO_CARD = stageCard(SCREEN_W - 28 - 6, SOLO_STAGE_H - 6, HOP + 0.04 * (SOLO_STAGE_H / 2) + 4);
+const SOLO_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SOLO_CARD.box };
 /** The sheet's spring has settled by about now: moments wait for it, so every open shows a whole moment. */
 const SHEET_SETTLE_MS = 300;
 
@@ -326,10 +331,12 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const lapsedCta = lapsed && vipLocked ? { ...baseCta, note: 'Your VIP ended, so this one is locked. Your coins are safe.' } : baseCta;
   // The buy confirmation says the member rule out loud before any coins move (DESIGN.md 4.3).
   const cta = !lapsedCta.note && phase === 'confirm' && memberItem ? { ...lapsedCta, note: MEMBER_PROMISE } : lapsedCta;
-  const stageH = secret ? SECRET_STAGE_H : STAGE_H;
+  // No set strip under the stage: the stage takes that room.
+  const solo = !secret && !(set && pieces.length > 1);
+  const stageH = secret ? SECRET_STAGE_H : solo ? SOLO_STAGE_H : STAGE_H;
   // The kid-fair promise, in a 7-year-old's words (kids UX round 1).
   const keepLine = MEMBER_PROMISE;
-  const card = secret ? SECRET_CARD : CARD;
+  const card = secret ? SECRET_CARD : solo ? SOLO_CARD : CARD;
   const boughtNow = landed > 0;
 
   const toggleFull = () => {
@@ -475,7 +482,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                       {stage ? (
                         <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body" shadow shadowAt={card.shadow} liftRoom={card.box.top}
                           popFrom={landed || dropping ? 1.3 : 1.18} dropIn={landed > 0 || dropping}
-                          style={secret ? SECRET_PLAYERCARD_STYLE : PLAYERCARD_STYLE} sceneGround={!!stage.scene}
+                          style={secret ? SECRET_PLAYERCARD_STYLE : solo ? SOLO_PLAYERCARD_STYLE : PLAYERCARD_STYLE} sceneGround={!!stage.scene}
                           fxPlay={secret ? landed : 0} fxHold={secret && HOLD_PHASES.has(phase)} fxTapToPlay fxStartDelay={secret ? SHEET_SETTLE_MS : 0}
                           onFxPlay={stage.scene ? onFxPlay : undefined} />
                       ) : (

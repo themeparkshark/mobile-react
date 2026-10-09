@@ -26,7 +26,8 @@ import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { restockPill, shelfOrder, wishSavedCopy } from '../../helpers/shopShelves';
 import type { ItemType } from '../../models/item-type';
 import type { ShopItem } from '../../models/shop-today';
-import { FONT, SHADOW, SharkLoader } from '../../ui';
+import { BRAND, FONT, SHADOW, SharkLoader } from '../../ui';
+import { LinearGradient } from 'expo-linear-gradient';
 import ShopTile from './ShopTile';
 import TryOnSheet from './TryOnSheet';
 import { MAX_FONT, SHOP_SURFACE as S, ShopToast, TimerPill, useShopNow, useShopToast } from './shopUi';
@@ -209,6 +210,8 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
           )}
         </Animated.View>
       </ScrollView>
+      {/* The shelf slides under the tab row through a short fade (no hard cut across the shopkeeper). */}
+      <LinearGradient pointerEvents="none" colors={[BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
       <ShopToast message={toast} still={still} />
       {open && (
         <TryOnSheet item={open} set={null} todayIds={todayIds} still={still} onClose={() => setOpen(null)}
@@ -221,6 +224,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
 
 const styles = StyleSheet.create({
   scroll: {},
+  fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 22 },
   stage: { height: GEAR_STAGE_H, overflow: 'hidden', paddingTop: 6 },
   keeper: { width: SCREEN_W - 40, height: GEAR_STAGE_H - 6, alignSelf: 'center' },
   bubble: { position: 'absolute', top: 0, backgroundColor: 'rgba(255,255,255,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },

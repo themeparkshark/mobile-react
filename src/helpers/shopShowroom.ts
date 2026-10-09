@@ -13,7 +13,7 @@ export function showroomInnerW(screenW: number): number { return screenW - 26; }
  * fits on one screen: about 300 pt on an iPhone 16 Pro, less for a guest (their note), never under 220.
  */
 export function showroomStageH(screenW: number, windowH: number, insetTop: number, insetBottom: number, guest: boolean): number {
-  const chrome = insetTop + 96 + 50 + (guest ? 64 : 0) + 168 + 152 + Math.max(insetBottom, 12);
+  const chrome = insetTop + 96 + 50 + (guest ? 64 : 0) + 160 + 166 + Math.max(insetBottom, 12);
   return Math.round(Math.max(220, Math.min(330, showroomInnerW(screenW) * 0.86, windowH - chrome)));
 }
 
