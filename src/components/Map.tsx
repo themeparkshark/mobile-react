@@ -75,7 +75,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
 /** Stable empty data for always-mounted sources that are off (never a new object per render). */
 const NO_FEATURES: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, chromeHidden = false, fright = null, onUserPan, declutter = null }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, chromeHidden = false, fright = null, onUserPan, declutter = null }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -99,6 +99,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly snapshotter?: MutableRefObject<(() => Promise<string | null>) | null>;
   /** More round buttons under the recenter button (the daily chest). */
   readonly extraControls?: ReactNode;
+  /** How many 54 pt buttons extraControls stacks (default 1 when present), for the declutter inset. */
+  readonly extraControlsCount?: number;
   /** In-park marker declutter (src/components/map/declutter): footprints, insets and the placement store. */
   readonly declutter?: MapDeclutterInput | null;
   /** A full-screen moment owns the screen: hide the map buttons and the data credit (shown again after). */
@@ -452,6 +454,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     longitude: location.longitude, priority: 0, tagObstacleOnly: true, body: { x: -26, y: -52, w: 52, h: 60 } }] : [],
   [!!declutter, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
   const hasExtraControls = !!extraControls;
+  const extraCount = hasExtraControls ? Math.max(1, extraControlsCount ?? 1) : 0;
   // Screen-space art over the map is an inset too: the Fin-ister moon (FrightMapLayer draws it
   // at 66 % across, 15 % down, 40 pt glow) and Explore's docked offline chip (OfflineBanner:
   // 44 pt, 16 pt from the right, 43 % down the window) while it shows.
@@ -463,11 +466,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const declutterControls = useMemo<InsetRect[]>(() => {
     if (!declutter || !viewSize) return [];
     // The compass (and chest) column: a hard inset with a 6 pt gap (share 0: no art under a button).
-    const out: InsetRect[] = [{ x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + (hasExtraControls ? 62 : 0) + 12, share: 0 }];
+    const out: InsetRect[] = [{ x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + extraCount * 62 + 12, share: 0 }];
     if (frightOn) out.push({ x: Math.round(viewSize.width * 0.66) - 44, y: Math.round(viewSize.height * 0.15) - 44, w: 88, h: 88, share: 0.2 });
     if (offline && viewTop !== null) out.push({ x: viewSize.width - 16 - 44 - 8, y: Math.round(windowHeight * 0.43) - viewTop - 8, w: 60, h: 60, share: 0.2 });
     return out;
-  }, [!!declutter, viewSize?.width, viewSize?.height, controlsTop, hasExtraControls, frightOn, offline, viewTop, windowHeight]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [!!declutter, viewSize?.width, viewSize?.height, controlsTop, extraCount, frightOn, offline, viewTop, windowHeight]); // eslint-disable-line react-hooks/exhaustive-deps
   // Development overlay (EXPO_PUBLIC_DECLUTTER_DEBUG=1): every footprint and chip box the solver placed.
   const [debugRects, setDebugRects] = useState<Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }> | null>(null);
   const debugOn = __DEV__ && process.env.EXPO_PUBLIC_DECLUTTER_DEBUG === '1';
