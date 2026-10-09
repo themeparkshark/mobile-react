@@ -20,7 +20,7 @@ import Animated, { cancelAnimation, FadeInDown, useAnimatedStyle, useSharedValue
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { GiftReceipt } from '../api/endpoints/me/prep-variant-gifts';
 import getPrepItemSets, {
-  claimSetMilestone, claimSetRewards, claimStarterRewards, clearPrepItemSetFocus, equipSetTitle,
+  claimSetMilestone, claimSetRewards, claimSetStep, claimStarterRewards, clearPrepItemSetFocus, equipSetTitle,
   focusPrepItemSet, getPrepItemSet, type PrepItemSetDetailResponse, type PrepItemSetItem, type PrepItemSetListItem,
 } from '../api/endpoints/me/prep-item-sets';
 import { getHomeHuntDex, getHomeHuntDexSet } from '../api/endpoints/me/homeHuntDex';
@@ -326,6 +326,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         if (outcome.toast) showToast(outcome.toast, 'success');
       } else if (reward.claim.kind === 'starter') {
         await claimStarterRewards(set.slug, itemId);
+      } else if (reward.claim.kind === 'step') {
+        // An in-between prize: energy and XP only, the reveal shows it.
+        await claimSetStep(set.slug, reward.claim.target);
       } else {
         const result = await claimSetMilestone(set.slug, reward.claim.key, itemId);
         const outcome = claimOutcome(result);

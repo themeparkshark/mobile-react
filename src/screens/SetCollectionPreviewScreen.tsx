@@ -108,6 +108,13 @@ function build(set: MockDexSet, setIndex: number) {
     time_gate: timeGate, weather_gate: null, total_items: total, collected_count: found,
     progress_percentage: Math.round((found / total) * 100), is_complete: complete, spare_count: 6, exchange_cost: 4,
     rewards_claimed: scene.claimed === true, starter_milestone: starter, completion_rewards: rewards,
+    // In-between prizes (server SetSteps) in the real scene: every ~8 finds between the starter and the full set.
+    steps: REAL_SCENE && total >= 16 ? [16, 24, 32].filter(target => target < total).map((target, index) => ({
+      key: `step_${target}`, target, collected: Math.min(found, target),
+      status: found >= target ? (scene.claimed || found >= total ? 'claimed' as const : 'claimable' as const) : 'locked' as const,
+      rewards: { energy: [20, 25, 30][index], experience: [60, 90, 120][index] },
+      claim_path: `/me/prep-item-sets/${set.slug}/steps/${target}/claim`,
+    })) : null,
   };
   const detail: PrepItemSetDetailResponse['data'] = {
     set: { id: list.id, slug: set.slug, name: set.name, description: '', icon_url: null, theme: 'food',

@@ -23,7 +23,8 @@ export type DexRewardStatus = 'locked' | 'claimable' | 'claimed' | 'pending';
 export type DexClaim =
   | { readonly kind: 'complete' }                       // POST /me/prep-item-sets/{slug}/claim
   | { readonly kind: 'starter' }                        // legacy POST .../claim-starter (with optional item_id)
-  | { readonly kind: 'milestone'; readonly key: SetMilestone['key'] }; // POST .../milestones/{key}/claim
+  | { readonly kind: 'milestone'; readonly key: SetMilestone['key'] } // POST .../milestones/{key}/claim
+  | { readonly kind: 'step'; readonly target: number };              // POST .../steps/{target}/claim (in-between prizes)
 
 export interface DexReward {
   readonly id: string;
@@ -220,7 +221,7 @@ function fromMilestone(milestone: SetMilestone, total: number, isFinal: boolean)
   };
 }
 
-type LegacySetLike = Pick<PrepItemSetListItem, 'is_complete' | 'rewards_claimed' | 'starter_milestone' | 'completion_rewards' | 'milestones'>
+type LegacySetLike = Pick<PrepItemSetListItem, 'is_complete' | 'rewards_claimed' | 'starter_milestone' | 'completion_rewards' | 'milestones' | 'steps'>
   & { total_items: number };
 
 /** Final reward plus earlier steps from a legacy list entry or detail. */
@@ -265,7 +266,28 @@ export function legacyRewards(set: LegacySetLike): { reward: DexReward; steps: D
       claim: { kind: 'starter' }, needsPick: !starter.rewards_claimed && pick, choices, titleTier: 'starter',
     });
   }
-  return { reward, steps };
+  return { reward, steps: [...steps, ...stepRewards(set.steps, total)] };
+}
+
+/** In-between prizes (server SetSteps): small energy + XP prizes every ~8 finds. Malformed entries are skipped. */
+export function stepRewards(raw: unknown, total: number): DexReward[] {
+  if (!Array.isArray(raw)) return [];
+  const out: DexReward[] = [];
+  for (const entry of raw) {
+    const step = record(entry);
+    const target = num(step?.target);
+    if (!step || target < 1 || target >= total) continue;
+    const rewards = record(step.rewards) ?? {};
+    const status = step.status === 'claimed' || step.status === 'claimable' ? step.status : 'locked';
+    const prize = prizeLine({ energy: num(rewards.energy), experience: num(rewards.experience) });
+    out.push({
+      id: `step_${target}`, target, status,
+      energy: num(rewards.energy), tickets: 0, experience: num(rewards.experience), coins: 0, title: null, wearableName: null,
+      prize, label: stepLabel(target, prize), claim: { kind: 'step', target },
+      needsPick: false, choices: [], titleTier: 'starter',
+    });
+  }
+  return out;
 }
 
 function legacyStatusOf(set: Pick<PrepItemSetListItem, 'availability' | 'is_in_rotation'> & { status?: unknown; is_retired?: unknown }): DexSetStatus {
@@ -309,6 +331,8 @@ const MILESTONE_KEYS = ['starter', 'explorer', 'complete', 'master', 'encore'];
 /** The claim route named by a v3 claim_path, or null to keep the legacy route. */
 export function claimFromPath(path: unknown): DexClaim | null {
   if (typeof path !== 'string') return null;
+  const step = /^\/me\/prep-item-sets\/[a-z0-9_-]+\/steps\/(\d+)\/claim$/.exec(path);
+  if (step) return { kind: 'step', target: Number(step[1]) };
   const match = /^\/me\/prep-item-sets\/[a-z0-9_-]+\/(claim|claim-starter|milestones\/([a-z]+)\/claim)$/.exec(path);
   if (!match) return null;
   if (match[2]) return MILESTONE_KEYS.includes(match[2]) ? { kind: 'milestone', key: match[2] as SetMilestone['key'] } : null;

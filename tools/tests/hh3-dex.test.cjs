@@ -670,3 +670,26 @@ test('R5: solid slot ink, numbered slot plates, compact locked finish row, Weari
   // Extras use the heart (sharing); the gift only ever means a prize.
   assert.match(parts, /<GameIcon name="heart" size=\{22\} \/>/);
 });
+
+test('in-between prizes (server steps): parsed into the prize list, own claim route, old servers unchanged', () => {
+  const base = legacySet();
+  const without = plain(dex.fromLegacySet(base));
+  const total = without.total;
+  const set = plain(dex.fromLegacySet({ ...base, steps: [
+    { key: 'step_16', target: 16, status: 'claimed', rewards: { energy: 20, experience: 60 } },
+    { key: 'step_24', target: 24, status: 'claimable', rewards: { energy: 25, experience: 90 } },
+    { key: 'bad', target: 0 }, 'junk', { target: total + 5 },
+  ] }));
+  const ids = set.steps.map(step => step.id);
+  assert.ok(ids.includes('step_16') && ids.includes('step_24'));
+  assert.equal(set.steps.length, without.steps.length + 2, 'malformed entries skipped');
+  const ready = set.steps.find(step => step.id === 'step_24');
+  assert.deepEqual(ready.claim, { kind: 'step', target: 24 });
+  assert.equal(ready.energy, 25);
+  assert.equal(ready.status, 'claimable');
+  assert.deepEqual(plain(dex.claimFromPath('/me/prep-item-sets/churro_collection/steps/32/claim')), { kind: 'step', target: 32 });
+  assert.equal(dex.goalLine({ ...set, found: 20, steps: set.steps.map(s => s.id === 'step_24' ? { ...s, status: 'locked' } : s) }), 'Next prize at 24: 4 to go');
+  const api = read('src/api/endpoints/me/prep-item-sets/index.ts');
+  assert.match(api, /`\/me\/prep-item-sets\/\$\{slug\}\/steps\/\$\{target\}\/claim`/);
+  assert.match(read('src/screens/SetCollectionScreen.tsx'), /reward\.claim\.kind === 'step'\) \{[\s\S]{0,120}claimSetStep\(set\.slug, reward\.claim\.target\)/);
+});

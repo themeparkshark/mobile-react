@@ -272,8 +272,8 @@ export function BookHeader({ set, onFocus, focusBusy, stamp, onClaim, busyId, ti
       {complete && titleWorn && !!set.reward.title && onTitle && (
         <SpringPress onPress={onTitle} accessibilityLabel={`Wearing the ${set.reward.title} title. Tap to take it off.`} style={styles.wearingChip}>
           <GameIcon name="crown" size={22} />
-          <Text style={styles.wearingChipText} numberOfLines={1} maxFontSizeMultiplier={1.3}>Wearing: {set.reward.title}</Text>
-          <Text style={styles.wearingOff} maxFontSizeMultiplier={1.3}>Take off</Text>
+          <Text style={styles.wearingChipText} numberOfLines={2} maxFontSizeMultiplier={1.3}>Wearing: {set.reward.title}</Text>
+          <View style={styles.wearingOffBtn}><Text style={styles.wearingOff} maxFontSizeMultiplier={1.3}>Take off</Text></View>
         </SpringPress>
       )}
       {complete && !stamp && (
@@ -281,7 +281,7 @@ export function BookHeader({ set, onFocus, focusBusy, stamp, onClaim, busyId, ti
           <Text style={styles.completeText} maxFontSizeMultiplier={1.1}>COMPLETE</Text>
         </View>
       )}
-      {!!stamp && <TitleStamp key={stamp} text={stamp} reduced={reduced} />}
+      {!!stamp && !titleWorn && <TitleStamp key={stamp} text={stamp} reduced={reduced} />}
     </Animated.View>
   );
 }
@@ -480,7 +480,7 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
           </View>
           {hero ? (
             <View style={{ gap: 6 }}>
-              {state.kind === 'locked' ? <PrizeChips reward={reward} /> : <PrizeMini reward={reward} />}
+              {state.kind === 'locked' ? <PrizeWords reward={reward} /> : <PrizeMini reward={reward} />}
               {!!reward.title && state.kind === 'locked' && (
                 <View style={[styles.chip, styles.chipTitle, { alignSelf: 'flex-start' }]}>
                   <GameIcon name="crown" size={22} />
@@ -506,6 +506,23 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
         )
       )}
     </Pressable>
+  );
+}
+
+/** The prizes as one quiet line of icon + words ("+200 Energy  +50 Tickets  +1000 XP"), for the locked big prize. */
+function PrizeWords({ reward }: { readonly reward: DexReward }) {
+  return (
+    <View style={styles.words}>
+      {prizeChips(reward).filter(chip => chip.icon !== 'crown').map(chip => (
+        <View key={chip.icon} style={styles.wordItem}>
+          <GameIcon name={chip.icon} size={20} />
+          <Text style={styles.wordText} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+            {chip.icon === 'energy' ? `${chip.value} Energy` : chip.icon === 'ticket' ? `${chip.value} ${chip.label.endsWith('Ticket') ? 'Ticket' : 'Tickets'}`
+              : chip.icon === 'xp' ? `${chip.value} XP` : chip.icon === 'coins' ? `${chip.value} Coins` : chip.value}
+          </Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -755,7 +772,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff3c4', borderWidth: 2, borderColor: BRAND.gold,
   },
   wearingChipText: { flex: 1, fontFamily: 'Shark', fontSize: 15, color: BROWN },
-  wearingOff: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft, textDecorationLine: 'underline' },
+  wearingOffBtn: {
+    minHeight: 34, paddingHorizontal: 12, borderRadius: 17, justifyContent: 'center', backgroundColor: BRAND.white,
+    borderWidth: 2, borderColor: BRAND.navy, borderBottomWidth: 4,
+  },
+  wearingOff: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
   stateReady: { backgroundColor: '#fff3c4', borderWidth: 2, borderColor: BRAND.gold },
   medalQuiet: { width: 50, height: 50, borderRadius: 25 },
   stateRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
@@ -788,6 +809,9 @@ const styles = StyleSheet.create({
   slimText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
   slimLine: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   mini: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  words: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 10, rowGap: 2 },
+  wordItem: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  wordText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
   miniChip: { flexDirection: 'row', alignItems: 'center', gap: 1 },
   miniText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
   finds: { paddingHorizontal: 16, marginTop: 0 },
