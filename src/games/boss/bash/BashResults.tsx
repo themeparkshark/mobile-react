@@ -27,8 +27,8 @@ export interface BashRewards { readonly coins: number; readonly xp: number; read
 
 function clock(endsAt: string | undefined, now: number) {
   if (!endsAt) return null;
-  const s = Math.max(0, Math.floor((new Date(endsAt).getTime() - now) / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const ms = new Date(endsAt).getTime() - now;
+  return ms <= 0 ? null : `${Math.max(1, Math.ceil(ms / 60000))} min left`;
 }
 
 /** Next-attack state after this round's charge. Pure (tested). */
@@ -127,7 +127,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <Animated.View style={[styles.hpRed, fill]} />
         </View>
         <Text style={styles.raidLine} numberOfLines={1}>
-          {ko ? 'Your hit could finish it!' : `${hpAfter.toLocaleString()} HP left`}{left ? `  ·  ${left} to go` : ''}{fighters > 0 ? `  ·  ${fighters} fighting` : ''}
+          {ko ? 'Your hit could finish it!' : `${hpAfter.toLocaleString()} HP left`}{left ? `  ·  ${left}` : ''}{fighters > 0 ? `  ·  ${fighters} fighting` : ''}
         </Text>
       </View>
 
@@ -144,7 +144,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       <View style={styles.chips}>
         <Chip label="Bonks" value={Number(meta.bonks ?? 0)} />
         <Chip label="Smashes" value={Number(meta.smashes ?? 0)} />
-        <Chip label="Best streak" value={Number(meta.best_streak ?? 0)} />
+        <Chip label="Blocks" value={Number(meta.blocks ?? 0)} />
       </View>
 
       {!noHits && n.can && onAgain ? <>
@@ -166,7 +166,8 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
 }
 
 function Loot({ icon, n }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: number }) {
-  return <View style={styles.lootItem}><GameIcon name={icon} size={26} /><Text style={styles.lootNum}>{n}</Text></View>;
+  const word = icon === 'xp' ? ' XP' : icon === 'parts' ? ' Parts' : '';
+  return <View style={styles.lootItem}><GameIcon name={icon} size={26} /><Text style={styles.lootNum}>{n}{word}</Text></View>;
 }
 function Chip({ label, value }: { label: string; value: number }) {
   return <View style={styles.chip}><Text style={styles.chipNum}>{value}</Text><Text style={styles.chipLabel}>{label}</Text></View>;

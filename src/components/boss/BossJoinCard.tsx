@@ -10,7 +10,7 @@
  * the cost on it and your Energy after.
  */
 import { Image } from 'expo-image';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { BOSS_NAMES, type BossRaid } from '../../api/endpoints/parks/raid';
@@ -71,7 +71,7 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
         </View>
         <Wallet energy={energy} tickets={tickets} showTickets={remote} short={cost.short?.kind ?? null} />
         <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close} hitSlop={8}>
-          <GameIcon name="close" size={34} />
+          <GameIcon name="close" size={26} />
         </Pressable>
       </View>
 
@@ -101,7 +101,10 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
         {remote
           ? <Tile label="FROM HOME" tone="home" a11y={`From home your hits count ${Math.round(raid.remote.damage_rate * 100)} percent, loot is ${Math.round((raid.remote.reward_rate ?? raid.remote.damage_rate) * 100)} percent and you cannot be MVP`}>
             <Text style={styles.bigPct} maxFontSizeMultiplier={1}>{Math.round(raid.remote.damage_rate * 100)}%</Text>
-            <Text style={styles.tileSmall} maxFontSizeMultiplier={1.2}>{raid.remote.joined ? 'Ticket paid' : 'power'}</Text>
+            <View style={styles.mvp}>
+              <View><GameIcon name="crown" size={14} /><View style={styles.crossOut} /></View>
+              <Text style={styles.tileSmall} maxFontSizeMultiplier={1.2}>{raid.remote.joined ? 'Ticket paid' : 'no MVP'}</Text>
+            </View>
           </Tile>
           : <Tile label="AT THE RIDE" tone="park" a11y="At the ride you hit at full power and can be MVP">
             <Text style={styles.bigPct} maxFontSizeMultiplier={1}>100%</Text>
@@ -132,8 +135,10 @@ export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, 
 }) {
   const reduced = useReducedGameMotion();
   const cost = joinCost(raid, remote, energy, tickets);
-  const label = joinLabel(raid, remote);
+  const short = cost.short;
+  const label = short && !starting ? `NEED ${short.need - short.have} MORE` : joinLabel(raid, remote);
   const off = !!blocked || starting;
+  const [how, setHow] = useState(false);
   const pulse = useSharedValue(1);
   useEffect(() => {
     if (!reduced && !off) pulse.value = withRepeat(withSequence(withTiming(1.03, { duration: 520 }), withTiming(1, { duration: 520 })), -1, false);
@@ -150,13 +155,26 @@ export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, 
           style={({ pressed }) => [styles.cta, off && styles.ctaOff, pressed && { transform: [{ scale: 0.97 }] }]}>
           <Text style={[styles.ctaText, off && styles.ctaTextOff]} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.2}>
             {starting ? 'GETTING READY...' : label}</Text>
+          {short && !starting && <GameIcon name="lock" size={24} />}
           <View style={styles.costPill}>
             {cost.ticket > 0 && <><GameIcon name="ticket" size={22} /><Text style={styles.costNum}>{cost.ticket}</Text><Text style={styles.plus}>+</Text></>}
             <GameIcon name="energy" size={22} /><Text style={styles.costNum}>{cost.energy}</Text>
           </View>
         </Pressable>
       </Animated.View>
-      {blocked ? <Text style={styles.blocked} maxFontSizeMultiplier={1.3}>{blocked}</Text>
+      {short ? <>
+        <Pressable accessibilityRole="button" onPress={() => setHow(v => !v)} style={styles.howBtn} hitSlop={6}
+          accessibilityLabel={`How to get ${short.kind === 'energy' ? 'Energy' : 'Tickets'}`}>
+          <GameIcon name={short.kind === 'energy' ? 'energy' : 'ticket'} size={20} />
+          <Text style={styles.howText} maxFontSizeMultiplier={1.3}>How to get {short.kind === 'energy' ? 'Energy' : 'Tickets'}</Text>
+        </Pressable>
+        {how && <View style={styles.howPanel}>
+          <HowRow icon="map" text="Home finds on your map" />
+          <HowRow icon="gift" text="Your daily chest" />
+          {short.kind === 'energy' && <HowRow icon="ride" text="Rides at the park" />}
+        </View>}
+      </>
+      : blocked ? <Text style={styles.blocked} maxFontSizeMultiplier={1.3}>{blocked}</Text>
         : <View style={styles.afterRow} accessible accessibilityLabel={`After this attack you will have ${cost.energyAfter} Energy. Attack ${raid.you.attacks + 1} of ${raid.max_attacks ?? 5}.`}>
           <Text style={styles.after} maxFontSizeMultiplier={1.3}>After</Text>
           <GameIcon name="energy" size={18} /><Text style={styles.afterNum} maxFontSizeMultiplier={1.3}>{cost.energyAfter}</Text>
@@ -169,6 +187,10 @@ export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, 
   );
 }
 
+function HowRow({ icon, text }: { icon: 'map' | 'gift' | 'ride'; text: string }) {
+  return <View style={styles.howRow}><GameIcon name={icon} size={24} /><Text style={styles.howRowText} maxFontSizeMultiplier={1.3}>{text}</Text></View>;
+}
+
 function Tile({ label, children, tone, wide, a11y }: { label: string; children: React.ReactNode; tone?: 'home' | 'park'; wide?: boolean; a11y: string }) {
   return <View style={[styles.tile, tone === 'home' && styles.tileHome, tone === 'park' && styles.tilePark, wide && { flex: 2 }]}
     accessible accessibilityLabel={a11y}>
@@ -177,7 +199,8 @@ function Tile({ label, children, tone, wide, a11y }: { label: string; children: 
   </View>;
 }
 function Loot({ icon, n }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: number }) {
-  return <View style={styles.loot}><GameIcon name={icon} size={18} /><Text style={styles.lootNum} maxFontSizeMultiplier={1.2}>{n}</Text></View>;
+  return <View style={styles.loot}><GameIcon name={icon} size={18} />
+    <Text style={styles.lootNum} maxFontSizeMultiplier={1.2}>{n}{icon === 'xp' ? ' XP' : ''}</Text></View>;
 }
 
 const styles = StyleSheet.create({
@@ -191,7 +214,8 @@ const styles = StyleSheet.create({
     borderColor: BRAND.navy, paddingLeft: 4, paddingRight: 9, paddingVertical: 2 },
   walletShort: { borderColor: BRAND.red, borderWidth: 3, backgroundColor: '#ffe3df' },
   walletNum: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
-  close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: BRAND.white,
+    borderWidth: 3, borderColor: BRAND.navy },
   hero: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 },
   bossDisc: { width: 104, height: 104, borderRadius: 52, backgroundColor: BRAND.sky, borderWidth: 3, borderColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center' },
@@ -211,6 +235,7 @@ const styles = StyleSheet.create({
   tileSmall: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navySoft },
   bigPct: { fontFamily: 'Shark', fontSize: 30, lineHeight: 34, color: BRAND.navy },
   mvp: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  crossOut: { position: 'absolute', left: -1, top: 6, width: 16, height: 2.5, borderRadius: 2, backgroundColor: BRAND.red, transform: [{ rotate: '-35deg' }] },
   teamDots: { flexDirection: 'row', marginTop: 2 },
   teamDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: BRAND.sky, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   lootGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 4 },
@@ -236,6 +261,12 @@ const styles = StyleSheet.create({
   afterRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 },
   after: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
   afterNum: { fontFamily: 'Shark', fontSize: 16, color: BRAND.gold, marginRight: 4 },
+  howBtn: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: BRAND.cream, borderRadius: 16,
+    borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 12, paddingVertical: 6, minHeight: 44 },
+  howText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
+  howPanel: { marginTop: 8, backgroundColor: BRAND.cream, borderRadius: 16, borderWidth: 2, borderColor: BRAND.navy, padding: 8, gap: 4 },
+  howRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  howRowText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
   notNow: { alignSelf: 'center', marginTop: 2, minHeight: 44, minWidth: 120, alignItems: 'center', justifyContent: 'center' },
   notNowText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, textDecorationLine: 'underline' },
 });

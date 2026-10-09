@@ -37,7 +37,7 @@ import {
 } from './BashParts';
 import BashResults, { type BashNext, type BashRewards } from './BashResults';
 import {
-  DEFAULT_WEIGHTS, INKED_MS, ROUND_MS, bashScore, bashStars, createBash, finsNeeded, phaseAt, tapBoss, tapPopup, tapWater, tick,
+  DEFAULT_WEIGHTS, INKED_MS, OUCH_MS, ROUND_MS, bashScore, bashStars, createBash, finsNeeded, phaseAt, tapBoss, tapPopup, tapWater, tick,
   type BashEvent, type BashState, type PhaseId, type Popup,
 } from './rules';
 
@@ -118,6 +118,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const [dizzy, setDizzy] = useState<{ from: number; until: number } | null>(null);
   /** The boss is in front of the water from the flop until it has climbed back behind it. */
   const [flopped, setFlopped] = useState(false);
+  /** The shark is seeing stars after a pufferfish: taps wait (shown on the water and the fins). */
+  const [stunned, setStunned] = useState(false);
   const [pose, setPose] = useState<SharkPose>('idle');
   const [face, setFace] = useState<Face>('angry');
   const [hint, setHintState] = useState<'none' | 'tentacle' | 'head' | 'ink'>('none');
@@ -201,7 +203,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setHud({ power: 0, need: 3, headStart: 0, popKey: 0, damage: 0, phase: 'warm' });
     cancelAnimation(bossShake); cancelAnimation(bossPuff);
     clock.value = 0; bossDrop.value = 0; bossHit.value = 0; bossRise.value = 0; fury.value = 0; cam.value = 1; hatPop.value = 0;
-    bossShake.value = 0; bossPuff.value = 0; setInkTell(false); setFlopped(false); setHeld(false); countdown.current = 4;
+    bossShake.value = 0; bossPuff.value = 0; setInkTell(false); setFlopped(false); setStunned(false); setHeld(false); countdown.current = 4;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hpLeft]);
 
@@ -299,7 +301,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     addFx({ t: 'burst', src: BASH_ART.puff, x: p.x, y: p.y - p.h * 0.35, size: p.h * 0.7 }, 420);
     addFx({ t: 'bubble', text: 'OUCH!', x: p.x, y: p.y - p.h * 0.85, tone: 'red' }, 800);
     if (!reduced) shake.shake(5, 160);
-    setPose('bonked'); later(950, () => setPose('idle'));
+    setPose('bonked'); later(OUCH_MS, () => setPose('idle'));
+    setStunned(true); later(OUCH_MS, () => setStunned(false));
     flashFace('laugh', 900);
     sfx('bo_feint_giggle', 'fx.nopeShort', { volume: 0.9 });
     haptic('failBuzz');
@@ -550,6 +553,11 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     const s = engine.current;
     // Dizzy (flopped on the water): the boss is the target, anywhere you tap. During the ink, only the boss blocks.
     if (s.dizzy) { tapHead(); return; }
+    if (played.current < s.ouchUntil) {
+      const p = spotXY(lane + 3);
+      addFx({ t: 'burst', src: BASH_ART.star, x: p.x, y: p.y - 40, size: 40 }, 380);
+      return;
+    }
     const popup = s.up.find(p => p.spot % 3 === lane);
     const r = popup ? tapPopup(s, popup.id, played.current, cap, weights) : tapWater(s, lane, played.current);
     engine.current = r.state;
@@ -639,6 +647,10 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       onPause={() => { halt(); setHeld(true); }}
       onResume={() => { setHeld(false); if (introDone.current) run(); }}
       hideHeaderScore={!!result}
+      headerScore={<View style={styles.dmgChip} accessible accessibilityLabel={`Damage ${hud.damage}`}>
+        <Text style={styles.dmgLabel} maxFontSizeMultiplier={1.1}>DAMAGE</Text>
+        <Text style={styles.dmgNum} maxFontSizeMultiplier={1.1}>{hud.damage.toLocaleString()}</Text>
+      </View>}
       onWrapUp={() => {
         // Boarding the ride mid-round keeps what you earned (the server needs at least 12 s since FIGHT, which the intro covers).
         halt();
@@ -703,6 +715,12 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
             onPressIn={() => tapLane(lane)}
             style={{ position: 'absolute', left: (L.w / 3) * lane, width: L.w / 3, top: L.waterY, bottom: 0 }} />)}
 
+          {stunned && <View pointerEvents="none" style={[styles.stun, { top: L.waterY }]}>
+            <Image source={BASH_ART.star} style={{ width: 40, height: 40 }} contentFit="contain" />
+            <Text style={styles.stunText} maxFontSizeMultiplier={1.2}>SEEING STARS...</Text>
+            <Image source={BASH_ART.star} style={{ width: 40, height: 40 }} contentFit="contain" />
+          </View>}
+
           {/* Shark cheerleader on the beach. */}
           <View pointerEvents="none" style={[styles.shark, { width: L.h * 0.13, height: L.h * 0.16 }]}>
             <Image source={sharkSrc} style={StyleSheet.absoluteFill} contentFit="contain" />
@@ -716,7 +734,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
                 width={f.wm === 'nice' || f.wm === 'great' ? L.w * 0.42 : L.w * 0.66} reduced={reduced} />
                 : f.t === 'ink' ? <InkSplat key={f.id} x={f.x} y={f.y} size={f.size} rot={f.rot} life={INKED_MS} reduced={reduced} />
                   : f.t === 'count' ? <CountBeat key={f.id} text={f.text} x={L.w - 58} y={L.h * 0.2} reduced={reduced} />
-                    : <Bubble key={f.id} text={f.text} x={f.x} y={f.y} tone={f.tone} reduced={reduced} />)}
+                    : <Bubble key={f.id} text={f.text} tone={f.tone} reduced={reduced}
+                      // Every word stays inside the stage, below the HUD (never cut by an edge).
+                      x={Math.max(126, Math.min(L.w - 126, f.x))} y={Math.max(L.h * 0.14, Math.min(L.h * 0.9, f.y))} />)}
           {!reduced && <ParticleField ref={particles} width={L.w} height={L.h} paused={held} />}
           </View>
         </Animated.View>}
@@ -782,10 +802,17 @@ function IntroCard({ phase, firstTime, skin, limbWord, reduced, onGo }: {
           <Step label="SMASH" n={3}><Image source={skin.dizzy ?? skin.body} style={{ width: 66, height: 66 }} contentFit="contain" />
             <View style={styles.stepTarget} /></Step>
         </View>
-        <View style={styles.noPuffer}>
-          <Image source={BASH_ART.puffer} style={{ width: 40, height: 36 }} contentFit="contain" />
-          <View style={styles.noSlash} />
-          <Text style={styles.noText}>Not the spiky fish!</Text>
+        <View style={styles.extraRow}>
+          <View style={styles.noPuffer}>
+            <Image source={BASH_ART.puffer} style={{ width: 34, height: 31 }} contentFit="contain" />
+            <View style={styles.noSlash} />
+            <Text style={styles.noText} maxFontSizeMultiplier={1.2}>Not this!</Text>
+          </View>
+          <View style={styles.inkTip}>
+            <Image source={skin.roar ?? skin.body} style={{ width: 34, height: 34 }} contentFit="contain" />
+            <Image source={BASH_ART.tapHand} style={{ width: 20, height: 26, marginLeft: -12, marginTop: 10 }} contentFit="contain" />
+            <Text style={styles.inkText} maxFontSizeMultiplier={1.2}>Puffs up? Tap it!</Text>
+          </View>
         </View>
         <View style={[styles.goBtn, !firstTime && styles.goBtnQuiet]}>
           <Text style={styles.goText}>{firstTime ? 'TAP TO START' : 'GET READY...'}</Text>
@@ -811,6 +838,12 @@ function Arrow() {
 const styles = StyleSheet.create({
   fury: { position: 'absolute', left: 0, right: 0, top: 0, backgroundColor: BRAND.navy },
   shark: { position: 'absolute', left: 8, bottom: 6 },
+  stun: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5,52,110,0.22)', flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', gap: 8 },
+  stunText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  dmgChip: { alignItems: 'flex-end' },
+  dmgLabel: { fontFamily: 'Shark', fontSize: 11, color: '#cdeaff', letterSpacing: 0.6 },
+  dmgNum: { fontFamily: 'Shark', fontSize: 26, color: BRAND.white },
   hud: { position: 'absolute', top: 8, left: 12, right: 12 },
   hpRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: 2 },
   hpName: { fontFamily: 'Shark', fontSize: 17, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
@@ -846,10 +879,14 @@ const styles = StyleSheet.create({
   arrow: { width: 16, height: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 26 },
   arrowHead: { width: 0, height: 0, borderTopWidth: 8, borderBottomWidth: 8, borderLeftWidth: 11, borderTopColor: 'transparent',
     borderBottomColor: 'transparent', borderLeftColor: BRAND.navy },
-  noPuffer: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 8, backgroundColor: BRAND.white, borderRadius: 16,
+  extraRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  inkTip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 2, borderColor: BRAND.navy,
+    paddingVertical: 4, paddingHorizontal: 8 },
+  inkText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
+  noPuffer: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.white, borderRadius: 16,
     borderWidth: 2, borderColor: BRAND.red, paddingVertical: 4, paddingHorizontal: 10 },
-  noSlash: { position: 'absolute', left: 8, width: 44, height: 5, borderRadius: 3, backgroundColor: BRAND.red, transform: [{ rotate: '-35deg' }] },
-  noText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.red },
+  noSlash: { position: 'absolute', left: 6, width: 40, height: 5, borderRadius: 3, backgroundColor: BRAND.red, transform: [{ rotate: '-35deg' }] },
+  noText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.red },
   goBtn: { marginTop: 12, minHeight: 56, alignSelf: 'stretch', borderRadius: 18, backgroundColor: BRAND.gold, borderWidth: 3, borderColor: BRAND.navy,
     borderBottomWidth: 6, borderBottomColor: BRAND.goldLip, alignItems: 'center', justifyContent: 'center' },
   goBtnQuiet: { backgroundColor: BRAND.sky, borderBottomColor: BRAND.skyDeep },

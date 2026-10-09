@@ -33,7 +33,7 @@ export const PopupActor = memo(function PopupActor({ kind, x, baseY, height, lim
   useEffect(() => {
     if (reduced) { rise.value = withTiming(1, { duration: 120 }); return; }
     rise.value = withSpring(1, { damping: 11, stiffness: 190, mass: 0.7 });
-    foam.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0.55, { duration: 400 }));
+    foam.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: 520 }));
     sway.value = withDelay(220, withRepeat(withTiming(1, { duration: isPuffer ? 520 : 820, easing: Easing.inOut(Easing.sin) }), -1, true));
     return () => { cancelAnimation(sway); cancelAnimation(rise); };
   }, [reduced, rise, sway, foam, isPuffer]);
@@ -307,8 +307,8 @@ export const Burst = memo(function Burst({ src, x, y, size, reduced, spin = fals
 });
 
 const styles = StyleSheet.create({
-  foam: { position: 'absolute', height: 14, borderRadius: 999, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)',
-    backgroundColor: 'rgba(255,255,255,0.28)' },
+  // A ripple ring at the waterline as it pops up, then gone (never a pad).
+  foam: { position: 'absolute', height: 16, borderRadius: 999, borderWidth: 3, borderColor: '#ffffff', backgroundColor: 'transparent' },
   finRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   finGlow: { ...StyleSheet.absoluteFillObject, margin: -8, borderRadius: 30, backgroundColor: 'rgba(255,207,59,0.55)' },
   targetCore: { ...StyleSheet.absoluteFillObject, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
