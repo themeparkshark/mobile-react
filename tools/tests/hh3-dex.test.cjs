@@ -664,7 +664,7 @@ test('R5: solid slot ink, numbered slot plates, compact locked finish row, Weari
   assert.match(tile, />#\{slot\}<\/Text>/);
   assert.match(screen, /slot=\{slotOf\.get\(item\.id\) \?\? 0\}/);
   assert.match(parts, /\{hero \? \(/);
-  assert.match(parts, />Wearing<\/Text>/);
+  assert.match(parts, /Wearing the \$\{reward\.title\} title\. Tap to take it off\./);
   assert.match(parts, /finished \|\| set\.isComplete \? BRAND\.gold : set\.color/);
   assert.match(screen, /Now hunting \$\{set\.name\} instead of \$\{before\.name\}\./);
   // Extras use the heart (sharing); the gift only ever means a prize.

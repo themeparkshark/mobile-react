@@ -424,7 +424,7 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
   }, [pulsing]);
   const checkStyle = useAnimatedStyle(() => ({ transform: [{ scale: stampIn.value }] }));
   const heading = final ? `Find all ${set.total}` : `Find ${reward.target}`;
-  const status = state.kind === 'done' ? 'Got it!' : state.kind === 'pending' ? 'On the way' : state.kind === 'locked' ? `${state.toGo} to go` : null;
+  const status = state.kind === 'done' ? 'Got it!' : state.kind === 'pending' ? 'On the way' : state.kind === 'locked' ? `${state.toGo} to go` : 'Ready!';
   // Not yet: a tap still answers (a wiggle, a tick and the count left in the pill).
   const nudge = () => {
     if (state.kind !== 'locked') return;
@@ -438,23 +438,22 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
   if (state.kind === 'done' && (!final || !reward.title || titleWorn)) {
     const worn = final && !!reward.title && titleWorn;
     return (
-      <View style={[styles.slim, worn && styles.slimTall]} accessible accessibilityLabel={`${heading}: you got ${reward.prize}${worn ? `. Wearing the ${reward.title} title` : ''}`}>
+      <View style={styles.slim} accessible accessibilityLabel={`${heading}: you got ${reward.prize}${worn ? `. Wearing the ${reward.title} title` : ''}`}>
         <View style={styles.slimLine}>
           <Animated.View style={[styles.slimMedal, checkStyle]}><GameIcon name="check" size={20} /></Animated.View>
           <Text style={styles.slimText} maxFontSizeMultiplier={BODY_SCALE}>{heading}</Text>
-          {worn ? <View style={{ flex: 1 }} /> : <PrizeMini reward={reward} />}
+          <PrizeMini reward={reward} />
           {worn && onTitle ? (
             // Worn: the one state that matters here is the title (tap to take it off).
             <Pressable onPress={onTitle} accessibilityRole="button" accessibilityLabel={`Wearing the ${reward.title} title. Tap to take it off.`} hitSlop={8}
               style={styles.wearingPill}>
-              <GameIcon name="crown" size={18} />
-              <Text style={styles.wearingText} maxFontSizeMultiplier={1.3}>Wearing</Text>
+              <GameIcon name="crown" size={20} />
+              <GameIcon name="check" size={14} />
             </Pressable>
           ) : (
             <View style={[styles.state, styles.stateDone, styles.stateRow]}><GameIcon name="check" size={16} /><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
           )}
         </View>
-        {worn && <View style={styles.slimSub}><PrizeMini reward={reward} /></View>}
       </View>
     );
   }
@@ -465,8 +464,8 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
       accessible={state.kind !== 'claim' && !(state.kind === 'done' && onTitle)}
       accessibilityLabel={`${heading}: ${reward.prize}.${status ? ` ${status}` : ''}`}>
       <View style={styles.prizeTop}>
-        <Animated.View style={[styles.medal, hero && styles.medalHero, state.kind === 'claim' && styles.medalReady, state.kind === 'done' && styles.medalDone, medalStyle]}>
-          <GameIcon name={final ? 'trophy' : 'gift'} size={hero ? 50 : 34} />
+        <Animated.View style={[styles.medal, hero && styles.medalHero, state.kind === 'claim' && styles.medalReady, state.kind === 'claim' && !hero && styles.medalQuiet, state.kind === 'done' && styles.medalDone, medalStyle]}>
+          <GameIcon name={final ? 'trophy' : 'gift'} size={hero ? 50 : state.kind === 'claim' ? 28 : 34} />
           {state.kind === 'done' && <Animated.View style={[styles.medalCheck, checkStyle]}><GameIcon name="check" size={20} /></Animated.View>}
           {state.kind === 'locked' && <View style={styles.medalCheck}><GameIcon name="lock" size={18} /></View>}
         </Animated.View>
@@ -474,7 +473,7 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
           <View style={styles.prizeHeadRow}>
             <Text style={[styles.prizeHead, hero && styles.prizeHeadHero]} maxFontSizeMultiplier={1.3}>{heading}</Text>
             {status && (
-              <View style={[styles.state, state.kind === 'done' && [styles.stateDone, styles.stateRow]]}>
+              <View style={[styles.state, state.kind === 'done' && [styles.stateDone, styles.stateRow], state.kind === 'claim' && styles.stateReady]}>
                 {state.kind === 'done' && <GameIcon name="check" size={16} />}
                 <Text style={[styles.stateText, state.kind === 'done' && styles.stateDoneText]} maxFontSizeMultiplier={1.3}>{status}</Text>
               </View>
@@ -750,6 +749,8 @@ const styles = StyleSheet.create({
   // Settled, not a button: cream with a gold edge.
   stateDone: { backgroundColor: '#fff8e4', borderWidth: 2, borderColor: '#f1dca0' },
   stateText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy },
+  stateReady: { backgroundColor: '#fff3c4', borderWidth: 2, borderColor: BRAND.gold },
+  medalQuiet: { width: 50, height: 50, borderRadius: 25 },
   stateRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   stateDoneText: { color: BROWN },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
@@ -778,12 +779,9 @@ const styles = StyleSheet.create({
   },
   slimMedal: { width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.gold },
   slimText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
-  slimTall: { flexDirection: 'column', alignItems: 'stretch', paddingVertical: 8 },
-  slimLine: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  slimSub: { flexDirection: 'row', marginLeft: 40, marginTop: 4 },
+  slimLine: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   mini: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   wearingPill: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 30, paddingHorizontal: 8, borderRadius: 15, backgroundColor: '#fff3c4', borderWidth: 2, borderColor: BRAND.gold },
-  wearingText: { fontFamily: 'Knockout', fontSize: 15, color: BROWN },
   miniChip: { flexDirection: 'row', alignItems: 'center', gap: 1 },
   miniText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
   finds: { paddingHorizontal: 16, marginTop: 0 },
