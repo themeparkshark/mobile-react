@@ -340,6 +340,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
   const onSmash = (e: Extract<BashEvent, { type: 'smash' }>) => {
     firstSmashed.current = true; setHint('none');
+    setFx(list => list.filter(f => !(f.t === 'bubble' && (f.text === 'SMASH IT!' || f.text === 'BLOCKED!'))));
     endDizzy();
     flashFace('hurt', 650);
     const x = L.head.x, y = L.head.y + L.dropBy;
@@ -366,6 +367,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
   const onShakeOff = () => {
     endDizzy();
+    setFx(list => list.filter(f => !(f.t === 'bubble' && f.text === 'SMASH IT!')));
     flashFace('laugh', 800);
     addFx({ t: 'bubble', text: 'TOO SLOW!', x: L.w / 2, y: L.head.y - 10, tone: 'white' }, 900);
     if (!reduced) bossRise.value = withSequence(withTiming(-0.1, { duration: 120 }), withSpring(0, { damping: 8 }));
@@ -578,10 +580,16 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   useEffect(() => {
     if (!__DEV__ || !autoplay || !visible) return;
     const plan = new Map<number, number>();
+    let dizzyAt = { from: -1, at: 0 };
     const id = setInterval(() => {
       if (!playing.current) return;
       const s = engine.current, ms = played.current;
-      if (s.dizzy) { if (ms > s.dizzy.from + 300 + (1 - autoplay) * 500) tapHeadRef.current(); return; }
+      if (s.dizzy) {
+        // Capture bot: sometimes early, sometimes on the gold core, sometimes late (kids vary).
+        if (dizzyAt.from !== s.dizzy.from) dizzyAt = { from: s.dizzy.from, at: s.dizzy.from + (s.dizzy.until - s.dizzy.from) * (autoplay > 0.8 ? 0.3 : [0.12, 0.33, 0.6][Math.floor(Math.random() * 3)]) };
+        if (ms >= dizzyAt.at) tapHeadRef.current();
+        return;
+      }
       if (s.ink && autoplay > 0.6 && ms > s.ink.from + 350) { tapHeadRef.current(); return; }
       for (const p of s.up) {
         if (!plan.has(p.id)) plan.set(p.id, p.kind === 'puffer' ? (Math.random() < (1 - autoplay) * 0.6 ? p.at + 500 : Infinity) : p.at + 260 + (1 - autoplay) * 500);
@@ -673,9 +681,6 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
             <Animated.View style={[StyleSheet.absoluteFill, bossStyle]}>
               {faces.map(([id, src]) => <Image key={id} source={src} contentFit="contain"
                 style={[StyleSheet.absoluteFill, { opacity: id === shownFace ? (skin.ghostly ? 0.92 : 1) : 0 }]} />)}
-              <Animated.View style={[StyleSheet.absoluteFill, bossFlash]}>
-                <Image source={bodySrc} style={StyleSheet.absoluteFill} contentFit="contain" tintColor="#ffffff" />
-              </Animated.View>
               {skin.hat && <Animated.View style={[{ position: 'absolute', left: L.bossSize * 0.22, top: -L.bossSize * 0.02,
                 width: L.bossSize * 0.56, height: L.bossSize * 0.42 }, hatStyle]}>
                 <Image source={BASH_ART.hat} style={StyleSheet.absoluteFill} contentFit="contain" />
