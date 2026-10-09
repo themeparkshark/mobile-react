@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '../../..');
 const ts = require(path.join(root, 'node_modules/typescript'));
 exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, options = {}) {
-  const slots = [], animations = [], timers = new Map(), sounds = [], cancelled = [], motions = [], jsCalls = [];
+  const slots = [], animations = [], timers = new Map(), delays = new Map(), sounds = [], cancelled = [], motions = [], jsCalls = [];
   let index = 0, dirty = true, effects = [], tree, timerId = 0, preferenceListener;
   let Component;
   const props = { ...initialProps };
@@ -56,7 +56,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
   const code = transpile(fs.readFileSync(path.join(root, file), 'utf8'));
   // Shared app hooks that every poll uses run for real in the component's realm.
   const realModules = { useLivePoll: 'src/hooks/useLivePoll.ts', livePollPolicy: 'src/hooks/livePollPolicy.ts',
-    gpsWatchPolicy: 'src/context/gpsWatchPolicy.ts', positionFilter: 'src/context/positionFilter.ts', useUserIdle: 'src/hooks/useUserIdle.ts', powerPolicy: 'src/power/powerPolicy.ts',
+    gpsWatchPolicy: 'src/context/gpsWatchPolicy.ts', positionFilter: 'src/context/positionFilter.ts', useUserIdle: 'src/hooks/useUserIdle.ts', powerPolicy: 'src/power/powerPolicy.ts', appActive: 'src/hooks/appActive.ts',
     matchLink: 'src/services/match/matchLink.ts', useMatchLink: 'src/hooks/useMatchLink.ts' };
   const realCache = new Map();
   let sandbox;
@@ -68,7 +68,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
     return real.exports;
   };
   sandbox = vm.createContext({ module, exports: module.exports, Date, Math, console, __DEV__: false, process: { env: {} }, ...globals,
-    setTimeout(fn) { const id = ++timerId; timers.set(id, fn); return id; }, clearTimeout(id) { timers.delete(id); },
+    setTimeout(fn, ms) { const id = ++timerId; timers.set(id, fn); delays.set(id, ms); return id; }, clearTimeout(id) { timers.delete(id); delays.delete(id); },
     require(name) {
       if (Object.hasOwn(imports, name)) return imports[name];
       const base = name.split('/').pop();
@@ -97,8 +97,8 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)services\/purchases$/.test(name)) return { storeAvailable: () => false };
       // The power budget (src/power) reads as full power unless a test stubs it.
       if (/(^|\/)power$/.test(name)) return { usePowerBudget: () => ({ level: 'full', ambient: true, animate: true,
-        pollMultiplier: 1, particleScale: 1, gpsRest: false, compass: true, lowPower: false, idle: false, stationary: false }),
-        markMoved() {}, useBudgetedPoll() {}, budgetedInterval: (ms, b) => (Number.isFinite(b.pollMultiplier) && ms > 0 ? ms * Math.max(1, b.pollMultiplier) : null), useBatterySaver: () => false, setBatterySaver() {} };
+        pollMultiplier: 1, particleScale: 1, gpsRest: false, compass: true, lowPower: false, idle: false }),
+        useBudgetedPoll() {}, budgetedInterval: (ms, b) => (Number.isFinite(b.pollMultiplier) && ms > 0 ? ms * Math.max(1, b.pollMultiplier) : null), useBatterySaver: () => false, setBatterySaver() {} };
       if (name.includes('assets/')) return name;
       return { default: name };
     },
@@ -115,7 +115,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
     return find(node.props?.children, predicate);
   }
   render();
-  return { props, native, animations, timers, sounds, cancelled, motions, jsCalls, render,
+  return { props, native, animations, timers, delays, sounds, cancelled, motions, jsCalls, render,
     get tree() { return tree; }, find: predicate => find(tree, predicate),
     change(value) { Object.assign(props, value); render(); },
     async settle() { await new Promise(resolve => setImmediate(resolve)); render(); },

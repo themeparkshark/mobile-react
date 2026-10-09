@@ -385,7 +385,7 @@ export default function SettingsScreen() {
           <SettingsRow
             art="energy"
             title="Battery Saver"
-            detail={batterySaver ? 'On: battery lasts longer, the map moves a little less' : 'Off: tap to make your battery last longer'}
+            detail={batterySaver ? 'On: lasts longer. Screen goes dark face down, flip it up to play' : 'Off: tap to make your battery last longer'}
             isLast
             onPress={() => setBatterySaver(!batterySaver)}
             accessory={

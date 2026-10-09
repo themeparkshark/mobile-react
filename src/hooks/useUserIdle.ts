@@ -21,6 +21,14 @@ const wakeListeners = new Set<() => void>();
 export function markUserActivity(now = Date.now()): void {
   lastActivityAt = now;
   if (wakeListeners.size) wakeListeners.forEach(fn => fn());
+  if (activityListeners.size) activityListeners.forEach(fn => fn());
+}
+
+/** Hear every touch or step (cheap: one Set). Returns the unsubscribe. */
+const activityListeners = new Set<() => void>();
+export function onUserActivity(listener: () => void): () => void {
+  activityListeners.add(listener);
+  return () => { activityListeners.delete(listener); };
 }
 
 export function lastUserActivityAt(): number {

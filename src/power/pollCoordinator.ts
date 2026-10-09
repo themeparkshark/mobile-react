@@ -24,6 +24,9 @@ export interface Clock {
   clearTimeout(handle: unknown): void;
 }
 
+/** Remembered last runs older than this are forgotten (keyed polls come and go). */
+export const FORGET_AFTER_MS = 10 * 60_000;
+
 /** Polls due this close together run in one wake. */
 export const ALIGN_MS = 1500;
 
@@ -44,6 +47,7 @@ export class PollCoordinator {
    * old schedule and runs only if it came due while away.
    */
   register(task: PollTask, runNow = true): () => void {
+    this.prune();
     const remembered = this.entries.get(task.id)?.lastRunAt ?? this.lastRuns.get(task.id) ?? null;
     this.entries.set(task.id, { task, lastRunAt: runNow ? null : (remembered ?? this.clock.now()) });
     this.schedule();
@@ -90,6 +94,12 @@ export class PollCoordinator {
   }
 
   size(): number { return this.entries.size; }
+  remembered(): number { return this.lastRuns.size; }
+
+  private prune(): void {
+    const cutoff = this.clock.now() - FORGET_AFTER_MS;
+    for (const [id, at] of this.lastRuns) if (at < cutoff && !this.entries.has(id)) this.lastRuns.delete(id);
+  }
   pending(): boolean { return this.timer !== null; }
 
   private schedule(): void {

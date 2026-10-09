@@ -32,3 +32,9 @@ export function pollDelay(lastRunAt: number | null, now: number, intervalMs: num
   if (lastRunAt === null || !Number.isFinite(lastRunAt) || lastRunAt > now) return 0;
   return Math.max(0, lastRunAt + intervalMs - now);
 }
+
+/** Battery Saver slows every live poll by a fixed 2x (never stacked with the budget's idle multiplier). */
+export const SAVER_POLL_FACTOR = 2;
+export function saverInterval(intervalMs: number, lowPower: boolean): number {
+  return lowPower ? intervalMs * SAVER_POLL_FACTOR : intervalMs;
+}

@@ -6,6 +6,8 @@
  *
  * expo-sensors Accelerometer (iOS, in g): face up on a table z = -1,
  * face down z = +1, upright in a hand y = -1, upside down in a pocket y = +1.
+ * Android reports the opposite sign on every axis; toIosTilt() evens it out.
+ * A touch in the last POCKET_AFTER_MS means someone is playing: never dim.
  */
 export const POCKET_AFTER_MS = 3000;
 /** Leave the dim at once when the phone comes up past this. */
@@ -22,8 +24,13 @@ export interface PocketState { readonly since: number | null; readonly dim: bool
 
 export const POCKET_START: PocketState = { since: null, dim: false };
 
-export function nextPocketState(prev: PocketState, t: Tilt, now: number): PocketState {
-  if (!isPocketPose(t)) return prev.since === null && !prev.dim ? prev : POCKET_START;
+export function toIosTilt(t: Tilt, os: string): Tilt {
+  return os === 'android' ? { x: -t.x, y: -t.y, z: -t.z } : t;
+}
+
+export function nextPocketState(prev: PocketState, t: Tilt, now: number, lastTouchAt: number | null = null): PocketState {
+  const touchedRecently = lastTouchAt !== null && now - lastTouchAt < POCKET_AFTER_MS;
+  if (!isPocketPose(t) || touchedRecently) return prev.since === null && !prev.dim ? prev : POCKET_START;
   const since = prev.since ?? now;
   const dim = now - since >= POCKET_AFTER_MS;
   return dim === prev.dim && since === prev.since ? prev : { since, dim };

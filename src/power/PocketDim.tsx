@@ -1,12 +1,14 @@
 /**
  * Black cover while the phone is face down or in a pocket, Battery Saver only.
- * Reads the accelerometer twice a second (the sensor is not used at all when
- * Saver is off or the app is in the background). Touches pass through.
+ * Reads the accelerometer twice a second (the sensor is off when Saver is off
+ * or the app is in the background). Touches pass through, and any touch
+ * removes the cover at once and restarts the 3 s wait.
  */
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
-import { POCKET_START, nextPocketState, type PocketState } from './pocketPolicy';
+import { lastUserActivityAt, onUserActivity } from '../hooks/useUserIdle';
+import { POCKET_START, nextPocketState, toIosTilt, type PocketState } from './pocketPolicy';
 
 const SAMPLE_MS = 500;
 
@@ -16,17 +18,21 @@ export default function PocketDim({ enabled }: { readonly enabled: boolean }) {
     if (!enabled) { setDim(false); return undefined; }
     let state: PocketState = POCKET_START;
     let sub: { remove(): void } | null = null;
+    const offTouch = onUserActivity(() => {
+      state = POCKET_START;
+      setDim(false);
+    });
     try {
       Accelerometer.setUpdateInterval(SAMPLE_MS);
       sub = Accelerometer.addListener(sample => {
-        const next = nextPocketState(state, sample, Date.now());
+        const next = nextPocketState(state, toIosTilt(sample, Platform.OS), Date.now(), lastUserActivityAt());
         if (next.dim !== state.dim) setDim(next.dim);
         state = next;
       });
     } catch {
       // No sensor (simulator): no dim, nothing else changes.
     }
-    return () => { sub?.remove(); setDim(false); };
+    return () => { offTouch(); sub?.remove(); setDim(false); };
   }, [enabled]);
   if (!dim) return null;
   return <View pointerEvents="none" style={styles.cover} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />;

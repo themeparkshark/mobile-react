@@ -23,6 +23,8 @@ test('normal play is full power: nothing rests, nothing slows', () => {
   assert.equal(b.particleScale, 1);
   assert.equal(b.compass, true);
   assert.equal(b.gpsRest, false);
+  assert.equal(policy.IDLE_AFTER_MS, 120000, 'one idle constant, two minutes');
+  assert.equal('stationary' in b, false);
 });
 
 test('Battery Saver while playing keeps loops (no visible loss) but slows data and thins particles', () => {
@@ -57,16 +59,6 @@ test('reduce motion stops ambient loops only, not data', () => {
   assert.equal(b.level, 'full');
   assert.equal(b.ambient, false);
   assert.equal(b.pollMultiplier, 1);
-});
-
-test('standing still alone changes nothing (no GPS flapping, no visual change)', () => {
-  const b = policy.powerBudget({ ...on, stationary: true });
-  assert.equal(b.gpsRest, false);
-  assert.equal(b.ambient, true);
-  assert.equal(policy.IDLE_AFTER_MS, 120000, 'one idle constant, two minutes');
-  assert.equal(policy.isStationary(null, 1e9), false, 'no fix yet is not still');
-  assert.equal(policy.isStationary(0, policy.STATIONARY_AFTER_MS - 1), false);
-  assert.equal(policy.isStationary(0, policy.STATIONARY_AFTER_MS), true);
 });
 
 test('budget helpers: intervals stretch, particles never vanish in the foreground', () => {
@@ -202,16 +194,6 @@ test('poll ids: a new key (park) is a new poll that runs at once; re-registering
   assert.deepEqual(runs.at(-1), ['p2', 10000], 'a new park fetches at once');
 });
 
-test('movement: GPS drift under 3 m is not a move', () => {
-  const m = loadTs('src/power/movement.ts');
-  const a = { latitude: 28.4177, longitude: -81.5812 };
-  assert.equal(m.markMoved(a, 0), true);
-  assert.equal(m.markMoved({ latitude: a.latitude + 0.00001, longitude: a.longitude }, 1000), false, '~1.1 m');
-  assert.equal(m.lastMovedAt(), 0);
-  assert.equal(m.markMoved({ latitude: a.latitude + 0.00005, longitude: a.longitude }, 2000), true, '~5.6 m');
-  assert.equal(m.lastMovedAt(), 2000);
-});
-
 test('pocket dim: face down or upside down for 3 s goes black; turning it up wakes at once', () => {
   const p = loadTs('src/power/pocketPolicy.ts');
   let s = p.POCKET_START;
@@ -228,6 +210,44 @@ test('pocket dim: face down or upside down for 3 s goes black; turning it up wak
   s = p.nextPocketState(s, { x: 0, y: 0.95, z: 0 }, 8000);
   assert.equal(s.dim, true, 'upside down in a pocket');
   assert.equal(p.nextPocketState(p.POCKET_START, { x: 0, y: 0, z: -1 }, 99), p.POCKET_START, 'face up on a table: no churn');
+});
+
+test('pocket dim: a recent touch means someone is playing; it restarts the wait', () => {
+  const p = loadTs('src/power/pocketPolicy.ts');
+  let s = p.POCKET_START;
+  s = p.nextPocketState(s, { x: 0, y: 0, z: 1 }, 0, null);
+  s = p.nextPocketState(s, { x: 0, y: 0, z: 1 }, 3000, 2500);
+  assert.equal(s.dim, false, 'touched 0.5 s ago: never dims');
+  assert.equal(s.since, null, 'the wait starts over');
+  s = p.nextPocketState(s, { x: 0, y: 0, z: 1 }, 6000, 2500);
+  s = p.nextPocketState(s, { x: 0, y: 0, z: 1 }, 9000, 2500);
+  assert.equal(s.dim, true, 'face down 3 s after the last touch');
+});
+
+test('pocket dim: Android axes are flipped to the iOS convention', () => {
+  const p = loadTs('src/power/pocketPolicy.ts');
+  const androidFaceDown = { x: 0, y: 0, z: -1 };
+  assert.equal(p.isPocketPose(p.toIosTilt(androidFaceDown, 'android')), true);
+  assert.equal(p.isPocketPose(p.toIosTilt(androidFaceDown, 'ios')), false, 'the same reading on iOS is face up');
+  assert.equal(p.isPocketPose(p.toIosTilt({ x: 0, y: 1, z: 0 }, 'android')), false, 'Android upright in a hand');
+});
+
+test('poll clock forgets keyed polls after 10 minutes', () => {
+  const clock = fakeClock();
+  const c = new coord.PollCoordinator(clock);
+  const off = c.register({ id: 'hud:1', run: () => {}, intervalMs: 1000 });
+  clock.advance(0); off();
+  assert.equal(c.remembered(), 1);
+  clock.advance(coord.FORGET_AFTER_MS + 1);
+  c.register({ id: 'hud:2', run: () => {}, intervalMs: 1000 });
+  assert.equal(c.remembered(), 0);
+});
+
+test('live polls: Battery Saver is a fixed 2x and never stacks with idle', () => {
+  const lp = loadTs('src/hooks/livePollPolicy.ts');
+  assert.equal(lp.saverInterval(30000, false), 30000);
+  assert.equal(lp.saverInterval(30000, true), 60000);
+  assert.equal(lp.saverInterval(90000, true), 180000, 'only the fixed 2x is added on top of the caller idle factor; the budget idle multiplier is never applied here');
 });
 
 // Defect 7: PartyClient knows it starts in the background and its safety poll rests there.

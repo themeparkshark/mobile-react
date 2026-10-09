@@ -31,8 +31,6 @@ export interface PowerInputs {
   readonly appActive: boolean;
   /** No touch anywhere in the app for IDLE_AFTER_MS. */
   readonly idle: boolean;
-  /** No real movement for STATIONARY_AFTER_MS (from published GPS fixes). */
-  readonly stationary: boolean;
   /** Battery Saver on (in-app switch, or OS Low Power Mode when readable). */
   readonly lowPower: boolean;
   /** OS Reduce Motion. */
@@ -55,17 +53,14 @@ export interface PowerBudget {
   readonly compass: boolean;
   readonly lowPower: boolean;
   readonly idle: boolean;
-  readonly stationary: boolean;
 }
 
 /** No touch for this long counts as idle: the app's one idle constant (useUserIdle). */
 export const IDLE_AFTER_MS = 2 * 60_000;
-/** No fix past the jitter filter for this long counts as standing still (in line, on a bench). */
-export const STATIONARY_AFTER_MS = 90_000;
 
 export const FULL_BUDGET: PowerBudget = {
   level: 'full', ambient: true, animate: true, pollMultiplier: 1, particleScale: 1,
-  gpsRest: false, compass: true, lowPower: false, idle: false, stationary: false,
+  gpsRest: false, compass: true, lowPower: false, idle: false,
 };
 
 export function powerLevel(input: PowerInputs): PowerLevel {
@@ -76,7 +71,7 @@ export function powerLevel(input: PowerInputs): PowerLevel {
 
 export function powerBudget(input: PowerInputs): PowerBudget {
   const level = powerLevel(input);
-  const common = { lowPower: input.lowPower, idle: input.idle, stationary: input.stationary };
+  const common = { lowPower: input.lowPower, idle: input.idle };
   if (level === 'sleep') {
     return { ...common, level, ambient: false, animate: false, pollMultiplier: Infinity,
       particleScale: 0, gpsRest: true, compass: false };
@@ -106,13 +101,4 @@ export function budgetedInterval(baseMs: number, budget: Pick<PowerBudget, 'poll
 export function budgetedParticles(count: number, budget: Pick<PowerBudget, 'particleScale' | 'animate'>): number {
   if (!budget.animate || count <= 0) return 0;
   return Math.max(1, Math.round(count * budget.particleScale));
-}
-
-/**
- * Standing still: the jitter filter publishes nothing while you stand, so the
- * last published fix age is the signal. Unknown (no fix yet) is not still.
- */
-export function isStationary(lastMoveAt: number | null, now: number, afterMs = STATIONARY_AFTER_MS): boolean {
-  if (lastMoveAt === null || !Number.isFinite(lastMoveAt)) return false;
-  return now - lastMoveAt >= afterMs;
 }

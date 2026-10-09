@@ -7,40 +7,12 @@
  * refresh came due. Changing `key` (a new park, a new player) starts over and
  * runs right away. See livePollPolicy.ts for the rules.
  */
-import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
-import { pollDelay, pollIntervalFor } from './livePollPolicy';
+import { useEffect, useRef } from 'react';
+import { useAppActive } from './appActive';
+
+export { useAppActive };
+import { pollDelay, pollIntervalFor, saverInterval } from './livePollPolicy';
 import { usePowerBudget } from '../power';
-
-let appStateNow: AppStateStatus | undefined = AppState.currentState;
-const appStateListeners = new Set<() => void>();
-let appStateSubscription: { remove: () => void } | null = null;
-
-function subscribeAppState(listener: () => void): () => void {
-  appStateListeners.add(listener);
-  if (!appStateSubscription) {
-    appStateSubscription = AppState.addEventListener('change', state => {
-      if (state === appStateNow) return;
-      appStateNow = state;
-      appStateListeners.forEach(fn => fn());
-    });
-  }
-  return () => {
-    appStateListeners.delete(listener);
-    if (!appStateListeners.size && appStateSubscription) {
-      appStateSubscription.remove();
-      appStateSubscription = null;
-    }
-  };
-}
-
-/** 'inactive' (Control Center, an incoming call banner) still counts as on screen. */
-const isActive = () => appStateNow !== 'background';
-
-/** True while the app is in the foreground. One shared AppState listener for every caller. */
-export function useAppActive(): boolean {
-  return useSyncExternalStore(subscribeAppState, isActive, isActive);
-}
 
 export interface LivePollOptions {
   /** False pauses the poll (no park, no player). Default true. */
@@ -58,10 +30,10 @@ export interface LivePollOptions {
 export default function useLivePoll(run: () => unknown, intervalMs: number, options: LivePollOptions = {}): void {
   const { enabled = true, focused = true, backgroundMs = null, key = null, immediate = true } = options;
   const appActive = useAppActive();
-  // Battery Saver stretches every live poll. Only Saver: idle slow-down is
-  // already applied by callers (idlePollInterval), so the two never stack.
-  const { lowPower, pollMultiplier } = usePowerBudget();
-  const scaled = lowPower && Number.isFinite(pollMultiplier) ? Math.round(intervalMs * Math.max(1, pollMultiplier)) : intervalMs;
+  // Battery Saver: a fixed 2x. Idle slow-down is the caller's job
+  // (idlePollInterval), so the two never stack past it.
+  const { lowPower } = usePowerBudget();
+  const scaled = saverInterval(intervalMs, lowPower);
   const runRef = useRef(run);
   runRef.current = run;
   const lastRunAt = useRef<number | null>(immediate ? null : Date.now());

@@ -11,7 +11,7 @@ import { setDevModeEnabled, setDevLocation as setGlobalDevLocation } from '../he
 import { nextParkPresence, NO_PARK_PRESENCE, shouldRefreshParkLookup, type ParkLookupRecord,
   type ParkPresence } from './parkLookupPolicy';
 import { gpsWatchSettings } from './gpsWatchPolicy';
-import { budgetedInterval, markMoved, usePowerBudget } from '../power';
+import { budgetedInterval, usePowerBudget } from '../power';
 import { useAppActive } from '../hooks/useLivePoll';
 import { PositionFilter } from './positionFilter';
 
@@ -524,7 +524,6 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
             if (verdict.kind !== 'publish') return;
 
             lastLocationRef.current = verdict.position;
-            markMoved(verdict.position);
             debouncedSetLocation(verdict.position);
           },
           restartAfterError,
