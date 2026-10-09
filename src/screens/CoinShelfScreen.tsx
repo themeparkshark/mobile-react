@@ -154,7 +154,7 @@ export default function CoinShelfScreen({ route }: {
             <GameIcon name="coins" size={44} />
             <View style={{ flex: 1 }}>
               <Text style={styles.summaryEyebrow}>{catalogStale ? 'SAVED ON YOUR PHONE' : 'ACROSS ALL PARKS'}</Text>
-              <Text style={styles.summaryCount}>{catalog ? `${ownedCount}/${catalogRides.length}` : coins.length} COINS</Text>
+              <Text style={styles.summaryCount}>{catalog ? `${ownedCount}/${catalogRides.length}` : coins.length} RIDE COINS</Text>
               {catalog && catalogRides.length > 0 && <View style={styles.track}>
                 <View style={[styles.fill, { width: `${Math.round(ownedCount / catalogRides.length * 100)}%` }]} />
               </View>}

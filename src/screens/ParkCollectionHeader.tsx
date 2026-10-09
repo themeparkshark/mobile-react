@@ -7,6 +7,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withS
 import GameIcon from '../ui/GameIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { limitedDayLabel } from '../services/collection/limitedCoins';
+import { parkCoinParts } from './parkCoinParts';
 
 interface Props {
   readonly parkName: string;
@@ -51,13 +52,6 @@ interface Props {
 }
 
 /** The slim park header: park, one Ride Coins count, and one next step. */
-/** The park total: every coin here (rides, shows, famous spots). */
-export const PARK_TOTAL_LABEL = 'COINS';
-/** The Ride Passport is the rides-only part of the park total, so it says rides. */
-export function passportChipLabel(collected: number, available: number): string {
-  return `RIDES ${collected}/${available}`;
-}
-
 export default function ParkCollectionHeader({ parkName, isOwnPark = true, collected, available, completionRate,
   ridePassportCollected, ridePassportAvailable, onOpenRidePassport, limitedCollected = 0, limitedAvailable = 0,
   limitedEndsOn, onBrowseLimited, onBrowseSecrets, onOpenStampBook,
@@ -69,6 +63,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   const shownCollected = holdCount ? Math.max(0, collected - 1) : collected;
   const rate = available > 0 ? Math.max(0, Math.min(100, shownCollected / available * 100))
     : Math.max(0, Math.min(100, Number.isFinite(completionRate) ? completionRate : 0));
+  const parts = parkCoinParts(shownCollected, available, ridePassportCollected, ridePassportAvailable);
   const passportComplete = typeof ridePassportAvailable === 'number' && ridePassportAvailable > 0 &&
     (ridePassportCollected ?? 0) >= ridePassportAvailable;
   const limitedLeaves = limitedDayLabel(limitedEndsOn);
@@ -119,27 +114,29 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
         contentFit="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
       {/* The title bar already names the park, so the header starts with the count. */}
       <View style={styles.countRow} accessible
-        accessibilityLabel={available > 0 ? `${shownCollected} of ${available} ${parkName} coins collected` : 'Ride Coins coming soon'}>
+        accessibilityLabel={available > 0 ? `${shownCollected} of ${available} ${parkName} Ride Coins collected` : 'Ride Coins coming soon'}>
         <Animated.Text style={[styles.count, flash && styles.countFlash, popStyle]}>
           {available > 0 ? `${shownCollected}/${available}` : 'NEW'}
         </Animated.Text>
-        {/* Every coin at this park: rides, shows and famous spots. The Ride
-            Passport chip below is the rides-only part of this same shelf, so
-            the two numbers never read as two totals for one park. */}
-        <Text style={styles.countLabel}>{PARK_TOTAL_LABEL}</Text>
+        <Text style={styles.countLabel}>RIDE COINS</Text>
       </View>
       <View style={styles.track}>
         <Animated.View style={[styles.fill, fillStyle]} />
       </View>
       <View style={styles.chips}>
-        {typeof ridePassportAvailable === 'number' && ridePassportAvailable > 0 &&
+        {parts &&
           <Pressable style={styles.chip} disabled={!onOpenRidePassport}
             accessibilityRole={onOpenRidePassport ? 'button' : undefined}
-            accessibilityLabel={`Ride Passport: ${ridePassportCollected ?? 0} of ${ridePassportAvailable} rides${onOpenRidePassport ? '. Show rides only.' : ''}`}
+            accessibilityLabel={`Rides: ${parts.rides.collected} of ${parts.rides.available}${onOpenRidePassport ? '. Show rides only.' : ''}`}
             onPress={onOpenRidePassport}>
             <GameIcon name="ride" size={20} />
-            <Text style={styles.chipText}>{passportChipLabel(ridePassportCollected ?? 0, ridePassportAvailable)}</Text>
+            <Text style={styles.chipText}>RIDES {parts.rides.collected}/{parts.rides.available}</Text>
           </Pressable>}
+        {parts?.sights && <View style={styles.chip} accessible
+          accessibilityLabel={`Shows and sights: ${parts.sights.collected} of ${parts.sights.available}`}>
+          <GameIcon name="star" size={18} />
+          <Text style={styles.chipText}>SIGHTS {parts.sights.collected}/{parts.sights.available}</Text>
+        </View>}
         {limitedAvailable > 0 && <Pressable style={styles.chip} onPress={onBrowseLimited} disabled={!onBrowseLimited}
           hitSlop={6} accessibilityRole={onBrowseLimited ? 'button' : undefined}
           accessibilityLabel={`Limited coins here now, ${limitedCollected} of ${limitedAvailable}${limitedLeaves ? `, leaving ${limitedLeaves}` : ''}${onBrowseLimited ? '. View limited shelf.' : ''}`}>
