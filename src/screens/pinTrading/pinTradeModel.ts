@@ -84,7 +84,7 @@ export function boardEntry(swap: PinSwapType): PinSwapType {
   return { id: swap.id, pin: swap.pin, held_from: swap.held_from, held_to: swap.held_to };
 }
 
-export type TradeErrorKind = 'taken' | 'owned' | 'network' | 'generic';
+export type TradeErrorKind = 'taken' | 'owned' | 'network' | 'generic' | 'gold_for_gold' | 'daily_limit';
 
 type HttpLike = { response?: { status?: number; data?: { message?: string } }; message?: string; code?: string };
 
@@ -94,6 +94,10 @@ export function classifyTradeError(error: unknown): TradeErrorKind {
   const status = e.response?.status;
   const message = (e.response?.data?.message ?? '').toLowerCase();
   if (!e.response) return 'network';
+  // Pins v2 board rules come with their own codes (picture cards, never "try again").
+  const code = (e.response?.data as { code?: string } | undefined)?.code;
+  if (code === 'gold_for_gold') return 'gold_for_gold';
+  if (code === 'daily_limit') return 'daily_limit';
   if (status === 422 && /already (purchased|have|own)/.test(message)) return 'owned';
   if (status === 403 || status === 404 || status === 409 || /unavailable|already been accepted|held/.test(message)) return 'taken';
   return 'generic';
@@ -127,6 +131,10 @@ export const PIN_TRADE_COPY = {
   /** Pins v2: say plainly when the trade gives away your last copy or a numbered gold pin. */
   confirmKeeper: (give: string) => `It’s your only ${give}.`,
   confirmSpare: 'You keep one!',
+  goldTitle: 'Gold for gold',
+  goldMessage: 'A gold pin trades only for a gold pin.',
+  dailyTitle: 'All done for today',
+  dailyMessage: 'You traded a lot today. Come back tomorrow!',
   confirmSerial: (n: number) => `Your gold #${n} goes too.`,
   confirmLabel: 'Yes, trade!',
   sendingLabel: 'Trading...',

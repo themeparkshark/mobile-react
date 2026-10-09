@@ -67,8 +67,6 @@ type Props = {
   readonly canWear?: (pull: RevealPull) => boolean;
   /** The box is on stage while the server answers; a tap waits for it, then opens. */
   readonly waiting?: boolean;
-  /** The chaser's edition size, for "#3 of 500". */
-  readonly edition?: number | null;
 };
 
 export const REVEAL_CUES = ['fx.whoosh', 'fx.whooshRev', 'fx.coinTick', 'fx.reveal', 'fx.reward', 'fx.firework', 'fx.hit', 'ui.tap', 'ui.complete'] as const;
@@ -172,7 +170,7 @@ function Ring({ size, t }: { size: number; t: SharedValue<number> }) {
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 10, borderColor: '#ffffff' }, style]} />;
 }
 
-export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear, waiting = false, edition }: Props) {
+export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear, waiting = false }: Props) {
   const wantOpen = useRef(false);
   const waitingRef = useRef(waiting);
   waitingRef.current = waiting;
@@ -560,7 +558,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             {pull.is_chaser && (
               <View style={styles.chaserBanner}>
                 <Image source={PIN_ART.chaser} style={{ width: 30, height: 30 }} contentFit="contain" />
-                <Text maxFontSizeMultiplier={1.1} style={styles.chaserText}>GOLD CHASER {serialLabel(pull.serial, edition)}</Text>
+                <Text maxFontSizeMultiplier={1.1} style={styles.chaserText}>GOLD CHASER {serialLabel(pull.serial)}</Text>
               </View>
             )}
             {pull.is_chaser && pull.by_pity && <Text maxFontSizeMultiplier={1.1} style={styles.guaranteed}>Guaranteed!</Text>}

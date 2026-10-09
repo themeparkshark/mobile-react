@@ -187,7 +187,8 @@ function TradeSheet(props: TradeSheetProps) {
                 onEndReachedThreshold={0.5}
                 onEndReached={props.onMorePins}
                 renderItem={({ item }) => (
-                  <PickPin item={item} size={cell} selected={selected?.id === item.id} still={still} onPress={props.onSelect} />
+                  <PickPin item={item} size={cell} selected={selected?.id === item.id} still={still} onPress={props.onSelect}
+                    locked={!!swap.serial && !item.serial} />
                 )}
               />
             )}
@@ -219,6 +220,9 @@ function TradeSheet(props: TradeSheetProps) {
                       {(selected.spares ?? 0) > 0
                         ? <View style={[styles.confirmChip, { backgroundColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={styles.confirmChipText}>x{(selected.spares ?? 0) + 1} {'\u2192'} x{selected.spares}</Text></View>
                         : <View style={[styles.confirmChip, { backgroundColor: BRAND.red }]}><Text maxFontSizeMultiplier={1} style={[styles.confirmChipText, { color: BRAND.white }]}>LAST ONE</Text></View>}
+                      {!!swap.serial && (
+                        <View style={[styles.confirmChip, { backgroundColor: '#3b2a05', borderColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={[styles.confirmChipText, { color: BRAND.gold }]}>get #{swap.serial}</Text></View>
+                      )}
                       {!!selected.serial && !(selected.spares ?? 0) && (
                         <View style={[styles.confirmChip, { backgroundColor: '#3b2a05', borderColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={[styles.confirmChipText, { color: BRAND.gold }]}>#{selected.serial}</Text></View>
                       )}

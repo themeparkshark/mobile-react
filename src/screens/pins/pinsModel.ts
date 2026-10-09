@@ -10,7 +10,7 @@
  * - My Pins: everything you own, with the trade badge on tradable pins.
  */
 
-export type PinKind = 'park' | 'seasonal' | 'event' | 'mystery' | 'shop';
+export type PinKind = 'park' | 'seasonal' | 'event' | 'mystery' | 'shop' | 'trophy';
 
 export interface PinRow {
   readonly item_id: number;
@@ -175,10 +175,11 @@ export const PINS_COPY = {
   closedSeries: 'All done',
 } as const;
 
-export type BadgeKind = 'seal' | 'trade' | 'none';
+export type BadgeKind = 'seal' | 'trade' | 'trophy' | 'none';
 
 /** The corner badge for a pin kind: earned in person = gold seal (never trades), everything else = trade badge. */
 export function badgeFor(kind: PinKind, tradable: boolean): BadgeKind {
+  if (kind === 'trophy') return 'trophy';
   if (!tradable || kind === 'park' || kind === 'seasonal' || kind === 'event') return 'seal';
   return 'trade';
 }

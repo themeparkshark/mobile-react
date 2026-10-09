@@ -110,7 +110,7 @@ function ParkSetCardBase({ set, today, busy, still, shine, onClaim, onPin, onHun
               }} hitSlop={4} style={styles.slot}
                 accessibilityRole="button" accessibilityLabel={p.owned ? `${p.name}, you have it${rare ? ', rare' : ''}` : `Missing pin${rare ? ', rare' : ''}. Find it at ${set.park_name ?? 'the park'}`}>
                 <PinTile uri={p.icon_url} size={pinSize} owned={p.owned} kind={p.kind} tradable={false} badge={false}
-                  tilt={((i * 37) % 13) - 6} shine={p.owned ? shine : undefined} lag={i * 0.12} lagSpan={0.6} surface="board" />
+                  tilt={((i * 37) % 13) - 6} flat surface="board" />
                 {rare && <View style={styles.rare}><Text maxFontSizeMultiplier={1} style={styles.rareText}>RARE</Text></View>}
                 {tip?.index === i && (
                   <View style={styles.tip} pointerEvents="none"><Text maxFontSizeMultiplier={1.35} style={styles.tipText} numberOfLines={1}>{tip.text}</Text></View>

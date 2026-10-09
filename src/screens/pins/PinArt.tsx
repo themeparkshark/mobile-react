@@ -11,7 +11,7 @@ import { Image } from 'expo-image';
 import { memo } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
-import { BRAND, FONT } from '../../ui';
+import { BRAND, FONT, GameIcon } from '../../ui';
 import EnamelPin from '../pinTrading/EnamelPin';
 import { badgeFor, type PinKind } from './pinsModel';
 
@@ -92,7 +92,10 @@ function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, til
           </View>
         </View>
       )}
-      {badge && owned && b !== 'none' && (
+      {badge && owned && b === 'trophy' && (
+        <View style={[styles.badge, { right: -badgeSize * 0.15, bottom: -badgeSize * 0.1 }]}><GameIcon name="trophy" size={badgeSize} /></View>
+      )}
+      {badge && owned && (b === 'seal' || b === 'trade') && (
         <Image source={b === 'seal' ? PIN_ART.seal : PIN_ART.trade}
           style={[styles.badge, { width: badgeSize, height: badgeSize, right: -badgeSize * 0.18, bottom: -badgeSize * 0.12 }]}
           contentFit="contain" accessibilityIgnoresInvertColors />

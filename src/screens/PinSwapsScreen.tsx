@@ -386,6 +386,15 @@ export default function PinSwapsScreen() {
       void warmPinImages([pick.icon_url], 120);
     } catch (error) {
       const kind = classifyTradeError(error);
+      if (kind === 'gold_for_gold' || kind === 'daily_limit') {
+        // A board rule, not a glitch: say it with a picture and end the trade kindly.
+        void unHoldPinSwap(h.swap.id).catch(() => undefined);
+        setHold(null);
+        setSelected(undefined);
+        beat('ui.modalClose', { volume: 0.6 });
+        gameAlert(kind === 'gold_for_gold' ? COPY.goldTitle : COPY.dailyTitle, kind === 'gold_for_gold' ? COPY.goldMessage : COPY.dailyMessage, undefined, { icon: kind === 'gold_for_gold' ? 'star' : 'moon' });
+        return;
+      }
       if (kind === 'owned') {
         // Already yours: no pin of yours can fix that, so end the trade kindly (no buzz) and go back to the board.
         void unHoldPinSwap(h.swap.id).catch(() => undefined);

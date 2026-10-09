@@ -308,8 +308,10 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
 });
 
 /** One of your pins in the picker: a cream tile like the board cards, a gold ring and check when picked. */
-export const PickPin = memo(function PickPin({ item, size, selected, still, onPress }: {
+export const PickPin = memo(function PickPin({ item, size, selected, still, onPress, locked = false }: {
   item: ItemType; size: number; selected: boolean; still: boolean; onPress: (item: ItemType) => void;
+  /** Pins v2: a gold board pin takes only a gold pin; the rest grey out with a lock. */
+  locked?: boolean;
 }) {
   const on = useSharedValue(selected ? 1 : 0);
   const press = useSharedValue(0);
@@ -321,9 +323,10 @@ export const PickPin = memo(function PickPin({ item, size, selected, still, onPr
   const badge = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ scale: 0.4 + on.value * 0.6 }] }));
   const name = pinName(item);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={name} accessibilityState={{ selected }} hitSlop={2}
+    <Pressable accessibilityRole="button" accessibilityLabel={name} hitSlop={2}
       onPressIn={() => { if (!still) press.value = withTiming(1, { duration: MOTION.pressInMs }); }}
       onPressOut={() => { press.value = still ? 0 : withTiming(0, { duration: MOTION.pressOutMs }); }}
+      disabled={locked} accessibilityState={{ selected, disabled: locked }}
       onPress={() => onPress(item)}>
       <Animated.View style={[styles.pick, { width: size, height: size }, selected && styles.pickOn, tileStyle]}>
         <Animated.View style={pinStyle}>
@@ -332,6 +335,7 @@ export const PickPin = memo(function PickPin({ item, size, selected, still, onPr
         <Animated.View style={[styles.pickBadge, badge]} pointerEvents="none"><GameIcon name="check" size={24} /></Animated.View>
         {/* Pins v2: spares show as x2 (give one, keep yours); a gold serial shows its number. */}
         {(item.spares ?? 0) > 0 && <View style={styles.pickSpares} pointerEvents="none"><Text maxFontSizeMultiplier={1} style={styles.pickSparesText}>x{(item.spares ?? 0) + 1}</Text></View>}
+        {locked && <View style={styles.pickLocked} pointerEvents="none"><GameIcon name="lock" size={22} /></View>}
         {!!item.serial && <View style={styles.pickSerial} pointerEvents="none"><Text maxFontSizeMultiplier={1} style={styles.pickSerialText}>#{item.serial}</Text></View>}
       </Animated.View>
     </Pressable>
@@ -344,6 +348,7 @@ export function PageWash() {
 }
 
 const styles = StyleSheet.create({
+  pickLocked: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,56,128,0.55)', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   pickSpares: { position: 'absolute', left: 2, bottom: 2, minWidth: 24, height: 20, borderRadius: 10, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   pickSparesText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.navy, paddingTop: 2 },
   pickSerial: { position: 'absolute', right: 2, top: 2, height: 18, borderRadius: 5, backgroundColor: '#3b2a05', borderWidth: 2, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
