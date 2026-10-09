@@ -152,6 +152,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setBusy('buy');
       trackMoney('gate_passed', 'vip', plan.productId);
+      trackMoney('sheet', 'vip', plan.productId);
       const outcome = await buyVip(plan);
       trackMoney(outcome === 'success' ? 'bought' : outcome === 'pending' ? 'pending' : outcome === 'cancelled' ? 'cancelled' : 'failed', 'vip', plan.productId);
       setBusy(null);
@@ -329,6 +330,7 @@ function GiftPlans() {
     trackMoney('tap', 'vip.gift', id);
     if (!(await askGrownUp({ kind: 'money', price: prices[id].price, gets: `${months === 12 ? '12 months' : '1 month'} of VIP. It doesn’t renew` }))) return;
     trackMoney('gate_passed', 'vip.gift', id);
+    trackMoney('sheet', 'vip.gift', id);
     setBusy(id);
     const outcome = await buyVipGift(id);
     setBusy(null);

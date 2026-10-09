@@ -268,6 +268,7 @@ export default function SharkPassScreen() {
       haptic('hitMedium');
       setBusy('buy');
       trackMoney('gate_passed', where, productId);
+      trackMoney('sheet', where, productId);
       const outcome = await buySharkPass(productId, state && state.enabled ? state.account_token : null);
       trackMoney(outcome.status === 'success' ? 'bought' : outcome.status === 'pending' ? 'pending' : outcome.status === 'cancelled' ? 'cancelled' : 'failed', where, productId);
       if (outcome.status === 'success') {

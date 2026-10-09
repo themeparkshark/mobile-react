@@ -1,12 +1,15 @@
 /**
  * The offer funnel, per placement (POST /api/me/money-events, batched): impression, tap, the
- * grown-up gate shown / passed / declined, bought, pending, failed, cancelled, claim. Only the
+ * grown-up gate shown / passed / declined, the App Store sheet opened, bought, pending, failed, cancelled, claim. Only the
+ * Rewarded ads join the same funnel as `ad.<placement>`. Only the
  * event, the placement and the product id are sent: never prices, gate answers or anything typed.
  * Best effort: a failed send is dropped, never retried in a loop, never blocks a purchase.
  */
 import client from '../../api/client';
 
-export type MoneyEvent = 'impression' | 'tap' | 'gate_shown' | 'gate_passed' | 'gate_declined' | 'bought' | 'pending' | 'failed' | 'cancelled' | 'claim';
+export type MoneyEvent = 'impression' | 'tap' | 'gate_shown' | 'gate_passed' | 'gate_declined' | 'sheet' | 'bought' | 'pending' | 'failed' | 'cancelled' | 'claim'
+  /** Rewarded ads (placement `ad.<where>`): the ad played, was closed early, paid, or had no ad to show. */
+  | 'ad_shown' | 'ad_skipped' | 'ad_rewarded' | 'ad_no_fill';
 
 type Row = { event: MoneyEvent; placement: string; product_id?: string };
 let queue: Row[] = [];

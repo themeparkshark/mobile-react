@@ -134,6 +134,22 @@ export type AdOutcome =
 export async function watchForReward(
   placement: AdPlacement, ref: string | number | null, vip: boolean,
 ): Promise<AdOutcome> {
+  const outcome = await watchOnce(placement, ref, vip);
+  // The ad funnel, next to the shop's (tap, then what happened). VIP's no-ad payout counts as rewarded.
+  const where = `ad.${placement}`;
+  trackMoney('tap', where);
+  const event = outcome.status === 'granted' || outcome.status === 'checking' ? 'ad_rewarded'
+    : outcome.status === 'skipped' ? 'ad_skipped' : outcome.status === 'no_fill' ? 'ad_no_fill' : null;
+  if (event) trackMoney(event, where);
+  return outcome;
+}
+
+/** The funnel, loaded lazily (best effort: a tracking problem never touches an ad or a reward). */
+function trackMoney(event: import('./money/track').MoneyEvent, placement: string): void {
+  try { (require('./money/track') as typeof import('./money/track')).trackMoney(event, placement); } catch { /* best effort */ }
+}
+
+async function watchOnce(placement: AdPlacement, ref: string | number | null, vip: boolean): Promise<AdOutcome> {
   if (!vip && !adsAvailable()) return { status: 'unavailable' };
   let offer: AdReward;
   try {
@@ -151,6 +167,7 @@ export async function watchForReward(
   let watched: Watched;
   try {
     await start();
+    trackMoney('ad_shown', `ad.${placement}`);
     watched = await watch(placement, offer.nonce);
   } catch {
     return { status: 'no_fill' };

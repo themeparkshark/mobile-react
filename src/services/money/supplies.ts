@@ -125,6 +125,7 @@ export async function buyPack(product: ShopProduct, options: { onStart?: () => v
       return { status: 'declined' };
     }
     trackMoney('gate_passed', where, product.product_id);
+    trackMoney('sheet', where, product.product_id);
     options.onStart?.();
     const outcome = await purchaseNow(product, catalog);
     trackMoney(outcome.status === 'success' ? 'bought' : outcome.status === 'pending' ? 'pending'
