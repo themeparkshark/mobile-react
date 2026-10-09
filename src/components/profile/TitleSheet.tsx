@@ -118,7 +118,7 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
   };
 
   /** Every stamp title and how to get it lives in the Stamp Book's Titles list. */
-  const openStampBook = () => { onClose(); setTimeout(() => RootNavigation.navigate('StampBook', { titles: true }), 260); };
+  const openStampBook = () => { onClose(); RootNavigation.navigate('StampBook', { titles: true }); };
 
   const worn = title?.trim() || null;
   const others = (earned ?? []).filter(entry => entry.title !== worn);

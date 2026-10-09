@@ -8,7 +8,8 @@
  * nothing is committed. Tiles copy a clock into their own value only while
  * they are on screen (`useTileClock`), so off-screen tiles do no work at all.
  */
-import { createContext, useContext, useEffect, useMemo } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import {
   cancelAnimation,
   Easing,
@@ -41,17 +42,41 @@ export const BookFxProvider = Ctx.Provider;
 export const SHINE_EVERY_MS = 3600;
 export const PULSE_EVERY_MS = 2000;
 
-/** Owns the clocks. `running` = screen focused and no card open. */
-export function useBookClocks(running: boolean, reducedMotion: boolean): BookFx {
+/** Pause the idle clocks after this long with no touch or scroll; the next touch wakes them. */
+export const IDLE_MS = 30_000;
+
+/**
+ * Owns the clocks. `running` = screen focused and no card open. `pulseOn`
+ * (a reward is waiting) and `shineOn` (a rare-or-better stamp is owned) let a
+ * clock rest when nothing on the page uses it. The app going to the
+ * background, or 30 s with no touch, also rests both; `poke()` wakes them.
+ */
+export function useBookClocks(running: boolean, reducedMotion: boolean, needs: { pulseOn: boolean; shineOn: boolean } = { pulseOn: true, shineOn: true }): BookFx & { poke: () => void } {
   const shine = useSharedValue(1);
   const pulse = useSharedValue(0);
   const paused = useSharedValue(!running);
   const scrollY = useSharedValue(0);
   const viewportH = useSharedValue(800);
+  const [awake, setAwake] = useState(true);
+  const [foreground, setForeground] = useState(AppState.currentState === 'active');
+  const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const poke = useCallback(() => {
+    if (idle.current) clearTimeout(idle.current);
+    idle.current = setTimeout(() => setAwake(false), IDLE_MS);
+    setAwake(true);
+  }, []);
+  useEffect(() => { poke(); return () => { if (idle.current) clearTimeout(idle.current); }; }, [poke]);
   useEffect(() => {
-    paused.value = !running;
-    if (!running || reducedMotion) return;
+    const sub = AppState.addEventListener('change', state => setForeground(state === 'active'));
+    return () => sub.remove();
+  }, []);
+
+  const live = running && awake && foreground;
+  const { pulseOn, shineOn } = needs;
+  useEffect(() => {
+    paused.value = !live;
+    if (!live || reducedMotion) return;
     const sweep = () => {
       shine.value = 0;
       shine.value = withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) });
@@ -62,18 +87,19 @@ export function useBookClocks(running: boolean, reducedMotion: boolean): BookFx 
         withTiming(0, { duration: 400, easing: Easing.inOut(Easing.quad) }),
       );
     };
-    sweep(); beat();
-    const a = setInterval(sweep, SHINE_EVERY_MS);
-    const b = setInterval(beat, PULSE_EVERY_MS);
+    const timers: ReturnType<typeof setInterval>[] = [];
+    if (shineOn) { sweep(); timers.push(setInterval(sweep, SHINE_EVERY_MS)); }
+    if (pulseOn) { beat(); timers.push(setInterval(beat, PULSE_EVERY_MS)); }
     return () => {
-      clearInterval(a); clearInterval(b);
+      timers.forEach(clearInterval);
       cancelAnimation(shine); cancelAnimation(pulse);
       shine.value = 1; pulse.value = 0;
     };
-  }, [running, reducedMotion, shine, pulse, paused]);
+  }, [live, reducedMotion, shineOn, pulseOn, shine, pulse, paused]);
 
-  return useMemo(() => ({ shine, pulse, paused, scrollY, viewportH, reducedMotion }),
+  const fx = useMemo(() => ({ shine, pulse, paused, scrollY, viewportH, reducedMotion }),
     [shine, pulse, paused, scrollY, viewportH, reducedMotion]);
+  return useMemo(() => ({ ...fx, poke }), [fx, poke]);
 }
 
 /** Worklet: is a band [top, top+h] (content coordinates) on screen right now? */

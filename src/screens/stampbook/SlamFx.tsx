@@ -99,7 +99,8 @@ export const Sunburst = memo(function Sunburst({ size, color, running }: { size:
   const spin = useSharedValue(0);
   useEffect(() => {
     if (!running) { cancelAnimation(spin); return; }
-    spin.value = withRepeat(withTiming(360, { duration: 20000, easing: Easing.linear }), -1, false);
+    // Three slow turns, then it rests (an open card left on screen goes idle).
+    spin.value = withRepeat(withTiming(360, { duration: 20000, easing: Easing.linear }), 3, false);
     return () => cancelAnimation(spin);
   }, [running, spin]);
   const rays = useMemo(() => {
@@ -115,7 +116,7 @@ export const Sunburst = memo(function Sunburst({ size, color, running }: { size:
   return (
     <View pointerEvents="none" style={[styles.center, { width: size, height: size, marginLeft: -size / 2, marginTop: -size / 2 }]}>
       <Animated.View style={[StyleSheet.absoluteFill, style]}>
-        <Svg width={size} height={size}>{rays.map((p, i) => <Polygon key={p} points={p} fill={i % 2 ? '#FFF4C2' : color} opacity={0.9} />)}</Svg>
+        <Svg width={size} height={size}>{rays.map((p, i) => <Polygon key={p} points={p} fill={i % 2 ? '#FFF4C2' : color} opacity={0.6} />)}</Svg>
       </Animated.View>
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
         <Defs>

@@ -29,7 +29,7 @@ import { playSfx } from '../../gamekit/SFX';
 import { useBookFx, useTileClock } from './BookFx';
 import Foil from './Foil';
 import StampArt from './StampArt';
-import { almostThere, hasShine, postmark, progressLabel, rarityRank, requirement, ring as ringGeo, stampState, tileLabel, type BookStamp, type Corner } from './model';
+import { almostThere, hasShine, postmark, progressLabel, rarityRank, requirement, ring as ringGeo, fillFraction, secretHint, stampState, tileLabel, type BookStamp, type Corner } from './model';
 
 export const INK = '#14213D';
 export const LIP = '#B98F45';
@@ -39,6 +39,9 @@ export const SLOT = '#F1E3BF';
 export const SLOT_EDGE = '#C9AE78';
 export const MUTED_INK = '#5B6782';
 const GOLD = '#FFC21A';
+/** Gift red: only a stamp with a reward waiting wears it (the CLAIM tag, the frame, the tab dot). */
+const GIFT = '#E3262E';
+const GIFT_LIP = '#9E1218';
 
 interface Props {
   readonly stamp: BookStamp;
@@ -66,9 +69,9 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
   const hasTitle = !!stamp.rewards?.title && !stamp.secret;
 
   const top = useDerivedValue(() => gridTop.value + localY.value);
-  const shine = useTileClock(fx.shine, top, height, 1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   const rank = rarityRank(stamp.rarity);
+  const fill = state === 'progress' ? fillFraction(stamp.percent) : 0;
 
   const onLayout = (e: LayoutChangeEvent) => { localY.value = e.nativeEvent.layout.y; };
   const tag = state === 'claim' ? 'claim' : isNew && stamp.earned ? 'new' : almost ? 'almost' : null;
@@ -88,14 +91,12 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
             {state === 'claim' && !fx.reducedMotion && (
               <Pulsing top={top} height={height} kind="glow"><View style={styles.claimGlowFill} /></Pulsing>
             )}
-            <View style={[styles.lip, { backgroundColor: state === 'claim' ? '#C98A00' : rank > 1 ? look.lip : LIP }]} />
-            <View style={[styles.card, { borderColor: state === 'claim' ? GOLD : look.frame }, state === 'claim' && styles.cardClaim]}>
+            <View style={[styles.lip, { backgroundColor: state === 'claim' ? GIFT_LIP : rank > 1 ? look.lip : LIP }]} />
+            <View style={[styles.card, { borderColor: state === 'claim' ? GIFT : look.frame }, state === 'claim' && styles.cardClaim]}>
               <LinearGradient colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0)']} style={styles.gloss} />
               <View style={[styles.artWrap, { width: art, height: art }]}>
                 <StampArt stamp={stamp} size="thumb" placeholder={accent} priority={col < 3 ? 'high' : 'normal'} />
-                {hasShine(stamp) && !fx.reducedMotion && (
-                  <Foil stamp={stamp} size={art} art="thumb" progress={shine} lag={col * 0.08} />
-                )}
+                {hasShine(stamp) && !fx.reducedMotion && <ShineFoil stamp={stamp} size={art} top={top} height={height} lag={col * 0.08} />}
                 {!!mark && (
                   <View style={[styles.postmark, CORNER[postmarkCorner(stamp.freeCorner, !!tag)]]} accessible={false}>
                     <Text style={styles.pmMonth} maxFontSizeMultiplier={1}>{mark.month}</Text>
@@ -117,16 +118,24 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
                   <View style={[styles.ghost, state === 'fresh' && styles.ghostFresh]}>
                     <StampArt stamp={stamp} size="thumb" priority={col < 3 ? 'high' : 'normal'} />
                   </View>
+                  {/* In progress: the real colour fills up from the bottom with the progress (capped well short of owned). */}
+                  {state === 'progress' && fill > 0 && (
+                    <View style={[styles.colorFill, { height: `${Math.round(fill * 82)}%` }]} pointerEvents="none">
+                      <View style={[styles.fillArt, { height: art * 0.82 }]}><StampArt stamp={stamp} size="thumb" locked={false} /></View>
+                    </View>
+                  )}
                   <ProgressRing size={art} fraction={stamp.percent / 100} color={accent} />
-                  {state === 'fresh' && <View style={styles.lock}><GameIcon name="lock" size={13} /></View>}
                 </>
               )}
             </View>
             <Text style={[styles.name, styles.nameSlot]} numberOfLines={state === 'secret' ? 1 : 2} adjustsFontSizeToFit minimumFontScale={0.8}
               maxFontSizeMultiplier={1.3}>{state === 'secret' ? 'Secret' : stamp.shortName}</Text>
             {state !== 'secret' && (req.pips ? (
-              <View style={styles.reqRow}>
-                <GameIcon name={req.icon} size={15} />
+              <View style={styles.reqCol}>
+                <View style={styles.reqRow}>
+                  <GameIcon name={req.icon} size={15} />
+                  <Text style={styles.count} maxFontSizeMultiplier={1.2}>{progressLabel(stamp)}</Text>
+                </View>
                 <View style={styles.pips}>
                   {Array.from({ length: stamp.target }, (_, i) => (
                     <View key={i} style={[styles.pip, { backgroundColor: i < stamp.progress ? accent : 'rgba(20,33,61,0.12)',
@@ -135,15 +144,17 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
                 </View>
               </View>
             ) : (
-              <View style={styles.reqRow}>
-                <GameIcon name={req.icon} size={15} />
+              <View style={styles.reqCol}>
+                <View style={styles.reqRow}>
+                  <GameIcon name={req.icon} size={15} />
+                  <Text style={styles.count} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.2}>{progressLabel(stamp)}</Text>
+                </View>
                 <View style={styles.bar}>
                   <View style={[styles.barFill, { width: `${Math.max(stamp.percent, 0)}%`, backgroundColor: accent }]} />
-                  <Text style={styles.barText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.2}>{progressLabel(stamp)}</Text>
                 </View>
               </View>
             ))}
-            {state === 'secret' && <Text style={styles.secretHint} numberOfLines={1} maxFontSizeMultiplier={1.2}>Keep playing!</Text>}
+            {state === 'secret' && <Text style={styles.secretHint} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.2}>{secretHint(stamp)}</Text>}
           </View>
         )}
 
@@ -166,7 +177,7 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
             <Text style={styles.claimText} maxFontSizeMultiplier={1.2}>CLAIM!</Text>
           </Pulsing>
         ) : tag === 'new' ? (
-          <Pulsing top={top} height={height} kind="bob" style={styles.newTag} still={fx.reducedMotion}><GameIcon name="new" size={30} /></Pulsing>
+          <View style={styles.newTag} pointerEvents="none"><Text style={styles.newText} maxFontSizeMultiplier={1.1}>NEW</Text></View>
         ) : tag === 'almost' ? (
           <View style={styles.almost}><Text style={styles.almostText} maxFontSizeMultiplier={1.2}>Almost!</Text></View>
         ) : null}
@@ -176,6 +187,13 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
 }
 
 export default memo(StampTile);
+
+/** The shine sweep on a rare-or-better owned stamp. Only these tiles carry a per-frame clock (plain tiles do no scroll work). */
+function ShineFoil({ stamp, size, top, height, lag }: { stamp: BookStamp; size: number; top: SharedValue<number>; height: number; lag: number }) {
+  const fx = useBookFx();
+  const shine = useTileClock(fx.shine, top, height, 1);
+  return <Foil stamp={stamp} size={size} art="thumb" progress={shine} lag={lag} />;
+}
 
 /** Thin ring around the ghost art, filled to the stamp's progress (Pokemon GO medal style). */
 function ProgressRing({ size, fraction, color }: { size: number; fraction: number; color: string }) {
@@ -227,9 +245,9 @@ const styles = StyleSheet.create({
     flex: 1, marginBottom: 5, borderRadius: 18, borderWidth: 3.5, backgroundColor: '#FFFFFF',
     alignItems: 'center', paddingTop: 12, paddingHorizontal: 5, overflow: 'hidden',
   },
-  cardClaim: { borderWidth: 4.5, backgroundColor: '#FFFBEA' },
+  cardClaim: { borderWidth: 4.5, backgroundColor: '#FFF4F0' },
   claimGlow: { position: 'absolute', left: -6, right: -6, top: -6, bottom: -2 },
-  claimGlowFill: { flex: 1, borderRadius: 24, backgroundColor: 'rgba(255,194,26,0.55)' },
+  claimGlowFill: { flex: 1, borderRadius: 24, backgroundColor: 'rgba(255,120,90,0.5)' },
   gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%', opacity: 0.6 },
   // Not yet: an empty slot recessed into the paper.
   slot: {
@@ -240,6 +258,8 @@ const styles = StyleSheet.create({
   artWrap: { alignItems: 'center', justifyContent: 'center' },
   ghost: { position: 'absolute', left: '9%', top: '9%', right: '9%', bottom: '9%', opacity: 0.55 },
   ghostFresh: { opacity: 0.3 },
+  colorFill: { position: 'absolute', left: '9%', right: '9%', bottom: '9%', overflow: 'hidden' },
+  fillArt: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   secret: {
     width: '78%', height: '78%', borderRadius: 999, borderWidth: 3, borderStyle: 'dashed', borderColor: '#D9A21B',
     alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,207,59,0.25)',
@@ -261,14 +281,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark', fontSize: 14, lineHeight: 16, color: INK, textAlign: 'center', marginTop: 4, textTransform: 'uppercase',
   },
   nameSlot: { color: MUTED_INK },
-  reqRow: { flexDirection: 'row', alignItems: 'center', gap: 3, width: '100%', paddingHorizontal: 2, marginTop: 'auto', marginBottom: 7 },
-  bar: {
-    flex: 1, height: 17, borderRadius: 9, backgroundColor: 'rgba(20,33,61,0.10)', overflow: 'hidden', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: 'rgba(20,33,61,0.25)',
-  },
-  barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 8 },
-  barText: { fontFamily: 'Shark', fontSize: 12, color: INK, textAlign: 'center', paddingHorizontal: 2 },
-  pips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 2 },
+  reqCol: { width: '100%', paddingHorizontal: 4, marginTop: 'auto', marginBottom: 8, gap: 3 },
+  reqRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  count: { flexShrink: 1, fontFamily: 'Shark', fontSize: 15, color: INK },
+  bar: { height: 8, borderRadius: 4, backgroundColor: 'rgba(20,33,61,0.13)', overflow: 'hidden' },
+  barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 4 },
+  pips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 2 },
   pip: { height: 9, borderRadius: 5, borderWidth: 1, borderColor: 'rgba(20,33,61,0.3)' },
   gems: { position: 'absolute', left: 9, top: 9, flexDirection: 'row', gap: 1 },
   gem: { width: 8, height: 8, borderRadius: 2, borderWidth: 1.5, borderColor: '#FFFFFF', transform: [{ rotate: '45deg' }] },
@@ -284,7 +302,11 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 9, paddingVertical: 3, borderWidth: 2.5, borderColor: '#FFFFFF',
   },
   claimText: { fontFamily: 'Shark', fontSize: 14, color: '#FFFFFF' },
-  newTag: { position: 'absolute', top: -14, alignSelf: 'center' },
+  newTag: {
+    position: 'absolute', top: -10, alignSelf: 'center', backgroundColor: '#1E88E5', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 2,
+    borderWidth: 2.5, borderColor: '#FFFFFF',
+  },
+  newText: { fontFamily: 'Shark', fontSize: 13, color: '#FFFFFF', letterSpacing: 0.5 },
   almost: {
     position: 'absolute', top: -8, alignSelf: 'center', backgroundColor: '#FFCF3B', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
     borderWidth: 2, borderColor: INK,

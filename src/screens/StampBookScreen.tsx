@@ -17,7 +17,7 @@
  * focus refetch is throttled to 30 s, and tile thumbs are prefetched.
  */
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type ScrollView } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,13 +39,15 @@ import StampTile, { INK, MUTED_INK, PAPER, SLOT_EDGE } from './stampbook/StampTi
 import StampCard, { type ClaimResult, type Wallet } from './stampbook/StampCard';
 import StampArt from './stampbook/StampArt';
 import TitlesSheet from './stampbook/TitlesSheet';
+import ClaimAll from './stampbook/ClaimAll';
+import { loadBookCache, memoryBook, saveBookCache } from './stampbook/cache';
 import { BookFxProvider, useBookClocks, useBookFx } from './stampbook/BookFx';
 import { Confetti } from './stampbook/SlamFx';
 import { prefetchList } from './stampbook/art';
 import { loadCelebrated, loadSeen, saveCelebrated, saveSeen } from './stampbook/seen';
 import { takeStampsDirty } from './stampbook/dirty';
 import {
-  almostThereList, bookTotals, buildBook, claimQueue, progressLabel, remainingLine, requirement, ring, stampIndex, titleCounts, titleEntries,
+  almostThereList, bookTotals, buildBook, claimQueue, hasShine, progressLabel, remainingLine, requirement, ring, stampIndex, titleCounts, titleEntries,
   type BookSection, type BookStamp, type GoTarget, type TitleEntry,
 } from './stampbook/model';
 
@@ -60,6 +62,9 @@ const SECTION_ICON: Record<string, GameIconName> = {
   parks: 'map', hunt: 'pin', rides: 'coin', friends: 'member', streaks: 'streak', milestones: 'trophy', special: 'star',
 };
 const BACKGROUND = require('../../assets/images/screens/leaderboard/standings-bg.png');
+const SHARK = require('../../assets/images/howto/shark-happy.webp');
+/** Sticky bookmark band height: a tab scroll lands the page just under it. */
+const TABS_H = 64;
 
 export default function StampBookScreen() {
   const previewMode = __DEV__ && process.env.EXPO_PUBLIC_STAMP_BOOK_PREVIEW === '1';
@@ -73,8 +78,9 @@ export default function StampBookScreen() {
   const chipScroller = useRef<ScrollView>(null);
   const chipX = useRef<Record<string, { x: number; w: number }>>({});
 
-  const [response, setResponse] = useState<StampsResponse | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  // The last book draws on the first frame (memory, then device cache); the network refresh lands behind it.
+  const [response, setResponse] = useState<StampsResponse | null>(() => (previewMode ? null : memoryBook(player?.id ?? null)));
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(() => (response ? 'ready' : 'loading'));
   const [filter, setFilter] = useState<string>('all');
   const [selected, setSelected] = useState<BookStamp | null>(null);
   const [fresh, setFresh] = useState(false);
@@ -85,6 +91,10 @@ export default function StampBookScreen() {
   const [titleMessage, setTitleMessage] = useState<string | null>(null);
   // Dev preview only: the worn title lives here (there is no signed-in player).
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
+  /** The worn title as the player just set it (optimistic); null once the server agrees. */
+  const [titleOverride, setTitleOverride] = useState<{ title: string | null } | null>(null);
+  const [claimAllOpen, setClaimAllOpen] = useState<readonly BookStamp[] | null>(null);
+  const sectionY = useRef<Record<string, number>>({});
   // Seen stamps live in a ref so opening a card never changes `open` (no tile re-render on the slam frame).
   const seenRef = useRef<Set<string> | null>(null);
   const [seenVersion, setSeenVersion] = useState(0);
@@ -95,7 +105,6 @@ export default function StampBookScreen() {
   const prevIndex = useRef<Map<number, BookStamp>>(new Map());
   const pendingPatch = useRef<number[]>([]);
 
-  const fx = useBookClocks(focused && !selected && !titlesOpen, reducedMotion);
 
   const sections = useMemo(() => {
     if (!response) return [];
@@ -104,11 +113,14 @@ export default function StampBookScreen() {
     return book;
   }, [response]);
   const totals = useMemo(() => bookTotals(sections), [sections]);
+  const shinyOwned = useMemo(() => sections.some(s => s.stamps.some(hasShine)), [sections]);
+  // Clocks rest when nothing uses them: pulse only with a reward waiting, shine only with a rare-or-better stamp owned.
+  const fx = useBookClocks(focused && !selected && !titlesOpen && !claimAllOpen, reducedMotion, { pulseOn: totals.toClaim > 0, shineOn: shinyOwned });
   const queue = useMemo(() => claimQueue(sections), [sections]);
   const almost = useMemo(() => almostThereList(sections, 3), [sections]);
-  const shown = filter === 'all' ? sections : sections.filter(s => s.key === filter);
   const accentFor = useCallback((key: string) => sections.find(s => s.key === key)?.color ?? '#2F6BFF', [sections]);
-  const wornTitle = (previewMode ? previewTitle ?? response?.equipped_title ?? null : player?.title ?? response?.equipped_title ?? null) || null;
+  const wornTitle = (titleOverride ? titleOverride.title
+    : previewMode ? previewTitle ?? response?.equipped_title ?? null : player?.title ?? response?.equipped_title ?? null) || null;
   const titles = useMemo(() => titleEntries(sections, response?.unlocked_titles, wornTitle), [sections, response?.unlocked_titles, wornTitle]);
   const titleCount = titleCounts(titles);
 
@@ -117,6 +129,17 @@ export default function StampBookScreen() {
   useEffect(() => { if (wantTitles) setTitlesOpen(true); }, [wantTitles, route.params]);
 
   useEffect(() => { loadSeen().then(set => { seenRef.current = set; setSeenVersion(v => v + 1); }); }, []);
+  // Cold app start: the device copy of the last book, if the network has not answered first.
+  useEffect(() => {
+    if (previewMode || response) return;
+    void loadBookCache(player?.id ?? null).then(cached => {
+      if (!cached) return;
+      setResponse(current => current ?? cached);
+      setStatus(current => (current === 'loading' ? 'ready' : current));
+    });
+    // Once, on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const load = useCallback((force: boolean) => {
     if (previewMode) {
@@ -134,6 +157,7 @@ export default function StampBookScreen() {
       .then(data => {
         setResponse(data);
         setStatus('ready');
+        saveBookCache(player?.id ?? null, data);
         const urls = prefetchList(Object.values(data.stamps).flat().map(s => ({
           slug: s.slug, earned: s.is_earned, iconUrl: s.icon_url ?? null, thumbUrl: s.icon_thumb_url ?? s.icon_url ?? null,
           lockedUrl: s.locked_icon_url ?? null, lockedThumbUrl: s.locked_thumb_url ?? null,
@@ -148,7 +172,7 @@ export default function StampBookScreen() {
         if (big.length) Image.prefetch(big, 'disk').catch(() => undefined);
       })
       .catch(() => { lastFetch.current = 0; setStatus(current => (current === 'ready' ? current : 'error')); });
-  }, [previewMode]);
+  }, [previewMode, player?.id]);
 
   useFocusEffect(useCallback(() => {
     const force = forceNext.current;
@@ -206,14 +230,16 @@ export default function StampBookScreen() {
         const s = all.find(x => x.id === id);
         if (s?.rewards?.title && !unlocked.some(u => u.stamp_id === id)) unlocked.push({ stamp_id: id, title: s.rewards.title });
       }
-      return {
+      const next = {
         ...current,
         unlocked_titles: unlocked,
         stamps: Object.fromEntries(Object.entries(current.stamps).map(([key, list]) =>
           [key, list.map(s => (ids.includes(s.id) ? { ...s, reward_claimed: true } : s))])),
       };
+      if (!previewMode) saveBookCache(player?.id ?? null, next);
+      return next;
     });
-  }, []);
+  }, [previewMode, player?.id]);
 
   /** Stamps opened while the card was up; their NEW tags clear when it closes, not on the slam frame. */
   const openedRef = useRef<number[]>([]);
@@ -251,6 +277,8 @@ export default function StampBookScreen() {
 
   const closeRef = useRef<() => void>(() => undefined);
   closeRef.current = close;
+  const pickRef = useRef<(k: string) => void>(() => undefined);
+  const openClaimRef = useRef<() => void>(() => undefined);
 
   const nextClaim = useMemo(() => {
     const waiting = queue.filter(s => !pendingPatch.current.includes(s.id));
@@ -282,7 +310,8 @@ export default function StampBookScreen() {
       titles: () => setTitlesOpen(true),
       closeTitles: () => setTitlesOpen(false),
       scroll: (y: number) => scroller.current?.scrollTo({ y, animated: false }),
-      tab: (key: string) => setFilter(key),
+      tab: (key: string) => pickRef.current(key),
+      claimAll: () => openClaimRef.current(),
       close: () => closeRef.current(),
       claimNext: () => openNextClaim(),
     };
@@ -316,25 +345,40 @@ export default function StampBookScreen() {
     }
   }, [selected, previewMode, refreshPlayer]);
 
-  /** Wear (stampId) or take off (null) a title through the server, then refresh the player so every surface agrees. */
+  /**
+   * Wear (stampId) or take off (null) a title. Optimistic: the book shows it on the tap, the server call and the player
+   * refresh run behind it, and a failure puts the old title back (the caller shows the message).
+   */
   const setTitle = useCallback(async (stampId: number | null, title: string | null): Promise<boolean> => {
     if (previewMode) { setPreviewTitle(title ?? ''); return true; }
-    await equipStampTitle(stampId);
-    await refreshPlayer();
+    const before = wornTitle;
+    setTitleOverride({ title });
+    try {
+      await equipStampTitle(stampId);
+    } catch (e) {
+      setTitleOverride({ title: before });
+      throw e;
+    }
     setResponse(current => current && { ...current, equipped_title: title });
+    refreshPlayer().catch(() => undefined).finally(() => setTitleOverride(null));
     return true;
-  }, [previewMode, refreshPlayer]);
+  }, [previewMode, refreshPlayer, wornTitle]);
+
+  /** One sound per action: wearing is a bright confirm, taking off a soft tap (the unlock sparkle belongs to claiming). */
+  const titleFeedback = (on: boolean) => {
+    if (on) { haptic('success'); playSfx('ui.confirm', 0.8); } else { haptic('tapLight'); playSfx('ui.tap', 0.6); }
+  };
 
   const toggleTitle = useCallback(async () => {
     if (!selected?.rewards.title || equipping) return;
     const wearing = wornTitle === selected.rewards.title;
     setEquipping(true);
     setMessage(null);
+    titleFeedback(!wearing);
     try {
       await setTitle(wearing ? null : selected.id, wearing ? null : selected.rewards.title);
-      haptic('success');
-      playSfx(wearing ? 'ui.select' : 'fx.reward', 0.8);
     } catch {
+      haptic('warning');
       setMessage('Could not update your title. Try again.');
     } finally {
       setEquipping(false);
@@ -345,11 +389,9 @@ export default function StampBookScreen() {
     if (titleBusy) return;
     setTitleBusy(entry ? entry.title : '__remove');
     setTitleMessage(null);
+    titleFeedback(!!entry);
     try {
       await setTitle(entry ? entry.stamp.id : null, entry ? entry.title : null);
-      haptic('success');
-      playSfx(entry ? 'fx.reward' : 'ui.select', 0.8);
-      setTitleMessage(entry ? `${entry.title} is on your profile!` : 'Title taken off your profile.');
     } catch {
       haptic('warning');
       setTitleMessage('That did not save. Try again.');
@@ -357,6 +399,39 @@ export default function StampBookScreen() {
       setTitleBusy(null);
     }
   }, [titleBusy, setTitle]);
+
+  /** Claim all: one stamp through the server; the book applies it when the sheet closes. */
+  const claimOne = useCallback(async (stamp: BookStamp): Promise<boolean> => {
+    if (previewMode) { pendingPatch.current.push(stamp.id); return true; }
+    try {
+      await claimStampReward(stamp.id);
+      pendingPatch.current.push(stamp.id);
+      return true;
+    } catch {
+      try {
+        const fresh = await getStamps();
+        if (Object.values(fresh.stamps).flat().find(s => s.id === stamp.id)?.reward_claimed) { pendingPatch.current.push(stamp.id); return true; }
+      } catch { /* shown as not claimed: the gift stays and can be tried again */ }
+      return false;
+    }
+  }, [previewMode]);
+
+  const openClaim = useCallback(() => {
+    const waiting = queue.filter(s => !pendingPatch.current.includes(s.id));
+    if (waiting.length <= 1) { openNextClaim(); return; }
+    playSfx('ui.modalOpen', 0.5);
+    haptic('tapLight');
+    setClaimAllOpen(waiting);
+    // Claimed stamps count as seen: no slam waits behind a gift you already opened.
+    waiting.forEach(s => openedRef.current.push(s.id));
+  }, [queue, openNextClaim]);
+
+  const closeClaimAll = useCallback(() => {
+    setClaimAllOpen(null);
+    if (!previewMode) refreshPlayer().catch(() => undefined);
+    flushPatches();
+    flushSeen();
+  }, [previewMode, refreshPlayer, flushPatches, flushSeen]);
 
   const openTitles = useCallback(() => {
     playSfx('ui.modalOpen', 0.5);
@@ -366,9 +441,17 @@ export default function StampBookScreen() {
   }, []);
 
   /** From the Titles list: close it first (one Modal at a time on iOS), then open the stamp. */
+  const pendingFromTitles = useRef<BookStamp | null>(null);
   const openFromTitles = useCallback((stamp: BookStamp) => {
+    pendingFromTitles.current = stamp;
     setTitlesOpen(false);
-    setTimeout(() => open(stamp), 320);
+  }, []);
+  /** The Titles dialog has finished closing (one Modal at a time on iOS): open the stamp it asked for. */
+  const titlesClosed = useCallback(() => {
+    setTitlesOpen(false);
+    const stamp = pendingFromTitles.current;
+    pendingFromTitles.current = null;
+    if (stamp) open(stamp);
   }, [open]);
 
   const go = useCallback((stamp: BookStamp) => {
@@ -380,13 +463,25 @@ export default function StampBookScreen() {
     RootNavigation.navigate(target as GoTarget as never);
   }, [flushPatches, flushSeen]);
 
+  /** Bookmark tabs: every page stays mounted; a tab scrolls its page up under the band (All: back to the cover). */
   const pick = useCallback((key: string) => {
-    if (key === filter) return;
     playSfx('ui.select', 0.7);
     haptic('tickSelection');
     setFilter(key);
-    scroller.current?.scrollTo({ y: 0, animated: !reducedMotion });
-  }, [filter, reducedMotion]);
+    const y = key === 'all' ? 0 : Math.max(0, (sectionY.current[key] ?? 0) - TABS_H - 4);
+    scroller.current?.scrollTo({ y, animated: !reducedMotion });
+  }, [reducedMotion]);
+
+  /** After a scroll settles, the tab of the page at the top lights up. */
+  const onScrollSettled = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    fx.poke();
+    const y = e.nativeEvent.contentOffset.y + TABS_H + 40;
+    const firstTop = Math.min(...Object.values(sectionY.current));
+    if (!Number.isFinite(firstTop) || y < firstTop + 20) { setFilter('all'); return; }
+    let best = 'all';
+    for (const [key, top] of Object.entries(sectionY.current)) if (top <= y && (best === 'all' || top > sectionY.current[best])) best = key;
+    setFilter(best);
+  }, [fx]);
 
   // Keep the active chip centred on screen.
   useEffect(() => {
@@ -395,8 +490,11 @@ export default function StampBookScreen() {
     chipScroller.current?.scrollTo({ x: Math.max(0, c.x + c.w / 2 - width / 2), animated: !reducedMotion });
   }, [filter, width, reducedMotion]);
 
+  pickRef.current = pick;
+  openClaimRef.current = openClaim;
   const onScroll = useAnimatedScrollHandler(e => { fx.scrollY.value = e.contentOffset.y; });
-  const wallet: Wallet = { energy: player?.energy ?? 0, tickets: player?.tickets ?? 0, xp: player?.total_experience ?? 0, coins: player?.coins ?? 0 };
+  const wallet: Wallet = useMemo(() => ({ energy: player?.energy ?? 0, tickets: player?.tickets ?? 0, xp: player?.total_experience ?? 0, coins: player?.coins ?? 0 }),
+    [player?.energy, player?.tickets, player?.total_experience, player?.coins]);
 
   return (
     <Wrapper>
@@ -407,7 +505,7 @@ export default function StampBookScreen() {
       </Topbar>
 
       <BookFxProvider value={fx}>
-        <View style={styles.screen} onLayout={e => { fx.viewportH.value = e.nativeEvent.layout.height; }}>
+        <View style={styles.screen} onTouchStart={fx.poke} onLayout={e => { fx.viewportH.value = e.nativeEvent.layout.height; }}>
           <Image source={BACKGROUND} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />
 
           {status !== 'ready' ? (
@@ -421,11 +519,12 @@ export default function StampBookScreen() {
             </View>
           ) : (
             <Animated.ScrollView ref={scroller as never} onScroll={onScroll} scrollEventThrottle={16}
-              contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} stickyHeaderIndices={[2]}>
+              contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} stickyHeaderIndices={[2]}
+              onMomentumScrollEnd={onScrollSettled} onScrollEndDrag={onScrollSettled}>
               <Cover earned={totals.earned} total={totals.total} toClaim={totals.toClaim} worn={wornTitle}
-                titlesOwned={titleCount.owned} titlesTotal={titleCount.total} onClaim={openNextClaim} onTitles={openTitles} />
+                titlesOwned={titleCount.owned} titlesTotal={titleCount.total} onClaim={openClaim} onTitles={openTitles} />
 
-              <AlmostThere stamps={filter === 'all' ? almost : almostThereList(shown, 3)} accentFor={accentFor} onOpen={open} />
+              <AlmostThere stamps={almost} accentFor={accentFor} onOpen={open} />
 
               <View style={styles.tabsWrap}>
                 <Animated.ScrollView ref={chipScroller as never} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
@@ -446,8 +545,8 @@ export default function StampBookScreen() {
 
               {sections.length === 0 && <Text style={styles.stateText}>No stamps yet. Check back soon.</Text>}
 
-              {shown.map(section => (
-                <SectionPage key={section.key} section={section} width={width}
+              {sections.map(section => (
+                <SectionPage key={section.key} section={section} width={width} onTop={y => { sectionY.current[section.key] = y; }}
                   seenRef={seenRef} seenVersion={seenVersion} celebrating={celebrate === section.key} onOpen={open} />
               ))}
               <View style={{ height: NAV_COVER + insets.bottom + 24 }} />
@@ -475,13 +574,18 @@ export default function StampBookScreen() {
         />
         <TitlesSheet visible={titlesOpen} entries={titles} worn={wornTitle} busy={titleBusy} message={titleMessage}
           onWear={entry => { void wearFromList(entry); }} onRemove={() => { void wearFromList(null); }}
-          onOpenStamp={openFromTitles} onClose={() => setTitlesOpen(false)} />
+          onOpenStamp={openFromTitles} onClose={titlesClosed} />
+        <ClaimAll stamps={claimAllOpen ?? []} visible={!!claimAllOpen} reducedMotion={reducedMotion} worn={wornTitle}
+          onClaimOne={claimOne} onWear={stamp => setTitle(stamp.id, stamp.rewards.title).then(() => undefined, () => undefined)} onClose={closeClaimAll} />
       </BookFxProvider>
     </Wrapper>
   );
 }
 
-/** The book's cover: stamps earned, the worn title (opens Titles) and the claim button when rewards wait. */
+/**
+ * The book's cover: blue cloth with gold corner caps and a stitched edge. Stamps earned (ring and percent), your
+ * shark wearing your title (tap: Titles), and one big gold Claim when rewards wait.
+ */
 function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim, onTitles }: {
   earned: number; total: number; toClaim: number; worn: string | null; titlesOwned: number; titlesTotal: number;
   onClaim: () => void; onTitles: () => void;
@@ -489,14 +593,17 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
   const fx = useBookFx();
   const R = 34;
   const { circumference, offset } = ring(total > 0 ? earned / total : 0, R);
+  const pct = total > 0 ? Math.floor((earned / total) * 100) : 0;
   const bounce = useAnimatedStyle(() => ({ transform: [{ translateY: -4 * fx.pulse.value }, { rotate: `${-8 * fx.pulse.value}deg` }] }));
   const pulse = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.03 * fx.pulse.value }] }));
   return (
     <View style={styles.coverWrap}>
       <View style={styles.coverLip} />
       <View style={styles.cover}>
+        <View style={styles.coverStitch} pointerEvents="none" />
+        {(['tl', 'tr', 'bl', 'br'] as const).map(c => <View key={c} style={[styles.corner, CORNER_CAP[c]]} pointerEvents="none" />)}
         <View style={styles.coverTop}>
-          <View style={styles.coverRing} accessible accessibilityLabel={`${earned} of ${total} stamps`}>
+          <View style={styles.coverRing} accessible accessibilityLabel={`${earned} of ${total} stamps, ${pct} percent`}>
             <Svg width={86} height={86} viewBox="0 0 86 86">
               <Circle cx={43} cy={43} r={R} stroke="rgba(255,255,255,0.28)" strokeWidth={10} fill="none" />
               <Circle cx={43} cy={43} r={R} stroke="#FFCF3B" strokeWidth={10} fill="none" strokeLinecap="round"
@@ -509,21 +616,20 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
           </View>
           <View style={styles.coverText}>
             <Text style={styles.coverTitle} maxFontSizeMultiplier={1.2}>My Stamps</Text>
-            <Pressable onPress={onTitles} style={({ pressed }) => [styles.titleRow, pressed && styles.pressed]} hitSlop={4}
-              accessibilityRole="button"
-              accessibilityLabel={worn ? `Your title: ${worn}. Titles, ${titlesOwned} of ${titlesTotal}.` : `No title yet. Titles, ${titlesOwned} of ${titlesTotal}.`}
-              accessibilityHint="Shows every title and how to get it">
-              <View style={[styles.titlePill, !worn && styles.titlePillEmpty]}>
-                <GameIcon name="crown" size={20} />
-                <Text style={[styles.titlePillText, !worn && styles.titlePillTextEmpty]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}
-                  maxFontSizeMultiplier={1.2}>{worn ?? 'Get a title!'}</Text>
-              </View>
-              <View style={styles.titlesBtn}>
-                <Text style={styles.titlesBtnText} maxFontSizeMultiplier={1.2}>Titles</Text>
-                <Text style={styles.titlesBtnCount} maxFontSizeMultiplier={1.2}>{titlesOwned}/{titlesTotal}</Text>
-              </View>
-            </Pressable>
+            <Text style={styles.coverPct} maxFontSizeMultiplier={1.2}>{pct}% stamped</Text>
           </View>
+          <Pressable onPress={onTitles} style={({ pressed }) => [styles.sharkTitle, pressed && styles.pressed]} hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={worn ? `Your title: ${worn}. Titles, ${titlesOwned} of ${titlesTotal}.` : `No title yet. Titles, ${titlesOwned} of ${titlesTotal}.`}
+            accessibilityHint="Shows every title and how to get it">
+            <Image source={SHARK} style={styles.coverShark} contentFit="contain" />
+            <View style={[styles.titlePill, !worn && styles.titlePillEmpty]}>
+              <GameIcon name="crown" size={16} />
+              <Text style={[styles.titlePillText, !worn && styles.titlePillTextEmpty]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}
+                maxFontSizeMultiplier={1.2}>{worn ?? 'No title'}</Text>
+            </View>
+            <View style={styles.titlesBadge}><Text style={styles.titlesBadgeText} maxFontSizeMultiplier={1.1}>Titles {titlesOwned}/{titlesTotal}</Text></View>
+          </Pressable>
         </View>
         {toClaim > 0 && (
           <Animated.View style={!fx.reducedMotion && pulse}>
@@ -531,7 +637,7 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
               accessibilityLabel={`Claim rewards from ${toClaim} ${toClaim === 1 ? 'stamp' : 'stamps'}`}>
               <View style={styles.claimAllFace}>
                 <Animated.View style={!fx.reducedMotion && bounce}><GameIcon name="gift" size={30} /></Animated.View>
-                <Text style={styles.claimAllText} maxFontSizeMultiplier={1.2}>{toClaim === 1 ? 'Claim your reward!' : `Claim ${toClaim} rewards!`}</Text>
+                <Text style={styles.claimAllText} maxFontSizeMultiplier={1.2}>{toClaim === 1 ? 'Claim your reward!' : `Claim all ${toClaim}!`}</Text>
               </View>
               <View style={styles.badge}><Text style={styles.badgeText}>{toClaim}</Text></View>
             </Pressable>
@@ -541,6 +647,11 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
     </View>
   );
 }
+
+const CORNER_CAP = {
+  tl: { left: -3, top: -3, borderTopLeftRadius: 24 }, tr: { right: -3, top: -3, borderTopRightRadius: 24 },
+  bl: { left: -3, bottom: -3, borderBottomLeftRadius: 24 }, br: { right: -3, bottom: -3, borderBottomRightRadius: 24 },
+} as const;
 
 /** The 3 stamps closest to done: ghost art in its ring, the name and "14/25". */
 function AlmostThere({ stamps, accentFor, onOpen }: { stamps: readonly BookStamp[]; accentFor: (k: string) => string; onOpen: (s: BookStamp) => void }) {
@@ -601,8 +712,8 @@ function Tab({ label, color, icon, active, earned, total, dot, onPress, onLayout
   );
 }
 
-const SectionPage = memo(function SectionPage({ section, width, seenRef, seenVersion, celebrating, onOpen }: {
-  section: BookSection; width: number; seenRef: { readonly current: Set<string> | null }; seenVersion: number;
+const SectionPage = memo(function SectionPage({ section, width, onTop, seenRef, seenVersion, celebrating, onOpen }: {
+  section: BookSection; width: number; onTop: (y: number) => void; seenRef: { readonly current: Set<string> | null }; seenVersion: number;
   celebrating: boolean; onOpen: (s: BookStamp) => void;
 }) {
   void seenVersion; // re-render this section (only) when NEW tags change
@@ -616,7 +727,7 @@ const SectionPage = memo(function SectionPage({ section, width, seenRef, seenVer
   const pct = section.total > 0 ? Math.round((section.earned / section.total) * 100) : 0;
   const complete = section.total > 0 && section.earned >= section.total;
   return (
-    <View style={styles.pageWrap} onLayout={e => { sectionTop.value = e.nativeEvent.layout.y; }}>
+    <View style={styles.pageWrap} onLayout={e => { sectionTop.value = e.nativeEvent.layout.y; onTop(e.nativeEvent.layout.y); }}>
       <View style={styles.pageLip} />
       <View style={styles.page}>
         <View style={styles.stitch} pointerEvents="none" />
@@ -626,7 +737,11 @@ const SectionPage = memo(function SectionPage({ section, width, seenRef, seenVer
             <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>{section.label}</Text>
             <Text style={styles.sectionBlurb} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.2}>{section.blurb}</Text>
           </View>
-          <GameIcon name={complete || celebrating ? 'chestOpen' : 'chest'} size={36} accessibilityLabel={complete ? 'Page complete' : 'Finish the page'} />
+          {complete ? (
+            <View style={styles.seal} accessible accessibilityLabel="Page complete"><GameIcon name="check" size={22} /><Text style={styles.sealText} maxFontSizeMultiplier={1.1}>DONE</Text></View>
+          ) : (
+            <GameIcon name={celebrating ? 'chestOpen' : 'chest'} size={36} accessibilityLabel="Finish the page to fill it" />
+          )}
         </View>
         <View style={styles.sectionBar} accessible accessibilityLabel={`${section.earned} of ${section.total} stamped`}>
           <View style={[styles.sectionFill, { width: `${Math.max(pct, 0)}%`, backgroundColor: section.color }]} />
@@ -652,31 +767,31 @@ const styles = StyleSheet.create({
   retryText: { color: INK, fontFamily: 'Shark', fontSize: 16 },
   pressed: { opacity: 0.88, transform: [{ scale: 0.98 }] },
 
-  // Cover
+  // Cover: blue cloth, gold corner caps, a stitched edge.
   coverWrap: { marginHorizontal: SIDE },
-  coverLip: { position: 'absolute', left: 0, right: 0, top: 8, bottom: -6, borderRadius: 24, backgroundColor: '#045089' },
-  cover: { padding: 12, borderRadius: 24, backgroundColor: '#0a77bf', borderWidth: 3, borderColor: '#FFFFFF', gap: 10 },
+  coverLip: { position: 'absolute', left: 0, right: 0, top: 8, bottom: -6, borderRadius: 24, backgroundColor: '#03417A' },
+  cover: { padding: 14, borderRadius: 24, backgroundColor: '#0A6FB8', borderWidth: 3, borderColor: '#0B3E78', gap: 10 },
+  coverStitch: { position: 'absolute', left: 7, right: 7, top: 7, bottom: 7, borderRadius: 18, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,214,102,0.75)' },
+  corner: { position: 'absolute', width: 30, height: 30, backgroundColor: '#FFC21A', borderWidth: 2.5, borderColor: '#B07A00' },
   coverTop: { flexDirection: 'row', alignItems: 'center' },
   coverRing: { width: 86, height: 86, alignItems: 'center', justifyContent: 'center' },
   coverCount: { position: 'absolute', alignItems: 'center' },
   coverNum: { fontFamily: 'Shark', fontSize: 28, color: '#FFFFFF', lineHeight: 30 },
   coverOf: { fontFamily: 'Knockout', fontSize: 14, color: '#E2F6FF' },
-  coverText: { flex: 1, marginLeft: 12, gap: 6 },
-  coverTitle: { fontFamily: 'Shark', fontSize: 25, color: '#FFFFFF', textTransform: 'uppercase', textShadowColor: '#05346e', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
+  coverText: { flex: 1, marginLeft: 10, gap: 2 },
+  coverTitle: { fontFamily: 'Shark', fontSize: 24, color: '#FFFFFF', textTransform: 'uppercase', textShadowColor: '#05346e', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
+  coverPct: { fontFamily: 'Shark', fontSize: 15, color: '#FFCF3B' },
+  sharkTitle: { alignItems: 'center', width: 116, minHeight: 44 },
+  coverShark: { width: 58, height: 62, marginBottom: -12 },
   titlePill: {
-    flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 38, backgroundColor: '#FFCF3B', borderRadius: 19,
-    paddingHorizontal: 10, borderWidth: 2, borderColor: '#FFFFFF', borderBottomWidth: 4, borderBottomColor: '#D99A00',
+    maxWidth: 116, flexDirection: 'row', alignItems: 'center', gap: 3, minHeight: 30, backgroundColor: '#FFCF3B', borderRadius: 15,
+    paddingHorizontal: 8, borderWidth: 2, borderColor: '#FFFFFF', borderBottomWidth: 4, borderBottomColor: '#D99A00',
   },
-  titlePillEmpty: { backgroundColor: 'rgba(255,255,255,0.18)', borderBottomColor: 'rgba(0,40,90,0.5)', borderStyle: 'dashed' },
-  titlePillText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 16, color: INK },
-  titlePillTextEmpty: { color: '#FFFFFF' },
-  titlesBtn: {
-    alignItems: 'center', justifyContent: 'center', minHeight: 44, minWidth: 58, paddingHorizontal: 8, borderRadius: 14,
-    backgroundColor: '#05559A', borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)',
-  },
-  titlesBtnText: { fontFamily: 'Shark', fontSize: 14, color: '#FFFFFF', lineHeight: 16 },
-  titlesBtnCount: { fontFamily: 'Knockout', fontSize: 13, color: '#FFCF3B', lineHeight: 15 },
+  titlePillEmpty: { backgroundColor: '#E2F6FF', borderBottomColor: '#9FB2C9' },
+  titlePillText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 14, color: INK },
+  titlePillTextEmpty: { color: MUTED_INK },
+  titlesBadge: { marginTop: 3, backgroundColor: '#05559A', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.8)' },
+  titlesBadgeText: { fontFamily: 'Shark', fontSize: 12, color: '#FFFFFF' },
   claimAll: { borderRadius: 18, backgroundColor: '#C98A00', paddingBottom: 5 },
   claimAllFace: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 52, paddingHorizontal: 14, borderRadius: 18,
@@ -731,4 +846,9 @@ const styles = StyleSheet.create({
   sectionFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 9 },
   sectionBarText: { fontFamily: 'Shark', fontSize: 13, color: INK, textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, rowGap: GAP + 8 },
+  seal: {
+    width: 52, height: 52, borderRadius: 26, backgroundColor: '#FFC21A', borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center',
+    transform: [{ rotate: '-10deg' }],
+  },
+  sealText: { fontFamily: 'Shark', fontSize: 11, color: INK, marginTop: -2 },
 });

@@ -25,6 +25,7 @@
  */
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -140,7 +141,15 @@ function Frame(props: Props & { stamp: BookStamp }) {
   const cascadingRef = useRef(false);
   const [shown, setShown] = useState<Wallet>(wallet);
   // A chained card opens before the profile refresh lands: follow the wallet whenever nothing is counting.
-  useEffect(() => { if (!cascadingRef.current) setShown(wallet); }, [wallet]);
+  // Counters only ever go up during a claim chain: a late profile refresh never pulls them back down.
+  useEffect(() => {
+    if (cascadingRef.current) return;
+    setShown(prev => (claimedIds.length === 0 ? wallet : {
+      energy: Math.max(prev.energy, wallet.energy), tickets: Math.max(prev.tickets, wallet.tickets),
+      xp: Math.max(prev.xp, wallet.xp), coins: Math.max(prev.coins, wallet.coins),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet.energy, wallet.tickets, wallet.xp, wallet.coins]);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [levelUp, setLevelUp] = useState<number | null>(null);
   const hudLayout = useRef({ hud: {} as Record<string, { x: number; y: number }>, hudRow: { x: 0, y: 0 }, content: { x: 0, y: 0 } });
@@ -195,11 +204,19 @@ function Frame(props: Props & { stamp: BookStamp }) {
   let action: { label: string; icon: GameIconName; onPress: () => void; a11y: string } | null = null;
   // A claimed title stamp: wearing the title is the main job, the claim chain moves to the second button.
   const titleReady = !!stamp.rewards.title && stamp.earned && claimed && !stamp.secret;
+  // Just put the title on: the main button says so for a beat before it becomes Next reward (no swap under the thumb).
+  const [justWore, setJustWore] = useState(false);
+  const woreBefore = useRef(wearingTitle);
+  useEffect(() => {
+    if (wearingTitle && !woreBefore.current) { setJustWore(true); const t = setTimeout(() => setJustWore(false), 900); woreBefore.current = wearingTitle; return () => clearTimeout(t); }
+    woreBefore.current = wearingTitle;
+  }, [wearingTitle]);
   const wearFirst = titleReady && !wearingTitle;
   if (claimable || phase === 'claiming') action = { label: 'Claim!', icon: 'gift', onPress: () => content.current?.claim(), a11y: `Claim rewards: ${rewardSpeech(stamp.rewards)}` };
+  else if (justWore) action = { label: 'Wearing it!', icon: 'check', onPress: noop, a11y: 'Wearing it' };
   else if (wearFirst) action = { label: equipping ? 'Saving...' : 'Wear title', icon: 'crown', onPress: onToggleTitle, a11y: `Wear the title ${stamp.rewards.title}` };
   else if (claimed && stamp.earned && nextCount > 0) action = { label: `Next reward (${nextCount} left)`, icon: 'gift', onPress: onNext, a11y: `Next reward, ${nextCount} left` };
-  else if (!stamp.earned && req.go) action = { label: 'Go!', icon: req.icon, onPress: () => onGo(stamp), a11y: `Go. ${stamp.howTo}` };
+  else if (!stamp.earned && !stamp.secret && req.go) action = { label: 'Go!', icon: req.icon, onPress: () => onGo(stamp), a11y: `Go. ${stamp.howTo}` };
   const status = phase === 'gotIt' ? 'Got it!' : phase === 'cascading' ? 'Stamped!' : claimed && stamp.earned && !action ? 'Stamped!' : null;
 
   // While the outgoing stamp is held on top, every part of the card shows THAT stamp (title, frame,
@@ -218,6 +235,9 @@ function Frame(props: Props & { stamp: BookStamp }) {
       <Animated.View style={[styles.card, cardStyle]} accessibilityViewIsModal onAccessibilityEscape={onClose}>
         <View style={styles.lip} />
         <View style={[styles.body, displayLegendary && styles.bodyLegendary]}>
+          {/* Alex's popup finish: a soft top gloss band and an inner bevel line. */}
+          <View pointerEvents="none" style={styles.bevel} />
+          <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']} style={styles.gloss} />
           <View style={styles.ribbon}><Ribbon text={display.name} /></View>
           <Pressable onPress={onClose} hitSlop={14} style={styles.close} accessibilityRole="button" accessibilityLabel="Close">
             <GameIcon name="close" size={44} />
@@ -274,10 +294,10 @@ function Frame(props: Props & { stamp: BookStamp }) {
             {!!display.rewards.title && display.earned && (
               <View style={!(displayClaimed && !busy) && styles.hidden} pointerEvents={displayClaimed && !busy && !holding ? 'auto' : 'none'}
                 importantForAccessibility={displayClaimed && !busy ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!(displayClaimed && !busy)}>
-                {wearFirst ? (
+                {wearFirst || justWore ? (
                   nextCount > 0 ? <GameButton label={`Next reward (${nextCount} left)`} variant="secondary" icon="gift" onPress={onNext} /> : null
                 ) : (
-                  <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Take off title' : 'Wear title'} variant={wearingTitle ? 'ghost' : 'secondary'}
+                  <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Take off' : 'Wear title'} variant={wearingTitle ? 'ghost' : 'secondary'}
                     tone="onBlue" icon="crown" loading={equipping} onPress={onToggleTitle} />
                 )}
               </View>
@@ -412,7 +432,8 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
     } else {
       fade.value = withTiming(1, { duration: 180 });
       playSfx('ui.modalOpen', 0.5);
-      if (!reducedMotion) breathe.value = withRepeat(withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.sin) }), -1, true);
+      // Six breaths, then it rests.
+      if (!reducedMotion) breathe.value = withRepeat(withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.sin) }), 6, true);
     }
   }, [stamp, fresh, slam, fade, hit, sx, sy, foil, breathe, reducedMotion]);
   useEffect(() => {
@@ -525,7 +546,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
         accessibilityRole={stamp.earned ? 'button' : 'image'}
         accessibilityLabel={`${stamp.name} stamp, ${tone.label}${stamp.earned ? '. Tap to stamp it again' : '. Locked'}`}
       >
-        {legendary && !reducedMotion && <Sunburst size={ART * 1.6} color={LEGENDARY_GOLD} running />}
+        {legendary && !reducedMotion && <Sunburst size={ART * 1.38} color={LEGENDARY_GOLD} running />}
         {stamp.earned && rank >= 3 && !reducedMotion && <RarityBurst size={ART * 1.3} color={tone.frame} hit={hit} />}
         {stamp.earned && <InkBurst seed={stamp.id} size={ART} color={INK} hit={hit} />}
         {!stamp.earned && !stamp.secret && <Animated.View style={[styles.breathe, { borderColor: accent }, glowStyle]} />}
@@ -545,12 +566,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
             </>
           )}
           {hasShine(stamp) && !reducedMotion && <Foil stamp={stamp} size={ART} art="full" progress={foil} />}
-          {!stamp.earned && !stamp.secret && (
-            <>
-              <View pointerEvents="none" style={[styles.stampHere, { borderColor: accent }]} />
-              <View style={styles.lock}><GameIcon name="lock" size={22} /></View>
-            </>
-          )}
+          {!stamp.earned && !stamp.secret && <View pointerEvents="none" style={[styles.stampHere, { borderColor: accent }]} />}
         </Animated.View>
         <Animated.View pointerEvents="none" style={[styles.flash, flashStyle]} />
       </Pressable>
@@ -588,7 +604,8 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
       </View>
 
       {!!stamp.rewards.title && !stamp.secret && (
-        <TitleBox title={stamp.rewards.title} state={!stamp.earned ? 'locked' : !claimed ? 'claim' : wearingTitle ? 'wearing' : 'ready'} />
+        <TitleBox title={stamp.rewards.title} state={!stamp.earned ? 'locked' : !claimed ? 'claim' : wearingTitle ? 'wearing' : 'ready'}
+          reducedMotion={reducedMotion} showShark={stageScale >= 0.8} />
       )}
 
       {chips.length > 0 && (
@@ -615,26 +632,32 @@ function WhereChip({ where }: { where: Where }) {
 }
 
 /** The title this stamp gives, as it reads under your shark, with one line on how to get or wear it. */
-function TitleBox({ title, state }: { title: string; state: 'locked' | 'claim' | 'ready' | 'wearing' }) {
-  // Unlock and wear moments: the pill pops (UI thread) with a sparkle sound when the title becomes yours or goes on.
+const SHARK = require('../../../assets/images/howto/shark-happy.webp');
+
+/** The title this stamp gives, worn under a little shark the way it shows on your profile, with one line on how to get or wear it. */
+function TitleBox({ title, state, reducedMotion, showShark }: { title: string; state: 'locked' | 'claim' | 'ready' | 'wearing'; reducedMotion: boolean; showShark: boolean }) {
+  // Unlock: the pill pops with its own sparkle sound. Wear: the pill pops (the wear sound comes from the button).
   const pop = useSharedValue(1);
   const first = useRef(true);
   useEffect(() => {
     if (first.current) { first.current = false; return; }
     if (state !== 'ready' && state !== 'wearing') return;
-    playSfx(state === 'ready' ? 'fx.reveal' : 'fx.reward', 0.8);
-    haptic('success');
+    if (state === 'ready') { playSfx('fx.reveal', 0.8); haptic('success'); }
+    if (reducedMotion) return;
     pop.value = withSequence(withTiming(1.22, { duration: 140, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 9, stiffness: 260 }));
-  }, [state, pop]);
+  }, [state, pop, reducedMotion]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
-  const line = state === 'wearing' ? 'On your profile now!' : state === 'ready' ? 'Yours! Wear it on your profile' : state === 'claim' ? 'Claim to unlock this title' : 'Earn this stamp to unlock';
+  const line = state === 'wearing' ? 'On your profile now!' : state === 'ready' ? 'Yours! Tap Wear title' : state === 'claim' ? 'Claim to unlock this title' : 'Earn this stamp to unlock';
   const owned = state === 'ready' || state === 'wearing';
   return (
     <View style={[styles.titleBox, owned && styles.titleBoxOwned]} accessible accessibilityLabel={`Title: ${title}. ${line}`}>
-      <Animated.View style={[styles.titlePill, !owned && styles.titlePillLocked, popStyle]}>
-        <GameIcon name="crown" size={20} />
-        <Text style={[styles.titlePillText, !owned && styles.titlePillTextLocked]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}
-          maxFontSizeMultiplier={1.2}>{title}</Text>
+      <Animated.View style={[styles.titleWear, popStyle]}>
+        {showShark && <Image source={SHARK} style={[styles.titleShark, !owned && styles.titleSharkLocked]} contentFit="contain" />}
+        <View style={[styles.titlePill, !owned && styles.titlePillLocked]}>
+          <GameIcon name="crown" size={18} />
+          <Text style={[styles.titlePillText, !owned && styles.titlePillTextLocked]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}
+            maxFontSizeMultiplier={1.2}>{title}</Text>
+        </View>
       </Animated.View>
       <Text style={styles.titleLine} numberOfLines={2} maxFontSizeMultiplier={1.2}>{line}</Text>
     </View>
@@ -666,6 +689,8 @@ const styles = StyleSheet.create({
   lip: { position: 'absolute', left: 0, right: 0, top: 8, bottom: -7, borderRadius: 22, backgroundColor: '#045089' },
   body: { ...DIALOG_CARD, alignItems: 'center', paddingHorizontal: 18, paddingBottom: 18, paddingTop: 34 },
   bodyLegendary: { borderColor: LEGENDARY_GOLD, borderWidth: 4 },
+  bevel: { position: 'absolute', left: 4, right: 4, top: 4, bottom: 4, borderRadius: 16, borderWidth: 2, borderColor: 'rgba(0,40,90,0.35)' },
+  gloss: { position: 'absolute', left: 3, right: 3, top: 3, height: 90, borderTopLeftRadius: 17, borderTopRightRadius: 17 },
   ribbon: { position: 'absolute', top: -34, left: 18, right: 18, alignItems: 'center' },
   close: { position: 'absolute', top: -18, right: -14, zIndex: 5 },
   content: { alignSelf: 'stretch', alignItems: 'center' },
@@ -742,8 +767,11 @@ const styles = StyleSheet.create({
     borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,207,59,0.75)', backgroundColor: 'rgba(0,40,90,0.3)',
   },
   titleBoxOwned: { borderStyle: 'solid', borderColor: '#FFCF3B', backgroundColor: 'rgba(255,207,59,0.16)' },
+  titleWear: { alignItems: 'center', maxWidth: '58%', flexShrink: 1 },
+  titleShark: { width: 46, height: 50, marginBottom: -8 },
+  titleSharkLocked: { opacity: 0.45 },
   titlePill: {
-    flexShrink: 1, maxWidth: '58%', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFCF3B', borderRadius: 16,
+    flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFCF3B', borderRadius: 16,
     paddingHorizontal: 9, minHeight: 32, borderWidth: 2, borderColor: '#FFFFFF', borderBottomWidth: 4, borderBottomColor: '#D99A00',
   },
   titlePillLocked: { backgroundColor: '#DCE6F2', borderBottomColor: '#9FB2C9' },

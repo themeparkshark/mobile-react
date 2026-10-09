@@ -102,7 +102,7 @@ export function toBookStamp(s: StampData): BookStamp {
     retired: !!s.retired,
     freeCorner: (['tl', 'tr', 'bl', 'br'] as const).find(c => c === s.art_free_corner) ?? 'tr',
     claimable: !!s.is_earned && !s.reward_claimed && hasRewards(s.rewards),
-    howTo: secret ? 'Keep playing to discover this one.' : (s.how_to ?? s.goal ?? '').trim(),
+    howTo: secret ? 'A secret stamp! Who will find it?' : (s.how_to ?? s.goal ?? '').trim(),
     section: s.section ?? sectionForMetric(s.metric ?? '', !!s.is_hidden),
     rarity: s.rarity,
     earned: !!s.is_earned,
@@ -266,7 +266,7 @@ const km = (meters: number) => (Math.floor(meters / 100) / 10).toLocaleString('e
 /** A positive "how close" line for a locked card: "3 more days!", "11 more finds!". */
 export function remainingLine(s: Pick<BookStamp, 'metric' | 'target' | 'progress' | 'earned' | 'secret'>): string {
   if (s.earned) return 'Stamped!';
-  if (s.secret) return 'A secret. Keep playing!';
+  if (s.secret) return secretHint(s);
   const req = requirement(s);
   const left = Math.max(0, s.target - s.progress);
   if (req.unit[0] === 'percent') return left > 0 ? `${left}% to go!` : 'Almost there!';
@@ -280,11 +280,11 @@ export function remainingLine(s: Pick<BookStamp, 'metric' | 'target' | 'progress
 /** VoiceOver line for a tile: state, progress and what to do. */
 export function tileLabel(s: BookStamp): string {
   if (s.earned) return `${s.name}. Earned${s.claimable ? '. Rewards ready to claim' : ''}.`;
-  if (s.secret) return 'Secret stamp. Keep playing to discover it.';
+  if (s.secret) return `Secret stamp. ${secretHint(s)}`;
   const req = requirement(s);
   const prog = req.unit[0] === 'percent' ? `${Math.min(100, s.progress)} percent` : isMeters(s.metric) ? progressLabel(s).replace('/', 'of')
     : `${Math.min(s.progress, s.target)} of ${s.target}`;
-  return `${s.name}. Locked. ${prog}. ${s.howTo}`;
+  return `${s.name}. ${s.progress > 0 ? 'In progress' : 'Not yet'}. ${prog}. ${s.howTo}`;
 }
 
 export function hasRewards(r: StampRewards | null | undefined): boolean {
@@ -307,6 +307,27 @@ export function rewardChips(r: StampRewards): { kind: 'energy' | 'tickets' | 'xp
   return chips;
 }
 
+/** 9,999 and under as is; then 10K, 12.5K, 1.2M (one decimal, trailing .0 dropped, rounded down so it never overstates progress). */
+export function compactCount(n: number): string {
+  const v = Math.max(0, Math.floor(n));
+  if (v < 10_000) return v.toLocaleString('en-US');
+  const [div, unit] = v >= 1_000_000 ? [1_000_000, 'M'] : [1_000, 'K'];
+  const x = Math.floor((v / div) * 10) / 10;
+  return `${Number.isInteger(x) ? x.toFixed(0) : x.toFixed(1)}${unit}`;
+}
+
+/** A secret's teaser: which kind of play finds it, never its name or goal. */
+export function secretHint(s: Pick<BookStamp, 'metric' | 'target'>): string {
+  const req = requirement(s);
+  if (req.icon === 'pin' || req.icon === 'sparkle') return 'Hint: keep catching finds!';
+  if (req.icon === 'map' || req.icon === 'ride') return 'Hint: explore the parks!';
+  if (req.icon === 'coin' || req.icon === 'trophy' || req.icon === 'queue') return 'Hint: play for ride coins!';
+  if (req.icon === 'streak') return 'Hint: come back every day!';
+  if (req.icon === 'member') return 'Hint: play with friends!';
+  if (req.icon === 'moon') return 'Hint: stay for the night!';
+  return 'Hint: keep playing!';
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "Oct 2, 2026" in the player's local time. Never a relative date. */
@@ -317,12 +338,11 @@ export function earnedDate(iso: string | null): string | null {
   return `${MONTHS[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
 }
 
-/** "3 / 10" for a count, "40%" for a percent-based passport. */
+/** "3 / 10" for a count; "8.1K / 30K" once a number passes 9,999; km for distance. */
 export function progressLabel(stamp: Pick<BookStamp, 'progress' | 'target'> & { readonly metric?: string }): string {
   if (stamp.metric && isMeters(stamp.metric)) return `${km(Math.min(stamp.progress, stamp.target))} / ${km(stamp.target)} km`;
-  if (stamp.target === 100 && stamp.progress <= 100) return `${Math.min(100, stamp.progress)}%`;
-  const fmt = (n: number) => n.toLocaleString('en-US');
-  return `${fmt(Math.min(stamp.progress, stamp.target))} / ${fmt(stamp.target)}`;
+  // One number-first format everywhere ("40 / 100", never "40%"); big counts shorten so they fit a tile ("8.1K / 30K").
+  return `${compactCount(Math.min(stamp.progress, stamp.target))} / ${compactCount(stamp.target)}`;
 }
 
 /** Ring geometry for a 0..1 fraction (SVG stroke-dasharray). */
@@ -423,7 +443,22 @@ export function titleLine(entry: TitleEntry): string {
     case 'wearing': return 'On your profile now';
     case 'ready': return 'Yours! Tap Wear';
     case 'claim': return 'Claim the stamp to unlock';
-    case 'progress': return `${progressLabel(entry.stamp)} to the ${entry.stamp.shortName} stamp`;
-    default: return `Earn the ${entry.stamp.shortName} stamp`;
+    case 'progress': return `From the ${entry.stamp.shortName} stamp`;
+    default: return `From the ${entry.stamp.shortName} stamp`;
   }
+}
+
+/** How much real colour an in-progress slot shows: up to 70% of the art at 99%, so it never reads as owned. */
+export function fillFraction(percent: number): number {
+  return Math.max(0, Math.min(0.7, (percent / 100) * 0.7));
+}
+
+export type RewardTotals = { energy: number; tickets: number; xp: number; coins: number };
+
+/** Claim all: what every waiting gift adds up to. */
+export function sumRewards(stamps: readonly Pick<BookStamp, 'rewards'>[]): RewardTotals {
+  return stamps.reduce((t, s) => ({
+    energy: t.energy + (s.rewards?.energy ?? 0), tickets: t.tickets + (s.rewards?.tickets ?? 0),
+    xp: t.xp + (s.rewards?.xp ?? 0), coins: t.coins + (s.rewards?.coins ?? 0),
+  }), { energy: 0, tickets: 0, xp: 0, coins: 0 });
 }

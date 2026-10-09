@@ -13,7 +13,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import StampArt from './StampArt';
 import { INK, MUTED_INK, PAPER } from './StampTile';
-import { titleLine, type BookStamp, type TitleEntry } from './model';
+import { progressLabel, titleLine, type BookStamp, type TitleEntry } from './model';
 
 const GOLD = '#FFCF3B';
 
@@ -50,7 +50,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
               <TitlePillText title={worn as string} owned />
               <Text style={styles.line} numberOfLines={1} maxFontSizeMultiplier={1.2}>On your profile now</Text>
             </View>
-            <SmallButton label={busy === '__remove' ? 'Saving...' : 'Remove'} kind="quiet" onPress={onRemove} a11y={`Remove the title ${worn}`} />
+            <SmallButton label={busy === '__remove' ? 'Saving...' : 'Take off'} kind="quiet" onPress={onRemove} a11y={`Take off the title ${worn}`} />
           </View>
         )}
         {entries.map(entry => {
@@ -70,13 +70,15 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
                 </View>
               </Pressable>
               {entry.state === 'wearing' ? (
-                <SmallButton label={busy === '__remove' ? 'Saving...' : 'Remove'} kind="quiet" onPress={onRemove} a11y={`Remove the title ${entry.title}`} />
+                <SmallButton label={busy === '__remove' ? 'Saving...' : 'Take off'} kind="quiet" onPress={onRemove} a11y={`Take off the title ${entry.title}`} />
               ) : entry.state === 'ready' ? (
                 <SmallButton label={busy === entry.title ? 'Saving...' : 'Wear'} icon="crown" kind="gold" onPress={() => onWear(entry)} a11y={`Wear the title ${entry.title}`} />
               ) : entry.state === 'claim' ? (
                 <SmallButton label="Claim" icon="gift" kind="red" onPress={open} a11y={`Claim the ${entry.stamp.name} stamp to unlock ${entry.title}`} />
               ) : (
-                <View style={styles.lockDot} accessible={false}><GameIcon name="lock" size={16} /></View>
+                <View style={styles.progressDot} accessible={false}>
+                  <Text style={styles.progressText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.1}>{progressLabel(entry.stamp)}</Text>
+                </View>
               )}
             </View>
           );
@@ -127,7 +129,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', shadowColor: '#022a55', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 0,
   },
   stepText: { fontFamily: 'Shark', fontSize: 13, color: '#FFFFFF', marginTop: 3 },
-  list: { alignSelf: 'stretch', maxHeight: 360 },
+  list: { alignSelf: 'stretch', maxHeight: 420 },
   listInner: { gap: 8, paddingVertical: 2 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PAPER, borderRadius: 16, borderWidth: 2.5, borderColor: '#FFFFFF',
@@ -146,7 +148,8 @@ const styles = StyleSheet.create({
   pillText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 14, color: INK },
   pillTextLocked: { color: MUTED_INK },
   line: { fontFamily: 'Knockout', fontSize: 14, color: MUTED_INK },
-  lockDot: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(91,103,130,0.18)', alignItems: 'center', justifyContent: 'center' },
+  progressDot: { minWidth: 56, maxWidth: 74, minHeight: 34, borderRadius: 12, backgroundColor: 'rgba(91,103,130,0.14)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  progressText: { fontFamily: 'Shark', fontSize: 13, color: MUTED_INK },
   btn: {
     flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 40, minWidth: 64, paddingHorizontal: 10, borderRadius: 14,
     borderWidth: 2.5, borderColor: '#FFFFFF', justifyContent: 'center',

@@ -40,7 +40,8 @@ function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, prio
         source={failed ? FALLBACK_ART : source}
         style={[StyleSheet.absoluteFill, dim && styles.dim]}
         contentFit="contain"
-        tintColor={tint}
+        // No ghost art from the server: a slate silhouette of the real art, so a stamp you do not own never shows its colours.
+        tintColor={tint ?? (dim ? GHOST_TINT : undefined)}
         transition={tint ? 0 : transition ?? 140}
         priority={priority}
         recyclingKey={`${stamp.id}-${size}-${locked ? 'g' : 'c'}${tint ? '-t' : ''}`}
@@ -57,8 +58,10 @@ function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, prio
 
 export default memo(StampArt);
 
+export const GHOST_TINT = '#7C88A3';
+
 const styles = StyleSheet.create({
   box: { width: '100%', height: '100%' },
   placeholder: { position: 'absolute', left: '14%', top: '14%', right: '14%', bottom: '14%', borderRadius: 999, opacity: 0.18 },
-  dim: { opacity: 0.38 },
+  dim: { opacity: 0.55 },
 });
