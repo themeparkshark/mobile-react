@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { memo, useEffect, useState } from 'react';
 import { View, type LayoutChangeEvent } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { useReduceMotionPreference } from '../../hooks/useReducedGameMotion';
 import { milestonesCrossed } from '../../services/trail/trailModel';
 import { BRAND } from '../../ui';
 import { STEPS_ART } from './TrailBoxArt';
@@ -36,7 +36,9 @@ function TrailPath({ fraction, height = 16, ready = false, seenKey, onFilled }: 
   /** Called once when the fill animation reaches the end. */
   readonly onFilled?: () => void;
 }) {
-  const reduced = useReducedGameMotion();
+  // null until the real setting is known: wait instead of snapping (R1 found the catch-up never played).
+  const pref = useReduceMotionPreference();
+  const reduced = pref === true;
   const [width, setWidth] = useState(0);
   const target = Math.max(0, Math.min(1, ready ? 1 : fraction));
   const start = seenFraction(seenKey) ?? target;
@@ -44,6 +46,7 @@ function TrailPath({ fraction, height = 16, ready = false, seenKey, onFilled }: 
   const bump = useSharedValue(1);
 
   useEffect(() => {
+    if (pref === null) return;
     const from = Math.max(seenFraction(seenKey) ?? fill.value, 0);
     const next = Math.max(from, target);
     if (seenKey) lastSeen.set(seenKey, next);
@@ -59,7 +62,7 @@ function TrailPath({ fraction, height = 16, ready = false, seenKey, onFilled }: 
       if (done && next >= 1 && onFilled) runOnJS(onFilled)();
     });
     bump.value = withSequence(withTiming(1.25, { duration: 160 }), withSpring(1, { damping: 8, stiffness: 240 }));
-  }, [target, reduced, seenKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [target, pref, seenKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fillStyle = useAnimatedStyle(() => ({ width: Math.max(height, fill.value * width) }));
   const sharkSize = height * 1.9;

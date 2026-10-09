@@ -70,6 +70,11 @@ export interface TrailSyncResult {
 }
 
 export const BOX_NAME: Record<TrailTier, string> = { blue: 'Blue Box', red: 'Red Box', gold: 'Gold Box' };
+/** "Blue Box", "Red Box", "Gold Box" for anything with a box colour. */
+export function boxName(b: { readonly tier: TrailTier }): string {
+  return BOX_NAME[b.tier];
+}
+
 /** Draw size grows with rarity, so the tier reads by size and trim as well as colour. */
 export const TIER_SCALE: Record<TrailTier, number> = { blue: 0.86, red: 0.94, gold: 1 };
 

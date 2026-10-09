@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Canvas, Circle, RadialGradient, vec } from '@shopify/react-native-skia';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { BOX_NAME, formatSteps, rewardLabel, type TrailBox, type TrailReward } from '../../services/trail/trailModel';
+import { BOX_NAME, boxName, formatSteps, rewardLabel, type TrailBox, type TrailReward } from '../../services/trail/trailModel';
 import { BRAND, GameButton, GameIcon, type GameIconName } from '../../ui';
 import RewardBurst from '../RewardBurst';
 import { BOX_ART, BOX_OPEN_ART } from './TrailBoxArt';
@@ -196,7 +196,7 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint }: {
     <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={showRewards ? next : onClose}>
       <Pressable style={[styles.scrim, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
         onPress={phase === 'ready' ? start : skipAhead} accessibilityRole="button"
-        accessibilityLabel={phase === 'ready' ? `Open your ${BOX_NAME[box.tier]}` : BOX_NAME[box.tier]}>
+        accessibilityLabel={phase === 'ready' ? `Open your ${boxName(box)}` : BOX_NAME[box.tier]}>
         <Text style={styles.kicker}>{BOX_NAME[box.tier]}{boxes.length > 1 ? `  ${index + 1} of ${boxes.length}` : ''}</Text>
         <Text style={styles.title}>{phase === 'ready' ? 'Tap to open!' : showRewards ? 'You got' : ' '}</Text>
         <View style={{ width: '100%', height: size * 1.05, alignItems: 'center', justifyContent: 'center' }}>

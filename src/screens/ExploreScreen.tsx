@@ -1190,6 +1190,12 @@ function ExploreScreen() {
           parkStory={activeParkProject ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null} />
       )}
+      {/* Trail Boxes at home: your boxes wait for the next park day (pill above the avatar menu; only when you have boxes). */}
+      {player && !park && permissionGranted && (
+        <View pointerEvents="box-none" style={{ position: 'absolute', right: 16, bottom: 194, zIndex: 10, alignItems: 'flex-end' }}>
+          <TrailHost active={mapFocused} inPark={false} />
+        </View>
+      )}
       {/* Guest: a bright sign-in invitation over the live map */}
       {!player && <GuestInvite />}
       

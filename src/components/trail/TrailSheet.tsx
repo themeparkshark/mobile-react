@@ -6,7 +6,7 @@ import { playSfx } from '../../gamekit/SFX';
 import { openAppSettings } from '../../services/external';
 import type { MotionAccess } from '../../services/trail/TrailProvider';
 import {
-  BOX_NAME, bonusLabel, boxFraction, formatDistance, formatSteps, missNote, percent, stepsToGo, usesMiles,
+  BOX_NAME, boxName, bonusLabel, boxFraction, formatDistance, formatSteps, missNote, percent, stepsToGo, usesMiles,
   type TrailBox, type TrailState, type TrailTier,
 } from '../../services/trail/trailModel';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, confirmGame, type GameIconName } from '../../ui';
@@ -127,7 +127,7 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
             <View style={styles.slots}>
               {slots.map((b, i) => (
                 <View key={b ? b.id : `empty-${i}`} style={[styles.slot, !b && styles.slotEmpty]} accessible
-                  accessibilityLabel={b ? `${BOX_NAME[b.tier]}: ${formatSteps(stepsToGo(b))} steps to go` : 'Empty spot. Win rides to earn boxes'}>
+                  accessibilityLabel={b ? `${boxName(b)}: ${formatSteps(stepsToGo(b))} steps to go` : 'Empty spot. Win rides to earn boxes'}>
                   {b ? (
                     <>
                       <TrailBoxArt tier={b.tier} size={74} fraction={boxFraction(b)} active={visible} />
@@ -153,7 +153,7 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
                     {state.waiting.map((b, i) => (
                       <Pressable key={b.id} accessibilityRole="button"
-                        accessibilityLabel={`${BOX_NAME[b.tier]}, ${formatSteps(b.goal_steps)} steps.${i > 0 ? ' Tap to walk it next' : ' Walks next'}`}
+                        accessibilityLabel={`${boxName(b)}, ${formatSteps(b.goal_steps)} steps.${i > 0 ? ' Tap to walk it next' : ' Walks next'}`}
                         onPress={() => { playSfx('ui.select'); setPicked(picked === b.id ? null : b.id); }}
                         style={[styles.waitBox, picked === b.id && styles.waitPicked]}>
                         <TrailBoxArt tier={b.tier} size={52} active={false} />
@@ -313,7 +313,7 @@ function Inside({ state }: { readonly state: TrailState }) {
       <Text style={styles.section}>Which box you get</Text>
       <View style={[styles.card, { flexDirection: 'row', justifyContent: 'space-around' }]}>
         {tiers.map(t => (
-          <View key={t.tier} style={{ alignItems: 'center' }} accessible accessibilityLabel={`${BOX_NAME[t.tier]}: ${percent(t.chance_bp)}`}>
+          <View key={t.tier} style={{ alignItems: 'center' }} accessible accessibilityLabel={`${boxName(t)}: ${percent(t.chance_bp)}`}>
             <TrailBoxArt tier={t.tier} size={64} active={false} />
             <Text style={styles.oddsPct}>{percent(t.chance_bp)}</Text>
           </View>

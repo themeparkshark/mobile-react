@@ -15,9 +15,10 @@ import type { TrailBox, TrailReward, TrailState, TrailTier } from '../services/t
  * Scenes: map, catchup (the walk lands after the app was closed), sheet,
  * ready, inside, ask (motion pre-ask), reveal (a Gold box), reveal3 (three in a row).
  */
-const SCENES = ['map', 'catchup', 'sheet', 'ready', 'inside', 'ask', 'reveal', 'reveal3'] as const;
+const SCENES = ['map', 'catchup', 'sheet', 'ready', 'inside', 'ask', 'reveal', 'reveal3', 'home'] as const;
 const START = (process.env.EXPO_PUBLIC_TRAIL_PREVIEW ?? 'map') as string;
 const noop = async () => undefined;
+const ASSETS = 'https://assets.themeparkshark.com/mobile/production/assets/';
 
 const box = (id: number, tier: TrailTier, goal: number, progress: number, status: TrailBox['status'], slot: number | null): TrailBox => ({
   id, tier, goal_steps: goal, progress_steps: progress, status, slot, source: 'arrival', earned_at: '2026-10-08T16:00:00Z',
@@ -41,29 +42,35 @@ function fixture(scene: string, step: number): TrailState {
     best_day: { park_day: '2026-10-08', steps, meters: Math.round(steps * 0.75) },
     lifetime: { steps: 84210, meters: 63158, boxes_opened: 11 },
     week: { steps: steps + 6100, goal_steps: 25000, goal_hit: false, goal_options: [10000, 25000, 50000] },
-    wheels: false, gold_in: 4, next_ride_box: 1,
+    wheels: false, gold_in: 3, next_ride_box: 1,
     odds: {
-      gold_pity: 10, exclusives: ['Propeller Hat', 'Party Inflatable Duck', 'Blue Inflatable Duck', 'Green Inflatable Duck'],
+      gold_pity: 8, exclusives: ['Propeller Hat', 'Party Inflatable Duck', 'Blue Inflatable Duck', 'Green Inflatable Duck'],
       tiers: [
-        { tier: 'blue', goal_steps: 2000, coins: 40, chance_bp: 6000, always: [], bonus: [
-          { kind: 'energy', amount: 10, chance_bp: 4000 }, { kind: 'tickets', amount: 1, chance_bp: 3000 }, { kind: 'coins', amount: 40, chance_bp: 2000 },
-          { kind: 'mystery_box', amount: 1, chance_bp: 800 }, { kind: 'exclusive', amount: 1, chance_bp: 200 }] },
-        { tier: 'red', goal_steps: 5000, coins: 100, chance_bp: 3000, always: [], bonus: [
-          { kind: 'mystery_box', amount: 1, chance_bp: 4000 }, { kind: 'tickets', amount: 2, chance_bp: 2500 },
-          { kind: 'energy', amount: 25, chance_bp: 2000 }, { kind: 'exclusive', amount: 1, chance_bp: 1500 }] },
-        { tier: 'gold', goal_steps: 10000, coins: 250, chance_bp: 1000, always: [{ kind: 'mystery_box', amount: 1 }], bonus: [
-          { kind: 'exclusive', amount: 1, chance_bp: 5000 }, { kind: 'mystery_box', amount: 2, chance_bp: 3000 }, { kind: 'tickets', amount: 3, chance_bp: 2000 }] },
+        { tier: 'blue', goal_steps: 2000, coins: 30, chance_bp: 6000, always: [], bonus: [
+          { kind: 'energy', amount: 10, chance_bp: 4000 }, { kind: 'tickets', amount: 1, chance_bp: 3200 }, { kind: 'coins', amount: 30, chance_bp: 2300 },
+          { kind: 'mystery_box', amount: 1, chance_bp: 500 }] },
+        { tier: 'red', goal_steps: 5000, coins: 75, chance_bp: 3000, always: [], bonus: [
+          { kind: 'tickets', amount: 2, chance_bp: 3000 }, { kind: 'mystery_box', amount: 1, chance_bp: 2500 },
+          { kind: 'energy', amount: 25, chance_bp: 2500 }, { kind: 'exclusive', amount: 1, chance_bp: 2000 }] },
+        { tier: 'gold', goal_steps: 10000, coins: 175, chance_bp: 1000, always: [{ kind: 'mystery_box', amount: 1 }], bonus: [
+          { kind: 'exclusive', amount: 1, chance_bp: 5500 }, { kind: 'mystery_box', amount: 1, chance_bp: 2500 }, { kind: 'tickets', amount: 3, chance_bp: 2000 }] },
       ],
     },
+    exclusives: [
+      { item_id: 168, name: 'Propeller Hat', icon_url: `${ASSETS}v4pmQB4e8CQ1UIWyUVei5GuXIva0UzrahR24DU0l.png`, owned: true },
+      { item_id: 54, name: 'Party Inflatable Duck', icon_url: `${ASSETS}AzMgxAaIRVnqTnsVxJI7I6PM8N11kU6nEZfhyBhC.png`, owned: false },
+      { item_id: 193, name: 'Blue Inflatable Duck', icon_url: `${ASSETS}mSiN8uw5KKnt5l7bFnCHDNAOl0XRzRpkGOSfWYM4.png`, owned: true },
+      { item_id: 191, name: 'Green Inflatable Duck', icon_url: `${ASSETS}PNPGlk5m14A5sNvkufUhhm7Bl31EA4eogoaHpYPX.png`, owned: false },
+    ],
     sync: scene === 'sheet' ? { credited_steps: 2410, ready_box_ids: [], goal_box: null, missed: [{ reason: 'ride', steps: 380 }] } : undefined,
   };
 }
 
 const REWARDS: Record<number, TrailReward[]> = {
-  9: [{ kind: 'coins', amount: 250 }, { kind: 'mystery_box', amount: 1 }, { kind: 'exclusive', amount: 1, name: 'Propeller Hat',
-    icon_url: 'https://assets.themeparkshark.com/mobile/production/assets/v4pmQB4e8CQ1UIWyUVei5GuXIva0UzrahR24DU0l.png' }],
-  10: [{ kind: 'coins', amount: 100 }, { kind: 'tickets', amount: 2 }],
-  11: [{ kind: 'coins', amount: 40 }, { kind: 'energy', amount: 10 }],
+  9: [{ kind: 'coins', amount: 175 }, { kind: 'mystery_box', amount: 1 }, { kind: 'exclusive', amount: 1, name: 'Party Inflatable Duck',
+    icon_url: 'https://assets.themeparkshark.com/mobile/production/assets/AzMgxAaIRVnqTnsVxJI7I6PM8N11kU6nEZfhyBhC.png' }],
+  10: [{ kind: 'coins', amount: 75 }, { kind: 'tickets', amount: 2 }],
+  11: [{ kind: 'coins', amount: 30 }, { kind: 'energy', amount: 10 }],
 };
 
 export default function TrailPreviewScreen() {
@@ -95,14 +102,15 @@ function Scene({ scene: SCENE, onNext }: { readonly scene: string; readonly onNe
 
   const preview = SCENE === 'sheet' || SCENE === 'ready' || SCENE === 'ask' ? 'sheet'
     : SCENE === 'inside' ? 'inside' : SCENE.startsWith('reveal') ? 'reveal' : undefined;
+  const home = SCENE === 'home';
   return (
-    <TrailContext.Provider value={value}>
+    <TrailContext.Provider value={home ? { ...value, parkId: null } : value}>
       <View style={styles.root}>
         <Map>{null}</Map>
         <View style={styles.column}>
           <View style={{ marginBottom: 12, gap: 6, alignItems: 'flex-end' }}>
-            <TrailHost active preview={preview} />
-            <MapResourcePill icon="energy" label="Energy" count={42} />
+            <TrailHost active preview={preview} inPark={!home} />
+            {!home && <MapResourcePill icon="energy" label="Energy" count={42} />}
           </View>
           <View style={styles.avatar} />
         </View>

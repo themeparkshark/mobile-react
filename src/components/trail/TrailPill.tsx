@@ -3,7 +3,7 @@ import { memo, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, cancelAnimation } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { boxFraction, headlineBox, milestonesCrossed, shortSteps, stepsToGo, type TrailState } from '../../services/trail/trailModel';
+import { boxFraction, headlineBox, milestonesCrossed, missNote, shortSteps, stepsToGo, type TrailState } from '../../services/trail/trailModel';
 import { BRAND, SHADOW } from '../../ui';
 import TrailBoxArt from './TrailBoxArt';
 
@@ -47,17 +47,19 @@ function TrailPill({ state, active, onPress }: {
     cancelAnimation(glow);
     glow.value = 0;
     if (ready && active && !reduced) {
-      glow.value = withRepeat(withSequence(withTiming(1, { duration: 650 }), withTiming(0, { duration: 650 })), -1);
+      // About 8 s of pulse, then a steady gold pill (no endless redraw on the map).
+      glow.value = withRepeat(withSequence(withTiming(1, { duration: 650 }), withTiming(0, { duration: 650 })), 6);
     }
     return () => cancelAnimation(glow);
   }, [ready, active, reduced, glow]);
 
   const wrapStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
-  const fillStyle = useAnimatedStyle(() => ({ width: `${Math.round(Math.min(1, fill.value) * 100)}%` }));
+  const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.04, Math.min(1, fill.value)) }] }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: 0.35 + glow.value * 0.65 }));
 
   const label = ready ? (ready > 1 ? `OPEN ${ready}` : 'OPEN!') : box ? shortSteps(stepsToGo(box)) : 'Walk';
-  const a11y = ready
+  const dropped = missNote(state.sync);
+  const a11y = dropped && !ready ? `Trail Box: ${box ? stepsToGo(box) : 0} steps to go. Some steps did not count, tap to see why` : ready
     ? `${ready} Trail ${ready === 1 ? 'Box is' : 'Boxes are'} ready to open`
     : box ? `Trail Box: ${stepsToGo(box)} steps to go` : 'Trail Boxes';
 
@@ -71,6 +73,7 @@ function TrailPill({ state, active, onPress }: {
           <Text style={[styles.count, ready ? styles.countReady : null]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
           {!ready && !!box && <Text style={styles.unit}>to go</Text>}
         </View>
+        {!!missNote(state.sync) && !ready && <View style={styles.dot} accessibilityElementsHidden />}
         <View style={styles.icon}>
           {box ? <TrailBoxArt tier={box.tier} size={38} fraction={fraction} ready={!!ready} active={active} />
             : <TrailBoxArt tier="blue" size={38} dim active={false} />}
@@ -90,11 +93,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center', ...SHADOW.card },
   pillReady: { backgroundColor: BRAND.gold, borderColor: BRAND.white },
   track: { position: 'absolute', left: 24, right: 10, bottom: 3, height: 5, borderRadius: 3, backgroundColor: BRAND.blueLip, overflow: 'hidden' },
-  fill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3, backgroundColor: BRAND.gold },
+  fill: { position: 'absolute', left: 0, top: 0, bottom: 0, right: 0, borderRadius: 3, backgroundColor: BRAND.gold, transformOrigin: 'left' },
   glow: { backgroundColor: BRAND.goldLight },
   count: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white, marginBottom: 3,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0 },
   countReady: { color: BRAND.navy, textShadowColor: BRAND.white, textShadowOffset: { width: 0, height: 1 } },
   unit: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.white, marginLeft: 3, marginBottom: 1 },
   icon: { position: 'absolute', left: -2, top: -1 },
+  dot: { position: 'absolute', right: -3, top: 1, width: 14, height: 14, borderRadius: 7, backgroundColor: BRAND.red,
+    borderWidth: 2, borderColor: BRAND.white },
 });

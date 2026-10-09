@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { playSfx } from '../../gamekit/SFX';
 import { useTrail } from '../../services/trail/TrailProvider';
-import type { TrailBox, TrailReward } from '../../services/trail/trailModel';
+import { boxName, formatSteps, headlineBox, stepsToGo, type TrailBox, type TrailReward } from '../../services/trail/trailModel';
 import { gameAlert } from '../../ui';
 import TrailPill from './TrailPill';
 import TrailReveal from './TrailReveal';
@@ -13,7 +13,7 @@ import TrailSheet from './TrailSheet';
  * the first state arrives. `active` pauses every idle animation when the map
  * is covered or not focused.
  */
-export default function TrailHost({ active, inPark = true, preview }: {
+function TrailHost({ active, inPark = true, preview }: {
   readonly active: boolean;
   readonly inPark?: boolean;
   /** Dev previews only: start with the sheet, its odds page, or the reveal open. */
@@ -24,10 +24,16 @@ export default function TrailHost({ active, inPark = true, preview }: {
   const [opening, setOpening] = useState<readonly TrailBox[] | null>(preview === 'reveal' ? trail.state?.ready ?? null : null);
 
   const show = useCallback(() => {
+    // Ready boxes: the pill goes straight to the opening (one tap, not three).
+    if (trail.state?.ready.length) { setOpening(trail.state.ready); return; }
     playSfx('ui.modalOpen');
     setOpen(true);
     void trail.flush();
   }, [trail]);
+  const nextHint = useMemo(() => {
+    const b = trail.state ? headlineBox({ ready: [], walking: trail.state.walking }) : null;
+    return b ? `Next up: ${boxName(b)}, ${formatSteps(stepsToGo(b))} steps to go` : null;
+  }, [trail.state]);
 
   const openBox = useCallback(async (boxId: number): Promise<readonly TrailReward[]> => {
     const next = await trail.open(boxId);
@@ -39,6 +45,9 @@ export default function TrailHost({ active, inPark = true, preview }: {
   }, []);
 
   if (!trail.enabled || !trail.state) return null;
+  // At home the pill shows only when you already have boxes (they wait for the next park day).
+  const any = trail.state.walking.length + trail.state.waiting.length + trail.state.ready.length;
+  if (!inPark && any === 0) return null;
   return (
     <>
       <TrailPill state={trail.state} active={active && !open && !opening} onPress={show} />
@@ -49,8 +58,10 @@ export default function TrailHost({ active, inPark = true, preview }: {
         onGoal={g => act(() => trail.setGoal(g))}
         onWheels={on => act(() => trail.setWheels(on))}
         onAskMotion={() => void trail.askMotion()} initialView={preview === 'inside' ? 'inside' : 'boxes'} />
-      {opening && <TrailReveal boxes={opening} onOpen={openBox}
+      {opening && <TrailReveal boxes={opening} onOpen={openBox} nextHint={nextHint}
         onClose={() => { setOpening(null); void trail.refresh(); }} />}
     </>
   );
 }
+
+export default memo(TrailHost);
