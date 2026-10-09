@@ -167,7 +167,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       <View style={[styles.band, secret && !set && { height: 6 }]}>
         {/* When rarity plus SET would not fit the measured tile, rarity shows as a dot (the label still says it). */}
         {/* No rarity to show: say what it is in one word (kids UX / shop critic, Oct 8). */}
-        {!badge.label && !secret && slotWord(item.item_type?.id) && (
+        {(!badge.label || (band !== 'dot' && !set)) && !secret && slotWord(item.item_type?.id) && (
           <View style={styles.slot}><Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.slotText}>{slotWord(item.item_type?.id)}</Text></View>
         )}
         {badge.label && !owned && !secret && (band === 'dot' ? (

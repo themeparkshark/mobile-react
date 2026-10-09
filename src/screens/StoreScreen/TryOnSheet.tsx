@@ -535,7 +535,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     <Text maxFontSizeMultiplier={MAX_FONT} style={styles.rarityText}>{badge.label}</Text></View>}
                 </View>
                 {/* What it is, in a kid's words (kids UX round 1): Secret pieces say what they do in their card. */}
-                {!fxKey && slotLine(item.item_type?.id) && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.slotLine}>{slotLine(item.item_type?.id)}</Text>}
+                {/* On the confirm step the coin math takes this room: nothing slides under the buttons (art director r5). */}
+                {!fxKey && !confirming && slotLine(item.item_type?.id) && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.slotLine}>{slotLine(item.item_type?.id)}</Text>}
                 {/* Non-members see the price too, with the lock (one marker everywhere). */}
                 {secretItem && vipLocked && !owned && (
                   <View style={[styles.lockPrice, { alignSelf: 'flex-start', marginTop: -2 }]} accessible accessibilityLabel={`${formatCoins(item.cost)} coins, VIP members can buy`}>
@@ -562,13 +563,13 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   <View style={styles.fxCard} accessible accessibilityLabel={`${leaveText ? `${leaveText} ` : ''}${FX_BLURB[fxKey]} ${keepLine}${rarity ? ` ${sentence(rarity.label)}` : ''}`}>
                     {goingAway && <View style={styles.fxRow}><View style={styles.lifeIcon}><GameIcon name={leavingIcon(goingAway)} size={22} /></View>
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{leaveText}</Text></View>}
-                    <View style={styles.fxRow}><View style={styles.lifeIcon}><GameIcon name="sparkle" size={22} /></View>
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{FX_BLURB[fxKey]}</Text></View>
+                    {!confirming && <View style={styles.fxRow}><View style={styles.lifeIcon}><GameIcon name="sparkle" size={22} /></View>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{FX_BLURB[fxKey]}</Text></View>}
                     <View style={styles.fxRow}><View style={styles.lifeIcon}><GameIcon name="check" size={20} /></View>
                       <Text maxFontSizeMultiplier={MAX_FONT} style={goingAway || rarity ? styles.fxText : styles.fxKeep}>{keepLine}</Text></View>
                     {/* Non-members: the real VIP price from the App Store, once it has loaded (never a guess). */}
                     {!player?.is_subscribed && vipLine && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.vipPrice}>{vipLine}</Text>}
-                    {rarity && <View style={styles.fxRow}><View style={styles.lifeIcon}><Image source={PEARLS[pearlFor(rarity.tier)]} style={styles.lifePearl} contentFit="contain" /></View>
+                    {rarity && !confirming && <View style={styles.fxRow}><View style={styles.lifeIcon}><Image source={PEARLS[pearlFor(rarity.tier)]} style={styles.lifePearl} contentFit="contain" /></View>
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{sentence(rarity.label)}</Text></View>}
                   </View>
                 )}

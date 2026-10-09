@@ -300,6 +300,8 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
               })}
             </ScrollView>
           )}
+          {/* The chip row fades at its right edge, so a cut chip reads as "scroll for more". */}
+          {filters.length > 0 && <LinearGradient pointerEvents="none" colors={['rgba(10,79,150,0)', S.panel]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.chipFade} />}
           {shelf.length === 0 ? (
             <SharkLoader tone="onBlue" state="empty" compact title="New gear is on the way" message="New gear comes soon. Check back later." />
           ) : (
@@ -336,6 +338,7 @@ const styles = StyleSheet.create({
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 34 },
   filters: { gap: 8, paddingHorizontal: 12, paddingTop: 12 },
   restock: { position: 'absolute', top: 8, left: 10 },
+  chipFade: { position: 'absolute', right: 0, top: 10, width: 28, height: 40, borderTopRightRadius: 19 },
   filter: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, paddingHorizontal: 13, borderRadius: 17,
     backgroundColor: 'rgba(5,52,110,0.65)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
   filterOn: { backgroundColor: '#ffcf3b', borderColor: '#ffffff' },

@@ -143,6 +143,10 @@ const RailTile = memo(function RailTile({ entry, selected, owned, member, still,
           <LinearGradient colors={[...V.tilePlate]} style={StyleSheet.absoluteFill} />
           <LinearGradient colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)']} style={styles.tileGloss} />
           <View style={styles.tileArt}><TileArt item={item} size={TILE + 6} still={still} /></View>
+          {/* Feathered edges: a beam or spark melts into the plate instead of stopping on a line. */}
+          <LinearGradient colors={['rgba(11,34,85,0)', V.tilePlate[1]]} style={styles.featherBottom} />
+          <LinearGradient colors={[V.tilePlate[1], 'rgba(11,34,85,0)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.featherLeft} />
+          <LinearGradient colors={['rgba(11,34,85,0)', V.tilePlate[1]]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.featherRight} />
         </View>
         <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.tileName}>{name}</Text>
         <View style={[styles.tilePrice, owned && styles.tileOwned]} pointerEvents="none">
@@ -262,8 +266,9 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
         <View style={{ flex: 1 }} />
         <Pressable onPress={onFavorites} hitSlop={6} accessibilityRole="button"
           accessibilityLabel={`Favorites, ${wishes} ${wishes === 1 ? 'item' : 'items'}`} style={styles.favs}>
-          <WishHeart on={wishes > 0} size={20} />
-          {wishes > 0 && <Text maxFontSizeMultiplier={1.2} style={styles.favsText}>{wishes}</Text>}
+          <WishHeart on={wishes > 0} size={18} />
+          {/* A labeled list, not a second heart button next to the stage's (shop critic r5). */}
+          <Text maxFontSizeMultiplier={1.2} style={styles.favsText}>{wishes > 0 ? `SAVED ${wishes}` : 'SAVED'}</Text>
         </Pressable>
         <View style={styles.coins} accessible accessibilityLabel={`${formatCoins(balance)} coins`}>
           <GameIcon name="coins" size={20} />
@@ -279,7 +284,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
         </Animated.View>
       )}
 
-      <Animated.View key={ready ? 'room' : 'wait'} entering={still || !ready ? undefined : FadeInDown.duration(280)} style={!ready && { opacity: 0 }}>
+      <Animated.View entering={still ? undefined : FadeInDown.duration(280)}>
         <VaultPanel padded={false} style={styles.panelWrap}>
           <Animated.View style={[{ height: stageH }, stageStyle]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
@@ -288,13 +293,18 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
                 still={resting} plinth={stage?.scene ? 'none' : 'secret'}
                 backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={resting} /> : undefined}>
                 {!stage?.scene && <StarMotes still={resting} />}
-                {stage ? <Playercard inventory={stage.look} still={resting} showBackground={false} pinAnchor="body" shadow
-                  shadowAt={card.shadow} liftRoom={Math.max(0, card.box.top - 40)} style={cardStyle} popLayers fxSound={!resting}
-                  fxTapToPlay /> : <View style={styles.flat}><TileArt item={item} size={200} thumb={false} still={resting} /></View>}
+                {/* The room is there at once (rays, plinth, the light sweep); your shark lands once its art is in, already wearing the piece. */}
+                {!ready ? null : stage ? (
+                  <Animated.View entering={still ? undefined : FadeIn.duration(240)} style={StyleSheet.absoluteFill} pointerEvents="box-none">
+                    <Playercard inventory={stage.look} still={resting} showBackground={false} pinAnchor="body" shadow
+                      shadowAt={card.shadow} liftRoom={Math.max(0, card.box.top - 40)} style={cardStyle} popLayers fxSound={!resting}
+                      fxTapToPlay />
+                  </Animated.View>
+                ) : <View style={styles.flat}><TileArt item={item} size={200} thumb={false} still={resting} /></View>}
               </ShopStage>
             </Pressable>
             {/* The entry moment: one gold light sweep across the room. */}
-            {!still && ready && <View pointerEvents="none" style={StyleSheet.absoluteFill}><Sheen still={false} delay={350} width={INNER_W + 120} /></View>}
+            {!still && <View pointerEvents="none" style={StyleSheet.absoluteFill}><Sheen still={false} delay={120} width={INNER_W + 120} /></View>}
             <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flare, flareStyle]} />
             <View style={styles.stageTop} pointerEvents="box-none">
               <ShelfChip entry={entry} offset={offset} />
@@ -406,6 +416,9 @@ const styles = StyleSheet.create({
   tileArt: { position: 'absolute', left: 0, right: 0, top: 0, height: TILE - 8, alignItems: 'center', justifyContent: 'center' },
   tileKind: { position: 'absolute', top: 5, left: 5, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(5,12,34,0.8)' },
+  featherBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 52 },
+  featherLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 12 },
+  featherRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 12 },
   tileName: { position: 'absolute', left: 4, right: 4, bottom: 30, textAlign: 'center', fontFamily: FONT.display, fontSize: 12, color: '#ffffff' },
   tilePrice: { position: 'absolute', bottom: 6, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, height: 22,
     borderRadius: 11, backgroundColor: V.well },
