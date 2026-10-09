@@ -38,6 +38,7 @@ import {
 } from './pinsModel';
 
 type Tab = 'mystery' | 'sets' | 'mine';
+let devHuntOpened = false;
 
 /** Coins short at a box: the money stream's top-up offer when present, else the Supplies coins shelf. */
 function offerCoins(need: number, retry: () => void) {
@@ -82,7 +83,15 @@ export default function PinsScreen() {
       const h = await getPinHome();
       setHome(h);
       setLanyardIds(h.lanyard.map(p => p.item_id));
-      setTab(t => t ?? initialTab(h));
+      // Dev capture only: EXPO_PUBLIC_PINS_TAB opens a shelf, EXPO_PUBLIC_PINS_HUNT opens today's hunt.
+      const devTab = __DEV__ ? (process.env.EXPO_PUBLIC_PINS_TAB as Tab | undefined) : undefined;
+      setTab(t => t ?? devTab ?? initialTab(h));
+      if (__DEV__ && process.env.EXPO_PUBLIC_PINS_HUNT === '1' && !devHuntOpened) {
+        devHuntOpened = true;
+        const here = h.pin_days?.find(d => d.here && d.status === 'hunt');
+        const set = here && h.park_sets.find(st => st.park_id === here.park_id);
+        if (set) setTimeout(() => setHunt(set), 800);
+      }
       setState('ready');
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
