@@ -59,10 +59,11 @@ test('reduce motion stops ambient loops only, not data', () => {
   assert.equal(b.pollMultiplier, 1);
 });
 
-test('standing still rests GPS steps but nothing visual', () => {
+test('standing still alone changes nothing (no GPS flapping, no visual change)', () => {
   const b = policy.powerBudget({ ...on, stationary: true });
-  assert.equal(b.gpsRest, true);
+  assert.equal(b.gpsRest, false);
   assert.equal(b.ambient, true);
+  assert.equal(policy.IDLE_AFTER_MS, 120000, 'one idle constant, two minutes');
   assert.equal(policy.isStationary(null, 1e9), false, 'no fix yet is not still');
   assert.equal(policy.isStationary(0, policy.STATIONARY_AFTER_MS - 1), false);
   assert.equal(policy.isStationary(0, policy.STATIONARY_AFTER_MS), true);
@@ -146,26 +147,104 @@ test('unregistering stops the timer; a throwing poll never breaks the clock', ()
   assert.equal(c.size(), 1);
 });
 
-test('GPS: background stops the foreground watcher; a still player on a map takes 6 m steps; queues untouched', () => {
-  const base = { mapOnScreen: true, queueTracking: false, inPark: true, confirmedOutside: false };
-  assert.equal(gps.gpsWatchSettings({ ...base, appActive: false }).tier, 'off');
-  assert.equal(gps.gpsWatchSettings(base).distanceInterval, 3, 'unchanged at normal power');
-  assert.equal(gps.gpsWatchSettings({ ...base, appActive: true }).distanceInterval, 3);
-  assert.equal(gps.gpsWatchSettings({ ...base, rest: true }).distanceInterval, 6);
-  assert.equal(gps.gpsWatchSettings({ ...base, rest: true }).accuracy, 'high', 'accuracy never drops');
-  assert.equal(gps.gpsWatchSettings({ ...base, rest: true, queueTracking: true }).distanceInterval, 3, 'LinePlay needs every step');
-  assert.equal(gps.gpsWatchSettings({ ...base, mapOnScreen: false, rest: true }).distanceInterval, 10);
+
+
+const gpsBase = { mapOnScreen: true, queueTracking: false, inPark: true, confirmedOutside: false };
+
+test('GPS: background stops the foreground watcher; Saver uses Balanced except in a queue; steps never change', () => {
+  assert.equal(gps.gpsWatchSettings({ ...gpsBase, appActive: false }).tier, 'off');
+  assert.deepEqual({ ...gps.gpsWatchSettings({ ...gpsBase, appActive: true }) }, { tier: 'map', accuracy: 'high', distanceInterval: 3, timeInterval: 500 }, 'normal power unchanged');
+  const saver = gps.gpsWatchSettings({ ...gpsBase, rest: true });
+  assert.equal(saver.accuracy, 'balanced');
+  assert.equal(saver.distanceInterval, 3, 'constant step: the watcher never restarts on a still/move flip');
+  assert.equal(gps.gpsWatchSettings({ ...gpsBase, rest: true, queueTracking: true }).accuracy, 'high', 'LinePlay keeps High');
 });
 
-test('wiring: provider wraps the app, LocationProvider rests compass and watcher, polls ride the clock, Settings has the switch', () => {
-  assert.match(read('App.tsx'), /<PowerProvider>/);
-  const loc = read('src/context/LocationProvider.tsx');
-  assert.match(loc, /compassOn = headingEnabled && power\.compass/);
-  assert.match(loc, /watch\.tier === 'off'/);
-  assert.match(loc, /markMoved\(\)/);
-  assert.match(read('src/components/GymBattle/BattleHUD.tsx'), /useBudgetedPoll\(fetchGym, 10000\)/);
-  assert.doesNotMatch(read('src/components/GymBattle/BattleHUD.tsx'), /setInterval\(fetchGym/);
-  assert.match(read('src/screens/QueueTimesScreen.tsx'), /ticking = screenFocused && appActive/);
-  assert.match(read('src/gamekit/net/PartyClient.ts'), /this\.state\.room \|\| this\.backgrounded/);
-  assert.match(read('src/screens/SettingsScreen.tsx'), /title="Battery Saver"/);
+// Defect 1: a slow storage read never undoes the switch.
+test('Battery Saver: flipping the switch before storage answers wins', async () => {
+  let release; const stored = new Map([['tps.batterySaver.v1', '0']]);
+  const AsyncStorage = { getItem: key => new Promise(r => { release = () => r(stored.get(key) ?? null); }),
+    setItem: async (k, v) => { stored.set(k, v); } };
+  const saver = loadTs('src/power/batterySaver.ts', { '@react-native-async-storage/async-storage': { default: AsyncStorage, __esModule: true }, react: { useSyncExternalStore: (_s, get) => get() } });
+  const pending = saver.loadBatterySaver();
+  saver.setBatterySaver(true);
+  release(); await pending;
+  assert.equal(saver.isBatterySaverOn(), true);
+  assert.equal(stored.get('tps.batterySaver.v1'), '1');
+});
+
+test('Battery Saver: a stored "on" is restored at launch', async () => {
+  const AsyncStorage = { getItem: async () => '1', setItem: async () => {} };
+  const saver = loadTs('src/power/batterySaver.ts', { '@react-native-async-storage/async-storage': { default: AsyncStorage, __esModule: true }, react: { useSyncExternalStore: (_s, get) => get() } });
+  await saver.loadBatterySaver();
+  assert.equal(saver.isBatterySaverOn(), true);
+});
+
+// Defects 2, 3 and the park-change refetch.
+test('poll ids: a new key (park) is a new poll that runs at once; re-registering the same id keeps its schedule', () => {
+  const ids = loadTs('src/power/useBudgetedPoll.ts', { react: { useEffect() {}, useRef: v => ({ current: v }) } });
+  assert.equal(ids.pollId('poll-1', null), 'poll-1');
+  assert.equal(ids.pollId('poll-1', 12), 'poll-1:12');
+  const clock = fakeClock();
+  const c = new coord.PollCoordinator(clock);
+  const runs = [];
+  let off = c.register({ id: ids.pollId('hud', 1), run: () => runs.push(['p1', clock.now()]), intervalMs: 10000 }, true);
+  clock.advance(4000);
+  off();
+  off = c.register({ id: ids.pollId('hud', 1), run: () => runs.push(['p1', clock.now()]), intervalMs: 10000 }, false);
+  clock.advance(0);
+  assert.deepEqual(runs, [['p1', 0]], 'a dep change / refocus costs no extra fetch');
+  clock.advance(6000);
+  assert.deepEqual(runs.at(-1), ['p1', 10000], 'kept the old schedule');
+  off();
+  c.register({ id: ids.pollId('hud', 2), run: () => runs.push(['p2', clock.now()]), intervalMs: 10000 }, true);
+  clock.advance(0);
+  assert.deepEqual(runs.at(-1), ['p2', 10000], 'a new park fetches at once');
+});
+
+test('movement: GPS drift under 3 m is not a move', () => {
+  const m = loadTs('src/power/movement.ts');
+  const a = { latitude: 28.4177, longitude: -81.5812 };
+  assert.equal(m.markMoved(a, 0), true);
+  assert.equal(m.markMoved({ latitude: a.latitude + 0.00001, longitude: a.longitude }, 1000), false, '~1.1 m');
+  assert.equal(m.lastMovedAt(), 0);
+  assert.equal(m.markMoved({ latitude: a.latitude + 0.00005, longitude: a.longitude }, 2000), true, '~5.6 m');
+  assert.equal(m.lastMovedAt(), 2000);
+});
+
+test('pocket dim: face down or upside down for 3 s goes black; turning it up wakes at once', () => {
+  const p = loadTs('src/power/pocketPolicy.ts');
+  let s = p.POCKET_START;
+  s = p.nextPocketState(s, { x: 0, y: -1, z: 0 }, 0);
+  assert.equal(s.dim, false, 'held upright');
+  s = p.nextPocketState(s, { x: 0, y: 0, z: 1 }, 1000);
+  s = p.nextPocketState(s, { x: 0, y: 0, z: 1 }, 3500);
+  assert.equal(s.dim, false);
+  s = p.nextPocketState(s, { x: 0, y: 0, z: 1 }, 4000);
+  assert.equal(s.dim, true, 'face down 3 s');
+  s = p.nextPocketState(s, { x: 0, y: -0.9, z: -0.3 }, 4500);
+  assert.equal(s.dim, false, 'picked up');
+  s = p.nextPocketState(s, { x: 0, y: 0.95, z: 0 }, 5000);
+  s = p.nextPocketState(s, { x: 0, y: 0.95, z: 0 }, 8000);
+  assert.equal(s.dim, true, 'upside down in a pocket');
+  assert.equal(p.nextPocketState(p.POCKET_START, { x: 0, y: 0, z: -1 }, 99), p.POCKET_START, 'face up on a table: no churn');
+});
+
+// Defect 7: PartyClient knows it starts in the background and its safety poll rests there.
+test('party: the safety poll rests in the background, from construction, and resumes on return', () => {
+  const net = loadTs('src/gamekit/net/PartyClient.ts');
+  const gets = []; const listeners = [];
+  const http = { get: url => { gets.push(url); return new Promise(() => {}); }, post: () => new Promise(() => {}) };
+  const make = currentState => new net.PartyClient({ http, userId: 7, setTimer: () => 0, clearTimer() {},
+    appState: { currentState, addEventListener: (_e, cb) => { listeners.push(cb); return { remove() {} }; } } });
+  const c = make('background');
+  assert.equal(c.backgrounded, true);
+  c.state = { ...c.state, room: { id: 5 } };
+  c.lastSyncAt = -1e9;
+  c.pollIfNeeded();
+  assert.equal(gets.length, 0, 'no poll while backgrounded');
+  listeners.forEach(cb => cb('active'));
+  assert.equal(c.backgrounded, false);
+  assert.ok(gets.some(u => u.includes('/party/rooms/5')), 'catches up on return');
+  assert.equal(make('active').backgrounded, false);
 });

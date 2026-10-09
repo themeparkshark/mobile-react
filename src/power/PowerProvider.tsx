@@ -15,6 +15,7 @@ import { useBatterySaver } from './batterySaver';
 import { lastMovedAt, onMoved } from './movement';
 import { FULL_BUDGET, IDLE_AFTER_MS, STATIONARY_AFTER_MS, isStationary, powerBudget, type PowerBudget } from './powerPolicy';
 import { pollCoordinator } from './pollCoordinator';
+import PocketDim from './PocketDim';
 
 const PowerContext = createContext<PowerBudget>(FULL_BUDGET);
 
@@ -52,7 +53,12 @@ export function PowerProvider({ children }: { readonly children: React.ReactNode
     pollCoordinator.setAppActive(appActive);
     pollCoordinator.setMultiplier(budget.pollMultiplier);
   }, [appActive, budget.pollMultiplier]);
-  return <PowerContext.Provider value={budget}>{children}</PowerContext.Provider>;
+  return (
+    <PowerContext.Provider value={budget}>
+      {children}
+      <PocketDim enabled={lowPower && appActive} />
+    </PowerContext.Provider>
+  );
 }
 
 /** The current power budget. Outside a provider: full power (tests, previews). */

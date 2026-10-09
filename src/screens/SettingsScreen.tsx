@@ -381,12 +381,13 @@ export default function SettingsScreen() {
             onPress={enableBackgroundLocation}
           />
           {/* Battery Saver (src/power): every feature stays; the game rests its
-              extra motion and checks for news less often. */}
+              extra motion, checks for news less often and dims face down. */}
           <SettingsRow
-            art="star"
+            art="energy"
             title="Battery Saver"
-            detail={batterySaver ? 'On: calmer map, longer park days' : 'Off: full sparkle'}
+            detail={batterySaver ? 'On: battery lasts longer, the map moves a little less' : 'Off: tap to make your battery last longer'}
             isLast
+            onPress={() => setBatterySaver(!batterySaver)}
             accessory={
               <BrandSwitch label="Battery saver" value={batterySaver} onValueChange={() => setBatterySaver(!batterySaver)} />
             }

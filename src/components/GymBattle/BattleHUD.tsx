@@ -77,7 +77,7 @@ export default function BattleHUD({ parkId }: Props) {
 
   // Poll every 10s for near-real-time score updates, on the app's one poll
   // clock: paused in the background, slower while idle or on Battery Saver.
-  useBudgetedPoll(fetchGym, 10000);
+  useBudgetedPoll(fetchGym, 10000, { key: parkId });
 
   // Refresh immediately when returning from GymBattleScreen
   const navigation = useNavigation();

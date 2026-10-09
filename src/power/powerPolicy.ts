@@ -49,7 +49,7 @@ export interface PowerBudget {
   readonly pollMultiplier: number;
   /** Scale particle counts by this (0..1). */
   readonly particleScale: number;
-  /** GPS may take coarser steps on the map (player is standing still, or saver on). */
+  /** Battery Saver: GPS may use Balanced accuracy where no queue is tracked. */
   readonly gpsRest: boolean;
   /** Compass (heading) may run. */
   readonly compass: boolean;
@@ -58,8 +58,8 @@ export interface PowerBudget {
   readonly stationary: boolean;
 }
 
-/** No touch for this long counts as idle. Long enough that reading a card is not idle. */
-export const IDLE_AFTER_MS = 60_000;
+/** No touch for this long counts as idle: the app's one idle constant (useUserIdle). */
+export const IDLE_AFTER_MS = 2 * 60_000;
 /** No fix past the jitter filter for this long counts as standing still (in line, on a bench). */
 export const STATIONARY_AFTER_MS = 90_000;
 
@@ -88,11 +88,11 @@ export function powerBudget(input: PowerInputs): PowerBudget {
     return { ...common, level, ambient, animate: true,
       pollMultiplier: input.lowPower && input.idle ? 3 : 2,
       particleScale: 0.5,
-      gpsRest: input.stationary || input.lowPower,
+      gpsRest: input.lowPower,
       compass: true };
   }
   return { ...common, level, ambient: !input.reduceMotion, animate: true, pollMultiplier: 1,
-    particleScale: 1, gpsRest: input.stationary, compass: true };
+    particleScale: 1, gpsRest: false, compass: true };
 }
 
 /** A poll interval under the budget, or null while paused. */

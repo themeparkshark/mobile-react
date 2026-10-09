@@ -83,6 +83,8 @@ export interface StorageLike {
 }
 
 export interface AppStateLike {
+  /** Optional: the state when the client is built (React Native AppState has it). */
+  readonly currentState?: string | null;
   addEventListener(event: 'change', cb: (state: string) => void): { remove(): void };
 }
 
@@ -194,6 +196,7 @@ export class PartyClient {
       this.now,
       (ms) => new Promise((done) => this.setTimer(() => done(), ms)),
     );
+    this.backgrounded = opts.appState?.currentState === 'background';
     this.appStateSub = opts.appState?.addEventListener('change', (s) => this.onAppState(s)) ?? null;
   }
 
@@ -684,6 +687,7 @@ export class PartyClient {
       return;
     }
     if (this.local?.heldAt != null && this.state.hold?.reason === 'background') this.release();
+    // Back in front: the safety poll wakes again; refresh() below catches up now.
     if (this.state.room) {
       void this.clock.sync(3, 100).then(() => this.set({ ...this.state, clockOffsetMs: this.clock.offsetMs }));
       this.refresh();

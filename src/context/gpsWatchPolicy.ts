@@ -38,10 +38,11 @@ export interface GpsWatchInputs {
    */
   readonly appActive?: boolean;
   /**
-   * Power budget says rest (standing still for a while, or Battery Saver on).
-   * A map that is not tracking a queue takes 6 m steps instead of 3 m: fewer
-   * JS wakeups and map re-renders while you stand, same accuracy, and the
-   * first real step still moves the shark.
+   * Battery Saver is on (the player chose it). Where no queue is tracked the
+   * watcher uses Balanced accuracy (Wi-Fi and cell assisted, far less GPS
+   * radio). Steps stay the same, and the input only changes when the player
+   * flips the switch, so the watcher never flaps between settings.
+   * LinePlay keeps High: queue advances need fixes under 20 m.
    */
   readonly rest?: boolean;
 }
@@ -55,8 +56,6 @@ export interface GpsWatchSettings {
   readonly timeInterval: number;
 }
 
-/** Map step while resting (standing still or Battery Saver), metres. */
-export const MAP_REST_DISTANCE_M = 6;
 
 export const GPS_WATCH: Readonly<Record<Exclude<GpsWatchTier, 'off'>, Omit<GpsWatchSettings, 'tier'>>> = {
   map: { accuracy: 'high', distanceInterval: 3, timeInterval: 500 },
@@ -79,7 +78,6 @@ export function gpsWatchSettings(input: GpsWatchInputs): GpsWatchSettings {
   if (tier === 'off') return { tier, ...GPS_WATCH.away, distanceInterval: 0, timeInterval: 0 };
   const base = GPS_WATCH[tier];
   const timeInterval = input.queueTracking ? QUEUE_ANDROID_TIME_INTERVAL_MS : base.timeInterval;
-  const distanceInterval = tier === 'map' && input.rest && !input.queueTracking
-    ? Math.max(base.distanceInterval, MAP_REST_DISTANCE_M) : base.distanceInterval;
-  return { tier, ...base, distanceInterval, timeInterval };
+  const accuracy = input.rest && !input.queueTracking ? 'balanced' : base.accuracy;
+  return { tier, ...base, accuracy, timeInterval };
 }

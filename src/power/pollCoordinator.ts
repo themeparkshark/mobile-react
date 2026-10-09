@@ -31,15 +31,21 @@ interface Entry { task: PollTask; lastRunAt: number | null; }
 
 export class PollCoordinator {
   private entries = new Map<string, Entry>();
+  /** Last run per id, kept across unregister so a re-register (a dep change, a refocus) is not a free extra fetch. */
+  private lastRuns = new Map<string, number>();
   private timer: unknown = null;
   private appActive = true;
   private multiplier = 1;
 
   constructor(private readonly clock: Clock) {}
 
+  /**
+   * runNow: run at once (first mount, a new key). Otherwise the poll keeps its
+   * old schedule and runs only if it came due while away.
+   */
   register(task: PollTask, runNow = true): () => void {
-    const prev = this.entries.get(task.id);
-    this.entries.set(task.id, { task, lastRunAt: runNow ? null : (prev?.lastRunAt ?? this.clock.now()) });
+    const remembered = this.entries.get(task.id)?.lastRunAt ?? this.lastRuns.get(task.id) ?? null;
+    this.entries.set(task.id, { task, lastRunAt: runNow ? null : (remembered ?? this.clock.now()) });
     this.schedule();
     return () => {
       const current = this.entries.get(task.id);
@@ -102,6 +108,7 @@ export class PollCoordinator {
       const entry = this.entries.get(id);
       if (!entry) continue;
       entry.lastRunAt = now;
+      this.lastRuns.set(id, now);
       try {
         const result = entry.task.run();
         if (result && typeof (result as Promise<unknown>).catch === 'function') {

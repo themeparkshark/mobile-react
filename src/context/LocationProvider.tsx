@@ -11,7 +11,7 @@ import { setDevModeEnabled, setDevLocation as setGlobalDevLocation } from '../he
 import { nextParkPresence, NO_PARK_PRESENCE, shouldRefreshParkLookup, type ParkLookupRecord,
   type ParkPresence } from './parkLookupPolicy';
 import { gpsWatchSettings } from './gpsWatchPolicy';
-import { markMoved, usePowerBudget } from '../power';
+import { budgetedInterval, markMoved, usePowerBudget } from '../power';
 import { useAppActive } from '../hooks/useLivePoll';
 import { PositionFilter } from './positionFilter';
 
@@ -444,15 +444,18 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   // A stationary guest still needs to recover from a failed check and refresh
   // a verified outside-park status when the park boundary may have changed.
   useEffect(() => {
-    if (!player?.id || !permissionGranted || !location || !appActive) return;
+    // A cheap local check (the lookup itself only fires on a real move), but it
+    // still wakes JS: off in the background, slower while idle or on Saver.
+    const lookupEvery = budgetedInterval(5000, power);
+    if (!player?.id || !permissionGranted || !location || !appActive || lookupEvery === null) return;
     const timer = setInterval(() => {
       if (!parkLookupPromiseRef.current &&
           shouldRefreshParkLookup(location, parkLookupRef.current)) {
         void lookupParkAt(location);
       }
-    }, 5000);
+    }, lookupEvery);
     return () => clearInterval(timer);
-  }, [player?.id, permissionGranted, location?.latitude, location?.longitude, appActive]);
+  }, [player?.id, permissionGranted, location?.latitude, location?.longitude, appActive, power.pollMultiplier]);
 
   // How hard the watcher works depends on what is on screen (gpsWatchPolicy):
   // full precision for a map or a queue, coarser steps elsewhere in a park,
@@ -521,7 +524,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
             if (verdict.kind !== 'publish') return;
 
             lastLocationRef.current = verdict.position;
-            markMoved();
+            markMoved(verdict.position);
             debouncedSetLocation(verdict.position);
           },
           restartAfterError,
