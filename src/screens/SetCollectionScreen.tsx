@@ -488,7 +488,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         {set && (
           <>
             <View onLayout={event => { stickAt.current = shelfH.current + event.nativeEvent.layout.y + event.nativeEvent.layout.height - 40; }}>
-            <BookHeader set={set} busyId={busy} onClaim={reward => void claim(reward)} stamp={stamp?.slug === set.slug ? stamp.title : null} focusBusy={busy === 'focus'}
+            <BookHeader set={set} busyId={busy} onClaim={reward => void claim(reward)}
+              titleWorn={!!set.reward.title && wornTitle === set.reward.title} onTitle={set.reward.title ? () => void toggleTitle() : null} stamp={stamp?.slug === set.slug ? stamp.title : null} focusBusy={busy === 'focus'}
               onFocus={!set.isComplete && (set.status === 'active' || set.status === 'resting') ? () => void toggleFocus() : null} />
             </View>
             <PrizeRows set={set}
@@ -804,7 +805,7 @@ const styles = StyleSheet.create({
   sparesHint: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, marginBottom: 12 },
   sparesBody: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.navy, textAlign: 'center', flexShrink: 1 },
   sparesGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, paddingVertical: 6 },
-  spareTile: { width: 76, height: 112, alignItems: 'center' },
+  spareTile: { width: 76, alignItems: 'center' },
   sparesFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 44 },
   spareName: { fontFamily: 'Knockout', fontSize: 14, lineHeight: 16, color: BRAND.navy, textAlign: 'center', marginTop: 8 },
   spareArtWrap: { width: 72, height: 72, justifyContent: 'center' },

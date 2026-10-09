@@ -193,12 +193,14 @@ function PrizeBar({ set, reduced }: { readonly set: DexSet; readonly reduced: bo
 }
 
 /** The open set in one white card: name and count, the prize bar, the next goal, when, and the Hunt switch. */
-export function BookHeader({ set, onFocus, focusBusy, stamp, onClaim, busyId }: {
+export function BookHeader({ set, onFocus, focusBusy, stamp, onClaim, busyId, titleWorn = false, onTitle = null }: {
   readonly set: DexSet; readonly onFocus: (() => void) | null; readonly focusBusy: boolean;
   /** The ready prize's Claim lives here, so it is always on the first screen. */
   readonly onClaim: (reward: DexReward) => void; readonly busyId: string | null;
   /** A title just won: stamps onto the header after the reveal closes. */
   readonly stamp?: string | null;
+  /** The set's title is worn: the header says so in words, and a tap takes it off. */
+  readonly titleWorn?: boolean; readonly onTitle?: (() => void) | null;
 }) {
   const reduced = useUiReducedMotion();
   const enter = useSharedValue(1);
@@ -267,6 +269,13 @@ export function BookHeader({ set, onFocus, focusBusy, stamp, onClaim, busyId }: 
         {onFocus && <HuntSwitch on={set.focused} busy={focusBusy} onPress={onFocus} reduced={reduced} />}
       </View>
       )}
+      {complete && titleWorn && !!set.reward.title && onTitle && (
+        <SpringPress onPress={onTitle} accessibilityLabel={`Wearing the ${set.reward.title} title. Tap to take it off.`} style={styles.wearingChip}>
+          <GameIcon name="crown" size={22} />
+          <Text style={styles.wearingChipText} numberOfLines={1} maxFontSizeMultiplier={1.3}>Wearing: {set.reward.title}</Text>
+          <Text style={styles.wearingOff} maxFontSizeMultiplier={1.3}>Take off</Text>
+        </SpringPress>
+      )}
       {complete && !stamp && (
         <View style={styles.completeStamp} accessible accessibilityLabel="Complete">
           <Text style={styles.completeText} maxFontSizeMultiplier={1.1}>COMPLETE</Text>
@@ -283,7 +292,7 @@ export function HuntSwitch({ on, busy, onPress, reduced }: { readonly on: boolea
   useEffect(() => {
     knob.value = reduced ? (on ? 1 : 0) : withSpring(on ? 1 : 0, { damping: 15, stiffness: 320 });
   }, [on, reduced, knob]);
-  const knobStyle = useAnimatedStyle(() => ({ transform: [{ translateX: knob.value * 24 }] }));
+  const knobStyle = useAnimatedStyle(() => ({ transform: [{ translateX: knob.value * 22 }] }));
   return (
     <Pressable accessibilityRole="switch" accessibilityState={{ checked: on, busy }} disabled={busy} onPress={onPress} hitSlop={6}
       accessibilityLabel={`Hunt this set, ${on ? 'on' : 'off'}. Its finds show up more on your map. You can hunt one set at a time.`}
@@ -295,7 +304,7 @@ export function HuntSwitch({ on, busy, onPress, reduced }: { readonly on: boolea
         <Text style={styles.huntSub} maxFontSizeMultiplier={1.3}>More on your map</Text>
       </View>
       <View style={[styles.track, on && styles.trackOn]}>
-        <Animated.View style={[styles.knob, knobStyle]}><GameIcon name="search" size={16} /></Animated.View>
+        <Animated.View style={[styles.knob, on && styles.knobOn, knobStyle]}>{on && <GameIcon name="search" size={16} />}</Animated.View>
       </View>
     </Pressable>
   );
@@ -436,23 +445,13 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
   // A won step folds to one slim line: nothing to do there any more. So does the won finish prize once its
   // title is worn (the page then opens on the trophy case).
   if (state.kind === 'done' && (!final || !reward.title || titleWorn)) {
-    const worn = final && !!reward.title && titleWorn;
     return (
-      <View style={styles.slim} accessible accessibilityLabel={`${heading}: you got ${reward.prize}${worn ? `. Wearing the ${reward.title} title` : ''}`}>
+      <View style={styles.slim} accessible accessibilityLabel={`${heading}: you got ${reward.prize}`}>
         <View style={styles.slimLine}>
           <Animated.View style={[styles.slimMedal, checkStyle]}><GameIcon name="check" size={20} /></Animated.View>
           <Text style={styles.slimText} maxFontSizeMultiplier={BODY_SCALE}>{heading}</Text>
           <PrizeMini reward={reward} />
-          {worn && onTitle ? (
-            // Worn: the one state that matters here is the title (tap to take it off).
-            <Pressable onPress={onTitle} accessibilityRole="button" accessibilityLabel={`Wearing the ${reward.title} title. Tap to take it off.`} hitSlop={8}
-              style={styles.wearingPill}>
-              <GameIcon name="crown" size={20} />
-              <GameIcon name="check" size={14} />
-            </Pressable>
-          ) : (
-            <View style={[styles.state, styles.stateDone, styles.stateRow]}><GameIcon name="check" size={16} /><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
-          )}
+          <View style={[styles.state, styles.stateDone, styles.stateRow]}><GameIcon name="check" size={16} /><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
         </View>
       </View>
     );
@@ -481,7 +480,7 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
           </View>
           {hero ? (
             <View style={{ gap: 6 }}>
-              <PrizeMini reward={reward} />
+              {state.kind === 'locked' ? <PrizeChips reward={reward} /> : <PrizeMini reward={reward} />}
               {!!reward.title && state.kind === 'locked' && (
                 <View style={[styles.chip, styles.chipTitle, { alignSelf: 'flex-start' }]}>
                   <GameIcon name="crown" size={22} />
@@ -710,12 +709,14 @@ const styles = StyleSheet.create({
   huntText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
   huntSub: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft },
   // House toggle: a chunky navy-outlined track (white off, blue on) and a gold knob carrying the magnifier.
-  track: { width: 60, height: 34, borderRadius: 17, backgroundColor: BRAND.white, padding: 2, borderWidth: 3, borderColor: BRAND.navy },
-  trackOn: { backgroundColor: BRAND.blueBright },
+  // Off: a pale grey track and a grey knob. On: a bright blue track and a gold knob. Clear even in greyscale.
+  track: { width: 60, height: 34, borderRadius: 17, backgroundColor: '#dfe6ee', padding: 2, borderWidth: 2, borderColor: '#c3cfdb' },
+  trackOn: { backgroundColor: BRAND.blueBright, borderColor: BRAND.navy, borderWidth: 3 },
   knob: {
-    width: 24, height: 24, borderRadius: 12, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.goldLip,
+    width: 26, height: 26, borderRadius: 13, backgroundColor: '#b9c6d3', borderWidth: 2, borderColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center',
   },
+  knobOn: { backgroundColor: BRAND.gold, borderColor: BRAND.goldLip },
   titleStampWrap: { position: 'absolute', right: 12, top: -14 },
   titleStamp: {
     flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 34, borderRadius: 9, backgroundColor: BRAND.gold,
@@ -749,6 +750,12 @@ const styles = StyleSheet.create({
   // Settled, not a button: cream with a gold edge.
   stateDone: { backgroundColor: '#fff8e4', borderWidth: 2, borderColor: '#f1dca0' },
   stateText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy },
+  wearingChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, minHeight: 44, paddingHorizontal: 10, borderRadius: 14,
+    backgroundColor: '#fff3c4', borderWidth: 2, borderColor: BRAND.gold,
+  },
+  wearingChipText: { flex: 1, fontFamily: 'Shark', fontSize: 15, color: BROWN },
+  wearingOff: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft, textDecorationLine: 'underline' },
   stateReady: { backgroundColor: '#fff3c4', borderWidth: 2, borderColor: BRAND.gold },
   medalQuiet: { width: 50, height: 50, borderRadius: 25 },
   stateRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
@@ -781,7 +788,6 @@ const styles = StyleSheet.create({
   slimText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
   slimLine: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   mini: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  wearingPill: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 30, paddingHorizontal: 8, borderRadius: 15, backgroundColor: '#fff3c4', borderWidth: 2, borderColor: BRAND.gold },
   miniChip: { flexDirection: 'row', alignItems: 'center', gap: 1 },
   miniText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
   finds: { paddingHorizontal: 16, marginTop: 0 },
