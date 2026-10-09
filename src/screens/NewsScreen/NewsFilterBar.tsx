@@ -7,6 +7,7 @@
  * Chips match Standings: white pills with a 4 px lip, gold when chosen.
  */
 import * as Haptics from 'expo-haptics';
+import GamePress from './GamePress';
 import useTapSound from './useTapSound';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -22,17 +23,16 @@ function Chip({ label, icon, on, small = false, onPress, onLayout }: {
   readonly onLayout?: (x: number, w: number) => void;
 }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={`Show ${label} news`} hitSlop={4}
-      onLayout={e => onLayout?.(e.nativeEvent.layout.x, e.nativeEvent.layout.width)}
+    <GamePress accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={`Show ${label} news`} hitSlop={4}
+      onLayout={onLayout}
       onPress={onPress}
-      style={({ pressed }) => ({
+      lip={small ? 4 : 5}
+        style={{
         height: small ? 36 : 42, paddingHorizontal: small ? 12 : 13, borderRadius: RADIUS.pill, flexDirection: 'row', alignItems: 'center', gap: 6,
-        backgroundColor: on ? BRAND.gold : BRAND.white, borderWidth: 3, borderBottomWidth: small ? 4 : 5,
-        borderColor: on ? BRAND.goldLip : 'rgba(5,52,110,0.26)', transform: [{ scale: pressed ? 0.95 : 1 }],
-      })}>
+        backgroundColor: on ? BRAND.gold : BRAND.white, borderWidth: 3, borderColor: on ? BRAND.goldLip : 'rgba(5,52,110,0.26)' }}>
       {icon && <GameIcon name={icon} size={small ? 18 : 22} />}
       <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: small ? 13 : 15, color: BRAND.navy }}>{label}</Text>
-    </Pressable>
+    </GamePress>
   );
 }
 
@@ -113,23 +113,25 @@ export default function NewsFilterBar({ filter, park, searching, query, onFilter
             accessibilityLabel="Search the news" maxFontSizeMultiplier={1.25}
             style={{ flex: 1, height: 40, fontFamily: 'Knockout', fontSize: 18, color: BRAND.navy }} />
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Done searching" hitSlop={8}
+        <GamePress accessibilityRole="button" accessibilityLabel="Done searching" hitSlop={8}
           onPress={() => { tick(); onSearchClose(); }}
-          style={({ pressed }) => ({ height: 44, paddingHorizontal: 14, borderRadius: RADIUS.pill, justifyContent: 'center', backgroundColor: BRAND.white,
-            borderWidth: 2, borderBottomWidth: 4, borderColor: 'rgba(5,52,110,0.2)', transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+          lip={4}
+        style={{ height: 44, paddingHorizontal: 14, borderRadius: RADIUS.pill, justifyContent: 'center', backgroundColor: BRAND.white,
+            borderWidth: 2, borderColor: 'rgba(5,52,110,0.2)' }}>
           <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>Done</Text>
-        </Pressable>
+        </GamePress>
       </Animated.View>
     );
   }
 
   const search = (
-    <Pressable key="search" accessibilityRole="button" accessibilityLabel="Search the news" hitSlop={4}
+    <GamePress key="search" accessibilityRole="button" accessibilityLabel="Search the news" hitSlop={4}
       onPress={() => { tick(); onSearchOpen(); }}
-      style={({ pressed }) => ({ width: 46, height: 42, borderRadius: RADIUS.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.white,
-        borderWidth: 3, borderBottomWidth: 5, borderColor: 'rgba(5,52,110,0.26)', transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+      lip={5}
+        style={{ width: 46, height: 42, borderRadius: RADIUS.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.white,
+        borderWidth: 3, borderColor: 'rgba(5,52,110,0.26)' }}>
       <GameIcon name="search" size={22} />
-    </Pressable>
+    </GamePress>
   );
 
   return (

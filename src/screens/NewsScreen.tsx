@@ -10,6 +10,7 @@
  * - Tapping a story opens the reader, which swipes through this same list.
  */
 import { useFocusEffect } from '@react-navigation/native';
+import GamePress from './NewsScreen/GamePress';
 import { Image } from 'expo-image';
 import { FlashList, type ListRenderItem } from '@shopify/flash-list';
 import * as Haptics from 'expo-haptics';
@@ -439,12 +440,13 @@ export default function NewsScreen() {
           {showTop && !toast && (
             <Animated.View entering={reduced ? undefined : FadeIn.duration(160)} exiting={reduced ? undefined : FadeOut.duration(120)}
               style={{ position: 'absolute', right: 10, top: 12 }}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Back to the top" hitSlop={8}
+              <GamePress accessibilityRole="button" accessibilityLabel="Back to the top" hitSlop={8}
                 onPress={() => { tap(); listRef.current?.scrollToOffset({ offset: 0, animated: !reduced }); }}
-                style={({ pressed }) => ({ width: 46, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: BRAND.navy, borderWidth: 3, borderBottomWidth: 5, borderColor: BRAND.white, ...SHADOW.card, transform: [{ scale: pressed ? 0.94 : 1 }] })}>
+                lip={5}
+        style={{ width: 46, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: BRAND.navy, borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card }}>
                 <View style={{ transform: [{ rotate: '-90deg' }] }}><GameIcon name="arrow" size={24} /></View>
-              </Pressable>
+              </GamePress>
             </Animated.View>
           )}
           {toast && (

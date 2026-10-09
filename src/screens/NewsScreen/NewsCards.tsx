@@ -8,6 +8,7 @@
  * reader; cards use a fixed 16:9 or 4:3 frame so rows never jump.
  */
 import { Image } from 'expo-image';
+import GamePress from './GamePress';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -256,11 +257,12 @@ export function InfoRow({ label, action, onPress }: { readonly label: string; re
     <View style={{ minHeight: 64, backgroundColor: BRAND.cream, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, gap: 8, paddingVertical: 10 }}>
       <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Knockout', fontSize: 16, color: INK_SOFT, textAlign: 'center' }}>{label}</Text>
       {action && onPress && (
-        <Pressable accessibilityRole="button" onPress={onPress} hitSlop={8}
-          style={({ pressed }) => ({ paddingHorizontal: 16, height: 38, borderRadius: RADIUS.pill, justifyContent: 'center', backgroundColor: BRAND.white,
-            borderWidth: 2, borderBottomWidth: 4, borderColor: RIM, transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+        <GamePress accessibilityRole="button" onPress={onPress} hitSlop={8}
+          lip={4}
+        style={{ paddingHorizontal: 16, height: 38, borderRadius: RADIUS.pill, justifyContent: 'center', backgroundColor: BRAND.white,
+            borderWidth: 2, borderColor: RIM }}>
           <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 15, color: INK }}>{action}</Text>
-        </Pressable>
+        </GamePress>
       )}
     </View>
   );
@@ -271,14 +273,13 @@ export const SITE_WAIT_TIMES = 'https://themeparkshark.com/category/wait-times/'
 
 function SiteTile({ icon, label, onPress }: { readonly icon: 'sparkle' | 'timer' | 'map'; readonly label: string; readonly onPress: () => void }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${label} on themeparkshark.com`} accessibilityHint="Asks a grown-up first" onPress={onPress}
-      style={({ pressed }) => ({ flex: 1, minHeight: 92, borderRadius: RADIUS.md, backgroundColor: BRAND.white, borderWidth: 3, borderBottomWidth: 6,
-        borderColor: BRAND.blueLip, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, paddingVertical: 8, gap: 4,
-        transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+    <GamePress accessibilityRole="button" accessibilityLabel={`${label} on themeparkshark.com`} accessibilityHint="Asks a grown-up first" onPress={onPress}
+      lip={6} grow
+        style={{ minHeight: 92, borderRadius: RADIUS.md, backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.blueLip, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, paddingVertical: 8, gap: 4 }}>
       <GameIcon name={icon} size={32} />
       <Text numberOfLines={2} maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 14, lineHeight: 16, color: BRAND.navy, textAlign: 'center' }}>{label}</Text>
       <View style={{ position: 'absolute', top: 5, right: 5 }}><GameIcon name="lock" size={14} /></View>
-    </Pressable>
+    </GamePress>
   );
 }
 

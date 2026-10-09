@@ -13,10 +13,11 @@
  *   Every way out of the app (website, other sites, share) asks a grown-up.
  */
 import * as Haptics from 'expo-haptics';
+import GamePress from './NewsScreen/GamePress';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, InteractionManager, Modal, Pressable, ScrollView, Text, useWindowDimensions, View, type ViewToken } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -44,13 +45,14 @@ function RoundButton({ label, hint, onPress, disabled = false, children }: {
   readonly label: string; readonly hint?: string; readonly onPress: () => void; readonly disabled?: boolean; readonly children: React.ReactNode;
 }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint} accessibilityState={{ disabled }} disabled={disabled}
+    <GamePress accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint} accessibilityState={{ disabled }} disabled={disabled}
       hitSlop={8} onPress={onPress}
-      style={({ pressed }) => ({ minWidth: 52, height: 50, paddingHorizontal: 12, borderRadius: 25, alignItems: 'center', justifyContent: 'center',
-        flexDirection: 'row', gap: 6, backgroundColor: BRAND.white, borderWidth: 3, borderBottomWidth: 5, borderColor: RIM,
-        opacity: disabled ? 0.35 : 1, transform: [{ scale: pressed ? 0.92 : 1 }] })}>
+      lip={5}
+        style={{ minWidth: 52, height: 50, paddingHorizontal: 12, borderRadius: 25, alignItems: 'center', justifyContent: 'center',
+        flexDirection: 'row', gap: 6, backgroundColor: BRAND.white, borderWidth: 3, borderColor: RIM,
+        opacity: disabled ? 0.35 : 1 }}>
       {children}
-    </Pressable>
+    </GamePress>
   );
 }
 
@@ -74,6 +76,22 @@ export default function ArticleScreen({ route, navigation }: any) {
   const [zoom, setZoom] = useState<{ uri: string; aspect: number } | null>(null);
   const [video, setVideo] = useState<SocialPostType | null>(null);
   const [opening, setOpening] = useState(false);
+  const zoomRef = useRef<ScrollView>(null);
+  const zoomScale = useRef(1);
+  const lastTap = useRef(0);
+  const closeZoom = useCallback(() => { zoomScale.current = 1; setZoom(null); }, []);
+  /** Double tap zooms in 2x on that spot (or back out); a single tap does nothing, so zooming never closes it by accident. */
+  const photoTap = useCallback((x: number, y: number) => {
+    const t = Date.now();
+    if (t - lastTap.current > 300) { lastTap.current = t; return; }
+    lastTap.current = 0;
+    const responder = zoomRef.current as unknown as { scrollResponderZoomTo?: (r: { x: number; y: number; width: number; height: number; animated?: boolean }) => void };
+    const out = zoomScale.current > 1.2;
+    const w = out ? width : width / 2;
+    const h = out ? width * 2 : width;
+    responder.scrollResponderZoomTo?.({ x: out ? 0 : Math.max(0, x - w / 2), y: out ? 0 : Math.max(0, y - h / 2), width: w, height: h, animated: !reduced });
+    zoomScale.current = out ? 1 : 2;
+  }, [width, reduced]);
   const entry = list[index];
   // "More news" per story, worked out the first time a page is drawn and kept.
   const relatedCache = useRef(new Map<number, NewsEntry[]>());
@@ -95,6 +113,8 @@ export default function ArticleScreen({ route, navigation }: any) {
     setLastViewed(entry.id);
   }, [entry]);
 
+  const fade = useSharedValue(1);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
   const indexRef = useRef(index);
   indexRef.current = index;
   /** One rule for every story change: the tap sound for a button, the selection tick when the page lands. */
@@ -102,10 +122,19 @@ export default function ArticleScreen({ route, navigation }: any) {
     if (next < 0 || next >= list.length || next === indexRef.current) return;
     tap();
     const near = Math.abs(next - indexRef.current) <= 1;
-    pager.current?.scrollToIndex({ index: next, animated: near && !reduced });
-    setIndex(next);
     if (!near) void Haptics.selectionAsync().catch(() => undefined);
-  }, [list.length, tap, reduced]);
+    if (near || reduced) {
+      pager.current?.scrollToIndex({ index: next, animated: near && !reduced });
+      setIndex(next);
+      return;
+    }
+    // A far jump (a More news story) dips to the page colour, cuts, and fades back in: it reads as a move, not a glitch.
+    fade.value = withSequence(withTiming(0, { duration: 90 }), withTiming(1, { duration: 160 }));
+    setTimeout(() => {
+      pager.current?.scrollToIndex({ index: next, animated: false });
+      setIndex(next);
+    }, 90);
+  }, [list.length, tap, reduced, fade]);
 
   const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const first = viewableItems.find(v => v.isViewable);
@@ -177,16 +206,17 @@ export default function ArticleScreen({ route, navigation }: any) {
           <TopbarText>{params.fromStory ? 'Story' : 'News'}</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Share this story" accessibilityHint="Asks a grown-up first" hitSlop={8}
+          <GamePress accessibilityRole="button" accessibilityLabel="Share this story" accessibilityHint="Asks a grown-up first" hitSlop={8}
             onPress={() => { void share(); }}
-            style={({ pressed }) => ({ height: 36, paddingHorizontal: 12, borderRadius: 18, justifyContent: 'center', backgroundColor: BRAND.white,
-              borderWidth: 3, borderBottomWidth: 4, borderColor: BRAND.navy, transform: [{ scale: pressed ? 0.92 : 1 }] })}>
+            lip={4}
+        style={{ height: 36, paddingHorizontal: 12, borderRadius: 18, justifyContent: 'center', backgroundColor: BRAND.white,
+              borderWidth: 3, borderColor: BRAND.navy }}>
             <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navy }}>Share</Text>
-          </Pressable>
+          </GamePress>
         </TopbarColumn>
       </Topbar>
 
-      <View style={{ flex: 1, marginTop: -8 }}>
+      <Animated.View style={[{ flex: 1, marginTop: -8 }, fadeStyle]}>
         <FlatList
           ref={pager}
           data={list}
@@ -208,7 +238,7 @@ export default function ArticleScreen({ route, navigation }: any) {
         />
         {/* The left edge belongs to the iOS back swipe, never to the pager. */}
         <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 18 }} />
-      </View>
+      </Animated.View>
 
       {/* Bottom bar: round Previous, and a Next card with the next story's photo and headline. */}
       <View style={{ minHeight: BOTTOM_BAR + insets.bottom, paddingBottom: Math.max(insets.bottom, 8), paddingTop: 8, backgroundColor: BRAND.cream,
@@ -220,9 +250,10 @@ export default function ArticleScreen({ route, navigation }: any) {
           </RoundButton>
         )}
         {next ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Next story. ${plainText(next.title)}`} hitSlop={6} onPress={() => goTo(index + 1)}
-            style={({ pressed }) => ({ flex: 1, height: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 5, paddingRight: 8,
-              backgroundColor: BRAND.white, borderWidth: 3, borderBottomWidth: 5, borderColor: BRAND.gold, transform: [{ scale: pressed ? 0.96 : 1 }] })}>
+          <GamePress accessibilityRole="button" accessibilityLabel={`Next story. ${plainText(next.title)}`} hitSlop={6} onPress={() => goTo(index + 1)}
+            lip={5} grow
+        style={{ height: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 5, paddingRight: 8,
+              backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold }}>
             <Image source={next.featured_image_small || next.featured_image ? { uri: (next.featured_image_small || next.featured_image) as string } : undefined} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.sky }}
               contentFit="cover" transition={120} />
             <View style={{ flex: 1 }}>
@@ -230,13 +261,14 @@ export default function ArticleScreen({ route, navigation }: any) {
               <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy }}>{plainText(next.title)}</Text>
             </View>
             <GameIcon name="arrow" size={26} />
-          </Pressable>
+          </GamePress>
         ) : (
-          <Pressable accessibilityRole="button" accessibilityLabel="Back to News" hitSlop={6} onPress={() => { tap(); navigation.goBack(); }}
-            style={({ pressed }) => ({ flex: 1, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.gold,
-              borderWidth: 3, borderBottomWidth: 5, borderColor: BRAND.goldLip, transform: [{ scale: pressed ? 0.96 : 1 }] })}>
+          <GamePress accessibilityRole="button" accessibilityLabel="Back to News" hitSlop={6} onPress={() => { tap(); navigation.goBack(); }}
+            lip={5} grow
+        style={{ height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.gold,
+              borderWidth: 3, borderColor: BRAND.goldLip }}>
             <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.navy }}>All caught up! Back to News</Text>
-          </Pressable>
+          </GamePress>
         )}
       </View>
 
@@ -249,17 +281,20 @@ export default function ArticleScreen({ route, navigation }: any) {
       )}
 
       {/* Tap a photo to look closer: pinch to zoom, X to close. */}
-      <Modal visible={zoom !== null} transparent animationType={reduced ? 'none' : 'fade'} onRequestClose={() => setZoom(null)} statusBarTranslucent>
+      <Modal visible={zoom !== null} transparent animationType={reduced ? 'none' : 'fade'} onRequestClose={closeZoom} statusBarTranslucent>
         <View style={{ flex: 1, backgroundColor: 'rgba(5,30,70,0.96)' }}>
           {zoom && (
-            <ScrollView maximumZoomScale={4} minimumZoomScale={1} centerContent bouncesZoom showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-              <Pressable accessibilityLabel="Close photo" onPress={() => setZoom(null)}>
+            <ScrollView ref={zoomRef} maximumZoomScale={4} minimumZoomScale={1} centerContent bouncesZoom showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+              onScroll={e => { zoomScale.current = e.nativeEvent.zoomScale ?? 1; }} scrollEventThrottle={64}
+              // Pull the photo down (not zoomed) to put it away, like Photos.
+              onScrollEndDrag={e => { if ((e.nativeEvent.zoomScale ?? 1) <= 1.01 && e.nativeEvent.contentOffset.y < -70) closeZoom(); }}>
+              <Pressable accessibilityLabel="Photo. Double tap to zoom, pull down to close" onPress={e => photoTap(e.nativeEvent.locationX, e.nativeEvent.locationY)}>
                 <Image source={{ uri: zoom.uri }} style={{ width, aspectRatio: zoom.aspect }} contentFit="contain" />
               </Pressable>
             </ScrollView>
           )}
-          <Pressable accessibilityRole="button" accessibilityLabel="Close photo" hitSlop={12} onPress={() => { tap(); setZoom(null); }}
+          <Pressable accessibilityRole="button" accessibilityLabel="Close photo" hitSlop={12} onPress={() => { tap(); closeZoom(); }}
             style={{ position: 'absolute', top: insets.top + 8, right: 16 }}>
             <GameIcon name="close" size={44} />
           </Pressable>
