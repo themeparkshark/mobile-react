@@ -193,6 +193,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const ring = useSharedValue(0);
   const dim = useSharedValue(0);
   const punch = useSharedValue(1);
+  const lift = useSharedValue(0);
   const rise = useSharedValue(0);
   const flip = useSharedValue(0);
   const settle = useSharedValue(0);
@@ -201,6 +202,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const hint = useSharedValue(0);
   const seal = useSharedValue(0);
   const stamp = useSharedValue(0);
+  const plusOne = useSharedValue(0);
   const popped = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = (ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); };
@@ -216,7 +218,18 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (!still) {
       shine.value = 0;
       shine.value = withDelay(450, withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }));
-      if (p?.is_chaser || isCatch) stamp.value = withDelay(250, withSpring(1, { damping: 9, stiffness: 220 }));
+      if (p?.is_chaser || isCatch) {
+        stamp.value = withDelay(250, withSpring(1, { damping: 9, stiffness: 220 }));
+        // The stamp lands with a thud you feel: the number is the flex.
+        later(330, () => { play('fx.hit', { pitch: 0.8 }); queueHaptic('hitMedium', 2); });
+        punch.value = withDelay(330, withSequence(withTiming(1.025, { duration: 50 }), withSpring(1, { damping: 10 })));
+      }
+      // An extra: a "+1" token rises toward the traders count.
+      if (p?.duplicate && !isCatch) {
+        plusOne.value = 0;
+        plusOne.value = withDelay(500, withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) }));
+        later(520, () => play('fx.coinTick', { pitch: 1.3 }));
+      }
     } else {
       stamp.value = 1;
     }
@@ -234,6 +247,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     const p = pulls[index];
     const isGold = !!p?.is_chaser || !!p?.rare;
     cancelAnimation(shake); shake.value = 0;
+    lift.value = withTiming(0, { duration: 160 });
     dim.value = withTiming(0, { duration: 200 });
     flash.value = withSequence(withTiming(1, { duration: 60 }), withTiming(0, { duration: 260 }));
     ring.value = 0; ring.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
@@ -268,6 +282,9 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (popped.current) return;
     setPhase('hold');
     dim.value = withTiming(1, { duration: 180 });
+    glow.value = withTiming(1, { duration: 300 });
+    lift.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.quad) });
+    shake.value = withRepeat(withSequence(withTiming(-2.5, { duration: 45 }), withTiming(2.5, { duration: 45 })), -1, true);
     play('fx.hit', { pitch: 0.55, volume: 1 }); queueHaptic('hitMedium', 2);
     later(230, () => { play('fx.hit', { pitch: 0.5, volume: 1 }); queueHaptic('comboHeavy', 2); });
     later(470, pop);
@@ -306,7 +323,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (!pull) return;
     clearTimers();
     popped.current = false;
-    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp].forEach(v => { cancelAnimation(v); v.value = 0; });
+    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, lift, plusOne].forEach(v => { cancelAnimation(v); v.value = 0; });
     punch.value = 1;
     setPhase('drop');
     if (noBox) {
@@ -342,7 +359,12 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const next = useCallback(() => {
     play('ui.tap');
     if (index < pulls.length - 1) { setIndex(i => i + 1); return; }
-    if (pulls.length > 1 && phase !== 'summary') { setPhase('summary'); play('ui.complete', { volume: 0.7 }); return; }
+    if (pulls.length > 1 && phase !== 'summary') {
+      setPhase('summary'); play('ui.complete', { volume: 0.7 });
+      // A tick per pin as it lands on the board, pitch rising.
+      if (!still) pulls.forEach((_, i) => later(120 + i * 110, () => play('fx.coinTick', { pitch: 1 + i * 0.1, volume: 0.7 })));
+      return;
+    }
     onDone(pulls);
   }, [index, pulls, phase, onDone]);
 
@@ -357,7 +379,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const stageStyle = useAnimatedStyle(() => ({ transform: [{ scale: punch.value }] }));
   const boxStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateY: interpolate(drop.value, [0, 1], [-height * 0.6, 0]) + settle.value * 70 },
+      { translateY: interpolate(drop.value, [0, 1], [-height * 0.6, 0]) + settle.value * 70 - lift.value * 14 },
       { rotate: `${shake.value}deg` },
       { scale: 1 + Math.abs(shake.value) * 0.004 + interpolate(settle.value, [0, 1], [0, -0.18]) },
     ],
@@ -384,6 +406,15 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   }));
   const stampStyle = useAnimatedStyle(() => ({ opacity: stamp.value > 0 ? 1 : 0, transform: [{ scale: interpolate(stamp.value, [0, 1], [2.4, 1]) }, { rotate: '-8deg' }] }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+  // rotateY = (1 - flip) * 540: the front faces you when cos(angle) > 0.
+  const frontStyle = useAnimatedStyle(() => ({ opacity: Math.cos(((1 - flip.value) * 540 * Math.PI) / 180) >= 0 ? 1 : 0 }));
+  const backStyle = useAnimatedStyle(() => ({ opacity: Math.cos(((1 - flip.value) * 540 * Math.PI) / 180) < 0 ? 1 : 0 }));
+  const ghostStyle = useAnimatedStyle(() => ({ opacity: 1 - rise.value, transform: [{ rotate: `${shake.value}deg` }, { scale: 0.85 + glow.value * 0.1 }] }));
+  const ghostFillStyle = useAnimatedStyle(() => ({ opacity: glow.value * 0.9 }));
+  const plusStyle = useAnimatedStyle(() => ({
+    opacity: plusOne.value <= 0 || plusOne.value >= 1 ? 0 : 1 - plusOne.value * plusOne.value,
+    transform: [{ translateY: -plusOne.value * 120 }, { scale: 0.8 + plusOne.value * 0.4 }],
+  }));
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value * 0.55 }));
   const infoStyle = useAnimatedStyle(() => ({ opacity: settle.value, transform: [{ translateY: (1 - settle.value) * 16 }] }));
   const hintStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -hint.value * 8 }, { scale: 1 + hint.value * 0.05 }] }));
@@ -416,6 +447,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
           </Svg>
         </Animated.View>
 
+        {/* The held breath dims everything except the box. */}
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
         <Animated.View pointerEvents="none" style={[styles.stage, { top: centerY - boxSize / 2, width, height: boxSize }, stageStyle]}>
           <Glow size={boxSize * 2.3} color={glowColor} amount={glow} id={gold ? 'glowGold' : 'glowSky'} />
           {gold && !still && <Rays size={boxSize * 2.6} spin={raySpin} on={rays} />}
@@ -433,6 +466,15 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               </Animated.View>
             </Animated.View>
           )}
+          {variant === 'pick' && pull.icon_url && (
+            // Pick / Completer: the pin's own shape trembles and fills with colour before it pops.
+            <Animated.View style={[{ position: 'absolute', width: pinSize, height: pinSize }, ghostStyle]}>
+              <Image source={pull.icon_url} style={StyleSheet.absoluteFill} contentFit="contain" tintColor="#7cc6f5" transition={0} />
+              <Animated.View style={[StyleSheet.absoluteFill, ghostFillStyle]}>
+                <Image source={pull.icon_url} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+              </Animated.View>
+            </Animated.View>
+          )}
           {isCatch && (
             <Animated.View style={[{ position: 'absolute', width: boxSize * 0.8, height: boxSize * 0.8 }, sealStyle]}>
               <Image source={PIN_ART.seal} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
@@ -440,7 +482,13 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
           )}
           {/* The pin is mounted (and its art decoding) from the start, hidden until it rises. */}
           <Animated.View style={[styles.pin, { width: pinSize, height: pinSize, top: (boxSize - pinSize) / 2 }, pinStyle]}>
-            {pull.icon_url && <EnamelPin uri={pull.icon_url} size={pinSize} shine={still ? undefined : shine} lag={0} lagSpan={0} surface="panel" />}
+            <Animated.View style={[StyleSheet.absoluteFill, frontStyle]}>
+              {pull.icon_url && <EnamelPin uri={pull.icon_url} size={pinSize} shine={still ? undefined : shine} lag={0} lagSpan={0} surface="panel" />}
+            </Animated.View>
+            {/* The back of the pin (a silver back stamp) shows while it turns, never a mirrored front. */}
+            <Animated.View style={[styles.pinBack, { width: pinSize * 0.7, height: pinSize * 0.7, borderRadius: pinSize * 0.35, left: pinSize * 0.15, top: pinSize * 0.15 }, backStyle]}>
+              <View style={[styles.pinBackPost, { width: pinSize * 0.16, height: pinSize * 0.16, borderRadius: pinSize * 0.08 }]} />
+            </Animated.View>
             {(pull.is_chaser || isCatch) && (
               <Animated.View style={[styles.stamp, stampStyle]}>
                 {pull.is_chaser
@@ -453,8 +501,6 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             {!still && phase !== 'summary' && confetti.map((p, i) => <ConfettiPiece key={i} p={p} burst={burst} />)}
           </View>
         </Animated.View>
-
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
 
         {phase === 'ready' && (
           <Animated.View pointerEvents="none" style={[styles.tapHint, { top: centerY + boxSize / 2 + 18 }, hintStyle]}>
@@ -473,6 +519,12 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             {pull.is_chaser && pull.by_pity && <Text maxFontSizeMultiplier={1.1} style={styles.guaranteed}>Guaranteed!</Text>}
             <Text maxFontSizeMultiplier={1.2} style={styles.name} numberOfLines={2}>{pull.name}</Text>
             {subtitle && <Text maxFontSizeMultiplier={1.2} style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>}
+            {pull.duplicate && !isCatch && (
+              <Animated.View pointerEvents="none" style={[styles.plusOne, plusStyle]}>
+                <Image source={PIN_ART.trade} style={{ width: 26, height: 26 }} contentFit="contain" />
+                <Text maxFontSizeMultiplier={1} style={styles.plusText}>+1</Text>
+              </Animated.View>
+            )}
             <View style={[styles.tag, tag.tone === 'trader' ? styles.tagTrader : tag.tone === 'gold' ? styles.tagGold : styles.tagNew]}>
               {tag.tone === 'trader' && <Image source={PIN_ART.trade} style={{ width: 22, height: 22 }} contentFit="contain" />}
               {isCatch && <Image source={PIN_ART.seal} style={{ width: 24, height: 24 }} contentFit="contain" />}
@@ -483,7 +535,9 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
         {phase === 'summary' && (
           <View style={[styles.summary, { top: height * 0.16 }]}>
-            <Text maxFontSizeMultiplier={1.2} style={styles.summaryTitle}>You got</Text>
+            <Text maxFontSizeMultiplier={1.2} style={styles.summaryTitle}>
+              {(() => { const n = pulls.filter(p => !p.duplicate).length; return n > 0 ? `${n} new!` : 'You got'; })()}
+            </Text>
             <ImageBackground source={CORK} resizeMode="cover" style={styles.summaryBoard} imageStyle={{ borderRadius: 14 }}>
               {pulls.map((p, i) => (
                 <Animated.View key={p.id} entering={still ? undefined : ZoomIn.springify().damping(10).delay(i * 110)} style={styles.summaryItem}>
@@ -495,6 +549,15 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                 </Animated.View>
               ))}
             </ImageBackground>
+            {(() => {
+              const extras = pulls.filter(p => p.duplicate).length;
+              return extras > 0 ? (
+                <View style={styles.extrasRow}>
+                  <Image source={PIN_ART.trade} style={{ width: 26, height: 26 }} contentFit="contain" />
+                  <Text maxFontSizeMultiplier={1.15} style={styles.extrasText}>+{extras} toward a Pick</Text>
+                </View>
+              ) : null;
+            })()}
           </View>
         )}
 
@@ -529,6 +592,8 @@ const styles = StyleSheet.create({
   stage: { position: 'absolute', left: 0, alignItems: 'center', justifyContent: 'center' },
   pin: { position: 'absolute', alignSelf: 'center' },
   stamp: { position: 'absolute', right: -6, bottom: 4 },
+  pinBack: { position: 'absolute', backgroundColor: '#c9d3df', borderWidth: 5, borderColor: '#8b98a8', alignItems: 'center', justifyContent: 'center' },
+  pinBackPost: { backgroundColor: '#e8edf3', borderWidth: 3, borderColor: '#8b98a8' },
   serialStamp: { backgroundColor: '#3b2a05', borderColor: BRAND.gold, borderWidth: 3, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2 },
   serialStampText: { fontFamily: FONT.display, fontSize: 26, color: BRAND.gold, paddingTop: 3 },
   confettiOrigin: { position: 'absolute', alignSelf: 'center', width: 1, height: 1 },
@@ -554,6 +619,8 @@ const styles = StyleSheet.create({
   summaryTitle: { fontFamily: FONT.display, fontSize: 34, color: BRAND.white, marginBottom: 14, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   summaryBoard: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 14, padding: 16, borderRadius: 16, borderWidth: 4, borderColor: '#8a5a2b', overflow: 'hidden' },
   summaryItem: { alignItems: 'center' },
+  extrasRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14, backgroundColor: BRAND.blueBright, borderRadius: 999, borderWidth: 3, borderColor: BRAND.white, paddingHorizontal: 14, paddingVertical: 4 },
+  extrasText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.white, paddingTop: 3 },
   summaryStar: { position: 'absolute', left: -8, top: -8, width: 30, height: 30 },
   miniTag: { marginTop: 6, borderRadius: 999, borderWidth: 2, paddingHorizontal: 9, paddingVertical: 1 },
   miniTagText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, paddingTop: 2 },
@@ -562,6 +629,8 @@ const styles = StyleSheet.create({
   pip: { width: 12, height: 12, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.25)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
   pipOn: { backgroundColor: BRAND.white },
   pipGold: { backgroundColor: BRAND.gold, borderColor: BRAND.white },
+  plusOne: { position: 'absolute', top: -10, right: 40, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  plusText: { fontFamily: FONT.display, fontSize: 24, color: BRAND.goldLight, paddingTop: 3, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   wear: { minHeight: 44, paddingHorizontal: 22, borderRadius: 999, borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.blueBright, alignItems: 'center', justifyContent: 'center' },
   wearText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.white, paddingTop: 3 },
   wornText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.goldLight, paddingTop: 2 },
