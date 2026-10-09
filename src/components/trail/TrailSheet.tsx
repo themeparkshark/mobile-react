@@ -18,7 +18,7 @@ import TrailPath from './TrailPath';
 const KIND_ICON: Record<string, GameIconName> = { coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star' };
 const RANK: Record<TrailTier, number> = { blue: 0, red: 1, gold: 2 };
 /** The park plaza landmark from the map: a picture for "only steps in the park count". */
-const PARK_ART = require('../../../assets/images/map/landmarks/plaza@3x.png');
+const PARK_ART = require('../../../assets/images/map/landmarks/plaza.png');
 const LOCALE = (() => { try { return Intl.DateTimeFormat().resolvedOptions().locale; } catch { return 'en-US'; } })();
 
 
