@@ -146,7 +146,7 @@ export function slotLine(itemTypeId: number | null | undefined): string | null {
 
 const SLOT_WORDS: Record<number, [string, string]> = {
   1: ['Hat', 'Hats'], 2: ['Face', 'Faces'], 3: ['Back', 'Back'], 4: ['Outfit', 'Outfits'],
-  5: ['Held', 'Held'], 6: ['Backdrop', 'Backdrops'], 7: ['Skin', 'Skins'], 8: ['Pin', 'Pins'],
+  5: ['In fin', 'In fin'], 6: ['Backdrop', 'Backdrops'], 7: ['Skin', 'Skins'], 8: ['Pin', 'Pins'],
 };
 
 /** One word for a piece's slot ("Hat", "Skin"), for the tile and the filter chips. */

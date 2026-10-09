@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addToWishlist, getWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
-import { formatCoins, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
+import { formatCoins, slotWord, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
 import { useAnyModalLayer } from '../../ui/modalLayers';
 import Playercard from '../../components/Playercard';
 import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
@@ -43,7 +43,7 @@ const GRID_PAD = 8;
 // Same tile as the v2 shelves: panel 10 pt margin + 3 pt border each side, 8 pt grid padding.
 const TILE_W = Math.floor((SCREEN_W - 2 * (10 + 3 + GRID_PAD) - GAP * 2) / 3);
 /** The shopkeeper stage (was 180 under a 90 pt countdown and a balance row: the shelf sat at 63% of the screen). */
-export const GEAR_STAGE_H = 128;
+export const GEAR_STAGE_H = 116;
 /** The shelf panel rises over the stage's floor: the shopkeeper stands behind the counter. */
 export const COUNTER_TUCK = 32;
 
@@ -133,8 +133,11 @@ const StarTile = memo(function StarTile({ item, balance, still, onOpen, onWish }
       <View style={styles.starText} pointerEvents="box-none">
         <View style={styles.starKicker}><Text maxFontSizeMultiplier={1.1} style={styles.starKickerText}>SHOP PICK</Text></View>
         <Text maxFontSizeMultiplier={1.15} numberOfLines={2} style={styles.starName}>{name}</Text>
-        {badge.label ? <View style={[styles.starRarity, { backgroundColor: badge.labelColor }]}>
-          <Text maxFontSizeMultiplier={1.1} style={styles.starRarityText}>{badge.label}</Text></View> : null}
+        <View style={styles.starChips}>
+          {badge.label ? <View style={[styles.starRarity, { backgroundColor: badge.labelColor }]}>
+            <Text maxFontSizeMultiplier={1.1} style={styles.starRarityText}>{badge.label}</Text></View> : null}
+          {slotWord(item.item_type?.id) && <View style={styles.starSlotChip}><Text maxFontSizeMultiplier={1.1} style={styles.starSlotChipText}>{slotWord(item.item_type?.id)}</Text></View>}
+        </View>
         {slotLine(item.item_type?.id) && <Text maxFontSizeMultiplier={1.1} numberOfLines={2} style={styles.starSlot}>{slotLine(item.item_type?.id)}</Text>}
         <View style={{ flex: 1 }} />
         {owned ? (
@@ -204,6 +207,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
 
   // Bought this visit: stays where the kid saw it until the next open.
   const shelf = useMemo(() => shelfOrder(items, bought), [items, bought]);
+  const ownedCount = items.filter(i => i.has_purchased).length;
   // Filter chips: All, each slot on the shelf, Can buy (shop critic round 2: "hats I can afford" in two taps).
   const filters = useMemo(() => shelfFilters(items, balance), [items, balance]);
   const [filter, setFilter] = useState('all');
@@ -278,7 +282,12 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
           {BUBBLES.map((b, i) => <Bubble key={i} {...b} still={stageStill} />)}
           <Shopkeeper imageUrl={promoUrl} still={stageStill} />
           {/* The restock day rides on the stage's corner: small, calm, out of the shelf's way. */}
-          <View style={styles.restock}><RestockChip nextAt={nextRotationAt} offset={offset} onElapsed={onRestockElapsed} /></View>
+          <View style={styles.restock}>
+            <RestockChip nextAt={nextRotationAt} offset={offset} onElapsed={onRestockElapsed} />
+            {/* Collection progress, quietly (monetization r7): a reason to come back that never pressures. */}
+            {ownedCount > 0 && <View style={styles.yoursChip} accessible accessibilityLabel={`${ownedCount} of ${items.length} on the shelf are yours`}>
+              <GameIcon name="check" size={14} /><Text maxFontSizeMultiplier={1.2} style={styles.yoursChipText}>{`${ownedCount} of ${items.length} yours`}</Text></View>}
+          </View>
         </View>
         <Animated.View entering={still ? undefined : FadeInUp.duration(260)} style={styles.panel}>
           {filters.length === 0 && (
@@ -336,8 +345,10 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
 const styles = StyleSheet.create({
   scroll: {},
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 34 },
-  filters: { gap: 8, paddingHorizontal: 12, paddingTop: 12 },
-  restock: { position: 'absolute', top: 8, left: 10 },
+  filters: { gap: 8, paddingHorizontal: 12, paddingTop: 9 },
+  restock: { position: 'absolute', top: 8, left: 10, gap: 6, alignItems: 'flex-start' },
+  yoursChip: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 9, borderRadius: 13, backgroundColor: 'rgba(5,52,110,0.84)' },
+  yoursChipText: { fontFamily: FONT.display, fontSize: 13, color: '#ffffff' },
   chipFade: { position: 'absolute', right: 0, top: 10, width: 28, height: 40, borderTopRightRadius: 19 },
   filter: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, paddingHorizontal: 13, borderRadius: 17,
     backgroundColor: 'rgba(5,52,110,0.65)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
@@ -352,6 +363,9 @@ const styles = StyleSheet.create({
   starKicker: { alignSelf: 'flex-start', backgroundColor: '#0a2350', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
   starKickerText: { fontFamily: FONT.display, fontSize: 12, color: '#ffe07a', letterSpacing: 0.8 },
   starName: { fontFamily: FONT.display, fontSize: 18, lineHeight: 21, color: '#0a2350' },
+  starChips: { flexDirection: 'row', gap: 4, flexWrap: 'wrap' },
+  starSlotChip: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1, backgroundColor: 'rgba(10,35,80,0.1)' },
+  starSlotChipText: { fontFamily: FONT.display, fontSize: 12, color: '#34506f', letterSpacing: 0.4 },
   starRarity: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   starRarityText: { fontFamily: FONT.display, fontSize: 12, color: '#ffffff', letterSpacing: 0.4 },
   starSlot: { fontFamily: FONT.body, fontSize: 14, lineHeight: 17, color: '#34506f' },

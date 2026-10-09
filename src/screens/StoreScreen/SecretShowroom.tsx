@@ -57,9 +57,10 @@ const INNER_W = PANEL_W - 6;
 const TILE = 108;
 const RAIL_PAD = 18;
 const KIND: Record<ShowroomKind, { icon: GameIconName; name: (s: ShopSection) => string }> = {
-  vault: { icon: 'crown', name: () => 'The Vault' },
+  // One place name (the Secret Shop) and a plain time word per shelf (kids UX r7: "The Vault" read as another room).
+  vault: { icon: 'crown', name: () => 'This week' },
   season: { icon: 'sparkle', name: s => s.title || 'Season drop' },
-  tonight: { icon: 'star', name: () => "Tonight's Pick" },
+  tonight: { icon: 'star', name: () => 'Today' },
 };
 
 /** A season drop's drawn art (Alex-style pipeline art, wave 2), shown in its shelf chip and tile badge. */
@@ -135,6 +136,8 @@ const RailTile = memo(function RailTile({ entry, selected, owned, member, still,
   const style = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.03 * lift.value }] }));
   const { item } = entry;
   const name = itemDisplayName(item);
+  // A saved piece shows its heart here too: wishing pays off in the room (monetization r7).
+  const wished = useWished(item.id);
   return (
     <Pressable onPress={() => onPick(item.id)} hitSlop={4} accessibilityRole="button" accessibilityState={{ selected }}
       accessibilityLabel={`${name}, ${KIND[entry.kind].name(entry.section)}, ${owned ? 'yours' : `${formatCoins(item.cost)} coins${member ? '' : ', VIP members can buy'}`}. Tap to put it on your shark.`}>
@@ -148,6 +151,7 @@ const RailTile = memo(function RailTile({ entry, selected, owned, member, still,
           <LinearGradient colors={[V.tilePlate[1], 'rgba(11,34,85,0)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.featherLeft} />
           <LinearGradient colors={['rgba(11,34,85,0)', V.tilePlate[1]]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.featherRight} />
         </View>
+        {wished && <View style={styles.tileSaved} pointerEvents="none"><WishHeart on size={14} /></View>}
         <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.tileName}>{name}</Text>
         <View style={[styles.tilePrice, owned && styles.tileOwned]} pointerEvents="none">
           {owned ? <GameIcon name="check" size={13} /> : <GameIcon name="coins" size={13} />}
@@ -191,6 +195,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
     paper_url: item.paper_url, no_eye_url: item.no_eye_url, item_type: item.item_type, fx_key: item.fx_key ?? null }], 'base') : null),
   [player?.inventory, item?.id]);
   const rail = useRef<ScrollView>(null);
+  const [railFirst, setRailFirst] = useState(0);
 
   // The stage answers each pick: a quick squash-and-settle, a gold flare on the rim.
   const bump = useSharedValue(0);
@@ -262,9 +267,11 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
         <View style={styles.badge} accessible accessibilityLabel={member ? 'You are a VIP member' : 'The VIP room. You can try everything on.'}>
           <GameIcon name={member ? 'member' : 'lock'} size={20} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.badgeText}>{member ? 'VIP ROOM' : 'VIP ONLY'}</Text>
+          {/* Guests: the invite rides in this row, so their stage starts where a member's does (art director r7). */}
+          {!member && <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} style={styles.guestInline}>{SECRET_PREVIEW_COPY.title}</Text>}
         </View>
         <View style={{ flex: 1 }} />
-        <Pressable onPress={onFavorites} hitSlop={6} accessibilityRole="button"
+        <Pressable onPress={onFavorites} hitSlop={10} accessibilityRole="button"
           accessibilityLabel={`Favorites, ${wishes} ${wishes === 1 ? 'item' : 'items'}`} style={styles.favs}>
           <WishHeart on={wishes > 0} size={18} />
           {/* A labeled list, not a second heart button next to the stage's (shop critic r5). */}
@@ -276,13 +283,6 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
         </View>
       </Animated.View>
 
-      {!member && (
-        <Animated.View entering={still ? undefined : FadeInDown.delay(60).duration(240)} style={styles.guest}
-          accessible accessibilityLabel={`${SECRET_PREVIEW_COPY.title} ${SECRET_PREVIEW_COPY.body}`}>
-          {/* One line, so a guest's stage keeps the member's size (the price says "for VIP", the button "See VIP"). */}
-          <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} style={[styles.guestText, styles.guestStrong]}>{SECRET_PREVIEW_COPY.title}</Text>
-        </Animated.View>
-      )}
 
       <Animated.View entering={still ? undefined : FadeInDown.duration(280)}>
         <VaultPanel padded={false} style={styles.panelWrap}>
@@ -308,7 +308,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
             <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flare, flareStyle]} />
             <View style={styles.stageTop} pointerEvents="box-none">
               <ShelfChip entry={entry} offset={offset} />
-              <StageHeart item={item} onWish={onWish} />
+              <View style={styles.heartLow}><StageHeart item={item} onWish={onWish} /></View>
             </View>
           </Animated.View>
 
@@ -331,7 +331,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
                 <View style={styles.leaving} accessible accessibilityLabel={leavingSay(leaving)}>
                   <GameIcon name={leavingIcon(leaving)} size={13} />
                   {/* Always with its day, never a bare LEAVING (monetization round 2). */}
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leavingText}>{`${leaving.forever ? 'LAST DAY' : 'LEAVES'} ${(shortDate(leaving.on) ?? '').toUpperCase()}`.trim()}</Text>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leavingText}>{`${leaving.forever ? 'Last day' : 'Leaves'} ${shortDate(leaving.on) ?? ''}`.trim()}</Text>
                 </View>
               )}
               <View style={{ flex: 1 }} />
@@ -347,11 +347,17 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
       <Animated.View entering={still ? undefined : FadeInUp.delay(120).duration(260)}>
         <View style={styles.railHead}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.railTitle}>IN THE ROOM TODAY</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.railHint}>{ownedCount > 0 ? `${ownedCount} of ${entries.length} are yours` : 'Tap one to put it on'}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.railHint}>{ownedCount > 0 ? `${ownedCount} of ${entries.length} yours · tap to try` : 'Tap one to put it on'}</Text>
         </View>
-        <ScrollView ref={rail} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
-          {entries.map(e => (
-            <RailTile key={e.item.id} entry={e} selected={e.item.id === item.id} member={member} still={resting}
+        <ScrollView ref={rail} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}
+          scrollEventThrottle={100} onScroll={ev => {
+            // Tiles scrolled out of the rail rest (performance / shop critic r7); only crossings re-render.
+            const first = Math.max(0, Math.floor((ev.nativeEvent.contentOffset.x - RAIL_PAD) / (TILE + 12)));
+            if (first !== railFirst) setRailFirst(first);
+          }}>
+          {entries.map((e, i) => (
+            <RailTile key={e.item.id} entry={e} selected={e.item.id === item.id} member={member}
+              still={resting || i < railFirst || i > railFirst + Math.ceil(SCREEN_W / (TILE + 12))}
               owned={!!(e.item.shop?.is_owned ?? e.item.has_purchased) || bought.includes(e.item.id)} onPick={pick} />
           ))}
         </ScrollView>
@@ -364,22 +370,23 @@ const styles = StyleSheet.create({
   scroll: { paddingTop: 8, gap: 10 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, minHeight: 40 },
   // A plain label, not a second chip next to the shelf chip (art director round 2).
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 2, paddingRight: 6, height: 36 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 2, paddingRight: 6, height: 36, flexShrink: 1 },
   badgeText: { fontFamily: FONT.display, fontSize: 14, color: V.inkGold, letterSpacing: 0.8 },
   favs: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 36, paddingHorizontal: 10, borderRadius: 18,
-    backgroundColor: '#fff0f5', borderWidth: 2, borderColor: '#ff4f8b' },
-  favsText: { fontFamily: FONT.display, fontSize: 14, color: '#c2185b' },
+    backgroundColor: 'transparent', borderWidth: 2, borderColor: 'rgba(255,159,191,0.85)' },
+  favsText: { fontFamily: FONT.display, fontSize: 14, color: '#ffd1e0' },
   coins: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 36, paddingHorizontal: 11, borderRadius: 18,
     backgroundColor: V.card, borderWidth: 2, borderColor: '#ffffff' },
   coinsText: { fontFamily: FONT.display, fontSize: 16, color: '#ffffff' },
   // A plain caption, not a pill that looks tappable (art director r6).
-  guest: { marginHorizontal: 14, paddingVertical: 2 },
+  guestInline: { marginLeft: 6, fontFamily: FONT.display, fontSize: 14, color: V.ink, flexShrink: 1 },
   guestText: { fontFamily: FONT.body, fontSize: 15, lineHeight: 19, color: V.inkSoft, textAlign: 'center' },
   guestStrong: { fontFamily: FONT.display, color: V.ink },
   panelWrap: { marginBottom: 0 },
   flat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   flare: { borderTopLeftRadius: 21, borderTopRightRadius: 21, borderWidth: 5, borderColor: V.gold, borderBottomWidth: 0 },
   stageTop: { position: 'absolute', top: 10, left: 10, right: 10, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
+  heartLow: { marginTop: 6 },
   shelfChip: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, height: 32, paddingLeft: 8, paddingRight: 12, borderRadius: 16,
     backgroundColor: 'rgba(5,12,34,0.72)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.45)' },
   shelfName: { fontFamily: FONT.display, fontSize: 13, color: V.inkGold, letterSpacing: 0.8, flexShrink: 1 },
@@ -400,9 +407,10 @@ const styles = StyleSheet.create({
   yours: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 8, paddingRight: 14, height: 40, borderRadius: 20,
     backgroundColor: '#1f9d55', borderWidth: 2, borderColor: '#ffffff' },
   yoursText: { fontFamily: FONT.display, fontSize: 16, color: '#ffffff' },
-  leaving: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: V.well, borderRadius: 8, borderWidth: 1.5, borderColor: V.gold,
+  leaving: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: V.well, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
     paddingHorizontal: 6, paddingVertical: 2 },
-  leavingText: { fontFamily: FONT.display, fontSize: 12, color: V.inkGold, letterSpacing: 0.6 },
+  // Calm: the date in soft ink, never an urgent gold shout (monetization r7).
+  leavingText: { fontFamily: FONT.display, fontSize: 13, color: V.inkSoft },
   railHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, marginTop: 4 },
   railTitle: { fontFamily: FONT.display, fontSize: 16, color: V.inkGold, letterSpacing: 1 },
   railHint: { fontFamily: FONT.body, fontSize: 15, color: V.inkSoft },
@@ -416,6 +424,7 @@ const styles = StyleSheet.create({
   tileArt: { position: 'absolute', left: 0, right: 0, top: 0, height: TILE - 8, alignItems: 'center', justifyContent: 'center' },
   tileKind: { position: 'absolute', top: 5, left: 5, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(5,12,34,0.8)' },
+  tileSaved: { position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 11, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
   featherBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 52 },
   featherLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 12 },
   featherRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 12 },

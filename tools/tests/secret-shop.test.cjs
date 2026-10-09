@@ -408,7 +408,7 @@ test('non-members window-shop: the Profile tile opens the Secret Shop when the f
   const shelves = src('src/screens/StoreScreen/ShopShelves.tsx');
   // Non-members get one calm note and the grown-up door in the showroom (Oct 8), never a buy button.
   const showroom = src('src/screens/StoreScreen/SecretShowroom.tsx');
-  assert.match(showroom, /\{!member && \(/);
+  assert.match(showroom, /\{!member && <Text maxFontSizeMultiplier=\{MAX_FONT\} numberOfLines=\{1\} style=\{styles\.guestInline\}>\{SECRET_PREVIEW_COPY\.title\}<\/Text>\}/);
   assert.match(showroom, /<VaultSecondaryButton label="See VIP" icon="member" onPress=\{\(\) => \{ void openMembership\(\); \}\}/);
   const ui = loadSecretUi();
   assert.match(ui.SECRET_PREVIEW_COPY.body, /yours forever/);

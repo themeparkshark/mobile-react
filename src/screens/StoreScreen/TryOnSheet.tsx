@@ -513,7 +513,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                       <View style={[styles.tag, styles.wearTag]} pointerEvents="none"><Text style={styles.wearTagText}>{wear === 'spinning' ? 'NOW WEARING' : 'WEARING'}</Text></View>
                     )
                   ) : (
-                    <View style={styles.tag} pointerEvents="none"><Text style={styles.tagText}>TRY-ON</Text></View>
+                    // Not a try-on any more once you are buying it (shop critic r7).
+                    confirming ? null : <View style={styles.tag} pointerEvents="none"><Text style={styles.tagText}>TRY-ON</Text></View>
                   )}
                 </View>
                 {confirming && (
@@ -778,8 +779,8 @@ const styles = StyleSheet.create({
   secondary: { minHeight: 48, minWidth: 96, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderRadius: 24,
     borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.75)' },
   slotLine: { fontFamily: FONT.body, fontSize: 17, lineHeight: 21, color: S.inkSoft, marginTop: -2 },
-  needPill: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 18,
-    borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.6)', backgroundColor: 'rgba(5,30,70,0.35)' },
+  // A caption, not a button shape: the offer below is what to tap (kids UX r7).
+  needPill: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   needText: { fontFamily: FONT.display, fontSize: 18, color: S.ink },
   vipPrice: { fontFamily: FONT.body, fontSize: 15, color: SECRET_THEME.inkSoft, marginLeft: 34 },
   secondaryText: { fontFamily: FONT.display, fontSize: 16, color: S.ink, textTransform: 'uppercase' },

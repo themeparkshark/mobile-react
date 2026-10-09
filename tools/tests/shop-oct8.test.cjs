@@ -37,7 +37,7 @@ test('the classic shelf sinks owned pieces, but a piece bought this visit stays 
 
 test('Gear on the live classic catalog: one scroll, the shelf over the shopkeeper, no big countdown', () => {
   const gear = src('src/screens/StoreScreen/GearShelf.tsx');
-  assert.match(gear, /export const GEAR_STAGE_H = 128;/, 'the stage was 180 under a 90 pt countdown and a balance row');
+  assert.match(gear, /export const GEAR_STAGE_H = 116;/, 'the stage was 180 under a 90 pt countdown and a balance row');
   assert.match(gear, /marginTop: -COUNTER_TUCK/);
   assert.match(gear, /<TryOnSheet item=\{open\}/, 'a tile opens the try-on on your own shark');
   assert.doesNotMatch(gear, /StoreCountdown/);
@@ -75,7 +75,7 @@ test('the whole room fits one iPhone screen, the stage never shrinks below 220',
   const member = room.showroomStageH(402, 874, 62, 34, false);
   const guest = room.showroomStageH(402, 874, 62, 34, true);
   assert.ok(member >= 280 && member <= 330, `member stage ${member}`);
-  assert.ok(guest < member && guest >= 220, `guest stage ${guest}`);
+  assert.equal(guest, member, 'the guest invite rides in the top row, so both stages are the same size');
   assert.equal(room.showroomStageH(375, 667, 20, 0, true), 220);
 });
 
@@ -113,7 +113,7 @@ test('round 3: filter chips (All, each slot on the shelf, Can buy) and one word 
     { id: 3, item_type: { id: 6 }, cost: 80 }, { id: 4, item_type: { id: 5 }, cost: 280 },
   ];
   const f = shelves.shelfFilters(items, 100);
-  assert.deepEqual(plain(f.map(x => [x.label, x.count])), [['All', 4], ['Can buy', 2], ['Held', 1], ['Backdrops', 1], ['Skins', 2]]);
+  assert.deepEqual(plain(f.map(x => [x.label, x.count])), [['All', 4], ['Can buy', 2], ['In fin', 1], ['Backdrops', 1], ['Skins', 2]]);
   assert.equal(items.filter(i => shelves.passesFilter(i, 'can_buy', 100)).length, 2);
   assert.equal(items.filter(i => shelves.passesFilter(i, 'slot:7', 100)).length, 2);
   assert.deepEqual(plain(shelves.shelfFilters([{ id: 1, item_type: { id: 1 }, cost: 1 }], 10)), [], 'one slot, all affordable: no chips');
