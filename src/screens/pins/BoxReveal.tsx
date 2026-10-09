@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4, transform: [{ rotate: '-3deg' }],
   },
   chaserText: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, letterSpacing: 1, paddingTop: 3 },
-  guaranteed: { fontFamily: FONT.display, fontSize: 18, color: BRAND.goldLight, paddingTop: 2 },
+  guaranteed: { fontFamily: FONT.display, fontSize: 22, color: BRAND.gold, paddingTop: 2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   name: { fontFamily: FONT.display, fontSize: 32, color: BRAND.white, textAlign: 'center', textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   subtitle: { fontFamily: FONT.body, fontSize: 18, color: '#cfeaff' },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 3, paddingHorizontal: 14, paddingVertical: 4 },

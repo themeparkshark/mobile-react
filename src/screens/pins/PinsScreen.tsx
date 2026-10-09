@@ -310,7 +310,7 @@ export default function PinsScreen() {
                   <Text maxFontSizeMultiplier={1.1} style={styles.tradeText}>{PINS_COPY.trade}</Text>
                 </Pressable>
               </View>
-              <Lanyard pins={lanyardPins} width={width - SPACE.lg * 2} height={176} showEmpty still={still} active={visible}
+              <Lanyard pins={lanyardPins} width={width - SPACE.lg * 2} height={150} showEmpty still={still} active={visible}
                 shine={shine} onPressSlot={(_, pin) => {
                   // On My Pins a tap takes a pin off; anywhere else it opens My Pins to choose.
                   if (tab === 'mine' && pin) toggleWear({ item_id: pin.item_id } as PinRow); else setTab('mine');
@@ -479,5 +479,5 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-start' },
   cell: { padding: 8, borderRadius: RADIUS.md, borderWidth: 3, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
   cellOn: { borderColor: BRAND.gold, backgroundColor: '#fff1c2' },
-  onCheck: { position: 'absolute', top: 2, right: 2, backgroundColor: BRAND.green, borderRadius: 12, borderWidth: 2, borderColor: BRAND.white, padding: 1 },
+  onCheck: { position: 'absolute', bottom: 2, right: 2, backgroundColor: BRAND.green, borderRadius: 12, borderWidth: 2, borderColor: BRAND.white, padding: 1 },
 });

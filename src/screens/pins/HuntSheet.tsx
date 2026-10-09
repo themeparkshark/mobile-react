@@ -72,6 +72,7 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
         setStatus(s);
         // Nothing left to hunt today: stop asking.
         if (s.status !== 'hunt') return;
+        if (s.warmth === 'here') setMiss(false);
         if (s.warmth && s.warmth !== last) {
           queueHaptic(s.warmth === 'here' ? 'success' : 'tickSelection', 1);
           last = s.warmth;
