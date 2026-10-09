@@ -436,19 +436,25 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
   // A won step folds to one slim line: nothing to do there any more. So does the won finish prize once its
   // title is worn (the page then opens on the trophy case).
   if (state.kind === 'done' && (!final || !reward.title || titleWorn)) {
+    const worn = final && !!reward.title && titleWorn;
     return (
-      <View style={styles.slim} accessible accessibilityLabel={`${heading}: you got ${reward.prize}`}>
-        <Animated.View style={[styles.slimMedal, checkStyle]}><GameIcon name="check" size={20} /></Animated.View>
-        <Text style={styles.slimText} maxFontSizeMultiplier={BODY_SCALE}>{heading}</Text>
-        <PrizeMini reward={reward} />
-        {final && !!reward.title && onTitle && (
-          <Pressable onPress={onTitle} accessibilityRole="button" accessibilityLabel={`Wearing the ${reward.title} title. Tap to take it off.`} hitSlop={8}
-            style={styles.wearingPill}>
-            <GameIcon name="crown" size={18} />
-            <Text style={styles.wearingText} maxFontSizeMultiplier={1.3}>Wearing</Text>
-          </Pressable>
-        )}
-        <View style={[styles.state, styles.stateDone, styles.stateRow]}><GameIcon name="check" size={16} /><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
+      <View style={[styles.slim, worn && styles.slimTall]} accessible accessibilityLabel={`${heading}: you got ${reward.prize}${worn ? `. Wearing the ${reward.title} title` : ''}`}>
+        <View style={styles.slimLine}>
+          <Animated.View style={[styles.slimMedal, checkStyle]}><GameIcon name="check" size={20} /></Animated.View>
+          <Text style={styles.slimText} maxFontSizeMultiplier={BODY_SCALE}>{heading}</Text>
+          {worn ? <View style={{ flex: 1 }} /> : <PrizeMini reward={reward} />}
+          {worn && onTitle ? (
+            // Worn: the one state that matters here is the title (tap to take it off).
+            <Pressable onPress={onTitle} accessibilityRole="button" accessibilityLabel={`Wearing the ${reward.title} title. Tap to take it off.`} hitSlop={8}
+              style={styles.wearingPill}>
+              <GameIcon name="crown" size={18} />
+              <Text style={styles.wearingText} maxFontSizeMultiplier={1.3}>Wearing</Text>
+            </Pressable>
+          ) : (
+            <View style={[styles.state, styles.stateDone, styles.stateRow]}><GameIcon name="check" size={16} /><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
+          )}
+        </View>
+        {worn && <View style={styles.slimSub}><PrizeMini reward={reward} /></View>}
       </View>
     );
   }
@@ -771,6 +777,9 @@ const styles = StyleSheet.create({
   },
   slimMedal: { width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.gold },
   slimText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
+  slimTall: { flexDirection: 'column', alignItems: 'stretch', paddingVertical: 8 },
+  slimLine: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  slimSub: { flexDirection: 'row', marginLeft: 40, marginTop: 4 },
   mini: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   wearingPill: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 30, paddingHorizontal: 8, borderRadius: 15, backgroundColor: '#fff3c4', borderWidth: 2, borderColor: BRAND.gold },
   wearingText: { fontFamily: 'Knockout', fontSize: 15, color: BROWN },
