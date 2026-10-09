@@ -903,13 +903,14 @@ function TermScene({ t, w, h, icon, caption }: SceneProps & { readonly icon: Gam
 function OddsScene({ t, w, h, rows }: SceneProps & { readonly rows: readonly { tier: RarityTier; percent: number }[] }) {
   const bw = Math.min(w - 40, 320);
   const x0 = (w - bw) / 2;
-  const rowH = Math.min(24, (h - 24) / Math.max(1, rows.length) - 6);
-  const top = (h - rows.length * (rowH + 6)) / 2;
+  const rowH = Math.min(22, (h - 52) / Math.max(1, rows.length) - 5);
+  // Below the close button on the window's top-right corner.
+  const top = Math.max(42, (h - rows.length * (rowH + 5)) / 2 + 12);
   const max = Math.max(1, ...rows.map(row => row.percent));
   return (
     <>
       {rows.map((row, i) => (
-        <OddsBar key={row.tier} t={t} i={i} x={x0} y={top + i * (rowH + 6)} w={bw} h={rowH} tier={row.tier} percent={row.percent} max={max} />
+        <OddsBar key={row.tier} t={t} i={i} x={x0} y={top + i * (rowH + 5)} w={bw} h={rowH} tier={row.tier} percent={row.percent} max={max} />
       ))}
     </>
   );
