@@ -134,3 +134,11 @@ test('the "at least 1 new" note only shows while a regular pin is missing (the s
     ? fs.readFileSync(`${process.env.HOME}/apps/tps-ws/fb-pins-be/app/Domains/PinTrading/Services/MysteryBoxService.php`, 'utf8') : '';
   if (server) assert.match(server, /\$missing->isNotEmpty\(\)/);
 });
+
+test('pack pace: honest days left and how many pins are still out there', () => {
+  const { packPace } = loadTs('src/screens/pins/pinsModel.ts');
+  assert.equal(packPace({ have: 2, total: 5, ends_on: '2026-12-31' }, '2026-10-09'), '83 days left · 3 still out there');
+  assert.equal(packPace({ have: 4, total: 5, ends_on: '2026-12-31' }, '2026-12-31'), 'Last day! · 1 still out there');
+  assert.equal(packPace({ have: 5, total: 5, ends_on: '2026-12-31' }, '2026-10-09'), 'All found!');
+  assert.equal(packPace({ have: 1, total: 5, ends_on: null }, '2026-10-09'), '4 still out there');
+});

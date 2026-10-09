@@ -16,7 +16,7 @@ import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import { BRAND, FONT, GameButton, GameIcon, OUTLINE, RADIUS, SHADOW, SPACE } from '../../ui';
 import { PIN_ART, PinTile } from './PinArt';
-import { foundLabel, seasonLabel, type ParkSet, type PinDay, type PinRow } from './pinsModel';
+import { foundLabel, packPace, seasonLabel, type ParkSet, type PinDay, type PinRow } from './pinsModel';
 
 const CORK = require('../../../assets/images/screens/pin-swaps/corkboard.png');
 
@@ -82,6 +82,8 @@ function ParkSetCardBase({ set, today, busy, still, shine, onClaim, onPin, onHun
   const [tip, setTip] = useState<{ index: number; text: string } | null>(null);
   useEffect(() => { if (!tip) return; const t = setTimeout(() => setTip(null), 2200); return () => clearTimeout(t); }, [tip]);
   const season = seasonLabel(set);
+  // Park time (the server's day), so the count changes at the park's midnight.
+  const pace = packPace(set, new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' }));
   const pinSize = set.reward.completer ? 48 : 56;
   return (
     <View style={[styles.card, SHADOW.card, set.complete && styles.cardDone]}>
@@ -98,6 +100,7 @@ function ParkSetCardBase({ set, today, busy, still, shine, onClaim, onPin, onHun
             </View>
             {season && <View style={styles.season}><Text maxFontSizeMultiplier={1.1} style={styles.seasonText}>{season}</Text></View>}
           </View>
+          {pace && <Text maxFontSizeMultiplier={1.2} style={styles.pace} numberOfLines={1}>{pace}</Text>}
         </View>
       </View>
 
@@ -162,6 +165,7 @@ const styles = StyleSheet.create({
   dot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: BRAND.navy, backgroundColor: BRAND.white },
   dotOn: { backgroundColor: BRAND.gold },
   count: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft, marginLeft: 4, paddingTop: 2 },
+  pace: { fontFamily: FONT.body, fontSize: 13, color: BRAND.navy, opacity: 0.8, marginTop: 2 },
   season: { backgroundColor: BRAND.red, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
   seasonText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.white, paddingTop: 2 },
   cork: { marginHorizontal: SPACE.sm, borderRadius: RADIUS.md, borderWidth: 3, borderColor: '#8a5a2b', overflow: 'hidden' },

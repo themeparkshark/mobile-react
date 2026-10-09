@@ -53,10 +53,11 @@ type Props = {
 
 export default function HuntSheet({ set, onClose, onCaught, still = false }: Props & { still?: boolean }) {
   const insets = useSafeAreaInsets();
-  const { location } = useContext(LocationContext);
+  const { location, gpsSignal } = useContext(LocationContext);
   const [status, setStatus] = useState<HuntStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [miss, setMiss] = useState(false);
+  const [fuzzy, setFuzzy] = useState(false);
   const loc = useRef(location);
   loc.current = location;
   const fill = useSharedValue(0);
@@ -126,13 +127,15 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
   const tryCatch = async () => {
     const l = loc.current;
     if (!set.park_id || !l || busy) return;
-    setBusy(true); setMiss(false);
+    setBusy(true); setMiss(false); setFuzzy(false);
     try {
-      const r = await catchPinOfTheDay(set.park_id, { latitude: l.latitude, longitude: l.longitude });
+      const r = await catchPinOfTheDay(set.park_id, { latitude: l.latitude, longitude: l.longitude, ...(gpsSignal.accuracyMeters ? { accuracy: gpsSignal.accuracyMeters } : {}) });
       if (r.caught) onCaught({ new: r.new, coins: r.coins, pin: r.pin, park_name: r.park_name, day: r.day, catch_number: r.catch_number });
       else onClose();
-    } catch {
-      setMiss(true);
+    } catch (e: unknown) {
+      // A fuzzy GPS fix gets its own plain hint (the pin is still there).
+      if ((e as { response?: { data?: { code?: string } } })?.response?.data?.code === 'weak_gps') setFuzzy(true);
+      else setMiss(true);
       queueHaptic('failBuzz', 1);
     } finally { setBusy(false); }
   };
@@ -159,6 +162,7 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
           <>
             <Text maxFontSizeMultiplier={1.35} style={[styles.word, { color: status?.warmth === 'here' ? BRAND.red : BRAND.navy }]}>{view.word}</Text>
             {!status?.here && <Text maxFontSizeMultiplier={1.35} style={styles.note}>Get inside the park to hunt.</Text>}
+            {fuzzy && <Text maxFontSizeMultiplier={1.3} style={styles.note}>GPS is fuzzy. Step into the open and hold again!</Text>}
             {miss && <Text maxFontSizeMultiplier={1.3} style={styles.note}>Not here yet. Watch the rings!</Text>}
             <Text maxFontSizeMultiplier={1.3} style={styles.note}>Look up while you walk!</Text>
             {status?.warmth === 'here' ? (

@@ -58,6 +58,8 @@ export interface ParkSet {
   readonly park_id: number | null;
   readonly park_name: string | null;
   readonly season: { label: string | null; from: string; to: string; open_now: boolean } | null;
+  /** Last day this pack can be found (Y-m-d, park time); null = never ends. */
+  readonly ends_on?: string | null;
   readonly tradable: false;
   readonly have: number;
   readonly total: number;
@@ -364,4 +366,18 @@ export function initialTab(home: Pick<PinHome, 'mystery' | 'park_sets'>): 'myste
   if (home.mystery.some(s => s.free_now)) return 'mystery';
   if (home.park_sets.some(s => s.complete && !s.claimed)) return 'sets';
   return 'mystery';
+}
+
+/**
+ * The pack's pace line: honest days left (from the server's end date) and how many pins are still out there.
+ * "12 days left · 3 still out there", "Last day! · 1 still out there", "All found!".
+ */
+export function packPace(set: Pick<ParkSet, 'have' | 'total'> & { ends_on?: string | null }, today: string): string | null {
+  const left = set.total - set.have;
+  if (left <= 0) return 'All found!';
+  const out = `${left} still out there`;
+  if (!set.ends_on) return out;
+  const days = Math.round((Date.parse(`${set.ends_on}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
+  if (days < 0) return null;
+  return `${days === 0 ? 'Last day!' : days === 1 ? '1 day left' : `${days} days left`} \u00b7 ${out}`;
 }
