@@ -6,6 +6,7 @@
  * Both run only while the page is what the player sees, and never with Reduce Motion.
  */
 import { useEffect } from 'react';
+import { usePowerBudget } from './power';
 import { cancelAnimation, Easing, makeMutable, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 
 export const BEAT = makeMutable(0);
@@ -16,7 +17,9 @@ export const SHEEN_PERIOD_MS = 6000;
  * Runs each clock only while something on screen reads it: the beat while a prize is ready, the sheen while
  * the open set shows a rare find. Both stop (zero frames) when the page is covered or Reduce Motion is on.
  */
-export function useBookClocks(beatOn: boolean, sheenOn: boolean, reduced: boolean): void {
+export function useBookClocks(beatOn: boolean, sheenOn: boolean, reducedMotion: boolean): void {
+  // Battery: idle or saver mode stops the ambient clocks too (FIXES.md row 22).
+  const reduced = reducedMotion || !usePowerBudget().ambient;
   useEffect(() => {
     if (!beatOn || reduced) { cancelAnimation(BEAT); BEAT.value = 0; return undefined; }
     BEAT.value = 0;
