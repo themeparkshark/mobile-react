@@ -32,6 +32,6 @@ export default function HomeHuntInfoSheet({ visible, sheet, loading, error, onRe
   readonly onRetry?: () => void;
   readonly onClose: () => void;
 }) {
-  const state = error ? 'error' : loading && sheet.pages.length === 0 ? 'loading' : 'ready';
+  const state = error ? 'error' : loading ? 'loading' : 'ready';
   return <HelpSheet visible={visible} sheet={sheet} state={state} onRetry={onRetry} onClose={onClose} />;
 }
