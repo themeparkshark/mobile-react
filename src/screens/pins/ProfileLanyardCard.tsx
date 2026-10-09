@@ -25,6 +25,8 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
   const still = useUiReducedMotion();
   const focused = useIsFocused();
   useEffect(() => {
+    // Fetch when the profile comes into view, not when it leaves.
+    if (!focused) return;
     let live = true;
     getPlayerLanyard(playerId).then(d => { if (live) setData(d); }).catch(() => undefined);
     return () => { live = false; };

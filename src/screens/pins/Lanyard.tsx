@@ -7,7 +7,7 @@
  * Motion is cheap: one UI-thread sway value for the whole strap, off with
  * Reduce Motion and while the screen is not focused.
  */
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, type SharedValue,
@@ -78,51 +78,55 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
   }, [still, active, sway]);
 
   const swayStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${sway.value * 0.9}deg` }] }));
-  const curveH = height * 0.8;
-  const slotsAt = slotPoints(max, width, curveH, 0.15, 0.85);
-  // Pins sized to the gap between slots so neighbours never overlap.
-  const gap = slotsAt.length > 1 ? Math.hypot(slotsAt[1].x - slotsAt[0].x, slotsAt[1].y - slotsAt[0].y) : width;
-  const pinSize = Math.min(62, Math.floor(gap - 16));
-  const strapW = 22;
-  // The strap path: two parallel curves (a ribbon), drawn once.
-  const steps = 24;
-  const outer: string[] = [];
-  const inner: string[] = [];
-  const stitch: string[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const p = strapPoint(t, width, curveH);
-    const q = strapPoint(Math.min(1, t + 0.001), width, curveH);
-    const dx = q.x - p.x; const dy = q.y - p.y; const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len; const ny = dx / len;
-    outer.push(`${i === 0 ? 'M' : 'L'}${(p.x + nx * strapW / 2).toFixed(1)},${(p.y + ny * strapW / 2).toFixed(1)}`);
-    inner.unshift(`L${(p.x - nx * strapW / 2).toFixed(1)},${(p.y - ny * strapW / 2).toFixed(1)}`);
-    stitch.push(`${i === 0 ? 'M' : 'L'}${(p.x + nx * (strapW / 2 - 4)).toFixed(1)},${(p.y + ny * (strapW / 2 - 4)).toFixed(1)}`);
-  }
-  const stitch2: string[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const p = strapPoint(t, width, curveH);
-    const q = strapPoint(Math.min(1, t + 0.001), width, curveH);
-    const dx = q.x - p.x; const dy = q.y - p.y; const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len; const ny = dx / len;
-    stitch2.push(`${i === 0 ? 'M' : 'L'}${(p.x - nx * (strapW / 2 - 4)).toFixed(1)},${(p.y - ny * (strapW / 2 - 4)).toFixed(1)}`);
-  }
-  const ribbon = `${outer.join(' ')} ${inner.join(' ')} Z`;
-  const weave: string[] = [];
-  for (let i = 1; i < 40; i++) {
-    const t = i / 40;
-    const p = strapPoint(t, width, curveH);
-    const q = strapPoint(Math.min(1, t + 0.001), width, curveH);
-    const dx = q.x - p.x; const dy = q.y - p.y; const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len; const ny = dx / len; const tx = dx / len; const ty = dy / len;
-    const a = { x: p.x + nx * 6 - tx * 3, y: p.y + ny * 6 - ty * 3 };
-    const b = { x: p.x - nx * 6 + tx * 3, y: p.y - ny * 6 + ty * 3 };
-    weave.push(`M${a.x.toFixed(1)},${a.y.toFixed(1)} L${b.x.toFixed(1)},${b.y.toFixed(1)}`);
-  }
-  const clipL = strapPoint(0.035, width, curveH);
-  const clipR = strapPoint(0.965, width, curveH);
+  // The strap's shapes depend only on size: built once per size, not every render.
+  const { curveH, slotsAt, pinSize, ribbon, stitch, stitch2, weave, clipL, clipR } = useMemo(() => {
+    const curveH = height * 0.8;
+      const slotsAt = slotPoints(max, width, curveH, 0.15, 0.85);
+    // Pins sized to the gap between slots so neighbours never overlap.
+      const gap = slotsAt.length > 1 ? Math.hypot(slotsAt[1].x - slotsAt[0].x, slotsAt[1].y - slotsAt[0].y) : width;
+      const pinSize = Math.min(62, Math.floor(gap - 16));
+      const strapW = 22;
+    // The strap path: two parallel curves (a ribbon), drawn once.
+      const steps = 24;
+      const outer: string[] = [];
+      const inner: string[] = [];
+      const stitch: string[] = [];
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const p = strapPoint(t, width, curveH);
+        const q = strapPoint(Math.min(1, t + 0.001), width, curveH);
+        const dx = q.x - p.x; const dy = q.y - p.y; const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len; const ny = dx / len;
+      outer.push(`${i === 0 ? 'M' : 'L'}${(p.x + nx * strapW / 2).toFixed(1)},${(p.y + ny * strapW / 2).toFixed(1)}`);
+      inner.unshift(`L${(p.x - nx * strapW / 2).toFixed(1)},${(p.y - ny * strapW / 2).toFixed(1)}`);
+      stitch.push(`${i === 0 ? 'M' : 'L'}${(p.x + nx * (strapW / 2 - 4)).toFixed(1)},${(p.y + ny * (strapW / 2 - 4)).toFixed(1)}`);
+    }
+      const stitch2: string[] = [];
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const p = strapPoint(t, width, curveH);
+        const q = strapPoint(Math.min(1, t + 0.001), width, curveH);
+        const dx = q.x - p.x; const dy = q.y - p.y; const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len; const ny = dx / len;
+      stitch2.push(`${i === 0 ? 'M' : 'L'}${(p.x - nx * (strapW / 2 - 4)).toFixed(1)},${(p.y - ny * (strapW / 2 - 4)).toFixed(1)}`);
+    }
+      const ribbon = `${outer.join(' ')} ${inner.join(' ')} Z`;
+      const weave: string[] = [];
+    for (let i = 1; i < 40; i++) {
+        const t = i / 40;
+        const p = strapPoint(t, width, curveH);
+        const q = strapPoint(Math.min(1, t + 0.001), width, curveH);
+        const dx = q.x - p.x; const dy = q.y - p.y; const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len; const ny = dx / len; const tx = dx / len; const ty = dy / len;
+        const a = { x: p.x + nx * 6 - tx * 3, y: p.y + ny * 6 - ty * 3 };
+        const b = { x: p.x - nx * 6 + tx * 3, y: p.y - ny * 6 + ty * 3 };
+      weave.push(`M${a.x.toFixed(1)},${a.y.toFixed(1)} L${b.x.toFixed(1)},${b.y.toFixed(1)}`);
+    }
+      const clipL = strapPoint(0.035, width, curveH);
+      const clipR = strapPoint(0.965, width, curveH);
 
+    return { curveH, slotsAt, pinSize, ribbon, stitch, stitch2, weave, clipL, clipR };
+  }, [width, height, max]);
   const slots = Array.from({ length: max }, (_, i) => pins[i] ?? null);
   return (
     <Animated.View style={[{ width, height, transformOrigin: 'top' } as object, swayStyle]}>
