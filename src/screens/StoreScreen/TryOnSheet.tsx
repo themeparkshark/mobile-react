@@ -26,6 +26,7 @@ import { SECRET_THEME } from '../../fx/secretTheme';
 import { UnlockBeat } from './SecretShopUi';
 import { Image } from 'expo-image';
 import { PEARLS, leavingIcon, lifeLines, pearlFor, retiringWishHint, sentence } from '../../helpers/shopLifecycle';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -39,7 +40,7 @@ import Playercard from '../../components/Playercard';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
-  afterBuyError, completesSet, stageCard, formatCoins, lastChanceLine, pieceState, recoveredSetOutcome, revealHoldMs, setProgressText, settleBuyError,
+  afterBuyError, completesSet, directBuyAllowed, stageCard, formatCoins, lastChanceLine, pieceState, recoveredSetOutcome, revealHoldMs, setProgressText, settleBuyError,
   MEMBER_KEEP, MEMBER_PROMISE, shortfall as shortBy, slotLine, tryOnCta, tryOnLayout, wearingIds, wishHintCopy, type TryOnPhase,
 } from '../../helpers/shopShelves';
 import { isItemWorn, itemDisplayName, slotForItem, wearableBadge } from '../../helpers/wardrobe';
@@ -79,6 +80,9 @@ const SOLO_CARD = stageCard(SCREEN_W - 28 - 6, SOLO_STAGE_H - 6, HOP + 0.04 * (S
 const SOLO_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SOLO_CARD.box };
 /** The sheet's spring has settled by about now: moments wait for it, so every open shows a whole moment. */
 const SHEET_SETTLE_MS = 300;
+const FIRST_BUY_KEY = 'shop:first-coin-buy';
+/** Direct buys this app run (the 3-in-2-minutes cap sends the rest back to the confirm step). */
+const directBuys: number[] = [];
 
 type Phase = TryOnPhase;
 type WearState = 'idle' | 'busy' | 'spinning' | 'failed';
@@ -200,6 +204,15 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const [fullLook, setFullLook] = useState(startFullLook);
   const [extras, setExtras] = useState<number[]>([]);
   const [phase, setPhase] = useState<Phase>('idle');
+  // A direct buy's button arms only after the sheet has settled + 400 ms, so the tile tap can never carry through.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    setArmed(false);
+    const t = setTimeout(() => setArmed(true), SHEET_SETTLE_MS + 400);
+    return () => clearTimeout(t);
+  }, [item?.id]);
+  const [firstBuyDone, setFirstBuyDone] = useState(false);
+  useEffect(() => { void AsyncStorage.getItem(FIRST_BUY_KEY).then(v => setFirstBuyDone(v === '1')).catch(() => undefined); }, []);
   const [wear, setWear] = useState<WearState>('idle');
   const [dropping, setDropping] = useState(false);
   const [landed, setLanded] = useState(0);
@@ -333,7 +346,13 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   // Member pieces are worn only while a member (DESIGN.md 4.3); the server enforces it too.
   const memberItem = isMemberWearItem(item);
   const wearLocked = memberWearLocked(item, player?.is_subscribed === true, memberLockOn);
-  const baseCta = tryOnCta({ owned, worn, vipLocked, short, phase, wear, finishes, cost: item.cost, paused: buyPaused, secret: secretItem, wearLocked });
+  const direct = !owned && short === 0 && !buyPaused && !wearLocked && !vipLocked && directBuyAllowed({ cost: item.cost, balance,
+    coins: (item.currency?.name ?? 'Coins').toLowerCase() === 'coins', secret: secretItem, member: isMemberWearItem(item),
+    firstBuyDone, recent: directBuys, now: Date.now() });
+  const tried = tryOnCta({ owned, worn, vipLocked, short, phase, wear, finishes, cost: item.cost, paused: buyPaused, secret: secretItem, wearLocked });
+  // One deliberate tap for a cheap piece: same gold button, the math already on screen, armed only after the sheet settles.
+  const baseCta = direct && phase === 'idle' && tried.action === 'ask' ? { ...tried, action: 'buy' as const } : tried;
+  const showMath = phase === 'confirm' || phase === 'buying' || phase === 'landing' || (direct && phase === 'idle');
   // VIP ran out while the sheet was open: say so kindly, coins untouched.
   const lapsedCta = lapsed && vipLocked ? { ...baseCta, note: 'Your VIP ended, so this one is locked. Your coins are safe.' } : baseCta;
   // The buy confirmation says the member rule out loud before any coins move (DESIGN.md 4.3).
@@ -359,16 +378,28 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   };
 
   // NEW! and WEAR IT NOW appear when the piece lands, not when the server answers.
+  // Members-only pieces (Secret Shop and VIP gear) get the big landing.
+  const bigLanding = secret || isMemberWearItem(item);
   const land = () => {
     setDropping(false);
     setLanded(l => l + 1);
     setPhase('bought');
+    if (!firstBuyDone) { setFirstBuyDone(true); void AsyncStorage.setItem(FIRST_BUY_KEY, '1').catch(() => undefined); }
     playSound(require('../../../assets/sounds/purchase_item_success.mp3'));
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    if (bigLanding) {
+      // A members-only piece lands bigger than a 50-coin skin (coordinator, Oct 9): a heavy thump with the
+      // burst, the reveal chime, then the success buzz as the piece plays its moment.
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
+      playSound(require('../../../assets/sounds/reveal.mp3'), { volume: 0.8 });
+      later(() => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined); }, 320);
+    } else {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    }
   };
 
   const buy = async () => {
-    if (phase !== 'confirm') return;
+    if (phase !== 'confirm' && !(direct && phase === 'idle' && armed)) return;
+    if (phase === 'idle') directBuys.push(Date.now());
     setPhase('buying');
     try {
       const result = await purchase(item);
@@ -491,8 +522,9 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   <ShopStage rim={glow} backdropUrl={stage?.scene ? null : stage?.backdrop} tone={secret ? 'night' : 'sky'} still={still}
                     backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} sound={secret} play={scenePlay} startDelay={SHEET_SETTLE_MS} /> : undefined}
                     sky={secret ? SECRET_THEME.sky : undefined} plinth={stage?.scene ? 'none' : secret ? 'secret' : 'house'}>
-                    {!secret && <LandFlash color={glow} still={still} trigger={landed} />}
-                    {secret && <UnlockBeat trigger={landed} still={still} />}
+                    {!bigLanding && <LandFlash color={glow} still={still} trigger={landed} />}
+                    {bigLanding && <LandFlash color={BRAND.gold} still={still} trigger={landed} />}
+                    {bigLanding && <UnlockBeat trigger={landed} still={still} />}
                     <Animated.View style={[StyleSheet.absoluteFill, stageStyle]}>
                       {stage ? (
                         <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body" shadow shadowAt={card.shadow} liftRoom={card.box.top}
@@ -518,16 +550,6 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     confirming ? null : <View style={styles.tag} pointerEvents="none"><Text style={styles.tagText}>TRY-ON</Text></View>
                   )}
                 </View>
-                {confirming && (
-                  <Animated.View entering={still ? undefined : FadeIn.duration(140)} style={styles.equation} accessible
-                    accessibilityLabel={`It costs ${formatCoins(item.cost)} coins. You have ${formatCoins(balance)}. After, you’ll have ${formatCoins(balance - item.cost)} left.`}>
-                    <CoinAmount n={balance} />
-                    <Text style={styles.op}>-</Text>
-                    <CoinAmount n={item.cost} />
-                    <Text style={styles.op}>=</Text>
-                    <CoinAmount n={balance - item.cost} label="left" />
-                  </Animated.View>
-                )}
               </View>
             </GestureDetector>
 
@@ -541,6 +563,15 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 {/* What it is, in a kid's words (kids UX round 1): Secret pieces say what they do in their card. */}
                 {/* On the confirm step the coin math takes this room: nothing slides under the buttons (art director r5). */}
                 {!fxKey && !confirming && slotLine(item.item_type?.id) && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.slotLine}>{slotLine(item.item_type?.id)}</Text>}
+                {/* Confirm reads what, then cost (art director r7/r8): the name above, the coin math under it.
+                    The result is the one big number; the subtraction is small (kids UX r8). */}
+                {showMath && (
+                  <Animated.View entering={still ? undefined : FadeIn.duration(140)} style={styles.equation} accessible
+                    accessibilityLabel={`It costs ${formatCoins(item.cost)} coins. You have ${formatCoins(balance)}. After, you’ll have ${formatCoins(balance - item.cost)} left.`}>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.mathSmall}>{`${formatCoins(balance)} - ${formatCoins(item.cost)} =`}</Text>
+                    <CoinAmount n={balance - item.cost} label="left" big />
+                  </Animated.View>
+                )}
                 {/* Non-members see the price too, with the lock (one marker everywhere). */}
                 {secretItem && vipLocked && !owned && (
                   <View style={[styles.lockPrice, { alignSelf: 'flex-start', marginTop: -2 }]} accessible accessibilityLabel={`${formatCoins(item.cost)} coins, VIP members can buy`}>
@@ -647,7 +678,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   <ShopCta label={cta.label} icon={owned ? 'shark' : cta.action === 'vip' ? 'member' : 'coins'}
                     width={PRIMARY_W} onPress={press} still={still}
                     loading={cta.look === 'busy' || cta.look === 'checking'} muted={cta.look === 'paused' || cta.look === 'checking'}
-                    disabled={hold || wear === 'spinning' || cta.look === 'paused' || cta.look === 'checking'} />
+                    disabled={hold || wear === 'spinning' || cta.look === 'paused' || cta.look === 'checking' || (direct && phase === 'idle' && !armed)} />
                   {cta.action === 'ask' && finishes && <Sheen still={still} delay={500} width={360} />}
                 </View>
                 )}
@@ -679,11 +710,11 @@ export function vipPriceLine(plans: readonly { price: string; period: string }[]
   return `VIP is ${priceText(plan)}.`;
 }
 
-function CoinAmount({ n, label }: { n: number; label?: string }) {
+function CoinAmount({ n, label, big = false }: { n: number; label?: string; big?: boolean }) {
   return (
     <View style={styles.amount}>
-      <GameIcon name="coins" size={18} />
-      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.amountText}>{formatCoins(n)}</Text>
+      <GameIcon name="coins" size={big ? 24 : 18} />
+      <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.amountText, big && styles.amountBig]}>{formatCoins(n)}</Text>
       {label && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.amountLabel}>{label}</Text>}
     </View>
   );
@@ -729,7 +760,7 @@ const styles = StyleSheet.create({
   newTagText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, letterSpacing: 1 },
   wearTag: { backgroundColor: BRAND.green, borderWidth: 2, borderColor: BRAND.white },
   wearTagText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.white, letterSpacing: 1 },
-  equation: { marginHorizontal: 14, marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+  equation: { marginTop: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, backgroundColor: S.well, borderRadius: 999, paddingVertical: 6, borderWidth: 2, borderColor: S.line },
   // The last row (the heart hint) always rests fully above the fade: fade height + 12.
   body: { paddingHorizontal: 18, paddingTop: 10, gap: 8, paddingBottom: 36 },
@@ -788,5 +819,7 @@ const styles = StyleSheet.create({
   op: { fontFamily: FONT.display, fontSize: 22, color: S.inkSoft },
   amount: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   amountText: { fontFamily: FONT.display, fontSize: 18, color: S.ink },
+  amountBig: { fontSize: 26 },
+  mathSmall: { fontFamily: FONT.display, fontSize: 15, color: S.inkSoft },
   amountLabel: { fontFamily: FONT.body, fontSize: 14, color: S.inkSoft },
 });

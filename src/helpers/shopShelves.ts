@@ -189,6 +189,20 @@ export function slotFitsBand(bandW: number, slot: string, rarityLabel: string, f
   return slotW + 4 + rarityW <= bandW - 8;
 }
 
+/**
+ * A cheap coin piece buys in one deliberate tap (kids UX consult, Oct 9: approve with conditions).
+ * Only when ALL hold: coins, <= 80 coins and <= 25% of the balance, not a Secret / members-only piece,
+ * not the kid's first buy ever, and fewer than 3 direct buys in the last 2 minutes. Anything else keeps
+ * the "Yes, buy it!" step. Real money never comes through here.
+ */
+export const DIRECT_BUY_MAX = 80;
+export function directBuyAllowed(s: { cost: number; balance: number; coins: boolean; secret: boolean; member: boolean;
+  firstBuyDone: boolean; recent: readonly number[]; now: number }): boolean {
+  if (!s.coins || s.secret || s.member || !s.firstBuyDone) return false;
+  if (!(s.cost > 0) || s.cost > DIRECT_BUY_MAX || s.cost > s.balance * 0.25) return false;
+  return s.recent.filter(t => s.now - t < 120_000).length < 3;
+}
+
 /** The classic shelf's star: the rarest piece you don't own yet (first on ties); null when you own them all. */
 export function starPick<T extends { id: number; rarity?: number; has_purchased?: boolean; is_member_item?: boolean }>(items: readonly T[], member: boolean): T | null {
   let best: T | null = null;

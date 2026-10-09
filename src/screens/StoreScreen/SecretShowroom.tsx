@@ -39,7 +39,7 @@ import { FxPauseContext } from '../../fx/FxStage';
 import { FX_BLURB, fxKeyOf } from '../../fx/registry';
 import { SECRET_THEME as V } from '../../fx/secretTheme';
 import { formatCoins, shortDate, stageCard } from '../../helpers/shopShelves';
-import { showroomEntries, showroomStageH, shelfWhen, type ShowroomEntry, type ShowroomKind } from '../../helpers/shopShowroom';
+import { railFirstVisible, railSpan, showroomEntries, showroomStageH, shelfWhen, type ShowroomEntry, type ShowroomKind } from '../../helpers/shopShowroom';
 import { leavingIcon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 import { isItemWorn, itemDisplayName } from '../../helpers/wardrobe';
 import type { ShopItem, ShopSection } from '../../models/shop-today';
@@ -47,6 +47,7 @@ import { FONT, GameIcon, type GameIconName } from '../../ui';
 import { SECRET_PREVIEW_COPY, StarMotes } from './SecretShopUi';
 import { VaultPanel, VaultSecondaryButton } from './SecretVault';
 import { TileArt } from './ShopTile';
+import useIdleRest from './useIdleRest';
 import { previewLook } from './TryOnSheet';
 import { MAX_FONT, Sheen, ShopCta, ShopStage, useShopNow, WishHeart } from './shopUi';
 import { useWishCount, useWished } from './wishStore';
@@ -162,6 +163,57 @@ const RailTile = memo(function RailTile({ entry, selected, owned, member, still,
   );
 });
 
+/**
+ * The picker row owns its scroll window, so a rail scroll re-renders only the rail, never the stage
+ * (performance r8). Tiles scrolled out of view rest; only crossings re-render.
+ */
+const Rail = memo(function Rail({ railRef, entries, selectedId, member, resting, bought, onPick }: {
+  railRef: React.RefObject<ScrollView>; entries: ShowroomEntry[]; selectedId: number; member: boolean; resting: boolean;
+  bought: readonly number[]; onPick: (id: number) => void;
+}) {
+  const [first, setFirst] = useState(0);
+  const span = railSpan(SCREEN_W, TILE + 12);
+  return (
+    <ScrollView ref={railRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}
+      scrollEventThrottle={100} onScroll={ev => {
+        const next = railFirstVisible(ev.nativeEvent.contentOffset.x, RAIL_PAD, TILE + 12);
+        if (next !== first) setFirst(next);
+      }}>
+      {entries.map((e, i) => (
+        <RailTile key={e.item.id} entry={e} selected={e.item.id === selectedId} member={member}
+          still={resting || i < first || i > first + span}
+          owned={!!(e.item.shop?.is_owned ?? e.item.has_purchased) || bought.includes(e.item.id)} onPick={onPick} />
+      ))}
+    </ScrollView>
+  );
+});
+
+/**
+ * The Secret Shop while it loads: the same midnight room (rim, rays, plinth) with a gold light sweep
+ * and one calm line, so the room is there from the first frame (game feel r8: no generic loader).
+ */
+export function SecretRoomSkeleton({ still }: { still: boolean }) {
+  const { height: winH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const stageH = showroomStageH(SCREEN_W, winH, insets.top, insets.bottom, false);
+  return (
+    <View style={[styles.scroll, { flex: 1 }]} accessible accessibilityLabel="Opening the Secret Shop">
+      <View style={styles.topRow} />
+      <VaultPanel padded={false} style={styles.panelWrap}>
+        <View style={{ height: stageH }}>
+          <ShopStage rim={V.gold} tone="night" sky={false} rays={V.inkGold} still={still} plinth="secret">
+            <StarMotes still={still} />
+          </ShopStage>
+          {!still && <View pointerEvents="none" style={StyleSheet.absoluteFill}><Sheen still={false} delay={0} width={INNER_W + 120} every={1400} /></View>}
+        </View>
+        <View style={[styles.plate, { alignItems: 'center', paddingVertical: 22 }]}>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.name}>Opening the Secret Shop</Text>
+        </View>
+      </VaultPanel>
+    </View>
+  );
+}
+
 export default function SecretShowroom({ sections, heroId, offset, still, bought, onOpen, onWish, onFavorites }: {
   readonly sections: readonly ShopSection[];
   readonly heroId: number | null | undefined;
@@ -177,6 +229,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
   const { playSound } = useContext(SoundEffectContext);
   const paused = useContext(FxPauseContext);
   const covered = useAnyModalLayer();
+  const { idle, wake } = useIdleRest(10000);
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const member = !!player?.is_subscribed;
@@ -195,7 +248,6 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
     paper_url: item.paper_url, no_eye_url: item.no_eye_url, item_type: item.item_type, fx_key: item.fx_key ?? null }], 'base') : null),
   [player?.inventory, item?.id]);
   const rail = useRef<ScrollView>(null);
-  const [railFirst, setRailFirst] = useState(0);
 
   // The stage answers each pick: a quick squash-and-settle, a gold flare on the rim.
   const bump = useSharedValue(0);
@@ -258,10 +310,12 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
   const fx = fxKeyOf(item);
   const blurb = fx ? FX_BLURB[fx] : 'A members-only piece for your shark.';
   const leaving = visibleLeaving(item.shop, { secret: true, vipLocked: !member });
-  const resting = still || paused || covered || !focused;
+  // The room's ambient loops (twinkles, rays, rail rigs, the shark's idle) rest after 10 s untouched (performance r8).
+  const resting = still || paused || covered || !focused || idle;
 
   return (
-    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 20 }]} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 20 }]} showsVerticalScrollIndicator={false}
+      onTouchStart={wake} onScrollBeginDrag={wake}>
       {/* Who you are in here, your Favorites and your coins: one slim row. */}
       <Animated.View entering={still ? undefined : FadeInDown.duration(240)} style={styles.topRow}>
         <View style={styles.badge} accessible accessibilityLabel={member ? 'You are a VIP member' : 'The VIP room. You can try everything on.'}>
@@ -349,18 +403,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.railTitle}>IN THE ROOM TODAY</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.railHint}>{ownedCount > 0 ? `${ownedCount} of ${entries.length} yours · tap to try` : 'Tap one to put it on'}</Text>
         </View>
-        <ScrollView ref={rail} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}
-          scrollEventThrottle={100} onScroll={ev => {
-            // Tiles scrolled out of the rail rest (performance / shop critic r7); only crossings re-render.
-            const first = Math.max(0, Math.floor((ev.nativeEvent.contentOffset.x - RAIL_PAD) / (TILE + 12)));
-            if (first !== railFirst) setRailFirst(first);
-          }}>
-          {entries.map((e, i) => (
-            <RailTile key={e.item.id} entry={e} selected={e.item.id === item.id} member={member}
-              still={resting || i < railFirst || i > railFirst + Math.ceil(SCREEN_W / (TILE + 12))}
-              owned={!!(e.item.shop?.is_owned ?? e.item.has_purchased) || bought.includes(e.item.id)} onPick={pick} />
-          ))}
-        </ScrollView>
+        <Rail railRef={rail} entries={entries} selectedId={item.id} member={member} resting={resting} bought={bought} onPick={pick} />
       </Animated.View>
     </ScrollView>
   );

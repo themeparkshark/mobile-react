@@ -776,7 +776,7 @@ test('pre-launch 3 and 4: the hero is house blue, and a fallback day hides the n
 test('pre-launch 6: Checking uses the muted face', () => {
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
   assert.match(sheet, /muted=\{cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
-  assert.match(sheet, /disabled=\{hold \|\| wear === 'spinning' \|\| cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
+  assert.match(sheet, /disabled=\{hold \|\| wear === 'spinning' \|\| cta\.look === 'paused' \|\| cta\.look === 'checking'/);
 });
 
 test('pre-launch 5: the buy hand-off bridges into the reveal on navy (no idle shelf)', () => {

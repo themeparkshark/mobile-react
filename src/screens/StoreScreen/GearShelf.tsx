@@ -34,6 +34,7 @@ import { BRAND, FONT, GameIcon, SHADOW, SharkLoader } from '../../ui';
 import { LinearGradient } from 'expo-linear-gradient';
 import ShopTile from './ShopTile';
 import TryOnSheet from './TryOnSheet';
+import useIdleRest from './useIdleRest';
 import { MAX_FONT, plateFor, SHOP_SURFACE as S, Sheen, ShopToast, TimerPill, useShopNow, useShopToast, WishHeart } from './shopUi';
 import { useWished, wishStore } from './wishStore';
 
@@ -197,7 +198,9 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   // The stage rests once it has scrolled away, off screen, and under the try-on.
   const covered = useAnyModalLayer();
   // Under the try-on, Favorites, a dialog or the grown-up gate the stage rests too.
-  const stageStill = still || stageAway || !focused || !!open || covered;
+  // After 8 s with no touch the ambient loops rest too (performance r8); a touch or scroll wakes them.
+  const { idle, wake } = useIdleRest(8000);
+  const stageStill = still || stageAway || !focused || !!open || covered || idle;
 
   // Hearts: the server's list seeds the shared store (the tab row's Favorites count reads it too).
   useEffect(() => {
@@ -274,6 +277,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 28 }]} showsVerticalScrollIndicator={false} scrollEventThrottle={64}
         // A shelf shorter than the screen still asks for the next page (performance r8: page 2 never loaded).
         onContentSizeChange={(_, h) => { if (h < winH + 240 && !nearEnd.current) { nearEnd.current = true; onEndReached?.(); } else if (h >= winH + 240) nearEnd.current = false; }}
+        onTouchStart={wake} onScrollBeginDrag={wake}
         onScroll={e => {
           const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
           const away = contentOffset.y > GEAR_STAGE_H - 10;
@@ -321,7 +325,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
             <View style={styles.grid}>
               {star && filter === 'all' && (
                 <Animated.View key={`star-${star.id}`} entering={still ? undefined : FadeIn.delay(40).duration(180)} style={{ width: 2 * TILE_W + GAP }}>
-                  <StarTile item={star as ShopItem} balance={balance} still={still || !focused || !!open || covered} onOpen={openItem} onWish={wish} />
+                  <StarTile item={star as ShopItem} balance={balance} still={still || !focused || !!open || covered || idle} onOpen={openItem} onWish={wish} />
                 </Animated.View>
               )}
               {shelf.filter(i => (filter !== 'all' || i.id !== star?.id) && passesFilter(i, filter, balance)).map((item, i) => (

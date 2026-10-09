@@ -103,7 +103,7 @@ test('round 2: the try-on lands in one beat and opens on confirm only when asked
   assert.match(sheet, /setPhase\(startConfirm && !startBought \? 'confirm' : 'idle'\)/);
   assert.match(sheet, /accessibilityLabel=\{`\$\{formatCoins\(balanceAfter \?\? balance\)\} coins`\}/);
   const room = src('src/screens/StoreScreen/SecretShowroom.tsx');
-  assert.match(room, /const resting = still \|\| paused \|\| covered \|\| !focused;/, 'the room rests under any sheet, dialog or the gate');
+  assert.match(room, /const resting = still \|\| paused \|\| covered \|\| !focused \|\| idle;/, 'the room rests under any sheet, dialog, the gate, and when idle');
   assert.match(room, /<TileArt item=\{item\} size=\{TILE \+ 6\} still=\{still\} \/>/, 'every piece in the picker moves');
 });
 
@@ -134,4 +134,33 @@ test('round 7: the slot chip sits beside the rarity only when both truly fit the
   assert.equal(shelves.slotFitsBand(100, 'Face', 'RARE'), true);
   assert.equal(shelves.slotFitsBand(100, 'Backdrop', 'UNCOMMON'), false);
   assert.equal(shelves.slotFitsBand(70, 'Face', 'RARE', 1.3), false, 'big text on a narrow tile drops the slot chip');
+});
+
+test('round 9: a cheap coin piece buys in one deliberate tap only inside every kids-consult guard', () => {
+  const base = { cost: 50, balance: 1240, coins: true, secret: false, member: false, firstBuyDone: true, recent: [], now: 1e6 };
+  assert.equal(shelves.directBuyAllowed(base), true);
+  assert.equal(shelves.directBuyAllowed({ ...base, cost: 81 }), false, 'over 80 coins keeps the confirm');
+  assert.equal(shelves.directBuyAllowed({ ...base, balance: 150 }), false, 'more than 25% of the balance keeps the confirm');
+  assert.equal(shelves.directBuyAllowed({ ...base, secret: true }), false);
+  assert.equal(shelves.directBuyAllowed({ ...base, member: true }), false);
+  assert.equal(shelves.directBuyAllowed({ ...base, coins: false }), false, 'never anything not priced in coins (real money never)');
+  assert.equal(shelves.directBuyAllowed({ ...base, firstBuyDone: false }), false, 'the first buy ever keeps the confirm');
+  assert.equal(shelves.directBuyAllowed({ ...base, recent: [1e6 - 10_000, 1e6 - 20_000, 1e6 - 30_000] }), false, '3 in 2 minutes: back to confirm');
+  assert.equal(shelves.directBuyAllowed({ ...base, recent: [1e6 - 200_000, 1e6 - 20_000, 1e6 - 30_000] }), true);
+  const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
+  assert.match(sheet, /setTimeout\(\(\) => setArmed\(true\), SHEET_SETTLE_MS \+ 400\)/, 'armed only after the sheet settles + 400 ms');
+  assert.match(sheet, /\|\| \(direct && phase === 'idle' && !armed\)\} \/>/);
+  assert.match(sheet, /const bigLanding = secret \|\| isMemberWearItem\(item\);/, 'members-only pieces land bigger');
+});
+
+test('round 9: idle rest, the rail owns its window, the Secret Shop opens on its own room', () => {
+  assert.equal(room.railFirstVisible(0, 18, 120), 0);
+  assert.equal(room.railFirstVisible(260, 18, 120), 2);
+  assert.equal(room.railSpan(402, 120), 4);
+  const gear = src('src/screens/StoreScreen/GearShelf.tsx');
+  assert.match(gear, /useIdleRest\(8000\)/);
+  const showroom = src('src/screens/StoreScreen/SecretShowroom.tsx');
+  assert.match(showroom, /useIdleRest\(10000\)/);
+  assert.match(showroom, /export function SecretRoomSkeleton/);
+  assert.match(src('src/screens/StoreScreen.tsx'), /\{routeSecret && status === 'loading' && <SecretRoomSkeleton still=\{reducedMotion\} \/>\}/);
 });

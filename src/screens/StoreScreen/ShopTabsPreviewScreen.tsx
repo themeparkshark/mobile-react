@@ -220,7 +220,7 @@ function Body({ mode: raw }: { mode: string }) {
   }) as unknown as AuthContextType, [player, fx]);
   if (!ready) return null;
   const StoreScreen = require('../StoreScreen').default;
-  const params = mode.startsWith('secret') ? { store: 77 }
+  const params = mode.startsWith('secret') ? { store: 77, secret: true }
     : { store: 'shark-shop', tab: mode.startsWith('supplies') ? 'supplies' : 'gear' };
   return (
     <AuthContext.Provider value={auth}>

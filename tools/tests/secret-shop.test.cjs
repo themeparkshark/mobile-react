@@ -404,7 +404,7 @@ test('the Secret Shop is drawn only while secret_shop_v2 is on (absent or error 
 
 test('non-members window-shop: the Profile tile opens the Secret Shop when the flag is on', () => {
   const profile = src('src/screens/ProfileScreen.tsx');
-  assert.match(profile, /void loadSecretShopFlag\(\)\.then\(on => \(on\s*\? RootNavigation\.navigate\('Store', \{ store: store\.id \}\)\s*: void openMembership\(\)\)\);/);
+  assert.match(profile, /void loadSecretShopFlag\(\)\.then\(on => \(on\s*\? RootNavigation\.navigate\('Store', \{ store: store\.id, secret: true \}\)\s*: void openMembership\(\)\)\);/);
   const shelves = src('src/screens/StoreScreen/ShopShelves.tsx');
   // Non-members get one calm note and the grown-up door in the showroom (Oct 8), never a buy button.
   const showroom = src('src/screens/StoreScreen/SecretShowroom.tsx');

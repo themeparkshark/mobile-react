@@ -28,6 +28,23 @@ import { useWished } from './wishStore';
 import * as Haptics from 'expo-haptics';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/** Art scale per slot (item_types): faces, held pieces and pins have more empty space in their art. */
+const ART_SCALE: Record<number, number> = { 2: 1.18, 5: 1.15, 8: 1.15, 6: 1.06 };
+
+/** Common pieces get a soft slot tint instead of one pale blue for all (shop critic r7: "identical boxes"). */
+export function slotPlate(typeId: number | null | undefined): [string, string] {
+  switch (typeId) {
+    case 1: return ['#e6f6ee', '#bfe3cf']; // hats: mint
+    case 2: return ['#fdeee4', '#f3cfb8']; // faces: peach
+    case 3: return ['#e9eefc', '#c9d3f2']; // back: periwinkle
+    case 4: return ['#e8f1fb', '#c4d8ef']; // outfits: sky
+    case 5: return ['#fbf3dc', '#efdca3']; // held: butter
+    case 6: return ['#e1f5f6', '#b5e1e4']; // backdrops: teal
+    case 7: return ['#e3eef9', '#bcd3ea']; // skins: the house blue
+    default: return ['#e3eef9', '#bcd3ea'];
+  }
+}
 import { leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 
 const RIBBON: Record<Exclude<TileRibbon, null>, { label: string; color: string; ink: string }> = {
@@ -89,7 +106,9 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   const ribbonLabel = ribbon === 'leaving' && leaving ? leavingRibbon(leaving) : ribbon ? RIBBON[ribbon].label : '';
   const name = itemDisplayName(item);
   const secret = isSecretItem(item);
-  const plate = secret ? SECRET_THEME.tilePlate : plateFor(item.rarity);
+  const plate = secret ? SECRET_THEME.tilePlate : (item.rarity ?? 1) <= 1 ? slotPlate(item.item_type?.id) : plateFor(item.rarity);
+  // Small art (faces, held pieces, pins) is drawn a little bigger in the same box, so every tile reads full.
+  const artScale = ART_SCALE[item.item_type?.id ?? 0] ?? 1;
   const set = item.shop?.set;
   const artSize = width - 18;
   // The band is decided from the tile's measured width (the prop is the first guess, so the first
@@ -152,7 +171,9 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
         </View>
       )}
       <View style={[styles.art, { marginTop: ribbon ? 10 : secret ? 8 : 0 }, owned && { opacity: 0.6 }]}>
-        <TileArt item={item} size={artSize} still={still} />
+        <View style={{ width: artSize, height: artSize * 0.8, alignItems: 'center', justifyContent: 'center' }}>
+          <TileArt item={item} size={artSize * artScale} still={still} />
+        </View>
       </View>
       {/* Secret: a violet-and-gold corner tag (DESIGN.md 6.5), so a Secret tile reads from across a room. */}
       {secret && (

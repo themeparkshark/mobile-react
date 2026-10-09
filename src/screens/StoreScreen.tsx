@@ -52,6 +52,7 @@ import { loadSecretShopFlag } from '../services/secretShopFlag';
 import Item from './StoreScreen/Item';
 import SuppliesShop, { type SuppliesFocus } from './StoreScreen/SuppliesShop';
 import GearShelf from './StoreScreen/GearShelf';
+import { SecretRoomSkeleton } from './StoreScreen/SecretShowroom';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 
@@ -322,8 +323,10 @@ export default function StoreScreen(props: NativeStackScreenProps<ParamListBase,
 }
 
 function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
-  const { store, tab: initialTab, focus, focus_item: focusItem } = route.params as {
+  const { store, tab: initialTab, focus, focus_item: focusItem, secret: routeSecret } = route.params as {
     store: number | 'shark-shop'; tab?: 'gear' | 'supplies'; focus?: SuppliesFocus;
+    /** Opened as the Secret Shop (Profile knows): while loading, show its own room, not the generic loader. */
+    secret?: boolean;
     /** Wishlist push deep link: open this item's try-on. */
     focus_item?: number;
   };
@@ -476,7 +479,7 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
   const classicGear = !today && sharkShop && tab === 'gear' && !(currentStore && isEventShop(currentStore));
   // The Secret Shop: the same shelves in midnight, with its own title bar (no tab row to fold into).
   const secretShelves = !!today && secretV2 && !sharkShop;
-  const floor = secretShelves ? SECRET_THEME.floor : BRAND.blue;
+  const floor = secretShelves || (routeSecret && status === 'loading') ? SECRET_THEME.floor : BRAND.blue;
 
   const loadMore = async () => {
     if (!catalog || !hasMore || status !== 'ready' || loadingMore.current) return;
@@ -520,12 +523,12 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       <Reanimated.View style={v2 ? titleStyle : undefined}
         onLayout={e => { if (!barH) setBarH(e.nativeEvent.layout.height); }}>
       {/* The vault keeps the house top bar (navy, not the legacy purple one): the shelves carry the midnight. */}
-      <Topbar purple={(currentStore?.is_secret_store ?? false) && !secretShelves} night={secretShelves}>
+      <Topbar purple={(currentStore?.is_secret_store ?? false) && !secretShelves} night={secretShelves || (!!routeSecret && status === 'loading')}>
         <TopbarColumn stretch={false}>
           {v2 ? <View style={{ width: 35 }} /> : <BackButton />}
         </TopbarColumn>
         <TopbarColumn>
-          <TopbarText>{secretShelves ? 'Secret Shop' : currentStore && isEventShop(currentStore) ? HALLOWEEN_SHOP_NAME
+          <TopbarText>{secretShelves || (routeSecret && status === 'loading') ? 'Secret Shop' : currentStore && isEventShop(currentStore) ? HALLOWEEN_SHOP_NAME
             : status === 'away' ? HALLOWEEN_SHOP_NAME : currentStore?.name ?? (sharkShop ? 'Shark Shop' : '')}</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false}>
@@ -549,7 +552,8 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
           <SharkLoader tone="onBlue" state="empty" title={AWAY_LINE} message={awayMessage(awayReason)} />
         </View>
       )}
-      {(!sharkShop || tab === 'gear') && status !== 'ready' && status !== 'away' && (
+      {routeSecret && status === 'loading' && <SecretRoomSkeleton still={reducedMotion} />}
+      {(!sharkShop || tab === 'gear') && status !== 'ready' && status !== 'away' && !(routeSecret && status === 'loading') && (
         <View style={{ flex: 1, backgroundColor: BRAND.blue }}>
           <SharkLoader tone="onBlue" state={status === 'error' ? 'error' : 'loading'}
             title={status === 'error' ? 'The Shark Shop couldn’t open' : undefined}

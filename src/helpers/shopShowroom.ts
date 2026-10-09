@@ -50,3 +50,13 @@ export function shelfWhen(entry: Pick<ShowroomEntry, 'kind' | 'section'>, now: n
   return eventEndPill(entry.section, now).label;
 }
 
+
+/** The first rail tile in view at a scroll offset (tiles left of it rest). */
+export function railFirstVisible(scrollX: number, pad: number, step: number): number {
+  return Math.max(0, Math.floor((scrollX - pad) / step));
+}
+
+/** How many tiles past the first can be on screen at once (partials included). */
+export function railSpan(screenW: number, step: number): number {
+  return Math.ceil(screenW / step);
+}
