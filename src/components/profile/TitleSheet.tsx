@@ -72,10 +72,8 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
       setEarned(earnedTitles([
         { slug: 'churro_collection', name: 'Churro Collection', total_items: 24, starter_milestone: { target: 8, rewards_claimed: true, rewards: { title: 'Churro Finder' } } },
         { slug: 'pretzel_collection', name: 'Pretzel Collection', total_items: 16, rewards_claimed: true, completion_rewards: { title: 'Pretzel Pro' } },
-      ], { stamps: { rides: [{ id: 4, name: 'Coaster Champ', goal: 'Ride 10 coasters' }],
-        hunt: [{ id: 911, name: 'Wild Legend Finder', goal: 'Catch two different legendary finds',
-          icon_thumb_url: process.env.EXPO_PUBLIC_STAMP_ART_BASE ? `${process.env.EXPO_PUBLIC_STAMP_ART_BASE}/wild-legend-finder@thumb.png` : null }] },
-      unlocked_titles: [{ stamp_id: 4, title: 'Coaster Champ' }, { stamp_id: 911, title: 'Wild Legend' }] }));
+      // The same dev book as the Stamp Book preview, so the profile list and the book's Titles list match in captures.
+      ], require('../../screens/stampbook/preview').PREVIEW_BOOK));
       return () => { live = false; };
     }
     void Promise.allSettled([getPrepItemSets(), getStamps()]).then(([sets, stamps]) => {
@@ -193,7 +191,7 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}
                       maxFontSizeMultiplier={1.3}>{entry.title}</Text>
-                    <Text style={styles.rowMeaning} numberOfLines={2} maxFontSizeMultiplier={1.3}>{entry.meaning}</Text>
+                    <Text style={styles.rowMeaning} maxFontSizeMultiplier={1.3}>{entry.meaning}</Text>
                   </View>
                   <View style={styles.wear}><Text style={styles.wearText} maxFontSizeMultiplier={1.2}>WEAR</Text></View>
                 </Pressable>

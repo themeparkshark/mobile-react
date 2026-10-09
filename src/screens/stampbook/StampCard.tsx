@@ -61,7 +61,7 @@ const STAGE_H = ART + 30 + 4;
 /** 1 on tall phones (900 pt and up); down to 0.42 on a 667 pt iPhone SE so the card never clips. */
 export function stageScaleFor(screenH: number): number {
   if (screenH >= 900) return 1;
-  return Math.max(0.34, Math.min(1, (screenH - 580) / 320));
+  return Math.max(0.5, Math.min(1, (screenH - 580) / 320));
 }
 /** Badge centre inside the art canvas (plates are normalised a little below centre). */
 const BADGE_CY = 0.55;
@@ -575,15 +575,19 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
       </View>
 
       {/* App-wide ramp (rarity.ts): light chip, rarity frame, navy ink; gold is Legendary only. */}
+      {/* Short phones: rarity and the earned date share one row, so the stamp art can stay big. */}
+      <View style={[styles.rarityCol, stageScale < 0.6 && stamp.earned && styles.rarityRow]}>
       <View style={[styles.rarity, { backgroundColor: tone.chip, borderColor: tone.frame }, pillGold && styles.rarityGold]}>
         <Text style={styles.rarityText} maxFontSizeMultiplier={1.2}>{tone.label.toUpperCase()}</Text>
       </View>
 
       {stamp.earned ? (
-        <Animated.Text style={[styles.earned, dateStyle]} maxFontSizeMultiplier={1.3}>
+        <Animated.Text style={[styles.earned, stageScale < 0.6 && styles.earnedInline, dateStyle]} maxFontSizeMultiplier={1.3}>
           {`Earned ${earnedDate(stamp.earnedAt) ?? ''}`.trim()}
         </Animated.Text>
-      ) : (
+      ) : null}
+      </View>
+      {stamp.earned ? null : (
         <View style={styles.remainingRow}>
           {!stamp.secret && <GameIcon name={req.icon} size={26} />}
           <Text style={styles.remaining} maxFontSizeMultiplier={1.3}>{remainingLine(stamp)}</Text>
@@ -693,6 +697,9 @@ const styles = StyleSheet.create({
   body: { ...DIALOG_CARD, alignItems: 'center', paddingHorizontal: 18, paddingBottom: 18, paddingTop: 34 },
   bodyLegendary: { borderColor: LEGENDARY_GOLD, borderWidth: 4 },
   rootCompact: { paddingTop: 30, paddingBottom: 6 },
+  rarityCol: { alignItems: 'center', zIndex: 3 },
+  rarityRow: { flexDirection: 'row', gap: 8 },
+  earnedInline: { marginTop: 0, fontSize: 16 },
   bodyCompact: { paddingTop: 28, paddingBottom: 12 },
   actionsCompact: { marginTop: 8 },
   howBoxCompact: { marginTop: 6, padding: 9 },

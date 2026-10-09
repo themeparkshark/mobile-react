@@ -11,7 +11,7 @@
  * Reduce Motion: no pops or confetti; sounds, haptics and announcements stay.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
@@ -57,6 +57,8 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
   const [party, setParty] = useState(false);
   const [wearing, setWearing] = useState<string | null>(null);
   const alive = useRef(true);
+  // Short phones (iPhone SE): smaller gifts and a shorter titles list, so the sheet stays inside the safe area.
+  const compact = useWindowDimensions().height < 700;
   useEffect(() => () => { alive.current = false; }, []);
   const all = sumRewards(stamps);
   const kinds = (Object.keys(all) as (keyof Totals)[]).filter(k => all[k] > 0);
@@ -105,7 +107,7 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
             </Pressable>
           )}
           <View style={styles.grid}>
-            {stamps.map(s => <Gift key={s.id} stamp={s} status={status[s.id] ?? 'waiting'} reducedMotion={reducedMotion} />)}
+            {stamps.map(s => <Gift key={s.id} stamp={s} status={status[s.id] ?? 'waiting'} reducedMotion={reducedMotion} compact={compact} />)}
           </View>
           <View style={styles.totals} accessible accessibilityLabel={kinds.map(k => `${phase === 'done' ? got[k] : all[k]} ${k}`).join(', ')}>
             {kinds.map(k => (
@@ -116,7 +118,7 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
             ))}
           </View>
           {titles.length > 0 && (
-            <ScrollView style={styles.titles} contentContainerStyle={{ gap: 8 }}>
+            <ScrollView style={[styles.titles, compact && styles.titlesCompact]} contentContainerStyle={{ gap: 8 }}>
               {titles.map(s => {
                 const isWorn = (wearing ?? worn) === s.rewards.title;
                 return (
@@ -155,7 +157,7 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
 }
 
 /** One gift-wrapped stamp: the art waits under a red gift tag, then stamps in with a pop and a check. */
-function Gift({ stamp, status, reducedMotion }: { stamp: BookStamp; status: Status; reducedMotion: boolean }) {
+function Gift({ stamp, status, reducedMotion, compact }: { stamp: BookStamp; status: Status; reducedMotion: boolean; compact: boolean }) {
   const pop = useSharedValue(1);
   useEffect(() => {
     if (status !== 'done' || reducedMotion) return;
@@ -163,7 +165,7 @@ function Gift({ stamp, status, reducedMotion }: { stamp: BookStamp; status: Stat
   }, [status, pop, reducedMotion]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   return (
-    <Animated.View style={[styles.gift, status === 'done' && styles.giftDone, style]} accessible
+    <Animated.View style={[styles.gift, compact && styles.giftCompact, status === 'done' && styles.giftDone, style]} accessible
       accessibilityLabel={`${stamp.name}${status === 'done' ? ', claimed' : status === 'failed' ? ', not claimed yet' : ''}`}>
       <StampArt stamp={stamp} size="thumb" />
       {status === 'done' ? (
@@ -188,6 +190,8 @@ const styles = StyleSheet.create({
     width: 70, height: 70, borderRadius: 18, backgroundColor: PAPER, borderWidth: 3, borderColor: '#E3262E', padding: 6,
   },
   giftDone: { borderColor: '#FFFFFF' },
+  giftCompact: { width: 56, height: 56, padding: 4 },
+  titlesCompact: { maxHeight: 120 },
   tag: {
     position: 'absolute', top: -8, right: -8, width: 28, height: 28, borderRadius: 14, backgroundColor: '#E3262E', borderWidth: 2.5,
     borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center',

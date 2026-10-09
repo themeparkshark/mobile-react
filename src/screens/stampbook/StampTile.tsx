@@ -93,11 +93,15 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
             )}
             {state === 'claim' && <View style={[styles.lip, { backgroundColor: GIFT_LIP }]} />}
             {/* Owned: stamped flat into the page in a solid rarity ring (Club Penguin's filled slot). A waiting gift stays a raised card. */}
-            <View style={[state === 'claim' ? styles.card : styles.inked, { borderColor: state === 'claim' ? GIFT : look.frame },
-              state === 'claim' && styles.cardClaim, state === 'owned' && rank >= 4 && styles.inkedTrim]}>
+            <View style={[state === 'claim' ? styles.card : styles.inked, state === 'claim' && { borderColor: GIFT }, state === 'claim' && styles.cardClaim]}>
               {state === 'claim' && <LinearGradient colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0)']} style={styles.gloss} />}
-              {state === 'owned' && rank >= 4 && <View pointerEvents="none" style={[styles.innerTrim, { borderColor: look.frame }]} />}
-              <View style={[styles.artWrap, { width: art, height: art }]}>
+              {/* Owned: printed straight onto the page, a little crooked like a real stamp, with an ink ring in its rarity colour. */}
+              <View style={[styles.artWrap, { width: art, height: art }, state === 'owned' && { transform: [{ rotate: `${tiltFor(stamp.id)}deg` }] }]}>
+                {state === 'owned' && (
+                  <View pointerEvents="none" style={[styles.inkRing, { borderColor: look.frame, borderWidth: rank >= 4 ? 3.5 : 2.5 }]}>
+                    {rank >= 4 && <View style={[styles.inkRingInner, { borderColor: look.frame }]} />}
+                  </View>
+                )}
                 <StampArt stamp={stamp} size="thumb" placeholder={accent} priority={col < 3 ? 'high' : 'normal'} />
                 {hasShine(stamp) && !fx.reducedMotion && <ShineFoil stamp={stamp} size={art} top={top} height={height} lag={col * 0.08} />}
                 {!!mark && (
@@ -119,7 +123,7 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
               ) : (
                 <>
                   <View style={[styles.ghost, state === 'fresh' && styles.ghostFresh]}>
-                    <StampArt stamp={stamp} size="thumb" priority={col < 3 ? 'high' : 'normal'} />
+                    <StampArt stamp={stamp} size="thumb" priority={col < 3 ? 'high' : 'normal'} fallbackIcon={req.icon} />
                   </View>
                   {/* In progress: the real colour fills up from the bottom with the progress (capped well short of owned). */}
                   {state === 'progress' && fill > 0 && (
@@ -191,6 +195,11 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
 
 export default memo(StampTile);
 
+/** A stable small tilt per stamp (-4 to 4 degrees), so the page looks hand-stamped, never random on re-render. */
+export function tiltFor(id: number): number {
+  return ((id * 37) % 9) - 4;
+}
+
 /** The shine sweep on a rare-or-better owned stamp. Only these tiles carry a per-frame clock (plain tiles do no scroll work). */
 function ShineFoil({ stamp, size, top, height, lag }: { stamp: BookStamp; size: number; top: SharedValue<number>; height: number; lag: number }) {
   const fx = useBookFx();
@@ -249,12 +258,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', paddingTop: 12, paddingHorizontal: 5, overflow: 'hidden',
   },
   cardClaim: { borderWidth: 4.5, backgroundColor: '#FFF4F0' },
-  inked: {
-    flex: 1, marginTop: 3, marginBottom: 2, borderRadius: 18, borderWidth: 3, backgroundColor: 'rgba(255,255,255,0.55)',
-    alignItems: 'center', paddingTop: 12, paddingHorizontal: 5, overflow: 'hidden',
-  },
-  inkedTrim: { borderWidth: 3.5 },
-  innerTrim: { position: 'absolute', left: 4, right: 4, top: 4, bottom: 4, borderRadius: 13, borderWidth: 1.5, opacity: 0.7 },
+  inked: { flex: 1, marginTop: 3, marginBottom: 2, alignItems: 'center', paddingTop: 12, paddingHorizontal: 5 },
+  inkRing: { position: 'absolute', left: -5, top: -5, right: -5, bottom: -5, borderRadius: 999, opacity: 0.85, alignItems: 'center', justifyContent: 'center' },
+  inkRingInner: { position: 'absolute', left: 3, top: 3, right: 3, bottom: 3, borderRadius: 999, borderWidth: 1.5 },
   claimGlow: { position: 'absolute', left: -6, right: -6, top: -6, bottom: -2 },
   claimGlowFill: { flex: 1, borderRadius: 24, backgroundColor: 'rgba(255,120,90,0.5)' },
   gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%', opacity: 0.6 },

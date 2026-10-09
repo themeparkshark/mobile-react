@@ -459,9 +459,9 @@ export function titleLine(entry: TitleEntry): string {
   }
 }
 
-/** How much real colour an in-progress slot shows: up to 70% of the art at 99%, so it never reads as owned. */
+/** How much of the art an in-progress slot fills with colour: the progress itself (40/100 fills 40%), capped at 85% so it never reads as owned. */
 export function fillFraction(percent: number): number {
-  return Math.max(0, Math.min(0.7, (percent / 100) * 0.7));
+  return Math.max(0, Math.min(0.85, percent / 100));
 }
 
 export type RewardTotals = { energy: number; tickets: number; xp: number; coins: number };

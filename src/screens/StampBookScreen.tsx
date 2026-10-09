@@ -677,7 +677,7 @@ function AlmostThere({ stamps, accentFor, onOpen }: { stamps: readonly BookStamp
           <Pressable key={s.id} style={({ pressed }) => [styles.almostItem, pressed && styles.pressed]} onPress={() => { playSfx('ui.tap'); haptic('tapLight'); onOpen(s); }}
             accessibilityRole="button" accessibilityLabel={`${s.name}. ${progressLabel(s)}. ${remainingLine(s)}`}>
             <View style={styles.almostArt}>
-              <View style={styles.almostGhost}><StampArt stamp={s} size="thumb" /></View>
+              <View style={styles.almostGhost}><StampArt stamp={s} size="thumb" fallbackIcon={requirement(s).icon} /></View>
               <MiniRing fraction={s.percent / 100} color={accentFor(s.section)} />
             </View>
             <Text style={styles.almostName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.2}>{s.shortName}</Text>

@@ -64,7 +64,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
               <Pressable style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]} onPress={open} accessibilityRole="button"
                 accessibilityLabel={`${entry.title} title. ${titleLine(entry)}. Opens the ${entry.stamp.name} stamp.`}>
                 <View style={styles.thumb}>
-                  <StampArt stamp={entry.stamp} size="thumb" />
+                  <StampArt stamp={entry.stamp} size="thumb" fallbackIcon="crown" />
                 </View>
                 <View style={styles.mid}>
                   <TitlePillText title={entry.title} owned={owned} />

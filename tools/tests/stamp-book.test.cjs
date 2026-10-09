@@ -477,7 +477,8 @@ test('v3 round 2: compact counts, colour fills up but never reads as owned, clai
   assert.equal(model.compactCount(10000), '10K');
   assert.equal(model.compactCount(30000), '30K');
   assert.equal(model.fillFraction(0), 0);
-  assert.ok(model.fillFraction(99) <= 0.7 && model.fillFraction(100) <= 0.7);
+  assert.equal(model.fillFraction(40), 0.4);
+  assert.ok(model.fillFraction(99) <= 0.85 && model.fillFraction(100) <= 0.85);
   assert.deepEqual(plain(model.sumRewards([{ rewards: rewards({ energy: 5, xp: 100 }) }, { rewards: rewards({ tickets: 2, xp: 50 }) }])),
     { energy: 5, tickets: 2, xp: 150, coins: 0 });
   const cache = read('src/screens/stampbook/cache.ts');
