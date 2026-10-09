@@ -8,6 +8,8 @@ import { BRAND, SHADOW } from '../../ui';
 import type { FollowMode } from './cameraFollow';
 
 const ROSE = require('../../../assets/images/map/compass-rose.png');
+/** Panned away the button shows your shark: "take me back to it". */
+const SHARK = require('../../../assets/images/screens/explore/shark_player.gif');
 
 /** What the map's top-right button is doing right now. */
 export type FollowButtonState = 'away' | FollowMode;
@@ -16,13 +18,23 @@ export type FollowButtonState = 'away' | FollowMode;
 export const FOLLOW_COPY = {
   heading: 'Map turns with you',
   north: 'North stays up',
-  away: 'Back to my shark',
+  away: 'Tap to find your shark',
+  noCompass: 'No compass here',
   hintTitle: 'Your compass',
-  hintBody: 'The map turns as you turn. Tap to keep north up.',
+  hintBody: 'The map turns when you turn. Tap me to keep north up.',
 } as const;
 
+type PillKey = 'heading' | 'north' | 'noCompass' | 'away';
+/** The first time per app session the map is panned away, the pill says how to get back. */
+let awayTaught = false;
+
+/** A pill only for a real mode toggle (heading and north), never for leaving or coming back from panned away. */
+export function shouldFlashPill(was: FollowButtonState, now: FollowButtonState): boolean {
+  return was !== now && was !== 'away' && now !== 'away';
+}
+
 export function followButtonLabel(state: FollowButtonState): string {
-  if (state === 'away') return 'Back to my shark. The map follows you again.';
+  if (state === 'away') return 'Find your shark. The map follows you again.';
   return state === 'heading'
     ? 'Compass: the map turns with you. Tap to keep north up.'
     : 'Compass: north stays up. Tap to turn the map with you.';
@@ -35,13 +47,13 @@ export function followButtonLabel(state: FollowButtonState): string {
  *  - Map turns with you (default): Alex's compass rose spins live so its red
  *    point always shows north; a small beam badge says it follows where you face.
  *  - North stays up: the map spins to north and holds; the rose sits upright
- *    on a cream button with a gold rim and an N badge.
- *  - Panned away: a gold button that brings the map back to your shark.
+ *    on a white button with a navy rim and an N badge.
+ *  - Panned away: a gold button showing your shark; a tap brings the map back to it.
  * Every tap shows what it did in a little pill, and the first visit gets a
  * one-time hint bubble. The rose turns on the UI thread with the camera
  * (`bearing` is the map's bearing, eased like the camera itself).
  */
-export default function FollowButton({ state, bearing, onPress, reducedMotion, hint, onHintDone }: {
+export default function FollowButton({ state, bearing, onPress, reducedMotion, hint, onHintDone, noCompassFlash = 0 }: {
   readonly state: FollowButtonState;
   readonly bearing: SharedValue<number>;
   readonly onPress: () => void;
@@ -49,18 +61,26 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
   /** Show the one-time hint bubble. */
   readonly hint: boolean;
   readonly onHintDone: () => void;
+  /** Bumped when a tap cannot turn the map (no compass): the pill says so. */
+  readonly noCompassFlash?: number;
 }) {
-  // A flash of the state's name after each tap (not on mount).
-  const [pill, setPill] = useState<FollowButtonState | null>(null);
+  // The new mode's name after a toggle (not on mount, not when coming back from panned away:
+  // the button changing back is the feedback there).
+  const [pill, setPill] = useState<PillKey | null>(null);
   const pillTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const firstState = useRef(true);
-  useEffect(() => {
-    if (firstState.current) { firstState.current = false; return; }
-    if (state === 'away') return;
-    setPill(state);
+  const lastState = useRef(state);
+  const flashPill = (key: PillKey) => {
+    setPill(key);
     if (pillTimer.current) clearTimeout(pillTimer.current);
     pillTimer.current = setTimeout(() => setPill(null), 1800);
-  }, [state]);
+  };
+  useEffect(() => {
+    const was = lastState.current;
+    lastState.current = state;
+    if (shouldFlashPill(was, state)) flashPill(state as PillKey);
+    else if (state === 'away' && was !== 'away' && !awayTaught) { awayTaught = true; flashPill('away'); }
+  }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (noCompassFlash > 0) flashPill('noCompass'); }, [noCompassFlash]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (pillTimer.current) clearTimeout(pillTimer.current); }, []);
   useEffect(() => {
     if (!hint) return;
@@ -69,7 +89,7 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
   }, [hint, onHintDone]);
 
   // The pill fades and slides in on the UI thread, and stays mounted while it fades out.
-  const [shownPill, setShownPill] = useState<FollowButtonState | null>(null);
+  const [shownPill, setShownPill] = useState<PillKey | null>(null);
   const pillOn = useSharedValue(0);
   useEffect(() => {
     const on = !!pill || hint;
@@ -123,15 +143,20 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
       )}
       <Pressable onPress={tap} accessibilityRole="button" accessibilityLabel={followButtonLabel(state)} hitSlop={8}>
         <Reanimated.View style={[styles.button, state === 'north' && styles.north, state === 'away' && styles.away, buttonStyle]}>
-          <Reanimated.View style={[styles.rose, roseStyle]}>
-            <Image source={ROSE} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
-          </Reanimated.View>
+          {state === 'away' ? (
+            <Image source={SHARK} autoplay={false} style={styles.shark} contentFit="contain" transition={0} />
+          ) : (
+            <Reanimated.View style={[styles.rose, roseStyle]}>
+              <Image source={ROSE} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+            </Reanimated.View>
+          )}
           {state !== 'away' && (
             <Reanimated.View style={[styles.badge, state === 'north' ? styles.badgeNorth : styles.badgeHeading, badgeStyle]}>
               {state === 'north' ? <Text style={styles.badgeN}>N</Text> : (
-                // A small beam: "it follows where you face".
-                <Svg width={12} height={12} viewBox="0 0 12 12">
-                  <Path d="M6 1 L10.5 10 Q6 7.6 1.5 10 Z" fill={BRAND.white} />
+                // The beam under your shark, in small: "the map follows where you face".
+                <Svg width={16} height={16} viewBox="0 0 16 16">
+                  <Path d="M8 14 L2.2 4.2 Q8 0.8 13.8 4.2 Z" fill={BRAND.white} />
+                  <Path d="M8 14 L5.6 8.6 Q8 7.4 10.4 8.6 Z" fill={BRAND.skyDeep} />
                 </Svg>
               )}
             </Reanimated.View>
@@ -146,14 +171,15 @@ const styles = StyleSheet.create({
   wrap: { width: 54, height: 54 },
   button: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center',
     backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },
-  north: { backgroundColor: BRAND.cream, borderColor: BRAND.gold },
+  north: { backgroundColor: BRAND.white, borderColor: BRAND.navy },
   away: { backgroundColor: BRAND.gold },
   rose: { width: 40, height: 40 },
-  badge: { position: 'absolute', right: -5, bottom: -5, width: 22, height: 22, borderRadius: 11, borderWidth: 2,
+  shark: { width: 46, height: 46, marginTop: 4 },
+  badge: { position: 'absolute', right: -7, bottom: -7, width: 26, height: 26, borderRadius: 13, borderWidth: 2.5,
     borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   badgeHeading: { backgroundColor: BRAND.blue },
   badgeNorth: { backgroundColor: BRAND.navy },
-  badgeN: { fontFamily: 'Shark', fontSize: 12, lineHeight: 14, color: BRAND.white, marginTop: 1 },
+  badgeN: { fontFamily: 'Shark', fontSize: 15, lineHeight: 17, color: BRAND.white, marginTop: 1 },
   pillLane: { position: 'absolute', right: 64, top: 0, width: 240, alignItems: 'flex-end' },
   pill: { marginTop: 11, height: 32, paddingHorizontal: 12, borderRadius: 16,
     backgroundColor: BRAND.white, borderWidth: 2.5, borderColor: BRAND.navy, justifyContent: 'center', ...SHADOW.card },

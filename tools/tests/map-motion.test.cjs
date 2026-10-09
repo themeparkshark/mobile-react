@@ -125,7 +125,8 @@ test('the map turns the camera without a React render per compass reading', () =
   const hook = read('src/components/map/useFollowCamera.ts');
   assert.doesNotMatch(map, /const \{ heading, setHeadingEnabled \} = useContext\(HeadingContext\)/);
   assert.match(map, /useContext\(HeadingControlContext\)/);
-  assert.match(map, /subscribeHeading\(cam\.onHeading\)/);
+  assert.match(map, /cam\.onHeading\(deg, at\);/);
+  assert.match(map, /if \(!haveHeadingRef\.current\) \{ haveHeadingRef\.current = true; setHaveHeading\(true\); \}/, "one render when the compass first reports, then none");
   assert.doesNotMatch(map, /pushCamera\(/, 'no ease-in-out camera move per fix or per compass tick');
   assert.match(hook, /animationMode: 'linearTo'/);
   assert.doesNotMatch(hook, /useState/, 'the loop never renders');
@@ -146,8 +147,12 @@ test('the compass says what it does: two named states, a pill after each tap and
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'f' },
     '../../ui': { BRAND: {}, SHADOW: { card: {} } },
   });
-  for (const key of ['heading', 'north', 'away']) assert.ok(btn.FOLLOW_COPY[key].split(' ').length <= 4, key);
+  for (const key of ['heading', 'north', 'away', 'noCompass']) assert.ok(btn.FOLLOW_COPY[key].split(' ').length <= 5, key);
+  assert.equal(btn.shouldFlashPill('heading', 'north'), true);
+  assert.equal(btn.shouldFlashPill('away', 'heading'), false, 'no pill on the way back');
+  assert.equal(btn.shouldFlashPill('heading', 'away'), false);
   assert.ok(btn.FOLLOW_COPY.hintBody.split(' ').length <= 12);
+  assert.match(btn.followButtonLabel('away'), /Find your shark/);
   assert.match(btn.followButtonLabel('heading'), /turns with you/);
   assert.match(btn.followButtonLabel('north'), /north stays up/);
   const map = read('src/components/Map.tsx');
@@ -204,4 +209,14 @@ test('one wild compass reading is ignored; two that agree are a real spin', () =
   for (let t = 0; t < 1500; t += 33) g.push(0, t);
   for (let t = 1500; t < 3000; t += 33) g.push(180, t);
   assert.ok(Math.abs(ad(180, g.value())) < 5, `about-face taken: ${g.value()}`);
+});
+
+test('the living shark: three tap tricks in turn, varied fidgets, a cheer that does not nag', () => {
+  const life = loadTs('src/components/map/sharkLife.ts');
+  assert.deepEqual([0, 1, 2, 3].map(n => life.tapTrick(n, true)), ['twirl', 'flip', 'bounce', 'twirl']);
+  assert.equal(life.tapTrick(0, false), 'wiggle', 'a lettered outfit never mirrors');
+  const six = [0, 1, 2, 3, 4, 5].map(n => life.nextFidget(n, true));
+  assert.ok(new Set(six).size >= 4 && six.includes('show'));
+  assert.ok(life.FIDGET_GAP_MS[0] >= 6000 && life.FIDGET_GAP_MS[1] <= 15000);
+  assert.ok(life.CHEER_REPEAT_MS >= 15000);
 });

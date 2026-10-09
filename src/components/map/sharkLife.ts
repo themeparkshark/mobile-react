@@ -16,3 +16,13 @@ export function nextFidget(n: number, hasMovingPiece: boolean): SharkMood {
   const list = hasMovingPiece ? DRESSED : PLAIN;
   return list[((n % list.length) + list.length) % list.length];
 }
+
+/** While a ride coin is in range: one cheer on arrival, then one this often. */
+export const CHEER_REPEAT_MS = 20000;
+
+export type TapTrick = 'twirl' | 'flip' | 'bounce' | 'wiggle';
+/** The n-th tap's trick: twirl, loop, double bounce in turn. A lettered outfit never mirrors: wiggle instead of twirl. */
+export function tapTrick(n: number, canMirror: boolean): TapTrick {
+  const t = (['twirl', 'flip', 'bounce'] as const)[((n % 3) + 3) % 3];
+  return t === 'twirl' && !canMirror ? 'wiggle' : t;
+}

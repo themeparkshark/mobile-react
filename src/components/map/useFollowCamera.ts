@@ -45,10 +45,13 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
   /** Unwrapped bearing last sent, and the map's real bearing while panned away. */
   const bearingU = useRef(0);
   const facingU = useRef(0);
+  const turnSent = useRef(0);
   const freeBearing = useRef(0);
   const bearing = useSharedValue(0);
   const facing = useSharedValue(0);
   const headingKnown = useSharedValue(0);
+  /** How fast the phone is turning (degrees a second, signed, eased): the shark leans into a turn. */
+  const turn = useSharedValue(0);
   const reducedRef = useRef(reducedMotion);
   reducedRef.current = reducedMotion;
 
@@ -95,6 +98,8 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
         } else quiet.current += 1;
       }
     } else quiet.current += 1;
+    const spin = Math.max(-150, Math.min(150, filter.speed()));
+    if (Math.abs(spin - turnSent.current) > 4) { turnSent.current = spin; turn.value = reducedRef.current ? 0 : withTiming(spin, { duration: 260 }); }
     // The beam: the phone's heading on the map. Straight up while the map turns with you.
     if (h !== null) {
       const mapBearing = following ? (target ?? 0) : freeBearing.current;
@@ -196,5 +201,5 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
   const where = useCallback(() => position(Date.now()), []); // eslint-disable-line react-hooks/exhaustive-deps
   const modeNow = useCallback(() => mode.current, []);
 
-  return { onHeading, onFix, recenter, setMode, noteFreeBearing, setRunning, resync, where, modeNow, bearing, facing, headingKnown };
+  return { onHeading, onFix, recenter, setMode, noteFreeBearing, setRunning, resync, where, modeNow, bearing, facing, headingKnown, turn };
 }
