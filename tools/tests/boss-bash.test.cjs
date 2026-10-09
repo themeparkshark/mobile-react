@@ -103,7 +103,7 @@ test('the ring sits on the core for exactly the PERFECT band (the picture equals
     assert.equal(b.ringScaleAt(band[1],band),1);assert.ok(b.ringScaleAt(band[1]+0.01,band)<1);}
 });
 test('filling the fins during an ink delays the ink, it is not lost', ()=>{
-  let s={...b.createBash(6),ink:{from:8000,until:9150},power:2,up:[{id:1,spot:0,kind:'tentacle',at:7900,until:9900}],ms:8100};
+  let s={...b.createBash(6),ink:{from:8000,until:9150},power:2,bonksSince:2,up:[{id:1,spot:0,kind:'tentacle',at:7900,until:9900}],ms:8100};
   const r=b.tapPopup(s,1,8200);assert.ok(r.state.dizzy);assert.equal(r.state.ink,null);assert.equal(r.state.nextInkAt,r.state.dizzy.until+400);
 });
 test('mashing empty water holds longer each time', ()=>{
@@ -114,4 +114,17 @@ test('mashing empty water holds longer each time', ()=>{
 test('PERFECT is earned: even a clean player with human timing wobble is not perfect every time', ()=>{
   const xs=runs.expert;const rate=xs.reduce((a,s)=>a+s.perfects,0)/Math.max(1,xs.reduce((a,s)=>a+s.smashes,0));
   console.log('expert perfect rate',rate.toFixed(2));assert.ok(rate<=0.75&&rate>=0.25,`rate ${rate}`);
+});
+
+test('a gold tentacle fills two fins, but a dizzy still needs two real hits (server share rule)', ()=>{
+  let s={...b.createBash(3),up:[{id:1,spot:0,kind:'gold',at:0,until:900},{id:2,spot:1,kind:'tentacle',at:0,until:900}],ms:100};
+  let r=b.tapPopup(s,1,200);assert.equal(r.state.power,2);assert.equal(r.state.dizzy,null);assert.equal(r.state.golds,1);
+  r=b.tapPopup(r.state,2,300);assert.ok(r.state.dizzy);
+  let h={...b.createBash(3),headStart:1,power:1,up:[{id:1,spot:0,kind:'gold',at:0,until:900}],ms:100};
+  r=b.tapPopup(h,1,200);assert.equal(r.state.dizzy,null,'gold + head start alone is not enough');
+});
+test('gold only appears beside a pufferfish', ()=>{
+  let seen=0;for(let seed=1;seed<40;seed++){let s={...b.createBash(seed),smashes:1};for(let ms=0;ms<b.ROUND_MS;ms+=16){const r=b.tick(s,ms);s=r.state;
+    for(const e of r.events)if(e.type==='spawn'&&e.popup.kind==='gold'){seen++;const p=s.up.find(q=>q.kind==='puffer');assert.ok(p);assert.equal(Math.abs(p.spot%3-e.popup.spot%3),1);}}}
+  assert.ok(seen>0);
 });

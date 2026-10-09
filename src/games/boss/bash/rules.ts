@@ -20,7 +20,8 @@ export const ROUND_MS = 20_000;
 export const SPOTS = 6;
 export type SpotId = 0 | 1 | 2 | 3 | 4 | 5;
 export type PhaseId = 'warm' | 'angry' | 'fury';
-export type Kind = 'tentacle' | 'puffer';
+/** A gold tentacle is worth two fins but only pops up next to a pufferfish, briefly: the risky, rewarding tap. */
+export type Kind = 'tentacle' | 'puffer' | 'gold';
 
 export interface PhaseRule {
   readonly id: PhaseId;
@@ -63,6 +64,9 @@ export const SPLASH_MS = 350;
 export const OUCH_MS = 1000;
 /** No new pop-ups in the last moment, so nothing sinks unseen at the bell. */
 export const LAST_SPAWN_MS = ROUND_MS - 700;
+/** Gold tentacle: how often it appears beside a pufferfish, and how briefly. */
+export const GOLD_CHANCE = 0.55;
+export const GOLD_UP_MS = 1000;
 /** Smallest cycle the server accepts: one weak hit per three hits. */
 export const MIN_BONKS = 2;
 
@@ -99,6 +103,9 @@ export interface BashState {
   readonly splashChain: number;
   /** Right after a smash the next tentacles pop up together (a fast rebuild rewards a clean player). */
   readonly burst: number;
+  /** Real hits since the last smash: the server's share rule needs 2 before every weak hit. */
+  readonly bonksSince: number;
+  readonly golds: number;
   readonly inks: number;
   readonly hits: number;
   readonly weak: number;
@@ -149,7 +156,7 @@ export function createBash(seed: number): BashState {
   return { seed, rng: next((seed >>> 0) * 2654435761 + 1), ms: 0, nextId: 1, nextSpawnAt: 450, lastSpot: -1, up: [],
     power: 0, headStart: 0, dizzy: null, ouchUntil: -1, hits: 0, weak: 0, bonks: 0, smashes: 0, perfects: 0, ouches: 0,
     missedDizzy: 0, streak: 0, bestStreak: 0, capped: 0, ink: null, nextInkAt: INK_FIRST_MS, inkedUntil: -1, blocks: 0, inked: 0,
-    splashUntil: -1, splashChain: 0, inks: 0, burst: 0 };
+    splashUntil: -1, splashChain: 0, inks: 0, burst: 0, bonksSince: 0, golds: 0 };
 }
 
 /** Fins to fill for the next dizzy (the head start counts as a filled fin). */
@@ -171,7 +178,7 @@ export function tick(state: BashState, ms: number): { state: BashState; events: 
   const before = phaseAt(state.ms), now = phaseAt(ms);
   if (now.id !== before.id) events.push({ type: 'phase', phase: now.id });
   if (s.dizzy && ms >= s.dizzy.until) {
-    s = { ...s, dizzy: null, power: 0, headStart: 0, missedDizzy: s.missedDizzy + 1, nextSpawnAt: ms + 250 };
+    s = { ...s, dizzy: null, power: 0, headStart: 0, bonksSince: 0, missedDizzy: s.missedDizzy + 1, nextSpawnAt: ms + 250 };
     events.push({ type: 'shakeOff' });
   }
   if (s.ink && ms >= s.ink.until) {
@@ -214,9 +221,16 @@ export function tick(state: BashState, ms: number): { state: BashState; events: 
         r = next(r);
         // Never two puffers up, and never a puffer before the first dizzy of the round.
         const puffers = s.up.some(p => p.kind === 'puffer');
-        const kind: Kind = !puffers && s.smashes + s.missedDizzy > 0 && unit(r) < now.puffer ? 'puffer' : 'tentacle';
+        const puffer = s.up.find(p => p.kind === 'puffer');
+        const golds = s.up.some(p => p.kind === 'gold');
+        // A gold tentacle only shows beside a pufferfish (next lane), so grabbing it is a real risk.
+        const goldLane = puffer && !golds ? [puffer.spot % 3 - 1, puffer.spot % 3 + 1].find(l => lanes.includes(l)) : undefined;
+        const gold = goldLane !== undefined && unit(r) < GOLD_CHANCE;
+        const kind: Kind = gold ? 'gold' : !puffers && s.smashes + s.missedDizzy > 0 && unit(r) < now.puffer ? 'puffer' : 'tentacle';
         r = next(r);
-        const popup: Popup = { id: s.nextId, spot: (lane + row) as SpotId, kind, at: ms, until: ms + now.upMs + (kind === 'puffer' ? 250 : 0) };
+        const spotLane = gold ? goldLane! : lane;
+        const life = kind === 'gold' ? GOLD_UP_MS : now.upMs + (kind === 'puffer' ? 250 : 0);
+        const popup: Popup = { id: s.nextId, spot: (spotLane + (gold ? (puffer!.spot < 3 ? 0 : 3) : row)) as SpotId, kind, at: ms, until: ms + life };
         const burst = Math.max(0, s.burst - 1);
         s = { ...s, rng: r, nextId: s.nextId + 1, up: [...s.up, popup], lastSpot: popup.spot, burst,
           nextSpawnAt: ms + (s.burst > 0 ? 20 : now.gapMs) };
@@ -244,12 +258,14 @@ export function tapPopup(state: BashState, id: number, ms: number, maxHits = Num
   const counted = state.hits < maxHits;
   const hits = state.hits + (counted ? 1 : 0);
   const streak = state.streak + 1;
-  const power = state.power + 1;
   const need = finsNeeded(state, ms);
+  const power = Math.min(need, state.power + (popup.kind === 'gold' ? 2 : 1));
+  const bonksSince = state.bonksSince + (counted ? 1 : 0);
   let s: BashState = { ...state, up, hits, bonks: state.bonks + 1, streak, bestStreak: Math.max(state.bestStreak, streak),
-    power, capped: state.capped + (counted ? 0 : 1), nextSpawnAt: Math.min(state.nextSpawnAt, ms + 60) };
+    power, bonksSince, golds: state.golds + (popup.kind === 'gold' ? 1 : 0), capped: state.capped + (counted ? 0 : 1),
+    nextSpawnAt: Math.min(state.nextSpawnAt, ms + 60) };
   const events: BashEvent[] = [{ type: 'bonk', popup, damage: counted ? w.per_hit : 0, streak, power, need, counted }];
-  if (power >= need) s = goDizzy(s, ms, events);
+  if (power >= need && bonksSince >= MIN_BONKS) s = goDizzy(s, ms, events);
   return { state: s, events };
 }
 
@@ -284,11 +300,12 @@ export function tapBoss(state: BashState, ms: number, maxHits = Number.POSITIVE_
   if (state.ink && !state.dizzy) {
     // Blocked the ink: it counts as a hit and fills a fin.
     const counted = state.hits < maxHits;
-    const power = state.power + 1, need = finsNeeded(state, ms);
+    const need = finsNeeded(state, ms), power = Math.min(need, state.power + 1);
     let s: BashState = { ...state, ink: null, hits: state.hits + (counted ? 1 : 0), blocks: state.blocks + 1, power,
+      bonksSince: state.bonksSince + (counted ? 1 : 0),
       streak: state.streak + 1, bestStreak: Math.max(state.bestStreak, state.streak + 1), capped: state.capped + (counted ? 0 : 1) };
     const events: BashEvent[] = [{ type: 'inkBlock', damage: counted ? w.per_hit : 0, power, need, counted }];
-    if (power >= need) s = goDizzy(s, ms, events);
+    if (power >= need && s.bonksSince >= MIN_BONKS) s = goDizzy(s, ms, events);
     return { state: s, events };
   }
   if (!state.dizzy || ms < state.dizzy.from - DIZZY_DROP_MS / 2) return { state, events: [{ type: 'clank' }] };
@@ -302,7 +319,7 @@ export function tapBoss(state: BashState, ms: number, maxHits = Number.POSITIVE_
   const perfect = p >= band[0] && p <= band[1];
   const damage = (counted ? w.per_hit : 0) + (weakOk ? w.per_weak_hit : 0);
   const headStart = perfect ? 1 : 0;
-  const s: BashState = { ...state, hits, weak, dizzy: null, power: headStart, headStart, smashes: state.smashes + 1,
+  const s: BashState = { ...state, hits, weak, dizzy: null, power: headStart, headStart, bonksSince: 0, smashes: state.smashes + 1,
     perfects: state.perfects + (perfect ? 1 : 0), capped: state.capped + (counted ? 0 : 1), nextSpawnAt: ms + 60, burst: 2 };
   return { state: s, events: [{ type: 'smash', damage, perfect, weak: weakOk, final: ms >= ROUND_MS - 3000 }] };
 }
