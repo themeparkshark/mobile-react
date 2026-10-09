@@ -5,19 +5,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { playSfx } from '../../gamekit/SFX';
 import { openAppSettings } from '../../services/external';
 import type { MotionAccess } from '../../services/trail/TrailProvider';
+import { getSeen, setSeen } from '../../services/trail/trailSeen';
 import {
   BOX_NAME, boxName, bonusLabel, boxFraction, formatDistance, formatSteps, missNote, percent, stepsToGo, usesMiles,
   type TrailBox, type TrailState, type TrailTier,
 } from '../../services/trail/trailModel';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, confirmGame, type GameIconName } from '../../ui';
-import TrailBoxArt, { STEPS_ART } from './TrailBoxArt';
+import TrailBoxArt, { STEPS_ART, WHEELS_ART } from './TrailBoxArt';
 import TrailPath from './TrailPath';
 
 const KIND_ICON: Record<string, GameIconName> = { coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star' };
+const RANK: Record<TrailTier, number> = { blue: 0, red: 1, gold: 2 };
 const LOCALE = (() => { try { return Intl.DateTimeFormat().resolvedOptions().locale; } catch { return 'en-US'; } })();
 
-/** What a steps-to-go number last showed, by box id: reopening counts down only the new walk. */
-const lastShown = new Map<number, number>();
 
 /**
  * Trail Boxes sheet: the three boxes walking right now (each a path that
@@ -53,6 +53,15 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
   }, [state.walking, state.slots]);
 
   const todayBest = !!state.best_day && state.today.steps > 0 && state.best_day.park_day === state.today.park_day;
+  const toggleWheels = async () => {
+    playSfx('ui.select');
+    if (!state.wheels) {
+      const ok = await confirmGame({ title: 'Grown-ups: turn on Rolling?', message: 'For a wheelchair, scooter or stroller. Your path on the map counts as walking while the map is open.',
+        confirmLabel: 'Turn on', cancelLabel: 'Not now' });
+      if (!ok) return;
+    }
+    onWheels(!state.wheels);
+  };
   const changeGoal = async () => {
     const ok = await confirmGame({ title: 'Change your goal?', message: 'Your steps this week stay. You can pick a new goal or none.',
       confirmLabel: 'Change', cancelLabel: 'Keep it' });
@@ -68,10 +77,7 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text accessibilityRole="header" style={styles.title}>{view === 'inside' ? 'What\'s inside' : 'Trail Boxes'}</Text>
             {view === 'inside' ? <Text style={styles.subtitle}>Every box, every chance</Text> : (
-              <View style={styles.parkOnly}>
-                <GameIcon name="map" size={18} />
-                <Text style={styles.parkOnlyText}>Walk in the park to open them</Text>
-              </View>
+              <Text style={styles.parkOnlyText}>Walk in the park to open them</Text>
             )}
           </View>
           {view === 'inside'
@@ -111,8 +117,11 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
               <Pressable accessibilityRole="button" accessibilityLabel={`Open ${state.ready.length} ready ${state.ready.length === 1 ? 'box' : 'boxes'}`}
                 onPress={() => { playSfx('ui.confirm'); onOpen(state.ready); }} style={[styles.card, styles.readyCard]}>
                 <View style={{ flexDirection: 'row', marginRight: 8 }}>
-                  {state.ready.slice(0, 3).map((b, i) => (
-                    <View key={b.id} style={{ marginLeft: i ? -30 : 0 }}><TrailBoxArt tier={b.tier} size={56} ready={i === 0} active={visible} /></View>
+                  {/* Rarest last, so it sits in front and biggest; the others fan out behind it. */}
+                  {[...state.ready].sort((a, b) => RANK[b.tier] - RANK[a.tier]).slice(0, 3).reverse().map((b, i, arr) => (
+                    <View key={b.id} style={{ marginLeft: i ? -26 : 0, transform: [{ rotate: `${(i - (arr.length - 1)) * 8}deg` }] }}>
+                      <TrailBoxArt tier={b.tier} size={i === arr.length - 1 ? 62 : 50} ready={i === arr.length - 1} active={visible} />
+                    </View>
                   ))}
                 </View>
                 <View style={{ flex: 1 }}>
@@ -222,11 +231,14 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
 
             {!!state.exclusives?.length && <Exclusives items={state.exclusives} />}
 
-            <Pressable onPress={() => { playSfx('ui.select'); onWheels(!state.wheels); }} accessibilityRole="switch"
-              accessibilityState={{ checked: state.wheels }} accessibilityLabel="Rolling with wheels: count a gentle pace while the app is closed"
+            <Pressable onPress={() => void toggleWheels()} accessibilityRole="switch"
+              accessibilityState={{ checked: state.wheels }} accessibilityLabel="Rolling: count my path on the map. Asks a grown-up first"
               style={[styles.card, styles.rowCard]}>
-              <GameIcon name="ride" size={30} />
-              <Text style={[styles.body, { flex: 1 }]}>Rolling in a wheelchair, scooter or stroller? Count a gentle pace while the app is closed.</Text>
+              <Image source={WHEELS_ART} style={{ width: 34, height: 34 }} contentFit="contain" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Rolling</Text>
+                <Text style={styles.body}>Wheelchair, scooter or stroller? Your path on the map counts while the map is open.</Text>
+              </View>
               <View style={[styles.toggle, state.wheels && styles.toggleOn]}>
                 <View style={[styles.knob, state.wheels && styles.knobOn]} />
               </View>
@@ -247,13 +259,13 @@ export default memo(TrailSheet);
 /** Steps to go, counting down from what you saw last time (Pikmin Bloom style), never up. */
 function StepsToGo({ box, visible }: { readonly box: TrailBox; readonly visible: boolean }) {
   const target = stepsToGo(box);
-  const from = lastShown.get(box.id);
+  const from = getSeen(`n:${box.id}`);
   const [shown, setShown] = useState(from != null && from > target ? from : target);
   const raf = useRef(0);
   useEffect(() => {
     if (!visible) return undefined;
-    const start = lastShown.get(box.id);
-    lastShown.set(box.id, target);
+    const start = getSeen(`n:${box.id}`);
+    setSeen(`n:${box.id}`, target);
     if (start == null || start <= target) { setShown(target); return undefined; }
     const t0 = Date.now();
     const tick = () => {
@@ -319,7 +331,7 @@ function Inside({ state }: { readonly state: TrailState }) {
           </View>
         ))}
       </View>
-      <Text style={styles.footnote}>Arriving at the park always gives a Blue Box. A Gold Box is sure to come by your {state.odds.gold_pity}th box{state.gold_in > 1 ? ` (in ${state.gold_in} or less)` : ' (your next one!)'}.</Text>
+      <Text style={styles.footnote}>{state.gold_in > 1 ? `A Gold Box is coming within ${state.gold_in} boxes!` : 'Your next box is a Gold Box!'} Arriving at the park gives a Blue Box.</Text>
       {tiers.map(t => <TierCard key={t.tier} tier={t.tier} t={t} />)}
     </ScrollView>
   );
@@ -335,8 +347,8 @@ function TierCard({ tier, t }: { readonly tier: TrailTier; readonly t: TrailStat
           <Text style={styles.body}>Opens after {formatSteps(t.goal_steps)} steps</Text>
         </View>
       </View>
-      <OddsRow icon="coins" label={`${formatSteps(t.coins)} Coins`} pct="Always" />
-      {t.always.map((a, i) => <OddsRow key={`a${i}`} icon={KIND_ICON[a.kind]} label={bonusLabel(a.kind, a.amount)} pct="Always" />)}
+      <OddsRow icon="coins" label={`${formatSteps(t.coins)} Coins`} pct="ALWAYS" />
+      {t.always.map((a, i) => <OddsRow key={`a${i}`} icon={KIND_ICON[a.kind]} label={bonusLabel(a.kind, a.amount)} pct="ALWAYS" />)}
       <Text style={[styles.earnSub, { marginTop: 6 }]}>Plus one of these:</Text>
       {t.bonus.map((b, i) => <OddsRow key={i} icon={KIND_ICON[b.kind]} label={bonusLabel(b.kind, b.amount)} pct={percent(b.chance_bp)} />)}
     </View>

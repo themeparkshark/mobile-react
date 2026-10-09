@@ -5,6 +5,7 @@ import getFeatureFlags from '../../api/endpoints/platform/feature-flags';
 import { frontTrailBox, getTrail, openTrailBox, postTrailWalk, putTrailSettings } from '../../api/endpoints/me/trail';
 import { AuthContext } from '../../context/AuthProvider';
 import { LocationContext, LocationStatusContext } from '../../context/LocationProvider';
+import { hydrateTrailSeen } from './trailSeen';
 import { TrailRecorder, type TrailAway, type TrailSegment, type TrailState } from './trailModel';
 
 /**
@@ -112,7 +113,7 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
   enabledRef.current = enabled;
 
   useEffect(() => { let on = true; void trailFlag().then(v => { if (on) setFlag(v); }); return () => { on = false; }; }, [player?.id]);
-  useEffect(() => { if (enabled) void readMotion().then(setMotion); }, [enabled]);
+  useEffect(() => { if (enabled) { void readMotion().then(setMotion); void hydrateTrailSeen(); } }, [enabled]);
 
   // Restore what a killed app left behind: windows not yet sent, and where it went to sleep.
   useEffect(() => {
@@ -179,7 +180,8 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
     if (!segments.length) return;
     pending.current = [...pending.current, ...segments].slice(-MAX_PENDING);
     persist();
-    void upload();
+    // While backing off (no signal), the retry timer sends it; never one POST per window offline.
+    if (!retryTimer.current) void upload();
   }, [persist, upload]);
 
   // Every published fix the map already gets (no extra GPS).
@@ -190,8 +192,6 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
       void AsyncStorage.removeItem(AWAY_KEY).catch(() => undefined);
     }
   }, [take]);
-  const locRef = useRef(location);
-  locRef.current = location;
   useEffect(() => {
     if (!enabled || !location) return;
     onFix(location.latitude, location.longitude);
@@ -218,10 +218,9 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
         }
       } else if (s === 'active') {
         void readMotion().then(setMotion);
-        // Catch up at once from the last known spot: the walk lands as soon as the app opens.
-        const loc = locRef.current;
-        if (loc && parkRef.current != null) onFix(loc.latitude, loc.longitude);
-        else void refresh();
+        // The first FRESH fix decides where the closed window ends (in the park, or "left"):
+        // replaying the pre-background spot would call a hotel walk a park walk.
+        void refresh();
       }
     });
     return () => sub.remove();

@@ -25,6 +25,7 @@ export const BOX_OPEN_ART: Record<TrailTier, number> = {
   gold: require('../../../assets/images/trail/open-gold.png'),
 };
 export const STEPS_ART = require('../../../assets/images/trail/steps.png');
+export const WHEELS_ART = require('../../../assets/images/trail/wheels.png');
 
 /** Idle wiggles and hops run this long after something changes, then rest (battery). */
 const LIVELY_MS = 8000;

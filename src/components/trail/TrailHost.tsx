@@ -50,7 +50,7 @@ function TrailHost({ active, inPark = true, preview }: {
   if (!inPark && any === 0) return null;
   return (
     <>
-      <TrailPill state={trail.state} active={active && !open && !opening} onPress={show} />
+      <TrailPill state={trail.state} active={active && !open && !opening} onPress={show} inPark={inPark} />
       <TrailSheet visible={open && !opening} state={trail.state} motion={trail.motion} inPark={inPark}
         onClose={() => { playSfx('ui.modalClose'); setOpen(false); }}
         onOpen={boxes => setOpening(boxes)}

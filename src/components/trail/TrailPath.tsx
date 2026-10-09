@@ -5,19 +5,14 @@ import { View, type LayoutChangeEvent } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useReduceMotionPreference } from '../../hooks/useReducedGameMotion';
 import { milestonesCrossed } from '../../services/trail/trailModel';
+import { getSeen, setSeen } from '../../services/trail/trailSeen';
 import { BRAND } from '../../ui';
 import { STEPS_ART } from './TrailBoxArt';
 
 const SHARK = require('../../../assets/icons/game/shark.png');
 
-/**
- * What each path last showed, by key (a box id). A path only animates the new
- * part of the walk since you last looked, the way Pikmin Bloom's seedlings
- * tick down when you open the list. Lives for the app session.
- */
-const lastSeen = new Map<string, number>();
 export function seenFraction(key: string | undefined): number | null {
-  return key ? lastSeen.get(key) ?? null : null;
+  return getSeen(key ? `p:${key}` : undefined);
 }
 
 /**
@@ -49,7 +44,7 @@ function TrailPath({ fraction, height = 16, ready = false, seenKey, onFilled }: 
     if (pref === null) return;
     const from = Math.max(seenFraction(seenKey) ?? fill.value, 0);
     const next = Math.max(from, target);
-    if (seenKey) lastSeen.set(seenKey, next);
+    if (seenKey) setSeen(`p:${seenKey}`, next);
     if (reduced || next <= fill.value + 0.001) { fill.value = next; return; }
     const beats = milestonesCrossed(fill.value, next);
     const ms = 650 + Math.min(700, (next - fill.value) * 1400);
@@ -57,11 +52,12 @@ function TrailPath({ fraction, height = 16, ready = false, seenKey, onFilled }: 
       if (i >= beats.length) return;
       void Haptics.impactAsync(beats[i] >= 1 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     };
-    beats.forEach((m, i) => setTimeout(() => beat(i), 250 + ms * ((m - fill.value) / (next - fill.value))));
+    const timers = beats.map((m, i) => setTimeout(() => beat(i), 250 + ms * ((m - fill.value) / (next - fill.value))));
     fill.value = withTiming(next, { duration: ms, easing: Easing.out(Easing.cubic) }, done => {
       if (done && next >= 1 && onFilled) runOnJS(onFilled)();
     });
     bump.value = withSequence(withTiming(1.25, { duration: 160 }), withSpring(1, { damping: 8, stiffness: 240 }));
+    return () => timers.forEach(clearTimeout);
   }, [target, pref, seenKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fillStyle = useAnimatedStyle(() => ({ width: Math.max(height, fill.value * width) }));

@@ -9,7 +9,7 @@
 
 export type TrailTier = 'blue' | 'red' | 'gold';
 export type TrailRewardKind = 'coins' | 'energy' | 'tickets' | 'mystery_box' | 'exclusive';
-export type TrailMissReason = 'ride' | 'outside' | 'not_checked_in' | 'hour_cap' | 'day_cap' | 'too_old' | 'overlap' | 'gps_short' | 'left_early' | 'bad';
+export type TrailMissReason = 'ride' | 'outside' | 'not_checked_in' | 'hour_cap' | 'day_cap' | 'too_old' | 'overlap' | 'gps_short' | 'left_early' | 'try_wheels' | 'bad';
 
 export interface TrailBox {
   readonly id: number;
@@ -144,6 +144,7 @@ export function missCopy(reason: TrailMissReason): string | null {
     case 'day_cap': return 'You walked a ton! Some steps were past the limit.';
     case 'gps_short': return 'Your phone lost the map for a bit, so some steps did not count.';
     case 'left_early': return 'Open the map before you leave the park to save every step.';
+    case 'try_wheels': return 'Pushing a stroller or rolling? Turn on Rolling below so your map path counts.';
     default: return null;
   }
 }

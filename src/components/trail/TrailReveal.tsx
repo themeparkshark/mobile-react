@@ -20,7 +20,7 @@ const ICON: Record<TrailReward['kind'], GameIconName> = {
 };
 /** Light behind each box: a warm white core into its colour, never muddy on navy. */
 const GLOW: Record<TrailBox['tier'], [string, string]> = {
-  blue: ['#ffffff', '#7cc6f5'], red: ['#fff4ec', '#ff8a7a'], gold: ['#fffbe8', '#ffd84d'],
+  blue: ['#ffffff', '#d6f0ff'], red: ['#fffaf6', '#ffd9d2'], gold: ['#fffdf2', '#fff0b8'],
 };
 const CONFETTI: Record<TrailBox['tier'], string[]> = {
   blue: ['#7cc6f5', '#ffffff', '#0879ca', '#bfe5ff', '#ffcf3b'],
@@ -197,14 +197,14 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint }: {
       <Pressable style={[styles.scrim, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
         onPress={phase === 'ready' ? start : skipAhead} accessibilityRole="button"
         accessibilityLabel={phase === 'ready' ? `Open your ${boxName(box)}` : BOX_NAME[box.tier]}>
-        <Text style={styles.kicker}>{BOX_NAME[box.tier]}{boxes.length > 1 ? `  ${index + 1} of ${boxes.length}` : ''}</Text>
-        <Text style={styles.title}>{phase === 'ready' ? 'Tap to open!' : showRewards ? 'You got' : ' '}</Text>
+        <Text style={styles.kicker}>{BOX_NAME[box.tier]}{boxes.length > 1 ? ` · ${index + 1} of ${boxes.length}` : ''}</Text>
+        <Text style={styles.title}>{phase === 'ready' ? 'Tap to open!' : showRewards ? 'You got' : opened ? 'Here it comes!' : ' '}</Text>
         <View style={{ width: '100%', height: size * 1.05, alignItems: 'center', justifyContent: 'center' }}>
           <Animated.View pointerEvents="none" style={[styles.center, { width: g, height: g, top: (size * 1.05 - g) / 2 }, glowStyle]}>
             <Canvas style={{ width: g, height: g }}>
               <Circle cx={g / 2} cy={g / 2} r={g / 2}>
                 <RadialGradient c={vec(g / 2, g / 2)} r={g / 2}
-                  colors={[GLOW[box.tier][0], `${GLOW[box.tier][1]}cc`, `${GLOW[box.tier][1]}00`]} positions={[0, 0.4, 1]} />
+                  colors={[GLOW[box.tier][0], `${GLOW[box.tier][1]}e6`, '#ffffff55', '#ffffff00']} positions={[0, 0.35, 0.7, 1]} />
               </Circle>
             </Canvas>
           </Animated.View>
@@ -234,7 +234,7 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint }: {
         {phase === 'ready' && (
           <View style={{ alignItems: 'center' }}>
             <Text style={styles.hint}>{index === 0 && boxes.length > 1 ? `${boxes.length} boxes to open` : ' '}</Text>
-            {index === 0 && <GameButton label="Later" variant="ghost" tone="onBlue" onPress={onClose} />}
+            {index === 0 && <GameButton label="Later" variant="secondary" size="compact" onPress={onClose} />}
           </View>
         )}
       </Pressable>
@@ -288,7 +288,7 @@ function RewardCard({ reward, tier, order, delay, hero, reduced }: {
         {reward.kind === 'exclusive' && reward.icon_url
           ? <Image source={{ uri: reward.icon_url }} style={{ width: 60, height: 60 }} contentFit="contain" />
           : <GameIcon name={ICON[reward.kind]} size={50} />}
-        <Text style={styles.cardText} numberOfLines={2} adjustsFontSizeToFit>
+        <Text style={styles.cardText} numberOfLines={2} adjustsFontSizeToFit maxFontSizeMultiplier={1.3}>
           {reward.kind === 'coins' ? `+${formatSteps(shown)} Coins` : rewardLabel(reward)}
         </Text>
         {hero && <Text style={styles.badge}>TRAIL ONLY</Text>}
@@ -303,7 +303,7 @@ function HeroRing({ ring }: { readonly ring: SharedValue<number> }) {
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(5,52,110,0.86)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  scrim: { flex: 1, backgroundColor: 'rgba(5,52,110,0.94)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   center: { position: 'absolute', alignSelf: 'center' },
   kicker: { zIndex: 2, fontFamily: 'Shark', fontSize: 16, color: BRAND.sky, textTransform: 'uppercase', letterSpacing: 2 },
   title: { zIndex: 2, fontFamily: 'Shark', fontSize: 34, color: BRAND.white, textTransform: 'uppercase', marginTop: 2,
