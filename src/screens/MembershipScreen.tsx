@@ -68,7 +68,7 @@ export function dealLine(plan: Pick<VipPlan, 'price' | 'period' | 'trial'>): str
   const billing = priceText(plan);
   const until = trialEndText(plan.trial);
   return plan.trial
-    ? `${capitalize(plan.trial)}${until ? `, until ${until}` : ''}. Then ${billing}.`
+    ? `${capitalize(plan.trial)}${until ? `, until ${until}` : ''}.\nThen ${billing}.`
     : `${billing}.`;
 }
 /** The buy button: the free part first when there is one. */

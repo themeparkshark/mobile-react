@@ -344,7 +344,9 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
   const n = product.grants[main] ?? 0;
   const best = product.badge === 'Best value';
   const wide = columns === 1;
-  const gear = main === 'coins' ? gearLine(product.buys) : null;
+  const gear = main === 'coins' ? gearLine(product.buys, bonus) : null;
+  // One sticker per card (kids UX r4): no % sticker on BEST VALUE, and coin packs say it in the gear line.
+  const sticker = bonus && !best && !gear ? `+${bonus}% MORE` : null;
   return (
     <View style={[columns === 3 ? st.col3 : columns === 2 ? st.col2 : st.col1]}>
       <ShopCard onPress={onBuy} disabled={disabled || !price || !!note} glow={best}
@@ -356,7 +358,7 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
           color={best ? 'gold' : 'navy'} size={columns === 3 ? 14 : 16} />
         {gear && <Text maxFontSizeMultiplier={MAX_FONT} style={st.gearLine} numberOfLines={2}>{gear}</Text>}
         <PriceBar price={price} busy={busy} note={note} />
-        {bonus && <Sticker text={`+${bonus}% MORE`} style={{ top: 6, right: 4 }} />}
+        {sticker && <Sticker text={sticker} style={{ top: 6, right: 4 }} />}
       </ShopCard>
       {best && <View style={st.bestPill} pointerEvents="none"><Text maxFontSizeMultiplier={1.1} style={st.bestPillText}>BEST VALUE</Text></View>}
     </View>

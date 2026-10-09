@@ -112,6 +112,20 @@ export function passGrants(tiers: readonly SharkPassTier[]): { coins: number; ti
   return out;
 }
 
+/** "about 9 ride coin wins away", from the server's own points for a win. Null when unknown. */
+export function winsAwayText(pointsAway: number, today: readonly { event: string; points: number }[]): string | null {
+  const win = today.find(e => e.event === 'ride_coin_win')?.points ?? 0;
+  if (win <= 0 || pointsAway <= 0) return null;
+  const n = Math.ceil(pointsAway / win);
+  return `about ${n} ride coin ${n === 1 ? 'win' : 'wins'} away`;
+}
+
+/** "4 free, 13 on the Shark Pass, 1 with Plus": the set's count, free first. */
+export function setMixText(pieces: readonly { row: 'free' | 'pass' | 'plus' }[]): string {
+  const c = (r: string) => pieces.filter(p => p.row === r).length;
+  return [`${c('free')} free`, `${c('pass')} on the Shark Pass`, ...(c('plus') ? [`${c('plus')} with Plus`] : [])].join(', ');
+}
+
 export type SetPiece = {
   readonly reward: Extract<SharkPassReward, { type: 'item' }>;
   /** 0 for a Shark Pass Plus extra. */

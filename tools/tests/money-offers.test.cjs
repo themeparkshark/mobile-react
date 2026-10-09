@@ -140,8 +140,11 @@ test('coin packs say what they buy from the server median gear price, never inve
   assert.equal(offers.gearLine({ gear: 1, gear_price: 400 }), 'Buys about 1 piece of gear');
   assert.equal(offers.gearLine(null), null);
   assert.equal(offers.gearLine(undefined), null);
+  assert.equal(offers.gearLine({ gear: 21, gear_price: 330 }, 38), 'Buys about 21 pieces of gear (38% more)');
+  assert.equal(pass.winsAwayText(1220, [{ event: 'ride_coin_win', points: 120 }]), 'about 11 ride coin wins away');
+  assert.equal(pass.setMixText([{ row: 'free' }, { row: 'pass' }, { row: 'pass' }, { row: 'plus' }]), '1 free, 2 on the Shark Pass, 1 with Plus');
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
-  assert.match(shop, /main === 'coins' \? gearLine\(product\.buys\)/);
+  assert.match(shop, /main === 'coins' \? gearLine\(product\.buys, bonus\)/);
 });
 
 test('the season set counts every wearable, owned = claimed, and says where each one comes from', () => {

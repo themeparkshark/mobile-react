@@ -59,7 +59,7 @@ test('the grown-up question: 2-digit times 1-digit, too hard for a 9 or 10 year 
   assert.equal(gate.numberWords(80), 'eighty');
   assert.doesNotMatch(ui, /violet|purple|#7b|#8e44|#6a/i, 'blue, white and gold only');
   assert.match(ui, /const offer = ok \? gateDetails\(req\.reason\) : null;/, 'offer details only after a right answer');
-  assert.match(ui, /That wasn't right\. A grown-up can try again in 30 seconds\./, 'calm, says what happened and when');
+  assert.match(ui, /A grown-up can try again in \$\{lastRestText\}\. No worries!/, 'calm, says what happened and when');
 });
 
 test('a wrong answer rests the gate for 30 s, and the rest survives a relaunch', async () => {
@@ -142,7 +142,7 @@ test('real money is bought in exactly two gated places', () => {
   // and a grown-up answers (price and contents restated) before StoreKit is called.
   // Funnel tracking may sit around the gate; the gate must come before the one StoreKit call.
   const code = strip(supplies);
-  assert.match(code, /if \(buying\) return \{ status: 'busy' \};[\s\S]{0,120}buying = true;\s*try \{[\s\S]{0,200}if \(!\(await askGrownUp\(gateReasonFor\(product, state\.prices\[product\.product_id\]\)\)\)\) \{[\s\S]{0,120}return \{ status: 'declined' \};/);
+  assert.match(code, /if \(buying\) return \{ status: 'busy' \};[\s\S]{0,320}buying = true;\s*try \{[\s\S]{0,200}if \(!\(await askGrownUp\(gateReasonFor\(product, state\.prices\[product\.product_id\]\)\)\)\) \{[\s\S]{0,120}return \{ status: 'declined' \};/);
   assert.ok(code.indexOf('await askGrownUp(') < code.indexOf('await purchaseNow('), 'the gate comes before the buy');
   assert.ok(code.indexOf('async function purchaseNow') > code.indexOf('await askGrownUp('), 'StoreKit is reached only from purchaseNow, after the gate');
   assert.equal((strip(supplies).match(/buyShopProduct\(/g) || []).length, 1, 'StoreKit is reached from one line, after the gate');
@@ -241,4 +241,25 @@ test('the try-on opens the gate only after the sheet has fully hidden', () => {
 test('one gate host, mounted once at the root', () => {
   assert.equal((read('src/Root.tsx').match(/<GrownUpGateHost \/>/g) || []).length, 1);
   assert.deepEqual(where(/<GrownUpGateHost/), ['src/Root.tsx']);
+});
+
+test('every real-money App Store call sits behind the grown-up gate in the same function (compliance r4)', () => {
+  const pass = read('src/screens/SharkPassScreen.tsx');
+  assert.match(pass, /askGrownUp\([\s\S]{0,900}buySharkPass\(/, 'Shark Pass and Plus');
+  const vip = read('src/screens/MembershipScreen.tsx');
+  assert.match(vip, /askGrownUp\([\s\S]{0,600}buyVipGift\(/, 'VIP gift plans');
+  assert.match(vip, /grownUpForNextStep\([\s\S]{0,600}buyVip\(/, 'VIP plans');
+  const supplies = read('src/services/money/supplies.ts');
+  assert.match(supplies, /if \(!state\.prices\[product\.product_id\]\?\.price\) return \{ status: 'declined' \};[\s\S]*askGrownUp\(/, 'no price, no buy');
+  for (const fn of ['buySharkPass(', 'buyVipGift(', 'buyVip(']) {
+    const callers = ['src/screens/SharkPassScreen.tsx', 'src/screens/MembershipScreen.tsx'].filter(f => read(f).includes(fn));
+    assert.ok(callers.length >= 1, fn);
+  }
+});
+
+test('repeated misses rest the gate longer: 30 s, 2 min, 10 min', () => {
+  const gate = gateModule();
+  assert.equal(gate.restMsFor(1), 30000);
+  assert.equal(gate.restMsFor(2), 120000);
+  assert.equal(gate.restMsFor(3), 600000);
 });

@@ -42,7 +42,7 @@ import * as RootNavigation from '../RootNavigation';
 import { buySharkPass, loadSharkPassPrice, onSharkPassDelivered, restoreSharkPass, storeAvailable, type ShopPrice } from '../services/purchases';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import { EVENT_COPY, claimedLine, passGrants, passTwinLine, lastDayText, nextBigPrize, passSummary, pieceSource, readyNowLine, rewardWords, seasonSet, type SetPiece } from '../services/money/sharkPassModel';
+import { EVENT_COPY, claimedLine, passGrants, passTwinLine, lastDayText, nextBigPrize, passSummary, pieceSource, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
 import { wearItem } from './StoreScreen/inventoryQueue';
 import { trackImpression, trackMoney } from '../services/money/track';
 import { baseRates, formatLike, regularValue } from '../services/money/offers';
@@ -341,7 +341,7 @@ export default function SharkPassScreen() {
     const value = regularValue({ coins: g.coins, tickets: g.tickets, rescue_passes: g.rescue_passes }, baseRates(supplies.catalog.products, supplies.prices));
     if (!value || value < price.amount * 1.5) return null;
     const worth = formatLike(price.price, Math.floor(value * 100) / 100);
-    return worth ? `Climb all ${steps} steps and the Shark Pass row's coins, tickets and Rescue Passes come to ${worth} at Supplies' regular prices. Plus ${g.pins} season items.` : null;
+    return worth ? `Climb all ${steps} steps and the Shark Pass row's coins, tickets and Rescue Passes come to ${worth} at Supplies' regular prices. Plus ${g.pins} Shark Pass season items.` : null;
   }, [tiers, price, supplies.catalog, supplies.prices, steps]);
   const worthValue = worthLine?.match(/come to (\S+) at/)?.[1] ?? null;
   // The panel's showcase: the season items on the Shark Pass row, the next ones first (up to 5).
@@ -420,6 +420,9 @@ export default function SharkPassScreen() {
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
                       {`${rewardWords(nextPrize.reward)} · ${nextPrize.pointsAway.toLocaleString('en-US')} points away`}
                     </Text>
+                    {winsAwayText(nextPrize.pointsAway, progress.today) && (
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextWins}>{winsAwayText(nextPrize.pointsAway, progress.today)}</Text>
+                    )}
                   </View>
                 </View>
               )}
@@ -546,6 +549,7 @@ export default function SharkPassScreen() {
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.earnTitle}>YOUR SEASON SET</Text>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.setCount}>{`${set.owned} of ${set.pieces.length}`}</Text>
                   </View>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>{setMixText(set.pieces)}</Text>
                   <View style={s.setBar}><View style={[s.setFill, { width: `${(set.owned / set.pieces.length) * 100}%` }]} /></View>
                   <View style={s.setGrid}>
                     {set.pieces.map(piece => (
@@ -802,6 +806,7 @@ const s = StyleSheet.create({
   grownUpsHead: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff', letterSpacing: 0.6 },
   grownUpRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   grownUpText: { flex: 1, fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff', lineHeight: 18 },
+  nextWins: { fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff' },
   setHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   setCount: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold },
   setBar: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },

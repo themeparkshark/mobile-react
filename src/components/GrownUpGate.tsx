@@ -22,7 +22,8 @@ import { useModalLayer } from '../ui/modalLayers';
  * - A pass covers only the door it was asked for, plus the next step of that
  *   same flow (the paywall's entry, then its Buy), once, within 2 minutes.
  *   Every other door asks again, and a wrong answer cancels any pass.
- * - A wrong answer closes kindly and the gate rests for 30 seconds (a moon,
+ * - A wrong answer closes kindly and the gate rests for 30 seconds, then 2 and 10 minutes
+ *   after repeated misses (a moon,
  *   "Resting", one line, OK). The rest survives a force-quit. Nothing scolds.
  * - Mounted once at the root (GrownUpGateHost in Root.tsx). With no host,
  *   askGrownUp() answers false: a door never opens ungated.
@@ -119,10 +120,12 @@ export function gateDetails(reason: GateReason | null | undefined): { head: stri
         reason.trial
           ? `After the free time it renews by itself at ${reason.price} ${perPeriod(reason.period)} until you cancel.`
           : `It renews by itself at ${reason.price} ${perPeriod(reason.period)} until you cancel.`,
-        'Cancel anytime in Settings, your name, Subscriptions, at least 24 hours before it renews. Paid with the Apple ID on this device.',
+        'Cancel anytime: Settings, your name, Subscriptions.',
+        'Cancel at least 24 hours before it renews.',
+        'Paid with the Apple ID on this device.',
       ],
     };
-    case 'vip': return reason.prices ? { head: 'VIP', lines: [reason.prices] } : null;
+    case 'vip': return reason.prices ? { head: reason.prices, lines: ['For bigger rewards every day and no ads.', 'Plans that renew do so by themselves until you cancel.', 'Paid with the Apple ID on this device.'] } : null;
     default: return null;
   }
 }
@@ -136,12 +139,27 @@ export function askGrownUp(reason: GateReason | null = null, seed = Math.floor(M
   return open;
 }
 
-/** Judges a typed answer; a wrong one rests the gate. Exported for tests. */
+/** Misses in a row (within 10 minutes) make the rest longer: 30 s, then 2 min, then 10 min. */
+let misses: { count: number; last: number } = { count: 0, last: 0 };
+export function restMsFor(missCount: number): number {
+  return missCount <= 1 ? GATE_REST_MS : missCount === 2 ? 120_000 : 600_000;
+}
+/** "30 seconds", "2 minutes", "10 minutes": the rest the gate just started. */
+let lastRestText = '30 seconds';
+function restText(ms: number): string {
+  return ms < 60_000 ? `${Math.round(ms / 1000)} seconds` : `${Math.round(ms / 60_000)} minutes`;
+}
+
+/** Judges a typed answer; a wrong one rests the gate (longer after repeated misses). Exported for tests. */
 export function judgeGate(typed: string, seed: number, now = Date.now()): boolean {
   const ok = seed >= 0 && typed !== '' && Number(typed) === grownUpQuestion(seed).answer;
+  if (ok) misses = { count: 0, last: 0 };
   if (!ok) {
     pass = null; // a wrong answer cancels any pass
-    gateRestUntil = now + GATE_REST_MS;
+    misses = { count: now - misses.last < 600_000 ? misses.count + 1 : 1, last: now };
+    const rest = restMsFor(misses.count);
+    lastRestText = restText(rest);
+    gateRestUntil = now + rest;
     void AsyncStorage.setItem(REST_KEY, String(gateRestUntil)).catch(() => undefined);
   }
   return ok;
@@ -171,6 +189,7 @@ export function setGateVipMember(member: boolean): void {
 /** Tests only. */
 export function resetGrownUpGateForTests(): void {
   gateRestUntil = 0;
+  misses = { count: 0, last: 0 };
   open = null;
   pass = null;
   vipMember = false;
@@ -283,8 +302,8 @@ export function GrownUpGateHost() {
               {details.lines.map(line => <Text key={line} maxFontSizeMultiplier={MAX_FONT} style={styles.offerLine}>{line}</Text>)}
             </View>
             <Pressable onPress={() => close(true)} style={({ pressed }) => [styles.key, styles.keyOk, styles.restOk, pressed && { opacity: 0.7 }]}
-              accessibilityRole="button" accessibilityLabel="Continue to the App Store">
-              <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.keyText, styles.keyOkText]}>Continue</Text>
+              accessibilityRole="button" accessibilityLabel="Continue to buy in the App Store">
+              <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.keyText, styles.keyOkText]}>Continue to buy</Text>
             </Pressable>
             <Pressable onPress={() => close(false)} style={styles.cancel} accessibilityRole="button" hitSlop={8}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.cancelText}>Not now</Text>
@@ -296,7 +315,7 @@ export function GrownUpGateHost() {
           <GameIcon name={resting ? 'moon' : 'lock'} size={resting ? 56 : 40} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title}>{resting ? 'Not quite' : 'Ask a grown-up'}</Text>
           {resting ? (
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.body}>That wasn't right. A grown-up can try again in 30 seconds.</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.body}>{`A grown-up can try again in ${lastRestText}. No worries!`}</Text>
           ) : (
             <>
               {why && (
@@ -309,8 +328,9 @@ export function GrownUpGateHost() {
                   </View>
                 </View>
               )}
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.body} accessibilityLabel={`Grown-ups: type the answer to ${q!.words}.`}>
-                Grown-ups: type the answer to{'\n'}<Text style={styles.words}>{q!.words}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.body}>Hand the phone to a grown-up.</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.body} accessibilityLabel={`Grown-up question: type the answer to ${q!.words}.`}>
+                Grown-up question:{'\n'}<Text style={styles.words}>{q!.words}</Text>
               </Text>
               <View style={styles.answer} accessible accessibilityLabel={typed ? `Answer ${typed}` : 'No answer yet'}>
                 <Text style={styles.answerText}>{typed || ' '}</Text>
@@ -364,7 +384,7 @@ const styles = StyleSheet.create({
   words: { fontFamily: FONT.display, fontSize: 21, color: GATE_COLORS.gold },
   offer: { alignSelf: 'stretch', gap: 6, padding: 12, borderRadius: 14, backgroundColor: GATE_COLORS.well, borderWidth: 2, borderColor: GATE_COLORS.gold },
   offerHead: { fontFamily: FONT.display, fontSize: 20, color: GATE_COLORS.gold, textAlign: 'center' },
-  offerLine: { fontFamily: FONT.body, fontSize: 15, color: GATE_COLORS.ink, textAlign: 'center' },
+  offerLine: { fontFamily: FONT.body, fontSize: 16, color: GATE_COLORS.ink, textAlign: 'center' },
   answer: { minWidth: 120, minHeight: 48, borderRadius: 14, backgroundColor: GATE_COLORS.well, borderWidth: 2, borderColor: GATE_COLORS.sky,
     alignItems: 'center', justifyContent: 'center' },
   answerText: { fontFamily: FONT.display, fontSize: 28, color: '#ffffff' },

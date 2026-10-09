@@ -116,6 +116,8 @@ export async function buyPack(product: ShopProduct, options: { onStart?: () => v
   if (buying) return { status: 'busy' };
   const catalog = state.catalog;
   const where = options.placement ?? 'supplies';
+  // No App Store price, no buy: the grown-up always sees a real number (compliance r4).
+  if (!state.prices[product.product_id]?.price) return { status: 'declined' };
   buying = true;
   try {
     trackMoney('tap', where, product.product_id);

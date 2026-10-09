@@ -138,7 +138,7 @@ test('real money: the shop and the VIP page say "real money" before any price, a
   const d = gate.gateDetails(renews);
   assert.equal(d.head, 'One week free, then $4.99 a month');
   assert.match(d.lines.join(' '), /renews by itself at \$4\.99 a month until you cancel/);
-  assert.match(d.lines.join(' '), /Cancel anytime in Settings.*24 hours before it renews/);
+  assert.match(d.lines.join(' '), /Cancel anytime: Settings, your name, Subscriptions\. Cancel at least 24 hours before it renews\./);
   assert.equal(gate.gateDetails({ kind: 'leave', where: 'a website' }), null, 'leaving the game needs no offer card');
   assert.equal(gate.gateReasonLines({ kind: 'leave', where: 'a website' }).line, 'It opens a website.');
   assert.equal(gate.gateReasonLines(null), null);

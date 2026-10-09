@@ -10,7 +10,7 @@ import type { BundleWorth } from '../../services/money/offers';
 import { Band, CARD, Contents, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, type PackArtKey } from './moneyUi';
 import { FONT } from '../../ui';
 
-export default function BundleCard({ product, price, worth, busy, disabled, onBuy, band = 'STARTER PACK · JUST ONCE', art = 'chest', compact = false }: {
+export default function BundleCard({ product, price, worth, busy, disabled, onBuy, band = 'STARTER PACK · ONE PER PLAYER', art = 'chest', compact = false }: {
   product: ShopProduct; price?: string; worth: BundleWorth | null; busy: boolean; disabled: boolean; onBuy: () => void;
   band?: string; art?: PackArtKey; compact?: boolean;
 }) {
@@ -27,6 +27,7 @@ export default function BundleCard({ product, price, worth, busy, disabled, onBu
                 {`Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}`}
               </Text>
             )}
+            {worth && <Text maxFontSizeMultiplier={MAX_FONT} style={st.kid}>Lots more than buying them one by one</Text>}
             <Contents grants={product.grants} size="tight" />
           </View>
         </View>
@@ -43,4 +44,5 @@ const st = StyleSheet.create({
   artCompact: { width: 92, height: 88 },
   worth: { fontFamily: FONT.display, fontSize: 19, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   worthCompact: { fontSize: 16 },
+  kid: { fontFamily: FONT.body, fontSize: 14, color: '#ffffff' },
 });
