@@ -57,6 +57,9 @@ import {
 } from './model';
 
 const ART = 220;
+/** Dev-only capture aid: EXPO_PUBLIC_SLAM_SLOWMO=4 plays the first-view slam 4x slower so an overloaded simulator records every beat. Always 1 in release. */
+const SLOWMO = __DEV__ ? Math.max(1, Number(process.env.EXPO_PUBLIC_SLAM_SLOWMO) || 1) : 1;
+const T = (ms: number) => ms * SLOWMO;
 const STAGE_H = ART + 30 + 4;
 /** 1 on tall phones (900 pt and up); down to 0.42 on a 667 pt iPhone SE so the card never clips. */
 export function stageScaleFor(screenH: number): number {
@@ -390,21 +393,21 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
     const hold = rank >= 5 ? 120 : 50;
     hit.value = 0;
     sx.value = 1.35; sy.value = 1.35; lift.value = -6; tilt.value = -12;
-    fade.value = withTiming(1, { duration: 80 });
-    lift.value = withSequence(withTiming(-12, { duration: 140, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 160, easing: Easing.in(Easing.exp) }));
-    tilt.value = withDelay(140, withTiming(-3, { duration: 160, easing: Easing.in(Easing.exp) }));
-    const drop = { duration: 160, easing: Easing.in(Easing.exp) };
+    fade.value = withTiming(1, { duration: T(80) });
+    lift.value = withSequence(withTiming(-12, { duration: T(140), easing: Easing.out(Easing.quad) }), withTiming(0, { duration: T(160), easing: Easing.in(Easing.exp) }));
+    tilt.value = withDelay(T(140), withTiming(-3, { duration: T(160), easing: Easing.in(Easing.exp) }));
+    const drop = { duration: T(160), easing: Easing.in(Easing.exp) };
     const settle = { damping: 20, stiffness: 380 };
-    sx.value = withSequence(withDelay(140, withTiming(0.92, drop)), withDelay(hold, withTiming(1.08, { duration: 60 })), withSpring(1, settle));
-    sy.value = withSequence(withDelay(140, withTiming(0.92, drop)), withDelay(hold, withTiming(0.92, { duration: 60 })), withSpring(1, settle));
-    hit.value = withDelay(300, withTiming(1, { duration: 1200, easing: Easing.linear }));
-    shake.value = withDelay(300, withSequence(
-      withTiming(6, { duration: 30 }), withTiming(-5, { duration: 30 }), withTiming(3, { duration: 30 }), withTiming(0, { duration: 30 })));
-    flash.value = withDelay(300, withSequence(withTiming(0.25, { duration: 16 }), withTiming(0, { duration: 120 })));
-    dateIn.value = withDelay(460, withTiming(1, { duration: 150 }));
-    if (hasShine(stamp)) { foil.value = 0; foil.value = withDelay(560, withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) })); }
-    later(140, () => playSfx('fx.whoosh', 0.6));
-    later(300, () => impact(celebrate));
+    sx.value = withSequence(withDelay(T(140), withTiming(0.92, drop)), withDelay(T(hold), withTiming(1.08, { duration: T(60) })), withSpring(1, settle));
+    sy.value = withSequence(withDelay(T(140), withTiming(0.92, drop)), withDelay(T(hold), withTiming(0.92, { duration: T(60) })), withSpring(1, settle));
+    hit.value = withDelay(T(300), withTiming(1, { duration: T(1200), easing: Easing.linear }));
+    shake.value = withDelay(T(300), withSequence(
+      withTiming(6, { duration: T(30) }), withTiming(-5, { duration: T(30) }), withTiming(3, { duration: T(30) }), withTiming(0, { duration: T(30) })));
+    flash.value = withDelay(T(300), withSequence(withTiming(0.25, { duration: T(16) }), withTiming(0, { duration: T(120) })));
+    dateIn.value = withDelay(T(460), withTiming(1, { duration: T(150) }));
+    if (hasShine(stamp)) { foil.value = 0; foil.value = withDelay(T(560), withTiming(1, { duration: T(900), easing: Easing.inOut(Easing.quad) })); }
+    later(T(140), () => playSfx('fx.whoosh', 0.6));
+    later(T(300), () => impact(celebrate));
   }, [reducedMotion, rank, stamp, fade, hit, sx, sy, lift, tilt, shake, flash, dateIn, foil, impact, later]);
 
   /** Quick re-press: claim moment and the re-stamp toy. */

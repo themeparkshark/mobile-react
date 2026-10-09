@@ -137,7 +137,9 @@ test('the slam: staged after the art loads (cap 350 ms), no Modal fade, navy ink
   assert.match(src, /Easing\.in\(Easing\.exp\)/);
   assert.match(src, /const hold = rank >= 5 \? 120 : 50;/);
   assert.match(src, /const settle = \{ damping: 20, stiffness: 380 \};/);
-  assert.match(src, /later\(300, \(\) => impact\(celebrate\)\)/);
+  assert.match(src, /later\(T\(300\), \(\) => impact\(celebrate\)\)/);
+  // The capture slow-motion is dev only: release always plays at 1x.
+  assert.match(src, /const SLOWMO = __DEV__ \? Math\.max\(1, Number\(process\.env\.EXPO_PUBLIC_SLAM_SLOWMO\) \|\| 1\) : 1;/);
   assert.ok(!/runOnJS/.test(src));
   assert.match(src, /<InkBurst seed=\{stamp\.id\} size=\{ART\} color=\{INK\}/);
   assert.match(src, /const INK = '#14213D';/);
