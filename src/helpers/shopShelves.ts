@@ -129,6 +129,31 @@ export function shelfOrder<T extends { id: number; has_purchased?: boolean }>(it
   return [...items.filter(i => !sinks(i)), ...items.filter(sinks)];
 }
 
+/** What a piece is, in a kid's words, from its slot (item_types: 1 head ... 8 pin). */
+export function slotLine(itemTypeId: number | null | undefined): string | null {
+  switch (itemTypeId) {
+    case 1: return 'A hat for your shark.';
+    case 2: return 'Goes on your shark’s face.';
+    case 3: return 'Goes on your shark’s back.';
+    case 4: return 'An outfit for your shark.';
+    case 5: return 'Your shark holds it in its fin.';
+    case 6: return 'A new place behind your shark.';
+    case 7: return 'A new color for your whole shark.';
+    case 8: return 'A pin for your shark’s collection.';
+    default: return null;
+  }
+}
+
+/** The classic shelf's star: the rarest piece you don't own yet (first on ties); null when you own them all. */
+export function starPick<T extends { id: number; rarity?: number; has_purchased?: boolean; is_member_item?: boolean }>(items: readonly T[], member: boolean): T | null {
+  let best: T | null = null;
+  for (const item of items) {
+    if (item.has_purchased || (item.is_member_item && !member)) continue;
+    if (!best || (item.rarity ?? 1) > (best.rarity ?? 1)) best = item;
+  }
+  return best;
+}
+
 /** Event, timer 1 of 2: when the shelf gets its next drop (null on the final shelf). */
 export function eventDropPill(section: SectionLike, nowMs: number): Pill | null {
   if (section.final_shelf) return null;

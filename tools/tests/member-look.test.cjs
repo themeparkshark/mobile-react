@@ -86,7 +86,7 @@ test('try-on: an owned member piece while lapsed asks a grown-up instead of fail
   assert.equal(shelves.tryOnCta({ ...base, wearLocked: false }).action, 'wear');
   assert.equal(shelves.tryOnCta({ ...base, wearLocked: true, worn: true }).action, 'close', 'taking it off always works');
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
-  assert.match(sheet, /phase === 'confirm' && memberItem \? \{ \.\.\.lapsedCta, note: MEMBER_PROMISE \}/, 'buy confirmation says it');
+  assert.match(sheet, /phase === 'confirm' && memberItem && !fxKey \? \{ \.\.\.lapsedCta, note: MEMBER_PROMISE \}/, 'buy confirmation says it (a Secret piece says it once, in its card)');
   assert.match(sheet, /\{!fxKeyOf\(item\) && memberItem && \(/, 'the item card says it on VIP gear too');
   assert.match(sheet, /const keepLine = MEMBER_PROMISE;/, 'and on every Secret piece');
 });

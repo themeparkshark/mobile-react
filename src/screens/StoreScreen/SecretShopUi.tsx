@@ -36,7 +36,7 @@ export const SecretPreviewBanner = memo(function SecretPreviewBanner() {
 
 export const SECRET_PREVIEW_COPY = {
   title: 'Try anything on!',
-  body: 'VIP members can buy these. Each one is yours forever.',
+  body: 'VIP members buy them, and they’re yours forever.',
 } as const;
 
 const STAR = require('../../../assets/fx/spark.webp');

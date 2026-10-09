@@ -301,7 +301,7 @@ const tabStyles = StyleSheet.create({
   tabOn: { backgroundColor: '#ffcf3b' },
   label: { fontFamily: 'Shark', fontSize: 17, color: '#fff' },
   labelOn: { color: '#6a3b00' },
-  coins: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, backgroundColor: BRAND.blueLip,
+  coins: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minWidth: 92, gap: 4, marginTop: 10, backgroundColor: BRAND.blueLip,
     borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 2, borderColor: BRAND.white },
   coinsText: { fontFamily: 'Shark', fontSize: 16, color: '#fff' },
   wish: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, marginRight: 8, backgroundColor: '#fff0f5',
@@ -567,7 +567,8 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
           {classicGear ? (
             <GearShelf items={items} setItems={setItems} promoUrl={catalog?.promotion_image_url}
               nextRotationAt={rotation?.next_rotation_at} onRestockElapsed={() => setRestockPending(true)}
-              onEndReached={() => { void loadMore(); }} recheck={recheckOwned} focusRequest={focusRequest} still={reducedMotion} />
+              onEndReached={() => { void loadMore(); }} recheck={recheckOwned} focusRequest={focusRequest} still={reducedMotion}
+              offset={clockSkew} loading={hasMore} />
           ) : (
           <SafeAreaView
             style={{

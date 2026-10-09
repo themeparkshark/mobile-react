@@ -37,7 +37,7 @@ test('the classic shelf sinks owned pieces, but a piece bought this visit stays 
 
 test('Gear on the live classic catalog: one scroll, the shelf over the shopkeeper, no big countdown', () => {
   const gear = src('src/screens/StoreScreen/GearShelf.tsx');
-  assert.match(gear, /export const GEAR_STAGE_H = 142;/, 'the stage was 180 under a 90 pt countdown and a balance row');
+  assert.match(gear, /export const GEAR_STAGE_H = 128;/, 'the stage was 180 under a 90 pt countdown and a balance row');
   assert.match(gear, /marginTop: -COUNTER_TUCK/);
   assert.match(gear, /<TryOnSheet item=\{open\}/, 'a tile opens the try-on on your own shark');
   assert.doesNotMatch(gear, /StoreCountdown/);
@@ -82,8 +82,27 @@ test('the whole room fits one iPhone screen, the stage never shrinks below 220',
 test('the showroom keeps the member rules in the try-on and the grown-up gate for guests', () => {
   const code = src('src/screens/StoreScreen/SecretShowroom.tsx');
   // Get it / Wear it open the try-on (buy confirm, MEMBER_WEAR_LOCK, members_only refusal all live there).
-  assert.match(code, /member \? <ShopCta label="Get it" width=\{150\} still=\{still\} onPress=\{\(\) => onOpen\(item\)\} \/>/);
-  assert.match(code, /<ShopCta label="Wear it" icon="check" width=\{150\} still=\{still\} onPress=\{\(\) => onOpen\(item, \{ bought: true \}\)\} \/>/);
+  assert.match(code, /member \? <ShopCta label="Get it" width=\{170\} still=\{still\} onPress=\{\(\) => onOpen\(item, \{ confirm: true \}\)\} \/>/);
+  assert.match(code, /<ShopCta label="Wear it" icon="check" width=\{170\} still=\{still\} onPress=\{\(\) => onOpen\(item, \{ bought: true \}\)\} \/>/);
   assert.match(code, /void openMembership\(\);/);
   assert.doesNotMatch(code, /buyShopProduct|purchase\(/, 'the showroom never buys on its own');
+});
+
+test('the shelf star is the rarest piece you can still get, and every slot has a kid line', () => {
+  const items = [{ id: 1, rarity: 1 }, { id: 2, rarity: 4, has_purchased: true }, { id: 3, rarity: 3 }, { id: 4, rarity: 3 }, { id: 5, rarity: 4, is_member_item: true }];
+  assert.equal(shelves.starPick(items, false).id, 3, 'owned and members-only pieces are skipped; first wins a tie');
+  assert.equal(shelves.starPick(items, true).id, 5);
+  assert.equal(shelves.starPick([{ id: 1, has_purchased: true }], false), null);
+  for (let t = 1; t <= 8; t++) assert.match(shelves.slotLine(t), /^[A-Z].*\.$/);
+  assert.equal(shelves.slotLine(99), null);
+});
+
+test('round 2: the try-on lands in one beat and opens on confirm only when asked', () => {
+  const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
+  assert.match(sheet, /later\(land, 390\);/);
+  assert.match(sheet, /setPhase\(startConfirm && !startBought \? 'confirm' : 'idle'\)/);
+  assert.match(sheet, /accessibilityLabel=\{`\$\{formatCoins\(balanceAfter \?\? balance\)\} coins`\}/);
+  const room = src('src/screens/StoreScreen/SecretShowroom.tsx');
+  assert.match(room, /const resting = still \|\| paused \|\| covered \|\| !focused;/, 'the room rests under any sheet, dialog or the gate');
+  assert.match(room, /<TileArt item=\{item\} size=\{TILE - 18\} still=\{still\} \/>/, 'every piece in the picker moves');
 });

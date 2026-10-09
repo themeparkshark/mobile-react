@@ -757,7 +757,7 @@ test('pre-launch 3 and 4: the hero is house blue, and a fallback day hides the n
   const code = src('src/screens/StoreScreen/ShopShelves.tsx');
   assert.match(code, /<LinearGradient colors=\{\[\.\.\.NIGHT_SKY\]\} style=\{StyleSheet\.absoluteFill\} \/>/, 'the card is the night stage blue, so the stage has no seam');
   // The Secret Shop's showroom paints the vault's night sky on its stage, with soft gold rays (Oct 8 showroom).
-  assert.match(src('src/screens/StoreScreen/SecretShowroom.tsx'), /tone="night" sky=\{\[\.\.\.V\.sky\]\} rays=\{V\.inkGold\}/);
+  assert.match(src('src/screens/StoreScreen/SecretShowroom.tsx'), /tone="night" sky=\{false\} rays=\{V\.inkGold\}/);
   const sky = /NIGHT_SKY = \['(#[0-9a-f]{6})', '(#[0-9a-f]{6})'\]/i.exec(src('src/screens/StoreScreen/shopUi.tsx'));
   const lum = hex => { const n = parseInt(hex.slice(1), 16); const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => { const q = v / 255; return q <= 0.03928 ? q / 12.92 : ((q + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
   for (const bg of [sky[1], sky[2]]) for (const ink of ['#ffffff', '#e2f6ff', '#ffe07a']) {

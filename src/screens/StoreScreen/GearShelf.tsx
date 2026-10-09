@@ -16,22 +16,26 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated as RNAnimated, Dimensions, Easing as RNEasing, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated as RNAnimated, Dimensions, Easing as RNEasing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addToWishlist, getWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
-import { restockPill, shelfOrder, wishSavedCopy } from '../../helpers/shopShelves';
+import { formatCoins, restockPill, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
+import { useAnyModalLayer } from '../../ui/modalLayers';
+import Playercard from '../../components/Playercard';
+import { itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
+import { previewLook } from './TryOnSheet';
 import type { ItemType } from '../../models/item-type';
 import type { ShopItem } from '../../models/shop-today';
-import { BRAND, FONT, SHADOW, SharkLoader } from '../../ui';
+import { BRAND, FONT, GameIcon, SHADOW, SharkLoader } from '../../ui';
 import { LinearGradient } from 'expo-linear-gradient';
 import ShopTile from './ShopTile';
 import TryOnSheet from './TryOnSheet';
-import { MAX_FONT, SHOP_SURFACE as S, ShopToast, TimerPill, useShopNow, useShopToast } from './shopUi';
-import { wishStore } from './wishStore';
+import { MAX_FONT, plateFor, SHOP_SURFACE as S, Sheen, ShopToast, TimerPill, useShopNow, useShopToast, WishHeart } from './shopUi';
+import { useWished, wishStore } from './wishStore';
 
 const SCREEN_W = Dimensions.get('window').width;
 const GAP = 12;
@@ -39,9 +43,9 @@ const GRID_PAD = 8;
 // Same tile as the v2 shelves: panel 10 pt margin + 3 pt border each side, 8 pt grid padding.
 const TILE_W = Math.floor((SCREEN_W - 2 * (10 + 3 + GRID_PAD) - GAP * 2) / 3);
 /** The shopkeeper stage (was 180 under a 90 pt countdown and a balance row: the shelf sat at 63% of the screen). */
-export const GEAR_STAGE_H = 142;
+export const GEAR_STAGE_H = 128;
 /** The shelf panel rises over the stage's floor: the shopkeeper stands behind the counter. */
-export const COUNTER_TUCK = 30;
+export const COUNTER_TUCK = 32;
 
 /** The catalog promo shark, bobbing and tilting in its bubbles (UI thread; stops when still). */
 const Shopkeeper = memo(function Shopkeeper({ imageUrl, still }: { imageUrl: string | undefined; still: boolean }) {
@@ -87,17 +91,65 @@ function Bubble({ x, size, ms, delay, o, still }: (typeof BUBBLES)[number] & { s
 }
 
 /** The restock day, small: one chip that ticks once a minute (never seconds). */
-function RestockChip({ nextAt, onElapsed }: { nextAt: string | null | undefined; onElapsed?: () => void }) {
-  const now = useShopNow(0);
+function RestockChip({ nextAt, offset, onElapsed }: { nextAt: string | null | undefined; offset: number; onElapsed?: () => void }) {
+  // Server time (offset), like every shop timer: a changed device clock never moves the day.
+  const now = useShopNow(offset);
   const pill = restockPill(nextAt, now);
-  const fired = useRef(false);
-  const left = nextAt ? Date.parse(nextAt) - now : 1;
-  useEffect(() => { if (left <= 0 && !fired.current) { fired.current = true; onElapsed?.(); } }, [left <= 0]);
+  const fired = useRef<string | null>(null);
+  const due = !!nextAt && Date.parse(nextAt) - now <= 0;
+  // Once per restock: a new nextAt (the next rotation) can fire again.
+  useEffect(() => { if (due && fired.current !== nextAt) { fired.current = nextAt ?? null; onElapsed?.(); } }, [due, nextAt]);
   if (!pill) return null;
   return <TimerPill pill={pill} still />;
 }
 
-export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, onRestockElapsed, onEndReached, recheck, focusRequest, still }: {
+/** The shelf's star: two tiles wide, the piece on your own shark, a slow shine. */
+const StarTile = memo(function StarTile({ item, balance, still, onOpen, onWish }: {
+  item: ShopItem; balance: number; still: boolean; onOpen: (item: ShopItem) => void; onWish: (item: ShopItem) => void;
+}) {
+  const { player } = useContext(AuthContext);
+  const wished = useWished(item.id);
+  const badge = wearableBadge(item);
+  const owned = !!item.has_purchased;
+  const look = useMemo(() => previewLook(player?.inventory, [{ id: item.id, name: item.name, icon_url: item.icon_url, paper_url: item.paper_url,
+    no_eye_url: item.no_eye_url, item_type: item.item_type, fx_key: item.fx_key ?? null }], 'player'), [player?.inventory, item.id]);
+  const short = Math.max(0, item.cost - balance);
+  const name = itemDisplayName(item);
+  const rim = badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border;
+  return (
+    <Pressable onPress={() => onOpen(item)} accessibilityRole="button"
+      accessibilityLabel={`Shop pick: ${name}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}, ${owned ? 'yours' : `${formatCoins(item.cost)} coins`}. Tap to try it on.`}
+      style={({ pressed }) => [styles.star, { borderColor: rim }, pressed && { transform: [{ scale: 0.97 }] }]}>
+      <View style={styles.starClip} pointerEvents="none">
+        <LinearGradient colors={plateFor(item.rarity)} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['rgba(255,255,255,0.4)', 'rgba(255,255,255,0)']} style={styles.starGloss} />
+        <Sheen still={still} width={2 * TILE_W + 80} every={6000} />
+      </View>
+      <View style={styles.starArt} pointerEvents="none">
+        {look ? <Playercard inventory={look.look} still={still} showBackground={false} pinAnchor="body" shadow style={StyleSheet.absoluteFill} />
+          : <Image source={item.icon_url} style={StyleSheet.absoluteFill} contentFit="contain" />}
+      </View>
+      <View style={styles.starText} pointerEvents="box-none">
+        <View style={styles.starKicker}><Text maxFontSizeMultiplier={1.1} style={styles.starKickerText}>SHOP PICK</Text></View>
+        <Text maxFontSizeMultiplier={1.15} numberOfLines={2} style={styles.starName}>{name}</Text>
+        {badge.label ? <View style={[styles.starRarity, { backgroundColor: badge.labelColor }]}>
+          <Text maxFontSizeMultiplier={1.1} style={styles.starRarityText}>{badge.label}</Text></View> : null}
+        {slotLine(item.item_type?.id) && <Text maxFontSizeMultiplier={1.1} numberOfLines={2} style={styles.starSlot}>{slotLine(item.item_type?.id)}</Text>}
+        <View style={{ flex: 1 }} />
+        <View style={styles.starPrice}>
+          <GameIcon name="coins" size={17} />
+          <Text maxFontSizeMultiplier={1.15} style={styles.starPriceText}>{short > 0 ? `Need ${formatCoins(short)} more` : formatCoins(item.cost)}</Text>
+        </View>
+      </View>
+      <Pressable onPress={() => onWish(item)} hitSlop={10} style={styles.starHeart} accessibilityRole="button" accessibilityState={{ selected: wished }}
+        accessibilityLabel={wished ? `Remove ${name} from Favorites` : `Save ${name} to Favorites`}>
+        <View style={[styles.heartDot, wished && styles.heartDotOn]}><WishHeart on={wished} size={18} /></View>
+      </Pressable>
+    </Pressable>
+  );
+});
+
+export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, onRestockElapsed, onEndReached, recheck, focusRequest, still, offset = 0, loading = false }: {
   readonly items: ItemType[];
   readonly setItems: (update: (prev: ItemType[]) => ItemType[]) => void;
   readonly promoUrl: string | undefined;
@@ -109,6 +161,10 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   /** Wishlist push or Favorites: open this item's try-on (a new nonce reopens the same item). */
   readonly focusRequest?: { id: number; nonce: number } | null;
   readonly still: boolean;
+  /** Server clock minus device clock. */
+  readonly offset?: number;
+  /** More catalog pages may still arrive (a focus request waits for them). */
+  readonly loading?: boolean;
 }) {
   const { player } = useContext(AuthContext);
   const { playSound: playSoundNow } = useContext(SoundEffectContext);
@@ -118,12 +174,18 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   const [bought, setBought] = useState<number[]>([]);
   const [toast, setToast] = useShopToast();
   const [stageAway, setStageAway] = useState(false);
+  const nearEnd = useRef(false);
+  // Only the first screenful staggers in; tiles from later pages just appear.
+  const firstIds = useRef<Set<number> | null>(null);
+  if (!firstIds.current && items.length) firstIds.current = new Set(items.slice(0, 9).map(i => i.id));
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const vip = !!player?.is_subscribed;
   const balance = Number(player?.coins ?? 0);
   // The stage rests once it has scrolled away, off screen, and under the try-on.
-  const stageStill = still || stageAway || !focused || !!open;
+  const covered = useAnyModalLayer();
+  // Under the try-on, Favorites, a dialog or the grown-up gate the stage rests too.
+  const stageStill = still || stageAway || !focused || !!open || covered;
 
   // Hearts: the server's list seeds the shared store (the tab row's Favorites count reads it too).
   useEffect(() => {
@@ -134,6 +196,11 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
 
   // Bought this visit: stays where the kid saw it until the next open.
   const shelf = useMemo(() => shelfOrder(items, bought), [items, bought]);
+  // The shelf's star: the rarest piece you can still get, two tiles wide, on your own shark. Chosen once
+  // per visit (it doesn't jump away when you buy it).
+  const starRef = useRef<number | null>(null);
+  if (starRef.current == null && items.length) starRef.current = starPick(items, vip)?.id ?? -1;
+  const star = items.find(i => i.id === starRef.current) ?? null;
 
   const openItem = useCallback((item: ShopItem) => {
     soundRef.current(require('../../../assets/sounds/reveal.mp3'), { volume: 0.6 });
@@ -144,9 +211,11 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   useEffect(() => {
     if (!focusRequest) return;
     const item = items.find(i => i.id === focusRequest.id);
-    if (item) setOpen(item as ShopItem);
-    else setToast('That one isn’t on the shelf today.');
-  }, [focusRequest?.nonce]);
+    if (item) { setOpen(item as ShopItem); return; }
+    // Wait for the shelf (and its next pages) before saying it isn't here.
+    if (items.length === 0 || loading) return;
+    setToast('That one isn’t on the shelf today.');
+  }, [focusRequest?.nonce, items.length, loading]);
 
   const wish = useCallback(async (item: ShopItem) => {
     const id = item.id;
@@ -185,7 +254,9 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
           const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
           const away = contentOffset.y > GEAR_STAGE_H - 10;
           if (away !== stageAway) setStageAway(away);
-          if (contentOffset.y + layoutMeasurement.height > contentSize.height - 240) onEndReached?.();
+          const near = contentOffset.y + layoutMeasurement.height > contentSize.height - 240;
+          if (near && !nearEnd.current) onEndReached?.();
+          nearEnd.current = near;
         }}>
         <View style={styles.stage}>
           {BUBBLES.map((b, i) => <Bubble key={i} {...b} still={stageStill} />)}
@@ -194,16 +265,21 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
         <Animated.View entering={still ? undefined : FadeInUp.duration(260)} style={styles.panel}>
           <View style={styles.header}>
             <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title} accessibilityRole="header">ON THE SHELF</Text>
-            <RestockChip nextAt={nextRotationAt} onElapsed={onRestockElapsed} />
+            <RestockChip nextAt={nextRotationAt} offset={offset} onElapsed={onRestockElapsed} />
           </View>
           {shelf.length === 0 ? (
             <SharkLoader tone="onBlue" state="empty" compact title="New gear is on the way" message="New gear comes soon. Check back later." />
           ) : (
             <View style={styles.grid}>
-              {shelf.map((item, i) => (
-                <Animated.View key={item.id} entering={still ? undefined : FadeIn.delay(80 + Math.min(i, 8) * 45).duration(220)}>
+              {star && (
+                <Animated.View key={`star-${star.id}`} entering={still ? undefined : FadeIn.delay(40).duration(180)} style={{ width: 2 * TILE_W + GAP }}>
+                  <StarTile item={star as ShopItem} balance={balance} still={still || !focused || !!open || covered} onOpen={openItem} onWish={wish} />
+                </Animated.View>
+              )}
+              {shelf.filter(i => i.id !== star?.id).map((item, i) => (
+                <Animated.View key={item.id} entering={still || !firstIds.current?.has(item.id) ? undefined : FadeIn.delay(60 + Math.min(i, 8) * 30).duration(180)}>
                   <ShopTile item={item as ShopItem} width={TILE_W} still={still} vipLocked={!!item.is_member_item && !vip}
-                    affordable={balance >= item.cost} justBought={bought.includes(item.id)} onOpen={openItem} onWish={wish} />
+                    affordable={balance >= item.cost} balance={balance} justBought={bought.includes(item.id)} onOpen={openItem} onWish={wish} />
                 </Animated.View>
               ))}
             </View>
@@ -225,6 +301,22 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
 const styles = StyleSheet.create({
   scroll: {},
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 22 },
+  star: { flex: 1, minHeight: 186, borderRadius: 16, borderWidth: 3, backgroundColor: '#ffffff', flexDirection: 'row', ...SHADOW.card },
+  starClip: { ...StyleSheet.absoluteFillObject, borderRadius: 13, overflow: 'hidden' },
+  starGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },
+  starArt: { width: '50%', marginVertical: 6 },
+  starText: { flex: 1, paddingTop: 12, paddingBottom: 10, paddingRight: 10, gap: 4 },
+  starKicker: { alignSelf: 'flex-start', backgroundColor: '#0a2350', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  starKickerText: { fontFamily: FONT.display, fontSize: 12, color: '#ffe07a', letterSpacing: 0.8 },
+  starName: { fontFamily: FONT.display, fontSize: 18, lineHeight: 21, color: '#0a2350' },
+  starRarity: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
+  starRarityText: { fontFamily: FONT.display, fontSize: 12, color: '#ffffff', letterSpacing: 0.4 },
+  starSlot: { fontFamily: FONT.body, fontSize: 14, lineHeight: 17, color: '#34506f' },
+  starPrice: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  starPriceText: { fontFamily: FONT.display, fontSize: 17, color: '#0a2350' },
+  starHeart: { position: 'absolute', top: -9, right: -9 },
+  heartDot: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: '#ff9bbf' },
+  heartDotOn: { borderColor: '#ff4f8b', backgroundColor: '#fff0f5' },
   stage: { height: GEAR_STAGE_H, overflow: 'hidden', paddingTop: 6 },
   keeper: { width: SCREEN_W - 40, height: GEAR_STAGE_H - 6, alignSelf: 'center' },
   bubble: { position: 'absolute', top: 0, backgroundColor: 'rgba(255,255,255,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },

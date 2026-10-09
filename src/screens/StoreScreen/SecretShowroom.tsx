@@ -25,9 +25,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
-  FadeIn, FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, ZoomIn,
+  FadeIn, FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
+import { useAnyModalLayer } from '../../ui/modalLayers';
 import { openMembership } from '../../components/GrownUpGate';
 import Playercard from '../../components/Playercard';
 import { AuthContext } from '../../context/AuthProvider';
@@ -53,6 +55,7 @@ const SCREEN_W = Dimensions.get('window').width;
 const PANEL_W = SCREEN_W - 20;
 const INNER_W = PANEL_W - 6;
 const TILE = 100;
+const RAIL_PAD = 18;
 const KIND: Record<ShowroomKind, { icon: GameIconName; name: (s: ShopSection) => string }> = {
   vault: { icon: 'crown', name: () => 'The Vault' },
   season: { icon: 'sparkle', name: s => s.title || 'Season drop' },
@@ -141,6 +144,7 @@ const RailTile = memo(function RailTile({ entry, selected, owned, member, still,
           <View style={styles.tileArt}><TileArt item={item} size={TILE - 18} still={still} /></View>
         </View>
         <View style={styles.tileKind} pointerEvents="none"><ShelfMark entry={entry} size={13} /></View>
+        <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.tileName}>{name}</Text>
         <View style={[styles.tilePrice, owned && styles.tileOwned]} pointerEvents="none">
           {owned ? <GameIcon name="check" size={13} /> : <GameIcon name="coins" size={13} />}
           <Text maxFontSizeMultiplier={1.15} style={styles.tilePriceText}>{owned ? 'Yours' : formatCoins(item.cost)}</Text>
@@ -157,13 +161,15 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
   readonly still: boolean;
   /** Bought this visit (the server's owned flag can lag the refresh). */
   readonly bought: readonly number[];
-  readonly onOpen: (item: ShopItem, opts?: { bought?: boolean }) => void;
+  readonly onOpen: (item: ShopItem, opts?: { bought?: boolean; confirm?: boolean }) => void;
   readonly onWish: (item: ShopItem) => void;
   readonly onFavorites: () => void;
 }) {
   const { player } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
   const paused = useContext(FxPauseContext);
+  const covered = useAnyModalLayer();
+  const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const member = !!player?.is_subscribed;
   const { height: winH } = useWindowDimensions();
@@ -179,7 +185,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
   const item = entry?.item ?? null;
   const stage = useMemo(() => (item ? previewLook(player?.inventory, [{ id: item.id, name: item.name, icon_url: item.icon_url,
     paper_url: item.paper_url, no_eye_url: item.no_eye_url, item_type: item.item_type, fx_key: item.fx_key ?? null }], 'base') : null),
-  [player?.inventory?.skin_item?.id, item?.id]);
+  [player?.inventory, item?.id]);
   const rail = useRef<ScrollView>(null);
 
   // The stage answers each pick: a quick squash-and-settle, a gold flare on the rim.
@@ -187,8 +193,20 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
   const stageStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.035 * Math.sin(Math.PI * bump.value) }] }));
   const flare = useSharedValue(0);
   const flareStyle = useAnimatedStyle(() => ({ opacity: flare.value }));
+  // Stable across picks (refs), so the memoized rail tiles never re-render for nothing.
+  const pickedRef = useRef(pickedId);
+  pickedRef.current = pickedId;
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
+  const stillRef = useRef(still);
+  stillRef.current = still;
+  const soundRef = useRef(playSound);
+  soundRef.current = playSound;
   const pick = useCallback((id: number) => {
-    if (id === (pickedId ?? entries[0]?.item.id)) return;
+    const entries = entriesRef.current;
+    const still = stillRef.current;
+    const playSound = soundRef.current;
+    if (id === (pickedRef.current ?? entries[0]?.item.id)) return;
     void Haptics.selectionAsync().catch(() => undefined);
     playSound(require('../../../assets/sounds/inventory_item_tap.mp3'), { volume: 0.7 });
     setPickedId(id);
@@ -197,8 +215,18 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
       flare.value = withSequence(withTiming(0.9, { duration: 90 }), withTiming(0, { duration: 420 }));
     }
     const index = entries.findIndex(e => e.item.id === id);
-    if (index >= 0) rail.current?.scrollTo({ x: Math.max(0, index * (TILE + 12) - (SCREEN_W - TILE) / 2 + 16), animated: !still });
-  }, [pickedId, entries, still, playSound]);
+    if (index >= 0) rail.current?.scrollTo({ x: Math.max(0, index * (TILE + 12) + RAIL_PAD - (SCREEN_W - TILE) / 2), animated: !still });
+  }, []);
+
+  // The room's "you're in" moment: a soft cue and one tap of haptics with the gold light sweep.
+  useEffect(() => {
+    if (still) return;
+    const t = setTimeout(() => {
+      soundRef.current(require('../../../assets/sounds/reveal.mp3'), { volume: 0.35 });
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    }, 350);
+    return () => clearTimeout(t);
+  }, []);
 
   if (!entry || !item) return null;
   const owned = !!(item.shop?.is_owned ?? item.has_purchased) || bought.includes(item.id);
@@ -207,7 +235,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
   const fx = fxKeyOf(item);
   const blurb = fx ? FX_BLURB[fx] : 'A members-only piece for your shark.';
   const leaving = visibleLeaving(item.shop, { secret: true, vipLocked: !member });
-  const resting = still || paused;
+  const resting = still || paused || covered || !focused;
 
   return (
     <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 20 }]} showsVerticalScrollIndicator={false}>
@@ -238,7 +266,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
         </Animated.View>
       )}
 
-      <Animated.View entering={still ? undefined : ZoomIn.springify().damping(16).stiffness(170)}>
+      <Animated.View entering={still ? undefined : FadeInDown.duration(280)}>
         <VaultPanel padded={false} style={styles.panelWrap}>
           <Animated.View style={[{ height: stageH }, stageStyle]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
@@ -261,9 +289,11 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
             </View>
           </Animated.View>
 
-          <Animated.View key={item.id} entering={still ? undefined : FadeInUp.duration(200)} style={styles.plate}>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.name} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{name}</Text>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.blurb} numberOfLines={2}>{blurb}</Text>
+          <View style={styles.plate}>
+            <Animated.View key={item.id} entering={still ? undefined : FadeIn.duration(180)}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.name} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{name}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.blurb} numberOfLines={2}>{blurb}</Text>
+            </Animated.View>
             <View style={styles.actions}>
               {owned ? (
                 <View style={styles.yours}><GameIcon name="check" size={18} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.yoursText}>{worn ? 'WEARING' : 'YOURS'}</Text></View>
@@ -281,12 +311,12 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
                 </View>
               )}
               <View style={{ flex: 1 }} />
-              {owned ? (worn ? null : <ShopCta label="Wear it" icon="check" width={150} still={still} onPress={() => onOpen(item, { bought: true })} />)
-                : member ? <ShopCta label="Get it" width={150} still={still} onPress={() => onOpen(item)} />
+              {owned ? (worn ? null : <ShopCta label="Wear it" icon="check" width={170} still={still} onPress={() => onOpen(item, { bought: true })} />)
+                : member ? <ShopCta label="Get it" width={170} still={still} onPress={() => onOpen(item, { confirm: true })} />
                 : <VaultSecondaryButton label="Ask a grown-up" icon="lock" onPress={() => { void openMembership(); }}
                     accessibilityLabel="Ask a grown-up about VIP" />}
             </View>
-          </Animated.View>
+          </View>
         </VaultPanel>
       </Animated.View>
 
@@ -351,14 +381,16 @@ const styles = StyleSheet.create({
   railHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, marginTop: 4 },
   railTitle: { fontFamily: FONT.display, fontSize: 16, color: V.inkGold, letterSpacing: 1 },
   railHint: { fontFamily: FONT.body, fontSize: 15, color: V.inkSoft },
-  rail: { gap: 12, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 8 },
-  tile: { width: TILE, height: TILE + 18, borderRadius: 18, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)', backgroundColor: V.panelDeep },
-  tileOn: { borderWidth: 3, borderColor: V.gold, shadowColor: V.gold, shadowOpacity: 0.8, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
+  rail: { gap: 12, paddingHorizontal: RAIL_PAD, paddingTop: 10, paddingBottom: 8 },
+  tile: { width: TILE, height: TILE + 34, borderRadius: 18, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)', backgroundColor: V.panelDeep },
+  // A static gold ring (no animated shadow: that costs an offscreen pass on iOS, performance round 1).
+  tileOn: { borderWidth: 3.5, borderColor: V.gold },
   tileClip: { ...StyleSheet.absoluteFillObject, borderRadius: 16, overflow: 'hidden' },
   tileGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },
-  tileArt: { position: 'absolute', left: 0, right: 0, top: 8, height: TILE - 10, alignItems: 'center', justifyContent: 'center' },
+  tileArt: { position: 'absolute', left: 0, right: 0, top: 6, height: TILE - 14, alignItems: 'center', justifyContent: 'center' },
   tileKind: { position: 'absolute', top: 5, left: 5, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(5,12,34,0.8)' },
+  tileName: { position: 'absolute', left: 4, right: 4, bottom: 30, textAlign: 'center', fontFamily: FONT.display, fontSize: 12, color: '#ffffff' },
   tilePrice: { position: 'absolute', bottom: 6, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, height: 22,
     borderRadius: 11, backgroundColor: V.well },
   tileOwned: { backgroundColor: '#1f9d55' },

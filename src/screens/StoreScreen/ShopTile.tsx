@@ -25,6 +25,9 @@ import { ShopItem } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
 import { MAX_FONT, Sheen, WishHeart, plateFor } from './shopUi';
 import { useWished } from './wishStore';
+import * as Haptics from 'expo-haptics';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 import { leavingIcon, leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 
 const RIBBON: Record<Exclude<TileRibbon, null>, { label: string; color: string; ink: string }> = {
@@ -59,11 +62,13 @@ export function TileArt({ item, size, thumb = true, still = false }: {
     style={{ width: size, height: h }} contentFit="contain" transition={120} />;
 }
 
-function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet = false, onOpen, onWish }: {
+function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet = false, balance, onOpen, onWish }: {
   readonly item: ShopItem;
   readonly width: number;
   readonly vipLocked: boolean;
   readonly affordable: boolean;
+  /** The player's coins, to say how many more a short tile needs. */
+  readonly balance?: number;
   readonly still: boolean;
   /** Bought this visit: a one-second OWNED slam, then the normal owned look. */
   readonly justBought?: boolean;
@@ -73,6 +78,8 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   readonly onWish: (item: ShopItem) => void;
 }) {
   const wished = useWished(item.id);
+  const press = useSharedValue(1);
+  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   const badge = wearableBadge(item);
   const owned = !!(item.shop?.is_owned ?? item.has_purchased);
   // A members-only piece never tells a non-member it is retiring (that would be a VIP nudge).
@@ -117,13 +124,15 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
     : `${formatCoins(item.cost)} coins${affordable ? '' : ', you need more coins'}`}${ribbon === 'leaving' && leaving ? `, ${leavingSay(leaving)}` : ribbon ? `, ${RIBBON[ribbon].label.toLowerCase()}` : ''}. Tap to try it on.`;
 
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={() => onOpen(item)}
+      // Every tap squishes and clicks (game feel, Oct 8): a spring, not a flat snap.
+      onPressIn={() => { void Haptics.selectionAsync().catch(() => undefined); if (!still) press.value = withTiming(0.94, { duration: 70 }); }}
+      onPressOut={() => { press.value = still ? 1 : withSpring(1, { damping: 12, stiffness: 320 }); }}
       onLayout={e => { const w = Math.round(e.nativeEvent.layout.width); if (Math.abs(w - measured) >= 1) setMeasured(w); }}
       accessibilityRole="button"
       accessibilityLabel={a11y}
-      style={({ pressed }) => [styles.tile, { width, borderColor: secret ? SECRET_THEME.gold : badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border,
-        transform: [{ scale: pressed ? 0.95 : 1 }] },
+      style={[styles.tile, pressStyle, { width, borderColor: secret ? SECRET_THEME.gold : badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border },
         // The vault tile: gold rim with the gold button's darker lip under it (the house 3D edge).
         secret ? { borderBottomWidth: 6, borderBottomColor: SECRET_THEME.goldLip } : null,
         badge.glow ? { shadowColor: badge.glow, shadowOpacity: 0.9, shadowRadius: 10 } : null]}
@@ -173,7 +182,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       <Text style={[styles.name, secret && styles.secretInk]} numberOfLines={2} ellipsizeMode="tail" maxFontSizeMultiplier={1.15}>{name}</Text>
       <View style={styles.priceRow}>
         {owned ? (
-          slam ? null : <Text maxFontSizeMultiplier={MAX_FONT} style={styles.ownedText}>Owned</Text>
+          slam ? null : <Text maxFontSizeMultiplier={MAX_FONT} style={styles.ownedText}>Yours</Text>
         ) : vipLocked && secret ? (
           // One price marker everywhere: the coin and the price, with a lock for non-members (kids UX round 1).
           <>
@@ -185,8 +194,12 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
           <><GameIcon name="member" size={15} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.price}> VIP</Text></>
         ) : (
           <>
-            {item.currency?.icon_url ? <Image source={{ uri: item.currency.icon_url }} style={[styles.coin, !affordable && { opacity: 0.45 }]} contentFit="contain" /> : null}
-            <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.price, secret && styles.secretInk, !affordable && styles.priceShort]}>{formatCoins(item.cost)}</Text>
+            {item.currency?.icon_url ? <Image source={{ uri: item.currency.icon_url }} style={[styles.coin, !affordable && { opacity: 0.6 }]} contentFit="contain" /> : null}
+            {/* Short of coins: how many more, never just a grey price (monetization round 1). The try-on shows the price. */}
+            {!affordable && balance != null
+              ? <Text maxFontSizeMultiplier={1.1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}
+                  style={[styles.need, secret && styles.secretInk]}>Need {formatCoins(item.cost - balance)} more</Text>
+              : <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.price, secret && styles.secretInk, !affordable && styles.priceShort]}>{formatCoins(item.cost)}</Text>}
           </>
         )}
       </View>
@@ -204,7 +217,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
           </Animated.View>
         </Pressable>
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -232,11 +245,12 @@ const styles = StyleSheet.create({
   secretTagText: { fontFamily: FONT.display, fontSize: 11, letterSpacing: 1, color: '#0b2156' },
   // Secret tiles are midnight, so their ink is white (art panel round 1: animated pieces glow on dark).
   secretInk: { color: '#ffffff' },
-  priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, minHeight: 19 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, minHeight: 19, maxWidth: '100%', paddingHorizontal: 6 },
   coin: { width: 17, height: 17, marginRight: 3 },
   price: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy },
   priceShort: { color: '#8b9bb0' },
-  ownedText: { fontFamily: FONT.display, fontSize: 14, color: '#7c93ab' },
+  ownedText: { fontFamily: FONT.display, fontSize: 15, color: '#1b7f45' },
+  need: { fontFamily: FONT.display, fontSize: 13, color: '#46607e', flexShrink: 1 },
   rarity: { borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 },
   rarityText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, letterSpacing: 0.4 },
   setChip: { flexDirection: 'row', alignItems: 'center', gap: 2,

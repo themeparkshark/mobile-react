@@ -40,7 +40,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
   afterBuyError, completesSet, stageCard, formatCoins, lastChanceLine, pieceState, recoveredSetOutcome, revealHoldMs, setProgressText, settleBuyError,
-  MEMBER_PROMISE, shortfall as shortBy, tryOnCta, tryOnLayout, wearingIds, wishHintCopy, type TryOnPhase,
+  MEMBER_PROMISE, shortfall as shortBy, slotLine, tryOnCta, tryOnLayout, wearingIds, wishHintCopy, type TryOnPhase,
 } from '../../helpers/shopShelves';
 import { isItemWorn, itemDisplayName, slotForItem, wearableBadge } from '../../helpers/wardrobe';
 import { InventoryType } from '../../models/inventory-type';
@@ -152,7 +152,7 @@ function LookSwitch({ on, still, onPress }: { on: boolean; still: boolean; onPre
   );
 }
 
-export default function TryOnSheet({ item, set, todayIds, still, accent, startFullLook = false, startBought = false,
+export default function TryOnSheet({ item, set, todayIds, still, accent, startFullLook = false, startBought = false, startConfirm = false,
   onClose, onLeaving, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false, secret = false }: {
   readonly item: ShopItem | null;
   readonly set: ShopSetSummary | null;
@@ -163,6 +163,11 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   readonly startFullLook?: boolean;
   /** Opened from an owned hero: the item is already yours ("Wear it now"). */
   readonly startBought?: boolean;
+  /**
+   * Opened from a Buy button (the Secret Shop's "Get it"): the sheet opens on the confirm step, so a
+   * buy is that tap plus "Yes, buy it!". Owned, VIP-locked, short and paused still win (tryOnCta).
+   */
+  readonly startConfirm?: boolean;
   readonly onClose: () => void;
   /** The sheet has slid away and its modal is about to hide (onClose follows once it is gone). */
   readonly onLeaving?: () => void;
@@ -217,9 +222,9 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   }, [rewardPending, landed]);
 
   useEffect(() => {
-    setExtras([]); setPhase('idle'); setWear('idle'); setBalanceAfter(null); setLanded(0);
+    setExtras([]); setPhase(startConfirm && !startBought ? 'confirm' : 'idle'); setWear('idle'); setBalanceAfter(null); setLanded(0);
     setFullLook(startFullLook);
-  }, [item?.id, startFullLook, startBought]);
+  }, [item?.id, startFullLook, startBought, startConfirm]);
 
   const pieces = set?.pieces ?? [];
   const balance = Number(player?.coins ?? 0);
@@ -330,7 +335,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   // VIP ran out while the sheet was open: say so kindly, coins untouched.
   const lapsedCta = lapsed && vipLocked ? { ...baseCta, note: 'Your VIP ended, so this one is locked. Your coins are safe.' } : baseCta;
   // The buy confirmation says the member rule out loud before any coins move (DESIGN.md 4.3).
-  const cta = !lapsedCta.note && phase === 'confirm' && memberItem ? { ...lapsedCta, note: MEMBER_PROMISE } : lapsedCta;
+  // A Secret piece already says it in its card above (no second copy at the moment of buying, monetization round 1).
+  const cta = !lapsedCta.note && phase === 'confirm' && memberItem && !fxKey ? { ...lapsedCta, note: MEMBER_PROMISE } : lapsedCta;
   // No set strip under the stage: the stage takes that room.
   const solo = !secret && !(set && pieces.length > 1);
   const stageH = secret ? SECRET_STAGE_H : solo ? SOLO_STAGE_H : STAGE_H;
@@ -371,8 +377,9 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
         setDropping(true);
         setCoins(c => c + 1);
         playSound(require('../../../assets/sounds/coin.mp3'));
-        later(() => { stageScale.value = withSequence(withTiming(1.06, { duration: 80 }), withSpring(1, { damping: 8 })); }, 520);
-        later(land, 600);
+        // The stage pops as the first coins hit and the piece lands with them: one beat inside 400 ms.
+        later(() => { stageScale.value = withSequence(withTiming(1.06, { duration: 80 }), withSpring(1, { damping: 8 })); }, 340);
+        later(land, 390);
       }
       void refreshPlayer();
     } catch (error: unknown) {
@@ -464,7 +471,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
               <View>
                 <View style={styles.grabber} />
                 <View style={styles.topRow}>
-                  <View style={[styles.balance, secret && { backgroundColor: SECRET_THEME.well, borderColor: SECRET_THEME.accent }]} accessible accessibilityLabel={`${formatCoins(balanceAfter ?? balance)} Shark Coins`}>
+                  <View style={[styles.balance, secret && { backgroundColor: SECRET_THEME.well, borderColor: SECRET_THEME.accent }]} accessible accessibilityLabel={`${formatCoins(balanceAfter ?? balance)} coins`}>
                     <GameIcon name="coins" size={20} />
                     <CoinTicker value={balanceAfter ?? balance} still={still} />
                   </View>
@@ -522,6 +529,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   {badge.label && <View style={[styles.rarity, { backgroundColor: badge.labelColor }]}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={styles.rarityText}>{badge.label}</Text></View>}
                 </View>
+                {/* What it is, in a kid's words (kids UX round 1): Secret pieces say what they do in their card. */}
+                {!fxKey && slotLine(item.item_type?.id) && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.slotLine}>{slotLine(item.item_type?.id)}</Text>}
                 {/* Non-members see the price too, with the lock (one marker everywhere). */}
                 {secretItem && vipLocked && !owned && (
                   <View style={[styles.lockPrice, { alignSelf: 'flex-start', marginTop: -2 }]} accessible accessibilityLabel={`${formatCoins(item.cost)} coins, VIP members can buy`}>
@@ -736,7 +745,10 @@ const styles = StyleSheet.create({
   wish: { width: 54, height: 54, borderRadius: 27, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: '#ff9bbf' },
   wishOn: { borderColor: '#ff4f8b', backgroundColor: '#fff0f5' },
-  secondary: { minHeight: 48, minWidth: 88, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  // An outlined pill, so a kid sees it is a button (kids UX round 1).
+  secondary: { minHeight: 48, minWidth: 96, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderRadius: 24,
+    borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.75)' },
+  slotLine: { fontFamily: FONT.body, fontSize: 17, lineHeight: 21, color: S.inkSoft, marginTop: -2 },
   secondaryText: { fontFamily: FONT.display, fontSize: 16, color: S.ink, textTransform: 'uppercase' },
   op: { fontFamily: FONT.display, fontSize: 22, color: S.inkSoft },
   amount: { flexDirection: 'row', alignItems: 'center', gap: 3 },

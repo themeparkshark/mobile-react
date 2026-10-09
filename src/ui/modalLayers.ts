@@ -46,6 +46,11 @@ export const modalLayers = {
   reset(): void { layers = []; emit(); },
 };
 
+/** True while any sheet, dialog or the grown-up gate is up: ambient stage loops behind it rest. */
+export function useAnyModalLayer(): boolean {
+  return useSyncExternalStore(modalLayers.subscribe, () => modalLayers.count() > 0);
+}
+
 /** True inside a sheet's own <Modal>: anything presented there is nested, not a sibling. */
 export const ModalLayerContext = createContext(false);
 

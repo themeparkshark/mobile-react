@@ -80,8 +80,8 @@ const HERO_CARD = HERO_L.card;
 const HERO_CARD_STYLE = { position: 'absolute' as const, ...HERO_CARD.box };
 const MINI_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: 0 };
 
-type Open = { item: ShopItem; fullLook: boolean; bought: boolean; accent: string | null } | null;
-type OpenFn = (item: ShopItem, opts?: { fullLook?: boolean; bought?: boolean; accent?: string | null }) => void;
+type Open = { item: ShopItem; fullLook: boolean; bought: boolean; accent: string | null; confirm?: boolean } | null;
+type OpenFn = (item: ShopItem, opts?: { fullLook?: boolean; bought?: boolean; accent?: string | null; confirm?: boolean }) => void;
 
 const SectionPills = memo(function SectionPills({ section, offset, still, single = false }: { section: ShopSection; offset: number; still: boolean;
   /** One honest pill per shelf (the Secret Shop: no "new drop" next to "ends", kids UX round 1). */
@@ -130,7 +130,7 @@ const Grid = memo(function Grid({ items, vip, balance, still, bought, quiet = fa
     <ShopProfile key={item.id} id={`tile-${item.id}`}>
       <Animated.View entering={flipIn && !still ? FadeInUp.delay(120 + i * 70).springify().damping(14) : undefined}>
         <ShopTile item={item} width={width} still={still} quiet={quiet}
-          vipLocked={!!item.is_member_item && !vip} affordable={balance >= item.cost} justBought={bought.includes(item.id)}
+          vipLocked={!!item.is_member_item && !vip} affordable={balance >= item.cost} balance={balance} justBought={bought.includes(item.id)}
           onOpen={onOpen} onWish={onWish} />
       </Animated.View>
     </ShopProfile>
@@ -321,7 +321,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
       {/* House blue like the panels: the lit plinth on a night stage is the one bright object. */}
       <LinearGradient colors={[...NIGHT_SKY]} style={StyleSheet.absoluteFill} />
       <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
-        accessibilityLabel={`This week's star: ${itemDisplayName(item)}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}`}>
+        accessibilityLabel={`This week's star: ${itemDisplayName(item)}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} coins. Tap to try it on.`}`}>
         <View style={styles.heroStage}>
           <ShopStage rim={glow} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={false} still={still}
             plinth={stage?.scene ? 'none' : 'house'}
@@ -487,7 +487,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   const openItem = useCallback<OpenFn>((item, opts = {}) => {
     playSound(require('../../../assets/sounds/reveal.mp3'), { volume: 0.6 });
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    setOpen({ item, fullLook: !!opts.fullLook, bought: !!opts.bought, accent: opts.accent ?? null });
+    setOpen({ item, fullLook: !!opts.fullLook, bought: !!opts.bought, accent: opts.accent ?? null, confirm: !!opts.confirm });
   }, [playSound]);
   const openTile = useCallback((item: ShopItem) => openItem(item), [openItem]);
 
@@ -861,7 +861,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
 
       {open && (
         <TryOnSheet item={open.item} set={openSet} todayIds={todayIds} still={still} accent={open.accent}
-          startFullLook={open.fullLook} startBought={open.bought}
+          startFullLook={open.fullLook} startBought={open.bought} startConfirm={!!open.confirm}
           onClose={closeTryOn} onLeaving={leavingTryOn} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
           checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={rewardPendingFor(reveals, open.item.shop?.set?.slug)} secret={secret} />
       )}
