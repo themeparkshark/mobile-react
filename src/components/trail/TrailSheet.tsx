@@ -186,7 +186,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
                     {state.rack - state.waiting.length > 0 && (
                       <View style={styles.rackEmpty} accessible accessibilityLabel={`${state.rack - state.waiting.length} open spots`}>
                         <Text style={styles.rackEmptyText}>+{state.rack - state.waiting.length}</Text>
-                        <Text style={styles.rackEmptySub}>open</Text>
+                        <Text style={styles.rackEmptySub}>OPEN</Text>
                       </View>
                     )}
                   </View>
@@ -202,7 +202,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
             <Text style={styles.section}>{inPark ? 'Today at the park' : 'Your walking'}</Text>
             <View style={[styles.card, styles.todayCard]}>
               <View style={{ flex: 1 }}>
-                {inPark && <Text style={styles.dayLine} numberOfLines={1}>{dayLabel(state.today.park_day)}{parkName ? ` · ${parkName}` : ''}</Text>}
+                {inPark && <Text style={styles.dayLine} numberOfLines={1}>{dayLabel(state.today.park_day)}{parkName ? ` · ${parkName.toUpperCase()}` : ''}</Text>}
                 <Text style={styles.bigNumber}>{formatSteps(inPark ? state.today.steps : state.lifetime.steps)}</Text>
                 <Text style={styles.body}>{inPark
                   ? `park steps today${state.today.meters > 0 ? `, about ${formatDistance(state.today.meters, miles)}` : ''}`

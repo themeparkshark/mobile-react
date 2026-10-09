@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   track: { position: 'absolute', left: 24, right: 10, bottom: 3, height: 5, borderRadius: 3, backgroundColor: BRAND.blueLip, overflow: 'hidden' },
   fill: { position: 'absolute', left: 0, top: 0, bottom: 0, right: 0, borderRadius: 3, backgroundColor: BRAND.gold, transformOrigin: 'left' },
   glow: { backgroundColor: BRAND.goldLight },
-  count: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white, marginBottom: 3, fontVariant: ['tabular-nums'],
+  count: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white, marginBottom: 3, fontVariant: ['tabular-nums'], minWidth: 40,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0 },
   countReady: { color: BRAND.navy, textShadowColor: BRAND.white, textShadowOffset: { width: 0, height: 1 } },
   unit: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.white, marginLeft: 3, marginBottom: 1 },
