@@ -1,3 +1,4 @@
+import { TrailProvider } from './src/services/trail/TrailProvider';
 import { Image, ImageBackground, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
@@ -111,7 +112,9 @@ export default function App() {
                               <TutorialProvider>
                                 <HelpProvider>
                                   <ToastProvider>
-                                    <Root />
+                                    <TrailProvider>
+                                      <Root />
+                                    </TrailProvider>
                                     {/* Progression v2: the one-time re-mint card, through the PresentationQueue. */}
                                     <RemintNoticeModal />
                                   </ToastProvider>

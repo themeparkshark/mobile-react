@@ -1,0 +1,226 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AppState, Platform } from 'react-native';
+import getFeatureFlags from '../../api/endpoints/platform/feature-flags';
+import { frontTrailBox, getTrail, openTrailBox, postTrailWalk, putTrailSettings } from '../../api/endpoints/me/trail';
+import { AuthContext } from '../../context/AuthProvider';
+import { LocationContext, LocationStatusContext } from '../../context/LocationProvider';
+import { TrailRecorder, type TrailAway, type TrailSegment, type TrailState } from './trailModel';
+
+/**
+ * Trail Boxes runtime: records walking windows from the location stream the
+ * map already has (no extra GPS, no timers), fills each window's steps from
+ * the phone's step history (expo-sensors Pedometer, already in the binary),
+ * uploads them in small batches and holds the server's answer.
+ *
+ * Off unless the server flag `trail_boxes` is on (or a dev preview forces it).
+ * Every failure is quiet: walking is a bonus, never a blocker. It never touches
+ * queue play.
+ */
+export type MotionAccess = 'unknown' | 'granted' | 'ask' | 'denied' | 'unavailable';
+
+export interface TrailContextType {
+  readonly enabled: boolean;
+  readonly state: TrailState | null;
+  readonly parkId: number | null;
+  readonly syncing: boolean;
+  /** Bumps each time the server answers a walk upload (drives fill animations). */
+  readonly syncVersion: number;
+  readonly motion: MotionAccess;
+  readonly refresh: () => Promise<void>;
+  /** Close the live window and upload now (sheet opened). */
+  readonly flush: () => Promise<void>;
+  readonly open: (boxId: number) => Promise<TrailState | null>;
+  readonly front: (boxId: number) => Promise<void>;
+  readonly setGoal: (steps: number | null) => Promise<void>;
+  readonly setWheels: (on: boolean) => Promise<void>;
+  readonly askMotion: () => Promise<MotionAccess>;
+}
+
+const noop = async () => undefined;
+export const TrailContext = createContext<TrailContextType>({
+  enabled: false, state: null, parkId: null, syncing: false, syncVersion: 0, motion: 'unknown',
+  refresh: noop, flush: noop, open: async () => null, front: noop, setGoal: noop, setWheels: noop, askMotion: async () => 'unknown',
+});
+
+export const useTrail = () => useContext(TrailContext);
+
+const PENDING_KEY = 'trail.pending.v1';
+const AWAY_KEY = 'trail.away.v1';
+const MAX_PENDING = 40;
+
+let flagCache: boolean | null = null;
+async function trailFlag(): Promise<boolean> {
+  if (__DEV__ && process.env.EXPO_PUBLIC_TRAIL_FORCE === '1') return true;
+  if (flagCache !== null) return flagCache;
+  try {
+    flagCache = (await getFeatureFlags()).flags.trail_boxes === true;
+  } catch {
+    return false;
+  }
+  return flagCache;
+}
+
+function pedometer(): any | null {
+  try { return require('expo-sensors').Pedometer; } catch { return null; }
+}
+
+async function readMotion(): Promise<MotionAccess> {
+  if (Platform.OS !== 'ios') return 'unavailable';
+  const P = pedometer();
+  try {
+    if (!P || !(await P.isAvailableAsync())) return 'unavailable';
+    const p = await P.getPermissionsAsync();
+    if (p.granted) return 'granted';
+    return p.canAskAgain ? 'ask' : 'denied';
+  } catch {
+    return 'unavailable';
+  }
+}
+
+/** The phone's own step count for a window, or null (no permission, no sensor, Android). */
+async function stepsFor(seg: TrailSegment): Promise<number | null> {
+  if (Platform.OS !== 'ios') return null;
+  const P = pedometer();
+  try {
+    if (!P || !(await P.getPermissionsAsync()).granted) return null;
+    const res = await P.getStepCountAsync(new Date(seg.started_at), new Date(seg.ended_at));
+    return Math.max(0, Math.round(res.steps));
+  } catch {
+    return null;
+  }
+}
+
+export function TrailProvider({ children }: { readonly children: ReactNode }) {
+  const { player } = useContext(AuthContext);
+  const { location } = useContext(LocationContext);
+  const { park } = useContext(LocationStatusContext);
+  const [flag, setFlag] = useState(false);
+  const [state, setState] = useState<TrailState | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncVersion, setSyncVersion] = useState(0);
+  const [motion, setMotion] = useState<MotionAccess>('unknown');
+  const recorder = useRef(new TrailRecorder());
+  const pending = useRef<TrailSegment[]>([]);
+  const uploading = useRef(false);
+  const parkId = park?.id ?? null;
+  const parkRef = useRef(parkId);
+  parkRef.current = parkId;
+  const enabled = flag && !!player?.id;
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+
+  useEffect(() => { let on = true; void trailFlag().then(v => { if (on) setFlag(v); }); return () => { on = false; }; }, [player?.id]);
+  useEffect(() => { if (enabled) void readMotion().then(setMotion); }, [enabled]);
+
+  // Restore what a killed app left behind: windows not yet sent, and where it went to sleep.
+  useEffect(() => {
+    if (!enabled) return;
+    void (async () => {
+      try {
+        const [p, a] = await Promise.all([AsyncStorage.getItem(PENDING_KEY), AsyncStorage.getItem(AWAY_KEY)]);
+        if (p) pending.current = [...(JSON.parse(p) as TrailSegment[]), ...pending.current].slice(-MAX_PENDING);
+        if (a && !recorder.current.away) recorder.current.away = JSON.parse(a) as TrailAway;
+      } catch { /* nothing saved */ }
+    })();
+  }, [enabled]);
+
+  const persist = useCallback(() => {
+    void AsyncStorage.setItem(PENDING_KEY, JSON.stringify(pending.current.slice(-MAX_PENDING))).catch(() => undefined);
+  }, []);
+
+  const upload = useCallback(async () => {
+    if (!enabledRef.current || uploading.current || pending.current.length === 0) return;
+    uploading.current = true;
+    setSyncing(true);
+    try {
+      const batch = pending.current.slice(0, 20);
+      for (const seg of batch) if (seg.steps == null) seg.steps = await stepsFor(seg);
+      const next = await postTrailWalk(parkRef.current, batch);
+      pending.current = pending.current.filter(s => !batch.includes(s));
+      persist();
+      setState(next);
+      setSyncVersion(v => v + 1);
+    } catch (error: any) {
+      // 4xx other than throttling: the server will never take these; drop them.
+      const status = error?.response?.status;
+      if (status && status >= 400 && status < 500 && status !== 429) {
+        pending.current = [];
+        persist();
+        if (status === 404) setFlag(false);
+      }
+    } finally {
+      uploading.current = false;
+      setSyncing(false);
+    }
+    if (pending.current.length > 0) setTimeout(() => void upload(), 1500);
+  }, [persist]);
+
+  const take = useCallback((segments: TrailSegment[]) => {
+    if (!segments.length) return;
+    pending.current = [...pending.current, ...segments].slice(-MAX_PENDING);
+    persist();
+    void upload();
+  }, [persist, upload]);
+
+  // Every published fix the map already gets (no extra GPS).
+  useEffect(() => {
+    if (!enabled || !location) return;
+    take(recorder.current.fix(parkId, { lat: location.latitude, lng: location.longitude }, Date.now()));
+    if (!recorder.current.away) void AsyncStorage.removeItem(AWAY_KEY).catch(() => undefined);
+  }, [enabled, location?.latitude, location?.longitude, parkId, take]);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const sub = AppState.addEventListener('change', s => {
+      if (s === 'background') {
+        take(recorder.current.background(Date.now()));
+        const away = recorder.current.away;
+        if (away) void AsyncStorage.setItem(AWAY_KEY, JSON.stringify(away)).catch(() => undefined);
+      } else if (s === 'active') {
+        void readMotion().then(setMotion);
+      }
+    });
+    return () => sub.remove();
+  }, [enabled, take]);
+
+  const refresh = useCallback(async () => {
+    if (!enabledRef.current) return;
+    try {
+      setState(await getTrail(parkRef.current));
+    } catch (error: any) {
+      if (error?.response?.status === 404) setFlag(false);
+    }
+  }, []);
+
+  useEffect(() => { if (enabled) void refresh(); }, [enabled, parkId, refresh]);
+
+  const flush = useCallback(async () => {
+    take(recorder.current.flush(Date.now()));
+    if (pending.current.length === 0) await refresh();
+  }, [take, refresh]);
+
+  const open = useCallback(async (boxId: number) => {
+    const next = await openTrailBox(boxId, `${boxId}-${player?.id ?? 0}-open`, parkRef.current);
+    setState(next);
+    return next;
+  }, [player?.id]);
+
+  const front = useCallback(async (boxId: number) => { setState(await frontTrailBox(boxId, parkRef.current)); }, []);
+  const setGoal = useCallback(async (steps: number | null) => { setState(await putTrailSettings({ weekly_goal_steps: steps }, parkRef.current)); }, []);
+  const setWheels = useCallback(async (on: boolean) => { setState(await putTrailSettings({ wheels: on }, parkRef.current)); }, []);
+  const askMotion = useCallback(async () => {
+    const P = pedometer();
+    try { if (P) await P.requestPermissionsAsync(); } catch { /* stays as is */ }
+    const now = await readMotion();
+    setMotion(now);
+    if (now === 'granted') void flush();
+    return now;
+  }, [flush]);
+
+  const value = useMemo<TrailContextType>(() => ({
+    enabled, state, parkId, syncing, syncVersion, motion, refresh, flush, open, front, setGoal, setWheels, askMotion,
+  }), [enabled, state, parkId, syncing, syncVersion, motion, refresh, flush, open, front, setGoal, setWheels, askMotion]);
+
+  return <TrailContext.Provider value={value}>{children}</TrailContext.Provider>;
+}
