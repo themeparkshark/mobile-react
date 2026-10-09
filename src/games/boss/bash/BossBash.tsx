@@ -127,6 +127,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const [dizzy, setDizzy] = useState<{ from: number; until: number } | null>(null);
   /** The boss is in front of the water from the flop until it has climbed back behind it. */
   const [flopped, setFlopped] = useState(false);
+  /** Where the dizzy boss lands: centre, left, right in turn, so the smash is never the same spot twice in a row. */
+  const [flopSide, setFlopSide] = useState(0);
+  const flopCount = useRef(0);
   /** The shark is seeing stars after a pufferfish: taps wait (shown on the water and the fins). */
   const [stunned, setStunned] = useState(false);
   const [pose, setPose] = useState<SharkPose>('idle');
@@ -156,6 +159,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const clock = useSharedValue(0);
   const bossFlinch = useSharedValue(0);
   const bossDrop = useSharedValue(0), bossHit = useSharedValue(0), bossRise = useSharedValue(0), bossShake = useSharedValue(0);
+  const flopX = useSharedValue(0);
   const cam = useSharedValue(1), fury = useSharedValue(0), hatPop = useSharedValue(0), bossPuff = useSharedValue(0);
   const countdown = useRef(4);
   const hintRef = useRef<'none' | 'tentacle' | 'head' | 'ink'>('none');
@@ -228,7 +232,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setHud({ power: 0, need: 3, headStart: 0, popKey: 0, damage: 0, phase: 'warm' });
     cancelAnimation(bossShake); cancelAnimation(bossPuff);
     clock.value = 0; bossDrop.value = 0; bossHit.value = 0; bossRise.value = 0; fury.value = 0; cam.value = 1; hatPop.value = 0;
-    bossShake.value = 0; bossPuff.value = 0; setInkTell(false); setFlopped(false); setStunned(false); setHeld(false); countdown.current = 4;
+    bossShake.value = 0; bossPuff.value = 0; setInkTell(false); setFlopped(false); setStunned(false); setHeld(false); flopCount.current = 0; setFlopSide(0); flopX.value = 0; countdown.current = 4;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hpLeft]);
 
@@ -339,6 +343,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setFace('dizzy');
     endInkTell(); cancelAnimation(bossPuff); bossPuff.value = withTiming(0, { duration: 100 });
     setFlopped(true);
+    const side = [0, -1, 1][flopCount.current++ % 3];
+    setFlopSide(side); flopX.value = side;
     // One frame late, so the boss is already in front of the water when it starts to fall.
     bossDrop.value = reduced ? withTiming(1, { duration: 120 }) : withDelay(34, withTiming(1, { duration: 150, easing: Easing.in(Easing.quad) }));
     if (!reduced) {
@@ -349,7 +355,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       });
       bossShake.value = withDelay(160, withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(-1, { duration: 260 })), -1, true));
     }
-    addFx({ t: 'bubble', text: 'SMASH IT!', x: L.w / 2, y: Math.min(L.h * 0.8, L.head.y + L.dropBy + L.bossSize * 0.3), tone: 'gold' }, 1000);
+    addFx({ t: 'bubble', text: 'SMASH IT!', x: L.w / 2 + side * L.w * 0.13, y: Math.min(L.h * 0.8, L.head.y + L.dropBy + L.bossSize * 0.3), tone: 'gold' }, 1000);
     if (!firstSmashed.current) setHint('head');
     sfx('bo_finisher_ready', 'fx.whooshRev', { volume: 0.9 });
     later(150, () => sfx('bo_pin_slam_kraken', 'fx.hit', { pitch: -5, volume: 1 }));
@@ -369,7 +375,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setFx(list => list.filter(f => !(f.t === 'bubble' && (f.text === 'SMASH IT!' || f.text === 'BLOCKED!'))));
     endDizzy();
     flashFace('hurt', 650);
-    const x = L.head.x, y = L.head.y + L.dropBy;
+    const x = L.head.x + flopSide * L.w * 0.13, y = L.head.y + L.dropBy;
     frozenUntil.current = Date.now() + SMASH_STOP_MS;
     addFx({ t: 'burst', src: BASH_ART.impact, x, y, size: L.bossSize * 0.7, spin: true }, 500);
     addFx({ t: 'num', text: `+${dealt()}`, x, y: y - 10, big: true }, 1300);
@@ -640,6 +646,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   // --- Styles ----------------------------------------------------------------------
   const bossStyle = useAnimatedStyle(() => ({
     transform: [
+      { translateX: bossDrop.value * flopX.value * L.w * 0.13 },
       { translateY: bossDrop.value * L.dropBy + bossRise.value * L.bossSize * 0.32 },
       { rotate: `${bossShake.value * 6 * bossDrop.value}deg` },
       { scaleX: 1 + bossHit.value * 0.05 + bossFlinch.value * 0.025 + bossPuff.value * 0.09 },
@@ -746,9 +753,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
               hint={hint === 'tentacle' && !exit && popup.kind === 'tentacle' && actors.find(a => !a.exit && a.popup.kind === 'tentacle')?.popup.id === popup.id} />;
           })}
 
-          {dizzy && <DizzyTarget x={L.head.x} y={L.head.y + L.dropBy} size={L.bossSize * 0.34} from={dizzy.from} until={dizzy.until} paused={held}
+          {dizzy && <DizzyTarget x={L.head.x + flopSide * L.w * 0.13} y={L.head.y + L.dropBy} size={L.bossSize * 0.34} from={dizzy.from} until={dizzy.until} paused={held}
             clock={clock} reduced={reduced} />}
-          {dizzy && hint === 'head' && <TapHand x={L.head.x + 18} y={L.head.y + L.dropBy + 4} reduced={reduced} size={72} />}
+          {dizzy && hint === 'head' && <TapHand x={L.head.x + flopSide * L.w * 0.13 + 18} y={L.head.y + L.dropBy + 4} reduced={reduced} size={72} />}
           {inkTell && hint === 'ink' && <TapHand x={L.head.x + 18} y={L.head.y + L.bossSize * 0.18} reduced={reduced} size={72} />}
 
           {/* Input: the boss on top, three lanes of water below. Dizzy or puffed up, every tap goes to the boss. */}
