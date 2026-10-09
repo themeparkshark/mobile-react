@@ -25,6 +25,8 @@ type Props = {
   /** Show empty "+" slots (your own lanyard, editable). */
   readonly showEmpty?: boolean;
   readonly onPressSlot?: (index: number, pin: LanyardPin | null) => void;
+  /** Long-press a pin: move it to the middle of the strap (the star spot). */
+  readonly onLongPressSlot?: (index: number, pin: LanyardPin) => void;
   readonly still?: boolean;
   readonly active?: boolean;
   readonly shine?: SharedValue<number>;
@@ -60,7 +62,7 @@ export function slotPoints(count: number, w: number, h: number, from = 0.1, to =
   });
 }
 
-function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, onPressSlot, still = false, active = true, shine }: Props) {
+function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, onPressSlot, onLongPressSlot, still = false, active = true, shine }: Props) {
   const sway = useSharedValue(0);
   useEffect(() => {
     if (still || !active) {
@@ -80,7 +82,7 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
   const slotsAt = slotPoints(max, width, curveH);
   // Pins sized to the gap between slots so neighbours never overlap.
   const gap = slotsAt.length > 1 ? Math.hypot(slotsAt[1].x - slotsAt[0].x, slotsAt[1].y - slotsAt[0].y) : width;
-  const pinSize = Math.min(64, Math.floor(gap - 8));
+  const pinSize = Math.min(62, Math.floor(gap - 16));
   const strapW = 22;
   // The strap path: two parallel curves (a ribbon), drawn once.
   const steps = 24;
@@ -140,6 +142,7 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
         return (
           <Pressable key={pin ? `p${pin.item_id}` : `e${i}`} disabled={!onPressSlot}
             onPress={() => onPressSlot?.(i, pin)}
+            onLongPress={pin && onLongPressSlot ? () => onLongPressSlot(i, pin) : undefined}
             accessibilityRole={onPressSlot ? 'button' : 'image'}
             accessibilityLabel={pin ? `${pin.name}${pin.is_chaser ? ', chaser' : ''}` : 'Empty spot. Add a pin'}
             hitSlop={6}

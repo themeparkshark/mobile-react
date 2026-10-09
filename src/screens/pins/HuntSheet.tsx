@@ -92,6 +92,23 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
   useEffect(() => { fill.value = withSpring(view.fill, { damping: 16, stiffness: 120 }); }, [view.fill, fill]);
   const fillStyle = useAnimatedStyle(() => ({ width: `${Math.max(6, fill.value * 100)}%` }));
 
+  const hold = useSharedValue(0);
+  const holdTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => holdTimers.current.forEach(clearTimeout), []);
+  const holdStyle = useAnimatedStyle(() => ({ width: `${hold.value * 100}%` }));
+  const startHold = () => {
+    if (busy) return;
+    holdTimers.current.forEach(clearTimeout); holdTimers.current = [];
+    hold.value = withTiming(1, { duration: 700 });
+    [0.2, 0.45, 0.7].forEach((f, k) => holdTimers.current.push(setTimeout(() => queueHaptic(k === 2 ? 'hitMedium' : 'tickSelection', 1), 700 * f)));
+    holdTimers.current.push(setTimeout(() => { if (hold.value > 0.97) void tryCatch(); }, 730));
+  };
+  const endHold = () => {
+    if (hold.value > 0.97) return;
+    holdTimers.current.forEach(clearTimeout); holdTimers.current = [];
+    hold.value = withTiming(0, { duration: 150 });
+  };
+
   const tryCatch = async () => {
     const l = loc.current;
     if (!set.park_id || !l || busy) return;
@@ -132,8 +149,19 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
             {!status?.here && <Text maxFontSizeMultiplier={1.35} style={styles.note}>Get inside the park to hunt.</Text>}
             {miss && <Text maxFontSizeMultiplier={1.3} style={styles.note}>Not here yet. Follow the bar!</Text>}
             <Text maxFontSizeMultiplier={1.3} style={styles.note}>Look up while you walk!</Text>
-            <GameButton label={status?.warmth === 'here' ? 'Catch it!' : 'Get closer'} icon="search" disabled={busy}
-              loading={busy} onPress={() => { if (status?.warmth === 'here') void tryCatch(); else { queueHaptic('failBuzz', 1); setMiss(true); } }} />
+            {status?.warmth === 'here' ? (
+              // Hold to catch: a gold bar fills with rising ticks, then it's yours (let go early to wait).
+              <Pressable onPressIn={startHold} onPressOut={endHold} disabled={busy}
+                style={[styles.catchBtn, busy && { opacity: 0.6 }]} accessibilityRole="button" accessibilityLabel="Hold to catch it"
+                accessibilityActions={[{ name: 'activate' }]} onAccessibilityAction={() => void tryCatch()}>
+                <Animated.View style={[styles.catchFill, holdStyle]} />
+                <GameIcon name="search" size={28} />
+                <Text maxFontSizeMultiplier={1.3} style={styles.catchText}>{busy ? 'Catching\u2026' : 'Hold to catch!'}</Text>
+              </Pressable>
+            ) : (
+              <GameButton label="Get closer" icon="search" disabled={busy}
+                onPress={() => { queueHaptic('failBuzz', 1); setMiss(true); }} />
+            )}
           </>
         )}
         {status?.status === 'none' && <Text maxFontSizeMultiplier={1.35} style={styles.note}>Check back tomorrow. Every day is a new chance.</Text>}
@@ -160,5 +188,11 @@ const styles = StyleSheet.create({
   meterIcons: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 6 },
   coldDot: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#7cc6f5', borderWidth: 2, borderColor: BRAND.navy },
   word: { fontFamily: FONT.display, fontSize: 28, paddingTop: 3 },
+  catchBtn: {
+    width: '100%', minHeight: 64, borderRadius: RADIUS.lg, borderWidth: 4, borderColor: BRAND.navy, backgroundColor: BRAND.gold,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden',
+  },
+  catchFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#ffe9a3' },
+  catchText: { fontFamily: FONT.display, fontSize: 26, color: BRAND.navy, paddingTop: 4 },
   note: { fontFamily: FONT.body, fontSize: 17, color: BRAND.navySoft, textAlign: 'center' },
 });

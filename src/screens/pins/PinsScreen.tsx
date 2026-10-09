@@ -76,6 +76,9 @@ export default function PinsScreen() {
   const [lanyardIds, setLanyardIds] = useState<number[]>([]);
   const pending = useRef<Record<number, string>>({});
   const pendingSeries = useRef<MysterySeries | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const cardY = useRef<Record<number, number>>({});
+  const listY = useRef(0);
   const pendingCounts = useRef<Partial<PinHome['counts']> | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shine = useSharedValue(0);
@@ -228,6 +231,8 @@ export default function PinsScreen() {
       }
       const ids = new Set(shown.filter(p => !p.duplicate).map(p => p.item_id));
       setFresh({ seriesId: r.seriesId, ids });
+      const y = cardY.current[r.seriesId];
+      if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y + listY.current - 80), animated: !still });
       setTimeout(() => setFresh(f => (f && f.ids === ids ? null : f)), 2600);
     } else if (r?.variant === 'catch') {
       void load(true);
@@ -293,7 +298,7 @@ export default function PinsScreen() {
             <SharkLoader state={state === 'error' ? 'error' : 'loading'} onRetry={() => void load()} />
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.scroll}
+          <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll}
             refreshControl={<RefreshControl refreshing={refreshing} tintColor={BRAND.white}
               onRefresh={async () => { setRefreshing(true); await load(true); setRefreshing(false); }} />}>
             <Animated.View entering={still ? undefined : FadeIn.duration(220)} style={styles.hero}>
@@ -309,6 +314,14 @@ export default function PinsScreen() {
                 shine={shine} onPressSlot={(_, pin) => {
                   // On My Pins a tap takes a pin off; anywhere else it opens My Pins to choose.
                   if (tab === 'mine' && pin) toggleWear({ item_id: pin.item_id } as PinRow); else setTab('mine');
+                }}
+                onLongPressSlot={(i, pin) => {
+                  // Long-press: this pin takes the middle of the strap, where everyone looks first.
+                  const ids = lanyardIds.filter(id => id !== pin.item_id);
+                  ids.splice(Math.min(2, ids.length), 0, pin.item_id);
+                  queueHaptic('hitMedium', 1);
+                  setLanyardIds(ids);
+                  void saveLanyard(ids).then(l => setHome(h => h && ({ ...h, lanyard: l }))).catch(() => undefined);
                 }} />
               <View style={styles.counts}>
                 <View style={styles.countChip} accessible accessibilityLabel={`${home.counts.sets_done} of ${home.counts.sets} park sets done`}>
@@ -334,11 +347,13 @@ export default function PinsScreen() {
 
             {/* Tabs stay mounted once visited (no rebuild on every switch). */}
             {visited.has('mystery') && (
-              <View style={[styles.list, tab !== 'mystery' && styles.hidden]}>
+              <View style={[styles.list, tab !== 'mystery' && styles.hidden]} onLayout={e => { listY.current = e.nativeEvent.layout.y; }}>
                 {home.mystery.map(s => (
+                  <View key={s.id} onLayout={e => { cardY.current[s.id] = e.nativeEvent.layout.y; }}>
                   <MysteryCard key={s.id} series={s} coins={coins} busy={!!busy && (busy.startsWith(`${s.id}:`) || busy === `pick:${s.id}`)}
                     active={visible && tab === 'mystery'} still={still} shine={tab === 'mystery' ? shine : undefined}
                     fresh={fresh?.seriesId === s.id ? fresh.ids : undefined} onOpen={open} onPick={setPicking} />
+                  </View>
                 ))}
               </View>
             )}
