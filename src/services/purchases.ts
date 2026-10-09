@@ -12,6 +12,7 @@
  */
 import { NativeModules, Platform } from 'react-native';
 import syncVip, { vipSyncErrorCode, type VipSyncResult } from '../api/endpoints/me/vip-sync';
+import { capturePrices, captureShopPrices, captureVipPlans } from '../dev/moneyPreview';
 import { redeemShopPurchase, shopErrorCode, type ShopRedeemResult } from '../api/endpoints/me/shop';
 
 /** App Store Connect: subscription group "VIP" (22421719). Yearly first. */
@@ -162,6 +163,7 @@ export function toPlan(product: StoreSubscription, trialEligible: boolean): VipP
 
 /** The VIP plans from the App Store, yearly first. Empty when none load. */
 export async function loadVipPlans(): Promise<VipPlan[]> {
+  if (__DEV__ && capturePrices()) return (lastVipPlans = captureVipPlans());
   const store = await connect();
   const products = await store.getSubscriptions({ skus: [...VIP_PRODUCT_IDS] });
   const eligible = await store.IapIosSk2.isEligibleForIntroOffer(VIP_SUBSCRIPTION_GROUP_ID).then(Boolean).catch(() => false);
@@ -310,6 +312,7 @@ export type ShopPrice = {
 export async function loadShopPrices(productIds: readonly string[]): Promise<Record<string, ShopPrice>> {
   const ids = productIds.filter(isShopProduct);
   if (!ids.length) return {};
+  if (__DEV__ && capturePrices()) return captureShopPrices(ids);
   const store = await connect();
   const products: StoreProduct[] = await store.getProducts({ skus: [...ids] });
   const prices: Record<string, ShopPrice> = {};

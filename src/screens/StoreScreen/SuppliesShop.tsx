@@ -1,65 +1,78 @@
 /**
- * Supplies: the Shark Shop's in-app purchase shelf (Apple StoreKit 2
- * consumables) plus the free daily Ticket.
+ * Supplies: the Shark Shop's real-money shelf (Apple StoreKit 2 consumables),
+ * the free daily ticket and the VIP door, in Alex's shop card language
+ * (references/alex/shop/Shop_ref.png): blue cards, thick white rims, colored
+ * name bands, navy price bars, a bigger pile of Alex's art for a bigger pack.
  *
  * Fair by design, and the copy says so:
- * - Every price is Apple's localized price, exactly what the player is
- *   charged. Every pack lists exactly what it holds. No random rewards.
- * - Only Park Tickets, Shark Coins, Energy and Rescue Passes are sold. Ride
- *   Parts, ride coins and coin levels are earned at the park, never sold.
- * - "Best value" only where it is true (the server checks it), one-time and
- *   daily packs say so, and the Daily Deal timer is the real day rollover.
- * - Parents control purchases through Apple (Ask to Buy); a pending approval
- *   is explained, never retried behind their back.
+ * - Every price is Apple's localized price, exactly what the grown-up pays,
+ *   always beside the green "$". Every pack shows exactly what it holds.
+ * - Every value note is computed from the catalog and Apple's prices
+ *   (services/money/offers.ts, tested): "+21% more" against the smallest
+ *   pack, "worth $6.60" for a bundle at regular pack prices. Nothing invented.
+ * - Only tickets, coins, energy and Rescue Passes are sold. Ride Parts, ride
+ *   coins and coin levels are earned at the park, never sold.
+ * - No countdown on anything you can buy; the deal says it changes each day.
+ * - Every buy goes through buyPack(): a grown-up answers first (Apple Kids
+ *   guideline 1.3 practice), and the gate restates the price and contents.
+ *   Ask to Buy is explained, never retried behind a grown-up's back.
  *
  * The server grants, never this screen: a purchase is sent to the server,
  * which verifies Apple's signature and credits it once.
  *
- * Works on the 1.7.0 binary only (StoreKit module). On 1.6.0 it asks for an
- * update; VIP players can still claim the free Ticket there (no ad needed).
+ * Works on the 1.7.0 binary and later (StoreKit module). On 1.6.0 it asks
+ * for an update; VIP players can still claim the free ticket there.
  */
 import { openExternal } from '../../services/external';
-import * as Haptics from 'expo-haptics';
-import { askGrownUp, type GateReason } from '../../components/GrownUpGate';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { AuthContext } from '../../context/AuthProvider';
-import { getShop, type ShopCatalog, type ShopGrants, type ShopProduct } from '../../api/endpoints/me/shop';
+import type { ShopGrants, ShopProduct } from '../../api/endpoints/me/shop';
 import { getAdSummary, type AdSummary } from '../../api/endpoints/me/ad-rewards';
-import { buyShopProduct, loadShopPrices, onShopDelivered, storeAvailable, type ShopPrice } from '../../services/purchases';
+import getVipPerks, { type VipPerk } from '../../api/endpoints/economy/vip-perks';
+import { onShopDelivered, storeAvailable } from '../../services/purchases';
 import { adsAvailable, rewardText, watchForReward } from '../../services/ads';
-import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../../ui';
+import { baseRates, bonusPercent, bundleWorth } from '../../services/money/offers';
+import { buyPack, outcomeMessage, refreshSupplies, useSupplies } from '../../services/money/supplies';
+import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../../ui';
+import { haptic } from '../../gamekit/Haptics';
 import OneTimeTip from '../../components/help/OneTimeTip';
 import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from '../../components/RealMoneyMark';
+import { openMembership } from '../../components/GrownUpGate';
 import { useHelp } from '../../components/help/HelpProvider';
+import {
+  Band, CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, packArtKey, unitWord, type PackArtKey,
+} from '../../components/money/moneyUi';
 import type { GlossaryKey } from '../../services/help/glossary';
+
+export { grantsText, gateReasonFor } from '../../services/money/supplies';
 
 const APP_STORE_URL = 'itms-apps://apps.apple.com/app/id6758812566';
 
 export type SuppliesFocus = 'tickets' | 'coins' | 'rescue' | 'featured';
 
-const CURRENCY: Record<keyof ShopGrants, { icon: GameIconName; one: string; many: string }> = {
-  tickets: { icon: 'ticket', one: 'ticket', many: 'tickets' },
-  coins: { icon: 'coins', one: 'coin', many: 'coins' },
-  energy: { icon: 'energy', one: 'energy', many: 'energy' },
-  rescue_passes: { icon: 'retry', one: 'Rescue Pass', many: 'Rescue Passes' },
-};
-const ORDER: (keyof ShopGrants)[] = ['tickets', 'coins', 'energy', 'rescue_passes'];
-const WALLET_TERM: Record<keyof ShopGrants, GlossaryKey> = {
-  tickets: 'tickets', coins: 'coins', energy: 'energy', rescue_passes: 'rescue_pass',
+const WALLET: { key: keyof ShopGrants; icon: GameIconName; term: GlossaryKey; many: string }[] = [
+  { key: 'tickets', icon: 'ticket', term: 'tickets', many: 'tickets' },
+  { key: 'coins', icon: 'coins', term: 'coins', many: 'coins' },
+  { key: 'energy', icon: 'energy', term: 'energy', many: 'energy' },
+  { key: 'rescue_passes', icon: 'retry', term: 'rescue_pass', many: 'Rescue Passes' },
+];
+
+/** What a section's coins or tickets are for, said once under its title. */
+const SECTION_NOTE: Partial<Record<ShopProduct['section'], string>> = {
+  tickets: 'One ticket plays one ride challenge.',
+  coins: 'Coins buy gear for your shark in the Shark Shop.',
+  rescue: 'One more try at a ride coin you don’t have yet.',
 };
 
-/** "15 tickets, 1,500 coins and 2 Rescue Passes". */
-export function grantsText(grants: ShopGrants): string {
-  const parts = ORDER.filter(k => (grants[k] ?? 0) > 0)
-    .map(k => `${(grants[k] ?? 0).toLocaleString('en-US')} ${grants[k] === 1 ? CURRENCY[k].one : CURRENCY[k].many}`);
-  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] ?? '';
-}
-
-/** What the grown-up gate restates before a real-money buy: "$4.99 for 15 tickets". */
-export function gateReasonFor(product: ShopProduct, price: ShopPrice | undefined): GateReason {
-  return { kind: 'money', price: price?.price ?? 'Real money', gets: grantsText(product.grants) };
+function unavailableText(product: ShopProduct, holdCap: number | null): string | null {
+  switch (product.unavailable_reason) {
+    case 'bought_today': return 'Got it today. Back tomorrow.';
+    case 'pouch_full': return `You can hold ${holdCap ?? 30} tickets. Use some first.`;
+    case 'unavailable': return 'Not here right now.';
+    default: return null;
+  }
 }
 
 export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
@@ -67,87 +80,57 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const { hasSeenTip, explain } = useHelp();
   const canBuy = storeAvailable();
   const vip = !!player?.is_subscribed;
-  const [catalog, setCatalog] = useState<ShopCatalog | null>(null);
-  const [prices, setPrices] = useState<Record<string, ShopPrice>>({});
+  const { catalog, prices, status } = useSupplies(!!player);
   const [ads, setAds] = useState<AdSummary | null>(null);
-  const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading');
+  const [perks, setPerks] = useState<VipPerk[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const buyingRef = useRef(false);
-  const [attempt, setAttempt] = useState(0);
+  const [landed, setLanded] = useState<{ grants: ShopGrants; art: PackArtKey } | null>(null);
   const scroll = useRef<ScrollView>(null);
-  const sectionY = useRef<Partial<Record<SuppliesFocus, number>>>({});
   const scrolledTo = useRef(false);
 
-  const reload = useCallback(async () => {
-    const [nextCatalog, nextAds] = await Promise.all([getShop(), getAdSummary().catch(() => null)]);
-    setCatalog(nextCatalog);
-    setAds(nextAds);
-    return nextCatalog;
-  }, []);
-
+  const reloadAds = useCallback(() => getAdSummary().then(setAds).catch(() => null), []);
   useEffect(() => {
     if (!player) return;
-    let live = true;
-    setStatus('loading');
-    reload().then(async (next) => {
-      if (!live) return;
-      setStatus('ready');
-      if (!canBuy) return;
-      const loaded = await loadShopPrices(next.products.map(p => p.product_id)).catch(() => ({}));
-      if (live) setPrices(loaded);
-    }).catch(() => { if (live) setStatus('error'); });
-    return () => { live = false; };
-  }, [player?.id, attempt, canBuy, reload]);
+    void reloadAds();
+    void refreshSupplies(true);
+    if (!vip) void getVipPerks().then(setPerks);
+  }, [player?.id, vip, reloadAds]);
 
   // Ask to Buy approvals and last run's unfinished purchases land here.
   useEffect(() => onShopDelivered(() => {
     void refreshPlayer().catch(() => undefined);
-    void reload().catch(() => undefined);
-  }), [refreshPlayer, reload]);
+    void refreshSupplies(true);
+  }), [refreshPlayer]);
 
   const onSection = (key: SuppliesFocus) => (event: LayoutChangeEvent) => {
-    sectionY.current[key] = event.nativeEvent.layout.y;
     if (focus === key && !scrolledTo.current) {
       scrolledTo.current = true;
-      setTimeout(() => scroll.current?.scrollTo({ y: Math.max(0, event.nativeEvent.layout.y - 8), animated: true }), 250);
+      const y = event.nativeEvent.layout.y;
+      setTimeout(() => scroll.current?.scrollTo({ y: Math.max(0, y - 8), animated: true }), 250);
     }
   };
 
-  const buy = async (product: ShopProduct) => {
-    // A ref, not state: a second tap while the gate is up must never start a second purchase.
-    if (busy || buyingRef.current || !catalog) return;
-    buyingRef.current = true;
-    try {
-      // Real money: a grown-up answers first (Apple Kids category, guideline 1.3),
-      // and the gate says what they are saying yes to: the price and what's in the pack.
-      if (!(await askGrownUp(gateReasonFor(product, prices[product.product_id])))) return;
-      await buyNow(product, catalog);
-    } finally {
-      buyingRef.current = false;
-    }
-  };
-  const buyNow = async (product: ShopProduct, catalog: ShopCatalog) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setBusy(product.product_id);
-    const outcome = await buyShopProduct(product.product_id, { accountToken: catalog.account_token, shownDay: catalog.day });
+  const rates = useMemo(() => baseRates(catalog?.products ?? [], prices), [catalog, prices]);
+  const sections = useMemo(() => {
+    const bySection = new Map<string, ShopProduct[]>();
+    for (const p of catalog?.products ?? []) bySection.set(p.section, [...(bySection.get(p.section) ?? []), p]);
+    return bySection;
+  }, [catalog]);
+
+  const buy = async (product: ShopProduct, art: PackArtKey) => {
+    if (busy) return;
+    haptic('tapLight');
+    // The one gated way to buy (services/money/supplies.ts): a grown-up answers first, and the gate
+    // says what they are saying yes to: the price and what's in the pack.
+    const outcome = await buyPack(product, { onStart: () => setBusy(product.product_id) });
     setBusy(null);
     if (outcome.status === 'success') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      const granted = outcome.result.results[0]?.granted ?? product.grants;
-      gameAlert('You got it!', `${grantsText(granted)}. They’re yours now.`);
+      setLanded({ grants: outcome.result.results[0]?.granted ?? product.grants, art });
       await refreshPlayer().catch(() => undefined);
-      await reload().catch(() => undefined);
-    } else if (outcome.status === 'pending') {
-      gameAlert('Waiting for a grown-up', 'A grown-up needs to say yes on their phone. Your Supplies show up after that.');
-    } else if (outcome.status === 'unverified') {
-      gameAlert('Almost there', 'It worked! Your Supplies show up in a minute. If not, they come next time you open the game.');
-    } else if (outcome.status === 'other_account') {
-      gameAlert('Bought on another account', 'This was bought on a different Theme Park Shark account. Sign in to that account to get it.');
-    } else if (outcome.status === 'unavailable') {
-      gameAlert('Update the game', 'Update Theme Park Shark in the App Store to buy Supplies.');
-    } else if (outcome.status === 'failed') {
-      gameAlert('That didn’t work', 'You weren’t charged. Check your internet, then tap the price again.');
+      return;
     }
+    const message = outcomeMessage(outcome, null);
+    if (message) gameAlert(message.title, message.body);
   };
 
   const claimDailyTicket = async () => {
@@ -156,7 +139,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
     const outcome = await watchForReward('daily_ticket', ads?.placements.daily_ticket.ref ?? null, vip);
     setBusy(null);
     if (outcome.status === 'granted') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptic('success');
       gameAlert('Free ticket!', outcome.reward.reward.overflow_message ?? `${rewardText(outcome.reward.reward)} added.`);
       await refreshPlayer().catch(() => undefined);
     } else if (outcome.status === 'checking') {
@@ -168,57 +151,93 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
     } else if (outcome.status === 'failed') {
       gameAlert('That didn’t work', 'Check your internet and try again.');
     }
-    await reload().catch(() => undefined);
+    await reloadAds();
   };
-
-  const sections = useMemo(() => {
-    const bySection = new Map<string, ShopProduct[]>();
-    for (const p of catalog?.products ?? []) bySection.set(p.section, [...(bySection.get(p.section) ?? []), p]);
-    return bySection;
-  }, [catalog]);
 
   if (!player) {
     return <Notice icon="lock" title="Sign in to shop" body="Sign in first. Then your Supplies stay with your shark on every phone." />;
   }
-  if (status !== 'ready' || !catalog) {
+  if (!catalog) {
     return (
       <View style={st.center}>
         <SharkLoader tone="onBlue" state={status === 'error' ? 'error' : 'loading'} compact
-          title={status === 'error' ? 'Supplies couldn’t open' : undefined} onRetry={() => setAttempt(a => a + 1)} />
+          title={status === 'error' ? 'Supplies couldn’t open' : undefined} onRetry={() => void refreshSupplies(true)} />
       </View>
     );
   }
 
   const daily = ads?.placements.daily_ticket;
   const showDaily = !!ads?.enabled && !!daily && (vip || adsAvailable());
+  const featured = sections.get('featured') ?? [];
+  const starter = featured.find(p => p.limit === 'once');
+  const todays = featured.filter(p => p !== starter);
+  // A product Apple hasn't priced (not set up yet in this storefront) is never shown as a dead card.
+  const priced = (p: ShopProduct) => !!prices[p.product_id] || Object.keys(prices).length === 0;
+  const holdCap = catalog.ticket_hold_cap;
 
   return (
     <ScrollView ref={scroll} contentContainerStyle={st.scroll} showsVerticalScrollIndicator={false}>
       <View style={st.wallet}>
-        {ORDER.map(k => (
+        {WALLET.map(w => (
           // Each balance explains itself, like the map's pills.
-          <Pressable key={k} style={st.walletChip} accessibilityRole="button"
-            accessibilityLabel={`${(catalog.wallet[k] ?? 0).toLocaleString('en-US')} ${CURRENCY[k].many}`}
+          <Pressable key={w.key} style={st.walletChip} accessibilityRole="button"
+            accessibilityLabel={`${(catalog.wallet[w.key] ?? 0).toLocaleString('en-US')} ${w.many}`}
             accessibilityHint="Explains what this is"
-            onPress={() => explain(WALLET_TERM[k], { count: catalog.wallet[k] ?? 0 })}>
-            <GameIcon name={CURRENCY[k].icon} size={22} />
+            onPress={() => explain(w.term, { count: catalog.wallet[w.key] ?? 0 })}>
+            <GameIcon name={w.icon} size={22} />
             {/* Rescue Passes have no picture of their own yet, so the chip says the word too. */}
-            <Text style={st.walletText}>{(catalog.wallet[k] ?? 0).toLocaleString('en-US')}{k === 'rescue_passes' ? ((catalog.wallet[k] ?? 0) === 1 ? ' pass' : ' passes') : ''}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.walletText}>{(catalog.wallet[w.key] ?? 0).toLocaleString('en-US')}{w.key === 'rescue_passes' ? ((catalog.wallet[w.key] ?? 0) === 1 ? ' pass' : ' passes') : ''}</Text>
           </Pressable>
         ))}
       </View>
 
       {/* First visit: what Supplies is, once. Then, at the first ad offer, that ads are optional. */}
-      <OneTimeTip id="supplies_tab" ready={status === 'ready' && !busy} compact style={{ marginBottom: 10 }} />
+      <OneTimeTip id="supplies_tab" ready={status === 'ready' && !busy} compact />
       {showDaily && !vip && daily.remaining > 0 && hasSeenTip('supplies_tab') && (
-        <OneTimeTip id="bonus_ads" ready={status === 'ready' && !busy} compact style={{ marginBottom: 10 }} />
+        <OneTimeTip id="bonus_ads" ready={status === 'ready' && !busy} compact />
       )}
+
+      {!canBuy ? (
+        <Notice icon="info" title="Update the game" body="Update Theme Park Shark to buy Supplies."
+          action={{ label: 'Update the app', onPress: () => void openExternal(APP_STORE_URL, 'system') }} />
+      ) : !catalog.enabled ? (
+        <Notice icon="timer" title="Back soon" body="Supplies are closed right now. Come back later." />
+      ) : (
+        <>
+          {/* Before any price: these cost real money, and a grown-up buys them. */}
+          <View style={st.realMoney} accessible accessibilityLabel="Supplies cost real money. A grown-up buys them.">
+            <RealMoneyMark size={30} />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.realMoneyText}>
+              <Text style={st.realMoneyHead}>REAL MONEY  </Text>Supplies cost real money. A grown-up buys them.
+            </Text>
+          </View>
+
+          <View onLayout={onSection('featured')} style={{ gap: 12 }}>
+            {starter && starter.available && priced(starter) && (
+              <StarterCard product={starter} price={prices[starter.product_id]?.price} worth={bundleWorth(starter, prices, rates)}
+                busy={busy === starter.product_id} disabled={!!busy} onBuy={() => void buy(starter, 'chest')} />
+            )}
+            {todays.length > 0 && (
+              <View style={st.row}>
+                {todays.filter(priced).map((p, i) => (
+                  <DayCard key={p.product_id} product={p} index={i} price={prices[p.product_id]?.price}
+                    worth={bundleWorth(p, prices, rates)} note={unavailableText(p, holdCap)}
+                    busy={busy === p.product_id} disabled={!!busy} onBuy={() => void buy(p, packArtKey(p))} />
+                ))}
+              </View>
+            )}
+          </View>
+        </>
+      )}
+
+      {!vip && <VipCard perks={perks} />}
+
       {showDaily && (
         <Animated.View entering={FadeInUp.springify().damping(15)} style={st.freeCard}>
-          <GameIcon name="ticket" size={40} />
+          <PackArt art="tickets-1" size={46} bob={false} />
           <View style={{ flex: 1 }}>
-            <Text style={st.freeTitle}>FREE DAILY TICKET</Text>
-            <Text style={st.freeBody}>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeTitle}>FREE DAILY TICKET</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeBody}>
               {daily.remaining > 0
                 ? vip ? 'Free for VIP members. No ad. Tap Claim.' : 'Watch one short ad for 1 free ticket. You don’t have to.'
                 : 'Claimed. Back tomorrow.'}
@@ -234,126 +253,148 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
         </Animated.View>
       )}
 
-      {!canBuy ? (
-        <Notice icon="info" title="Update the game" body="Update Theme Park Shark to buy Supplies."
-          action={{ label: 'Update the app', onPress: () => void openExternal(APP_STORE_URL, 'system') }} />
-      ) : !catalog.enabled ? (
-        <Notice icon="timer" title="Back soon" body="Supplies are closed right now. Come back later." />
-      ) : (
-        <>
-          {/* Before any price: these cost real money, and a grown-up buys them. */}
-          <View style={st.realMoney} accessible accessibilityLabel="Supplies cost real money. A grown-up buys them.">
-            <RealMoneyMark size={36} />
-            <View style={{ flex: 1 }}>
-              <Text style={st.realMoneyHead}>REAL MONEY</Text>
-              <Text style={st.realMoneyBody}>Supplies cost real money. A grown-up buys them.</Text>
+      {canBuy && catalog.enabled && (['tickets', 'coins', 'rescue'] as const).map(key => {
+        const packs = (sections.get(key) ?? []).filter(priced);
+        if (!packs.length) return null;
+        const title = catalog.sections.find(s => s.key === key)?.title ?? key;
+        return (
+          <View key={key} onLayout={onSection(key)} style={st.section}>
+            <View style={st.sectionHead}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionTitle} accessibilityRole="header">{title}</Text>
+              <View style={st.sectionRule} />
+            </View>
+            {SECTION_NOTE[key] && <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionNote}>{SECTION_NOTE[key]}</Text>}
+            <View style={st.grid}>
+              {packs.map((p, i) => (
+                <PackCard key={p.product_id} product={p} tier={i} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 1 : 3}
+                  price={prices[p.product_id]?.price} bonus={bonusPercent(p, prices, rates)}
+                  note={unavailableText(p, holdCap)} busy={busy === p.product_id} disabled={!!busy}
+                  onBuy={() => void buy(p, packArtKey(p, i))} />
+              ))}
             </View>
           </View>
-          <View onLayout={onSection('featured')}>
-            {(sections.get('featured') ?? []).map((p, i) => (
-              <FeaturedCard key={p.product_id} product={p} price={prices[p.product_id]} index={i}
-                busy={busy === p.product_id} disabled={!!busy} onBuy={() => void buy(p)} />
-            ))}
-          </View>
-          {(['tickets', 'coins', 'rescue'] as const).map(key => (sections.get(key)?.length ?? 0) > 0 && (
-            <View key={key} onLayout={onSection(key)} style={st.section}>
-              <Text style={st.sectionTitle}>{catalog.sections.find(s => s.key === key)?.title ?? key}</Text>
-              {key === 'rescue' && <Text style={st.sectionNote}>A Rescue Pass gives you one more try at a ride coin you don’t have yet.</Text>}
-              <View style={st.grid}>
-                {(sections.get(key) ?? []).map(p => (
-                  <PackCard key={p.product_id} product={p} price={prices[p.product_id]}
-                    busy={busy === p.product_id} disabled={!!busy} onBuy={() => void buy(p)}
-                    holdCap={catalog.ticket_hold_cap} />
-                ))}
-              </View>
-            </View>
-          ))}
-        </>
-      )}
+        );
+      })}
 
       <View style={st.rules}>
         {catalog.rules.map(rule => (
           <View key={rule} style={st.ruleRow}>
             <GameIcon name="check" size={16} />
-            <Text style={st.rule}>{rule}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.rule}>{rule}</Text>
           </View>
         ))}
       </View>
+
+      <GotIt grants={landed?.grants ?? null} art={landed?.art ?? 'gift'} onDone={() => setLanded(null)} />
     </ScrollView>
   );
 }
 
-function unavailableText(product: ShopProduct, holdCap: number | null): string | null {
-  switch (product.unavailable_reason) {
-    case 'bought_today': return 'Bought today. Back tomorrow.';
-    case 'pouch_full': return `You can hold ${holdCap ?? 30} tickets. Use some first.`;
-    case 'unavailable': return 'Not available right now.';
-    default: return null;
-  }
-}
-
-function PriceButton({ product, price, busy, disabled, onBuy, holdCap = null }: {
-  product: ShopProduct; price?: ShopPrice; busy: boolean; disabled: boolean; onBuy: () => void; holdCap?: number | null;
+/** The one-time Starter Pack: Alex's big card, his open chest, the honest worth. */
+function StarterCard({ product, price, worth, busy, disabled, onBuy }: {
+  product: ShopProduct; price?: string; worth: ReturnType<typeof bundleWorth>; busy: boolean; disabled: boolean; onBuy: () => void;
 }) {
-  const blocked = unavailableText(product, holdCap);
-  if (blocked) return <Text style={st.blocked}>{blocked}</Text>;
   return (
-    <Pressable onPress={onBuy} disabled={disabled || !price}
-      style={({ pressed }) => [st.price, (!price || disabled) && st.priceDisabled, pressed && st.pricePressed]}
-      accessibilityRole="button" accessibilityLabel={price ? `Buy ${product.title} for ${price.price}. Real money. A grown-up buys it.` : `${product.title} is loading`}>
-      <Text style={st.priceText}>{busy ? 'ONE MOMENT' : price ? price.price : 'LOADING'}</Text>
-      {/* The price never stands alone: every one says it is real money. */}
-      {price && !busy && <Text style={st.priceNote}>real money</Text>}
-    </Pressable>
-  );
-}
-
-function Contents({ grants, size = 'big' }: { grants: ShopGrants; size?: 'big' | 'small' }) {
-  return (
-    <View style={st.contents}>
-      {ORDER.filter(k => (grants[k] ?? 0) > 0).map(k => (
-        <View key={k} style={st.contentChip}>
-          <GameIcon name={CURRENCY[k].icon} size={size === 'big' ? 22 : 18} />
-          <Text style={[st.contentText, size === 'small' && st.contentTextSmall]}>
-            {(grants[k] ?? 0).toLocaleString('en-US')} {grants[k] === 1 ? CURRENCY[k].one : CURRENCY[k].many}
-          </Text>
+    <Animated.View entering={FadeInUp.delay(60).springify().damping(15)}>
+      <ShopCard onPress={onBuy} disabled={disabled || !price} glow
+        accessibilityLabel={`${product.title}, just once. ${price ? `${price}, real money, a grown-up buys it.` : ''}${worth ? ` Worth ${worth.worth} in regular packs.` : ''}`}>
+        <Band text="STARTER PACK · JUST ONCE" color="gold" size={18} />
+        <View style={st.starterBody}>
+          <View style={st.starterArt}><PackArt art="chest" size={118} /></View>
+          <View style={{ flex: 1, gap: 6 }}>
+            {worth && (
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.worth}>
+                {`Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}`}
+              </Text>
+            )}
+            <Contents grants={product.grants} size="small" />
+          </View>
         </View>
-      ))}
-    </View>
-  );
-}
-
-function FeaturedCard({ product, price, index, busy, disabled, onBuy }: {
-  product: ShopProduct; price?: ShopPrice; index: number; busy: boolean; disabled: boolean; onBuy: () => void;
-}) {
-  return (
-    <Animated.View entering={FadeInUp.delay(80 + index * 80).springify().damping(15)} style={st.featured}>
-      <View style={st.featuredHead}>
-        <Text style={st.featuredTitle}>{product.title.toUpperCase()}</Text>
-        {/* Every limit sits in the same spot: the badge. */}
-        {(product.badge ?? (product.limit === 'daily' ? 'One per day' : null)) && (
-          <Text style={st.badge}>{(product.badge ?? 'One per day').toUpperCase()}</Text>
-        )}
-      </View>
-      {/* No countdown on anything you can buy. The deal looks like every other pack; its badge says it changes each day. */}
-      <Contents grants={product.grants} />
-      <PriceButton product={product} price={price} busy={busy} disabled={disabled} onBuy={onBuy} />
+        <PriceBar price={price} busy={busy} big />
+        {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: 30, left: 8 }} />}
+      </ShopCard>
     </Animated.View>
   );
 }
 
-function PackCard({ product, price, busy, disabled, onBuy, holdCap }: {
-  product: ShopProduct; price?: ShopPrice; busy: boolean; disabled: boolean; onBuy: () => void; holdCap: number | null;
+/** Daily Deal and Park Day Pack, side by side: today's picks. */
+function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: {
+  product: ShopProduct; index: number; price?: string; worth: ReturnType<typeof bundleWorth>; note: string | null;
+  busy: boolean; disabled: boolean; onBuy: () => void;
 }) {
-  const main = ORDER.find(k => (product.grants[k] ?? 0) > 0) ?? 'tickets';
+  const deal = !!product.deal_key || product.product_id.endsWith('.deal.daily');
   return (
-    <View style={[st.pack, product.badge === 'Best value' && st.packBest]}>
-      {product.badge && <Text style={st.packBadge}>{product.badge.toUpperCase()}</Text>}
-      <GameIcon name={CURRENCY[main].icon} size={44} />
-      <Text style={st.packAmount}>{(product.grants[main] ?? 0).toLocaleString('en-US')}</Text>
-      <Text style={st.packLabel}>{product.grants[main] === 1 ? CURRENCY[main].one : CURRENCY[main].many}</Text>
-      <PriceButton product={product} price={price} busy={busy} disabled={disabled} onBuy={onBuy} holdCap={holdCap} />
+    <Animated.View entering={FadeInUp.delay(120 + index * 70).springify().damping(15)} style={{ flex: 1 }}>
+      <ShopCard onPress={onBuy} disabled={disabled || !price || !!note} style={{ flex: 1 }}
+        accessibilityLabel={`${product.title}. ${deal ? 'A new deal every day.' : 'One a day.'} ${price ?? ''}, real money.`}>
+        <Band text={deal ? 'TODAY’S DEAL' : 'PARK DAY'} color={deal ? 'green' : 'blue'} size={15} />
+        <View style={st.dayBody}>
+          <PackArt art={packArtKey(product)} size={64} />
+          <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{product.title.toUpperCase()}</Text>
+          <Contents grants={product.grants} size="small" />
+          <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>
+            {worth ? `Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}` : deal ? 'New deal every day' : 'One a day'}
+          </Text>
+        </View>
+        <PriceBar price={price} busy={busy} note={note} />
+      </ShopCard>
+    </Animated.View>
+  );
+}
+
+function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, onBuy }: {
+  product: ShopProduct; tier: number; columns: 1 | 2 | 3; price?: string; bonus: number | null; note: string | null;
+  busy: boolean; disabled: boolean; onBuy: () => void;
+}) {
+  const main = (['tickets', 'coins', 'rescue_passes'] as const).find(k => (product.grants[k] ?? 0) > 0) ?? 'tickets';
+  const n = product.grants[main] ?? 0;
+  const best = product.badge === 'Best value';
+  const wide = columns === 1;
+  return (
+    <View style={[columns === 3 ? st.col3 : columns === 2 ? st.col2 : st.col1]}>
+      <ShopCard onPress={onBuy} disabled={disabled || !price || !!note} glow={best}
+        accessibilityLabel={`${n.toLocaleString('en-US')} ${unitWord(main, n)}. ${price ?? ''}, real money, a grown-up buys it.${bonus ? ` ${bonus}% more than the smallest pack.` : ''}${best ? ' Best value.' : ''}`}>
+        <View style={[st.packArtWell, wide && st.packArtWide]}>
+          <PackArt art={packArtKey(product, tier)} size={wide ? 70 : columns === 2 ? 82 : 64} bob={false} />
+          {wide && (
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.wideNote}>{`${n} ${unitWord(main, n)}`}</Text>
+          )}
+        </View>
+        <Band text={best ? 'BEST VALUE' : `${n.toLocaleString('en-US')} ${main === 'rescue_passes' ? 'PASSES' : unitWord(main, n).toUpperCase()}`}
+          color={best ? 'gold' : 'navy'} size={columns === 3 ? 14 : 16} />
+        {best && (
+          <Text maxFontSizeMultiplier={MAX_FONT} style={st.bestAmount}>{`${n.toLocaleString('en-US')} ${unitWord(main, n)}`}</Text>
+        )}
+        <PriceBar price={price} busy={busy} note={note} />
+        {bonus && <Sticker text={`+${bonus}% MORE`} style={{ top: 6, right: 4 }} />}
+      </ShopCard>
     </View>
+  );
+}
+
+/** The VIP door on the shelf: what VIP gives, no price (the page after the grown-up gate has it). */
+function VipCard({ perks }: { perks: VipPerk[] | null }) {
+  const lines = (perks ?? []).slice(0, 4);
+  return (
+    <Animated.View entering={FadeInUp.delay(180).springify().damping(15)} style={st.vipLip}>
+      <View style={st.vip}>
+        <View style={st.vipHead}>
+          <GameIcon name="member" size={40} />
+          <View style={{ flex: 1 }}>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipTitle}>GO VIP</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipSub}>Bigger rewards every day. No ads.</Text>
+          </View>
+        </View>
+        {lines.map(perk => (
+          <View key={perk.title} style={st.vipRow}>
+            <GameIcon name={perk.icon} size={22} />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipRowText} numberOfLines={1}>{perk.title}</Text>
+          </View>
+        ))}
+        <GameButton label="Ask a grown-up" icon="lock" size="compact" onPress={() => { void openMembership(); }}
+          accessibilityLabel="See VIP. A grown-up opens it." style={{ alignSelf: 'center', marginTop: 4 }} />
+      </View>
+    </Animated.View>
   );
 }
 
@@ -363,8 +404,8 @@ function Notice({ icon, title, body, action }: {
   return (
     <View style={st.notice}>
       <GameIcon name={icon} size={36} />
-      <Text style={st.noticeTitle}>{title}</Text>
-      <Text style={st.noticeBody}>{body}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT} style={st.noticeTitle}>{title}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT} style={st.noticeBody}>{body}</Text>
       {action && <GameButton label={action.label} onPress={action.onPress} />}
     </View>
   );
@@ -372,52 +413,52 @@ function Notice({ icon, title, body, action }: {
 
 const st = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center' },
-  scroll: { padding: 14, paddingBottom: 40, gap: 12 },
+  scroll: { padding: 14, paddingBottom: 48, gap: 14 },
   wallet: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 8 },
   walletChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BRAND.blue, borderRadius: 999,
     borderWidth: 3, borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 3 },
-  walletText: { fontFamily: 'Shark', fontSize: 16, color: '#fff', textShadowColor: BRAND.navy, textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0 },
-  freeCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#e4f7ff', borderRadius: 18,
-    borderWidth: 3, borderColor: '#ffd443', padding: 12 },
-  freeTitle: { fontFamily: 'Shark', fontSize: 17, color: '#075b9b' },
-  freeBody: { fontFamily: 'Knockout', fontSize: 15, color: '#17446c', lineHeight: 19 },
-  featured: { backgroundColor: '#fff', borderRadius: 20, borderWidth: 3, borderColor: '#ffcf3b', padding: 14, gap: 8, marginBottom: 12 },
-  featuredHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  featuredTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, flexShrink: 1 },
-  badge: { backgroundColor: BRAND.greenLip, color: '#fff', fontFamily: 'Shark', fontSize: 12, paddingHorizontal: 8,
-    paddingVertical: 3, borderRadius: 10, overflow: 'hidden' },
-  contents: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  contentChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eef6ff', borderRadius: 12,
-    paddingHorizontal: 8, paddingVertical: 4 },
-  contentText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy },
-  contentTextSmall: { fontSize: 14 },
+  walletText: { fontFamily: FONT.display, fontSize: 16, color: '#fff', textShadowColor: BRAND.navy, textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0 },
+  realMoney: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: REAL_MONEY_TINT, borderRadius: 14,
+    borderWidth: 3, borderColor: REAL_MONEY_GREEN, paddingHorizontal: 10, paddingVertical: 6 },
+  realMoneyHead: { fontFamily: FONT.display, fontSize: 15, color: REAL_MONEY_INK },
+  realMoneyText: { flex: 1, fontFamily: FONT.body, fontSize: 15, color: BRAND.navy, lineHeight: 19 },
+  row: { flexDirection: 'row', gap: 10 },
+  starterBody: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 10, alignSelf: 'stretch' },
+  starterArt: { width: 128, height: 118, alignItems: 'center', justifyContent: 'center' },
+  worth: { fontFamily: FONT.display, fontSize: 19, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  dayBody: { alignItems: 'center', gap: 5, paddingHorizontal: 6, paddingTop: 8, paddingBottom: 8, flex: 1, alignSelf: 'stretch' },
+  dayTitle: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  dayNote: { fontFamily: FONT.body, fontSize: 13, color: '#e2f6ff', textAlign: 'center' },
   section: { gap: 8 },
-  sectionTitle: { fontFamily: 'Shark', fontSize: 22, color: '#fff', textShadowColor: BRAND.navy,
+  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sectionTitle: { fontFamily: FONT.display, fontSize: 24, color: '#fff', textShadowColor: BRAND.navy,
     textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0 },
+  sectionRule: { flex: 1, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.75)' },
+  sectionNote: { fontFamily: FONT.body, fontSize: 15, color: '#e2f6ff', marginTop: -4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  pack: { flexGrow: 1, flexBasis: '30%', minWidth: 100, backgroundColor: '#fff', borderRadius: 18, borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.6)', alignItems: 'center', paddingTop: 16, paddingBottom: 10, paddingHorizontal: 8, gap: 2 },
-  packBest: { borderColor: '#ffcf3b' },
-  packBadge: { position: 'absolute', top: -11, backgroundColor: BRAND.greenLip, color: '#fff', fontFamily: 'Shark', fontSize: 11,
-    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 9, overflow: 'hidden' },
-  packAmount: { fontFamily: 'Shark', fontSize: 24, color: BRAND.navy, marginTop: 2 },
-  packLabel: { fontFamily: 'Knockout', fontSize: 14, color: '#475569', marginBottom: 6, textAlign: 'center' },
-  price: { alignSelf: 'stretch', backgroundColor: '#ffcf3b', borderRadius: 14, paddingVertical: 9, alignItems: 'center',
-    borderBottomWidth: 4, borderBottomColor: '#d99a00' },
-  priceDisabled: { opacity: 0.55 },
-  pricePressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },
-  priceText: { fontFamily: 'Shark', fontSize: 19, color: '#6a3b00' },
-  blocked: { fontFamily: 'Knockout', fontSize: 14, color: '#64748b', textAlign: 'center', paddingVertical: 6 },
-  realMoney: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: REAL_MONEY_TINT, borderRadius: 16,
-    borderWidth: 3, borderColor: REAL_MONEY_GREEN, paddingHorizontal: 12, paddingVertical: 8 },
-  realMoneyHead: { fontFamily: 'Shark', fontSize: 18, color: REAL_MONEY_INK },
-  priceNote: { fontFamily: 'Knockout', fontSize: 12, color: '#6a3b00', opacity: 0.8, marginTop: -2 },
-  sectionNote: { fontFamily: 'Knockout', fontSize: 15, color: '#fff', marginTop: -4 },
-  realMoneyBody: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy, lineHeight: 20 },
+  col3: { width: '31.2%', flexGrow: 1 },
+  col2: { width: '47.5%', flexGrow: 1 },
+  col1: { width: '100%' },
+  packArtWell: { height: 92, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', paddingTop: 6 },
+  packArtWide: { flexDirection: 'row', gap: 12, height: 86 },
+  wideNote: { fontFamily: FONT.display, fontSize: 22, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  bestAmount: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff', paddingVertical: 2, alignSelf: 'stretch', textAlign: 'center',
+    backgroundColor: CARD.band.navy },
+  vipLip: { borderRadius: 22, backgroundColor: '#5a3a00', paddingBottom: 6 },
+  vip: { borderRadius: 22, borderWidth: 4, borderColor: BRAND.gold, backgroundColor: '#123f80', padding: 12, gap: 6 },
+  vipHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  vipTitle: { fontFamily: FONT.display, fontSize: 26, color: BRAND.gold, textShadowColor: '#5a3a00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  vipSub: { fontFamily: FONT.body, fontSize: 15, color: '#e2f6ff' },
+  vipRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
+  vipRowText: { flex: 1, fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
+  freeCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#e4f7ff', borderRadius: 18,
+    borderWidth: 3, borderColor: '#ffd443', padding: 10 },
+  freeTitle: { fontFamily: FONT.display, fontSize: 17, color: '#075b9b' },
+  freeBody: { fontFamily: FONT.body, fontSize: 15, color: '#17446c', lineHeight: 19 },
   rules: { backgroundColor: 'rgba(5,52,110,0.55)', borderRadius: 16, padding: 12, gap: 6, marginTop: 4 },
   ruleRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  rule: { flex: 1, fontFamily: 'Knockout', fontSize: 14, color: '#fff', lineHeight: 18 },
+  rule: { flex: 1, fontFamily: FONT.body, fontSize: 14, color: '#fff', lineHeight: 18 },
   notice: { backgroundColor: '#fff', borderRadius: 20, padding: 18, alignItems: 'center', gap: 8 },
-  noticeTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy },
-  noticeBody: { fontFamily: 'Knockout', fontSize: 16, color: '#334155', textAlign: 'center' },
+  noticeTitle: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy },
+  noticeBody: { fontFamily: FONT.body, fontSize: 16, color: '#334155', textAlign: 'center' },
 });
