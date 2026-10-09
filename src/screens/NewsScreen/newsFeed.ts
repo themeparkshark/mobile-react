@@ -46,6 +46,12 @@ export type NewsPage = {
   readonly source: 'server' | 'wordpress';
 };
 
+/** Dev only: EXPO_PUBLIC_NEWS_OFFLINE=1 makes every news request fail, to record the offline states. */
+const DEV_OFFLINE = __DEV__ && process.env.EXPO_PUBLIC_NEWS_OFFLINE === '1';
+function devOffline(): void {
+  if (DEV_OFFLINE) throw new Error('offline (dev flag)');
+}
+
 /** Remembered for the session: does the game server page and filter (v2)? */
 let serverV2: boolean | null = null;
 export function serverPages(): boolean | null {
@@ -97,6 +103,7 @@ function wpCategoryIds(query: NewsQuery): number[] {
 }
 
 async function fromWordPress(query: NewsQuery): Promise<NewsPage> {
+  devOffline();
   const categories = wpCategoryIds(query);
   const response = await axios.get(WP_POSTS, {
     timeout: WP_TIMEOUT_MS,
@@ -117,6 +124,7 @@ async function fromWordPress(query: NewsQuery): Promise<NewsPage> {
 }
 
 async function fromServer(query: NewsQuery): Promise<NewsPage> {
+  devOffline();
   const plain = query.filter === 'all' && !query.search && query.page === 1;
   const response = await client.get('/news', {
     params: plain ? undefined : {
@@ -156,6 +164,7 @@ export async function fetchNewsPage(query: NewsQuery): Promise<NewsPage> {
  * fails the title words still place most stories.
  */
 export async function fetchCategories(ids: readonly number[]): Promise<Map<number, number[]>> {
+  devOffline();
   const out = new Map<number, number[]>();
   if (!ids.length) return out;
   const response = await axios.get(WP_POSTS, {
