@@ -41,6 +41,7 @@ function ridDay(iso: string): string {
 }
 import * as RootNavigation from '../RootNavigation';
 import OneTimeTip from './help/OneTimeTip';
+import CoinTopUpOffer from './money/CoinTopUpOffer';
 import { storeAvailable } from '../services/purchases';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../share';
@@ -828,7 +829,12 @@ export default function CoinLevelingModal({
                     {/* Ride Parts are earned at the ride and never sold. The shop
                         only helps with what is sold: Tickets for more ride
                         challenges, or Energy. */}
-                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && (
+                    {/* Short only on energy: the one pack that covers it, right here (grown-up gated). */}
+                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && hasParts && !hasEnergy && (
+                      <CoinTopUpOffer currency="energy" reason="level-up" need={Math.max(1, rideCoin.energy_to_next_level - playerEnergy)}
+                        style={{ marginTop: 8 }} />
+                    )}
+                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && !hasParts && (
                       <TouchableOpacity onPress={() => { pendingSuppliesRef.current = !hasParts ? 'tickets' : 'featured'; handleClose(); }}
                         accessibilityRole="button" hitSlop={8}
                         accessibilityLabel={!hasParts ? 'Get tickets in Supplies. A grown-up buys these with real money.' : 'See Supplies packs with energy. A grown-up buys these with real money.'}>
