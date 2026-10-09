@@ -57,7 +57,7 @@ const REAL: Record<string, Scenario & { hint?: string }> = {
   pretzel_collection: { found: 9, starter: 'claimable' },
   night_lights: { found: 3, starter: 'locked', spawning: false, hint: 'After sunset' },
   rain_parade: { found: 1, starter: 'locked', spawning: false, hint: 'On rainy days' },
-  camera_crew: { found: 0, starter: 'locked' },
+  camera_crew: { found: 40, claimed: true, starter: 'claimed' },
 };
 const SCENARIOS: Record<string, Scenario & { hint?: string }> = process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real' ? REAL : SCENARIOS_ALL;
 const STARTER_TARGET = process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real' ? 8 : 5;

@@ -341,8 +341,16 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     RootNavigation.navigate('Inventory', wearNavigationParams(wear));
   }, [claimResult, wearing, refreshPlayer]);
 
+  // The preview has no player: it wears titles locally so captures show the real button states.
+  const [previewTitle, setPreviewTitle] = useState<string | null>(null);
+  const wornTitle = preview ? previewTitle : player?.title ?? null;
   const toggleTitle = useCallback(async () => {
-    if (!set?.reward.title || busy || preview) return;
+    if (!set?.reward.title || busy) return;
+    if (preview) {
+      setPreviewTitle(current => (current === set.reward.title ? null : set.reward.title));
+      playSfx('ui.confirm', 0.7);
+      return;
+    }
     setBusy('title');
     try {
       await equipSetTitle(set.slug, player?.title !== set.reward.title, set.reward.titleTier);
@@ -428,8 +436,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             <BookHeader set={set} stamp={stamp?.slug === set.slug ? stamp.title : null} focusBusy={busy === 'focus'}
               onFocus={set.status === 'active' || set.status === 'resting' ? () => void toggleFocus() : null} />
             <PrizeRows set={set} busyId={busy} onClaim={reward => void claim(reward)}
-              titleWorn={!!set.reward.title && player?.title === set.reward.title} titleBusy={busy === 'title'}
-              onTitle={set.reward.title && !preview ? () => void toggleTitle() : null} popKey={popKey} active={isFocused} />
+              titleWorn={!!set.reward.title && wornTitle === set.reward.title} titleBusy={busy === 'title'}
+              onTitle={set.reward.title ? () => void toggleTitle() : null} popKey={popKey} active={isFocused} />
             {claimResult && (
               <View style={{ marginHorizontal: SIDE, marginBottom: 10 }}>
                 <ClaimResultCard outcome={claimResult} wearing={wearing} onWear={() => void wearIt()} onDismiss={() => setClaimResult(null)} />
