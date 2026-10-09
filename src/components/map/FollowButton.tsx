@@ -55,11 +55,10 @@ function LocatorFace({ facing }: { readonly facing: boolean }) {
         </>
       )}
       <Circle cx={22} cy={28} r={11} fill={BRAND.white} stroke={BRAND.navy} strokeWidth={2.4} />
-      <Circle cx={22} cy={28} r={6.6} fill="none" stroke={BRAND.skyDeep} strokeWidth={1.8} />
-      {/* The fin: gold, a lighter cel band on its lit (left) side, a navy outline. */}
-      <Path d="M16.5 31.5 C17.5 26 20.5 21 26.5 18.5 C25 23 25.5 27.5 27.5 31.5 Z" fill={BRAND.gold} stroke={BRAND.navy} strokeWidth={2} strokeLinejoin="round" />
-      <Path d="M18.6 30 C19.4 26.4 21.4 23.2 24.2 21.4 C23.4 24.4 23.4 27.2 24.2 30 Z" fill={BRAND.goldLight} />
-      <Path d="M15 31.8 H29" stroke={BRAND.navy} strokeWidth={2.2} strokeLinecap="round" />
+      {/* The fin: hooked back like a shark's, gold with a lighter cel band, a navy outline, cutting a wave. */}
+      <Path d="M29 32 C28.5 25 24 19.5 15.5 17.5 C18.5 21.5 19.5 26.5 18.5 32 Z" fill={BRAND.gold} stroke={BRAND.navy} strokeWidth={2} strokeLinejoin="round" />
+      <Path d="M26.5 31 C26 26.5 23.5 22.5 19.5 20.3 C21 23.5 21.5 27 21 31 Z" fill={BRAND.goldLight} />
+      <Path d="M13 32.5 q2.25 -2 4.5 0 t4.5 0 t4.5 0 t4.5 0" fill="none" stroke={BRAND.navy} strokeWidth={2} strokeLinecap="round" />
     </Svg>
   );
 }
