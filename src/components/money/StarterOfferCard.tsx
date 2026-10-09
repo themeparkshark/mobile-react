@@ -19,7 +19,7 @@ import { CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, Sticker } from './m
 
 const SEEN_KEY = 'money:starter-offer-seen';
 
-export default function StarterOfferCard({ ready }: { ready: boolean }) {
+export default function StarterOfferCard({ ready, onShown }: { ready: boolean; onShown?: (shown: boolean) => void }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const canBuy = !!player && storeAvailable();
   const [show, setShow] = useState<boolean | null>(null);
@@ -37,6 +37,8 @@ export default function StarterOfferCard({ ready }: { ready: boolean }) {
 
   const starter = catalog?.enabled ? catalog.products.find(p => p.limit === 'once' && p.available) : undefined;
   const price = starter ? prices[starter.product_id] : undefined;
+  const visible = !!(show && starter && price);
+  useEffect(() => { onShown?.(visible); }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!show || !starter || !price) return null;
   const worth = bundleWorth(starter, prices, baseRates(catalog!.products, prices));
   trackImpression('postwin.starter', starter.product_id);
@@ -56,15 +58,15 @@ export default function StarterOfferCard({ ready }: { ready: boolean }) {
 
   return (
     <Animated.View entering={FadeInUp.delay(400).springify().damping(15)} style={st.wrap}>
-      <Text maxFontSizeMultiplier={MAX_FONT} style={st.kicker}>STARTER PACK, JUST ONCE</Text>
       <Pressable onPress={() => void buy()} disabled={busy} accessibilityRole="button"
         accessibilityLabel={`Starter Pack, just once. ${price.price}, real money, a grown-up buys it.${worth ? ` Worth ${worth.worth}.` : ''}`}
         style={({ pressed }) => [st.lip, pressed && st.lipPressed]}>
         <View style={st.card}>
           <PackArt art="chest" size={70} />
           <View style={{ flex: 1, gap: 4, paddingVertical: 8 }}>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.title}>{worth ? `STARTER PACK · WORTH ${worth.worth}` : 'STARTER PACK'}</Text>
-            <Contents grants={starter.grants} size="small" />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.title}>STARTER PACK · JUST ONCE</Text>
+            {worth && <Text maxFontSizeMultiplier={MAX_FONT} style={st.worth}>{`Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}`}</Text>}
+            <Contents grants={starter.grants} size="tight" />
           </View>
           <View style={st.priceCol}><PriceBar price={price.price} busy={busy} /></View>
           {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: 2, left: 2 }} />}
@@ -83,5 +85,6 @@ const st = StyleSheet.create({
   card: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 16, borderWidth: 3, borderColor: '#ffd84a',
     backgroundColor: CARD.bottom, overflow: 'hidden', paddingLeft: 6 },
   title: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
+  worth: { fontFamily: FONT.display, fontSize: 13, color: '#ffe07a' },
   priceCol: { width: 96, alignSelf: 'stretch', justifyContent: 'center' },
 });

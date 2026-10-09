@@ -234,6 +234,7 @@ export default function PostWinRewardsModal({
   const isVip = !!player?.is_subscribed;
   // The VIP line quotes the server's own multiplier; loaded once per run.
   useEffect(() => { if (!isVip) void warmVipPerks(); }, [isVip]);
+  const [starterShown, setStarterShown] = useState(false);
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
@@ -510,7 +511,8 @@ export default function PostWinRewardsModal({
                 </>
               )}
 
-              {!isVip && (xpEarned > 0 || coinsEarned > 0) && (
+              {/* One money offer per sheet: the once-ever Starter Pack takes the VIP line's place. */}
+              {!isVip && !starterShown && (xpEarned > 0 || coinsEarned > 0) && (
                 <Pressable style={styles.vipChip} accessibilityRole="button"
                   accessibilityLabel="VIP members get extra XP and coins when they win. Tap to learn about VIP."
                   onPress={() => closeTo(() => { void openMembership(); })}>
@@ -523,7 +525,7 @@ export default function PostWinRewardsModal({
               )}
 
               {/* The Starter Pack, once ever, at the first win: an earned moment, never a pop-up. */}
-              {!isVip && coinsEarned > 0 && <StarterOfferCard ready={visible} />}
+              {!isVip && coinsEarned > 0 && <StarterOfferCard ready={visible} onShown={setStarterShown} />}
 
               {/* The Shark Pass after a win: where the climb stands and a claim dot (hidden when no season runs). */}
               {(xpEarned > 0 || coinsEarned > 0) && <SharkPassBanner style={{ alignSelf: 'stretch', marginTop: 8 }} open={go => closeTo(go)} />}
