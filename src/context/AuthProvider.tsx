@@ -62,12 +62,12 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
         if (!isStandalonePreviewMode()) RootNavigation.navigate(player.username ? 'Loading' : 'Welcome');
       } catch (error: any) {
         if (error?.response?.status === 401) {
-          await logout();
+          await logout().catch(() => undefined);
           setIsReady(true);
           return;
         }
         // Preserve a previously verified profile during a temporary outage.
-        const cached = await AsyncStorage.getItem('player');
+        const cached = await AsyncStorage.getItem('player').catch(() => null);
         if (cached) {
           try {
             const cachedPlayer = JSON.parse(cached) as PlayerType;

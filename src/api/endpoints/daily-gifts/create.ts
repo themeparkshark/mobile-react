@@ -1,6 +1,7 @@
 import { ApiResponseType } from '../../../models/api-response-type';
 import { DailyGiftType } from '../../../models/daily-gift-type';
 import client from '../../client';
+import { badShapeError, isRecord } from '../../jsonGuard';
 
 /** The device's IANA timezone, so the chest turns over at the player's midnight. */
 export function deviceTimezone(): string | undefined {
@@ -18,5 +19,6 @@ export default async function create(): Promise<DailyGiftType> {
     timezone ? { timezone } : undefined
   );
 
+  if (!isRecord(data?.data)) throw badShapeError('/daily-gifts');
   return data.data;
 }

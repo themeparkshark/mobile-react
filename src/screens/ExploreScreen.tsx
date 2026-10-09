@@ -834,7 +834,7 @@ function ExploreScreen() {
     if (!playerTeam?.has_team) {
       RootNavigation.navigate('TeamSelection', { 
         onTeamSelected: () => {
-          getMyTeam().then(setPlayerTeam);
+          getMyTeam().then(setPlayerTeam).catch(() => undefined);
         }
       });
       return;

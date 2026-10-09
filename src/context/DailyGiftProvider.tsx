@@ -27,7 +27,13 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
   useTimeoutWhen(
     async () => {
       // The request carries the device timezone, so the chest is per local day.
-      setDailyGift(await getDailyGift());
+      // Runs 5 s after every signed-in launch, often offline or behind a
+      // hotel Wi-Fi page: a failure just means no chest card this launch.
+      try {
+        setDailyGift(await getDailyGift());
+      } catch {
+        // The chest stays where it is; the next launch asks again.
+      }
     },
     5000,
     Boolean(isReady && player && player.username)

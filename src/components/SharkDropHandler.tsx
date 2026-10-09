@@ -56,7 +56,7 @@ export default function SharkDropHandler() {
   };
 
   useEffect(() => {
-    void Linking.getInitialURL().then(queue);
+    void Linking.getInitialURL().then(queue).catch(() => undefined);
     void AsyncStorage.getItem(PENDING_KEY).then(code => { if (code) setPending(code); }).catch(() => undefined);
     const sub = Linking.addEventListener('url', ({ url }) => void queue(url));
     return () => sub.remove();
@@ -71,6 +71,8 @@ export default function SharkDropHandler() {
     prize.value = 0;
     void client.post<{ data: DropResult }>('/coin-codes/redeem', { code })
       .then(({ data }) => {
+        // A reply without a prize must not leave a locked, empty modal.
+        if (!data?.data || typeof data.data !== 'object') throw new Error('Unexpected drop reply');
         setState({ code, result: data.data });
         lid.value = withSequence(withTiming(1, { duration: 120 }), withSpring(1));
         prize.value = withDelay(250, withSpring(1, { damping: 9, stiffness: 150 }));
@@ -79,7 +81,9 @@ export default function SharkDropHandler() {
         void refreshPlayer?.();
       })
       .catch((error) => {
-        const message = error?.response?.data?.message ?? 'We couldn’t open this drop. Check your connection and tap the link again.';
+        const serverMessage = error?.response?.data?.message;
+        const message = typeof serverMessage === 'string' && serverMessage
+          ? serverMessage : 'We couldn’t open this drop. Check your connection and tap the link again.';
         setState({ code, error: message });
       })
       .finally(() => {

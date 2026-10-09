@@ -80,3 +80,29 @@ export function nonJsonError(response: GuardResponse & { request?: unknown }): N
 export function isNonJsonError(error: unknown): boolean {
   return !!error && typeof error === 'object' && (error as { code?: unknown }).code === NON_JSON_CODE;
 }
+
+export const BAD_SHAPE_CODE = 'ERR_BAD_SHAPE';
+
+/**
+ * A 200 that is JSON but not the shape the screen needs (an empty body, an
+ * error object, an old server). Read endpoints throw this instead of handing
+ * the screen something it would crash on; callers already treat a rejection
+ * as "could not load".
+ */
+export function badShapeError(what: string): Error & { code: typeof BAD_SHAPE_CODE } {
+  const error = new Error(`Unexpected reply for ${what}`) as Error & { code: typeof BAD_SHAPE_CODE };
+  error.name = 'BadShapeResponseError';
+  error.code = BAD_SHAPE_CODE;
+  return error;
+}
+
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * A map coordinate as the API sends it: a number, or a Laravel decimal cast
+ * string like "33.81210000". Values are checked, never rewritten.
+ */
+export const isCoordinate = (value: unknown): boolean =>
+  (typeof value === 'number' && Number.isFinite(value)) ||
+  (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)));
