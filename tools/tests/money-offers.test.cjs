@@ -113,7 +113,7 @@ test('Shark Pass: what the pass row adds for reached steps, and its sums', () =>
 test('real money: Supplies packs, the Shark Pass and VIP each buy only after a grown-up answers', () => {
   const strip = code => code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   const screen = strip(read('src/screens/SharkPassScreen.tsx'));
-  assert.match(screen, /if \(!\(await askGrownUp\(\{ kind: 'money', price: price\.price,[^)]*\}\)\)\) return;[\s\S]{0,200}await buySharkPass\(/);
+  assert.match(screen, /if \(!\(await askGrownUp\(\{ kind: 'money', price: cost\.price,[\s\S]{0,160}?\}\)\)\) return;[\s\S]{0,260}await buySharkPass\(/);
   assert.equal((screen.match(/buySharkPass\(/g) || []).length, 1);
   for (const file of ['src/components/money/CoinTopUpOffer.tsx', 'src/components/money/StarterOfferCard.tsx', 'src/screens/StoreScreen/SuppliesShop.tsx']) {
     const code = strip(read(file));
@@ -122,7 +122,7 @@ test('real money: Supplies packs, the Shark Pass and VIP each buy only after a g
   }
   // A Shark Pass is never mistaken for a Supplies pack (it would be redeemed at the wrong door and never finished).
   const purchases = read('src/services/purchases.ts');
-  assert.match(purchases, /&& !isSharkPassProduct\(productId\);/);
+  assert.match(purchases, /&& !isSharkPassProduct\(productId\) && !isVipGiftProduct\(productId\);/);
   assert.match(screen, /It doesn’t renew/);
 });
 

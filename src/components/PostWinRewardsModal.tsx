@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { openMembership } from './GrownUpGate';
 import StarterOfferCard from './money/StarterOfferCard';
+import { storeAvailable } from '../services/purchases';
 import SharkPassBanner from './money/SharkPassBanner';
 import { vipWinLine } from '../services/money/offers';
 import { vipRideMultiplierNow, warmVipPerks } from '../services/money/vipPerks';
@@ -235,7 +236,8 @@ export default function PostWinRewardsModal({
   // The VIP line quotes the server's own multiplier; loaded once per run.
   useEffect(() => { if (!isVip) void warmVipPerks(); }, [isVip]);
   // null until the Starter card has decided; the VIP line waits for it, so it never flashes and vanishes.
-  const [starterShown, setStarterShown] = useState<boolean | null>(null);
+  // No store (old build) or nobody signed in: there is no Starter card to wait for.
+  const [starterShown, setStarterShown] = useState<boolean | null>(() => (storeAvailable() && !!player ? null : false));
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
