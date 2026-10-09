@@ -216,16 +216,17 @@ function Swap({ t, a, b, from, to, style }: {
 
 function ClimbScene({ t, w, h }: SceneProps) {
   const bw = Math.min(w - 48, 292);
-  const rowH = Math.round(Math.min(40, h * 0.215));
-  const gap = 7;
+  const rowH = Math.round(Math.min(36, h * 0.2));
+  const gap = 6;
   const step = rowH + gap;
   const x0 = (w - bw) / 2;
-  const y0 = (h - (rowH * 3 + gap * 2)) / 2;
+  // Rows sit below the close button on the window's top-right corner.
+  const y0 = Math.max(46, (h - (rowH * 3 + gap * 2)) / 2);
   // The ride icon flies into your count; you pass the row above.
   const flyer = useAnimatedStyle(() => {
     const k = seg(t.value, 0.06, 0.3);
-    const x = interpolate(k, [0, 1], [w * 0.92, x0 + bw - rowH * 1.3]);
-    const y = interpolate(k, [0, 1], [-rowH * 0.6, y0 + step * 2 + rowH * 0.1]) - Math.sin(k * Math.PI) * h * 0.18;
+    const x = interpolate(k, [0, 1], [w + 10, x0 + bw - rowH * 1.3]);
+    const y = interpolate(k, [0, 1], [h * 0.42, y0 + step * 2 + rowH * 0.1]) - Math.sin(k * Math.PI) * h * 0.22;
     const fade = interpolate(t.value, [0.05, 0.08, 0.29, 0.32], [0, 1, 1, 0], 'clamp');
     return { opacity: fade, transform: [{ translateX: x }, { translateY: y }, { scale: 1.2 - 0.4 * k }, { rotate: `${-14 + 14 * k}deg` }] };
   });

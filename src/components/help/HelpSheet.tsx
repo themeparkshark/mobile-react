@@ -20,7 +20,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState, type Rea
 import {
   Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import Animated, {
   Easing, interpolate, runOnJS, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, withTiming,
   type SharedValue,
@@ -33,6 +33,9 @@ import { BRAND, GameButton, GameIcon, SharkLoader } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import HelpHero, { type HeroData } from './HelpHero';
 import { HELP_TOUR_ON, onTourNext } from './helpTour';
+
+// A gesture-handler scroll view, so the swipe-down pan and sideways paging negotiate instead of the native pager eating every touch.
+const PagerScroll = Animated.createAnimatedComponent(GestureScrollView);
 
 const openSound = require('../../../assets/sounds/modal_open.mp3');
 const closeSound = require('../../../assets/sounds/modal_close.mp3');
@@ -123,7 +126,7 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
   const insets = useSafeAreaInsets();
   const pages = sheet.pages;
   const [page, setPage] = useState(0);
-  const scroll = useAnimatedRef<Animated.ScrollView>();
+  const scroll = useAnimatedRef<GestureScrollView>();
   const scrollX = useSharedValue(0);
   const sheetH = useSharedValue(height);
   const pageW = width;
@@ -194,7 +197,7 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
             {`${sheet.name} help${pages.length > 1 ? `, page ${page + 1} of ${pages.length}` : ''}`}
           </Text>
           {ready ? (
-            <Animated.ScrollView ref={scroll} horizontal pagingEnabled showsHorizontalScrollIndicator={false} bounces={pages.length > 1}
+            <PagerScroll ref={scroll} horizontal pagingEnabled showsHorizontalScrollIndicator={false} bounces={pages.length > 1}
               scrollEnabled={pages.length > 1} onScroll={onScroll} scrollEventThrottle={16} onMomentumScrollEnd={onSettle}
               decelerationRate="fast">
               {pages.map((p, index) => (
@@ -202,7 +205,7 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
                   running={active && index === page} reduced={reduced} reveal={reveal} scrollX={scrollX}
                   footer={pageFooter?.(p) ?? null} />
               ))}
-            </Animated.ScrollView>
+            </PagerScroll>
           ) : (
             <View style={{ height: heroH + 190, justifyContent: 'center', paddingHorizontal: SIDE }}>
               <SharkLoader state={state === 'error' ? 'error' : 'loading'} title={state === 'error' ? 'Couldn\'t load this' : undefined} onRetry={onRetry} />
