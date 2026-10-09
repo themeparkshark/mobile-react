@@ -8,6 +8,8 @@ import EventSheet from '../components/liveEvents/EventSheet';
 import EventStatusChip from '../components/liveEvents/EventStatusChip';
 import FrenzyBanner, { resetFrenzyBannerForTests } from '../components/liveEvents/FrenzyBanner';
 import StarRideBadge from '../components/liveEvents/StarRideBadge';
+import NextUpRail from '../components/nextUp/NextUpRail';
+import { openableKeys } from '../services/liveEvents/model';
 import { goldenReefFixture } from '../services/liveEvents/fixture';
 import { BRAND, GameIcon } from '../ui';
 
@@ -55,6 +57,11 @@ export default function LiveEventPreviewScreen() {
     return reward;
   };
   const home = mode === 'home';
+  const ready = openableKeys(live).length;
+  const rail = ready ? { kind: 'event_chest', icon: 'chest', title: ready === 1 ? 'Open your reef chest' : `Open ${ready} reef chests`, action: { type: 'open_event' as const, event_id: live.id } }
+    : live.phase !== 'live' ? { kind: 'daily_chest', icon: 'gift', title: 'Open your daily chest', action: { type: 'daily_chest' as const } }
+      : home ? { kind: 'event_progress', icon: 'chest', title: 'Fill the reef', action: { type: 'open_event' as const, event_id: live.id } }
+        : { kind: 'star_ride', icon: 'star', title: live.frenzy.active ? 'Frenzy! Win a Star Ride' : 'Win a Star Ride: x2', action: { type: 'show_ride' as const, task_id: 101 } };
 
   return (
     <View style={styles.map}>
@@ -79,6 +86,9 @@ export default function LiveEventPreviewScreen() {
         </View>
         <View style={styles.toastSlot}><FrenzyBanner event={live} /></View>
       </View>
+      <View style={[styles.rail, { bottom: insets.bottom + 120 }]}>
+        <NextUpRail item={rail} onAction={a => { if (a.type === 'open_event') setSheet(true); }} />
+      </View>
       <ScrollView horizontal style={[styles.controls, { bottom: insets.bottom + 12 }]} contentContainerStyle={{ gap: 6, paddingHorizontal: 10 }}>
         {MODES.map(m => (
           <Pressable key={m} onPress={() => { setMode(m); setSheet(m === 'sheet'); }} style={[styles.ctl, m === mode && styles.ctlOn]}>
@@ -102,6 +112,7 @@ const styles = StyleSheet.create({
   homeRow: { flexDirection: 'row', gap: 10 },
   fakeChip: { height: 36, paddingHorizontal: 8, borderRadius: 18, backgroundColor: BRAND.blue, borderWidth: 2.5, borderColor: BRAND.white, justifyContent: 'center' },
   toastSlot: { marginTop: 10, alignItems: 'center' },
+  rail: { position: 'absolute', left: 12, right: 12 },
   controls: { position: 'absolute', left: 0, right: 0, flexGrow: 0 },
   ctl: { backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 10, paddingVertical: 8 },
   ctlOn: { backgroundColor: BRAND.gold },
