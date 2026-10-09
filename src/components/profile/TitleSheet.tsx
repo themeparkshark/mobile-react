@@ -72,7 +72,10 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
       setEarned(earnedTitles([
         { slug: 'churro_collection', name: 'Churro Collection', total_items: 24, starter_milestone: { target: 8, rewards_claimed: true, rewards: { title: 'Churro Finder' } } },
         { slug: 'pretzel_collection', name: 'Pretzel Collection', total_items: 16, rewards_claimed: true, completion_rewards: { title: 'Pretzel Pro' } },
-      ], { stamps: { rides: [{ id: 4, name: 'Coaster Champ', goal: 'Ride 10 coasters' }] }, unlocked_titles: [{ stamp_id: 4, title: 'Coaster Champ' }] }));
+      ], { stamps: { rides: [{ id: 4, name: 'Coaster Champ', goal: 'Ride 10 coasters' }],
+        hunt: [{ id: 911, name: 'Wild Legend Finder', goal: 'Catch two different legendary finds',
+          icon_thumb_url: process.env.EXPO_PUBLIC_STAMP_ART_BASE ? `${process.env.EXPO_PUBLIC_STAMP_ART_BASE}/wild-legend-finder@thumb.png` : null }] },
+      unlocked_titles: [{ stamp_id: 4, title: 'Coaster Champ' }, { stamp_id: 911, title: 'Wild Legend' }] }));
       return () => { live = false; };
     }
     void Promise.allSettled([getPrepItemSets(), getStamps()]).then(([sets, stamps]) => {
