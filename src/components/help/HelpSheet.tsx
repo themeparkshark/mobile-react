@@ -32,6 +32,7 @@ import type { HelpPage, HelpSheetSpec } from '../../services/help/helpSheets';
 import { BRAND, GameButton, GameIcon, SharkLoader } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import HelpHero, { type HeroData } from './HelpHero';
+import { markUserActivity } from '../../hooks/useUserIdle';
 import { HELP_TOUR_ON, onTourNext } from './helpTour';
 
 // A gesture-handler scroll view, so the swipe-down pan and sideways paging negotiate instead of the native pager eating every touch.
@@ -195,7 +196,8 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
     : { transform: [{ translateY: (1 - open.value) * (sheetH.value + 40) + drag.value }] }));
 
   return (
-    <View style={StyleSheet.absoluteFill} accessibilityViewIsModal>
+    // A Modal is its own native root, so the app's idle tracker never sees these touches: report them.
+    <View style={StyleSheet.absoluteFill} accessibilityViewIsModal onTouchStart={() => markUserActivity()}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, scrim]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityRole="button" accessibilityLabel="Close help" />
       </Animated.View>
