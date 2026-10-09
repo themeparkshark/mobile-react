@@ -20,7 +20,7 @@ test('R2-4 Deep Lantern entry points: profile + player chip and the collection b
   assert.match(read('src/screens/PlayerScreen.tsx'), /<ProfileEventChip playerId=\{currentPlayer\.id\} \/>/);
   // Ship merge: the book shows Events as set cards in its own picker (menu-dex EventTab, CONTRACT 6), not the shelf tile.
   const book = read('src/screens/SetCollectionScreen.tsx');
-  assert.match(book, /<EventTab key=\{`event-\$\{card\.eventSlug\}`\}/);
+  assert.match(book, /<ShelfEventCard key=\{`event-\$\{card\.eventSlug\}`\}/);
   assert.match(book, /RootNavigation\.navigate\('FrightCard', \{ eventSlug: card\.eventSlug \}\)/);
   const shelf = read('src/components/fright/FrightEventShelf.tsx');
   assert.match(shelf, /getEventShelf/);
