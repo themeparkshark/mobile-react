@@ -598,8 +598,8 @@ const styles = StyleSheet.create({
   },
   headerDone: { backgroundColor: '#fffaea', borderColor: BRAND.gold, borderBottomColor: BRAND.goldLip, borderWidth: 3 },
   completeStamp: {
-    position: 'absolute', right: 12, bottom: 12, paddingHorizontal: 10, height: 34, justifyContent: 'center', borderRadius: 8,
-    borderWidth: 3, borderColor: BRAND.goldLip, backgroundColor: 'rgba(255,207,59,0.25)', transform: [{ rotate: '-8deg' }],
+    position: 'absolute', right: 10, top: -12, paddingHorizontal: 10, height: 34, justifyContent: 'center', borderRadius: 8,
+    borderWidth: 3, borderColor: BRAND.goldLip, backgroundColor: '#fff3c4', transform: [{ rotate: '6deg' }],
   },
   completeText: { fontFamily: 'Shark', fontSize: 18, color: BROWN, letterSpacing: 1 },
   headerTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
