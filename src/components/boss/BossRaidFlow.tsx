@@ -113,7 +113,7 @@ export const PRESENCE: Record<PresenceReason, string> = {
 };
 
 /** Boss sheet (who's fighting, HP, your attacks), the Boss Brawl, and the victory/escape moment. */
-export default function BossRaidFlow({ raid, parkId, open, onClose, onState, recoveryService, onCelebrationDismiss, onMapOcclusionChange, presentationAvailable = true, loading = false, link = 'live', onRetryLink }: {
+export default function BossRaidFlow({ raid, parkId, open, onClose, onState, recoveryService, roundService = startRaidRound, onCelebrationDismiss, onMapOcclusionChange, presentationAvailable = true, loading = false, link = 'live', onRetryLink }: {
   readonly raid: BossRaid | null;
   readonly parkId: number | null;
   readonly open: boolean;
@@ -121,6 +121,8 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   readonly onState: (state: RaidState) => void;
   /** Local fixture injection; normal screens always use the shared durable service. */
   readonly recoveryService?: BossAttackRecovery;
+  /** Local fixture injection for dev previews; normal screens ask the server. */
+  readonly roundService?: typeof startRaidRound;
   readonly onCelebrationDismiss?: (raid: BossRaid) => void;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
   readonly presentationAvailable?: boolean;
@@ -268,7 +270,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     setStarting(true);
     // FIGHT asks the server for this round's token first: it checks Energy, attacks
     // left, the remote Ticket and whether you are really at the ride before you play.
-    const result = await startRaidRound(raid.id, { ...at, ...(remote ? { remote: true } : {}) });
+    const result = await roundService(raid.id, { ...at, ...(remote ? { remote: true } : {}) });
     setStarting(false);
     if (!currentView.current.open || !currentView.current.focused || currentView.current.contextKey !== entryKey || round.current) return;
     if (!result.ok) {

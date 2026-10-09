@@ -29,7 +29,15 @@ const SESSION = Date.now() % 100000;
 const memory = new globalThis.Map<string, string>();
 const fixtureRecovery = new BossAttackRecovery({
   getItem: async key => memory.get(key) ?? null, setItem: async (key, value) => { memory.set(key, value); }, removeItem: async key => { memory.delete(key); },
-}, async () => ({ ok: false, error: 'network' }), async () => ({ ok: false }));
+}, async (_, body) => {
+  const damage = Math.floor((body.hits * 4 + body.weak_hits * 40) * (body.remote ? 0.6 : 1));
+  const raid = fixtureRaid('kraken');
+  return { ok: true, damage, state: { raid: { ...raid, hp_left: Math.max(0, raid.hp_left - damage), you: { ...raid.you,
+    attacks: raid.you.attacks + 1, attacks_left: raid.you.attacks_left - 1, damage: raid.you.damage + damage } }, next_at: null } };
+}, async () => ({ ok: false }));
+/** Fixture FIGHT: a local round token, never a server call. */
+const fixtureRound = async (_: number, body: { remote?: boolean }) => ({ ok: true as const, round: { token: 'f'.repeat(32),
+  remote: !!body.remote, reason: null, damage_rate: body.remote ? 0.6 : 1, max_ms: 21000, max_hits: 70 } });
 
 function fixtureRaid(boss: BossId, over: Partial<BossRaid> = {}): BossRaid {
   const stamp = new Date().toISOString();
@@ -138,7 +146,7 @@ export default function BossMapPreviewScreen() {
     </View>
     {(section === 'sheet' || section === 'home') && <AuthContext.Provider value={fakeAuth}>
       <LocationContext.Provider value={fakePlace}>
-        <BossRaidFlow parkId={1} open recoveryService={fixtureRecovery} onClose={() => setSection('map')} onState={() => undefined}
+        <BossRaidFlow parkId={1} open recoveryService={fixtureRecovery} roundService={fixtureRound} onClose={() => setSection('map')} onState={() => undefined}
           raid={fixtureRaid(boss, section === 'home' ? { latitude: null, longitude: null } : {})} />
       </LocationContext.Provider>
     </AuthContext.Provider>}
