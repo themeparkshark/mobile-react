@@ -619,12 +619,12 @@ const styles = StyleSheet.create({
   },
   cardBadge: { width: 36, height: 36 },
   cardName: {
-    fontFamily: 'Shark', fontSize: 14, lineHeight: 16, color: BRAND.white, marginTop: 4, paddingHorizontal: 6, textAlign: 'center',
+    fontFamily: 'Shark', fontSize: 14, lineHeight: 16, color: BRAND.white, marginTop: 2, paddingHorizontal: 6, textAlign: 'center',
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 1, minHeight: 32,
   },
   // A darker band at the foot of the cover carries the count, so it reads on every set color.
   cardBand: {
-    position: 'absolute', bottom: 0, left: 0, right: 0, height: 28, flexDirection: 'row', alignItems: 'center', gap: 5,
+    position: 'absolute', bottom: 0, left: 0, right: 0, height: 24, flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 7, backgroundColor: 'rgba(5,52,110,0.45)',
   },
   cardTrack: { flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.35)', overflow: 'hidden' },
