@@ -109,7 +109,7 @@ function baseInventory(): InventoryType {
   } as unknown as InventoryType;
 }
 
-function fixturePlayer(member: boolean): PlayerType {
+export function fixturePlayer(member: boolean): PlayerType {
   return { id: 77, name: 'Finn', coins: 1240, is_subscribed: member, enabled_sound_effects: true, enabled_music: false,
     inventory: baseInventory() } as unknown as PlayerType;
 }
@@ -122,7 +122,7 @@ function at(days: number, hour = 0): string {
 }
 
 /** night 2: the next night's Tonight Only (the fireworks scene), to show a scene piece on the shelves. */
-function fixtureToday(night = 1, batch = 0): ShopToday {
+export function fixtureToday(night = 1, batch = 0): ShopToday {
   if (batch) return batchToday(batch);
   const items = HEROES.map(heroItem);
   const by = (fx: FxKey) => items.find(i => i.fx_key === fx)!;

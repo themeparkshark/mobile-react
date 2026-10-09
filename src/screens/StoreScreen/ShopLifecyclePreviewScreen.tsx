@@ -71,7 +71,7 @@ function section(s: Partial<ShopSection>): ShopSection {
     time_left_label: null, last_chance: false, hero_id: null, set_slugs: [], items: [], ...s };
 }
 
-function sharkToday(): ShopToday {
+export function sharkToday(): ShopToday {
   return {
     store_id: 18, shop_day: new Date().toISOString().slice(0, 10), timezone: 'America/Los_Angeles', resets_at: at(1),
     server_time: new Date().toISOString(), sets: [], wishlist_ids: [], equipped_title: null, wishlist_alerts: false,
@@ -122,7 +122,7 @@ function secretToday(): ShopToday {
 
 const SKIN = uri(require('../../../assets/images/screens/inventory/classic-no-eye.png'));
 const BACKDROP = uri(require('../../../assets/images/shark_background.png'));
-function fixturePlayer(member: boolean): PlayerType {
+export function fixturePlayer(member: boolean): PlayerType {
   return { id: 77, name: 'Finn', coins: 1240, is_subscribed: member, enabled_sound_effects: true, enabled_music: false,
     inventory: {
       id: 1,
