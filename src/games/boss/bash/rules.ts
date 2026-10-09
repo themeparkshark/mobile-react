@@ -40,12 +40,12 @@ export interface PhaseRule {
 }
 
 export const PHASES: readonly PhaseRule[] = [
-  { id: 'warm', from: 0, visible: 3, gapMs: 150, upMs: 2400, puffer: 0, dizzyMs: 1900, need: 3 },
-  { id: 'angry', from: 6_500, visible: 3, gapMs: 130, upMs: 1900, puffer: 0.3, dizzyMs: 1650, need: 3 },
-  { id: 'fury', from: 13_500, visible: 3, gapMs: 100, upMs: 1500, puffer: 0.34, dizzyMs: 1250, need: 2 },
+  { id: 'warm', from: 0, visible: 3, gapMs: 150, upMs: 2400, puffer: 0, dizzyMs: 1700, need: 3 },
+  { id: 'angry', from: 6_500, visible: 3, gapMs: 130, upMs: 1900, puffer: 0.3, dizzyMs: 1450, need: 3 },
+  { id: 'fury', from: 13_500, visible: 3, gapMs: 100, upMs: 1500, puffer: 0.34, dizzyMs: 1200, need: 2 },
 ];
 /** The head drops for this long before it can be smashed (the dizzy wobble). */
-export const DIZZY_DROP_MS = 150;
+export const DIZZY_DROP_MS = 120;
 /** A PERFECT smash: tap while the closing ring sits on the gold core (this slice of the dizzy window). */
 export const PERFECT_FROM = 0.25;
 export const PERFECT_UNTIL = 0.42;
@@ -97,6 +97,8 @@ export interface BashState {
   readonly splashUntil: number;
   /** Empty-water taps in a row: each one holds the next tap a little longer (mashing loses to aiming). */
   readonly splashChain: number;
+  /** Right after a smash the next tentacles pop up together (a fast rebuild rewards a clean player). */
+  readonly burst: number;
   readonly inks: number;
   readonly hits: number;
   readonly weak: number;
@@ -147,7 +149,7 @@ export function createBash(seed: number): BashState {
   return { seed, rng: next((seed >>> 0) * 2654435761 + 1), ms: 0, nextId: 1, nextSpawnAt: 450, lastSpot: -1, up: [],
     power: 0, headStart: 0, dizzy: null, ouchUntil: -1, hits: 0, weak: 0, bonks: 0, smashes: 0, perfects: 0, ouches: 0,
     missedDizzy: 0, streak: 0, bestStreak: 0, capped: 0, ink: null, nextInkAt: INK_FIRST_MS, inkedUntil: -1, blocks: 0, inked: 0,
-    splashUntil: -1, splashChain: 0, inks: 0 };
+    splashUntil: -1, splashChain: 0, inks: 0, burst: 0 };
 }
 
 /** Fins to fill for the next dizzy (the head start counts as a filled fin). */
@@ -215,7 +217,9 @@ export function tick(state: BashState, ms: number): { state: BashState; events: 
         const kind: Kind = !puffers && s.smashes + s.missedDizzy > 0 && unit(r) < now.puffer ? 'puffer' : 'tentacle';
         r = next(r);
         const popup: Popup = { id: s.nextId, spot: (lane + row) as SpotId, kind, at: ms, until: ms + now.upMs + (kind === 'puffer' ? 250 : 0) };
-        s = { ...s, rng: r, nextId: s.nextId + 1, up: [...s.up, popup], lastSpot: popup.spot, nextSpawnAt: ms + now.gapMs };
+        const burst = Math.max(0, s.burst - 1);
+        s = { ...s, rng: r, nextId: s.nextId + 1, up: [...s.up, popup], lastSpot: popup.spot, burst,
+          nextSpawnAt: ms + (s.burst > 0 ? 20 : now.gapMs) };
         events.push({ type: 'spawn', popup });
       }
     }
@@ -230,8 +234,8 @@ export function tapPopup(state: BashState, id: number, ms: number, maxHits = Num
   if (!popup || ms < state.ouchUntil || ms < state.splashUntil || state.dizzy || ms >= ROUND_MS) return { state, events: [] };
   const up = state.up.filter(p => p.id !== id);
   if (popup.kind === 'puffer') {
-    // A spike pops every fin and the shark sees stars for a moment.
-    const lostFins = state.power;
+    // A spike pops one fin and the shark sees stars for a moment (one penalty a kid can see, not a wipe).
+    const lostFins = state.power > 0 ? 1 : 0;
     const power = state.power - lostFins;
     return { state: { ...state, up, power, headStart: Math.min(state.headStart, power), streak: 0, ouches: state.ouches + 1,
       ouchUntil: ms + OUCH_MS },
@@ -299,7 +303,7 @@ export function tapBoss(state: BashState, ms: number, maxHits = Number.POSITIVE_
   const damage = (counted ? w.per_hit : 0) + (weakOk ? w.per_weak_hit : 0);
   const headStart = perfect ? 1 : 0;
   const s: BashState = { ...state, hits, weak, dizzy: null, power: headStart, headStart, smashes: state.smashes + 1,
-    perfects: state.perfects + (perfect ? 1 : 0), capped: state.capped + (counted ? 0 : 1), nextSpawnAt: ms + 90 };
+    perfects: state.perfects + (perfect ? 1 : 0), capped: state.capped + (counted ? 0 : 1), nextSpawnAt: ms + 60, burst: 2 };
   return { state: s, events: [{ type: 'smash', damage, perfect, weak: weakOk, final: ms >= ROUND_MS - 3000 }] };
 }
 

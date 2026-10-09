@@ -45,20 +45,21 @@ test('every round passes the server proof rules', ()=>{
 test('balance: beginners matter, skill pays, mashing puffers does not', ()=>{
   const e=median(dmg('expert')),m=median(dmg('median')),y=median(dmg('young')),x=median(dmg('masher'));
   console.log('median damage',{expert:e,median:m,young:y,masher:x});
-  assert.ok(e>=740&&e<=1150,`expert ${e}`);
-  assert.ok(m>=360&&m<=650,`median ${m}`);
+  // A clean player reaches 80%+ of the server ceiling (70 hits, 23 weak = 1,200).
+  assert.ok(e>=0.8*1200&&e<=1200,`expert ${e}`);
+  assert.ok(m>=0.4*e&&m<=0.65*e,`median ${m} vs expert ${e}`);
   assert.ok(y>=0.25*e,`young ${y} vs expert ${e}`);
-  assert.ok(x<0.6*e,`masher ${x} should trail expert ${e}`);
+  assert.ok(x<0.5*e,`masher ${x} should trail expert ${e}`);
 });
 test('the hit cap absorbs bonks visibly and scores 0', ()=>{
   const s=play(3,{...BOTS.expert,maxHits:10});
   assert.equal(s.hits,10);assert.ok(s.capped>0);
   assert.ok(s.weak<=Math.floor(s.hits/3));
 });
-test('a pufferfish pops every fin and the shark is stunned for a moment', ()=>{
+test('a pufferfish pops one fin and the shark is stunned for a moment', ()=>{
   let s={...b.createBash(1),up:[{id:9,spot:0,kind:'puffer',at:0,until:5000}],power:2,ms:100};
   const r=b.tapPopup(s,9,200);
-  assert.equal(r.state.power,0);assert.equal(r.events[0].type,'ouch');assert.equal(r.events[0].lostFins,2);
+  assert.equal(r.state.power,1);assert.equal(r.events[0].type,'ouch');assert.equal(r.events[0].lostFins,1);
   assert.equal(b.tapBoss(r.state,300).events.length,0);
 });
 test('fins fill to a dizzy head; a smash on the gold core is PERFECT and gives a head start', ()=>{
