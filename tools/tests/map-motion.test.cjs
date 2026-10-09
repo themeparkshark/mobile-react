@@ -52,42 +52,43 @@ test('a quick turn is followed closely and lands on the new heading (through nor
   assert.equal(f.speed(), 0, 'no lead once still');
 });
 
-test('the shark swims at an even walking pace between fixes (never a stop-go, never past the fix)', () => {
-  const k = 111320;
-  const fixAt = n => ({ latitude: 33.8122 + n / k, longitude: -117.919 });
-  const c = cf.newChaser(fixAt(0), 0);
+test('the shark follows a walk closely, sets off with you and settles when you stop (step sensor)', () => {
+  const k = 111320, kl = k * Math.cos(33.8122 * Math.PI / 180);
+  const at = e => ({ latitude: 33.8122, longitude: -117.919 + e / kl });
+  const pos = p => (p.longitude + 117.919) * kl;
+  const c = cf.newChaser(at(0), 0);
   const pace = new cf.WalkPace();
-  pace.push(fixAt(0), 0);
-  // Fixes 2.8 m apart, uneven gaps (1.4 m/s on average), as a phone with a 3 m filter delivers them.
-  const gaps = [2000, 1300, 2700, 1800, 2400, 1500, 2600, 2000, 1700, 2300];
-  let t = 0, n = 0;
-  const speeds = [];
-  let prev = cf.chaseAdvance(c, 0);
-  for (const gap of gaps) {
-    for (let s2 = 0; s2 < gap; s2 += 50) {
-      const p = cf.chaseAdvance(c, t + s2);
-      speeds.push(Math.hypot((p.latitude - prev.latitude) * k, (p.longitude - prev.longitude) * k * 0.83) / 0.05);
-      prev = p;
-    }
-    t += gap; n += 2.8;
-    cf.chaseFix(c, fixAt(n), t, pace.push(fixAt(n), t), false);
+  pace.push(at(0), 0);
+  // Standing 2 s, then the step sensor says walking (phone pointing east), 1.4 m/s with a fix every 2 s.
+  cf.chaseWalk(c, true, 2000, 90);
+  let t = 2000;
+  for (let i = 1; i <= 12; i++) {
+    const ft = 2000 + i * 2000;
+    for (; t < ft; t += 50) cf.chaseAdvance(c, t);
+    const f = at(1.4 * (ft - 2000) / 1000);
+    pace.push(f, ft);
+    cf.chaseFix(c, f, ft, pace.velocity(), pace.gap(), false);
   }
-  const steady = speeds.slice(Math.floor(speeds.length * 0.4));
-  const mu = steady.reduce((a, b) => a + b) / steady.length;
-  const sd = Math.sqrt(steady.reduce((a, b) => a + (b - mu) ** 2, 0) / steady.length);
-  assert.ok(sd / mu < 0.2, `speed variation ${(sd / mu).toFixed(2)}`);
-  assert.ok(Math.min(...steady) > 0.4 * mu, 'never stops mid-walk');
-  // Standing still after the last fix: it settles on it and does not pass it.
-  const end = cf.chaseAdvance(c, t + 8000);
-  assert.ok(Math.abs((end.latitude - fixAt(n).latitude) * k) < 0.1);
-  assert.equal(cf.chaseActive(c, t + 8000), false);
-  // A re-seat jumps.
-  cf.chaseFix(c, fixAt(500), t + 9000, 1.4, true);
-  assert.ok(Math.abs((cf.chaseAdvance(c, t + 9000).latitude - fixAt(500).latitude) * k) < 0.01);
+  // Set off at once: moving within half a second of the step sensor.
+  const c2 = cf.newChaser(at(0), 0); cf.chaseWalk(c2, true, 0, 90);
+  assert.ok(pos(cf.chaseAdvance(c2, 600)) > 0.2, 'sets off at once');
+  // Steady walk: close behind the walker, never ahead by more than a step.
+  for (; t < 26000; t += 50) {
+    const lag = 1.4 * (t - 2000) / 1000 - pos(cf.chaseAdvance(c, t));
+    if (t > 12000) assert.ok(lag > -1.5 && lag < 2.0, `lag ${lag.toFixed(2)} m at ${t}`);
+  }
+  // Stop: the step sensor says standing; the shark is at rest within 1.2 s and stays put.
+  cf.chaseWalk(c, false, 26000);
+  const stopPos = pos(cf.chaseAdvance(c, 27200));
+  assert.ok(Math.abs(pos(cf.chaseAdvance(c, 27300)) - stopPos) < 0.03, 'at rest about a second after you stop');
+  assert.equal(cf.chaseActive(c, 28000), false);
+  // A long gap costs nothing: one call jumps to rest.
+  cf.chaseAdvance(c, 28000 + 3600_000);
+  assert.equal(c.t, 28000 + 3600_000);
 });
 
 test('walking pace is measured over several fixes, so GPS scatter does not speed the shark up', () => {
-  const p = new cf.WalkPace();
+  const p = new cf.WalkPace(); const p2 = p;
   const r = gaussFrom(rng(3));
   let v = 0;
   for (let i = 0; i < 8; i++) {
@@ -96,6 +97,7 @@ test('walking pace is measured over several fixes, so GPS scatter does not speed
   }
   assert.ok(v > 1.0 && v < 1.9, `pace ${v.toFixed(2)} m/s for a 1.4 m/s walk`);
   assert.equal(cf.walkGlideMs(2.8, 1.4), 2240);
+  const vel = p2.velocity(); assert.ok(vel[1] > 1.0 && vel[1] < 1.9, 'velocity points north');
   assert.equal(cf.walkGlideMs(0, 1.4), 0);
   assert.ok(cf.walkGlideMs(200, 0.1) <= 4000);
 });

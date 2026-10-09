@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject }
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { createHeadingFilter, angleDelta } from './headingFilter';
-import { CAM_MODE_SPIN_MS, CAM_RECENTER_MS, CAM_TICK_MS, camChanged, chaseActive, chaseAdvance, chaseFix, chasePeek, newChaser,
+import { CAM_MODE_SPIN_MS, CAM_RECENTER_MS, CAM_TICK_MS, camChanged, chaseActive, chaseAdvance, chaseFix, chasePeek, chaseWalk, newChaser,
   targetBearing, segmentGap, segmentMs, walkGlideMs, WalkPace, type Chaser, type CamStop, type FollowMode } from './cameraFollow';
 import { GLIDE_MAX_M, GLIDE_MIN_M, glideMeters, type GlidePoint } from './glide';
 import { probeCount } from '../../dev/motionProbe';
@@ -73,7 +73,8 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
     timer.current = null;
     if (!running.current) return;
     const now = Date.now();
-    if (now < holdUntil.current) { schedule(holdUntil.current - now); return; }
+    // An eased move (a mode spin, a recenter) owns the camera; the pause is not a slow tick.
+    if (now < holdUntil.current) { lastTick.current = 0; schedule(holdUntil.current - now); return; }
     if (lastTick.current && now - lastTick.current < 1000) gapEst.current = segmentGap(gapEst.current, now - lastTick.current);
     lastTick.current = now;
     const seg = segmentMs(gapEst.current);
@@ -131,7 +132,7 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
     if (meters > GLIDE_MAX_M) pace.reset();
     const ms = jump ? 0 : walkGlideMs(meters, walk);
     if (!chaser.current) chaser.current = newChaser(loc, now);
-    else chaseFix(chaser.current, loc, now, walk, jump);
+    else chaseFix(chaser.current, loc, now, pace.velocity(), pace.gap(), jump);
     prevFix.current = { p: loc, t: now };
     if (!prev) {
       // First fix: put the camera there at once.
@@ -178,6 +179,13 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
     kick();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** The step sensor (useWalkSense): setting off starts the shark swimming at once; stopping settles it. */
+  const onWalk = useCallback((walking: boolean) => {
+    if (!chaser.current) return;
+    chaseWalk(chaser.current, walking, Date.now(), filter.value());
+    kick();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** Panned away: the map's real bearing (from the map's own camera events). */
   const noteFreeBearing = useCallback((deg: number) => {
     if (!Number.isFinite(deg) || followRef.current) return;
@@ -196,10 +204,11 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
   useEffect(() => () => { running.current = false; if (timer.current) clearTimeout(timer.current); }, []);
 
   /** The map finished drawing (a camera move sent before that may have been dropped): send the next one fresh. */
-  const resync = useCallback(() => { last.current = null; holdUntil.current = 0; kick(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Never shortens an eased move in progress (MapLibre reports "finished rendering" after every tile load).
+  const resync = useCallback(() => { last.current = null; kick(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const where = useCallback(() => position(Date.now()), []); // eslint-disable-line react-hooks/exhaustive-deps
   const modeNow = useCallback(() => mode.current, []);
 
-  return { onHeading, onFix, recenter, setMode, noteFreeBearing, setRunning, resync, where, modeNow, bearing, facing, headingKnown, turn };
+  return { onHeading, onFix, onWalk, recenter, setMode, noteFreeBearing, setRunning, resync, where, modeNow, bearing, facing, headingKnown, turn };
 }

@@ -9,7 +9,7 @@ import type { FollowMode } from './cameraFollow';
 
 const ROSE = require('../../../assets/images/map/compass-rose.png');
 /** Panned away the button shows your shark: "take me back to it". */
-const SHARK = require('../../../assets/images/screens/explore/shark_player.gif');
+const SHARK = require('../../../assets/images/map/follow-shark.png');
 
 /** What the map's top-right button is doing right now. */
 export type FollowButtonState = 'away' | FollowMode;
@@ -114,7 +114,9 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
 
   const buttonStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   // North on the rose points at north on the map: the rose turns opposite the map.
-  const roseStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${nudge.value - bearing.value}deg` }] }));
+  const roseStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${-bearing.value}deg` }] }));
+  // Panned away: the shark on the button wiggles once so the way back is noticed.
+  const nudgeStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${nudge.value}deg` }] }));
   const badgeStyle = useAnimatedStyle(() => ({ transform: [{ scale: badge.value }] }));
 
   const tap = () => {
@@ -145,7 +147,9 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
       <Pressable onPress={tap} accessibilityRole="button" accessibilityLabel={followButtonLabel(state)} hitSlop={8}>
         <Reanimated.View style={[styles.button, state === 'north' && styles.north, state === 'away' && styles.away, buttonStyle]}>
           {state === 'away' ? (
-            <Image source={SHARK} autoplay={false} style={styles.shark} contentFit="contain" transition={0} />
+            <Reanimated.View style={nudgeStyle}>
+              <Image source={SHARK} style={styles.shark} contentFit="contain" transition={0} />
+            </Reanimated.View>
           ) : (
             <Reanimated.View style={[styles.rose, roseStyle]}>
               <Image source={ROSE} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
@@ -176,7 +180,7 @@ const styles = StyleSheet.create({
   north: { backgroundColor: BRAND.white, borderColor: BRAND.navy },
   away: { backgroundColor: BRAND.gold },
   rose: { width: 40, height: 40 },
-  shark: { width: 46, height: 46, marginTop: 4 },
+  shark: { width: 42, height: 42 },
   badge: { position: 'absolute', right: -7, bottom: -7, width: 26, height: 26, borderRadius: 13, borderWidth: 2.5,
     borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   badgeHeading: { backgroundColor: BRAND.blue },

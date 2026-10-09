@@ -10,8 +10,10 @@ import { useFollowCamera } from './map/useFollowCamera';
 import FollowButton from './map/FollowButton';
 import MapSharkLook from './map/MapSharkLook';
 import { SharkSparkles } from './map/SharkSparkles';
+import { TrailBoxBadge, type MapTrail } from './map/TrailBoxBadge';
 import { CHEER_REPEAT_MS, nextFidget, FIDGET_GAP_MS, tapTrick, type SharkMood } from './map/sharkLife';
 import { useFxClock, useFxKick } from '../fx/FxStage';
+import { useWalkSense } from '../gamekit/motion/useWalkSense';
 import { wornFx } from '../fx/FxLayers';
 import type { FollowMode } from './map/cameraFollow';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -66,6 +68,8 @@ const FOLLOW_MODE_KEY = 'tps_map_follow_mode_v1';
 const FOLLOW_ZOOM_MIN = 14;
 const FOLLOW_ZOOM_MAX = 20;
 const WHOOSH = require('../../assets/sounds/whoosh.mp3');
+/** Walk detection for the map: walking after 2 steps, standing 0.9 s after the last step. */
+const WALK_SENSE_MAP = { startSteps: 2, stopAfterMs: 900 } as const;
 const SHARK_TAP_SOUND = require('../../assets/sounds/inventory_item_tap.mp3');
 
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
@@ -106,7 +110,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
 /** Stable empty data for always-mounted sources that are off (never a new object per render). */
 const NO_FEATURES: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, chromeHidden = false, fright = null, onUserPan, declutter = null }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, chromeHidden = false, fright = null, onUserPan, declutter = null }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -142,6 +146,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly hintReady?: boolean;
   /** Something to catch right here (a ride coin in range): the shark perks up and cheers now and then. */
   readonly sharkCheer?: boolean;
+  /** Trail Boxes (steps stream): the box filling as you walk rides on the shark; it hops when one is ready. */
+  readonly trail?: MapTrail | null;
 }) {
   if (__DEV__) probeCount('mapRender');
   const { location, gpsSignal } = useContext(LocationContext);
@@ -155,14 +161,21 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const [screenFocused, setScreenFocused] = useState(true);
   useFocusEffect(useCallback(() => {
     setScreenFocused(true);
-    setHeadingEnabled(true);
-    return () => { setScreenFocused(false); setHeadingEnabled(false); };
-  }, [setHeadingEnabled]));
+    return () => setScreenFocused(false);
+  }, []));
   const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   useEffect(() => {
     const sub = AppState.addEventListener('change', state => setAppActive(state === 'active'));
     return () => sub.remove();
   }, []);
+  // The compass runs only while this map is on screen and the app is in front (the app keeps
+  // location in the background for ride detection; the compass has no reason to).
+  const compassOn = screenFocused && appActive;
+  useEffect(() => {
+    if (!compassOn) return;
+    setHeadingEnabled(true);
+    return () => setHeadingEnabled(false);
+  }, [compassOn, setHeadingEnabled]);
   // Time of day: the real sun over the player, rechecked each minute while the map is on screen.
   const [skyNow, setSkyNow] = useState(() => Date.now());
   useEffect(() => {
@@ -269,9 +282,25 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // The lean reads the camera's turn speed on the UI thread (no JS per frame).
   useAnimatedReaction(() => cam.turn.value, v => { turnLean.value = v; });
   // The heading beam turns with the phone on the UI thread; it fades in once the compass reports.
-  const beamStyle = useAnimatedStyle(() => ({ opacity: 0.8 * cam.headingKnown.value, transform: [{ rotate: `${cam.facing.value}deg` }] }));
+  // One style per drawn copy: a hidden copy returns a fixed value, so only the visible beam turns.
+  const useBeam = (live: SharedValue<number>) => useAnimatedStyle(() => (live.value === 0
+    ? { opacity: 0, transform: [{ rotate: '0deg' }] }
+    : { opacity: 0.8 * cam.headingKnown.value, transform: [{ rotate: `${cam.facing.value}deg` }] }));
+  const overlayBeam = useBeam(overlayLive), slot0Beam = useBeam(slot0Live), slot1Beam = useBeam(slot1Live);
   // The camera loop rests while the map is off screen or the app is in the background.
   useEffect(() => { cam.setRunning(screenFocused && appActive); }, [screenFocused, appActive, cam.setRunning]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The step sensor: the shark sets off the moment you do and settles the moment you stop (the GPS
+  // only reports every few metres). Accelerometer at 25 Hz, only while this map is on screen.
+  useWalkSense({ active: compassOn && !!location, intervalMs: 40, config: WALK_SENSE_MAP,
+    onWalkChange: walking => {
+      cam.onWalk(walking);
+      if (!walking && !reducedMotion) {
+        // Stopped: the wake and the waddle wind down with the shark, not at the next fix.
+        if (strideStop.current) clearTimeout(strideStop.current);
+        strideMs.current = 0; cancelAnimation(stride); stride.value = withTiming(0, { duration: 250 });
+        wake.value = withTiming(0, { duration: 500 });
+      }
+    } });
   // Fin-ister layers place chips with the map's bearing (it used to be the compass, back when the map always turned with it).
   const frightBearing = useRef(createBearingStore()).current;
 
@@ -547,7 +576,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <Image source={GROUND_GLOW} tintColor="#05143c" style={StyleSheet.absoluteFill} contentFit="fill" />
         </Reanimated.View>
         {/* Which way the phone points: a soft beam under the shark (UI thread, eased like the camera). */}
-        <Reanimated.View pointerEvents="none" style={[styles.beam, beamStyle]}>
+        <Reanimated.View pointerEvents="none" style={[styles.beam, live === overlayLive ? overlayBeam : live === slot0Live ? slot0Beam : slot1Beam]}>
           <Image source={HEADING_BEAM} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
         </Reanimated.View>
         {/* Player's avatar — bobs, tilts, breathes */}
@@ -650,11 +679,28 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     return () => clearInterval(timer);
   }, [lifeOn, sharkCheer, react]);
 
+  // Development captures (EXPO_PUBLIC_DEV_MAP_TRAIL=gold:0.6): a walking box on the shark.
+  const devTrail = useMemo<MapTrail | null>(() => {
+    const raw = __DEV__ ? process.env.EXPO_PUBLIC_DEV_MAP_TRAIL : undefined;
+    if (!raw) return null;
+    const [tier, p] = raw.split(':');
+    return { walking: true, tier: (tier === 'red' || tier === 'gold' ? tier : 'blue'), progress: Number(p) || 0.5, readyCount: 0 };
+  }, []);
+  // A Trail Box became ready: one happy hop with sparkles.
+  const readySeen = useRef(trail?.readyCount ?? 0);
+  useEffect(() => {
+    const n = trail?.readyCount ?? 0;
+    if (n > readySeen.current) react('cheer');
+    readySeen.current = n;
+  }, [trail?.readyCount, react]);
+
   // One-time hint on the compass, once the map is up and calm (useOneTimeTip: one tip at a time).
   const compassTip = useOneTimeTip('map_compass', hintReady && screenFocused && appActive && focusedOnPlayer && !covered && !chromeHidden);
   // Development captures (EXPO_PUBLIC_DEV_COMPASS_HINT=1): show the hint every launch.
   const [devHint, setDevHint] = useState(__DEV__ && process.env.EXPO_PUBLIC_DEV_COMPASS_HINT === '1');
   const compassHint = devHint ? { visible: !covered, dismiss: () => setDevHint(false) } : compassTip;
+  const compassHintRef = useRef<(() => void) | null>(null);
+  compassHintRef.current = compassHint.visible ? compassHint.dismiss : null;
   const chromeOff = chromeHidden ? 1 : 0;
   const chromeStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value * 1.6, chromeOff)) }), [chromeOff]);
 
@@ -707,12 +753,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         attributionEnabled={false}
         compassEnabled={false}
         // Two-finger rotate only when panned away: while following, the compass button owns the bearing.
-        rotateEnabled={!focusedOnPlayer}
+        rotateEnabled={!focusedOnPlayer && !followHold}
         pitchEnabled={false}
         regionWillChangeDebounceTime={0}
         onRegionWillChange={(feature) => {
           if (!feature.properties?.isUserInteraction) return;
           onUserPan?.();
+          if (compassHintRef.current) compassHintRef.current();
           if (followRef.current) {
             gestureZoomRef.current = Number(feature.properties?.zoomLevel);
             // Until the gesture shows itself a pan, the button keeps its mode (a pinch is not "panned away").
@@ -773,6 +820,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           const startZoom = gestureZoomRef.current;
           gestureZoomRef.current = NaN;
           setFollowHold(false);
+          // The zoom a player pinched to is the zoom a recenter comes back to, even if the pinch also slid the map.
+          if (Number.isFinite(startZoom) && Math.abs(zoom - startZoom) >= 0.12) followZoomRef.current = Math.min(FOLLOW_ZOOM_MAX, Math.max(FOLLOW_ZOOM_MIN, zoom));
           const [lng, lat] = feature.geometry.coordinates;
           if (Math.abs(lat - location.latitude) < 0.00007 && Math.abs(lng - location.longitude) < 0.00007) {
             followRef.current = true;
@@ -919,6 +968,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <View style={styles.centerShark} pointerEvents="box-none">
             {sharkArt(overlayStyles, overlayLive, focusedOnPlayer, true)}
             <SharkSparkles burst={sparkleBurst} />
+            <TrailBoxBadge trail={trail ?? devTrail} live={lifeOn} />
             {/* Tap your shark: it hops, twirls and shows off what it is wearing. */}
             <Pressable style={styles.sharkTap} onPress={onSharkTap} disabled={!focusedOnPlayer}
               accessibilityRole="button" accessibilityLabel="Your shark. Tap to say hi." />
