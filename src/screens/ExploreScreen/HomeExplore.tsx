@@ -115,6 +115,8 @@ interface Props {
   chestButton?: ReactNode;
   /** The park story, as a small chip in the top HUD row. */
   parkStory?: ParkStoryChip | null;
+  /** The player is free (no dialog, lesson or chest): the map compass may show its one-time hint. */
+  compassHintReady?: boolean;
   /**
    * How to Play's "Let's go!" sends `highlightNearestFind` (a timestamp) with
    * Explore: each new value glides the camera to the nearest find once.
@@ -128,7 +130,8 @@ interface Props {
  */
 export default function HomeExplore({ onPrepItemNearby, catching = null, onCatchCollected, onCatchUnavailable,
   onCatchDone, refreshVersion, homeLocationConfirmed,
-  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, highlightNearestFind = null, parkStory = null }: Props) {
+  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, highlightNearestFind = null, parkStory = null,
+  compassHintReady = false }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -653,7 +656,8 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       }}>
       {/* Map with prep items - player marker is handled by Map component */}
       <Map controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled} focusCoordinate={findFocus}
-        extraControls={chestButton} ambientFrozen={catchOpen} chromeHidden={catchOpen} onUserPan={onUserPan}>
+        extraControls={chestButton} ambientFrozen={catchOpen} chromeHidden={catchOpen} onUserPan={onUserPan}
+        hintReady={compassHintReady && !catchOpen && introSeen === true}>
         {homeLocationConfirmed && allPlaced.map(({ item: prepItem, distance, inRange }) => (
           <HomeFindMarker key={prepItem.pivot_id || prepItem.id} item={prepItem}
             // Rounded so GPS jitter does not re-render every marker.

@@ -67,7 +67,7 @@ test('a player with items but no skin counts as dressed', () => {
 });
 
 test('no shark-drawing component falls back to the shark-colored-v2 drawing', () => {
-  for (const file of ['src/components/Playercard.tsx', 'src/components/Avatar.tsx', 'src/components/Map.tsx', 'src/components/Item.tsx']) {
+  for (const file of ['src/components/Playercard.tsx', 'src/components/Avatar.tsx', 'src/components/map/MapSharkLook.tsx', 'src/components/Item.tsx']) {
     const src = fs.readFileSync(path.join(root, file), 'utf8');
     assert.doesNotMatch(src, /shark-colored-v2/, file);
     assert.match(src, /sharkBaseLayers\(/, `${file} draws the shared shark base`);
@@ -103,7 +103,10 @@ test('a wardrobe top card dresses the Classic shark when no skin is worn', () =>
 });
 
 test('map marker: the dressed shark eyes pause off-screen and under Reduce Motion', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/Map.tsx'), 'utf8');
-  const block = src.slice(src.indexOf('sharkBaseLayers(player?.inventory).map'), src.indexOf('outfitLayerUrls(player?.inventory).map'));
-  require('node:assert/strict').match(block, /autoplay=\{playing && screenFocused && !reducedMotion\}/);
+  // The map draws its dressed shark through MapSharkLook; Map passes `playing` already gated on screen focus and Reduce Motion.
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  const map = fs2.readFileSync(path2.join(__dirname, '../../src/components/Map.tsx'), 'utf8');
+  const look = fs2.readFileSync(path2.join(__dirname, '../../src/components/map/MapSharkLook.tsx'), 'utf8');
+  require('node:assert/strict').match(map, /playing=\{playing && screenFocused && !reducedMotion\}/);
+  require('node:assert/strict').match(look, /sharkBaseLayers\(inventory\)\.map\(\(source, index\) => \(\n\s*<Image key=\{`base-\$\{index\}`\} source=\{source\} autoplay=\{playing\}/);
 });

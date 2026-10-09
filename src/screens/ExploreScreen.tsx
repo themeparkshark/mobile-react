@@ -1185,7 +1185,7 @@ function ExploreScreen() {
           onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
           introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
-          onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} highlightNearestFind={highlightNearestFind}
+          onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} compassHintReady={parkTipReady} highlightNearestFind={highlightNearestFind}
           parkStory={activeParkProject ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null} />
       )}
@@ -1457,6 +1457,8 @@ function ExploreScreen() {
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
+          hintReady={parkTipReady && !parkTipShowing}
+          sharkCheer={activeRedeemable?.type === 'task' || activeRedeemable?.type === 'secret_task'}
           projector={mapProjector}
           onZoomChange={onMapZoom}
           ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded}

@@ -16,6 +16,7 @@ export type TipId =
   | 'first_level_up'
   | 'supplies_tab'
   | 'bonus_ads'
+  | 'map_compass'
   | `game:${string}`;
 
 export const TIP_STORAGE_PREFIX = 'tps_tips_seen_v1';

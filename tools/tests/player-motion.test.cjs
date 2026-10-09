@@ -151,7 +151,7 @@ test('the shark faces where it walks on screen (art flips), with a dead band for
   assert.equal(motion.facingFor(0, 90, 1), 1, 'north on an east-up map heads left');
   const map = read('src/components/Map.tsx');
   assert.match(map, /Math\.max\(0\.35, Math\.abs\(f\)\)/, 'never a paper-thin card flip');
-  assert.match(map, /\{ scaleX: sx \}, \{ scaleY: 1 - 0\.06 \* mid \}/, 'a slight squash mid-turn');
+  assert.match(map, /\{ scaleX: sx \* m\.twirl\.value \* \(1 \+ 0\.12 \* sq\) \}, \{ scaleY: \(1 - 0\.06 \* mid\) \* \(1 - 0\.14 \* sq\) \}/, 'a slight squash mid-turn');
   assert.match(map, /facing\.value = withTiming\(next, \{ duration: 260 \}\)/);
   assert.match(map, /const step = m\.stride\.value \* m\.wake\.value;/, 'the stride bounce only rides on a real walk');
 });

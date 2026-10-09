@@ -99,6 +99,14 @@ export function wardrobeCategoryLabel(itemType: Pick<ItemTypeType, 'id' | 'name'
   return CATEGORY_LABELS[itemType.id] ?? itemType.name ?? 'Items';
 }
 
+/** The worn outfit items' slots and paper URLs, back to front (outfitLayerUrls with the slot). */
+export function outfitSlotsDrawn(inventory: InventoryType | null | undefined): { slot: typeof OUTFIT_LAYER_ORDER[number]; uri: string }[] {
+  if (!inventory) return [];
+  return OUTFIT_LAYER_ORDER
+    .map((slot) => ({ slot, uri: inventory[slot]?.paper_url }))
+    .filter((layer): layer is { slot: typeof OUTFIT_LAYER_ORDER[number]; uri: string } => typeof layer.uri === 'string' && layer.uri.length > 0);
+}
+
 /** Paper URLs of the worn outfit items, back to front. */
 export function outfitLayerUrls(inventory: InventoryType | null | undefined): string[] {
   if (!inventory) return [];

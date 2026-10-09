@@ -23,9 +23,13 @@ const HEADING_THRESHOLD = 2; // small dead zone for jitter
 const FAST_TURN_THRESHOLD = 8; // triggers fast mode quickly
 const FAST_TURN_SMOOTHING = 0.75; // very responsive when turning
 // iOS sends a compass sample for every 1 degree of turn (30+ a second while
-// the phone moves). Each one re-renders the whole map, so cap the rate; the
-// trailing sample is always delivered so the final heading is exact.
-export const HEADING_MIN_INTERVAL_MS = 80;
+// the phone moves). The map no longer reads the heading through React state
+// (it subscribes to raw samples and turns the camera without a render), so the
+// state is only a coarse copy (a 5 degree change, at most every 2 s) for anything else; the trailing
+// sample is always delivered so the final heading is exact.
+export const HEADING_MIN_INTERVAL_MS = 2000;
+/** The coarse copy moves only for a real change (degrees). */
+export const HEADING_STATE_MIN_DEG = 5;
 // A watcher killed by an OS error (kCLErrorLocationUnknown indoors, right after
 // the permission grant, a paused stream) is restarted after this delay.
 export const WATCH_RESTART_DELAY_MS = 2000;
@@ -106,13 +110,27 @@ export const LocationStatusContext = createContext<LocationStatusContextType>(
  * on every heading sample.
  */
 export interface HeadingContextType {
+  /** Coarse (at most twice a second): for display only. Motion subscribes with subscribeHeading. */
   readonly heading: number | null;
   readonly headingEnabled: boolean;
   readonly setHeadingEnabled: (enabled: boolean) => void;
+  /** Every raw compass reading (degrees, ms), with no React render; returns the unsubscribe. */
+  readonly subscribeHeading: (listener: HeadingListener) => () => void;
 }
+export type HeadingListener = (degrees: number, atMs: number) => void;
+const noHeadingSubscription = () => () => undefined;
 
 export const HeadingContext = createContext<HeadingContextType>({
-  heading: null, headingEnabled: false, setHeadingEnabled: () => undefined,
+  heading: null, headingEnabled: false, setHeadingEnabled: () => undefined, subscribeHeading: noHeadingSubscription,
+});
+
+/**
+ * The stable half of HeadingContext (it never changes value): a map that turns with the
+ * compass reads this, so a compass reading never re-renders it.
+ */
+export type HeadingControlContextType = Pick<HeadingContextType, 'setHeadingEnabled' | 'subscribeHeading'>;
+export const HeadingControlContext = createContext<HeadingControlContextType>({
+  setHeadingEnabled: () => undefined, subscribeHeading: noHeadingSubscription,
 });
 
 // Default dev location: Universal Studios Hollywood. EXPO_PUBLIC_DEV_START_LAT/LNG
@@ -193,11 +211,20 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const setHeadingEnabled = useCallback((enabled: boolean) => {
     setHeadingClaims(count => Math.max(0, count + (enabled ? 1 : -1)));
   }, []);
+  const headingListenersRef = useRef(new Set<HeadingListener>());
+  const subscribeHeading = useCallback((listener: HeadingListener) => {
+    headingListenersRef.current.add(listener);
+    return () => { headingListenersRef.current.delete(listener); };
+  }, []);
   const lastHeadingEmitRef = useRef(0);
   const pendingHeadingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastHeadingStateRef = useRef<number | null>(null);
   const setHeading = (value: number | null) => {
     if (pendingHeadingRef.current) { clearTimeout(pendingHeadingRef.current); pendingHeadingRef.current = null; }
-    if (value === null) { setHeadingState(null); return; }
+    if (value === null) { lastHeadingStateRef.current = null; setHeadingState(null); return; }
+    const prev = lastHeadingStateRef.current;
+    if (prev !== null && Math.abs(((value - prev + 540) % 360) - 180) < HEADING_STATE_MIN_DEG) return;
+    lastHeadingStateRef.current = value;
     const wait = lastHeadingEmitRef.current + HEADING_MIN_INTERVAL_MS - Date.now();
     if (wait <= 0) { lastHeadingEmitRef.current = Date.now(); if (__DEV__) probeCount('headingOut'); setHeadingState(value); return; }
     pendingHeadingRef.current = setTimeout(() => {
@@ -301,6 +328,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
             : headingData.magHeading;
           
           if (rawHeading >= 0) {
+            const at = Date.now();
+            headingListenersRef.current.forEach(listener => listener(rawHeading, at));
             const smoothed = smoothHeading(rawHeading);
             setHeading(smoothed);
           }
@@ -644,14 +673,18 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const shownSignal = devMode && simulationAllowed ? GPS_SIGNAL_GOOD : gpsSignal;
   const value = useMemo<LocationContextType>(() => ({ ...statusValue, location, gpsSignal: shownSignal }),
     [statusValue, location, shownSignal]);
-  const headingValue = useMemo<HeadingContextType>(() => ({ heading, headingEnabled, setHeadingEnabled }),
-    [heading, headingEnabled, setHeadingEnabled]);
+  const headingValue = useMemo<HeadingContextType>(() => ({ heading, headingEnabled, setHeadingEnabled, subscribeHeading }),
+    [heading, headingEnabled, setHeadingEnabled, subscribeHeading]);
+  const headingControl = useMemo<HeadingControlContextType>(() => ({ setHeadingEnabled, subscribeHeading }),
+    [setHeadingEnabled, subscribeHeading]);
 
   return (
     <LocationContext.Provider value={value}>
       <LocationStatusContext.Provider value={statusValue}>
         <HeadingContext.Provider value={headingValue}>
-          {children}
+          <HeadingControlContext.Provider value={headingControl}>
+            {children}
+          </HeadingControlContext.Provider>
         </HeadingContext.Provider>
       </LocationStatusContext.Provider>
     </LocationContext.Provider>
