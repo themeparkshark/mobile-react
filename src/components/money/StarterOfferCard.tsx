@@ -54,7 +54,7 @@ export default function StarterOfferCard({ ready }: { ready: boolean }) {
 
   return (
     <Animated.View entering={FadeInUp.delay(400).springify().damping(15)} style={st.wrap}>
-      <Text maxFontSizeMultiplier={MAX_FONT} style={st.kicker}>A WELCOME GIFT, JUST ONCE</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT} style={st.kicker}>STARTER PACK, JUST ONCE</Text>
       <Pressable onPress={() => void buy()} disabled={busy} accessibilityRole="button"
         accessibilityLabel={`Starter Pack, just once. ${price.price}, real money, a grown-up buys it.${worth ? ` Worth ${worth.worth}.` : ''}`}
         style={({ pressed }) => [st.lip, pressed && st.lipPressed]}>

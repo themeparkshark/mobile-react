@@ -32,5 +32,5 @@ export function useMoneyFlag(name: string): boolean {
 
 /** VIP's weekly Mystery Pin Box (pins: MysteryBoxService::vipWeekly), listed only while boxes are live. */
 export const VIP_WEEKLY_BOX_PERK = {
-  icon: 'gift', title: '1 free Mystery Pin Box every week', body: 'It lands in your pins every week you’re VIP.',
+  icon: 'gift', title: '1 free Mystery Pin Box every week', body: 'Free every week you’re VIP. Odds are shown on the box.',
 } as const;

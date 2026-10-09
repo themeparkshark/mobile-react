@@ -196,10 +196,12 @@ const RAYS = require('../../../assets/images/reveal/rays.webp');
  * The payoff after a purchase lands: rays turn behind the pack art, the art
  * pops, confetti bursts, the contents slide in, one cue and one buzz.
  */
-export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption }: {
+export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption, action }: {
   grants: ShopGrants | null; art: PackArtKey; title?: string; onDone: () => void;
   /** A custom picture instead of the pack art (a season item), and one line under the title. */
   picture?: ReactNode; caption?: string;
+  /** A second button, e.g. "Wear it now" for a pin. */
+  action?: { label: string; onPress: () => void };
 }) {
   const still = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
@@ -234,8 +236,9 @@ export function GotIt({ grants, art, title = 'You got it!', onDone, picture, cap
         <Animated.View entering={still ? undefined : FadeInDown.delay(420).springify().damping(14)}>
           {caption ? <Text maxFontSizeMultiplier={MAX_FONT} style={s.gotCaption}>{caption}</Text> : <Contents grants={grants} />}
         </Animated.View>
-        <Animated.View entering={still ? undefined : FadeIn.delay(700)} style={{ marginTop: 18, width: 240 }}>
-          <GameButton label="Awesome" onPress={onDone} />
+        <Animated.View entering={still ? undefined : FadeIn.delay(700)} style={{ marginTop: 18, width: 240, gap: 8 }}>
+          {action && <GameButton label={action.label} icon="pin" onPress={action.onPress} />}
+          <GameButton label={action ? 'Later' : 'Awesome'} variant={action ? 'ghost' : 'primary'} tone="onBlue" onPress={onDone} />
         </Animated.View>
       </Pressable>
     </Modal>
