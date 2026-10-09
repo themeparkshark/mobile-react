@@ -2389,7 +2389,8 @@ export default function MemoryGame({
                 <VerdictChip ref={chip} reducedMotion={reducedMotion} />
               </View>
             </View>
-            <RopeNumeral x={g.W / 2} y={g.rope.y} seconds={flags.clock !== 'none' ? hud.seconds : null} turnsLeft={hud.turnsLeft} urgent={hud.urgent} reducedMotion={reducedMotion} />
+            {/* The spent clock (0) hides under the end card's ribbon instead of peeking out behind it. */}
+            {tryScreen ? null : <RopeNumeral x={g.W / 2} y={g.rope.y} seconds={flags.clock !== 'none' ? hud.seconds : null} turnsLeft={hud.turnsLeft} urgent={hud.urgent} reducedMotion={reducedMotion} />}
             <AwningCallouts ref={awning} geo={g} reducedMotion={reducedMotion} />
 
             {/* Peek (Time Attack, from its unlock): the counter's right end. */}

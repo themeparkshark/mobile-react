@@ -107,7 +107,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
     name: nearbyRideName,
     hint: 'Tap its coin below to make it your goal.',
   } : isOwnPark ? {
-    eyebrow: 'PICK YOUR NEXT ADVENTURE', name: 'Choose a missing coin', hint: 'Tap an empty slot on the shelf.',
+    eyebrow: 'NEXT ADVENTURE', name: 'Pick a missing coin', hint: 'Tap an empty slot on the shelf.',
   } : null;
 
   return <View style={styles.frame}>

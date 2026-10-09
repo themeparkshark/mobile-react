@@ -72,6 +72,8 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
   const line = useSharedValue(reducedMotion ? 1 : 0);
   const button = useSharedValue(reducedMotion ? 1 : 0);
   const breathe = useSharedValue(0);
+  // Press and hold the card to peek at the board behind it.
+  const peek = useSharedValue(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
@@ -101,7 +103,7 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const cardSt = useAnimatedStyle(() => ({ opacity: Math.min(1, enter.value * 1.6), transform: [{ translateY: (1 - enter.value) * 28 }] }));
+  const cardSt = useAnimatedStyle(() => ({ opacity: Math.min(1, enter.value * 1.6) * (1 - peek.value * 0.85), transform: [{ translateY: (1 - enter.value) * 28 }] }));
   const bannerSt = useAnimatedStyle(() => ({
     opacity: banner.value > 0 ? 1 : 0,
     transform: [{ translateY: (1 - Math.min(1, banner.value)) * -34 }, { scale: banner.value || 1 }],
@@ -115,7 +117,10 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
 
   return (
     <Animated.View style={[styles.pos, { bottom }, cardSt]} accessibilityViewIsModal>
-      <View style={[styles.card, compact && styles.cardCompact]}>
+      <Pressable style={[styles.card, compact && styles.cardCompact]} delayLongPress={220}
+        onLongPress={() => { peek.value = withTiming(1, { duration: 140 }); Haptic.tickSelection(); }}
+        onPressOut={() => { peek.value = withTiming(0, { duration: 180 }); }}
+        accessibilityHint="Press and hold to see the board">
         <Animated.View style={[styles.banner, bannerSt]}>
           <Image source={BANNER} style={styles.bannerImg} resizeMode="stretch" />
           <Animated.View style={[styles.bannerFlash, flashSt]} />
@@ -145,7 +150,7 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
             <Text style={canRetry ? styles.doneText : styles.btnText}>{canRetry ? 'Done' : 'DONE'}</Text>
           </Pressable>
         </Animated.View>
-      </View>
+      </Pressable>
     </Animated.View>
   );
 }

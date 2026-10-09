@@ -45,3 +45,7 @@ test('the bar is two-tone keyed to the chips, and parts never use the held-back 
   assert.match(src, /styles\.fillSights, \{ flex: parts\.sights\.collected \}/);
   assert.match(src, /chipSights: \{ borderColor: SIGHTS_ORANGE \}/);
 });
+
+test('the empty-goal row fits one line on the real Park screen', () => {
+  assert.match(read('src/screens/ParkCollectionHeader.tsx'), /eyebrow: 'NEXT ADVENTURE', name: 'Pick a missing coin'/);
+});

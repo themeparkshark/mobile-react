@@ -45,3 +45,10 @@ test('the card is anchored to the board bottom and compacts on short phones (no 
   assert.match(game, /bottom=\{Math\.max\(8, g\.H - \(g\.felt\.y \+ g\.felt\.h\) \+ 6\)\} compact=\{g\.H < 600\}/);
   assert.match(src, /styles\.pos, \{ bottom \}/);
 });
+
+test('hold the card to peek at the board; the spent clock hides under the ribbon', () => {
+  assert.match(src, /onLongPress=\{\(\) => \{ peek\.value = withTiming\(1/);
+  assert.match(src, /onPressOut=\{\(\) => \{ peek\.value = withTiming\(0/);
+  const game = fs.readFileSync(path.join(root, 'src/games/memory/MemoryGame.tsx'), 'utf8');
+  assert.match(game, /\{tryScreen \? null : <RopeNumeral/);
+});
