@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { openMembership } from './GrownUpGate';
 import StarterOfferCard from './money/StarterOfferCard';
+import SharkPassBanner from './money/SharkPassBanner';
 import { vipWinLine } from '../services/money/offers';
 import { vipRideMultiplierNow, warmVipPerks } from '../services/money/vipPerks';
 import OneTimeTip from './help/OneTimeTip';
@@ -523,6 +524,9 @@ export default function PostWinRewardsModal({
 
               {/* The Starter Pack, once ever, at the first win: an earned moment, never a pop-up. */}
               {!isVip && coinsEarned > 0 && <StarterOfferCard ready={visible} />}
+
+              {/* The Shark Pass after a win: where the climb stands and a claim dot (hidden when no season runs). */}
+              {(xpEarned > 0 || coinsEarned > 0) && <SharkPassBanner style={{ alignSelf: 'stretch', marginTop: 8 }} open={go => closeTo(go)} />}
 
               {nextUnlock && <Text style={styles.hint}>{nextUnlock}</Text>}
             </Animated.View>

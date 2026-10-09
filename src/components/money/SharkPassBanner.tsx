@@ -25,7 +25,11 @@ export function bannerLine(state: SharkPassState | null): string | null {
   return step === 0 ? `Play to climb ${steps} steps of winter rewards` : `Step ${step} of ${steps}${premium ? '' : ' · see the Shark Pass row'}`;
 }
 
-export default function SharkPassBanner({ style }: { style?: StyleProp<ViewStyle> }) {
+export default function SharkPassBanner({ style, open }: {
+  style?: StyleProp<ViewStyle>;
+  /** Inside a modal: close it first, then go (e.g. the post-win sheet's closeTo). */
+  open?: (go: () => void) => void;
+}) {
   const [state, setState] = useState<SharkPassState | null>(null);
   useFocusEffect(useCallback(() => {
     let live = true;
@@ -36,7 +40,7 @@ export default function SharkPassBanner({ style }: { style?: StyleProp<ViewStyle
   if (!line || !state || !state.enabled || !state.season) return null;
   const claim = (state.progress?.claimable ?? 0) > 0;
   return (
-    <Pressable onPress={() => RootNavigation.navigate('SharkPass')} accessibilityRole="button"
+    <Pressable onPress={() => { const go = () => RootNavigation.navigate('SharkPass'); if (open) open(go); else go(); }} accessibilityRole="button"
       accessibilityLabel={`Shark Pass, ${state.season.title}. ${line}.`}
       style={({ pressed }) => [st.lip, style, pressed && st.lipPressed]}>
       <View style={st.card}>

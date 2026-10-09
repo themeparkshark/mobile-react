@@ -179,7 +179,10 @@ export default function SharkPassScreen() {
       const res = await claimSharkPassReward(tier.tier, track);
       setState(res.pass);
       const itemId = Number((res.granted as { item_id?: unknown }).item_id) || undefined;
-      setLanded({ reward, title: reward.type === 'item' ? 'New season pin!' : 'You got it!', itemId });
+      // Royal Pass beat: after a free claim, the same step's Shark Pass reward, calm, no timer.
+      const passTwin = track === 'free' && !premium ? `With the Shark Pass this step also gives ${rewardWords(tier.paid)}.` : null;
+      setLanded({ reward, title: reward.type === 'item' ? 'New season pin!' : 'You got it!', itemId,
+        caption: passTwin ? `${rewardWords(reward)}. ${passTwin}` : undefined });
       void refreshPlayer?.().catch(() => undefined);
     } catch (error) {
       const code = sharkPassErrorCode(error);
@@ -255,6 +258,7 @@ export default function SharkPassScreen() {
   const into = progress?.points_into_tier ?? 0;
   const summary = useMemo(() => passSummary(tiers), [tiers]);
   const nextPrize = progress ? nextBigPrize(tiers, progress.points, perStep) : null;
+  const nextStep = nextPrize?.tier ?? 0;
   const heroLook = useMemo(() => withSeasonPin(player?.inventory as InventoryType | undefined, nextPrize?.reward ?? progress?.top_prize),
     [player?.inventory, nextPrize?.reward, progress?.top_prize]);
   const readyNow = useMemo(() => readyNowLine(tiers), [tiers]);
@@ -312,11 +316,11 @@ export default function SharkPassScreen() {
                   </Text>
                 </View>
               </View>
-              {nextPrize && (
+              {nextPrize && nextStep > 0 && (
                 <View style={s.nextPrize}>
                   <RewardPicture reward={nextPrize.reward} size={40} />
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
-                    {`${nextPrize.pointsAway.toLocaleString('en-US')} points to the ${rewardWords(nextPrize.reward)} at step ${nextPrize.tier}${nextPrize.pass && !premium ? ' (Shark Pass)' : ''}`}
+                    {`${nextPrize.pointsAway.toLocaleString('en-US')} points to the ${rewardWords(nextPrize.reward)} at step ${nextStep}${nextPrize.pass && !premium ? ' (Shark Pass)' : ''}`}
                   </Text>
                 </View>
               )}

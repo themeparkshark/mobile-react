@@ -46,11 +46,26 @@ export const VIP_BENEFITS: { icon: GameIconName; title: string; body: string }[]
 
 const APP_STORE_URL = 'itms-apps://apps.apple.com/app/id6758812566';
 
+const TRIAL_DAYS: Record<string, number> = { day: 1, week: 7, month: 30 };
+const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** "Thursday, October 15": the day the free trial ends, from its length ("One week free"). Null if unknown. */
+export function trialEndText(trial: string | null, now: Date = new Date()): string | null {
+  const m = trial?.toLowerCase().match(/^(\w+) (day|week|month)s? free$/);
+  const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+  const n = m ? words.indexOf(m[1]) : -1;
+  if (!m || n <= 0) return null;
+  const end = new Date(now.getTime() + n * TRIAL_DAYS[m[2]] * 86_400_000);
+  return `${WEEKDAY[end.getDay()]}, ${MONTH[end.getMonth()]} ${end.getDate()}`;
+}
+
 /** "Free for 1 week. Then $4.99 a month." The deal, said once, right above the button. */
 export function dealLine(plan: Pick<VipPlan, 'price' | 'period' | 'trial'>): string {
   const billing = priceText(plan);
+  const until = trialEndText(plan.trial);
   return plan.trial
-    ? `${capitalize(plan.trial)}. Then ${billing}.`
+    ? `${capitalize(plan.trial)}${until ? `, until ${until}` : ''}. Then ${billing}.`
     : `${billing}.`;
 }
 /** The buy button: the free part first when there is one. */
