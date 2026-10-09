@@ -104,6 +104,7 @@ function route(fx: Fixture, config: AxiosRequestConfig): { status: number; data:
   if (/^\/me\/wishlist\/\d+/.test(url)) {
     return { status: 200, data: { data: { item_ids: config.method === 'delete' ? [] : [Number(url.split('/').pop())] } } };
   }
+  if (url === '/me/inventory' && config.method === 'put') return { status: 200, data: { data: fx.player.inventory } };
   const buy = /^\/me\/inventory\/items\/(\d+)\/purchase/.exec(url);
   if (buy) {
     const all = [...LEGACY_ITEMS, ...sharkToday().sections.flatMap(x => x.items), ...fixtureToday(1, 0).sections.flatMap(x => x.items)];
