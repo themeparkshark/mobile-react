@@ -14,6 +14,7 @@ import {
 } from '../../services/trail/trailModel';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, confirmGame, type GameIconName } from '../../ui';
 import { CountUpText } from '../../gamekit/fx/CountUpText';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import TrailBoxArt, { STEPS_ART, WHEELS_ART } from './TrailBoxArt';
 import TrailPath from './TrailPath';
 
@@ -120,7 +121,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
             {!!note && (
               <View style={[styles.card, styles.noteCard, styles.rowLead]}>
                 {note.reason === 'ride' ? <GameIcon name="ride" size={28} />
-                  : <Image source={note.reason === 'try_wheels' ? WHEELS_ART : note.reason === 'outside' || note.reason === 'left_early' ? PARK_ART : STEPS_ART}
+                  : <Image source={note.reason === 'try_wheels' || note.reason === 'rolling_cap' ? WHEELS_ART : note.reason === 'outside' || note.reason === 'left_early' ? PARK_ART : STEPS_ART}
                       style={{ width: 28, height: 28 }} contentFit="contain" />}
                 <Text style={[styles.body, { flex: 1 }]}><Text style={styles.bold}>{formatSteps(note.steps)} STEPS NOT COUNTED. </Text>{note.text}</Text>
               </View>
@@ -178,13 +179,16 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
                         accessibilityLabel={`${boxName(b)}, ${formatSteps(b.goal_steps)} steps.${i > 0 ? ' Tap to walk it next' : ' Walks next'}`}
                         onPress={() => { playSfx('ui.select'); setPicked(picked === b.id ? null : b.id); }}
                         style={[styles.waitBox, picked === b.id && styles.waitPicked]}>
-                        <TrailBoxArt tier={b.tier} size={40} active={false} />
+                        <TrailBoxArt tier={b.tier} size={36} active={false} />
                         <Text style={styles.waitText}>{formatSteps(b.goal_steps)}</Text>
                       </Pressable>
                     ))}
-                    {Array.from({ length: Math.max(0, state.rack - state.waiting.length) }, (_, i) => (
-                      <View key={`open-${i}`} style={styles.rackEmpty} accessibilityElementsHidden />
-                    ))}
+                    {state.rack - state.waiting.length > 0 && (
+                      <View style={styles.rackEmpty} accessible accessibilityLabel={`${state.rack - state.waiting.length} open spots`}>
+                        <Text style={styles.rackEmptyText}>+{state.rack - state.waiting.length}</Text>
+                        <Text style={styles.rackEmptySub}>open</Text>
+                      </View>
+                    )}
                   </View>
                   {picked != null && state.waiting[0]?.id !== picked && (
                     <GameButton label="Walk this one next" size="compact" variant="secondary" onPress={() => { onFront(picked); setPicked(null); }}
@@ -299,21 +303,23 @@ function weekOf(day: string): string {
 /** Weekly goal: a path to the goal; the first time you see it reached that week, it pops with a cheer. */
 function GoalCard({ state, visible, onChange }: { readonly state: TrailState; readonly visible: boolean; readonly onChange: () => void }) {
   const goal = state.week.goal_steps ?? 1;
+  const reduced = useReducedGameMotion();
   const pop = useSharedValue(1);
   const glow = useSharedValue(0);
   useEffect(() => {
     if (!visible || !state.week.goal_hit) return;
     const key = `goal:${weekOf(state.today.park_day)}`;
     if (getSeen(key) != null) return;
-    setSeen(key, 1);
     const t = setTimeout(() => {
-      pop.value = withSequence(withTiming(1.06, { duration: 160 }), withSpring(1, { damping: 8, stiffness: 220 }));
-      glow.value = withSequence(withTiming(1, { duration: 200 }), withTiming(0, { duration: 1400 }));
+      setSeen(key, 1);
       playSfx('fx.reward');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      if (reduced) return;
+      pop.value = withSequence(withTiming(1.06, { duration: 160 }), withSpring(1, { damping: 8, stiffness: 220 }));
+      glow.value = withSequence(withTiming(1, { duration: 200 }), withTiming(0, { duration: 1400 }));
     }, 700);
     return () => clearTimeout(t);
-  }, [visible, state.week.goal_hit, state.today.park_day, pop, glow]);
+  }, [visible, state.week.goal_hit, state.today.park_day, pop, glow, reduced]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value }));
   return (
@@ -450,10 +456,12 @@ const styles = StyleSheet.create({
   toGo: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 2, textShadowOffset: { width: 0, height: 0 }, minWidth: 80 },
   toGoUnit: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft, marginTop: -2 },
   footnote: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft, marginTop: 6 },
-  waitBox: { width: '31%', height: 66, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, borderWidth: 2.5, borderColor: BRAND.sky, backgroundColor: BRAND.cream },
+  waitBox: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, borderWidth: 2.5, borderColor: BRAND.sky, backgroundColor: BRAND.cream },
   waitPicked: { borderColor: BRAND.gold, backgroundColor: BRAND.cream },
-  rackGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 6, paddingVertical: 4 },
-  rackEmpty: { width: '31%', height: 66, borderRadius: RADIUS.md, borderWidth: 2, borderStyle: 'dashed', borderColor: BRAND.skyDeep },
+  rackGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 4 },
+  rackEmptyText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.skyDeep },
+  rackEmptySub: { fontFamily: 'Knockout', fontSize: 13, color: BRAND.skyDeep, marginTop: -2 },
+  rackEmpty: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, borderWidth: 2, borderStyle: 'dashed', borderColor: BRAND.skyDeep },
   waitText: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   todayCard: { flexDirection: 'row', alignItems: 'center' },
   dayLine: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navySoft, letterSpacing: 1, marginBottom: 2 },

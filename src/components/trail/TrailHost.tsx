@@ -1,7 +1,5 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { playSfx } from '../../gamekit/SFX';
-import { useContext } from 'react';
-import { LocationStatusContext } from '../../context/LocationProvider';
 import { useTrail } from '../../services/trail/TrailProvider';
 import { boxName, formatSteps, headlineBox, stepsToGo, type TrailBox, type TrailReward } from '../../services/trail/trailModel';
 import { gameAlert } from '../../ui';
@@ -22,7 +20,6 @@ function TrailHost({ active, inPark = true, preview }: {
   readonly preview?: 'sheet' | 'inside' | 'reveal';
 }) {
   const trail = useTrail();
-  const { park } = useContext(LocationStatusContext);
   const [open, setOpen] = useState(preview === 'sheet' || preview === 'inside');
   const [opening, setOpening] = useState<readonly TrailBox[] | null>(preview === 'reveal' ? trail.state?.ready ?? null : null);
 
@@ -54,7 +51,7 @@ function TrailHost({ active, inPark = true, preview }: {
   return (
     <>
       <TrailPill state={trail.state} active={active && !open && !opening} onPress={show} inPark={inPark} />
-      <TrailSheet visible={open && !opening} state={trail.state} motion={trail.motion} inPark={inPark} parkName={park?.name ?? null}
+      <TrailSheet visible={open && !opening} state={trail.state} motion={trail.motion} inPark={inPark} parkName={trail.state.today.park_name ?? null}
         onClose={() => { playSfx('ui.modalClose'); setOpen(false); }}
         onOpen={boxes => setOpening(boxes)}
         onFront={id => act(() => trail.front(id))}

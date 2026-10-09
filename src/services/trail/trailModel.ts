@@ -9,7 +9,7 @@
 
 export type TrailTier = 'blue' | 'red' | 'gold';
 export type TrailRewardKind = 'coins' | 'energy' | 'tickets' | 'mystery_box' | 'exclusive';
-export type TrailMissReason = 'ride' | 'outside' | 'not_checked_in' | 'hour_cap' | 'day_cap' | 'too_old' | 'overlap' | 'gps_short' | 'left_early' | 'try_wheels' | 'bad';
+export type TrailMissReason = 'ride' | 'outside' | 'not_checked_in' | 'hour_cap' | 'day_cap' | 'too_old' | 'overlap' | 'gps_short' | 'left_early' | 'try_wheels' | 'rolling_cap' | 'bad';
 
 export interface TrailBox {
   readonly id: number;
@@ -48,7 +48,7 @@ export interface TrailState {
   readonly walking: readonly TrailBox[];
   readonly waiting: readonly TrailBox[];
   readonly ready: readonly TrailBox[];
-  readonly today: { readonly park_id: number | null; readonly park_day: string; readonly steps: number; readonly meters: number };
+  readonly today: { readonly park_id: number | null; readonly park_name?: string | null; readonly park_day: string; readonly steps: number; readonly meters: number };
   readonly best_day: { readonly park_day: string; readonly steps: number; readonly meters: number } | null;
   readonly lifetime: { readonly steps: number; readonly meters: number; readonly boxes_opened: number };
   readonly week: { readonly steps: number; readonly goal_steps: number | null; readonly goal_hit: boolean; readonly goal_options: readonly number[] };
@@ -144,6 +144,7 @@ export function missCopy(reason: TrailMissReason): string | null {
     case 'day_cap': return 'You walked a ton! Some steps were past the limit.';
     case 'gps_short': return 'Your phone lost the map for a bit, so some steps did not count.';
     case 'left_early': return 'Open the map before you leave the park to save every step.';
+    case 'rolling_cap': return 'What a big day of rolling! The rest of today\'s path is past the limit.';
     case 'try_wheels': return 'Pushing a stroller or rolling? Turn on Rolling below so your map path counts.';
     default: return null;
   }

@@ -38,7 +38,7 @@ function fixture(scene: string, step: number): TrailState {
   const steps = scene === 'catchup' && step > 0 ? 14870 : 12460;
   return {
     enabled: true, slots: 3, rack: 6, walking, waiting, ready,
-    today: { park_id: 10, park_day: '2026-10-08', steps, meters: Math.round(steps * 0.75) },
+    today: { park_id: 10, park_name: 'Epic Universe', park_day: '2026-10-08', steps, meters: Math.round(steps * 0.75) },
     best_day: { park_day: '2026-10-08', steps, meters: Math.round(steps * 0.75) },
     lifetime: { steps: 84210, meters: 63158, boxes_opened: 11 },
     week: scene === 'ready' ? { steps: 26200, goal_steps: 25000, goal_hit: true, goal_options: [10000, 25000, 50000] }
