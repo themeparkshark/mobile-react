@@ -149,7 +149,7 @@ export function RareShelfCard({ onPress }: { readonly onPress: () => void }) {
       <View style={styles.cardRing}>
         <View style={[styles.cardFace, styles.rareFace]}>
           <LinearGradient colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']} style={styles.gloss} pointerEvents="none" />
-          <View style={[styles.cardWell, { borderColor: BRAND.goldLip }]}><GameIcon name="star" size={34} /></View>
+          <View style={[styles.cardWell, { borderColor: BRAND.goldLip }]}><GameIcon name="star" size={30} /></View>
           <Text numberOfLines={2} style={[styles.cardName, styles.rareName]} maxFontSizeMultiplier={1.15}>Rare find today!</Text>
           <View style={[styles.cardBand, styles.rareBand]}>
             <GameIcon name="map" size={18} />
@@ -614,10 +614,10 @@ const styles = StyleSheet.create({
   cardFaceGold: { borderColor: BRAND.gold, borderBottomColor: BRAND.goldLip, borderWidth: 4, borderBottomWidth: 7 },
   gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '46%' },
   cardWell: {
-    width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(255,255,255,0.95)', alignItems: 'center', justifyContent: 'center',
+    width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.95)', alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: 'rgba(5,52,110,0.25)',
   },
-  cardBadge: { width: 40, height: 40 },
+  cardBadge: { width: 36, height: 36 },
   cardName: {
     fontFamily: 'Shark', fontSize: 14, lineHeight: 16, color: BRAND.white, marginTop: 4, paddingHorizontal: 6, textAlign: 'center',
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 1, minHeight: 32,
