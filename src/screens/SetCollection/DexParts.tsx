@@ -4,7 +4,7 @@
  * reveal). The Collections page itself is built from BookParts.tsx. Every move
  * runs on the UI thread and Reduce Motion swaps it for a fade or a still.
  */
-import { Image, type ImageSource } from 'expo-image';
+import type { ImageSource } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';

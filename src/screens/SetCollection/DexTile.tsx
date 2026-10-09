@@ -13,7 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
+  Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming,
 } from 'react-native-reanimated';
 import { playSfx } from '../../gamekit/SFX';
 import * as Haptics from '../../helpers/haptics';
@@ -21,6 +21,7 @@ import { BRAND, GameIcon, SHADOW } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { GIFT, itemArt, SpringPress } from './DexParts';
 import { SLOT_COLORS } from './BookParts';
+import { SHEEN, sweepAt } from './bookClock';
 import { rarityLook } from './dexLook';
 import type { DexItem } from './dexModel';
 
@@ -36,17 +37,34 @@ function seenIds(): Promise<Set<number>> {
     .then(set => { seen = set; return set; });
   return loading;
 }
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function markSeen(id: number) {
   void seenIds().then(set => {
     if (set.has(id)) return;
     set.add(id);
-    void AsyncStorage.setItem(SEEN_KEY, JSON.stringify([...set].slice(-400))).catch(() => undefined);
+    // One write per batch of new finds, not one per tile.
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void AsyncStorage.setItem(SEEN_KEY, JSON.stringify([...set].slice(-400))).catch(() => undefined);
+    }, 400);
   });
+}
+// Several new finds on one page flip one after another (120 ms apart) with one pop and one haptic for the group.
+let flipQueue = 0;
+let lastFlipAt = 0;
+function nextFlipDelay(): { delay: number; lead: boolean } {
+  const now = Date.now();
+  if (now - lastFlipAt > 900) flipQueue = 0;
+  lastFlipAt = now;
+  const slot = flipQueue;
+  flipQueue += 1;
+  return { delay: 250 + slot * 120, lead: slot === 0 };
 }
 
 /** Height of a tile row: the sticker plus its one-line name. */
 export const tileHeight = (width: number) => width + NAME_H;
-const NAME_H = 22;
+const NAME_H = 38;
 
 export const ItemTile = memo(function ItemTile({ item, width, onPress, active = true }: {
   readonly item: DexItem; readonly width: number; readonly onPress: (item: DexItem) => void;
@@ -58,7 +76,6 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
   const [artFailed, setArtFailed] = useState(false);
   const [flipping, setFlipping] = useState(false);
   const turn = useSharedValue(0);
-  const shine = useSharedValue(-1);
 
   // FlashList recycles this cell for other items: drop every per-item state on a new id.
   useEffect(() => {
@@ -76,15 +93,18 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
     void seenIds().then(set => {
       if (!live || set.has(item.id)) return;
       setFlipping(true);
+      const { delay, lead } = nextFlipDelay();
       turn.value = 0;
-      turn.value = withDelay(250, withTiming(1, { duration: 620, easing: Easing.out(Easing.back(1.4)) }));
-      // The pop lands as the sticker turns its face (about the 90 degree point).
-      flipTimer = setTimeout(() => {
-        if (!live) return;
-        playSfx('ui.select', 0.55);
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-      }, 480);
-      timer = setTimeout(() => { if (live) setFlipping(false); }, 1000);
+      turn.value = withDelay(delay, withTiming(1, { duration: 620, easing: Easing.out(Easing.back(1.4)) }));
+      // The pop lands as the first sticker turns its face (about the 90 degree point).
+      if (lead) {
+        flipTimer = setTimeout(() => {
+          if (!live) return;
+          playSfx('ui.select', 0.55);
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+        }, delay + 230);
+      }
+      timer = setTimeout(() => { if (live) setFlipping(false); }, delay + 760);
       markSeen(item.id);
     });
     return () => {
@@ -97,23 +117,26 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
 
   // A sheen that says "rare": Rare every ~7 s, Epic every ~5 s, Legendary every 3 s with its gold rim pulse.
   // Off while the screen is covered, and with Reduce Motion.
+  // One page clock drives every sweep (bookClock.SHEEN); each sticker reads it at its own phase, so a row of
+  // rare finds never flashes in sync. Legendary sweeps twice per period.
   const sheen = item.found && item.rarity >= 3 && active && !reduced;
-  useEffect(() => {
-    if (!sheen) { cancelAnimation(shine); shine.value = -1; return; }
-    const rest = item.rarity >= 5 ? 2100 : item.rarity === 4 ? 4100 : 6100;
-    // Start offset by id, so a row of rare finds never flashes in sync.
-    shine.value = withDelay((item.id * 397) % 2500,
-      withRepeat(withSequence(withTiming(-1, { duration: 0 }), withDelay(rest, withTiming(1, { duration: 900 }))), -1, false));
-    return () => cancelAnimation(shine);
-  }, [sheen, item.rarity, item.id, shine]);
+  const phase = ((item.id * 397) % 1000) / 1000;
+  const twice = item.rarity >= 5;
 
-  const flipStyle = useAnimatedStyle(() => (flipping ? {
-    transform: [{ perspective: 600 }, { rotateY: `${interpolate(turn.value, [0, 0.5, 1], [0, 90, 0])}deg` }],
-  } : {}));
+  // Always returns the transform (0 deg when idle), so a recycled cell never keeps a half-turned tilt.
+  const flipStyle = useAnimatedStyle(() => ({
+    transform: [{ perspective: 600 }, { rotateY: `${flipping ? interpolate(turn.value, [0, 0.5, 1], [0, 90, 0]) : 0}deg` }],
+  }));
   const colorStyle = useAnimatedStyle(() => ({ opacity: flipping ? (turn.value >= 0.5 ? 1 : 0) : 1 }));
   const shadowStyle = useAnimatedStyle(() => ({ opacity: flipping && turn.value < 0.5 ? 1 : 0 }));
-  const shineStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shine.value * width * 1.4 }, { rotate: '20deg' }] }));
-  const rimStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(shine.value) * 1.4) }));
+  const shineStyle = useAnimatedStyle(() => {
+    const x = sheen ? sweepAt(SHEEN.value, phase, twice) : -1;
+    return { transform: [{ translateX: x * width * 1.4 }, { rotate: '20deg' }] };
+  }, [sheen, phase, twice, width]);
+  const rimStyle = useAnimatedStyle(() => {
+    const x = sheen ? sweepAt(SHEEN.value, phase, twice) : -1;
+    return { opacity: Math.max(0, 1 - Math.abs(x) * 1.4) };
+  }, [sheen, phase, twice]);
 
   const art = artFailed ? GIFT : itemArt(item);
   const artSize = width * (item.found ? 0.72 : 0.66);
@@ -121,13 +144,13 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
     ? `${item.name}, ${look.label}, found${item.spares > 0 ? `, ${item.spares} extra` : ''}${item.isNew ? ', new' : ''}`
     : `${item.name}, ${look.label}, still to find`;
   // A die-cut sticker sits a hair off straight (from its id, so it never changes): an album, not a spreadsheet.
-  const tilt = item.found && !reduced ? ((item.id * 7) % 5) - 2 : 0;
+  const tilt = item.found && !reduced ? (((item.id * 7) % 5) - 2) * 1.5 : 0;
   return (
     <SpringPress onPress={() => onPress(item)} accessibilityLabel={label} accessibilityHint="Double-tap to see it." style={{ width, height: tileHeight(width) }}>
       <Animated.View style={flipStyle}>
         {item.found ? (
-          <View style={[styles.sticker, { width, height: width, backgroundColor: look.frame, transform: [{ rotate: `${tilt * 0.8}deg` }] }]}>
-            <View style={styles.stickerFace}>
+          <View style={[styles.sticker, { width, height: width, backgroundColor: look.frame, transform: [{ rotate: `${tilt}deg` }] }]}>
+            <View style={[styles.stickerFace, sheen && styles.clip]}>
               <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(5,52,110,0.07)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
               <Animated.View style={[StyleSheet.absoluteFill, styles.center, colorStyle]}>
                 <Image source={art} contentFit="contain" allowDownscaling recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
@@ -150,6 +173,8 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
               <View style={styles.count}><Text style={styles.countText} maxFontSizeMultiplier={1.2}>+{item.spares}</Text></View>
             )}
             {item.isNew && <View style={styles.newTag}><GameIcon name="new" size={32} /></View>}
+            {/* A still foil star on Rare and up, so rarity shows even when nothing moves. */}
+            {item.rarity >= 3 && <View style={styles.foil} pointerEvents="none"><GameIcon name="sparkle" size={item.rarity >= 5 ? 22 : 18} /></View>}
           </View>
         ) : (
           <View key={item.id} style={[styles.slot, { width, height: width }]}>
@@ -158,9 +183,10 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
           </View>
         )}
       </Animated.View>
+      {/* Every tile keeps the same label plate, so the grid stays even: the name when found, "???" when not. */}
       {item.found
-        ? <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.name} maxFontSizeMultiplier={1.2}>{item.name}</Text>
-        : null}
+        ? <Text numberOfLines={2} style={styles.name} maxFontSizeMultiplier={1.15}>{item.name}</Text>
+        : <Text style={[styles.name, styles.nameMissing]} maxFontSizeMultiplier={1.15} importantForAccessibility="no">???</Text>}
     </SpringPress>
   );
 }, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress && a.active === b.active);
@@ -168,11 +194,17 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
   // A found sticker: a rarity-colored die-cut edge, a thick white border, a lip and a soft lift off the page.
-  sticker: { borderRadius: 18, padding: 3, ...SHADOW.card, shadowOpacity: 0.2, shadowRadius: 3, shadowOffset: { width: 0, height: 3 } },
+  // Navy ink line, then the rarity color, then a thick white face: a die-cut sticker.
+  sticker: {
+    borderRadius: 18, padding: 3, borderWidth: 1.5, borderColor: BRAND.navy,
+    ...SHADOW.card, shadowOpacity: 0.2, shadowRadius: 3, shadowOffset: { width: 0, height: 3 },
+  },
   stickerFace: {
     flex: 1, borderRadius: 15, backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 5,
-    borderBottomColor: '#e6eef7', overflow: 'hidden',
+    borderBottomColor: '#e6eef7',
   },
+  // Only a sticker with a moving sheen needs the mask (the art already fits inside).
+  clip: { overflow: 'hidden' },
   // An empty slot pressed into the album page: dashed edge, the shape faded in navy.
   slot: {
     borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: SLOT_COLORS.edge, backgroundColor: SLOT_COLORS.fill,
@@ -186,5 +218,7 @@ const styles = StyleSheet.create({
   newTag: { position: 'absolute', top: -6, left: -6 },
   shine: { position: 'absolute', width: 60, left: '35%' },
   rim: { ...StyleSheet.absoluteFillObject, borderRadius: 18, borderWidth: 4, borderColor: '#ffe07a' },
-  name: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
+  name: { fontFamily: 'Knockout', fontSize: 14, lineHeight: 16, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
+  nameMissing: { color: SLOT_COLORS.edge },
+  foil: { position: 'absolute', top: 4, right: 4 },
 });

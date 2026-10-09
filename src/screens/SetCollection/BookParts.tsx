@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, ZoomOut,
+  Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, ZoomOut,
 } from 'react-native-reanimated';
 import { playSfx } from '../../gamekit/SFX';
 import * as Haptics from '../../helpers/haptics';
@@ -30,6 +30,7 @@ import {
   goalLine, hasClaimable, openNow, prizeChips, prizeList, prizeMarks, prizeState, progressFraction, RARITY_WORDS, whenLine,
   type DexReward, type DexSet,
 } from './dexModel';
+import { BEAT } from './bookClock';
 import type { EventCard } from './eventCards';
 
 export const BOOK_BG = require('../../../assets/images/screens/leaderboard/standings-bg.png');
@@ -38,13 +39,13 @@ export const SHEET = BRAND.cream;
 /** An empty sticker slot printed in the album. */
 const SLOT = '#f1e4c0';
 const SLOT_EDGE = '#d6bf85';
-export const SLOT_COLORS = { fill: SLOT, edge: SLOT_EDGE, ink: BRAND.navy, inkOpacity: 0.2 } as const;
+export const SLOT_COLORS = { fill: SLOT, edge: SLOT_EDGE, ink: BRAND.blue, inkOpacity: 0.2 } as const;
 const BROWN = '#7a3d00';
 /** Dynamic Type room for body copy (cards grow in height instead of clipping). */
 const BODY_SCALE = 1.45;
 
-export const SHELF_CARD_W = 104;
-export const SHELF_CARD_H = 132;
+export const SHELF_CARD_W = 102;
+export const SHELF_CARD_H = 122;
 export const SHELF_GAP = 12;
 
 const finishedOf = (set: Pick<DexSet, 'reward'>) => set.reward.status === 'claimed' || set.reward.status === 'pending';
@@ -67,14 +68,12 @@ export const ShelfCard = memo(function ShelfCard({ set, selected, onPress, activ
     opacity: 0.8 + 0.2 * lift.value,
     transform: [{ translateY: -4 * lift.value }, { scale: 0.93 + 0.07 * lift.value }],
   }));
-  const bob = useSharedValue(0);
-  useEffect(() => {
-    if (!claim || reduced || !active) { cancelAnimation(bob); bob.value = 0; return; }
-    // One shared beat with the prize row medal (700 ms each way).
-    bob.value = withRepeat(withSequence(withTiming(1, { duration: 700 }), withTiming(0, { duration: 700 })), -1, false);
-    return () => cancelAnimation(bob);
-  }, [claim, reduced, active, bob]);
-  const bobStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -4 * bob.value }, { rotate: `${-8 + 8 * bob.value}deg` }] }));
+  // The page's one shared beat (bookClock): in step with the prize medal, resting between pulses.
+  const moving = claim && !reduced && active;
+  const bobStyle = useAnimatedStyle(() => {
+    const b = moving ? BEAT.value : 0;
+    return { transform: [{ translateY: -4 * b }, { rotate: `${-8 + 8 * b}deg` }] };
+  }, [moving]);
   const fraction = progressFraction(set);
   return (
     <SpringPress onPress={() => onPress(set.slug)} accessibilityState={{ selected }}
@@ -171,8 +170,8 @@ function PrizeBar({ set, reduced }: { readonly set: DexSet; readonly reduced: bo
         const done = mark.status === 'claimed' || mark.status === 'pending';
         const ready = mark.status === 'claimable';
         return (
-          <View key={`${mark.target}-${mark.final}`} style={[styles.notch, { left: `${mark.at * 100}%` }, ready && styles.notchReady, done && styles.notchDone]}>
-            <GameIcon name={done ? 'check' : mark.final ? 'trophy' : 'gift'} size={18} />
+          <View key={`${mark.target}-${mark.final}`} style={[styles.notch, { left: `${mark.at * 100}%` }, ready && styles.notchReady, done && (mark.final ? styles.notchTrophy : styles.notchDone)]}>
+            <GameIcon name={mark.final ? 'trophy' : done ? 'check' : 'gift'} size={18} />
           </View>
         );
       })}
@@ -202,11 +201,12 @@ export function BookHeader({ set, onFocus, focusBusy, stamp }: {
   const open = openNow(set);
   const when = whenLine(set);
   const [badgeFailed, setBadgeFailed] = useState(false);
-  const toGo = goal?.match(/\((\d+) to go\)|: (\d+) to go/);
-  const pill = ready ? 'Prize ready!' : finished || set.isComplete ? 'All found!' : toGo ? `${toGo[1] ?? toGo[2]} to go` : null;
-  const nextIsFinal = !!goal && goal.startsWith('Next: find all');
+  useEffect(() => { setBadgeFailed(false); }, [set.slug]);
+  // The header says only what no row says: a prize is waiting, or the set is done. "N to go" lives on its prize row.
+  const pill = ready ? 'Prize ready!' : finished || set.isComplete ? 'All found!' : null;
+  const complete = finished || set.isComplete;
   return (
-    <Animated.View style={[styles.header, enterStyle]}>
+    <Animated.View style={[styles.header, complete && styles.headerDone, enterStyle]}>
       <View style={styles.headerTop}>
         <View style={[styles.headerBadge, { borderColor: finished ? BRAND.gold : set.color }]}>
           <Image source={badgeFailed ? GIFT : setBadge(set)} style={styles.headerBadgeArt} contentFit="contain" onError={() => setBadgeFailed(true)} />
@@ -220,7 +220,7 @@ export function BookHeader({ set, onFocus, focusBusy, stamp }: {
             </Text>
             {pill && (
               <View style={[styles.goalPill, (ready || finished) && styles.goalPillGold]}>
-                <GameIcon name={ready ? 'gift' : finished ? 'crown' : nextIsFinal ? 'trophy' : 'gift'} size={18} />
+                <GameIcon name={ready ? 'gift' : 'crown'} size={18} />
                 <Text style={styles.goalPillText} maxFontSizeMultiplier={1.3}>{pill}</Text>
               </View>
             )}
@@ -228,6 +228,7 @@ export function BookHeader({ set, onFocus, focusBusy, stamp }: {
         </View>
       </View>
       <PrizeBar set={set} reduced={reduced} />
+      {complete ? null : (
       <View style={styles.headerRow}>
         <View style={styles.when} accessible accessibilityLabel={`${when}${open === false ? '. Not right now' : open ? '. On now' : ''}`}>
           <GameIcon name={whenIcon(set)} size={26} />
@@ -243,31 +244,36 @@ export function BookHeader({ set, onFocus, focusBusy, stamp }: {
         </View>
         {onFocus && <HuntSwitch on={set.focused} busy={focusBusy} onPress={onFocus} reduced={reduced} />}
       </View>
+      )}
+      {complete && !stamp && (
+        <View style={styles.completeStamp} accessible accessibilityLabel="Complete">
+          <Text style={styles.completeText} maxFontSizeMultiplier={1.1}>COMPLETE</Text>
+        </View>
+      )}
       {!!stamp && <TitleStamp key={stamp} text={stamp} reduced={reduced} />}
     </Animated.View>
   );
 }
 
 /** A real on/off switch that says what it does: "Hunt this set / More on your map". */
-function HuntSwitch({ on, busy, onPress, reduced }: { readonly on: boolean; readonly busy: boolean; readonly onPress: () => void; readonly reduced: boolean }) {
+export function HuntSwitch({ on, busy, onPress, reduced }: { readonly on: boolean; readonly busy: boolean; readonly onPress: () => void; readonly reduced: boolean }) {
   const knob = useSharedValue(on ? 1 : 0);
   useEffect(() => {
     knob.value = reduced ? (on ? 1 : 0) : withSpring(on ? 1 : 0, { damping: 15, stiffness: 320 });
   }, [on, reduced, knob]);
-  const knobStyle = useAnimatedStyle(() => ({ transform: [{ translateX: knob.value * 22 }] }));
+  const knobStyle = useAnimatedStyle(() => ({ transform: [{ translateX: knob.value * 24 }] }));
   return (
     <Pressable accessibilityRole="switch" accessibilityState={{ checked: on, busy }} disabled={busy} onPress={onPress} hitSlop={6}
-      accessibilityLabel="Hunt this set. Its finds show up more on your map."
+      accessibilityLabel={`Hunt this set, ${on ? 'on' : 'off'}. Its finds show up more on your map.`}
       style={({ pressed }) => [styles.hunt, on && styles.huntOn, pressed && { transform: [{ scale: 0.97 }] }]}>
       <View style={{ flexShrink: 1 }}>
         <View style={styles.huntTitleRow}>
-          <GameIcon name="search" size={20} />
-          <Text style={styles.huntText} maxFontSizeMultiplier={1.3}>Hunt this set</Text>
+          <Text style={styles.huntText} maxFontSizeMultiplier={1.3}>{on ? 'Hunting!' : 'Hunt this set'}</Text>
         </View>
         <Text style={styles.huntSub} maxFontSizeMultiplier={1.3}>More on your map</Text>
       </View>
       <View style={[styles.track, on && styles.trackOn]}>
-        <Animated.View style={[styles.knob, knobStyle]} />
+        <Animated.View style={[styles.knob, knobStyle]}><GameIcon name="search" size={16} /></Animated.View>
       </View>
     </Pressable>
   );
@@ -307,11 +313,17 @@ function TitleStamp({ text, reduced }: { readonly text: string; readonly reduced
 }
 
 /** Prize chips with words: "+15 Energy", "+1 Ticket", "+30 XP". The title gets its own gold ribbon (TitleRibbon). */
-export function PrizeChips({ reward }: { readonly reward: DexReward }) {
+export function PrizeChips({ reward, titleChip = false }: { readonly reward: DexReward; readonly titleChip?: boolean }) {
   const chips = prizeChips(reward).filter(chip => chip.icon !== 'crown');
   if (chips.length === 0 && !reward.title) return <Text style={styles.chipText}>A surprise</Text>;
   return (
     <View style={styles.chips}>
+      {titleChip && !!reward.title && (
+        <View style={[styles.chip, styles.chipTitle]}>
+          <GameIcon name="crown" size={24} />
+          <Text style={[styles.chipText, styles.chipTitleText]} numberOfLines={1} maxFontSizeMultiplier={1.3}>Title: {reward.title}</Text>
+        </View>
+      )}
       {chips.map(chip => {
         const words = chip.icon === 'energy' ? `${chip.value} Energy` : chip.icon === 'ticket' ? `${chip.value} ${chip.label.endsWith('Ticket') ? 'Ticket' : 'Tickets'}`
           : chip.icon === 'xp' ? `${chip.value} XP` : chip.icon === 'coins' ? `${chip.value} Coins` : chip.value;
@@ -329,10 +341,13 @@ export function PrizeChips({ reward }: { readonly reward: DexReward }) {
 /** The title you win, as a gold ribbon banner. */
 function TitleRibbon({ title }: { readonly title: string }) {
   return (
-    <View style={styles.ribbon}>
-      <Image source={RIBBON} style={StyleSheet.absoluteFill} contentFit="fill" />
-      <GameIcon name="crown" size={22} />
-      <Text style={styles.ribbonText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.2}>Title: {title}</Text>
+    <View accessible accessibilityLabel={`Title: ${title}. It shows by your name.`}>
+      <View style={styles.ribbon}>
+        <Image source={RIBBON} style={StyleSheet.absoluteFill} contentFit="fill" />
+        <GameIcon name="crown" size={22} />
+        <Text style={styles.ribbonText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.2}>Title: {title}</Text>
+      </View>
+      <Text style={styles.ribbonSub} maxFontSizeMultiplier={BODY_SCALE}>A title shows by your name</Text>
     </View>
   );
 }
@@ -366,15 +381,10 @@ function PrizeRow({ set, reward, final, busy, onClaim, titleWorn, titleBusy, onT
   readonly onTitle: (() => void) | null; readonly reduced: boolean; readonly active: boolean;
 }) {
   const state = prizeState(reward, set.found);
-  const glow = useSharedValue(0);
   const wiggle = useSharedValue(0);
   const stampIn = useSharedValue(1);
   const lastKind = useRef(state.kind);
-  useEffect(() => {
-    if (state.kind !== 'claim' || reduced || !active) { cancelAnimation(glow); glow.value = 0; return; }
-    glow.value = withRepeat(withSequence(withTiming(1, { duration: 700 }), withTiming(0, { duration: 700 })), -1, false);
-    return () => cancelAnimation(glow);
-  }, [state.kind, reduced, active, glow]);
+  const pulsing = state.kind === 'claim' && !reduced && active;
   // Won just now (the reveal closed): the check stamps onto the medal with a thud.
   useEffect(() => {
     const was = lastKind.current;
@@ -386,7 +396,10 @@ function PrizeRow({ set, reward, final, busy, onClaim, titleWorn, titleBusy, onT
     stampIn.value = 2.2;
     stampIn.value = withSequence(withTiming(1, { duration: 180, easing: Easing.in(Easing.quad) }), withSpring(1, { damping: 8, stiffness: 300 }));
   }, [state.kind, reduced, stampIn]);
-  const medalStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.08 * glow.value }, { rotate: `${-6 * glow.value + wiggle.value}deg` }] }));
+  const medalStyle = useAnimatedStyle(() => {
+    const g = pulsing ? BEAT.value : 0;
+    return { transform: [{ scale: 1 + 0.08 * g }, { rotate: `${-6 * g + wiggle.value}deg` }] };
+  }, [pulsing]);
   const checkStyle = useAnimatedStyle(() => ({ transform: [{ scale: stampIn.value }] }));
   const heading = final ? `Find all ${set.total}` : `Find ${reward.target}`;
   const status = state.kind === 'done' ? 'Got it!' : state.kind === 'pending' ? 'On the way' : state.kind === 'locked' ? `${state.toGo} to go` : null;
@@ -401,11 +414,11 @@ function PrizeRow({ set, reward, final, busy, onClaim, titleWorn, titleBusy, onT
   // A won step folds to one slim line: nothing to do there any more.
   if (!final && state.kind === 'done') {
     return (
-      <View style={styles.slim} accessible accessibilityLabel={`${heading}: won. ${reward.prize}`}>
+      <View style={styles.slim} accessible accessibilityLabel={`${heading}: you got ${reward.prize}`}>
         <Animated.View style={[styles.slimMedal, checkStyle]}><GameIcon name="check" size={20} /></Animated.View>
         <Text style={styles.slimText} maxFontSizeMultiplier={BODY_SCALE}>{heading}</Text>
         <PrizeMini reward={reward} />
-        <View style={[styles.state, styles.stateDone]}><Text style={[styles.stateText, styles.stateDoneText]} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
+        <View style={[styles.state, styles.stateDone]}><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
       </View>
     );
   }
@@ -417,7 +430,7 @@ function PrizeRow({ set, reward, final, busy, onClaim, titleWorn, titleBusy, onT
       accessibilityLabel={`${heading}: ${reward.prize}.${status ? ` ${status}` : ''}`}>
       <View style={styles.prizeTop}>
         <Animated.View style={[styles.medal, hero && styles.medalHero, state.kind === 'claim' && styles.medalReady, state.kind === 'done' && styles.medalDone, medalStyle]}>
-          <GameIcon name={final ? 'trophy' : 'gift'} size={hero ? 48 : 36} />
+          <GameIcon name={final ? 'trophy' : 'gift'} size={hero ? 44 : 34} />
           {state.kind === 'done' && <Animated.View style={[styles.medalCheck, checkStyle]}><GameIcon name="check" size={20} /></Animated.View>}
           {state.kind === 'locked' && <View style={styles.medalCheck}><GameIcon name="lock" size={18} /></View>}
         </Animated.View>
@@ -430,21 +443,26 @@ function PrizeRow({ set, reward, final, busy, onClaim, titleWorn, titleBusy, onT
               </View>
             )}
           </View>
-          <PrizeChips reward={reward} />
+          <PrizeChips reward={reward} titleChip={state.kind === 'locked'} />
         </View>
       </View>
-      {!!reward.title && <TitleRibbon title={reward.title} />}
+      {!!reward.title && state.kind !== 'locked' && <TitleRibbon title={reward.title} />}
       {state.kind === 'claim' && (
         <GameButton label={reward.needsPick ? 'Pick and claim' : 'Claim!'} icon="gift" loading={busy}
           onPress={() => onClaim(reward)} style={{ marginTop: 10 }} accessibilityLabel={`Claim the ${heading} prize: ${reward.prize}`} />
       )}
       {state.kind === 'pending' && <Text style={styles.prizeNote} maxFontSizeMultiplier={BODY_SCALE}>Your shark item is on the way.</Text>}
       {state.kind === 'done' && onTitle && reward.title && (
-        <SpringPress onPress={onTitle} disabled={titleBusy} accessibilityLabel={titleWorn ? `Take off the ${reward.title} title` : `Wear the ${reward.title} title`}
-          style={[styles.wear, titleWorn && styles.wearOn, titleBusy && { opacity: 0.6 }]}>
-          <GameIcon name={titleWorn ? 'check' : 'crown'} size={24} />
-          <Text style={styles.wearText} maxFontSizeMultiplier={1.3}>{titleWorn ? 'Wearing this title' : 'Wear this title'}</Text>
-        </SpringPress>
+        titleWorn ? (
+          <SpringPress onPress={onTitle} disabled={titleBusy} accessibilityLabel={`Wearing the ${reward.title} title. Tap to take it off.`}
+            style={[styles.wear, titleBusy && { opacity: 0.6 }]}>
+            <GameIcon name="check" size={24} />
+            <Text style={styles.wearText} maxFontSizeMultiplier={1.3}>Wearing this title</Text>
+          </SpringPress>
+        ) : (
+          <GameButton label="Wear this title" icon="crown" loading={titleBusy} onPress={onTitle} style={{ marginTop: 10 }}
+            accessibilityLabel={`Wear the ${reward.title} title`} />
+        )
       )}
     </Pressable>
   );
@@ -454,7 +472,12 @@ function PrizeRow({ set, reward, final, busy, onClaim, titleWorn, titleBusy, onT
 function PrizeMini({ reward }: { readonly reward: DexReward }) {
   return (
     <View style={styles.mini} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-      {prizeChips(reward).filter(chip => chip.icon !== 'crown').map(chip => <GameIcon key={chip.icon} name={chip.icon} size={20} />)}
+      {prizeChips(reward).filter(chip => chip.icon !== 'crown').map(chip => (
+        <View key={chip.icon} style={styles.miniChip}>
+          <GameIcon name={chip.icon} size={22} />
+          <Text style={styles.miniText} maxFontSizeMultiplier={1.3}>{chip.value}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -480,7 +503,7 @@ export function FindsHeader({ set, extras, onExtras }: {
       <SectionTitle icon="chest" text="Your finds" right={extras > 0 && onExtras ? (
         <SpringPress onPress={onExtras} accessibilityLabel={`${extras} ${extras === 1 ? 'extra' : 'extras'}. Give one to a friend.`} style={styles.extras}>
           <GameIcon name="heart" size={22} />
-          <Text style={styles.extrasText} maxFontSizeMultiplier={1.3}>Give {extras} {extras === 1 ? 'extra' : 'extras'}</Text>
+          <Text style={styles.extrasText} maxFontSizeMultiplier={1.3}>{extras} {extras === 1 ? 'extra' : 'extras'} to give</Text>
         </SpringPress>
       ) : null} />
       <View style={styles.key} accessible accessibilityLabel="Key: a bright sticker is found. A faded shape is still to find. A plus number means extras you can give away.">
@@ -496,7 +519,7 @@ export function FindsHeader({ set, extras, onExtras }: {
         </View>
         <View style={styles.keyItem}>
           <View style={styles.plus}><Text style={styles.plusText}>+2</Text></View>
-          <Text style={styles.keyText} maxFontSizeMultiplier={1.3}>Extras</Text>
+          <Text style={styles.keyText} maxFontSizeMultiplier={1.3}>Extras to give</Text>
         </View>
       </View>
     </View>
@@ -535,10 +558,10 @@ const styles = StyleSheet.create({
   cardFaceGold: { borderColor: BRAND.gold, borderBottomColor: BRAND.goldLip, borderWidth: 4, borderBottomWidth: 7 },
   gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '46%' },
   cardWell: {
-    width: 58, height: 58, borderRadius: 29, backgroundColor: 'rgba(255,255,255,0.95)', alignItems: 'center', justifyContent: 'center',
+    width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.95)', alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: 'rgba(5,52,110,0.25)',
   },
-  cardBadge: { width: 48, height: 48 },
+  cardBadge: { width: 44, height: 44 },
   cardName: {
     fontFamily: 'Shark', fontSize: 14, lineHeight: 16, color: BRAND.white, marginTop: 4, paddingHorizontal: 6, textAlign: 'center',
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 1, minHeight: 32,
@@ -555,7 +578,7 @@ const styles = StyleSheet.create({
     position: 'absolute', top: -4, left: -2, flexDirection: 'row', alignItems: 'center', gap: 2, height: 26, paddingHorizontal: 7,
     borderRadius: 13, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.white,
   },
-  cardHuntText: { fontFamily: 'Knockout', fontSize: 14, color: BROWN },
+  cardHuntText: { fontFamily: 'Knockout', fontSize: 15, color: BROWN },
   cardPrize: {
     position: 'absolute', top: -6, right: -2, width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: BRAND.gold, ...SHADOW.card,
@@ -573,6 +596,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 12, marginTop: 12, padding: 12, borderRadius: 22, backgroundColor: BRAND.white,
     borderWidth: 2, borderColor: '#efe1b8', borderBottomWidth: 5,
   },
+  headerDone: { backgroundColor: '#fffaea', borderColor: BRAND.gold, borderBottomColor: BRAND.goldLip, borderWidth: 3 },
+  completeStamp: {
+    position: 'absolute', right: 12, bottom: 12, paddingHorizontal: 10, height: 34, justifyContent: 'center', borderRadius: 8,
+    borderWidth: 3, borderColor: BRAND.goldLip, backgroundColor: 'rgba(255,207,59,0.25)', transform: [{ rotate: '-8deg' }],
+  },
+  completeText: { fontFamily: 'Shark', fontSize: 18, color: BROWN, letterSpacing: 1 },
   headerTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerBadge: {
     width: 68, height: 68, borderRadius: 34, borderWidth: 4, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', ...SHADOW.card,
@@ -596,7 +625,8 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#cfe0f1', alignItems: 'center', justifyContent: 'center',
   },
   notchReady: { borderColor: BRAND.gold, backgroundColor: '#fff3c4' },
-  notchDone: { borderColor: BRAND.green, backgroundColor: '#eafbef' },
+  notchDone: { borderColor: BRAND.gold, backgroundColor: '#fff3c4' },
+  notchTrophy: { borderColor: BRAND.goldLip, backgroundColor: BRAND.gold, ...SHADOW.card, shadowColor: BRAND.gold, shadowOpacity: 0.9, shadowRadius: 6 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, paddingTop: 10, borderTopWidth: 2, borderTopColor: '#f4ead0' },
   when: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   whenText: { fontFamily: 'Knockout', fontSize: 17, lineHeight: 19, color: BRAND.navy },
@@ -610,12 +640,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#f2f7fc', borderWidth: 2, borderColor: '#cfe0f1',
   },
   huntOn: { backgroundColor: '#eaf6ff', borderColor: BRAND.blueBright },
+
   huntTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   huntText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
   huntSub: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft },
-  track: { width: 52, height: 30, borderRadius: 15, backgroundColor: '#b9c8d8', padding: 3, borderWidth: 2, borderColor: BRAND.white },
-  trackOn: { backgroundColor: BRAND.green },
-  knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: BRAND.white, ...SHADOW.card, shadowOpacity: 0.25, shadowRadius: 2 },
+  // House toggle: a chunky navy-outlined track (white off, blue on) and a gold knob carrying the magnifier.
+  track: { width: 60, height: 34, borderRadius: 17, backgroundColor: BRAND.white, padding: 2, borderWidth: 3, borderColor: BRAND.navy },
+  trackOn: { backgroundColor: BRAND.blueBright },
+  knob: {
+    width: 24, height: 24, borderRadius: 12, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.goldLip,
+    alignItems: 'center', justifyContent: 'center',
+  },
   titleStampWrap: { position: 'absolute', right: 12, top: -14 },
   titleStamp: {
     flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 34, borderRadius: 9, backgroundColor: BRAND.gold,
@@ -638,18 +673,20 @@ const styles = StyleSheet.create({
     width: 62, height: 62, borderRadius: 31, backgroundColor: '#fff6d8', borderWidth: 3, borderColor: '#f1dca0',
     alignItems: 'center', justifyContent: 'center',
   },
-  medalHero: { width: 76, height: 76, borderRadius: 38, borderColor: BRAND.gold, backgroundColor: '#fff3c4' },
+  medalHero: { width: 66, height: 66, borderRadius: 33, borderColor: BRAND.gold, backgroundColor: '#fff3c4' },
   medalReady: { backgroundColor: '#fff3c4', borderColor: BRAND.gold },
-  medalDone: { backgroundColor: '#eafbef', borderColor: BRAND.green },
+  medalDone: { backgroundColor: '#fff3c4', borderColor: BRAND.gold },
   medalCheck: {
     position: 'absolute', right: -6, bottom: -6, width: 30, height: 30, borderRadius: 15, backgroundColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#e7d7a8',
   },
   state: { paddingHorizontal: 10, height: 30, borderRadius: 15, justifyContent: 'center', backgroundColor: '#eef4fb' },
-  stateDone: { backgroundColor: '#d8f3df' },
+  stateDone: { backgroundColor: BRAND.gold },
   stateText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy },
-  stateDoneText: { color: '#1d6b33' },
+  stateDoneText: { color: BROWN },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chipTitle: { backgroundColor: '#fff3c4', borderColor: BRAND.gold },
+  chipTitleText: { fontFamily: 'Knockout', color: BROWN },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 34, paddingHorizontal: 8, borderRadius: 11,
     backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#efe1b8', maxWidth: '100%',
@@ -660,6 +697,7 @@ const styles = StyleSheet.create({
     width: '92%', height: 48, paddingHorizontal: 34, paddingBottom: 6,
   },
   ribbonText: { fontFamily: 'Shark', fontSize: 17, color: BROWN, flexShrink: 1 },
+  ribbonSub: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft, textAlign: 'center', marginTop: 2 },
   wear: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'stretch', marginTop: 10,
     minHeight: 50, borderRadius: 25, backgroundColor: BRAND.gold, borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 6, borderBottomColor: BRAND.goldLip,
@@ -668,11 +706,13 @@ const styles = StyleSheet.create({
   wearText: { fontFamily: 'Shark', fontSize: 17, color: BROWN },
   slim: {
     flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: 10, marginBottom: 10, borderRadius: 16,
-    backgroundColor: '#f3fbf4', borderWidth: 2, borderColor: '#bfe6c8',
+    backgroundColor: '#fffaea', borderWidth: 2, borderColor: '#f1dca0',
   },
-  slimMedal: { width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.green },
+  slimMedal: { width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.gold },
   slimText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
-  mini: { flex: 1, flexDirection: 'row', gap: 4, opacity: 0.8 },
+  mini: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  miniChip: { flexDirection: 'row', alignItems: 'center', gap: 1 },
+  miniText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
   finds: { paddingHorizontal: 16, marginTop: 6 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, minHeight: 48 },
   sectionText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy },

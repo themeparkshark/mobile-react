@@ -391,7 +391,10 @@ test('round 3: swap story, recycled tiles, focus refresh, light ticks, small pho
   assert.doesNotMatch(screen, /eslint-disable/);
   // A tick re-reads only the v3 dex when it is live.
   assert.match(screen, /void loadSets\(true\);/);
-  assert.match(screen, /reuse = light && dex != null/);
+  assert.match(screen, /const reuse = dex != null;/);
+  // Full reads run the dex and legacy calls together.
+  assert.match(screen, /\[dex, legacy\] = await Promise\.all\(/);
+  assert.match(screen, /\[dex, raw\] = await Promise\.all\(/);
   // The item card scrolls and scales on small phones.
   assert.match(card, /<ScrollView style=\{\{ maxHeight: height \* 0\.78 \}\}/);
   assert.doesNotMatch(card, /Swapped!/);
@@ -528,7 +531,12 @@ test('round 7: reveal clears the dim and busy state at once, refreshes in backgr
   assert.match(screen, /<Modal visible=\{claimWaiting && !picking\}/, 'the whole window dims during the wait');
   assert.match(screen, /function ClaimBuildUp/);
   // The page is laid out so the prize rows sit in the first screen: no jump-scroll that hides the shelf.
-  assert.doesNotMatch(screen, /firstLand|seededOffset|scrollToOffset/);
+  assert.doesNotMatch(screen, /firstLand|seededOffset/);
+  // Idle loops share one page clock and stop under any sheet, card or reveal.
+  assert.match(screen, /const active = isFocused && !selectedItem && !reveal && !sparesOpen && !giftItem && !claimWaiting && !picking;/);
+  assert.match(read('src/screens/SetCollection/bookClock.ts'), /export const SHEEN = makeMutable\(0\);/);
+  assert.doesNotMatch(read('src/screens/SetCollection/DexTile.tsx'), /withRepeat/, 'no per-tile endless loop');
+  assert.doesNotMatch(read('src/screens/SetCollection/BookParts.tsx'), /withRepeat/, 'no per-card endless loop');
   assert.match(read('src/screens/SetCollection/DexReveal.tsx'), /if \(countTargets === 0\) later\(onCountsDone/);
   assert.match(read('src/screens/SetCollection/dexLook.tsx'), /gemOutline/);
 });

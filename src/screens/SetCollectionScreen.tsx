@@ -35,11 +35,11 @@ import { playSfx } from '../gamekit/SFX';
 import * as Haptics from '../helpers/haptics';
 import type { ItemType } from '../models/item-type';
 import * as RootNavigation from '../RootNavigation';
-import { BRAND, GameButton, GameIcon } from '../ui';
+import { BRAND, GameButton, GameIcon, SHADOW } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { showToast } from '../utils/toast';
 import GiftPrepVariantPanel from './GiftPrepVariantPanel';
-import { itemArt } from './SetCollection/DexParts';
+import { itemArt, setBadge } from './SetCollection/DexParts';
 import {
   BOOK_BG, BookHeader, FindsHeader, PrizeRows, RareBanner, RarityHeading, SHEET, SHELF_CARD_H, SHELF_CARD_W, SHELF_GAP, ShelfCard, ShelfEventCard,
 } from './SetCollection/BookParts';
@@ -48,6 +48,7 @@ import { RewardReveal } from './SetCollection/DexReveal';
 import { cachedBook, storeBook, storeDetail } from './SetCollection/dexCache';
 import { getEventShelf, type EventCard, type EventShelf } from './SetCollection/eventCards';
 import { ItemTile, tileHeight } from './SetCollection/DexTile';
+import { useBookClocks } from './SetCollection/bookClock';
 import { TilePanel } from './SetCollection/dexLook';
 import {
   buildBook, buildItems, findRows, initialSlug, mergeStable, refreshEveryMs,
@@ -153,9 +154,19 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
 
   const loadSets = useCallback(async (light = false): Promise<DexSet[]> => {
     try {
-      const dex = previewSets ? (previewDex ?? null) : await getHomeHuntDex(locationRef.current);
-      const reuse = light && dex != null && legacyList.current != null;
-      const legacy = previewSets ?? (reuse ? legacyList.current! : await getPrepItemSets(locationRef.current ?? undefined));
+      // A light tick with a legacy copy in hand reads only the v3 dex; otherwise both reads run together.
+      let dex: unknown;
+      let legacy: PrepItemSetListItem[];
+      if (previewSets) {
+        dex = previewDex ?? null;
+        legacy = previewSets;
+      } else if (light && legacyList.current != null) {
+        dex = await getHomeHuntDex(locationRef.current);
+        const reuse = dex != null;
+        legacy = reuse ? legacyList.current : await getPrepItemSets(locationRef.current ?? undefined);
+      } else {
+        [dex, legacy] = await Promise.all([getHomeHuntDex(locationRef.current), getPrepItemSets(locationRef.current ?? undefined)]);
+      }
       legacyList.current = legacy;
       const next = buildBook(legacy, dex);
       if (!previewSets && player?.id != null) storeBook(player.id, legacy, dex, next);
@@ -178,9 +189,18 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
 
   const loadDetail = useCallback(async (target: string, light = false) => {
     try {
-      const dex = preview ? (previewDexDetails?.[target] ?? null) : await getHomeHuntDexSet(target, locationRef.current);
-      const cached = light && dex != null ? legacyDetail.current[target] : undefined;
-      const raw = previewDetails?.[target] ?? cached ?? await getPrepItemSet(target, locationRef.current ?? undefined);
+      let dex: unknown;
+      let raw: Detail;
+      if (preview) {
+        dex = previewDexDetails?.[target] ?? null;
+        raw = previewDetails?.[target] ?? await getPrepItemSet(target, locationRef.current ?? undefined);
+      } else if (light && legacyDetail.current[target]) {
+        dex = await getHomeHuntDexSet(target, locationRef.current);
+        raw = dex != null ? legacyDetail.current[target] : await getPrepItemSet(target, locationRef.current ?? undefined);
+      } else {
+        // Both reads together (a park network pays one wait, not two).
+        [dex, raw] = await Promise.all([getHomeHuntDexSet(target, locationRef.current), getPrepItemSet(target, locationRef.current ?? undefined)]);
+      }
       legacyDetail.current[target] = raw;
       if (!preview && player?.id != null) storeDetail(player.id, target, raw, dex);
       const payload = dex as { items?: unknown; exchange?: { spares?: unknown } } | null;
@@ -199,7 +219,20 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   }, [previewDetails, previewDexDetails, preview]);
 
   useEffect(() => { void loadSets(); }, [loadSets]);
-  useEffect(() => { if (slug) void loadDetail(slug); }, [slug, loadDetail]);
+  // A set switch paints the last copy of that set at once (session cache or preview), then refreshes in place.
+  useEffect(() => {
+    if (!slug) return;
+    setDetail(current => {
+      if (current?.slug === slug) return current;
+      const cachedRaw = previewDetails?.[slug] ?? legacyDetail.current[slug];
+      if (!cachedRaw) return current;
+      const cachedDex = (preview ? previewDexDetails?.[slug] : cachedBook(player?.id)?.details[slug]?.dex) as
+        { items?: unknown; exchange?: { spares?: unknown } } | null | undefined;
+      const spares = typeof cachedDex?.exchange?.spares === 'number' ? cachedDex.exchange.spares : Math.max(0, cachedRaw.progress.spare_count ?? 0);
+      return { slug, raw: cachedRaw, items: buildItems(cachedRaw, cachedDex?.items), spares };
+    });
+    void loadDetail(slug);
+  }, [slug, loadDetail, preview, previewDetails, previewDexDetails, player?.id]);
 
   const set = useMemo(() => sets.find(entry => entry.slug === slug) ?? null, [sets, slug]);
   const items = detail && detail.slug === slug ? detail.items : null;
@@ -231,8 +264,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const slugIndex = sets.findIndex(entry => entry.slug === slug);
   const centerPicker = useCallback((animated: boolean) => {
     if (slugIndex < 0) return;
-    const x = SIDE + slugIndex * (SHELF_CARD_W + 6 + SHELF_GAP) - (width - SHELF_CARD_W) / 2;
-    pickerRef.current?.scrollTo({ x: Math.max(0, x), animated });
+    // Land on a whole-card stop (the snap grid) with the card before it in view, never a card cut mid-word on the left.
+    const step = SHELF_CARD_W + 6 + SHELF_GAP;
+    pickerRef.current?.scrollTo({ x: Math.max(0, slugIndex - 1) * step, animated });
   }, [slugIndex, width]);
   useEffect(() => { centerPicker(!reduced); }, [centerPicker, reduced]);
 
@@ -414,6 +448,19 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   }, []);
 
   const listRef = useRef<FlashList<FindRow | number>>(null);
+  // Idle loops run only while the page itself is what the player sees (not under a sheet, card or reveal).
+  const active = isFocused && !selectedItem && !reveal && !sparesOpen && !giftItem && !claimWaiting && !picking;
+  useBookClocks(active, reduced);
+  // Scrolled into the finds: a slim bar keeps the set's badge, name and count in view (state flips only at the line).
+  const shelfH = useRef(0);
+  const stickAt = useRef(Number.POSITIVE_INFINITY);
+  const [stuck, setStuck] = useState(false);
+  const stuckRef = useRef(false);
+  const onListScroll = useCallback((y: number) => {
+    // stickAt: the bottom of the set's header card (its name and count have scrolled away).
+    const next = y > stickAt.current;
+    if (next !== stuckRef.current) { stuckRef.current = next; setStuck(next); }
+  }, []);
   const tile = Math.floor((width - SIDE * 2 - CELL_GAP * (COLUMNS - 1)) / COLUMNS);
   // Today's rare is worth a trip until it is caught: not spawned yet (available) or waiting on the map (onMap).
   const daily = !!book.dailyRare && !book.dailyRare.caughtToday && (book.dailyRare.available || book.dailyRare.onMap);
@@ -424,20 +471,22 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
 
   const header = (
     <View>
-      <ScrollView ref={pickerRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelf} snapToInterval={SHELF_CARD_W + 6 + SHELF_GAP} decelerationRate="fast"
+      <ScrollView ref={pickerRef} horizontal onLayout={event => { shelfH.current = event.nativeEvent.layout.height; }} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelf} snapToInterval={SHELF_CARD_W + 6 + SHELF_GAP} decelerationRate="fast"
         onContentSizeChange={() => centerPicker(false)}>
-        {sets.map(entry => <ShelfCard key={entry.slug} set={entry} selected={entry.slug === slug} onPress={chooseSet} active={isFocused} />)}
+        {sets.map(entry => <ShelfCard key={entry.slug} set={entry} selected={entry.slug === slug} onPress={chooseSet} active={active} />)}
         {eventsReady && events.cards.map(card => <ShelfEventCard key={`event-${card.eventSlug}`} card={card} onPress={openEvent} />)}
       </ScrollView>
       {daily && <RareBanner onPress={goToMap} />}
       <View style={styles.sheetTop}>
         {set && (
           <>
+            <View onLayout={event => { stickAt.current = shelfH.current + event.nativeEvent.layout.y + event.nativeEvent.layout.height - 40; }}>
             <BookHeader set={set} stamp={stamp?.slug === set.slug ? stamp.title : null} focusBusy={busy === 'focus'}
-              onFocus={set.status === 'active' || set.status === 'resting' ? () => void toggleFocus() : null} />
+              onFocus={!set.isComplete && (set.status === 'active' || set.status === 'resting') ? () => void toggleFocus() : null} />
+            </View>
             <PrizeRows set={set} busyId={busy} onClaim={reward => void claim(reward)}
               titleWorn={!!set.reward.title && wornTitle === set.reward.title} titleBusy={busy === 'title'}
-              onTitle={set.reward.title ? () => void toggleTitle() : null} popKey={popKey} active={isFocused} />
+              onTitle={set.reward.title ? () => void toggleTitle() : null} popKey={popKey} active={active} />
             {claimResult && (
               <View style={{ marginHorizontal: SIDE, marginBottom: 10 }}>
                 <ClaimResultCard outcome={claimResult} wearing={wearing} onWear={() => void wearIt()} onDismiss={() => setClaimResult(null)} />
@@ -495,17 +544,18 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             data={data}
             estimatedItemSize={tileHeight(tile) + CELL_GAP}
             getItemType={entry => (typeof entry === 'number' ? 'ghost' : entry.kind)}
-            // Keys carry the set, so a set switch mounts fresh rows that pop in.
-            keyExtractor={entry => (typeof entry === 'number' ? `ghost-${entry}` : `${slug}-${entry.key}`)}
+            keyExtractor={entry => (typeof entry === 'number' ? `ghost-${entry}` : entry.key)}
             ListHeaderComponent={header}
+            onScroll={event => onListScroll(event.nativeEvent.contentOffset.y)}
+            scrollEventThrottle={32}
             ListFooterComponent={<View style={{ height: CTA_CLEARANCE, backgroundColor: SHEET }} />}
             extraData={tile}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item: entry, index }) => (
+            renderItem={({ item: entry }) => (
               typeof entry === 'number' ? (
                 <View style={styles.tileRow}>
                   {Array.from({ length: COLUMNS }, (_, index) => (
-                    <TilePanel key={index} rarity={1} found={false} style={{ width: tile, height: tile, marginBottom: tileHeight(tile) - tile, opacity: 0.45 }} />
+                    <View key={index} style={[styles.ghost, { width: tile, height: tile, marginBottom: tileHeight(tile) - tile }]} />
                   ))}
                 </View>
               ) : entry.kind === 'heading' ? (
@@ -513,16 +563,20 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
                   <RarityHeading rarity={entry.rarity} label={entry.label} found={entry.found} total={entry.total} />
                 </View>
               ) : (
-                <Animated.View style={styles.tileRow} entering={reduced ? undefined : FadeInDown.duration(240).delay(Math.min(index, 8) * 28)}>
-                  {entry.items.map(item => <ItemTile key={item.id} item={item} width={tile} onPress={openItem} active={isFocused} />)}
-                </Animated.View>
+                <View style={styles.tileRow}>
+                  {entry.items.map(item => <ItemTile key={item.id} item={item} width={tile} onPress={openItem} active={active} />)}
+                </View>
               )
             )}
           />
         )}
       </View>
 
+      {set && stuck && <StickyBar set={set} reduced={reduced} onTop={() => listRef.current?.scrollToOffset({ offset: 0, animated: !reduced })} />}
+
       <ItemCard item={selectedItem} set={set} onClose={closeItem} error={error} onFind={goToMap}
+        hunt={set && !set.isComplete && (set.status === 'active' || set.status === 'resting')
+          ? { on: set.focused, busy: busy === 'focus', onPress: () => void toggleFocus() } : null}
         onShare={!canShare ? null : () => {
           playSfx('ui.tap', 0.5);
           setGiftItem(selectedItem);
@@ -568,6 +622,23 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         overlay={claimWaiting ? buildUp : null}
         onConfirm={itemId => { if (picking) void claim(picking, itemId); }} onClose={() => setPicking(null)} />
     </Wrapper>
+  );
+}
+
+/** The slim bar over the finds: badge, name and count. Tap it to go back to the top. */
+function StickyBar({ set, reduced, onTop }: { readonly set: DexSet; readonly reduced: boolean; readonly onTop: () => void }) {
+  return (
+    <Animated.View entering={reduced ? undefined : FadeInDown.duration(180)} style={styles.sticky}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${set.name}, ${set.found} of ${set.total} found. Back to the top.`}
+        onPress={onTop} style={styles.stickyInner}>
+        <View style={[styles.stickyBadge, { borderColor: set.color }]}>
+          <Image source={setBadge(set)} style={{ width: 30, height: 30 }} contentFit="contain" />
+        </View>
+        <Text style={styles.stickyName} numberOfLines={1} maxFontSizeMultiplier={1.2}>{set.name}</Text>
+        <Text style={styles.stickyCount} maxFontSizeMultiplier={1.2}>{set.found}/{set.total}</Text>
+        <GameIcon name="arrow" size={20} />
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -659,6 +730,7 @@ function SparesSheet({ visible, items, onClose, onShare }: {
                   <Image source={itemArt(item)} style={styles.sparesArt} contentFit="contain" />
                 </TilePanel>
                 <View style={styles.sparesTimes}><Text style={styles.sparesTimesText}>+{item.spares}</Text></View>
+                <Text style={styles.spareName} numberOfLines={2} maxFontSizeMultiplier={1.2}>{item.name}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -666,7 +738,7 @@ function SparesSheet({ visible, items, onClose, onShare }: {
             <GameIcon name="map" size={26} />
             <Text style={styles.sparesMapText}>New finds come from the map</Text>
           </View>
-          <GameButton label="Done" variant="ghost" onPress={onClose} style={{ marginTop: 10 }} />
+          <GameButton label="Done" variant="secondary" onPress={onClose} style={{ marginTop: 12 }} />
         </View>
       </View>
     </Modal>
@@ -674,6 +746,14 @@ function SparesSheet({ visible, items, onClose, onShare }: {
 }
 
 const styles = StyleSheet.create({
+  sticky: { position: 'absolute', left: 12, right: 12, top: 96, zIndex: 5 },
+  stickyInner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: 10, borderRadius: 24,
+    backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#efe1b8', borderBottomWidth: 4, ...SHADOW.card,
+  },
+  stickyBadge: { width: 38, height: 38, borderRadius: 19, borderWidth: 3, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.white },
+  stickyName: { flex: 1, fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
+  stickyCount: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
   // The water art's own average color, so the push never shows a plain blue frame while it decodes.
   page: { flex: 1, marginTop: -8, backgroundColor: '#5cc3f2' },
   sheetBack: { position: 'absolute', left: 0, right: 0, top: '55%', bottom: 0, backgroundColor: SHEET },
@@ -683,6 +763,7 @@ const styles = StyleSheet.create({
     backgroundColor: SHEET, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 3, borderColor: BRAND.white,
     paddingBottom: 4,
   },
+  ghost: { borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: '#e6d6a6', backgroundColor: '#f6ecd0' },
   tileRow: { flexDirection: 'row', gap: CELL_GAP, paddingHorizontal: SIDE, paddingBottom: CELL_GAP, backgroundColor: SHEET },
   center: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, paddingHorizontal: 24, gap: 12, width: '100%' },
   emptyTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, textAlign: 'center' },
@@ -706,7 +787,8 @@ const styles = StyleSheet.create({
   sparesHint: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, marginBottom: 12 },
   sparesBody: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.navy, textAlign: 'center', flexShrink: 1 },
   sparesGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, paddingVertical: 6 },
-  spareTile: { width: 72, height: 72 },
+  spareTile: { width: 76, alignItems: 'center' },
+  spareName: { fontFamily: 'Knockout', fontSize: 14, lineHeight: 16, color: BRAND.navy, textAlign: 'center', marginTop: 8 },
   spareArtWrap: { width: 72, height: 72, justifyContent: 'center' },
   sparesArt: { width: 54, height: 54 },
   sparesMap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },

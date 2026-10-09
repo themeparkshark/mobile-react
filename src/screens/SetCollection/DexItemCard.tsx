@@ -19,14 +19,16 @@ import { parkDayCaptureSize } from '../../components/parkDayShareMetrics';
 import { playSfx } from '../../gamekit/SFX';
 import { BRAND, GameButton, GameIcon, gameAlert } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { SLOT_COLORS } from './BookParts';
+import { HuntSwitch, SLOT_COLORS } from './BookParts';
 import { CLOSE_X, itemArt, RIBBON, StarBurst } from './DexParts';
 import { RarityGems, rarityLook } from './dexLook';
 import { caughtLine, spawnIcon, type DexItem, type DexSet } from './dexModel';
 import { Offscreen, RidePhoto, RidePhotoShareCard } from './RidePhoto';
 
-export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
+export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = null }: {
   readonly item: DexItem | null; readonly set: DexSet | null;
+  /** The set's Hunt switch, offered on a missing find (null when the set cannot be hunted). */
+  readonly hunt?: { readonly on: boolean; readonly busy: boolean; readonly onPress: () => void } | null;
   readonly onClose: () => void;
   readonly onShare: (() => void) | null; readonly onFind: () => void; readonly error: string | null;
 }) {
@@ -131,6 +133,11 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
                   <Text style={styles.whereText}>{item.spawnHint}</Text>
                 </View>
               </View>
+              {!item.found && hunt && (
+                <View style={{ marginTop: 10, alignItems: 'stretch' }}>
+                  <HuntSwitch on={hunt.on} busy={hunt.busy} onPress={hunt.onPress} reduced={reduced} />
+                </View>
+              )}
               {/* A missing find is earned on the map: one big, obvious way there. A swapped-in one points there too. */}
               {(!item.found || item.foundInWorld === false) && (
                 <GameButton label={item.found ? 'Catch one on the map' : 'Find it on the map'} icon="map" onPress={onFind} fullWidth
