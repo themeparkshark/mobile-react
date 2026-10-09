@@ -40,16 +40,27 @@ export interface PhaseRule {
 }
 
 export const PHASES: readonly PhaseRule[] = [
-  { id: 'warm', from: 0, visible: 2, gapMs: 200, upMs: 2100, puffer: 0, dizzyMs: 2400, need: 3 },
-  { id: 'angry', from: 6_500, visible: 3, gapMs: 170, upMs: 1700, puffer: 0.32, dizzyMs: 2000, need: 3 },
-  { id: 'fury', from: 13_500, visible: 3, gapMs: 140, upMs: 1400, puffer: 0.36, dizzyMs: 1700, need: 2 },
+  { id: 'warm', from: 0, visible: 3, gapMs: 150, upMs: 2400, puffer: 0, dizzyMs: 1900, need: 3 },
+  { id: 'angry', from: 6_500, visible: 3, gapMs: 130, upMs: 1900, puffer: 0.3, dizzyMs: 1650, need: 3 },
+  { id: 'fury', from: 13_500, visible: 3, gapMs: 110, upMs: 1600, puffer: 0.34, dizzyMs: 1450, need: 2 },
 ];
 /** The head drops for this long before it can be smashed (the dizzy wobble). */
-export const DIZZY_DROP_MS = 180;
-/** A PERFECT smash: tap while the ring still glows gold (the first part of the window). */
-export const PERFECT_UNTIL = 0.42;
+export const DIZZY_DROP_MS = 150;
+/** A PERFECT smash: tap while the closing ring sits on the gold core (this slice of the dizzy window). */
+export const PERFECT_FROM = 0.2;
+export const PERFECT_UNTIL = 0.5;
+/** INK attack: the boss puffs up for this long (the tell). Tap the boss to block it; miss it and you get inked. */
+export const INK_TELL_MS = 1150;
+/** First ink, then one every INK_EVERY_MS (never in the last INK_LAST_MS). */
+export const INK_FIRST_MS = 8_000;
+export const INK_EVERY_MS = 4_600;
+export const INK_LAST_MS = 1_800;
+/** Ink on the screen lasts this long (looks only; it never changes the score). */
+export const INKED_MS = 2_000;
+/** A tap on empty water splashes and holds the next tap this long (mashing is slower than aiming). */
+export const SPLASH_MS = 220;
 /** Bonking a pufferfish stuns the shark this long (taps are ignored, shown by the bonked pose). */
-export const OUCH_MS = 1000;
+export const OUCH_MS = 1100;
 /** No new pop-ups in the last moment, so nothing sinks unseen at the bell. */
 export const LAST_SPAWN_MS = ROUND_MS - 700;
 /** Smallest cycle the server accepts: one weak hit per three hits. */
@@ -77,6 +88,13 @@ export interface BashState {
   readonly headStart: number;
   readonly dizzy: { readonly from: number; readonly until: number } | null;
   readonly ouchUntil: number;
+  /** The INK tell (puffed up) while it is on. */
+  readonly ink: { readonly from: number; readonly until: number } | null;
+  readonly nextInkAt: number;
+  readonly inkedUntil: number;
+  readonly blocks: number;
+  readonly inked: number;
+  readonly splashUntil: number;
   readonly hits: number;
   readonly weak: number;
   readonly bonks: number;
@@ -99,7 +117,11 @@ export type BashEvent =
   | { type: 'smash'; damage: number; perfect: boolean; weak: boolean; final: boolean }
   | { type: 'ouch'; popup: Popup; lostFins: number }
   | { type: 'shakeOff' }
-  | { type: 'block' };
+  | { type: 'clank' }
+  | { type: 'inkTell'; from: number; until: number }
+  | { type: 'inkBlock'; damage: number; power: number; need: number; counted: boolean }
+  | { type: 'inked'; until: number }
+  | { type: 'splash'; lane: number };
 
 export interface Weights { readonly per_hit: number; readonly per_weak_hit: number }
 export const DEFAULT_WEIGHTS: Weights = { per_hit: 4, per_weak_hit: 40 };
@@ -121,7 +143,8 @@ export function phaseAt(ms: number): PhaseRule {
 export function createBash(seed: number): BashState {
   return { seed, rng: next((seed >>> 0) * 2654435761 + 1), ms: 0, nextId: 1, nextSpawnAt: 450, lastSpot: -1, up: [],
     power: 0, headStart: 0, dizzy: null, ouchUntil: -1, hits: 0, weak: 0, bonks: 0, smashes: 0, perfects: 0, ouches: 0,
-    missedDizzy: 0, streak: 0, bestStreak: 0, capped: 0 };
+    missedDizzy: 0, streak: 0, bestStreak: 0, capped: 0, ink: null, nextInkAt: INK_FIRST_MS, inkedUntil: -1, blocks: 0, inked: 0,
+    splashUntil: -1 };
 }
 
 /** Fins to fill for the next dizzy (the head start counts as a filled fin). */
@@ -145,6 +168,19 @@ export function tick(state: BashState, ms: number): { state: BashState; events: 
   if (s.dizzy && ms >= s.dizzy.until) {
     s = { ...s, dizzy: null, power: 0, headStart: 0, missedDizzy: s.missedDizzy + 1, nextSpawnAt: ms + 250 };
     events.push({ type: 'shakeOff' });
+  }
+  if (s.ink && ms >= s.ink.until) {
+    s = { ...s, ink: null, inkedUntil: ms + INKED_MS, inked: s.inked + 1, streak: 0 };
+    events.push({ type: 'inked', until: ms + INKED_MS });
+  }
+  if (!s.ink && ms >= s.nextInkAt) {
+    if (ms >= ROUND_MS - INK_LAST_MS) s = { ...s, nextInkAt: Number.POSITIVE_INFINITY };
+    else if (s.dizzy) s = { ...s, nextInkAt: s.dizzy.until + 500 };
+    else {
+      const ink = { from: ms, until: ms + INK_TELL_MS };
+      s = { ...s, ink, nextInkAt: ms + INK_EVERY_MS };
+      events.push({ type: 'inkTell', ...ink });
+    }
   }
   const sinking = s.up.filter(p => ms >= p.until);
   if (sinking.length) {
@@ -183,11 +219,11 @@ export function tick(state: BashState, ms: number): { state: BashState; events: 
 export function tapPopup(state: BashState, id: number, ms: number, maxHits = Number.POSITIVE_INFINITY,
   w: Weights = DEFAULT_WEIGHTS): { state: BashState; events: BashEvent[] } {
   const popup = state.up.find(p => p.id === id);
-  if (!popup || ms < state.ouchUntil || state.dizzy || ms >= ROUND_MS) return { state, events: [] };
+  if (!popup || ms < state.ouchUntil || ms < state.splashUntil || state.dizzy || ms >= ROUND_MS) return { state, events: [] };
   const up = state.up.filter(p => p.id !== id);
   if (popup.kind === 'puffer') {
-    // A spike pops one fin (never the whole charge) and the shark sees stars for a moment.
-    const lostFins = state.power > 0 ? 1 : 0;
+    // A spike pops up to two fins and the shark sees stars for a moment.
+    const lostFins = Math.min(state.power, 2);
     const power = state.power - lostFins;
     return { state: { ...state, up, power, headStart: Math.min(state.headStart, power), streak: 0, ouches: state.ouches + 1,
       ouchUntil: ms + OUCH_MS },
@@ -199,17 +235,25 @@ export function tapPopup(state: BashState, id: number, ms: number, maxHits = Num
   const power = state.power + 1;
   const need = finsNeeded(state, ms);
   let s: BashState = { ...state, up, hits, bonks: state.bonks + 1, streak, bestStreak: Math.max(state.bestStreak, streak),
-    power, capped: state.capped + (counted ? 0 : 1), nextSpawnAt: Math.min(state.nextSpawnAt, ms + 90) };
+    power, capped: state.capped + (counted ? 0 : 1), nextSpawnAt: Math.min(state.nextSpawnAt, ms + 60) };
   const events: BashEvent[] = [{ type: 'bonk', popup, damage: counted ? w.per_hit : 0, streak, power, need, counted }];
-  if (power >= need) {
-    const rule = phaseAt(ms);
-    const dizzy = { from: ms + DIZZY_DROP_MS, until: ms + DIZZY_DROP_MS + rule.dizzyMs };
-    // Every other pop-up dives: the only thing left to hit is the dizzy head.
-    s = { ...s, dizzy, up: [] };
-    up.forEach(p => events.push({ type: 'sink', popup: p }));
-    events.push({ type: 'dizzy', ...dizzy });
-  }
+  if (power >= need) s = goDizzy(s, ms, events);
   return { state: s, events };
+}
+
+/** Fins full: the boss flops over dizzy, every pop-up dives, the ink (if any) fizzles. */
+function goDizzy(s: BashState, ms: number, events: BashEvent[]): BashState {
+  const rule = phaseAt(ms);
+  const dizzy = { from: ms + DIZZY_DROP_MS, until: ms + DIZZY_DROP_MS + rule.dizzyMs };
+  s.up.forEach(p => events.push({ type: 'sink', popup: p }));
+  events.push({ type: 'dizzy', ...dizzy });
+  return { ...s, dizzy, up: [], ink: null };
+}
+
+/** A tap on empty water: a splash, and a short hold so mashing is slower than aiming. */
+export function tapWater(state: BashState, lane: number, ms: number): { state: BashState; events: BashEvent[] } {
+  if (ms < state.ouchUntil || state.dizzy || ms >= ROUND_MS || ms < state.splashUntil) return { state, events: [] };
+  return { state: { ...state, splashUntil: ms + SPLASH_MS }, events: [{ type: 'splash', lane }] };
 }
 
 /** Where the dizzy ring is: 0 just opened, 1 about to close. */
@@ -222,17 +266,28 @@ export function dizzyProgress(state: Pick<BashState, 'dizzy'>, ms: number): numb
 export function tapBoss(state: BashState, ms: number, maxHits = Number.POSITIVE_INFINITY,
   w: Weights = DEFAULT_WEIGHTS): { state: BashState; events: BashEvent[] } {
   if (ms < state.ouchUntil || ms >= ROUND_MS) return { state, events: [] };
-  if (!state.dizzy || ms < state.dizzy.from - DIZZY_DROP_MS / 2) return { state, events: [{ type: 'block' }] };
+  if (state.ink && !state.dizzy) {
+    // Blocked the ink: it counts as a hit and fills a fin.
+    const counted = state.hits < maxHits;
+    const power = state.power + 1, need = finsNeeded(state, ms);
+    let s: BashState = { ...state, ink: null, hits: state.hits + (counted ? 1 : 0), blocks: state.blocks + 1, power,
+      streak: state.streak + 1, bestStreak: Math.max(state.bestStreak, state.streak + 1), capped: state.capped + (counted ? 0 : 1) };
+    const events: BashEvent[] = [{ type: 'inkBlock', damage: counted ? w.per_hit : 0, power, need, counted }];
+    if (power >= need) s = goDizzy(s, ms, events);
+    return { state: s, events };
+  }
+  if (!state.dizzy || ms < state.dizzy.from - DIZZY_DROP_MS / 2) return { state, events: [{ type: 'clank' }] };
   const counted = state.hits < maxHits;
   const hits = state.hits + (counted ? 1 : 0);
   // The fins guarantee the server's share rule; this guard keeps it true even at the cap.
   const weakOk = counted && state.weak + 1 <= Math.floor(hits / 3);
   const weak = state.weak + (weakOk ? 1 : 0);
-  const perfect = dizzyProgress(state, ms) <= PERFECT_UNTIL;
+  const p = dizzyProgress(state, ms);
+  const perfect = p >= PERFECT_FROM && p <= PERFECT_UNTIL;
   const damage = (counted ? w.per_hit : 0) + (weakOk ? w.per_weak_hit : 0);
   const headStart = perfect ? 1 : 0;
   const s: BashState = { ...state, hits, weak, dizzy: null, power: headStart, headStart, smashes: state.smashes + 1,
-    perfects: state.perfects + (perfect ? 1 : 0), capped: state.capped + (counted ? 0 : 1), nextSpawnAt: ms + 150 };
+    perfects: state.perfects + (perfect ? 1 : 0), capped: state.capped + (counted ? 0 : 1), nextSpawnAt: ms + 90 };
   return { state: s, events: [{ type: 'smash', damage, perfect, weak: weakOk, final: ms >= ROUND_MS - 3000 }] };
 }
 
