@@ -12,6 +12,7 @@ import { nextParkPresence, NO_PARK_PRESENCE, shouldRefreshParkLookup, type ParkL
   type ParkPresence } from './parkLookupPolicy';
 import { gpsWatchSettings } from './gpsWatchPolicy';
 import { PositionFilter } from './positionFilter';
+import { probeCount } from '../dev/motionProbe';
 
 // Smoothing factor for heading (lower = smoother but laggier, higher = more responsive but jittery)
 // Tuned for snappy but stable
@@ -198,10 +199,11 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     if (pendingHeadingRef.current) { clearTimeout(pendingHeadingRef.current); pendingHeadingRef.current = null; }
     if (value === null) { setHeadingState(null); return; }
     const wait = lastHeadingEmitRef.current + HEADING_MIN_INTERVAL_MS - Date.now();
-    if (wait <= 0) { lastHeadingEmitRef.current = Date.now(); setHeadingState(value); return; }
+    if (wait <= 0) { lastHeadingEmitRef.current = Date.now(); if (__DEV__) probeCount('headingOut'); setHeadingState(value); return; }
     pendingHeadingRef.current = setTimeout(() => {
       pendingHeadingRef.current = null;
       lastHeadingEmitRef.current = Date.now();
+      if (__DEV__) probeCount('headingOut');
       setHeadingState(value);
     }, wait);
   };
@@ -287,7 +289,12 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
     const startHeadingSubscription = async () => {
       try {
-        headingSubscriptionRef.current = await Location.watchHeadingAsync((headingData) => {
+        // A simulator has no compass: dev builds can play a scripted, noisy one (src/dev/headingSim.ts).
+        const watchHeading: typeof Location.watchHeadingAsync = __DEV__ && process.env.EXPO_PUBLIC_DEV_HEADING_SIM
+          ? async (cb) => require('../dev/headingSim').startHeadingSim(cb)
+          : Location.watchHeadingAsync;
+        headingSubscriptionRef.current = await watchHeading((headingData) => {
+          if (__DEV__) probeCount('headingIn');
           // Use trueHeading if available (more accurate), fallback to magHeading
           const rawHeading = headingData.trueHeading >= 0 
             ? headingData.trueHeading 

@@ -30,6 +30,7 @@ import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapD
 import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
 import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { MOTION_PROBE, MotionProbeFrames, probeCamera, probeCount } from '../dev/motionProbe';
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -108,6 +109,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   /** A finger started moving the map. */
   readonly onUserPan?: () => void;
 }) {
+  if (__DEV__) probeCount('mapRender');
   const { location, gpsSignal } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
   const { player } = useContext(AuthContext);
@@ -215,6 +217,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const pushCamera = (duration: number, zoomLevel?: number) => {
     const loc = locationRef.current;
     if (!followRef.current || !loc) return;
+    if (__DEV__) probeCount('camCmd');
     cameraRef.current?.setCamera({
       centerCoordinate: [loc.longitude, loc.latitude],
       ...(headingRef.current !== null ? { heading: headingRef.current } : {}),
@@ -226,6 +229,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
 
   useEffect(() => {
     if (!location) return;
+    if (__DEV__) probeCount('fix');
 
     // Skip animation on first location (just set it)
     if (!prevLocationRef.current) {
@@ -630,6 +634,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           // HUD fades first), and the panned-away shark hides before iOS parks it in the corner.
           // Camera eases (following the walk, a tap-to-focus) get the same held passes, less often.
           noteCamera(Number(feature.properties?.zoomLevel), Number(feature.properties?.heading));
+          if (__DEV__ && MOTION_PROBE) { const [cx, cy] = feature.geometry?.coordinates ?? []; probeCamera(Number(feature.properties?.heading), Number(cx), Number(cy), Number(feature.properties?.zoomLevel)); }
           const now = Date.now();
           if (now - lastMoveFeed.current < (feature.properties?.isUserInteraction ? 100 : 200)) return;
           lastMoveFeed.current = now;
@@ -781,6 +786,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
         </Animated.View>
       )}
+      {__DEV__ && MOTION_PROBE && <MotionProbeFrames />}
       {location && (
         <View pointerEvents="none" style={[styles.centerOverlay, { opacity: focusedOnPlayer ? 1 : 0 }]}>
           <View style={styles.centerShark}>{sharkArt(overlayStyles, overlayLive, focusedOnPlayer)}</View>
