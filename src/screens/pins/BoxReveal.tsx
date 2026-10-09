@@ -65,6 +65,8 @@ type Props = {
   /** Puts the pin on the lanyard; resolves true once saved (a full lanyard swaps out its last pin). */
   readonly onWear?: (pull: RevealPull) => Promise<boolean>;
   readonly canWear?: (pull: RevealPull) => boolean;
+  /** The box is on stage while the server answers; a tap waits for it, then opens. */
+  readonly waiting?: boolean;
 };
 
 export const REVEAL_CUES = ['fx.whoosh', 'fx.whooshRev', 'fx.coinTick', 'fx.reveal', 'fx.reward', 'fx.firework', 'fx.hit', 'ui.tap', 'ui.complete'] as const;
@@ -163,7 +165,10 @@ function Ring({ size, t }: { size: number; t: SharedValue<number> }) {
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 10, borderColor: '#ffffff' }, style]} />;
 }
 
-export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear }: Props) {
+export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear, waiting = false }: Props) {
+  const wantOpen = useRef(false);
+  const waitingRef = useRef(waiting);
+  waitingRef.current = waiting;
   const isCatch = variant === 'catch';
   /** Catch and pick have no box: the pin comes straight up. */
   const noBox = variant !== 'box';
@@ -297,6 +302,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
   const open = useCallback(() => {
     if (phaseRef.current !== 'ready' && phaseRef.current !== 'drop') return;
+    // Still waiting for the server: remember the tap and open the moment it answers.
+    if (waitingRef.current) { wantOpen.current = true; queueHaptic('tapLight', 1); return; }
     const p = pulls[index];
     const isGold = !!p?.is_chaser || !!p?.rare;
     if (still) { play('fx.whooshRev', { volume: 0.6 }); pop(); return; }
@@ -340,6 +347,10 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     // The first box waits for your tap; in a bundle, "Next box" already was the tap.
     later(still ? 200 : 520, () => { if (index > 0) open(); else setPhase('ready'); });
   }, [index]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!waiting && wantOpen.current) { wantOpen.current = false; open(); }
+  }, [waiting]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When an auto-opened box reaches 'drop' -> open, `open` needs the current phase; re-run once ready.
   useEffect(() => {

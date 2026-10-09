@@ -63,7 +63,7 @@ export default function PinsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [reveal, setReveal] = useState<{
-    pulls: RevealPull[]; tone: 'blue' | 'coral'; variant?: 'box' | 'catch' | 'pick'; coins?: number; seriesId?: number;
+    pulls: RevealPull[]; tone: 'blue' | 'coral'; variant?: 'box' | 'catch' | 'pick'; coins?: number; seriesId?: number; waiting?: boolean;
     tag?: (p: RevealPull) => { text: string; tone: 'new' | 'trader' | 'gold' }; subtitle?: (p: RevealPull) => string | null;
   } | null>(null);
   const [fresh, setFresh] = useState<{ seriesId: number; ids: Set<number> } | null>(null);
@@ -132,21 +132,25 @@ export default function PinsScreen() {
     pending.current[series.id] = requestId;
     setBusy(key);
     queueHaptic('tapLight', 1);
+    // The box drops in right away; the server answers while it lands (no dead beat).
+    const placeholder: RevealPull = { id: -1, item_id: -1, pin_id: 0, name: '', icon_url: null, is_chaser: false, by_pity: false, serial: null, duplicate: false };
+    setReveal({ pulls: [placeholder], tone: boxTone(series.theme_color), seriesId: series.id, waiting: true });
     try {
       const r = await openMysteryBoxes(series.id, { count, pay, request_id: requestId, region: region.current });
       delete pending.current[series.id];
-      // Decode the pins at reveal size before the box opens, so the flip never shows a blank.
-      await Promise.race([warmPinImages(r.pulls.map(p => p.icon_url ?? undefined), 210), new Promise(res => setTimeout(res, 700))]);
+      // Decode the pins at reveal size while the box sits there.
+      void warmPinImages(r.pulls.map(p => p.icon_url ?? undefined), 210);
       const order = new Map(series.pins.filter(p => !p.is_chaser).map((p, i) => [p.item_id, i + 1]));
       const regularCount = order.size;
       setReveal({
-        pulls: r.pulls, tone: boxTone(series.theme_color), seriesId: series.id,
+        pulls: r.pulls, tone: boxTone(series.theme_color), seriesId: series.id, waiting: false,
         subtitle: p => (p.is_chaser ? series.name : `${series.name} \u00b7 ${order.get(p.item_id) ?? '?'} of ${regularCount}`),
       });
       // The page updates when the reveal closes (pins land in their slots then).
       pendingSeries.current = r.series;
       void refreshPlayer().catch(() => undefined);
     } catch (e: unknown) {
+      setReveal(null);
       const data = (e as { response?: { status?: number; data?: { code?: string; message?: string; need?: number; have?: number } } })?.response;
       if (data?.status && data.status < 500) delete pending.current[series.id];
       if (data?.data?.code === 'not_enough_currency') void refreshPlayer().catch(() => undefined);
@@ -373,7 +377,7 @@ export default function PinsScreen() {
         )}
       </View>
       {reveal && (
-        <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant}
+        <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant} waiting={reveal.waiting}
           tagFor={reveal.tag} subtitleFor={reveal.subtitle}
           canWear={p => p.is_chaser || reveal.variant === 'catch' || !!p.rare}
           onWear={p => wear(p.item_id)}
