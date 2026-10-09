@@ -151,7 +151,7 @@ test('the compass says what it does: two named states, a pill after each tap and
   assert.equal(btn.shouldFlashPill('heading', 'north'), true);
   assert.equal(btn.shouldFlashPill('away', 'heading'), false, 'no pill on the way back');
   assert.equal(btn.shouldFlashPill('heading', 'away'), false);
-  assert.ok(btn.FOLLOW_COPY.hintBody.split(' ').length <= 12);
+  assert.ok(btn.FOLLOW_COPY.hintBody.split(' ').length <= 12 && btn.FOLLOW_COPY.hintBodyNorth.split(' ').length <= 12);
   assert.match(btn.followButtonLabel('away'), /Find your shark/);
   assert.match(btn.followButtonLabel('heading'), /turns with you/);
   assert.match(btn.followButtonLabel('north'), /north stays up/);

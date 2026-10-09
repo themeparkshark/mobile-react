@@ -22,6 +22,7 @@ export const FOLLOW_COPY = {
   noCompass: 'No compass here',
   hintTitle: 'Your compass',
   hintBody: 'The map turns when you turn. Tap me to keep north up.',
+  hintBodyNorth: 'North stays at the top. Tap me to turn the map with you.',
 } as const;
 
 type PillKey = 'heading' | 'north' | 'noCompass' | 'away';
@@ -132,7 +133,7 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
           {hint ? (
             <>
               <Text style={styles.hintTitle}>{FOLLOW_COPY.hintTitle}</Text>
-              <Text style={styles.hintBody}>{FOLLOW_COPY.hintBody}</Text>
+              <Text style={styles.hintBody}>{state === 'north' ? FOLLOW_COPY.hintBodyNorth : FOLLOW_COPY.hintBody}</Text>
             </>
           ) : (
             <Text style={styles.pillText} numberOfLines={1}>{FOLLOW_COPY[shownPill ?? 'heading']}</Text>
