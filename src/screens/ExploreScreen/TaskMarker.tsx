@@ -272,10 +272,17 @@ function MarkerTimer({ expiresAt, ticking, urgent, badgeStyle }: {
   const done = left <= 0;
   useEffect(() => {
     if (!ticking || done) return;
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [ticking, done]);
+    // Battery: every second only in the last minute (the clock shows seconds); otherwise wake at each minute boundary.
+    let id: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const t = Date.now(); setNow(t);
+      const rest = expiresAt - t;
+      if (rest <= 0) return;
+      id = setTimeout(tick, rest < 60_000 ? 1000 : (rest % 60_000) || 60_000);
+    };
+    tick();
+    return () => clearTimeout(id);
+  }, [ticking, done, expiresAt]);
   const shown = useSharedValue(done ? 0 : 1);
   useEffect(() => { shown.value = withTiming(done ? 0 : 1, { duration: TIMER_FADE_MS }); }, [done, shown]);
   const fade = useAnimatedStyle(() => ({ opacity: shown.value }));

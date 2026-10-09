@@ -23,12 +23,16 @@ const SPIN = Easing.bezier(0.33, 0, 0.2, 1);
  *  - `facing`: which way the phone points relative to the map (0 is straight
  *    up the screen; it moves only in north-up mode or while panned away).
  */
-export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
+export function useFollowCamera({ cameraRef, followRef, reducedMotion, tickMs = CAM_TICK_MS }: {
   readonly cameraRef: RefObject<CameraRef>;
   /** True while the camera follows the shark (a finger on the map turns it off). */
   readonly followRef: MutableRefObject<boolean>;
   readonly reducedMotion: boolean;
+  /** The loop's tick while something moves (slower on Battery Saver). */
+  readonly tickMs?: number;
 }) {
+  const tickRef = useRef(tickMs);
+  tickRef.current = tickMs;
   const filter = useRef(createHeadingFilter()).current;
   const pace = useRef(new WalkPace()).current;
   const chaser = useRef<Chaser | null>(null);
@@ -107,7 +111,7 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
       animateFacing(mode.current === 'heading' && following ? 0 : angleDelta(mapBearing, h), seg);
     }
     if (chaser.current) { chaseHeading(chaser.current, h); chaseAdvance(chaser.current, now); }
-    if (quiet.current < 3 || chaseActive(chaser.current, now) || !filter.settled()) schedule(CAM_TICK_MS);
+    if (quiet.current < 3 || chaseActive(chaser.current, now) || !filter.settled()) schedule(tickRef.current);
   };
   const schedule = (ms: number) => {
     if (timer.current || !running.current) return;

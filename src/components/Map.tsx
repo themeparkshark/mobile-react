@@ -14,8 +14,9 @@ import { TrailBoxBadge, type MapTrail } from './map/TrailBoxBadge';
 import { CHEER_REPEAT_MS, nextFidget, FIDGET_GAP_MS, tapTrick, type SharkMood } from './map/sharkLife';
 import { useFxClock, useFxKick } from '../fx/FxStage';
 import { useMapWalkSense } from './map/useMapWalkSense';
+import { usePowerBudget } from '../power';
 import { wornFx } from '../fx/FxLayers';
-import type { FollowMode } from './map/cameraFollow';
+import { CAM_TICK_MS, type FollowMode } from './map/cameraFollow';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 import { useOneTimeTip } from './help/HelpProvider';
@@ -171,6 +172,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // The compass runs only while this map is on screen and the app is in front (the app keeps
   // location in the background for ride detection; the compass has no reason to).
   const compassOn = screenFocused && appActive;
+  // Battery (fb-battery): the step sensor rests when idle, slows on Saver; the camera loop ticks slower on Saver.
+  const power = usePowerBudget();
   useEffect(() => {
     if (!compassOn) return;
     setHeadingEnabled(true);
@@ -271,7 +274,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const followRef = useRef(true);
   // The follow camera: a short linear move about ten times a second while the shark swims or the
   // compass turns, nothing while both are still (map/useFollowCamera.ts, map/cameraFollow.ts).
-  const cam = useFollowCamera({ cameraRef, followRef, reducedMotion });
+  const cam = useFollowCamera({ cameraRef, followRef, reducedMotion, tickMs: power.lowPower ? 200 : CAM_TICK_MS });
   // No compass (some phones, a simulator): the map stays north up and the button says so.
   const [haveHeading, setHaveHeading] = useState(false);
   const haveHeadingRef = useRef(false);
@@ -291,7 +294,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   useEffect(() => { cam.setRunning(screenFocused && appActive); }, [screenFocused, appActive, cam.setRunning]); // eslint-disable-line react-hooks/exhaustive-deps
   // The step sensor: the shark sets off the moment you do and settles the moment you stop (the GPS
   // only reports every few metres). Accelerometer at 25 Hz, only while this map is on screen.
-  useMapWalkSense(compassOn && !!location, 40, WALK_SENSE_MAP, walking => {
+  useMapWalkSense(compassOn && !!location && power.animate && !power.idle, power.lowPower ? 100 : 40, WALK_SENSE_MAP, walking => {
       cam.onWalk(walking);
       // Setting off: the waddle and wake start with your first steps, not at the next GPS fix.
       if (walking && !reducedMotion) { wake.value = withTiming(1, { duration: 250 }); runStride(1.2, 60_000); }
@@ -675,12 +678,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   }, [lifeOn, react, fxWorn]); // eslint-disable-line react-hooks/exhaustive-deps
   // A ride coin in range: the shark perks up and cheers every few seconds until you play it.
   useEffect(() => {
-    if (!lifeOn || !sharkCheer) return;
+    if (!lifeOn || !sharkCheer || power.idle) return;
     react('cheer');
     // One cheer when you arrive, then only now and then (a long line is not a pep rally).
     const timer = setInterval(() => react('cheer'), CHEER_REPEAT_MS);
     return () => clearInterval(timer);
-  }, [lifeOn, sharkCheer, react]);
+  }, [lifeOn, sharkCheer, react, power.idle]);
 
   // Development captures (EXPO_PUBLIC_DEV_MAP_TRAIL=gold:0.6): a walking box on the shark.
   const devTrail = useMemo<MapTrail | null>(() => {
