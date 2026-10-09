@@ -38,7 +38,7 @@ import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import SafeChatPicker, { useSafeChatPlaces } from './threads/SafeChatPicker';
 import { emitSocial } from './threads/socialEvents';
 import { CLEAN } from '../components/CleanScreenBackground';
-import { CommentChip, GoldPill, OfficialAvatar, OfficialName, PressScale, ReactionBar, card } from './threads/socialLook';
+import { CommentChip, GoldPill, OfficialAvatar, OfficialName, PressScale, ReactionBar, card, useSocialSounds } from './threads/socialLook';
 import { CARE_LINE, DISCLOSURE_LINE, isCareHold, isDisclosure, composeSafeChat, phraseById, phraseLabel, DRAFT_LINES, QUICK_REPLIES, QUICK_REPLY_IDS, REPLY_MAX, type SafeChatPick, checkDraft, errorLine, HINT_DEBOUNCE_MS, isDistress, pauseLine, quickDraftProblem, reviewLine, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
 import useReactions from './threads/useReactions';
 import useKeyboardInset from './threads/useKeyboardInset';
@@ -172,6 +172,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
   const threadId = Number(params.thread);
   const insets = useSafeAreaInsets();
   const reduced = useUiReducedMotion();
+  useSocialSounds();
   const { height: windowHeight } = useWindowDimensions();
   const keyboard = useKeyboardInset(windowHeight, reduced);
   const { player } = useContext(AuthContext);

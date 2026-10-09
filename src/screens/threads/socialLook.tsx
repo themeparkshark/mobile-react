@@ -5,7 +5,7 @@
  * for topics. Every press springs on the UI thread and has a Reduce Motion path.
  */
 import { Image } from 'expo-image';
-import { memo, useContext, useEffect, useState, type ReactNode } from 'react';
+import { memo, useEffect, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   FadeIn,
@@ -16,7 +16,8 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { SoundEffectContext } from '../../context/SoundEffectProvider';
+import { GameAudio } from '../../gamekit/audio/GameAudio';
+import { playSfx } from '../../gamekit/SFX';
 import * as Haptics from '../../helpers/haptics';
 import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
@@ -46,8 +47,21 @@ export const INK_SOFT = BRAND.navySoft;
 
 // ── Press with a spring ────────────────────────────────────────────────
 
-/** Every Social tap clicks (Chris's tap.mp3, quiet) unless the action plays its own sound. */
-export const PRESS_SOUND = require('../../../assets/sounds/tap.mp3');
+/** Every Social tap clicks (Chris's tap.mp3 as the preloaded 'ui.tap' cue) unless the action plays its own sound. */
+export const PRESS_CUE = 'ui.tap';
+const SOCIAL_CUES = [PRESS_CUE, 'fx.hit', 'ui.select'];
+
+/** Preload Social's press cues once, so the first click lands with the squash (no file load per tap). */
+export function useSocialSounds() {
+  useEffect(() => {
+    void (async () => {
+      try {
+        if (!GameAudio.backend) await GameAudio.init();
+        await GameAudio.preload(SOCIAL_CUES);
+      } catch { /* sound is decoration */ }
+    })();
+  }, []);
+}
 
 /** The Pressable itself scales, so layout styles (flex, absolute) apply to the touch area. */
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -85,9 +99,10 @@ export function PressScale({
   readonly testID?: string;
 }) {
   const reduced = useUiReducedMotion();
-  const { playSound } = useContext(SoundEffectContext);
   const scale = useSharedValue(1);
-  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const dim = useSharedValue(1);
+  // Reduce Motion: no squash, a quick dim instead, so the press still shows.
+  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }], opacity: dim.value }));
 
   return (
     <AnimatedPressable
@@ -100,15 +115,18 @@ export function PressScale({
       accessibilityHint={accessibilityHint}
       accessibilityState={accessibilityState ?? (disabled ? { disabled: true } : undefined)}
       onPressIn={() => {
-        if (!reduced) scale.value = withTiming(scaleTo, { duration: 70 });
+        if (reduced) dim.value = withTiming(0.7, { duration: 60 });
+        else scale.value = withTiming(scaleTo, { duration: 70 });
       }}
       onPressOut={() => {
-        if (!reduced) scale.value = withSpring(1, { damping: 9, stiffness: 320, mass: 0.6 });
+        if (reduced) dim.value = withTiming(1, { duration: 120 });
+        else scale.value = withSpring(1, { damping: 9, stiffness: 320, mass: 0.6 });
       }}
       onPress={() => {
+        if (!onPress) return; // nothing happens: no fake click
         if (haptic !== 'none') void Haptics.impactAsync(haptic === 'medium' ? 'medium' : 'light');
-        if (sound === 'tap') playSound(PRESS_SOUND, { volume: 0.4 });
-        onPress?.();
+        if (sound === 'tap') playSfx(PRESS_CUE, 0.5);
+        onPress();
       }}
       onLongPress={onLongPress}
       delayLongPress={350}

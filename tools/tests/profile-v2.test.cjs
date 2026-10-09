@@ -127,10 +127,10 @@ test('level up earned elsewhere plays on return: mount at level 5 data, now leve
   assert.equal(potionTransition({ level: 6, progress: 0.07 }, { level: 6, progress: 0.1 }, false, true), 'defer');
   assert.equal(potionTransition({ level: 6, progress: 0.07 }, { level: 7, progress: 0.1 }, false, true), 'defer');
   const potion = read('src/components/XpBar.tsx');
-  assert.match(potion, /useEffect\(\(\) => \(\) => driver\.dispose\(\), \[driver\]\)/, 'timers clear only on unmount');
+  assert.match(potion, /useEffect\(\(\) => \(\) => \{\n\s+driver\.dispose\(\);[\s\S]*?\}, \[driver\]\)/, 'timers clear only on unmount');
   assert.match(potion, /const base = Math\.min\(0\.5, \(innerH \* 0\.9\) \/ innerW\)/, 'a living blob of liquid stays at the start of a fresh level');
   const card = read('src/components/Experience.tsx');
-  assert.match(card, /'LEVEL UP!'/);
+  assert.match(potion, /'LEVEL UP!'/);
   assert.match(card, /useReduceMotionPreference\(\) === true/);
   assert.match(card, /HapticPatterns\.levelUp\(\)/);
 });

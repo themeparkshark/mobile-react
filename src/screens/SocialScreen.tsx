@@ -41,7 +41,7 @@ import RulesCard, { hasPromised } from './threads/RulesCard';
 import ThreadCard from './threads/ThreadCard';
 import { applySocialEvent, emitSocial, onSocial } from './threads/socialEvents';
 import CleanScreenBackground, { CLEAN } from '../components/CleanScreenBackground';
-import { COMPOSE_ART, PressScale } from './threads/socialLook';
+import { COMPOSE_ART, PressScale, useSocialSounds } from './threads/socialLook';
 import { DEFAULT_PROMPT, mergePage, type FeedTab } from './threads/socialModel';
 
 type Status = 'loading' | 'ready' | 'error';
@@ -52,6 +52,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   const { urls } = useCrumbs();
   const reduced = useUiReducedMotion();
   const insets = useSafeAreaInsets();
+  useSocialSounds();
 
   const playerTeam = (player as { team?: { team?: string } } | null)?.team?.team;
   const team = isTeam(playerTeam) ? TEAMS[playerTeam] : null;
@@ -285,8 +286,8 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <ChestButton open={shortcuts} onPress={() => setShortcuts(true)} accessibilityLabel="More: VIP, Merch, Pin Trading, Coin Codes"
-            label={player && !player.is_subscribed ? 'VIP' : 'More'} />
+          <ChestButton open={shortcuts} onPress={() => setShortcuts(true)} label="More" accessibilityLabel="More"
+            accessibilityHint={player && !player.is_subscribed ? 'Pin Trading, Coin Codes, Merch, VIP and Watch' : 'Pin Trading, Coin Codes, Merch and Watch'} />
         </TopbarColumn>
         <TopbarColumn><TopbarText>Social</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false}><SocialHelp /></TopbarColumn>
