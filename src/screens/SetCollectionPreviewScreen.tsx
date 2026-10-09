@@ -31,6 +31,8 @@ interface Scenario {
   readonly status?: 'active' | 'resting' | 'upcoming' | 'retired';
   readonly spawning?: boolean | null;
   readonly focused?: boolean;
+  /** Also own the top find (a Legendary) to show its shimmer. */
+  readonly ownTop?: boolean;
 }
 
 // One story per set: mid-hunt, finished and ready to claim, starter ready, resting at night, coming soon.
@@ -53,13 +55,15 @@ const SCENARIOS_ALL: Record<string, Scenario> = {
 // EXPO_PUBLIC_DEX_PREVIEW_SCENE=real: a typical mid-game player on today's five live sets (one set hunted,
 // a starter step ready, a night set and a rain set waiting for their time, one untouched).
 const REAL: Record<string, Scenario & { hint?: string }> = {
-  churro_collection: { found: 14, starter: 'claimed', focused: true },
+  churro_collection: { found: 14, starter: 'claimed', focused: true, ownTop: true },
   pretzel_collection: { found: 9, starter: 'claimable' },
   night_lights: { found: 3, starter: 'locked', spawning: false, hint: 'After sunset' },
   rain_parade: { found: 1, starter: 'locked', spawning: false, hint: 'On rainy days' },
-  camera_crew: { found: 40, claimed: true, starter: 'claimed' },
+  // One finished set whose big prize is waiting (claim it to see the title stamp, then the trophy case).
+  camera_crew: { found: 40, starter: 'claimed' },
 };
 const SCENARIOS: Record<string, Scenario & { hint?: string }> = process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real' ? REAL : SCENARIOS_ALL;
+const REAL_SCENE = process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real';
 const STARTER_TARGET = process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real' ? 8 : 5;
 
 function owned(index: number, count: number, total: number): boolean {
@@ -72,7 +76,7 @@ function build(set: MockDexSet, setIndex: number) {
   const scene = SCENARIOS[set.slug] ?? { found: 0 };
   const total = set.items.length;
   const items: PrepItemSetItem[] = set.items.map((item, index) => {
-    const have = scene.found >= total || owned(index, scene.found, total);
+    const have = scene.found >= total || owned(index, scene.found, total) || (scene.ownTop === true && index === total - 1);
     const copies = have ? 1 + ((index * 5 + setIndex) % 4) : 0;
     return {
       id: setIndex * 100 + index + 1, name: item.name, variant_slug: '', description: item.flavor,
@@ -139,7 +143,7 @@ export default function SetCollectionPreviewScreen() {
     <SetCollectionScreen
       previewSets={BUILT.map(entry => entry.list)}
       previewDetails={Object.fromEntries(BUILT.map(entry => [entry.list.slug, entry.detail]))}
-      previewDex={{ sets: BUILT.map(entry => entry.dexSet) }}
+      previewDex={{ sets: BUILT.map(entry => entry.dexSet), ...(REAL_SCENE ? { daily_rare: { available: true, on_map: false, caught_today: false } } : {}) }}
       previewDexDetails={Object.fromEntries(BUILT.map(entry => [entry.list.slug, { items: entry.dexItems }]))}
     />
   );
