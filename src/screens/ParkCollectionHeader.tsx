@@ -63,7 +63,9 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   const shownCollected = holdCount ? Math.max(0, collected - 1) : collected;
   const rate = available > 0 ? Math.max(0, Math.min(100, shownCollected / available * 100))
     : Math.max(0, Math.min(100, Number.isFinite(completionRate) ? completionRate : 0));
-  const parts = parkCoinParts(shownCollected, available, ridePassportCollected, ridePassportAvailable);
+  // Parts use the real count: while a landing coin is held back on the big
+  // number we don't know its kind, and the wrong chip must never tick.
+  const parts = parkCoinParts(collected, available, ridePassportCollected, ridePassportAvailable);
   const passportComplete = typeof ridePassportAvailable === 'number' && ridePassportAvailable > 0 &&
     (ridePassportCollected ?? 0) >= ridePassportAvailable;
   const limitedLeaves = limitedDayLabel(limitedEndsOn);
@@ -121,7 +123,13 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
         <Text style={styles.countLabel}>RIDE COINS</Text>
       </View>
       <View style={styles.track}>
-        <Animated.View style={[styles.fill, fillStyle]} />
+        <Animated.View style={[styles.fill, parts?.sights && styles.fillSplit, fillStyle]}>
+          {/* Two-tone bar keyed to the chips: gold = rides, orange = sights. */}
+          {parts?.sights && parts.rides.collected + parts.sights.collected > 0 && <>
+            <View style={[styles.fillRides, { flex: parts.rides.collected }]} />
+            <View style={[styles.fillSights, { flex: parts.sights.collected }]} />
+          </>}
+        </Animated.View>
       </View>
       <View style={styles.chips}>
         {parts &&
@@ -132,7 +140,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
             <GameIcon name="ride" size={18} />
             <Text style={styles.chipText}>RIDES {parts.rides.collected}/{parts.rides.available}</Text>
           </Pressable>}
-        {parts?.sights && <View style={styles.chip} accessible
+        {parts?.sights && <View style={[styles.chip, styles.chipSights]} accessible
           accessibilityLabel={`Shows and sights: ${parts.sights.collected} of ${parts.sights.available}`}>
           <GameIcon name="star" size={18} />
           <Text style={styles.chipText}>SIGHTS {parts.sights.collected}/{parts.sights.available}</Text>
@@ -176,6 +184,9 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   </View>;
 }
 
+/** Sights color: the bar segment and its chip border match. */
+const SIGHTS_ORANGE = '#ff9b2f';
+
 const styles = StyleSheet.create({
   frame: { borderRadius: 20, borderWidth: 3, borderColor: '#fff', backgroundColor: '#fff8e4',
     overflow: 'hidden', shadowColor: '#05346e', shadowOpacity: 0.22,
@@ -191,6 +202,10 @@ const styles = StyleSheet.create({
   track: { height: 12, backgroundColor: '#bfe5ff', borderWidth: 2, borderColor: '#fff',
     borderRadius: 7, overflow: 'hidden', marginTop: 5, marginRight: 70 },
   fill: { height: '100%', backgroundColor: '#ffcf3b', borderRadius: 7 },
+  fillSplit: { flexDirection: 'row', overflow: 'hidden', backgroundColor: 'transparent' },
+  fillRides: { height: '100%', backgroundColor: '#ffcf3b' },
+  fillSights: { height: '100%', backgroundColor: SIGHTS_ORANGE },
+  chipSights: { borderColor: SIGHTS_ORANGE },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 7 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 4,
     backgroundColor: '#fff8e4', borderWidth: 2, borderColor: '#ffcf3b', borderRadius: 12 },

@@ -37,3 +37,11 @@ test('the glossary explains the parts instead of claiming the passport is the wh
   assert.match(g, /One for each ride, show and famous sight/);
   assert.match(g, /The rides part of a park\\'s shelf/);
 });
+
+test('the bar is two-tone keyed to the chips, and parts never use the held-back count', () => {
+  const src = read('src/screens/ParkCollectionHeader.tsx');
+  assert.match(src, /parkCoinParts\(collected, available,/);
+  assert.match(src, /styles\.fillRides, \{ flex: parts\.rides\.collected \}/);
+  assert.match(src, /styles\.fillSights, \{ flex: parts\.sights\.collected \}/);
+  assert.match(src, /chipSights: \{ borderColor: SIGHTS_ORANGE \}/);
+});

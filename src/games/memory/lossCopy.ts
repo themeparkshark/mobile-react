@@ -12,19 +12,23 @@ export interface LossCopy {
   readonly line: string;
 }
 
-export function memoryLossCopy(pairs: number, total: number): LossCopy {
+export function memoryLossCopy(pairs: number, total: number, outOfTurns = false): LossCopy {
   const p = Math.max(0, Math.floor(pairs));
   const t = Math.max(1, Math.floor(total));
   const left = Math.max(0, t - p);
-  if (p === 0) return { title: "TIME'S UP!", line: 'Flip two at a time. Remember where each card was.' };
+  // Low-signal rides end on a turn limit, not the clock.
+  if (p === 0) return outOfTurns
+    ? { title: 'OUT OF FLIPS!', line: 'Flip 2 cards. Remember where they were.' }
+    : { title: "TIME'S UP!", line: 'Flip 2 cards. Remember where they were.' };
+  if (outOfTurns && left > 2) return { title: 'OUT OF FLIPS!', line: `You found ${p} of ${t} pairs. Keep going!` };
   if (left <= 2) return { title: 'SO CLOSE!', line: left === 1 ? 'Just 1 pair to go!' : `Just ${left} pairs to go!` };
   if (p * 2 >= t) return { title: 'NICE TRY!', line: `You found ${p} of ${t} pairs.` };
   return { title: 'GOOD START!', line: `You found ${p} of ${t} pairs. Keep going!` };
 }
 
 /** The results banner for a lost run (no numbers jammed into the title). */
-export function memoryLossBanner(pairs: number, total: number): string {
-  return memoryLossCopy(pairs, total).title;
+export function memoryLossBanner(pairs: number, total: number, outOfTurns = false): string {
+  return memoryLossCopy(pairs, total, outOfTurns).title;
 }
 
 /** The line under TRY AGAIN: how many tries this Ticket still has. */

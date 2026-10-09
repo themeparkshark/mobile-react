@@ -30,10 +30,10 @@ test('tries line is plain and says when the Ticket is used up', () => {
 
 test('the results banner and end card use the honest copy', () => {
   assert.doesNotMatch(src, /`SO CLOSE \$\{e\.pairs\}/);
-  assert.match(src, /memoryLossBanner\(e\.pairs, e\.pairsTotal\)/);
+  assert.match(src, /memoryLossBanner\(e\.pairs, e\.pairsTotal, e\.status === 'out'\)/);
   assert.doesNotMatch(src, />SO CLOSE</);
   assert.doesNotMatch(src, />End challenge</);
-  assert.match(src, /<TryCard copy=\{memoryLossCopy\(tryScreen\.pairs, tryScreen\.total\)\}/);
+  assert.match(src, /<TryCard copy=\{memoryLossCopy\(tryScreen\.pairs, tryScreen\.total, tryScreen\.out\)\}/);
   assert.match(src, /accessibilityLabel="Done"/);
 });
 
@@ -44,7 +44,7 @@ test('cards stay visible: only known faces flip, under a light veil', () => {
 
 test('every ride try ends on the end card; Done in a ride challenge goes straight to the ride loss card', () => {
   assert.match(src, /if \(r\.mode === 'ride'\) \{\s*setTryScreen\(/);
-  assert.match(src, /if \(rideChallenge && r\?\.mode === 'ride'\) \{[\s\S]{0,160}onClose\(\);/);
+  assert.match(src, /if \(rideChallenge && r\?\.mode === 'ride'\) \{[\s\S]{0,400}void collectRewards\(r, false, false, 0\)[\s\S]{0,60}onClose\(\);/);
   assert.match(src, /if \(!prev \|\| RIDE_TRIES - 1 - prev\.tryIndex <= 0\) return;/);
 });
 
@@ -56,5 +56,18 @@ test('a storage failure can never leave a dead board with no result', () => {
 test('header says Memory Match and the ride name, matching the how-to', () => {
   assert.doesNotMatch(src, /'Ride Sprint'/);
   assert.match(src, /const title = mode === 'ride' \? 'Memory Match'/);
-  assert.match(src, /`\$\{taskName \|\| deck\.label\}/);
+  assert.match(src, /`Try \$\{r\.tryIndex \+ 1\} of \$\{RIDE_TRIES\} · ` : ''\}\$\{taskName \|\| deck\.label\}/, 'try count first, never cut off');
+});
+
+test('a low-signal turn limit says OUT OF FLIPS, not TIME\'S UP', () => {
+  assert.equal(memoryLossCopy(0, 8, true).title, 'OUT OF FLIPS!');
+  assert.equal(memoryLossCopy(3, 8, true).title, 'OUT OF FLIPS!');
+  assert.equal(memoryLossCopy(7, 8, true).title, 'SO CLOSE!');
+  assert.equal(memoryLossCopy(0, 8).line, 'Flip 2 cards. Remember where they were.');
+});
+
+test('a lost ride shows no NEW BEST and no luck jargon; the board shows ~1.5 s before the card', () => {
+  assert.match(src, /newBest: r\.mode === 'ride' && !won \? false :/);
+  assert.match(src, /chipText = won \? luckyChip\(e\) : null;/);
+  assert.match(src, /later\(1500, \(\) => \{\s*\/\/ Ride challenge/);
 });

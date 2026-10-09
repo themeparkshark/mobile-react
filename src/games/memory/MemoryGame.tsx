@@ -344,7 +344,7 @@ export default function MemoryGame({
     seconds: null as number | null, urgent: false, chain: 0, gauge: 0, showtime: false, showLeft: 0, showWarn: false,
     strikes: 0, pairs: 0, total: 8, board: 1, turns: 0, turnsLeft: null as number | null,
   });
-  const [tryScreen, setTryScreen] = useState<{ pairs: number; total: number; left: number } | null>(null);
+  const [tryScreen, setTryScreen] = useState<{ pairs: number; total: number; left: number; out: boolean } | null>(null);
   const tryCardIn = useSharedValue(0);
   const [unlock, setUnlock] = useState<{ kicker: string; title: string; hint?: string } | null>(null);
   const [tip, setTip] = useState<{ text: string; kind: 'scout' | 'slip' } | null>(null);
@@ -947,7 +947,7 @@ export default function MemoryGame({
       if (runRef.current !== r) return;
       const par = r.mode === 'daily' ? fairParFor(e.pairsTotal) : parFor(e.pairsTotal);
       const numbers: ResultsNumber[] = [];
-      let banner = won ? 'CLEARED!' : memoryLossBanner(e.pairs, e.pairsTotal);
+      let banner = won ? 'CLEARED!' : memoryLossBanner(e.pairs, e.pairsTotal, e.status === 'out');
       let tally: MemoryResultsData['tally'] = null;
       let chipText: string | null = null;
       if (r.mode === 'ride') {
@@ -955,7 +955,7 @@ export default function MemoryGame({
         if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
         if (ridePb != null && !r.signal) numbers.push({ label: 'BEST', value: `${(ridePb / 1000).toFixed(1)}s`, hot: newRidePb });
         if (won) numbers.push({ label: 'SCORE', value: finalScore.toLocaleString('en-US') });
-        chipText = luckyChip(e);
+        chipText = won ? luckyChip(e) : null;
         if (perfect && won) banner = 'PERFECT!';
       } else if (r.mode === 'timeAttack') {
         banner = `BOARD ${e.board}`;
@@ -996,7 +996,7 @@ export default function MemoryGame({
         chip: chipText,
         grades: r.mode === 'warmup' ? null : { memory: grades.memory, speed: grades.speed, chain: grades.chain },
         tip: r.mode === 'warmup' ? 'Remember where you saw each card. That is the whole game.' : grades.tip,
-        newBest: pb.isNewBest || newRidePb,
+        newBest: r.mode === 'ride' && !won ? false : pb.isNewBest || newRidePb,
         rewards: r.mode === 'warmup' ? null : rewards,
         daily: dailySum,
         extraRewards: extra,
@@ -1188,11 +1188,11 @@ export default function MemoryGame({
     stage.current?.tumble();
     rope.urgent.value = 0;
     const left = RIDE_TRIES - 1 - r.tryIndex;
-    later(1000, () => {
+    later(1500, () => {
       // Ride challenge: every try ends on the same end card (TRY AGAIN while
       // the Ticket has tries, then Done), right over the board.
       if (r.mode === 'ride') {
-        setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left });
+        setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left, out });
         tryCardIn.value = 0;
         tryCardIn.value = reducedMotion ? 1 : withSpring(1, { damping: 13, stiffness: 190 });
       } else finishRun(false);
@@ -2173,12 +2173,15 @@ export default function MemoryGame({
     if (rideChallenge && r?.mode === 'ride') {
       r.ended = true;
       r.playing = false;
+      clearTimers();
       GameAudio.music.stop(300);
+      // The run's new album cards still count: save them (best effort, on device) while the ride shows its card.
+      void collectRewards(r, false, false, 0).catch(() => undefined);
       onClose();
       return;
     }
     finishRun(false);
-  }, [finishRun, rideChallenge, onClose]);
+  }, [finishRun, rideChallenge, onClose, clearTimers, collectRewards]);
 
   const onRematch = useCallback(() => {
     setRunIndex((k) => k + 1);
@@ -2254,7 +2257,7 @@ export default function MemoryGame({
   const g = geo;
   const title = mode === 'ride' ? 'Memory Match' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : mode === 'warmup' ? 'Memory Warm-up' : 'Memory Match';
   const subtitle = mode === 'ride'
-    ? `${taskName || deck.label}${r && r.tryIndex > 0 ? ` · Try ${r.tryIndex + 1} of ${RIDE_TRIES}` : ''}${r?.signal ? ' · Low signal' : ''}`
+    ? `${r && r.tryIndex > 0 ? `Try ${r.tryIndex + 1} of ${RIDE_TRIES} · ` : ''}${taskName || deck.label}${r?.signal ? ' · Low signal' : ''}`
     : mode === 'timeAttack' ? `${deck.label} · Board ${hud.board}`
     : mode === 'daily' ? `${deck.label} · ${daily?.ranked && runIndex === 0 ? 'Ranked' : 'Practice'}`
     : mode === 'race' ? `${deck.label} · Practice race` : deck.label;
@@ -2424,7 +2427,7 @@ export default function MemoryGame({
             ) : null}
 
             {tryScreen ? (
-              <TryCard copy={memoryLossCopy(tryScreen.pairs, tryScreen.total)} pairs={tryScreen.pairs}
+              <TryCard copy={memoryLossCopy(tryScreen.pairs, tryScreen.total, tryScreen.out)} pairs={tryScreen.pairs}
                 total={tryScreen.total} left={tryScreen.left} top={g.felt.y + g.felt.h * 0.2}
                 enter={tryCardIn} onTryAgain={tryAgain} onDone={giveUp} />
             ) : null}
@@ -2467,7 +2470,7 @@ function TryCard({ copy, pairs, total, left, top, enter, onTryAgain, onDone }: {
         </Pressable>
       ) : null}
       <View style={styles.tryLeftRow}>
-        <GameIcon name="ticket" size={18} />
+        <GameIcon name="ticket" size={24} />
         <Text style={styles.tryLeft}>{triesLeftLine(left)}</Text>
       </View>
       <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? styles.tryDone : styles.tryBtn, pressed && styles.tryBtnDown]}
