@@ -123,6 +123,12 @@ export function restockPill(nextAt: string | null | undefined, nowMs: number): P
   return { label: `New gear on ${day}`, urgent: false, a11y: `New gear arrives on ${day}` };
 }
 
+/** Owned pieces sink to the end (the shelf is mostly things you can still get); order is otherwise the server's. */
+export function shelfOrder<T extends { id: number; has_purchased?: boolean }>(items: readonly T[], keepFirst: readonly number[] = []): T[] {
+  const sinks = (i: T) => !!i.has_purchased && !keepFirst.includes(i.id);
+  return [...items.filter(i => !sinks(i)), ...items.filter(sinks)];
+}
+
 /** Event, timer 1 of 2: when the shelf gets its next drop (null on the final shelf). */
 export function eventDropPill(section: SectionLike, nowMs: number): Pill | null {
   if (section.final_shelf) return null;

@@ -406,7 +406,10 @@ test('non-members window-shop: the Profile tile opens the Secret Shop when the f
   const profile = src('src/screens/ProfileScreen.tsx');
   assert.match(profile, /void loadSecretShopFlag\(\)\.then\(on => \(on\s*\? RootNavigation\.navigate\('Store', \{ store: store\.id \}\)\s*: void openMembership\(\)\)\);/);
   const shelves = src('src/screens/StoreScreen/ShopShelves.tsx');
-  assert.match(shelves, /\{secret && !vip && <SecretPreviewBanner \/>\}/);
+  // Non-members get one calm note and the grown-up door in the showroom (Oct 8), never a buy button.
+  const showroom = src('src/screens/StoreScreen/SecretShowroom.tsx');
+  assert.match(showroom, /\{!member && \(/);
+  assert.match(showroom, /<VaultSecondaryButton label="Ask a grown-up" icon="lock" onPress=\{\(\) => \{ void openMembership\(\); \}\}/);
   const ui = loadSecretUi();
   assert.match(ui.SECRET_PREVIEW_COPY.body, /yours forever/);
   assert.doesNotMatch(ui.SECRET_PREVIEW_COPY.body + ui.SECRET_PREVIEW_COPY.title, /hurry|last chance|only \d|left!/i, 'calm copy, no pressure');

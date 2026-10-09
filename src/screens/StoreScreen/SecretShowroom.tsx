@@ -36,12 +36,13 @@ import { FxSceneBackdrop } from '../../fx/FxSolo';
 import { FxPauseContext } from '../../fx/FxStage';
 import { FX_BLURB, fxKeyOf } from '../../fx/registry';
 import { SECRET_THEME as V } from '../../fx/secretTheme';
-import { dailyPill, eventEndPill, featuredPill, formatCoins, stageCard } from '../../helpers/shopShelves';
+import { formatCoins, stageCard } from '../../helpers/shopShelves';
+import { showroomEntries, showroomStageH, shelfWhen, type ShowroomEntry, type ShowroomKind } from '../../helpers/shopShowroom';
 import { leavingIcon, leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 import { isItemWorn, itemDisplayName } from '../../helpers/wardrobe';
 import type { ShopItem, ShopSection } from '../../models/shop-today';
 import { FONT, GameIcon, type GameIconName } from '../../ui';
-import { StarMotes } from './SecretShopUi';
+import { SECRET_PREVIEW_COPY, StarMotes } from './SecretShopUi';
 import { VaultPanel, VaultSecondaryButton } from './SecretVault';
 import { TileArt } from './ShopTile';
 import { previewLook } from './TryOnSheet';
@@ -52,38 +53,6 @@ const SCREEN_W = Dimensions.get('window').width;
 const PANEL_W = SCREEN_W - 20;
 const INNER_W = PANEL_W - 6;
 const TILE = 86;
-/**
- * The stage takes what the screen has left, so the whole room (top row, stage, plate, the picker)
- * fits on one screen: about 300 pt on an iPhone 16 Pro, less for a guest (their note), never under 220.
- */
-export function showroomStageH(windowH: number, insetTop: number, insetBottom: number, guest: boolean): number {
-  const chrome = insetTop + 96 + 50 + (guest ? 64 : 0) + 168 + 152 + Math.max(insetBottom, 12);
-  return Math.round(Math.max(220, Math.min(330, INNER_W * 0.86, windowH - chrome)));
-}
-
-export type ShowroomKind = 'vault' | 'season' | 'tonight';
-export type ShowroomEntry = { readonly item: ShopItem; readonly section: ShopSection; readonly kind: ShowroomKind };
-
-/** Every piece in the room, in one order: the Vault's star, the rest of the Vault, each season drop, Tonight's Pick. */
-export function showroomEntries(sections: readonly ShopSection[], heroId: number | null | undefined): ShowroomEntry[] {
-  const out: ShowroomEntry[] = [];
-  const seen = new Set<number>();
-  const add = (item: ShopItem, section: ShopSection, kind: ShowroomKind) => {
-    if (seen.has(item.id)) return;
-    seen.add(item.id);
-    out.push({ item, section, kind });
-  };
-  const featured = sections.find(s => s.type === 'featured');
-  if (featured) {
-    const hero = featured.items.find(i => i.id === (heroId ?? featured.hero_id));
-    if (hero) add(hero, featured, 'vault');
-    featured.items.forEach(i => add(i, featured, 'vault'));
-  }
-  sections.filter(s => s.type === 'event').forEach(s => s.items.forEach(i => add(i, s, 'season')));
-  sections.filter(s => s.type === 'daily').forEach(s => s.items.forEach(i => add(i, s, 'tonight')));
-  return out;
-}
-
 const KIND: Record<ShowroomKind, { icon: GameIconName; name: (s: ShopSection) => string }> = {
   vault: { icon: 'crown', name: () => 'The Vault' },
   season: { icon: 'sparkle', name: s => s.title || 'Season drop' },
@@ -114,16 +83,6 @@ function seasonIcon(key: string | null | undefined): GameIconName {
   if (key === 'valentines') return 'heart';
   if (key === 'holiday') return 'gift';
   return 'sparkle';
-}
-
-/** "New on Monday" for the Vault (it flips Monday), "New tonight" for Tonight's Pick, "Ends Nov 1" for a season. */
-export function shelfWhen(entry: Pick<ShowroomEntry, 'kind' | 'section'>, now: number): string {
-  if (entry.kind === 'vault') {
-    const p = featuredPill(entry.section, now).label;
-    return p === 'New tonight' ? 'New tomorrow' : p;
-  }
-  if (entry.kind === 'tonight') return dailyPill(entry.section, now).label === 'New stuff now' ? 'New now' : 'New tonight';
-  return eventEndPill(entry.section, now).label;
 }
 
 function iconFor(entry: ShowroomEntry): GameIconName {
@@ -208,7 +167,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
   const insets = useSafeAreaInsets();
   const member = !!player?.is_subscribed;
   const { height: winH } = useWindowDimensions();
-  const stageH = showroomStageH(winH, insets.top, insets.bottom, !member);
+  const stageH = showroomStageH(SCREEN_W, winH, insets.top, insets.bottom, !member);
   // Room above the shark for the jetpack's lift (up to 0.135 of the card), as on the old Vault stage.
   const card = useMemo(() => stageCard(INNER_W, stageH, 0.16 * stageH), [stageH]);
   const cardStyle = useMemo(() => ({ position: 'absolute' as const, ...card.box }), [card]);
@@ -254,9 +213,9 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
     <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 20 }]} showsVerticalScrollIndicator={false}>
       {/* Who you are in here, your Favorites and your coins: one slim row. */}
       <Animated.View entering={still ? undefined : FadeInDown.duration(240)} style={styles.topRow}>
-        <View style={styles.badge} accessible accessibilityLabel={member ? 'You are a VIP member' : 'Members only room. You can try everything on.'}>
+        <View style={styles.badge} accessible accessibilityLabel={member ? 'You are a VIP member' : 'The VIP room. You can try everything on.'}>
           <GameIcon name={member ? 'member' : 'lock'} size={20} />
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.badgeText}>{member ? 'VIP ROOM' : 'MEMBERS ONLY'}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.badgeText}>{member ? 'VIP ROOM' : 'VIP ONLY'}</Text>
         </View>
         <View style={{ flex: 1 }} />
         <Pressable onPress={onFavorites} hitSlop={6} accessibilityRole="button"
@@ -272,9 +231,9 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
 
       {!member && (
         <Animated.View entering={still ? undefined : FadeInDown.delay(60).duration(240)} style={styles.guest}
-          accessible accessibilityLabel="Try anything on! VIP members can buy these, and each one is yours forever.">
+          accessible accessibilityLabel={`${SECRET_PREVIEW_COPY.title} ${SECRET_PREVIEW_COPY.body}`}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.guestText}>
-            <Text style={styles.guestStrong}>Try anything on! </Text>VIP members can buy these. Each one is yours forever.
+            <Text style={styles.guestStrong}>{SECRET_PREVIEW_COPY.title} </Text>{SECRET_PREVIEW_COPY.body}
           </Text>
         </Animated.View>
       )}

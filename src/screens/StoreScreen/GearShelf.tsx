@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addToWishlist, getWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
-import { restockPill, wishSavedCopy } from '../../helpers/shopShelves';
+import { restockPill, shelfOrder, wishSavedCopy } from '../../helpers/shopShelves';
 import type { ItemType } from '../../models/item-type';
 import type { ShopItem } from '../../models/shop-today';
 import { FONT, SHADOW, SharkLoader } from '../../ui';
@@ -41,12 +41,6 @@ const TILE_W = Math.floor((SCREEN_W - 2 * (10 + 3 + GRID_PAD) - GAP * 2) / 3);
 export const GEAR_STAGE_H = 142;
 /** The shelf panel rises over the stage's floor: the shopkeeper stands behind the counter. */
 export const COUNTER_TUCK = 30;
-
-/** Owned pieces sink to the end (the shelf is mostly things you can still get); order is otherwise the server's. */
-export function shelfOrder<T extends { id: number; has_purchased?: boolean }>(items: readonly T[], keepFirst: readonly number[] = []): T[] {
-  const sinks = (i: T) => !!i.has_purchased && !keepFirst.includes(i.id);
-  return [...items.filter(i => !sinks(i)), ...items.filter(sinks)];
-}
 
 /** The catalog promo shark, bobbing and tilting in its bubbles (UI thread; stops when still). */
 const Shopkeeper = memo(function Shopkeeper({ imageUrl, still }: { imageUrl: string | undefined; still: boolean }) {
