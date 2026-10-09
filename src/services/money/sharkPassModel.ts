@@ -85,7 +85,10 @@ export function readyNowLine(tiers: readonly SharkPassTier[]): string | null {
 
 /** What a "Claim all" landed, in words: the first three, then "and N more". */
 export function claimedLine(rewards: readonly SharkPassReward[]): string {
-  const words = rewards.map(rewardWords);
+  // Best first: items, then coins, tickets, Rescue Passes, boxes, energy. Six or fewer are all named.
+  const rank: Record<string, number> = { item: 0, coins: 1, tickets: 2, rescue_passes: 3, mystery_box: 4, energy: 5 };
+  const words = [...rewards].sort((a, b) => (rank[a.type] ?? 9) - (rank[b.type] ?? 9)).map(rewardWords);
+  if (words.length <= 6) return words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}` : words[0] ?? '';
   return words.length <= 3 ? words.join(', ') : `${words.slice(0, 3).join(', ')} and ${words.length - 3} more`;
 }
 

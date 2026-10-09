@@ -7,7 +7,7 @@ import client from '../../client';
 export type SharkPassReward =
   | { readonly type: 'coins' | 'tickets' | 'energy' | 'rescue_passes'; readonly amount: number; readonly ready: boolean }
   | { readonly type: 'mystery_box'; readonly boxes: number; readonly ready: boolean }
-  | { readonly type: 'item'; readonly name: string; readonly slot: string; readonly art: string; readonly icon_url: string | null; readonly ready: boolean };
+  | { readonly type: 'item'; readonly name: string; readonly slot: 'pin' | 'background' | string; readonly art: string; readonly icon_url: string | null; readonly ready: boolean };
 
 export type SharkPassTier = {
   readonly tier: number;

@@ -105,6 +105,8 @@ test('Shark Pass: what the pass row adds for reached steps, and its sums', () =>
   ];
   assert.equal(pass.passTwinLine(tiers, false), 'With the Shark Pass you’d also have Frosty Scarf Pin, 100 coins and 1 more.');
   assert.equal(pass.passTwinLine(tiers, true), null, 'owners see nothing extra');
+  assert.equal(pass.claimedLine([{ type: 'energy', amount: 25 }, { type: 'coins', amount: 50 }, { type: 'item', name: 'Frosty Scarf Pin' }]),
+    'Frosty Scarf Pin, 50 coins and 25 energy', 'best first, all named');
   assert.deepEqual(plain(pass.passGrants(tiers)), { coins: 100, tickets: 2, rescue_passes: 1, pins: 1 });
 });
 
