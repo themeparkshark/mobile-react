@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import type { LiveEvent } from '../../api/endpoints/live-events';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { useEventAmbient } from '../../services/liveEvents/ambient';
 import { chipState } from '../../services/liveEvents/model';
 import { BRAND, GameIcon } from '../../ui';
 import { eventArt } from './eventArt';
@@ -28,7 +29,8 @@ function EventStatusChip({ event, onPress, inline = false, paused = false, now =
   const s = chipState(event, now);
   const reduced = useReducedGameMotion();
   const hop = useSharedValue(0);
-  const hopping = s.kind === 'open' && !reduced && !paused;
+  const p = useEventAmbient();
+  const hopping = s.kind === 'open' && !reduced && p.ambient && !paused;
   useEffect(() => {
     if (!hopping) { cancelAnimation(hop); hop.value = 0; return; }
     hop.value = withRepeat(withSequence(withTiming(1, { duration: 240, easing: Easing.out(Easing.quad) }),

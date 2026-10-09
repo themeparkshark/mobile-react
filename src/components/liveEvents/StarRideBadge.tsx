@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
+import { useEventAmbient } from '../../services/liveEvents/ambient';
 
 /**
  * A Star Ride: a star with "x2" that sits on the ride coin marker itself
@@ -13,7 +14,7 @@ import { BRAND, GameIcon } from '../../ui';
 function StarRideBadge({ size = 22, paused = false, times = 2 }: { readonly size?: number; readonly paused?: boolean; readonly times?: number }) {
   const reduced = useReducedGameMotion();
   const t = useSharedValue(0);
-  const still = paused || reduced;
+  const still = paused || reduced || !useEventAmbient().ambient;
   useEffect(() => {
     if (still) { cancelAnimation(t); t.value = 0; return; }
     t.value = withRepeat(withSequence(withTiming(1, { duration: 700, easing: Easing.inOut(Easing.sin) }),

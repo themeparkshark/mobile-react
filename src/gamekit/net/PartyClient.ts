@@ -718,21 +718,33 @@ export class PartyClient {
       .catch((e) => this.handleError(e));
   };
 
+  /**
+   * One timer for the heartbeat and the safety poll, set to whichever is due
+   * next (battery: no 250 ms wake-ups while a room sits in a lobby). A fresh
+   * snapshot moves lastSyncAt, so the next wake simply finds nothing due.
+   */
+  private nextDueMs(): number {
+    const r = this.local;
+    const inRound = !!r && !r.ended && this.state.phase === 'playing';
+    const beatEvery = inRound ? ROUND_HEARTBEAT_MS : HEARTBEAT_MS;
+    const pollEvery = this.state.connection === 'live' ? POLL_LIVE_MS : POLL_FALLBACK_MS;
+    const now = this.now();
+    const due = Math.min(this.lastBeatAt + beatEvery, this.lastSyncAt + pollEvery) - now;
+    // At most 1 s, so a round that starts mid-wait gets its 3 s heartbeat on time.
+    return Math.max(LOOP_MS, Math.min(due, 1000));
+  }
+
   private startLoops(): void {
     this.loopTimers.forEach((t) => this.clearTimer(t));
     this.loopTimers = [];
-    const loop = (fn: () => void, ms: () => number) => {
-      const tick = () => {
-        if (this.destroyed || !this.state.room) return;
-        fn();
-        const h = this.setTimer(tick, ms());
-        this.loopTimers.push(h);
-        if (this.loopTimers.length > 16) this.loopTimers.splice(0, this.loopTimers.length - 16);
-      };
-      this.loopTimers.push(this.setTimer(tick, ms()));
+    const tick = () => {
+      this.loopTimers = [];
+      if (this.destroyed || !this.state.room) return;
+      this.heartbeat();
+      this.pollIfNeeded();
+      this.loopTimers = [this.setTimer(tick, this.nextDueMs())];
     };
-    loop(this.heartbeat, () => LOOP_MS);
-    loop(this.pollIfNeeded, () => LOOP_MS);
+    this.loopTimers = [this.setTimer(tick, LOOP_MS)];
   }
 
   /** Safety poll: every 1.25 s without a socket, every 5 s with one; any fresh snapshot resets the wait. */

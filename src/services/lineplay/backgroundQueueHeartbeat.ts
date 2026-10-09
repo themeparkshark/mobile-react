@@ -219,7 +219,8 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
         ...(typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy >= 0
           ? { accuracy_meters: Math.min(10_000, accuracy) } : {}),
       }, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 });
-      if (response.data?.status === 'completed') {
+      // Battery: any finished session ends the background task at once.
+      if (['completed', 'ended', 'expired', 'cancelled', 'abandoned'].includes(String(response.data?.status ?? ''))) {
         await AsyncStorage.removeItem(STORAGE_KEY);
         await stopTask();
         return;
@@ -231,7 +232,7 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
     } catch (requestError) {
       const response = (requestError as { response?: { status?: number; data?: { code?: string } } })?.response;
       const status = response?.status;
-      if (status === 401 || status === 404) {
+      if (status === 401 || status === 404 || status === 410) {
         await AsyncStorage.removeItem(STORAGE_KEY);
         await stopTask();
         return;

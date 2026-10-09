@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import type { EventChest } from '../../api/endpoints/live-events';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { useEventAmbient } from '../../services/liveEvents/ambient';
 import { trackFill } from '../../services/liveEvents/model';
 import { BRAND, GameIcon } from '../../ui';
 import type { EventArt } from './eventArt';
@@ -11,17 +12,18 @@ import type { EventArt } from './eventArt';
 const CHEST = 40;
 
 /** A chest you can open now: a small hop, on the UI thread, still under reduced motion. */
-function HopChest({ art, size }: { readonly art: EventArt; readonly size: number }) {
+function HopChest({ art, size, paused = false }: { readonly art: EventArt; readonly size: number; readonly paused?: boolean }) {
   const reduced = useReducedGameMotion();
+  const p = useEventAmbient();
   const t = useSharedValue(0);
   useEffect(() => {
-    if (reduced) { t.value = 0; return; }
+    if (reduced || !p.ambient || paused) { cancelAnimation(t); t.value = 0; return; }
     t.value = withRepeat(withSequence(
       withTiming(1, { duration: 260, easing: Easing.out(Easing.quad) }),
       withTiming(0, { duration: 300, easing: Easing.in(Easing.quad) }),
       withTiming(0, { duration: 900 })), -1, false);
     return () => cancelAnimation(t);
-  }, [reduced, t]);
+  }, [reduced, p.ambient, paused, t]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: -6 * t.value }, { rotate: `${(t.value - 0.5) * 6}deg` }] }));
   return <Animated.View style={style}><Image source={art.chestClosed} style={{ width: size, height: size }} contentFit="contain" /></Animated.View>;
 }
@@ -31,7 +33,7 @@ function HopChest({ art, size }: { readonly art: EventArt; readonly size: number
  * dim with a lock, a ready chest hops with a red dot, an opened chest shows
  * open with a green check. Tap a ready chest to open it.
  */
-function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label }: {
+function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label, paused = false }: {
   readonly chests: readonly EventChest[];
   readonly value: number;
   readonly art: EventArt;
@@ -41,6 +43,8 @@ function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label }: {
   readonly opening?: string | null;
   /** Screen-reader name of the track ("Your chests"). */
   readonly label: string;
+  /** The sheet is hidden or covered: ready chests rest. */
+  readonly paused?: boolean;
 }) {
   const reduced = useReducedGameMotion();
   const { fill, stops } = trackFill(chests, value);
@@ -65,7 +69,7 @@ function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label }: {
             accessibilityRole="button"
             accessibilityLabel={ready ? 'Chest ready. Open it.' : done ? 'Chest opened. See what it held.' : chest.reached ? 'Chest reached. Help once to open it.' : 'Chest locked. See what is inside.'}
             style={[styles.chestSlot, { left }]}>
-            {ready ? <HopChest art={art} size={CHEST} />
+            {ready ? <HopChest art={art} size={CHEST} paused={paused} />
               : <Image source={done ? art.chestOpen : art.chestClosed} style={[styles.chest, locked && styles.locked]} contentFit="contain" />}
             {ready && <View style={styles.dot} />}
             {done && <View style={styles.badge}><GameIcon name="check" size={14} /></View>}
