@@ -102,13 +102,15 @@ function ChaserMeter({ series, still }: { series: MysterySeries; still: boolean 
 /** Traders: extra copies fill coin slots; when they're full, Pick any pin you still need. */
 function TradersRow({ series, busy, onPick, still }: { series: MysterySeries; busy: boolean; onPick: () => void; still: boolean }) {
   const v = pointsView(series);
+  const ready = v.missing === 0 ? v.points >= v.cost : v.ready;
   const pop = useSharedValue(1);
   useEffect(() => {
-    if (v.ready && !still) pop.value = withSequence(withTiming(1.15, { duration: 120 }), withSpring(1, { damping: 6 }));
-  }, [v.ready, still, pop]);
+    if (ready && !still) pop.value = withSequence(withTiming(1.15, { duration: 120 }), withSpring(1, { damping: 6 }));
+  }, [ready, still, pop]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
-  // Nothing left to pick: the extras still trade on the board, so the row steps aside.
-  if (v.missing === 0) return null;
+  // Series complete: the same 5 extras become a free box instead of a pick.
+  const boxMode = v.missing === 0;
+  if (boxMode && v.points === 0) return null;
   const filled = Math.min(v.points, v.cost);
   return (
     <View style={styles.tradersRow} accessible accessibilityLabel={`Extras: ${filled} of ${v.cost}. ${v.ready ? 'Pick a pin you need' : 'Extra copies fill these'}`}>
@@ -120,10 +122,11 @@ function TradersRow({ series, busy, onPick, still }: { series: MysterySeries; bu
         ))}
       </View>
       <Animated.View style={popStyle}>
-        <Pressable disabled={!v.ready || busy} onPress={onPick} hitSlop={6}
-          style={({ pressed }) => [styles.pick, !v.ready && styles.pickOff, pressed && { transform: [{ scale: 0.96 }] }]}
-          accessibilityRole="button" accessibilityState={{ disabled: !v.ready }} accessibilityLabel="Pick a pin you need">
-          <Text maxFontSizeMultiplier={1.1} style={[styles.pickText, !v.ready && { color: '#9fb3cb' }]}>Pick</Text>
+        <Pressable disabled={!ready || busy} onPress={onPick} hitSlop={6}
+          style={({ pressed }) => [styles.pick, !ready && styles.pickOff, pressed && { transform: [{ scale: 0.96 }] }]}
+          accessibilityRole="button" accessibilityState={{ disabled: !ready }} accessibilityLabel={boxMode ? 'Turn 5 extras into a free box' : 'Pick a pin you need'}>
+          {boxMode ? <Image source={BOX_ART.blue.closed} style={{ width: 28, height: 28, opacity: ready ? 1 : 0.4 }} contentFit="contain" />
+            : <Text maxFontSizeMultiplier={1.1} style={[styles.pickText, !ready && { color: '#9fb3cb' }]}>Pick</Text>}
         </Pressable>
       </Animated.View>
     </View>
@@ -223,9 +226,11 @@ type Props = {
   readonly fresh?: ReadonlySet<number>;
   readonly onOpen: (series: MysterySeries, count: number, pay: 'coins' | 'free') => void;
   readonly onPick: (series: MysterySeries) => void;
+  /** The server said coins were short (a stale balance): show the top-up right here. */
+  readonly serverShort?: number | null;
 };
 
-function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onOpen, onPick }: Props) {
+function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onOpen, onPick, serverShort }: Props) {
   const tone = boxTone(series.theme_color);
   const free = nextFreeBox(series);
   const progress = seriesProgress(series);
@@ -237,6 +242,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
   const shortOne = coinsShort(series, 1, coins);
   const shortFive = coinsShort(series, series.bundle.count, coins);
   const [topUp, setTopUp] = useState<number | null>(null);
+  useEffect(() => { if (serverShort && serverShort > 0) setTopUp(serverShort); }, [serverShort]);
   const bump = useSharedValue(1);
   const callBack = useSharedValue(1);
   const callBackStyle = useAnimatedStyle(() => ({ transform: [{ scale: callBack.value }] }));
@@ -251,7 +257,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
     const end = new Date(series.ends_at);
     const days = (end.getTime() - Date.now()) / 86400000;
     if (days > 14 || days < 0) return null;
-    return `Meter ends ${end.toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles' })}`;
+    return 'Your chaser meter moves to the next series';
   })();
 
   const tryOpen = (count: number) => {

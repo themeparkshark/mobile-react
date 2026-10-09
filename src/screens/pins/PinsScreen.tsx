@@ -68,6 +68,7 @@ export default function PinsScreen() {
   } | null>(null);
   const [fresh, setFresh] = useState<{ seriesId: number; ids: Set<number> } | null>(null);
   const [picking, setPicking] = useState<MysterySeries | null>(null);
+  const [serverShort, setServerShort] = useState<{ seriesId: number; need: number } | null>(null);
   const [help, setHelp] = useState(false);
   const [visited, setVisited] = useState<Set<Tab>>(new Set());
   const [appActive, setAppActive] = useState(true);
@@ -159,7 +160,11 @@ export default function PinsScreen() {
       setReveal(null);
       const data = (e as { response?: { status?: number; data?: { code?: string; message?: string; need?: number; have?: number } } })?.response;
       if (data?.status && data.status < 500) delete pending.current[series.id];
-      if (data?.data?.code === 'not_enough_currency') void refreshPlayer().catch(() => undefined);
+      if (data?.data?.code === 'not_enough_currency') {
+        // A stale balance: the card shows the top-up for exactly what's missing.
+        setServerShort({ seriesId: series.id, need: Math.max(1, (data.data.need ?? 0) - (data.data.have ?? 0)) });
+        void refreshPlayer().catch(() => undefined);
+      }
       else gameAlert('That box didn’t open', data?.data?.message ?? 'Check your internet and try again. Your coins are safe.');
     } finally { setBusy(null); }
   }, [busy, coins, refreshPlayer]);
@@ -208,6 +213,20 @@ export default function PinsScreen() {
       gameAlert('Not yet', 'Check your internet and try again.');
     } finally { setBusy(null); }
   }, [busy]);
+
+  const extrasForBox = useCallback(async (series: MysterySeries) => {
+    if (busy) return;
+    setBusy(`pick:${series.id}`);
+    try {
+      const r = await pickWithPoints(series.id, 0, newRequestId());
+      if (r.picked) {
+        queueHaptic('success', 2);
+        setHome(h => h && ({ ...h, mystery: h.mystery.map(s => (s.id === r.series.id ? r.series : s)) }));
+        void load(true);
+      }
+    } catch { gameAlert('Not yet', 'Check your internet and try again.'); }
+    finally { setBusy(null); }
+  }, [busy, load]);
 
   const closeReveal = useCallback((shown: readonly RevealPull[]) => {
     const r = reveal;
@@ -367,7 +386,12 @@ export default function PinsScreen() {
                   <View key={s.id} onLayout={e => { cardY.current[s.id] = e.nativeEvent.layout.y; }}>
                   <MysteryCard key={s.id} series={s} coins={coins} busy={!!busy && (busy.startsWith(`${s.id}:`) || busy === `pick:${s.id}`)}
                     active={visible && tab === 'mystery'} still={still} shine={tab === 'mystery' ? shine : undefined}
-                    fresh={fresh?.seriesId === s.id ? fresh.ids : undefined} onOpen={open} onPick={setPicking} />
+                    fresh={fresh?.seriesId === s.id ? fresh.ids : undefined} onOpen={open}
+                    serverShort={serverShort?.seriesId === s.id ? serverShort.need : null}
+                    onPick={series => {
+                      // A finished series turns 5 extras into a free box; otherwise pick a missing pin.
+                      if (series.pins.every(p => p.is_chaser || p.owned)) void extrasForBox(series); else setPicking(series);
+                    }} />
                   </View>
                 ))}
               </View>
