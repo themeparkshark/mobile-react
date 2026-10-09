@@ -116,14 +116,15 @@ export function needleDeg(mapBearing: number): number {
 /**
  * The shark's swim (the "follower"). GPS gives a fix only every 3 m or so (about every 2 s at a
  * walk), each a metre or two off. The follower:
- *  - runs the target on from the newest fix at the walking velocity (measured over the last few
- *    fixes, so it is steady) for about as long as the next fix should take, at most 1.6 m: you are
- *    somewhere between your last fix and the next one, and this is the best guess of where;
- *  - swims toward that moving target with a critically damped spring plus the target's own
- *    velocity, so on a steady walk it rides right on it (no trailing) at an even speed, and a new
- *    fix only nudges it;
- *  - stops when the target stops: no fix when one was due means you stopped, and the shark
- *    settles within about a second, never sliding on.
+ *  - keeps a constant-velocity Kalman estimate of where you are and how you walk (chaseFix), whose
+ *    motion noise depends on the step sensor: walking (normal), standing (almost none, velocity pinned
+ *    at zero, fixes inside a 5 m dead zone barely count), unknown (standing until two GPS steps agree);
+ *    a ride vehicle (3+ fixes over 4 m nearly in line) overrides "standing";
+ *  - runs the target on from the estimate at its velocity for about the expected gap to the next fix
+ *    (longer while the step sensor says walking, at most 4.2 m; one gap when a fix lands off to the
+ *    side, the start of a turn); a GPS step the phone's heading agrees with turns it at once;
+ *  - swims toward that target with a critically damped spring plus the target's velocity, and settles
+ *    with a stiffer spring when the step sensor says you stopped; a false start returns to the last fix.
  * Cheap: a few multiplies per 16 ms step, and it skips straight to rest after a long gap.
  */
 /** Spring stiffness (rad/s): higher follows fixes faster, lower is smoother. */
@@ -154,12 +155,14 @@ export interface Chaser {
   hx: number | null; hy: number | null;
   /** Standing but carried (the GPS keeps moving steadily): the run-on comes back. */
   carried: boolean;
-  fastPrev: boolean;
   /** Kalman estimate: position, its time, and the shared 2x2 covariance (null before the first fix). */
   kX: GlidePoint; kT: number; kP: [number, number, number, number] | null;
+  /** The last few fixes (carried and step-agreement checks). */
+  recent: { p: GlidePoint; t: number }[];
 }
 export function newChaser(at: GlidePoint, tMs: number): Chaser {
-  return { p: at, ve: 0, vn: 0, t: tMs, fix: at, fixT: tMs, re: 0, rn: 0, leadS: 0, walking: null, lastFix: at, lastFixT: tMs, walkSince: 0, offStep: null, hx: null, hy: null, carried: false, fastPrev: false, kX: at, kT: tMs, kP: null };
+  return { p: at, ve: 0, vn: 0, t: tMs, fix: at, fixT: tMs, re: 0, rn: 0, leadS: 0, walking: null, lastFix: at, lastFixT: tMs, walkSince: 0, offStep: null, hx: null, hy: null, carried: false, kX: at, kT: tMs, kP: null,
+    recent: [{ p: at, t: tMs }] };
 }
 const leadFor = (c: Chaser, v: number, gapS: number) => {
   // Standing (step sensor): no run-on, but every fix still moves the shark (a ride vehicle, a stroller).
@@ -205,12 +208,15 @@ const enM = (a: GlidePoint, b: GlidePoint): [number, number] => [
 const move = (p: GlidePoint, e: number, n: number): GlidePoint => ({
   latitude: p.latitude + n / 111_320, longitude: p.longitude + e / (111_320 * Math.cos(p.latitude * Math.PI / 180)) });
 /** Where the target is at `tMs` and how fast it moves (m/s east, north). */
+function trajectory(fix: GlidePoint, re: number, rn: number, leadS: number, fixT: number, tMs: number): [GlidePoint, number, number] {
+  const el = Math.max(0, (tMs - fixT) / 1000);
+  const running = el < leadS;
+  const s = Math.min(el, leadS);
+  return [move(fix, re * s, rn * s), running ? re : 0, running ? rn : 0];
+}
+/** Where the target is at `tMs` and how fast it moves. */
 function followTarget(c: Chaser, tMs: number): [GlidePoint, number, number] {
-  const el = Math.max(0, (tMs - c.fixT) / 1000);
-  const running = el < c.leadS;
-  const s = Math.min(el, c.leadS);
-  const [re, rn] = runDirection(c);
-  return [move(c.fix, re * s, rn * s), running ? re : 0, running ? rn : 0];
+  return trajectory(c.fix, c.re, c.rn, c.leadS, c.fixT, tMs);
 }
 /**
  * The run-on's velocity. The compass never steers it: people look around while they walk, and the round 4
@@ -260,18 +266,20 @@ export function chasePeek(c: Chaser, tMs: number): GlidePoint {
 export function chaseSpeed(c: Chaser | null): number {
   return c ? Math.hypot(c.ve, c.vn) : 0;
 }
-/** How much of a small miss between the target and a new fix is taken in (the rest is GPS scatter). */
-export const FOLLOW_ALPHA = 0.3;
-/** Standing (step sensor): even less, so scatter does not walk a standing shark. */
-export const FOLLOW_STILL_ALPHA = 0.2;
-/** A fix this far (m) from the target is taken whole (a real move, not scatter). */
-export const FOLLOW_SNAP_M = 5;
-/** How much of a miss changes the pace (alpha-beta beta). */
-export const FOLLOW_BETA = 0.08;
 /** A step at least this long (m) that turns more than 35 degrees is a corner. */
 export const FOLLOW_TURN_STEP_M = 2;
 /** Kalman (constant velocity): how much a walker's velocity may change per second (m/s^2 noise density). */
 export const FOLLOW_Q = 0.3;
+/** Standing (step sensor, not carried): the estimate barely moves. */
+export const FOLLOW_Q_STILL = 0.005;
+/** No step sensor yet (map just opened, a simulator): cautious. */
+export const FOLLOW_Q_UNKNOWN = 0.1;
+/** Standing: fixes this close (m) to the estimate are scatter. */
+export const FOLLOW_STILL_DEADZONE_M = 5;
+/** The filter's step is capped (s): one fix after a quiet spell never counts for everything. */
+export const FOLLOW_MAX_DT_S = 3;
+/** A fix this far (m) to the side of the shark's heading means a turn is starting: the run-on shortens to one gap. */
+export const FOLLOW_SIDE_M = 1.5;
 /** Kalman: the spread of a filtered fix (m). */
 export const FOLLOW_R_M = 1.6;
 /**
@@ -283,54 +291,94 @@ export const FOLLOW_R_M = 1.6;
  */
 export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, _rate: readonly [number, number], gapS: number, jump: boolean): void {
   chaseAdvance(c, tMs);
-  const first = !c.lastFix || c.lastFix === c.fix && c.lastFixT === c.fixT && c.kP === null;
+  const first = c.kP === null;
   const prevFix = c.lastFix, prevT = c.lastFixT;
   c.lastFix = fix; c.lastFixT = tMs;
-  if (jump || first || c.kP === null) {
-    if (jump) { c.p = fix; c.ve = 0; c.vn = 0; }
-    c.fix = fix; c.fixT = tMs; c.re = 0; c.rn = 0; c.leadS = 0;
+  c.recent.push({ p: fix, t: tMs });
+  if (c.recent.length > 4) c.recent.shift();
+  if (jump || first) {
+    if (jump) { c.p = fix; c.ve = 0; c.vn = 0; c.recent = [{ p: fix, t: tMs }]; }
+    c.fix = fix; c.fixT = tMs; c.re = 0; c.rn = 0; c.leadS = 0; c.kX = fix; c.kT = tMs;
     c.kP = [FOLLOW_R_M * FOLLOW_R_M, 0, 0, 1];
     return;
   }
-  const dt = Math.min(10, Math.max(0.2, (tMs - c.kT) / 1000));
-  // Predict from the last update (position, not the run-on target: the filter owns the estimate).
-  const [P00, P01, P10, P11] = c.kP;
-  const q = FOLLOW_Q;
+  // No step sensor yet (the map just opened, or a phone without one): standing until the GPS itself shows
+  // a walk (two steps that agree), so scatter at the map's opening never sets the shark wandering.
+  const standing = c.walking === false || (c.walking === null && !stepsAgree(c.recent));
+  // Carried while "standing" (a ride vehicle, a stroller): the last 3 or more fixes cover over 4 m in a nearly
+  // straight line. Slowly drifting phone GPS while you stand never does that.
+  c.carried = standing && carriedBy(c.recent);
+  const still = standing && !c.carried;
+  // How much a velocity may change per second: almost nothing while standing (the estimate stays put), a
+  // walker's worth otherwise. The step is capped so a long quiet spell never makes one fix count for all.
+  const q = still ? FOLLOW_Q_STILL : c.walking === null ? FOLLOW_Q_UNKNOWN : FOLLOW_Q;
+  // Standing: a fix inside the dead zone is scatter around where you are; it nudges very little.
+  const dt = Math.min(FOLLOW_MAX_DT_S, Math.max(0.2, (tMs - c.kT) / 1000));
+  const vre = still ? 0 : c.re, vrn = still ? 0 : c.rn;
+  const kp = c.kP as [number, number, number, number];
+  const [P00, P01, P10, P11] = still ? [kp[0], 0, 0, 0] : kp;
   const p00 = P00 + dt * (P10 + P01) + dt * dt * P11 + q * dt * dt * dt / 3;
   const p01 = P01 + dt * P11 + q * dt * dt / 2;
   const p10 = P10 + dt * P11 + q * dt * dt / 2;
   const p11 = P11 + q * dt;
-  const pred = move(c.kX, c.re * dt, c.rn * dt);
+  const pred = move(c.kX, vre * dt, vrn * dt);
   const [ye, yn] = enM(pred, fix);
-  // Standing (step sensor): a fix is mostly scatter, so it counts for less (a ride vehicle still wins over a few fixes).
-  const r = c.walking === false ? FOLLOW_R_M * 2 : FOLLOW_R_M;
+  // Standing: a fix is mostly scatter, so it counts for much less.
+  const r = still ? FOLLOW_R_M * 2 : FOLLOW_R_M;
   const S = p00 + r * r;
-  const k0 = p00 / S, k1 = p10 / S;
+  const near = Math.hypot(...enM(c.kX, fix)) < FOLLOW_STILL_DEADZONE_M;
+  const k0 = (p00 / S) * (still && near ? 0.1 : 1), k1 = still ? 0 : p10 / S;
   const est = move(pred, k0 * ye, k0 * yn);
-  let re = c.re + k1 * ye, rn = c.rn + k1 * yn;
-  c.kP = [(1 - k0) * p00, (1 - k0) * p01, p10 - k1 * p00, p11 - k1 * p01];
+  let re = vre + k1 * ye, rn = vrn + k1 * yn;
+  c.kP = [(1 - k0) * p00, (1 - k0) * p01, p10 - (p10 / S) * p00, p11 - (p10 / S) * p01];
   const sp = Math.hypot(re, rn);
   if (sp > GLIDE_MAX_CARRY_MPS) { re *= GLIDE_MAX_CARRY_MPS / sp; rn *= GLIDE_MAX_CARRY_MPS / sp; }
+  // Off to the side of where the shark was heading (cross-track): a turn is starting. Run on only one gap.
+  let sideways = false;
+  const v = Math.hypot(re, rn);
+  if (v > 0.3) sideways = Math.abs((ye * rn - yn * re) / v) > FOLLOW_SIDE_M;
   // A corner the phone confirms: the newest step turns away from the estimate (over 35 degrees) and the
   // phone points along that step (within 45). Take the step's direction now instead of a fix later. The
   // compass never steers on its own (people look around while walking); it only confirms what GPS shows.
   if (prevFix && c.walking === true && c.hx !== null && c.hy !== null) {
     const sdt = Math.max(0.3, (tMs - prevT) / 1000);
     const [se, sn] = enM(prevFix, fix);
-    const sl = Math.hypot(se, sn), v = Math.hypot(re, rn);
+    const sl = Math.hypot(se, sn);
     if (sl >= FOLLOW_TURN_STEP_M && v > 0.3) {
       const offPace = (re * se + rn * sn) / (v * sl) < Math.cos(35 * Math.PI / 180);
       const phoneAlong = (c.hx * se + c.hy * sn) / sl > Math.cos(45 * Math.PI / 180);
-      if (offPace && phoneAlong) { const pace = Math.min(v, sl / sdt); re = (se / sl) * pace; rn = (sn / sl) * pace; }
+      if (offPace && phoneAlong) {
+        const pace = Math.min(v, sl / sdt); re = (se / sl) * pace; rn = (sn / sl) * pace;
+        // The filter was sure of the old direction; it should not be now.
+        c.kP = [c.kP[0], 0, 0, Math.max(c.kP[3], 0.5)];
+        sideways = true;
+      }
     }
   }
+  // Without the step sensor: run on only when the last two steps agree (scatter rarely does).
+  const agree = c.walking !== null || stepsAgree(c.recent);
   c.kX = est; c.kT = tMs;
-  // Carried (standing, yet the estimate keeps moving for two fixes in a row): the run-on comes back.
-  const fast = Math.hypot(re, rn) > 0.8;
-  c.carried = c.walking === false && fast && c.fastPrev;
-  c.fastPrev = fast;
-  c.fix = est; c.fixT = tMs; c.re = re; c.rn = rn;
-  c.leadS = leadFor(c, Math.hypot(re, rn), gapS);
+  c.fix = est; c.fixT = tMs; c.re = still ? 0 : re; c.rn = still ? 0 : rn;
+  const speed = Math.hypot(c.re, c.rn);
+  const lead = agree ? leadFor(c, speed, gapS) : 0;
+  c.leadS = sideways ? Math.min(lead, Math.max(0.5, gapS), FOLLOW_MAX_LEAD_M / Math.max(0.3, speed)) : lead;
+}
+/** Carried: the last fixes (3 or more) moved over 4 m net, nearly in a line (net over 80 % of the path). */
+function carriedBy(recent: readonly { p: GlidePoint; t: number }[]): boolean {
+  if (recent.length < 3) return false;
+  let path = 0;
+  for (let i = 1; i < recent.length; i++) { const [e, n] = enM(recent[i - 1].p, recent[i].p); path += Math.hypot(e, n); }
+  const [ne, nn] = enM(recent[0].p, recent[recent.length - 1].p);
+  const net = Math.hypot(ne, nn);
+  return net > 4 && net > 0.8 * path;
+}
+/** The last two steps point the same way (within 45 degrees) and each is at least 1.5 m. */
+function stepsAgree(recent: readonly { p: GlidePoint; t: number }[]): boolean {
+  if (recent.length < 3) return false;
+  const [a, b, d] = recent.slice(-3).map(x => x.p);
+  const [e1, n1] = enM(a, b), [e2, n2] = enM(b, d);
+  const l1 = Math.hypot(e1, n1), l2 = Math.hypot(e2, n2);
+  return l1 >= 1.5 && l2 >= 1.5 && (e1 * e2 + n1 * n2) / (l1 * l2) > Math.cos(45 * Math.PI / 180);
 }
 /** Still moving at `tMs` (not yet at rest on its target). */
 export function chaseActive(c: Chaser | null, tMs: number): boolean {
