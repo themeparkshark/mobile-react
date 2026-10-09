@@ -153,9 +153,9 @@ test('items: found in color with a caught count, missing as silhouettes with a r
   assert.equal(items[1].canExchange, false);
   assert.equal(items[2].spawnHint, 'Rainy days only.', 'an item gate wins');
   assert.equal(items[1].spawnHint, 'After sunset', 'then the set gate');
-  assert.equal(dex.caughtLine(items[3]), 'Swapped in. Catch one on the map too!');
-  assert.equal(dex.caughtLine(items[1]), 'Not caught yet');
-  assert.equal(dex.caughtLine(items[0]), 'Caught 3 times');
+  assert.equal(dex.caughtLine(items[3]), 'Swapped in. Find one on the map too!');
+  assert.equal(dex.caughtLine(items[1]), 'Not found yet');
+  assert.equal(dex.caughtLine(items[0]), 'Found 3 times');
   assert.equal(items[3].isNew, false);
   // v3 item fields overlay by id.
   const v3 = plain(dex.buildItems(detail, [{ id: 2, is_found: true, caught_count: 4, copies: 2, spares: 1, flavor: 'Shiny!',
@@ -225,7 +225,9 @@ test('the book screen: one hierarchy (shelf, set, prizes, finds by rarity), Flas
   assert.match(screen, /source=\{BOOK_BG\}/, 'the Standings underwater art');
   assert.match(parts, /standings-bg\.png/);
   assert.match(parts, /export function PrizeChips[\s\S]*prizeChips\(reward\)/, 'prizes are icons plus words');
-  assert.match(parts, /`Title: \$\{chip\.value\}`/, 'the title is shown up front');
+  assert.match(parts, />Title: \{title\}<\/Text>/, 'the title is shown up front, as a ribbon');
+  assert.match(parts, /prizeMarks\(set\)/, 'a notch on the bar for every prize');
+  assert.match(parts, /const goal = goalLine\(set\);/);
   assert.match(parts, /Find all \$\{set\.total\}/);
   assert.match(parts, /scaleX: Math\.max\(0\.001, fill\.value\)/, 'the count bar animates a transform, not width');
   // Shelf keeps the chosen set on screen.
@@ -319,8 +321,8 @@ test('rarity: the app-wide design-system palette, navy ink on light chips, named
   assert.match(parts, /\{label\}<\/Text>/);
   const tile = read('src/screens/SetCollection/DexTile.tsx');
   assert.doesNotMatch(tile, /<RarityGems/);
-  assert.match(tile, /item\.rarity >= 5 && item\.found/, 'Legendary shimmer');
-  assert.match(tile, /item\.found && item\.spares > 0 &&/, 'the extras badge only when there are extras');
+  assert.match(tile, /const sheen = item\.found && item\.rarity >= 3 && active && !reduced;/, 'Rare and up shine, paused when covered');
+  assert.match(tile, /\{item\.spares > 0 && \(/, 'the extras badge only when there are extras (inside the found sticker)');
   assert.match(tile, /\+\{item\.spares\}/, 'one notation for extras: +N');
   assert.match(tile, /borderStyle: 'dashed'/, 'a missing find is an empty album slot');
   assert.doesNotMatch(tile, /swapReady|name="swap"/, 'no swap badge: swaps are retired');
@@ -403,8 +405,8 @@ test('round 3: swap story, recycled tiles, focus refresh, light ticks, small pho
   assert.equal(dex.rarityHint('Anytime, anywhere', 1), 'Anytime, anywhere');
   assert.equal(dex.rarityHint('After sunset', 5), 'After sunset');
   // Reduce Motion: header and shelf cards fade only.
-  assert.match(parts, /reduced \? \{ opacity: 0\.88 \+ 0\.12 \* lift\.value \}/);
-  assert.match(parts, /reduced \? \{ opacity: enter\.value \}/);
+  assert.match(parts, /reduced \? \{ opacity: 0\.8 \+ 0\.2 \* lift\.value \}/);
+  assert.match(parts, /enter\.value = reduced \? 1 :/);
   assert.doesNotMatch(read('src/screens/SetCollection/SetHuntSections.tsx'), /fontSize: 1[0-4]\b/);
 });
 
@@ -430,13 +432,15 @@ test('the set says when its finds are on the map, once, and marks the hunted set
   const parts = read('src/screens/SetCollection/BookParts.tsx');
   assert.match(parts, /const when = whenLine\(set\);/);
   assert.match(parts, /open \? 'On now' : 'Not right now'/);
-  assert.match(parts, /set\.focused \? 'Hunting' : 'Hunt this set'/, 'the hunt switch has words');
-  assert.match(parts, /set\.focused && <View style=\{styles\.cardHunt\}>/);
+  assert.match(parts, /accessibilityRole="switch"/, 'a real switch');
+  assert.match(parts, />More on your map<\/Text>/, 'the hunt switch says what it does');
+  assert.match(parts, /set\.focused && \(\s*<View style=\{styles\.cardHunt\}>/);
+  assert.match(parts, />Hunting<\/Text>/, 'the shelf tag is a word');
   assert.match(parts, /you are hunting this set/);
   assert.match(read('src/screens/SetCollectionScreen.tsx'), /finds will show up more on your map/, 'turning it on says what it does');
   // The shelf card carries its own count and prize marker.
   assert.match(parts, /\{set\.found\}\/\{set\.total\}<\/Text>/);
-  assert.match(parts, /claim && <Animated\.View style=\{\[styles\.cardPrize/);
+  assert.match(parts, /<Animated\.View style=\{\[styles\.cardPrize, bobStyle\]\}/);
 });
 
 test('round 4: instant book, menu above the map, grades, shimmer, title stamp', () => {
@@ -463,7 +467,7 @@ test('round 4: instant book, menu above the map, grades, shimmer, title stamp', 
   assert.match(parts, /cardFaceGold/);
   assert.match(parts, /const t = useSharedValue\(reduced \? 1 : 1\.6\)/, 'the title stamp slams from 1.6');
   assert.match(tile, /styles\.rim/);
-  assert.match(tile, /<View key=\{item\.id\} style=\{panel\}>/);
+  assert.match(tile, /<View key=\{item\.id\} style=\{\[styles\.slot/);
   assert.match(read('src/screens/SetCollection/RidePhoto.tsx'), /great: \{ outer: '#9fb8d4'/);
   assert.match(card, /position: 'absolute', top: 10, left: 10/, 'Golden Hour tag in the photo corner, away from the grade');
 });
@@ -623,11 +627,11 @@ test('swaps are retired: rare finds are earned on the map, spares stay a count, 
   // Extras: a share button only when there are any and sharing is on; the sheet lists every extra and explains sharing.
   const parts2 = read('src/screens/SetCollection/BookParts.tsx');
   assert.match(parts2, /extras > 0 && onExtras \?/);
-  assert.match(screen, /Tap one to give it to a friend who still needs it!/);
+  assert.match(screen, /Tap one to give it to a friend!/);
   assert.match(screen, /const list = \[\.\.\.items\]\.filter\(item => item\.found && item\.spares > 0\)/, 'every extra, not just one');
   assert.doesNotMatch(screen, /swap for new finds/i);
   // Items swapped in while swaps were live keep the label.
-  assert.equal(dex.caughtLine({ found: true, foundInWorld: false, caught: 1 }), 'Swapped in. Catch one on the map too!');
+  assert.equal(dex.caughtLine({ found: true, foundInWorld: false, caught: 1 }), 'Swapped in. Find one on the map too!');
   assert.match(card, /item\.foundInWorld === false \? 'Swapped in'/);
   // A missing find gets one big way to the map in the slot the Swap button used.
   assert.match(card, /\(!item\.found \|\| item\.foundInWorld === false\) && \([\s\S]{0,120}'Catch one on the map' : 'Find it on the map'\} icon="map" onPress=\{onFind\}/);

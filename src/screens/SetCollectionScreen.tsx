@@ -15,7 +15,7 @@ import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { GiftReceipt } from '../api/endpoints/me/prep-variant-gifts';
 import getPrepItemSets, {
@@ -47,7 +47,7 @@ import { ItemCard } from './SetCollection/DexItemCard';
 import { RewardReveal } from './SetCollection/DexReveal';
 import { cachedBook, storeBook, storeDetail } from './SetCollection/dexCache';
 import { getEventShelf, type EventCard, type EventShelf } from './SetCollection/eventCards';
-import { ItemTile } from './SetCollection/DexTile';
+import { ItemTile, tileHeight } from './SetCollection/DexTile';
 import { TilePanel } from './SetCollection/dexLook';
 import {
   buildBook, buildItems, findRows, initialSlug, mergeStable, refreshEveryMs,
@@ -256,7 +256,6 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const celebrate = useCallback((reward: DexReward) => {
     playSfx('fx.reward', 0.9);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    setPopKey(key => key + 1);
     invalidateMenuRewardBadge();
     // The reveal is opaque and up: the pre-dim and the busy CLAIM go at once (never wait on the refresh calls).
     claimDim.value = withTiming(0, { duration: 200 });
@@ -360,17 +359,17 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     if (!set || busy) return;
     const desired = !set.focused;
     setBusy('focus');
-    playSfx('ui.tap', 0.6);
+    // Answer the tap at once: the switch flips, a tick, a haptic. The server catches up (rolled back on failure).
+    playSfx('ui.select', 0.6);
+    void Haptics.selectionAsync().catch(() => undefined);
+    setBook(current => ({ ...current, sets: current.sets.map(entry => ({ ...entry, focused: desired && entry.slug === set.slug })) }));
+    if (desired) showToast(`${set.name} finds will show up more on your map.`, 'success');
     try {
-      if (preview) {
-        setBook(current => ({ ...current, sets: current.sets.map(entry => ({ ...entry, focused: desired && entry.slug === set.slug })) }));
-      } else {
+      if (!preview) {
         if (desired) await focusPrepItemSet(set.slug);
         else await clearPrepItemSetFocus();
         await loadSets();
       }
-      void Haptics.selectionAsync().catch(() => undefined);
-      if (desired) showToast(`${set.name} finds will show up more on your map.`, 'success');
     } catch {
       const list = await loadSets();
       if (list.find(entry => entry.slug === set.slug)?.focused !== desired) setError('Could not change your hunt. Try again.');
@@ -417,9 +416,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
 
   const header = (
     <View>
-      <ScrollView ref={pickerRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelf}
+      <ScrollView ref={pickerRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelf} snapToInterval={SHELF_CARD_W + 6 + SHELF_GAP} decelerationRate="fast"
         onContentSizeChange={() => centerPicker(false)}>
-        {sets.map(entry => <ShelfCard key={entry.slug} set={entry} selected={entry.slug === slug} onPress={chooseSet} />)}
+        {sets.map(entry => <ShelfCard key={entry.slug} set={entry} selected={entry.slug === slug} onPress={chooseSet} active={isFocused} />)}
         {eventsReady && events.cards.map(card => <ShelfEventCard key={`event-${card.eventSlug}`} card={card} onPress={openEvent} />)}
       </ScrollView>
       {daily && <RareBanner onPress={goToMap} />}
@@ -430,14 +429,14 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
               onFocus={set.status === 'active' || set.status === 'resting' ? () => void toggleFocus() : null} />
             <PrizeRows set={set} busyId={busy} onClaim={reward => void claim(reward)}
               titleWorn={!!set.reward.title && player?.title === set.reward.title} titleBusy={busy === 'title'}
-              onTitle={set.reward.title && !preview ? () => void toggleTitle() : null} popKey={popKey} />
+              onTitle={set.reward.title && !preview ? () => void toggleTitle() : null} popKey={popKey} active={isFocused} />
             {claimResult && (
               <View style={{ marginHorizontal: SIDE, marginBottom: 10 }}>
                 <ClaimResultCard outcome={claimResult} wearing={wearing} onWear={() => void wearIt()} onDismiss={() => setClaimResult(null)} />
               </View>
             )}
             {!!error && !selectedItem && <Text style={styles.error}>{error}</Text>}
-            <FindsHeader extras={extras} onExtras={canShare ? () => { playSfx('ui.tap', 0.5); setSparesOpen(true); } : null} />
+            <FindsHeader set={set} extras={extras} onExtras={canShare ? () => { playSfx('ui.tap', 0.5); setSparesOpen(true); } : null} />
             {detailError && !items && (
               <View style={styles.center}>
                 <Text style={styles.emptyTitle}>Your finds did not load</Text>
@@ -486,18 +485,19 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
           <FlashList
             ref={listRef}
             data={data}
-            estimatedItemSize={tile + CELL_GAP}
+            estimatedItemSize={tileHeight(tile) + CELL_GAP}
             getItemType={entry => (typeof entry === 'number' ? 'ghost' : entry.kind)}
-            keyExtractor={entry => (typeof entry === 'number' ? `ghost-${entry}` : entry.key)}
+            // Keys carry the set, so a set switch mounts fresh rows that pop in.
+            keyExtractor={entry => (typeof entry === 'number' ? `ghost-${entry}` : `${slug}-${entry.key}`)}
             ListHeaderComponent={header}
             ListFooterComponent={<View style={{ height: CTA_CLEARANCE, backgroundColor: SHEET }} />}
             extraData={tile}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item: entry }) => (
+            renderItem={({ item: entry, index }) => (
               typeof entry === 'number' ? (
                 <View style={styles.tileRow}>
                   {Array.from({ length: COLUMNS }, (_, index) => (
-                    <TilePanel key={index} rarity={1} found={false} style={{ width: tile, height: tile, opacity: 0.45 }} />
+                    <TilePanel key={index} rarity={1} found={false} style={{ width: tile, height: tile, marginBottom: tileHeight(tile) - tile, opacity: 0.45 }} />
                   ))}
                 </View>
               ) : entry.kind === 'heading' ? (
@@ -505,9 +505,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
                   <RarityHeading rarity={entry.rarity} label={entry.label} found={entry.found} total={entry.total} />
                 </View>
               ) : (
-                <View style={styles.tileRow}>
-                  {entry.items.map(item => <ItemTile key={item.id} item={item} width={tile} onPress={openItem} />)}
-                </View>
+                <Animated.View style={styles.tileRow} entering={reduced ? undefined : FadeInDown.duration(240).delay(Math.min(index, 8) * 28)}>
+                  {entry.items.map(item => <ItemTile key={item.id} item={item} width={tile} onPress={openItem} active={isFocused} />)}
+                </Animated.View>
               )
             )}
           />
@@ -548,6 +548,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       <RewardReveal reveal={reveal} onClose={() => {
         const won = reveal;
         setReveal(null);
+        // Back in the book: the row stamps its check and pops (the reveal covered it until now).
+        setPopKey(key => key + 1);
         // Back in the book: the title stamps onto the set's ribbon (the card ring is already gold).
         if (won?.reward.title) {
           setStamp({ slug: won.set.slug, title: won.reward.title });
@@ -578,11 +580,19 @@ function ClaimBuildUp({ reduced }: { readonly reduced: boolean }) {
     return () => { timers.forEach(clearTimeout); cancelAnimation(pulse); };
   }, [reduced, pulse]);
   const glow = useAnimatedStyle(() => ({ opacity: 0.25 + 0.5 * pulse.value, transform: [{ scale: 0.85 + 0.25 * pulse.value }] }));
+  // The gift shakes in step with the rising tones, harder the longer the wait (capped).
+  const shake = useSharedValue(0);
+  useEffect(() => {
+    if (reduced) return undefined;
+    shake.value = withRepeat(withSequence(withTiming(1, { duration: 70 }), withTiming(-1, { duration: 140 }), withTiming(0, { duration: 70 }), withTiming(0, { duration: 220 })), -1, false);
+    return () => cancelAnimation(shake);
+  }, [reduced, shake]);
+  const shakeStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${shake.value * (6 + 6 * pulse.value)}deg` }, { scale: 1 + 0.06 * pulse.value }] }));
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}
       accessible accessibilityLabel="Claiming your reward">
       <Animated.View style={[{ width: 220, height: 220, borderRadius: 110, backgroundColor: BRAND.gold }, glow]} />
-      <View style={{ position: 'absolute' }}><GameIcon name="gift" size={96} /></View>
+      <Animated.View style={[{ position: 'absolute' }, shakeStyle]}><GameIcon name="gift" size={96} /></Animated.View>
     </View>
   );
 }
@@ -628,7 +638,10 @@ function SparesSheet({ visible, items, onClose, onShare }: {
         <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sparesCard} accessibilityViewIsModal>
           <Text style={styles.sparesTitle} accessibilityRole="header">Your extras</Text>
-          <Text style={styles.sparesBody}>You caught these more than once. Tap one to give it to a friend who still needs it!</Text>
+          <View style={styles.sparesHint}>
+            <GameIcon name="heart" size={24} />
+            <Text style={styles.sparesBody}>Tap one to give it to a friend!</Text>
+          </View>
           <ScrollView style={{ maxHeight: 300, alignSelf: 'stretch' }} contentContainerStyle={styles.sparesGrid}>
             {list.map(item => (
               <Pressable key={item.id} accessibilityRole="button" disabled={!onShare}
@@ -645,7 +658,7 @@ function SparesSheet({ visible, items, onClose, onShare }: {
             <GameIcon name="map" size={26} />
             <Text style={styles.sparesMapText}>New finds come from the map</Text>
           </View>
-          <GameButton label="Done" icon="check" onPress={onClose} style={{ marginTop: 14 }} />
+          <GameButton label="Done" variant="ghost" onPress={onClose} style={{ marginTop: 10 }} />
         </View>
       </View>
     </Modal>
@@ -656,7 +669,7 @@ const styles = StyleSheet.create({
   // The water art's own average color, so the push never shows a plain blue frame while it decodes.
   page: { flex: 1, marginTop: -8, backgroundColor: '#5cc3f2' },
   sheetBack: { position: 'absolute', left: 0, right: 0, top: '55%', bottom: 0, backgroundColor: SHEET },
-  shelf: { paddingHorizontal: SIDE, paddingTop: 22, paddingBottom: 18 },
+  shelf: { paddingHorizontal: SIDE, paddingTop: 16, paddingBottom: 12 },
   // The cream sheet under the shelf: the page for this set (Standings cream, a white rim on top).
   sheetTop: {
     backgroundColor: SHEET, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 3, borderColor: BRAND.white,
@@ -682,7 +695,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 8, borderBottomColor: '#e3d3a3', alignItems: 'center',
   },
   sparesTitle: { fontFamily: 'Shark', fontSize: 24, color: BRAND.navy, textAlign: 'center' },
-  sparesBody: { fontFamily: 'Knockout', fontSize: 18, lineHeight: 22, color: BRAND.navySoft, textAlign: 'center', marginTop: 6, marginBottom: 12 },
+  sparesHint: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, marginBottom: 12 },
+  sparesBody: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.navy, textAlign: 'center', flexShrink: 1 },
   sparesGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, paddingVertical: 6 },
   spareTile: { width: 72, height: 72 },
   spareArtWrap: { width: 72, height: 72, justifyContent: 'center' },

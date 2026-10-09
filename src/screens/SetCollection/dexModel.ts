@@ -558,9 +558,9 @@ export function buildItems(
 
 /** The item card's catch line. */
 export function caughtLine(item: DexItem): string {
-  if (!item.found) return 'Not caught yet';
-  if (item.foundInWorld === false) return 'Swapped in. Catch one on the map too!';
-  return item.caught === 1 ? 'Caught 1 time' : `Caught ${item.caught} times`;
+  if (!item.found) return 'Not found yet';
+  if (item.foundInWorld === false) return 'Swapped in. Find one on the map too!';
+  return item.caught === 1 ? 'Found 1 time' : `Found ${item.caught} times`;
 }
 
 
@@ -657,6 +657,30 @@ export function openNow(set: Pick<DexSet, 'spawnHint' | 'spawningNow' | 'status'
   if (set.spawningNow === false) return false;
   if (!set.spawnHint || GENERIC_HINT.test(set.spawnHint.trim()) || /^anytime/i.test(set.spawnHint.trim())) return null;
   return set.spawningNow === true ? true : null;
+}
+
+/** How hard a rarity is to find, in words a 7-year-old reads (same kind of hint for all five). */
+export const RARITY_WORDS: Readonly<Record<1 | 2 | 3 | 4 | 5, string>> = {
+  1: 'Easy to find', 2: 'A little harder', 3: 'Hard to find', 4: 'Very hard to find', 5: 'Super rare!',
+};
+
+/** The bar notches: where each prize sits on the count bar (0..1), and its state. */
+export function prizeMarks(set: Pick<DexSet, 'total' | 'reward' | 'steps'>): { readonly at: number; readonly final: boolean; readonly status: DexRewardStatus; readonly target: number }[] {
+  const total = Math.max(1, set.total);
+  return prizeList(set).map(({ reward, final }) => ({
+    at: final ? 1 : Math.max(0.05, Math.min(0.95, reward.target / total)), final, status: reward.status, target: final ? total : reward.target,
+  }));
+}
+
+/** The next goal in words, naming the target ("Next prize at 8: 3 to go", "Next: find all 40 (31 to go)"). Null while a prize waits (its row says so). */
+export function goalLine(set: Pick<DexSet, 'total' | 'found' | 'reward' | 'steps' | 'isComplete'>): string | null {
+  if (hasClaimable(set as DexSet)) return null;
+  const finished = set.reward.status === 'claimed' || set.reward.status === 'pending';
+  if (finished || set.isComplete) return 'You found them all!';
+  const next = prizeList(set).find(entry => entry.reward.status === 'locked');
+  if (!next) return null;
+  const toGo = Math.max(1, (next.final ? set.total : next.reward.target) - set.found);
+  return next.final ? `Next: find all ${set.total} (${toGo} to go)` : `Next prize at ${next.reward.target}: ${toGo} to go`;
 }
 
 /** A prize row's state in words a kid reads at a glance. */

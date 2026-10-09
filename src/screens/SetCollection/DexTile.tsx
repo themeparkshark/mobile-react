@@ -15,6 +15,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
+import { playSfx } from '../../gamekit/SFX';
+import * as Haptics from '../../helpers/haptics';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { GIFT, itemArt, SpringPress } from './DexParts';
@@ -42,8 +44,14 @@ function markSeen(id: number) {
   });
 }
 
-export const ItemTile = memo(function ItemTile({ item, width, onPress }: {
+/** Height of a tile row: the sticker plus its one-line name. */
+export const tileHeight = (width: number) => width + NAME_H;
+const NAME_H = 22;
+
+export const ItemTile = memo(function ItemTile({ item, width, onPress, active = true }: {
   readonly item: DexItem; readonly width: number; readonly onPress: (item: DexItem) => void;
+  /** False while the screen is covered: the sheen loops stop. */
+  readonly active?: boolean;
 }) {
   const reduced = useUiReducedMotion();
   const look = rarityLook(item.rarity);
@@ -64,28 +72,40 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress }: {
     if (!item.isNew || !item.found || reduced) return;
     let live = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let flipTimer: ReturnType<typeof setTimeout> | null = null;
     void seenIds().then(set => {
       if (!live || set.has(item.id)) return;
       setFlipping(true);
       turn.value = 0;
       turn.value = withDelay(250, withTiming(1, { duration: 620, easing: Easing.out(Easing.back(1.4)) }));
+      // The pop lands as the sticker turns its face (about the 90 degree point).
+      flipTimer = setTimeout(() => {
+        if (!live) return;
+        playSfx('ui.select', 0.55);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+      }, 480);
       timer = setTimeout(() => { if (live) setFlipping(false); }, 1000);
       markSeen(item.id);
     });
     return () => {
       live = false;
       if (timer) clearTimeout(timer);
+      if (flipTimer) clearTimeout(flipTimer);
       setFlipping(false);
     };
   }, [item.id, item.isNew, item.found, reduced, turn]);
 
-  // Legendary shimmer every ~3.5 s while the tile is mounted (the list unmounts off-screen tiles).
+  // A sheen that says "rare": Rare every ~7 s, Epic every ~5 s, Legendary every 3 s with its gold rim pulse.
+  // Off while the screen is covered, and with Reduce Motion.
+  const sheen = item.found && item.rarity >= 3 && active && !reduced;
   useEffect(() => {
-    if (item.rarity < 5 || !item.found || reduced) { cancelAnimation(shine); shine.value = -1; return; }
-    // Every 3 s: a wide bright sweep, and the gold rim pulses with it.
-    shine.value = withRepeat(withSequence(withTiming(-1, { duration: 0 }), withDelay(2100, withTiming(1, { duration: 900 }))), -1, false);
+    if (!sheen) { cancelAnimation(shine); shine.value = -1; return; }
+    const rest = item.rarity >= 5 ? 2100 : item.rarity === 4 ? 4100 : 6100;
+    // Start offset by id, so a row of rare finds never flashes in sync.
+    shine.value = withDelay((item.id * 397) % 2500,
+      withRepeat(withSequence(withTiming(-1, { duration: 0 }), withDelay(rest, withTiming(1, { duration: 900 }))), -1, false));
     return () => cancelAnimation(shine);
-  }, [item.rarity, item.found, reduced, shine]);
+  }, [sheen, item.rarity, item.id, shine]);
 
   const flipStyle = useAnimatedStyle(() => (flipping ? {
     transform: [{ perspective: 600 }, { rotateY: `${interpolate(turn.value, [0, 0.5, 1], [0, 90, 0])}deg` }],
@@ -96,62 +116,75 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress }: {
   const rimStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(shine.value) * 1.4) }));
 
   const art = artFailed ? GIFT : itemArt(item);
-  const artSize = width * (item.found ? 0.76 : 0.66);
+  const artSize = width * (item.found ? 0.72 : 0.66);
   const label = item.found
     ? `${item.name}, ${look.label}, found${item.spares > 0 ? `, ${item.spares} extra` : ''}${item.isNew ? ', new' : ''}`
     : `${item.name}, ${look.label}, still to find`;
-  const panel = item.found
-    ? [styles.sticker, { borderColor: look.frame, width, height: width }]
-    : [styles.slot, { width, height: width }];
+  // A die-cut sticker sits a hair off straight (from its id, so it never changes): an album, not a spreadsheet.
+  const tilt = item.found && !reduced ? ((item.id * 7) % 5) - 2 : 0;
   return (
-    <SpringPress onPress={() => onPress(item)} accessibilityLabel={label} style={{ width }}>
+    <SpringPress onPress={() => onPress(item)} accessibilityLabel={label} accessibilityHint="Double-tap to see it." style={{ width, height: tileHeight(width) }}>
       <Animated.View style={flipStyle}>
-        <View key={item.id} style={panel}>
-          {item.found && <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(5,52,110,0.06)']} style={StyleSheet.absoluteFill} pointerEvents="none" />}
-          <Animated.View style={[StyleSheet.absoluteFill, styles.center, colorStyle]}>
+        {item.found ? (
+          <View style={[styles.sticker, { width, height: width, backgroundColor: look.frame, transform: [{ rotate: `${tilt * 0.8}deg` }] }]}>
+            <View style={styles.stickerFace}>
+              <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(5,52,110,0.07)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+              <Animated.View style={[StyleSheet.absoluteFill, styles.center, colorStyle]}>
+                <Image source={art} contentFit="contain" allowDownscaling recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
+                  style={{ width: artSize, height: artSize }} />
+              </Animated.View>
+              {flipping && (
+                <Animated.View style={[StyleSheet.absoluteFill, styles.center, shadowStyle]}>
+                  <Image source={art} contentFit="contain" allowDownscaling tintColor={SLOT_COLORS.ink} style={{ width: artSize, height: artSize, opacity: 0.35 }} />
+                </Animated.View>
+              )}
+              {sheen && (
+                <Animated.View style={[styles.shine, { height: width * 1.6, top: -width * 0.3 }, shineStyle]} pointerEvents="none">
+                  <LinearGradient start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                    colors={['rgba(255,255,255,0)', item.rarity >= 5 ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.7)', 'rgba(255,255,255,0)']} style={StyleSheet.absoluteFill} />
+                </Animated.View>
+              )}
+            </View>
+            {item.rarity >= 5 && sheen && <Animated.View style={[styles.rim, rimStyle]} pointerEvents="none" />}
+            {item.spares > 0 && (
+              <View style={styles.count}><Text style={styles.countText} maxFontSizeMultiplier={1.2}>+{item.spares}</Text></View>
+            )}
+            {item.isNew && <View style={styles.newTag}><GameIcon name="new" size={32} /></View>}
+          </View>
+        ) : (
+          <View key={item.id} style={[styles.slot, { width, height: width }]}>
             <Image source={art} contentFit="contain" allowDownscaling recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
-              tintColor={item.found ? undefined : SLOT_COLORS.ink}
-              style={{ width: artSize, height: artSize, opacity: item.found ? 1 : 0.75 }} />
-          </Animated.View>
-          {flipping && (
-            <Animated.View style={[StyleSheet.absoluteFill, styles.center, shadowStyle]}>
-              <Image source={art} contentFit="contain" allowDownscaling tintColor={SLOT_COLORS.ink} style={{ width: artSize, height: artSize }} />
-            </Animated.View>
-          )}
-          {item.rarity >= 5 && item.found && (
-            <Animated.View style={[styles.shine, { height: width * 1.6, top: -width * 0.3 }, shineStyle]} pointerEvents="none">
-              <LinearGradient start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.95)', 'rgba(255,255,255,0)']} style={StyleSheet.absoluteFill} />
-            </Animated.View>
-          )}
-          {item.rarity >= 5 && item.found && <Animated.View style={[styles.rim, rimStyle]} pointerEvents="none" />}
-          {item.found && item.spares > 0 && (
-            <View style={styles.count}><Text style={styles.countText} maxFontSizeMultiplier={1.2}>+{item.spares}</Text></View>
-          )}
-          {item.isNew && item.found && <View style={styles.newTag}><GameIcon name="new" size={30} /></View>}
-        </View>
+              tintColor={SLOT_COLORS.ink} style={{ width: artSize, height: artSize, opacity: SLOT_COLORS.inkOpacity }} />
+          </View>
+        )}
       </Animated.View>
+      {item.found
+        ? <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.name} maxFontSizeMultiplier={1.2}>{item.name}</Text>
+        : null}
     </SpringPress>
   );
-}, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress);
+}, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress && a.active === b.active);
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  // A found sticker: white, its rarity frame, a lip and a soft lift off the cream page.
-  sticker: {
-    borderRadius: 16, borderWidth: 3, borderBottomWidth: 6, backgroundColor: BRAND.white, overflow: 'hidden', ...SHADOW.card,
-    shadowOpacity: 0.16, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+  // A found sticker: a rarity-colored die-cut edge, a thick white border, a lip and a soft lift off the page.
+  sticker: { borderRadius: 18, padding: 3, ...SHADOW.card, shadowOpacity: 0.2, shadowRadius: 3, shadowOffset: { width: 0, height: 3 } },
+  stickerFace: {
+    flex: 1, borderRadius: 15, backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 5,
+    borderBottomColor: '#e6eef7', overflow: 'hidden',
   },
-  // An empty slot printed in the album.
+  // An empty slot pressed into the album page: dashed edge, the shape faded in navy.
   slot: {
-    borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: SLOT_COLORS.edge, backgroundColor: SLOT_COLORS.fill, overflow: 'hidden',
+    borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: SLOT_COLORS.edge, backgroundColor: SLOT_COLORS.fill,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   count: {
-    position: 'absolute', bottom: 4, right: 4, minWidth: 30, height: 22, paddingHorizontal: 5, borderRadius: 11,
+    position: 'absolute', bottom: -4, right: -4, minWidth: 34, height: 26, paddingHorizontal: 5, borderRadius: 13,
     backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
   },
-  countText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
-  newTag: { position: 'absolute', top: 0, left: 0 },
+  countText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
+  newTag: { position: 'absolute', top: -6, left: -6 },
   shine: { position: 'absolute', width: 60, left: '35%' },
-  rim: { ...StyleSheet.absoluteFillObject, borderRadius: 13, borderWidth: 4, borderColor: '#ffe07a' },
+  rim: { ...StyleSheet.absoluteFillObject, borderRadius: 18, borderWidth: 4, borderColor: '#ffe07a' },
+  name: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
 });
