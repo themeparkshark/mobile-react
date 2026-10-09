@@ -19,7 +19,8 @@ export const SHEEN_PERIOD_MS = 6000;
  */
 export function useBookClocks(beatOn: boolean, sheenOn: boolean, reducedMotion: boolean): void {
   // Battery: idle or saver mode stops the ambient clocks too (FIXES.md row 22).
-  const reduced = reducedMotion || !usePowerBudget().ambient;
+  const ambient = usePowerBudget().ambient;
+  const reduced = reducedMotion || !ambient;
   useEffect(() => {
     if (!beatOn || reduced) { cancelAnimation(BEAT); BEAT.value = 0; return undefined; }
     BEAT.value = 0;
