@@ -202,7 +202,7 @@ export default function SharkPassScreen() {
       const res = await claimAllSharkPass();
       setState(res.pass);
       const rewards = res.claimed.map(c => c.reward);
-      const hero = rewards.find(r => r.type === 'item') ?? rewards[0];
+      const hero = rewards.find(r => r.type === 'item') ?? rewards.find(r => r.type === 'coins') ?? rewards[0];
       if (hero) setLanded({ reward: hero, title: rewards.length > 1 ? `${rewards.length} rewards!` : 'You got it!', caption: claimedLine(rewards) });
       void refreshPlayer?.().catch(() => undefined);
     } catch {
