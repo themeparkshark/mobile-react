@@ -226,12 +226,11 @@ test('the shop copy is honest: real prices, no random rewards, Parts never sold,
   for (const file of ['src/services/ads.ts', 'src/screens/LinePlay/components/LineSnackOffer.tsx', 'src/components/PostWinRewardsModal.tsx']) {
     assert.doesNotMatch(read(file), /—/, file);
   }
-  const { grantsText } = loadTs('src/screens/StoreScreen/SuppliesShop.tsx', {
-    'expo-haptics': {}, react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} }, 'react-native': { StyleSheet: { create: s => s } },
-    'react-native-reanimated': { default: {}, FadeInUp: {} }, '../../context/AuthProvider': {}, '../../api/endpoints/me/shop': {},
-    '../../api/endpoints/me/ad-rewards': {}, '../../services/purchases': {}, '../../services/ads': {}, '../../ui': { BRAND: {} }, '../../components/help/OneTimeTip': {}, '../../components/help/HelpProvider': {},
-    '../../components/GrownUpGate': { ensureGrownUp: async () => true },
-    '../../services/external': { openExternal: async () => true },
+  // One copy of the words for every offer (services/money/supplies.ts); Supplies re-exports it.
+  assert.match(shop, /export \{ grantsText, gateReasonFor \} from '\.\.\/\.\.\/services\/money\/supplies';/);
+  const { grantsText } = loadTs('src/services/money/supplies.ts', {
+    react: { useEffect() {}, useState: v => [v, () => {}] }, '../../components/GrownUpGate': { askGrownUp: async () => false },
+    '../../api/endpoints/me/shop': {}, '../purchases': {},
   });
   assert.equal(grantsText({ tickets: 15, coins: 1500, energy: 150, rescue_passes: 2 }),
     '15 tickets, 1,500 coins, 150 energy and 2 Rescue Passes');

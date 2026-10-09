@@ -223,6 +223,10 @@ export default function SharkPassScreen() {
   };
 
   const running = focused && active && !reduced;
+  const step = progress?.tier ?? 0;
+  const steps = season?.tier_count ?? 0;
+  const perStep = season?.points_per_tier ?? 1;
+  const into = progress?.points_into_tier ?? 0;
   const summary = useMemo(() => passSummary(tiers), [tiers]);
   const nextPaid = tiers.filter(t => !t.unlocked || !premium).filter(t => t.paid.type === 'item' || t.paid.type === 'mystery_box').slice(0, 3);
 
@@ -261,12 +265,12 @@ export default function SharkPassScreen() {
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.season}>{season.title.toUpperCase()}</Text>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.ends}>{`Ends ${lastDayText(season.last_day)}`}</Text>
                   <View style={s.stepRow}>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.step}>{`STEP ${progress.tier}`}</Text>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.stepOf}>{`of ${season.tier_count}`}</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.step}>{`STEP ${step}`}</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.stepOf}>{`of ${steps}`}</Text>
                   </View>
                   <ProgressBar value={progress.points_into_tier / season.points_per_tier} reduced={reduced} />
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.points}>
-                    {progress.tier >= season.tier_count ? 'You finished the season!' : `${progress.points_into_tier} / ${season.points_per_tier} points to step ${progress.tier + 1}`}
+                    {step >= steps ? 'You finished the season!' : `${into} / ${perStep} points to step ${step + 1}`}
                   </Text>
                 </View>
               </View>
@@ -289,7 +293,8 @@ export default function SharkPassScreen() {
               renderItem={({ item }) => (
                 <TierColumn tier={item} current={progress.tier} premium={premium} busy={busy} pulse={running}
                   onClaim={(track) => void claim(item, track)} onLocked={() => {
-                    if (!item.unlocked) gameAlert(`Step ${item.tier}`, `Keep playing to reach step ${item.tier}.`);
+                    const n = item.tier;
+                    if (!item.unlocked) gameAlert(`Step ${n}`, `Keep playing to reach step ${n}.`);
                     else if (!premium) gameAlert('Shark Pass reward', `${rewardWords(item.paid)} comes with the Shark Pass.`);
                   }} />
               )} />
@@ -298,9 +303,9 @@ export default function SharkPassScreen() {
               <Animated.View entering={reduced ? undefined : FadeInUp.delay(200).springify().damping(15)} style={s.buyLip}>
                 <View style={s.buy}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyTitle}>UNLOCK THE SHARK PASS ROW</Text>
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{`A reward on all ${season.tier_count} steps: ${summary}.`}</Text>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{`A reward on all ${steps} steps: ${summary}.`}</Text>
                   {progress.tier > 0 && (
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{`You’re on step ${progress.tier}, so those Shark Pass rewards are ready right away.`}</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{`You’re on step ${step}, so those Shark Pass rewards are ready right away.`}</Text>
                   )}
                   <View style={s.preview}>
                     {nextPaid.map(t => (

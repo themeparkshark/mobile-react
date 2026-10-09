@@ -12,7 +12,7 @@
  */
 import { NativeModules, Platform } from 'react-native';
 import syncVip, { vipSyncErrorCode, type VipSyncResult } from '../api/endpoints/me/vip-sync';
-import { redeemSharkPass, sharkPassErrorCode, type SharkPassState } from '../api/endpoints/me/shark-pass';
+import type { SharkPassState } from '../api/endpoints/me/shark-pass';
 import { redeemShopPurchase, shopErrorCode, type ShopRedeemResult } from '../api/endpoints/me/shop';
 
 /** App Store Connect: subscription group "VIP" (22421719). Yearly first. */
@@ -434,6 +434,12 @@ export function priceText(plan: Pick<VipPlan, 'price' | 'period'>): string {
 
 // ── Shark Pass (one Non-Consumable per season) ─────────────
 
+/** Loaded on first use, so VIP and Supplies never pull the pass client in. */
+function sharkPassApi(): typeof import('../api/endpoints/me/shark-pass') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  return require('../api/endpoints/me/shark-pass');
+}
+
 const passDelivered = new Map<string, Promise<SharkPassState>>();
 type PassListener = (state: SharkPassState) => void;
 const passListeners = new Set<PassListener>();
@@ -452,7 +458,7 @@ function deliverPass(store: Iap, purchase: StorePurchase): Promise<SharkPassStat
   const pending = passDelivered.get(key);
   if (pending) return pending;
   const promise = (async () => {
-    const state = await redeemSharkPass(jws);
+    const state = await sharkPassApi().redeemSharkPass(jws);
     await store.finishTransaction({ purchase, isConsumable: false }).catch(() => undefined);
     passListeners.forEach((listener) => { try { listener(state); } catch { /* a screen's problem */ } });
     return state;
@@ -499,7 +505,7 @@ export async function buySharkPass(productId: string, accountToken?: string | nu
     const state = await deliverPass(store, purchase);
     return state ? { status: 'success', state } : { status: 'unverified' };
   } catch (error) {
-    return sharkPassErrorCode(error) === 'SHARK_PASS_OTHER_PLAYER' ? { status: 'other_account' } : { status: 'unverified' };
+    return sharkPassApi().sharkPassErrorCode(error) === 'SHARK_PASS_OTHER_PLAYER' ? { status: 'other_account' } : { status: 'unverified' };
   }
 }
 
@@ -520,6 +526,6 @@ export async function restoreSharkPass(productId: string): Promise<'restored' | 
     }
     return restored ? 'restored' : 'nothing';
   } catch (error) {
-    return sharkPassErrorCode(error) === 'SHARK_PASS_OTHER_PLAYER' ? 'other_account' : 'failed';
+    return sharkPassApi().sharkPassErrorCode(error) === 'SHARK_PASS_OTHER_PLAYER' ? 'other_account' : 'failed';
   }
 }

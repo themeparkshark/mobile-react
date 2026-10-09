@@ -18,9 +18,11 @@ const EMBLEM = require('../../../assets/images/sharkpass/pass-emblem.webp');
 /** The banner's second line. Exported for tests. */
 export function bannerLine(state: SharkPassState | null): string | null {
   if (!state || !state.enabled || !state.season || !state.progress) return null;
-  const { tier, claimable, premium } = state.progress;
+  const { claimable, premium } = state.progress;
+  const step = state.progress.tier;
+  const steps = state.season.tier_count;
   if (claimable > 0) return `${claimable} ${claimable === 1 ? 'reward' : 'rewards'} to claim`;
-  return tier === 0 ? 'Play to climb 50 steps of winter rewards' : `Step ${tier} of ${state.season.tier_count}${premium ? '' : ' · see the Shark Pass row'}`;
+  return step === 0 ? `Play to climb ${steps} steps of winter rewards` : `Step ${step} of ${steps}${premium ? '' : ' · see the Shark Pass row'}`;
 }
 
 export default function SharkPassBanner({ style }: { style?: StyleProp<ViewStyle> }) {
