@@ -1089,7 +1089,7 @@ export default function MemoryGame({
     GameAudio.play('mm_win');
     Haptic.comboHeavy();
     // 250ms anticipation shake (+-3deg at 12Hz) with rising haptics, 12 stars.
-    later(470, () => {
+    later(360, () => {
       coinShake.value = withSequence(...Array.from({ length: 6 }, (_, i) => withTiming(i % 2 ? -3 : 3, { duration: 40 })), withTiming(0, { duration: 10 }));
       Haptic.tapLight();
       later(80, () => Haptic.hitMedium());
@@ -1097,8 +1097,8 @@ export default function MemoryGame({
       fx.current?.burst('stars', mx, my, { count: reducedMotion ? 6 : 12 });
       stage.current?.pose('coin');
     });
-    later(720, () => {
-      coinFly.value = withTiming(1, { duration: 300, easing: Easing.in(Easing.cubic) });
+    later(600, () => {
+      coinFly.value = withTiming(1, { duration: 280, easing: Easing.in(Easing.cubic) });
       finishRun(won);
     });
   }, [coin, coinFly, coinShake, finishRun, later, reducedMotion]);
@@ -1569,9 +1569,13 @@ export default function MemoryGame({
             if (ev.tierUp) {
               Haptic.success();
               if (ev.tierUp === 3) {
-                awning.current?.ribbon('SWEET RUN');
+                awning.current?.ribbon('SWEET RUN', 2);
                 GameAudio.play('mm_sting_sweet_run');
               }
+            }
+            // Combo callout: from 3 remembered in a row, each step lands bigger.
+            if (grade === 'recall' && chain >= 3 && ev.tierUp !== 3) {
+              awning.current?.ribbon(`COMBO x${chain}`, chain - 2);
             }
             // The barker answers.
             stage.current?.pose(grade === 'recall' ? 'fist' : 'wave', 700);

@@ -29,3 +29,16 @@ test('win scrim is navy, PERFECT gets one capped coin burst, and the shell scrim
   assert.match(src, /burst=\{data\.banner === 'PERFECT!'\}/);
   assert.match(game, /resultsScrim=\{resultData \? 'none' : undefined\}/);
 });
+
+test('game feel pass: combo ribbon escalates above the awning, bold link arc, compact flame pill, shorter finale sit', () => {
+  const booth = fs.readFileSync(path.join(root, 'src/games/memory/MemoryBooth.tsx'), 'utf8');
+  assert.match(booth, /peak\.value = reducedMotion \? 1 : 1 \+ Math\.min\(0\.3, level \* 0\.08\)/);
+  assert.match(booth, /top: geo\.ribbonY - rh \* 0\.95/);
+  assert.match(game, /awning\.current\?\.ribbon\(`COMBO x\$\{chain\}`, chain - 2\)/);
+  const fx = fs.readFileSync(path.join(root, 'src/games/memory/BoardFx.tsx'), 'utf8');
+  assert.match(fx, /strokeWidth=\{6\} strokeCap="round" color=\{MM\.gold\}/);
+  const hud = fs.readFileSync(path.join(root, 'src/games/memory/Hud.tsx'), 'utf8');
+  assert.match(hud, /chainCompact: \{ width: undefined, minWidth: 58/);
+  const mode = fs.readFileSync(path.join(root, 'src/games/memory/modes/mode.ts'), 'utf8');
+  assert.match(mode, /const swap = 320;/);
+});

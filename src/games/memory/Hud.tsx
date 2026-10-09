@@ -104,7 +104,8 @@ export const ChainPlate = forwardRef<ChainPlateHandle, {
     for (let i = 0; i < 6; i++) pips.push(<View key={i} style={[styles.pip, i < gauge && styles.pipOn]} />);
   }
   return (
-    <Animated.View style={[styles.chainPlate, showtime && styles.chainShow, st]}
+    // Content-sized when it only holds the flame and a number: no empty white bar.
+    <Animated.View style={[styles.chainPlate, !pips.length && strikes == null && styles.chainCompact, showtime && styles.chainShow, st]}
       accessible accessibilityLabel={`Chain ${chain}${showtime ? ', Showtime' : ''}`}>
       <View style={styles.ringWrap} pointerEvents="none">
         <Svg width={84} height={84} viewBox="-42 -42 84 84">
@@ -112,7 +113,7 @@ export const ChainPlate = forwardRef<ChainPlateHandle, {
         </Svg>
       </View>
       <View style={styles.chainRow}>
-        <Image source={STREAK} style={styles.streakIcon} resizeMode="contain" />
+        <Image source={STREAK} style={[styles.streakIcon, chain === 0 && !showtime && styles.streakIdle]} resizeMode="contain" />
         <Text style={styles.chainText}>{chain}</Text>
         {strikes != null ? (
           <View style={styles.strikes}>
@@ -264,6 +265,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6, justifyContent: 'center',
   },
   chainShow: { backgroundColor: '#fff4c2', borderColor: MM.goldDeep },
+  chainCompact: { width: undefined, minWidth: 58, paddingHorizontal: 10 },
+  streakIdle: { opacity: 0.45 },
   ringWrap: { position: 'absolute', left: 4, top: -20 },
   chainRow: { flexDirection: 'row', alignItems: 'center' },
   streakIcon: { width: 20, height: 22 },
