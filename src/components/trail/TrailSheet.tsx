@@ -30,11 +30,13 @@ const LOCALE = (() => { try { return Intl.DateTimeFormat().resolvedOptions().loc
  * optional weekly goal, how to earn more, the Trail Exclusives you can collect
  * and what is inside every box with its odds. Pictures first, short words.
  */
-function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, onGoal, onWheels, onAskMotion, initialView = 'boxes' }: {
+function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen, onFront, onGoal, onWheels, onAskMotion, initialView = 'boxes' }: {
   readonly visible: boolean;
   readonly state: TrailState;
   readonly motion: MotionAccess;
   readonly inPark: boolean;
+  /** Today's park, for the park-day line on the Today card. */
+  readonly parkName?: string | null;
   readonly onClose: () => void;
   readonly onOpen: (boxes: readonly TrailBox[]) => void;
   readonly onFront: (boxId: number) => void;
@@ -196,6 +198,7 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
             <Text style={styles.section}>{inPark ? 'Today at the park' : 'Your walking'}</Text>
             <View style={[styles.card, styles.todayCard]}>
               <View style={{ flex: 1 }}>
+                {inPark && <Text style={styles.dayLine} numberOfLines={1}>{dayLabel(state.today.park_day)}{parkName ? ` · ${parkName}` : ''}</Text>}
                 <Text style={styles.bigNumber}>{formatSteps(inPark ? state.today.steps : state.lifetime.steps)}</Text>
                 <Text style={styles.body}>{inPark
                   ? `park steps today${state.today.meters > 0 ? `, about ${formatDistance(state.today.meters, miles)}` : ''}`
@@ -274,6 +277,15 @@ function StepsToGo({ box, visible }: { readonly box: TrailBox; readonly visible:
     setValue(target);
   }, [box.id, target, visible]);
   return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><CountUpText value={value} durationMs={900} punch={1} style={styles.toGo} /></View>;
+}
+
+/** "THU, OCT 9" for a park day (yyyy-mm-dd), locale-free. */
+function dayLabel(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return '';
+  const wd = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][d.getUTCDay()];
+  const mo = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][d.getUTCMonth()];
+  return `${wd}, ${mo} ${d.getUTCDate()}`;
 }
 
 /** Monday (yyyy-mm-dd) of the week holding a park day, for the once-a-week goal celebration. */
@@ -444,6 +456,7 @@ const styles = StyleSheet.create({
   rackEmpty: { width: '31%', height: 66, borderRadius: RADIUS.md, borderWidth: 2, borderStyle: 'dashed', borderColor: BRAND.skyDeep },
   waitText: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   todayCard: { flexDirection: 'row', alignItems: 'center' },
+  dayLine: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navySoft, letterSpacing: 1, marginBottom: 2 },
   bigNumber: { fontFamily: 'Shark', fontSize: 36, color: BRAND.blue },
   bestBadge: { alignItems: 'center', backgroundColor: BRAND.goldLight, borderRadius: RADIUS.md, borderWidth: 3, borderColor: BRAND.navy, padding: 6 },
   bestText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, textTransform: 'uppercase' },
