@@ -313,9 +313,13 @@ export default function NewsScreen() {
           {waitingFirst ? (
             <FeedSkeleton />
           ) : emptyNow ? (
-            <SharkLoader state={state.failed ? 'error' : 'empty'} tone="onBlue" compact title={emptyTitle}
-              message={state.failed ? 'Check your signal and try again.' : search ? 'Try a park or ride name.' : 'Pick another park for now.'}
-              onRetry={state.failed ? retry : undefined} />
+            <View style={{ marginHorizontal: 16, marginTop: 12, paddingVertical: 18, paddingHorizontal: 12, borderRadius: RADIUS.xl,
+              backgroundColor: BRAND.cream, borderWidth: 3, borderBottomWidth: 6, borderColor: BRAND.white }}>
+              <SharkLoader state={state.failed ? 'error' : 'empty'} tone="onLight" compact title={emptyTitle}
+                message={state.failed ? (topEntries.length ? 'Check your signal. Saved stories are in Top Stories.' : 'Check your signal and try again.')
+                  : search ? 'Try a park or ride name.' : 'Pick another park for now.'}
+                onRetry={state.failed ? retry : undefined} />
+            </View>
           ) : (
             <FlashList
               ref={listRef}
