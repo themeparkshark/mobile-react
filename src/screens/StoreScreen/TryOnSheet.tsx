@@ -69,7 +69,7 @@ const HOP = 18;
 const CARD = stageCard(SCREEN_W - 28 - 6, STAGE_H - 6, HOP + 0.04 * (STAGE_H / 2) + 4);
 const PLAYERCARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 // The Secret Shop try-on: the piece is the point, so the stage takes about half the sheet (panel round 1).
-const SECRET_STAGE_H = Math.round(Math.min(430, SHEET_H * 0.52));
+const SECRET_STAGE_H = Math.round(Math.min(470, SHEET_H * 0.6));
 const SECRET_CARD = stageCard(SCREEN_W - 28 - 6, SECRET_STAGE_H - 6, HOP + 0.04 * (SECRET_STAGE_H / 2) + 4);
 const SECRET_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SECRET_CARD.box };
 // A piece with no set strip (most classic-catalog gear) gets the room the strip would use: a bigger stage,
