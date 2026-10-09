@@ -22,6 +22,7 @@ import HowToDemo from '../../screens/HowToPlay/HowToDemos';
 import Ribbon from '../Ribbon';
 import { RARITY_LOOK, type RarityTier } from '../../screens/SetCollection/dexLook';
 import type { HelpHeroKey } from '../../services/help/helpSheets';
+import { usePowerBudget } from '../../power';
 import { BRAND, GameIcon, type GameIconName } from '../../ui';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -116,36 +117,38 @@ export default function HelpHero({ hero, width, height, running, reduced, data }
   readonly reduced: boolean;
   readonly data?: HeroData;
 }) {
-  const t = useLoop(hero, running, reduced);
+  // Battery: the decorative loop rests when the phone is idle or backgrounded (full power: no change).
+  const p = usePowerBudget();
+  const t = useLoop(hero, running && p.ambient, reduced);
   const cork = hero === 'pins_swap' || hero === 'pins_clock';
-  const p = { t, w: width, h: height };
+  const sp = { t, w: width, h: height };
   return (
     <View style={[styles.stage, { width, height }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {cork
         // The board's own cork, tiled at its drawn size so it stays crisp (never stretched).
         ? <ImageBackground source={ART.corkTile} style={StyleSheet.absoluteFill} resizeMode="repeat" imageStyle={{ width: 200, height: 200 }} />
         : <Image source={ART.water} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />}
-      {hero === 'standings_climb' && <ClimbScene {...p} />}
-      {hero === 'standings_podium' && <PodiumScene {...p} />}
-      {hero === 'standings_boards' && <BoardsScene {...p} />}
-      {hero === 'pins_swap' && <PinSwapScene {...p} />}
-      {hero === 'pins_clock' && <PinClockScene {...p} />}
-      {hero === 'shop_gear' && <GearScene {...p} />}
-      {hero === 'shop_daily' && <DailyScene {...p} />}
-      {hero === 'shop_supplies' && <SuppliesScene {...p} />}
-      {hero === 'park_shelf' && <ShelfScene {...p} />}
-      {hero === 'park_levels' && <LevelsScene {...p} />}
-      {hero === 'redeem_chest' && <ChestScene {...p} />}
-      {hero === 'social_share' && <ShareScene {...p} />}
-      {hero === 'social_safe' && <SafeScene {...p} />}
+      {hero === 'standings_climb' && <ClimbScene {...sp} />}
+      {hero === 'standings_podium' && <PodiumScene {...sp} />}
+      {hero === 'standings_boards' && <BoardsScene {...sp} />}
+      {hero === 'pins_swap' && <PinSwapScene {...sp} />}
+      {hero === 'pins_clock' && <PinClockScene {...sp} />}
+      {hero === 'shop_gear' && <GearScene {...sp} />}
+      {hero === 'shop_daily' && <DailyScene {...sp} />}
+      {hero === 'shop_supplies' && <SuppliesScene {...sp} />}
+      {hero === 'park_shelf' && <ShelfScene {...sp} />}
+      {hero === 'park_levels' && <LevelsScene {...sp} />}
+      {hero === 'redeem_chest' && <ChestScene {...sp} />}
+      {hero === 'social_share' && <ShareScene {...sp} />}
+      {hero === 'social_safe' && <SafeScene {...sp} />}
       {(hero === 'basics_map' || hero === 'basics_park' || hero === 'basics_line') && (
         <View style={[StyleSheet.absoluteFill, styles.center]}>
-          <HowToDemo art={hero === 'basics_map' ? 'find' : hero === 'basics_park' ? 'park' : 'line'} size={height * 0.98} active={running} reduced={reduced} />
+          <HowToDemo art={hero === 'basics_map' ? 'find' : hero === 'basics_park' ? 'park' : 'line'} size={height * 0.98} active={running && p.ambient} reduced={reduced} />
         </View>
       )}
-      {hero === 'term' && <TermScene {...p} icon={data?.icon ?? 'info'} caption={data?.caption ?? null} />}
-      {hero === 'odds' && <OddsScene {...p} rows={data?.odds ?? []} />}
-      {hero === 'rules' && <TermScene {...p} icon={data?.icon ?? 'trophy'} caption={null} />}
+      {hero === 'term' && <TermScene {...sp} icon={data?.icon ?? 'info'} caption={data?.caption ?? null} />}
+      {hero === 'odds' && <OddsScene {...sp} rows={data?.odds ?? []} />}
+      {hero === 'rules' && <TermScene {...sp} icon={data?.icon ?? 'trophy'} caption={null} />}
     </View>
   );
 }
