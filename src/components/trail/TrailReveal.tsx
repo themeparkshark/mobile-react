@@ -234,7 +234,11 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint }: {
         {phase === 'ready' && (
           <View style={{ alignItems: 'center' }}>
             <Text style={styles.hint}>{index === 0 && boxes.length > 1 ? `${boxes.length} boxes to open` : ' '}</Text>
-            {index === 0 && <GameButton label="Later" variant="secondary" size="compact" onPress={onClose} />}
+            {index === 0 && (
+              <Pressable accessibilityRole="button" accessibilityLabel="Later. Keep this box for now" onPress={onClose} style={styles.later}>
+                <Text style={styles.laterText}>LATER</Text>
+              </Pressable>
+            )}
           </View>
         )}
       </Pressable>
@@ -318,6 +322,9 @@ const styles = StyleSheet.create({
   badge: { fontFamily: 'Shark', fontSize: 11, color: BRAND.white, backgroundColor: BRAND.navy, borderRadius: 8,
     paddingHorizontal: 6, paddingVertical: 1, marginTop: 4, overflow: 'hidden', letterSpacing: 1 },
   ring: { position: 'absolute', width: 120, height: 120, borderRadius: 60, borderWidth: 6, borderColor: BRAND.gold },
+  later: { minHeight: 44, minWidth: 120, paddingHorizontal: 20, borderRadius: 22, borderWidth: 2.5, borderColor: BRAND.sky,
+    alignItems: 'center', justifyContent: 'center' },
+  laterText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.sky, letterSpacing: 1 },
   hint: { fontFamily: 'Knockout', fontSize: 18, color: BRAND.sky, marginBottom: 8, textAlign: 'center' },
   error: { fontFamily: 'Knockout', fontSize: 18, color: BRAND.white, marginBottom: 12, textAlign: 'center' },
 });

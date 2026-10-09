@@ -87,7 +87,7 @@ function Scene({ scene: SCENE, onNext }: { readonly scene: string; readonly onNe
   const opened = useRef(new Set<number>());
   useEffect(() => {
     if (SCENE !== 'catchup') return undefined;
-    const t = setTimeout(() => { setStep(1); setState(fixture(SCENE, 1)); }, 2500);
+    const t = setTimeout(() => { setStep(1); setState(fixture(SCENE, 1)); }, 6000);
     return () => clearTimeout(t);
   }, []);
   const value = useMemo<TrailContextType>(() => ({
