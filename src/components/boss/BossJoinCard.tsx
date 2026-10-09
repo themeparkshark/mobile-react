@@ -27,9 +27,11 @@ export function Wallet({ energy, tickets, showTickets, short }: {
 }) {
   return <View style={styles.wallet} accessible accessibilityLabel={`You have ${energy} Energy${showTickets ? ` and ${tickets} Tickets` : ''}`}>
     <View style={[styles.walletItem, short === 'energy' && styles.walletShort]}><GameIcon name="energy" size={22} />
-      <Text style={styles.walletNum} maxFontSizeMultiplier={1.3}>{energy.toLocaleString()}</Text></View>
+      <Text style={styles.walletNum} maxFontSizeMultiplier={1.3}>{energy.toLocaleString()}</Text>
+      {short === 'energy' && <View style={styles.bang}><Text style={styles.bangText}>!</Text></View>}</View>
     {showTickets && <View style={[styles.walletItem, short === 'ticket' && styles.walletShort]}><GameIcon name="ticket" size={22} />
-      <Text style={styles.walletNum} maxFontSizeMultiplier={1.3}>{tickets.toLocaleString()}</Text></View>}
+      <Text style={styles.walletNum} maxFontSizeMultiplier={1.3}>{tickets.toLocaleString()}</Text>
+      {short === 'ticket' && <View style={styles.bang}><Text style={styles.bangText}>!</Text></View>}</View>}
   </View>;
 }
 
@@ -102,9 +104,10 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
         </Tile>}
         {remote
           ? <Tile label="FROM HOME" tone="home" a11y={`From home your hits count ${Math.round(raid.remote.damage_rate * 100)} percent, loot is ${Math.round((raid.remote.reward_rate ?? raid.remote.damage_rate) * 100)} percent and you cannot be MVP`}>
+            <Text style={styles.homeWhy} maxFontSizeMultiplier={1.2}>Not at the park</Text>
             <Text style={styles.bigPct} maxFontSizeMultiplier={1}>{Math.round(raid.remote.damage_rate * 100)}%</Text>
             <View style={styles.mvp}>
-              <View><GameIcon name="crown" size={14} /><View style={styles.crossOut} /></View>
+              <View><GameIcon name="crown" size={18} /><View style={styles.crossOut} /></View>
               <Text style={styles.tileSmall} maxFontSizeMultiplier={1.2}>no MVP</Text>
             </View>
           </Tile>
@@ -138,7 +141,8 @@ export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, 
   const reduced = useReducedGameMotion();
   const cost = joinCost(raid, remote, energy, tickets);
   const short = cost.short;
-  const label = short && !starting ? `NEED ${short.need - short.have} MORE` : joinLabel(raid, remote);
+  const label = short && !starting ? `NEED ${short.need - short.have} ${short.kind === 'energy' ? 'ENERGY' : short.need - short.have === 1 ? 'TICKET' : 'TICKETS'}`
+    : joinLabel(raid, remote);
   const off = !!blocked || starting;
   const [how, setHow] = useState(false);
   const pulse = useSharedValue(1);
@@ -208,7 +212,7 @@ function Loot({ icon, n }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: numbe
 
 const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  live: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BRAND.red, borderRadius: 14, borderWidth: 2, borderColor: BRAND.white,
+  live: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BRAND.redLip, borderRadius: 14, borderWidth: 2, borderColor: BRAND.white,
     paddingHorizontal: 9, paddingVertical: 3 },
   liveDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: BRAND.white },
   liveText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
@@ -216,6 +220,9 @@ const styles = StyleSheet.create({
   walletItem: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.cream, borderRadius: 14, borderWidth: 2,
     borderColor: BRAND.navy, paddingLeft: 4, paddingRight: 9, paddingVertical: 2 },
   walletShort: { borderColor: BRAND.red, borderWidth: 3, backgroundColor: '#ffe3df' },
+  bang: { position: 'absolute', right: -7, top: -9, width: 20, height: 20, borderRadius: 10, backgroundColor: BRAND.red, borderWidth: 2,
+    borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
+  bangText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white, lineHeight: 16 },
   walletNum: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: BRAND.white,
     borderWidth: 3, borderColor: BRAND.navy },
@@ -236,9 +243,10 @@ const styles = StyleSheet.create({
   tilePic: { height: 58, alignItems: 'center', justifyContent: 'center' },
   tileLabel: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, marginTop: 2 },
   tileSmall: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navySoft },
+  homeWhy: { fontFamily: 'Shark', fontSize: 11, color: BRAND.navySoft },
   bigPct: { fontFamily: 'Shark', fontSize: 30, lineHeight: 34, color: BRAND.navy },
   mvp: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  crossOut: { position: 'absolute', left: -1, top: 6, width: 16, height: 2.5, borderRadius: 2, backgroundColor: BRAND.red, transform: [{ rotate: '-35deg' }] },
+  crossOut: { position: 'absolute', left: -2, top: 7, width: 22, height: 4, borderRadius: 2, backgroundColor: BRAND.red, transform: [{ rotate: '-35deg' }] },
   teamDots: { flexDirection: 'row', marginTop: 2 },
   teamDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: BRAND.sky, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   lootGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 4 },
@@ -263,7 +271,8 @@ const styles = StyleSheet.create({
   blocked: { marginTop: 8, fontFamily: 'Shark', fontSize: 16, color: BRAND.white, textAlign: 'center' },
   afterRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 },
   after: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
-  afterNum: { fontFamily: 'Shark', fontSize: 16, color: BRAND.gold, marginRight: 4 },
+  afterNum: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, backgroundColor: BRAND.cream, borderRadius: 8, paddingHorizontal: 5,
+    overflow: 'hidden', marginRight: 4 },
   howBtn: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: BRAND.cream, borderRadius: 16,
     borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 12, paddingVertical: 6, minHeight: 44 },
   howText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },

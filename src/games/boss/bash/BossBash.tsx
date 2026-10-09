@@ -58,6 +58,15 @@ type Fx =
 type FxIn = Fx extends infer F ? (F extends Fx ? Omit<F, 'id'> : never) : never;
 type FxLive = Fx & { until: number };
 
+/** Word-slot priority (higher wins): countdown/FINISH 5, BLOCK IT! 4, smash and hit words 3, phase 2, streak 1. */
+function wordRank(f: { t: string; wm?: string; text?: string }): number {
+  if (f.t === 'count' || (f.t === 'wm' && f.wm === 'finish')) return 5;
+  if (f.t === 'bubble' && f.text === 'BLOCK IT!') return 4;
+  if (f.t === 'wm' && (f.wm === 'nice' || f.wm === 'great' || f.wm === 'superb')) return 1;
+  if ((f.t === 'wm' && f.wm === 'fury') || (f.t === 'bubble' && f.text === 'FASTER!')) return 2;
+  return 3;
+}
+
 /** Studio cue when it exists, else the shipped Chris sound. */
 function cue(id: string, fallback: string): string {
   return GameAudio.hasCue(id) ? id : fallback;
@@ -174,8 +183,15 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     // In the last 3 seconds the countdown owns the slot; only FINISH! may replace it. Expiry is one sweeper.
     const word = (t: Fx['t']) => t === 'wm' || t === 'bubble' || t === 'count';
     setFx(list => {
-      const counting = list.some(f => f.t === 'count' && f.until > Date.now());
-      if (counting && word(item.t) && item.t !== 'count' && !(item.t === 'wm' && item.wm === 'finish')) return list;
+      if (word(item.t)) {
+        // The word slot has a priority: countdown/FINISH > BLOCK IT! > smash and hit words > phase > streak.
+        // A lower word never replaces a higher one that is still up; the countdown owns the whole last 3 s.
+        const now = Date.now();
+        const live = list.find(f => word(f.t) && f.until > now);
+        const lastSeconds = played.current >= ROUND_MS - 3000;
+        if (lastSeconds && wordRank(item) < 5) return list;
+        if (live && wordRank(item) < wordRank(live)) return list;
+      }
       return [...list.filter(f => !(word(item.t) && word(f.t))).slice(-12), { ...item, id, until: Date.now() + life } as FxLive];
     });
   }, []);

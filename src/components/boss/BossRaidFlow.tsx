@@ -235,6 +235,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   // The round is sent at the bell (keepOpen) so the result card can show what the server said and an idle
   // result card or a closed app never loses it; Done / Attack again then only close the fight.
   const sentAtBell = useRef(false);
+  const atStart = useRef<{ energy: number; attacksLeft: number } | null>(null);
   const [receipt, setReceipt] = useState<{ state: 'saving' | 'saved' | 'error'; note: string | null } | null>(null);
   const [liveActive, setLiveActive] = useState(false);
   const submit = (expectedRound: typeof round.current, meta?: Record<string, unknown>, keepOpen = false) => {
@@ -304,6 +305,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     setRoundRate(result.round.damage_rate);
     roundLimits.current = { max_ms: result.round.max_ms, max_hits: result.round.max_hits };
     sentAtBell.current = false; setReceipt(null); setLiveActive(true);
+    atStart.current = { energy, attacksLeft: raid.you.attacks_left };
     setFighting(true);
   };
   const renderedRound = round.current;
@@ -361,7 +363,8 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             damageRate={round.current?.body.remote ? roundRate : 1}
             damage={raid.damage ?? DEFAULT_DAMAGE}
             maxHits={roundLimits.current?.max_hits}
-            next={{ attacksLeft: raid.you.attacks_left, energy, energyCost: raid.energy_cost }}
+            // The wallet as it was at FIGHT: the round is charged at the bell, and the refreshed wallet must not be charged twice.
+            next={{ attacksLeft: atStart.current?.attacksLeft ?? raid.you.attacks_left, energy: atStart.current?.energy ?? energy, energyCost: raid.energy_cost }}
             rewards={rewards ?? undefined}
             capLeft={Math.max(0, MAX_DAMAGE_PER_PLAYER - raid.you.damage)}
             autoplay={__DEV__ ? devAutoplay : 0}

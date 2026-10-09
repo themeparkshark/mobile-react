@@ -82,7 +82,7 @@ export default function BossMapPreviewScreen() {
       setKnobs({ energy: num('energy', 120), tickets: num('tickets', 2), attacks: num('attacks', 0), joined: query.get('joined') === '1', autoplay: num('autoplay', 0) });
       if (query.get('play') === '1') setRun(value => value + 1);
       // First-time Boss Bash lesson again (capture only).
-      if (query.get('fresh') === '1') void AsyncStorage.removeItem('boss_bash_seen_v1').catch(() => undefined);
+      if (query.get('fresh') === '1') void AsyncStorage.multiRemove(['boss_bash_seen_v1', 'boss_bash_best_kraken']).catch(() => undefined);
     };
     void Linking.getInitialURL().then(apply).catch(() => undefined);
     const sub = Linking.addEventListener('url', event => apply(event.url));
