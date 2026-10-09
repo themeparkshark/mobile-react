@@ -111,3 +111,33 @@ export function passGrants(tiers: readonly SharkPassTier[]): { coins: number; ti
   }
   return out;
 }
+
+export type SetPiece = {
+  readonly reward: Extract<SharkPassReward, { type: 'item' }>;
+  /** 0 for a Shark Pass Plus extra. */
+  readonly step: number;
+  readonly row: 'free' | 'pass' | 'plus';
+  readonly owned: boolean;
+};
+
+/**
+ * The season set: every wearable this season (pins and scenes), free row first, then the Shark
+ * Pass row by step, then Plus. Owned = claimed (Plus extras: owned with Plus). Exported for tests.
+ */
+export function seasonSet(tiers: readonly SharkPassTier[], plusRewards: readonly SharkPassReward[] = [], plus = false): { pieces: SetPiece[]; owned: number } {
+  const free: SetPiece[] = [];
+  const pass: SetPiece[] = [];
+  for (const t of tiers) {
+    if (t.free?.type === 'item') free.push({ reward: t.free, step: t.tier, row: 'free', owned: t.free_claimed });
+    if (t.paid.type === 'item') pass.push({ reward: t.paid, step: t.tier, row: 'pass', owned: t.paid_claimed });
+  }
+  const extras: SetPiece[] = plusRewards.flatMap(r => (r.type === 'item' ? [{ reward: r, step: 0, row: 'plus' as const, owned: plus }] : []));
+  const pieces = [...free, ...pass, ...extras];
+  return { pieces, owned: pieces.filter(p => p.owned).length };
+}
+
+/** Where a piece comes from, in plain words: "Free at step 10", "Shark Pass, step 20", "Shark Pass Plus". */
+export function pieceSource(piece: SetPiece): string {
+  if (piece.row === 'plus') return 'Shark Pass Plus';
+  return piece.row === 'free' ? `Free at step ${piece.step}` : `Shark Pass, step ${piece.step}`;
+}

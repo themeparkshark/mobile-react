@@ -143,3 +143,22 @@ test('coin packs say what they buy from the server median gear price, never inve
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
   assert.match(shop, /main === 'coins' \? gearLine\(product\.buys\)/);
 });
+
+test('the season set counts every wearable, owned = claimed, and says where each one comes from', () => {
+  const it = (art, slot = 'pin') => ({ type: 'item', name: art, art, slot, icon_url: null, ready: true });
+  const coins = { type: 'coins', amount: 40, ready: true };
+  const tiers = [
+    { tier: 1, unlocked: true, free: coins, paid: it('scarf'), free_claimed: true, paid_claimed: true },
+    { tier: 10, unlocked: true, free: it('mittens'), paid: it('beanie'), free_claimed: true, paid_claimed: false },
+    { tier: 50, unlocked: false, free: it('finisher'), paid: it('lights', 'background'), free_claimed: false, paid_claimed: false },
+  ];
+  const set = pass.seasonSet(tiers, [it('crown')], false);
+  assert.equal(set.pieces.length, 6);
+  assert.equal(set.owned, 2);
+  assert.deepEqual(plain(set.pieces.map(p => p.reward.art)), ['mittens', 'finisher', 'scarf', 'beanie', 'lights', 'crown'], 'free row first');
+  assert.equal(pass.pieceSource(set.pieces[0]), 'Free at step 10');
+  assert.equal(pass.pieceSource(set.pieces[3]), 'Shark Pass, step 10');
+  assert.equal(pass.pieceSource(set.pieces[5]), 'Shark Pass Plus');
+  assert.equal(pass.seasonSet(tiers, [it('crown')], true).owned, 3, 'Plus extras are owned with Plus');
+  assert.match(read('src/screens/SharkPassScreen.tsx'), /YOUR SEASON SET/);
+});

@@ -41,7 +41,7 @@ import * as RootNavigation from '../RootNavigation';
 import { buySharkPass, loadSharkPassPrice, onSharkPassDelivered, restoreSharkPass, storeAvailable, type ShopPrice } from '../services/purchases';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import { EVENT_COPY, claimedLine, passGrants, passTwinLine, lastDayText, nextBigPrize, passSummary, readyNowLine, rewardWords } from '../services/money/sharkPassModel';
+import { EVENT_COPY, claimedLine, passGrants, passTwinLine, lastDayText, nextBigPrize, passSummary, pieceSource, readyNowLine, rewardWords, seasonSet, type SetPiece } from '../services/money/sharkPassModel';
 import { wearItem } from './StoreScreen/inventoryQueue';
 import { trackImpression, trackMoney } from '../services/money/track';
 import { baseRates, formatLike, regularValue } from '../services/money/offers';
@@ -154,6 +154,8 @@ export default function SharkPassScreen() {
   const [price, setPrice] = useState<ShopPrice | null>(null);
   const [plusPrice, setPlusPrice] = useState<ShopPrice | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // The season set's try-on: the kid's own shark wearing a piece (nothing is saved).
+  const [tryOn, setTryOn] = useState<SetPiece | null>(null);
   const [landed, setLanded] = useState<{ reward: SharkPassReward; title: string; caption?: string; itemId?: number; emblem?: boolean; group?: SharkPassReward[]; twin?: string; locked?: SharkPassReward[] } | null>(null);
   const buying = useRef(false);
   const list = useRef<FlatList<SharkPassTier>>(null);
@@ -531,6 +533,33 @@ export default function SharkPassScreen() {
               </View>
             )}
 
+            {/* The season set: every pin and scene, owned ones bright, tap any to try it on. */}
+            {(() => {
+              const set = seasonSet(tiers, season.plus_rewards ?? [], !!progress.plus);
+              if (!set.pieces.length) return null;
+              return (
+                <View style={s.earn}>
+                  <View style={s.setHead}>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.earnTitle}>YOUR SEASON SET</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.setCount}>{`${set.owned} of ${set.pieces.length}`}</Text>
+                  </View>
+                  <View style={s.setBar}><View style={[s.setFill, { width: `${(set.owned / set.pieces.length) * 100}%` }]} /></View>
+                  <View style={s.setGrid}>
+                    {set.pieces.map(piece => (
+                      <Pressable key={piece.reward.art + piece.row} onPress={() => setTryOn(piece)} style={({ pressed }) => [s.setCell, piece.owned && s.setCellOwned, pressed && { opacity: 0.75 }]}
+                        accessibilityRole="button" accessibilityLabel={`${piece.reward.name}. ${piece.owned ? 'Yours.' : pieceSource(piece) + '.'} Tap to try it on.`}>
+                        <View style={!piece.owned && s.setDim}><RewardPicture reward={piece.reward} size={52} /></View>
+                        {piece.owned
+                          ? <View style={s.setBadge}><GameIcon name="check" size={16} /></View>
+                          : <Text maxFontSizeMultiplier={1.1} style={s.setStep}>{piece.row === 'plus' ? 'PLUS' : piece.row === 'free' ? `FREE ${piece.step}` : `STEP ${piece.step}`}</Text>}
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>Tap any piece to try it on your shark.</Text>
+                </View>
+              );
+            })()}
+
             {/* How to climb: the server's own point table, with today's count. */}
             <View style={s.earn}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={s.earnTitle}>HOW TO CLIMB</Text>
@@ -568,6 +597,20 @@ export default function SharkPassScreen() {
             <View style={{ width: 170, height: 190 }}><Playercard inventory={heroLook} showBackground={false} pinAnchor="body" still={reduced} style={StyleSheet.absoluteFill} /></View>
           ) : <Image source={EMBLEM} style={{ width: 170, height: 170 }} contentFit="contain" />}
           caption={`You climbed ${climbed.to - climbed.from} ${climbed.to - climbed.from === 1 ? 'step' : 'steps'}. ${progress?.claimable ? `${progress.claimable} ${progress.claimable === 1 ? 'reward is' : 'rewards are'} ready.` : 'Keep going!'}`} />
+      )}
+      {tryOn && (
+        <Pressable style={s.tryScrim} onPress={() => setTryOn(null)} accessibilityRole="button" accessibilityLabel="Close">
+          <View style={s.tryCard} accessibilityViewIsModal>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={s.tryTitle}>{tryOn.reward.name}</Text>
+            {tryOn.reward.slot === 'pin' && withSeasonPin(player?.inventory as InventoryType | undefined, tryOn.reward)?.skin_item ? (
+              <View style={{ width: 190, height: 210 }}>
+                <Playercard inventory={withSeasonPin(player?.inventory as InventoryType | undefined, tryOn.reward)!} showBackground={false} pinAnchor="body" still={reduced} style={StyleSheet.absoluteFill} />
+              </View>
+            ) : <RewardPicture reward={tryOn.reward} size={tryOn.reward.slot === 'background' ? 220 : 160} />}
+            <Text maxFontSizeMultiplier={MAX_FONT} style={s.trySource}>{tryOn.owned ? 'It’s yours. Wear it from your closet.' : pieceSource(tryOn)}</Text>
+            <GameButton label="OK" size="compact" onPress={() => setTryOn(null)} accessibilityLabel="Close" />
+          </View>
+        </Pressable>
       )}
       {landed && (
         <GotIt grants={{}} art="gift" title={landed.title} onDone={() => setLanded(null)} picture={landed.emblem ? <Image source={EMBLEM} style={{ width: 180, height: 180 }} contentFit="contain" />
@@ -755,6 +798,21 @@ const s = StyleSheet.create({
   grownUpsHead: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff', letterSpacing: 0.6 },
   grownUpRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   grownUpText: { flex: 1, fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff', lineHeight: 18 },
+  setHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  setCount: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold },
+  setBar: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
+  setFill: { height: '100%', backgroundColor: BRAND.gold, borderRadius: 4 },
+  setGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', paddingTop: 4 },
+  setCell: { width: 70, height: 84, borderRadius: 14, alignItems: 'center', justifyContent: 'center', gap: 2,
+    backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.18)' },
+  setCellOwned: { backgroundColor: 'rgba(255,211,77,0.18)', borderColor: BRAND.gold },
+  setDim: { opacity: 0.45 },
+  setBadge: { position: 'absolute', top: -6, right: -6 },
+  setStep: { fontFamily: FONT.display, fontSize: 11, color: '#e2f6ff' },
+  tryScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,30,70,0.8)', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 },
+  tryCard: { width: '100%', maxWidth: 320, alignItems: 'center', gap: 10, padding: 18, borderRadius: 24, backgroundColor: '#0b3a75', borderWidth: 3, borderColor: '#ffffff' },
+  tryTitle: { fontFamily: FONT.display, fontSize: 22, color: '#ffffff', textAlign: 'center' },
+  trySource: { fontFamily: FONT.body, fontSize: 16, color: '#e2f6ff', textAlign: 'center' },
   earn: { marginHorizontal: 14, backgroundColor: 'rgba(5,40,90,0.55)', borderRadius: 20, padding: 12, gap: 6, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
   earnTitle: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff' },
   earnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
