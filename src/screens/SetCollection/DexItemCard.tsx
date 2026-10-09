@@ -97,7 +97,8 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
                 {item.name}
               </Text>
             </View>
-            <View style={styles.body}>
+            {/* The card frame wears the find's rarity color. */}
+            <View style={[styles.body, { borderColor: look.frame }]}>
               <ScrollView style={{ maxHeight: height * 0.78 }} contentContainerStyle={styles.bodyInner} showsVerticalScrollIndicator={false} bounces={false}>
               <View style={[styles.hero, { height: Math.min(photo ? 262 : 230, Math.round(height * (photo ? 0.31 : 0.27))) },
                 photo && styles.heroPhoto, !item.found && styles.heroSlot, item.found && !photo && { borderColor: look.frame },
@@ -125,7 +126,14 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
                   <Text style={styles.caughtText}>{item.found && item.foundInWorld === false ? 'Swapped in' : caughtLine(item)}</Text>
                 </View>
               </View>
-              {!!item.flavor && <Text style={styles.flavor}>{item.flavor}</Text>}
+              {/* The pride line: when it was first found, and a short line about it. */}
+              {item.found && !!item.firstFoundAt && !Number.isNaN(Date.parse(item.firstFoundAt)) && (
+                <View style={[styles.firstFound, { borderColor: look.frame }]}>
+                  <GameIcon name="star" size={18} />
+                  <Text style={styles.firstFoundText}>First found {new Date(item.firstFoundAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
+                </View>
+              )}
+              <Text style={styles.flavor}>{item.flavor || (item.found ? `A ${look.label} find from the ${set?.name ?? 'collection'}.` : `A ${look.label} find still out there. Keep looking!`)}</Text>
               <View style={styles.where} accessible accessibilityLabel={`When to look: ${item.spawnHint}`}>
                 <GameIcon name={spawnIcon(item.spawnHint)} size={30} />
                 <View style={{ flex: 1 }}>
@@ -203,6 +211,11 @@ const styles = StyleSheet.create({
   },
   caughtYes: { borderColor: BRAND.green },
   caughtText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
+  firstFound: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 5, marginTop: 10, paddingHorizontal: 10, height: 30,
+    borderRadius: 15, borderWidth: 2, backgroundColor: BRAND.white,
+  },
+  firstFoundText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
   flavor: {
     fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.navy, textAlign: 'center', marginTop: 10,
   },

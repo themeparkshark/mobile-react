@@ -99,6 +99,8 @@ export interface DexItem {
   readonly photoUrl: string | null;
   /** Caught during Golden Hour (cosmetic gold card). */
   readonly goldenHour: boolean;
+  /** When this find was first caught (ISO), for the card's "First found" line. */
+  readonly firstFoundAt: string | null;
 }
 
 export type PhotoGrade = 'good' | 'great' | 'frame_it';
@@ -576,6 +578,7 @@ export function buildItems(
       photoGrade: photo.grade,
       photoUrl: photo.url,
       goldenHour: photo.goldenHour,
+      firstFoundAt: found ? firstFound : null,
     };
   });
 }

@@ -15,8 +15,8 @@ import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import Animated, { cancelAnimation, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import { forwardRef, type ReactNode, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import Animated, { cancelAnimation, FadeInDown, withDelay, withSpring, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { AppState, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { GiftReceipt } from '../api/endpoints/me/prep-variant-gifts';
 import getPrepItemSets, {
@@ -323,7 +323,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     claimDim.value = reduced ? 0.6 : withTiming(0.6, { duration: 450 });
     try {
       if (preview) {
-        // Nothing to send: the local mark below is the whole claim.
+        // Nothing to send; the preview waits like a slow park network so the build-up can be seen.
+        await new Promise(resolve => setTimeout(resolve, 1600));
       } else if (reward.claim.kind === 'complete') {
         // On an authored set the server pays the full-set claim as its Master milestone, wearable included,
         // so the same "Added to your Inventory / WEAR IT" outcome applies (a legacy set grants no item: no card).
@@ -571,7 +572,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             ListFooterComponent={<View style={{ height: CTA_CLEARANCE, backgroundColor: SHEET }} />}
             extraData={tile}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item: entry }) => (
+            renderItem={({ item: entry, index }) => (
               typeof entry === 'number' ? (
                 <View style={styles.tileRow}>
                   {Array.from({ length: COLUMNS }, (_, index) => (
@@ -583,9 +584,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
                   <RarityHeading rarity={entry.rarity} label={entry.label} found={entry.found} total={entry.total} />
                 </View>
               ) : (
-                <View style={styles.tileRow}>
+                <RowPop slug={slug} index={index} reduced={reduced} style={styles.tileRow}>
                   {entry.items.map(item => <ItemTile key={item.id} item={item} width={tile} onPress={openItem} slot={slotOf.get(item.id) ?? 0} />)}
-                </View>
+                </RowPop>
               )
             )}
           />
@@ -644,6 +645,26 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   );
 }
 
+/**
+ * The first rows of a set pop in one after another when the set opens (about 40 ms apart, top rows only; a
+ * one-shot UI-thread spring, nothing loops). Recycled cells for the same set never replay it.
+ */
+function RowPop({ slug, index, reduced, style, children }: {
+  readonly slug: string | null; readonly index: number; readonly reduced: boolean; readonly style: object; readonly children: ReactNode;
+}) {
+  const t = useSharedValue(1);
+  const last = useRef(slug);
+  useEffect(() => {
+    if (last.current === slug) return;
+    last.current = slug;
+    if (reduced || index > 8) return;
+    t.value = 0;
+    t.value = withDelay(index * 40, withSpring(1, { damping: 13, stiffness: 220 }));
+  }, [slug, index, reduced, t]);
+  const anim = useAnimatedStyle(() => ({ opacity: 0.3 + 0.7 * t.value, transform: [{ translateY: (1 - t.value) * 14 }, { scale: 0.96 + 0.04 * t.value }] }));
+  return <Animated.View style={[style, anim]}>{children}</Animated.View>;
+}
+
 /** The slim bar over the finds: badge, name and count. Tap it to go back to the top. */
 interface StickyHandle { show: (on: boolean) => void }
 const StickyBar = forwardRef<StickyHandle, { readonly set: DexSet; readonly reduced: boolean; readonly onTop: () => void }>(
@@ -672,6 +693,7 @@ const StickyBar = forwardRef<StickyHandle, { readonly set: DexSet; readonly redu
 /** The claim wait as a build-up: a pulsing gold glow and, after 600 ms, a rising tone every half second. */
 function ClaimBuildUp({ reduced }: { readonly reduced: boolean }) {
   const pulse = useSharedValue(0);
+  const grow = useSharedValue(0);
   useEffect(() => {
     if (reduced) return undefined;
     pulse.value = withRepeat(withSequence(withTiming(1, { duration: 380 }), withTiming(0.35, { duration: 380 })), -1, false);
@@ -681,11 +703,13 @@ function ClaimBuildUp({ reduced }: { readonly reduced: boolean }) {
     const tick = () => {
       playSfx('ui.select', Math.min(0.9, 0.35 + step * 0.12));
       step += 1;
+      // Each rising tone shakes the gift harder (capped).
+      grow.value = withTiming(Math.min(1, step / 4), { duration: 120 });
       timer = setTimeout(tick, 500);
     };
     timer = setTimeout(tick, 600);
     return () => { if (timer) clearTimeout(timer); cancelAnimation(pulse); };
-  }, [reduced, pulse]);
+  }, [reduced, pulse, grow]);
   const glow = useAnimatedStyle(() => ({ opacity: 0.25 + 0.5 * pulse.value, transform: [{ scale: 0.85 + 0.25 * pulse.value }] }));
   // The gift shakes in step with the rising tones, harder the longer the wait (capped).
   const shake = useSharedValue(0);
@@ -694,7 +718,9 @@ function ClaimBuildUp({ reduced }: { readonly reduced: boolean }) {
     shake.value = withRepeat(withSequence(withTiming(1, { duration: 70 }), withTiming(-1, { duration: 140 }), withTiming(0, { duration: 70 }), withTiming(0, { duration: 220 })), -1, false);
     return () => cancelAnimation(shake);
   }, [reduced, shake]);
-  const shakeStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${shake.value * (6 + 6 * pulse.value)}deg` }, { scale: 1 + 0.06 * pulse.value }] }));
+  const shakeStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${shake.value * (8 + 14 * grow.value)}deg` }, { scale: 1 + 0.06 * pulse.value + 0.08 * grow.value }],
+  }));
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}
       accessible accessibilityLabel="Claiming your reward">

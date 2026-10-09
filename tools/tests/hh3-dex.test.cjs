@@ -707,3 +707,17 @@ test('perf: clocks run only when read, sweeps live in rare-only children, sticky
   assert.match(screen, /AppState\.addEventListener\('change'/);
   assert.doesNotMatch(screen, /timers\.push/);
 });
+
+test('juice: notches pop as the fill passes, count rolls up, rows pop in on a set switch, gift shakes harder, item card pride line', () => {
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  const screen = read('src/screens/SetCollection/../SetCollectionScreen.tsx');
+  const card = read('src/screens/SetCollection/DexItemCard.tsx');
+  assert.match(parts, /function Notch\(/);
+  assert.match(parts, /function RollCount\(/);
+  assert.match(screen, /function RowPop\(/);
+  assert.match(screen, /grow\.value = withTiming\(Math\.min\(1, step \/ 4\)/);
+  assert.match(card, /First found \{new Date\(item\.firstFoundAt\)/);
+  assert.match(card, /\[styles\.body, \{ borderColor: look\.frame \}\]/);
+  const item = dex.buildItems({ items: [{ id: 1, name: 'A', rarity: 1, is_collected: true, quantity_collected: 1, first_collected_at: '2026-10-01T10:00:00Z' }], progress: {} })[0];
+  assert.equal(item.firstFoundAt, '2026-10-01T10:00:00Z');
+});

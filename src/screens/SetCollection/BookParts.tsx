@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, ZoomOut,
+  Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, ZoomOut,
 } from 'react-native-reanimated';
 import { playSfx } from '../../gamekit/SFX';
 import * as Haptics from '../../helpers/haptics';
@@ -169,9 +169,12 @@ function PrizeBar({ set, reduced }: { readonly set: DexSet; readonly reduced: bo
   const fill = useSharedValue(0);
   const fraction = progressFraction(set);
   const finished = finishedOf(set);
+  // A new set sweeps its bar from empty; a count change on the same set moves from where it was.
+  const lastSlug = useRef<string | null>(null);
   useEffect(() => {
-    fill.value = reduced ? fraction : withTiming(fraction, { duration: 600, easing: Easing.out(Easing.cubic) });
-  }, [fraction, reduced, fill]);
+    if (lastSlug.current !== set.slug) { lastSlug.current = set.slug; if (!reduced) fill.value = 0; }
+    fill.value = reduced ? fraction : withTiming(fraction, { duration: FILL_MS, easing: Easing.out(Easing.cubic) });
+  }, [fraction, reduced, fill, set.slug]);
   // scaleX on a full-width bar: no layout work per frame.
   const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.001, fill.value) }] }));
   return (
@@ -179,16 +182,55 @@ function PrizeBar({ set, reduced }: { readonly set: DexSet; readonly reduced: bo
       <View style={styles.bar}>
         <Animated.View style={[styles.barFill, { backgroundColor: finished || set.isComplete ? BRAND.gold : set.color }, fillStyle]} />
       </View>
-      {prizeMarks(set).map(mark => {
-        const done = mark.status === 'claimed' || mark.status === 'pending';
-        const ready = mark.status === 'claimable';
-        return (
-          <View key={`${mark.target}-${mark.final}`} style={[styles.notch, { left: `${mark.at * 100}%` }, ready && styles.notchReady, done && (mark.final ? styles.notchTrophy : styles.notchDone)]}>
-            <GameIcon name={mark.final ? 'trophy' : done ? 'check' : 'gift'} size={18} />
-          </View>
-        );
-      })}
+      {prizeMarks(set).map((mark, index) => (
+        <Notch key={`${set.slug}-${mark.target}-${mark.final}`} mark={mark} fraction={fraction} reduced={reduced} tick={index} />
+      ))}
     </View>
+  );
+}
+
+const FILL_MS = 600;
+
+/** The found count rolls up from 0 when a set opens (capped ticks, JS timer for ~0.5 s only). */
+function RollCount({ value, reduced, style }: { readonly value: number; readonly reduced: boolean; readonly style: object }) {
+  const [shown, setShown] = useState(reduced ? value : 0);
+  useEffect(() => {
+    if (reduced || value <= 0) { setShown(value); return undefined; }
+    const steps = Math.min(10, value);
+    let i = 0;
+    const timer = setInterval(() => {
+      i += 1;
+      setShown(Math.round((value * i) / steps));
+      if (i >= steps) clearInterval(timer);
+    }, Math.round(FILL_MS / steps));
+    return () => clearInterval(timer);
+  }, [value, reduced]);
+  return <Text style={style}>{shown}</Text>;
+}
+
+/** One prize marker on the bar. When the fill sweeps past it, it pops and ticks (one-shot, no loop). */
+function Notch({ mark, fraction, reduced, tick }: {
+  readonly mark: { at: number; final: boolean; status: DexReward['status']; target: number };
+  readonly fraction: number; readonly reduced: boolean; readonly tick: number;
+}) {
+  const done = mark.status === 'claimed' || mark.status === 'pending';
+  const ready = mark.status === 'claimable';
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    if (reduced || fraction <= 0 || mark.at > fraction + 0.001) return undefined;
+    // The fill eases out, so it reaches this marker at about this share of its run.
+    const share = Math.min(1, mark.at / fraction);
+    const delay = Math.round(FILL_MS * (1 - Math.pow(1 - share, 1 / 3)));
+    scale.value = withDelay(delay, withSequence(withTiming(1.35, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 300 })));
+    const timer = setTimeout(() => playSfx('ui.select', Math.min(0.55, 0.25 + tick * 0.08)), delay);
+    return () => clearTimeout(timer);
+    // Once per marker per set (the key carries the set).
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <Animated.View style={[styles.notch, { left: `${mark.at * 100}%` }, ready && styles.notchReady, done && (mark.final ? styles.notchTrophy : styles.notchDone), style]}>
+      <GameIcon name={mark.final ? 'trophy' : done ? 'check' : 'gift'} size={18} />
+    </Animated.View>
   );
 }
 
@@ -235,7 +277,7 @@ export function BookHeader({ set, onFocus, focusBusy, stamp, onClaim, busyId, ti
           <Text style={styles.headerName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.25}>{set.name}</Text>
           <View style={styles.countRow}>
             <Text style={styles.headerCount} maxFontSizeMultiplier={BODY_SCALE}>
-              <Text style={styles.headerCountBig}>{set.found}</Text> of {set.total} found
+              <RollCount key={set.slug} value={set.found} reduced={reduced} style={styles.headerCountBig} /> of {set.total} found
             </Text>
             {pill && (
               <View style={[styles.goalPill, (ready || finished) && styles.goalPillGold]}>
