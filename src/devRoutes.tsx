@@ -14,6 +14,7 @@ export type DevScreen = {
 
 export const DEV_SCREENS: readonly DevScreen[] = __DEV__
   ? [
+      { name: 'LiveEventPreview', getComponent: () => require('./screens/LiveEventPreviewScreen').default },
       { name: 'QueueTimesPreview', getComponent: () => require('./screens/QueueTimesPreviewScreen').default },
       { name: 'TriviaGamePreview', getComponent: () => require('./screens/LinePlay/TriviaGamePreviewScreen').default },
       { name: 'QueueStampPreview', getComponent: () => require('./screens/LinePlay/QueueStampPreviewScreen').default },
@@ -87,6 +88,7 @@ export function devInitialRoute(): string | null {
     [on(process.env.EXPO_PUBLIC_STAMP_BOOK_PREVIEW) || on(process.env.EXPO_PUBLIC_STAMP_BOOK_LIVE), 'StampBook'],
     [on(process.env.EXPO_PUBLIC_QUEUE_STAMP_PREVIEW), 'QueueStampPreview'],
     [on(process.env.EXPO_PUBLIC_RIDE_GAME_PREVIEW), 'MiniGameTester'],
+    [!!process.env.EXPO_PUBLIC_LIVE_EVENT_PREVIEW, 'LiveEventPreview'],
     [on(process.env.EXPO_PUBLIC_COIN_SHELF_PREVIEW), 'CoinShelf'],
     [on(process.env.EXPO_PUBLIC_RIDE_TRACKER_PREVIEW), 'RideTracker'],
     [on(process.env.EXPO_PUBLIC_COIN_LEVELING_PREVIEW), 'CoinLevelingPreview'],
