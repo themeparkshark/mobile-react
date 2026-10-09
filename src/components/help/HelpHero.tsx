@@ -126,7 +126,7 @@ export default function HelpHero({ hero, width, height, running, reduced, data }
     <View style={[styles.stage, { width, height }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {cork
         // The board's own cork, tiled at its drawn size so it stays crisp (never stretched).
-        ? <ImageBackground source={ART.corkTile} style={StyleSheet.absoluteFill} resizeMode="repeat" imageStyle={{ width: 200, height: 200 }} />
+        ? <ImageBackground source={ART.corkTile} style={[StyleSheet.absoluteFill, { backgroundColor: '#c99a63' }]} resizeMode="repeat" />
         : <Image source={ART.water} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />}
       {hero === 'standings_climb' && <ClimbScene {...sp} />}
       {hero === 'standings_podium' && <PodiumScene {...sp} />}
@@ -264,8 +264,8 @@ function ClimbScene({ t, w, h }: SceneProps) {
           <Swap t={t} a={0.3} b={0.36} from="6" to="7" style={countStyle} />
         </MiniRow>
       </Abs>
-      <Abs x={x0 + bw * 0.42} y={y0 + step * 2 - rowH * 0.42} w={64} h={26} style={upChip}>
-        <View style={styles.upChip}><GameIcon name="arrow" size={14} style={{ transform: [{ rotate: '-90deg' }] }} /><Text style={styles.upText}>Up 1</Text></View>
+      <Abs x={x0 + bw * 0.4} y={y0 + step * 2 - rowH * 0.5} w={78} h={30} style={upChip}>
+        <View style={styles.upChip}><GameIcon name="arrow" size={16} style={{ transform: [{ rotate: '-90deg' }] }} /><Text style={styles.upText}>Up 1</Text></View>
       </Abs>
       <Abs x={0} y={0} w={36} h={36} style={flyer}><GameIcon name="ride" size={34} /></Abs>
     </>
@@ -946,9 +946,9 @@ const styles = StyleSheet.create({
   count: { fontFamily: 'Shark', color: BRAND.blue, textAlign: 'center' },
   upChip: {
     flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.gold, borderRadius: 999, borderWidth: 2,
-    borderColor: BRAND.white, paddingHorizontal: 8, height: 26, alignSelf: 'flex-start',
+    borderColor: BRAND.white, paddingHorizontal: 10, height: 30, alignSelf: 'flex-start',
   },
-  upText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 2 },
+  upText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 2 },
   boardFace: { width: 24, height: 24, borderRadius: 12, overflow: 'hidden', backgroundColor: '#e8f4ff', alignItems: 'center', borderWidth: 1.5, borderColor: BRAND.white },
   boardCard: {
     backgroundColor: BRAND.white, borderRadius: 18, borderWidth: 2.5, borderColor: '#cfe6fb', borderBottomWidth: 5, borderBottomColor: '#9cc3e8',

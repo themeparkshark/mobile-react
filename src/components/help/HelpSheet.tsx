@@ -317,8 +317,8 @@ function Dot({ index, width, scrollX, count, onPress }: {
     return { width: 10 + 16 * (1 - d), backgroundColor: d < 0.5 ? BRAND.blue : '#b9d8f2' };
   });
   return (
-    <Pressable onPress={onPress} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Page ${index + 1} of ${count}`}
-      style={{ height: 44, minWidth: 30, alignItems: 'center', justifyContent: 'center' }}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Page ${index + 1} of ${count}`}
+      hitSlop={{ top: 7, bottom: 7, left: 6, right: 6 }} style={{ height: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' }}>
       <Animated.View style={[styles.dot, style]} />
     </Pressable>
   );
@@ -343,8 +343,8 @@ const styles = StyleSheet.create({
   points: { alignSelf: 'stretch', marginTop: 10, gap: 8, paddingHorizontal: 4 },
   point: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 40 },
   pointIcon: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: BRAND.white, borderWidth: 2.5, borderColor: '#9cc3e8',
-    borderBottomWidth: 4, borderBottomColor: '#6f9fd2',
+    width: 40, height: 40, borderRadius: 20, backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.blueBright,
+    borderBottomWidth: 4.5, borderBottomColor: BRAND.blueLip,
     alignItems: 'center', justifyContent: 'center',
   },
   pointText: { flex: 1, fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.navy },

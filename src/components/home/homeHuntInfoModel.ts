@@ -28,10 +28,9 @@ export function oddsInfoSheet(info: HomeHuntInfo | null | undefined) {
   const rows = oddsRows(info);
   const odds = info?.odds;
   const local: SheetPoint[] = odds ? [
-    ...(Number(odds.focus) > 0 ? [{ icon: 'star' as const, text: `Pick a set to focus: ${Number(odds.focus)}% of finds come from it.` }] : []),
+    ...(Number(odds.focus) > 0 ? [{ icon: 'star' as const, text: `Focus a set: ${Number(odds.focus)}% of finds come from it.` }] : []),
     ...(Number(odds.missing_multiplier) > 1 ? [{ icon: 'new' as const, text: `New-to-you items show up ${Number(odds.missing_multiplier)} times more.` }] : []),
-    { icon: 'member' as const, text: 'VIP shows more finds. The odds stay the same.' },
-  ] : points(clean(info?.odds_lines).slice(0, 3), 'sparkle');
+      ] : points(clean(info?.odds_lines).slice(0, 3), 'sparkle');
   return {
     id: 'odds', name: 'Drop odds',
     pages: [{ key: 'odds', hero: 'odds' as const, headline: 'How rare finds are', heroData: { odds: rows }, points: local }],

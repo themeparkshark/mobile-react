@@ -20,7 +20,7 @@ export function termSheetContent(term: GlossaryTerm, count?: number | null): Hel
     name: term.label,
     pages: [{
       key: 'term', hero: 'term', headline: term.label,
-      heroData: { icon: term.icon, caption: balance ? balance.replace(/\.$/, '') : null },
+      heroData: { icon: term.icon, caption: balance && (count ?? 0) > 0 ? balance.replace(/\.$/, '') : null },
       points: [
         { icon: term.icon, text: brief(term.what, local.what) },
         { icon: 'gift', text: brief(term.earn, local.earn) },

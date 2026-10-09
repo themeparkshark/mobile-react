@@ -24,7 +24,7 @@ export default function SocialHelp() {
         style={styles.link}
         accessibilityLabel="Blocked players"
       >
-        <GameIcon name="lock" size={20} />
+        <GameIcon name="lock" size={18} />
         <Text maxFontSizeMultiplier={1.25} style={styles.linkText}>Blocked players</Text>
       </PressScale>
       <PressScale
@@ -32,7 +32,7 @@ export default function SocialHelp() {
         style={styles.link}
         accessibilityLabel={`Grown-ups: email ${SUPPORT_EMAIL}`}
       >
-        <GameIcon name="info" size={20} />
+        <GameIcon name="info" size={18} />
         <Text maxFontSizeMultiplier={1.25} style={styles.linkText}>Grown-ups: email us</Text>
       </PressScale>
     </View>
@@ -50,11 +50,9 @@ export default function SocialHelp() {
 }
 
 const styles = StyleSheet.create({
-  links: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  linksSpace: { height: 56 },
-  link: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, borderRadius: 999,
-    backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#d7ecfb',
-  },
-  linkText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 3 },
+  // One quiet row of links, like the sheet's "How to play" link: never a second set of buttons.
+  links: { flexDirection: 'row', justifyContent: 'center', gap: 18, marginTop: 6 },
+  linksSpace: { height: 50 },
+  link: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 44 },
+  linkText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.blue, marginTop: 3 },
 });

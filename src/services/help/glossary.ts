@@ -90,7 +90,7 @@ const TERMS: readonly GlossaryTerm[] = [
     what: 'The ride coin you want next. It waits on your map.',
     earn: 'Open a park\'s shelf and tap Set Goal on a ride.' },
   { key: 'stamps', label: 'Stamps', icon: 'medal1', topic: 'collections',
-    what: 'Badges for milestones, like your first ride coin or a 7-day streak.',
+    what: 'Badges for big moments, like your first ride coin.',
     earn: 'See them all in your Stamp Book, from the menu.' },
   { key: 'sets', label: 'Sets', icon: 'gift', topic: 'collections',
     what: 'Every home find belongs to a set, like the Churro Collection.',
@@ -126,7 +126,7 @@ const TERMS: readonly GlossaryTerm[] = [
     what: 'Packs of Tickets, Coins and Energy. A grown-up pays real money.',
     earn: 'In the Shark Shop. Ride Parts and ride coins are never sold.' },
   { key: 'bonus_ads', label: 'Bonus ads', icon: 'play', topic: 'shop',
-    what: 'Short, optional ads that give a small bonus, like a Ticket.',
+    what: 'Short ads you can skip. Watch one for a small bonus.',
     earn: 'Tap Watch when you see one. Skipping costs nothing.' },
 ];
 
