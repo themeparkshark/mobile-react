@@ -146,7 +146,7 @@ export default function BoxReveal({ pulls, tone, still, onDone, variant = 'box',
   const art = BOX_ART[tone];
   const boxSize = Math.min(240, width * 0.58);
   const pinSize = Math.min(210, width * 0.52);
-  const centerY = height * 0.42;
+  const centerY = height * 0.47;
 
   const drop = useSharedValue(0);
   const shake = useSharedValue(0);
@@ -284,7 +284,7 @@ export default function BoxReveal({ pulls, tone, still, onDone, variant = 'box',
       { rotate: `${shake.value}deg` },
       { scale: 1 + Math.abs(shake.value) * 0.004 + interpolate(settle.value, [0, 1], [0, -0.18]) },
     ],
-    opacity: 1 - settle.value * 0.75,
+    opacity: 1 - settle.value,
   }));
   const closedStyle = useAnimatedStyle(() => ({ opacity: opened.value > 0 ? 0 : 1 }));
   const baseStyle = useAnimatedStyle(() => ({ opacity: opened.value > 0 ? 1 : 0 }));
@@ -346,7 +346,7 @@ export default function BoxReveal({ pulls, tone, still, onDone, variant = 'box',
         )}
 
         {phase === 'show' && (
-          <Animated.View style={[styles.info, { top: centerY + pinSize * 0.42 }, infoStyle]} pointerEvents="box-none">
+          <Animated.View style={[styles.info, { top: centerY + pinSize * 0.12 }, infoStyle]} pointerEvents="box-none">
             {pull.is_chaser && (
               <View style={styles.chaserBanner}>
                 <Image source={PIN_ART.chaser} style={{ width: 30, height: 30 }} contentFit="contain" />
@@ -404,7 +404,7 @@ export default function BoxReveal({ pulls, tone, still, onDone, variant = 'box',
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(4,38,92,0.88)' },
+  scrim: { flex: 1, backgroundColor: 'rgba(3,32,80,0.95)' },
   stage: { position: 'absolute', left: 0, alignItems: 'center', justifyContent: 'center' },
   pin: { position: 'absolute', alignSelf: 'center' },
   confettiOrigin: { position: 'absolute', alignSelf: 'center', width: 1, height: 1 },

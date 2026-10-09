@@ -191,15 +191,16 @@ export default function PinsScreen() {
               onRefresh={async () => { setRefreshing(true); await load(true); setRefreshing(false); }} />}>
             <Animated.View entering={still ? undefined : FadeIn.duration(220)} style={styles.hero}>
               <View style={styles.heroTop}>
-                <Text maxFontSizeMultiplier={1.15} style={styles.heroTitle}>{PINS_COPY.lanyard}</Text>
-                <GameButton size="compact" variant="secondary" label={PINS_COPY.trade} icon="swap" onPress={() => RootNavigation.navigate('PinSwaps')} />
+                <Text maxFontSizeMultiplier={1.15} style={styles.heroTitle}>{PINS_COPY.lanyard} <Text style={styles.heroCount}>{home.counts.pins} pins</Text></Text>
+                <Pressable onPress={() => { queueHaptic('tapLight', 1); RootNavigation.navigate('PinSwaps'); }} style={({ pressed }) => [styles.tradePill, pressed && { transform: [{ scale: 0.96 }] }]}
+                  accessibilityRole="button" accessibilityLabel="Trade pins on the board" hitSlop={8}>
+                  <Image source={PIN_ART.trade} style={{ width: 26, height: 26 }} contentFit="contain" />
+                  <Text maxFontSizeMultiplier={1.1} style={styles.tradeText}>{PINS_COPY.trade}</Text>
+                </Pressable>
               </View>
-              <Lanyard pins={lanyardPins} width={width - SPACE.lg * 2} showEmpty still={still} active={focused}
+              <Lanyard pins={lanyardPins} width={width - SPACE.lg * 2} height={176} showEmpty still={still} active={focused}
                 shine={shine} onPressSlot={() => setTab('mine')} />
               <View style={styles.counts}>
-                <View style={styles.countChip} accessible accessibilityLabel={`${home.counts.pins} pins`}>
-                  <GameIcon name="pin" size={20} /><Text maxFontSizeMultiplier={1.1} style={styles.countText}>{home.counts.pins}</Text>
-                </View>
                 <View style={styles.countChip} accessible accessibilityLabel={`${home.counts.sets_done} of ${home.counts.sets} park sets done`}>
                   <Image source={PIN_ART.seal} style={{ width: 22, height: 22 }} contentFit="contain" />
                   <Text maxFontSizeMultiplier={1.1} style={styles.countText}>{home.counts.sets_done}/{home.counts.sets}</Text>
@@ -290,6 +291,13 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: SPACE.lg, paddingTop: SPACE.md, paddingBottom: 48, gap: SPACE.md },
   hero: { backgroundColor: 'rgba(5,52,110,0.32)', borderRadius: RADIUS.lg, borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)', paddingTop: SPACE.sm, paddingBottom: SPACE.md, overflow: 'hidden' },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACE.md },
+  heroCount: { fontFamily: FONT.body, fontSize: 17, color: '#e2f6ff', textShadowRadius: 0 },
+  tradePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3,
+    borderRadius: 999, paddingLeft: 6, paddingRight: 14, paddingVertical: 4, minHeight: 44,
+    shadowColor: BRAND.navy, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 0,
+  },
+  tradeText: { fontFamily: FONT.display, fontSize: 19, color: BRAND.navy, paddingTop: 3 },
   heroTitle: { fontFamily: FONT.display, fontSize: 24, color: BRAND.white, paddingTop: 3, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   counts: { flexDirection: 'row', justifyContent: 'center', gap: SPACE.sm, marginTop: -SPACE.sm },
   countChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.cream, borderColor: BRAND.navy, borderWidth: 2, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },

@@ -58,7 +58,7 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
   }, [still, active, sway]);
 
   const swayStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${sway.value * 0.9}deg` }] }));
-  const pinSize = Math.min(64, Math.round(width / 6.4));
+  const pinSize = Math.min(76, Math.round(width / 5.2));
   const strapW = 22;
   // The strap path: two parallel curves (a ribbon), drawn once.
   const steps = 24;
@@ -107,7 +107,7 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
             style={{ position: 'absolute', left: p.x - pinSize / 2, top: p.y - pinSize * 0.42, width: pinSize, height: pinSize }}>
             {pin ? (
               <PinTile uri={pin.icon_url} size={pinSize} owned kind={pin.kind} tradable={pin.tradable}
-                chaser={pin.is_chaser} tilt={tilt} shine={pin.is_chaser || i % 2 === 0 ? shine : undefined}
+                chaser={pin.is_chaser} badge={!pin.tradable} tilt={tilt} shine={pin.is_chaser || i % 2 === 0 ? shine : undefined}
                 lag={i * 0.12} lagSpan={0.6} surface="panel" />
             ) : (
               <View style={[styles.empty, { width: pinSize - 8, height: pinSize - 8, borderRadius: (pinSize - 8) / 2 }]}>

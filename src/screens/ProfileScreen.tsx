@@ -247,9 +247,10 @@ export default function ProfileScreen() {
       },
       {
         key: 'pin-packs',
-        label: labels.pin_packs || 'Pin Packs',
+        // Pins v2: one Pins page (mystery boxes, park sets, your lanyard).
+        label: 'Pins',
         image: require('../../assets/images/screens/profile/pin_collections.png'),
-        hint: 'Opens your pin collections',
+        hint: 'Opens your pins, mystery boxes and park sets',
         onPress: () => RootNavigation.navigate('PinCollections'),
       },
       ...others.map((store): ProfileShortcut => ({

@@ -8,11 +8,11 @@
  */
 import { Image } from 'expo-image';
 import { memo, useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue,
 } from 'react-native-reanimated';
-import { BRAND, FONT, GameButton, OUTLINE, RADIUS, SHADOW, SPACE } from '../../ui';
+import { BRAND, FONT, GameButton, GameIcon, OUTLINE, RADIUS, SHADOW, SPACE } from '../../ui';
 import { BOX_ART, boxTone, PIN_ART, PinTile } from './PinArt';
 import {
   chaserMeter, endsLabel, formatChance, nextFreeBox, oneIn, seriesProgress, splitSeries, type MysterySeries, type PinRow,
@@ -24,7 +24,7 @@ const FREE_REASON = { first: 'First box free', weekly: 'Free this week', banked:
  * What can be inside a box and the chance of each, in pictures + numbers.
  * Every pin in the series is listed; the chaser is last, in gold.
  */
-export const OddsTable = memo(function OddsTable({ pins, size = 50, shine, compact = false }: {
+export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compact = false }: {
   pins: readonly PinRow[]; size?: number; shine?: SharedValue<number>; compact?: boolean;
 }) {
   const regular = pins.filter(p => !p.is_chaser);
@@ -33,7 +33,7 @@ export const OddsTable = memo(function OddsTable({ pins, size = 50, shine, compa
     <View style={styles.odds} accessible accessibilityLabel={`What can be inside. ${pins.map(p => `${p.name} ${formatChance(p.chance_bp)}`).join(', ')}`}>
       <View style={styles.oddsRow}>
         {regular.map((p, i) => (
-          <View key={p.item_id} style={[styles.oddsCell, { width: size + 10 }]}>
+          <View key={p.item_id} style={[styles.oddsCell, { width: size + 9 }]}>
             <PinTile uri={p.icon_url} size={size} owned={p.owned} kind={p.kind} tradable={p.tradable} spares={p.spares}
               badge={false} tilt={((i * 29) % 9) - 4} shine={p.owned ? shine : undefined} lag={i * 0.1} lagSpan={0.8} />
             <Text maxFontSizeMultiplier={1.15} style={styles.pct}>{formatChance(p.chance_bp)}</Text>
@@ -150,9 +150,16 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, onOpen }: 
               <GameButton label={`Open ${series.price}`} icon="coins" loading={busy} disabled={busy}
                 onPress={() => onOpen(series, 1, 'coins')} accessibilityHint={`Opens one mystery box for ${series.price} coins. You have ${coins}`} />
             )}
-            <GameButton variant="secondary" size="compact" label={`${series.bundle.count} for ${series.bundle.price.toLocaleString('en-US')}`} icon="coins"
-              disabled={busy} onPress={() => onOpen(series, series.bundle.count, 'coins')}
-              accessibilityHint={`Opens ${series.bundle.count} boxes for ${series.bundle.price} coins`} />
+            <Pressable disabled={busy} onPress={() => onOpen(series, series.bundle.count, 'coins')} hitSlop={6}
+              style={({ pressed }) => [styles.bundle, pressed && { transform: [{ scale: 0.96 }] }, busy && { opacity: 0.5 }]}
+              accessibilityRole="button" accessibilityLabel={`Open ${series.bundle.count} boxes for ${series.bundle.price} coins`}>
+              <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
+              <Text maxFontSizeMultiplier={1.1} style={styles.bundleText}>x{series.bundle.count}</Text>
+              <View style={styles.bundlePrice}>
+                <GameIcon name="coin" size={18} />
+                <Text maxFontSizeMultiplier={1.1} style={styles.bundlePriceText}>{series.bundle.price.toLocaleString('en-US')}</Text>
+              </View>
+            </Pressable>
           </View>
         ) : (
           <Text maxFontSizeMultiplier={1.15} style={styles.closed}>All done. Trade for these pins on the board.</Text>
@@ -197,5 +204,12 @@ const styles = StyleSheet.create({
   actions: { alignItems: 'center', gap: SPACE.sm },
   freeChip: { backgroundColor: BRAND.green, borderRadius: 999, borderWidth: 2, borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 2 },
   freeText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, paddingTop: 2 },
+  bundle: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.blueBright, borderColor: BRAND.navy, borderWidth: 3,
+    borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, minHeight: 44,
+  },
+  bundleText: { fontFamily: FONT.display, fontSize: 19, color: BRAND.white, paddingTop: 3 },
+  bundlePrice: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.cream, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
+  bundlePriceText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy, paddingTop: 2 },
   closed: { fontFamily: FONT.body, fontSize: 17, color: BRAND.navySoft, textAlign: 'center' },
 });
