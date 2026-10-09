@@ -27,6 +27,7 @@ import {
 import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import { perMonthText } from '../services/money/offers';
 import MemberStage from '../components/money/MemberStage';
+import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../services/money/flags';
 
 // Every line here is backed by live server logic: ride wins pay VIP double
 // (CompleteTaskAction), VIP home maps spawn two extra finds and double their
@@ -82,6 +83,8 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const [perks, setPerks] = useState<VipPerk[]>(VIP_BENEFITS);
   const canBuy = storeAvailable();
   const member = player?.is_subscribed === true;
+  // Pins: VIP gets a free Mystery Pin Box every week, listed only while boxes are live.
+  const boxesLive = useMoneyFlag('pin_mystery_boxes');
   useEffect(() => {
     let live = true;
     getVipPerks().then(next => { if (live && next) setPerks(next); }).catch(() => undefined);
@@ -179,9 +182,9 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
           </Animated.Text>
 
           <View style={s.benefits}>
-            {perks.map((b, i) => (
+            {(boxesLive ? [...perks, VIP_WEEKLY_BOX_PERK as VipPerk] : perks).map((b, i, all) => (
               <Animated.View key={b.title} entering={FadeInUp.delay(280 + i * 70).springify().damping(15)}
-                style={[s.benefit, perks.length % 2 === 1 && i === perks.length - 1 && s.benefitWide]}>
+                style={[s.benefit, all.length % 2 === 1 && i === all.length - 1 && s.benefitWide]}>
                 <View style={s.benefitIcon}><GameIcon name={b.icon} size={36} /></View>
                 <Text maxFontSizeMultiplier={1.25} style={s.benefitTitle}>{b.title}</Text>
                 <Text maxFontSizeMultiplier={1.25} style={s.benefitBody}>{b.body}</Text>

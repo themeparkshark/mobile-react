@@ -179,5 +179,5 @@ test('paywall perks come from the server VIP flags, with a safe fallback', () =>
   assert.equal(api.parseVipPerks(undefined), null);
   const screen = fs.readFileSync(path.join(root, 'src/screens/MembershipScreen.tsx'), 'utf8');
   assert.match(screen, /getVipPerks\(\)\.then/);
-  assert.match(screen, /\{perks\.map\(/);
+  assert.match(screen, /perks\)\.map\(/);
 });

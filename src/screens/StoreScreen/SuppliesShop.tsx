@@ -42,6 +42,7 @@ import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from
 import { openMembership } from '../../components/GrownUpGate';
 import { useHelp } from '../../components/help/HelpProvider';
 import SharkPassBanner from '../../components/money/SharkPassBanner';
+import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../../services/money/flags';
 import {
   Band, CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, packArtKey, unitWord, type PackArtKey,
 } from '../../components/money/moneyUi';
@@ -82,6 +83,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const canBuy = storeAvailable();
   const vip = !!player?.is_subscribed;
   const { catalog, prices, status } = useSupplies(!!player);
+  const boxesLive = useMoneyFlag('pin_mystery_boxes');
   const [ads, setAds] = useState<AdSummary | null>(null);
   const [perks, setPerks] = useState<VipPerk[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -233,7 +235,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
         </>
       )}
 
-      {!vip && <VipCard perks={perks} />}
+      {!vip && <VipCard perks={perks && boxesLive ? [...perks, VIP_WEEKLY_BOX_PERK as VipPerk] : perks} />}
 
       {showDaily && (
         <Animated.View entering={FadeInUp.springify().damping(15)} style={st.freeCard}>
@@ -267,6 +269,9 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
               <View style={st.sectionRule} />
             </View>
             {SECTION_NOTE[key] && <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionNote}>{SECTION_NOTE[key]}</Text>}
+            {key === 'coins' && boxesLive && (
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionNote}>Coins can open Mystery Pin Boxes. Odds are shown on each box.</Text>
+            )}
             <View style={st.grid}>
               {packs.map((p, i) => (
                 <PackCard key={p.product_id} product={p} tier={i} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 1 : 3}
