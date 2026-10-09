@@ -30,11 +30,14 @@ function TrailPill({ state, active, onPress, inPark = true }: {
   const glow = useSharedValue(0);
   const fill = useSharedValue(fraction);
   const count = state.walking.length + state.waiting.length + ready;
-  const prev = useRef({ count, fraction, id: box?.id ?? 0, ready });
+  const toGoNow = box && box.status !== 'ready' ? stepsToGo(box) : 0;
+  const prev = useRef({ count, fraction, id: box?.id ?? 0, ready, toGo: toGoNow });
+  const [sweepSteps, setSweepSteps] = useState<number | null>(null);
   const wipe = useSharedValue(0);
   // What the pill shows as ready: lags behind for the fill-to-full beat.
   const [shownReady, setShownReady] = useState(ready);
   const finishSweep = useCallback((n: number) => {
+    setSweepSteps(null);
     setShownReady(n);
     pop.value = withSequence(withTiming(1.22, { duration: 130 }), withSpring(1, { damping: 7, stiffness: 260 }));
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
@@ -46,9 +49,17 @@ function TrailPill({ state, active, onPress, inPark = true }: {
     const crossed = sameBox ? milestonesCrossed(p.fraction, fraction) : [];
     const earned = count > p.count;
     const newlyReady = ready > p.ready;
-    prev.current = { count, fraction, id: box?.id ?? 0, ready };
+    prev.current = { count, fraction, id: box?.id ?? 0, ready, toGo: newlyReady ? p.toGo : toGoNow };
     if (newlyReady && shownReady === 0 && active && !reduced && inPark) {
-      // Sweep to full, gold wipe across the capsule, then OPEN! springs in.
+      // Sweep to full while the number counts down to 0, gold wipe across the capsule, then OPEN! springs in.
+      const fromSteps = p.toGo;
+      const t0 = Date.now();
+      const tick = () => {
+        const k = Math.min(1, (Date.now() - t0) / 380);
+        setSweepSteps(Math.round(fromSteps * (1 - k)));
+        if (k < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
       fill.value = withTiming(1, { duration: 380 }, () => {
         wipe.value = 0;
         wipe.value = withTiming(1, { duration: 280 }, done => { if (done) runOnJS(finishSweep)(ready); });
@@ -82,7 +93,7 @@ function TrailPill({ state, active, onPress, inPark = true }: {
   const waiting = state.walking.length + state.waiting.length;
   const shown = shownReady ? state.ready.length : 0;
   const home = !inPark && !shown;
-  const label = shown ? (shown > 1 ? `OPEN ${shown}` : 'OPEN!') : home ? `${waiting} waiting` : box && box.status !== 'ready' ? shortSteps(stepsToGo(box)) : box ? '0' : 'Walk';
+  const label = shown ? (shown > 1 ? `OPEN ${shown}` : 'OPEN!') : home ? `${waiting} WAITING` : sweepSteps != null ? shortSteps(sweepSteps) : box && box.status !== 'ready' ? shortSteps(stepsToGo(box)) : box ? shortSteps(prev.current.toGo) : 'Walk';
   const dropped = missNote(state.sync);
   const a11y = home ? `${waiting} Trail ${waiting === 1 ? 'Box waits' : 'Boxes wait'} for your next park day` : dropped && !ready ? `Trail Box: ${box ? stepsToGo(box) : 0} steps to go. Some steps did not count, tap to see why` : ready
     ? `${ready} Trail ${ready === 1 ? 'Box is' : 'Boxes are'} ready to open`
@@ -127,7 +138,7 @@ const styles = StyleSheet.create({
   count: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white, marginBottom: 3,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0 },
   countReady: { color: BRAND.navy, textShadowColor: BRAND.white, textShadowOffset: { width: 0, height: 1 } },
-  unit: { fontFamily: 'Knockout', fontSize: 11, color: BRAND.white, marginLeft: 3, marginBottom: 1 },
+  unit: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.white, marginLeft: 3, marginBottom: 1 },
   icon: { position: 'absolute', left: -2, top: -1 },
   dot: { position: 'absolute', right: -3, top: 1, width: 14, height: 14, borderRadius: 7, backgroundColor: BRAND.red,
     borderWidth: 2, borderColor: BRAND.white },

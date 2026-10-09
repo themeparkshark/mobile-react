@@ -60,7 +60,8 @@ function TrailPath({ fraction, height = 16, ready = false, seenKey, onFilled }: 
     return () => timers.forEach(clearTimeout);
   }, [target, pref, seenKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fillStyle = useAnimatedStyle(() => ({ width: Math.max(height, fill.value * width) }));
+  // Transform only (no layout pass per frame): a full-width bar slides in from the left.
+  const fillStyle = useAnimatedStyle(() => ({ width, transform: [{ translateX: -width + Math.max(height, fill.value * width) }] }));
   const sharkSize = height * 1.9;
   const sharkStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: Math.max(0, fill.value * width - sharkSize * 0.75) }, { scale: bump.value }],

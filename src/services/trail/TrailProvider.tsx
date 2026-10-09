@@ -51,9 +51,12 @@ const AWAY_KEY = 'trail.away.v1';
 const MAX_PENDING = 40;
 
 let flagCache: boolean | null = null;
+let flagAt = 0;
+const FLAG_TTL_MS = 10 * 60_000;
 async function trailFlag(): Promise<boolean> {
   if (__DEV__ && process.env.EXPO_PUBLIC_TRAIL_FORCE === '1') return true;
-  if (flagCache !== null) return flagCache;
+  if (flagCache !== null && Date.now() - flagAt < FLAG_TTL_MS) return flagCache;
+  flagAt = Date.now();
   try {
     flagCache = (await getFeatureFlags()).flags.trail_boxes === true;
   } catch {
@@ -218,9 +221,19 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
         }
       } else if (s === 'active') {
         void readMotion().then(setMotion);
-        // The first FRESH fix decides where the closed window ends (in the park, or "left"):
-        // replaying the pre-background spot would call a hotel walk a park walk.
-        void refresh();
+        void trailFlag().then(setFlag);
+        // A FRESH fix decides where the closed window ends (in the park, or "left"); never the
+        // pre-background spot. The phone's last known fix counts only if it is newer than when we
+        // went to sleep, so the walk lands at once instead of waiting for the next GPS update.
+        const since = recorder.current.away?.at ?? 0;
+        void (async () => {
+          try {
+            const Location = require('expo-location');
+            const last = await Location.getLastKnownPositionAsync({ maxAge: 120_000 });
+            if (last && since && last.timestamp > since) onFix(last.coords.latitude, last.coords.longitude);
+          } catch { /* the next fix does it */ }
+          void refresh();
+        })();
       }
     });
     return () => sub.remove();

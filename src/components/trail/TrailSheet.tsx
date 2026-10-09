@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { playSfx } from '../../gamekit/SFX';
@@ -11,6 +11,7 @@ import {
   type TrailBox, type TrailState, type TrailTier,
 } from '../../services/trail/trailModel';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, confirmGame, type GameIconName } from '../../ui';
+import { CountUpText } from '../../gamekit/fx/CountUpText';
 import TrailBoxArt, { STEPS_ART, WHEELS_ART } from './TrailBoxArt';
 import TrailPath from './TrailPath';
 
@@ -169,6 +170,9 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
                         <Text style={styles.waitText}>{formatSteps(b.goal_steps)}</Text>
                       </Pressable>
                     ))}
+                    {Array.from({ length: Math.max(0, state.rack - state.waiting.length) }, (_, i) => (
+                      <View key={`open-${i}`} style={styles.rackEmpty} accessibilityElementsHidden />
+                    ))}
                   </ScrollView>
                   {picked != null && state.waiting[0]?.id !== picked && (
                     <GameButton label="Walk this one next" size="compact" variant="secondary" onPress={() => { onFront(picked); setPicked(null); }}
@@ -256,27 +260,19 @@ function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, 
 
 export default memo(TrailSheet);
 
-/** Steps to go, counting down from what you saw last time (Pikmin Bloom style), never up. */
+/** Steps to go, counting down on the UI thread from what you saw last time (Pikmin Bloom style), never up. */
 function StepsToGo({ box, visible }: { readonly box: TrailBox; readonly visible: boolean }) {
   const target = stepsToGo(box);
-  const from = getSeen(`n:${box.id}`);
-  const [shown, setShown] = useState(from != null && from > target ? from : target);
-  const raf = useRef(0);
+  const [value, setValue] = useState(() => {
+    const from = getSeen(`n:${box.id}`);
+    return from != null && from > target ? from : target;
+  });
   useEffect(() => {
-    if (!visible) return undefined;
-    const start = getSeen(`n:${box.id}`);
+    if (!visible) return;
     setSeen(`n:${box.id}`, target);
-    if (start == null || start <= target) { setShown(target); return undefined; }
-    const t0 = Date.now();
-    const tick = () => {
-      const k = Math.min(1, (Date.now() - t0) / 900);
-      setShown(Math.round(start - (start - target) * (1 - (1 - k) ** 3)));
-      if (k < 1) raf.current = requestAnimationFrame(tick);
-    };
-    raf.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf.current);
+    setValue(target);
   }, [box.id, target, visible]);
-  return <Text style={styles.toGo} numberOfLines={1} adjustsFontSizeToFit>{formatSteps(shown)}</Text>;
+  return <CountUpText value={value} durationMs={900} punch={1} style={styles.toGo} />;
 }
 
 function cheer(steps: number): string {
@@ -391,11 +387,12 @@ const styles = StyleSheet.create({
   slot: { flex: 1, backgroundColor: BRAND.white, borderRadius: RADIUS.lg, borderWidth: 2.5, borderColor: BRAND.sky,
     alignItems: 'center', paddingHorizontal: 8, paddingTop: 6, paddingBottom: 10 },
   slotEmpty: { backgroundColor: 'transparent', borderStyle: 'dashed', borderColor: BRAND.skyDeep, justifyContent: 'center', minHeight: 160 },
-  toGo: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 2 },
+  toGo: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 2, textShadowOffset: { width: 0, height: 0 }, minWidth: 80 },
   toGoUnit: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft, marginTop: -2 },
   footnote: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft, marginTop: 6 },
   waitBox: { width: 70, alignItems: 'center', borderRadius: RADIUS.md, borderWidth: 2.5, borderColor: 'transparent', paddingVertical: 4 },
   waitPicked: { borderColor: BRAND.gold, backgroundColor: BRAND.cream },
+  rackEmpty: { width: 62, height: 70, marginHorizontal: 4, borderRadius: RADIUS.md, borderWidth: 2, borderStyle: 'dashed', borderColor: BRAND.skyDeep },
   waitText: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   todayCard: { flexDirection: 'row', alignItems: 'center' },
   bigNumber: { fontFamily: 'Shark', fontSize: 36, color: BRAND.blue },

@@ -7,12 +7,13 @@ import Animated, {
   withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Canvas, Circle, RadialGradient, vec } from '@shopify/react-native-skia';
+import { Canvas, Circle, Path, RadialGradient, Skia, vec } from '@shopify/react-native-skia';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { BOX_NAME, boxName, formatSteps, rewardLabel, type TrailBox, type TrailReward } from '../../services/trail/trailModel';
+import { BOX_NAME, boxName, rewardLabel, type TrailBox, type TrailReward } from '../../services/trail/trailModel';
 import { BRAND, GameButton, GameIcon, type GameIconName } from '../../ui';
 import RewardBurst from '../RewardBurst';
+import { CountUpText } from '../../gamekit/fx/CountUpText';
 import { BOX_ART, BOX_OPEN_ART } from './TrailBoxArt';
 
 const ICON: Record<TrailReward['kind'], GameIconName> = {
@@ -20,7 +21,7 @@ const ICON: Record<TrailReward['kind'], GameIconName> = {
 };
 /** Light behind each box: a warm white core into its colour, never muddy on navy. */
 const GLOW: Record<TrailBox['tier'], [string, string]> = {
-  blue: ['#ffffff', '#d6f0ff'], red: ['#fffaf6', '#ffd9d2'], gold: ['#fffdf2', '#fff0b8'],
+  blue: ['#ffffff', '#d6f0ff'], red: ['#fff0ec', '#ffe2dc'], gold: ['#fff1b8', '#fff6d8'],
 };
 const CONFETTI: Record<TrailBox['tier'], string[]> = {
   blue: ['#7cc6f5', '#ffffff', '#0879ca', '#bfe5ff', '#ffcf3b'],
@@ -208,6 +209,7 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint }: {
               </Circle>
             </Canvas>
           </Animated.View>
+          {box.tier === 'gold' && <GoldRays size={g * 1.05} top={(size * 1.05 - g * 1.05) / 2} reduced={reduced} />}
           <Animated.View style={boxStyle}>
             <Image source={opened ? BOX_OPEN_ART[box.tier] : BOX_ART[box.tier]}
               style={{ width: size, height: size }} contentFit="contain" />
@@ -261,20 +263,13 @@ function RewardCard({ reward, tier, order, delay, hero, reduced }: {
 }) {
   const t = useSharedValue(reduced ? 1 : 0);
   const ring = useSharedValue(0);
-  const [shown, setShown] = useState(reduced || reward.kind !== 'coins' ? reward.amount : 0);
+  // Coins count up on the UI thread (CountUpText), from 0 once the card lands.
+  const [coinValue, setCoinValue] = useState(reduced ? reward.amount : 0);
   const landed = useCallback(() => {
     haptic(hero ? 2 : 0);
     if (hero) { sfx('fx.reveal'); sfx('fx.firework'); } else sfx(reward.kind === 'coins' ? 'fx.coin' : 'ui.select', { pitch: order * 2 });
-    if (reward.kind === 'coins' && !reduced) {
-      const startAt = Date.now();
-      const tick = () => {
-        const k = Math.min(1, (Date.now() - startAt) / 650);
-        setShown(Math.round(reward.amount * (1 - (1 - k) ** 3)));
-        if (k < 1) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    }
-  }, [hero, order, reward.kind, reward.amount, reduced]);
+    if (reward.kind === 'coins') setCoinValue(reward.amount);
+  }, [hero, order, reward.kind, reward.amount]);
   useEffect(() => {
     if (reduced) return;
     t.value = withDelay(delay, withSpring(1, { damping: 12, stiffness: 170 }, done => { if (done) runOnJS(landed)(); }));
@@ -292,11 +287,43 @@ function RewardCard({ reward, tier, order, delay, hero, reduced }: {
         {reward.kind === 'exclusive' && reward.icon_url
           ? <Image source={{ uri: reward.icon_url }} style={{ width: 60, height: 60 }} contentFit="contain" />
           : <GameIcon name={ICON[reward.kind]} size={50} />}
-        <Text style={styles.cardText} numberOfLines={2} adjustsFontSizeToFit maxFontSizeMultiplier={1.3}>
-          {reward.kind === 'coins' ? `+${formatSteps(shown)} Coins` : rewardLabel(reward)}
-        </Text>
+        {reward.kind === 'coins'
+          ? <CountUpText value={coinValue} durationMs={650} prefix="+" suffix=" COINS" punch={1.08} reducedMotion={reduced}
+              style={styles.coinText} />
+          : <Text style={styles.cardText} numberOfLines={2} adjustsFontSizeToFit maxFontSizeMultiplier={1.3}>{rewardLabel(reward)}</Text>}
         {hero && <Text style={styles.badge}>TRAIL ONLY</Text>}
       </View>
+    </Animated.View>
+  );
+}
+
+/** Gold only: soft pale-gold sun rays turning slowly behind the box (warmth without a muddy halo). */
+function GoldRays({ size, top, reduced }: { readonly size: number; readonly top: number; readonly reduced: boolean }) {
+  const spin = useSharedValue(0);
+  useEffect(() => {
+    if (reduced) return undefined;
+    spin.value = withRepeat(withTiming(360, { duration: 24000, easing: Easing.linear }), -1, false);
+    return () => cancelAnimation(spin);
+  }, [reduced, spin]);
+  const path = (() => {
+    const p = Skia.Path.Make();
+    const c = size / 2;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const w = Math.PI / 26;
+      p.moveTo(c, c);
+      p.lineTo(c + Math.cos(a - w) * c, c + Math.sin(a - w) * c);
+      p.lineTo(c + Math.cos(a + w) * c, c + Math.sin(a + w) * c);
+      p.close();
+    }
+    return p;
+  })();
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
+  return (
+    <Animated.View pointerEvents="none" style={[{ position: 'absolute', top, width: size, height: size, alignSelf: 'center' }, style]}>
+      <Canvas style={{ width: size, height: size }}>
+        <Path path={path} color="#fff3c4" opacity={0.22} />
+      </Canvas>
     </Animated.View>
   );
 }
@@ -307,7 +334,7 @@ function HeroRing({ ring }: { readonly ring: SharedValue<number> }) {
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(5,52,110,0.94)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  scrim: { flex: 1, backgroundColor: BRAND.navy, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   center: { position: 'absolute', alignSelf: 'center' },
   kicker: { zIndex: 2, fontFamily: 'Shark', fontSize: 16, color: BRAND.sky, textTransform: 'uppercase', letterSpacing: 2 },
   title: { zIndex: 2, fontFamily: 'Shark', fontSize: 34, color: BRAND.white, textTransform: 'uppercase', marginTop: 2,
@@ -318,6 +345,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingTop: 16, paddingBottom: 8, overflow: 'hidden' },
   cardHero: { backgroundColor: BRAND.goldLight, transform: [{ scale: 1.06 }] },
   strip: { position: 'absolute', left: 0, right: 0, top: 0, height: 9 },
+  coinText: { fontSize: 15, color: BRAND.navy, textShadowOffset: { width: 0, height: 0 }, marginTop: 6, minWidth: 90 },
   cardText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, textAlign: 'center', marginTop: 6, textTransform: 'uppercase' },
   badge: { fontFamily: 'Shark', fontSize: 11, color: BRAND.white, backgroundColor: BRAND.navy, borderRadius: 8,
     paddingHorizontal: 6, paddingVertical: 1, marginTop: 4, overflow: 'hidden', letterSpacing: 1 },
