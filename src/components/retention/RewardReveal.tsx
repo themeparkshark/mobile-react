@@ -68,6 +68,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const rows = rewards ? rewardRows(rewards) : [];
   const revealed = !!rewards;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const scroll = useRef<ScrollView>(null);
   const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
 
@@ -115,7 +116,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     if (reducedMotion) {
       setSwapped(true);
       haptic('success'); playSfx('fx.reward');
-      rows.forEach((row, i) => later(() => setLanded(n => Math.max(n, i + 1)), 120 * (i + 1)));
+      rows.forEach((row, i) => later(() => { setLanded(n => Math.max(n, i + 1)); if (isBigReward(row.kind)) scroll.current?.scrollToEnd({ animated: false }); }, 120 * (i + 1)));
       return;
     }
     // Squash, flash, swap behind the flash, overshoot.
@@ -129,6 +130,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     rowSchedule(rows).forEach((ms, i) => later(() => {
       setLanded(n => Math.max(n, i + 1));
       const big = isBigReward(rows[i].kind);
+      // On a small phone the rows scroll: the hero cards (always last) slide into view as they land.
+      if (big) later(() => scroll.current?.scrollToEnd({ animated: true }), 40);
       haptic(big ? 'comboHeavy' : 'tickSelection');
       playSfx(big ? 'fx.firework' : rows[i].kind === 'coins' || rows[i].kind === 'bonus_coins' ? 'fx.coin' : 'fx.coinTick', big ? 1 : 0.8);
     }, ms));
@@ -157,7 +160,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         </Animated.View>
       </Pressable>
       <Pressable onPress={skip} disabled={!revealed || allIn} accessible={false} style={{ alignSelf: 'stretch' }}>
-        <ScrollView style={{ height: rowsHeight }} contentContainerStyle={styles.rows} scrollEnabled={allIn}
+        <ScrollView ref={scroll} style={{ height: rowsHeight }} contentContainerStyle={styles.rows} scrollEnabled={revealed}
           showsVerticalScrollIndicator={false}>
           {!revealed ? (
             <View style={[styles.hintBox, { height: rowsHeight - 8 }]}>
