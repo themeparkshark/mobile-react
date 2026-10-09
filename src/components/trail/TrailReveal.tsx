@@ -7,6 +7,7 @@ import Animated, {
   withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Canvas, Circle, RadialGradient, vec } from '@shopify/react-native-skia';
 import { playSfx } from '../../gamekit/SFX';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { TIER_NAME, rewardLabel, type TrailBox, type TrailReward } from '../../services/trail/trailModel';
@@ -15,9 +16,9 @@ import RewardBurst from '../RewardBurst';
 import { BOX_ART } from './TrailBoxArt';
 
 const ICON: Record<TrailReward['kind'], GameIconName> = {
-  coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'pin', exclusive: 'star',
+  coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star',
 };
-const TIER_GLOW: Record<TrailBox['tier'], string> = { blue: BRAND.skyDeep, red: '#ff9a8f', gold: BRAND.goldLight };
+const TIER_GLOW: Record<TrailBox['tier'], string> = { blue: '#7cc6f5', red: '#ff8a7a', gold: '#ffe07a' };
 
 type Phase = 'ready' | 'shaking' | 'rewards' | 'error';
 
@@ -138,7 +139,7 @@ export default function TrailReveal({ boxes, onOpen, onClose }: {
       { scale: 1 + boxOut.value * 0.5 + idle.value * 0.02 },
     ],
   }));
-  const glowStyle = useAnimatedStyle(() => ({ opacity: 0.35 + idle.value * 0.3 + boxOut.value * 0.6, transform: [{ scale: 1 + boxOut.value * 0.6 }] }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: 0.55 + idle.value * 0.3 + boxOut.value * 0.4, transform: [{ scale: 1 + boxOut.value * 0.6 }] }));
   const ringStyle = useAnimatedStyle(() => ({ opacity: ring.value === 0 ? 0 : 1 - ring.value, transform: [{ scale: 0.4 + ring.value * 1.8 }] }));
 
   if (!box) return null;
@@ -149,10 +150,17 @@ export default function TrailReveal({ boxes, onOpen, onClose }: {
       <Pressable style={[styles.scrim, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}
         onPress={phase === 'ready' ? start : skipAhead} accessibilityRole="button"
         accessibilityLabel={phase === 'ready' ? `Open your ${TIER_NAME[box.tier]}` : 'Trail Box'}>
-        <Text style={styles.kicker}>{phase === 'rewards' ? 'You got' : TIER_NAME[box.tier]}</Text>
-        {phase !== 'rewards' && <Text style={styles.title}>{phase === 'ready' ? 'Tap to open!' : 'Opening...'}</Text>}
+        <Text style={styles.kicker}>{phase === 'rewards' ? `${TIER_NAME[box.tier]} opened` : TIER_NAME[box.tier]}</Text>
+        <Text style={styles.title}>{phase === 'ready' ? 'Tap to open!' : phase === 'rewards' ? 'You got' : 'Opening...'}</Text>
         <View style={{ width: size * 1.5, height: size * 1.25, alignItems: 'center', justifyContent: 'center' }}>
-          <Animated.View style={[styles.glow, { width: size * 1.2, height: size * 1.2, borderRadius: size, backgroundColor: TIER_GLOW[box.tier] }, glowStyle]} />
+          <Animated.View pointerEvents="none" style={[styles.glow, { width: size * 1.5, height: size * 1.5 }, glowStyle]}>
+            <Canvas style={{ width: size * 1.5, height: size * 1.5 }}>
+              <Circle cx={size * 0.75} cy={size * 0.75} r={size * 0.75}>
+                <RadialGradient c={vec(size * 0.75, size * 0.75)} r={size * 0.75}
+                  colors={[TIER_GLOW[box.tier], `${TIER_GLOW[box.tier]}88`, `${TIER_GLOW[box.tier]}00`]} positions={[0, 0.45, 1]} />
+              </Circle>
+            </Canvas>
+          </Animated.View>
           <Animated.View style={[styles.ring, { width: size, height: size, borderRadius: size }, ringStyle]} />
           {phase !== 'rewards' && (
             <Animated.View style={boxStyle}>
@@ -165,7 +173,10 @@ export default function TrailReveal({ boxes, onOpen, onClose }: {
                 <Animated.View key={`${r.kind}-${i}`} entering={reduced ? FadeIn.duration(150) : ZoomIn.delay(140 + i * 260).springify().damping(11)}
                   style={[styles.card, r.kind === 'exclusive' && styles.cardGold]}>
                   {r.kind === 'exclusive' && r.icon_url
-                    ? <Image source={{ uri: r.icon_url }} style={{ width: 52, height: 52 }} contentFit="contain" />
+                    ? <View style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center' }}>
+                        <View style={StyleSheet.absoluteFill}><GameIcon name="star" size={48} /></View>
+                        <Image source={{ uri: r.icon_url }} style={{ width: 56, height: 56, backgroundColor: BRAND.goldLight }} contentFit="contain" />
+                      </View>
                     : <GameIcon name={ICON[r.kind]} size={48} />}
                   <Text style={styles.cardText} numberOfLines={2}>{r.kind === 'coins' ? `+${rewardLabel(r)}` : rewardLabel(r)}</Text>
                   {r.kind === 'exclusive' && <Text style={styles.badge}>TRAIL ONLY</Text>}
@@ -196,8 +207,8 @@ export default function TrailReveal({ boxes, onOpen, onClose }: {
 
 const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: 'rgba(5,52,110,0.88)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
-  kicker: { fontFamily: 'Knockout', fontSize: 18, color: BRAND.sky, textTransform: 'uppercase', letterSpacing: 2 },
-  title: { fontFamily: 'Shark', fontSize: 34, color: BRAND.white, textTransform: 'uppercase', marginTop: 2,
+  kicker: { zIndex: 2, fontFamily: 'Knockout', fontSize: 18, color: BRAND.sky, textTransform: 'uppercase', letterSpacing: 2 },
+  title: { zIndex: 2, fontFamily: 'Shark', fontSize: 34, color: BRAND.white, textTransform: 'uppercase', marginTop: 2,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 2, height: 3 }, textShadowRadius: 0 },
   glow: { position: 'absolute' },
   ring: { position: 'absolute', borderWidth: 6, borderColor: BRAND.gold },

@@ -12,7 +12,7 @@ import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, type GameIconName } from '
 import TrailBoxArt, { STEPS_ART } from './TrailBoxArt';
 import TrailPath from './TrailPath';
 
-const KIND_ICON: Record<string, GameIconName> = { coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'pin', exclusive: 'star' };
+const KIND_ICON: Record<string, GameIconName> = { coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star' };
 const LOCALE = (() => { try { return Intl.DateTimeFormat().resolvedOptions().locale; } catch { return 'en-US'; } })();
 
 /**
@@ -21,7 +21,9 @@ const LOCALE = (() => { try { return Intl.DateTimeFormat().resolvedOptions().loc
  * walk, an optional weekly goal, how to earn more, and what is inside every
  * box with its odds. Plain words, pictures first.
  */
-export default function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, onGoal, onWheels, onAskMotion }: {
+export default function TrailSheet({ visible, state, motion, inPark, onClose, onOpen, onFront, onGoal, onWheels, onAskMotion, initialView = 'boxes' }: {
+  /** Dev previews only. */
+  readonly initialView?: 'boxes' | 'inside';
   readonly visible: boolean;
   readonly state: TrailState;
   readonly motion: MotionAccess;
@@ -34,11 +36,11 @@ export default function TrailSheet({ visible, state, motion, inPark, onClose, on
   readonly onAskMotion: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const [view, setView] = useState<'boxes' | 'inside'>('boxes');
+  const [view, setView] = useState<'boxes' | 'inside'>(initialView);
   const [picked, setPicked] = useState<number | null>(null);
   const miles = usesMiles(LOCALE);
   const note = missNote(state.sync);
-  useEffect(() => { if (visible) { setView('boxes'); setPicked(null); } }, [visible]);
+  useEffect(() => { if (visible) { setView(initialView); setPicked(null); } }, [visible, initialView]);
 
   const slots = useMemo(() => {
     const out: (TrailBox | null)[] = Array.from({ length: state.slots }, () => null);
@@ -89,14 +91,14 @@ export default function TrailSheet({ visible, state, motion, inPark, onClose, on
             {state.ready.length > 0 && (
               <Pressable accessibilityRole="button" accessibilityLabel={`Open ${state.ready.length} ready ${state.ready.length === 1 ? 'box' : 'boxes'}`}
                 onPress={() => { playSfx('ui.confirm'); onOpen(state.ready); }} style={[styles.card, styles.readyCard]}>
-                <View style={{ flexDirection: 'row', marginRight: 6 }}>
+                <View style={{ flexDirection: 'row', marginRight: 8 }}>
                   {state.ready.slice(0, 3).map((b, i) => (
-                    <View key={b.id} style={{ marginLeft: i ? -26 : 0 }}><TrailBoxArt tier={b.tier} size={64} ready active={visible} /></View>
+                    <View key={b.id} style={{ marginLeft: i ? -30 : 0 }}><TrailBoxArt tier={b.tier} size={56} ready={i === 0} active={visible} /></View>
                   ))}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.readyTitle}>{state.ready.length === 1 ? 'Ready to open!' : `${state.ready.length} ready to open!`}</Text>
-                  <Text style={[styles.body, { color: BRAND.navy }]}>You walked them open.</Text>
+                  <Text style={styles.readyTitle} numberOfLines={1} adjustsFontSizeToFit>{state.ready.length === 1 ? 'Ready!' : `${state.ready.length} ready!`}</Text>
+                  <Text style={[styles.body, { color: BRAND.navy }]}>You walked {state.ready.length === 1 ? 'it' : 'them'} open.</Text>
                 </View>
                 <View style={styles.openChip}><Text style={styles.openChipText}>OPEN</Text></View>
               </Pressable>
@@ -291,7 +293,7 @@ const styles = StyleSheet.create({
   askCard: { flexDirection: 'row', borderColor: BRAND.skyDeep, marginBottom: 8 },
   noteCard: { backgroundColor: BRAND.sky, borderColor: BRAND.sky, marginBottom: 8 },
   readyCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.goldLight, borderColor: BRAND.gold, borderWidth: 3, ...SHADOW.card },
-  readyTitle: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, textTransform: 'uppercase' },
+  readyTitle: { fontFamily: 'Shark', fontSize: 24, color: BRAND.navy, textTransform: 'uppercase' },
   openChip: { backgroundColor: BRAND.blueBright, borderRadius: RADIUS.pill, borderWidth: 2.5, borderColor: BRAND.white, paddingHorizontal: 14, paddingVertical: 6 },
   openChipText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0 },
   cardTitle: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, textTransform: 'uppercase' },

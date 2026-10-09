@@ -13,10 +13,15 @@ import TrailSheet from './TrailSheet';
  * the first state arrives. `active` pauses every idle animation when the map
  * is covered or not focused.
  */
-export default function TrailHost({ active, inPark = true }: { readonly active: boolean; readonly inPark?: boolean }) {
+export default function TrailHost({ active, inPark = true, preview }: {
+  readonly active: boolean;
+  readonly inPark?: boolean;
+  /** Dev previews only: start with the sheet, its odds page, or the reveal open. */
+  readonly preview?: 'sheet' | 'inside' | 'reveal';
+}) {
   const trail = useTrail();
-  const [open, setOpen] = useState(false);
-  const [opening, setOpening] = useState<readonly TrailBox[] | null>(null);
+  const [open, setOpen] = useState(preview === 'sheet' || preview === 'inside');
+  const [opening, setOpening] = useState<readonly TrailBox[] | null>(preview === 'reveal' ? trail.state?.ready ?? null : null);
 
   const show = useCallback(() => {
     playSfx('ui.modalOpen');
@@ -43,7 +48,7 @@ export default function TrailHost({ active, inPark = true }: { readonly active: 
         onFront={id => act(() => trail.front(id))}
         onGoal={g => act(() => trail.setGoal(g))}
         onWheels={on => act(() => trail.setWheels(on))}
-        onAskMotion={() => void trail.askMotion()} />
+        onAskMotion={() => void trail.askMotion()} initialView={preview === 'inside' ? 'inside' : 'boxes'} />
       {opening && <TrailReveal boxes={opening} onOpen={openBox}
         onClose={() => { setOpening(null); void trail.refresh(); }} />}
     </>

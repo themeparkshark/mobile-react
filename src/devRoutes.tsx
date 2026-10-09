@@ -48,6 +48,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
       { name: 'FrightIntroPreview', getComponent: () => require('./components/fright/tutorial/FrightIntroPreviewScreen').default },
       { name: 'SecretShopPreview', getComponent: () => require('./screens/StoreScreen/SecretShopPreviewScreen').default },
+      { name: 'TrailPreview', getComponent: () => require('./screens/TrailPreviewScreen').default },
       { name: 'ShopLifecyclePreview', getComponent: () => require('./screens/StoreScreen/ShopLifecyclePreviewScreen').default },
     ]
   : [];
@@ -60,6 +61,7 @@ export function devInitialRoute(): string | null {
   if (!__DEV__) return null;
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
+    [!!process.env.EXPO_PUBLIC_TRAIL_PREVIEW, 'TrailPreview'],
     [!!process.env.EXPO_PUBLIC_SHOP_LIFE_PREVIEW, 'ShopLifecyclePreview'],
     [on(process.env.EXPO_PUBLIC_HOME_CATCH_PREVIEW), 'HomeCatchPreview'],
     [on(process.env.EXPO_PUBLIC_MAP_ALIVE_PREVIEW), 'MapAlivePreview'],

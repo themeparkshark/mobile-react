@@ -66,10 +66,10 @@ function TrailPill({ state, active, onPress }: {
       hitSlop={6} onPress={onPress} style={({ pressed }) => [styles.wrap, pressed && { transform: [{ scale: 0.96 }] }]}>
       <Animated.View style={[styles.row, wrapStyle]}>
         <View style={[styles.pill, ready ? styles.pillReady : null]}>
-          {!ready && <Animated.View style={[styles.fill, fillStyle]} />}
+          {!ready && <View style={styles.track}><Animated.View style={[styles.fill, fillStyle]} /></View>}
           {!!ready && <Animated.View style={[StyleSheet.absoluteFill, styles.glow, glowStyle]} />}
           <Text style={[styles.count, ready ? styles.countReady : null]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
-          {!ready && !!box && <Text style={styles.unit}>steps</Text>}
+          {!ready && !!box && <Text style={styles.unit}>to go</Text>}
         </View>
         <View style={styles.icon}>
           {box ? <TrailBoxArt tier={box.tier} size={38} fraction={fraction} ready={!!ready} active={active} />
@@ -89,11 +89,12 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.blueBright, borderWidth: 2.5, borderColor: BRAND.white, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', ...SHADOW.card },
   pillReady: { backgroundColor: BRAND.gold, borderColor: BRAND.white },
-  fill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,207,59,0.55)' },
+  track: { position: 'absolute', left: 24, right: 10, bottom: 3, height: 5, borderRadius: 3, backgroundColor: BRAND.blueLip, overflow: 'hidden' },
+  fill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3, backgroundColor: BRAND.gold },
   glow: { backgroundColor: BRAND.goldLight },
-  count: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white,
+  count: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white, marginBottom: 3,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0 },
   countReady: { color: BRAND.navy, textShadowColor: BRAND.white, textShadowOffset: { width: 0, height: 1 } },
-  unit: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.white, marginLeft: 3, marginTop: 3 },
+  unit: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.white, marginLeft: 3, marginBottom: 1 },
   icon: { position: 'absolute', left: -2, top: -1 },
 });
