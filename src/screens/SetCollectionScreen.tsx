@@ -15,9 +15,9 @@ import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import Animated, { cancelAnimation, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { AppState, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { GiftReceipt } from '../api/endpoints/me/prep-variant-gifts';
 import getPrepItemSets, {
   claimSetMilestone, claimSetRewards, claimSetStep, claimStarterRewards, clearPrepItemSetFocus, equipSetTitle,
@@ -52,7 +52,7 @@ import { ItemTile, tileHeight } from './SetCollection/DexTile';
 import { useBookClocks } from './SetCollection/bookClock';
 import { TilePanel } from './SetCollection/dexLook';
 import {
-  buildBook, buildItems, findRows, initialSlug, mergeStable, refreshEveryMs,
+  buildBook, buildItems, findRows, hasClaimable, initialSlug, mergeStable, refreshEveryMs,
   type DexBook, type DexItem, type DexReward, type DexSet, type FindRow,
 } from './SetCollection/dexModel';
 import { ClaimResultCard, MilestonePickSheet } from './SetCollection/SetHuntSections';
@@ -254,14 +254,20 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     return undefined;
   }, [preview, loadSets, loadDetail]));
   const every = refreshEveryMs(set);
+  // The refresh timer runs only while the screen is focused and the app is in the foreground.
+  const [foreground, setForeground] = useState(AppState.currentState === 'active');
   useEffect(() => {
-    if (!isFocused || preview) return;
+    const sub = AppState.addEventListener('change', next => setForeground(next === 'active'));
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (!isFocused || preview || !foreground) return;
     const timer = setInterval(() => {
       void loadSets(true);
       if (slug) void loadDetail(slug, true);
     }, every);
     return () => clearInterval(timer);
-  }, [isFocused, preview, loadSets, loadDetail, slug, every]);
+  }, [isFocused, preview, foreground, loadSets, loadDetail, slug, every]);
 
   // Keep the picked set card on screen, centered when possible: on change, and once the picker has laid out.
   const slugIndex = sets.findIndex(entry => entry.slug === slug);
@@ -458,16 +464,19 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const listRef = useRef<FlashList<FindRow | number>>(null);
   // Idle loops run only while the page itself is what the player sees (not under a sheet, card or reveal).
   const active = isFocused && !selectedItem && !reveal && !sparesOpen && !giftItem && !claimWaiting && !picking;
-  useBookClocks(active, reduced);
-  // Scrolled into the finds: a slim bar keeps the set's badge, name and count in view (state flips only at the line).
+  // Each clock runs only while something on screen reads it: the beat while a shelf gift waits, the sheen while
+  // the open set shows a found Rare or better.
+  const anyClaim = useMemo(() => sets.some(hasClaimable), [sets]);
+  const anyRare = useMemo(() => !!items?.some(item => item.found && item.rarity >= 3), [items]);
+  useBookClocks(active && anyClaim, active && anyRare, reduced);
+  // Scrolled into the finds: a slim bar keeps the set's badge, name and count in view. The bar owns its own
+  // shown/hidden state, so crossing the line re-renders only the bar, never the list or its header.
   const shelfH = useRef(0);
   const stickAt = useRef(Number.POSITIVE_INFINITY);
-  const [stuck, setStuck] = useState(false);
-  const stuckRef = useRef(false);
+  const stickyRef = useRef<StickyHandle>(null);
   const onListScroll = useCallback((y: number) => {
     // stickAt: the bottom of the set's header card (its name and count have scrolled away).
-    const next = y > stickAt.current;
-    if (next !== stuckRef.current) { stuckRef.current = next; setStuck(next); }
+    stickyRef.current?.show(y > stickAt.current);
   }, []);
   const tile = Math.floor((width - SIDE * 2 - CELL_GAP * (COLUMNS - 1)) / COLUMNS);
   // Extras: copies past the first, counted from the tiles when they are loaded (one number everywhere).
@@ -481,7 +490,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       <ScrollView ref={pickerRef} horizontal onLayout={event => { shelfH.current = event.nativeEvent.layout.height; }} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelf} snapToInterval={SHELF_CARD_W + 6 + SHELF_GAP} decelerationRate="fast"
         onContentSizeChange={() => centerPicker(false)}>
         {daily && <RareShelfCard onPress={goToMap} />}
-        {sets.map(entry => <ShelfCard key={entry.slug} set={entry} selected={entry.slug === slug} onPress={chooseSet} active={active} />)}
+        {sets.map(entry => <ShelfCard key={entry.slug} set={entry} selected={entry.slug === slug} onPress={chooseSet} />)}
         {eventsReady && events.cards.map(card => <ShelfEventCard key={`event-${card.eventSlug}`} card={card} onPress={openEvent} />)}
       </ScrollView>
       {/* Soft edges, so a card cut by the screen edge reads as "scroll for more", not a clipped word. */}
@@ -497,7 +506,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             </View>
             <PrizeRows set={set}
               titleWorn={!!set.reward.title && wornTitle === set.reward.title} titleBusy={busy === 'title'}
-              onTitle={set.reward.title ? () => void toggleTitle() : null} popKey={popKey} active={active} />
+              onTitle={set.reward.title ? () => void toggleTitle() : null} popKey={popKey} />
             {claimResult && (
               <View style={{ marginHorizontal: SIDE, marginBottom: 10 }}>
                 <ClaimResultCard outcome={claimResult} wearing={wearing} onWear={() => void wearIt()} onDismiss={() => setClaimResult(null)} />
@@ -575,13 +584,13 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
                 </View>
               ) : (
                 <View style={styles.tileRow}>
-                  {entry.items.map(item => <ItemTile key={item.id} item={item} width={tile} onPress={openItem} active={active} slot={slotOf.get(item.id) ?? 0} />)}
+                  {entry.items.map(item => <ItemTile key={item.id} item={item} width={tile} onPress={openItem} slot={slotOf.get(item.id) ?? 0} />)}
                 </View>
               )
             )}
           />
         )}
-        {set && stuck && <StickyBar set={set} reduced={reduced} onTop={() => listRef.current?.scrollToOffset({ offset: 0, animated: !reduced })} />}
+        {set && <StickyBar ref={stickyRef} set={set} reduced={reduced} onTop={() => listRef.current?.scrollToOffset({ offset: 0, animated: !reduced })} />}
       </View>
 
       <ItemCard item={selectedItem} set={set} onClose={closeItem} error={error} onFind={goToMap}
@@ -636,7 +645,13 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
 }
 
 /** The slim bar over the finds: badge, name and count. Tap it to go back to the top. */
-function StickyBar({ set, reduced, onTop }: { readonly set: DexSet; readonly reduced: boolean; readonly onTop: () => void }) {
+interface StickyHandle { show: (on: boolean) => void }
+const StickyBar = forwardRef<StickyHandle, { readonly set: DexSet; readonly reduced: boolean; readonly onTop: () => void }>(
+  function StickyBar({ set, reduced, onTop }, ref) {
+  const [on, setOn] = useState(false);
+  const onRef = useRef(false);
+  useImperativeHandle(ref, () => ({ show: next => { if (next !== onRef.current) { onRef.current = next; setOn(next); } } }), []);
+  if (!on) return null;
   return (
     <Animated.View entering={reduced ? undefined : FadeInDown.duration(180)} style={styles.sticky}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${set.name}, ${set.found} of ${set.total} found. Back to the top.`}
@@ -652,7 +667,7 @@ function StickyBar({ set, reduced, onTop }: { readonly set: DexSet; readonly red
       <LinearGradient pointerEvents="none" colors={[SHEET, 'rgba(255,248,228,0)']} style={styles.stickyFade} />
     </Animated.View>
   );
-}
+});
 
 /** The claim wait as a build-up: a pulsing gold glow and, after 600 ms, a rising tone every half second. */
 function ClaimBuildUp({ reduced }: { readonly reduced: boolean }) {
@@ -661,14 +676,15 @@ function ClaimBuildUp({ reduced }: { readonly reduced: boolean }) {
     if (reduced) return undefined;
     pulse.value = withRepeat(withSequence(withTiming(1, { duration: 380 }), withTiming(0.35, { duration: 380 })), -1, false);
     let step = 0;
-    const timers: ReturnType<typeof setTimeout>[] = [];
+    // Only the latest tone timer is kept (no growing list while a slow claim waits).
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const tick = () => {
       playSfx('ui.select', Math.min(0.9, 0.35 + step * 0.12));
       step += 1;
-      timers.push(setTimeout(tick, 500));
+      timer = setTimeout(tick, 500);
     };
-    timers.push(setTimeout(tick, 600));
-    return () => { timers.forEach(clearTimeout); cancelAnimation(pulse); };
+    timer = setTimeout(tick, 600);
+    return () => { if (timer) clearTimeout(timer); cancelAnimation(pulse); };
   }, [reduced, pulse]);
   const glow = useAnimatedStyle(() => ({ opacity: 0.25 + 0.5 * pulse.value, transform: [{ scale: 0.85 + 0.25 * pulse.value }] }));
   // The gift shakes in step with the rising tones, harder the longer the wait (capped).

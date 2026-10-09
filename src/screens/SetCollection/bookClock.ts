@@ -12,23 +12,27 @@ export const BEAT = makeMutable(0);
 export const SHEEN = makeMutable(0);
 export const SHEEN_PERIOD_MS = 6000;
 
-export function useBookClocks(active: boolean, reduced: boolean): void {
+/**
+ * Runs each clock only while something on screen reads it: the beat while a prize is ready, the sheen while
+ * the open set shows a rare find. Both stop (zero frames) when the page is covered or Reduce Motion is on.
+ */
+export function useBookClocks(beatOn: boolean, sheenOn: boolean, reduced: boolean): void {
   useEffect(() => {
-    if (!active || reduced) {
-      cancelAnimation(BEAT); cancelAnimation(SHEEN);
-      BEAT.value = 0;
-      return undefined;
-    }
+    if (!beatOn || reduced) { cancelAnimation(BEAT); BEAT.value = 0; return undefined; }
     BEAT.value = 0;
     BEAT.value = withRepeat(withSequence(
       withTiming(1, { duration: 350 }), withTiming(0, { duration: 350 }),
       withTiming(1, { duration: 350 }), withTiming(0, { duration: 350 }),
       withDelay(2000, withTiming(0, { duration: 0 })),
     ), -1, false);
+    return () => cancelAnimation(BEAT);
+  }, [beatOn, reduced]);
+  useEffect(() => {
+    if (!sheenOn || reduced) { cancelAnimation(SHEEN); return undefined; }
     SHEEN.value = 0;
     SHEEN.value = withRepeat(withTiming(1, { duration: SHEEN_PERIOD_MS, easing: Easing.linear }), -1, false);
-    return () => { cancelAnimation(BEAT); cancelAnimation(SHEEN); };
-  }, [active, reduced]);
+    return () => cancelAnimation(SHEEN);
+  }, [sheenOn, reduced]);
 }
 
 /** Where a sweep sits (-1 before, 1 after) for a sticker at `phase` (0..1): it crosses during a 15% window of the period. */

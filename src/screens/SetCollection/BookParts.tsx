@@ -53,10 +53,8 @@ export const SHELF_GAP = 12;
 const finishedOf = (set: Pick<DexSet, 'reward'>) => set.reward.status === 'claimed' || set.reward.status === 'pending';
 
 /** One set on the shelf: the cover, the name, and its count. A gift when a prize is ready, gold when finished. */
-export const ShelfCard = memo(function ShelfCard({ set, selected, onPress, active }: {
+export const ShelfCard = memo(function ShelfCard({ set, selected, onPress }: {
   readonly set: DexSet; readonly selected: boolean; readonly onPress: (slug: string) => void;
-  /** False while the screen is covered: idle loops stop. */
-  readonly active: boolean;
 }) {
   const reduced = useUiReducedMotion();
   const claim = hasClaimable(set);
@@ -70,12 +68,6 @@ export const ShelfCard = memo(function ShelfCard({ set, selected, onPress, activ
     opacity: 0.8 + 0.2 * lift.value,
     transform: [{ translateY: -4 * lift.value }, { scale: 0.93 + 0.07 * lift.value }],
   }));
-  // The page's one shared beat (bookClock): in step with the prize medal, resting between pulses.
-  const moving = claim && !reduced && active;
-  const bobStyle = useAnimatedStyle(() => {
-    const b = moving ? BEAT.value : 0;
-    return { transform: [{ translateY: -4 * b }, { rotate: `${-8 + 8 * b}deg` }] };
-  }, [moving]);
   const fraction = progressFraction(set);
   return (
     <SpringPress onPress={() => onPress(set.slug)} accessibilityState={{ selected }}
@@ -106,9 +98,7 @@ export const ShelfCard = memo(function ShelfCard({ set, selected, onPress, activ
         {claim && (
           // The exit pop lives on a bare wrapper, so it never fights the bob's transform.
           <Animated.View pointerEvents="none" style={styles.cardPrizeSlot} exiting={reduced ? undefined : ZoomOut.duration(260)}>
-            <Animated.View style={[styles.cardPrize, styles.cardPrizeInner, bobStyle]}>
-              <GameIcon name="gift" size={26} />
-            </Animated.View>
+            <GiftBob />
           </Animated.View>
         )}
         {finished && !claim && <View style={styles.cardPrize}><GameIcon name="star" size={24} /></View>}
@@ -116,6 +106,16 @@ export const ShelfCard = memo(function ShelfCard({ set, selected, onPress, activ
     </SpringPress>
   );
 });
+
+/** The ready gift on a shelf card: bobs on the page's shared beat (mounted only while a prize waits). */
+function GiftBob() {
+  const style = useAnimatedStyle(() => ({ transform: [{ translateY: -4 * BEAT.value }, { rotate: `${-8 + 8 * BEAT.value}deg` }] }));
+  return (
+    <Animated.View style={[styles.cardPrize, styles.cardPrizeInner, style]}>
+      <GameIcon name="gift" size={26} />
+    </Animated.View>
+  );
+}
 
 /** An Events card on the same shelf (after the sets): night colors, the event art, done of total haunts. */
 export const ShelfEventCard = memo(function ShelfEventCard({ card, onPress }: {
@@ -384,10 +384,9 @@ function TitleRibbon({ title }: { readonly title: string }) {
 }
 
 /** Every prize for the set, in target order. A won step folds to one slim line; the finish prize is the hero row. */
-export function PrizeRows({ set, titleWorn, titleBusy, onTitle, popKey, active }: {
+export function PrizeRows({ set, titleWorn, titleBusy, onTitle, popKey }: {
   readonly set: DexSet;
   readonly titleWorn: boolean; readonly titleBusy: boolean; readonly onTitle: (() => void) | null; readonly popKey: number;
-  readonly active: boolean;
 }) {
   const reduced = useUiReducedMotion();
   const pop = useSharedValue(1);
@@ -400,22 +399,21 @@ export function PrizeRows({ set, titleWorn, titleBusy, onTitle, popKey, active }
     <Animated.View style={[styles.prizes, popStyle]}>
       {prizeList(set).map(({ reward, final }) => (
         <PrizeRow key={reward.id} set={set} reward={reward} final={final}
-          titleWorn={titleWorn} titleBusy={titleBusy} onTitle={final ? onTitle : null} reduced={reduced} active={active} />
+          titleWorn={titleWorn} titleBusy={titleBusy} onTitle={final ? onTitle : null} reduced={reduced} />
       ))}
     </Animated.View>
   );
 }
 
-function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, active }: {
+function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced }: {
   readonly set: DexSet; readonly reward: DexReward; readonly final: boolean;
   readonly titleWorn: boolean; readonly titleBusy: boolean;
-  readonly onTitle: (() => void) | null; readonly reduced: boolean; readonly active: boolean;
+  readonly onTitle: (() => void) | null; readonly reduced: boolean;
 }) {
   const state = prizeState(reward, set.found);
   const wiggle = useSharedValue(0);
   const stampIn = useSharedValue(1);
   const lastKind = useRef(state.kind);
-  const pulsing = state.kind === 'claim' && !reduced && active;
   // Won just now (the reveal closed): the check stamps onto the medal with a thud.
   useEffect(() => {
     const was = lastKind.current;
@@ -427,10 +425,8 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
     stampIn.value = 2.2;
     stampIn.value = withSequence(withTiming(1, { duration: 180, easing: Easing.in(Easing.quad) }), withSpring(1, { damping: 8, stiffness: 300 }));
   }, [state.kind, reduced, stampIn]);
-  const medalStyle = useAnimatedStyle(() => {
-    const g = pulsing ? BEAT.value : 0;
-    return { transform: [{ scale: 1 + 0.08 * g }, { rotate: `${-6 * g + wiggle.value}deg` }] };
-  }, [pulsing]);
+  // The ready step stays quiet (CLAIM PRIZE above owns the motion); the medal only wiggles when tapped early.
+  const medalStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value}deg` }] }));
   const checkStyle = useAnimatedStyle(() => ({ transform: [{ scale: stampIn.value }] }));
   const heading = final ? `Find all ${set.total}` : `Find ${reward.target}`;
   const status = state.kind === 'done' ? 'Got it!' : state.kind === 'pending' ? 'On the way' : state.kind === 'locked' ? `${state.toGo} to go` : 'Ready!';

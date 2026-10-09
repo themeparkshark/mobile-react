@@ -243,7 +243,7 @@ test('the book screen: one hierarchy (shelf, set, prizes, finds by rarity), Flas
   const api = read('src/api/endpoints/me/homeHuntDex.ts');
   assert.match(api, /'\/me\/home-hunt\/dex'/);
   assert.match(api, /status === 404/);
-  assert.match(screen, /if \(!isFocused \|\| preview\) return;/);
+  assert.match(screen, /if \(!isFocused \|\| preview \|\| !foreground\) return;/);
 });
 
 test('page model: finds grouped by rarity in rows, when-line, open-now, prize states, next goal', () => {
@@ -321,7 +321,7 @@ test('rarity: the app-wide design-system palette, navy ink on light chips, named
   assert.match(parts, /\{label\}<\/Text>/);
   const tile = read('src/screens/SetCollection/DexTile.tsx');
   assert.doesNotMatch(tile, /<RarityGems/);
-  assert.match(tile, /const sheen = item\.found && item\.rarity >= 3 && active && !reduced;/, 'Rare and up shine, paused when covered');
+  assert.match(tile, /const sheen = item\.found && item\.rarity >= 3 && !reduced;/, 'Rare and up shine (the clock stops when covered)');
   assert.match(tile, /\{item\.spares > 0 && \(/, 'the extras badge only when there are extras (inside the found sticker)');
   assert.match(tile, /\+\{item\.spares\}/, 'one notation for extras: +N');
   assert.match(tile, /borderStyle: 'dashed'/, 'a missing find is an empty album slot');
@@ -443,7 +443,7 @@ test('the set says when its finds are on the map, once, and marks the hunted set
   assert.match(read('src/screens/SetCollectionScreen.tsx'), /finds will show up more on your map/, 'turning it on says what it does');
   // The shelf card carries its own count and prize marker.
   assert.match(parts, /\{set\.found\}\/\{set\.total\}<\/Text>/);
-  assert.match(parts, /styles\.cardPrize, styles\.cardPrizeInner, bobStyle/);
+  assert.match(parts, /function GiftBob\(\)/);
 });
 
 test('round 4: instant book, menu above the map, grades, shimmer, title stamp', () => {
@@ -470,7 +470,7 @@ test('round 4: instant book, menu above the map, grades, shimmer, title stamp', 
   assert.match(parts, /cardFaceGold/);
   assert.match(parts, /const t = useSharedValue\(reduced \? 1 : 1\.6\)/, 'the title stamp slams from 1.6');
   assert.match(tile, /styles\.rim/);
-  assert.match(tile, /<View key=\{item\.id\} style=\{\[styles\.slot/);
+  assert.match(tile, /<View style=\{\[styles\.slot/);
   assert.match(read('src/screens/SetCollection/RidePhoto.tsx'), /great: \{ outer: '#9fb8d4'/);
   assert.match(card, /position: 'absolute', top: 10, left: 10/, 'Golden Hour tag in the photo corner, away from the grade');
 });
@@ -692,4 +692,18 @@ test('in-between prizes (server steps): parsed into the prize list, own claim ro
   const api = read('src/api/endpoints/me/prep-item-sets/index.ts');
   assert.match(api, /`\/me\/prep-item-sets\/\$\{slug\}\/steps\/\$\{target\}\/claim`/);
   assert.match(read('src/screens/SetCollectionScreen.tsx'), /reward\.claim\.kind === 'step'\) \{[\s\S]{0,120}claimSetStep\(set\.slug, reward\.claim\.target\)/);
+});
+
+test('perf: clocks run only when read, sweeps live in rare-only children, sticky bar owns its state, background pauses refresh', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  const tile = read('src/screens/SetCollection/DexTile.tsx');
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  assert.match(screen, /useBookClocks\(active && anyClaim, active && anyRare, reduced\)/);
+  assert.match(tile, /\{sheen && <Sheen id=\{item\.id\}/);
+  assert.match(tile, /sticker: \{ borderRadius: 18, backgroundColor: BRAND\.white/);
+  assert.doesNotMatch(tile + parts, /active\?: boolean|readonly active: boolean/);
+  assert.match(parts, /\{claim && \([\s\S]{0,300}<GiftBob \/>/);
+  assert.match(screen, /stickyRef\.current\?\.show\(y > stickAt\.current\)/);
+  assert.match(screen, /AppState\.addEventListener\('change'/);
+  assert.doesNotMatch(screen, /timers\.push/);
 });

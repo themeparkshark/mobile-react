@@ -66,10 +66,8 @@ function nextFlipDelay(): { delay: number; lead: boolean } {
 export const tileHeight = (width: number) => width + NAME_H;
 const NAME_H = 40;
 
-export const ItemTile = memo(function ItemTile({ item, width, onPress, active = true, slot = 0 }: {
+export const ItemTile = memo(function ItemTile({ item, width, onPress, slot = 0 }: {
   readonly item: DexItem; readonly width: number; readonly onPress: (item: DexItem) => void;
-  /** False while the screen is covered: the sheen loops stop. */
-  readonly active?: boolean;
   /** The find's number in its set (shown on a missing slot's plate: "#14"). */
   readonly slot?: number;
 }) {
@@ -121,9 +119,9 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
   // Off while the screen is covered, and with Reduce Motion.
   // One page clock drives every sweep (bookClock.SHEEN); each sticker reads it at its own phase, so a row of
   // rare finds never flashes in sync. Legendary sweeps twice per period.
-  const sheen = item.found && item.rarity >= 3 && active && !reduced;
-  const phase = ((item.id * 397) % 1000) / 1000;
-  const twice = item.rarity >= 5;
+  // The sweep lives in its own child, mounted only on rare stickers: common tiles never touch the clock, and the
+  // clock itself stops (no frames) while the page is covered (useBookClocks).
+  const sheen = item.found && item.rarity >= 3 && !reduced;
 
   // Always returns the transform (0 deg when idle), so a recycled cell never keeps a half-turned tilt.
   const flipStyle = useAnimatedStyle(() => ({
@@ -131,14 +129,6 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
   }));
   const colorStyle = useAnimatedStyle(() => ({ opacity: flipping ? (turn.value >= 0.5 ? 1 : 0) : 1 }));
   const shadowStyle = useAnimatedStyle(() => ({ opacity: flipping && turn.value < 0.5 ? 1 : 0 }));
-  const shineStyle = useAnimatedStyle(() => {
-    const x = sheen ? sweepAt(SHEEN.value, phase, twice) : -1;
-    return { transform: [{ translateX: x * width * 1.4 }, { rotate: '20deg' }] };
-  }, [sheen, phase, twice, width]);
-  const rimStyle = useAnimatedStyle(() => {
-    const x = sheen ? sweepAt(SHEEN.value, phase, twice) : -1;
-    return { opacity: Math.max(0, 1 - Math.abs(x) * 1.4) };
-  }, [sheen, phase, twice]);
 
   const art = artFailed ? GIFT : itemArt(item);
   const artSize = width * (item.found ? 0.72 : 0.66);
@@ -163,14 +153,9 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
                   <Image source={art} contentFit="contain" allowDownscaling tintColor={SLOT_COLORS.ink} style={{ width: artSize, height: artSize, opacity: 0.35 }} />
                 </Animated.View>
               )}
-              {sheen && (
-                <Animated.View style={[styles.shine, { height: width * 1.6, top: -width * 0.3 }, shineStyle]} pointerEvents="none">
-                  <LinearGradient start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                    colors={['rgba(255,255,255,0)', item.rarity >= 5 ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.7)', 'rgba(255,255,255,0)']} style={StyleSheet.absoluteFill} />
-                </Animated.View>
-              )}
+              {sheen && <Sheen id={item.id} rarity={item.rarity} width={width} />}
             </View>
-            {item.rarity >= 5 && sheen && <Animated.View style={[styles.rim, rimStyle]} pointerEvents="none" />}
+            {item.rarity >= 5 && sheen && <Rim id={item.id} />}
             {item.spares > 0 && (
               <View style={styles.count}><Text style={styles.countText} maxFontSizeMultiplier={1.2}>+{item.spares}</Text></View>
             )}
@@ -179,7 +164,7 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
             {item.rarity >= 3 && <View style={styles.foil} pointerEvents="none"><GameIcon name="sparkle" size={item.rarity >= 5 ? 22 : 18} /></View>}
           </View>
         ) : (
-          <View key={item.id} style={[styles.slot, { width, height: width }]}>
+          <View style={[styles.slot, { width, height: width }]}>
             <Image source={art} contentFit="contain" allowDownscaling recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
               tintColor={SLOT_COLORS.ink} style={{ width: artSize, height: artSize, opacity: SLOT_COLORS.inkOpacity }} />
           </View>
@@ -191,13 +176,38 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress, active = 
         : <View style={styles.plate}><Text style={styles.plateText} maxFontSizeMultiplier={1.15} importantForAccessibility="no">#{slot}</Text></View>}
     </SpringPress>
   );
-}, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress && a.active === b.active && a.slot === b.slot);
+}, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress && a.slot === b.slot);
+
+const phaseOf = (id: number) => ((id * 397) % 1000) / 1000;
+
+/** The rare sweep, reading the page clock at this sticker's own phase (Legendary twice per period). */
+function Sheen({ id, rarity, width }: { readonly id: number; readonly rarity: number; readonly width: number }) {
+  const phase = phaseOf(id);
+  const twice = rarity >= 5;
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: sweepAt(SHEEN.value, phase, twice) * width * 1.4 }, { rotate: '20deg' }],
+  }), [phase, twice, width]);
+  return (
+    <Animated.View style={[styles.shine, { height: width * 1.6, top: -width * 0.3 }, style]} pointerEvents="none">
+      <LinearGradient start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+        colors={['rgba(255,255,255,0)', rarity >= 5 ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.7)', 'rgba(255,255,255,0)']} style={StyleSheet.absoluteFill} />
+    </Animated.View>
+  );
+}
+
+/** The Legendary gold rim that pulses with its sweep. */
+function Rim({ id }: { readonly id: number }) {
+  const phase = phaseOf(id);
+  const style = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(sweepAt(SHEEN.value, phase, true)) * 1.4) }), [phase]);
+  return <Animated.View style={[styles.rim, style]} pointerEvents="none" />;
+}
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
   // A found sticker: a rarity-colored die-cut edge, a thick white border, a lip and a soft lift off the page.
   // One sticker: a thick even rarity frame on a white face, a soft navy shadow under it, a slight tilt.
-  sticker: { borderRadius: 18, ...SHADOW.card, shadowOpacity: 0.22, shadowRadius: 2, shadowOffset: { width: 0, height: 3 } },
+  // An opaque background lets iOS take the fast shadow path.
+  sticker: { borderRadius: 18, backgroundColor: BRAND.white, ...SHADOW.card, shadowOpacity: 0.22, shadowRadius: 2, shadowOffset: { width: 0, height: 3 } },
   stickerFace: { flex: 1, borderRadius: 18, backgroundColor: BRAND.white, borderWidth: 4 },
   // Only a sticker with a moving sheen needs the mask (the art already fits inside).
   clip: { overflow: 'hidden' },
