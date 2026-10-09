@@ -222,3 +222,44 @@ test('the living shark: three tap tricks in turn, varied fidgets, a cheer that d
   assert.ok(life.FIDGET_GAP_MS[0] >= 6000 && life.FIDGET_GAP_MS[1] <= 15000);
   assert.ok(life.CHEER_REPEAT_MS >= 15000);
 });
+
+test('regressions from round 3: corners, false starts and a ride vehicle never leave the shark far from you', () => {
+  const k = 111320, kl = k * Math.cos(33.8122 * Math.PI / 180);
+  const at = (e, n) => ({ latitude: 33.8122 + n / k, longitude: -117.919 + e / kl });
+  const en = p => [(p.longitude + 117.919) * kl, (p.latitude - 33.8122) * k];
+  // A 90 degree corner: east 20 m, then north; the phone turns with you.
+  {
+    const c = cf.newChaser(at(0, 0), 0), pace = new cf.WalkPace(); pace.push(at(0, 0), 0);
+    cf.chaseWalk(c, true, 500, 90);
+    const truth = t => (t <= 14.3 ? [1.4 * t, 0] : [20, 1.4 * (t - 14.3)]);
+    let past = 0;
+    for (let t = 0.5; t < 30; t += 0.05) {
+      cf.chaseHeading(c, t < 14.6 ? 90 : 0);
+      const p = en(cf.chaseAdvance(c, t * 1000));
+      if (t > 14.3 && t < 22) past = Math.max(past, p[0] - 20);
+      if (Math.abs(t * 1000 % 2000) < 50 && t > 1) { const [e, n] = truth(t); const f = at(e, n); pace.push(f, t * 1000); cf.chaseFix(c, f, t * 1000, pace.velocity(), pace.gap(), false); }
+    }
+    assert.ok(past < 2, `swam ${past.toFixed(2)} m past the corner`);
+  }
+  // A fidget: the step sensor says walking for 1.5 s, no fix comes, then standing: back at the last fix.
+  {
+    const c = cf.newChaser(at(0, 0), 0);
+    cf.chaseWalk(c, true, 1000, 45);
+    cf.chaseAdvance(c, 2500);
+    cf.chaseWalk(c, false, 2500);
+    const [e, n] = en(cf.chaseAdvance(c, 6000));
+    assert.ok(Math.hypot(e, n) < 0.15, `fidget left the shark ${Math.hypot(e, n).toFixed(2)} m away`);
+  }
+  // A ride vehicle: the step sensor says standing, the GPS moves steadily at 2 m/s; the shark goes along.
+  {
+    const c = cf.newChaser(at(0, 0), 0), pace = new cf.WalkPace(); pace.push(at(0, 0), 0);
+    cf.chaseWalk(c, false, 100);
+    let worst = 0;
+    for (let i = 1; i <= 15; i++) {
+      const f = at(4 * i, 0); pace.push(f, i * 2000); cf.chaseFix(c, f, i * 2000, pace.velocity(), pace.gap(), false);
+      const [e] = en(cf.chaseAdvance(c, i * 2000 + 1900));
+      if (i > 4) worst = Math.max(worst, Math.abs(4 * i + 3.8 - e));
+    }
+    assert.ok(worst < 5, `vehicle: ${worst.toFixed(2)} m behind`);
+  }
+});
