@@ -162,8 +162,8 @@ export default function BossMapPreviewScreen() {
           onLiveRefresh={() => setTeamDrop(d => d + 96 + Math.round(Math.random() * 60))}
           raid={fixtureRaid(boss, { ...(section === 'home' ? { latitude: null, longitude: null } : {}), you: youFixture,
             hp_left: 3480 - teamDrop,
-            top: [{ username: 'finnfan22', damage: 1480, you: false, team: 'mouse' }, { username: 'sharkbait_sam', damage: Math.max(1, youFixture.damage), you: true, team: 'shark' },
-              { username: 'coasterkid', damage: 640, you: false, team: 'globe' }].sort((a, b) => b.damage - a.damage),
+            top: [{ username: 'finnfan22', damage: 1480, you: false, team: 'mouse' }, { username: 'sharkbait_sam', damage: youFixture.damage, you: true, team: 'shark' },
+              { username: 'coasterkid', damage: 640, you: false, team: 'globe' }].filter(t => t.damage > 0).sort((a, b) => b.damage - a.damage),
             remote: { joined: knobs.joined, ticket_cost: 1, damage_rate: 0.6, reward_rate: 0.6, fighters: 1 } })} />
       </LocationContext.Provider>
     </AuthContext.Provider>}

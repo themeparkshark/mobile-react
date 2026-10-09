@@ -116,6 +116,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const [inkTell, setInkTell] = useState(false);
   const [hud, setHud] = useState({ power: 0, need: 3, headStart: 0, popKey: 0, damage: 0, phase: 'warm' as PhaseId });
   const [dizzy, setDizzy] = useState<{ from: number; until: number } | null>(null);
+  /** The boss is in front of the water from the flop until it has climbed back behind it. */
+  const [flopped, setFlopped] = useState(false);
   const [pose, setPose] = useState<SharkPose>('idle');
   const [face, setFace] = useState<Face>('angry');
   const [hint, setHintState] = useState<'none' | 'tentacle' | 'head' | 'ink'>('none');
@@ -199,7 +201,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setHud({ power: 0, need: 3, headStart: 0, popKey: 0, damage: 0, phase: 'warm' });
     cancelAnimation(bossShake); cancelAnimation(bossPuff);
     clock.value = 0; bossDrop.value = 0; bossHit.value = 0; bossRise.value = 0; fury.value = 0; cam.value = 1; hatPop.value = 0;
-    bossShake.value = 0; bossPuff.value = 0; setInkTell(false); setHeld(false); countdown.current = 4;
+    bossShake.value = 0; bossPuff.value = 0; setInkTell(false); setFlopped(false); setHeld(false); countdown.current = 4;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hpLeft]);
 
@@ -307,7 +309,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setDizzy({ from, until });
     setFace('dizzy');
     setInkTell(false); cancelAnimation(bossPuff); bossPuff.value = withTiming(0, { duration: 100 });
-    bossDrop.value = reduced ? withTiming(1, { duration: 120 }) : withTiming(1, { duration: 150, easing: Easing.in(Easing.quad) });
+    setFlopped(true);
+    // One frame late, so the boss is already in front of the water when it starts to fall.
+    bossDrop.value = reduced ? withTiming(1, { duration: 120 }) : withDelay(34, withTiming(1, { duration: 150, easing: Easing.in(Easing.quad) }));
     if (!reduced) {
       later(150, () => {
         addFx({ t: 'burst', src: BASH_ART.splash, x: L.w * 0.3, y: L.waterY + 30, size: L.w * 0.3 }, 420);
@@ -327,7 +331,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setDizzy(null);
     setFace('angry');
     cancelAnimation(bossShake); bossShake.value = withTiming(0, { duration: 120 });
-    bossDrop.value = reduced ? withTiming(0, { duration: 120 }) : withSpring(0, { damping: 12, stiffness: 160 });
+    bossDrop.value = reduced ? withTiming(0, { duration: 120 }) : withTiming(0, { duration: 260, easing: Easing.out(Easing.back(1.2)) });
+    later(reduced ? 140 : 300, () => setFlopped(engine.current.dizzy !== null));
   };
 
   const onSmash = (e: Extract<BashEvent, { type: 'smash' }>) => {
@@ -645,7 +650,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
           {/* The boss, rising out of the lagoon. */}
           <View pointerEvents="none" style={{ position: 'absolute', left: (L.w - L.bossSize) / 2, top: L.bossTop, width: L.bossSize, height: L.bossSize,
-            zIndex: dizzy ? 3 : 1 }}>
+            zIndex: flopped ? 3 : 1 }}>
             <Animated.View style={[StyleSheet.absoluteFill, bossStyle]}>
               {faces.map(([id, src]) => <Image key={id} source={src} contentFit="contain"
                 style={[StyleSheet.absoluteFill, { opacity: id === shownFace ? (skin.ghostly ? 0.92 : 1) : 0 }]} />)}
