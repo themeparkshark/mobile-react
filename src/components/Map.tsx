@@ -294,6 +294,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   useWalkSense({ active: compassOn && !!location, intervalMs: 40, config: WALK_SENSE_MAP,
     onWalkChange: walking => {
       cam.onWalk(walking);
+      // Setting off: the waddle and wake start with your first steps, not at the next GPS fix.
+      if (walking && !reducedMotion) { wake.value = withTiming(1, { duration: 250 }); runStride(1.2, 60_000); }
       if (!walking && !reducedMotion) {
         // Stopped: the wake and the waddle wind down with the shark, not at the next fix.
         if (strideStop.current) clearTimeout(strideStop.current);
@@ -447,9 +449,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // Camera zoom, for sizing the grab zone in metres (updated when a move settles).
   const [cameraZoom, setCameraZoom] = useState(FOLLOW_ZOOM);
   const ppmLat = location ? Math.round(location.latitude * 100) / 100 : null;
+  const lastNoted = useRef({ zoom: NaN, bearing: NaN });
   const noteCamera = (zoom: number, bearing: number) => {
-    if (Number.isFinite(zoom) && ppmLat !== null) zoomPpm.value = pointsPerMeter(zoom, ppmLat);
-    if (Number.isFinite(bearing)) { mapBearing.value = bearing; cam.noteFreeBearing(bearing); if (frightOn) frightBearing.set(bearing); }
+    // Called for every camera frame while the map moves: write only what changed.
+    if (Number.isFinite(zoom) && ppmLat !== null && !(Math.abs(zoom - lastNoted.current.zoom) <= 0.002)) { lastNoted.current.zoom = zoom; zoomPpm.value = pointsPerMeter(zoom, ppmLat); }
+    if (Number.isFinite(bearing) && !(Math.abs(bearing - lastNoted.current.bearing) <= 0.05)) { lastNoted.current.bearing = bearing; mapBearing.value = bearing; cam.noteFreeBearing(bearing); if (frightOn) frightBearing.set(bearing); }
   };
   useEffect(() => { if (ppmLat !== null) zoomPpm.value = pointsPerMeter(cameraZoom, ppmLat); }, [cameraZoom, ppmLat, zoomPpm]);
   // The right-rail controls, so fright haunt chips keep clear of them.
