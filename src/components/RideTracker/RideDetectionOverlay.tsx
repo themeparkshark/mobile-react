@@ -148,6 +148,8 @@ const RideDetectionOverlay: React.FC = () => {
     minute: '2-digit',
   });
 
+  // Development captures of the map (EXPO_PUBLIC_DEV_NO_RIDE_PROMPT=1): walking a scripted route past rides should not pop this.
+  if (__DEV__ && process.env.EXPO_PUBLIC_DEV_NO_RIDE_PROMPT === '1') return null;
   return (
     <Animated.View
       style={[styles.container, { opacity: opacityAnim }]}
