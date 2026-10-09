@@ -12,14 +12,14 @@ export interface LossCopy {
   readonly line: string;
 }
 
-export function memoryLossCopy(pairs: number, total: number, outOfTurns = false): LossCopy {
+export function memoryLossCopy(pairs: number, total: number, outOfTurns = false, flipped = true): LossCopy {
   const p = Math.max(0, Math.floor(pairs));
   const t = Math.max(1, Math.floor(total));
   const left = Math.max(0, t - p);
   // Low-signal rides end on a turn limit, not the clock.
-  if (p === 0) return outOfTurns
-    ? { title: 'OUT OF FLIPS!', line: 'Flip 2 cards. Remember where they were.' }
-    : { title: "TIME'S UP!", line: 'Flip 2 cards. Remember where they were.' };
+  // Never flipped a card: teach the one move, don't ask them to remember.
+  const tip = flipped ? 'Flip 2 cards. Remember where they were.' : 'Tap 2 cards to flip them!';
+  if (p === 0) return { title: outOfTurns ? 'OUT OF FLIPS!' : "TIME'S UP!", line: tip };
   if (outOfTurns && left > 2) return { title: 'OUT OF FLIPS!', line: `You found ${p} of ${t} pairs. Keep going!` };
   if (left <= 2) return { title: 'SO CLOSE!', line: left === 1 ? 'Just 1 pair to go!' : `Just ${left} pairs to go!` };
   if (p * 2 >= t) return { title: 'NICE TRY!', line: `You found ${p} of ${t} pairs.` };

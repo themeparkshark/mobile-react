@@ -33,7 +33,7 @@ test('the results banner and end card use the honest copy', () => {
   assert.match(src, /memoryLossBanner\(e\.pairs, e\.pairsTotal, e\.status === 'out'\)/);
   assert.doesNotMatch(src, />SO CLOSE</);
   assert.doesNotMatch(src, />End challenge</);
-  assert.match(src, /<TryCard copy=\{memoryLossCopy\(tryScreen\.pairs, tryScreen\.total, tryScreen\.out\)\}/);
+  assert.match(src, /<TryCard copy=\{memoryLossCopy\(tryScreen\.pairs, tryScreen\.total, tryScreen\.out, tryScreen\.flipped\)\}/);
   assert.match(src, /accessibilityLabel="Done"/);
 });
 
@@ -69,5 +69,13 @@ test('a low-signal turn limit says OUT OF FLIPS, not TIME\'S UP', () => {
 test('a lost ride shows no NEW BEST and no luck jargon; the board shows ~1.5 s before the card', () => {
   assert.match(src, /newBest: r\.mode === 'ride' && !won \? false :/);
   assert.match(src, /chipText = won \? luckyChip\(e\) : null;/);
-  assert.match(src, /later\(1500, \(\) => \{\s*\/\/ Ride challenge/);
+  assert.match(src, /later\(k > 0 \? 1500 : 600, \(\) => \{\s*\/\/ Ride challenge/);
+});
+
+test('a kid who never flipped is taught the move; every try saves its album cards', () => {
+  assert.equal(memoryLossCopy(0, 8, false, false).line, 'Tap 2 cards to flip them!');
+  assert.equal(memoryLossCopy(0, 8, true, false).title, 'OUT OF FLIPS!');
+  assert.match(src, /flipped: r\.eng\.turns > 0/);
+  const tryAgain = src.slice(src.indexOf('const tryAgain = useCallback('), src.indexOf('const giveUp = useCallback('));
+  assert.match(tryAgain, /void collectRewards\(prev, false, false, 0\)/);
 });

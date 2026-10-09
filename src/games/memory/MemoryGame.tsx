@@ -344,7 +344,7 @@ export default function MemoryGame({
     seconds: null as number | null, urgent: false, chain: 0, gauge: 0, showtime: false, showLeft: 0, showWarn: false,
     strikes: 0, pairs: 0, total: 8, board: 1, turns: 0, turnsLeft: null as number | null,
   });
-  const [tryScreen, setTryScreen] = useState<{ pairs: number; total: number; left: number; out: boolean } | null>(null);
+  const [tryScreen, setTryScreen] = useState<{ pairs: number; total: number; left: number; out: boolean; flipped: boolean } | null>(null);
   const tryCardIn = useSharedValue(0);
   const [unlock, setUnlock] = useState<{ kicker: string; title: string; hint?: string } | null>(null);
   const [tip, setTip] = useState<{ text: string; kind: 'scout' | 'slip' } | null>(null);
@@ -1188,11 +1188,12 @@ export default function MemoryGame({
     stage.current?.tumble();
     rope.urgent.value = 0;
     const left = RIDE_TRIES - 1 - r.tryIndex;
-    later(1500, () => {
+    // With nothing to reveal there is nothing to look at: the card comes up fast.
+    later(k > 0 ? 1500 : 600, () => {
       // Ride challenge: every try ends on the same end card (TRY AGAIN while
       // the Ticket has tries, then Done), right over the board.
       if (r.mode === 'ride') {
-        setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left, out });
+        setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left, out, flipped: r.eng.turns > 0 });
         tryCardIn.value = 0;
         tryCardIn.value = reducedMotion ? 1 : withSpring(1, { damping: 13, stiffness: 190 });
       } else finishRun(false);
@@ -2151,6 +2152,8 @@ export default function MemoryGame({
     const prev = runRef.current;
     if (!prev || RIDE_TRIES - 1 - prev.tryIndex <= 0) return;
     Haptic.tapLight();
+    // Cards matched on this try still go in the album (best effort, on device).
+    void collectRewards(prev, false, false, 0).catch(() => undefined);
     clearTimers();
     setTryScreen(null);
     const r = buildRun({ runIndex: prev.runIndex, tryIndex: prev.tryIndex + 1 });
@@ -2162,7 +2165,7 @@ export default function MemoryGame({
     later(900, () => {
       if (runRef.current === r) beginPlay();
     });
-  }, [beginPlay, buildRun, clearTimers, later, newBoardView, resetScene, syncHud, wash]);
+  }, [beginPlay, buildRun, clearTimers, collectRewards, later, newBoardView, resetScene, syncHud, wash]);
 
   const giveUp = useCallback(() => {
     Haptic.tapLight();
@@ -2427,7 +2430,7 @@ export default function MemoryGame({
             ) : null}
 
             {tryScreen ? (
-              <TryCard copy={memoryLossCopy(tryScreen.pairs, tryScreen.total, tryScreen.out)} pairs={tryScreen.pairs}
+              <TryCard copy={memoryLossCopy(tryScreen.pairs, tryScreen.total, tryScreen.out, tryScreen.flipped)} pairs={tryScreen.pairs}
                 total={tryScreen.total} left={tryScreen.left} top={g.felt.y + g.felt.h * 0.2}
                 enter={tryCardIn} onTryAgain={tryAgain} onDone={giveUp} />
             ) : null}
