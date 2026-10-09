@@ -22,13 +22,15 @@ export const PopupActor = memo(function PopupActor({ kind, x, baseY, height, lim
   kind: Kind; x: number; baseY: number; height: number; limb: number; limbAspect: number; exit: ActorExit; reduced: boolean;
   ghostly: boolean; hint: boolean;
 }) {
-  const { animate } = usePowerBudget();
+  // Decorative idle loop: stops on Battery Saver / idle (ambient), never at normal power.
+  const { ambient: animate } = usePowerBudget();
   const rise = useSharedValue(reduced ? 1 : 0);
   const sway = useSharedValue(0);
   const squash = useSharedValue(1);
   const flash = useSharedValue(0);
   const foam = useSharedValue(0);
   const isPuffer = kind === 'puffer';
+  const isGold = kind === 'gold';
   const w = isPuffer ? height * 0.62 : height * limbAspect;
   const h = isPuffer ? height * 0.56 : height;
 
@@ -78,6 +80,10 @@ export const PopupActor = memo(function PopupActor({ kind, x, baseY, height, lim
       <View style={{ position: 'absolute', left: -w, width: w * 3, top: -h * 0.2, height: h * 1.2 + (isPuffer ? h * 0.25 : 0), overflow: 'hidden' }}>
         <Animated.View style={[{ position: 'absolute', left: w, top: h * 0.2 + (isPuffer ? h * 0.12 : 0), width: w, height: h }, body]}>
           <Image source={limbSrc} style={StyleSheet.absoluteFill} contentFit="contain" />
+          {/* Gold tentacle: the same drawn limb washed gold, with sparkles (worth two fins, gone fast). */}
+          {isGold && <Image source={limbSrc} style={[StyleSheet.absoluteFill, { opacity: 0.62 }]} contentFit="contain" tintColor="#ffcf3b" />}
+          {isGold && <Image source={BASH_ART.sparkle} style={{ position: 'absolute', width: w * 0.55, height: w * 0.55, left: -w * 0.1, top: h * 0.05 }} contentFit="contain" />}
+          {isGold && <Image source={BASH_ART.sparkle} style={{ position: 'absolute', width: w * 0.4, height: w * 0.4, right: -w * 0.05, top: h * 0.4 }} contentFit="contain" />}
           <Animated.View style={[StyleSheet.absoluteFill, white]}>
             <Image source={limbSrc} style={StyleSheet.absoluteFill} contentFit="contain" tintColor="#ffffff" />
           </Animated.View>
@@ -107,7 +113,8 @@ export function TapHand({ x, y, reduced, size = 64 }: { x: number; y: number; re
 export const FinMeter = memo(function FinMeter({ power, need, headStart, popKey, ready, size, reduced }: {
   power: number; need: number; headStart: number; popKey: number; ready: boolean; size: number; reduced: boolean;
 }) {
-  const { animate } = usePowerBudget();
+  // Decorative idle loop: stops on Battery Saver / idle (ambient), never at normal power.
+  const { ambient: animate } = usePowerBudget();
   const glow = useSharedValue(0);
   useEffect(() => {
     if (ready && !reduced && animate) glow.value = withRepeat(withSequence(withTiming(1, { duration: 180 }), withTiming(0.35, { duration: 220 })), -1, false);
@@ -226,7 +233,8 @@ export const CountBeat = memo(function CountBeat({ text, x, y, reduced }: { text
 
 /** Stars circling a dizzy head. */
 export function DizzyStars({ x, y, r, reduced }: { x: number; y: number; r: number; reduced: boolean }) {
-  const { animate } = usePowerBudget();
+  // Decorative idle loop: stops on Battery Saver / idle (ambient), never at normal power.
+  const { ambient: animate } = usePowerBudget();
   const t = useSharedValue(0);
   useEffect(() => {
     if (!reduced && animate) t.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1, false);

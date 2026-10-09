@@ -176,6 +176,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const bossFlinch = useSharedValue(0);
   const bossDrop = useSharedValue(0), bossHit = useSharedValue(0), bossRise = useSharedValue(0), bossShake = useSharedValue(0);
   const flopX = useSharedValue(0);
+  const hatOff = useSharedValue(0);
   const bossFade = useSharedValue(1);
   const cam = useSharedValue(1), fury = useSharedValue(0), hatPop = useSharedValue(0), bossPuff = useSharedValue(0);
   const countdown = useRef(4);
@@ -249,6 +250,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     if (raf.current !== null) cancelAnimationFrame(raf.current);
     raf.current = null; playing.current = false; finished.current = false; played.current = 0;
     heldRef.current = false; goPending.current = false; perfectChain.current = 0; hpAtBell.current = null;
+    shownStage.current = 0; setHatGone(false); hatOff.value = 0;
     seedRef.current = (seedRef.current * 7919 + 17) % 1000003;
     engine.current = createBash(seedRef.current);
     shownTotal.current = 0;
@@ -339,6 +341,11 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     addFx({ t: 'burst', src: BASH_ART.splash, x: p.x, y: p.y - 18, size: p.h * 0.5 }, 420);
     const d = dealt();
     addFx({ t: 'num', text: e.counted ? `+${d}` : 'MAX', x: p.x, y: tipY - 20, big: false }, 900);
+    if (e.popup.kind === 'gold') {
+      addFx({ t: 'bubble', text: 'GOLD! 2 FINS', x: p.x, y: tipY - 50, tone: 'gold' }, 900);
+      GameAudio.play('fx.coin', { volume: 1, pitch: 5 });
+      haptic('hitMedium');
+    }
     if (!reduced) {
       particles.current?.burst({ x: p.x, y: tipY, preset: 'burst', count: 6, colors: [BRAND.white, BRAND.goldLight, '#a0edff'], speed: 0.8 });
       bossFlinch.value = withSequence(withTiming(1, { duration: 40 }), withTiming(0, { duration: 160 }));
@@ -508,6 +515,35 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       haptic('warning');
     }
   };
+
+  // --- Raid stages: the boss looks worse as the team wears it down (announced once, with sound) ------
+  const [hatGone, setHatGone] = useState(false);
+  const shownStage = useRef(0);
+  const stageNow = hpLeft / Math.max(1, hpMax) < 0.25 ? 2 : hpLeft / Math.max(1, hpMax) < 0.5 ? 1 : 0;
+  useEffect(() => {
+    if (!visible || intro === 'rise' || intro === 'teach' || !L.w) return;
+    if (stageNow <= shownStage.current) return;
+    const from = shownStage.current;
+    shownStage.current = stageNow;
+    if (from < 1) {
+      flashFace('roar', 1100);
+      addFx({ t: 'bubble', text: "IT'S ANGRY!", x: L.w / 2, y: L.bossTop + L.bossSize * 0.7, tone: 'red' }, 1100);
+      if (!reduced) shake.shake(7, 240);
+      sfx('bo_phase_kraken', 'fx.whoosh', { volume: 1 });
+      haptic('warning');
+    }
+    if (stageNow >= 2 && skin.hat) {
+      later(from < 1 ? 900 : 0, () => {
+        hatOff.value = reduced ? withTiming(1, { duration: 150 }) : withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) });
+        later(reduced ? 160 : 900, () => setHatGone(true));
+        addFx({ t: 'bubble', text: "HAT'S OFF!", x: L.w / 2, y: L.bossTop + L.bossSize * 0.7, tone: 'gold' }, 1100);
+        later(reduced ? 0 : 650, () => addFx({ t: 'burst', src: BASH_ART.splash, x: L.w * 0.68, y: L.waterY + 8, size: L.w * 0.3 }, 450));
+        sfx('bo_part_bounce', 'fx.whoosh', { volume: 1, pitch: 4 });
+        haptic('hitMedium');
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stageNow, visible, intro, L.w]);
 
   // --- The loop ----------------------------------------------------------------
   const buildResult = (s: BashState): GameResult => {
@@ -722,6 +758,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const faces = ([['angry', skin.body], ['dizzy', skin.dizzy], ['hurt', skin.hurt], ['laugh', skin.laugh], ['roar', skin.roar], ['puff', skin.puff]] as const)
     .filter((f): f is readonly [Face, number] => f[1] !== null);
   const idle: Face = stage >= 1 && skin.roar ? 'roar' : 'angry';
+  const hatOffStyle = useAnimatedStyle(() => ({ opacity: 1 - hatOff.value,
+    transform: [{ translateY: -hatOff.value * L.bossSize * 0.5 + hatOff.value * hatOff.value * L.bossSize * 0.9 },
+      { translateX: hatOff.value * L.bossSize * 0.35 }, { rotate: `${hatOff.value * 220}deg` }] }));
   const wanted: Face = face === 'angry' ? idle : face;
   const shownFace: Face = faces.some(f => f[0] === wanted) ? wanted : 'angry';
   const bodySrc = faces.find(f => f[0] === shownFace)?.[1] ?? skin.body;
@@ -782,8 +821,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
             <Animated.View style={[StyleSheet.absoluteFill, bossStyle]}>
               {faces.map(([id, src]) => <Image key={id} source={src} contentFit="contain"
                 style={[StyleSheet.absoluteFill, { opacity: id === shownFace ? (skin.ghostly ? 0.92 : 1) : 0 }]} />)}
-              {skin.hat && stage < 2 && <Animated.View style={[{ position: 'absolute', left: L.bossSize * 0.22, top: -L.bossSize * 0.02,
-                width: L.bossSize * 0.56, height: L.bossSize * 0.42 }, hatStyle]}>
+              {skin.hat && !hatGone && <Animated.View style={[{ position: 'absolute', left: L.bossSize * 0.22, top: -L.bossSize * 0.02,
+                width: L.bossSize * 0.56, height: L.bossSize * 0.42 }, hatStyle, hatOffStyle]}>
                 <Image source={BASH_ART.hat} style={StyleSheet.absoluteFill} contentFit="contain" />
               </Animated.View>}
               {dizzy && <DizzyStars x={L.bossSize * skin.head[0]} y={L.bossSize * 0.08} r={L.bossSize * 0.24} reduced={reduced} />}
@@ -792,7 +831,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
           {/* The water in front of the boss (hides its lower half). */}
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 2 }]}>
-            <WaterFront width={L.w} height={L.h} top={L.waterY} reduced={reduced} running={visible && !result && !held && power.animate} />
+            <WaterFront width={L.w} height={L.h} top={L.waterY} reduced={reduced} running={visible && !result && !held && power.ambient} />
           </View>
           <Image source={BASH_ART.beach} pointerEvents="none" contentFit="cover" contentPosition="bottom"
             style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: L.w * 0.66, zIndex: 2 }} />
