@@ -68,6 +68,7 @@ function loadClient(apiUrl, log) {
       '../services/connectivity': { reportReachable: () => reachability.push('up'), reportUnreachable: () => reachability.push('down') },
       './getRetry': loadTs('src/api/getRetry.ts'),
       './dedupeGet': loadTs('src/api/dedupeGet.ts'),
+      './jsonGuard': loadTs('src/api/jsonGuard.ts'),
       '../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
     }).default;
     client.defaults.headers.common.Authorization = 'Bearer test-token';

@@ -171,6 +171,7 @@ function realStack(transport) {
     '../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
     './getRetry': loadTs('src/api/getRetry.ts', {}, { setTimeout: fn => { fn(); return 0; } }),
     './dedupeGet': loadTs('src/api/dedupeGet.ts'),
+    './jsonGuard': loadTs('src/api/jsonGuard.ts'),
   }).default;
   const broadcasts = [];
   const toasts = [];
@@ -279,6 +280,7 @@ test('React Native network errors (response with status 0) count as no response'
     '../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
     './getRetry': loadTs('src/api/getRetry.ts'),
     './dedupeGet': loadTs('src/api/dedupeGet.ts'),
+    './jsonGuard': loadTs('src/api/jsonGuard.ts'),
   }, { setTimeout: (fn) => { fn(); return 0; } });
   await assert.rejects(handlers.bad({ ...rnDropped, config: { method: 'post', url: '/me/line-sessions/1/complete' } }));
   assert.deepEqual(events, ['unreachable'], 'status 0 shows the offline banner instead of marking the API reachable');
