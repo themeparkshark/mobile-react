@@ -31,7 +31,7 @@ const tagsStyles: Readonly<Record<string, MixedStyleDeclaration>> = {
   h2: { fontFamily: 'Knockout', fontWeight: 'normal', fontSize: 27, lineHeight: 31, color: BRAND.navy, marginTop: 14, marginBottom: 10 },
   h3: { fontFamily: 'Knockout', fontWeight: 'normal', fontSize: 23, lineHeight: 27, color: BRAND.navy, marginTop: 12, marginBottom: 8 },
   h4: { fontFamily: 'Knockout', fontWeight: 'normal', fontSize: 20, color: BRAND.navy, marginTop: 10, marginBottom: 6 },
-  a: { color: BRAND.blue, textDecorationLine: 'underline', textDecorationColor: BRAND.skyDeep, fontWeight: '600' },
+  a: { color: BRAND.blue, fontWeight: '700', textDecorationLine: 'none' },
   strong: { fontWeight: '700', color: BRAND.navy },
   ul: { marginTop: 0, marginBottom: 18, paddingLeft: 6 },
   ol: { marginTop: 0, marginBottom: 18, paddingLeft: 6 },
@@ -48,6 +48,10 @@ const tagsStyles: Readonly<Record<string, MixedStyleDeclaration>> = {
 
 const classesStyles: Readonly<Record<string, MixedStyleDeclaration>> = {
   'wp-block-image': { marginBottom: 20 },
+  /** Another TPS story: opens right here. Bold blue on a soft sky band. */
+  'tps-link': { color: BRAND.blue, backgroundColor: '#e3f3ff', fontWeight: '700', textDecorationLine: 'none' },
+  /** Leaves the game (a grown-up says yes first): quieter navy with a dotted underline. */
+  'out-link': { color: BRAND.navySoft, fontWeight: '600', textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: BRAND.navySoft },
 };
 
 /** Body text grows with Dynamic Type, up to a size the column still holds. */

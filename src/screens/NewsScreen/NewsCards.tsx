@@ -12,18 +12,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
-import { BRAND, GameButton, GameIcon, RADIUS, SHADOW } from '../../ui';
+import { BRAND, GameIcon, RADIUS, SHADOW } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { dek, isFresh, parkLabel, plainText, readMinutes, timeAgo, type NewsEntry } from './newsModel';
+import { dek, parkLabel, plainText, readMinutes, timeAgo, type NewsEntry } from './newsModel';
 
 export const TPS_WORDMARK = require('../../../assets/images/screens/login/logo.png');
 export const TPS_SHARK = require('../../../assets/images/screens/pin-collections/shark.png');
 
 export const INK = BRAND.navy;
 export const INK_SOFT = BRAND.navySoft;
-const RIM = 'rgba(5,52,110,0.14)';
+/** One card frame for hero, rows and More news (Standings family, a touch heavier): 3 px navy-tint rim, 6 px lip. */
+export const RIM = 'rgba(5,52,110,0.26)';
+export const FRAME = { borderWidth: 3, borderBottomWidth: 6, borderColor: RIM } as const;
 const PLACEHOLDER = '#dcecf9';
-export const ROW_HEIGHT = 124;
+export const ROW_HEIGHT = 138;
 export const SIDE = 14;
 
 /** Small park tag: navy on sky, Shark face. */
@@ -32,7 +34,7 @@ export function ParkTag({ label, onImage = false }: { readonly label: string | n
   return (
     <View style={{ alignSelf: 'flex-start', paddingHorizontal: 8, height: 22, borderRadius: 11, justifyContent: 'center',
       backgroundColor: onImage ? BRAND.white : BRAND.sky, borderWidth: onImage ? 2 : 0, borderColor: BRAND.navy }}>
-      <Text numberOfLines={1} maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.navy, letterSpacing: 0.3 }}>{label}</Text>
+      <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.navy, letterSpacing: 0.3 }}>{label}</Text>
     </View>
   );
 }
@@ -40,20 +42,30 @@ export function ParkTag({ label, onImage = false }: { readonly label: string | n
 export function NewBadge() {
   return (
     <View accessibilityLabel="New story" style={{ paddingHorizontal: 7, height: 22, borderRadius: 11, justifyContent: 'center',
-      backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.goldLip }}>
+      backgroundColor: BRAND.gold, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.goldLip }}>
       <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.navy }}>NEW</Text>
     </View>
   );
 }
 
-/** "3 hr ago  ·  2 min read", or a Read check once opened. */
-function Meta({ entry, read, now }: { readonly entry: NewsEntry; readonly read: boolean; readonly now: number }) {
+/** "3 hr ago" with the clock; "2 min read" only where there is room (lead story, reader). */
+function Meta({ entry, now, long = false }: { readonly entry: NewsEntry; readonly now: number; readonly long?: boolean }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      {read && <GameIcon name="check" size={14} />}
-      <Text numberOfLines={1} maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Knockout', fontSize: 14, color: INK_SOFT, letterSpacing: 0.2 }}>
-        {read ? 'Read  ·  ' : ''}{timeAgo(entry.date, now)}  ·  {readMinutes(entry)} min read
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+      <GameIcon name="timer" size={15} />
+      <Text numberOfLines={1} maxFontSizeMultiplier={1.35} style={{ fontFamily: 'Knockout', fontSize: 14, color: INK_SOFT, letterSpacing: 0.2 }}>
+        {timeAgo(entry.date, now)}{long ? `  ·  ${readMinutes(entry)} min read` : ''}
       </Text>
+    </View>
+  );
+}
+
+/** Already opened: a drawn check on the photo's corner (the card also fades a little). */
+function ReadCheck() {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no" style={{ position: 'absolute', right: 6, top: 6, width: 26, height: 26, borderRadius: 13,
+      backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.green, alignItems: 'center', justifyContent: 'center' }}>
+      <GameIcon name="check" size={16} />
     </View>
   );
 }
@@ -74,88 +86,94 @@ function Picture({ uri, style, recycle }: { readonly uri: string | null | undefi
 
 function storyLabel(entry: NewsEntry, read: boolean): string {
   const tag = parkLabel(entry);
-  return `${tag ? `${tag}. ` : ''}${plainText(entry.title)}. ${timeAgo(entry.date)}.${read ? ' Read.' : ''}`;
+  return `${tag ? `${tag}. ` : ''}${plainText(entry.title)}. ${timeAgo(entry.date)}.${read ? ' You read this one.' : ''}`;
 }
 
-/** The lead story: a big 16:9 photo, park tag, NEW, headline and a two-line dek. */
-export const HeroCard = memo(function HeroCard({ entry, read, now, onPress }: {
-  readonly entry: NewsEntry; readonly read: boolean; readonly now: number; readonly onPress: (entry: NewsEntry) => void;
-}) {
+type CardProps = {
+  readonly entry: NewsEntry;
+  readonly read: boolean;
+  /** One of the three newest park stories (the only ones that get NEW). */
+  readonly fresh: boolean;
+  readonly now: number;
+  readonly onPress: (entry: NewsEntry) => void;
+};
+
+/** The lead story: a wide 2:1 photo with one TOP STORY badge, park tag, headline, one-line dek. */
+export const HeroCard = memo(function HeroCard({ entry, read, now, onPress }: CardProps) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Top story. ${storyLabel(entry, read)}`} accessibilityHint="Opens the story"
       onPress={() => onPress(entry)}
-      style={({ pressed }) => ({ marginHorizontal: SIDE, marginTop: 6, marginBottom: 14, borderRadius: RADIUS.lg, backgroundColor: BRAND.white,
-        borderWidth: 3, borderBottomWidth: 6, borderColor: BRAND.white, ...SHADOW.lifted, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+      style={({ pressed }) => ({ marginHorizontal: SIDE, marginTop: 4, marginBottom: 12, borderRadius: RADIUS.lg, backgroundColor: BRAND.white,
+        ...FRAME, borderColor: BRAND.white, ...SHADOW.lifted, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
       <View style={{ borderRadius: RADIUS.lg - 3, overflow: 'hidden' }}>
-        <Picture uri={entry.featured_image} recycle={`hero-${entry.id}`} style={{ width: '100%', aspectRatio: 16 / 9 }} />
-        <View style={{ position: 'absolute', left: 10, top: 10, flexDirection: 'row', gap: 6 }}>
-          <View style={{ paddingHorizontal: 9, height: 24, borderRadius: 12, justifyContent: 'center', backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white }}>
-            <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white, letterSpacing: 0.4 }}>TOP STORY</Text>
+        <View>
+          <Picture uri={entry.featured_image} recycle={`hero-${entry.id}`} style={{ width: '100%', aspectRatio: 2 }} />
+          <View style={{ position: 'absolute', left: 10, top: 10, paddingHorizontal: 9, height: 26, borderRadius: 13, justifyContent: 'center',
+            backgroundColor: BRAND.navy, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.white }}>
+            <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white, letterSpacing: 0.4 }}>TOP STORY</Text>
           </View>
-          {isFresh(entry.date, now) && !read && <NewBadge />}
+          {read && <ReadCheck />}
         </View>
-        <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 14, gap: 7 }}>
+        <View style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12, gap: 6, opacity: read ? 0.72 : 1 }}>
           <ParkTag label={parkLabel(entry)} />
-          <Text numberOfLines={3} maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 27, lineHeight: 31, color: read ? INK_SOFT : INK }}>
+          <Text numberOfLines={3} maxFontSizeMultiplier={1.35} style={{ fontFamily: 'Knockout', fontSize: 26, lineHeight: 30, color: INK }}>
             {plainText(entry.title)}
           </Text>
           {!!dek(entry) && (
-            <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ fontSize: 15, lineHeight: 21, color: '#33507a' }}>{dek(entry, 140)}</Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.35} style={{ fontSize: 15, lineHeight: 20, color: '#33507a' }}>{dek(entry, 120)}</Text>
           )}
-          <Meta entry={entry} read={read} now={now} />
+          <Meta entry={entry} now={now} long />
         </View>
       </View>
     </Pressable>
   );
 });
 
-/** A story row: text on the left, a 4:3 photo on the right. About five fit on a screen. */
-export const StoryRow = memo(function StoryRow({ entry, read, now, onPress }: {
-  readonly entry: NewsEntry; readonly read: boolean; readonly now: number; readonly onPress: (entry: NewsEntry) => void;
-}) {
+/** A story row: text on the left (three-line headline), a 4:3 photo on the right. */
+export const StoryRow = memo(function StoryRow({ entry, read, fresh, now, onPress }: CardProps) {
   return (
     <View style={{ height: ROW_HEIGHT, paddingHorizontal: SIDE, justifyContent: 'center', backgroundColor: BRAND.cream }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={storyLabel(entry, read)} accessibilityHint="Opens the story"
+      <Pressable accessibilityRole="button" accessibilityLabel={`${fresh ? 'New. ' : ''}${storyLabel(entry, read)}`} accessibilityHint="Opens the story"
         onPress={() => onPress(entry)}
         style={({ pressed }) => ({ height: ROW_HEIGHT - 10, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 12, paddingRight: 8,
-          borderRadius: RADIUS.md, backgroundColor: BRAND.white, borderWidth: 2, borderBottomWidth: 4, borderColor: RIM,
-          transform: [{ scale: pressed ? 0.98 : 1 }] })}>
-        <View style={{ flex: 1, gap: 4 }}>
+          borderRadius: RADIUS.md, backgroundColor: BRAND.white, ...FRAME, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+        <View style={{ flex: 1, gap: 4, opacity: read ? 0.65 : 1 }}>
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-            <ParkTag label={parkLabel(entry)} />
-            {isFresh(entry.date, now) && !read && <NewBadge />}
+            {fresh && !read ? <NewBadge /> : <ParkTag label={parkLabel(entry)} />}
           </View>
-          <Text numberOfLines={2} maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Knockout', fontSize: 19, lineHeight: 22, color: read ? INK_SOFT : INK }}>
+          <Text numberOfLines={3} maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Knockout', fontSize: 19, lineHeight: 22, color: INK }}>
             {plainText(entry.title)}
           </Text>
-          <Meta entry={entry} read={read} now={now} />
+          <Meta entry={entry} now={now} />
         </View>
-        <Picture uri={entry.featured_image} recycle={`row-${entry.id}`} style={{ width: 104, height: 92, borderRadius: 10 }} />
+        <View>
+          <Picture uri={entry.featured_image} recycle={`row-${entry.id}`} style={{ width: 104, height: 98, borderRadius: 10, opacity: read ? 0.8 : 1 }} />
+          {read && <ReadCheck />}
+        </View>
       </Pressable>
     </View>
   );
 });
 
 /** Every few rows, one big photo story keeps the scroll lively. */
-export const FeatureCard = memo(function FeatureCard({ entry, read, now, onPress }: {
-  readonly entry: NewsEntry; readonly read: boolean; readonly now: number; readonly onPress: (entry: NewsEntry) => void;
-}) {
+export const FeatureCard = memo(function FeatureCard({ entry, read, fresh, now, onPress }: CardProps) {
   return (
     <View style={{ paddingHorizontal: SIDE, paddingVertical: 5, backgroundColor: BRAND.cream }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={storyLabel(entry, read)} accessibilityHint="Opens the story"
+      <Pressable accessibilityRole="button" accessibilityLabel={`${fresh ? 'New. ' : ''}${storyLabel(entry, read)}`} accessibilityHint="Opens the story"
         onPress={() => onPress(entry)}
-        style={({ pressed }) => ({ borderRadius: RADIUS.md, backgroundColor: BRAND.white, borderWidth: 2, borderBottomWidth: 4, borderColor: RIM,
-          overflow: 'hidden', transform: [{ scale: pressed ? 0.98 : 1 }] })}>
-        <Picture uri={entry.featured_image} recycle={`feat-${entry.id}`} style={{ width: '100%', aspectRatio: 16 / 9 }} />
-        <View style={{ padding: 12, gap: 6 }}>
+        style={({ pressed }) => ({ borderRadius: RADIUS.md, backgroundColor: BRAND.white, ...FRAME, overflow: 'hidden', transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+        <View>
+          <Picture uri={entry.featured_image} recycle={`feat-${entry.id}`} style={{ width: '100%', aspectRatio: 2, opacity: read ? 0.8 : 1 }} />
+          {read && <ReadCheck />}
+        </View>
+        <View style={{ padding: 12, gap: 6, opacity: read ? 0.65 : 1 }}>
           <View style={{ flexDirection: 'row', gap: 6 }}>
-            <ParkTag label={parkLabel(entry)} />
-            {isFresh(entry.date, now) && !read && <NewBadge />}
+            {fresh && !read ? <NewBadge /> : <ParkTag label={parkLabel(entry)} />}
           </View>
-          <Text numberOfLines={3} maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Knockout', fontSize: 22, lineHeight: 26, color: read ? INK_SOFT : INK }}>
+          <Text numberOfLines={3} maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 22, lineHeight: 26, color: INK }}>
             {plainText(entry.title)}
           </Text>
-          <Meta entry={entry} read={read} now={now} />
+          <Meta entry={entry} now={now} />
         </View>
       </Pressable>
     </View>
@@ -200,7 +218,7 @@ export function SkeletonRow() {
           <View style={{ width: '95%', height: 16, borderRadius: 8, backgroundColor: 'rgba(5,52,110,0.09)' }} />
           <View style={{ width: '70%', height: 16, borderRadius: 8, backgroundColor: 'rgba(5,52,110,0.09)' }} />
         </View>
-        <View style={{ width: 104, height: 92, borderRadius: 10, backgroundColor: 'rgba(5,52,110,0.09)' }} />
+        <View style={{ width: 104, height: 98, borderRadius: 10, backgroundColor: 'rgba(5,52,110,0.09)' }} />
       </Animated.View>
     </View>
   );
@@ -212,7 +230,7 @@ export function FeedSkeleton() {
   return (
     <View accessibilityLabel="Loading news" style={{ flex: 1 }}>
       <Animated.View style={[{ marginHorizontal: SIDE, marginTop: 6, marginBottom: 14, borderRadius: RADIUS.lg, backgroundColor: 'rgba(255,255,255,0.75)', borderWidth: 3, borderColor: BRAND.white, overflow: 'hidden' }, style]}>
-        <View style={{ width: '100%', aspectRatio: 16 / 9, backgroundColor: 'rgba(5,52,110,0.08)' }} />
+        <View style={{ width: '100%', aspectRatio: 2, backgroundColor: 'rgba(5,52,110,0.08)' }} />
         <View style={{ padding: 14, gap: 10 }}>
           <View style={{ width: 110, height: 18, borderRadius: 9, backgroundColor: 'rgba(5,52,110,0.08)' }} />
           <View style={{ width: '92%', height: 22, borderRadius: 11, backgroundColor: 'rgba(5,52,110,0.08)' }} />
@@ -243,20 +261,53 @@ export function InfoRow({ label, action, onPress }: { readonly label: string; re
   );
 }
 
-/** End of the feed: the site itself, with Dustin's wordmark and the TPS shark. */
-export function SiteCard({ onVisit, label = 'Visit themeparkshark.com' }: { readonly onVisit: () => void; readonly label?: string }) {
+export const SITE_HOME = 'https://themeparkshark.com/';
+export const SITE_WAIT_TIMES = 'https://themeparkshark.com/category/wait-times/';
+
+function SiteTile({ icon, label, onPress }: { readonly icon: 'sparkle' | 'timer' | 'map'; readonly label: string; readonly onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${label} on themeparkshark.com`} accessibilityHint="Asks a grown-up first" onPress={onPress}
+      style={({ pressed }) => ({ flex: 1, minHeight: 92, borderRadius: RADIUS.md, backgroundColor: BRAND.white, borderWidth: 3, borderBottomWidth: 6,
+        borderColor: BRAND.blueLip, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, paddingVertical: 8, gap: 4,
+        transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+      <GameIcon name={icon} size={32} />
+      <Text numberOfLines={2} maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 14, lineHeight: 16, color: BRAND.navy, textAlign: 'center' }}>{label}</Text>
+      <View style={{ position: 'absolute', top: 5, right: 5 }}><GameIcon name="lock" size={14} /></View>
+    </Pressable>
+  );
+}
+
+/**
+ * themeparkshark.com, shown off: Dustin's wordmark, the TPS shark and three
+ * drawn tiles into the site (this story, wait times, all the news). Each tile
+ * goes through the grown-up gate (the small lock says so before the tap).
+ */
+export function SiteCard({ onOpen, storyUrl }: { readonly onOpen: (url: string) => void; readonly storyUrl?: string | null }) {
+  return (
+    <View style={{ borderRadius: RADIUS.lg, backgroundColor: BRAND.blue, borderWidth: 3, borderBottomWidth: 6, borderColor: BRAND.blueLip, padding: 14, gap: 10, overflow: 'hidden' }}>
+      <Image source={TPS_WORDMARK} style={{ width: '96%', alignSelf: 'center', aspectRatio: 1284 / 322 }} contentFit="contain" accessibilityLabel="Theme Park Shark" />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Image source={TPS_SHARK} style={{ width: 56, height: 56 }} contentFit="contain" />
+        <Text maxFontSizeMultiplier={1.3} style={{ flex: 1, fontFamily: 'Knockout', fontSize: 18, lineHeight: 22, color: BRAND.white }}>
+          Guides, wait times and every story live on themeparkshark.com. A grown-up opens it.
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        {storyUrl
+          ? <SiteTile icon="sparkle" label="This story" onPress={() => onOpen(storyUrl)} />
+          : <SiteTile icon="sparkle" label="Top stories" onPress={() => onOpen(SITE_HOME)} />}
+        <SiteTile icon="timer" label="Wait times" onPress={() => onOpen(SITE_WAIT_TIMES)} />
+        <SiteTile icon="map" label="All the news" onPress={() => onOpen(SITE_HOME)} />
+      </View>
+    </View>
+  );
+}
+
+/** End of the feed: the site card on the cream sheet. */
+export function SiteRow({ onOpen }: { readonly onOpen: (url: string) => void }) {
   return (
     <View style={{ paddingHorizontal: SIDE, paddingTop: 10, paddingBottom: 16, backgroundColor: BRAND.cream }}>
-      <View style={{ borderRadius: RADIUS.lg, backgroundColor: BRAND.blue, borderWidth: 3, borderBottomWidth: 6, borderColor: BRAND.blueLip, padding: 16, alignItems: 'center', gap: 10, overflow: 'hidden' }}>
-        <Image source={TPS_WORDMARK} style={{ width: '92%', aspectRatio: 1284 / 322 }} contentFit="contain" accessibilityLabel="Theme Park Shark" />
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Image source={TPS_SHARK} style={{ width: 64, height: 64 }} contentFit="contain" />
-          <Text maxFontSizeMultiplier={1.25} style={{ flex: 1, fontFamily: 'Knockout', fontSize: 18, lineHeight: 22, color: BRAND.white }}>
-            Every story, park guide and wait time lives on themeparkshark.com.
-          </Text>
-        </View>
-        <GameButton label={label} onPress={onVisit} accessibilityHint="Asks a grown-up, then opens the website" />
-      </View>
+      <SiteCard onOpen={onOpen} />
     </View>
   );
 }

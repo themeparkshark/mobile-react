@@ -7,18 +7,18 @@
  * Chips match Standings: white pills with a 4 px lip, gold when chosen.
  */
 import * as Haptics from 'expo-haptics';
-import { useCallback, useContext, useEffect, useRef } from 'react';
+import useTapSound from './useTapSound';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
-import { SoundEffectContext } from '../../context/SoundEffectProvider';
-import { BRAND, GameIcon, RADIUS } from '../../ui';
+import { BRAND, GameIcon, RADIUS, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { NEWS_FILTERS, filterByKey, type NewsFilterKey } from './newsModel';
 
-const tapSound = require('../../../assets/sounds/tap.mp3');
 
-function Chip({ label, on, small = false, onPress, onLayout }: {
-  readonly label: string; readonly on: boolean; readonly small?: boolean; readonly onPress: () => void;
+function Chip({ label, icon, on, small = false, onPress, onLayout }: {
+  readonly label: string; readonly icon?: GameIconName; readonly on: boolean; readonly small?: boolean; readonly onPress: () => void;
   readonly onLayout?: (x: number, w: number) => void;
 }) {
   return (
@@ -26,17 +26,18 @@ function Chip({ label, on, small = false, onPress, onLayout }: {
       onLayout={e => onLayout?.(e.nativeEvent.layout.x, e.nativeEvent.layout.width)}
       onPress={onPress}
       style={({ pressed }) => ({
-        height: small ? 34 : 40, paddingHorizontal: small ? 12 : 15, borderRadius: RADIUS.pill, justifyContent: 'center',
-        backgroundColor: on ? BRAND.gold : BRAND.white, borderWidth: 2, borderBottomWidth: small ? 3 : 4,
-        borderColor: on ? BRAND.goldLip : 'rgba(5,52,110,0.2)', transform: [{ scale: pressed ? 0.95 : 1 }],
+        height: small ? 36 : 42, paddingHorizontal: small ? 12 : 13, borderRadius: RADIUS.pill, flexDirection: 'row', alignItems: 'center', gap: 6,
+        backgroundColor: on ? BRAND.gold : BRAND.white, borderWidth: 3, borderBottomWidth: small ? 4 : 5,
+        borderColor: on ? BRAND.goldLip : 'rgba(5,52,110,0.26)', transform: [{ scale: pressed ? 0.95 : 1 }],
       })}>
-      <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: small ? 13 : 15, color: BRAND.navy }}>{label}</Text>
+      {icon && <GameIcon name={icon} size={small ? 18 : 22} />}
+      <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: small ? 13 : 15, color: BRAND.navy }}>{label}</Text>
     </Pressable>
   );
 }
 
 function ChipRow({ items, value, small, onChange, leading }: {
-  readonly items: readonly { key: string; label: string }[]; readonly value: string; readonly small?: boolean;
+  readonly items: readonly { key: string; label: string; icon?: GameIconName }[]; readonly value: string; readonly small?: boolean;
   readonly onChange: (key: string) => void; readonly leading?: React.ReactNode;
 }) {
   const scroller = useRef<ScrollView>(null);
@@ -48,16 +49,30 @@ function ChipRow({ items, value, small, onChange, leading }: {
     if (spot) scroller.current?.scrollTo({ x: Math.max(0, spot.x - (width - spot.w) / 2), animated: true });
   }, [width]);
   useEffect(() => { reveal(value); }, [value, reveal]);
+  const [atEnd, setAtEnd] = useState(false);
   return (
-    <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ paddingHorizontal: 14, gap: 8, alignItems: 'center' }}>
-      {leading}
-      {items.map(item => (
-        <Chip key={item.key} label={item.label} on={item.key === value} small={small}
-          onLayout={(x, w) => { spots.current.set(item.key, { x, w }); if (item.key === value) reveal(item.key); }}
-          onPress={() => onChange(item.key)} />
-      ))}
-    </ScrollView>
+    <View>
+      <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" scrollEventThrottle={64}
+        onScroll={e => {
+          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+          const end = contentOffset.x + layoutMeasurement.width >= contentSize.width - 8;
+          if (end !== atEnd) setAtEnd(end);
+        }}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 2, gap: 8, alignItems: 'center' }}>
+        {leading}
+        {items.map(item => (
+          <Chip key={item.key} label={item.label} icon={item.icon} on={item.key === value} small={small}
+            onLayout={(x, w) => { spots.current.set(item.key, { x, w }); if (item.key === value) reveal(item.key); }}
+            onPress={() => onChange(item.key)} />
+        ))}
+      </ScrollView>
+      {/* More chips this way: a soft water fade at the edge until the row is scrolled to its end. */}
+      {!atEnd && (
+        <LinearGradient pointerEvents="none" start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+          colors={['rgba(14,127,217,0)', 'rgba(14,127,217,0.85)']}
+          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 36 }} />
+      )}
+    </View>
   );
 }
 
@@ -72,10 +87,10 @@ export default function NewsFilterBar({ filter, park, searching, query, onFilter
   readonly onSearchClose: () => void;
   readonly onQuery: (text: string) => void;
 }) {
-  const { playSound } = useContext(SoundEffectContext);
+  const tap = useTapSound();
   const reduced = useUiReducedMotion();
   const tick = () => {
-    playSound(tapSound);
+    tap();
     void Haptics.selectionAsync().catch(() => undefined);
   };
   const parks = filterByKey(filter).parks;
@@ -107,8 +122,8 @@ export default function NewsFilterBar({ filter, park, searching, query, onFilter
   const search = (
     <Pressable key="search" accessibilityRole="button" accessibilityLabel="Search the news" hitSlop={4}
       onPress={() => { tick(); onSearchOpen(); }}
-      style={({ pressed }) => ({ width: 44, height: 40, borderRadius: RADIUS.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.white,
-        borderWidth: 2, borderBottomWidth: 4, borderColor: 'rgba(5,52,110,0.2)', transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+      style={({ pressed }) => ({ width: 46, height: 42, borderRadius: RADIUS.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.white,
+        borderWidth: 3, borderBottomWidth: 5, borderColor: 'rgba(5,52,110,0.26)', transform: [{ scale: pressed ? 0.95 : 1 }] })}>
       <GameIcon name="search" size={22} />
     </Pressable>
   );

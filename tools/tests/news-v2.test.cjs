@@ -48,8 +48,27 @@ test('without categories (live v1 server) title words still place stories', () =
   assert.equal(model.filterOf({ ...entry(1, ''), title: 'Universal Studios Hollywood Holidays 2026 Add Merry Minions' }), 'universal');
   assert.equal(model.filterOf({ ...entry(2, ''), title: 'Disney&#8217;s Lakeshore Lodge Reveals Branch &#038; Brush Lounge' }), 'disney');
   assert.equal(model.filterOf({ ...entry(3, ''), title: 'Holiday World Happy Halloween Weekends Tops Midwest Ranking' }), 'more');
-  assert.equal(model.filterOf({ ...entry(4, ''), title: 'Abbott Elementary Returns for Season 6' }), null);
+  assert.equal(model.filterOf({ ...entry(4, ''), title: 'Abbott Elementary Returns for Season 6' }), 'screen');
+  assert.equal(model.filterOf({ ...entry(9, ''), title: 'Disney Halloween Home Decor 2026' }), 'disney');
   assert.equal(model.parkLabel({ ...entry(5, ''), title: 'SeaWorld Orlando adds a coaster' }), 'SeaWorld');
+});
+
+test('shows, films, streaming and games stay out of the park feed (Movies & TV)', () => {
+  const screen = ['Abbott Elementary Returns for Season 6 on October 7', 'Disney+ Adds Super Bowl LXI Streaming on February 14, 2027',
+    'Star Wars: Galactic Racer Launches on PS5, Xbox Series X|S and PC', 'Huluween on Disney+ Returns With Hocus Pocus, New Specials',
+    'Avengers: Doomsday Footage Reveals Loki’s Return', 'Coven Academy Debuts October 1 on Freeform'];
+  const park = ['Rock ‘n’ Roller Coaster Gets Muppets Holiday Overlay November 4', 'Savi’s Workshop Adds Lightsaber Effects and Updated Hilt',
+    'Disney Believe Dining: Frozen Feast and Pluto’s Pita Platters', 'HHN 2026 Scare Zones Have Guest Triggers and Storm Effects'];
+  for (const title of screen) {
+    const e = { ...entry(1, ''), title, categories: [39] };
+    assert.equal(model.isScreenStory(e), true, title);
+    assert.equal(model.matchesFilter(e, 'all'), false, title);
+    assert.equal(model.matchesFilter(e, 'screen'), true, title);
+    assert.equal(model.parkLabel(e), 'Movies & TV');
+  }
+  for (const title of park) assert.equal(model.isScreenStory({ ...entry(2, ''), title, categories: [39] }), false, title);
+  // A park-level category always wins (a film night at EPCOT is park news).
+  assert.equal(model.isScreenStory({ ...entry(3, ''), title: 'Movie night returns', categories: [39, 42] }), false);
 });
 
 test('park chips match exact categories and fall back to the brand without them', () => {
@@ -135,7 +154,8 @@ test('WordPress posts and both server versions map to the same story shape', () 
   };
   const e = model.entryFromWordPress(post);
   assert.equal(e.featured_image, 'https://x/a-768x432.jpg');
-  assert.equal(e.featured_image_full, 'https://x/a-1024x576.jpg');
+  assert.equal(e.featured_image_large, 'https://x/a-1024x576.jpg');
+  assert.equal(e.featured_image_full, 'https://x/full.jpg');
   assert.equal(e.image_credit, 'Photo: Disney');
   assert.deepEqual([...e.categories], [39, 40]);
   assert.equal(model.entryFromWordPress({}), null);
@@ -153,6 +173,9 @@ test('feed rows: lead story, day dividers, a photo story every few rows, then th
   const list = Array.from({ length: 12 }, (_, i) => entry(i + 1, new Date(NOW - i * 5 * 3600000).toISOString().slice(0, 19)));
   const out = rows.buildFeedRows({ entries: list, lead: true, now: NOW, searchLabel: null, loadingMore: false, failed: false, end: true, stale: false });
   assert.equal(out[0].type, 'hero');
+  // NEW: at most three, park stories only, never on the lead (it already says TOP STORY).
+  assert.ok(out.filter(r => r.fresh).length <= 3);
+  assert.equal(out[0].fresh, false);
   assert.equal(out[1].type, 'sheet');
   assert.equal(out[2].type, 'day');
   assert.ok(out.some(r => r.type === 'feature'));
@@ -180,8 +203,11 @@ test('kid safety: every way out of the reader goes through services/external', (
 
 test('the reader clears the Dynamic Island and the server contract stays additive', () => {
   const reader = read('src/screens/ArticleScreen.tsx');
-  assert.match(reader, /useSafeAreaInsets/);
-  assert.match(reader, /paddingTop: insets\.top/);
+  // The house Topbar (it sits below the status bar and the Dynamic Island) with Alex's back button.
+  assert.match(reader, /<Topbar>/);
+  assert.match(reader, /<BackButton \/>/);
+  // The left edge stays free for the iOS back swipe.
+  assert.match(reader, /left edge belongs to the iOS back swipe/);
   const feed = read('src/screens/NewsScreen/newsFeed.ts');
   // Old and new servers both answer GET /news with { data: [...] }; v2 is detected, never assumed.
   assert.match(feed, /client\.get\('\/news'/);

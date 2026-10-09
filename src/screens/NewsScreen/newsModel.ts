@@ -12,6 +12,8 @@ import type { EntryType } from '../../models/entry-type';
 export type NewsEntry = EntryType & {
   /** WordPress category ids, when the source sent them. */
   readonly categories?: readonly number[];
+  /** WordPress "large" (1024 px): the reader's hero, never the multi-MB original. */
+  readonly featured_image_large?: string | null;
   readonly image_width?: number | null;
   readonly image_height?: number | null;
   readonly image_credit?: string | null;
@@ -70,7 +72,7 @@ export function isFresh(date: string | null | undefined, now: number = Date.now(
 
 /* ----------------------------------------------------- filters and parks */
 
-export type NewsFilterKey = 'all' | 'disney' | 'universal' | 'seaworld' | 'more';
+export type NewsFilterKey = 'all' | 'disney' | 'universal' | 'seaworld' | 'more' | 'screen';
 
 export type NewsPark = {
   readonly key: string;
@@ -82,6 +84,8 @@ export type NewsPark = {
 export type NewsFilter = {
   readonly key: NewsFilterKey;
   readonly label: string;
+  /** UI kit icon on the chip (generic drawn art, never a park logo). */
+  readonly icon: 'star' | 'sparkle' | 'ride' | 'fin' | 'map' | 'camera';
   /** Every WordPress category id inside this filter (parent and children). */
   readonly ids: readonly number[];
   /** Park chips shown under the filter once it is picked. */
@@ -95,10 +99,11 @@ export type NewsFilter = {
  * stable in WordPress; a new child category simply falls back to the parent.
  */
 export const NEWS_FILTERS: readonly NewsFilter[] = [
-  { key: 'all', label: 'Top Stories', ids: [], parks: [], words: null },
+  { key: 'all', label: 'Top Stories', icon: 'star', ids: [], parks: [], words: null },
   {
     key: 'disney',
     label: 'Disney',
+    icon: 'sparkle',
     ids: [39, 40, 41, 42, 43, 44, 45, 46, 48, 49, 50, 51, 52, 53, 54, 55, 72, 73, 75, 76, 77, 114, 1041],
     parks: [
       { key: 'wdw', label: 'Walt Disney World', ids: [40, 41, 42, 43, 44, 45, 46, 72, 73, 76, 1041] },
@@ -111,6 +116,7 @@ export const NEWS_FILTERS: readonly NewsFilter[] = [
   {
     key: 'universal',
     label: 'Universal',
+    icon: 'ride',
     ids: [47, 56, 57, 58, 71, 78, 513, 645, 932, 997, 1055],
     parks: [
       { key: 'uor', label: 'Orlando', ids: [56] },
@@ -124,6 +130,7 @@ export const NEWS_FILTERS: readonly NewsFilter[] = [
   {
     key: 'seaworld',
     label: 'SeaWorld',
+    icon: 'fin',
     ids: [59, 60, 68, 69, 70, 74, 1639],
     parks: [],
     words: /\b(seaworld|busch gardens|aquatica|discovery cove|sesame place|adventure island|howl-o-scream)\b/i,
@@ -131,9 +138,19 @@ export const NEWS_FILTERS: readonly NewsFilter[] = [
   {
     key: 'more',
     label: 'More Parks',
+    icon: 'map',
     ids: [61, 63, 64, 65, 66, 67, 120],
     parks: [],
     words: /\b(six flags|cedar point|legoland|knott'?s|dollywood|hersheypark|holiday world|kings island|carowinds|silver dollar city|kennywood|europa-park|efteling)\b/i,
+  },
+  {
+    // Shows, films, streaming and games: real TPS stories, kept out of the park feed's lead.
+    key: 'screen',
+    label: 'Movies & TV',
+    icon: 'camera',
+    ids: [],
+    parks: [],
+    words: null,
   },
 ];
 
@@ -156,10 +173,33 @@ const PARK_LABELS: Readonly<Record<number, string>> = {
 /** Specific parks win over resorts, resorts over brands. */
 const LABEL_ORDER = [41, 42, 43, 44, 46, 49, 50, 51, 71, 932, 1639, 68, 69, 64, 65, 66, 63, 67, 52, 53, 54, 55, 56, 57, 58, 645, 40, 45, 1041, 76, 72, 73, 48, 75, 77, 59, 60, 70, 74, 114, 997, 513, 1055, 78, 61, 120, 39, 47];
 
+/** Park-level categories (not the bare Disney / Universal / More brand buckets). */
+const PARK_LEVEL = new Set(NEWS_FILTERS.flatMap(f => f.ids).filter(id => ![39, 47, 61, 114, 120].includes(id)));
+const PARK_WORDS = /\b(parks?|resorts?|cruises?|ships?|rides?|attractions?|lands?|festivals?|parades?|fireworks|hotels?|lodge|restaurants?|dining|menus?|food|snacks?|treats?|merch(?:andise)?|shops?|stores?|tickets?|pass(?:holders?)?|queues?|wait times?|epcot|magic kingdom|disneyland|disney world|disney springs|citywalk|horror nights|coasters?|imagineering|d23|meet and greet|characters?|haunted houses?|scare zones?)\b/i;
+const SCREEN_WORDS = /disney\+|huluween|\b(hulu|espn|abc|freeform|disney channel|national geographic|streaming|season \d+|premieres?|series|sitcom|episodes?|trailer|teaser|box office|theatrical|films?|movies?|comic(?:s|-con)?|novels?|video games?|ps5|xbox|playstation|nintendo switch|albums?|super bowl|nfl|nba|oscars?|emmys?|footage|cast|actors?|actress|directors?|sequel|box set)\b/i;
+
+/**
+ * A screen story (TV, film, streaming, games): kept out of the park feed's
+ * lead, Up next and NEW, and found under Movies & TV.
+ */
+const screenMemo = new WeakMap<NewsEntry, boolean>();
+export function isScreenStory(entry: NewsEntry): boolean {
+  let hit = screenMemo.get(entry);
+  if (hit === undefined) screenMemo.set(entry, (hit = screenStory(entry)));
+  return hit;
+}
+function screenStory(entry: NewsEntry): boolean {
+  if (entry.categories && entry.categories.some(id => PARK_LEVEL.has(id))) return false;
+  const title = plainText(entry.title);
+  if (PARK_WORDS.test(title)) return false;
+  return SCREEN_WORDS.test(title) || SCREEN_WORDS.test(dek(entry, 200));
+}
+
 export function filterOf(entry: NewsEntry): NewsFilterKey | null {
+  if (isScreenStory(entry)) return 'screen';
   if (entry.categories && entry.categories.length) {
     for (const filter of NEWS_FILTERS) {
-      if (filter.key !== 'all' && entry.categories.some(id => filter.ids.includes(id))) return filter.key;
+      if (filter.ids.length && entry.categories.some(id => filter.ids.includes(id))) return filter.key;
     }
     return null;
   }
@@ -171,7 +211,14 @@ export function filterOf(entry: NewsEntry): NewsFilterKey | null {
 }
 
 /** The small tag on a card ("EPCOT", "Universal Hollywood"); null when unknown. */
+const labelMemo = new WeakMap<NewsEntry, string | null>();
 export function parkLabel(entry: NewsEntry): string | null {
+  let hit = labelMemo.get(entry);
+  if (hit === undefined) labelMemo.set(entry, (hit = labelOf(entry)));
+  return hit;
+}
+function labelOf(entry: NewsEntry): string | null {
+  if (isScreenStory(entry)) return 'Movies & TV';
   if (entry.categories && entry.categories.length) {
     for (const id of LABEL_ORDER) if (entry.categories.includes(id)) return PARK_LABELS[id];
   }
@@ -180,7 +227,8 @@ export function parkLabel(entry: NewsEntry): string | null {
 }
 
 export function matchesFilter(entry: NewsEntry, filter: NewsFilterKey, park: string | null = null): boolean {
-  if (filter === 'all') return true;
+  // Top Stories is the park feed: screen stories live under Movies & TV.
+  if (filter === 'all') return !isScreenStory(entry);
   const f = filterByKey(filter);
   if (park) {
     const p = f.parks.find(x => x.key === park);
@@ -219,7 +267,11 @@ const CREDIT = /^(?:(?:photo|image|images|video)s?(?: courtesy)?(?: of)?:?|court
  * One or two sentence dek for a card: the story's first real paragraph
  * (never a photo credit), else the WordPress excerpt.
  */
-export function dek(entry: NewsEntry, max = 150): string {
+const leadMemo = new WeakMap<NewsEntry, string>();
+/** The story's first real paragraph (or its excerpt), worked out once per story. */
+function leadText(entry: NewsEntry): string {
+  let hit = leadMemo.get(entry);
+  if (hit !== undefined) return hit;
   let text = '';
   for (const m of String(entry.content ?? '').matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)) {
     const para = plainText(m[1]);
@@ -233,6 +285,12 @@ export function dek(entry: NewsEntry, max = 150): string {
       if (!CREDIT.test(text)) break;
     }
   }
+  leadMemo.set(entry, text);
+  return text;
+}
+
+export function dek(entry: NewsEntry, max = 150): string {
+  const text = leadText(entry);
   if (text.length <= max) return text;
   const cut = text.slice(0, max);
   const sentence = cut.lastIndexOf('. ');
@@ -240,10 +298,15 @@ export function dek(entry: NewsEntry, max = 150): string {
   return `${cut.slice(0, cut.lastIndexOf(' '))}...`;
 }
 
+const minutesMemo = new WeakMap<NewsEntry, number>();
 export function readMinutes(entry: NewsEntry): number {
   if (entry.read_minutes && entry.read_minutes > 0) return entry.read_minutes;
-  const words = plainText(entry.content ?? '').split(' ').filter(Boolean).length;
-  return Math.max(1, Math.round(words / 200));
+  let hit = minutesMemo.get(entry);
+  if (hit === undefined) {
+    const words = plainText(entry.content ?? '').split(' ').filter(Boolean).length;
+    minutesMemo.set(entry, (hit = Math.max(1, Math.round(words / 200))));
+  }
+  return hit;
 }
 
 /* -------------------------------------------------------------- images */
@@ -300,6 +363,12 @@ export function prepareArticleHtml(html: string | null | undefined): string {
     return `<tpsvideo data-id="${id}" data-title="${title.replace(/"/g, '&quot;')}" data-short="${tall || /#shorts/i.test(title) ? '1' : '0'}"></tpsvideo>`;
   });
   out = out.replace(/<p>\s*(?:&nbsp;| )?\s*<\/p>/gi, '');
+  // Links say where they go before the tap: TPS stories open in the reader, the rest ask a grown-up.
+  out = out.replace(/<a\b([^>]*)>/gi, (_m, attrs: string) => {
+    const href = /href="([^"]*)"/i.exec(attrs)?.[1] ?? '';
+    const cls = tpsArticleSlug(href) ? 'tps-link' : 'out-link';
+    return `<a class="${cls}"${attrs.replace(/\sclass="[^"]*"/gi, '')}>`;
+  });
   // Empty embed shells left behind.
   out = out.replace(/<figure[^>]*>\s*(?:<div[^>]*>\s*<\/div>\s*)?<\/figure>/gi, '');
   return out.trim();
@@ -328,10 +397,21 @@ export function mergeEntries(...lists: readonly (readonly NewsEntry[])[]): NewsE
     for (const entry of list) {
       if (!entry || typeof entry.id !== 'number') continue;
       const prev = byId.get(entry.id);
-      byId.set(entry.id, prev ? { ...prev, ...stripEmpty(entry) } : entry);
+      if (!prev || prev === entry) { byId.set(entry.id, entry); continue; }
+      const extra = stripEmpty(entry) as unknown as Record<string, unknown>;
+      const base = prev as unknown as Record<string, unknown>;
+      // Same story, nothing new: keep the old object so memoized cards skip their draw.
+      const changed = Object.keys(extra).some(k => !sameValue(base[k], extra[k]));
+      if (changed) byId.set(entry.id, { ...prev, ...(extra as unknown as NewsEntry) });
     }
   }
   return [...byId.values()].sort((a, b) => (newsTime(b.date) || 0) - (newsTime(a.date) || 0));
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((v, i) => v === b[i]);
+  return false;
 }
 
 function stripEmpty(entry: NewsEntry): NewsEntry {
@@ -348,7 +428,8 @@ export function relatedFor(entry: NewsEntry, list: readonly NewsEntry[], n = 3):
   const key = filterOf(entry);
   const others = list.filter(e => e.id !== entry.id);
   const same = key ? others.filter(e => filterOf(e) === key) : [];
-  const rest = others.filter(e => !same.includes(e));
+  // Park stories never suggest a TV or film story.
+  const rest = others.filter(e => !same.includes(e) && (key === 'screen' || !isScreenStory(e)));
   return [...same, ...rest].slice(0, n);
 }
 
@@ -376,7 +457,8 @@ export function entryFromWordPress(post: any): NewsEntry | null {
     id: post.id,
     date: post.date_gmt ?? post.date ?? '',
     featured_image: sized?.source_url ?? media?.source_url ?? null,
-    featured_image_full: sizes.large?.source_url ?? media?.source_url ?? null,
+    featured_image_full: media?.source_url ?? null,
+    featured_image_large: sizes.large?.source_url ?? null,
     title: post.title?.rendered ?? '',
     url: post.link ?? '',
     content: post.content?.rendered ?? '',

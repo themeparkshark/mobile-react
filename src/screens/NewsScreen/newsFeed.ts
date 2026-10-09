@@ -28,7 +28,7 @@ export const WP_TIMEOUT_MS = 15000;
 
 const FEED_KEY = 'tps.news.v2.feed';
 const READ_KEY = 'tps.news.v2.read';
-const SAVED_MAX = 30;
+const SAVED_MAX = 20;
 const READ_MAX = 400;
 
 const WP_FIELDS = 'id,date_gmt,title,link,excerpt,content,categories,_links,_embedded';
@@ -88,9 +88,14 @@ export async function loadReadIds(): Promise<Set<number>> {
   }
 }
 
+let readSave: ReturnType<typeof setTimeout> | null = null;
+/** Written a moment after the last change, so swiping through stories never writes storage mid-swipe. */
 export function saveReadIds(ids: ReadonlySet<number>): void {
-  const list = [...ids].slice(-READ_MAX);
-  AsyncStorage.setItem(READ_KEY, JSON.stringify(list)).catch(() => undefined);
+  if (readSave) clearTimeout(readSave);
+  readSave = setTimeout(() => {
+    readSave = null;
+    AsyncStorage.setItem(READ_KEY, JSON.stringify([...ids].slice(-READ_MAX))).catch(() => undefined);
+  }, 1200);
 }
 
 /* ------------------------------------------------------------ network */

@@ -3,14 +3,16 @@
  * lead story, the cream sheet edge, day dividers, story rows with a big
  * photo story every FEATURE_EVERY rows, then paging and the site card.
  */
-import { newsTime, type NewsEntry } from './newsModel';
+import { isFresh, isScreenStory, newsTime, type NewsEntry } from './newsModel';
 
 export type FeedRow =
-  | { readonly type: 'hero' | 'row' | 'feature'; readonly key: string; readonly entry: NewsEntry }
+  | { readonly type: 'hero' | 'row' | 'feature'; readonly key: string; readonly entry: NewsEntry; readonly fresh: boolean }
   | { readonly type: 'day' | 'search'; readonly key: string; readonly label: string }
   | { readonly type: 'sheet' | 'skeleton' | 'retry' | 'site' | 'stale'; readonly key: string };
 
 export const FEATURE_EVERY = 6;
+/** NEW goes on at most this many stories (the newest park stories under 12 hours old). */
+export const MAX_NEW = 3;
 
 /** "Today", "Yesterday", "This week" or "Earlier", in the phone's own calendar. */
 export function dayLabel(date: string, now: number): string {
@@ -37,9 +39,10 @@ export function buildFeedRows({ entries, lead, now, searchLabel, loadingMore, fa
   readonly stale: boolean;
 }): FeedRow[] {
   const rows: FeedRow[] = [];
+  const fresh = new Set(entries.filter(e => isFresh(e.date, now) && !isScreenStory(e)).slice(0, MAX_NEW).map(e => e.id));
   let rest = entries;
   if (lead && entries.length) {
-    rows.push({ type: 'hero', key: `hero-${entries[0].id}`, entry: entries[0] });
+    rows.push({ type: 'hero', key: `hero-${entries[0].id}`, entry: entries[0], fresh: false });
     rest = entries.slice(1);
   }
   rows.push({ type: 'sheet', key: 'sheet' });
@@ -60,7 +63,7 @@ export function buildFeedRows({ entries, lead, now, searchLabel, loadingMore, fa
     sinceFeature += 1;
     const feature = !searchLabel && sinceFeature > FEATURE_EVERY && !!entry.featured_image;
     if (feature) sinceFeature = 0;
-    rows.push({ type: feature ? 'feature' : 'row', key: `${feature ? 'f' : 'r'}-${entry.id}`, entry });
+    rows.push({ type: feature ? 'feature' : 'row', key: `${feature ? 'f' : 'r'}-${entry.id}`, entry, fresh: fresh.has(entry.id) });
   }
   if (loadingMore) {
     rows.push({ type: 'skeleton', key: 'sk-1' }, { type: 'skeleton', key: 'sk-2' });
