@@ -119,8 +119,7 @@ export default function NewsScreen() {
       const result = await fetchNewsPage({ filter: f, park: p, search: s || undefined, page });
       setLists(prev => {
         const base = mode === 'more' ? (prev[k] ?? EMPTY).entries : [];
-        // Search keeps WordPress's relevance order; everything else is newest first.
-        const entries = s ? [...base, ...result.entries.filter(e => !base.some(b => b.id === e.id))] : mergeEntries(base, result.entries);
+        const entries = mergeEntries(base, result.entries);
         return { ...prev, [k]: { ...(prev[k] ?? EMPTY), entries, page, hasMore: result.hasMore && result.entries.length > 0, loading: 'idle', failed: false } };
       });
       if (k === 'all:') {
@@ -201,8 +200,9 @@ export default function NewsScreen() {
   const shown = useMemo(() => {
     if (key === 'all:') return topEntries;
     if (search) {
+      // Headline matches already on the phone first, then the site's wider matches, newest first.
       const local = searchLocal(allLoaded, search);
-      return [...state.entries, ...local.filter(e => !state.entries.some(r => r.id === e.id))];
+      return [...local, ...mergeEntries(state.entries).filter(e => !local.some(r => r.id === e.id))];
     }
     const local = allLoaded.filter(e => matchesFilter(e, filter, park));
     return mergeEntries(local, state.entries);

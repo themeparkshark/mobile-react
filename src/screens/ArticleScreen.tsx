@@ -31,7 +31,7 @@ const BACK_ART = require('../../assets/images/screens/explore/back.png');
 const BAR_HEIGHT = 54;
 const BOTTOM_BAR = 58;
 
-type Params = { id?: number; ids?: number[]; entry?: NewsEntry };
+type Params = { id?: number; ids?: number[]; entry?: NewsEntry; fromStory?: boolean };
 
 function BarButton({ label, onPress, children, disabled = false, hint }: {
   readonly label: string; readonly onPress: () => void; readonly children: React.ReactNode; readonly disabled?: boolean; readonly hint?: string;
@@ -115,7 +115,7 @@ export default function ArticleScreen({ route, navigation }: any) {
     if (at >= 0) { goTo(at); return; }
     playSound(tapSound);
     rememberEntries([target]);
-    navigation.push('Article', { id: target.id, ids: [target.id, ...relatedFor(target, list, 6).map(e => e.id)] });
+    navigation.push('Article', { id: target.id, ids: [target.id, ...relatedFor(target, list, 6).map(e => e.id)], fromStory: true });
   }, [list, goTo, navigation, playSound]);
 
   const handlers: ArticleBodyHandlers = useMemo(() => ({
@@ -173,9 +173,9 @@ export default function ArticleScreen({ route, navigation }: any) {
       {/* Top bar: always visible, below the Dynamic Island. */}
       <View style={{ position: 'absolute', left: 0, right: 0, top: 0, paddingTop: insets.top, height: topInset, backgroundColor: BRAND.blue,
         borderBottomWidth: 3, borderBottomColor: BRAND.blueLip, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 10 }}>
-        <BarButton label="Back to News" onPress={back}>
+        <BarButton label={params.fromStory ? 'Back to the last story' : 'Back to News'} onPress={back}>
           <Image source={BACK_ART} style={{ width: 26, height: 26 }} contentFit="contain" />
-          <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>News</Text>
+          <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>{params.fromStory ? 'Back' : 'News'}</Text>
         </BarButton>
         <View style={{ flex: 1, alignItems: 'center' }}>
           {list.length > 1 && (
@@ -196,7 +196,9 @@ export default function ArticleScreen({ route, navigation }: any) {
             <View style={{ transform: [{ scaleX: -1 }] }}><GameIcon name="arrow" size={22} /></View>
             <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>Previous</Text>
           </BarButton>
-          <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft }}>Swipe for more</Text>
+          <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft }}>
+            {index >= list.length - 1 ? 'Last story' : 'Swipe for more'}
+          </Text>
           <BarButton label="Next story" disabled={index >= list.length - 1} onPress={() => goTo(index + 1)}>
             <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>Next</Text>
             <GameIcon name="arrow" size={22} />
