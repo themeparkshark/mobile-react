@@ -155,13 +155,15 @@ export interface Chaser {
   hx: number | null; hy: number | null;
   /** Standing but carried (the GPS keeps moving steadily): the run-on comes back. */
   carried: boolean;
+  /** The previous fix's miss when it was over 3 m (for the same-side shift rule). */
+  lastResid: [number, number] | null;
   /** Kalman estimate: position, its time, and the shared 2x2 covariance (null before the first fix). */
   kX: GlidePoint; kT: number; kP: [number, number, number, number] | null;
   /** The last few fixes (carried and step-agreement checks). */
   recent: { p: GlidePoint; t: number }[];
 }
 export function newChaser(at: GlidePoint, tMs: number): Chaser {
-  return { p: at, ve: 0, vn: 0, t: tMs, fix: at, fixT: tMs, re: 0, rn: 0, leadS: 0, walking: null, lastFix: at, lastFixT: tMs, walkSince: 0, offStep: null, hx: null, hy: null, carried: false, kX: at, kT: tMs, kP: null,
+  return { p: at, ve: 0, vn: 0, t: tMs, fix: at, fixT: tMs, re: 0, rn: 0, leadS: 0, walking: null, lastFix: at, lastFixT: tMs, walkSince: 0, offStep: null, hx: null, hy: null, carried: false, lastResid: null, kX: at, kT: tMs, kP: null,
     recent: [{ p: at, t: tMs }] };
 }
 const leadFor = (c: Chaser, v: number, gapS: number) => {
@@ -254,6 +256,13 @@ export function chaseAdvance(c: Chaser, tMs: number): GlidePoint {
     }
     c.ve += (w * w * ex + 2 * w * (te - c.ve)) * dt;
     c.vn += (w * w * ey + 2 * w * (tn - c.vn)) * dt;
+    // Walking: never slide backward along the walk unless the shark got well ahead (over 2.5 m); slow down instead.
+    const ts = Math.hypot(te, tn);
+    if (ts > 0.3) {
+      const ux = te / ts, uy = tn / ts;
+      const along = c.ve * ux + c.vn * uy;
+      if (along < 0 && ex * ux + ey * uy > -2.5) { c.ve -= along * ux; c.vn -= along * uy; }
+    }
     c.p = move(c.p, c.ve * dt, c.vn * dt);
     c.t += dt * 1000;
   }
@@ -304,7 +313,14 @@ export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, _rate: readonl
   }
   // No step sensor yet (the map just opened, or a phone without one): standing until the GPS itself shows
   // a walk (two steps that agree), so scatter at the map's opening never sets the shark wandering.
-  const standing = c.walking === false || (c.walking === null && !stepsAgree(c.recent));
+  // Two fixes in a row landing well away (over 3 m) on the same side: a real move, whatever the sensor says
+  // (a shuffle forward in a queue, a walk-off the stride detector missed).
+  const [sx, sy] = enM(c.kX, fix);
+  const sd = Math.hypot(sx, sy);
+  const shifted = sd > 3 && c.lastResid !== null && Math.hypot(...c.lastResid) > 3
+    && (sx * c.lastResid[0] + sy * c.lastResid[1]) / (sd * Math.hypot(...c.lastResid)) > 0.7;
+  c.lastResid = sd > 3 ? [sx, sy] : null;
+  const standing = c.walking === false || (c.walking === null && !stepsAgree(c.recent) && !shifted);
   // Carried while "standing" (a ride vehicle, a stroller): the last 3 or more fixes cover over 4 m in a nearly
   // straight line. Slowly drifting phone GPS while you stand never does that.
   c.carried = standing && carriedBy(c.recent);
@@ -325,12 +341,16 @@ export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, _rate: readonl
   const [ye, yn] = enM(pred, fix);
   // Standing: a fix is mostly scatter, so it counts for much less.
   const r = still ? FOLLOW_R_M * 2 : FOLLOW_R_M;
-  const S = p00 + r * r;
+  // A confirmed shift: the filter was too sure you stood still; reopen its position uncertainty.
+  const pp = shifted ? p00 + 9 : p00;
+  const S = pp + r * r;
   const near = Math.hypot(...enM(c.kX, fix)) < FOLLOW_STILL_DEADZONE_M;
-  const k0 = (p00 / S) * (still ? (near ? 0.1 : 0.25) : 1), k1 = still ? 0 : p10 / S;
+  const k0 = (pp / S) * (still && !shifted ? (near ? 0.1 : 0.25) : 1), k1 = still ? 0 : p10 / S;
   const est = move(pred, k0 * ye, k0 * yn);
   let re = vre + k1 * ye, rn = vrn + k1 * yn;
-  c.kP = [(1 - k0) * p00, (1 - k0) * p01, p10 - (p10 / S) * p00, p11 - (p10 / S) * p01];
+  // Posterior for the gain actually used (Joseph form on position): a fix counted at 10 % shrinks the
+  // uncertainty by about that much, not as if it counted in full, so the filter keeps listening.
+  c.kP = [(1 - k0) * (1 - k0) * pp + k0 * k0 * r * r, (1 - k0) * p01, p10 - (p10 / S) * p00, p11 - (p10 / S) * p01];
   const sp = Math.hypot(re, rn);
   if (sp > GLIDE_MAX_CARRY_MPS) { re *= GLIDE_MAX_CARRY_MPS / sp; rn *= GLIDE_MAX_CARRY_MPS / sp; }
   // Off to the side of where the shark was heading (cross-track): a turn is starting. Run on only one gap.

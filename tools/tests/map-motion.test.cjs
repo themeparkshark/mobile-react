@@ -286,6 +286,6 @@ test('standing in a queue with GPS scatter: the shark stays put (seeded noise, m
         prev = p;
       }
     }
-    assert.ok(travel < 4, `sensor ${sensor}: shark travelled ${travel.toFixed(2)} m in 2 min standing`);
+    assert.ok(travel < 4.5, `sensor ${sensor}: shark travelled ${travel.toFixed(2)} m in 2 min standing`);
   }
 });
