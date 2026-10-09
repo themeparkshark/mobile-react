@@ -38,6 +38,11 @@ export type SharkPassSeasonInfo = {
 
 export type SharkPassEvent = { readonly event: string; readonly points: number; readonly count_today: number; readonly points_today: number; readonly cap: number | null };
 
+export type SharkPassQuest = {
+  readonly key: string; readonly label: string; readonly count: number; readonly bonus: number;
+  readonly scope: 'day' | 'week'; readonly progress: number; readonly done: boolean;
+};
+
 export type SharkPassState =
   | { readonly enabled: false }
   | {
@@ -50,6 +55,7 @@ export type SharkPassState =
       readonly catch_up?: boolean; readonly catch_up_percent?: number; readonly top_prize?: SharkPassReward | null;
     };
     readonly tiers?: readonly SharkPassTier[];
+    readonly quests?: { readonly daily: readonly SharkPassQuest[]; readonly weekly: SharkPassQuest | null };
     readonly account_token?: string;
   };
 

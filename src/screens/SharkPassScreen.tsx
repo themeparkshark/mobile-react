@@ -357,6 +357,24 @@ export default function SharkPassScreen() {
               </Animated.View>
             )}
 
+            {/* Today's Pass quests: 3 a day (the first always doable at home) and one for the week. */}
+            {state.enabled && state.quests && !season.ended && (
+              <View style={s.quests}>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questsTitle}>TODAY’S PASS QUESTS</Text>
+                {[...state.quests.daily, ...(state.quests.weekly ? [state.quests.weekly] : [])].map(q => (
+                  <View key={`${q.scope}:${q.key}`} style={[s.questRow, q.done && s.questDone]}>
+                    <GameIcon name={q.done ? 'check' : q.scope === 'week' ? 'ride' : 'star'} size={24} />
+                    <View style={{ flex: 1 }}>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.questLabel}>{q.label}</Text>
+                      <View style={s.questBar}><View style={[s.questFill, { width: `${(q.progress / Math.max(1, q.count)) * 100}%` }]} /></View>
+                    </View>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? 'Done!' : `+${q.bonus}`}</Text>
+                  </View>
+                ))}
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>New quests every day. Skipping a day is fine.</Text>
+              </View>
+            )}
+
             {/* How to climb: the server's own point table, with today's count. */}
             <View style={s.earn}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={s.earnTitle}>HOW TO CLIMB</Text>
@@ -510,6 +528,15 @@ const s = StyleSheet.create({
   ctaSub: { fontFamily: FONT.body, fontSize: 14, color: '#6a3b00' },
   realMoney: { fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff' },
   restore: { fontFamily: FONT.body, fontSize: 15, color: '#ffffff', textDecorationLine: 'underline' },
+  quests: { marginHorizontal: 14, backgroundColor: '#123f80', borderRadius: 20, padding: 12, gap: 8, borderWidth: 3, borderColor: '#7dffb0' },
+  questsTitle: { fontFamily: FONT.display, fontSize: 17, color: '#7dffb0' },
+  questRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 8 },
+  questDone: { opacity: 0.75 },
+  questLabel: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
+  questBar: { height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.8)', marginTop: 4, overflow: 'hidden' },
+  questFill: { height: '100%', backgroundColor: '#7dffb0', borderRadius: 4 },
+  questBonus: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold, minWidth: 54, textAlign: 'right' },
+  questFoot: { fontFamily: FONT.body, fontSize: 13, color: '#e2f6ff', textAlign: 'center' },
   earn: { marginHorizontal: 14, backgroundColor: BRAND.cream, borderRadius: 20, padding: 12, gap: 6, borderWidth: 3, borderColor: BRAND.navy },
   earnTitle: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy },
   earnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
