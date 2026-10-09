@@ -16,7 +16,8 @@ const LEGACY = process.env.EXPO_PUBLIC_DEX_PREVIEW_LEGACY === '1';
 const ART = LEGACY ? '' : process.env.EXPO_PUBLIC_DEX_PREVIEW_ART ?? '';
 const RARITY = ['', 'common', 'uncommon', 'rare', 'epic', 'legendary'];
 const HINTS: Record<string, string> = {
-  always: 'Pops up near you, any time.',
+  // The live server's words (SpawnGate::hint).
+  always: process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real' ? 'Anytime, anywhere' : 'Pops up near you, any time.',
   time: 'After sunset',
   days: 'Weekends',
   seasonal: 'October only',
@@ -33,7 +34,7 @@ interface Scenario {
 }
 
 // One story per set: mid-hunt, finished and ready to claim, starter ready, resting at night, coming soon.
-const SCENARIOS: Record<string, Scenario> = {
+const SCENARIOS_ALL: Record<string, Scenario> = {
   snack_stand: { found: 8, starter: 'claimed', focused: true },
   churro_cart: { found: 9, starter: 'claimed' },
   sweet_treats: { found: 5, starter: 'claimable' },
@@ -48,6 +49,18 @@ const SCENARIOS: Record<string, Scenario> = {
   parade_day: { found: 0, starter: 'locked' },
   spooky_snacks: { found: 0, status: 'upcoming' },
 };
+
+// EXPO_PUBLIC_DEX_PREVIEW_SCENE=real: a typical mid-game player on today's five live sets (one set hunted,
+// a starter step ready, a night set and a rain set waiting for their time, one untouched).
+const REAL: Record<string, Scenario & { hint?: string }> = {
+  churro_collection: { found: 14, starter: 'claimed', focused: true },
+  pretzel_collection: { found: 9, starter: 'claimable' },
+  night_lights: { found: 3, starter: 'locked', spawning: false, hint: 'After sunset' },
+  rain_parade: { found: 1, starter: 'locked', spawning: false, hint: 'On rainy days' },
+  camera_crew: { found: 0, starter: 'locked' },
+};
+const SCENARIOS: Record<string, Scenario & { hint?: string }> = process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real' ? REAL : SCENARIOS_ALL;
+const STARTER_TARGET = process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real' ? 8 : 5;
 
 function owned(index: number, count: number, total: number): boolean {
   // Spread the finds so silhouettes mix in, Legendary last.
@@ -77,12 +90,12 @@ function build(set: MockDexSet, setIndex: number) {
   const found = items.filter(item => item.is_collected).length;
   const complete = found >= total;
   const starter: StarterMilestone | null = scene.starter ? {
-    target: 5, collected: Math.min(5, found), is_unlocked: scene.starter !== 'locked', rewards_claimed: scene.starter === 'claimed',
+    target: STARTER_TARGET, collected: Math.min(STARTER_TARGET, found), is_unlocked: scene.starter !== 'locked', rewards_claimed: scene.starter === 'claimed',
     rewards: { energy: 15, tickets: 1, experience: 30 },
   } : null;
   const rewards = { energy: set.reward.energy, tickets: set.reward.tickets, experience: set.reward.xp, title: set.reward.title, badge_url: null };
   const status = scene.status ?? 'active';
-  const timeGate = scene.spawning === false ? { start_hour: null, end_hour: null, description: 'After sunset', is_spawning_now: false } : null;
+  const timeGate = scene.spawning === false ? { start_hour: null, end_hour: null, description: scene.hint ?? 'After sunset', is_spawning_now: false } : null;
   const list: PrepItemSetListItem = {
     id: setIndex + 1, slug: set.slug, name: set.name, description: '', icon_url: null, theme: 'food',
     theme_config: { label: set.name, color: set.color }, rarity: 'common', is_focused: scene.focused === true,
@@ -106,7 +119,7 @@ function build(set: MockDexSet, setIndex: number) {
   const dexSet = {
     // Set badges are still being drawn: the set's top item stands in.
     slug: set.slug, color: set.color, badge_url: ART ? `${ART}/items/${set.items[set.items.length - 1].slug}.png` : null,
-    status, spawning_now: scene.spawning ?? (status === 'active' ? true : null), spawn_hint: HINTS[set.spawn] ?? null,
+    status, spawning_now: scene.spawning ?? (status === 'active' ? true : null), spawn_hint: scene.hint ?? HINTS[set.spawn] ?? null,
     reward: { coins: set.reward.coins },
   };
   const dexItems = items.map((item, index) => ({

@@ -1,8 +1,11 @@
 /**
- * A sticker slot in the book: the rarity frame and gems, the item art (or a
- * dark silhouette), the name underneath, an "x3" badge from two copies up,
- * a shimmer sweep on found
- * Legendaries, and a one-time flip from silhouette to color for a new find.
+ * A sticker in the album. Found: a bright white sticker in its rarity frame,
+ * the art in full color, a "+2" badge for extra copies, a shimmer sweep on
+ * Legendaries, and a one-time flip from shape to color for a new find.
+ * Still to find: an empty slot printed in the album (dashed edge, faded
+ * shape), so found and missing read apart at arm's length. The rarity lives
+ * on the group heading above the row, so tiles carry no gems and no names
+ * (the name is on the card a tap opens and in the VoiceOver label).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
@@ -12,10 +15,11 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
-import { BRAND, GameIcon } from '../../ui';
+import { BRAND, GameIcon, SHADOW } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { GIFT, itemArt, SILHOUETTE, SpringPress } from './DexParts';
-import { RarityGems, rarityLook, TilePanel } from './dexLook';
+import { GIFT, itemArt, SpringPress } from './DexParts';
+import { SLOT_COLORS } from './BookParts';
+import { rarityLook } from './dexLook';
 import type { DexItem } from './dexModel';
 
 // New finds flip once per device; the ids are remembered here.
@@ -92,22 +96,26 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress }: {
   const rimStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(shine.value) * 1.4) }));
 
   const art = artFailed ? GIFT : itemArt(item);
-  const artSize = width * 0.7;
+  const artSize = width * (item.found ? 0.76 : 0.66);
   const label = item.found
-    ? `${item.name}, ${look.label}${item.caught > 1 ? `, caught ${item.caught} times` : ''}`
-    : `Missing: ${item.name}, ${look.label}`;
+    ? `${item.name}, ${look.label}, found${item.spares > 0 ? `, ${item.spares} extra` : ''}${item.isNew ? ', new' : ''}`
+    : `${item.name}, ${look.label}, still to find`;
+  const panel = item.found
+    ? [styles.sticker, { borderColor: look.frame, width, height: width }]
+    : [styles.slot, { width, height: width }];
   return (
-    <SpringPress onPress={() => onPress(item)} accessibilityLabel={label} style={{ width, marginBottom: 10 }}>
+    <SpringPress onPress={() => onPress(item)} accessibilityLabel={label} style={{ width }}>
       <Animated.View style={flipStyle}>
-        <TilePanel key={item.id} rarity={item.rarity} found={item.found} style={{ width, height: width, justifyContent: 'center' }}>
+        <View key={item.id} style={panel}>
+          {item.found && <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(5,52,110,0.06)']} style={StyleSheet.absoluteFill} pointerEvents="none" />}
           <Animated.View style={[StyleSheet.absoluteFill, styles.center, colorStyle]}>
             <Image source={art} contentFit="contain" allowDownscaling recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
-              tintColor={item.found ? undefined : SILHOUETTE}
-              style={{ width: artSize, height: artSize, opacity: item.found ? 1 : 0.85 }} />
+              tintColor={item.found ? undefined : SLOT_COLORS.ink}
+              style={{ width: artSize, height: artSize, opacity: item.found ? 1 : 0.75 }} />
           </Animated.View>
           {flipping && (
             <Animated.View style={[StyleSheet.absoluteFill, styles.center, shadowStyle]}>
-              <Image source={art} contentFit="contain" allowDownscaling tintColor={SILHOUETTE} style={{ width: artSize, height: artSize }} />
+              <Image source={art} contentFit="contain" allowDownscaling tintColor={SLOT_COLORS.ink} style={{ width: artSize, height: artSize }} />
             </Animated.View>
           )}
           {item.rarity >= 5 && item.found && (
@@ -117,32 +125,33 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress }: {
             </Animated.View>
           )}
           {item.rarity >= 5 && item.found && <Animated.View style={[styles.rim, rimStyle]} pointerEvents="none" />}
-          <RarityGems rarity={item.rarity} size={Math.min(10, Math.floor((width - 16) / (Math.max(1, item.rarity) * 1.6)))} style={styles.gems} />
-          {item.caught > 1 && (
-            <View style={styles.count}><Text style={styles.countText} maxFontSizeMultiplier={1.2}>x{item.caught}</Text></View>
+          {item.found && item.spares > 0 && (
+            <View style={styles.count}><Text style={styles.countText} maxFontSizeMultiplier={1.2}>+{item.spares}</Text></View>
           )}
           {item.isNew && item.found && <View style={styles.newTag}><GameIcon name="new" size={30} /></View>}
-        </TilePanel>
+        </View>
       </Animated.View>
-      <Text numberOfLines={2} style={[styles.name, !item.found && styles.nameMissing]} maxFontSizeMultiplier={1.25}>{item.name}</Text>
     </SpringPress>
   );
 }, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress);
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  gems: { position: 'absolute', top: 7, left: 6 },
+  // A found sticker: white, its rarity frame, a lip and a soft lift off the cream page.
+  sticker: {
+    borderRadius: 16, borderWidth: 3, borderBottomWidth: 6, backgroundColor: BRAND.white, overflow: 'hidden', ...SHADOW.card,
+    shadowOpacity: 0.16, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+  },
+  // An empty slot printed in the album.
+  slot: {
+    borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: SLOT_COLORS.edge, backgroundColor: SLOT_COLORS.fill, overflow: 'hidden',
+  },
   count: {
-    position: 'absolute', bottom: 5, right: 4, minWidth: 30, height: 24, paddingHorizontal: 5, borderRadius: 12,
+    position: 'absolute', bottom: 4, right: 4, minWidth: 30, height: 22, paddingHorizontal: 5, borderRadius: 11,
     backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
   },
-  countText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white },
-  newTag: { position: 'absolute', bottom: 2, left: 2 },
+  countText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
+  newTag: { position: 'absolute', top: 0, left: 0 },
   shine: { position: 'absolute', width: 60, left: '35%' },
   rim: { ...StyleSheet.absoluteFillObject, borderRadius: 13, borderWidth: 4, borderColor: '#ffe07a' },
-  name: {
-    fontFamily: 'Shark', fontSize: 14, lineHeight: 15, color: BRAND.navy, textAlign: 'center', marginTop: 4,
-    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 8, overflow: 'hidden', paddingHorizontal: 3, paddingVertical: 2,
-  },
-  nameMissing: { color: '#2e4866', backgroundColor: 'rgba(225,236,247,0.94)' },
 });

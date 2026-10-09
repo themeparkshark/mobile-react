@@ -98,7 +98,7 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
               <ScrollView style={{ maxHeight: height * 0.78 }} contentContainerStyle={styles.bodyInner} showsVerticalScrollIndicator={false} bounces={false}>
               <View style={[styles.hero, { height: Math.min(photo ? 262 : 230, Math.round(height * (photo ? 0.31 : 0.27))) },
                 photo && styles.heroPhoto, item.goldenHour && !photo && styles.heroGolden]}>
-                {!item.found && <Animated.View style={[styles.halo, { backgroundColor: look.frame }, glowStyle]} />}
+                {!item.found && <Animated.View style={[styles.halo, { backgroundColor: 'rgba(255,255,255,0.45)' }, glowStyle]} />}
                 {item.found && !photo && <View style={[styles.halo, { backgroundColor: 'rgba(255,255,255,0.35)' }]} />}
                 {/* The burst sits behind the art, never over it. */}
                 {item.found && item.isNew && <StarBurst key={item.id} color={look.frame} />}
@@ -117,17 +117,18 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
                 </View>
                 <View style={[styles.caughtChip, item.found && item.foundInWorld !== false ? styles.caughtYes : null]}
                   accessible accessibilityLabel={caughtLine(item)}>
-                  <GameIcon name={item.found ? 'check' : 'search'} size={20} />
+                  <GameIcon name={item.found ? 'check' : 'lock'} size={20} />
                   <Text style={styles.caughtText}>{item.found && item.foundInWorld === false ? 'Swapped in' : caughtLine(item)}</Text>
                 </View>
               </View>
               {!!item.flavor && <Text style={styles.flavor}>{item.flavor}</Text>}
-              <Pressable accessibilityRole="button" accessibilityLabel={`Where to find it: ${item.spawnHint}. Open the map.`}
-                onPress={onFind} style={({ pressed }) => [styles.where, pressed && { opacity: 0.85 }]}>
+              <View style={styles.where} accessible accessibilityLabel={`When to look: ${item.spawnHint}`}>
                 <GameIcon name={spawnIcon(item.spawnHint)} size={30} />
-                <Text style={styles.whereText}>{item.spawnHint}</Text>
-                <GameIcon name="arrow" size={24} />
-              </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.whereLabel}>When to look</Text>
+                  <Text style={styles.whereText}>{item.spawnHint}</Text>
+                </View>
+              </View>
               {/* A missing find is earned on the map: one big, obvious way there. A swapped-in one points there too. */}
               {(!item.found || item.foundInWorld === false) && (
                 <GameButton label={item.found ? 'Catch one on the map' : 'Find it on the map'} icon="map" onPress={onFind} fullWidth
@@ -139,7 +140,7 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
                   onPress={() => { playSfx('ui.tap', 0.6); setSharing(true); setShareMount(true); }} fullWidth style={{ marginTop: 10 }} />
               )}
               {item.found && onShare && item.spares > 0 && (
-                <GameButton label="Share a spare" icon="gift" variant="secondary" onPress={onShare} fullWidth style={{ marginTop: 8 }} />
+                <GameButton label="Give an extra to a friend" icon="heart" variant="secondary" onPress={onShare} fullWidth style={{ marginTop: 8 }} />
               )}
               {!!error && <Text style={styles.error}>{error}</Text>}
               </ScrollView>
@@ -193,10 +194,11 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(5,52,110,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0,
   },
   where: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 52, marginTop: 12, paddingHorizontal: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, marginTop: 12, paddingHorizontal: 12, paddingVertical: 6,
     borderRadius: 16, backgroundColor: BRAND.white, borderWidth: 3, borderColor: '#bcd9f2',
   },
-  whereText: { flex: 1, fontFamily: 'Shark', fontSize: 16, lineHeight: 19, color: BRAND.navy },
+  whereLabel: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft },
+  whereText: { fontFamily: 'Shark', fontSize: 17, lineHeight: 20, color: BRAND.navy },
   error: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.white, marginTop: 8, textAlign: 'center' },
   close: { position: 'absolute', top: 14, right: -6, width: 50, height: 50, zIndex: 4 },
 });

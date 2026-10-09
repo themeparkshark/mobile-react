@@ -611,3 +611,68 @@ export function prizeChips(reward: Pick<DexReward, 'energy' | 'tickets' | 'exper
   if (reward.title) list.push({ icon: 'crown', value: reward.title, label: `the ${reward.title} title` });
   return list;
 }
+
+/** One row of the finds list: a rarity heading, or up to `columns` tiles. */
+export type FindRow =
+  | { readonly kind: 'heading'; readonly key: string; readonly rarity: 1 | 2 | 3 | 4 | 5; readonly label: string; readonly found: number; readonly total: number }
+  | { readonly kind: 'tiles'; readonly key: string; readonly items: readonly DexItem[] };
+
+/**
+ * The finds grouped by rarity, Common first and Legendary last (the big goal at the bottom), each group under
+ * a heading that names the rarity and its count. Set order is kept inside a group. Rows, not cells, so every
+ * tile sits on the same grid and recycled rows never shift.
+ */
+export function findRows(items: readonly DexItem[], columns: number): FindRow[] {
+  const rows: FindRow[] = [];
+  for (const rarity of [1, 2, 3, 4, 5] as const) {
+    const group = items.filter(item => item.rarity === rarity);
+    if (group.length === 0) continue;
+    rows.push({ kind: 'heading', key: `h${rarity}`, rarity, label: rarityLabel(rarity),
+      found: group.filter(item => item.found).length, total: group.length });
+    for (let i = 0; i < group.length; i += columns) {
+      const slice = group.slice(i, i + columns);
+      rows.push({ kind: 'tiles', key: `r${rarity}-${slice[0].id}`, items: slice });
+    }
+  }
+  return rows;
+}
+
+/** "On the map after sunset", "On the map anytime", "On the map on rainy days": where and when this book's finds show up. */
+export function whenLine(set: Pick<DexSet, 'spawnHint' | 'status' | 'startsAt'>, now: Date = new Date()): string {
+  if (set.status === 'retired') return 'No longer on the map. Yours to keep!';
+  if (set.status === 'upcoming') {
+    const start = set.startsAt ? new Date(set.startsAt) : null;
+    return start && !Number.isNaN(start.getTime()) && start.getTime() > now.getTime()
+      ? `On the map from ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'On the map soon';
+  }
+  const hint = (set.spawnHint ?? '').trim().replace(/\.$/, '');
+  if (!hint || GENERIC_HINT.test(hint) || /^anytime/i.test(hint)) return 'On the map anytime';
+  return `On the map ${hint.charAt(0).toLowerCase()}${hint.slice(1)}`;
+}
+
+/** Is the book's map window open right now? Null when it is always open (nothing to say). */
+export function openNow(set: Pick<DexSet, 'spawnHint' | 'spawningNow' | 'status'>): boolean | null {
+  if (set.status === 'retired' || set.status === 'upcoming') return false;
+  if (set.status === 'resting') return false;
+  if (set.spawningNow === false) return false;
+  if (!set.spawnHint || GENERIC_HINT.test(set.spawnHint.trim()) || /^anytime/i.test(set.spawnHint.trim())) return null;
+  return set.spawningNow === true ? true : null;
+}
+
+/** A prize row's state in words a kid reads at a glance. */
+export function prizeState(reward: Pick<DexReward, 'status' | 'target'>, found: number):
+  { readonly kind: 'claim' | 'done' | 'pending' | 'locked'; readonly toGo: number } {
+  if (reward.status === 'claimable') return { kind: 'claim', toGo: 0 };
+  if (reward.status === 'claimed') return { kind: 'done', toGo: 0 };
+  if (reward.status === 'pending') return { kind: 'pending', toGo: 0 };
+  return { kind: 'locked', toGo: Math.max(1, reward.target - found) };
+}
+
+/** Earlier steps then the finish reward, in target order (the prize list). */
+export function prizeList(set: Pick<DexSet, 'total' | 'reward' | 'steps'>): { readonly reward: DexReward; readonly final: boolean }[] {
+  return [
+    ...set.steps.filter(step => step.target < Math.max(1, set.total)).slice().sort((a, b) => a.target - b.target)
+      .map(reward => ({ reward, final: false })),
+    { reward: set.reward, final: true },
+  ];
+}
