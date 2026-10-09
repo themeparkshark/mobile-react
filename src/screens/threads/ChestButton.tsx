@@ -175,6 +175,7 @@ export default function ChestButton({
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint="Opens more Shark fun"
       style={styles.hit}
     >
       <View pointerEvents="none" style={styles.fx}>
