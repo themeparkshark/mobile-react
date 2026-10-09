@@ -60,12 +60,16 @@ function Meta({ entry, now, long = false }: { readonly entry: NewsEntry; readonl
   );
 }
 
-/** Already opened: a drawn check on the photo's corner (the card also fades a little). */
+/**
+ * Already opened: the app's own "done" check (Alex's badge, the same mark the
+ * game uses for finished goals) on the photo's corner. The photo and tag fade
+ * a little; the headline stays full navy so it is still easy to read.
+ */
 function ReadCheck() {
   return (
-    <View accessibilityElementsHidden importantForAccessibility="no" style={{ position: 'absolute', right: 6, top: 6, width: 26, height: 26, borderRadius: 13,
-      backgroundColor: BRAND.gold, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' }}>
-      <GameIcon name="check" size={15} mono={BRAND.navy} />
+    <View accessibilityElementsHidden importantForAccessibility="no" style={{ position: 'absolute', right: 5, top: 5, width: 30, height: 30, borderRadius: 15,
+      backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', ...SHADOW.card }}>
+      <GameIcon name="check" size={26} />
     </View>
   );
 }
