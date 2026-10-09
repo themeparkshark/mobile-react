@@ -68,8 +68,7 @@ function fixture(scene: string, step: number): TrailState {
 }
 
 const REWARDS: Record<number, TrailReward[]> = {
-  9: [{ kind: 'coins', amount: 175 }, { kind: 'mystery_box', amount: 1 }, { kind: 'exclusive', amount: 1, name: 'Party Inflatable Duck',
-    icon_url: 'https://assets.themeparkshark.com/mobile/production/assets/AzMgxAaIRVnqTnsVxJI7I6PM8N11kU6nEZfhyBhC.png' }],
+  9: [{ kind: 'coins', amount: 175 }, { kind: 'mystery_box', amount: 1 }, { kind: 'exclusive', amount: 1, name: 'Gold Footprint Crown', icon_url: 'file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/dustin-feedback-oct8/steps/art/exclusives/icon/gold-footprint-crown.png' }],
   10: [{ kind: 'coins', amount: 75 }, { kind: 'tickets', amount: 2 }],
   11: [{ kind: 'coins', amount: 30 }, { kind: 'energy', amount: 10 }],
 };
