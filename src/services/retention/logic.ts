@@ -24,18 +24,24 @@ const LABEL: Record<Exclude<RewardKind, 'item'>, [string, string]> = {
 };
 
 /** The reveal order: the rare stuff lands last, the way a pack opening saves the chase. */
-const ORDER: RewardKind[] = ['coins', 'bonus_coins', 'tickets', 'energy', 'xp', 'freezes', 'item', 'mystery_boxes'];
+const ORDER: RewardKind[] = ['xp', 'energy', 'coins', 'bonus_coins', 'tickets', 'freezes', 'item', 'mystery_boxes'];
 
 /** Big rows get their own held beat and a hero card. */
 export function isBigReward(kind: RewardKind): boolean {
-  return kind === 'item' || kind === 'mystery_boxes';
+  return kind === 'item' || kind === 'mystery_boxes' || kind === 'freezes';
+}
+
+/** How long after the last prize lands before the button appears (a big card gets time to be seen). */
+export function doneDelay(rows: readonly RewardRow[]): number {
+  const last = rows[rows.length - 1];
+  return last && isBigReward(last.kind) ? 600 : 150;
 }
 
 /**
  * When each row lands (ms after the lid pops): small rows every beat, a held
  * pause before each big one so it reads as its own moment.
  */
-export function rowSchedule(rows: readonly RewardRow[], beat = 380, hold = 450, first = 420): number[] {
+export function rowSchedule(rows: readonly RewardRow[], beat = 460, hold = 450, first = 420): number[] {
   const out: number[] = [];
   let t = first;
   rows.forEach((row, i) => {

@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Modal from 'react-native-modal';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import {
   buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
   type DailyThreeState, type LevelChest, type PaidRewards,
@@ -234,7 +235,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         : current.src === 'weekly' ? await claimWeeklyBox()
         : await openLevelChest(current.level ?? 0);
       // Let the shake build before the lid pops (anticipation reads at 450 ms+).
-      const wait = reducedMotion ? 0 : Math.max(0, 560 - (Date.now() - started));
+      // The Weekly Box shakes longest (900 ms): the week's biggest moment earns the longest wind-up.
+      const wait = reducedMotion ? 0 : Math.max(0, (current.src === 'weekly' ? 900 : 560) - (Date.now() - started));
       setTimeout(() => { if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards }); }, wait);
       if (result.state?.goals) applyDaily(result.state);
       if (current.src === 'level') setChests(cs => cs.map(c => (c.level === current.level ? { ...c, opened: true, rewards: result.rewards } : c)));
@@ -310,10 +312,15 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     );
   }
 
+  const xpNow = player?.experience ?? 0;
+  const xpNeed = player?.experience_level?.experience ?? 0;
   const nextLevel = (lv: number) => (
-    <View style={styles.nextRow}>
-      <Image source={LEVEL_CHEST} style={{ width: 30, height: 30 }} contentFit="contain" />
-      <Text style={styles.nextText}>{`Next: the Level ${lv + 1} chest`}</Text>
+    <View style={styles.nextBlock}>
+      <View style={styles.nextRow}>
+        <Image source={LEVEL_CHEST} style={{ width: 30, height: 30 }} contentFit="contain" />
+        <Text style={styles.nextText}>{`Next: Level ${lv + 1} chest with new gear`}</Text>
+      </View>
+      {xpNeed > 0 && <XpBar pct={Math.min(1, xpNow / xpNeed)} reducedMotion={reducedMotion} />}
     </View>
   );
 
@@ -414,8 +421,25 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   return { button, overlay, occluding: visible };
 }
 
+/** The road to the next level chest: fills from empty over 600 ms when the chest closes its show. */
+function XpBar({ pct, reducedMotion }: { readonly pct: number; readonly reducedMotion: boolean }) {
+  const w = useSharedValue(reducedMotion ? pct : 0);
+  useEffect(() => { w.value = reducedMotion ? pct : withTiming(pct, { duration: 600 }); }, [pct, reducedMotion, w]);
+  const fill = useAnimatedStyle(() => ({ width: `${Math.max(4, w.value * 100)}%` }));
+  return (
+    <View style={styles.xpTrack} accessibilityLabel={`${Math.round(pct * 100)} percent of the way to the next level`}>
+      <Animated.View style={[styles.xpFill, fill]} />
+      <GameIcon name="xp" size={22} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center' },
+  nextBlock: { gap: 6 },
+  xpTrack: { height: 16, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'visible', justifyContent: 'center',
+    marginHorizontal: 18, paddingLeft: 0 },
+  xpFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 8, backgroundColor: BRAND.gold },
   card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
     paddingTop: 22, paddingBottom: 14, paddingHorizontal: 14, alignItems: 'center', gap: 8 },
   bigArt: { width: 110, height: 110 },

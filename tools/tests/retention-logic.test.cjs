@@ -32,9 +32,9 @@ const state = (over = {}) => ({
 
 test('reward rows follow what the server paid, rare things last, zeros skipped', () => {
   const rows = L.rewardRows({ coins: 700, tickets: 1, energy: 0, xp: 40, mystery_boxes: 1, item: { id: 3, name: 'Star Shades', image: 'x.png', rarity: 2 } });
-  assert.deepEqual(plain(rows.map(r => r.kind)), ['coins', 'tickets', 'xp', 'item', 'mystery_boxes']);
-  assert.equal(rows[0].label, 'coins');
-  assert.equal(rows[1].label, 'Ticket');
+  assert.deepEqual(plain(rows.map(r => r.kind)), ['xp', 'coins', 'tickets', 'item', 'mystery_boxes']);
+  assert.equal(rows[1].label, 'coins');
+  assert.equal(rows[2].label, 'Ticket');
   assert.equal(rows[3].label, 'Star Shades');
   assert.equal(rows[4].label, 'Mystery Box');
   assert.deepEqual(plain(L.rewardRows({ coins: 0, item: null })), []);
@@ -129,9 +129,11 @@ test('bars only where the title names the count; the park catch never shows 0/2'
 
 test('the reveal holds before gear and boxes so each gets its own beat', () => {
   const rows = L.rewardRows({ coins: 50, tickets: 1, item: { id: 1, name: 'Cap', image: null, rarity: 1 }, mystery_boxes: 1 });
-  const t = L.rowSchedule(rows, 380, 450, 420);
-  assert.deepEqual(plain(t), [420, 800, 1630, 2460]);
-  assert.equal(L.rewardRows({ coins: 50, bonus_coins: 150 })[1].label, 'bonus coins');
+  const t = L.rowSchedule(rows, 460, 450, 420);
+  assert.deepEqual(plain(t), [420, 880, 1790, 2700]);
+  assert.equal(L.doneDelay(rows), 600, 'the big card gets time to be seen before the button');
+  assert.equal(L.doneDelay(L.rewardRows({ coins: 5 })), 150);
+  assert.equal(L.isBigReward('freezes'), true, 'the Weekly Box always ends on a hero card');
 });
 
 test('closing beats point at tomorrow and the next milestone, and a lost streak keeps its record', () => {

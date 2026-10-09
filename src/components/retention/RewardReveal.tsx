@@ -7,7 +7,7 @@ import Animated, {
 import type { PaidRewards } from '../../api/endpoints/retention';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
-import { isBigReward, rewardRows, rowSchedule, type RewardRow } from '../../services/retention/logic';
+import { doneDelay, isBigReward, rewardRows, rowSchedule, type RewardRow } from '../../services/retention/logic';
 import { BRAND, GameIcon } from '../../ui';
 import RewardBurst from '../RewardBurst';
 import { useAmbient } from './power';
@@ -66,6 +66,9 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const [landed, setLanded] = useState(0);
   const [swapped, setSwapped] = useState(false);
   const [stalled, setStalled] = useState(false);
+  // The button appears a beat after the last prize (600 ms after a hero card) and ignores taps for 400 ms after a skip.
+  const [buttonReady, setButtonReady] = useState(false);
+  const openedAt = useRef(0);
   const [stage, setStage] = useState<{ x: number; y: number } | null>(null);
   const rows = rewards ? rewardRows(rewards) : [];
   const revealed = !!rewards;
@@ -112,13 +115,15 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
 
   // The pop, then one row per beat (held beats before the big ones).
   useEffect(() => {
-    if (!revealed) { setLanded(0); setSwapped(false); return; }
+    if (!revealed) { setLanded(0); setSwapped(false); setButtonReady(false); return; }
+    openedAt.current = Date.now();
     cancelAnimation(shake); shake.value = 0;
     timers.current.forEach(clearTimeout); timers.current = [];
     if (reducedMotion) {
       setSwapped(true);
       haptic('success'); playSfx('fx.reward');
       rows.forEach((row, i) => later(() => { setLanded(n => Math.max(n, i + 1)); if (isBigReward(row.kind)) scroll.current?.scrollToEnd({ animated: false }); }, 120 * (i + 1)));
+      later(() => setButtonReady(true), 120 * rows.length + 300);
       return;
     }
     // Squash, flash, swap behind the flash, overshoot.
@@ -129,13 +134,17 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     burst.value = 0;
     burst.value = withDelay(120, withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }));
     later(() => { haptic('success'); playSfx('fx.reward'); }, 120);
-    rowSchedule(rows).forEach((ms, i) => later(() => {
+    const schedule = rowSchedule(rows);
+    later(() => setButtonReady(true), (schedule[schedule.length - 1] ?? 400) + doneDelay(rows));
+    schedule.forEach((ms, i) => later(() => {
       setLanded(n => Math.max(n, i + 1));
       const big = isBigReward(rows[i].kind);
       // On a small phone the rows scroll: the hero cards (always last) slide into view as they land.
       if (big) later(() => scroll.current?.scrollToEnd({ animated: true }), 40);
       haptic(big ? 'comboHeavy' : 'tickSelection');
       playSfx(big ? 'fx.firework' : rows[i].kind === 'coins' || rows[i].kind === 'bonus_coins' ? 'fx.coin' : 'fx.coinTick', big ? 1 : 0.8);
+      // Coins tick while they count up (3 soft ticks, never a stream).
+      if (rows[i].kind === 'coins') [120, 240, 360].forEach(d => later(() => playSfx('fx.coinTick', 0.45), d));
     }, ms));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealed, reducedMotion]);
@@ -146,8 +155,14 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: 0.35 + glow.value * 0.4, transform: [{ scale: 0.92 + glow.value * 0.08 }] }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
-  const allIn = revealed && landed >= rows.length;
-  const skip = () => { if (!revealed || allIn) return; timers.current.forEach(clearTimeout); timers.current = []; setLanded(rows.length); setSwapped(true); };
+  const allIn = revealed && landed >= rows.length && buttonReady;
+  const skip = () => {
+    // The first 350 ms after the lid pops ignore taps (a quick double tap never skips the show).
+    if (!revealed || allIn || Date.now() - openedAt.current < 350) return;
+    timers.current.forEach(clearTimeout); timers.current = [];
+    setLanded(rows.length); setSwapped(true);
+    later(() => setButtonReady(true), 400);
+  };
 
   return (
     <View style={styles.card}>
@@ -196,7 +211,7 @@ function rowIcon(row: RewardRow) {
     case 'tickets': return <GameIcon name="ticket" size={40} />;
     case 'energy': return <GameIcon name="energy" size={40} />;
     case 'xp': return <GameIcon name="xp" size={40} />;
-    case 'freezes': return <Image source={FREEZE} style={{ width: 40, height: 40 }} contentFit="contain" />;
+    case 'freezes': return <Image source={FREEZE} style={{ width: 64, height: 64 }} contentFit="contain" />;
     case 'mystery_boxes': return <Image source={BOX} style={{ width: 72, height: 72 }} contentFit="contain" />;
     case 'item': return row.image
       ? <Image source={{ uri: row.image }} style={{ width: 80, height: 80 }} contentFit="contain" />
@@ -233,7 +248,8 @@ function Row({ row, shown, reducedMotion, onWear, onPins, compact = false }: {
   useEffect(() => {
     if (!shown) { t.value = 0; return; }
     if (reducedMotion) { t.value = withTiming(1, { duration: 150 }); return; }
-    t.value = big ? withSequence(withTiming(1, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 260 }))
+    // Hero cards: slam, a 90 ms hit-stop, then settle.
+    t.value = big ? withSequence(withTiming(1, { duration: 120 }), withDelay(90, withSpring(1, { damping: 7, stiffness: 260 })))
       : withSpring(1, { damping: 10, stiffness: 220 });
     if (big) beam.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: 900 }));
   }, [shown, reducedMotion, big, t, beam]);
@@ -253,8 +269,9 @@ function Row({ row, shown, reducedMotion, onWear, onPins, compact = false }: {
         <View style={[styles.rowIcon, big && styles.rowIconBig]}>{rowIcon(row)}</View>
         {big ? (
           <View style={{ flex: 1, gap: 4 }}>
-            <Text style={styles.bigKicker}>{row.kind === 'item' ? 'NEW GEAR' : 'FREE MYSTERY BOX'}</Text>
-            <Text style={styles.bigName} numberOfLines={2}>{row.kind === 'item' ? row.label : 'A surprise pin is inside'}</Text>
+            <Text style={styles.bigKicker}>{row.kind === 'item' ? 'NEW GEAR' : row.kind === 'freezes' ? 'STREAK FREEZE' : 'FREE MYSTERY BOX'}</Text>
+            <Text style={styles.bigName} numberOfLines={2}>{row.kind === 'item' ? row.label
+              : row.kind === 'freezes' ? 'Your flame is safe if you miss a day' : 'A surprise pin is inside'}</Text>
             {(onWear || onPins) && (
               <Pressable onPress={onWear ?? onPins} accessibilityRole="button" hitSlop={6}
                 style={({ pressed }) => [styles.smallBtn, pressed && styles.buttonPressed]}>
