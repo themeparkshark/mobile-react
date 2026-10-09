@@ -72,7 +72,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const lastRead = useRef(0);
   const prevGoals = useRef<DailyThreeState['goals'] | null>(null);
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   // Read the switches; a failed read (offline, slow server) is retried on the next map focus.
   useEffect(() => {
