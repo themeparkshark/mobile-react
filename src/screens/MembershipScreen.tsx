@@ -7,7 +7,6 @@
  */
 import { clearGrownUpPass, grownUpForNextStep, type GateReason } from '../components/GrownUpGate';
 import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from '../components/RealMoneyMark';
-import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { useFocusEffect } from '@react-navigation/native';
 import { openExternal, openLegal } from '../services/external';
 import * as Haptics from 'expo-haptics';
@@ -15,7 +14,7 @@ import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  Easing, FadeInDown, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming,
+  FadeInDown, FadeInUp,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as RootNavigation from '../RootNavigation';
@@ -26,6 +25,8 @@ import {
   buyVip, legalText, loadVipPlans, priceText, restoreVip, savingsText, storeAvailable, type VipPlan,
 } from '../services/purchases';
 import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
+import { perMonthText } from '../services/money/offers';
+import MemberStage from '../components/money/MemberStage';
 
 // Every line here is backed by live server logic: ride wins pay VIP double
 // (CompleteTaskAction), VIP home maps spawn two extra finds and double their
@@ -37,6 +38,7 @@ import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName 
 export const VIP_BENEFITS: { icon: GameIconName; title: string; body: string }[] = [
   { icon: 'xp', title: '2x XP and coins', body: 'Every time you win a ride coin at the park.' },
   { icon: 'search', title: '2 extra finds on every home hunt', body: '2x energy, tickets and XP from every find.' },
+  { icon: 'ticket', title: 'A free ticket every day', body: 'Claim it in Supplies. No ad to watch.' },
   { icon: 'member', title: 'VIP badge on your profile', body: 'Everyone can see you’re VIP.' },
 ];
 
@@ -79,6 +81,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const [busy, setBusy] = useState<null | 'buy' | 'restore'>(null);
   const [perks, setPerks] = useState<VipPerk[]>(VIP_BENEFITS);
   const canBuy = storeAvailable();
+  const member = player?.is_subscribed === true;
   useEffect(() => {
     let live = true;
     getVipPerks().then(next => { if (live && next) setPerks(next); }).catch(() => undefined);
@@ -86,7 +89,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   }, []);
 
   useEffect(() => {
-    if (!player || !canBuy) { setLoading(false); return; }
+    if (!player || !canBuy || member) { setLoading(false); return; }
     let live = true;
     setLoading(true); setLoadFailed(false);
     loadVipPlans().then((next) => {
@@ -98,7 +101,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
       if (live) { setPlans([]); setLoadFailed(true); }
     }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [player?.id, attempt, canBuy]);
+  }, [player?.id, attempt, canBuy, member]);
 
   const plan = plans.find(p => p.productId === selectedId) ?? plans[0] ?? null;
 
@@ -169,23 +172,29 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-          <Hero />
-          <Animated.Text entering={FadeInDown.delay(150)} style={s.title}>GO VIP</Animated.Text>
-          <Animated.Text entering={FadeInDown.delay(220)} style={s.sub}>Get more from every park day and every hunt.</Animated.Text>
+          <MemberStage />
+          <Animated.Text entering={FadeInDown.delay(150)} style={s.title}>{member ? 'YOU’RE VIP' : 'GO VIP'}</Animated.Text>
+          <Animated.Text entering={FadeInDown.delay(220)} style={s.sub}>
+            {member ? 'Here’s everything you get.' : 'Bigger rewards at home and at the park.'}
+          </Animated.Text>
 
           <View style={s.benefits}>
             {perks.map((b, i) => (
-              <Animated.View key={b.title} entering={FadeInUp.delay(280 + i * 80).springify().damping(15)} style={s.benefit}>
-                <GameIcon name={b.icon} size={34} />
-                <View style={{ flex: 1 }}>
-                  <Text style={s.benefitTitle}>{b.title}</Text>
-                  <Text style={s.benefitBody}>{b.body}</Text>
-                </View>
+              <Animated.View key={b.title} entering={FadeInUp.delay(280 + i * 70).springify().damping(15)}
+                style={[s.benefit, perks.length % 2 === 1 && i === perks.length - 1 && s.benefitWide]}>
+                <View style={s.benefitIcon}><GameIcon name={b.icon} size={36} /></View>
+                <Text maxFontSizeMultiplier={1.25} style={s.benefitTitle}>{b.title}</Text>
+                <Text maxFontSizeMultiplier={1.25} style={s.benefitBody}>{b.body}</Text>
               </Animated.View>
             ))}
           </View>
 
-          {!player ? (
+          {member ? (
+            <Animated.View entering={FadeInUp.delay(560)} style={s.memberNote}>
+              <GameIcon name="member" size={30} />
+              <Text style={s.memberNoteText}>Your VIP is on. A grown-up can change it anytime in Apple ID settings.</Text>
+            </Animated.View>
+          ) : !player ? (
             // Guests see the perks and a way in, never a dead purchase button.
             <Animated.View entering={FadeInUp.delay(620)} style={s.guest}>
               <Text style={s.guestText}>Sign in first. Then VIP stays with your shark on every phone.</Text>
@@ -213,9 +222,11 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
                       style={[s.planCard, selected && s.planCardSelected]}
                       accessibilityRole="radio" accessibilityState={{ selected }}
                       accessibilityLabel={`${p.period === 'year' ? 'Yearly' : 'Monthly'}, ${priceText(p)}`}>
-                      {p.period === 'year' && savings && <Text style={s.planBadge}>COSTS LESS</Text>}
+                      {p.period === 'year' && savings && <Text style={s.planBadge}>{savings}</Text>}
+                      <View style={[s.radio, selected && s.radioOn]}>{selected && <View style={s.radioDot} />}</View>
                       <Text style={[s.planName, selected && s.planNameSelected]}>{p.period === 'year' ? 'YEARLY' : 'MONTHLY'}</Text>
                       <Text style={[s.planPrice, selected && s.planNameSelected]}>{priceText(p)}</Text>
+                      {perMonthText(p) && <Text style={s.planPer}>{`Just ${perMonthText(p)}`}</Text>}
                       {p.trial && <Text style={s.planTrial}>{p.trial}</Text>}
                     </Pressable>
                   );
@@ -238,6 +249,8 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
               </Pressable>
             </Animated.View>
           )}
+
+          {!member && player && canBuy && plan && <GrownUpNotes />}
 
           <View style={s.links}>
             <Pressable onPress={() => void restore()} disabled={!!busy} hitSlop={8}>
@@ -269,26 +282,29 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   );
 }
 
-function Hero() {
-  const still = useUiReducedMotion();
-  const bob = useSharedValue(0);
-  const spin = useSharedValue(0);
-  useEffect(() => {
-    // Reduce Motion: the hero holds still.
-    if (still) return () => undefined;
-    bob.value = withRepeat(withTiming(1, { duration: 1700, easing: Easing.inOut(Easing.sin) }), -1, true);
-    spin.value = withRepeat(withTiming(1, { duration: 20000, easing: Easing.linear }), -1, false);
-    return () => { cancelAnimation(bob); cancelAnimation(spin); };
-  }, [bob, spin, still]);
-  const hero = useAnimatedStyle(() => ({ transform: [{ translateY: -bob.value * 8 }] }));
-  const burst = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
+/**
+ * For the grown-up holding the phone: what VIP is in plain words, and the
+ * promises the game keeps. Every line is true of the shipped game.
+ */
+const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
+  { icon: 'play', text: 'No ads. VIP gets every bonus without watching one.' },
+  { icon: 'lock', text: 'Every real-money buy asks a grown-up first. Ask to Buy works too.' },
+  { icon: 'check', text: 'Everything you earn or buy stays in your closet for good.' },
+  { icon: 'settings', text: 'Turn VIP off anytime in Apple\u00A0ID settings.' },
+];
+
+function GrownUpNotes() {
   return (
-    <View style={s.heroStage}>
-      <Animated.Image source={require('../../assets/images/screens/explore/starburst.png')} style={[s.burst, burst]} resizeMode="contain" />
-      <Animated.View entering={ZoomIn.springify().damping(11)} style={hero}>
-        <Image source={require('../../assets/images/vip-hero.png')} style={s.hero} contentFit="contain" />
-      </Animated.View>
-    </View>
+    <Animated.View entering={FadeInUp.delay(700)} style={s.grownUps} accessible
+      accessibilityLabel={`For grown-ups. ${GROWN_UP_NOTES.map(n => n.text).join(' ')}`}>
+      <Text style={s.grownUpsHead}>FOR GROWN-UPS</Text>
+      {GROWN_UP_NOTES.map(note => (
+        <View key={note.text} style={s.grownUpRow}>
+          <GameIcon name={note.icon} size={20} />
+          <Text style={s.grownUpText}>{note.text}</Text>
+        </View>
+      ))}
+    </Animated.View>
   );
 }
 
@@ -298,23 +314,36 @@ const s = StyleSheet.create({
   closeRow: { height: 44, alignItems: 'flex-end', paddingRight: 14 },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   scroll: { alignItems: 'center', paddingHorizontal: 20, paddingBottom: 40 },
-  heroStage: { width: 200, height: 120, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
-  burst: { position: 'absolute', width: 340, height: 340, opacity: 0.18 },
-  hero: { width: 120, height: 120 },
   title: { fontFamily: 'Shark', fontSize: 46, color: '#ffcf3b', textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   sub: { fontFamily: 'Knockout', fontSize: 18, color: '#fff', textAlign: 'center', marginTop: 2 },
-  benefits: { width: '100%', gap: 8, marginTop: 16 },
-  benefit: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16,
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)', padding: 10 },
-  benefitTitle: { fontFamily: 'Shark', fontSize: 18, color: '#fff' },
-  benefitBody: { fontFamily: 'Knockout', fontSize: 14, color: '#dbeafe' },
+  benefits: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14 },
+  benefit: { width: '47.8%', flexGrow: 1, alignItems: 'center', backgroundColor: '#0a4f96', borderRadius: 18,
+    borderWidth: 3, borderColor: '#ffffff', paddingHorizontal: 8, paddingTop: 10, paddingBottom: 10, gap: 3,
+    borderBottomWidth: 6, borderBottomColor: '#05346e' },
+  benefitWide: { width: '100%' },
+  benefitIcon: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#ffcf3b' },
+  benefitTitle: { fontFamily: 'Shark', fontSize: 16, color: '#fff', textAlign: 'center' },
+  benefitBody: { fontFamily: 'Knockout', fontSize: 13, color: '#dbeafe', textAlign: 'center', lineHeight: 16 },
+  radio: { position: 'absolute', top: 10, left: 10, width: 20, height: 20, borderRadius: 10, borderWidth: 3, borderColor: '#9db7d6', backgroundColor: '#fff' },
+  radioOn: { borderColor: '#d99a00' },
+  radioDot: { position: 'absolute', top: 2, left: 2, width: 10, height: 10, borderRadius: 5, backgroundColor: '#d99a00' },
+  planPer: { fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c', marginTop: 1 },
+  memberNote: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, backgroundColor: 'rgba(5,52,110,0.6)',
+    borderRadius: 16, padding: 12, borderWidth: 2, borderColor: '#ffcf3b' },
+  memberNoteText: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: '#fff', lineHeight: 20 },
+  grownUps: { width: '100%', marginTop: 16, backgroundColor: '#fff8e4', borderRadius: 18, padding: 12, gap: 6,
+    borderWidth: 3, borderColor: '#05346e' },
+  grownUpsHead: { fontFamily: 'Shark', fontSize: 16, color: '#05346e', letterSpacing: 0.6 },
+  grownUpRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  grownUpText: { flex: 1, fontFamily: 'Knockout', fontSize: 15, color: '#05346e', lineHeight: 19 },
   guest: { width: '100%', marginTop: 18, alignItems: 'center', gap: 12 },
   guestText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.white, textAlign: 'center' },
   plans: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  planCard: { flex: 1, backgroundColor: '#fff', borderRadius: 20, paddingVertical: 12, paddingHorizontal: 8,
+  planCard: { flex: 1, backgroundColor: '#fff', borderRadius: 20, paddingTop: 16, paddingBottom: 12, paddingHorizontal: 8,
     alignItems: 'center', borderWidth: 3, borderColor: 'rgba(255,255,255,0.5)' },
-  planCardSelected: { backgroundColor: '#fff', borderColor: '#ffcf3b' },
-  planBadge: { position: 'absolute', top: -12, backgroundColor: BRAND.greenLip, color: '#fff', fontFamily: 'Shark', fontSize: 12,
+  planCardSelected: { backgroundColor: '#fffbea', borderColor: '#ffcf3b', borderWidth: 4, transform: [{ scale: 1.03 }] },
+  planBadge: { position: 'absolute', top: -13, backgroundColor: '#e8322a', borderWidth: 2, borderColor: '#fff', color: '#fff', fontFamily: 'Shark', fontSize: 12,
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, overflow: 'hidden' },
   planName: { fontFamily: 'Shark', fontSize: 16, color: '#09268f' },
   planNameSelected: { color: '#09268f' },

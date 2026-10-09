@@ -65,38 +65,30 @@ test('a wrong answer rests the gate for 30 s, and the rest survives a relaunch',
   assert.equal(await relaunched.askGrownUp(null, 5, 2000), false);
 });
 
-test('the paywall decides the gate from the signed-in player, not from the button', async () => {
+test('pitch first: anyone sees VIP, and the paywall Buy is the gated real-money step', async () => {
   const navigated = [];
   const gate = gateModule({}, navigated, false);
-  assert.equal(await gate.openMembership(), false, 'no grown-up: no paywall');
-  assert.equal(await gate.openMembership({ devPreview: true }), false, 'the dev jump is dev-only');
-  assert.deepEqual(navigated, []);
-  gate.setGateVipMember(true);
-  assert.equal(await gate.openMembership(), true, 'a VIP member opens their perks');
+  assert.equal(await gate.openMembership(), true, 'the VIP page (perks, plans, prices) opens for everyone');
   assert.deepEqual(navigated, [['Membership']]);
   assert.match(read('src/context/AuthProvider.tsx'), /setGateVipMember\(player\?\.is_subscribed === true\)/);
   assert.doesNotMatch(read('src/components/profile/StatusBadges.tsx'), /member: own/, 'never decided by whose badge was tapped');
   const paywall = read('src/screens/MembershipScreen.tsx');
+  // Buy: a grown-up answers (plan and price restated) before StoreKit is ever called.
   assert.match(paywall, /if \(!\(await grownUpForNextStep\('vip', Date\.now\(\), vipGateReason\(plan\)\)\)\) return;\s*Haptics[\s\S]{0,120}const outcome = await buyVip\(plan\);/);
   assert.match(paywall, /if \(!plan \|\| busy \|\| buying\.current\) return;\s*buying\.current = true;/);
 });
 
-test('a pass covers only its own flow\'s next step, once; other doors ask again; a wrong answer cancels it', async () => {
+test('no door grants a pass: every real-money Buy asks a grown-up fresh', async () => {
   const src = read('src/components/GrownUpGate.tsx');
-  // Only openMembership grants a pass, and only for the 'vip' flow.
-  assert.equal((strip(src).match(/pass = \{/g) || []).length, 1);
-  assert.match(src, /if \(!\(await askGrownUp\(await vipDoorReason\(\)\)\)\) return false;\s*\/\/[^\n]*\n\s*pass = \{ flow: 'vip', until: Date\.now\(\) \+ GATE_PASS_MS \};/);
-  // Single use, flow-matched, fresh.
+  assert.equal((strip(src).match(/pass = \{/g) || []).length, 0, 'nothing pre-approves a Buy');
   assert.match(src, /const held = pass;\s*pass = null;[^\n]*\n\s*if \(held && held\.flow === flow && now < held\.until\) return true;\s*return askGrownUp\(reason\);/);
   assert.match(src, /if \(!ok\) \{\s*pass = null;/, 'a wrong answer cancels any pass');
-  // The pass is read in exactly one place, the paywall's Buy; every other door asks fresh.
   assert.deepEqual(where(/grownUpForNextStep\(/).filter(f => f !== 'src/components/GrownUpGate.tsx'), ['src/screens/MembershipScreen.tsx']);
   assert.deepEqual(where(/ensureGrownUp/), [], 'no blanket pass helper');
   const external = strip(read('src/services/external.ts'));
   assert.equal((external.match(/await askGrownUp\((exitReason\(url\)|SHARE)\)/g) || []).length, 3, 'each exit asks');
   const gate = gateModule();
-  // No host mounted: a fresh ask answers no, and an unused pass of another flow never opens anything.
-  assert.equal(await gate.grownUpForNextStep('vip'), false);
+  assert.equal(await gate.grownUpForNextStep('vip'), false, 'no host: the Buy is refused');
 });
 
 test('server-named screens (push taps, inbox rows) never open the paywall ungated', () => {
@@ -104,7 +96,7 @@ test('server-named screens (push taps, inbox rows) never open the paywall ungate
   const gate = gateModule({}, navigated);
   gate.openServerRoute('Membership', {});
   gate.openServerRoute('Park', { park: 3 });
-  assert.deepEqual(navigated, [['Park', { park: 3 }]], 'Membership goes through openMembership (no host here: no)');
+  assert.deepEqual(navigated, [['Membership'], ['Park', { park: 3 }]], 'Membership goes through openMembership (the pitch; its Buy is gated)');
   assert.match(read('src/services/push.ts'), /if \(route\?\.screen\) openServerRoute\(route\.screen, route\.params \?\? \{\}\);/);
   assert.match(read('src/screens/NotificationsScreen.tsx'), /openServerRoute\(target\.screen, target\.params\)/);
   assert.deepEqual(where(/navigate\(\s*(route|target)\.screen/), [], 'no raw server route navigation');
@@ -134,10 +126,12 @@ test('every way into the VIP paywall goes through openMembership, by any API or 
 
 test('real money is bought in exactly two gated places', () => {
   assert.deepEqual(where(/\bbuyVip\(/).filter(f => f !== 'src/services/purchases.ts'), ['src/screens/MembershipScreen.tsx']);
-  assert.deepEqual(where(/\bbuyShopProduct\(/).filter(f => f !== 'src/services/purchases.ts'), ['src/screens/StoreScreen/SuppliesShop.tsx']);
-  const supplies = read('src/screens/StoreScreen/SuppliesShop.tsx');
-  // A ref, so a second tap while the gate is up never starts a second purchase.
-  assert.match(supplies, /if \(busy \|\| buyingRef\.current \|\| !catalog\) return;\s*buyingRef\.current = true;\s*try \{[\s\S]{0,300}if \(!\(await askGrownUp\(gateReasonFor\(product, prices\[product\.product_id\]\)\)\)\) return;\s*await buyNow\(product, catalog\);/);
+  assert.deepEqual(where(/\bbuyShopProduct\(/).filter(f => f !== 'src/services/purchases.ts'), ['src/services/money/supplies.ts']);
+  const supplies = read('src/services/money/supplies.ts');
+  // One gated helper for every pack, app-wide: a second tap anywhere is ignored while one runs,
+  // and a grown-up answers (price and contents restated) before StoreKit is called.
+  assert.match(supplies, /if \(buying\) return \{ status: 'busy' \};[\s\S]{0,80}buying = true;\s*try \{\s*if \(!\(await askGrownUp\(gateReasonFor\(product, state\.prices\[product\.product_id\]\)\)\)\) return \{ status: 'declined' \};/);
+  assert.equal((strip(supplies).match(/buyShopProduct\(/g) || []).length, 1, 'StoreKit is reached from one line, after the gate');
 });
 
 test('nothing leaves the app without a grown-up: one helper, an exact allowlist', () => {

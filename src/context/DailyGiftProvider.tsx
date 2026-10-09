@@ -51,6 +51,19 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
     return () => clearTimeout(timer);
   }, [isReady, player?.id, preview]);
 
+  // Dev-only: money screens by deep link for captures (src/dev/moneyPreview.ts).
+  useEffect(() => {
+    if (!__DEV__ || !isReady || !player) return undefined;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const dev = require('../dev/moneyPreview') as typeof import('../dev/moneyPreview');
+    return dev.installMoneyDevLinks((screen) => {
+      if (screen === 'vip') void openMembership({ devPreview: true });
+      else if (screen === 'supplies') RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies' });
+      else if (screen === 'store') RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'gear' });
+      else RootNavigation.navigate('MoneyPreview', { screen });
+    });
+  }, [isReady, player?.id]);
+
   return (
     <DailyGiftContext.Provider
       value={{

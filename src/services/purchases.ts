@@ -41,6 +41,12 @@ function iap(): Iap {
   return require('react-native-iap') as Iap;
 }
 
+/** Dev builds only: simulator price fixtures for captures (tools/capture, never in a store bundle). */
+function devCapture(): typeof import('../../tools/capture/moneyCapture') | null {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  try { return __DEV__ ? require('../../tools/capture/moneyCapture') : null; } catch { return null; }
+}
+
 let connection: Promise<Iap> | null = null;
 let listening = false;
 const delivered = new Map<string, Promise<VipSyncResult>>();
@@ -162,6 +168,7 @@ export function toPlan(product: StoreSubscription, trialEligible: boolean): VipP
 
 /** The VIP plans from the App Store, yearly first. Empty when none load. */
 export async function loadVipPlans(): Promise<VipPlan[]> {
+  if (__DEV__) { const cap = devCapture(); if (cap?.capturePrices()) return (lastVipPlans = cap.captureVipPlans()); }
   const store = await connect();
   const products = await store.getSubscriptions({ skus: [...VIP_PRODUCT_IDS] });
   const eligible = await store.IapIosSk2.isEligibleForIntroOffer(VIP_SUBSCRIPTION_GROUP_ID).then(Boolean).catch(() => false);
@@ -310,6 +317,7 @@ export type ShopPrice = {
 export async function loadShopPrices(productIds: readonly string[]): Promise<Record<string, ShopPrice>> {
   const ids = productIds.filter(isShopProduct);
   if (!ids.length) return {};
+  if (__DEV__) { const cap = devCapture(); if (cap?.capturePrices()) return cap.captureShopPrices(ids); }
   const store = await connect();
   const products: StoreProduct[] = await store.getProducts({ skus: [...ids] });
   const prices: Record<string, ShopPrice> = {};
