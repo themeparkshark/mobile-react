@@ -268,14 +268,14 @@ export function GrownUpGateHost() {
   );
 }
 
-/** Midnight panel, gold keys: every ink is AA on its surface. */
+/** House navy panel, white rim, gold OK key (blue/white/gold palette): every ink is AA on its surface. */
 export const GATE_COLORS = {
-  panel: '#2a1d6e', card: '#3a2a8a', well: '#20165a', ink: '#ffffff', inkSoft: '#e8defd',
-  border: '#d9c6ff', gold: '#ffd34d', violet: '#8f6bff',
+  panel: '#0b3a75', card: '#1a5c9e', well: '#082d5c', ink: '#ffffff', inkSoft: '#e2f6ff',
+  border: '#ffffff', gold: '#ffd34d', violet: '#7cc6f5',
 } as const;
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(10,6,40,0.75)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  scrim: { flex: 1, backgroundColor: 'rgba(5,30,70,0.75)', alignItems: 'center', justifyContent: 'center', padding: 20 },
   card: { width: '100%', maxWidth: 340, alignItems: 'center', gap: 10, padding: 18, borderRadius: 24, backgroundColor: GATE_COLORS.panel,
     borderWidth: 3, borderColor: GATE_COLORS.border },
   cardRest: { maxWidth: 270, paddingVertical: 16, gap: 8 },

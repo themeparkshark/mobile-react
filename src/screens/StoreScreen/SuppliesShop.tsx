@@ -215,9 +215,9 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
         <>
           {/* Before any price: these cost real money, and a grown-up buys them. */}
           <View style={st.realMoney} accessible accessibilityLabel="Supplies cost real money. A grown-up buys them.">
-            <RealMoneyMark size={30} />
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.realMoneyText}>
-              <Text style={st.realMoneyHead}>REAL MONEY  </Text>Supplies cost real money. A grown-up buys them.
+            <RealMoneyMark size={22} />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.realMoneyText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+              Supplies cost real money. A grown-up buys them.
             </Text>
           </View>
 
@@ -283,7 +283,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             )}
             <View style={st.grid}>
               {packs.map((p, i) => (
-                <PackCard key={p.product_id} product={p} tier={i} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 1 : 3}
+                <PackCard key={p.product_id} product={p} tier={i} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 2 : 3}
                   price={prices[p.product_id]?.price} bonus={bonusPercent(p, prices, rates)}
                   note={unavailableText(p, holdCap)} busy={busy === p.product_id} disabled={!!busy}
                   onBuy={() => void buy(p, packArtKey(p, i))} />
@@ -350,9 +350,11 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
           <PackArt art={packArtKey(product)} size={64} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{product.title.toUpperCase()}</Text>
           <View style={{ flex: 1, justifyContent: 'center', alignSelf: 'stretch' }}><Contents grants={product.grants} size="tight" /></View>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>
-            {worth ? `Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}` : deal ? 'New deal every day' : 'One a day'}
-          </Text>
+          {worth ? (
+            <View style={st.worthPill}><Text maxFontSizeMultiplier={MAX_FONT} style={st.worthPillText}>{`WORTH ${worth.worth}`}</Text></View>
+          ) : (
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>{deal ? 'New deal every day' : 'One a day'}</Text>
+          )}
         </View>
         <PriceBar price={price} busy={busy} note={note} />
         {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: 34, right: 4 }} />}
@@ -388,7 +390,7 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
 
 /** The VIP door on the shelf: what VIP gives, no price (the page after the grown-up gate has it). */
 function VipCard({ perks }: { perks: VipPerk[] | null }) {
-  const lines = (perks ?? []).slice(0, 4);
+  const lines = (perks ?? []).filter(p => p.icon !== 'member').slice(0, 4);
   return (
     <Animated.View entering={FadeInUp.delay(180).springify().damping(15)} style={st.vipLip}>
       <View style={st.vip}>
@@ -399,12 +401,14 @@ function VipCard({ perks }: { perks: VipPerk[] | null }) {
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipSub}>Bigger rewards every day. No ads.</Text>
           </View>
         </View>
-        {lines.map(perk => (
-          <View key={perk.title} style={st.vipRow}>
-            <GameIcon name={perk.icon} size={22} />
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipRowText} numberOfLines={1}>{perk.title}</Text>
-          </View>
-        ))}
+        <View style={st.vipTiles}>
+          {lines.map(perk => (
+            <View key={perk.title} style={st.vipTile}>
+              <View style={st.vipTileIcon}><GameIcon name={perk.icon} size={28} /></View>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipTileText} numberOfLines={2}>{perk.title}</Text>
+            </View>
+          ))}
+        </View>
         <GameButton label="See VIP" icon="member" size="compact" onPress={() => { void openMembership(); }}
           accessibilityLabel="See everything VIP gives" style={{ alignSelf: 'center', marginTop: 4 }} />
       </View>
@@ -432,16 +436,18 @@ const st = StyleSheet.create({
   walletChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BRAND.blue, borderRadius: 999,
     borderWidth: 3, borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 3 },
   walletText: { fontFamily: FONT.display, fontSize: 16, color: '#fff', textShadowColor: BRAND.navy, textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0 },
-  realMoney: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: REAL_MONEY_TINT, borderRadius: 14,
-    borderWidth: 3, borderColor: REAL_MONEY_GREEN, paddingHorizontal: 10, paddingVertical: 6 },
+  realMoney: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,248,228,0.95)', borderRadius: 999,
+    borderWidth: 2, borderColor: REAL_MONEY_GREEN, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'center' },
   realMoneyHead: { fontFamily: FONT.display, fontSize: 15, color: REAL_MONEY_INK },
-  realMoneyText: { flex: 1, fontFamily: FONT.body, fontSize: 15, color: BRAND.navy, lineHeight: 19 },
+  realMoneyText: { flexShrink: 1, fontFamily: FONT.display, fontSize: 14, color: REAL_MONEY_INK },
   row: { flexDirection: 'row', gap: 10 },
   starterBody: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 10, alignSelf: 'stretch' },
   starterArt: { width: 128, height: 118, alignItems: 'center', justifyContent: 'center' },
   worth: { fontFamily: FONT.display, fontSize: 19, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   dayBody: { alignItems: 'center', gap: 5, paddingHorizontal: 6, paddingTop: 8, paddingBottom: 8, flex: 1, alignSelf: 'stretch' },
   dayTitle: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  worthPill: { backgroundColor: '#ffcf3b', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 2, borderColor: '#ffffff' },
+  worthPillText: { fontFamily: FONT.display, fontSize: 13, color: '#6a3b00' },
   dayNote: { fontFamily: FONT.body, fontSize: 13, color: '#e2f6ff', textAlign: 'center' },
   section: { gap: 8 },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -451,7 +457,7 @@ const st = StyleSheet.create({
   sectionNote: { fontFamily: FONT.body, fontSize: 15, color: '#e2f6ff', marginTop: -4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 10, rowGap: 16, paddingTop: 6 },
   col3: { width: '31.2%', flexGrow: 1, alignItems: 'stretch' },
-  col2: { width: '47.5%', flexGrow: 1, alignItems: 'stretch' },
+  col2: { width: '48.5%', alignItems: 'stretch' },
   col1: { width: '100%' },
   packArtWell: { height: 92, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', paddingTop: 6 },
   packArtWide: { flexDirection: 'row', gap: 12, height: 86 },
@@ -466,6 +472,12 @@ const st = StyleSheet.create({
   vipHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   vipTitle: { fontFamily: FONT.display, fontSize: 26, color: BRAND.gold, textShadowColor: '#5a3a00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   vipSub: { fontFamily: FONT.body, fontSize: 15, color: '#e2f6ff' },
+  vipTiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  vipTile: { width: '47.5%', flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0a4f96', borderRadius: 14,
+    borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: BRAND.navy, padding: 6 },
+  vipTileIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 2, borderColor: BRAND.gold,
+    alignItems: 'center', justifyContent: 'center' },
+  vipTileText: { flex: 1, fontFamily: FONT.display, fontSize: 13, color: '#ffffff' },
   vipRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
   vipRowText: { flex: 1, fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   freeCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#e4f7ff', borderRadius: 18,
