@@ -38,6 +38,12 @@ export const CHEST_SPARKLE_SOUND = require('../../../assets/sounds/reveal.mp3');
 /** The sheet opens this long after the tap, so the lid pop is seen first. */
 export const CHEST_OPEN_DELAY_MS = 220;
 
+// Dev captures only: EXPO_PUBLIC_JUICE_SLOWMO=4 plays the tap 4x slower for frame-by-frame review.
+const SLOW = __DEV__ ? Math.max(1, Number(process.env.EXPO_PUBLIC_JUICE_SLOWMO) || 1) : 1;
+const ms = (t: number) => t * SLOW;
+const spring = (c: { damping: number; stiffness: number; mass?: number }) =>
+  (SLOW === 1 ? c : { ...c, damping: c.damping / SLOW, stiffness: c.stiffness / (SLOW * SLOW) });
+
 const SIZE = 36;
 const OPEN_SIZE = 43;
 const FX = 96; // the star canvas, centred on the chest
@@ -80,14 +86,18 @@ export default function ChestButton({
   // The sheet closed: shut the lid with a small bump.
   const wasOpen = useRef(open);
   useEffect(() => {
+    // Under the sheet the chest rests upright (the backdrop covers the tail of the wiggle).
+    if (open && !wasOpen.current) {
+      for (const v of [lift, tilt]) { cancelAnimation(v); v.value = withTiming(0, { duration: ms(120) }); }
+    }
     if (wasOpen.current && !open) {
       setLidOpen(false);
       if (!reduced) {
-        sy.value = withSequence(withTiming(0.9, { duration: 70 }), withSpring(1, { damping: 7, stiffness: 320 }));
+        sy.value = withSequence(withTiming(0.9, { duration: ms(70) }), withSpring(1, spring({ damping: 7, stiffness: 320 })));
       }
     }
     wasOpen.current = open;
-  }, [open, reduced, sy]);
+  }, [open, reduced, sy, lift, tilt]);
 
   const chestStyle = useAnimatedStyle(() => ({
     transform: [
@@ -124,14 +134,14 @@ export default function ChestButton({
     if (reduced) return;
     cancelAnimation(sx);
     cancelAnimation(sy);
-    sx.value = withTiming(1.14, { duration: 70, easing: Easing.out(Easing.quad) });
-    sy.value = withTiming(0.82, { duration: 70, easing: Easing.out(Easing.quad) });
+    sx.value = withTiming(1.14, { duration: ms(70), easing: Easing.out(Easing.quad) });
+    sy.value = withTiming(0.82, { duration: ms(70), easing: Easing.out(Easing.quad) });
   };
 
   const pressOut = () => {
     if (reduced) return;
-    sx.value = withSpring(1, { damping: 6, stiffness: 340, mass: 0.6 });
-    sy.value = withSpring(1, { damping: 6, stiffness: 340, mass: 0.6 });
+    sx.value = withSpring(1, spring({ damping: 6, stiffness: 340, mass: 0.6 }));
+    sy.value = withSpring(1, spring({ damping: 6, stiffness: 340, mass: 0.6 }));
   };
 
   const press = () => {
@@ -141,20 +151,20 @@ export default function ChestButton({
     setLidOpen(true);
     if (!reduced) {
       lift.value = withSequence(
-        withTiming(-9, { duration: 110, easing: Easing.out(Easing.quad) }),
-        withSpring(0, { damping: 7, stiffness: 260 }),
+        withTiming(-9, { duration: ms(110), easing: Easing.out(Easing.quad) }),
+        withSpring(0, spring({ damping: 7, stiffness: 260 })),
       );
       tilt.value = withSequence(
-        withTiming(-11, { duration: 70 }),
-        withTiming(9, { duration: 90 }),
-        withTiming(-5, { duration: 80 }),
-        withSpring(0, { damping: 8, stiffness: 300 }),
+        withTiming(-11, { duration: ms(70) }),
+        withTiming(9, { duration: ms(90) }),
+        withTiming(-5, { duration: ms(80) }),
+        withSpring(0, spring({ damping: 8, stiffness: 300 })),
       );
       burst.value = 0;
-      burst.value = withTiming(1, { duration: 620, easing: Easing.linear });
+      burst.value = withTiming(1, { duration: ms(620), easing: Easing.linear });
     }
     if (pending.current) clearTimeout(pending.current);
-    pending.current = setTimeout(() => { pending.current = null; onPress(); }, reduced ? 60 : CHEST_OPEN_DELAY_MS);
+    pending.current = setTimeout(() => { pending.current = null; onPress(); }, reduced ? 60 : ms(CHEST_OPEN_DELAY_MS));
   };
 
   return (
