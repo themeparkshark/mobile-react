@@ -73,6 +73,8 @@ export interface MemoryResultsData {
   /** Extra reward lines (UPGRADED, ON-SITE, GOLD EDITION). */
   extraRewards: string[];
   againLabel: 'PLAY AGAIN' | 'TRY AGAIN' | null;
+  /** One short line under the crowns (e.g. how to get PERFECT). */
+  crownHint?: string | null;
 }
 
 export type ResultsPanel = 'actions' | 'album' | 'challenge' | 'stats';
@@ -169,6 +171,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
               <Crown key={i} on={i < data.stars} delay={reducedMotion ? 0 : (sched.crowns[i] ?? 0)} hang={i === 2} reducedMotion={reducedMotion} />
             ))}
           </View>
+          {data.crownHint ? <Reveal show={step >= 3}><Text style={styles.crownHint}>{data.crownHint}</Text></Reveal> : null}
           {data.newBest ? <Reveal show={step >= 3}><Text style={styles.newBest}>NEW BEST</Text></Reveal> : null}
           {data.tally ? <Reveal show={step >= 3}>{step >= 3 ? <Numbers data={data} reducedMotion={reducedMotion} tallyOnly /> : <Numbers data={data} reducedMotion tallyOnly />}</Reveal> : null}
           <Reveal show={step >= 5}><Rewards data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.rewards} /></Reveal>
@@ -480,6 +483,7 @@ const styles = StyleSheet.create({
   crownWrap: { marginHorizontal: 6 },
   crown: { width: 44, height: 40 },
   crownOff: { opacity: 0.2 },
+  crownHint: { fontFamily: 'Knockout', fontSize: 15, color: MM.navyText, marginTop: 2, textAlign: 'center' },
   numbers: { alignSelf: 'stretch', alignItems: 'center', marginTop: 4 },
   tally: { alignItems: 'center', marginBottom: 4 },
   tallyParts: { fontFamily: 'Shark', fontSize: 16, color: MM.ink },

@@ -952,6 +952,7 @@ export default function MemoryGame({
       let banner = won ? 'CLEARED!' : memoryLossBanner(e.pairs, e.pairsTotal, e.status === 'out');
       let tally: MemoryResultsData['tally'] = null;
       let chipText: string | null = null;
+      let crownHint: string | null = null;
       if (r.mode === 'ride') {
         numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
         if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
@@ -960,6 +961,11 @@ export default function MemoryGame({
         // The luck chip contradicts PERFECT!, and it is jargon on a loss.
         chipText = won && !perfect ? luckyChip(e) : null;
         if (perfect && won) banner = 'PERFECT!';
+        // Three crowns but not PERFECT (turns): warm banner plus how to get PERFECT, so 100% never reads as "not perfect".
+        else if (won && stars >= 3) {
+          banner = 'AMAZING!';
+          crownHint = `Clear it in ${perfectOf(e)} turns for PERFECT!`;
+        }
       } else if (r.mode === 'timeAttack') {
         banner = `BOARD ${e.board}`;
         tally = { parts: `${r.cleared} BOARDS · CHAIN ${e.maxChain} · ${e.showtimes} SHOWTIME`, total: finalScore };
@@ -1004,6 +1010,7 @@ export default function MemoryGame({
         daily: dailySum,
         extraRewards: extra,
         againLabel: r.mode === 'ride' ? null : r.mode === 'warmup' ? null : 'PLAY AGAIN',
+        crownHint,
       };
       setResultData(data);
       setResult({
@@ -2355,6 +2362,7 @@ export default function MemoryGame({
                   h={g.ch}
                   back={CARD_BACK}
                   preloadSheet={deck.faceSheet}
+                  preloadExtraSheet={deck.extraFaceSheet}
                   face={cardFaceFor(id)}
                   goldBack={faces[id] === FACE_GOLD}
                   reducedMotion={reducedMotion}

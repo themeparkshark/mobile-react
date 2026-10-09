@@ -135,6 +135,8 @@ interface Props {
    * fresh sprite-sheet Image loads mid-flip.
    */
   preloadSheet?: ImageSourcePropType;
+  /** The deck's second (extra) face sheet, preloaded the same way. */
+  preloadExtraSheet?: ImageSourcePropType;
   goldBack?: boolean;
   reducedMotion: boolean;
   sv: CardValues;
@@ -145,7 +147,7 @@ interface Props {
 const INK = '#0B5CAD';
 
 export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function MemoryCard(
-  { w, h, back, face, preloadSheet, goldBack, reducedMotion, sv, shimmer, id },
+  { w, h, back, face, preloadSheet, preloadExtraSheet, goldBack, reducedMotion, sv, shimmer, id },
   ref,
 ) {
   const v = useMemo(() => ({
@@ -459,35 +461,46 @@ export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function Memo
         </View>
       );
     }
-    // One stable sheet Image per card: mounted at the deal with the deck's
-    // sheet (hidden), then only moved to its slot when the face is known.
-    const sheet = face.sheet ?? preloadSheet;
-    if (sheet != null && !failed) {
-      const known = face.sheet != null && face.slot != null;
-      const slot = known ? face.slot! : 0;
-      const cols = known ? face.cols ?? 4 : 4;
-      const rows = known ? face.rows ?? 2 : 2;
+    // Stable sheet Images per card, mounted at the deal (hidden) for both of
+    // the deck's sheets; on flip only position and opacity change, so a face
+    // is never waiting on a decode (no blank cream frame mid-flip).
+    const sheets: { src: ImageSourcePropType; cols: number; rows: number }[] = [];
+    if (preloadSheet != null) sheets.push({ src: preloadSheet, cols: 4, rows: 2 });
+    if (preloadExtraSheet != null) sheets.push({ src: preloadExtraSheet, cols: 2, rows: 1 });
+    if (face.sheet != null && !sheets.some((x) => x.src === face.sheet)) {
+      sheets.push({ src: face.sheet, cols: face.cols ?? 4, rows: face.rows ?? 2 });
+    }
+    if (sheets.length && !failed) {
       return (
         <View style={[size, styles.clip, { backgroundColor: MM.cream }]}>
-          <Image
-            source={sheet}
-            resizeMode="stretch"
-            onError={() => setFailed(true)}
-            style={{
-              position: 'absolute',
-              width: w * cols,
-              height: h * rows,
-              left: -(slot % cols) * w,
-              top: -Math.floor(slot / cols) * h,
-              opacity: known ? 1 : 0,
-            }}
-          />
+          {sheets.map((sh, i) => {
+            const on = face.sheet === sh.src && face.slot != null;
+            const cols = on ? face.cols ?? sh.cols : sh.cols;
+            const rows = on ? face.rows ?? sh.rows : sh.rows;
+            const slot = on ? face.slot! : 0;
+            return (
+              <Image
+                key={i}
+                source={sh.src}
+                resizeMode="stretch"
+                onError={() => setFailed(true)}
+                style={{
+                  position: 'absolute',
+                  width: w * cols,
+                  height: h * rows,
+                  left: -(slot % cols) * w,
+                  top: -Math.floor(slot / cols) * h,
+                  opacity: on ? 1 : 0,
+                }}
+              />
+            );
+          })}
         </View>
       );
     }
     return <View style={[size, styles.plate, { backgroundColor: MM.cream }]} />;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [face, preloadSheet, failed, w, h]);
+  }, [face, preloadSheet, preloadExtraSheet, failed, w, h]);
 
   const pip = Math.max(8, Math.round(w * 0.12));
   return (

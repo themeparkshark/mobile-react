@@ -73,3 +73,11 @@ test('round 3 timing: banner visible on frame 0, short flash, upward burst, resu
   assert.match(src, /const a = Math\.PI \+ \(k \/ \(PERFECT_COINS - 1\)\) \* Math\.PI;/);
   assert.match(game, /later\(420, \(\) => finishRun\(won\)\);/);
 });
+
+test('three crowns never read as "not perfect"; both face sheets are preloaded', () => {
+  assert.match(game, /banner = 'AMAZING!';\s*crownHint = `Clear it in \$\{perfectOf\(e\)\} turns for PERFECT!`;/);
+  assert.match(src, /data\.crownHint \? <Reveal show=\{step >= 3\}>/);
+  const card = fs.readFileSync(path.join(root, 'src/games/memory/MemoryCard.tsx'), 'utf8');
+  assert.match(card, /if \(preloadExtraSheet != null\) sheets\.push/);
+  assert.match(game, /preloadExtraSheet=\{deck\.extraFaceSheet\}/);
+});
