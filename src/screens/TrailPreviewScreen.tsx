@@ -48,8 +48,8 @@ function fixture(scene: string, step: number): TrailState {
       gold_pity: 8, exclusives: ['Propeller Hat', 'Party Inflatable Duck', 'Blue Inflatable Duck', 'Green Inflatable Duck'],
       tiers: [
         { tier: 'blue', goal_steps: 2000, coins: 30, chance_bp: 6000, always: [], bonus: [
-          { kind: 'energy', amount: 10, chance_bp: 4000 }, { kind: 'tickets', amount: 1, chance_bp: 3200 }, { kind: 'coins', amount: 30, chance_bp: 2300 },
-          { kind: 'mystery_box', amount: 1, chance_bp: 500 }] },
+          { kind: 'energy', amount: 10, chance_bp: 3800 }, { kind: 'tickets', amount: 1, chance_bp: 3100 }, { kind: 'coins', amount: 30, chance_bp: 2300 },
+          { kind: 'mystery_box', amount: 1, chance_bp: 500 }, { kind: 'exclusive', amount: 1, chance_bp: 300 }] },
         { tier: 'red', goal_steps: 5000, coins: 75, chance_bp: 3000, always: [], bonus: [
           { kind: 'tickets', amount: 2, chance_bp: 3000 }, { kind: 'mystery_box', amount: 1, chance_bp: 2500 },
           { kind: 'energy', amount: 25, chance_bp: 2500 }, { kind: 'exclusive', amount: 1, chance_bp: 2000 }] },

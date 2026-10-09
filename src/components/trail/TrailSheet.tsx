@@ -374,7 +374,7 @@ function Exclusives({ items }: { readonly items: NonNullable<TrailState['exclusi
           </View>
         ))}
       </View>
-      <Text style={styles.footnote}>Only in Red and Gold Trail Boxes. Wear them to show you walk the parks.</Text>
+      <Text style={styles.footnote}>Only in Trail Boxes, most often in Gold. Wear them to show you walk the parks.</Text>
     </>
   );
 }
