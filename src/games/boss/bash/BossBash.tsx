@@ -453,6 +453,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const onInkTell = () => {
     setInkTell(true);
     flashFace('puff', 1150);
+    // Saving power: one puff-up instead of the loop, so the tell never goes missing.
+    if (!reduced && !power.animate) bossPuff.value = withSequence(withTiming(1, { duration: 280 }), withTiming(0.7, { duration: 300 }));
     if (!reduced && power.animate) bossPuff.value = withRepeat(withSequence(withTiming(1, { duration: 280 }), withTiming(0.6, { duration: 200 })), -1, false);
     addFx({ t: 'bubble', text: 'BLOCK IT!', x: L.w / 2, y: L.bossTop + L.bossSize * 0.62, tone: 'red' }, 1150);
     if (!firstBlocked.current) setHint('ink');
