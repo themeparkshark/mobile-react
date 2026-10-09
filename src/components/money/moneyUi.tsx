@@ -186,8 +186,10 @@ const RAYS = require('../../../assets/images/reveal/rays.webp');
  * The payoff after a purchase lands: rays turn behind the pack art, the art
  * pops, confetti bursts, the contents slide in, one cue and one buzz.
  */
-export function GotIt({ grants, art, title = 'You got it!', onDone }: {
+export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption }: {
   grants: ShopGrants | null; art: PackArtKey; title?: string; onDone: () => void;
+  /** A custom picture instead of the pack art (a season item), and one line under the title. */
+  picture?: ReactNode; caption?: string;
 }) {
   const still = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
@@ -214,13 +216,13 @@ export function GotIt({ grants, art, title = 'You got it!', onDone }: {
         <View style={s.gotStage}>
           {!still && <Animated.Image source={RAYS} style={[s.gotRays, rays]} resizeMode="contain" />}
           <Animated.View entering={still ? undefined : ZoomIn.springify().damping(9).stiffness(160)}>
-            <Image source={ART[art]} style={s.gotArt} contentFit="contain" />
+            {picture ?? <Image source={ART[art]} style={s.gotArt} contentFit="contain" />}
           </Animated.View>
           {!still && <RewardBurst progress={burst} x={140} y={110} />}
         </View>
         <Animated.Text entering={still ? undefined : FadeInDown.delay(250).springify().damping(14)} maxFontSizeMultiplier={MAX_FONT} style={s.gotTitle}>{title}</Animated.Text>
         <Animated.View entering={still ? undefined : FadeInDown.delay(420).springify().damping(14)}>
-          <Contents grants={grants} />
+          {caption ? <Text maxFontSizeMultiplier={MAX_FONT} style={s.gotCaption}>{caption}</Text> : <Contents grants={grants} />}
         </Animated.View>
         <Animated.View entering={still ? undefined : FadeIn.delay(700)} style={{ marginTop: 18, width: 240 }}>
           <GameButton label="Awesome" onPress={onDone} />
@@ -261,6 +263,7 @@ const s = StyleSheet.create({
   gotStage: { width: 280, height: 240, alignItems: 'center', justifyContent: 'center' },
   gotRays: { position: 'absolute', width: 420, height: 420, opacity: 0.55 },
   gotArt: { width: 190, height: 190 },
+  gotCaption: { fontFamily: FONT.display, fontSize: 22, color: '#ffffff', textAlign: 'center' },
   gotTitle: { fontFamily: FONT.display, fontSize: 40, color: BRAND.gold, marginTop: 4, marginBottom: 10,
     textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 },
 });

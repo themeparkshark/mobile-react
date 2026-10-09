@@ -59,6 +59,7 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
     return dev.installMoneyDevLinks((screen) => {
       if (screen === 'vip') void openMembership({ devPreview: true });
       else if (screen === 'supplies') RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies' });
+      else if (screen === 'pass') RootNavigation.navigate('SharkPass');
       else if (screen === 'store') RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'gear' });
       else RootNavigation.navigate('MoneyPreview', { screen });
     });

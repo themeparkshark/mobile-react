@@ -41,6 +41,7 @@ import OneTimeTip from '../../components/help/OneTimeTip';
 import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from '../../components/RealMoneyMark';
 import { openMembership } from '../../components/GrownUpGate';
 import { useHelp } from '../../components/help/HelpProvider';
+import SharkPassBanner from '../../components/money/SharkPassBanner';
 import {
   Band, CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, packArtKey, unitWord, type PackArtKey,
 } from '../../components/money/moneyUi';
@@ -190,6 +191,8 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
           </Pressable>
         ))}
       </View>
+
+      <SharkPassBanner />
 
       {/* First visit: what Supplies is, once. Then, at the first ad offer, that ads are optional. */}
       <OneTimeTip id="supplies_tab" ready={status === 'ready' && !busy} compact />

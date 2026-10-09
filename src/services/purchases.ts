@@ -12,6 +12,7 @@
  */
 import { NativeModules, Platform } from 'react-native';
 import syncVip, { vipSyncErrorCode, type VipSyncResult } from '../api/endpoints/me/vip-sync';
+import { redeemSharkPass, sharkPassErrorCode, type SharkPassState } from '../api/endpoints/me/shark-pass';
 import { redeemShopPurchase, shopErrorCode, type ShopRedeemResult } from '../api/endpoints/me/shop';
 
 /** App Store Connect: subscription group "VIP" (22421719). Yearly first. */
@@ -65,6 +66,7 @@ function connect(): Promise<Iap> {
         store.purchaseUpdatedListener((purchase) => {
           void deliver(store, [purchase]).catch(() => undefined);
           void deliverShop(store, purchase).catch(() => undefined);
+          void deliverPass(store, purchase).catch(() => undefined);
         });
       }
       await store.initConnection();
@@ -264,11 +266,17 @@ async function currentVipEntitlements(store: Iap): Promise<StorePurchase[]> {
 
 // ── Supplies shop (consumables) ─────────────────────────────
 
-/** Every Supplies product is ours and not VIP (server config/shop.php owns the list). */
+/** Every Supplies product is ours and not VIP or a Shark Pass (server config/shop.php owns the list). */
 export function isShopProduct(productId: string | undefined | null): boolean {
   return typeof productId === 'string' && productId.startsWith('com.themeparkshark.app.')
-    && !(VIP_PRODUCT_IDS as readonly string[]).includes(productId);
+    && !(VIP_PRODUCT_IDS as readonly string[]).includes(productId) && !isSharkPassProduct(productId);
 }
+
+/** One App Store Non-Consumable per Shark Pass season: com.themeparkshark.app.sharkpass.<season>. */
+export function isSharkPassProduct(productId: string | undefined | null): boolean {
+  return typeof productId === 'string' && productId.startsWith(SHARK_PASS_PREFIX);
+}
+export const SHARK_PASS_PREFIX = 'com.themeparkshark.app.sharkpass.';
 
 const shopDelivered = new Map<string, Promise<ShopRedeemResult>>();
 /** The shop day the player was looking at when they tapped Buy (Daily Deal grace). */
@@ -422,4 +430,96 @@ export function savingsText(plans: readonly Pick<VipPlan, 'period' | 'amount'>[]
 /** "$4.99 a month" (or "every 3 months"): words, not a slash. */
 export function priceText(plan: Pick<VipPlan, 'price' | 'period'>): string {
   return `${plan.price} ${/\s/.test(plan.period) ? 'every' : 'a'} ${plan.period}`;
+}
+
+// ── Shark Pass (one Non-Consumable per season) ─────────────
+
+const passDelivered = new Map<string, Promise<SharkPassState>>();
+type PassListener = (state: SharkPassState) => void;
+const passListeners = new Set<PassListener>();
+
+/** A Shark Pass that lands outside a Buy tap (Ask to Buy approved, last run's unfinished). */
+export function onSharkPassDelivered(listener: PassListener): () => void {
+  passListeners.add(listener);
+  return () => { passListeners.delete(listener); };
+}
+
+/** Sends a Shark Pass transaction to the server, then finishes it. Once per transaction even when reported twice. */
+function deliverPass(store: Iap, purchase: StorePurchase): Promise<SharkPassState | null> {
+  const jws = jwsOf(purchase);
+  if (!isSharkPassProduct(purchase.productId) || !jws) return Promise.resolve(null);
+  const key = keyOf(purchase);
+  const pending = passDelivered.get(key);
+  if (pending) return pending;
+  const promise = (async () => {
+    const state = await redeemSharkPass(jws);
+    await store.finishTransaction({ purchase, isConsumable: false }).catch(() => undefined);
+    passListeners.forEach((listener) => { try { listener(state); } catch { /* a screen's problem */ } });
+    return state;
+  })();
+  passDelivered.set(key, promise);
+  promise.catch(() => { if (passDelivered.get(key) === promise) passDelivered.delete(key); });
+  return promise;
+}
+
+/** Apple's localized price for this season's Shark Pass, or null. */
+export async function loadSharkPassPrice(productId: string): Promise<ShopPrice | null> {
+  if (!isSharkPassProduct(productId)) return null;
+  if (__DEV__) { const cap = devCapture(); if (cap?.capturePrices()) return { productId, price: '$4.99', amount: 4.99 }; }
+  const store = await connect();
+  const [product] = await store.getProducts({ skus: [productId] });
+  return product?.localizedPrice ? { productId, price: product.localizedPrice, amount: Number(product.price) || 0 } : null;
+}
+
+export type PassPurchaseOutcome =
+  | { status: 'success'; state: SharkPassState }
+  | { status: 'cancelled' | 'pending' | 'unverified' | 'other_account' | 'unavailable' | 'failed' };
+
+/** Buys this season's Shark Pass. The caller has already asked a grown-up. */
+export async function buySharkPass(productId: string, accountToken?: string | null): Promise<PassPurchaseOutcome> {
+  if (!storeAvailable()) return { status: 'unavailable' };
+  if (!isSharkPassProduct(productId)) return { status: 'failed' };
+  let store: Iap;
+  let purchase: StorePurchase | null = null;
+  try {
+    store = await connect();
+    const bought = await store.requestPurchase({
+      sku: productId, andDangerouslyFinishTransactionAutomaticallyIOS: false,
+      ...(accountToken ? { appAccountToken: accountToken } : {}),
+    });
+    purchase = (Array.isArray(bought) ? bought[0] : bought) ?? null;
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === 'E_USER_CANCELLED') return { status: 'cancelled' };
+    if (code === 'E_DEFERRED_PAYMENT') return { status: 'pending' };
+    return { status: 'failed' };
+  }
+  if (!purchase) return { status: 'pending' };
+  try {
+    const state = await deliverPass(store, purchase);
+    return state ? { status: 'success', state } : { status: 'unverified' };
+  } catch (error) {
+    return sharkPassErrorCode(error) === 'SHARK_PASS_OTHER_PLAYER' ? { status: 'other_account' } : { status: 'unverified' };
+  }
+}
+
+/** Restore: every Shark Pass this Apple ID owns goes to the server again. */
+export async function restoreSharkPass(productId: string): Promise<'restored' | 'nothing' | 'other_account' | 'unavailable' | 'failed'> {
+  if (!storeAvailable()) return 'unavailable';
+  try {
+    const store = await connect();
+    await store.IapIosSk2.sync().catch(() => undefined);
+    await store.getProducts({ skus: [productId] });
+    const owned = (await store.getAvailablePurchases({ onlyIncludeActiveItems: true })).filter(p => isSharkPassProduct(p.productId));
+    if (!owned.length) return 'nothing';
+    passDelivered.clear();
+    let restored = false;
+    for (const purchase of owned) {
+      const state = await deliverPass(store, purchase);
+      if (state && 'progress' in state && state.progress?.premium) restored = true;
+    }
+    return restored ? 'restored' : 'nothing';
+  } catch (error) {
+    return sharkPassErrorCode(error) === 'SHARK_PASS_OTHER_PLAYER' ? 'other_account' : 'failed';
+  }
 }
