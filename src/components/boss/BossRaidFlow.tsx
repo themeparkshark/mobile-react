@@ -235,6 +235,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   // The round is sent at the bell (keepOpen) so the result card can show what the server said and an idle
   // result card or a closed app never loses it; Done / Attack again then only close the fight.
   const sentAtBell = useRef(false);
+  const [showTeams, setShowTeams] = useState(false);
   const atStart = useRef<{ energy: number; attacksLeft: number } | null>(null);
   const [receipt, setReceipt] = useState<{ state: 'saving' | 'saved' | 'error'; note: string | null } | null>(null);
   const [liveActive, setLiveActive] = useState(false);
@@ -367,6 +368,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             next={{ attacksLeft: atStart.current?.attacksLeft ?? raid.you.attacks_left, energy: atStart.current?.energy ?? energy, energyCost: raid.energy_cost }}
             rewards={rewards ?? undefined}
             capLeft={Math.max(0, MAX_DAMAGE_PER_PLAYER - raid.you.damage)}
+            teamDamage={raid.teams.mouse + raid.teams.globe + raid.teams.shark}
             autoplay={__DEV__ ? devAutoplay : 0}
             onRoundEnd={meta => submit(renderedRound, meta, true)}
             onActiveChange={setLiveActive}
@@ -390,11 +392,16 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
               {receiptBlocked && recovery.snapshot && !againPending &&
                 <BossAttackStatus snapshot={recovery.snapshot} onRetry={() => { void recovery.retry(); }} />}
               {raid.you.attacks > 0 && <View style={{ marginTop: 6 }}><PushSoftAsk /></View>}
-              <Text style={styles.section}>Your attacks</Text>
-              <AttackPips raid={raid} />
-              <Text style={styles.section}>Teams</Text>
-              <TeamDamage raid={raid} />
-              <TopFighters raid={raid} />
+              {/* First look stays short: the team details open on a tap (they are always there for repeat attackers). */}
+              {raid.you.attacks > 0 || showTeams ? <>
+                <Text style={styles.section}>Your attacks</Text>
+                <AttackPips raid={raid} />
+                <Text style={styles.section}>Teams</Text>
+                <TeamDamage raid={raid} />
+                <TopFighters raid={raid} />
+              </> : <Pressable accessibilityRole="button" onPress={() => setShowTeams(true)} style={styles.teamsBtn} hitSlop={6}>
+                <Text style={styles.teamsBtnText}>See who is fighting</Text>
+              </Pressable>}
               <Text style={styles.fine}>
                 {remote
                   ? `From home your hits count ${Math.round(raid.remote.damage_rate * 100)}%, loot is ${Math.round((raid.remote.reward_rate ?? raid.remote.damage_rate) * 100)}% and the MVP prize stays at the ride. Everyone who lands a hit shares the loot if the team wins.`
@@ -453,6 +460,9 @@ const styles = StyleSheet.create({
   blocked: { marginBottom: 6, fontFamily: 'Shark', fontSize: 15, color: BRAND.white, textAlign: 'center' },
   cost: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   costText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white },
+  teamsBtn: { alignSelf: 'center', marginTop: 12, minHeight: 44, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 14,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
+  teamsBtnText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
   section: { marginTop: 14, fontFamily: 'Shark', fontSize: 15, color: BRAND.white, opacity: 0.9 },
   fine: { marginTop: 8, fontFamily: 'Knockout', fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center' },
 });

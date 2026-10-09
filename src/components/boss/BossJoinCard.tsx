@@ -91,7 +91,7 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
 
       <View style={{ marginTop: 10 }}><BossHpBar hpLeft={raid.hp_left} hpMax={raid.hp_max} height={22} /></View>
       <View style={styles.hpRow}>
-        <Text style={styles.hpText} maxFontSizeMultiplier={1.3}>{pctLeft}% left</Text>
+        <View />
         <View style={styles.fighters}><GameIcon name="shark" size={18} />
           <Text style={styles.hpText} maxFontSizeMultiplier={1.3}>{raid.fighters} fighting</Text></View>
       </View>
@@ -186,7 +186,7 @@ export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, 
           <GameIcon name="energy" size={18} /><Text style={styles.afterNum} maxFontSizeMultiplier={1.3}>{cost.energyAfter}</Text>
           {cost.ticket > 0 && <><GameIcon name="ticket" size={18} /><Text style={styles.afterNum} maxFontSizeMultiplier={1.3}>{cost.ticketsAfter}</Text></>}
           {remote && raid.remote.joined && <><GameIcon name="ticket" size={18} /><Text style={styles.after} maxFontSizeMultiplier={1.3}>paid</Text></>}
-          <Text style={styles.after} maxFontSizeMultiplier={1.3}>  ·  Attack {raid.you.attacks + 1} of {raid.max_attacks ?? 5}</Text>
+          {raid.you.attacks > 0 && <Text style={styles.after} maxFontSizeMultiplier={1.3}>  ·  Attack {raid.you.attacks + 1} of {raid.max_attacks ?? 5}</Text>}
         </View>}
       <Pressable accessibilityRole="button" onPress={onClose} style={styles.notNow} hitSlop={6}>
         <Text style={styles.notNowText} maxFontSizeMultiplier={1.3}>Not now</Text></Pressable>

@@ -99,6 +99,8 @@ export interface BossBashProps {
   readonly rewards?: BashRewards;
   /** Damage this player can still add to this raid (server per-player cap). */
   readonly capLeft?: number;
+  /** Everyone's damage on this raid before this round (for "your share"). */
+  readonly teamDamage?: number;
   readonly onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   readonly onClose: () => void;
   /** Result screen "Attack again": submit this round, then start the next. */
@@ -119,7 +121,7 @@ export interface BossBashProps {
 }
 
 export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fighters = 0, endsAt, damageRate = 1,
-  damage: weightsIn, maxHits, next, rewards, capLeft, onComplete, onClose, onAgain, onQuit, onActiveChange, onRoundEnd, receipt = null, receiptNote = null,
+  damage: weightsIn, maxHits, next, rewards, capLeft, teamDamage = 0, onComplete, onClose, onAgain, onQuit, onActiveChange, onRoundEnd, receipt = null, receiptNote = null,
   autoplay = 0, forceIntro = false }: BossBashProps) {
   const weights = weightsIn ?? DEFAULT_WEIGHTS;
   const skin = BOSS_SKINS[boss];
@@ -179,6 +181,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   /** The id of a streak word (drawn low, small) vs a smash/phase word (drawn high in the sky). */
   const streakWord = useRef(-1);
   const perfectChain = useRef(0);
+  const lastBonkBuzz = useRef(0);
   const shake = useShake(), flash = useFlash();
 
   const addFx = useCallback((item: FxIn, life = 900) => {
@@ -338,7 +341,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     }
     const step = LADDER[Math.min(LADDER.length - 1, e.streak - 1)];
     sfx('bo_hit', 'fx.hit', { pitch: step, volume: 0.95, pan: (LANES[e.popup.spot % 3] - 0.5) * 1.2 });
-    haptic('tapLight');
+    // One light tick per bonk, but never a buzz: at most one every 110 ms.
+    if (Date.now() - lastBonkBuzz.current > 110) { lastBonkBuzz.current = Date.now(); haptic('tapLight'); }
     if (e.streak === 6 || e.streak === 12 || e.streak === 20) {
       addFx({ t: 'wm', wm: e.streak === 6 ? 'nice' : e.streak === 12 ? 'great' : 'superb' }, 900);
       streakWord.current = fxId.current;
@@ -366,7 +370,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     const side = [0, -1, 1][flopCount.current++ % 3];
     setFlopSide(side); flopX.value = side;
     // One frame late, so the boss is already in front of the water when it starts to fall.
-    bossDrop.value = reduced ? withTiming(1, { duration: 120 }) : withDelay(34, withTiming(1, { duration: 150, easing: Easing.in(Easing.quad) }));
+    bossDrop.value = reduced ? withTiming(1, { duration: 120 }) : withDelay(16, withTiming(1, { duration: 100, easing: Easing.in(Easing.quad) }));
     if (!reduced) {
       later(150, () => {
         addFx({ t: 'burst', src: BASH_ART.splash, x: L.w * 0.3, y: L.waterY + 30, size: L.w * 0.3 }, 420);
@@ -703,11 +707,15 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     return { transform: [{ translateY: -up * L.bossSize * 0.06 }, { rotate: `${up * 14 * Math.sin(v * 9)}deg` }] };
   });
 
+  // The boss looks worse as the whole team wears it down: angry under half HP, hat gone under a quarter.
+  const stage = hpLeft / Math.max(1, hpMax) < 0.25 ? 2 : hpLeft / Math.max(1, hpMax) < 0.5 ? 1 : 0;
   const hpNow = Math.max(0, hpLeft - (capLeft === undefined ? hud.damage : Math.min(hud.damage, capLeft)));
   // Every face is mounted once and cross-cut by opacity: no decode hitch on a swap.
   const faces = ([['angry', skin.body], ['dizzy', skin.dizzy], ['hurt', skin.hurt], ['laugh', skin.laugh], ['roar', skin.roar], ['puff', skin.puff]] as const)
     .filter((f): f is readonly [Face, number] => f[1] !== null);
-  const shownFace: Face = faces.some(f => f[0] === face) ? face : 'angry';
+  const idle: Face = stage >= 1 && skin.roar ? 'roar' : 'angry';
+  const wanted: Face = face === 'angry' ? idle : face;
+  const shownFace: Face = faces.some(f => f[0] === wanted) ? wanted : 'angry';
   const bodySrc = faces.find(f => f[0] === shownFace)?.[1] ?? skin.body;
   const sharkSrc = BASH_ART.shark[pose];
   const finSize = Math.min(54, L.w * 0.13);
@@ -716,6 +724,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     <BashResults args={args} bossName={bossName} boss={boss} rideName={rideName ?? null} startHp={hpAtBell.current ?? hpLeft} capLeft={capLeft}
       hpMax={hpMax} damage={args.result.score} rate={damageRate} meta={args.result.meta ?? {}} fighters={fighters}
       endsAt={endsAt} next={next} rewards={rewards} receipt={receipt} receiptNote={receiptNote} bestBefore={best}
+      teamDamage={teamDamage} portrait={skin.hurt ?? skin.dizzy ?? undefined}
       onAgain={onAgain && args.result.meta ? () => onAgain(args.result.meta!) : undefined} />
   );
 
@@ -765,7 +774,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
             <Animated.View style={[StyleSheet.absoluteFill, bossStyle]}>
               {faces.map(([id, src]) => <Image key={id} source={src} contentFit="contain"
                 style={[StyleSheet.absoluteFill, { opacity: id === shownFace ? (skin.ghostly ? 0.92 : 1) : 0 }]} />)}
-              {skin.hat && <Animated.View style={[{ position: 'absolute', left: L.bossSize * 0.22, top: -L.bossSize * 0.02,
+              {skin.hat && stage < 2 && <Animated.View style={[{ position: 'absolute', left: L.bossSize * 0.22, top: -L.bossSize * 0.02,
                 width: L.bossSize * 0.56, height: L.bossSize * 0.42 }, hatStyle]}>
                 <Image source={BASH_ART.hat} style={StyleSheet.absoluteFill} contentFit="contain" />
               </Animated.View>}
@@ -846,7 +855,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           </View>
           <View style={styles.chipRow}>
             {damageRate < 1 ? <View style={styles.homeChip}><Text style={styles.homeText}>From home: {Math.round(damageRate * 100)}% power</Text></View> : <View />}
-            {teamHit !== null && <View style={styles.teamChip}><Text style={styles.teamText}>Your team hit it! -{teamHit.toLocaleString()}</Text></View>}
+            {teamHit !== null && <View style={styles.teamChip}><GameIcon name="sparkle" size={14} /><Text style={styles.teamText}>+{teamHit.toLocaleString()} from your team</Text></View>}
           </View>
         </View>}
         {L.w > 0 && !result && <View pointerEvents="none" style={styles.finDock}>
@@ -947,7 +956,7 @@ const styles = StyleSheet.create({
   secsText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, padding: 0, minWidth: 22, textAlign: 'center' },
   timerTrack: { flex: 1, height: 10, borderRadius: 4, borderWidth: 2, borderColor: BRAND.navy, backgroundColor: 'rgba(255,255,255,0.7)', overflow: 'hidden' },
   timerFill: { height: '100%', borderRadius: 2 },
-  teamChip: { marginTop: 6, backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
+  teamChip: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 6, backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
   teamText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
   homeChip: { marginTop: 6, backgroundColor: 'rgba(5,52,110,0.75)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
   homeText: { fontFamily: 'Knockout', fontSize: 13, color: BRAND.white },

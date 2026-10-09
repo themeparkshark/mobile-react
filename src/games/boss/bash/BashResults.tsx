@@ -49,7 +49,7 @@ export function creditedDamage(damage: number, capLeft: number | undefined): num
 }
 
 export default function BashResults({ args, bossName, boss, startHp, hpMax, damage: rawDamage, capLeft, rate, meta, fighters, endsAt, next, rewards, onAgain,
-  receipt = null, receiptNote = null, bestBefore = 0 }: {
+  receipt = null, receiptNote = null, bestBefore = 0, teamDamage = 0, portrait }: {
   args: ShellResultsArgs; bossName: string; boss: BossId; rideName: string | null; startHp: number; hpMax: number; damage: number;
   /** Per-player raid cap left before this round (config boss.max_damage_per_player_per_raid). */
   capLeft?: number;
@@ -60,6 +60,9 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   receiptNote?: string | null;
   /** Your best on this boss as read at the start of the round. */
   bestBefore?: number;
+  teamDamage?: number;
+  /** The hurt boss (it took your hits). */
+  portrait?: number;
 }) {
   const { stars, claim, reducedMotion: reduced } = args;
   const damage = creditedDamage(rawDamage, capLeft);
@@ -103,16 +106,17 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   return (
     <View style={styles.card} accessibilityViewIsModal>
       <View style={[styles.banner, ko && styles.bannerWin]} accessibilityRole="header">
-        <Text style={styles.bannerText}>{noHits ? 'MISSED IT' : ko ? 'FINAL BLOW!' : 'STILL FIGHTING'}</Text>
+        <Text style={styles.bannerText}>{noHits ? 'MISSED IT' : ko ? 'YOU FINISHED IT!' : 'STILL FIGHTING'}</Text>
       </View>
       {best && !noHits && <View style={styles.best}><Text style={styles.bestText}>NEW BEST!</Text></View>}
       <View style={styles.head}>
-        <Image source={BOSS_ART[boss]} style={styles.bossPic} contentFit="contain" />
+        <Image source={portrait ?? BOSS_ART[boss]} style={styles.bossPic} contentFit="contain" />
         <View style={{ flex: 1 }}>
           <Text style={styles.kicker}>{noHits ? 'NO HITS THIS TIME' : `YOU HIT ${bossName.toUpperCase()} FOR`}</Text>
           {noHits ? <Text style={styles.zero}>No Energy was spent.</Text>
             : <CountUpText value={damage} delayMs={reduced ? 0 : 200} durationMs={reduced ? 1 : 700} style={styles.dmg} />}
           {rate < 1 && !noHits && <Text style={styles.rate}>From home, {Math.round(rate * 100)}% power</Text>}
+          {!noHits && teamDamage > 0 && <Text style={styles.rate}>That is {Math.max(1, Math.round((damage / (teamDamage + damage)) * 100))}% of all the team's hits</Text>}
           {capped && <Text style={styles.rate}>That hits the most one shark can do to this boss.</Text>}
         </View>
       </View>
