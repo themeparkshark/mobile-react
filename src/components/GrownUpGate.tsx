@@ -11,9 +11,14 @@ import { useModalLayer } from '../ui/modalLayers';
  * The grown-up gate in front of every paywall and real-money purchase
  * (Apple Kids category, guideline 1.3; Secret Shop kids UX rounds 1-5).
  *
- * - A two-digit times a one-digit sum (23..89 times 6..9, no round tens),
- *   typed on a number pad: no choices to guess from, and a 9 or 10 year old
- *   can't do it in their head.
+ * - Two steps for the grown-up: read a sum written out in words ("forty-seven
+ *   times six"), then work out a two-digit times a one-digit sum (23..89 times
+ *   6..9, no round tens), typed on a number pad. No digits to copy, no choices to
+ *   guess from: an adult reads and answers at once, a 9 or 10 year old can't.
+ * - The child never sees the offer: before the answer the gate only says "this
+ *   costs real money". The price, what it gets, any free trial and, for a plan
+ *   that renews, the renewal and cancel terms (App Store 3.1.2) are shown on a
+ *   second card only after the grown-up answers, with Continue and Not now.
  * - A pass covers only the door it was asked for, plus the next step of that
  *   same flow (the paywall's entry, then its Buy), once, within 2 minutes.
  *   Every other door asks again, and a wrong answer cancels any pass.
@@ -26,11 +31,22 @@ import { useModalLayer } from '../ui/modalLayers';
  * out of the app through services/external; source tests fail the build on a
  * bare navigate('Membership'), openURL, openBrowserAsync or share call.
  */
-export function grownUpQuestion(seed: number): { a: number; b: number; answer: number } {
+const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+/** 0..99 in words: "forty-seven". Exported for tests. */
+export function numberWords(n: number): string {
+  if (n < 10) return ONES[n];
+  const teens = ['ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+  if (n < 20) return teens[n - 10];
+  const t = TENS[Math.floor(n / 10)];
+  return n % 10 ? `${t}-${ONES[n % 10]}` : t;
+}
+
+export function grownUpQuestion(seed: number): { a: number; b: number; answer: number; words: string } {
   const s = Math.abs(Math.floor(seed));
   const a = (2 + (s % 7)) * 10 + (3 + (Math.floor(s / 7) % 7));
   const b = 6 + (Math.floor(s / 49) % 4);
-  return { a, b, answer: a * b };
+  return { a, b, answer: a * b, words: `${numberWords(a)} times ${numberWords(b)}` };
 }
 
 export const GATE_REST_MS = 30_000;
@@ -61,18 +77,53 @@ async function loadRest() {
  */
 export type GateReason =
   | { readonly kind: 'money'; readonly price: string; readonly gets: string }
+  /** A plan that renews by itself (VIP). `period` is "month", "year" or "3 months". */
+  | { readonly kind: 'renews'; readonly what: string; readonly price: string; readonly period: string; readonly trial: string | null }
   | { readonly kind: 'vip'; readonly prices?: string }
   | { readonly kind: 'leave'; readonly where: string }
   | { readonly kind: 'share' };
 
-/** The two lines the gate shows for a reason. Exported for tests. */
+/**
+ * What the gate says BEFORE the grown-up answers: only that it is real money or leaves
+ * the game. No price, no free trial, nothing to tempt a child. Exported for tests.
+ */
 export function gateReasonLines(reason: GateReason | null | undefined): { head: string; line: string | null; icon: GameIconName | 'money' } | null {
   if (!reason) return null;
   switch (reason.kind) {
-    case 'money': return { head: 'This costs real money.', line: `${reason.price} for ${reason.gets}`, icon: 'money' };
-    case 'vip': return { head: 'VIP costs real money.', line: reason.prices ?? 'The prices are on the next screen.', icon: 'money' };
+    case 'money':
+    case 'renews': return { head: 'This costs real money.', line: 'A grown-up sees the details next.', icon: 'money' };
+    case 'vip': return { head: 'VIP costs real money.', line: 'A grown-up sees the details next.', icon: 'money' };
     case 'leave': return { head: 'This leaves the game.', line: `It opens ${reason.where}.`, icon: 'arrow' };
     case 'share': return { head: 'This shares outside the game.', line: 'It sends this to another app.', icon: 'arrow' };
+  }
+}
+
+/** "a month", "a year" or "every 3 months". */
+function perPeriod(period: string): string {
+  return /\s/.test(period) ? `every ${period}` : `a ${period}`;
+}
+
+/**
+ * The offer card the grown-up sees AFTER answering: the price, what it gets, any free
+ * trial, and for a plan that renews the App Store 3.1.2 terms. Null: no second card.
+ * Exported for tests.
+ */
+export function gateDetails(reason: GateReason | null | undefined): { head: string; lines: string[] } | null {
+  if (!reason) return null;
+  switch (reason.kind) {
+    case 'money': return { head: `${reason.price}`, lines: [`For ${reason.gets}.`, 'Paid with the Apple ID on this device.'] };
+    case 'renews': return {
+      head: reason.trial ? `${reason.trial}, then ${reason.price} ${perPeriod(reason.period)}` : `${reason.price} ${perPeriod(reason.period)}`,
+      lines: [
+        `For ${reason.what}.`,
+        reason.trial
+          ? `After the free time it renews by itself at ${reason.price} ${perPeriod(reason.period)} until you cancel.`
+          : `It renews by itself at ${reason.price} ${perPeriod(reason.period)} until you cancel.`,
+        'Cancel anytime in Settings, your name, Subscriptions, at least 24 hours before it renews. Paid with the Apple ID on this device.',
+      ],
+    };
+    case 'vip': return reason.prices ? { head: 'VIP', lines: [reason.prices] } : null;
+    default: return null;
   }
 }
 
@@ -197,8 +248,10 @@ const MAX_FONT = 1.3;
 export function GrownUpGateHost() {
   const [req, setReq] = useState<GateRequest | null>(null);
   const [typed, setTyped] = useState('');
+  // After a right answer: the offer card (price, trial, renewal terms) for the grown-up only.
+  const [details, setDetails] = useState<{ head: string; lines: string[] } | null>(null);
   useEffect(() => {
-    showGate = r => { setTyped(''); setReq(r); };
+    showGate = r => { setTyped(''); setDetails(null); setReq(r); };
     return () => { showGate = null; };
   }, []);
   // Waits behind any open sheet instead of stacking a second <Modal> (ui/modalLayers.ts).
@@ -207,15 +260,37 @@ export function GrownUpGateHost() {
   const resting = req.seed < 0;
   const q = resting ? null : grownUpQuestion(req.seed);
   const why = resting ? null : gateReasonLines(req.reason);
-  const close = (ok: boolean) => { req.resolve(ok); setReq(null); };
+  const close = (ok: boolean) => { req.resolve(ok); setReq(null); setDetails(null); };
   const press = (k: typeof KEYS[number]) => {
     if (k === 'del') { setTyped(t => t.slice(0, -1)); return; }
-    if (k === 'ok') { close(judgeGate(typed, req.seed)); return; }
+    if (k === 'ok') {
+      const ok = judgeGate(typed, req.seed);
+      const offer = ok ? gateDetails(req.reason) : null;
+      if (offer) setDetails(offer); else close(ok);
+      return;
+    }
     setTyped(t => (t.length < 3 ? t + k : t));
   };
   return (
     <Modal visible transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent>
       <View style={styles.scrim}>
+        {details ? (
+          <View style={styles.card} accessibilityViewIsModal>
+            <RealMoneyMark size={36} />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title}>For grown-ups</Text>
+            <View style={styles.offer} accessible accessibilityLabel={[details.head, ...details.lines].join(' ')}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.offerHead}>{details.head}</Text>
+              {details.lines.map(line => <Text key={line} maxFontSizeMultiplier={MAX_FONT} style={styles.offerLine}>{line}</Text>)}
+            </View>
+            <Pressable onPress={() => close(true)} style={({ pressed }) => [styles.key, styles.keyOk, styles.restOk, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button" accessibilityLabel="Continue to the App Store">
+              <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.keyText, styles.keyOkText]}>Continue</Text>
+            </Pressable>
+            <Pressable onPress={() => close(false)} style={styles.cancel} accessibilityRole="button" hitSlop={8}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.cancelText}>Not now</Text>
+            </Pressable>
+          </View>
+        ) : (
         <View style={[styles.card, resting && styles.cardRest]} accessibilityViewIsModal>
           {/* The lock means "grown-ups only". The VIP badge means VIP and nothing else. */}
           <GameIcon name={resting ? 'moon' : 'lock'} size={resting ? 56 : 40} />
@@ -234,8 +309,8 @@ export function GrownUpGateHost() {
                   </View>
                 </View>
               )}
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.body} accessibilityLabel={`Grown-ups: what is ${q!.a} times ${q!.b}?`}>
-                Grown-ups: what is {q!.a} × {q!.b}?
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.body} accessibilityLabel={`Grown-ups: type the answer to ${q!.words}.`}>
+                Grown-ups: type the answer to{'\n'}<Text style={styles.words}>{q!.words}</Text>
               </Text>
               <View style={styles.answer} accessible accessibilityLabel={typed ? `Answer ${typed}` : 'No answer yet'}>
                 <Text style={styles.answerText}>{typed || ' '}</Text>
@@ -263,6 +338,7 @@ export function GrownUpGateHost() {
             </Pressable>
           )}
         </View>
+        )}
       </View>
     </Modal>
   );
@@ -271,7 +347,7 @@ export function GrownUpGateHost() {
 /** House navy panel, white rim, gold OK key (blue/white/gold palette): every ink is AA on its surface. */
 export const GATE_COLORS = {
   panel: '#0b3a75', card: '#1a5c9e', well: '#082d5c', ink: '#ffffff', inkSoft: '#e2f6ff',
-  border: '#ffffff', gold: '#ffd34d', violet: '#7cc6f5',
+  border: '#ffffff', gold: '#ffd34d', sky: '#7cc6f5',
 } as const;
 
 const styles = StyleSheet.create({
@@ -285,7 +361,11 @@ const styles = StyleSheet.create({
     borderRadius: 14, backgroundColor: GATE_COLORS.well, borderWidth: 2, borderColor: GATE_COLORS.gold },
   whyHead: { fontFamily: FONT.display, fontSize: 17, color: GATE_COLORS.gold },
   whyLine: { fontFamily: FONT.body, fontSize: 16, color: GATE_COLORS.ink },
-  answer: { minWidth: 120, minHeight: 48, borderRadius: 14, backgroundColor: GATE_COLORS.well, borderWidth: 2, borderColor: GATE_COLORS.violet,
+  words: { fontFamily: FONT.display, fontSize: 21, color: GATE_COLORS.gold },
+  offer: { alignSelf: 'stretch', gap: 6, padding: 12, borderRadius: 14, backgroundColor: GATE_COLORS.well, borderWidth: 2, borderColor: GATE_COLORS.gold },
+  offerHead: { fontFamily: FONT.display, fontSize: 20, color: GATE_COLORS.gold, textAlign: 'center' },
+  offerLine: { fontFamily: FONT.body, fontSize: 15, color: GATE_COLORS.ink, textAlign: 'center' },
+  answer: { minWidth: 120, minHeight: 48, borderRadius: 14, backgroundColor: GATE_COLORS.well, borderWidth: 2, borderColor: GATE_COLORS.sky,
     alignItems: 'center', justifyContent: 'center' },
   answerText: { fontFamily: FONT.display, fontSize: 28, color: '#ffffff' },
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, width: 3 * 72 + 2 * 8 },

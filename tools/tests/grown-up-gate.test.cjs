@@ -40,6 +40,9 @@ test('the grown-up question: 2-digit times 1-digit, too hard for a 9 or 10 year 
     const { a, b, answer } = gate.grownUpQuestion(seed);
     assert.ok(a >= 23 && a <= 89 && a % 10 >= 3 && b >= 6 && b <= 9, `${a} x ${b}`);
     assert.equal(answer, a * b);
+    const { words } = gate.grownUpQuestion(seed);
+    assert.doesNotMatch(words, /\d/, 'written in words: no digits to copy');
+    assert.match(words, /^[a-z]+(-[a-z]+)? times [a-z]+$/);
     assert.ok(String(answer).length <= 3, 'fits the 3-digit answer box');
     seen.add(`${a}x${b}`);
   }
@@ -51,6 +54,11 @@ test('the grown-up question: 2-digit times 1-digit, too hard for a 9 or 10 year 
   const ui = read('src/components/GrownUpGate.tsx');
   assert.match(ui, /const KEYS = \['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'\] as const;/, 'typed on a pad, no choices');
   assert.match(ui, /'Ask a grown-up'/);
+  assert.equal(gate.grownUpQuestion(0).words, 'twenty-three times six');
+  assert.equal(gate.numberWords(47), 'forty-seven');
+  assert.equal(gate.numberWords(80), 'eighty');
+  assert.doesNotMatch(ui, /violet|purple|#7b|#8e44|#6a/i, 'blue, white and gold only');
+  assert.match(ui, /const offer = ok \? gateDetails\(req\.reason\) : null;/, 'offer details only after a right answer');
   assert.match(ui, /That wasn't right\. A grown-up can try again in 30 seconds\./, 'calm, says what happened and when');
 });
 

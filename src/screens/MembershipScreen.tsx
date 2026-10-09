@@ -86,7 +86,7 @@ function capitalize(text: string): string {
 
 /** What the grown-up gate restates before the App Store sheet. */
 export function vipGateReason(plan: Pick<VipPlan, 'price' | 'period' | 'trial'>): GateReason {
-  return { kind: 'money', price: plan.trial ? `${plan.trial}. Then ${priceText(plan)}` : priceText(plan), gets: 'VIP' };
+  return { kind: 'renews', what: 'VIP', price: plan.price, period: plan.period, trial: plan.trial };
 }
 
 export default function MembershipScreen({ route }: { route: { params?: { intro?: boolean } } }) {
