@@ -215,13 +215,13 @@ export function SkeletonRow() {
   const style = usePulse();
   return (
     <View style={{ height: ROW_HEIGHT, paddingHorizontal: SIDE, justifyContent: 'center', backgroundColor: BRAND.cream }} accessible={false}>
-      <Animated.View style={[{ height: ROW_HEIGHT - 10, borderRadius: RADIUS.md, backgroundColor: 'rgba(5,52,110,0.10)', flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 }, style]}>
+      <Animated.View style={[{ height: ROW_HEIGHT - 10, borderRadius: RADIUS.md, backgroundColor: BRAND.white, ...FRAME, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 }, style]}>
         <View style={{ flex: 1, gap: 9 }}>
-          <View style={{ width: 90, height: 16, borderRadius: 8, backgroundColor: '#d9e9f6' }} />
-          <View style={{ width: '95%', height: 16, borderRadius: 8, backgroundColor: '#d9e9f6' }} />
-          <View style={{ width: '70%', height: 16, borderRadius: 8, backgroundColor: '#d9e9f6' }} />
+          <View style={{ width: 90, height: 16, borderRadius: 8, backgroundColor: '#cfe3f5' }} />
+          <View style={{ width: '95%', height: 16, borderRadius: 8, backgroundColor: '#cfe3f5' }} />
+          <View style={{ width: '70%', height: 16, borderRadius: 8, backgroundColor: '#cfe3f5' }} />
         </View>
-        <View style={{ width: 104, height: 92, borderRadius: 10, backgroundColor: '#d9e9f6' }} />
+        <View style={{ width: 104, height: 92, borderRadius: 10, backgroundColor: '#cfe3f5' }} />
       </Animated.View>
     </View>
   );
@@ -237,9 +237,9 @@ export function FeedSkeleton() {
           <Image source={TPS_SHARK} style={{ width: 72, height: 72, opacity: 0.85 }} contentFit="contain" accessibilityLabel="Loading news" />
         </View>
         <View style={{ padding: 14, gap: 10 }}>
-          <View style={{ width: 110, height: 18, borderRadius: 9, backgroundColor: '#d9e9f6' }} />
-          <View style={{ width: '92%', height: 22, borderRadius: 11, backgroundColor: '#d9e9f6' }} />
-          <View style={{ width: '60%', height: 22, borderRadius: 11, backgroundColor: '#d9e9f6' }} />
+          <View style={{ width: 110, height: 18, borderRadius: 9, backgroundColor: '#cfe3f5' }} />
+          <View style={{ width: '92%', height: 22, borderRadius: 11, backgroundColor: '#cfe3f5' }} />
+          <View style={{ width: '60%', height: 22, borderRadius: 11, backgroundColor: '#cfe3f5' }} />
         </View>
       </Animated.View>
       <SheetTop />
