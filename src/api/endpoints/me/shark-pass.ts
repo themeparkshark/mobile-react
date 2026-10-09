@@ -32,6 +32,8 @@ export type SharkPassSeasonInfo = {
   /** Over: no more points or sale; reached rewards stay claimable until claim_until. */
   readonly ended?: boolean;
   readonly claim_until?: string;
+  /** The last full day a claim works ('YYYY-MM-DD'). */
+  readonly claim_last_day?: string;
   /** For sale: running, and every season item exists on the server. */
   readonly on_sale?: boolean;
 };

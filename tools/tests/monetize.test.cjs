@@ -230,7 +230,7 @@ test('the shop copy is honest: real prices, no random rewards, Parts never sold,
   assert.match(shop, /export \{ grantsText, gateReasonFor \} from '\.\.\/\.\.\/services\/money\/supplies';/);
   const { grantsText } = loadTs('src/services/money/supplies.ts', {
     react: { useEffect() {}, useState: v => [v, () => {}] }, '../../components/GrownUpGate': { askGrownUp: async () => false },
-    '../../api/endpoints/me/shop': {}, '../purchases': {},
+    '../../api/endpoints/me/shop': {}, '../purchases': {}, './track': { trackMoney() {} },
   });
   assert.equal(grantsText({ tickets: 15, coins: 1500, energy: 150, rescue_passes: 2 }),
     '15 tickets, 1,500 coins, 150 energy and 2 Rescue Passes');

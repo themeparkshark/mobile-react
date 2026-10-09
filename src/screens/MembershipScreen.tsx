@@ -40,7 +40,6 @@ import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../services/money/flags';
 export const VIP_BENEFITS: { icon: GameIconName; title: string; body: string }[] = [
   { icon: 'xp', title: '2x XP and coins', body: 'Every time you win a ride coin at the park.' },
   { icon: 'search', title: '2 extra finds on every home hunt', body: '2x energy, tickets and XP from every find.' },
-  { icon: 'ticket', title: 'A free ticket every day', body: 'Claim it in Supplies. No ad to watch.' },
   { icon: 'member', title: 'VIP badge on your profile', body: 'Everyone can see you’re VIP.' },
 ];
 

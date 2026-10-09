@@ -95,6 +95,9 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)services\/ads$/.test(name)) return { adsAvailable: () => false, rewardText: () => '',
         watchForReward: async () => ({ status: 'unavailable' }) };
       if (/(^|\/)services\/purchases$/.test(name)) return { storeAvailable: () => false };
+      // Money offers on reward sheets (money stream): no server multiplier, so the generic VIP line.
+      if (/(^|\/)services\/money\/offers$/.test(name)) return { vipWinLine: () => null };
+      if (/(^|\/)services\/money\/vipPerks$/.test(name)) return { warmVipPerks: async () => undefined, vipRideMultiplierNow: () => null };
       if (name.includes('assets/')) return name;
       return { default: name };
     },

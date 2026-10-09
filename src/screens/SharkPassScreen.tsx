@@ -123,7 +123,7 @@ const CELL_W = 92;
 /** For the grown-up holding the phone: what the Shark Pass is, in plain words. All true of the server rules. */
 const PASS_GROWN_UP_NOTES = [
   'One buy for this season. It never renews and is never charged again.',
-  'Steps are earned only by playing. Steps and points are never sold.',
+  'Steps come only from playing. Points are never sold. VIP members earn 25% more points.',
   'Nothing in the Shark Pass row is random. Every reward is shown above.',
   'Every real-money buy asks a grown-up first. Ask to Buy works too.',
 ];
@@ -362,7 +362,7 @@ export default function SharkPassScreen() {
               <View style={s.ended}>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyTitle}>THIS SEASON IS OVER</Text>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>
-                  {`Claim what you reached by ${lastDayText((season.claim_until ?? season.last_day).slice(0, 10))}.`}
+                  {season.claim_last_day ? `Claim what you reached by ${lastDayText(season.claim_last_day)}.` : 'Claim what you reached soon.'}
                 </Text>
               </View>
             )}

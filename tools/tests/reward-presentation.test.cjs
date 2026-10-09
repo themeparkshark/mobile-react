@@ -156,7 +156,7 @@ test('a coin that cannot power up offers its one next step, never a dead end', (
     'react-native': { Dimensions: { get: () => ({ width: 390, height: 844 }) } }, 'expo-image': {}, 'react-native-modal': {},
     'lottie-react-native': {}, '../helpers/haptics': {}, '../config': {}, './HoloCoinPreview': {}, './Ribbon': {},
     './YellowButton': {}, './CoinUpgradeDemo': {}, '../context/AuthProvider': {}, '../context/SoundEffectProvider': {},
-    '../hooks/useReducedGameMotion': {}, '../ui/GameIcon': {}, '../RootNavigation': {}, '../services/purchases': { storeAvailable: () => false },
+    '../hooks/useReducedGameMotion': {}, '../ui/GameIcon': {}, '../RootNavigation': {}, '../services/purchases': { storeAvailable: () => false }, './money/CoinTopUpOffer': { default: 'CoinTopUpOffer' },
     ...progressionStubs, './coin/CoinStand': {}, './coin/Crowning': {}, './coin/LevelUpBurst': {}, './coin/PerkTrack': {}, './help/OneTimeTip': {},
     '../share': {}, '../share/devDrive': { useDevAutoPress() {} },
   });

@@ -74,7 +74,9 @@ test('pitch first: anyone sees VIP, and the paywall Buy is the gated real-money 
   assert.doesNotMatch(read('src/components/profile/StatusBadges.tsx'), /member: own/, 'never decided by whose badge was tapped');
   const paywall = read('src/screens/MembershipScreen.tsx');
   // Buy: a grown-up answers (plan and price restated) before StoreKit is ever called.
-  assert.match(paywall, /if \(!\(await grownUpForNextStep\('vip', Date\.now\(\), vipGateReason\(plan\)\)\)\) return;\s*Haptics[\s\S]{0,120}const outcome = await buyVip\(plan\);/);
+  // Funnel tracking may sit between the gate and the buy; the gate must still come first.
+  assert.match(paywall, /if \(!\(await grownUpForNextStep\('vip', Date\.now\(\), vipGateReason\(plan\)\)\)\) return;\s*Haptics[\s\S]{0,220}const outcome = await buyVip\(plan\);/);
+  assert.equal((strip(paywall).match(/buyVip\(/g) || []).length, 1, 'one StoreKit call, after the gate');
   assert.match(paywall, /if \(!plan \|\| busy \|\| buying\.current\) return;\s*buying\.current = true;/);
 });
 
@@ -130,7 +132,11 @@ test('real money is bought in exactly two gated places', () => {
   const supplies = read('src/services/money/supplies.ts');
   // One gated helper for every pack, app-wide: a second tap anywhere is ignored while one runs,
   // and a grown-up answers (price and contents restated) before StoreKit is called.
-  assert.match(supplies, /if \(buying\) return \{ status: 'busy' \};[\s\S]{0,80}buying = true;\s*try \{\s*if \(!\(await askGrownUp\(gateReasonFor\(product, state\.prices\[product\.product_id\]\)\)\)\) return \{ status: 'declined' \};/);
+  // Funnel tracking may sit around the gate; the gate must come before the one StoreKit call.
+  const code = strip(supplies);
+  assert.match(code, /if \(buying\) return \{ status: 'busy' \};[\s\S]{0,120}buying = true;\s*try \{[\s\S]{0,200}if \(!\(await askGrownUp\(gateReasonFor\(product, state\.prices\[product\.product_id\]\)\)\)\) \{[\s\S]{0,120}return \{ status: 'declined' \};/);
+  assert.ok(code.indexOf('await askGrownUp(') < code.indexOf('await purchaseNow('), 'the gate comes before the buy');
+  assert.ok(code.indexOf('async function purchaseNow') > code.indexOf('await askGrownUp('), 'StoreKit is reached only from purchaseNow, after the gate');
   assert.equal((strip(supplies).match(/buyShopProduct\(/g) || []).length, 1, 'StoreKit is reached from one line, after the gate');
 });
 
