@@ -48,9 +48,11 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
 }) {
   const ambient = useAmbient();
   const { width, height } = useWindowDimensions();
-  const size = Math.min(width * 0.46, height * 0.24, 200);
-  // Rows get a fixed area (scrolls on small phones), so the card never changes height.
-  const rowsHeight = Math.max(190, Math.min(300, height - size - 330));
+  // Many prizes (gear, a box) get a smaller chest so every card fits whole on a Pro-size phone.
+  const many = (rewards ? rewardRows(rewards).length : 0) >= 5;
+  const size = Math.min(width * 0.46, height * 0.24, many ? 160 : 200);
+  // Rows get a fixed area (scrolls only on small phones), so the card never changes height.
+  const rowsHeight = Math.max(200, Math.min(380, height - size - 300));
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
   const pop = useSharedValue(1);

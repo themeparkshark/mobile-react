@@ -134,7 +134,7 @@ export function weeklyLine(s: DailyThreeState): string {
   const left = w.needed - w.done;
   if (left > open) return 'A new week starts Monday';
   if (w.done === 0) return `${w.needed} flames this week open the gift`;
-  return `${left} more flame${left === 1 ? '' : 's'} open the gift`;
+  return left === 1 ? '1 more flame opens the gift' : `${left} more flames open the gift`;
 }
 
 /** The next chest to present: the lowest unopened level. */

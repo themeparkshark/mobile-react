@@ -112,7 +112,7 @@ test('weekly line is honest about what is still reachable this week', () => {
   assert.equal(L.weeklyLine(wk({ done: 0, days: days(['before', 'before', 'before', 'before', 'today', 'future', 'future']) })),
     'A new week starts Monday');
   assert.equal(L.weeklyLine(wk({ done: 3, days: days(['done', 'done', 'done', 'today', 'future', 'future', 'future']) })), '2 more flames open the gift');
-  assert.equal(L.weeklyLine(wk({ done: 4, days: days(['done', 'done', 'done', 'done', 'today', 'future', 'future']) })), '1 more flame open the gift');
+  assert.equal(L.weeklyLine(wk({ done: 4, days: days(['done', 'done', 'done', 'done', 'today', 'future', 'future']) })), '1 more flame opens the gift');
   assert.equal(L.weeklyLine(wk({ claimable: true })), 'Your Weekly Box is ready!');
   assert.equal(L.weeklyLine(wk({ claimed: true })), 'Gift opened! A new week starts Monday.');
   assert.equal(L.weeklyLine(wk({ done: 0, days: days(['today', 'future', 'future', 'future', 'future', 'future', 'future']) })), '5 flames this week open the gift');
