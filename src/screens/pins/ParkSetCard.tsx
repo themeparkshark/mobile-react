@@ -10,7 +10,7 @@
  * warmer/colder hunt (HuntSheet).
  */
 import { Image } from 'expo-image';
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import { BRAND, FONT, GameButton, GameIcon, OUTLINE, RADIUS, SHADOW, SPACE } from '../../ui';
@@ -76,6 +76,9 @@ type Props = {
 };
 
 function ParkSetCardBase({ set, today, busy, still, shine, onClaim, onPin, onHunt }: Props) {
+  // A tap on a pin shows a little bubble (no dialogs on a collection page).
+  const [tip, setTip] = useState<{ index: number; text: string } | null>(null);
+  useEffect(() => { if (!tip) return; const t = setTimeout(() => setTip(null), 2200); return () => clearTimeout(t); }, [tip]);
   const season = seasonLabel(set);
   const pinSize = set.reward.completer ? 48 : 56;
   return (
@@ -83,7 +86,7 @@ function ParkSetCardBase({ set, today, busy, still, shine, onClaim, onPin, onHun
       <View style={styles.head}>
         <Image source={PIN_ART.seal} style={styles.seal} contentFit="contain" accessibilityLabel="Earned at the park" />
         <View style={{ flex: 1 }}>
-          <Text maxFontSizeMultiplier={1.15} style={styles.name} numberOfLines={1}>{set.name}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={styles.name} numberOfLines={1}>{set.name}</Text>
           <View style={styles.subRow}>
             <View style={styles.progress} accessible accessibilityLabel={`${set.have} of ${set.total} pins`}>
               {Array.from({ length: set.total }, (_, i) => (
@@ -101,11 +104,17 @@ function ParkSetCardBase({ set, today, busy, still, shine, onClaim, onPin, onHun
           {set.pins.map((p, i) => {
             const rare = p.rarity === 'rare';
             return (
-              <Pressable key={p.item_id} onPress={() => onPin(set, p)} hitSlop={4} style={styles.slot}
+              <Pressable key={p.item_id} onPress={() => {
+                onPin(set, p);
+                setTip({ index: i, text: p.owned ? 'Yours! Park only' : rare ? `Rare! At ${set.park_name ?? 'the park'}` : `At ${set.park_name ?? 'the park'}` });
+              }} hitSlop={4} style={styles.slot}
                 accessibilityRole="button" accessibilityLabel={p.owned ? `${p.name}, you have it${rare ? ', rare' : ''}` : `Missing pin${rare ? ', rare' : ''}. Find it at ${set.park_name ?? 'the park'}`}>
                 <PinTile uri={p.icon_url} size={pinSize} owned={p.owned} kind={p.kind} tradable={false} badge={false}
                   tilt={((i * 37) % 13) - 6} shine={p.owned ? shine : undefined} lag={i * 0.12} lagSpan={0.6} surface="board" />
                 {rare && <View style={styles.rare}><Text maxFontSizeMultiplier={1} style={styles.rareText}>RARE</Text></View>}
+                {tip?.index === i && (
+                  <View style={styles.tip} pointerEvents="none"><Text maxFontSizeMultiplier={1.35} style={styles.tipText} numberOfLines={1}>{tip.text}</Text></View>
+                )}
               </Pressable>
             );
           })}
@@ -160,6 +169,8 @@ const styles = StyleSheet.create({
   prizeTag: { position: 'absolute', bottom: -8, backgroundColor: BRAND.blueBright, borderColor: BRAND.white, borderWidth: 2, borderRadius: 6, paddingHorizontal: 5 },
   slot: { alignItems: 'center', minWidth: 48, minHeight: 60 },
   rare: { position: 'absolute', bottom: -8, backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 2, borderRadius: 6, paddingHorizontal: 5 },
+  tip: { position: 'absolute', top: -30, alignSelf: 'center', backgroundColor: BRAND.navy, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, zIndex: 5, minWidth: 90, alignItems: 'center' },
+  tipText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.white, paddingTop: 2 },
   rareText: { fontFamily: FONT.display, fontSize: 11, color: BRAND.navy, paddingTop: 2 },
   foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', paddingHorizontal: SPACE.md, paddingVertical: SPACE.sm, gap: SPACE.sm, minHeight: 56 },
   today: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 2, paddingHorizontal: 10, paddingVertical: 5 },

@@ -29,7 +29,7 @@
  */
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, ImageBackground, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing, ZoomIn, cancelAnimation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
@@ -62,7 +62,8 @@ type Props = {
   /** A small line under the name ("Shark Tales · 2 of 6", "Universal Studios Hollywood · Oct 8"). */
   readonly subtitleFor?: (pull: RevealPull) => string | null;
   /** Offer "Wear it" for this pull (chaser, park pin): puts it on the lanyard. */
-  readonly onWear?: (pull: RevealPull) => void;
+  /** Puts the pin on the lanyard; resolves true once saved (a full lanyard swaps out its last pin). */
+  readonly onWear?: (pull: RevealPull) => Promise<boolean>;
   readonly canWear?: (pull: RevealPull) => boolean;
 };
 
@@ -76,7 +77,6 @@ function play(cue: typeof REVEAL_CUES[number], opts: { volume?: number; pitch?: 
   try { GameAudio.play(cue, opts); } catch { /* audio is decoration */ }
 }
 
-const CORK = require('../../../assets/images/screens/pin-swaps/corkboard.png');
 const CONFETTI = 22;
 const CONFETTI_COLORS = ['#ffcf3b', '#ffffff', '#7cc6f5', '#ffe07a', '#ef4a3c', '#3cb85c'];
 const GOLD_COLORS = ['#ffcf3b', '#ffe07a', '#ffffff', '#f2a900'];
@@ -427,7 +427,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     : { text: PINS_COPY.newPin, tone: 'new' as const };
   const subtitle = subtitleFor?.(pull) ?? null;
   const wearable = !!onWear && !!canWear?.(pull) && !worn.has(pull.item_id);
-  const summarySize = Math.min(96, (width - 72) / 3.2);
+  const summarySize = Math.min(104, (width - 100) / 3.3);
 
   return (
     <Modal transparent visible animationType="fade" statusBarTranslucent onRequestClose={() => (phase === 'show' || phase === 'summary') && next()}>
@@ -504,7 +504,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
         {phase === 'ready' && (
           <Animated.View pointerEvents="none" style={[styles.tapHint, { top: centerY + boxSize / 2 + 18 }, hintStyle]}>
-            <Text maxFontSizeMultiplier={1.2} style={styles.tapText}>Tap to open!</Text>
+            <Text maxFontSizeMultiplier={1.35} style={styles.tapText}>Tap to open!</Text>
           </Animated.View>
         )}
 
@@ -517,8 +517,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               </View>
             )}
             {pull.is_chaser && pull.by_pity && <Text maxFontSizeMultiplier={1.1} style={styles.guaranteed}>Guaranteed!</Text>}
-            <Text maxFontSizeMultiplier={1.2} style={styles.name} numberOfLines={2}>{pull.name}</Text>
-            {subtitle && <Text maxFontSizeMultiplier={1.2} style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>}
+            <Text maxFontSizeMultiplier={1.35} style={styles.name} numberOfLines={2}>{pull.name}</Text>
+            {subtitle && <Text maxFontSizeMultiplier={1.35} style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>}
             {pull.duplicate && !isCatch && (
               <Animated.View pointerEvents="none" style={[styles.plusOne, plusStyle]}>
                 <Image source={PIN_ART.trade} style={{ width: 26, height: 26 }} contentFit="contain" />
@@ -535,10 +535,10 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
         {phase === 'summary' && (
           <View style={[styles.summary, { top: height * 0.16 }]}>
-            <Text maxFontSizeMultiplier={1.2} style={styles.summaryTitle}>
+            <Text maxFontSizeMultiplier={1.35} style={styles.summaryTitle}>
               {(() => { const n = pulls.filter(p => !p.duplicate).length; return n > 0 ? `${n} new!` : 'You got'; })()}
             </Text>
-            <ImageBackground source={CORK} resizeMode="cover" style={styles.summaryBoard} imageStyle={{ borderRadius: 14 }}>
+            <View style={styles.summaryBoard}>
               {pulls.map((p, i) => (
                 <Animated.View key={p.id} entering={still ? undefined : ZoomIn.springify().damping(10).delay(i * 110)} style={styles.summaryItem}>
                   {p.icon_url && <EnamelPin uri={p.icon_url} size={summarySize} surface="board" tilt={((i * 37) % 13) - 6} />}
@@ -548,13 +548,13 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                   </View>
                 </Animated.View>
               ))}
-            </ImageBackground>
+            </View>
             {(() => {
               const extras = pulls.filter(p => p.duplicate).length;
               return extras > 0 ? (
                 <View style={styles.extrasRow}>
                   <Image source={PIN_ART.trade} style={{ width: 26, height: 26 }} contentFit="contain" />
-                  <Text maxFontSizeMultiplier={1.15} style={styles.extrasText}>+{extras} toward a Pick</Text>
+                  <Text maxFontSizeMultiplier={1.3} style={styles.extrasText}>+{extras} toward a Pick</Text>
                 </View>
               ) : null;
             })()}
@@ -571,7 +571,9 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               </View>
             )}
             {phase === 'show' && wearable && (
-              <Pressable onPress={() => { queueHaptic('success', 1); onWear?.(pull); setWorn(w => new Set(w).add(pull.item_id)); }}
+              <Pressable onPress={() => {
+                void onWear?.(pull).then(ok => { if (ok) { queueHaptic('success', 1); play('fx.coinTick', { pitch: 1.5 }); setWorn(w => new Set(w).add(pull.item_id)); } });
+              }}
                 style={({ pressed }) => [styles.wear, pressed && { transform: [{ scale: 0.96 }] }]} accessibilityRole="button" accessibilityLabel="Wear it on your lanyard">
                 <Text maxFontSizeMultiplier={1.1} style={styles.wearText}>Wear it</Text>
               </Pressable>
@@ -587,7 +589,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(2,24,62,0.97)' },
+  scrim: { flex: 1, backgroundColor: '#021a45' },
   spot: { position: 'absolute' },
   stage: { position: 'absolute', left: 0, alignItems: 'center', justifyContent: 'center' },
   pin: { position: 'absolute', alignSelf: 'center' },
@@ -617,7 +619,11 @@ const styles = StyleSheet.create({
   tagText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.navy, paddingTop: 2 },
   summary: { position: 'absolute', left: 16, right: 16, alignItems: 'center' },
   summaryTitle: { fontFamily: FONT.display, fontSize: 34, color: BRAND.white, marginBottom: 14, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
-  summaryBoard: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 14, padding: 16, borderRadius: 16, borderWidth: 4, borderColor: '#8a5a2b', overflow: 'hidden' },
+  // A cork board drawn once in code: cork fill, one wood frame, even gutters.
+  summaryBoard: {
+    width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignContent: 'center', gap: 18, paddingVertical: 22, paddingHorizontal: 12,
+    borderRadius: 16, borderWidth: 6, borderColor: '#8a5a2b', backgroundColor: '#d9a866', minHeight: 300,
+  },
   summaryItem: { alignItems: 'center' },
   extrasRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14, backgroundColor: BRAND.blueBright, borderRadius: 999, borderWidth: 3, borderColor: BRAND.white, paddingHorizontal: 14, paddingVertical: 4 },
   extrasText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.white, paddingTop: 3 },

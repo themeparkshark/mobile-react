@@ -25,8 +25,8 @@ export function PickSheet({ series, busy, onPick, onClose }: { series: MysterySe
   return (
     <Sheet onClose={onClose}>
       <Image source={PIN_ART.trade} style={styles.topIcon} contentFit="contain" />
-      <Text maxFontSizeMultiplier={1.2} style={styles.title}>Pick a pin!</Text>
-      <Text maxFontSizeMultiplier={1.2} style={styles.sub}>Your extras pay for it.</Text>
+      <Text maxFontSizeMultiplier={1.35} style={styles.title}>Pick a pin!</Text>
+      <Text maxFontSizeMultiplier={1.35} style={styles.sub}>Your extras pay for it.</Text>
       <View style={styles.grid}>
         {missing.map((p, i) => (
           <Pressable key={p.item_id} disabled={busy} onPress={() => onPick(p)} style={({ pressed }) => [styles.cell, pressed && { transform: [{ scale: 0.95 }] }]}
@@ -43,7 +43,7 @@ export function PickSheet({ series, busy, onPick, onClose }: { series: MysterySe
 
 const HELP = [
   { art: BOX_ART.blue.closed, word: 'Open boxes', line: 'Each has 1 pin.' },
-  { art: PIN_ART.chaser, word: 'Gold chaser', line: 'Rare! Always comes.' },
+  { art: PIN_ART.chaser, word: 'Gold chaser', line: 'Rare! By box 20 for sure.' },
   { art: PIN_ART.seal, word: 'Park only', line: 'Found at the park.' },
   { art: PIN_ART.trade, word: 'Can trade', line: 'Swap extras.' },
 ] as const;
@@ -51,13 +51,13 @@ const HELP = [
 export function PinsHelp({ onClose }: { onClose: () => void }) {
   return (
     <Sheet onClose={onClose}>
-      <Text maxFontSizeMultiplier={1.2} style={[styles.title, { marginTop: SPACE.sm }]}>Pins</Text>
+      <Text maxFontSizeMultiplier={1.35} style={[styles.title, { marginTop: SPACE.sm }]}>Pins</Text>
       <View style={styles.help}>
         {HELP.map(h => (
           <View key={h.word} style={styles.helpTile} accessible accessibilityLabel={`${h.word}. ${h.line}`}>
             <Image source={h.art} style={{ width: 64, height: 64 }} contentFit="contain" />
-            <Text maxFontSizeMultiplier={1.15} style={styles.helpWord}>{h.word}</Text>
-            <Text maxFontSizeMultiplier={1.15} style={styles.helpLine}>{h.line}</Text>
+            <Text maxFontSizeMultiplier={1.3} style={styles.helpWord}>{h.word}</Text>
+            <Text maxFontSizeMultiplier={1.3} style={styles.helpLine}>{h.line}</Text>
           </View>
         ))}
       </View>

@@ -32,7 +32,7 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
   const body = (
     <View style={styles.card} accessible accessibilityLabel={`${own ? 'Your' : 'Their'} lanyard: ${data.lanyard.map(p => p.name).join(', ') || 'empty'}. ${data.pins} pins, ${data.sets_done} park sets done`}>
       <View style={styles.head}>
-        <Text maxFontSizeMultiplier={1.15} style={styles.title}>Lanyard</Text>
+        <Text maxFontSizeMultiplier={1.3} style={styles.title}>Lanyard</Text>
         <View style={styles.chip}><Image source={PIN_ART.seal} style={styles.icon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>{data.sets_done}</Text></View>
         {chasers > 0 && <View style={styles.chip}><Image source={PIN_ART.chaser} style={styles.icon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>{chasers}</Text></View>}
         <Text maxFontSizeMultiplier={1.1} style={styles.count}>{data.pins} pins</Text>
@@ -40,7 +40,7 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
       {data.lanyard.length > 0 ? (
         <Lanyard pins={data.lanyard} width={width - 32 - SPACE.md * 2} height={140} still={still} active={focused} />
       ) : (
-        <Text maxFontSizeMultiplier={1.2} style={styles.empty}>Wear your best pins here</Text>
+        <Text maxFontSizeMultiplier={1.35} style={styles.empty}>Wear your best pins here</Text>
       )}
     </View>
   );

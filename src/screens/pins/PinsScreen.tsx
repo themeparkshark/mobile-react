@@ -46,7 +46,7 @@ function TabButton({ label, icon, active, badge, onPress }: { label: string; ico
   return (
     <Pressable onPress={onPress} style={[styles.tab, active && styles.tabOn]} accessibilityRole="tab" accessibilityState={{ selected: active }} accessibilityLabel={label}>
       <Image source={icon} style={{ width: 26, height: 26 }} contentFit="contain" />
-      <Text maxFontSizeMultiplier={1.15} style={[styles.tabText, active && styles.tabTextOn]}>{label}</Text>
+      <Text maxFontSizeMultiplier={1.3} style={[styles.tabText, active && styles.tabTextOn]}>{label}</Text>
       {badge && <View style={styles.tabDot} />}
     </Pressable>
   );
@@ -225,11 +225,7 @@ export default function PinsScreen() {
     }
   }, [reveal, load, home]);
 
-  const onPin = useCallback((set: ParkSet, pin: PinRow) => {
-    queueHaptic('tapLight', 1);
-    if (pin.owned) gameAlert(pin.name, `Earned at ${set.park_name ?? 'the park'}. Park pins stay yours: they never trade.`);
-    else gameAlert('Still hiding', `Find it at ${set.park_name ?? 'the park'}.${pin.rarity === 'rare' ? ' It’s rare: it hides on fewer days.' : ''}`);
-  }, []);
+  const onPin = useCallback((_set: ParkSet, _pin: PinRow) => { queueHaptic('tapLight', 1); }, []);
 
   const toggleWear = useCallback((pin: PinRow) => {
     const max = home?.lanyard_max ?? 6;
@@ -248,11 +244,18 @@ export default function PinsScreen() {
   const lanyardPins = useMemo(() => lanyardIds.map(id => byId.get(id)).filter((p): p is PinRow => !!p).map(p => ({
     item_id: p.item_id, name: p.name, icon_url: p.icon_url, kind: p.kind, is_chaser: !!p.is_chaser, tradable: p.tradable, serial: p.serial,
   })), [lanyardIds, byId]);
-  const wear = useCallback((itemId: number) => {
-    if (lanyardIds.includes(itemId)) return;
-    const pin = byId.get(itemId) ?? ({ item_id: itemId } as PinRow);
-    toggleWear(pin);
-  }, [lanyardIds, byId, toggleWear]);
+  /** "Wear it" from a reveal: saves now; a full lanyard swaps out its last pin. True once saved. */
+  const wear = useCallback(async (itemId: number): Promise<boolean> => {
+    if (lanyardIds.includes(itemId)) return true;
+    const max = home?.lanyard_max ?? 6;
+    const ids = lanyardIds.length >= max ? [...lanyardIds.slice(0, max - 1), itemId] : [...lanyardIds, itemId];
+    try {
+      const l = await saveLanyard(ids);
+      setLanyardIds(l.map(p => p.item_id));
+      setHome(h => h && ({ ...h, lanyard: l }));
+      return l.some(p => p.item_id === itemId);
+    } catch { return false; }
+  }, [lanyardIds, home?.lanyard_max]);
   const dayFor = useCallback((set: ParkSet) => home?.pin_days?.find(d => d.park_id === set.park_id), [home?.pin_days]);
 
   if (state === 'legacy') return <LegacyPinPacks />;
@@ -286,7 +289,7 @@ export default function PinsScreen() {
               onRefresh={async () => { setRefreshing(true); await load(true); setRefreshing(false); }} />}>
             <Animated.View entering={still ? undefined : FadeIn.duration(220)} style={styles.hero}>
               <View style={styles.heroTop}>
-                <Text maxFontSizeMultiplier={1.15} style={styles.heroTitle}>{PINS_COPY.lanyard} <Text style={styles.heroCount}>{home.counts.pins} pins</Text></Text>
+                <Text maxFontSizeMultiplier={1.3} style={styles.heroTitle}>{PINS_COPY.lanyard} <Text style={styles.heroCount}>{home.counts.pins} pins</Text></Text>
                 <Pressable onPress={() => { queueHaptic('tapLight', 1); RootNavigation.navigate('PinSwaps'); }} style={({ pressed }) => [styles.tradePill, pressed && { transform: [{ scale: 0.96 }] }]}
                   accessibilityRole="button" accessibilityLabel="Trade pins on the board" hitSlop={8}>
                   <Image source={PIN_ART.trade} style={{ width: 26, height: 26 }} contentFit="contain" />
@@ -317,7 +320,7 @@ export default function PinsScreen() {
             <View style={styles.tabs} accessibilityRole="tablist">
               <TabButton label={PINS_COPY.tabMystery} icon={require('../../../assets/images/pins/box-blue-closed.webp')} active={tab === 'mystery'} badge={freeWaiting} onPress={() => setTab('mystery')} />
               <TabButton label={PINS_COPY.tabSets} icon={PIN_ART.seal} active={tab === 'sets'} badge={claimWaiting || huntToday} onPress={() => setTab('sets')} />
-              <TabButton label={PINS_COPY.tabMine} icon={PIN_ART.trade} active={tab === 'mine'} onPress={() => setTab('mine')} />
+              <TabButton label={PINS_COPY.tabMine} icon={require('../../../assets/images/pins/box-blue-lid.webp')} active={tab === 'mine'} onPress={() => setTab('mine')} />
             </View>
 
             {/* Tabs stay mounted once visited (no rebuild on every switch). */}
@@ -342,7 +345,7 @@ export default function PinsScreen() {
 
             {visited.has('mine') && (
               <View style={[styles.mine, tab !== 'mine' && styles.hidden]}>
-                <Text maxFontSizeMultiplier={1.15} style={styles.wearHint}>Tap a pin to wear it</Text>
+                <Text maxFontSizeMultiplier={1.3} style={styles.wearHint}>Tap a pin to wear it</Text>
                 <View style={styles.legend}>
                   <View style={styles.legendItem}><Image source={PIN_ART.trade} style={styles.legendIcon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.legendText}>Can trade</Text></View>
                   <View style={styles.legendItem}><Image source={PIN_ART.seal} style={styles.legendIcon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.legendText}>Park only</Text></View>
@@ -377,7 +380,7 @@ export default function PinsScreen() {
           onDone={closeReveal} />
       )}
       {hunt && (
-        <HuntSheet set={hunt} onClose={() => setHunt(null)} onCaught={r => {
+        <HuntSheet set={hunt} still={still} onClose={() => setHunt(null)} onCaught={r => {
           setHunt(null);
           const day = r.day ? new Date(`${r.day}T12:00:00`).toLocaleString('en-US', { month: 'short', day: 'numeric' }) : '';
           setReveal({
@@ -415,8 +418,9 @@ const styles = StyleSheet.create({
   tradeText: { fontFamily: FONT.display, fontSize: 19, color: BRAND.navy, paddingTop: 3 },
   heroTitle: { fontFamily: FONT.display, fontSize: 24, color: BRAND.white, paddingTop: 3, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   counts: { flexDirection: 'row', justifyContent: 'center', gap: SPACE.sm, marginTop: -SPACE.sm },
-  countChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.cream, borderColor: BRAND.navy, borderWidth: 2, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
-  countText: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy, paddingTop: 2 },
+  // Read-only counts: no button look (no outline), just icon + number.
+  countChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  countText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.white, paddingTop: 2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   tabs: { flexDirection: 'row', gap: SPACE.sm },
   tab: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 48,

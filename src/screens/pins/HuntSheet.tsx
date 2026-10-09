@@ -47,7 +47,7 @@ type Props = {
   readonly onCaught: (result: { new: boolean; coins: number; pin: NonNullable<HuntStatus['pin']> & { rarity?: string }; park_name?: string | null; day?: string; catch_number?: number }) => void;
 };
 
-export default function HuntSheet({ set, onClose, onCaught }: Props) {
+export default function HuntSheet({ set, onClose, onCaught, still = false }: Props & { still?: boolean }) {
   const insets = useSafeAreaInsets();
   const { location } = useContext(LocationContext);
   const [status, setStatus] = useState<HuntStatus | null>(null);
@@ -106,13 +106,13 @@ export default function HuntSheet({ set, onClose, onCaught }: Props) {
       <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + SPACE.lg }]}>
         <View style={styles.sealWrap}>
-          {hunting && <Sonar warmth={status?.warmth ?? null} color={view.color} />}
+          {hunting && !still && <Sonar warmth={status?.warmth ?? null} color={view.color} />}
           <Image source={PIN_ART.seal} style={styles.seal} contentFit="contain" />
         </View>
-        <Text maxFontSizeMultiplier={1.2} style={styles.title}>
+        <Text maxFontSizeMultiplier={1.35} style={styles.title}>
           {status?.status === 'none' ? 'No pin today' : status?.status === 'caught' ? 'You got today’s pin!' : 'A pin is hiding!'}
         </Text>
-        <Text maxFontSizeMultiplier={1.2} style={styles.sub}>{set.park_name ?? set.name}</Text>
+        <Text maxFontSizeMultiplier={1.35} style={styles.sub}>{set.park_name ?? set.name}</Text>
         {hunting && (
           <>
             <View style={styles.meter} accessible accessibilityLabel={view.word}>
@@ -122,13 +122,15 @@ export default function HuntSheet({ set, onClose, onCaught }: Props) {
                 <GameIcon name="streak" size={22} />
               </View>
             </View>
-            <Text maxFontSizeMultiplier={1.2} style={[styles.word, { color: status?.warmth === 'here' ? BRAND.red : BRAND.navy }]}>{view.word}</Text>
-            {!status?.here && <Text maxFontSizeMultiplier={1.2} style={styles.note}>Get inside the park to hunt.</Text>}
-            {miss && <Text maxFontSizeMultiplier={1.2} style={styles.note}>Not quite. Keep looking!</Text>}
-            <GameButton label="Catch it!" icon="search" disabled={status?.warmth !== 'here' || busy} loading={busy} onPress={tryCatch} />
+            <Text maxFontSizeMultiplier={1.35} style={[styles.word, { color: status?.warmth === 'here' ? BRAND.red : BRAND.navy }]}>{view.word}</Text>
+            {!status?.here && <Text maxFontSizeMultiplier={1.35} style={styles.note}>Get inside the park to hunt.</Text>}
+            {miss && <Text maxFontSizeMultiplier={1.3} style={styles.note}>Not here yet. Follow the bar!</Text>}
+            <Text maxFontSizeMultiplier={1.3} style={styles.note}>Look up while you walk!</Text>
+            <GameButton label={status?.warmth === 'here' ? 'Catch it!' : 'Get closer'} icon="search" disabled={busy}
+              loading={busy} onPress={() => { if (status?.warmth === 'here') void tryCatch(); else { queueHaptic('failBuzz', 1); setMiss(true); } }} />
           </>
         )}
-        {status?.status === 'none' && <Text maxFontSizeMultiplier={1.2} style={styles.note}>Check back tomorrow. Every day is a new chance.</Text>}
+        {status?.status === 'none' && <Text maxFontSizeMultiplier={1.35} style={styles.note}>Check back tomorrow. Every day is a new chance.</Text>}
         <GameButton variant="ghost" label="Close" onPress={onClose} />
       </View>
     </Modal>

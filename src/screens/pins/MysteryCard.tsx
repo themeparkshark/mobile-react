@@ -20,6 +20,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import CoinTopUpOffer from '../../components/money/CoinTopUpOffer';
+import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon, OUTLINE, RADIUS, SHADOW, SPACE } from '../../ui';
 import { BOX_ART, boxTone, PIN_ART, PinTile } from './PinArt';
@@ -55,7 +56,7 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
               {isFresh && <View style={[styles.freshRing, { width: size + 8, height: size + 8, borderRadius: (size + 8) / 2 }]} />}
               <PinTile uri={p.icon_url} size={size} owned={p.owned} kind={p.kind} tradable={p.tradable} spares={p.spares}
                 badge={false} tilt={((i * 29) % 9) - 4} flat shine={undefined} />
-              <Text maxFontSizeMultiplier={1.15} style={styles.pct}>{formatChance(p.chance_bp)}</Text>
+              <Text maxFontSizeMultiplier={1.3} style={styles.pct}>{formatChance(p.chance_bp)}</Text>
             </Animated.View>
           );
         })}
@@ -65,8 +66,8 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
           <PinTile uri={chaser.icon_url} size={size + 10} owned={chaser.owned} kind={chaser.kind} tradable={chaser.tradable} chaser
             badge={false} serial={chaser.serial} shine={chaser.owned ? shine : undefined} lag={0.7} lagSpan={0.8} />
           <View style={{ flex: 1 }}>
-            <Text maxFontSizeMultiplier={1.15} style={styles.chaserLabel}>Gold chaser</Text>
-            <Text maxFontSizeMultiplier={1.15} style={styles.chaserPct}>
+            <Text maxFontSizeMultiplier={1.3} style={styles.chaserLabel}>Gold chaser</Text>
+            <Text maxFontSizeMultiplier={1.3} style={styles.chaserPct}>
               {formatChance(chaser.chance_bp)}{pity ? `  ·  always by box ${pity}` : ''}
             </Text>
           </View>
@@ -83,32 +84,45 @@ function ChaserMeter({ series, still }: { series: MysterySeries; still: boolean 
   const fillStyle = useAnimatedStyle(() => ({ width: `${Math.max(6, fill.value * 100)}%` }));
   return (
     <View style={styles.meterRow} accessible accessibilityLabel={`Gold chaser in ${series.chaser_within} boxes or less`}>
+      <View style={styles.meterLead}>
+        <Image source={BOX_ART[boxTone(series.theme_color)].closed} style={{ width: 26, height: 26 }} contentFit="contain" />
+        <Text maxFontSizeMultiplier={1.3} style={styles.meterNum}>{series.chaser_within}</Text>
+      </View>
       <View style={styles.meterTrack}>
         <Animated.View style={[styles.meterFill, fillStyle]} />
       </View>
       <Image source={PIN_ART.chaser} style={styles.meterStar} contentFit="contain" />
-      <Text maxFontSizeMultiplier={1.15} style={styles.meterNum}>{series.chaser_within}</Text>
     </View>
   );
 }
 
-/** Traders: spares fill toward a free pick of any missing pin. */
-function TradersRow({ series, busy, onPick }: { series: MysterySeries; busy: boolean; onPick: () => void }) {
+/** Traders: extra copies fill coin slots; when they're full, Pick any pin you still need. */
+function TradersRow({ series, busy, onPick, still }: { series: MysterySeries; busy: boolean; onPick: () => void; still: boolean }) {
   const v = pointsView(series);
-  // Nothing left to pick: the extras still trade on the board, so the bar steps aside.
+  const pop = useSharedValue(1);
+  useEffect(() => {
+    if (v.ready && !still) pop.value = withSequence(withTiming(1.15, { duration: 120 }), withSpring(1, { damping: 6 }));
+  }, [v.ready, still, pop]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  // Nothing left to pick: the extras still trade on the board, so the row steps aside.
   if (v.missing === 0) return null;
+  const filled = Math.min(v.points, v.cost);
   return (
-    <View style={styles.tradersRow} accessible accessibilityLabel={`Traders: ${v.points} of ${v.cost}. ${v.ready ? 'Pick a pin you need' : 'Extra copies fill this up'}`}>
+    <View style={styles.tradersRow} accessible accessibilityLabel={`Extras: ${filled} of ${v.cost}. ${v.ready ? 'Pick a pin you need' : 'Extra copies fill these'}`}>
       <Image source={PIN_ART.trade} style={{ width: 28, height: 28 }} contentFit="contain" />
-      <View style={styles.tradersTrack}>
-        <View style={[styles.tradersFill, { width: `${Math.max(4, v.fill * 100)}%` }]} />
-        <Text maxFontSizeMultiplier={1.1} style={styles.tradersNum}>{Math.min(v.points, v.cost)}/{v.cost}</Text>
+      <View style={styles.slots}>
+        {Array.from({ length: v.cost }, (_, i) => (
+          <Animated.View key={`${i}:${i < filled ? 1 : 0}`} entering={i < filled && !still ? ZoomIn.springify().damping(9) : undefined}
+            style={[styles.slot, i < filled && styles.slotOn]} />
+        ))}
       </View>
-      <Pressable disabled={!v.ready || busy} onPress={onPick} hitSlop={6}
-        style={({ pressed }) => [styles.pick, !v.ready && styles.pickOff, pressed && { transform: [{ scale: 0.96 }] }]}
-        accessibilityRole="button" accessibilityState={{ disabled: !v.ready }} accessibilityLabel="Pick a pin you need">
-        <Text maxFontSizeMultiplier={1.1} style={[styles.pickText, !v.ready && { color: BRAND.navySoft }]}>Pick</Text>
-      </Pressable>
+      <Animated.View style={popStyle}>
+        <Pressable disabled={!v.ready || busy} onPress={onPick} hitSlop={6}
+          style={({ pressed }) => [styles.pick, !v.ready && styles.pickOff, pressed && { transform: [{ scale: 0.96 }] }]}
+          accessibilityRole="button" accessibilityState={{ disabled: !v.ready }} accessibilityLabel="Pick a pin you need">
+          <Text maxFontSizeMultiplier={1.1} style={[styles.pickText, !v.ready && { color: '#9fb3cb' }]}>Pick</Text>
+        </Pressable>
+      </Animated.View>
     </View>
   );
 }
@@ -134,31 +148,65 @@ function BobbingBox({ tone, active, still, free }: { tone: 'blue' | 'coral'; act
   );
 }
 
-/** Open 5: a short hold fills a ring, then it opens (no accidental 1,100-coin tap). */
+/**
+ * Open 5: a short hold (a gold bar fills along the bottom with rising ticks),
+ * then it opens. A quick tap wiggles it and says "Hold!", so nobody thinks it's
+ * broken, and VoiceOver/Switch users get a plain activate action.
+ */
 function HoldToOpen({ label, saving, disabled, tone, onOpen }: { label: string; saving: number; disabled: boolean; tone: 'blue' | 'coral'; onOpen: () => void }) {
   const p = useSharedValue(0);
+  const wiggle = useSharedValue(0);
   const fired = useRef(false);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const [hint, setHint] = useState(false);
+  useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
   const fillStyle = useAnimatedStyle(() => ({ width: `${p.value * 100}%` }));
+  const wiggleStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value}deg` }] }));
+  const clear = () => { timers.current.forEach(clearTimeout); timers.current = []; };
   const start = () => {
     if (disabled) return;
     fired.current = false;
+    setHint(false);
+    clear();
     queueHaptic('tapLight', 1);
-    p.value = withTiming(1, { duration: HOLD_MS, easing: Easing.linear }, done => { if (done) p.value = 1; });
-    setTimeout(() => {
+    p.value = withTiming(1, { duration: HOLD_MS, easing: Easing.linear });
+    [0.25, 0.5, 0.75].forEach((f, k) => timers.current.push(setTimeout(() => {
+      try { GameAudio.play('fx.coinTick', { pitch: 1 + k * 0.15, volume: 0.6 }); } catch { /* audio is decoration */ }
+      queueHaptic('tickSelection', 1);
+    }, HOLD_MS * f)));
+    timers.current.push(setTimeout(() => {
       if (p.value >= 0.98 && !fired.current) { fired.current = true; queueHaptic('hitMedium', 1); onOpen(); p.value = withTiming(0, { duration: 250 }); }
-    }, HOLD_MS + 30);
+    }, HOLD_MS + 30));
   };
-  const end = () => { if (!fired.current) { cancelAnimation(p); p.value = withTiming(0, { duration: 150 }); } };
+  const end = () => {
+    if (fired.current) return;
+    clear();
+    const quick = p.value < 0.5;
+    cancelAnimation(p); p.value = withTiming(0, { duration: 150 });
+    if (quick && !disabled) {
+      wiggle.value = withSequence(withTiming(-4, { duration: 50 }), withTiming(4, { duration: 60 }), withTiming(-3, { duration: 60 }), withTiming(0, { duration: 50 }));
+      setHint(true);
+      timers.current.push(setTimeout(() => setHint(false), 1400));
+    }
+  };
   return (
-    <Pressable onPressIn={start} onPressOut={end} disabled={disabled} hitSlop={4}
-      style={[styles.openBtn, styles.openFive, disabled && { opacity: 0.5 }]}
-      accessibilityRole="button" accessibilityLabel={`${label}. Hold to open five boxes`} accessibilityHint="Press and hold">
-      <Animated.View style={[styles.holdFill, fillStyle]} />
-      <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
-      <Text maxFontSizeMultiplier={1.1} style={styles.openFiveText}>x5</Text>
-      <View style={styles.price}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{label}</Text></View>
-      {saving > 0 && <View style={styles.save}><Text maxFontSizeMultiplier={1} style={styles.saveText}>Save {saving}</Text></View>}
-    </Pressable>
+    <Animated.View style={[{ flex: 1 }, wiggleStyle]}>
+      {hint && (
+        <Animated.View entering={FadeIn.duration(120)} style={styles.holdHint} pointerEvents="none">
+          <Text maxFontSizeMultiplier={1.35} style={styles.holdHintText}>Hold!</Text>
+        </Animated.View>
+      )}
+      <Pressable onPressIn={start} onPressOut={end} disabled={disabled} hitSlop={4}
+        style={[styles.openBtn, styles.openFive, disabled && { opacity: 0.5 }]}
+        accessibilityRole="button" accessibilityLabel={`${label}. Hold to open five boxes`} accessibilityHint="Press and hold"
+        accessibilityActions={[{ name: 'activate' }]} onAccessibilityAction={e => { if (e.nativeEvent.actionName === 'activate' && !disabled) onOpen(); }}>
+        <Animated.View style={[styles.holdFill, fillStyle]} />
+        <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
+        <Text maxFontSizeMultiplier={1.1} style={styles.openFiveText}>x5</Text>
+        <View style={styles.price}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{label}</Text></View>
+        {saving > 0 && <View style={styles.save}><Text maxFontSizeMultiplier={1} style={styles.saveText}>Save {saving}</Text></View>}
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -187,6 +235,8 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
   const shortFive = coinsShort(series, series.bundle.count, coins);
   const [topUp, setTopUp] = useState<number | null>(null);
   const bump = useSharedValue(1);
+  const callBack = useSharedValue(1);
+  const callBackStyle = useAnimatedStyle(() => ({ transform: [{ scale: callBack.value }] }));
   useEffect(() => {
     if (fresh && fresh.size > 0 && !still) bump.value = withSequence(withTiming(1.25, { duration: 140 }), withSpring(1, { damping: 8 }));
   }, [fresh, still, bump]);
@@ -205,7 +255,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
       <View style={[styles.head, { backgroundColor: accent }]}>
         <BobbingBox tone={tone} active={active && series.open} still={still} free={!!free} />
         <View style={styles.headText}>
-          <Text maxFontSizeMultiplier={1.15} style={styles.name} numberOfLines={1}>{series.name}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={styles.name} numberOfLines={1}>{series.name}</Text>
           <View style={styles.chips}>
             <Animated.View style={[styles.countChip, bumpStyle]} accessible accessibilityLabel={`You have ${progress.have} of ${progress.total}`}>
               <Text maxFontSizeMultiplier={1.1} style={styles.countText}>{progress.have}/{regular.length}</Text>
@@ -225,7 +275,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
       <View style={styles.body}>
         <OddsTable pins={series.pins} shine={shine} pity={series.pity} fresh={fresh} />
         {series.open && <ChaserMeter series={series} still={still} />}
-        {series.open && <TradersRow series={series} busy={busy} onPick={() => onPick(series)} />}
+        {series.open && <TradersRow series={series} busy={busy} still={still} onPick={() => onPick(series)} />}
         {series.open ? (
           <View style={{ gap: SPACE.sm }}>
             {free && (
@@ -237,6 +287,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
             )}
             {paid ? (
               <View style={styles.actions}>
+                <Animated.View style={[{ flex: 1 }, callBackStyle]}>
                 <Pressable disabled={busy} onPress={() => tryOpen(1)} hitSlop={4}
                   style={({ pressed }) => [styles.openBtn, styles.openOne, pressed && { transform: [{ scale: 0.96 }] }, busy && { opacity: 0.5 }]}
                   accessibilityRole="button" accessibilityLabel={shortOne > 0 ? `Need ${shortOne} more coins` : `Open one box for ${series.price} coins`}>
@@ -244,21 +295,26 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
                   <Text maxFontSizeMultiplier={1.1} style={styles.openOneText}>x1</Text>
                   <View style={styles.price}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{series.price}</Text></View>
                 </Pressable>
+                </Animated.View>
                 <HoldToOpen label={series.bundle.price.toLocaleString('en-US')} saving={bundleSaving(series)} disabled={busy} tone={tone}
                   onOpen={() => tryOpen(series.bundle.count)} />
               </View>
             ) : (
-              <Text maxFontSizeMultiplier={1.15} style={styles.closed}>Free boxes only here</Text>
+              <Text maxFontSizeMultiplier={1.3} style={styles.closed}>Free boxes only here</Text>
             )}
-            {nextFree && !free && <Text maxFontSizeMultiplier={1.15} style={styles.nextFree}>{nextFree}</Text>}
+            {nextFree && !free && <Text maxFontSizeMultiplier={1.3} style={styles.nextFree}>{nextFree}</Text>}
             {topUp !== null && topUp > 0 && (
               <Animated.View entering={FadeIn.duration(160)}>
-                <CoinTopUpOffer need={topUp} reason="mystery-box" onDone={() => setTopUp(null)} />
+                <CoinTopUpOffer need={topUp} reason="mystery-box" onDone={() => {
+                  // Coins landed: the offer folds and the Open button calls you back (never auto-spends).
+                  setTopUp(null);
+                  if (!still) callBack.value = withSequence(withTiming(1.08, { duration: 140 }), withSpring(1, { damping: 5 }), withTiming(1.06, { duration: 140 }), withSpring(1, { damping: 6 }));
+                }} />
               </Animated.View>
             )}
           </View>
         ) : (
-          <Text maxFontSizeMultiplier={1.15} style={styles.closed}>All done. Trade for these on the board.</Text>
+          <Text maxFontSizeMultiplier={1.3} style={styles.closed}>All done. Trade for these on the board.</Text>
         )}
       </View>
     </View>
@@ -295,13 +351,17 @@ const styles = StyleSheet.create({
   meterTrack: { flex: 1, height: 18, borderRadius: 9, backgroundColor: BRAND.sky, borderWidth: 2, borderColor: BRAND.navy, overflow: 'hidden' },
   meterFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.gold },
   meterStar: { width: 30, height: 30 },
-  meterNum: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, minWidth: 28, paddingTop: 3 },
+  meterLead: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#fff1c2', borderRadius: 999, borderWidth: 2, borderColor: BRAND.goldLip, paddingHorizontal: 6, paddingVertical: 1 },
+  meterNum: { fontFamily: FONT.display, fontSize: 20, color: BRAND.navy, minWidth: 22, textAlign: 'center', paddingTop: 3 },
   tradersRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  slots: { flex: 1, flexDirection: 'row', gap: 6, justifyContent: 'center' },
+  slot: { width: 26, height: 26, borderRadius: 13, borderWidth: 3, borderColor: '#9fb3cb', borderStyle: 'dashed', backgroundColor: '#eef6ff' },
+  slotOn: { borderStyle: 'solid', borderColor: BRAND.navy, backgroundColor: BRAND.blueBright },
   tradersTrack: { flex: 1, height: 22, borderRadius: 11, backgroundColor: '#dbeefe', borderWidth: 2, borderColor: BRAND.navy, overflow: 'hidden', justifyContent: 'center' },
   tradersFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.blueBright },
   tradersNum: { alignSelf: 'center', fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, paddingTop: 2 },
   pick: { minHeight: 44, minWidth: 64, paddingHorizontal: 12, borderRadius: 999, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.gold, alignItems: 'center', justifyContent: 'center' },
-  pickOff: { backgroundColor: '#eef3f9', borderColor: '#b8c9dd' },
+  pickOff: { backgroundColor: 'transparent', borderColor: '#c9d6e6', borderStyle: 'dashed' },
   pickText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.navy, paddingTop: 3 },
   actions: { flexDirection: 'row', gap: SPACE.md, justifyContent: 'center' },
   openBtn: {
@@ -310,7 +370,9 @@ const styles = StyleSheet.create({
   },
   openOne: { backgroundColor: BRAND.gold },
   openFive: { backgroundColor: BRAND.blueBright },
-  holdFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,207,59,0.55)' },
+  holdFill: { position: 'absolute', left: 0, bottom: 0, height: 7, backgroundColor: BRAND.gold },
+  holdHint: { position: 'absolute', top: -34, alignSelf: 'center', zIndex: 2, backgroundColor: BRAND.navy, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 3 },
+  holdHintText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.white, paddingTop: 3 },
   openOneText: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, paddingTop: 3 },
   openFiveText: { fontFamily: FONT.display, fontSize: 22, color: BRAND.white, paddingTop: 3 },
   price: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.cream, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
