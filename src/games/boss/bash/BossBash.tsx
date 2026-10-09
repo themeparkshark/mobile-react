@@ -826,7 +826,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           {/* Pop-ups. */}
           {actors.map(({ popup, exit }) => {
             const p = spotXY(popup.spot);
-            return <PopupActor key={popup.id} kind={popup.kind} x={p.x} baseY={p.y} height={p.h} limb={skin.limb}
+            return <PopupActor key={popup.id} kind={popup.kind} x={p.x} baseY={p.y} height={p.h} limb={skin.limb} goldLimb={skin.goldLimb}
               limbAspect={skin.limbAspect} exit={exit} reduced={reduced} ghostly={skin.ghostly}
               hint={hint === 'tentacle' && !exit && popup.kind === 'tentacle' && actors.find(a => !a.exit && a.popup.kind === 'tentacle')?.popup.id === popup.id} />;
           })}

@@ -63,6 +63,8 @@ export interface BossSkin {
   readonly hat: boolean;
   /** What the limb is called in the one-word callouts. */
   readonly limbWord: string;
+  /** Hand-drawn gold version of the limb (null: the limb is washed gold in code). */
+  readonly goldLimb?: number;
   /** Ghost Squid fades in and out a little. */
   readonly ghostly: boolean;
 }
@@ -75,6 +77,7 @@ const KRAKEN: BossSkin = {
   roar: require('../../../assets/games/boss/bash/kraken_roar_hd.webp'),
   puff: require('../../../assets/games/boss/bash/kraken_puff_hd.webp'),
   limb: require('../../../assets/games/boss/bash/tentacle.png'),
+  goldLimb: require('../../../assets/games/boss/bash/tentacle_gold.webp'),
   limbAspect: 261 / 600,
   // Between the eyes (the hat sits above), so the smash ring frames the face.
   head: [0.5, 0.42],

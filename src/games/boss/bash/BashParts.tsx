@@ -18,8 +18,8 @@ import { DIZZY_DROP_MS, ringScaleAt, type Kind } from './rules';
 export type ActorExit = null | 'bonk' | 'sink' | 'ouch' | 'dive';
 
 /** One tentacle (or puffer) rising out of the water in its spot. */
-export const PopupActor = memo(function PopupActor({ kind, x, baseY, height, limb, limbAspect, exit, reduced, ghostly, hint }: {
-  kind: Kind; x: number; baseY: number; height: number; limb: number; limbAspect: number; exit: ActorExit; reduced: boolean;
+export const PopupActor = memo(function PopupActor({ kind, x, baseY, height, limb, goldLimb, limbAspect, exit, reduced, ghostly, hint }: {
+  kind: Kind; x: number; baseY: number; height: number; limb: number; goldLimb?: number; limbAspect: number; exit: ActorExit; reduced: boolean;
   ghostly: boolean; hint: boolean;
 }) {
   // Decorative idle loop: stops on Battery Saver / idle (ambient), never at normal power.
@@ -74,14 +74,14 @@ export const PopupActor = memo(function PopupActor({ kind, x, baseY, height, lim
   });
   const white = useAnimatedStyle(() => ({ opacity: flash.value }));
   const foamStyle = useAnimatedStyle(() => ({ opacity: foam.value, transform: [{ scaleX: 0.7 + foam.value * 0.5 }] }));
-  const limbSrc = isPuffer ? BASH_ART.puffer : limb;
+  const limbSrc = isPuffer ? BASH_ART.puffer : isGold && goldLimb ? goldLimb : limb;
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: x - w / 2, top: baseY - h - (isPuffer ? h * 0.25 : 0), width: w, height: h + (isPuffer ? h * 0.25 : 0) }}>
       <View style={{ position: 'absolute', left: -w, width: w * 3, top: -h * 0.2, height: h * 1.2 + (isPuffer ? h * 0.25 : 0), overflow: 'hidden' }}>
         <Animated.View style={[{ position: 'absolute', left: w, top: h * 0.2 + (isPuffer ? h * 0.12 : 0), width: w, height: h }, body]}>
           <Image source={limbSrc} style={StyleSheet.absoluteFill} contentFit="contain" />
-          {/* Gold tentacle: the same drawn limb washed gold, with sparkles (worth two fins, gone fast). */}
-          {isGold && <Image source={limbSrc} style={[StyleSheet.absoluteFill, { opacity: 0.62 }]} contentFit="contain" tintColor="#ffcf3b" />}
+          {/* Gold tentacle: hand-drawn gold art (Kraken) or the drawn limb washed gold, with sparkles (worth two fins, gone fast). */}
+          {isGold && !goldLimb && <Image source={limbSrc} style={[StyleSheet.absoluteFill, { opacity: 0.62 }]} contentFit="contain" tintColor="#ffcf3b" />}
           {isGold && <Image source={BASH_ART.sparkle} style={{ position: 'absolute', width: w * 0.55, height: w * 0.55, left: -w * 0.1, top: h * 0.05 }} contentFit="contain" />}
           {isGold && <Image source={BASH_ART.sparkle} style={{ position: 'absolute', width: w * 0.4, height: w * 0.4, right: -w * 0.05, top: h * 0.4 }} contentFit="contain" />}
           <Animated.View style={[StyleSheet.absoluteFill, white]}>
