@@ -190,17 +190,27 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         </ScrollView>
       </Pressable>
       <View style={styles.bottom}>
-        {allIn ? (
-          <>
-            {footer}
-            <Pressable onPress={onDone} accessibilityRole="button" style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
-              <Text style={styles.buttonText}>{doneLabel ?? 'AWESOME!'}</Text>
-            </Pressable>
-          </>
-        ) : null}
+        {allIn ? <DoneArea footer={footer} label={doneLabel ?? 'AWESOME!'} onDone={onDone} reducedMotion={reducedMotion} /> : null}
       </View>
       {stage && <RewardBurst progress={burst} x={stage.x} y={stage.y} />}
     </View>
+  );
+}
+
+/** The closing line and the button fade up together (200 ms), never pop in. */
+function DoneArea({ footer, label, onDone, reducedMotion }: {
+  readonly footer?: React.ReactNode; readonly label: string; readonly onDone: () => void; readonly reducedMotion: boolean;
+}) {
+  const a = useSharedValue(reducedMotion ? 1 : 0);
+  useEffect(() => { if (!reducedMotion) a.value = withTiming(1, { duration: 200 }); }, [reducedMotion, a]);
+  const style = useAnimatedStyle(() => ({ opacity: a.value, transform: [{ translateY: (1 - a.value) * 8 }] }));
+  return (
+    <Animated.View style={[{ gap: 8 }, style]}>
+      {footer}
+      <Pressable onPress={onDone} accessibilityRole="button" style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
+        <Text style={styles.buttonText}>{label}</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -248,13 +258,13 @@ function Row({ row, shown, reducedMotion, onWear, onPins, compact = false }: {
   useEffect(() => {
     if (!shown) { t.value = 0; return; }
     if (reducedMotion) { t.value = withTiming(1, { duration: 150 }); return; }
-    // Hero cards: slam, a 90 ms hit-stop, then settle.
-    t.value = big ? withSequence(withTiming(1, { duration: 120 }), withDelay(90, withSpring(1, { damping: 7, stiffness: 260 })))
+    // Hero cards: slam past rest (scale 0.96), a 90 ms hit-stop, then spring back to 1.
+    t.value = big ? withSequence(withTiming(1.114, { duration: 120, easing: Easing.in(Easing.quad) }), withDelay(90, withSpring(1, { damping: 7, stiffness: 260 })))
       : withSpring(1, { damping: 10, stiffness: 220 });
     if (big) beam.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: 900 }));
   }, [shown, reducedMotion, big, t, beam]);
   const style = useAnimatedStyle(() => ({
-    opacity: t.value,
+    opacity: Math.min(1, t.value),
     transform: big
       ? [{ scale: 1.35 - t.value * 0.35 }]
       : [{ translateY: (1 - t.value) * -18 }, { scale: 0.7 + t.value * 0.3 }],
@@ -296,7 +306,8 @@ const styles = StyleSheet.create({
   stage: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   glow: { position: 'absolute', backgroundColor: 'rgba(255, 244, 196, 0.55)' },
   flash: { backgroundColor: BRAND.white },
-  rows: { gap: 6, paddingVertical: 4 },
+  // Few prizes sit in the middle of the rows area, not at the top of an empty panel.
+  rows: { gap: 6, paddingVertical: 4, flexGrow: 1, justifyContent: 'center' },
   hintBox: { alignItems: 'center', justifyContent: 'center' },
   hint: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold, textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14,

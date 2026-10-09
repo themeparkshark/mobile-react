@@ -315,11 +315,15 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
 
   const xpNow = player?.experience ?? 0;
   const xpNeed = player?.experience_level?.experience ?? 0;
+  // When the next level is far off (Level 7+ takes weeks), lead with the nearer streak prize.
+  const farLevel = xpNeed > 0 && xpNow / xpNeed < 0.5 && lvOf(player) >= 6;
   const nextLevel = (lv: number) => (
     <View style={styles.nextBlock}>
       <View style={styles.nextRow}>
         <Image source={LEVEL_CHEST} style={{ width: 30, height: 30 }} contentFit="contain" />
-        <Text style={styles.nextText}>{`Next: Level ${lv + 1} chest with new gear`}</Text>
+        <Text style={styles.nextText}>{farLevel && daily?.streak.next_milestone
+          ? `Next prize: ${daily.streak.next_milestone.label.toLowerCase()} on Day ${daily.streak.next_milestone.day}`
+          : `Next: Level ${lv + 1} chest with new gear`}</Text>
       </View>
       {xpNeed > 0 && <XpBar pct={Math.min(1, xpNow / xpNeed)} reducedMotion={reducedMotion} />}
     </View>
@@ -340,7 +344,12 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     const r = view;
     title = r.src === 'level' ? `Level ${r.level}!` : r.src === 'weekly' ? 'Weekly Box' : 'Daily 3 done!';
     const footer = r.src === 'level' ? nextLevel(r.level ?? 1)
-      : r.src === 'weekly' ? <Text style={styles.nextText}>A new box waits next week.</Text>
+      : r.src === 'weekly' ? (
+        <View style={styles.nextRow}>
+          <Image source={WEEKLY} style={{ width: 28, height: 28 }} contentFit="contain" />
+          <Text style={styles.nextText}>Next box: 5 flames next week</Text>
+        </View>
+      )
       : daily ? (
         <View style={styles.nextRow}>
           <GameIcon name="streak" size={26} />
@@ -420,6 +429,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   );
 
   return { button, overlay, occluding: visible };
+}
+
+function lvOf(p: { experience_level?: { level: number } } | null | undefined): number {
+  return p?.experience_level?.level ?? 0;
 }
 
 /** The road to the next level chest: fills from empty over 600 ms when the chest closes its show. */

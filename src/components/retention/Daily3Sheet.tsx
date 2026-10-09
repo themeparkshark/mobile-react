@@ -114,8 +114,8 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
         <Text style={styles.reset}>{resetLabel(state.resets_at, now)}</Text>
         <Pressable onPress={() => onReminders(!reminders)} accessibilityRole="switch" accessibilityState={{ checked: reminders }}
           accessibilityLabel="Daily reminders" hitSlop={8} style={styles.bell}>
-          <View style={!reminders && styles.bellOff}><GameIcon name="bell" size={20} /></View>
-          <Text style={styles.reset}>{reminders ? 'Reminders on' : 'Reminders off'}</Text>
+          <View style={!reminders && styles.bellOff}><GameIcon name="bell" size={26} /></View>
+          <Text style={styles.bellText}>{reminders ? 'Reminders on' : 'Reminders off'}</Text>
         </Pressable>
       </View>
       {coach && <Coach onDone={onCoachDone} />}
@@ -380,6 +380,7 @@ const styles = StyleSheet.create({
   reset: { fontFamily: 'Knockout', fontSize: 13, color: '#a9d6f7' },
   bell: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 4 },
   bellOff: { opacity: 0.45 },
+  bellText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white },
   coachScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5, 52, 110, 0.82)', justifyContent: 'center', padding: 14 },
   coachCard: { backgroundColor: BRAND.white, borderRadius: 20, padding: 14, gap: 8, borderWidth: 3, borderColor: BRAND.gold },
   coachTitle: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, textAlign: 'center' },
