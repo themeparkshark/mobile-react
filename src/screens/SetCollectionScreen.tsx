@@ -570,9 +570,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             )}
           />
         )}
+        {set && stuck && <StickyBar set={set} reduced={reduced} onTop={() => listRef.current?.scrollToOffset({ offset: 0, animated: !reduced })} />}
       </View>
-
-      {set && stuck && <StickyBar set={set} reduced={reduced} onTop={() => listRef.current?.scrollToOffset({ offset: 0, animated: !reduced })} />}
 
       <ItemCard item={selectedItem} set={set} onClose={closeItem} error={error} onFind={goToMap}
         hunt={set && !set.isComplete && (set.status === 'active' || set.status === 'resting')
@@ -746,7 +745,8 @@ function SparesSheet({ visible, items, onClose, onShare }: {
 }
 
 const styles = StyleSheet.create({
-  sticky: { position: 'absolute', left: 12, right: 12, top: 96, zIndex: 5 },
+  // Inside the page, just under the header bar.
+  sticky: { position: 'absolute', left: 12, right: 12, top: 16, zIndex: 5 },
   stickyInner: {
     flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: 10, borderRadius: 24,
     backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#efe1b8', borderBottomWidth: 4, ...SHADOW.card,
