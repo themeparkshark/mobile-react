@@ -48,6 +48,7 @@ import {
   setLastViewed,
   rememberEntries,
   takeLastViewed,
+  onLastViewed,
 } from './NewsScreen/newsFeed';
 import {
   filterByKey,
@@ -94,6 +95,10 @@ export default function NewsScreen() {
   const [cats, setCats] = useState<Readonly<Record<number, number[]>>>({});
   const listRef = useRef<FlashList<FeedRow>>(null);
   const showTopRef = useRef(false);
+  const visibleRows = useRef(new Set<number>());
+  const onViewable = useRef(({ viewableItems }: { viewableItems: { index: number | null; isViewable: boolean }[] }) => {
+    visibleRows.current = new Set(viewableItems.filter(v => v.isViewable && v.index != null).map(v => v.index as number));
+  }).current;
   const listsRef = useRef(lists);
   listsRef.current = lists;
   const inflight = useRef(new Set<string>());
@@ -169,15 +174,21 @@ export default function NewsScreen() {
     return () => clearTimeout(id);
   }, [query]);
 
-  // Coming back from the reader: refresh Read marks, ages, and bring the last story into view.
+  // While the reader is open the feed follows it (out of sight), so Back lands on the last story.
+  const bringIntoView = useCallback((id: number) => {
+    const index = rowsRef.current.findIndex(r => 'entry' in r && r.entry.id === id);
+    // Already fully on screen (the story you just tapped): leave the feed where it is.
+    if (index <= 0 || visibleRows.current.has(index)) return;
+    listRef.current?.scrollToIndex({ index, viewPosition: 0.35, animated: false });
+  }, []);
+  useEffect(() => onLastViewed(bringIntoView), [bringIntoView]);
+  // Coming back from the reader: fresh Read marks and ages.
   useFocusEffect(useCallback(() => {
     setRead(new Set(readNow()));
     setNow(Date.now());
     const id = takeLastViewed();
-    if (id == null) return;
-    const index = rowsRef.current.findIndex(r => 'entry' in r && r.entry.id === id);
-    if (index > 0) requestAnimationFrame(() => listRef.current?.scrollToIndex({ index, viewPosition: 0.35, animated: false }));
-  }, []));
+    if (id != null) requestAnimationFrame(() => bringIntoView(id));
+  }, [bringIntoView]));
 
   // Tapping News in the footer while here: back to the top.
   useEffect(() => onTabReselect('News', () => {
@@ -315,6 +326,8 @@ export default function NewsScreen() {
               estimatedItemSize={124}
               onEndReached={onEndReached}
               onEndReachedThreshold={1.2}
+              onViewableItemsChanged={onViewable}
+              viewabilityConfig={{ itemVisiblePercentThreshold: 90 }}
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}

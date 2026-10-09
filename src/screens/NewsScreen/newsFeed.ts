@@ -211,15 +211,24 @@ export function findBySlug(slug: string): NewsEntry | undefined {
   return undefined;
 }
 
-/** The story the reader was last showing, so the feed can bring it into view on return. */
+/**
+ * The story the reader is showing. The feed (still mounted under the reader)
+ * follows along, so going back lands on that story with no jump.
+ */
 let lastViewed: number | null = null;
+const viewedListeners = new Set<(id: number) => void>();
 export function setLastViewed(id: number | null): void {
   lastViewed = id;
+  if (id != null) viewedListeners.forEach(listener => listener(id));
 }
 export function takeLastViewed(): number | null {
   const id = lastViewed;
   lastViewed = null;
   return id;
+}
+export function onLastViewed(listener: (id: number) => void): () => void {
+  viewedListeners.add(listener);
+  return () => { viewedListeners.delete(listener); };
 }
 
 /* ------------------------------------------------------- read stories */
