@@ -164,3 +164,13 @@ test('round 9: idle rest, the rail owns its window, the Secret Shop opens on its
   assert.match(showroom, /export function SecretRoomSkeleton/);
   assert.match(src('src/screens/StoreScreen.tsx'), /\{routeSecret && status === 'loading' && <SecretRoomSkeleton still=\{reducedMotion\} \/>\}/);
 });
+
+test('round 10: every one-tap guard ships (math visible, in-flight lock, drag/multi-touch cancel, session cap, spoken result)', () => {
+  const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
+  assert.match(sheet, /\{!fxKey && !showMath && slotLine/, 'the slot line steps aside so the math is fully visible before the tap');
+  assert.match(sheet, /if \(buyingRef\.current\) return;\s*buyingRef\.current = true;/);
+  assert.match(sheet, /Math\.hypot\(t\.pageX - s0\.x, t\.pageY - s0\.y\) > 10/);
+  assert.match(sheet, /touches\.length > 1/);
+  assert.match(sheet, /&& !directCapped;/);
+  assert.match(sheet, /You will have \$\{formatCoins\(balance - item\.cost\)\} left\./);
+});

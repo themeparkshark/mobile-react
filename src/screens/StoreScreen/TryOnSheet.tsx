@@ -83,6 +83,8 @@ const SHEET_SETTLE_MS = 300;
 const FIRST_BUY_KEY = 'shop:first-coin-buy';
 /** Direct buys this app run (the 3-in-2-minutes cap sends the rest back to the confirm step). */
 const directBuys: number[] = [];
+/** After a third quick direct buy, the rest of this app run uses the confirm step. */
+let directCapped = false;
 
 type Phase = TryOnPhase;
 type WearState = 'idle' | 'busy' | 'spinning' | 'failed';
@@ -212,6 +214,10 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     return () => clearTimeout(t);
   }, [item?.id]);
   const [firstBuyDone, setFirstBuyDone] = useState(false);
+  const buyingRef = useRef(false);
+  useEffect(() => { if (phase !== 'buying' && phase !== 'landing') buyingRef.current = false; }, [phase]);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const touchVoid = useRef(false);
   useEffect(() => { void AsyncStorage.getItem(FIRST_BUY_KEY).then(v => setFirstBuyDone(v === '1')).catch(() => undefined); }, []);
   const [wear, setWear] = useState<WearState>('idle');
   const [dropping, setDropping] = useState(false);
@@ -348,7 +354,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const wearLocked = memberWearLocked(item, player?.is_subscribed === true, memberLockOn);
   const direct = !owned && short === 0 && !buyPaused && !wearLocked && !vipLocked && directBuyAllowed({ cost: item.cost, balance,
     coins: (item.currency?.name ?? 'Coins').toLowerCase() === 'coins', secret: secretItem, member: isMemberWearItem(item),
-    firstBuyDone, recent: directBuys, now: Date.now() });
+    firstBuyDone, recent: directBuys, now: Date.now() }) && !directCapped;
   const tried = tryOnCta({ owned, worn, vipLocked, short, phase, wear, finishes, cost: item.cost, paused: buyPaused, secret: secretItem, wearLocked });
   // One deliberate tap for a cheap piece: same gold button, the math already on screen, armed only after the sheet settles.
   const baseCta = direct && phase === 'idle' && tried.action === 'ask' ? { ...tried, action: 'buy' as const } : tried;
@@ -399,7 +405,10 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
 
   const buy = async () => {
     if (phase !== 'confirm' && !(direct && phase === 'idle' && armed)) return;
-    if (phase === 'idle') directBuys.push(Date.now());
+    // In-flight lock: a second tap before the server answers never starts a second buy.
+    if (buyingRef.current) return;
+    buyingRef.current = true;
+    if (phase === 'idle') { directBuys.push(Date.now()); if (directBuys.filter(t => Date.now() - t < 120_000).length >= 3) directCapped = true; }
     setPhase('buying');
     try {
       const result = await purchase(item);
@@ -473,6 +482,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   };
 
   const press = () => {
+    if (direct && phase === 'idle' && touchVoid.current) { touchVoid.current = false; return; }
     switch (cta.action) {
       case 'wear': void wearNow(); break;
       case 'close': closeAnimated(); break;
@@ -562,7 +572,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 </View>
                 {/* What it is, in a kid's words (kids UX round 1): Secret pieces say what they do in their card. */}
                 {/* On the confirm step the coin math takes this room: nothing slides under the buttons (art director r5). */}
-                {!fxKey && !confirming && slotLine(item.item_type?.id) && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.slotLine}>{slotLine(item.item_type?.id)}</Text>}
+                {!fxKey && !showMath && slotLine(item.item_type?.id) && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.slotLine}>{slotLine(item.item_type?.id)}</Text>}
                 {/* Confirm reads what, then cost (art director r7/r8): the name above, the coin math under it.
                     The result is the one big number; the subtraction is small (kids UX r8). */}
                 {showMath && (
@@ -674,9 +684,14 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     <Text maxFontSizeMultiplier={MAX_FONT} style={styles.needText}>{cta.label}</Text>
                   </View>
                 ) : (
-                <View style={{ overflow: 'hidden', borderRadius: 18 }}>
+                <View style={{ overflow: 'hidden', borderRadius: 18 }}
+                  // One-tap guards (kids consult): a second finger or a drag of more than 10 pt cancels the press.
+                  onTouchStart={e => { const t = e.nativeEvent; touchStart.current = { x: t.pageX, y: t.pageY }; touchVoid.current = t.touches.length > 1; }}
+                  onTouchMove={e => { const t = e.nativeEvent; const s0 = touchStart.current;
+                    if (t.touches.length > 1 || (s0 && Math.hypot(t.pageX - s0.x, t.pageY - s0.y) > 10)) touchVoid.current = true; }}>
                   <ShopCta label={cta.label} icon={owned ? 'shark' : cta.action === 'vip' ? 'member' : 'coins'}
                     width={PRIMARY_W} onPress={press} still={still}
+                    accessibilityHint={direct && phase === 'idle' ? `Buys it now. You will have ${formatCoins(balance - item.cost)} left.` : undefined}
                     loading={cta.look === 'busy' || cta.look === 'checking'} muted={cta.look === 'paused' || cta.look === 'checking'}
                     disabled={hold || wear === 'spinning' || cta.look === 'paused' || cta.look === 'checking' || (direct && phase === 'idle' && !armed)} />
                   {cta.action === 'ask' && finishes && <Sheen still={still} delay={500} width={360} />}

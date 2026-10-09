@@ -274,7 +274,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 28 }]} showsVerticalScrollIndicator={false} scrollEventThrottle={64}
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 48 }]} showsVerticalScrollIndicator={false} scrollEventThrottle={64}
         // A shelf shorter than the screen still asks for the next page (performance r8: page 2 never loaded).
         onContentSizeChange={(_, h) => { if (h < winH + 240 && !nearEnd.current) { nearEnd.current = true; onEndReached?.(); } else if (h >= winH + 240) nearEnd.current = false; }}
         onTouchStart={wake} onScrollBeginDrag={wake}

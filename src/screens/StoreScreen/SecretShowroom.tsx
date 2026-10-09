@@ -400,7 +400,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
 
       <Animated.View entering={still ? undefined : FadeInUp.delay(120).duration(260)}>
         <View style={styles.railHead}>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.railTitle}>IN THE ROOM TODAY</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.railTitle}>TODAY</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.railHint}>{ownedCount > 0 ? `${ownedCount} of ${entries.length} yours · tap to try` : 'Tap one to put it on'}</Text>
         </View>
         <Rail railRef={rail} entries={entries} selectedId={item.id} member={member} resting={resting} bought={bought} onPick={pick} />
