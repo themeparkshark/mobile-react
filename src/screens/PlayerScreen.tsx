@@ -14,6 +14,7 @@ import Stats from '../components/Stats';
 import ProfileShortcuts, { type ProfileShortcut } from '../components/profile/ProfileShortcuts';
 import StatusBadges from '../components/profile/StatusBadges';
 import TitlePill from '../components/profile/TitlePill';
+import * as RootNavigation from '../RootNavigation';
 import ProfileEventChip from '../components/profile/ProfileEventChip';
 import useCardOnScreen from '../components/profile/useCardOnScreen';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -135,6 +136,14 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
               await actions.cheer(currentPlayer);
             }
           },
+        }] : []),
+        // A friend's Stamp Book, read only (friends only: the server refuses everyone else).
+        ...(isFriend ? [{
+          key: 'stamps',
+          label: 'Stamps',
+          image: require('../../assets/icons/game/medal1.png'),
+          hint: `Opens ${currentPlayer.screen_name}'s Stamp Book`,
+          onPress: () => RootNavigation.navigate('FriendStampBook', { playerId: currentPlayer.id, name: currentPlayer.screen_name }),
         }] : []),
         ...(currentPlayer.mascot ? [{
           key: 'gift',

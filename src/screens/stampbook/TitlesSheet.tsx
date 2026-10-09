@@ -8,7 +8,8 @@
  * one still shows here at the top so Remove always works.
  */
 import { ScrollView, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { GameDialog, GameIcon } from '../../ui';
+import { GameIcon } from '../../ui';
+import StampSheet from './StampSheet';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import StampArt from './StampArt';
@@ -17,7 +18,7 @@ import { progressLabel, titleLine, type BookStamp, type TitleEntry } from './mod
 
 const GOLD = '#FFCF3B';
 
-export default function TitlesSheet({ visible, entries, worn, busy, message, onWear, onRemove, onOpenStamp, onClose }: {
+export default function TitlesSheet({ visible, entries, worn, busy, message, onWear, onRemove, onOpenStamp, onClose, onDismiss }: {
   readonly visible: boolean;
   readonly entries: readonly TitleEntry[];
   /** The title on the profile now (from a stamp or a Collection Book). */
@@ -29,13 +30,14 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
   readonly onRemove: () => void;
   readonly onOpenStamp: (stamp: BookStamp) => void;
   readonly onClose: () => void;
+  /** The sheet is fully gone (the stamp card a row asked for opens here). */
+  readonly onDismiss?: () => void;
 }) {
   const fromBook = !!worn && !entries.some(e => e.title === worn);
   // The list scrolls inside the dialog; on short phones it stays short enough that the ribbon clears the status bar.
   const listMax = Math.min(420, useWindowDimensions().height - 400);
   return (
-    <GameDialog visible={visible} title="Titles" buttons={[{ text: 'Close', style: 'cancel', variant: 'ghost' }]}
-      onAnswer={() => onClose()} testID="stamp-titles">
+    <StampSheet visible={visible} title="Titles" onClose={onClose} onDismiss={onDismiss} testID="stamp-titles">
       <View style={styles.steps} accessible accessibilityLabel="Earn a stamp, claim it, then wear its title on your profile.">
         <Step icon="medal1" label="Earn it" />
         <GameIcon name="arrow" size={18} />
@@ -87,7 +89,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
         })}
       </ScrollView>
       {!!message && <Text style={styles.message} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.5}>{message}</Text>}
-    </GameDialog>
+    </StampSheet>
   );
 }
 

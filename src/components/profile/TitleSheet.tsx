@@ -13,7 +13,8 @@ import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import getPrepItemSets, { equipSetTitle } from '../../api/endpoints/me/prep-item-sets';
 import { equipStampTitle, getStamps } from '../../api/endpoints/me/stamps';
-import { BRAND, GameButton, GameDialog, GameIcon, GameText } from '../../ui';
+import { BRAND, GameButton, GameIcon, GameText } from '../../ui';
+import StampSheet from '../../screens/stampbook/StampSheet';
 import { setBadge } from '../../screens/SetCollection/DexParts';
 import * as RootNavigation from '../../RootNavigation';
 import { describeTitle, earnedTitles, findEarned, titleBadgeSlug, type EarnedTitle } from './titleModel';
@@ -125,9 +126,7 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
   const others = (earned ?? []).filter(entry => entry.title !== worn);
 
   return (
-    <GameDialog visible={visible} title={mode === 'about' ? 'Your title' : 'Change title'}
-      buttons={[{ text: 'Close', style: 'cancel', variant: 'ghost' }]}
-      onAnswer={() => onClose()} testID="title-sheet">
+    <StampSheet visible={visible} title={mode === 'about' ? 'Your title' : 'Change title'} onClose={onClose} testID="title-sheet">
       {mode === 'about' ? (
         <View style={styles.body}>
           {!!worn && (
@@ -208,7 +207,7 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
           </View>
         </View>
       )}
-    </GameDialog>
+    </StampSheet>
   );
 }
 

@@ -453,7 +453,8 @@ const STAMPS: StampData[] = [
   "section": "hunt",
   "icon_url": null,
   "how_to": "Keep hunting!",
-  "short_name": "???"
+  "short_name": "???",
+  "secret_hint": "A mountain of finds hides this one!"
  },
  {
   "id": 914,
@@ -512,7 +513,7 @@ const STAMPS: StampData[] = [
    "tickets": 0,
    "xp": 250,
    "coins": 0,
-   "title": "Ride Collector"
+   "title": "Coin Collector"
   },
   "section": "rides",
   "icon_url": null,

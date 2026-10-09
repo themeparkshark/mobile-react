@@ -40,6 +40,8 @@ export interface StampData {
   retired?: boolean;
   /** Empty corner of the art for the postmark (stamps:import-art manifest). */
   art_free_corner?: 'tl' | 'tr' | 'bl' | 'br' | null;
+  /** A riddle while the stamp is still secret (round 8 backend); null otherwise. */
+  secret_hint?: string | null;
 }
 
 export interface StampSectionInfo {
@@ -70,6 +72,24 @@ export async function getStamps(): Promise<StampsResponse> {
 export async function claimStampReward(stampId: number): Promise<{ success: boolean; rewards: StampRewards; levels_gained?: number; level?: number | null }> {
   // The card shows the rewards and any level-up itself: skip the global broadcast banners for this call.
   const { data } = await client.post(`/me/stamps/${stampId}/claim`, undefined, { skipBroadcasts: true } as object);
+  return data;
+}
+
+/** A friend's Stamp Book (friends only, read only): owned stamps, per-section counts, worn title, rarest stamp. */
+export interface FriendStamp {
+  id: number; slug: string; name: string; short_name: string; rarity: StampData['rarity']; section: string;
+  icon_thumb_url: string | null; earned_at: string | null;
+}
+export interface FriendBook {
+  player: { id: number; username: string | null; title: string | null };
+  stamps: FriendStamp[];
+  rarest: FriendStamp | null;
+  sections: (StampSectionInfo & { earned: number; total: number })[];
+  summary: { earned: number; total: number };
+}
+
+export async function getFriendStamps(playerId: number): Promise<FriendBook> {
+  const { data } = await client.get<FriendBook>(`/players/${playerId}/stamps`);
   return data;
 }
 

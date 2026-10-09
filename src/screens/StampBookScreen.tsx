@@ -21,7 +21,7 @@ import { InteractionManager, Pressable, StyleSheet, Text, View, useWindowDimensi
 import { Image } from 'expo-image';
 import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -42,12 +42,13 @@ import TitlesSheet from './stampbook/TitlesSheet';
 import ClaimAll from './stampbook/ClaimAll';
 import { loadBookCache, memoryBook, saveBookCache } from './stampbook/cache';
 import { BookFxProvider, useBookClocks, useBookFx } from './stampbook/BookFx';
+import { stampRarity } from './stampbook/rarity';
 import { Confetti } from './stampbook/SlamFx';
 import { prefetchList } from './stampbook/art';
 import { loadCelebrated, loadSeen, saveCelebrated, saveSeen } from './stampbook/seen';
 import { takeStampsDirty } from './stampbook/dirty';
 import {
-  almostThereList, bookTotals, buildBook, claimQueue, hasShine, progressLabel, remainingLine, requirement, ring, stampIndex, titleCounts, titleEntries,
+  almostThereList, rarestOwned, bookTotals, buildBook, claimQueue, hasShine, progressLabel, remainingLine, requirement, ring, stampIndex, titleCounts, titleEntries,
   type BookSection, type BookStamp, type GoTarget, type TitleEntry,
 } from './stampbook/model';
 
@@ -132,6 +133,7 @@ export default function StampBookScreen() {
   const fx = useBookClocks(focused && !selected && !titlesOpen && !claimAllOpen, reducedMotion, { pulseOn: totals.toClaim > 0, shineOn: shinyOwned, pulseWhenIdle: totals.toClaim > 0 });
   const queue = useMemo(() => claimQueue(sections), [sections]);
   const almost = useMemo(() => almostThereList(sections, 3), [sections]);
+  const rarest = useMemo(() => rarestOwned(sections), [sections]);
   const accentFor = useCallback((key: string) => sections.find(s => s.key === key)?.color ?? '#2F6BFF', [sections]);
   const wornTitle = (titleOverride ? titleOverride.title
     : previewMode ? previewTitle ?? response?.equipped_title ?? null : player?.title ?? response?.equipped_title ?? null) || null;
@@ -547,7 +549,8 @@ export default function StampBookScreen() {
               contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} stickyHeaderIndices={[2]}
               onMomentumScrollEnd={onScrollSettled} onScrollEndDrag={onScrollSettled}>
               <Cover earned={totals.earned} total={totals.total} toClaim={totals.toClaim} worn={wornTitle}
-                titlesOwned={titleCount.owned} titlesTotal={titleCount.total} onClaim={openClaim} onTitles={openTitles} />
+                titlesOwned={titleCount.owned} titlesTotal={titleCount.total} onClaim={openClaim} onTitles={openTitles}
+                rarest={rarest} onOpen={open} />
 
               <AlmostThere stamps={almost} accentFor={accentFor} onOpen={open} />
 
@@ -605,7 +608,7 @@ export default function StampBookScreen() {
         />
         <TitlesSheet visible={titlesOpen} entries={titles} worn={wornTitle} busy={titleBusy} message={titleMessage}
           onWear={entry => { void wearFromList(entry); }} onRemove={() => { void wearFromList(null); }}
-          onOpenStamp={openFromTitles} onClose={titlesClosed} />
+          onOpenStamp={openFromTitles} onClose={() => setTitlesOpen(false)} onDismiss={titlesClosed} />
         <ClaimAll stamps={claimAllOpen ?? []} visible={!!claimAllOpen} reducedMotion={reducedMotion} worn={wornTitle}
           onClaimOne={claimOne} onWear={stamp => setTitle(stamp.id, stamp.rewards.title).then(() => undefined, () => undefined)} onClose={closeClaimAll} />
       </BookFxProvider>
@@ -617,9 +620,9 @@ export default function StampBookScreen() {
  * The book's cover: blue cloth with gold corner caps and a stitched edge. Stamps earned (ring and percent), your
  * shark wearing your title (tap: Titles), and one big gold Claim when rewards wait.
  */
-function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim, onTitles }: {
+function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim, onTitles, rarest, onOpen }: {
   earned: number; total: number; toClaim: number; worn: string | null; titlesOwned: number; titlesTotal: number;
-  onClaim: () => void; onTitles: () => void;
+  onClaim: () => void; onTitles: () => void; rarest: BookStamp | null; onOpen: (s: BookStamp) => void;
 }) {
   const fx = useBookFx();
   const R = 34;
@@ -662,6 +665,20 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
             <View style={styles.titlesBadge}><Text style={styles.titlesBadgeText} maxFontSizeMultiplier={1.1}>Titles {titlesOwned}/{titlesTotal}</Text></View>
           </Pressable>
         </View>
+        {/* Pride: the rarest stamp you own, in a foil frame of its rarity. */}
+        {!!rarest && (
+          <Pressable onPress={() => { playSfx('ui.tap'); haptic('tapLight'); onOpen(rarest); }} style={({ pressed }) => [styles.showcase, pressed && styles.pressed]}
+            accessibilityRole="button" accessibilityLabel={`Your rarest stamp: ${rarest.name}, ${stampRarity(rarest.rarity).label}`}>
+            <View style={[styles.showcaseArt, { borderColor: stampRarity(rarest.rarity).frame }]}><StampArt stamp={rarest} size="thumb" /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.showcaseLabel} maxFontSizeMultiplier={1.3}>MY RAREST</Text>
+              <Text style={styles.showcaseName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.3}>{rarest.shortName}</Text>
+            </View>
+            <View style={[styles.showcasePill, { backgroundColor: stampRarity(rarest.rarity).chip, borderColor: stampRarity(rarest.rarity).frame }]}>
+              <Text style={styles.showcasePillText} maxFontSizeMultiplier={1.2}>{stampRarity(rarest.rarity).label.toUpperCase()}</Text>
+            </View>
+          </Pressable>
+        )}
         {toClaim > 0 && (
           <Animated.View style={!fx.reducedMotion && pulse}>
             <Pressable onPress={onClaim} style={({ pressed }) => [styles.claimAll, pressed && styles.pressed]} accessibilityRole="button"
@@ -769,7 +786,7 @@ const SectionPage = memo(function SectionPage({ section, width, boardTop, onTop,
             <Text style={styles.sectionBlurb} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.4}>{section.blurb}</Text>
           </View>
           {complete ? (
-            <View style={styles.seal} accessible accessibilityLabel="Page complete"><GameIcon name="check" size={22} /><Text style={styles.sealText} maxFontSizeMultiplier={1.1}>DONE</Text></View>
+            <PageSeal celebrating={celebrating} />
           ) : (
             <GameIcon name={celebrating ? 'chestOpen' : 'chest'} size={36} accessibilityLabel="Finish the page to fill it" />
           )}
@@ -790,6 +807,25 @@ const SectionPage = memo(function SectionPage({ section, width, boardTop, onTop,
     </View>
   );
 });
+
+/** The gold seal on a finished page: it slams in (pop, thunk) the first time the page completes. */
+function PageSeal({ celebrating }: { celebrating: boolean }) {
+  const fx = useBookFx();
+  const pop = useSharedValue(1);
+  useEffect(() => {
+    if (!celebrating || fx.reducedMotion) return;
+    pop.value = 1.8;
+    pop.value = withSpring(1, { damping: 9, stiffness: 260 });
+    playSfx('fx.hit', 0.8);
+    haptic('hitRigid');
+  }, [celebrating, fx.reducedMotion, pop]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }, { rotate: '-10deg' }] }));
+  return (
+    <Animated.View style={[styles.seal, style]} accessible accessibilityLabel="Page complete">
+      <GameIcon name="check" size={22} /><Text style={styles.sealText} maxFontSizeMultiplier={1.1}>DONE</Text>
+    </Animated.View>
+  );
+}
 
 const styles = StyleSheet.create({
   screen: { flex: 1, overflow: 'hidden', backgroundColor: '#0a77bf' },
@@ -823,6 +859,15 @@ const styles = StyleSheet.create({
   titlePillEmpty: { backgroundColor: '#E2F6FF', borderBottomColor: '#9FB2C9' },
   titlePillText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 14, color: INK },
   titlePillTextEmpty: { color: MUTED_INK },
+  showcase: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(0,40,90,0.35)', borderRadius: 16, padding: 8, minHeight: 56,
+    borderWidth: 2, borderColor: 'rgba(255,214,102,0.7)',
+  },
+  showcaseArt: { width: 46, height: 46, borderRadius: 23, borderWidth: 3, backgroundColor: '#FFF6DE', padding: 2 },
+  showcaseLabel: { fontFamily: 'Shark', fontSize: 12, color: '#FFCF3B', letterSpacing: 1 },
+  showcaseName: { fontFamily: 'Shark', fontSize: 17, color: '#FFFFFF' },
+  showcasePill: { borderRadius: 12, borderWidth: 2, paddingHorizontal: 10, paddingVertical: 3 },
+  showcasePillText: { fontFamily: 'Shark', fontSize: 13, color: '#05346e', letterSpacing: 0.5 },
   titlesBadge: { marginTop: 3, backgroundColor: '#05559A', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.8)' },
   titlesBadgeText: { fontFamily: 'Shark', fontSize: 12, color: '#FFFFFF' },
   claimAll: { borderRadius: 18, backgroundColor: '#C98A00', paddingBottom: 5 },
@@ -888,7 +933,6 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, rowGap: GAP + 8 },
   seal: {
     width: 52, height: 52, borderRadius: 26, backgroundColor: '#FFC21A', borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center',
-    transform: [{ rotate: '-10deg' }],
   },
   sealText: { fontFamily: 'Shark', fontSize: 11, color: INK, marginTop: -2 },
 });

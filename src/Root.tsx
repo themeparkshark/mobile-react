@@ -257,6 +257,7 @@ export default function App() {
         {/* V2 Screens */}
         <Stack.Screen name="SetCollection" getComponent={() => require('./screens/SetCollectionScreen').default} />
         <Stack.Screen name="StampBook" getComponent={() => require('./screens/StampBookScreen').default} />
+        <Stack.Screen name="FriendStampBook" getComponent={() => require('./screens/FriendStampBookScreen').default} />
         <Stack.Screen name="CoinShelf" getComponent={() => require('./screens/CoinShelfScreen').default} />
         <Stack.Screen 
           name="CommunityCenter" 

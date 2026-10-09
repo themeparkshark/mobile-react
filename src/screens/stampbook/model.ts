@@ -37,6 +37,8 @@ export interface BookStamp {
   readonly claimable: boolean;
   /** The empty corner of the art (server hint), where the postmark goes. */
   readonly freeCorner: Corner;
+  /** The server's riddle for a secret stamp (null when found or not secret). */
+  readonly secretHint: string | null;
 }
 
 export type Corner = 'tl' | 'tr' | 'bl' | 'br';
@@ -101,6 +103,7 @@ export function toBookStamp(s: StampData): BookStamp {
     metric: s.metric ?? '',
     retired: !!s.retired,
     freeCorner: (['tl', 'tr', 'bl', 'br'] as const).find(c => c === s.art_free_corner) ?? 'tr',
+    secretHint: secret && typeof s.secret_hint === 'string' && s.secret_hint.trim() ? s.secret_hint.trim() : null,
     claimable: !!s.is_earned && !s.reward_claimed && hasRewards(s.rewards),
     howTo: secret ? 'A secret stamp! Who will find it?' : (s.how_to ?? s.goal ?? '').trim(),
     section: s.section ?? sectionForMetric(s.metric ?? '', !!s.is_hidden),
@@ -133,7 +136,7 @@ export function compareStamps(a: BookStamp, b: BookStamp): number {
 
 /** Fields that change what a tile shows. Same key: reuse the old object so memoized tiles skip. */
 function stampKey(s: BookStamp): string {
-  return [s.progress, s.earned, s.earnedAt, s.rewardClaimed, s.iconUrl, s.thumbUrl, s.lockedThumbUrl, s.shortName, s.howTo, s.retired, s.freeCorner].join('|');
+  return [s.progress, s.earned, s.earnedAt, s.rewardClaimed, s.iconUrl, s.thumbUrl, s.lockedThumbUrl, s.shortName, s.howTo, s.retired, s.freeCorner, s.secretHint].join('|');
 }
 
 /**
@@ -325,7 +328,9 @@ function kCount(n: number): string {
 }
 
 /** A secret's teaser: which kind of play finds it, never its name or goal. */
-export function secretHint(s: Pick<BookStamp, 'metric' | 'target'>): string {
+export function secretHint(s: Pick<BookStamp, 'metric' | 'target'> & { readonly secretHint?: string | null }): string {
+  // The server's own riddle first (round 8); else a hint from the kind of play.
+  if (s.secretHint) return s.secretHint;
   const req = requirement(s);
   if (req.icon === 'pin' || req.icon === 'sparkle') return 'Hint: keep catching finds!';
   if (req.icon === 'map' || req.icon === 'ride') return 'Hint: explore the parks!';
@@ -393,6 +398,13 @@ export function whereFor(metric: string): Where {
   if (/^(visited_|park_shelf:|ride_passport_|park_coins_|ride_coins_|ride_boss|verified_lineplay|trivia_|line_bonus)/.test(metric)) return 'park';
   if (['parks_visited', 'night_show', 'night_owl'].includes(metric) || /^(park_distance|trail_box)/.test(metric)) return 'park';
   return 'anywhere';
+}
+
+/** The rarest stamp you own (highest rarity, newest first): the cover's showcase. */
+export function rarestOwned(sections: readonly BookSection[]): BookStamp | null {
+  const owned = sections.flatMap(s => s.stamps).filter(s => s.earned);
+  owned.sort((a, b) => rarityRank(b.rarity) - rarityRank(a.rarity) || (b.earnedAt ?? '').localeCompare(a.earnedAt ?? ''));
+  return owned[0] ?? null;
 }
 
 /** Up to `n` stamps closest to done across the whole book (not secret, not retired, started). */

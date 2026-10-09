@@ -514,3 +514,23 @@ test('round 6: Claim all from a card with 2+ gifts, claims run 3 at a time, idle
   // A secret shows its real art only as a navy silhouette under a gold "?".
   assert.match(card, /tint="#1B2B4A"/);
 });
+
+test('round 8: rarest stamp showcase, server riddles for secrets, friends-only friend book, house-styled sheets', () => {
+  const book = model.buildBook({ stamps: { a: [
+    stamp({ id: 1, is_earned: true, rarity: 'rare', earned_at: '2026-09-01T00:00:00Z', progress: 2 }),
+    stamp({ id: 2, is_earned: true, rarity: 'legendary', earned_at: '2026-08-01T00:00:00Z', progress: 2 }),
+    stamp({ id: 3, rarity: 'legendary', progress: 1 }),
+    stamp({ id: 4, is_hidden: true, secret_hint: 'A mountain of finds hides this one!' }),
+  ] } });
+  assert.equal(model.rarestOwned(book).id, 2);
+  const secret = book.flatMap(s => s.stamps).find(s => s.id === 4);
+  assert.equal(model.secretHint(secret), 'A mountain of finds hides this one!');
+  // Found secrets drop the riddle.
+  assert.equal(model.toBookStamp(stamp({ is_hidden: true, is_earned: true, secret_hint: 'x' })).secretHint, null);
+  const friend = read('src/screens/FriendStampBookScreen.tsx');
+  assert.match(friend, /getFriendStamps\(playerId\)/);
+  assert.match(friend, /Only friends can open this Stamp Book\./);
+  assert.match(read('src/screens/PlayerScreen.tsx'), /\.\.\.\(isFriend \? \[\{\s*key: 'stamps'/);
+  assert.match(read('src/screens/stampbook/TitlesSheet.tsx'), /<StampSheet visible=\{visible\} title="Titles"/);
+  assert.match(read('src/components/profile/TitleSheet.tsx'), /<StampSheet visible=\{visible\}/);
+});
