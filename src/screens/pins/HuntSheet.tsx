@@ -76,8 +76,14 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
           queueHaptic(s.warmth === 'here' ? 'success' : 'tickSelection', 1);
           last = s.warmth;
         }
-      } catch { /* keep the last reading */ }
-      if (live) timer = setTimeout(tick, POLL_MS);
+        // Away from the park there's nothing to measure: check rarely.
+        if (live) timer = setTimeout(tick, s.here ? POLL_MS : POLL_MS * 5);
+        return;
+      } catch {
+        // Keep the last reading and back off.
+        if (live) timer = setTimeout(tick, POLL_MS * 3);
+        return;
+      }
     };
     void tick();
     return () => { live = false; if (timer) clearTimeout(timer); };

@@ -15,7 +15,7 @@ import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import { BRAND, FONT, GameButton, GameIcon, OUTLINE, RADIUS, SHADOW, SPACE } from '../../ui';
 import { PIN_ART, PinTile } from './PinArt';
-import { seasonLabel, type ParkSet, type PinDay, type PinRow } from './pinsModel';
+import { foundLabel, seasonLabel, type ParkSet, type PinDay, type PinRow } from './pinsModel';
 
 const CORK = require('../../../assets/images/screens/pin-swaps/corkboard.png');
 
@@ -106,7 +106,7 @@ function ParkSetCardBase({ set, today, busy, still, shine, onClaim, onPin, onHun
             return (
               <Pressable key={p.item_id} onPress={() => {
                 onPin(set, p);
-                setTip({ index: i, text: p.owned ? 'Yours! Park only' : rare ? `Rare! At ${set.park_name ?? 'the park'}` : `At ${set.park_name ?? 'the park'}` });
+                setTip({ index: i, text: p.owned ? (foundLabel(p.found) ?? 'Yours! Park only') : rare ? `Rare! At ${set.park_name ?? 'the park'}` : `At ${set.park_name ?? 'the park'}` });
               }} hitSlop={4} style={styles.slot}
                 accessibilityRole="button" accessibilityLabel={p.owned ? `${p.name}, you have it${rare ? ', rare' : ''}` : `Missing pin${rare ? ', rare' : ''}. Find it at ${set.park_name ?? 'the park'}`}>
                 <PinTile uri={p.icon_url} size={pinSize} owned={p.owned} kind={p.kind} tradable={false} badge={false}

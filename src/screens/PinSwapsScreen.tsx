@@ -555,7 +555,7 @@ export default function PinSwapsScreen() {
                         style={done && hold?.swap.id === swap.id ? { opacity: 0 } : undefined}>
                         <BoardPinCard item={swap.pin.item} swapId={swap.id} tiltSeed={keySeed(swap.key)} width={cellWidth} height={cardHeight} shine={shine}
                           lag={lagFor(i)} lagSpan={lagSpan} still={still} badge={badgeFor(swap.pin.item)}
-                          busy={busyId === swap.id || hold?.swap.id === swap.id} onPress={onBoardPress} />
+                          busy={busyId === swap.id || hold?.swap.id === swap.id} onPress={onBoardPress} serial={swap.serial} />
                       </Animated.View>
                     ))}
                   </View>

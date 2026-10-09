@@ -71,7 +71,9 @@ export type BoardBadge = 'owned' | 'yours' | undefined;
  * finger, the pin lifts off the card (deeper shadow). The pin keeps its own
  * tilt; the card tilts the other way.
  */
-export const BoardPinCard = memo(function BoardPinCard({ item, swapId, tiltSeed = swapId, width, height, shine, lag, lagSpan, still, busy, badge, onPress }: {
+export const BoardPinCard = memo(function BoardPinCard({ item, swapId, tiltSeed = swapId, width, height, shine, lag, lagSpan, still, busy, badge, onPress, serial }: {
+  /** Pins v2: a gold chaser's number (#3) shows on its card, so it never looks like a common. */
+  serial?: number | null;
   item: ItemType; swapId: number;
   /** Stable per slot, so a pin changing in place keeps the card's tilt. */
   tiltSeed?: number; width: number; height: number; shine?: SharedValue<number>; lag: number; lagSpan: number;
@@ -124,6 +126,7 @@ export const BoardPinCard = memo(function BoardPinCard({ item, swapId, tiltSeed 
           <EnamelPin uri={item.icon_url} size={pinSize} tilt={pinTilt(tiltSeed)} shine={still ? undefined : shine} lag={lag} lagSpan={lagSpan}
             lift={lift} surface="board" recyclingKey={`board-${swapId}`} />
         </Animated.View>
+        {!!serial && <View style={styles.boardSerial} pointerEvents="none"><Text maxFontSizeMultiplier={1} style={styles.pickSerialText}>#{serial}</Text></View>}
         <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.backerName}>{balanceName(name)}</Text>
         {badge && <CornerRibbon label={badge === 'owned' ? 'Got it' : 'From you'} tone={badge === 'owned' ? 'navy' : 'gold'} icon={badge === 'owned' ? 'check' : 'arrow'} />}
       </Animated.View>
@@ -344,6 +347,7 @@ const styles = StyleSheet.create({
   pickSpares: { position: 'absolute', left: 2, bottom: 2, minWidth: 24, height: 20, borderRadius: 10, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   pickSparesText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.navy, paddingTop: 2 },
   pickSerial: { position: 'absolute', right: 2, top: 2, height: 18, borderRadius: 5, backgroundColor: '#3b2a05', borderWidth: 2, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  boardSerial: { position: 'absolute', top: 8, right: 8, height: 22, borderRadius: 6, backgroundColor: '#3b2a05', borderWidth: 2, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, transform: [{ rotate: '6deg' }] },
   pickSerialText: { fontFamily: FONT.display, fontSize: 11, color: BRAND.gold, paddingTop: 2 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',

@@ -30,13 +30,18 @@ import {
 } from './pinsModel';
 
 const FREE_REASON = { first: 'First box free', weekly: 'Free this week', banked: 'Free box' } as const;
+let bankedFromLabel: string | null = null;
+/** The page tells cards where the banked box came from ("Free box from VIP"). */
+export function setBankedFrom(label: string | null) { bankedFromLabel = label; }
 const HOLD_MS = 650;
 
 /**
  * What can be inside a box and the chance of each, in pictures + numbers.
  * Every pin in the series is listed; the chaser is last, in gold.
  */
-export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compact = false, pity, fresh }: {
+export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compact = false, pity, fresh, edition, soldOut }: {
+  /** Limited edition of the gold chaser, and whether all are found. */
+  edition?: number | null; soldOut?: boolean;
   pins: readonly PinRow[]; size?: number; shine?: SharedValue<number>; compact?: boolean;
   /** The guarantee box, said next to the chaser's odds. */
   pity?: number;
@@ -66,9 +71,9 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
           <PinTile uri={chaser.icon_url} size={size + 10} owned={chaser.owned} kind={chaser.kind} tradable={chaser.tradable} chaser
             badge={false} serial={chaser.serial} shine={chaser.owned ? shine : undefined} lag={0.7} lagSpan={0.8} />
           <View style={{ flex: 1 }}>
-            <Text maxFontSizeMultiplier={1.3} style={styles.chaserLabel}>Gold chaser</Text>
+            <Text maxFontSizeMultiplier={1.3} style={styles.chaserLabel}>Gold chaser{edition ? ` \u00b7 only ${edition}` : ''}</Text>
             <Text maxFontSizeMultiplier={1.3} style={styles.chaserPct}>
-              {formatChance(chaser.chance_bp)}{pity ? `  ·  always by box ${pity}` : ''}
+              {soldOut ? `All ${edition} found! 0%` : `${formatChance(chaser.chance_bp)}${pity ? `  \u00b7  always by box ${pity}` : ''}`}
             </Text>
           </View>
         </View>
@@ -273,14 +278,14 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
       </View>
 
       <View style={styles.body}>
-        <OddsTable pins={series.pins} shine={shine} pity={series.pity} fresh={fresh} />
-        {series.open && <ChaserMeter series={series} still={still} />}
+        <OddsTable pins={series.pins} shine={shine} pity={series.pity} fresh={fresh} edition={series.edition_size} soldOut={series.sold_out} />
+        {series.open && !series.sold_out && <ChaserMeter series={series} still={still} />}
         {series.open && <TradersRow series={series} busy={busy} still={still} onPick={() => onPick(series)} />}
         {series.open ? (
           <View style={{ gap: SPACE.sm }}>
             {free && (
               <View style={{ alignItems: 'center', gap: 6 }}>
-                <View style={styles.freeChip}><Text maxFontSizeMultiplier={1.1} style={styles.freeText}>{FREE_REASON[free]}</Text></View>
+                <View style={styles.freeChip}><Text maxFontSizeMultiplier={1.1} style={styles.freeText}>{free === 'banked' && bankedFromLabel ? bankedFromLabel : FREE_REASON[free]}</Text></View>
                 <GameButton label="Open free" icon="gift" loading={busy} disabled={busy} onPress={() => onOpen(series, 1, 'free')}
                   accessibilityHint="Opens one mystery box for free" />
               </View>

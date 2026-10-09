@@ -67,6 +67,8 @@ type Props = {
   readonly canWear?: (pull: RevealPull) => boolean;
   /** The box is on stage while the server answers; a tap waits for it, then opens. */
   readonly waiting?: boolean;
+  /** The chaser's edition size, for "#3 of 500". */
+  readonly edition?: number | null;
 };
 
 export const REVEAL_CUES = ['fx.whoosh', 'fx.whooshRev', 'fx.coinTick', 'fx.reveal', 'fx.reward', 'fx.firework', 'fx.hit', 'ui.tap', 'ui.complete'] as const;
@@ -116,8 +118,9 @@ function ConfettiPiece({ p, burst }: { p: ReturnType<typeof pieces>[number]; bur
 }
 
 /** Gold rays behind gold moments (one small SVG, turned on the UI thread). */
-function Rays({ size, spin, on }: { size: number; spin: SharedValue<number>; on: SharedValue<number> }) {
-  const style = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ rotate: `${spin.value}deg` }, { scale: 0.8 + on.value * 0.2 }] }));
+function Rays({ size: full, spin, on }: { size: number; spin: SharedValue<number>; on: SharedValue<number> }) {
+  const size = Math.round(full / LOWRES);
+  const style = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ rotate: `${spin.value}deg` }, { scale: (0.8 + on.value * 0.2) * LOWRES }] }));
   const r = size / 2;
   const wedges = Array.from({ length: 12 }, (_, i) => {
     const a0 = (i / 12) * Math.PI * 2; const a1 = a0 + Math.PI / 18;
@@ -138,8 +141,12 @@ function Rays({ size, spin, on }: { size: number; spin: SharedValue<number>; on:
   );
 }
 
-function Glow({ size, color, amount, id }: { size: number; color: string; amount: SharedValue<number>; id: string }) {
-  const style = useAnimatedStyle(() => ({ opacity: amount.value, transform: [{ scale: 0.7 + amount.value * 0.45 }] }));
+/** Soft gradients are drawn at a third of their size and scaled up: same look, a ninth of the memory. */
+const LOWRES = 3;
+
+function Glow({ size: full, color, amount, id }: { size: number; color: string; amount: SharedValue<number>; id: string }) {
+  const size = Math.round(full / LOWRES);
+  const style = useAnimatedStyle(() => ({ opacity: amount.value, transform: [{ scale: (0.7 + amount.value * 0.45) * LOWRES }] }));
   return (
     <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size }, style]}>
       <Svg width={size} height={size}>
@@ -165,7 +172,7 @@ function Ring({ size, t }: { size: number; t: SharedValue<number> }) {
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 10, borderColor: '#ffffff' }, style]} />;
 }
 
-export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear, waiting = false }: Props) {
+export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear, waiting = false, edition }: Props) {
   const wantOpen = useRef(false);
   const waitingRef = useRef(waiting);
   waitingRef.current = waiting;
@@ -429,7 +436,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value * 0.55 }));
   const infoStyle = useAnimatedStyle(() => ({ opacity: settle.value, transform: [{ translateY: (1 - settle.value) * 16 }] }));
   const hintStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -hint.value * 8 }, { scale: 1 + hint.value * 0.05 }] }));
-  const spotStyle = useAnimatedStyle(() => ({ opacity: 0.55 + settle.value * 0.45 }));
+  const spotStyle = useAnimatedStyle(() => ({ opacity: 0.55 + settle.value * 0.45, transform: [{ scale: LOWRES }] }));
 
   if (!pull) return null;
   const glowColor = gold ? '#ffcf3b' : '#bfe5ff';
@@ -445,8 +452,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       <Pressable style={styles.scrim} onPress={onBackdrop} accessibilityRole="button"
         accessibilityLabel={phase === 'ready' ? 'Open the box' : 'Mystery box'}>
         {/* A soft spotlight: the stage reads as a stage, not the page behind. */}
-        <Animated.View pointerEvents="none" style={[styles.spot, { top: centerY - width * 0.75, left: -width * 0.25, width: width * 1.5, height: width * 1.5 }, spotStyle]}>
-          <Svg width={width * 1.5} height={width * 1.5}>
+        <Animated.View pointerEvents="none" style={[styles.spot, { top: centerY - width * 0.25, left: width * 0.25, width: width * 0.5, height: width * 0.5 }, spotStyle]}>
+          <Svg width={width * 0.5} height={width * 0.5}>
             <Defs>
               <RadialGradient id="spot" cx="50%" cy="50%" r="50%">
                 <Stop offset="0" stopColor="#2f86d8" stopOpacity="0.85" />
@@ -454,7 +461,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                 <Stop offset="1" stopColor="#03204f" stopOpacity="0" />
               </RadialGradient>
             </Defs>
-            <Circle cx={width * 0.75} cy={width * 0.75} r={width * 0.75} fill="url(#spot)" />
+            <Circle cx={width * 0.25} cy={width * 0.25} r={width * 0.25} fill="url(#spot)" />
           </Svg>
         </Animated.View>
 
@@ -524,7 +531,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             {pull.is_chaser && (
               <View style={styles.chaserBanner}>
                 <Image source={PIN_ART.chaser} style={{ width: 30, height: 30 }} contentFit="contain" />
-                <Text maxFontSizeMultiplier={1.1} style={styles.chaserText}>GOLD CHASER {serialLabel(pull.serial)}</Text>
+                <Text maxFontSizeMultiplier={1.1} style={styles.chaserText}>GOLD CHASER {serialLabel(pull.serial, edition)}</Text>
               </View>
             )}
             {pull.is_chaser && pull.by_pity && <Text maxFontSizeMultiplier={1.1} style={styles.guaranteed}>Guaranteed!</Text>}
@@ -552,7 +559,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             <View style={styles.summaryBoard}>
               {pulls.map((p, i) => (
                 <Animated.View key={p.id} entering={still ? undefined : ZoomIn.springify().damping(10).delay(i * 110)} style={styles.summaryItem}>
-                  {p.icon_url && <EnamelPin uri={p.icon_url} size={summarySize} surface="board" tilt={((i * 37) % 13) - 6} />}
+                  {p.icon_url && <EnamelPin uri={p.icon_url} size={summarySize} surface="board" tilt={((i * 37) % 13) - 6} flat />}
                   {p.is_chaser && <Image source={PIN_ART.chaser} style={styles.summaryStar} contentFit="contain" />}
                   <View style={[styles.miniTag, p.duplicate ? styles.tagTrader : styles.tagNew]}>
                     <Text maxFontSizeMultiplier={1} style={[styles.miniTagText, p.duplicate && { color: BRAND.white }]}>{p.duplicate ? 'EXTRA' : 'NEW'}</Text>

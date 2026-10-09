@@ -209,11 +209,22 @@ function TradeSheet(props: TradeSheetProps) {
                   <EnamelPin uri={selected.icon_url} size={compact ? 34 : 42} surface="none" recyclingKey={`mine-${selected.id}`} />
                   <GameIcon name="arrow" size={26} />
                   <EnamelPin uri={swap.pin.item.icon_url} size={compact ? 34 : 42} surface="none" recyclingKey={`board-${swap.id}`} />
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.confirmLine} numberOfLines={4} adjustsFontSizeToFit minimumFontScale={0.75}>
+                  <View style={{ flex: 1 }}>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.confirmLine, { flex: 0 }]} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.8}>
                     {COPY.confirmMessage(pinName(selected), pinName(swap.pin.item))}
-                    {selected.spares === undefined ? '' : (selected.spares ?? 0) > 0 ? ` ${COPY.confirmSpare}` : ` ${COPY.confirmKeeper(pinName(selected))}`}
-                    {selected.serial && !(selected.spares ?? 0) ? ` ${COPY.confirmSerial(selected.serial)}` : ''}
                   </Text>
+                  {/* Pins v2, in pictures: x2 -> x1 (you keep one) or LAST ONE; a gold number goes with its pin. */}
+                  {selected.spares !== undefined && (
+                    <View style={styles.confirmChips} accessible accessibilityLabel={(selected.spares ?? 0) > 0 ? COPY.confirmSpare : COPY.confirmKeeper(pinName(selected))}>
+                      {(selected.spares ?? 0) > 0
+                        ? <View style={[styles.confirmChip, { backgroundColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={styles.confirmChipText}>x{(selected.spares ?? 0) + 1} {'\u2192'} x{selected.spares}</Text></View>
+                        : <View style={[styles.confirmChip, { backgroundColor: BRAND.red }]}><Text maxFontSizeMultiplier={1} style={[styles.confirmChipText, { color: BRAND.white }]}>LAST ONE</Text></View>}
+                      {!!selected.serial && !(selected.spares ?? 0) && (
+                        <View style={[styles.confirmChip, { backgroundColor: '#3b2a05', borderColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={[styles.confirmChipText, { color: BRAND.gold }]}>#{selected.serial}</Text></View>
+                      )}
+                    </View>
+                  )}
+                  </View>
                 </View>
               )}
               <Animated.View entering={still ? undefined : ZoomIn.springify().damping(11).stiffness(240)} style={{ width: '100%', alignItems: 'center' }}>
@@ -245,6 +256,9 @@ function TradeSheet(props: TradeSheetProps) {
 export default memo(TradeSheet);
 
 const styles = StyleSheet.create({
+  confirmChips: { flexDirection: 'row', gap: 6, marginTop: 4 },
+  confirmChip: { borderRadius: 8, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 7, paddingVertical: 1 },
+  confirmChipText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, paddingTop: 2 },
   scrim: { backgroundColor: 'rgba(6,30,74,0.86)' },
   sheet: {
     position: 'absolute', bottom: 0, alignSelf: 'center', backgroundColor: TRADE_SURFACE.panel,

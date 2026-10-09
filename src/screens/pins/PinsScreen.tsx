@@ -31,11 +31,11 @@ import LegacyPinPacks from '../PinCollectionsScreen';
 import BoxReveal, { preloadRevealAudio, type RevealPull } from './BoxReveal';
 import HuntSheet from './HuntSheet';
 import { Lanyard } from './Lanyard';
-import { MysteryCard } from './MysteryCard';
+import { MysteryCard, setBankedFrom } from './MysteryCard';
 import { boxTone, PIN_ART, PinTile } from './PinArt';
 import { ParkSetCard } from './ParkSetCard';
 import {
-  coinsShort, deviceRegion, initialTab, myPins, newRequestId, PINS_COPY, toggleLanyard,
+  coinsShort, deviceRegion, freeFromLabel, initialTab, myPins, newRequestId, PINS_COPY, toggleLanyard,
   type MysterySeries, type ParkSet, type PinHome, type PinRow, type Pull,
 } from './pinsModel';
 
@@ -63,7 +63,7 @@ export default function PinsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [reveal, setReveal] = useState<{
-    pulls: RevealPull[]; tone: 'blue' | 'coral'; variant?: 'box' | 'catch' | 'pick'; coins?: number; seriesId?: number; waiting?: boolean;
+    pulls: RevealPull[]; tone: 'blue' | 'coral'; variant?: 'box' | 'catch' | 'pick'; coins?: number; seriesId?: number; waiting?: boolean; edition?: number | null;
     tag?: (p: RevealPull) => { text: string; tone: 'new' | 'trader' | 'gold' }; subtitle?: (p: RevealPull) => string | null;
   } | null>(null);
   const [fresh, setFresh] = useState<{ seriesId: number; ids: Set<number> } | null>(null);
@@ -76,6 +76,7 @@ export default function PinsScreen() {
   const [lanyardIds, setLanyardIds] = useState<number[]>([]);
   const pending = useRef<Record<number, string>>({});
   const pendingSeries = useRef<MysterySeries | null>(null);
+  const pendingCounts = useRef<Partial<PinHome['counts']> | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shine = useSharedValue(0);
   const coins = player?.coins ?? 0;
@@ -87,6 +88,7 @@ export default function PinsScreen() {
       region.current ??= (await storefrontRegion()) ?? deviceRegion();
       const h = await getPinHome(region.current);
       setHome(h);
+      setBankedFrom(freeFromLabel(h.free_box_from));
       setLanyardIds(h.lanyard.map(p => p.item_id));
       // Dev capture only: EXPO_PUBLIC_PINS_TAB opens a shelf, EXPO_PUBLIC_PINS_HUNT opens today's hunt.
       const devTab = __DEV__ ? (process.env.EXPO_PUBLIC_PINS_TAB as Tab | undefined) : undefined;
@@ -134,7 +136,7 @@ export default function PinsScreen() {
     queueHaptic('tapLight', 1);
     // The box drops in right away; the server answers while it lands (no dead beat).
     const placeholder: RevealPull = { id: -1, item_id: -1, pin_id: 0, name: '', icon_url: null, is_chaser: false, by_pity: false, serial: null, duplicate: false };
-    setReveal({ pulls: [placeholder], tone: boxTone(series.theme_color), seriesId: series.id, waiting: true });
+    setReveal({ pulls: [placeholder], tone: boxTone(series.theme_color), seriesId: series.id, waiting: true, edition: series.edition_size });
     try {
       const r = await openMysteryBoxes(series.id, { count, pay, request_id: requestId, region: region.current });
       delete pending.current[series.id];
@@ -143,11 +145,12 @@ export default function PinsScreen() {
       const order = new Map(series.pins.filter(p => !p.is_chaser).map((p, i) => [p.item_id, i + 1]));
       const regularCount = order.size;
       setReveal({
-        pulls: r.pulls, tone: boxTone(series.theme_color), seriesId: series.id, waiting: false,
+        pulls: r.pulls, tone: boxTone(series.theme_color), seriesId: series.id, waiting: false, edition: series.edition_size,
         subtitle: p => (p.is_chaser ? series.name : `${series.name} \u00b7 ${order.get(p.item_id) ?? '?'} of ${regularCount}`),
       });
       // The page updates when the reveal closes (pins land in their slots then).
       pendingSeries.current = r.series;
+      if (r.counts) pendingCounts.current = r.counts;
       void refreshPlayer().catch(() => undefined);
     } catch (e: unknown) {
       setReveal(null);
@@ -211,7 +214,9 @@ export default function PinsScreen() {
     if (next && r?.seriesId) {
       // Pins land in their slots: the series updates and the new ones pop in with a gold ring.
       const before = home?.mystery.find(s => s.id === next.id);
-      setHome(h => h && ({ ...h, mystery: h.mystery.map(s => (s.id === next.id ? next : s)) }));
+      const counts = pendingCounts.current;
+      pendingCounts.current = null;
+      setHome(h => h && ({ ...h, counts: { ...h.counts, ...(counts ?? {}) }, mystery: h.mystery.map(s => (s.id === next.id ? next : s)) }));
       // Finishing the series: its Completer pin gets its own moment.
       if (next.completer?.owned && before?.completer && !before.completer.owned) {
         const c = next.completer;
@@ -377,7 +382,7 @@ export default function PinsScreen() {
         )}
       </View>
       {reveal && (
-        <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant} waiting={reveal.waiting}
+        <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant} waiting={reveal.waiting} edition={reveal.edition}
           tagFor={reveal.tag} subtitleFor={reveal.subtitle}
           canWear={p => p.is_chaser || reveal.variant === 'catch' || !!p.rare}
           onWear={p => wear(p.item_id)}

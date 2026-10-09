@@ -30,6 +30,8 @@ export interface PinRow {
   readonly rarity?: 'common' | 'uncommon' | 'rare';
   /** Chasers: your lowest serial number for this pin (#3), the flex. */
   readonly serial?: number | null;
+  /** Park pins you caught: the park day and your finder order that day (#1 = first). */
+  readonly found?: { day: string; order: number } | null;
 }
 
 export interface PinDay {
@@ -97,6 +99,9 @@ export interface MysterySeries {
   /** Trade in traders: points from spares; a missing regular pin costs pick_cost. */
   readonly points?: number;
   readonly pick_cost?: number;
+  /** Limited edition size for the gold chaser (#3 of 500), and whether all are found. */
+  readonly edition_size?: number | null;
+  readonly sold_out?: boolean;
   /** Finishing the series pays this pin. */
   readonly completer?: PinRow | null;
   readonly pins: PinRow[];
@@ -116,6 +121,8 @@ export interface PinHome {
   readonly lanyard: LanyardPin[];
   readonly lanyard_max: number;
   readonly free_boxes: number;
+  /** Where the newest banked free box came from (vip_weekly, shark_pass, park_set...). */
+  readonly free_box_from?: string | null;
   readonly counts: { pins: number; sets_done: number; sets: number; traders: number; chasers: number };
   readonly park_sets: ParkSet[];
   /** Pin of the Day at each park today (null when the feature is off). */
@@ -137,6 +144,7 @@ export interface Pull {
 }
 
 export interface OpenResult {
+  readonly counts?: Partial<PinHome['counts']>;
   readonly reused: boolean;
   readonly pulls: Pull[];
   readonly coins: number;
@@ -244,9 +252,29 @@ export function seasonLabel(set: Pick<ParkSet, 'season'>): string | null {
   return names[month - 1] ? `Only in ${names[month - 1]}` : null;
 }
 
-/** "#3" for a chaser serial; low numbers are the flex. */
-export function serialLabel(serial: number | null | undefined): string {
-  return serial ? `#${serial}` : '';
+/** "#3" (or "#3 of 500") for a chaser serial; low numbers are the flex. */
+export function serialLabel(serial: number | null | undefined, edition?: number | null): string {
+  if (!serial) return '';
+  return edition ? `#${serial} of ${edition}` : `#${serial}`;
+}
+
+/** "Oct 9 · finder #1" for a caught park pin. */
+export function foundLabel(found: { day: string; order: number } | null | undefined): string | null {
+  if (!found) return null;
+  const d = new Date(`${found.day}T12:00:00`);
+  const day = Number.isNaN(d.getTime()) ? found.day : d.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+  return `${day} \u00b7 finder #${found.order}`;
+}
+
+/** "from VIP" / "from your Shark Pass" for a banked free box. */
+export function freeFromLabel(source: string | null | undefined): string | null {
+  switch (source) {
+    case 'vip_weekly': return 'Free box from VIP';
+    case 'shark_pass': return 'Free box from your Shark Pass';
+    case 'park_set': return 'Free box from a park set';
+    case 'trail_box': return 'Free box from a Trail Box';
+    default: return null;
+  }
 }
 
 /** Owned pins for the My Pins shelf: every owned pin once, chasers first, then in-person, then the rest by name. */
