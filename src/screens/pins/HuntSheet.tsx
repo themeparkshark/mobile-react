@@ -24,7 +24,7 @@ const POLL_MS = 6000;
 type Props = {
   readonly set: ParkSet;
   readonly onClose: () => void;
-  readonly onCaught: (result: { new: boolean; coins: number; pin: NonNullable<HuntStatus['pin']> }) => void;
+  readonly onCaught: (result: { new: boolean; coins: number; pin: NonNullable<HuntStatus['pin']> & { rarity?: string }; park_name?: string | null; day?: string; catch_number?: number }) => void;
 };
 
 export default function HuntSheet({ set, onClose, onCaught }: Props) {
@@ -70,7 +70,7 @@ export default function HuntSheet({ set, onClose, onCaught }: Props) {
     setBusy(true); setMiss(false);
     try {
       const r = await catchPinOfTheDay(set.park_id, { latitude: l.latitude, longitude: l.longitude });
-      if (r.caught) onCaught({ new: r.new, coins: r.coins, pin: r.pin });
+      if (r.caught) onCaught({ new: r.new, coins: r.coins, pin: r.pin, park_name: r.park_name, day: r.day, catch_number: r.catch_number });
       else onClose();
     } catch {
       setMiss(true);

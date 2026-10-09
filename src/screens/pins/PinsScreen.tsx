@@ -14,7 +14,9 @@ import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, useSharedValue, withDelay, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
-import { claimParkSet, getPinHome, openMysteryBoxes, saveLanyard } from '../../api/endpoints/pins';
+import { claimParkSet, getPinHome, openMysteryBoxes, pickWithPoints, saveLanyard, storefrontRegion } from '../../api/endpoints/pins';
+import { warmPinImages } from '../pinTrading/pinImageCache';
+import { PickSheet, PinsHelp } from './PinsSheets';
 import Currency from '../../components/Topbar/Currency';
 import Topbar, { BackButton } from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
@@ -26,7 +28,7 @@ import { BRAND, FONT, gameAlert, GameButton, GameIcon, OUTLINE, RADIUS, SharkLoa
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { PageWash } from '../pinTrading/PinTradeParts';
 import LegacyPinPacks from '../PinCollectionsScreen';
-import BoxReveal, { preloadRevealAudio } from './BoxReveal';
+import BoxReveal, { preloadRevealAudio, type RevealPull } from './BoxReveal';
 import HuntSheet from './HuntSheet';
 import { Lanyard } from './Lanyard';
 import { MysteryCard } from './MysteryCard';
@@ -39,15 +41,6 @@ import {
 
 type Tab = 'mystery' | 'sets' | 'mine';
 let devHuntOpened = false;
-
-/** Coins short at a box: the money stream's top-up offer when present, else the Supplies coins shelf. */
-function offerCoins(need: number, retry: () => void) {
-  void retry;
-  gameAlert('Need more coins', `You need ${need} more coins for that.`, [
-    { text: 'Get coins', onPress: () => RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies', focus: 'coins' }) },
-    { text: 'Not now', style: 'cancel' },
-  ]);
-}
 
 function TabButton({ label, icon, active, badge, onPress }: { label: string; icon: number; active: boolean; badge?: boolean; onPress: () => void }) {
   return (
@@ -69,10 +62,20 @@ export default function PinsScreen() {
   const [tab, setTab] = useState<Tab | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [reveal, setReveal] = useState<{ pulls: Pull[]; tone: 'blue' | 'coral'; variant?: 'box' | 'catch'; coins?: number } | null>(null);
+  const [reveal, setReveal] = useState<{
+    pulls: RevealPull[]; tone: 'blue' | 'coral'; variant?: 'box' | 'catch' | 'pick'; coins?: number; seriesId?: number;
+    tag?: (p: RevealPull) => { text: string; tone: 'new' | 'trader' | 'gold' }; subtitle?: (p: RevealPull) => string | null;
+  } | null>(null);
+  const [fresh, setFresh] = useState<{ seriesId: number; ids: Set<number> } | null>(null);
+  const [picking, setPicking] = useState<MysterySeries | null>(null);
+  const [help, setHelp] = useState(false);
+  const [visited, setVisited] = useState<Set<Tab>>(new Set());
+  const [appActive, setAppActive] = useState(true);
+  const region = useRef<string | null>(null);
   const [hunt, setHunt] = useState<ParkSet | null>(null);
   const [lanyardIds, setLanyardIds] = useState<number[]>([]);
   const pending = useRef<Record<number, string>>({});
+  const pendingSeries = useRef<MysterySeries | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shine = useSharedValue(0);
   const coins = player?.coins ?? 0;
@@ -80,7 +83,9 @@ export default function PinsScreen() {
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setState(s => (s === 'ready' ? s : 'loading'));
     try {
-      const h = await getPinHome();
+      // Paid boxes follow the App Store storefront country (else the device region).
+      region.current ??= (await storefrontRegion()) ?? deviceRegion();
+      const h = await getPinHome(region.current);
       setHome(h);
       setLanyardIds(h.lanyard.map(p => p.item_id));
       // Dev capture only: EXPO_PUBLIC_PINS_TAB opens a shelf, EXPO_PUBLIC_PINS_HUNT opens today's hunt.
@@ -101,19 +106,26 @@ export default function PinsScreen() {
 
   useEffect(() => { void load(); preloadRevealAudio(); }, [load]);
 
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', s => setAppActive(s === 'active'));
+    return () => sub.remove();
+  }, []);
+  // One "visible" flag feeds every idle loop: focused, app open, no reveal or sheet on top.
+  const visible = focused && appActive && !reveal && !hunt && !picking && !help;
+
   // One shine sweep across the visible pins every ~7 s while the page is up (UI thread, nothing redraws at rest).
   useEffect(() => {
-    if (still || !focused || state !== 'ready') { cancelAnimation(shine); return; }
+    if (still || !visible || state !== 'ready') { cancelAnimation(shine); return; }
     shine.value = 0;
     shine.value = withRepeat(withDelay(5200, withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.quad) })), -1, false);
-    const sub = AppState.addEventListener('change', s => { if (s !== 'active') cancelAnimation(shine); });
-    return () => { cancelAnimation(shine); sub.remove(); };
-  }, [still, focused, state, shine]);
+    return () => cancelAnimation(shine);
+  }, [still, visible, state, shine]);
+
+  useEffect(() => { if (tab) setVisited(v => (v.has(tab) ? v : new Set(v).add(tab))); }, [tab]);
 
   const open = useCallback(async (series: MysterySeries, count: number, pay: 'coins' | 'free') => {
     if (busy) return;
-    const short = pay === 'coins' ? coinsShort(series, count, coins) : 0;
-    if (short > 0) { queueHaptic('failBuzz', 1); offerCoins(short, () => undefined); return; }
+    if (pay === 'coins' && coinsShort(series, count, coins) > 0) return; // the card shows the top-up
     const key = `${series.id}:${count}:${pay}`;
     // A retried tap after a failure reuses its id, so it can never charge twice.
     const requestId = pending.current[series.id] ?? newRequestId();
@@ -121,15 +133,23 @@ export default function PinsScreen() {
     setBusy(key);
     queueHaptic('tapLight', 1);
     try {
-      const r = await openMysteryBoxes(series.id, { count, pay, request_id: requestId, region: deviceRegion() });
+      const r = await openMysteryBoxes(series.id, { count, pay, request_id: requestId, region: region.current });
       delete pending.current[series.id];
-      setReveal({ pulls: r.pulls, tone: boxTone(series.theme_color) });
-      setHome(h => h && ({ ...h, free_boxes: r.free_boxes, mystery: h.mystery.map(s => (s.id === r.series.id ? r.series : s)) }));
+      // Decode the pins at reveal size before the box opens, so the flip never shows a blank.
+      await Promise.race([warmPinImages(r.pulls.map(p => p.icon_url ?? undefined), 210), new Promise(res => setTimeout(res, 700))]);
+      const order = new Map(series.pins.filter(p => !p.is_chaser).map((p, i) => [p.item_id, i + 1]));
+      const regularCount = order.size;
+      setReveal({
+        pulls: r.pulls, tone: boxTone(series.theme_color), seriesId: series.id,
+        subtitle: p => (p.is_chaser ? series.name : `${series.name} \u00b7 ${order.get(p.item_id) ?? '?'} of ${regularCount}`),
+      });
+      // The page updates when the reveal closes (pins land in their slots then).
+      pendingSeries.current = r.series;
       void refreshPlayer().catch(() => undefined);
     } catch (e: unknown) {
       const data = (e as { response?: { status?: number; data?: { code?: string; message?: string; need?: number; have?: number } } })?.response;
       if (data?.status && data.status < 500) delete pending.current[series.id];
-      if (data?.data?.code === 'not_enough_currency') offerCoins(Math.max(1, (data.data.need ?? 0) - (data.data.have ?? 0)), () => undefined);
+      if (data?.data?.code === 'not_enough_currency') void refreshPlayer().catch(() => undefined);
       else gameAlert('That box didn’t open', data?.data?.message ?? 'Check your internet and try again. Your coins are safe.');
     } finally { setBusy(null); }
   }, [busy, coins, refreshPlayer]);
@@ -140,8 +160,18 @@ export default function PinsScreen() {
     try {
       const r = await claimParkSet(set.id);
       if (r.claimed) {
-        queueHaptic('success', 2);
-        gameAlert(`${set.name} done!`, `You got ${r.coins} coins${r.boxes ? ` and ${r.boxes} free mystery box` : ''}.`);
+        const c = set.reward.completer;
+        if (c) {
+          setReveal({
+            variant: 'catch', tone: 'blue',
+            pulls: [{ id: c.item_id, item_id: c.item_id, pin_id: 0, name: c.name, icon_url: c.icon_url, is_chaser: false, by_pity: false, serial: null, duplicate: false, rare: true }],
+            tag: () => ({ text: `+${r.coins} coins${r.boxes ? ` +${r.boxes} box` : ''}`, tone: 'gold' }),
+            subtitle: () => `${set.name} set done!`,
+          });
+        } else {
+          queueHaptic('success', 2);
+          gameAlert(`${set.name} done!`, `+${r.coins} coins${r.boxes ? ` and ${r.boxes} free box` : ''}.`);
+        }
       }
       void refreshPlayer().catch(() => undefined);
       await load(true);
@@ -149,6 +179,41 @@ export default function PinsScreen() {
       gameAlert('Not yet', 'Check your internet and try again.');
     } finally { setBusy(null); }
   }, [busy, load, refreshPlayer]);
+
+  const pick = useCallback(async (series: MysterySeries, pin: PinRow) => {
+    if (busy) return;
+    setBusy(`pick:${series.id}`);
+    try {
+      const r = await pickWithPoints(series.id, pin.item_id, newRequestId());
+      setPicking(null);
+      if (r.picked) {
+        pendingSeries.current = r.series;
+        setReveal({
+          variant: 'pick', tone: boxTone(series.theme_color), seriesId: series.id,
+          pulls: [{ id: pin.item_id, item_id: pin.item_id, pin_id: 0, name: pin.name, icon_url: pin.icon_url, is_chaser: false, by_pity: false, serial: null, duplicate: false }],
+          tag: () => ({ text: 'Picked with extras!', tone: 'new' }), subtitle: () => series.name,
+        });
+      }
+    } catch {
+      gameAlert('Not yet', 'Check your internet and try again.');
+    } finally { setBusy(null); }
+  }, [busy]);
+
+  const closeReveal = useCallback((shown: readonly RevealPull[]) => {
+    const r = reveal;
+    setReveal(null);
+    const next = pendingSeries.current;
+    pendingSeries.current = null;
+    if (next && r?.seriesId) {
+      // Pins land in their slots: the series updates and the new ones pop in with a gold ring.
+      setHome(h => h && ({ ...h, mystery: h.mystery.map(s => (s.id === next.id ? next : s)) }));
+      const ids = new Set(shown.filter(p => !p.duplicate).map(p => p.item_id));
+      setFresh({ seriesId: r.seriesId, ids });
+      setTimeout(() => setFresh(f => (f && f.ids === ids ? null : f)), 2600);
+    } else if (r?.variant === 'catch') {
+      void load(true);
+    }
+  }, [reveal, load]);
 
   const onPin = useCallback((set: ParkSet, pin: PinRow) => {
     queueHaptic('tapLight', 1);
@@ -159,7 +224,7 @@ export default function PinsScreen() {
   const toggleWear = useCallback((pin: PinRow) => {
     const max = home?.lanyard_max ?? 6;
     const next = toggleLanyard(lanyardIds, pin.item_id, max);
-    if (next.full) { queueHaptic('failBuzz', 1); gameAlert('Lanyard is full', `You can wear ${max}. Tap a pin on it to take it off.`); return; }
+    if (next.full) { queueHaptic('failBuzz', 1); gameAlert('Lanyard is full', `You can wear ${max}. Tap a pin on the lanyard to take it off.`); return; }
     queueHaptic('tickSelection', 1);
     setLanyardIds(next.ids);
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -171,8 +236,13 @@ export default function PinsScreen() {
   const owned = useMemo(() => (home ? myPins(home) : []), [home]);
   const byId = useMemo(() => new Map(owned.map(p => [p.item_id, p])), [owned]);
   const lanyardPins = useMemo(() => lanyardIds.map(id => byId.get(id)).filter((p): p is PinRow => !!p).map(p => ({
-    item_id: p.item_id, name: p.name, icon_url: p.icon_url, kind: p.kind, is_chaser: !!p.is_chaser, tradable: p.tradable,
+    item_id: p.item_id, name: p.name, icon_url: p.icon_url, kind: p.kind, is_chaser: !!p.is_chaser, tradable: p.tradable, serial: p.serial,
   })), [lanyardIds, byId]);
+  const wear = useCallback((itemId: number) => {
+    if (lanyardIds.includes(itemId)) return;
+    const pin = byId.get(itemId) ?? ({ item_id: itemId } as PinRow);
+    toggleWear(pin);
+  }, [lanyardIds, byId, toggleWear]);
   const dayFor = useCallback((set: ParkSet) => home?.pin_days?.find(d => d.park_id === set.park_id), [home?.pin_days]);
 
   if (state === 'legacy') return <LegacyPinPacks />;
@@ -186,7 +256,13 @@ export default function PinsScreen() {
       <Topbar>
         <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
         <TopbarColumn><TopbarText>{PINS_COPY.title}</TopbarText></TopbarColumn>
-        <TopbarColumn stretch={false}><Currency count={coins} name="Coins" /></TopbarColumn>
+        <TopbarColumn stretch={false}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Currency count={coins} name="Coins" />
+            <Pressable onPress={() => setHelp(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="How pins work"
+              style={styles.helpBtn}><GameIcon name="info" size={26} /></Pressable>
+          </View>
+        </TopbarColumn>
       </Topbar>
       <View style={{ flex: 1, marginTop: -8 }}>
         <PageWash />
@@ -207,8 +283,11 @@ export default function PinsScreen() {
                   <Text maxFontSizeMultiplier={1.1} style={styles.tradeText}>{PINS_COPY.trade}</Text>
                 </Pressable>
               </View>
-              <Lanyard pins={lanyardPins} width={width - SPACE.lg * 2} height={176} showEmpty still={still} active={focused}
-                shine={shine} onPressSlot={() => setTab('mine')} />
+              <Lanyard pins={lanyardPins} width={width - SPACE.lg * 2} height={176} showEmpty still={still} active={visible}
+                shine={shine} onPressSlot={(_, pin) => {
+                  // On My Pins a tap takes a pin off; anywhere else it opens My Pins to choose.
+                  if (tab === 'mine' && pin) toggleWear({ item_id: pin.item_id } as PinRow); else setTab('mine');
+                }} />
               <View style={styles.counts}>
                 <View style={styles.countChip} accessible accessibilityLabel={`${home.counts.sets_done} of ${home.counts.sets} park sets done`}>
                   <Image source={PIN_ART.seal} style={{ width: 22, height: 22 }} contentFit="contain" />
@@ -231,26 +310,29 @@ export default function PinsScreen() {
               <TabButton label={PINS_COPY.tabMine} icon={PIN_ART.trade} active={tab === 'mine'} onPress={() => setTab('mine')} />
             </View>
 
-            {tab === 'mystery' && (
-              <View style={styles.list}>
+            {/* Tabs stay mounted once visited (no rebuild on every switch). */}
+            {visited.has('mystery') && (
+              <View style={[styles.list, tab !== 'mystery' && styles.hidden]}>
                 {home.mystery.map(s => (
-                  <MysteryCard key={s.id} series={s} coins={coins} busy={!!busy && busy.startsWith(`${s.id}:`)} active={focused && !reveal}
-                    still={still} shine={shine} onOpen={open} />
+                  <MysteryCard key={s.id} series={s} coins={coins} busy={!!busy && (busy.startsWith(`${s.id}:`) || busy === `pick:${s.id}`)}
+                    active={visible && tab === 'mystery'} still={still} shine={tab === 'mystery' ? shine : undefined}
+                    fresh={fresh?.seriesId === s.id ? fresh.ids : undefined} onOpen={open} onPick={setPicking} />
                 ))}
               </View>
             )}
 
-            {tab === 'sets' && (
-              <View style={styles.list}>
+            {visited.has('sets') && (
+              <View style={[styles.list, tab !== 'sets' && styles.hidden]}>
                 {home.park_sets.map(s => (
-                  <ParkSetCard key={s.id} set={s} today={dayFor(s)} busy={busy === `set:${s.id}`} still={still} shine={shine}
+                  <ParkSetCard key={s.id} set={s} today={dayFor(s)} busy={busy === `set:${s.id}`} still={still || !visible || tab !== 'sets'} shine={tab === 'sets' ? shine : undefined}
                     onClaim={claim} onPin={onPin} onHunt={setHunt} />
                 ))}
               </View>
             )}
 
-            {tab === 'mine' && (
-              <View style={styles.mine}>
+            {visited.has('mine') && (
+              <View style={[styles.mine, tab !== 'mine' && styles.hidden]}>
+                <Text maxFontSizeMultiplier={1.15} style={styles.wearHint}>Tap a pin to wear it</Text>
                 <View style={styles.legend}>
                   <View style={styles.legendItem}><Image source={PIN_ART.trade} style={styles.legendIcon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.legendText}>Can trade</Text></View>
                   <View style={styles.legendItem}><Image source={PIN_ART.seal} style={styles.legendIcon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.legendText}>Park only</Text></View>
@@ -265,8 +347,8 @@ export default function PinsScreen() {
                       <Pressable key={p.item_id} onPress={() => toggleWear(p)} style={[styles.cell, { width: cellW }, on && styles.cellOn]}
                         accessibilityRole="button" accessibilityState={{ selected: on }}
                         accessibilityLabel={`${p.name}${p.is_chaser ? ', chaser' : ''}${p.tradable ? ', can trade' : ', park only'}${on ? ', on your lanyard' : ''}`}>
-                        <PinTile uri={p.icon_url} size={size} owned kind={p.kind} tradable={p.tradable} chaser={p.is_chaser} spares={p.spares}
-                          tilt={((i * 23) % 9) - 4} shine={i < 12 ? shine : undefined} lag={i * 0.05} lagSpan={0.6} />
+                        <PinTile uri={p.icon_thumb_url ?? p.icon_url} size={size} owned kind={p.kind} tradable={p.tradable} chaser={p.is_chaser} spares={p.spares}
+                          serial={p.serial} tilt={((i * 23) % 9) - 4} flat />
                         {on && <View style={styles.onCheck}><GameIcon name="check" size={16} /></View>}
                       </Pressable>
                     );
@@ -279,25 +361,38 @@ export default function PinsScreen() {
       </View>
       {reveal && (
         <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant}
-          tagFor={reveal.variant === 'catch' ? p => (p.duplicate ? { text: `+${reveal.coins ?? 50} coins`, tone: 'trader' } : { text: 'Park pin!', tone: 'new' }) : undefined}
-          onDone={() => { setReveal(null); void load(true); }} />
+          tagFor={reveal.tag} subtitleFor={reveal.subtitle}
+          canWear={p => p.is_chaser || reveal.variant === 'catch' || !!p.rare}
+          onWear={p => wear(p.item_id)}
+          onDone={closeReveal} />
       )}
       {hunt && (
         <HuntSheet set={hunt} onClose={() => setHunt(null)} onCaught={r => {
           setHunt(null);
-          setReveal({ variant: 'catch', tone: 'blue', coins: r.coins, pulls: [{
-            id: r.pin.item_id, item_id: r.pin.item_id, pin_id: 0, name: r.pin.name, icon_url: r.pin.icon_url,
-            is_chaser: false, by_pity: false, serial: null, duplicate: !r.new,
-          }] });
+          const day = r.day ? new Date(`${r.day}T12:00:00`).toLocaleString('en-US', { month: 'short', day: 'numeric' }) : '';
+          setReveal({
+            variant: 'catch', tone: 'blue', coins: r.coins,
+            pulls: [{ id: r.pin.item_id, item_id: r.pin.item_id, pin_id: 0, name: r.pin.name, icon_url: r.pin.icon_url,
+              is_chaser: false, by_pity: false, serial: null, duplicate: !r.new, rare: r.pin.rarity === 'rare' }],
+            tag: p => (p.duplicate ? { text: `+${r.coins} coins`, tone: 'trader' } : p.rare ? { text: 'RARE park pin!', tone: 'gold' } : { text: 'Park pin!', tone: 'new' }),
+            subtitle: () => [r.park_name ?? hunt.park_name, day, r.catch_number ? `#${r.catch_number} to find it` : null].filter(Boolean).join(' \u00b7 '),
+          });
           void refreshPlayer().catch(() => undefined);
         }} />
       )}
+      {picking && (
+        <PickSheet series={picking} busy={busy === `pick:${picking.id}`} onClose={() => setPicking(null)} onPick={p => void pick(picking, p)} />
+      )}
+      {help && <PinsHelp onClose={() => setHelp(false)} />}
     </>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  hidden: { display: 'none' },
+  helpBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.blue, alignItems: 'center', justifyContent: 'center' },
+  wearHint: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy, textAlign: 'center', paddingTop: 2 },
   scroll: { paddingHorizontal: SPACE.lg, paddingTop: SPACE.md, paddingBottom: 48, gap: SPACE.md },
   hero: { backgroundColor: 'rgba(5,52,110,0.32)', borderRadius: RADIUS.lg, borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)', paddingTop: SPACE.sm, paddingBottom: SPACE.md, overflow: 'hidden' },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACE.md },

@@ -37,7 +37,7 @@ export async function getPinOfTheDay(parkId: number, at: { latitude: number; lon
   return data.data;
 }
 
-export async function catchPinOfTheDay(parkId: number, at: { latitude: number; longitude: number }): Promise<{ caught: boolean; new: boolean; coins: number; coins_now: number; pin: { item_id: number; name: string; icon_url: string | null; set_id: number } }> {
+export async function catchPinOfTheDay(parkId: number, at: { latitude: number; longitude: number }): Promise<{ caught: boolean; new: boolean; coins: number; coins_now: number; pin: { item_id: number; name: string; icon_url: string | null; set_id: number; rarity?: string }; park_name?: string | null; day?: string; catch_number?: number }> {
   const { data } = await client.post(`/parks/${parkId}/pin-of-the-day/catch`, at, { skipBroadcasts: true } as object);
   return data.data;
 }
