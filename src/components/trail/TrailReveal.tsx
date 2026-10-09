@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Canvas, Circle, Path, RadialGradient, Skia, vec } from '@shopify/react-native-skia';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { useAppActive } from '../../hooks/useLivePoll';
 import { BOX_NAME, boxName, rewardLabel, type TrailBox, type TrailReward } from '../../services/trail/trailModel';
 import { BRAND, GameButton, GameIcon, type GameIconName } from '../../ui';
 import RewardBurst from '../RewardBurst';
@@ -312,11 +313,13 @@ function RewardCard({ reward, tier, order, delay, hero, reduced }: {
  */
 function GoldRays({ size, top, reduced }: { readonly size: number; readonly top: number; readonly reduced: boolean }) {
   const spin = useSharedValue(0);
+  // Battery: the decorative spin rests in the background (shim until claude/fb-battery's p.ambient lands).
+  const appActive = useAppActive();
   useEffect(() => {
-    if (reduced) return undefined;
+    if (reduced || !appActive) return undefined;
     spin.value = withRepeat(withTiming(360, { duration: 24000, easing: Easing.linear }), -1, false);
     return () => cancelAnimation(spin);
-  }, [reduced, spin]);
+  }, [reduced, appActive, spin]);
   const path = useMemo(() => {
     const p = Skia.Path.Make();
     const c = size / 2;
