@@ -516,7 +516,7 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
   // title is worn (the page then opens on the trophy case).
   if (state.kind === 'done' && (!final || !reward.title || titleWorn)) {
     return (
-      <View style={styles.slim} accessible accessibilityLabel={`${heading}: you got ${reward.prize}`}>
+      <View style={styles.slim} accessible accessibilityLabel={wonBefore > 0 ? `${heading}: ${prizeList(set).filter(e => !e.final && (e.reward.status === 'claimed' || e.reward.status === 'pending')).map(e => `find ${e.reward.target}, ${e.reward.prize}`).join('; ')}` : `${heading}: you got ${reward.prize}`}>
         <View style={styles.slimLine}>
           <Animated.View style={[styles.slimMedal, checkStyle]}><GameIcon name="check" size={20} /></Animated.View>
           <Text style={styles.slimText} maxFontSizeMultiplier={BODY_SCALE}>{heading}</Text>
