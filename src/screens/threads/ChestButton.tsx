@@ -54,12 +54,14 @@ const SIZE = 36;
 const OPEN_SIZE = 35;
 const FX = 96; // the star canvas, centred on the chest
 const STARS = [
-  { a: -2.45, d: 28, s: 5.5 },
-  { a: -1.95, d: 33, s: 7 },
-  { a: -1.5, d: 30, s: 6 },
-  { a: -1.05, d: 33, s: 7 },
-  { a: -0.6, d: 27, s: 5.5 },
+  { a: -2.55, d: 18, s: 6 },
+  { a: -2.0, d: 20, s: 7.5 },
+  { a: -1.5, d: 17, s: 6.5 },
+  { a: -1.0, d: 20, s: 7.5 },
+  { a: -0.5, d: 18, s: 6 },
 ];
+/** Stars start this far out from the lid and spread before they grow, so they never stack. */
+const STAR_START = 10;
 
 export default function ChestButton({
   label,
@@ -139,10 +141,12 @@ export default function ChestButton({
     for (let i = 0; i < STARS.length; i++) {
       const s = STARS[i];
       const e = 1 - (1 - q) * (1 - q);
-      const x = cx + Math.cos(s.a) * s.d * e;
-      const y = cy + Math.sin(s.a) * s.d * e + q * q * 8;
-      const r = s.s * Math.sin(Math.min(1, q * 1.15) * Math.PI);
-      if (r < 0.6) continue;
+      const reach = STAR_START + s.d * e;
+      const x = cx + Math.cos(s.a) * reach;
+      const y = cy + Math.sin(s.a) * reach + q * q * 8;
+      const grow = Math.min(1, Math.max(0, (q - 0.06) * 1.8));
+      const r = s.s * Math.sin(grow * Math.PI * 0.5) * (1 - Math.max(0, q - 0.65) / 0.35);
+      if (r < 3.5) continue;
       p.moveTo(x, y - r);
       p.quadTo(x, y, x + r, y);
       p.quadTo(x, y, x, y + r);
@@ -210,7 +214,7 @@ export default function ChestButton({
         <Canvas style={StyleSheet.absoluteFill}>
           <Group>
             <Path path={stars} color={BRAND.gold} />
-            <Path path={stars} style="stroke" strokeWidth={1.5} strokeJoin="round" color="#b07800" />
+            <Path path={stars} style="stroke" strokeWidth={1.8} strokeJoin="round" color="#9a6400" />
           </Group>
         </Canvas>
       </View>

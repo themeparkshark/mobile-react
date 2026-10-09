@@ -80,6 +80,12 @@ const PAD_X = 16;
 const PAD_TOP = 22;
 const PAD_BOTTOM = 10;
 const IDLE_FRAME_MS = 50;
+/** After this long with nothing happening the idle drops to about 10 redraws a second. */
+const SLEEPY_AFTER_S = 15;
+const SLEEPY_FRAME_MS = 100;
+/** The full number shows this long before LEVEL UP! replaces it. */
+const BANNER_LAG_MS = 90;
+const STAR_START = 9;
 const FONT_PX = 15;
 /** Idle shine: one soft sweep every SHINE_EVERY seconds. */
 const SHINE_EVERY = 7.5;
@@ -97,12 +103,12 @@ const BUBBLES = [
 ];
 /** Stars puff out of the end of the bar, up and back along it: never more than ~16 pt above the bar. */
 export const SPARKS = [
-  { a: -3.0, d: 34, s: 7 },
-  { a: -2.6, d: 27, s: 9 },
-  { a: -2.2, d: 22, s: 8 },
-  { a: -1.8, d: 20, s: 9.5 },
-  { a: -1.4, d: 21, s: 8 },
-  { a: -1.0, d: 16, s: 6.5 },
+  { a: -3.05, d: 26, s: 7.5 },
+  { a: -2.6, d: 18, s: 9 },
+  { a: -2.15, d: 13, s: 8.5 },
+  { a: -1.7, d: 11, s: 9.5 },
+  { a: -1.25, d: 12, s: 8.5 },
+  { a: -0.85, d: 10, s: 7 },
 ];
 
 function clamp01(n: number) {
@@ -150,6 +156,7 @@ function XpBarImpl({
 
   const time = useSharedValue(0);
   const acc = useSharedValue(0);
+  const quiet = useSharedValue(0);
   const fill = useSharedValue(initial ? clamp01(initial.progress) : 0);
   const slosh = useSharedValue(0);
   const fizz = useSharedValue(1);
@@ -163,6 +170,8 @@ function XpBarImpl({
   // The numbers on the bar: they lag the data through a level up and count on gains.
   const count = useSharedValue(initial?.xp ? initial.xp.current : xp.current);
   const shownNeeded = useSharedValue(initial?.xp ? initial.xp.needed : xp.needed);
+  // The number the label is heading to: the slash is placed for it, so it never jumps while counting.
+  const anchor = useSharedValue(initial?.xp ? initial.xp.current : xp.current);
 
   const latestXp = useRef(xp);
   latestXp.current = xp;
@@ -195,7 +204,13 @@ function XpBarImpl({
       },
       // The refill always shows the latest data, even if it changed during the celebration.
       refill: (latest) => {
-        if (!reducedRef.current && !party.current.drained) { party.current.pending = latest; return; }
+        if (!reducedRef.current && !party.current.drained) {
+          party.current.pending = latest;
+          // If the drain never completes (its animation was replaced), refill anyway shortly after.
+          const token = party.current.token;
+          setTimeout(() => { if (party.current.token === token && party.current.pending) startRefill(party.current.pending); }, 600);
+          return;
+        }
         startRefill(latest);
       },
       play: (kind, next) => {
@@ -210,6 +225,7 @@ function XpBarImpl({
     const now = latestXp.current;
     banner.value = 0;
     shownNeeded.value = now.needed;
+    anchor.value = now.current;
     count.value = 0;
     count.value = withTiming(now.current, { duration: 700, easing: Easing.out(Easing.cubic) });
     fill.value = withSpring(latest.progress, { damping: 16, stiffness: 70 });
@@ -247,15 +263,17 @@ function XpBarImpl({
       const token = party.current.token + 1;
       party.current = { token, drained: false, pending: null };
       // The numbers race to full with the liquid.
+      anchor.value = shownNeeded.value;
       count.value = withTiming(shownNeeded.value, { duration: BURST_AT_MS, easing: Easing.in(Easing.quad) });
       fill.value = withSequence(
-        withTiming(1, { duration: BURST_AT_MS, easing: Easing.in(Easing.quad) }, () => {
-          // First full frame: LEVEL UP! on the bar now, badge, sound and haptic one hop later.
-          banner.value = 1;
+        withTiming(1, { duration: BURST_AT_MS, easing: Easing.in(Easing.quad) }, (finished) => {
+          if (!finished) return; // a cancelled run-up never pays out
+          // First full frame: the full number shows for a beat, then LEVEL UP!; badge, sound and haptic one hop later.
+          banner.value = withDelay(BANNER_LAG_MS, withTiming(1, { duration: 0 }));
           runOnJS(onBrim)(token);
         }),
-        withDelay(GOLD_HOLD_MS, withTiming(0, { duration: DRAIN_MS, easing: Easing.inOut(Easing.quad) }, () => {
-          runOnJS(onDrained)(token);
+        withDelay(GOLD_HOLD_MS, withTiming(0, { duration: DRAIN_MS, easing: Easing.inOut(Easing.quad) }, (finished) => {
+          if (finished) runOnJS(onDrained)(token);
         })),
       );
       slosh.value = withSequence(withTiming(0.6, { duration: BURST_AT_MS - 200 }), withTiming(2.2, { duration: 200 }),
@@ -263,8 +281,7 @@ function XpBarImpl({
       fizz.value = withSequence(withTiming(1.4, { duration: BURST_AT_MS - 200 }), withTiming(3, { duration: 200 }),
         withTiming(1, { duration: 1800 }));
       flash.value = withSequence(
-        withTiming(0.25, { duration: BURST_AT_MS - 40 }),
-        withTiming(1, { duration: 40 }),
+        withDelay(BURST_AT_MS - 40, withTiming(1, { duration: 40 })),
         withDelay(GOLD_HOLD_MS - 120, withTiming(0, { duration: DRAIN_MS })),
       );
       // One bright pulse on the gold (no scaling, so the bar never touches the badge or the cap).
@@ -281,6 +298,7 @@ function XpBarImpl({
     }
     fill.value = withSpring(next.progress, { damping: 15, stiffness: kind === 'pour' ? 45 : 75 });
     shownNeeded.value = now.needed;
+    anchor.value = now.current;
     if (kind === 'gain' || kind === 'pour') {
       if (kind === 'pour') count.value = 0;
       count.value = withTiming(now.current, { duration: kind === 'pour' ? 800 : 600, easing: Easing.out(Easing.cubic) });
@@ -299,9 +317,12 @@ function XpBarImpl({
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
   }, [driver]);
 
+  // Hidden (another screen on top, scrolled away): hold every change, so a level up earned elsewhere
+  // plays, with its sound and haptic, when the bar is seen again, never on a hidden screen.
   useEffect(() => {
+    if (paused) return;
     driver.update({ level, progress: target }, reduced);
-  }, [driver, target, level, reduced]);
+  }, [driver, target, level, reduced, paused]);
 
   // The clock: UI thread. Calm at rest (about 20 redraws a second), display rate while something is happening.
   const frame = useFrameCallback((info) => {
@@ -312,7 +333,9 @@ function XpBarImpl({
     // The idle shine also runs at the display rate, so it glides instead of stepping.
     const shining = time.value % SHINE_EVERY < SHINE_FOR + 0.1;
     const busy = shining || slosh.value > 0.05 || fizz.value > 1.05 || glint.value > 0 || burst.value > 0 || flash.value > 0;
-    if (!busy && acc.value < IDLE_FRAME_MS) return;
+    if (busy) quiet.value = 0;
+    else quiet.value += Math.min(dt, 100) / 1000;
+    if (!busy && acc.value < (quiet.value > SLEEPY_AFTER_S ? SLEEPY_FRAME_MS : IDLE_FRAME_MS)) return;
     time.value += acc.value / 1000;
     acc.value = 0;
   }, false);
@@ -351,7 +374,8 @@ function XpBarImpl({
     const innerW = Math.max(1, w.value - INSET * 2);
     const base = Math.min(0.5, (innerH * 0.9) / innerW);
     const f = Math.max(0, Math.min(1, fill.value));
-    return x0 + innerW * (base + f * (1 - base));
+    // At full the liquid runs past the rounded end, so no sliver of glass shows through the gold.
+    return x0 + innerW * (base + f * (1 - base)) + Math.max(0, f - 0.95) * 160;
   });
 
   // The front edge: a smooth curve through a few points (quadratic midpoints), gentle at rest.
@@ -443,11 +467,14 @@ function XpBarImpl({
     const cy = y0 + innerH / 2;
     for (let i = 0; i < SPARKS.length; i++) {
       const s = SPARKS[i];
-      const e = Math.min(1, q * 1.6);
-      const x = cx + Math.cos(s.a) * s.d * e;
-      const y = cy + Math.sin(s.a) * s.d * e + q * q * 6;
-      const r = s.s * Math.sin(Math.min(1, q * 1.2) * Math.PI);
-      if (r < 2.5) continue; // tiny stars would be all outline: skip them
+      // Spread first, then grow: each star starts STAR_START pt out, so they never stack on one point.
+      const e = Math.min(1, q * 1.8);
+      const reach = STAR_START + s.d * e;
+      const x = cx + Math.cos(s.a) * reach;
+      const y = cy + Math.sin(s.a) * reach + q * q * 6;
+      const grow = Math.min(1, Math.max(0, (q - 0.08) * 1.6));
+      const r = s.s * Math.sin(grow * Math.PI * 0.5) * (1 - Math.max(0, q - 0.7) / 0.3);
+      if (r < 4) continue; // small stars would be all outline: skip them
       // Four-point star.
       p.moveTo(x, y - r);
       p.quadTo(x, y, x + r, y);
@@ -461,11 +488,8 @@ function XpBarImpl({
   const deepTop = y0 + innerH * 0.6;
   const glintOpacity = useDerivedValue(() => glint.value * 0.9);
   const goldOpacity = useDerivedValue(() => flash.value);
-  const glowOpacity = useDerivedValue(() => flash.value * 0.55);
   const shineColor = useDerivedValue(() => (sweep.value > 0 ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.35)'));
 
-  const latestCurrent = useSharedValue(xp.current);
-  useEffect(() => { latestCurrent.value = xp.current; }, [xp.current, latestCurrent]);
   // The label, formatted on the UI thread. The slash stays still while the left number counts.
   const text = useDerivedValue(() => {
     if (banner.value) return 'LEVEL UP!';
@@ -480,7 +504,7 @@ function XpBarImpl({
     if (banner.value || slash < 0) return cx - font.getTextWidth(label) / 2;
     // Centre the final label, then hold the slash where it lands.
     const right = label.slice(slash);
-    const finalLeft = font.getTextWidth(groupDigits(latestCurrent.value));
+    const finalLeft = font.getTextWidth(groupDigits(anchor.value));
     const total = finalLeft + font.getTextWidth(right);
     const slashAt = cx - total / 2 + finalLeft;
     return slashAt - font.getTextWidth(label.slice(0, slash));
@@ -508,9 +532,9 @@ function XpBarImpl({
     >
       {width > 0 && (
         <Canvas style={{ position: 'absolute', left: -PAD_X, top: -PAD_TOP, width: canvasW, height: canvasH }}>
-          {/* Gold glow behind the bar at the level-up burst (opacity only) */}
-          <RoundedRect x={PAD_X - 5} y={PAD_TOP - 5} width={width + 10} height={XP_BAR_HEIGHT + XP_BAR_LIP + 10}
-            r={(XP_BAR_HEIGHT + 10) / 2} color="rgba(255, 207, 59, 0.9)" opacity={glowOpacity} />
+          {/* A tight gold rim around the bar at the level up (opacity only) */}
+          <RoundedRect x={PAD_X - 2.5} y={PAD_TOP - 2.5} width={width + 5} height={XP_BAR_HEIGHT + XP_BAR_LIP + 5}
+            r={(XP_BAR_HEIGHT + XP_BAR_LIP + 5) / 2} color={GOLD} opacity={goldOpacity} />
           {/* Alex's pill: dark lip, ink outline, white rim, then the glass track with a cel band */}
           <RoundedRect x={PAD_X} y={PAD_TOP + XP_BAR_LIP} width={width} height={XP_BAR_HEIGHT} r={XP_BAR_HEIGHT / 2} color={LIP} />
           <RoundedRect x={PAD_X} y={PAD_TOP} width={width} height={XP_BAR_HEIGHT} r={XP_BAR_HEIGHT / 2} color={INK} />
@@ -534,6 +558,7 @@ function XpBarImpl({
               <Path path={shine} color={shineColor} />
             </Group>
             <Path path={edge} style="stroke" strokeWidth={2} strokeCap="round" color={LIQUID_TOP} />
+            <Path path={edge} style="stroke" strokeWidth={2.5} strokeCap="round" color={GOLD} opacity={goldOpacity} />
             <Path path={edge} style="stroke" strokeWidth={4} strokeCap="round" color="#ffffff" opacity={glintOpacity} />
             {/* Reduce Motion level up: the whole track fades to gold and back */}
             <Group opacity={rmGold}>
@@ -551,7 +576,7 @@ function XpBarImpl({
           ) : null}
           {/* Level-up stars */}
           <Path path={sparks} color={GOLD} />
-          <Path path={sparks} style="stroke" strokeWidth={1.2} strokeJoin="round" color={GOLD_INK} />
+          <Path path={sparks} style="stroke" strokeWidth={2} strokeJoin="round" color={GOLD_INK} />
         </Canvas>
       )}
     </View>

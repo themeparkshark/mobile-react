@@ -207,6 +207,11 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     return () => clearTimeout(id);
   }, [freshId]);
 
+  // Stable so a parent render (a tap, the chest, the sheet) never re-renders the feed rows.
+  const renderThread = useCallback(({ item, index }: { item: ThreadType; index: number }) => (
+    <ThreadCard thread={item} index={index} fresh={item.id === glowId} onOpen={openThread} onMenu={openMenu} />
+  ), [glowId, openThread, openMenu]);
+
   const items = useMemo(() => {
     // A post I just made sits on top (above the pin) while it glows, fully in view.
     const fresh = freshId !== null ? threads.find((item) => item.id === freshId) : undefined;
@@ -301,15 +306,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
           ref={listRef}
           data={status === 'ready' ? items : []}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item, index }) => (
-            <ThreadCard
-              thread={item}
-              index={index}
-              fresh={item.id === glowId}
-              onOpen={openThread}
-              onMenu={openMenu}
-            />
-          )}
+          renderItem={renderThread}
           extraData={glowId}
           estimatedItemSize={260}
           ListHeaderComponent={header}
