@@ -52,6 +52,7 @@ import { loadSecretShopFlag } from '../services/secretShopFlag';
 import Item from './StoreScreen/Item';
 import SuppliesShop, { type SuppliesFocus } from './StoreScreen/SuppliesShop';
 import GearShelf from './StoreScreen/GearShelf';
+import useBudgetedPoll from './StoreScreen/powerShim';
 import { SecretRoomSkeleton } from './StoreScreen/SecretShowroom';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
@@ -398,18 +399,16 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
 
   // At zero the server restocks on its hourly job: check the timer each minute
   // and reload the shop once a new rotation is live.
-  useEffect(() => {
-    if (!restockPending || !currentStore) return;
-    const interval = setInterval(async () => {
-      const next = await getStoreRotation(currentStore.id).catch(() => null);
-      if (next?.next_rotation_at && new Date(next.next_rotation_at).getTime() > Date.now()) {
-        setRestockPending(false);
-        silentReload.current = true;
-        setAttempt(a => a + 1);
-      }
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [restockPending, currentStore?.id]);
+  // On the app's budgeted poll clock (battery fix 20): pauses in the background, slows when idle.
+  useBudgetedPoll(async () => {
+    if (!currentStore) return;
+    const next = await getStoreRotation(currentStore.id).catch(() => null);
+    if (next?.next_rotation_at && new Date(next.next_rotation_at).getTime() > Date.now()) {
+      setRestockPending(false);
+      silentReload.current = true;
+      setAttempt(a => a + 1);
+    }
+  }, 60_000, { enabled: restockPending && !!currentStore, immediate: false });
 
   // One load path with an end state: the shop never spins forever.
   useEffect(() => {

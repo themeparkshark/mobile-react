@@ -35,6 +35,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import ShopTile from './ShopTile';
 import TryOnSheet from './TryOnSheet';
 import useIdleRest from './useIdleRest';
+import { budgetedParticles, usePowerBudget } from './powerShim';
 import { MAX_FONT, plateFor, SHOP_SURFACE as S, Sheen, ShopToast, TimerPill, useShopNow, useShopToast, WishHeart } from './shopUi';
 import { useWished, wishStore } from './wishStore';
 
@@ -200,7 +201,10 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   // Under the try-on, Favorites, a dialog or the grown-up gate the stage rests too.
   // After 8 s with no touch the ambient loops rest too (performance r8); a touch or scroll wakes them.
   const { idle, wake } = useIdleRest(8000);
-  const stageStill = still || stageAway || !focused || !!open || covered || idle;
+  // Battery fix 20: decorative loops also gate on the app power budget (Saver, 2 min idle, background).
+  const power = usePowerBudget();
+  const bubbleCount = budgetedParticles(BUBBLES.length, power);
+  const stageStill = still || !power.ambient || stageAway || !focused || !!open || covered || idle;
 
   // Hearts: the server's list seeds the shared store (the tab row's Favorites count reads it too).
   useEffect(() => {
@@ -287,7 +291,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
           nearEnd.current = near;
         }}>
         <View style={styles.stage}>
-          {BUBBLES.map((b, i) => <Bubble key={i} {...b} still={stageStill} />)}
+          {BUBBLES.slice(0, bubbleCount).map((b, i) => <Bubble key={i} {...b} still={stageStill} />)}
           <Shopkeeper imageUrl={promoUrl} still={stageStill} />
           {/* The restock day rides on the stage's corner: small, calm, out of the shelf's way. */}
           <View style={styles.restock}>
