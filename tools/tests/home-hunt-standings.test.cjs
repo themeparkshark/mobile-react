@@ -167,9 +167,11 @@ test('info sheets show the server lines verbatim, odds as bars, and drop empty p
   assert.deepEqual(sheet.pages[1].points.map(point => point.text), ['Hunter: 60+ points.', 'Free and VIP rank the same.']);
   const odds = sheet.pages[2];
   assert.deepEqual(odds.heroData.odds.map(row => row.percent), [55, 28, 12, 4, 1]);
-  // The bars already say the first line; the rest stay verbatim.
-  assert.deepEqual(odds.points.map(point => point.text), ['With a set focused, 65% of items come from it.']);
+  // Short lines built from the server's numbers, never more than three.
+  assert.deepEqual(odds.points.map(point => point.text), ['Pick a set to focus: 65% of finds come from it.',
+    'New-to-you items show up 3 times more.', 'VIP shows more finds. The odds stay the same.']);
   assert.equal(info.homeHuntInfoSheet(null).pages.length, 0);
-  assert.deepEqual(plain(info.oddsInfoSheet({ odds_lines: ['a'] })).pages[0].points.map(point => point.text), ['a']);
+  // An older server without the odds block: its own sentences, at most three.
+  assert.deepEqual(plain(info.oddsInfoSheet({ odds_lines: ['a', 'b', 'c', 'd'] })).pages[0].points.map(point => point.text), ['a', 'b', 'c']);
 });
 

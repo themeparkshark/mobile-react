@@ -47,6 +47,8 @@ export type HelpSheetContent = Omit<HelpSheetSpec, 'pages'> & { readonly pages: 
 const SPRING_IN = { damping: 19, stiffness: 210, mass: 0.9 } as const;
 const OUT_MS = 190;
 const SIDE = 16;
+/** The sheet's white side border; pages are exactly the space inside it, so a swiped page lands centered. */
+const BORDER = 3;
 /** Text never grows past this, so a page never needs to scroll at large text sizes. */
 const MAX_FONT = 1.25;
 
@@ -129,7 +131,7 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
   const scroll = useAnimatedRef<GestureScrollView>();
   const scrollX = useSharedValue(0);
   const sheetH = useSharedValue(height);
-  const pageW = width;
+  const pageW = width - BORDER * 2;
   // Short phones (SE) get a shorter hero so a page never needs to scroll.
   const heroH = Math.round(Math.min(188, Math.max(140, height * 0.22)));
   const heroW = pageW - SIDE * 2;
@@ -192,7 +194,14 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
         <Animated.View
           onLayout={event => { sheetH.value = event.nativeEvent.layout.height; }}
           style={[styles.sheet, { maxHeight: height - insets.top - 12, paddingBottom: Math.max(insets.bottom, 14) + 4 }, sheetStyle]}>
-          <View style={styles.handle} />
+          {/* Header row on the cream: the drag handle, and the close button, which never sits on the art. */}
+          <View style={styles.header}>
+            <View style={styles.handle} />
+            <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Close help" hitSlop={6}
+              style={({ pressed }) => [styles.close, pressed && { transform: [{ scale: 0.92 }] }]}>
+              <GameIcon name="close" size={32} />
+            </Pressable>
+          </View>
           <Text accessibilityRole="header" style={styles.srOnly}>
             {`${sheet.name} help${pages.length > 1 ? `, page ${page + 1} of ${pages.length}` : ''}`}
           </Text>
@@ -212,13 +221,12 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
             </View>
           )}
           <View style={styles.footer}>
-            {ready && pages.length > 1 && (
-              <View style={styles.dots}>
-                {pages.map((p, index) => (
-                  <Dot key={p.key} index={index} width={pageW} scrollX={scrollX} count={pages.length} onPress={() => goTo(index)} />
-                ))}
-              </View>
-            )}
+            {/* Always the same slot, so the button sits at one height on every sheet. */}
+            <View style={styles.dots}>
+              {ready && pages.length > 1 && pages.map((p, index) => (
+                <Dot key={p.key} index={index} width={pageW} scrollX={scrollX} count={pages.length} onPress={() => goTo(index)} />
+              ))}
+            </View>
             <GameButton label={!ready || last ? 'Got it' : 'Next'} onPress={!ready || last ? close : () => goTo(page + 1)}
               icon={!ready || last ? undefined : 'arrow'}
               accessibilityHint={!ready || last ? 'Closes help' : `Shows page ${page + 2} of ${pages.length}`}
@@ -231,10 +239,6 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
               </Pressable>
             )}
           </View>
-          <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Close help" hitSlop={10}
-            style={({ pressed }) => [styles.close, pressed && { transform: [{ scale: 0.92 }] }]}>
-            <GameIcon name="close" size={34} />
-          </Pressable>
         </Animated.View>
       </GestureDetector>
     </View>
@@ -308,7 +312,7 @@ function Dot({ index, width, scrollX, count, onPress }: {
   });
   return (
     <Pressable onPress={onPress} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Page ${index + 1} of ${count}`}
-      style={{ height: 24, justifyContent: 'center' }}>
+      style={{ height: 44, minWidth: 30, alignItems: 'center', justifyContent: 'center' }}>
       <Animated.View style={[styles.dot, style]} />
     </Pressable>
   );
@@ -321,7 +325,8 @@ const styles = StyleSheet.create({
     borderWidth: 3, borderBottomWidth: 0, borderColor: BRAND.white, paddingTop: 10,
     shadowColor: BRAND.navy, shadowOpacity: 0.25, shadowRadius: 16, shadowOffset: { width: 0, height: -4 }, elevation: 16,
   },
-  handle: { alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: 'rgba(5,52,110,0.18)', marginBottom: 10 },
+  header: { height: 40, alignItems: 'center', justifyContent: 'center', marginTop: -6 },
+  handle: { width: 44, height: 5, borderRadius: 3, backgroundColor: 'rgba(5,52,110,0.18)' },
   srOnly: { position: 'absolute', width: 1, height: 1, opacity: 0 },
   heroWindow: {
     borderRadius: 24, borderWidth: 3, borderColor: BRAND.white, overflow: 'hidden', backgroundColor: BRAND.skyDeep,
@@ -332,16 +337,17 @@ const styles = StyleSheet.create({
   points: { alignSelf: 'stretch', marginTop: 10, gap: 8, paddingHorizontal: 4 },
   point: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 40 },
   pointIcon: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#d7ecfb',
+    width: 40, height: 40, borderRadius: 20, backgroundColor: BRAND.white, borderWidth: 2.5, borderColor: '#9cc3e8',
+    borderBottomWidth: 4, borderBottomColor: '#6f9fd2',
     alignItems: 'center', justifyContent: 'center',
   },
   pointText: { flex: 1, fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.navy },
   pointIconSmall: { width: 30, height: 30, borderRadius: 15 },
   pointTextSmall: { fontSize: 16, lineHeight: 20 },
-  footer: { paddingTop: 12, gap: 8, alignItems: 'center' },
-  dots: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
+  footer: { paddingTop: 4, gap: 6, alignItems: 'center' },
+  dots: { flexDirection: 'row', gap: 2, alignItems: 'center', justifyContent: 'center', height: 30 },
   dot: { height: 10, borderRadius: 5 },
   more: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 12 },
   moreText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.blue, marginTop: 2 },
-  close: { position: 'absolute', top: 24, right: 24, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  close: { position: 'absolute', right: 10, top: -2, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });

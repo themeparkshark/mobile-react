@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react';
-import { balanceLine, type GlossaryKey, type GlossaryTerm } from '../../services/help/glossary';
+import { balanceLine, LOCAL_GLOSSARY, type GlossaryKey, type GlossaryTerm } from '../../services/help/glossary';
+import { HELP_LIMITS, wordCount } from '../../services/help/helpSheets';
 import HelpSheet, { type HelpSheetContent } from './HelpSheet';
+
+/** A server line only when it is as short as the sheet's rule; otherwise the local line. */
+function brief(line: string, local: string): string {
+  return wordCount(line) <= HELP_LIMITS.pointWords ? line : local;
+}
 
 /** The word's sheet: its art and your count up top, then what it does and how to get it. */
 export function termSheetContent(term: GlossaryTerm, count?: number | null): HelpSheetContent {
   const balance = balanceLine(term, count);
+  const local = LOCAL_GLOSSARY[term.key] ?? term;
   return {
     id: `term:${term.key}`,
     name: term.label,
@@ -12,8 +19,8 @@ export function termSheetContent(term: GlossaryTerm, count?: number | null): Hel
       key: 'term', hero: 'term', headline: term.label,
       heroData: { icon: term.icon, caption: balance ? balance.replace(/\.$/, '') : null },
       points: [
-        { icon: term.icon, text: term.what },
-        { icon: 'gift', text: term.earn },
+        { icon: term.icon, text: brief(term.what, local.what) },
+        { icon: 'gift', text: brief(term.earn, local.earn) },
       ],
     }],
   };

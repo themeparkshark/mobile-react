@@ -199,7 +199,7 @@ export default function HelpProvider({ children }: { readonly children: React.Re
         onOpenGuide={term ? () => openHowToPlay(term.topic) : undefined}
         onClose={() => setSheet(null)} />
       <HelpSheet visible={helpId != null} sheet={lastHelpId ? helpSheet(lastHelpId) : null} onClose={() => setHelpId(null)}
-        more={lastHelpId === 'park_map' ? { label: 'Every tip in How to play', onPress: () => openHowToPlay('park') } : undefined} />
+        more={lastHelpId === 'park_map' ? { label: 'How to play', onPress: () => openHowToPlay('park') } : undefined} />
     </HelpContext.Provider>
   );
 }

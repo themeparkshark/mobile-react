@@ -11,7 +11,7 @@
  */
 import { Image } from 'expo-image';
 import { useEffect, type ReactNode } from 'react';
-import { StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
+import { ImageBackground, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, interpolate, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withTiming,
   type SharedValue,
@@ -28,7 +28,8 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 const ART = {
   water: require('../../../assets/images/help/stage-water.webp'),
-  cork: require('../../../assets/images/help/stage-cork.webp'),
+  groundShadow: require('../../../assets/images/howto/ground-shadow.webp'),
+  corkTile: require('../../../assets/images/screens/pin-swaps/corkboard.png'),
   sharks: [
     require('../../../assets/images/screens/leaderboard/sharks/shark-0.png'),
     require('../../../assets/images/screens/leaderboard/sharks/shark-1.png'),
@@ -120,8 +121,10 @@ export default function HelpHero({ hero, width, height, running, reduced, data }
   const p = { t, w: width, h: height };
   return (
     <View style={[styles.stage, { width, height }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Image source={cork ? ART.cork : ART.water} style={StyleSheet.absoluteFill} contentFit="cover"
-        contentPosition={cork ? 'center' : 'top'} />
+      {cork
+        // The board's own cork, tiled at its drawn size so it stays crisp (never stretched).
+        ? <ImageBackground source={ART.corkTile} style={StyleSheet.absoluteFill} resizeMode="repeat" imageStyle={{ width: 200, height: 200 }} />
+        : <Image source={ART.water} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />}
       {hero === 'standings_climb' && <ClimbScene {...p} />}
       {hero === 'standings_podium' && <PodiumScene {...p} />}
       {hero === 'standings_boards' && <BoardsScene {...p} />}
@@ -172,16 +175,16 @@ function Art({ source, w, h }: { readonly source: ImageSourcePropType | number; 
   return <Image source={source} style={{ width: w, height: h }} contentFit="contain" />;
 }
 
-/** A soft navy contact shadow under things that stand on the stage. */
+/** The soft oval ground shadow the How to Play demos use, centered under whatever stands on the stage. */
 function Shadow({ x, y, w }: { readonly x: number; readonly y: number; readonly w: number }) {
-  return <View style={{ position: 'absolute', left: x - w / 2, top: y - w * 0.08, width: w, height: w * 0.16, borderRadius: w, backgroundColor: 'rgba(5,52,110,0.18)' }} />;
+  return <Image source={ART.groundShadow} style={{ position: 'absolute', left: x - w / 2, top: y - w * 0.12, width: w, height: w * 0.24, opacity: 0.8 }} contentFit="fill" />;
 }
 
 /* ------------------------------------------------------------------ Standings */
 
 /** A standings row as the board draws it: rank disc, shark face, a name, the ride icon and a count. */
-function MiniRow({ rank, face, you, children, width, height }: {
-  readonly rank: ReactNode; readonly face: number; readonly you?: boolean; readonly children?: ReactNode;
+function MiniRow({ rank, face, you, name, children, width, height }: {
+  readonly rank: ReactNode; readonly face: number; readonly you?: boolean; readonly name?: string; readonly children?: ReactNode;
   readonly width: number; readonly height: number;
 }) {
   return (
@@ -190,7 +193,8 @@ function MiniRow({ rank, face, you, children, width, height }: {
       <View style={[styles.face, { width: height * 0.76, height: height * 0.76, borderRadius: height }, you && { borderColor: BRAND.gold }]}>
         <Image source={ART.sharks[face]} style={{ width: '120%', height: '120%', marginTop: '18%' }} contentFit="cover" />
       </View>
-      {you ? <Text style={styles.youName}>You</Text> : <View style={styles.nameBar} />}
+      {/* Fixed sample names in the board's own type, never real players. */}
+      <Text numberOfLines={1} style={[styles.youName, !you && { color: BRAND.navySoft }]}>{you ? 'You' : name ?? ''}</Text>
       <View style={{ flex: 1 }} />
       <GameIcon name="ride" size={height * 0.5} />
       <View style={{ width: height * 0.62, alignItems: 'center' }}>{children}</View>
@@ -216,12 +220,11 @@ function Swap({ t, a, b, from, to, style }: {
 
 function ClimbScene({ t, w, h }: SceneProps) {
   const bw = Math.min(w - 48, 292);
-  const rowH = Math.round(Math.min(36, h * 0.2));
+  const rowH = Math.round(Math.min(40, h * 0.215));
   const gap = 6;
   const step = rowH + gap;
   const x0 = (w - bw) / 2;
-  // Rows sit below the close button on the window's top-right corner.
-  const y0 = Math.max(46, (h - (rowH * 3 + gap * 2)) / 2);
+  const y0 = (h - (rowH * 3 + gap * 2)) / 2;
   // The ride icon flies into your count; you pass the row above.
   const flyer = useAnimatedStyle(() => {
     const k = seg(t.value, 0.06, 0.3);
@@ -246,10 +249,10 @@ function ClimbScene({ t, w, h }: SceneProps) {
   return (
     <>
       <Abs x={x0} y={y0} w={bw} h={rowH}>
-        <MiniRow width={bw} height={rowH} face={2} rank={<Text style={rankStyle}>3</Text>}><Text style={countStyle}>7</Text></MiniRow>
+        <MiniRow width={bw} height={rowH} face={2} name="TOONS" rank={<Text style={rankStyle}>3</Text>}><Text style={countStyle}>7</Text></MiniRow>
       </Abs>
       <Abs x={x0} y={y0 + step} w={bw} h={rowH} style={midStyle}>
-        <MiniRow width={bw} height={rowH} face={5} rank={<Swap t={t} a={0.52} b={0.6} from="4" to="5" style={rankStyle} />}>
+        <MiniRow width={bw} height={rowH} face={5} name="SURFKING" rank={<Swap t={t} a={0.52} b={0.6} from="4" to="5" style={rankStyle} />}>
           <Text style={countStyle}>6</Text>
         </MiniRow>
       </Abs>
@@ -317,69 +320,55 @@ function TicketPop({ t, cx, cy, dir }: { readonly t: SharedValue<number>; readon
   return <Abs x={cx - size / 2} y={cy} w={size} h={size * 0.69} style={style}><Art source={ART.ticket} w={size} h={size * 0.69} /></Abs>;
 }
 
-const BOARDS: readonly { icon: GameIconName; label: string; line: string; face: number }[] = [
-  { icon: 'timer', label: 'This Week', line: 'Rides won', face: 0 },
-  { icon: 'heart', label: 'Friends', line: 'You and friends', face: 4 },
-  { icon: 'trophy', label: 'All-Time', line: 'Ride coins', face: 1 },
+const BOARDS: readonly { icon: GameIconName; label: string; unit: GameIconName; score: string; faces: readonly number[] }[] = [
+  { icon: 'timer', label: 'This Week', unit: 'ride', score: '7', faces: [0] },
+  { icon: 'heart', label: 'Friends', unit: 'ride', score: '4', faces: [4, 1] },
+  { icon: 'trophy', label: 'All-Time', unit: 'coin', score: '52', faces: [6] },
 ];
 
+/** The three boards as three cards; each takes its turn lifting into the spotlight, like tapping its tab. */
 function BoardsScene({ t, w, h }: SceneProps) {
-  const bw = Math.min(w - 32, 320);
-  const railH = 44;
-  const seg3 = (bw - 12) / 3;
-  const x0 = (w - bw) / 2;
-  // Below the sheet's close button, which sits on the window's top-right corner.
-  const y0 = Math.max(48, h * 0.27);
-  // The pill rests on a tab for a beat, then springs to the next one, like the real rail.
-  const pos = (v: number) => {
-    'worklet';
-    return interpolate(v, [0, 0.26, 0.33, 0.36, 0.6, 0.67, 0.7, 0.92, 0.99, 1], [0, 0, 1.06, 1, 1, 2.06, 2, 2, 0, 0], 'clamp');
-  };
-  const pill = useAnimatedStyle(() => ({ transform: [{ translateX: pos(t.value) * seg3 }] }));
+  const gap = 12;
+  const cw = Math.min((w - 40 - gap * 2) / 3, 104);
+  const ch = Math.min(h - 36, cw * 1.25);
+  const x0 = (w - (cw * 3 + gap * 2)) / 2;
+  const y0 = (h - ch) / 2 + 4;
   return (
     <>
-      <Abs x={x0} y={y0} w={bw} h={railH}>
-        <View style={[styles.rail, { width: bw, height: railH }]}>
-          <Animated.View style={[styles.railPill, { width: seg3, height: railH - 12 }, pill]} />
-          {BOARDS.map((board, i) => <RailTab key={board.label} t={t} i={i} width={seg3} board={board} pos={pos} />)}
-        </View>
-      </Abs>
-      {BOARDS.map((board, i) => <BoardChip key={board.label} t={t} i={i} pos={pos} cx={w / 2} y={y0 + railH + 14} board={board} />)}
+      {BOARDS.map((board, i) => <BoardCard key={board.label} t={t} i={i} x={x0 + i * (cw + gap)} y={y0} w={cw} h={ch} board={board} />)}
     </>
   );
 }
 
-function RailTab({ t, i, width, board, pos }: {
-  readonly t: SharedValue<number>; readonly i: number; readonly width: number;
-  readonly board: typeof BOARDS[number]; readonly pos: (v: number) => number;
+function BoardCard({ t, i, x, y, w, h, board }: {
+  readonly t: SharedValue<number>; readonly i: number; readonly x: number; readonly y: number; readonly w: number; readonly h: number;
+  readonly board: typeof BOARDS[number];
 }) {
-  const on = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(pos(t.value) - i) * 1.6) }));
-  const off = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.abs(pos(t.value) - i) * 1.6) }));
-  return (
-    <View style={{ width, height: '100%', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 4 }}>
-      <GameIcon name={board.icon} size={18} />
-      <View>
-        <Animated.Text numberOfLines={1} style={[styles.tabText, { color: BRAND.white }, off]}>{board.label}</Animated.Text>
-        <Animated.Text numberOfLines={1} style={[styles.tabText, StyleSheet.absoluteFill, { color: BRAND.navy }, on]}>{board.label}</Animated.Text>
-      </View>
-    </View>
-  );
-}
-
-function BoardChip({ t, i, pos, cx, y, board }: {
-  readonly t: SharedValue<number>; readonly i: number; readonly pos: (v: number) => number;
-  readonly cx: number; readonly y: number; readonly board: typeof BOARDS[number];
-}) {
-  const style = useAnimatedStyle(() => {
-    const d = Math.abs(pos(t.value) - i);
-    return { opacity: Math.max(0, 1 - d * 2.2), transform: [{ translateY: Math.min(1, d) * 10 }, { scale: 1 - Math.min(1, d) * 0.08 }] };
+  // Each card owns a third of the loop: lift in, hold, settle.
+  const on = (v: number) => {
+    'worklet';
+    const a = i / 3;
+    return interpolate(v, [a, a + 0.06, a + 0.27, a + 0.33], [0, 1, 1, 0], 'clamp');
+  };
+  const card = useAnimatedStyle(() => {
+    const k = on(t.value);
+    return { transform: [{ translateY: -8 * k }, { scale: 1 + 0.07 * k }], shadowOpacity: 0.12 + 0.18 * k };
   });
+  const ring = useAnimatedStyle(() => ({ opacity: on(t.value) }));
+  const icon = h * 0.34;
   return (
-    <Abs x={cx - 120} y={y} w={240} h={64} style={[{ alignItems: 'center' }, style]}>
-      <View style={styles.boardChip}>
-        <View style={styles.boardFace}><Image source={ART.sharks[board.face]} style={{ width: '120%', height: '120%', marginTop: '18%' }} contentFit="cover" /></View>
-        <GameIcon name={i === 2 ? 'coin' : 'ride'} size={22} />
-        <Text style={styles.boardChipText}>{board.line}</Text>
+    <Abs x={x} y={y} w={w} h={h} style={[styles.boardCard, card]}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.boardRing, ring]} />
+      <GameIcon name={board.icon} size={icon} />
+      <Text numberOfLines={1} adjustsFontSizeToFit style={styles.boardLabel}>{board.label}</Text>
+      <View style={styles.boardScore}>
+        {board.faces.map((face, n) => (
+          <View key={face} style={[styles.boardFace, n > 0 && { marginLeft: -8 }]}>
+            <Image source={ART.sharks[face]} style={{ width: '120%', height: '120%', marginTop: '18%' }} contentFit="cover" />
+          </View>
+        ))}
+        <GameIcon name={board.unit} size={18} />
+        <Text style={styles.boardNum}>{board.score}</Text>
       </View>
     </Abs>
   );
@@ -452,7 +441,7 @@ function PinClockScene({ t, w, h }: SceneProps) {
       </Abs>
       <Abs x={cx - pin / 2} y={cy - pin / 2} w={pin} h={pin} style={lift}><Art source={ART.pinAstro} w={pin} h={pin} /></Abs>
       <Abs x={cx + r + 14} y={cy - 26} w={52} h={52} style={tick}><GameIcon name="timer" size={50} /></Abs>
-      <Abs x={w * 0.08} y={h * 0.14} w={48} h={48} style={{ transform: [{ rotate: '-10deg' }], opacity: 0.9 }}><Art source={ART.pinHat} w={46} h={46} /></Abs>
+      <Abs x={w * 0.1} y={h * 0.2} w={52} h={52} style={{ transform: [{ rotate: '-10deg' }] }}><Art source={ART.pinHat} w={50} h={50} /></Abs>
     </>
   );
 }
@@ -804,8 +793,8 @@ function ShareScene({ t, w, h }: SceneProps) {
   return (
     <>
       <Abs x={w * 0.08} y={h / 2 - badge / 2} w={badge} h={badge}><PencilBadge t={t} size={badge} /></Abs>
-      <PostCard t={t} at={0.06} x={x} y={h * 0.14} w={cardW} h={cardH} face={1} art={ART.churro} likes={['2', '3']} likeAt={0.5} />
-      <PostCard t={t} at={0.22} x={x + 14} y={h * 0.14 + cardH + 12} w={cardW} h={cardH} face={0} icon="ride" likes={['4', '5']} likeAt={0.62} />
+      <PostCard t={t} at={0.06} x={x} y={h * 0.14} w={cardW} h={cardH} face={1} art={ART.churro} likes={['2', '3']} likeAt={0.5} caption="Churro time!" />
+      <PostCard t={t} at={0.22} x={x + 14} y={h * 0.14 + cardH + 12} w={cardW} h={cardH} face={0} icon="ride" likes={['4', '5']} likeAt={0.62} caption="Rode it twice!" />
     </>
   );
 }
@@ -815,7 +804,8 @@ function PencilBadge({ t, size }: { readonly t: SharedValue<number>; readonly si
   return <Animated.View style={style}><Art source={ART.compose} w={size} h={size} /></Animated.View>;
 }
 
-function PostCard({ t, at, x, y, w, h, face, art, icon, likes, likeAt }: {
+function PostCard({ t, at, x, y, w, h, face, art, icon, likes, likeAt, caption }: {
+  readonly caption: string;
   readonly t: SharedValue<number>; readonly at: number; readonly x: number; readonly y: number; readonly w: number; readonly h: number;
   readonly face: number; readonly art?: number; readonly icon?: GameIconName; readonly likes: readonly [string, string] | string[]; readonly likeAt: number;
 }) {
@@ -832,10 +822,7 @@ function PostCard({ t, at, x, y, w, h, face, art, icon, likes, likeAt }: {
     <Abs x={x} y={y} w={w} h={h} style={style}>
       <View style={[styles.post, { height: h }]}>
         <View style={styles.postFace}><Image source={ART.sharks[face]} style={{ width: '120%', height: '120%', marginTop: '18%' }} contentFit="cover" /></View>
-        <View style={{ flex: 1, gap: 5 }}>
-          <View style={[styles.nameBar, { width: '70%', marginLeft: 0 }]} />
-          <View style={[styles.nameBar, { width: '46%', marginLeft: 0, opacity: 0.5 }]} />
-        </View>
+        <Text numberOfLines={1} style={styles.postCaption}>{caption}</Text>
         {art != null ? <Image source={art} style={{ width: h * 0.62, height: h * 0.62 }} contentFit="contain" /> : <GameIcon name={icon ?? 'ride'} size={h * 0.56} />}
         <View style={styles.likeChip}>
           <Animated.View style={heart}><GameIcon name="heart" size={16} /></Animated.View>
@@ -903,9 +890,8 @@ function TermScene({ t, w, h, icon, caption }: SceneProps & { readonly icon: Gam
 function OddsScene({ t, w, h, rows }: SceneProps & { readonly rows: readonly { tier: RarityTier; percent: number }[] }) {
   const bw = Math.min(w - 40, 320);
   const x0 = (w - bw) / 2;
-  const rowH = Math.min(22, (h - 52) / Math.max(1, rows.length) - 5);
-  // Below the close button on the window's top-right corner.
-  const top = Math.max(42, (h - rows.length * (rowH + 5)) / 2 + 12);
+  const rowH = Math.min(24, (h - 24) / Math.max(1, rows.length) - 5);
+  const top = (h - rows.length * (rowH + 5)) / 2;
   const max = Math.max(1, ...rows.map(row => row.percent));
   return (
     <>
@@ -921,10 +907,12 @@ function OddsBar({ t, i, x, y, w, h, tier, percent, max }: {
   readonly tier: RarityTier; readonly percent: number; readonly max: number;
 }) {
   const look = RARITY_LOOK[tier];
-  const labelW = 92;
+  const labelW = 104;
   const trackW = w - labelW - 50;
-  const fill = Math.max(h, trackW * (percent / max));
-  const grow = useAnimatedStyle(() => ({ width: h + (fill - h) * seg(t.value, i * 0.08, 0.5 + i * 0.08) }));
+  // True scale against the biggest share; a tiny share still shows as a dot.
+  const dot = h * 0.62;
+  const fill = Math.max(dot, trackW * (percent / max));
+  const grow = useAnimatedStyle(() => ({ width: dot + (fill - dot) * seg(t.value, i * 0.08, 0.5 + i * 0.08) }));
   return (
     <Abs x={x} y={y} w={w} h={h}>
       <View style={{ flexDirection: 'row', alignItems: 'center', height: h }}>
@@ -951,26 +939,23 @@ const styles = StyleSheet.create({
   rank: { backgroundColor: BRAND.blue, alignItems: 'center', justifyContent: 'center' },
   rankText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white, textAlign: 'center', includeFontPadding: false },
   face: { overflow: 'hidden', backgroundColor: '#e8f4ff', borderWidth: 2, borderColor: '#cfe6fb', alignItems: 'center' },
-  nameBar: { width: 74, height: 9, borderRadius: 9, backgroundColor: 'rgba(61,95,140,0.25)', marginLeft: 2 },
-  youName: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, marginTop: 2 },
+  youName: { flexShrink: 1, fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 2 },
   count: { fontFamily: 'Shark', color: BRAND.blue, textAlign: 'center' },
   upChip: {
     flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.gold, borderRadius: 999, borderWidth: 2,
     borderColor: BRAND.white, paddingHorizontal: 8, height: 26, alignSelf: 'flex-start',
   },
-  upText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, marginTop: 2 },
-  rail: {
-    flexDirection: 'row', padding: 4, paddingHorizontal: 4, borderRadius: 16, backgroundColor: 'rgba(5,52,110,0.62)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.45)', alignItems: 'center',
+  upText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 2 },
+  boardFace: { width: 24, height: 24, borderRadius: 12, overflow: 'hidden', backgroundColor: '#e8f4ff', alignItems: 'center', borderWidth: 1.5, borderColor: BRAND.white },
+  boardCard: {
+    backgroundColor: BRAND.white, borderRadius: 18, borderWidth: 2.5, borderColor: '#cfe6fb', borderBottomWidth: 5, borderBottomColor: '#9cc3e8',
+    alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 6,
+    shadowColor: BRAND.navy, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },
   },
-  railPill: { position: 'absolute', left: 4, top: 4, borderRadius: 12, backgroundColor: BRAND.white, borderBottomWidth: 3, borderBottomColor: BRAND.sky },
-  tabText: { fontFamily: 'Shark', fontSize: 13 },
-  boardChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.white, borderRadius: 999, paddingLeft: 6,
-    paddingRight: 16, height: 46, borderWidth: 2, borderColor: '#d7ecfb', shadowColor: BRAND.navy, shadowOpacity: 0.14, shadowRadius: 5, shadowOffset: { width: 0, height: 2 },
-  },
-  boardFace: { width: 34, height: 34, borderRadius: 17, overflow: 'hidden', backgroundColor: '#e8f4ff', alignItems: 'center' },
-  boardChipText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, marginTop: 2 },
+  boardRing: { borderRadius: 18, borderWidth: 3, borderColor: BRAND.gold, margin: -3 },
+  boardLabel: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 2 },
+  boardScore: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  boardNum: { fontFamily: 'Shark', fontSize: 15, color: BRAND.blue, marginTop: 2 },
   slot: { position: 'absolute', backgroundColor: 'rgba(255,248,228,0.9)', borderWidth: 3, borderColor: BRAND.white, borderStyle: 'dashed' },
   price: {
     position: 'absolute', left: '22%', right: '22%', borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.3)',
@@ -985,7 +970,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, height: 30, borderRadius: 999,
     backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#d7ecfb',
   },
-  grownUpText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, marginTop: 2 },
+  grownUpText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 2 },
   coinPanel: { position: 'absolute', backgroundColor: BRAND.blue, borderRadius: 22, borderWidth: 3, borderColor: BRAND.white },
   coinSlot: {
     position: 'absolute', backgroundColor: '#0a4f9c', borderWidth: 3, borderColor: '#2f86d6', alignItems: 'center', justifyContent: 'center',
@@ -995,8 +980,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, borderRadius: 999, backgroundColor: BRAND.white,
     borderWidth: 2, paddingHorizontal: 12,
   },
-  levelNum: { fontFamily: 'Shark', fontSize: 14, color: BRAND.blue, marginTop: 2 },
-  levelName: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 2 },
+  levelNum: { fontFamily: 'Shark', fontSize: 16, color: BRAND.blue, marginTop: 2 },
+  levelName: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 2 },
   codeField: {
     flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.white, borderRadius: 14, borderWidth: 2,
     borderColor: '#d7ecfb', paddingHorizontal: 12,
@@ -1006,12 +991,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 2,
     borderColor: '#d7ecfb', paddingHorizontal: 8, shadowColor: BRAND.navy, shadowOpacity: 0.14, shadowRadius: 5, shadowOffset: { width: 0, height: 2 },
   },
+  postCaption: { flex: 1, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 2 },
   postFace: { width: 32, height: 32, borderRadius: 16, overflow: 'hidden', backgroundColor: '#e8f4ff', alignItems: 'center' },
   likeChip: {
     position: 'absolute', right: -8, bottom: -10, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.white,
     borderRadius: 999, borderWidth: 2, borderColor: '#ffd0cc', paddingHorizontal: 6, height: 24,
   },
-  likeText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, marginTop: 2 },
+  likeText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 2 },
   safeDisc: {
     backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#d7ecfb',
     shadowColor: BRAND.navy, shadowOpacity: 0.16, shadowRadius: 5, shadowOffset: { width: 0, height: 3 },
@@ -1023,7 +1009,7 @@ const styles = StyleSheet.create({
   },
   captionText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 2 },
   oddsLabel: { borderRadius: 999, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-  oddsLabelText: { fontFamily: 'Shark', fontSize: 12, marginTop: 2 },
+  oddsLabelText: { fontFamily: 'Shark', fontSize: 14, marginTop: 2 },
   oddsTrack: { borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.6)', overflow: 'hidden', justifyContent: 'center' },
   oddsPct: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, width: 42, textAlign: 'right' },
 });

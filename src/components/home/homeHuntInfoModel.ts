@@ -16,21 +16,25 @@ export function oddsRows(info: HomeHuntInfo | null | undefined): { tier: 1 | 2 |
   return values.map((percent, i) => ({ tier: (i + 1) as 1 | 2 | 3 | 4 | 5, percent: Number(percent) || 0 }));
 }
 
-type SheetPoint = { readonly icon: 'star' | 'trophy' | 'sparkle' | 'info' | 'dice'; readonly text: string };
+type SheetPoint = { readonly icon: 'star' | 'trophy' | 'sparkle' | 'info' | 'new' | 'member'; readonly text: string };
 const points = (lines: readonly string[], icon: SheetPoint['icon']): SheetPoint[] => lines.map(text => ({ icon, text }));
 
 /**
- * The set page's "How rare is each find?" sheet: bars for the five rarities (the
- * server's numbers), then the server's other odds lines. The first odds line
- * repeats the bars as a sentence, so it is dropped when the bars can show.
+ * The set page's "How rare finds are" sheet: bars for the five rarities, then
+ * three short lines. Every number comes from the server's odds block; when an
+ * older server sends only its sentences, those show instead (at most three).
  */
 export function oddsInfoSheet(info: HomeHuntInfo | null | undefined) {
   const rows = oddsRows(info);
-  const lines = clean(info?.odds_lines);
+  const odds = info?.odds;
+  const local: SheetPoint[] = odds ? [
+    ...(Number(odds.focus) > 0 ? [{ icon: 'star' as const, text: `Pick a set to focus: ${Number(odds.focus)}% of finds come from it.` }] : []),
+    ...(Number(odds.missing_multiplier) > 1 ? [{ icon: 'new' as const, text: `New-to-you items show up ${Number(odds.missing_multiplier)} times more.` }] : []),
+    { icon: 'member' as const, text: 'VIP shows more finds. The odds stay the same.' },
+  ] : points(clean(info?.odds_lines).slice(0, 3), 'sparkle');
   return {
     id: 'odds', name: 'Drop odds',
-    pages: [{ key: 'odds', hero: 'odds' as const, headline: 'How rare is each find?', heroData: { odds: rows },
-      points: points(rows.length ? lines.slice(1) : lines, 'dice') }],
+    pages: [{ key: 'odds', hero: 'odds' as const, headline: 'How rare finds are', heroData: { odds: rows }, points: local }],
   };
 }
 

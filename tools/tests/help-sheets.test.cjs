@@ -65,10 +65,26 @@ test('the sheet is safe-area correct, dismissable every way, and its scenes stop
 test('Shark Social keeps its safety rules and grown-up links', () => {
   const social = sheets.HELP_SHEETS.social;
   const text = social.pages.flatMap(page => page.points.map(point => point.text)).join(' ');
-  for (const words of [/Mean posts get removed/, /name, address, school or phone/, /Report/]) assert.match(text, words);
+  for (const words of [/Mean posts get removed/, /name, school, address or phone/, /report/]) assert.match(text, words);
   const help = read('src/screens/threads/SocialHelp.tsx');
   assert.match(help, /BlockedPlayers/);
   assert.match(help, /Grown-ups: email us/);
+});
+
+test('every glossary line fits the word sheet: 12 words at most', () => {
+  const glossary = loadTs('src/services/help/glossary.ts');
+  for (const key of glossary.GLOSSARY_KEYS) {
+    const term = glossary.LOCAL_GLOSSARY[key];
+    for (const line of [term.what, term.earn]) assert.ok(sheets.wordCount(line) <= 12, `${key}: ${line}`);
+  }
+  // A long server line falls back to the local one on the word sheet.
+  const help = loadTs('src/components/help/TermSheet.tsx', {
+    './HelpSheet': { default: () => null }, react: { useEffect: () => undefined, useState: v => [v, () => undefined] },
+    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'F' },
+  });
+  const long = { ...glossary.LOCAL_GLOSSARY.energy, earn: 'Energy powers boss raids and coin upgrades. Earn it from home finds, rides and your daily chest.' };
+  assert.equal(help.termSheetContent(long, 3).pages[0].points[1].text, glossary.LOCAL_GLOSSARY.energy.earn);
+  assert.equal(help.termSheetContent(long, 3).pages[0].heroData.caption, 'You have 3 Energy');
 });
 
 test('the pin hold copy matches the trading screen constant', () => {

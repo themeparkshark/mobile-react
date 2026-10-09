@@ -48,6 +48,7 @@ export const HELP_LIMITS = { pages: 3, points: 3, pointWords: 12, headlineWords:
 
 /** How long a picked pin is held for you (the server's default hold, see pinTradeModel). */
 const PIN_HOLD_MINUTES = 2;
+const PIN_HOLD_WORD = 'Two';
 
 export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
   standings: {
@@ -55,20 +56,20 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
     pages: [
       { key: 'climb', hero: 'standings_climb', headline: 'Win rides, climb up',
         points: [
-          { icon: 'ride', text: 'Every ride challenge you win is 1 point.' },
-          { icon: 'retry', text: 'Each ride counts once per park day.' },
+          { icon: 'ride', text: 'Win a ride challenge: +1 on the board.' },
+          { icon: 'check', text: 'Each ride counts once per park day.' },
           { icon: 'timer', text: 'A new week starts every Monday.' },
         ] },
-      { key: 'podium', hero: 'standings_podium', headline: 'Top 3 win prizes',
+      { key: 'podium', hero: 'standings_podium', headline: 'Top 3 win each week',
         points: [
-          { icon: 'crown', text: 'The top 3 each week earn a title.' },
-          { icon: 'ticket', text: 'They get bonus Tickets too.' },
-          { icon: 'star', text: 'Hit your weekly goals for extra XP.' },
+          { icon: 'crown', text: '1st Ride Champ, 2nd Ride Ace, 3rd Ride Star.' },
+          { icon: 'ticket', text: 'Plus bonus Tickets for all three.' },
+          { icon: 'star', text: 'Hit your weekly goals for bonus XP.' },
         ] },
-      { key: 'boards', hero: 'standings_boards', headline: 'Three ways to rank',
+      { key: 'boards', hero: 'standings_boards', headline: 'Pick your board',
         points: [
           { icon: 'timer', text: 'This Week: rides won this week.' },
-          { icon: 'heart', text: 'Friends: you and your friends.' },
+          { icon: 'heart', text: 'Friends: the same race, just your crew.' },
           { icon: 'trophy', text: 'All-Time: every ride coin you own.' },
         ] },
     ],
@@ -82,11 +83,11 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
           { icon: 'swap', text: 'Give one of your pins for it.' },
           { icon: 'gift', text: 'The new pin is yours to keep.' },
         ] },
-      { key: 'clock', hero: 'pins_clock', headline: 'Take your time',
+      { key: 'clock', hero: 'pins_clock', headline: `${PIN_HOLD_WORD} minutes to decide`,
         points: [
-          { icon: 'timer', text: `Your pick is saved for ${PIN_HOLD_MINUTES} minutes.` },
-          { icon: 'retry', text: 'Trade as many times as you like.' },
-          { icon: 'lock', text: 'Trades are final, so pick a favorite.' },
+          { icon: 'timer', text: `Your pick is held for ${PIN_HOLD_MINUTES} minutes.` },
+          { icon: 'swap', text: 'Trade as often as you like.' },
+          { icon: 'lock', text: 'Trades can\'t be undone.' },
         ] },
     ],
   },
@@ -95,7 +96,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
     pages: [
       { key: 'gear', hero: 'shop_gear', headline: 'Dress up your shark',
         points: [
-          { icon: 'coin', text: 'Spend Shark Coins on gear.' },
+          { icon: 'coin', text: 'Spend Coins on gear.' },
           { icon: 'shark', text: 'Try it on before you buy.' },
           { icon: 'heart', text: 'Tap the heart to save it for later.' },
         ] },
@@ -108,7 +109,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         points: [
           { icon: 'ticket', text: 'Packs of Tickets, Energy and more.' },
           { icon: 'lock', text: 'A grown-up buys them with real money.' },
-          { icon: 'play', text: 'Bonus ads are optional. Skipping costs nothing.' },
+          { icon: 'play', text: 'Bonus ads are free. Watch one or skip it.' },
         ] },
     ],
   },
@@ -125,7 +126,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         points: [
           { icon: 'coin', text: 'Tap a coin to level it up.' },
           { icon: 'parts', text: 'Use Energy and that ride\'s Ride Parts.' },
-          { icon: 'queue', text: 'Earn Ride Parts waiting in that ride\'s line.' },
+          { icon: 'queue', text: 'Get Ride Parts from LinePlay in its line, or by winning.' },
         ] },
     ],
   },
@@ -149,11 +150,11 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
   redeem: {
     id: 'redeem', name: 'Redeem',
     pages: [
-      { key: 'code', hero: 'redeem_chest', headline: 'Got a coin code?',
+      { key: 'code', hero: 'redeem_chest', headline: 'Redeem a coin code',
         points: [
-          { icon: 'edit', text: 'Type the code, then tap Done.' },
-          { icon: 'gift', text: 'Win coins, Tickets, Energy or gear.' },
-          { icon: 'timer', text: 'Each code works once. Some end fast.' },
+          { icon: 'edit', text: 'Type the code and tap Next.' },
+          { icon: 'gift', text: 'Get Coins, Tickets, Energy or a prize.' },
+          { icon: 'timer', text: 'One use per player. Some run out fast.' },
         ] },
     ],
   },
@@ -169,8 +170,8 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
       { key: 'safe', hero: 'social_safe', headline: 'Kind and safe',
         points: [
           { icon: 'heart', text: 'Nice words only. Mean posts get removed.' },
-          { icon: 'lock', text: 'Never share your name, address, school or phone.' },
-          { icon: 'info', text: 'See something bad? Tap the dots, then Report.' },
+          { icon: 'lock', text: 'Never share your name, school, address or phone.' },
+          { icon: 'bell', text: 'Tap the dots on a post to report it.' },
         ] },
     ],
   },

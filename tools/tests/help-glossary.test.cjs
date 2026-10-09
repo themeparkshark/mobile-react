@@ -146,5 +146,5 @@ test('the Supplies shop and ad offers are explained: optional, what is sold, nev
   assert.equal(shop.id, 'shop');
   const shopText = shop.pages.flatMap(page => page.points.map(point => point.text)).join(' ');
   assert.match(shopText, /grown-up/);
-  assert.match(shopText, /optional/);
+  assert.match(shopText, /skip it/);
 });
