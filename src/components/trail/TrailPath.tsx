@@ -1,42 +1,65 @@
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { View, type LayoutChangeEvent } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming, withSequence, withSpring } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { milestonesCrossed } from '../../services/trail/trailModel';
 import { BRAND } from '../../ui';
 import { STEPS_ART } from './TrailBoxArt';
 
 const SHARK = require('../../../assets/icons/game/shark.png');
 
 /**
+ * What each path last showed, by key (a box id). A path only animates the new
+ * part of the walk since you last looked, the way Pikmin Bloom's seedlings
+ * tick down when you open the list. Lives for the app session.
+ */
+const lastSeen = new Map<string, number>();
+export function seenFraction(key: string | undefined): number | null {
+  return key ? lastSeen.get(key) ?? null : null;
+}
+
+/**
  * The walking path: a sky track with footprint dots that fills gold as you
  * walk, with a tiny shark riding the front of the fill. It only ever moves
- * forward on screen. A fill that grows animates over ~0.9 s from where it was,
- * so catching up after the app was closed reads as "my walk just landed".
+ * forward: the first time a box is seen it appears at its real progress; after
+ * that, opening the sheet animates only the steps walked since you last looked
+ * (about a second), with a light tick at 25/50/75/100%.
  */
-function TrailPath({ fraction, height = 16, ready = false, onFilled }: {
+function TrailPath({ fraction, height = 16, ready = false, seenKey, onFilled }: {
   readonly fraction: number;
   readonly height?: number;
   readonly ready?: boolean;
+  /** Remember progress under this key (box id) so reopening animates only the new walk. */
+  readonly seenKey?: string;
   /** Called once when the fill animation reaches the end. */
   readonly onFilled?: () => void;
 }) {
   const reduced = useReducedGameMotion();
   const [width, setWidth] = useState(0);
-  const shown = useRef(0);
-  const fill = useSharedValue(0);
-  const bump = useSharedValue(1);
   const target = Math.max(0, Math.min(1, ready ? 1 : fraction));
+  const start = seenFraction(seenKey) ?? target;
+  const fill = useSharedValue(Math.min(start, target));
+  const bump = useSharedValue(1);
 
   useEffect(() => {
-    const next = Math.max(shown.current, target);
-    const grew = next > shown.current + 0.001;
-    shown.current = next;
-    if (reduced || !grew) { fill.value = next; return; }
-    fill.value = withTiming(next, { duration: 900, easing: Easing.out(Easing.cubic) });
+    const from = Math.max(seenFraction(seenKey) ?? fill.value, 0);
+    const next = Math.max(from, target);
+    if (seenKey) lastSeen.set(seenKey, next);
+    if (reduced || next <= fill.value + 0.001) { fill.value = next; return; }
+    const beats = milestonesCrossed(fill.value, next);
+    const ms = 650 + Math.min(700, (next - fill.value) * 1400);
+    const beat = (i: number) => {
+      if (i >= beats.length) return;
+      void Haptics.impactAsync(beats[i] >= 1 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    };
+    beats.forEach((m, i) => setTimeout(() => beat(i), 250 + ms * ((m - fill.value) / (next - fill.value))));
+    fill.value = withTiming(next, { duration: ms, easing: Easing.out(Easing.cubic) }, done => {
+      if (done && next >= 1 && onFilled) runOnJS(onFilled)();
+    });
     bump.value = withSequence(withTiming(1.25, { duration: 160 }), withSpring(1, { damping: 8, stiffness: 240 }));
-    if (next >= 1 && onFilled) setTimeout(onFilled, 900);
-  }, [target, reduced, fill, bump, onFilled]);
+  }, [target, reduced, seenKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fillStyle = useAnimatedStyle(() => ({ width: Math.max(height, fill.value * width) }));
   const sharkSize = height * 1.9;

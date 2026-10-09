@@ -80,14 +80,15 @@ test('recorder: the open map makes a live window every 3 minutes from fixes the 
   assert.notEqual(out[0].id, out[1].id);
 });
 
-test('recorder: a jump (tunnel, ride) is never counted as walking', () => {
+test('recorder: a jump (out of an indoor queue) keeps the queue time but never counts the hop', () => {
   const r = new m.TrailRecorder(() => 'x');
   r.fix(PARK, A, 0);
   r.fix(PARK, north(A, 10), 10_000);
   r.fix(PARK, north(A, 20), 25_000);
-  const out = r.fix(PARK, north(A, 600), 40_000);
+  const out = r.fix(PARK, north(A, 600), 600_000);
   assert.equal(out.length, 1);
   assert.equal(out[0].gps_m, 20);
+  assert.equal(out[0].ended_at, 600_000);
 });
 
 test('recorder: app closed in the park becomes one "closed" window between the two in-park points', () => {
@@ -105,14 +106,16 @@ test('recorder: app closed in the park becomes one "closed" window between the t
   assert.equal(r.away, null);
 });
 
-test('recorder: coming back somewhere else (another park, home) sends no closed window', () => {
+test('recorder: reopening outside the park (the tram home) sends a "left" window ending at the last park point', () => {
   const r = new m.TrailRecorder(() => 'x');
   r.fix(PARK, A, 0);
+  r.fix(PARK, north(A, 40), 40_000);
   r.background(60_000);
-  assert.equal((r.fix(PARK + 1, A, 3_600_000)).length, 0);
-  r.fix(PARK + 1, A, 3_700_000);
-  r.background(3_800_000);
-  assert.equal((r.fix(null, A, 4_000_000)).length, 0);
+  const out = r.fix(null, north(A, 5000), 3_600_000);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].source, 'left');
+  assert.equal(out[0].park_id, PARK);
+  assert.equal(JSON.stringify(out[0].end), JSON.stringify(north(A, 40)));
   assert.equal(r.away, null);
 });
 
@@ -125,4 +128,27 @@ test('recorder: leaving the park closes the window; tiny windows are dropped', (
   assert.equal(out[0].gps_m, 40);
   r.fix(PARK, A, 100_000);
   assert.equal((r.flush(105_000)).length, 0);
+});
+
+test('recorder: opening the sheet twice quickly and then pocketing the phone loses nothing (R1 blocker)', () => {
+  const r = new m.TrailRecorder(() => 'x');
+  r.fix(PARK, A, 0);
+  r.fix(PARK, north(A, 30), 30_000);
+  assert.equal(r.flush(35_000).length, 1);
+  assert.equal(r.flush(40_000).length, 0); // 5 s window: keeps running
+  assert.equal(r.flush(45_000).length, 0);
+  assert.equal(r.background(50_000).length, 0); // 15 s window: becomes the start of the closed one
+  assert.equal(r.away.at, 35_000);
+  const back = r.fix(PARK, north(A, 800), 1_800_000);
+  assert.equal(back.length, 1);
+  assert.equal(back[0].source, 'closed');
+  assert.equal(back[0].started_at, 35_000);
+});
+
+test('recorder: backgrounding right after a fresh window still remembers the park point', () => {
+  const r = new m.TrailRecorder(() => 'x');
+  r.fix(PARK, A, 0);
+  assert.equal(r.background(2_000).length, 0);
+  assert.ok(r.away);
+  assert.equal(r.fix(PARK, A, 600_000)[0].source, 'closed');
 });

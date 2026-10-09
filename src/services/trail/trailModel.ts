@@ -9,7 +9,7 @@
 
 export type TrailTier = 'blue' | 'red' | 'gold';
 export type TrailRewardKind = 'coins' | 'energy' | 'tickets' | 'mystery_box' | 'exclusive';
-export type TrailMissReason = 'ride' | 'outside' | 'not_checked_in' | 'hour_cap' | 'day_cap' | 'too_old' | 'overlap' | 'gps_short' | 'bad';
+export type TrailMissReason = 'ride' | 'outside' | 'not_checked_in' | 'hour_cap' | 'day_cap' | 'too_old' | 'overlap' | 'gps_short' | 'left_early' | 'bad';
 
 export interface TrailBox {
   readonly id: number;
@@ -56,6 +56,8 @@ export interface TrailState {
   readonly gold_in: number;
   readonly next_ride_box: number | null;
   readonly odds: { readonly tiers: readonly TrailOddsTier[]; readonly gold_pity: number; readonly exclusives: readonly string[] };
+  /** Trail Exclusives with art and whether you have each (newer servers). */
+  readonly exclusives?: readonly { readonly item_id: number; readonly name: string; readonly icon_url: string | null; readonly owned: boolean }[];
   readonly sync?: TrailSyncResult;
   readonly opened?: { readonly box: TrailBox; readonly rewards: readonly TrailReward[]; readonly replayed: boolean };
 }
@@ -67,7 +69,7 @@ export interface TrailSyncResult {
   readonly goal_box: unknown | null;
 }
 
-export const TIER_NAME: Record<TrailTier, string> = { blue: 'Blue Box', red: 'Red Box', gold: 'Gold Box' };
+export const BOX_NAME: Record<TrailTier, string> = { blue: 'Blue Box', red: 'Red Box', gold: 'Gold Box' };
 /** Draw size grows with rarity, so the tier reads by size and trim as well as colour. */
 export const TIER_SCALE: Record<TrailTier, number> = { blue: 0.86, red: 0.94, gold: 1 };
 
@@ -135,7 +137,8 @@ export function missCopy(reason: TrailMissReason): string | null {
     case 'not_checked_in': return 'Open the map at the park so your steps count.';
     case 'hour_cap':
     case 'day_cap': return 'You walked a ton! Some steps were past the limit.';
-    case 'gps_short': return 'Some steps did not match your path on the map.';
+    case 'gps_short': return 'Your phone lost the map for a bit, so some steps did not count.';
+    case 'left_early': return 'Open the map before you leave the park to save every step.';
     default: return null;
   }
 }
@@ -177,7 +180,7 @@ export interface TrailPoint { readonly lat: number; readonly lng: number }
 export interface TrailSegment {
   readonly id: string;
   readonly park_id: number;
-  readonly source: 'live' | 'closed';
+  readonly source: 'live' | 'closed' | 'left';
   readonly started_at: number;
   readonly ended_at: number;
   steps: number | null;
@@ -194,7 +197,7 @@ interface LiveRun { parkId: number; startAt: number; start: TrailPoint; lastAt: 
 export const LIVE_FLUSH_MS = 3 * 60_000;
 /** One hop longer than this between published fixes is a re-seat (a tunnel, a ride), not a walk. */
 export const MAX_HOP_M = 120;
-/** Shorter windows are folded into the next one. */
+/** Shorter live windows are never sent alone: they keep running, or start the closed window. */
 export const MIN_WINDOW_MS = 20_000;
 
 export function metersBetween(a: TrailPoint, b: TrailPoint): number {
@@ -216,6 +219,8 @@ export function metersBetween(a: TrailPoint, b: TrailPoint): number {
 export class TrailRecorder {
   private run: LiveRun | null = null;
   away: TrailAway | null = null;
+  /** The last in-park fix seen, so going to the background always leaves a starting point. */
+  private lastFix: { parkId: number; pt: TrailPoint } | null = null;
   private seq = 0;
 
   constructor(private readonly makeId: (at: number) => string = at => `${at.toString(36)}-${Math.random().toString(36).slice(2, 8)}`) {}
@@ -224,14 +229,16 @@ export class TrailRecorder {
   fix(parkId: number | null, pt: TrailPoint, at: number): TrailSegment[] {
     const out: TrailSegment[] = [];
     // Back from the background: the window while the app was closed.
-    if (this.away && parkId != null) {
-      if (this.away.parkId === parkId && at - this.away.at >= MIN_WINDOW_MS) {
-        out.push(this.segment(parkId, 'closed', this.away.at, at, this.away.pt, pt, 0));
+    if (this.away) {
+      const away = this.away;
+      this.away = null;
+      if (at - away.at >= MIN_WINDOW_MS) {
+        if (parkId === away.parkId) out.push(this.segment(parkId, 'closed', away.at, at, away.pt, pt, 0));
+        // Reopened outside the park (the tram home): the walk still counts, ending at the last park point.
+        else out.push(this.segment(away.parkId, 'left', away.at, at, away.pt, away.pt, 0));
       }
-      this.away = null;
-    } else if (this.away && parkId == null) {
-      this.away = null;
     }
+    this.lastFix = parkId == null ? null : { parkId, pt };
     if (parkId == null) {
       const closed = this.close();
       if (closed) out.push(closed);
@@ -248,7 +255,10 @@ export class TrailRecorder {
     const hop = metersBetween(this.run.last, pt);
     if (hop <= MAX_HOP_M) this.run.gpsM += hop;
     else {
-      // A jump: close what we have and start fresh here (never count the jump).
+      // A jump (out of an indoor queue, a tunnel): the window keeps its time, so the steps in the
+      // queue still count, but the hop itself never adds distance. Close it here and start fresh.
+      this.run.last = pt;
+      this.run.lastAt = at;
       const closed = this.close();
       if (closed) out.push(closed);
       this.run = { parkId, startAt: at, start: pt, lastAt: at, last: pt, gpsM: 0 };
@@ -267,16 +277,28 @@ export class TrailRecorder {
   /** The app goes to the background: close the live window and remember where we were. */
   background(at: number): TrailSegment[] {
     const run = this.run;
-    const closed = this.close(at);
-    if (run) this.away = { parkId: run.parkId, at, pt: run.last };
-    return closed ? [closed] : [];
+    const out: TrailSegment[] = [];
+    if (run && at - run.startAt >= MIN_WINDOW_MS) {
+      const closed = this.close(at);
+      if (closed) out.push(closed);
+    }
+    this.run = null;
+    // A short live window is not lost: the closed window starts where it started.
+    const last = run ?? this.lastFix;
+    if (last) {
+      const from = run && at - run.startAt < MIN_WINDOW_MS ? run.startAt : at;
+      const pt = run && at - run.startAt < MIN_WINDOW_MS ? run.start : (run?.last ?? this.lastFix!.pt);
+      this.away = { parkId: run?.parkId ?? this.lastFix!.parkId, at: from, pt };
+    }
+    return out;
   }
 
-  /** Close the live window now (the sheet opened, a manual refresh). */
+  /** Close the live window now (the sheet opened). A window too short to send keeps running. */
   flush(at: number): TrailSegment[] {
     const run = this.run;
+    if (!run || at - run.startAt < MIN_WINDOW_MS) return [];
     const closed = this.close(at);
-    if (run && closed) this.run = { ...run, startAt: at, start: run.last, lastAt: at, gpsM: 0 };
+    this.run = { ...run, startAt: at, start: run.last, lastAt: at, gpsM: 0 };
     return closed ? [closed] : [];
   }
 
@@ -289,7 +311,7 @@ export class TrailRecorder {
     return this.segment(run.parkId, 'live', run.startAt, end, run.start, run.last, run.gpsM);
   }
 
-  private segment(parkId: number, source: 'live' | 'closed', from: number, to: number, a: TrailPoint, b: TrailPoint, gpsM: number): TrailSegment {
+  private segment(parkId: number, source: TrailSegment['source'], from: number, to: number, a: TrailPoint, b: TrailPoint, gpsM: number): TrailSegment {
     this.seq += 1;
     return { id: `${this.makeId(from)}-${this.seq}`, park_id: parkId, source, started_at: Math.round(from), ended_at: Math.round(to),
       steps: null, gps_m: Math.round(gpsM), start: a, end: b };

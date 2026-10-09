@@ -101,6 +101,7 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
   const [syncVersion, setSyncVersion] = useState(0);
   const [motion, setMotion] = useState<MotionAccess>('unknown');
   const recorder = useRef(new TrailRecorder());
+  const awaySaved = useRef(false);
   const pending = useRef<TrailSegment[]>([]);
   const uploading = useRef(false);
   const parkId = park?.id ?? null;
@@ -120,7 +121,7 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
       try {
         const [p, a] = await Promise.all([AsyncStorage.getItem(PENDING_KEY), AsyncStorage.getItem(AWAY_KEY)]);
         if (p) pending.current = [...(JSON.parse(p) as TrailSegment[]), ...pending.current].slice(-MAX_PENDING);
-        if (a && !recorder.current.away) recorder.current.away = JSON.parse(a) as TrailAway;
+        if (a && !recorder.current.away) { recorder.current.away = JSON.parse(a) as TrailAway; awaySaved.current = true; }
       } catch { /* nothing saved */ }
     })();
   }, [enabled]);
@@ -129,32 +130,50 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
     void AsyncStorage.setItem(PENDING_KEY, JSON.stringify(pending.current.slice(-MAX_PENDING))).catch(() => undefined);
   }, []);
 
+  const backoff = useRef(0);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const upload = useCallback(async () => {
     if (!enabledRef.current || uploading.current || pending.current.length === 0) return;
     uploading.current = true;
     setSyncing(true);
+    let retryIn = 0;
     try {
       const batch = pending.current.slice(0, 20);
       for (const seg of batch) if (seg.steps == null) seg.steps = await stepsFor(seg);
       const next = await postTrailWalk(parkRef.current, batch);
       pending.current = pending.current.filter(s => !batch.includes(s));
+      backoff.current = 0;
       persist();
       setState(next);
       setSyncVersion(v => v + 1);
+      if (pending.current.length > 0) retryIn = 1500;
     } catch (error: any) {
-      // 4xx other than throttling: the server will never take these; drop them.
-      const status = error?.response?.status;
-      if (status && status >= 400 && status < 500 && status !== 429) {
+      const status: number | undefined = error?.response?.status;
+      if (status === 404) {
+        // The feature is off on this server: stop and forget.
         pending.current = [];
         persist();
-        if (status === 404) setFlag(false);
+        setFlag(false);
+      } else if (status === 400 || status === 422) {
+        // The server will never take this batch; keep everything after it.
+        pending.current = pending.current.slice(20);
+        persist();
+      } else {
+        // No signal, 401/403 (signing back in), 429 or 5xx: keep the walk and try later.
+        const header = Number(error?.response?.headers?.['retry-after']);
+        backoff.current = Math.min(5 * 60_000, Math.max(5_000, backoff.current * 2 || 5_000));
+        retryIn = Number.isFinite(header) && header > 0 ? header * 1000 : backoff.current;
       }
     } finally {
       uploading.current = false;
       setSyncing(false);
     }
-    if (pending.current.length > 0) setTimeout(() => void upload(), 1500);
+    if (retryIn > 0) {
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+      retryTimer.current = setTimeout(() => { retryTimer.current = null; void upload(); }, retryIn);
+    }
   }, [persist]);
+  useEffect(() => () => { if (retryTimer.current) clearTimeout(retryTimer.current); }, []);
 
   const take = useCallback((segments: TrailSegment[]) => {
     if (!segments.length) return;
@@ -164,25 +183,19 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
   }, [persist, upload]);
 
   // Every published fix the map already gets (no extra GPS).
+  const onFix = useCallback((lat: number, lng: number) => {
+    take(recorder.current.fix(parkRef.current, { lat, lng }, Date.now()));
+    if (!recorder.current.away && awaySaved.current) {
+      awaySaved.current = false;
+      void AsyncStorage.removeItem(AWAY_KEY).catch(() => undefined);
+    }
+  }, [take]);
+  const locRef = useRef(location);
+  locRef.current = location;
   useEffect(() => {
     if (!enabled || !location) return;
-    take(recorder.current.fix(parkId, { lat: location.latitude, lng: location.longitude }, Date.now()));
-    if (!recorder.current.away) void AsyncStorage.removeItem(AWAY_KEY).catch(() => undefined);
-  }, [enabled, location?.latitude, location?.longitude, parkId, take]);
-
-  useEffect(() => {
-    if (!enabled) return undefined;
-    const sub = AppState.addEventListener('change', s => {
-      if (s === 'background') {
-        take(recorder.current.background(Date.now()));
-        const away = recorder.current.away;
-        if (away) void AsyncStorage.setItem(AWAY_KEY, JSON.stringify(away)).catch(() => undefined);
-      } else if (s === 'active') {
-        void readMotion().then(setMotion);
-      }
-    });
-    return () => sub.remove();
-  }, [enabled, take]);
+    onFix(location.latitude, location.longitude);
+  }, [enabled, location?.latitude, location?.longitude, parkId, onFix]);
 
   const refresh = useCallback(async () => {
     if (!enabledRef.current) return;
@@ -192,6 +205,28 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
       if (error?.response?.status === 404) setFlag(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const sub = AppState.addEventListener('change', s => {
+      if (s === 'background') {
+        take(recorder.current.background(Date.now()));
+        const away = recorder.current.away;
+        if (away) {
+          awaySaved.current = true;
+          void AsyncStorage.setItem(AWAY_KEY, JSON.stringify(away)).catch(() => undefined);
+        }
+      } else if (s === 'active') {
+        void readMotion().then(setMotion);
+        // Catch up at once from the last known spot: the walk lands as soon as the app opens.
+        const loc = locRef.current;
+        if (loc && parkRef.current != null) onFix(loc.latitude, loc.longitude);
+        else void refresh();
+      }
+    });
+    return () => sub.remove();
+  }, [enabled, take, onFix]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   useEffect(() => { if (enabled) void refresh(); }, [enabled, parkId, refresh]);
 
