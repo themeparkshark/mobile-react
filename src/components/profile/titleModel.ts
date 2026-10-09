@@ -43,7 +43,7 @@ type SetLike = {
 };
 
 type StampLike = {
-  readonly id: number; readonly name: string; readonly goal?: string | null;
+  readonly id: number; readonly name: string; readonly goal?: string | null; readonly how_to?: string | null;
   readonly icon_thumb_url?: string | null; readonly icon_url?: string | null;
 };
 type StampsLike = {
@@ -78,7 +78,8 @@ export function completeMeaning(bookName: string, total: number): string {
 
 export function stampMeaning(stamp: StampLike | undefined): string {
   if (!stamp) return 'You earned it with a stamp in your Stamp Book.';
-  const goal = clean(stamp.goal).replace(/[.!]+$/, '');
+  // The short kid copy ("Catch 2 legendary finds") when the server sends it, else the full goal.
+  const goal = (clean(stamp.how_to) || clean(stamp.goal)).replace(/[.!]+$/, '');
   return goal ? `You earned the ${clean(stamp.name)} stamp: ${goal}.` : `You earned the ${clean(stamp.name)} stamp.`;
 }
 

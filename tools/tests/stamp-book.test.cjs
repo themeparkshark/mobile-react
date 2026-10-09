@@ -74,8 +74,9 @@ test('a locked stamp shows its how-to and progress; a secret hides its name and 
 
   // Passports are percentages; big counts get separators; earned is always full.
   assert.equal(model.progressLabel({ progress: 40, target: 100 }), '40 / 100');
-  assert.equal(model.progressLabel({ progress: 8120, target: 30000 }), '8,120 / 30K');
+  assert.equal(model.progressLabel({ progress: 8120, target: 30000 }), '8.1K / 30K');
   assert.equal(model.progressLabel({ progress: 12560, target: 30000 }), '12.5K / 30K');
+  assert.equal(model.progressLabel({ progress: 0, target: 10000 }), '0 / 10K');
   assert.equal(model.compactCount(1250000), '1.2M');
   assert.equal(model.toBookStamp(stamp({ is_earned: true, progress: 0 })).percent, 100);
 });

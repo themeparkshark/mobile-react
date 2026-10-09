@@ -316,6 +316,14 @@ export function compactCount(n: number): string {
   return `${Number.isInteger(x) ? x.toFixed(0) : x.toFixed(1)}${unit}`;
 }
 
+/** Thousands with one decimal, rounded down: 3,100 -> "3.1K", 950 -> "0.9K", 0 -> "0". */
+function kCount(n: number): string {
+  const v = Math.max(0, Math.floor(n));
+  if (v >= 1_000_000 || v === 0) return compactCount(v);
+  const x = Math.floor(v / 100) / 10;
+  return `${Number.isInteger(x) ? x.toFixed(0) : x.toFixed(1)}K`;
+}
+
 /** A secret's teaser: which kind of play finds it, never its name or goal. */
 export function secretHint(s: Pick<BookStamp, 'metric' | 'target'>): string {
   const req = requirement(s);
@@ -342,7 +350,10 @@ export function earnedDate(iso: string | null): string | null {
 export function progressLabel(stamp: Pick<BookStamp, 'progress' | 'target'> & { readonly metric?: string }): string {
   if (stamp.metric && isMeters(stamp.metric)) return `${km(Math.min(stamp.progress, stamp.target))} / ${km(stamp.target)} km`;
   // One number-first format everywhere ("40 / 100", never "40%"); big counts shorten so they fit a tile ("8.1K / 30K").
-  return `${compactCount(Math.min(stamp.progress, stamp.target))} / ${compactCount(stamp.target)}`;
+  const done = Math.min(stamp.progress, stamp.target);
+  // Both sides in one style: "3.1K / 10K", never "3,100 / 10K".
+  if (stamp.target >= 10_000) return `${kCount(done)} / ${compactCount(stamp.target)}`;
+  return `${compactCount(done)} / ${compactCount(stamp.target)}`;
 }
 
 /** Ring geometry for a 0..1 fraction (SVG stroke-dasharray). */

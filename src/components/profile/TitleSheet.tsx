@@ -162,23 +162,14 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
           )}
           <View style={[styles.actions, confirming && styles.hiddenActions]} pointerEvents={confirming ? 'none' : 'auto'}
             accessibilityElementsHidden={confirming} importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}>
-            {(earned === null || earned.some(entry => entry.title !== worn)) && (
-              <GameButton label="Change title" tone="onBlue" icon="swap" disabled={!!busy}
-                onPress={() => setMode('change')} accessibilityHint="Shows the titles you have earned" />
+            {/* Two jobs only: change it (the list ends with More titles) or take it off. */}
+            <GameButton label="Change title" tone="onBlue" icon="swap" disabled={!!busy}
+              onPress={() => setMode('change')} accessibilityHint="Shows the titles you have and where to get more" />
+            {!!worn && (
+              <GameButton label={busy === 'remove' ? 'Saving...' : 'Take off'} icon="close" variant="secondary" tone="onBlue"
+                loading={busy === 'remove'} disabled={!!busy || earned === null} onPress={() => { void remove(); }}
+                accessibilityLabel="Take off title" accessibilityHint="Takes the title off your profile" />
             )}
-            <View style={styles.pair}>
-              {!!worn && (
-                <View style={styles.pairItem}>
-                  <GameButton label={busy === 'remove' ? 'Saving...' : 'Take off'} icon="close" variant="ghost" tone="onBlue" size="compact"
-                    loading={busy === 'remove'} disabled={!!busy || earned === null} onPress={() => { void remove(); }}
-                    accessibilityLabel="Take off title" accessibilityHint="Takes the title off your profile" />
-                </View>
-              )}
-              <View style={styles.pairItem}>
-                <GameButton label="More titles" icon="medal1" variant="secondary" tone="onBlue" size="compact" disabled={!!busy}
-                  onPress={openStampBook} accessibilityHint="Opens the Titles list in your Stamp Book" />
-              </View>
-            </View>
           </View>
         </View>
       ) : (
@@ -211,7 +202,11 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
           )}
           {!!error && <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.error}>{error}</GameText>}
           <View style={styles.actions}>
-            <GameButton label="Back" variant="secondary" tone="onBlue" icon="back" disabled={!!busy} onPress={() => setMode('about')} />
+            {earned !== null && others.length > 0 && (
+              <GameButton label="More titles" icon="medal1" variant="secondary" tone="onBlue" disabled={!!busy} onPress={openStampBook}
+                accessibilityHint="Opens the Titles list in your Stamp Book" />
+            )}
+            <GameButton label="Back" variant="ghost" tone="onBlue" icon="back" disabled={!!busy} onPress={() => setMode('about')} />
           </View>
         </View>
       )}

@@ -28,7 +28,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { useBookFx, useTileClock } from './BookFx';
 import Foil from './Foil';
-import StampArt from './StampArt';
+import StampArt, { GHOST_TINT } from './StampArt';
 import { almostThere, hasShine, postmark, progressLabel, rarityRank, requirement, ring as ringGeo, fillFraction, secretHint, stampState, tileLabel, type BookStamp, type Corner } from './model';
 
 export const INK = '#14213D';
@@ -91,9 +91,12 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
             {state === 'claim' && !fx.reducedMotion && (
               <Pulsing top={top} height={height} kind="glow"><View style={styles.claimGlowFill} /></Pulsing>
             )}
-            <View style={[styles.lip, { backgroundColor: state === 'claim' ? GIFT_LIP : rank > 1 ? look.lip : LIP }]} />
-            <View style={[styles.card, { borderColor: state === 'claim' ? GIFT : look.frame }, state === 'claim' && styles.cardClaim]}>
-              <LinearGradient colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0)']} style={styles.gloss} />
+            {state === 'claim' && <View style={[styles.lip, { backgroundColor: GIFT_LIP }]} />}
+            {/* Owned: stamped flat into the page in a solid rarity ring (Club Penguin's filled slot). A waiting gift stays a raised card. */}
+            <View style={[state === 'claim' ? styles.card : styles.inked, { borderColor: state === 'claim' ? GIFT : look.frame },
+              state === 'claim' && styles.cardClaim, state === 'owned' && rank >= 4 && styles.inkedTrim]}>
+              {state === 'claim' && <LinearGradient colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0)']} style={styles.gloss} />}
+              {state === 'owned' && rank >= 4 && <View pointerEvents="none" style={[styles.innerTrim, { borderColor: look.frame }]} />}
               <View style={[styles.artWrap, { width: art, height: art }]}>
                 <StampArt stamp={stamp} size="thumb" placeholder={accent} priority={col < 3 ? 'high' : 'normal'} />
                 {hasShine(stamp) && !fx.reducedMotion && <ShineFoil stamp={stamp} size={art} top={top} height={height} lag={col * 0.08} />}
@@ -116,7 +119,7 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
               ) : (
                 <>
                   <View style={[styles.ghost, state === 'fresh' && styles.ghostFresh]}>
-                    <StampArt stamp={stamp} size="thumb" priority={col < 3 ? 'high' : 'normal'} />
+                    <StampArt stamp={stamp} size="thumb" locked={false} tint={GHOST_TINT} priority={col < 3 ? 'high' : 'normal'} />
                   </View>
                   {/* In progress: the real colour fills up from the bottom with the progress (capped well short of owned). */}
                   {state === 'progress' && fill > 0 && (
@@ -177,7 +180,7 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
             <Text style={styles.claimText} maxFontSizeMultiplier={1.2}>CLAIM!</Text>
           </Pulsing>
         ) : tag === 'new' ? (
-          <View style={styles.newTag} pointerEvents="none"><Text style={styles.newText} maxFontSizeMultiplier={1.1}>NEW</Text></View>
+          <View style={styles.newTag} pointerEvents="none"><GameIcon name="sparkle" size={14} /><Text style={styles.newText} maxFontSizeMultiplier={1.1}>NEW</Text></View>
         ) : tag === 'almost' ? (
           <View style={styles.almost}><Text style={styles.almostText} maxFontSizeMultiplier={1.2}>Almost!</Text></View>
         ) : null}
@@ -246,6 +249,12 @@ const styles = StyleSheet.create({
     alignItems: 'center', paddingTop: 12, paddingHorizontal: 5, overflow: 'hidden',
   },
   cardClaim: { borderWidth: 4.5, backgroundColor: '#FFF4F0' },
+  inked: {
+    flex: 1, marginTop: 3, marginBottom: 2, borderRadius: 18, borderWidth: 3, backgroundColor: 'rgba(255,255,255,0.55)',
+    alignItems: 'center', paddingTop: 12, paddingHorizontal: 5, overflow: 'hidden',
+  },
+  inkedTrim: { borderWidth: 3.5 },
+  innerTrim: { position: 'absolute', left: 4, right: 4, top: 4, bottom: 4, borderRadius: 13, borderWidth: 1.5, opacity: 0.7 },
   claimGlow: { position: 'absolute', left: -6, right: -6, top: -6, bottom: -2 },
   claimGlowFill: { flex: 1, borderRadius: 24, backgroundColor: 'rgba(255,120,90,0.5)' },
   gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%', opacity: 0.6 },
@@ -302,11 +311,12 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 9, paddingVertical: 3, borderWidth: 2.5, borderColor: '#FFFFFF',
   },
   claimText: { fontFamily: 'Shark', fontSize: 14, color: '#FFFFFF' },
+  // NEW is a round blue seal (CLAIM is a square red gift tag): different shape, not just colour.
   newTag: {
-    position: 'absolute', top: -10, alignSelf: 'center', backgroundColor: '#1E88E5', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 2,
-    borderWidth: 2.5, borderColor: '#FFFFFF',
+    position: 'absolute', top: -14, alignSelf: 'center', width: 40, height: 40, borderRadius: 20, backgroundColor: '#1E88E5',
+    borderWidth: 2.5, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center',
   },
-  newText: { fontFamily: 'Shark', fontSize: 13, color: '#FFFFFF', letterSpacing: 0.5 },
+  newText: { fontFamily: 'Shark', fontSize: 11, lineHeight: 12, color: '#FFFFFF', marginTop: -1 },
   almost: {
     position: 'absolute', top: -8, alignSelf: 'center', backgroundColor: '#FFCF3B', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
     borderWidth: 2, borderColor: INK,

@@ -30,7 +30,8 @@ interface Props {
 function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, priority = 'normal', style, onReady, onShown, transition }: Props) {
   const [failed, setFailed] = useState(false);
   const { source, ghostIsReal } = stampArt(stamp, size, locked);
-  const dim = locked && !ghostIsReal && !tint;
+  // A missing ghost (or art that failed to load) on a stamp you do not own: the slate silhouette, never full colour.
+  const dim = locked && (!ghostIsReal || failed) && !tint;
   // The big card shows the 256 px thumb (already cached by the grid) until the 768 px art arrives.
   const thumb = size === 'full' && !tint ? stampArt(stamp, 'thumb', locked).source : undefined;
   return (

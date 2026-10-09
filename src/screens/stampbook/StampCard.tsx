@@ -293,7 +293,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
             {/* Second button, mounted (invisible) as soon as the stamp has a title so its art is measured before it shows:
                 a freshly mounted GameButton otherwise flashes one frame of blank art. Wearing the title first: the claim chain;
                 already wearing it: a quiet Take off. */}
-            {!!display.rewards.title && display.earned && (
+            {!!display.rewards.title && display.earned && (!compact || displayClaimed) && (
               <View style={!(displayClaimed && !busy) && styles.hidden} pointerEvents={displayClaimed && !busy && !holding ? 'auto' : 'none'}
                 importantForAccessibility={displayClaimed && !busy ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!(displayClaimed && !busy)}>
                 {wearFirst || justWore ? (
@@ -597,8 +597,10 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
           {!stamp.earned && !stamp.secret && <WhereChip where={whereFor(stamp.metric)} />}
         </View>
         {!stamp.earned && !stamp.secret && (
-          <View style={styles.bar}>
-            <View style={[styles.barFill, { width: `${Math.max(4, stamp.percent)}%`, backgroundColor: accent }]} />
+          <View style={styles.barRow}>
+            <View style={styles.bar}>
+              <View style={[styles.barFill, { width: `${Math.max(4, stamp.percent)}%`, backgroundColor: accent }]} />
+            </View>
             <Text style={styles.barText} maxFontSizeMultiplier={1.2}>{progressLabel(stamp)}</Text>
           </View>
         )}
@@ -686,8 +688,8 @@ function Token({ kind, label, done, pop, index, onLayout }: {
 const styles = StyleSheet.create({
   root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 18 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,52,110,0.82)' },
-  card: { width: '100%', maxWidth: 370, marginTop: 24 },
-  lip: { position: 'absolute', left: 0, right: 0, top: 8, bottom: -7, borderRadius: 22, backgroundColor: '#045089' },
+  card: { width: '100%', maxWidth: 370, marginTop: 24, borderRadius: 24, borderWidth: 3, borderColor: '#0B2A55', backgroundColor: '#0B2A55' },
+  lip: { position: 'absolute', left: -3, right: -3, top: 8, bottom: -10, borderRadius: 24, backgroundColor: '#03305E' },
   body: { ...DIALOG_CARD, alignItems: 'center', paddingHorizontal: 18, paddingBottom: 18, paddingTop: 34 },
   bodyLegendary: { borderColor: LEGENDARY_GOLD, borderWidth: 4 },
   rootCompact: { paddingTop: 30, paddingBottom: 6 },
@@ -734,9 +736,10 @@ const styles = StyleSheet.create({
   howHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   howCount: { fontFamily: 'Shark', fontSize: 17, color: '#FFFFFF' },
   howText: { flex: 1, fontFamily: 'Knockout', fontSize: 18, lineHeight: 22, color: '#FFFFFF' },
-  bar: { height: 20, borderRadius: 10, backgroundColor: 'rgba(0,20,60,0.55)', marginTop: 10, overflow: 'hidden', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)' },
+  barRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  bar: { flex: 1, height: 14, borderRadius: 7, backgroundColor: 'rgba(0,20,60,0.55)', overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)' },
   barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 9 },
-  barText: { fontFamily: 'Shark', fontSize: 14, color: '#FFFFFF', textAlign: 'center', textShadowColor: '#05346e', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
+  barText: { fontFamily: 'Shark', fontSize: 17, color: '#FFFFFF', textShadowColor: '#05346e', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
   tokens: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 12 },
   token: { alignItems: 'center', minWidth: 58 },
   disc: {

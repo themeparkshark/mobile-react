@@ -116,7 +116,20 @@ export const Sunburst = memo(function Sunburst({ size, color, running }: { size:
   return (
     <View pointerEvents="none" style={[styles.center, { width: size, height: size, marginLeft: -size / 2, marginTop: -size / 2 }]}>
       <Animated.View style={[StyleSheet.absoluteFill, style]}>
-        <Svg width={size} height={size}>{rays.map((p, i) => <Polygon key={p} points={p} fill={i % 2 ? '#FFF4C2' : color} opacity={0.6} />)}</Svg>
+        {/* Soft tapered rays: each fades out toward its tip (radial gradient), so nothing reads as a hard bar behind the text. */}
+        <Svg width={size} height={size}>
+          <Defs>
+            <RadialGradient id="rayA" cx="50%" cy="50%" r="50%">
+              <Stop offset="0.15" stopColor={color} stopOpacity="0.95" />
+              <Stop offset="1" stopColor={color} stopOpacity="0" />
+            </RadialGradient>
+            <RadialGradient id="rayB" cx="50%" cy="50%" r="50%">
+              <Stop offset="0.15" stopColor="#FFF4C2" stopOpacity="0.9" />
+              <Stop offset="1" stopColor="#FFF4C2" stopOpacity="0" />
+            </RadialGradient>
+          </Defs>
+          {rays.map((p, i) => <Polygon key={p} points={p} fill={i % 2 ? 'url(#rayB)' : 'url(#rayA)'} />)}
+        </Svg>
       </Animated.View>
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
         <Defs>

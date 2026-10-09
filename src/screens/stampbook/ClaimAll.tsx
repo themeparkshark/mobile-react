@@ -99,14 +99,19 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
         <View style={styles.lip} />
         <View style={styles.body}>
           <View style={styles.ribbon}><Ribbon text="Your rewards!" /></View>
+          {phase !== 'claiming' && (
+            <Pressable onPress={onClose} hitSlop={14} style={styles.close} accessibilityRole="button" accessibilityLabel="Close">
+              <GameIcon name="close" size={44} />
+            </Pressable>
+          )}
           <View style={styles.grid}>
             {stamps.map(s => <Gift key={s.id} stamp={s} status={status[s.id] ?? 'waiting'} reducedMotion={reducedMotion} />)}
           </View>
-          <View style={styles.totals} accessible accessibilityLabel={kinds.map(k => `${phase === 'ready' ? all[k] : got[k]} ${k}`).join(', ')}>
+          <View style={styles.totals} accessible accessibilityLabel={kinds.map(k => `${phase === 'done' ? got[k] : all[k]} ${k}`).join(', ')}>
             {kinds.map(k => (
               <View key={k} style={styles.total}>
                 <View style={styles.disc}><GameIcon name={TOTAL_ICON[k]} size={24} /></View>
-                <Text style={styles.totalText} maxFontSizeMultiplier={1.2}>+{compactCount(phase === 'ready' ? all[k] : got[k])}</Text>
+                <Text style={styles.totalText} maxFontSizeMultiplier={1.2}>+{compactCount(phase === 'done' ? got[k] : all[k])}</Text>
               </View>
             ))}
           </View>
@@ -173,10 +178,11 @@ function Gift({ stamp, status, reducedMotion }: { stamp: BookStamp; status: Stat
 const styles = StyleSheet.create({
   root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 18 },
   backdrop: { backgroundColor: 'rgba(5,52,110,0.82)' },
-  card: { width: '100%', maxWidth: 370 },
+  card: { width: '100%', maxWidth: 370, borderRadius: 24, borderWidth: 3, borderColor: '#0B2A55', backgroundColor: '#0B2A55' },
   lip: { position: 'absolute', left: 0, right: 0, top: 8, bottom: -7, borderRadius: 22, backgroundColor: '#045089' },
   body: { ...DIALOG_CARD, alignItems: 'center', paddingHorizontal: 16, paddingBottom: 16, paddingTop: 40, gap: 12 },
   ribbon: { position: 'absolute', top: -34, left: 18, right: 18, alignItems: 'center' },
+  close: { position: 'absolute', top: -18, right: -14, zIndex: 5 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
   gift: {
     width: 70, height: 70, borderRadius: 18, backgroundColor: PAPER, borderWidth: 3, borderColor: '#E3262E', padding: 6,

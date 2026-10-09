@@ -55,6 +55,10 @@ const GAP = 9;
 const SIDE = 12;
 const PAGE_PAD = 12;
 const PAGE_BORDER = 3;
+/** The book board's side inset around the pages. */
+const BOARD_INSET = 6;
+/** Page margin inside the board. */
+const PAGE_SIDE = 8;
 const REFETCH_MS = 30_000;
 /** The floating compass nav covers about this much of the bottom. */
 const NAV_COVER = 150;
@@ -95,6 +99,8 @@ export default function StampBookScreen() {
   const [titleOverride, setTitleOverride] = useState<{ title: string | null } | null>(null);
   const [claimAllOpen, setClaimAllOpen] = useState<readonly BookStamp[] | null>(null);
   const sectionY = useRef<Record<string, number>>({});
+  const boardY = useRef(0);
+  const [boardTopState, setBoardTopState] = useState(0);
   // Seen stamps live in a ref so opening a card never changes `open` (no tile re-render on the slam frame).
   const seenRef = useRef<Set<string> | null>(null);
   const [seenVersion, setSeenVersion] = useState(0);
@@ -545,10 +551,14 @@ export default function StampBookScreen() {
 
               {sections.length === 0 && <Text style={styles.stateText}>No stamps yet. Check back soon.</Text>}
 
+              {/* One book board behind every page: blue cloth, stitched edge, gold corners (the cover's binding). */}
+              <View style={styles.board} onLayout={e => { boardY.current = e.nativeEvent.layout.y; setBoardTopState(e.nativeEvent.layout.y); }}>
+                <View style={styles.boardStitch} pointerEvents="none" />
               {sections.map(section => (
-                <SectionPage key={section.key} section={section} width={width} onTop={y => { sectionY.current[section.key] = y; }}
+                <SectionPage key={section.key} section={section} width={width} boardTop={boardTopState} onTop={y => { sectionY.current[section.key] = boardY.current + y; }}
                   seenRef={seenRef} seenVersion={seenVersion} celebrating={celebrate === section.key} onOpen={open} />
               ))}
+              </View>
               <View style={{ height: NAV_COVER + insets.bottom + 24 }} />
             </Animated.ScrollView>
           )}
@@ -712,8 +722,8 @@ function Tab({ label, color, icon, active, earned, total, dot, onPress, onLayout
   );
 }
 
-const SectionPage = memo(function SectionPage({ section, width, onTop, seenRef, seenVersion, celebrating, onOpen }: {
-  section: BookSection; width: number; onTop: (y: number) => void; seenRef: { readonly current: Set<string> | null }; seenVersion: number;
+const SectionPage = memo(function SectionPage({ section, width, boardTop, onTop, seenRef, seenVersion, celebrating, onOpen }: {
+  section: BookSection; width: number; boardTop: number; onTop: (y: number) => void; seenRef: { readonly current: Set<string> | null }; seenVersion: number;
   celebrating: boolean; onOpen: (s: BookStamp) => void;
 }) {
   void seenVersion; // re-render this section (only) when NEW tags change
@@ -722,12 +732,12 @@ const SectionPage = memo(function SectionPage({ section, width, onTop, seenRef, 
   const gridLocal = useSharedValue(0);
   const gridTop = useDerivedValue(() => sectionTop.value + gridLocal.value);
   const cols = 3;
-  const tile = Math.floor((width - SIDE * 2 - PAGE_PAD * 2 - PAGE_BORDER * 2 - GAP * (cols - 1)) / cols);
+  const tile = Math.floor((width - (BOARD_INSET + 3) * 2 - PAGE_SIDE * 2 - PAGE_PAD * 2 - PAGE_BORDER * 2 - GAP * (cols - 1)) / cols);
   const tileH = Math.round(tile * 1.36);
   const pct = section.total > 0 ? Math.round((section.earned / section.total) * 100) : 0;
   const complete = section.total > 0 && section.earned >= section.total;
   return (
-    <View style={styles.pageWrap} onLayout={e => { sectionTop.value = e.nativeEvent.layout.y; onTop(e.nativeEvent.layout.y); }}>
+    <View style={styles.pageWrap} onLayout={e => { sectionTop.value = boardTop + e.nativeEvent.layout.y; onTop(e.nativeEvent.layout.y); }}>
       <View style={styles.pageLip} />
       <View style={styles.page}>
         <View style={styles.stitch} pointerEvents="none" />
@@ -743,8 +753,10 @@ const SectionPage = memo(function SectionPage({ section, width, onTop, seenRef, 
             <GameIcon name={celebrating ? 'chestOpen' : 'chest'} size={36} accessibilityLabel="Finish the page to fill it" />
           )}
         </View>
-        <View style={styles.sectionBar} accessible accessibilityLabel={`${section.earned} of ${section.total} stamped`}>
-          <View style={[styles.sectionFill, { width: `${Math.max(pct, 0)}%`, backgroundColor: section.color }]} />
+        <View style={styles.sectionBarRow} accessible accessibilityLabel={`${section.earned} of ${section.total} stamped`}>
+          <View style={styles.sectionBar}>
+            <View style={[styles.sectionFill, { width: `${Math.max(pct, 0)}%`, backgroundColor: section.color }]} />
+          </View>
           <Text style={styles.sectionBarText} maxFontSizeMultiplier={1.2}>{section.earned} / {section.total}</Text>
         </View>
         <View style={styles.grid} onLayout={(e: LayoutChangeEvent) => { gridLocal.value = e.nativeEvent.layout.y; }}>
@@ -831,7 +843,12 @@ const styles = StyleSheet.create({
   dot: { position: 'absolute', top: -3, right: -3, width: 14, height: 14, borderRadius: 7, backgroundColor: '#E3262E', borderWidth: 2, borderColor: '#FFFFFF' },
 
   // Paper page
-  pageWrap: { marginHorizontal: SIDE, marginTop: 16 },
+  board: {
+    marginHorizontal: BOARD_INSET, marginTop: 12, paddingBottom: 18, borderRadius: 28, backgroundColor: '#0A6FB8',
+    borderWidth: 3, borderColor: '#0B3E78',
+  },
+  boardStitch: { position: 'absolute', left: 6, right: 6, top: 6, bottom: 6, borderRadius: 22, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,214,102,0.6)' },
+  pageWrap: { marginHorizontal: PAGE_SIDE, marginTop: 14 },
   pageLip: { position: 'absolute', left: 0, right: 0, top: 8, bottom: -6, borderRadius: 24, backgroundColor: '#C9AE78' },
   page: { borderRadius: 24, backgroundColor: PAPER, borderWidth: PAGE_BORDER, borderColor: '#FFFFFF', padding: PAGE_PAD, paddingBottom: PAGE_PAD + 4, overflow: 'hidden' },
   stitch: { position: 'absolute', left: 6, right: 6, top: 6, bottom: 6, borderRadius: 19, borderWidth: 1.5, borderStyle: 'dashed', borderColor: SLOT_EDGE, opacity: 0.8 },
@@ -839,12 +856,13 @@ const styles = StyleSheet.create({
   sectionBadge: { width: 42, height: 42, borderRadius: 21, borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { fontFamily: 'Shark', fontSize: 21, color: INK, textTransform: 'uppercase' },
   sectionBlurb: { fontFamily: 'Knockout', fontSize: 14, color: MUTED_INK },
+  sectionBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, marginBottom: 16 },
   sectionBar: {
-    height: 20, borderRadius: 10, backgroundColor: 'rgba(20,33,61,0.10)', overflow: 'hidden', justifyContent: 'center',
-    borderWidth: 2, borderColor: 'rgba(20,33,61,0.2)', marginTop: 8, marginBottom: 16,
+    flex: 1, height: 14, borderRadius: 7, backgroundColor: 'rgba(20,33,61,0.10)', overflow: 'hidden',
+    borderWidth: 1.5, borderColor: 'rgba(20,33,61,0.2)',
   },
   sectionFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 9 },
-  sectionBarText: { fontFamily: 'Shark', fontSize: 13, color: INK, textAlign: 'center' },
+  sectionBarText: { fontFamily: 'Shark', fontSize: 16, color: INK, minWidth: 44, textAlign: 'right' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, rowGap: GAP + 8 },
   seal: {
     width: 52, height: 52, borderRadius: 26, backgroundColor: '#FFC21A', borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center',

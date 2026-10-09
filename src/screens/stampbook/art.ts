@@ -37,6 +37,7 @@ export function stampArt(stamp: ArtFields, size: ArtSize, locked = !stamp.earned
 
 /** Thumbs worth prefetching after the book loads (disk cache, no decode). */
 export function prefetchList(stamps: readonly ArtFields[]): string[] {
-  const urls = stamps.map(s => (s.earned ? s.thumbUrl : s.lockedThumbUrl ?? s.thumbUrl)).filter((u): u is string => !!u);
+  // Slots draw the colour thumb as a slate silhouette (and fill it as progress grows), so every tile needs only its colour thumb.
+  const urls = stamps.map(s => s.thumbUrl).filter((u): u is string => !!u);
   return Array.from(new Set(urls));
 }
