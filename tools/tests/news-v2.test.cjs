@@ -260,3 +260,21 @@ test('the reader clears the Dynamic Island and the server contract stays additiv
 test('News has a dev preview flag', () => {
   assert.match(read('src/devRoutes.tsx'), /EXPO_PUBLIC_NEWS_PREVIEW\), 'News'\]/);
 });
+
+test('game press never changes its footprint: the face gives up the visible lip, the underlay fills it', () => {
+  const { pressLayers } = loadTs('src/screens/NewsScreen/GamePress.tsx', {
+    react: {}, 'react-native': { Pressable: 'Pressable', View: 'View', StyleSheet: { flatten: s => s } },
+    'react-native-reanimated': { default: { View: 'AView' } }, '../../ui/useUiReducedMotion': { default: () => false },
+  });
+  const { face, under, drop } = pressLayers({ height: 42, borderWidth: 3, borderBottomWidth: 5, borderRadius: 21, borderColor: '#d99a00', flex: 1 }, 5);
+  assert.equal(drop, 2);
+  assert.equal(face.height + drop, 42, 'face + lip = the original 42 pt');
+  assert.equal(face.borderBottomWidth, 3);
+  assert.equal(face.flex, undefined);
+  assert.equal(under.top, 2);
+  assert.equal(under.backgroundColor, '#d99a00');
+  // No layout prop is animated: only translateY on the face.
+  const src = read('src/screens/NewsScreen/GamePress.tsx');
+  assert.match(src, /useAnimatedStyle\(\(\) => \(\{ transform: \[\{ translateY: down\.value \* drop \}\] \}\)\)/);
+  assert.doesNotMatch(src, /marginBottom: down/);
+});

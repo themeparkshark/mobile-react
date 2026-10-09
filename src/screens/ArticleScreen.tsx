@@ -78,6 +78,8 @@ export default function ArticleScreen({ route, navigation }: any) {
   const [opening, setOpening] = useState(false);
   const zoomRef = useRef<ScrollView>(null);
   const zoomScale = useRef(1);
+  /** Where the photo sits inside the zoom view's content (it is centred), for aiming a double tap. */
+  const photoTop = useRef(0);
   const lastTap = useRef(0);
   const closeZoom = useCallback(() => { zoomScale.current = 1; setZoom(null); }, []);
   /** Double tap zooms in 2x on that spot (or back out); a single tap does nothing, so zooming never closes it by accident. */
@@ -87,11 +89,20 @@ export default function ArticleScreen({ route, navigation }: any) {
     lastTap.current = 0;
     const responder = zoomRef.current as unknown as { scrollResponderZoomTo?: (r: { x: number; y: number; width: number; height: number; animated?: boolean }) => void };
     const out = zoomScale.current > 1.2;
-    const w = out ? width : width / 2;
-    const h = out ? width * 2 : width;
-    responder.scrollResponderZoomTo?.({ x: out ? 0 : Math.max(0, x - w / 2), y: out ? 0 : Math.max(0, y - h / 2), width: w, height: h, animated: !reduced });
-    zoomScale.current = out ? 1 : 2;
-  }, [width, reduced]);
+    const photoH = zoom ? width / zoom.aspect : width;
+    if (out) {
+      responder.scrollResponderZoomTo?.({ x: 0, y: photoTop.current, width, height: photoH, animated: !reduced });
+      zoomScale.current = 1;
+      return;
+    }
+    // 2x on the tapped spot, kept inside the photo.
+    const w = width / 2;
+    const h = photoH / 2;
+    const cx = Math.min(Math.max(x - w / 2, 0), width - w);
+    const cy = photoTop.current + Math.min(Math.max(y - h / 2, 0), photoH - h);
+    responder.scrollResponderZoomTo?.({ x: cx, y: cy, width: w, height: h, animated: !reduced });
+    zoomScale.current = 2;
+  }, [width, reduced, zoom]);
   const entry = list[index];
   // "More news" per story, worked out the first time a page is drawn and kept.
   const relatedCache = useRef(new Map<number, NewsEntry[]>());
@@ -114,6 +125,9 @@ export default function ArticleScreen({ route, navigation }: any) {
   }, [entry]);
 
   const fade = useSharedValue(1);
+  const jumping = useRef(false);
+  const jumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (jumpTimer.current) clearTimeout(jumpTimer.current); }, []);
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
   const indexRef = useRef(index);
   indexRef.current = index;
@@ -128,11 +142,18 @@ export default function ArticleScreen({ route, navigation }: any) {
       setIndex(next);
       return;
     }
-    // A far jump (a More news story) dips to the page colour, cuts, and fades back in: it reads as a move, not a glitch.
-    fade.value = withSequence(withTiming(0, { duration: 90 }), withTiming(1, { duration: 160 }));
-    setTimeout(() => {
+    // A far jump (a More news story) dips to the page colour, cuts, and fades back in once the
+    // new page is drawn: it reads as a move, not a glitch. A second jump while one is running is ignored.
+    if (jumping.current) return;
+    jumping.current = true;
+    fade.value = withTiming(0, { duration: 90 });
+    jumpTimer.current = setTimeout(() => {
       pager.current?.scrollToIndex({ index: next, animated: false });
       setIndex(next);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        fade.value = withTiming(1, { duration: 160 });
+        jumping.current = false;
+      }));
     }, 90);
   }, [list.length, tap, reduced, fade]);
 
@@ -289,7 +310,8 @@ export default function ArticleScreen({ route, navigation }: any) {
               onScroll={e => { zoomScale.current = e.nativeEvent.zoomScale ?? 1; }} scrollEventThrottle={64}
               // Pull the photo down (not zoomed) to put it away, like Photos.
               onScrollEndDrag={e => { if ((e.nativeEvent.zoomScale ?? 1) <= 1.01 && e.nativeEvent.contentOffset.y < -70) closeZoom(); }}>
-              <Pressable accessibilityLabel="Photo. Double tap to zoom, pull down to close" onPress={e => photoTap(e.nativeEvent.locationX, e.nativeEvent.locationY)}>
+              <Pressable accessibilityLabel="Photo. Double tap to zoom, pull down to close" onPress={e => photoTap(e.nativeEvent.locationX, e.nativeEvent.locationY)}
+                onLayout={e => { photoTop.current = e.nativeEvent.layout.y; }}>
                 <Image source={{ uri: zoom.uri }} style={{ width, aspectRatio: zoom.aspect }} contentFit="contain" />
               </Pressable>
             </ScrollView>
