@@ -209,6 +209,10 @@ test('shopping stories never lead and sink to the end of their day', () => {
   assert.deepEqual([...grown.map(e => e.id)], [3, 4, 1, 2, 9]);
   const refreshed = rows.keepOrder([3, 4, 1], [{ ...entry(10, at(0)), title: 'Brand new' }, ...led]);
   assert.equal(refreshed[0].id, 10);
+  // A story that belongs in the middle (newer than the last row shown) re-sorts by date instead of landing at the bottom.
+  const late = { ...entry(11, at(2.5)), title: 'Late category match' };
+  const middle = rows.keepOrder([3, 4], [led[0], late, led[3]]);
+  assert.deepEqual([...middle.map(e => e.id)], [3, 11, 4]);
 });
 
 test('cruise stories filed under Disney get a cruise tag; shop sorting keeps calendar days in order', () => {

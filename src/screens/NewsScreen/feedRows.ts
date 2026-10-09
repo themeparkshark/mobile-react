@@ -89,7 +89,8 @@ export function buildFeedRows({ entries, lead, now, searchLabel, loadingMore, fa
     if (!searchLabel) {
       const day = dayLabel(entry.date, now);
       if (day !== lastDay) {
-        rows.push({ type: 'day', key: `day-${day}`, label: day });
+        // A label can only repeat if the list is out of order; the index keeps keys unique regardless.
+        rows.push({ type: 'day', key: `day-${day}-${rows.length}`, label: day });
         lastDay = day;
       }
     }
@@ -119,5 +120,10 @@ export function keepOrder(previous: readonly number[], next: readonly NewsEntry[
   if (!previous.every(id => byId.has(id))) return [...next];
   const kept = previous.map(id => byId.get(id)!);
   const seen = new Set(previous);
-  return [...kept, ...next.filter(e => !seen.has(e.id))];
+  const added = next.filter(e => !seen.has(e.id));
+  // Only a true "more at the bottom": every added story is no newer than the last one shown.
+  // A story that belongs higher up (late categories, a filter's own page) means a fresh order.
+  const lastMs = newsTime(kept[kept.length - 1].date);
+  if (added.some(e => (newsTime(e.date) || 0) > (lastMs || 0))) return [...next];
+  return [...kept, ...added];
 }

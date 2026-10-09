@@ -281,10 +281,9 @@ export default function NewsScreen() {
     const [lead, ...rest] = shown;
     const spaced = lead ? [lead, ...shopLast(rest, now, !state.hasMore)] : [];
     const prev = orderRef.current.key === key ? orderRef.current.ids : [];
-    const next = keepOrder(prev, spaced);
-    orderRef.current = { key, ids: next.map(e => e.id) };
-    return next;
+    return keepOrder(prev, spaced);
   }, [shown, search, now, state.hasMore, key]);
+  useEffect(() => { orderRef.current = { key, ids: ordered.map(e => e.id) }; }, [ordered, key]);
   const rows = useMemo(() => buildFeedRows({
     entries: ordered,
     lead: !search,
@@ -294,7 +293,7 @@ export default function NewsScreen() {
     failed: state.failed && shown.length > 0,
     end: !state.hasMore || (state.failed && state.page === 0 && shown.length > 0),
     stale: shown.length > 0 && (key === 'all:' ? offline : state.failed),
-  }), [shown, search, now, state.loading, state.failed, state.hasMore, state.page, key, offline]);
+  }), [ordered, shown, search, now, state.loading, state.failed, state.hasMore, state.page, key, offline]);
   shownRef.current = shown;
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
