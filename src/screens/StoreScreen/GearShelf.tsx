@@ -333,7 +333,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
                 </Animated.View>
               )}
               {shelf.filter(i => (filter !== 'all' || i.id !== star?.id) && passesFilter(i, filter, balance)).map((item, i) => (
-                <Animated.View key={item.id} entering={still || !firstIds.current?.has(item.id) ? undefined : FadeIn.delay(60 + Math.min(i, 8) * 30).duration(180)}>
+                <Animated.View key={`${filter}:${item.id}`} entering={still ? undefined : !firstIds.current?.has(item.id) || filter !== 'all' ? FadeIn.duration(160) : FadeIn.delay(60 + Math.min(i, 8) * 30).duration(180)}>
                   <ShopTile item={item as ShopItem} width={TILE_W} still={still} vipLocked={!!item.is_member_item && !vip}
                     affordable={balance >= item.cost} balance={balance} justBought={bought.includes(item.id)} onOpen={openItem} onWish={wish} />
                 </Animated.View>

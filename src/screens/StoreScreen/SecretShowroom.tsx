@@ -48,6 +48,7 @@ import { SECRET_PREVIEW_COPY, StarMotes } from './SecretShopUi';
 import { VaultPanel, VaultSecondaryButton } from './SecretVault';
 import { TileArt } from './ShopTile';
 import useIdleRest from './useIdleRest';
+import { usePowerBudget } from './powerShim';
 import { previewLook } from './TryOnSheet';
 import { MAX_FONT, Sheen, ShopCta, ShopStage, useShopNow, WishHeart } from './shopUi';
 import { useWishCount, useWished } from './wishStore';
@@ -311,7 +312,8 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
   const blurb = fx ? FX_BLURB[fx] : 'A members-only piece for your shark.';
   const leaving = visibleLeaving(item.shop, { secret: true, vipLocked: !member });
   // The room's ambient loops (twinkles, rays, rail rigs, the shark's idle) rest after 10 s untouched (performance r8).
-  const resting = still || paused || covered || !focused || idle;
+  const power = usePowerBudget();
+  const resting = still || paused || covered || !focused || idle || !power.ambient;
 
   return (
     <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 20 }]} showsVerticalScrollIndicator={false}
