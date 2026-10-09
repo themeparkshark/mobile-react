@@ -71,7 +71,8 @@ const KRAKEN: BossSkin = {
   roar: require('../../../assets/games/boss/bash/kraken_roar.png'),
   limb: require('../../../assets/games/boss/bash/tentacle.png'),
   limbAspect: 261 / 600,
-  head: [0.5, 0.3],
+  // Between the eyes (the hat sits above), so the smash ring frames the face.
+  head: [0.5, 0.42],
   hat: true,
   limbWord: 'tentacles',
   ghostly: false,

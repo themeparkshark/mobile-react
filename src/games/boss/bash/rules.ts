@@ -47,8 +47,8 @@ export const PHASES: readonly PhaseRule[] = [
 /** The head drops for this long before it can be smashed (the dizzy wobble). */
 export const DIZZY_DROP_MS = 150;
 /** A PERFECT smash: tap while the closing ring sits on the gold core (this slice of the dizzy window). */
-export const PERFECT_FROM = 0.2;
-export const PERFECT_UNTIL = 0.5;
+export const PERFECT_FROM = 0.22;
+export const PERFECT_UNTIL = 0.45;
 /** INK attack: the boss puffs up for this long (the tell). Tap the boss to block it; miss it and you get inked. */
 export const INK_TELL_MS = 1150;
 /** First ink, then one every INK_EVERY_MS (never in the last INK_LAST_MS). */
@@ -60,7 +60,7 @@ export const INKED_MS = 2_000;
 /** A tap on empty water splashes and holds the next tap this long (mashing is slower than aiming). */
 export const SPLASH_MS = 220;
 /** Bonking a pufferfish stuns the shark this long (taps are ignored, shown by the bonked pose). */
-export const OUCH_MS = 1100;
+export const OUCH_MS = 1200;
 /** No new pop-ups in the last moment, so nothing sinks unseen at the bell. */
 export const LAST_SPAWN_MS = ROUND_MS - 700;
 /** Smallest cycle the server accepts: one weak hit per three hits. */
@@ -120,7 +120,7 @@ export type BashEvent =
   | { type: 'clank' }
   | { type: 'inkTell'; from: number; until: number }
   | { type: 'inkBlock'; damage: number; power: number; need: number; counted: boolean }
-  | { type: 'inked'; until: number }
+  | { type: 'inked'; until: number; lostFins: number }
   | { type: 'splash'; lane: number };
 
 export interface Weights { readonly per_hit: number; readonly per_weak_hit: number }
@@ -170,8 +170,11 @@ export function tick(state: BashState, ms: number): { state: BashState; events: 
     events.push({ type: 'shakeOff' });
   }
   if (s.ink && ms >= s.ink.until) {
-    s = { ...s, ink: null, inkedUntil: ms + INKED_MS, inked: s.inked + 1, streak: 0 };
-    events.push({ type: 'inked', until: ms + INKED_MS });
+    // Missed the block: the ink costs a fin (never the head start below it) and the screen gets splatted.
+    const lost = s.power > 0 ? 1 : 0;
+    const power = s.power - lost;
+    s = { ...s, ink: null, inkedUntil: ms + INKED_MS, inked: s.inked + 1, streak: 0, power, headStart: Math.min(s.headStart, power) };
+    events.push({ type: 'inked', until: ms + INKED_MS, lostFins: lost });
   }
   if (!s.ink && ms >= s.nextInkAt) {
     if (ms >= ROUND_MS - INK_LAST_MS) s = { ...s, nextInkAt: Number.POSITIVE_INFINITY };
@@ -222,8 +225,8 @@ export function tapPopup(state: BashState, id: number, ms: number, maxHits = Num
   if (!popup || ms < state.ouchUntil || ms < state.splashUntil || state.dizzy || ms >= ROUND_MS) return { state, events: [] };
   const up = state.up.filter(p => p.id !== id);
   if (popup.kind === 'puffer') {
-    // A spike pops up to two fins and the shark sees stars for a moment.
-    const lostFins = Math.min(state.power, 2);
+    // A spike pops every fin and the shark sees stars for a moment.
+    const lostFins = state.power;
     const power = state.power - lostFins;
     return { state: { ...state, up, power, headStart: Math.min(state.headStart, power), streak: 0, ouches: state.ouches + 1,
       ouchUntil: ms + OUCH_MS },

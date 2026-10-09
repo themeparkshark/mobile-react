@@ -48,14 +48,14 @@ test('balance: beginners matter, skill pays, mashing puffers does not', ()=>{
   assert.ok(e>=740&&e<=1150,`expert ${e}`);
   assert.ok(m>=360&&m<=650,`median ${m}`);
   assert.ok(y>=0.25*e,`young ${y} vs expert ${e}`);
-  assert.ok(x<0.8*e,`masher ${x} should trail expert ${e}`);
+  assert.ok(x<0.75*e,`masher ${x} should trail expert ${e}`);
 });
 test('the hit cap absorbs bonks visibly and scores 0', ()=>{
   const s=play(3,{...BOTS.expert,maxHits:10});
   assert.equal(s.hits,10);assert.ok(s.capped>0);
   assert.ok(s.weak<=Math.floor(s.hits/3));
 });
-test('a pufferfish pops two fins and the shark is stunned for a moment', ()=>{
+test('a pufferfish pops every fin and the shark is stunned for a moment', ()=>{
   let s={...b.createBash(1),up:[{id:9,spot:0,kind:'puffer',at:0,until:5000}],power:2,ms:100};
   const r=b.tapPopup(s,9,200);
   assert.equal(r.state.power,0);assert.equal(r.events[0].type,'ouch');assert.equal(r.events[0].lostFins,2);
@@ -78,10 +78,10 @@ test('stars use full-power damage', ()=>{
   assert.equal(b.bashDamage(40,12,0.6),Math.floor((160+480)*0.6));
 });
 
-test('ink: a puff you can block (a hit and a fin), or you get inked; the share rule holds', ()=>{
+test('ink: a puff you can block (a hit and a fin), or you get inked and lose a fin; the share rule holds', ()=>{
   let s=b.createBash(9);s=b.tick(s,b.INK_FIRST_MS).state;assert.ok(s.ink);
   const blocked=b.tapBoss(s,b.INK_FIRST_MS+300);assert.equal(blocked.events[0].type,'inkBlock');assert.equal(blocked.state.hits,1);assert.equal(blocked.state.power,1);
-  const inked=b.tick(s,s.ink.until+1);assert.ok(inked.events.some(e=>e.type==='inked'));assert.equal(inked.state.ink,null);
+  const inked=b.tick({...s,power:2},s.ink.until+1);assert.ok(inked.events.some(e=>e.type==='inked'&&e.lostFins===1));assert.equal(inked.state.ink,null);assert.equal(inked.state.power,1);
 });
 test('a tap on empty water splashes and holds the next tap briefly', ()=>{
   let s={...b.createBash(2),up:[{id:5,spot:1,kind:'tentacle',at:0,until:9000}],ms:100};

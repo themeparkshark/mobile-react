@@ -256,12 +256,12 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
         case 'clank': onClank(); break;
         case 'inkTell': onInkTell(); break;
         case 'inkBlock': onInkBlock(e); break;
-        case 'inked': onInked(); break;
+        case 'inked': onInked(e.lostFins); break;
         case 'splash': onSplash(e.lane); break;
         case 'phase': onPhase(e.phase); break;
       }
     }
-    syncHud(engine.current, events.some(e => e.type === 'ouch' && e.lostFins > 0) ? Date.now() : undefined);
+    syncHud(engine.current, events.some(e => (e.type === 'ouch' || e.type === 'inked') && e.lostFins > 0) ? Date.now() : undefined);
   };
 
   /** Show a face for a moment, then go back to angry (never over a dizzy head). */
@@ -308,7 +308,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const onDizzy = (from: number, until: number) => {
     setDizzy({ from, until });
     setFace('dizzy');
-    setInkTell(false); cancelAnimation(bossPuff); bossPuff.value = withTiming(0, { duration: 100 });
+    endInkTell(); cancelAnimation(bossPuff); bossPuff.value = withTiming(0, { duration: 100 });
     setFlopped(true);
     // One frame late, so the boss is already in front of the water when it starts to fall.
     bossDrop.value = reduced ? withTiming(1, { duration: 120 }) : withDelay(34, withTiming(1, { duration: 150, easing: Easing.in(Easing.quad) }));
@@ -331,7 +331,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setDizzy(null);
     setFace('angry');
     cancelAnimation(bossShake); bossShake.value = withTiming(0, { duration: 120 });
-    bossDrop.value = reduced ? withTiming(0, { duration: 120 }) : withTiming(0, { duration: 260, easing: Easing.out(Easing.back(1.2)) });
+    bossDrop.value = reduced ? withTiming(0, { duration: 120 }) : withTiming(0, { duration: 260, easing: Easing.out(Easing.quad) });
     later(reduced ? 140 : 300, () => setFlopped(engine.current.dizzy !== null));
   };
 
@@ -349,11 +349,11 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       shake.shake(e.perfect ? 10 : 7, 200);
       if (e.perfect) flash.flash(0.18, 120);
       cam.value = withSequence(withTiming(1.07, { duration: 60 }), withSpring(1, { damping: 10, stiffness: 180 }));
-      bossHit.value = withSequence(withTiming(1, { duration: 30 }), withDelay(SMASH_STOP_MS, withTiming(0, { duration: 150 })));
+      bossHit.value = withSequence(withTiming(1, { duration: 30 }), withDelay(40, withTiming(0, { duration: 90 })));
       if (skin.hat) { hatPop.value = 0; hatPop.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.quad) }); }
     }
     setPose('cheer'); later(900, () => setPose(cur => (cur === 'cheer' ? 'idle' : cur)));
-    sfx('bo_crit', 'fx.hit', { pitch: e.perfect ? 7 : 2, volume: 1 });
+    sfx('bo_crit', 'fx.coin', { pitch: e.perfect ? 7 : 2, volume: 1 });
     sfx('bo_kraken_slam', 'fx.firework', { volume: 0.8 });
     haptic(e.perfect ? 'comboHeavy' : 'hitMedium');
     // Knocked out by your own hit: the shared HP is gone.
@@ -365,14 +365,14 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     endDizzy();
     flashFace('laugh', 800);
     addFx({ t: 'bubble', text: 'TOO SLOW!', x: L.w / 2, y: L.head.y - 10, tone: 'white' }, 900);
-    if (!reduced) bossRise.value = withSequence(withTiming(-1, { duration: 120 }), withSpring(0, { damping: 8 }));
+    if (!reduced) bossRise.value = withSequence(withTiming(-0.1, { duration: 120 }), withSpring(0, { damping: 8 }));
     sfx('bo_opening_close', 'fx.nopeShort', { volume: 0.8 });
     haptic('warning');
   };
 
   const onClank = () => {
     blocks.current += 1;
-    if (!reduced) bossRise.value = withSequence(withTiming(-0.3, { duration: 60 }), withSpring(0, { damping: 9 }));
+    if (!reduced) bossRise.value = withSequence(withTiming(-0.06, { duration: 60 }), withSpring(0, { damping: 9 }));
     sfx('bo_guard_kraken', 'ui.tap', { volume: 0.5 });
     haptic('hitSoft');
     if (blocks.current % 3 === 1) {
@@ -385,13 +385,14 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setInkTell(true);
     flashFace('roar', 1150);
     if (!reduced) bossPuff.value = withRepeat(withSequence(withTiming(1, { duration: 280 }), withTiming(0.6, { duration: 200 })), -1, false);
-    addFx({ t: 'bubble', text: 'BLOCK IT!', x: L.w / 2, y: L.waterY - 26, tone: 'red' }, 1150);
+    addFx({ t: 'bubble', text: 'BLOCK IT!', x: L.w / 2, y: L.bossTop + L.bossSize * 0.62, tone: 'red' }, 1150);
     if (!firstBlocked.current) setHint('ink');
-    sfx('bo_laser_charge', 'fx.whooshRev', { volume: 0.9 });
+    sfx('bo_laser_charge', 'fx.inZone', { volume: 0.9 });
     haptic('warning');
   };
   const endInkTell = () => {
     setInkTell(false);
+    setFx(list => list.filter(f => !(f.t === 'bubble' && f.text === 'BLOCK IT!')));
     cancelAnimation(bossPuff); bossPuff.value = withTiming(0, { duration: 140 });
     if (hintRef.current === 'ink') setHint('none');
   };
@@ -403,12 +404,13 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     addFx({ t: 'bubble', text: 'BLOCKED!', x, y: y + 40, tone: 'gold' }, 900);
     addFx({ t: 'num', text: e.counted ? `+${dealt()}` : 'MAX', x, y: y - 30, big: false }, 900);
     flashFace('hurt', 500);
-    if (!reduced) bossRise.value = withSequence(withTiming(-0.5, { duration: 70 }), withSpring(0, { damping: 9 }));
+    if (!reduced) bossRise.value = withSequence(withTiming(0.08, { duration: 70 }), withSpring(0, { damping: 9 }));
     sfx('bo_perfect_clang', 'ui.confirm', { volume: 1 });
     haptic('hitMedium');
   };
-  const onInked = () => {
+  const onInked = (lost: number) => {
     endInkTell();
+    if (lost > 0) addFx({ t: 'bubble', text: 'INKED!', x: L.w / 2, y: L.waterY + 30, tone: 'red' }, 900);
     flashFace('laugh', 900);
     const spots = [[0.25, 0.62], [0.68, 0.7], [0.45, 0.86]];
     spots.forEach(([fx0, fy0], i) => later(i * 70, () => addFx({ t: 'ink', x: L.w * fx0, y: L.h * fy0, size: L.w * 0.42, rot: (i - 1) * 20 }, INKED_MS)));
@@ -424,7 +426,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const onPhase = (phase: PhaseId) => {
     flashFace('roar', 900);
     if (phase === 'angry') {
-      if (!reduced) { shake.shake(6, 220); bossRise.value = withSequence(withTiming(-1.4, { duration: 160 }), withSpring(0, { damping: 9 })); }
+      if (!reduced) { shake.shake(6, 220); bossRise.value = withSequence(withTiming(-0.12, { duration: 120 }), withSpring(0, { damping: 9 })); haptic('hitMedium'); }
       addFx({ t: 'bubble', text: 'FASTER!', x: L.w / 2, y: L.waterY - 30, tone: 'gold' }, 1000);
       sfx('bo_phase_kraken', 'fx.whoosh', { volume: 0.9 });
     } else if (phase === 'fury') {
@@ -546,8 +548,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const tapLane = (lane: number) => {
     if (!playing.current) return;
     const s = engine.current;
-    // Dizzy (flopped on the water) or puffed up for ink: the boss is the target, anywhere you tap.
-    if (s.dizzy || s.ink) { tapHead(); return; }
+    // Dizzy (flopped on the water): the boss is the target, anywhere you tap. During the ink, only the boss blocks.
+    if (s.dizzy) { tapHead(); return; }
     const popup = s.up.find(p => p.spot % 3 === lane);
     const r = popup ? tapPopup(s, popup.id, played.current, cap, weights) : tapWater(s, lane, played.current);
     engine.current = r.state;
@@ -560,6 +562,10 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     apply(r.events);
   };
 
+  // Handlers through refs, so a timer or the dev autoplay never runs a first-render closure (stale layout).
+  const tapLaneRef = useRef(tapLane); tapLaneRef.current = tapLane;
+  const tapHeadRef = useRef(tapHead); tapHeadRef.current = tapHead;
+  const LRef = useRef(L); LRef.current = L;
   // Dev autoplay for captures: reads the same state a player sees.
   useEffect(() => {
     if (!__DEV__ || !autoplay || !visible) return;
@@ -567,11 +573,11 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     const id = setInterval(() => {
       if (!playing.current) return;
       const s = engine.current, ms = played.current;
-      if (s.dizzy) { if (ms > s.dizzy.from + 300 + (1 - autoplay) * 500) tapHead(); return; }
-      if (s.ink) { if (autoplay > 0.6 && ms > s.ink.from + 350) tapHead(); }
+      if (s.dizzy) { if (ms > s.dizzy.from + 300 + (1 - autoplay) * 500) tapHeadRef.current(); return; }
+      if (s.ink && autoplay > 0.6 && ms > s.ink.from + 350) { tapHeadRef.current(); return; }
       for (const p of s.up) {
         if (!plan.has(p.id)) plan.set(p.id, p.kind === 'puffer' ? (Math.random() < (1 - autoplay) * 0.6 ? p.at + 500 : Infinity) : p.at + 260 + (1 - autoplay) * 500);
-        if (ms >= (plan.get(p.id) ?? Infinity)) { tapLane(p.spot % 3); break; }
+        if (ms >= (plan.get(p.id) ?? Infinity)) { tapLaneRef.current(p.spot % 3); break; }
       }
     }, 60);
     return () => clearInterval(id);
@@ -587,7 +593,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       { scaleY: 1 - bossHit.value * 0.07 - bossFlinch.value * 0.03 + bossPuff.value * 0.06 },
     ],
   }));
-  const bossFlash = useAnimatedStyle(() => ({ opacity: bossHit.value * 0.6 }));
+  // A quick bright pop, never a pale ghost: low peak, short.
+  const bossFlash = useAnimatedStyle(() => ({ opacity: bossHit.value * 0.32 }));
   const camStyle = useAnimatedStyle(() => ({ transform: [{ scale: cam.value }] }));
   const furyStyle = useAnimatedStyle(() => ({ opacity: fury.value * 0.22 }));
   const timerStyle = useAnimatedStyle(() => ({ width: `${Math.max(0, 1 - clock.value / ROUND_MS) * 100}%` as `${number}%`,
@@ -704,26 +711,28 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           {/* Effects. */}
           {fx.map(f => f.t === 'num' ? <DamageNumber key={f.id} text={f.text} x={f.x} y={f.y} big={f.big} toX={scoreTarget.x} toY={scoreTarget.y} reduced={reduced} />
             : f.t === 'burst' ? (reduced ? null : <Burst key={f.id} src={f.src} x={f.x} y={f.y} size={f.size} spin={f.spin} reduced={reduced} />)
-              : f.t === 'wm' ? <Wordmark key={f.id} id={f.wm} x={L.w / 2} y={L.h * 0.2} width={L.w * 0.7} reduced={reduced} />
+              : f.t === 'wm' ? <Wordmark key={f.id} id={f.wm} x={L.w / 2}
+                y={f.wm === 'nice' || f.wm === 'great' || f.wm === 'superb' && !flopped ? L.h * 0.76 : L.h * 0.24}
+                width={f.wm === 'nice' || f.wm === 'great' ? L.w * 0.42 : L.w * 0.66} reduced={reduced} />
                 : f.t === 'ink' ? <InkSplat key={f.id} x={f.x} y={f.y} size={f.size} rot={f.rot} life={INKED_MS} reduced={reduced} />
-                  : f.t === 'count' ? <CountBeat key={f.id} text={f.text} x={L.w / 2} y={L.h * 0.33} reduced={reduced} />
+                  : f.t === 'count' ? <CountBeat key={f.id} text={f.text} x={L.w - 58} y={L.h * 0.2} reduced={reduced} />
                     : <Bubble key={f.id} text={f.text} x={f.x} y={f.y} tone={f.tone} reduced={reduced} />)}
           {!reduced && <ParticleField ref={particles} width={L.w} height={L.h} paused={held} />}
           </View>
         </Animated.View>}
 
         {/* HUD: shared HP, seconds left and the round bar on top; the fins at the bottom. */}
-        {L.w > 0 && <View pointerEvents="none" style={styles.hud}>
+        {L.w > 0 && !result && <View pointerEvents="none" style={styles.hud}>
           <View style={styles.hpRow}>
-            <Text style={styles.hpName} numberOfLines={1}>{bossName.toUpperCase()}</Text>
-            <Text style={styles.hpCount} numberOfLines={1}>{hpNow.toLocaleString()} HP left{fighters > 0 ? `  ·  ${fighters} fighting` : ''}</Text>
-          </View>
-          <View style={styles.hpTrack}>
-            <View style={[styles.hpYours, { width: `${Math.min(100, (Math.max(0, hpLeft) / Math.max(1, hpMax)) * 100)}%` }]} />
-            <View style={[styles.hpFill, { width: `${Math.min(100, (hpNow / Math.max(1, hpMax)) * 100)}%` }]} />
+            <Text style={styles.hpName} numberOfLines={1} maxFontSizeMultiplier={1.15}>{bossName.toUpperCase()}</Text>
+            <Text style={styles.hpCount} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.15}>
+              {hpNow.toLocaleString()} HP{fighters > 0 ? `  ·  ${fighters} fighting` : ''}</Text>
           </View>
           <View style={styles.clockRow}>
-            <View style={styles.timerTrack}><Animated.View style={[styles.timerFill, timerStyle]} /></View>
+            <View style={[styles.hpTrack, { flex: 1, marginTop: 0 }]}>
+              <View style={[styles.hpYours, { width: `${Math.min(100, (Math.max(0, hpLeft) / Math.max(1, hpMax)) * 100)}%` }]} />
+              <View style={[styles.hpFill, { width: `${Math.min(100, (hpNow / Math.max(1, hpMax)) * 100)}%` }]} />
+            </View>
             <SecondsLeft clock={clock} />
           </View>
           <View style={styles.chipRow}>
@@ -813,7 +822,7 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   secs: { minWidth: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 12,
     borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 6, paddingVertical: 1 },
-  secsText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, padding: 0, minWidth: 22, textAlign: 'center' },
+  secsText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, padding: 0, minWidth: 22, textAlign: 'center' },
   timerTrack: { flex: 1, height: 10, borderRadius: 4, borderWidth: 2, borderColor: BRAND.navy, backgroundColor: 'rgba(255,255,255,0.7)', overflow: 'hidden' },
   timerFill: { height: '100%', borderRadius: 2 },
   teamChip: { marginTop: 6, backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
