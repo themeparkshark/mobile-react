@@ -1,15 +1,16 @@
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming,
   type SharedValue } from 'react-native-reanimated';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import { BRAND, SHADOW } from '../../ui';
 import type { FollowMode } from './cameraFollow';
 
 const ROSE = require('../../../assets/images/map/compass-rose.png');
-/** Panned away the button shows your shark: "take me back to it". */
-const SHARK = require('../../../assets/images/map/follow-shark.png');
+/** Panned away the button shows your own shark (its look), or Alex's Classic: "take me back to it". */
+const CLASSIC = require('../../../assets/images/screens/inventory/classic-no-eye.png');
+const EYES = require('../../../assets/images/screens/inventory/blink.png');
 
 /** What the map's top-right button is doing right now. */
 export type FollowButtonState = 'away' | FollowMode;
@@ -54,7 +55,7 @@ export function followButtonLabel(state: FollowButtonState): string {
  * one-time hint bubble. The rose turns on the UI thread with the camera
  * (`bearing` is the map's bearing, eased like the camera itself).
  */
-export default function FollowButton({ state, bearing, onPress, reducedMotion, hint, onHintDone, noCompassFlash = 0 }: {
+export default function FollowButton({ state, bearing, onPress, reducedMotion, hint, onHintDone, noCompassFlash = 0, awayArt }: {
   readonly state: FollowButtonState;
   readonly bearing: SharedValue<number>;
   readonly onPress: () => void;
@@ -64,6 +65,8 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
   readonly onHintDone: () => void;
   /** Bumped when a tap cannot turn the map (no compass): the pill says so. */
   readonly noCompassFlash?: number;
+  /** The player's own shark for the panned-away state (drawn 44 pt). */
+  readonly awayArt?: ReactNode;
 }) {
   // The new mode's name after a toggle (not on mount, not when coming back from panned away:
   // the button changing back is the feedback there).
@@ -147,8 +150,13 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
       <Pressable onPress={tap} accessibilityRole="button" accessibilityLabel={followButtonLabel(state)} hitSlop={8}>
         <Reanimated.View style={[styles.button, state === 'north' && styles.north, state === 'away' && styles.away, buttonStyle]}>
           {state === 'away' ? (
-            <Reanimated.View style={nudgeStyle}>
-              <Image source={SHARK} style={styles.shark} contentFit="contain" transition={0} />
+            <Reanimated.View style={[styles.sharkBox, nudgeStyle]}>
+              {awayArt ?? (
+                <>
+                  <Image source={CLASSIC} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+                  <Image source={EYES} autoplay={false} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+                </>
+              )}
             </Reanimated.View>
           ) : (
             <Reanimated.View style={[styles.rose, roseStyle]}>
@@ -159,10 +167,10 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
             <Reanimated.View style={[styles.badge, state === 'north' ? styles.badgeNorth : styles.badgeHeading, badgeStyle]}>
               {state === 'north' ? <Text style={styles.badgeN}>N</Text> : (
                 // The beam under your shark, in small: "the map follows where you face".
-                // A dot (you) with a soft fan pointing up: "the map follows where you face".
-                <Svg width={18} height={18} viewBox="0 0 18 18">
-                  <Path d="M9 12 L3 3.4 Q9 0.4 15 3.4 Z" fill={BRAND.skyDeep} opacity={0.95} />
-                  <Circle cx={9} cy={12.4} r={3.6} fill={BRAND.white} />
+                // A turning arrow: "the map turns".
+                <Svg width={16} height={16} viewBox="0 0 16 16">
+                  <Path d="M13.2 8.6 A5.3 5.3 0 1 1 10.6 3.6" stroke={BRAND.white} strokeWidth={2.4} fill="none" strokeLinecap="round" />
+                  <Path d="M9.2 0.9 L13.6 3.4 L9.6 6.6 Z" fill={BRAND.white} />
                 </Svg>
               )}
             </Reanimated.View>
@@ -180,7 +188,7 @@ const styles = StyleSheet.create({
   north: { backgroundColor: BRAND.white, borderColor: BRAND.navy },
   away: { backgroundColor: BRAND.gold },
   rose: { width: 40, height: 40 },
-  shark: { width: 42, height: 42 },
+  sharkBox: { width: 44, height: 44, marginTop: 4 },
   badge: { position: 'absolute', right: -7, bottom: -7, width: 26, height: 26, borderRadius: 13, borderWidth: 2.5,
     borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   badgeHeading: { backgroundColor: BRAND.blue },

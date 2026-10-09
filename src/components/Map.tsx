@@ -743,7 +743,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* The compass: how the map turns (with you, or north up); panned away, back to the shark. */}
         <FollowButton state={focusedOnPlayer || followHold ? shownMode : 'away'} bearing={cam.bearing} onPress={onFollowButton}
           reducedMotion={reducedMotion} hint={compassHint.visible && haveHeading} onHintDone={compassHint.dismiss}
-          noCompassFlash={noCompassFlash} />
+          noCompassFlash={noCompassFlash}
+          awayArt={hasDressedShark(lookInventory) ? <View style={styles.awaySharkScale}><MapSharkLook inventory={lookInventory} t={fxClock} kick={fxKick} animate={false} playing={false} /></View> : undefined} />
         {extraControls}
       </Reanimated.View>
 
@@ -1097,6 +1098,8 @@ const styles = StyleSheet.create({
     height: 14,
     opacity: 0.5,
   },
+  // The player's shark on the panned-away button (MapSharkLook draws 60 pt; the button shows 44).
+  awaySharkScale: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', transform: [{ scale: 44 / 60 }] },
   // The shark's body in its 100 x 110 box (the 60 pt art sits on the ground point).
   sharkTap: { position: 'absolute', left: 18, top: 28, width: 64, height: 76 },
   // Centered on the ground point (SHARK_GROUND), so it turns about where you stand.

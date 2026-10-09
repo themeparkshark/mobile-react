@@ -145,7 +145,7 @@ test('the compass says what it does: two named states, a pill after each tap and
     'react-native': { Pressable: () => null, StyleSheet: { create: s => s, absoluteFill: {} }, Text: () => null, View: () => null },
     'react-native-reanimated': { __esModule: true, default: { View: () => null }, Easing: { out: () => 0, quad: 0 },
       useAnimatedStyle: () => ({}), useSharedValue: v => ({ value: v }), withSequence: () => 0, withSpring: () => 0, withTiming: () => 0 },
-    'react-native-svg': { __esModule: true, default: () => null, Path: () => null, Circle: () => null },
+    'react-native-svg': { __esModule: true, default: () => null, Path: () => null },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'f' },
     '../../ui': { BRAND: {}, SHADOW: { card: {} } },
   });
