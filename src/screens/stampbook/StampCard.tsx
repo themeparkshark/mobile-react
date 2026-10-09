@@ -115,6 +115,8 @@ interface Props {
   readonly nextStamp?: BookStamp | null;
   readonly onClaim: () => Promise<ClaimResult>;
   readonly onNext: () => void;
+  /** 2+ gifts still waiting: open Claim all instead of the one-by-one chain. */
+  readonly onClaimAll?: () => void;
   readonly onGo: (stamp: BookStamp) => void;
   readonly onToggleTitle: () => void;
   readonly onClose: () => void;
@@ -132,7 +134,7 @@ interface ContentHandle { claim: () => void }
 
 /** Mounted once per open: backdrop, card chrome and the action button survive chained stamps. */
 function Frame(props: Props & { stamp: BookStamp }) {
-  const { stamp, reducedMotion, equipping, message, wearingTitle, nextCount, nextStamp, wallet, onNext, onGo, onToggleTitle, onClose } = props;
+  const { stamp, reducedMotion, equipping, message, wearingTitle, nextCount, nextStamp, wallet, onNext, onClaimAll, onGo, onToggleTitle, onClose } = props;
   // Short phones (iPhone SE): tighter spacing so the whole card sits inside the safe area.
   const compact = useWindowDimensions().height < 700;
   const backdrop = useSharedValue(reducedMotion ? 1 : 0);
@@ -220,6 +222,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
   if (claimable || phase === 'claiming') action = { label: 'Claim!', icon: 'gift', onPress: () => content.current?.claim(), a11y: `Claim rewards: ${rewardSpeech(stamp.rewards)}` };
   else if (justWore) action = { label: 'Wearing it!', icon: 'check', onPress: noop, a11y: 'Wearing it' };
   else if (wearFirst) action = { label: equipping ? 'Saving...' : 'Wear title', icon: 'crown', onPress: onToggleTitle, a11y: `Wear the title ${stamp.rewards.title}` };
+  else if (claimed && stamp.earned && nextCount > 1 && onClaimAll) action = { label: `Claim all ${nextCount}!`, icon: 'gift', onPress: onClaimAll, a11y: `Claim all ${nextCount} rewards` };
   else if (claimed && stamp.earned && nextCount > 0) action = { label: `Next reward (${nextCount} left)`, icon: 'gift', onPress: onNext, a11y: `Next reward, ${nextCount} left` };
   else if (!stamp.earned && !stamp.secret && req.go) action = { label: 'Go!', icon: req.icon, onPress: () => onGo(stamp), a11y: `Go. ${stamp.howTo}` };
   const status = phase === 'gotIt' ? 'Got it!' : phase === 'cascading' ? 'Stamped!' : claimed && stamp.earned && !action ? 'Stamped!' : null;
@@ -300,10 +303,11 @@ function Frame(props: Props & { stamp: BookStamp }) {
               <View style={!(displayClaimed && !busy) && styles.hidden} pointerEvents={displayClaimed && !busy && !holding ? 'auto' : 'none'}
                 importantForAccessibility={displayClaimed && !busy ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!(displayClaimed && !busy)}>
                 {wearFirst || justWore ? (
-                  nextCount > 0 ? <GameButton label={`Next reward (${nextCount} left)`} variant="secondary" icon="gift" onPress={onNext} /> : null
+                  nextCount > 1 && onClaimAll ? <GameButton label={`Claim all ${nextCount}`} variant="secondary" size="compact" icon="gift" onPress={onClaimAll} />
+                    : nextCount > 0 ? <GameButton label={`Next reward (${nextCount} left)`} variant="secondary" size="compact" icon="gift" onPress={onNext} /> : null
                 ) : (
-                  <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Take off' : 'Wear title'} variant="secondary"
-                    tone="onBlue" icon="crown" loading={equipping} onPress={onToggleTitle} />
+                  <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Take off' : 'Wear title'} variant="secondary" size="compact"
+                    tone="onBlue" icon={wearingTitle ? 'close' : 'crown'} loading={equipping} onPress={onToggleTitle} />
                 )}
               </View>
             )}
@@ -559,7 +563,13 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
         <Animated.View style={[styles.shadow, shadowStyle]}><SoftShadow width={ART * 0.62} height={26} /></Animated.View>
         <Animated.View style={[styles.artBox, artStyle]}>
           {stamp.secret ? (
-            <View style={[styles.secret, { borderColor: accent }]}><GameIcon name="info" size={ART * 0.4} /></View>
+            // A secret: the real art as a navy silhouette with sparkles and a gold "?" (the shape teases, the stamp stays a surprise).
+            <View style={styles.secretWrap}>
+              <View style={styles.secretSil}><StampArt stamp={stamp} size="full" locked={false} tint="#1B2B4A" onReady={onArtReady} /></View>
+              <View style={styles.secretQ}><Text style={styles.secretQText} maxFontSizeMultiplier={1}>?</Text></View>
+              <View style={[styles.secretSpark, { left: '12%', top: '18%' }]}><GameIcon name="sparkle" size={28} /></View>
+              <View style={[styles.secretSpark, { right: '10%', top: '30%' }]}><GameIcon name="sparkle" size={22} /></View>
+            </View>
           ) : (
             <>
               <StampArt stamp={stamp} size="full" priority="high" onReady={onArtReady} onShown={onShown} transition={0} />
@@ -706,6 +716,14 @@ const styles = StyleSheet.create({
   bodyLegendary: { borderColor: LEGENDARY_GOLD, borderWidth: 4 },
   rootCompact: { paddingTop: 30, paddingBottom: 6 },
   rarityCol: { alignItems: 'center', zIndex: 3 },
+  secretWrap: { width: ART, height: ART, alignItems: 'center', justifyContent: 'center' },
+  secretSil: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, opacity: 0.85 },
+  secretQ: {
+    width: ART * 0.36, height: ART * 0.36, borderRadius: ART, backgroundColor: '#FFCF3B', borderWidth: 4, borderColor: '#FFFFFF',
+    alignItems: 'center', justifyContent: 'center', marginTop: ART * 0.1,
+  },
+  secretQText: { fontFamily: 'Shark', fontSize: 52, color: '#8A5A00', marginTop: -4 },
+  secretSpark: { position: 'absolute' },
   rarityRow: { flexDirection: 'row', gap: 8 },
   earnedInline: { marginTop: 0, fontSize: 16 },
   bodyCompact: { paddingTop: 28, paddingBottom: 12 },

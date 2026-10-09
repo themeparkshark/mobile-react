@@ -137,15 +137,12 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
           )}
           {!!worn && (
             <View style={styles.pill} accessible accessibilityLabel={`Title: ${worn}`}>
-              <TitleArt entry={findEarned(worn, earned ?? [])} title={worn} size={30} />
+              <GameIcon name="crown" size={26} />
               <Text style={styles.pillText} numberOfLines={2} maxFontSizeMultiplier={1.3}>{worn}</Text>
             </View>
           )}
           <GameText preset="body" tone="onBlue" align="center" style={styles.copy}>
             {worn ? describeTitle(worn, earned ?? []) : 'No title yet. Earn stamps to unlock titles, then wear one here.'}
-          </GameText>
-          <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.hint}>
-            Your title shows under your shark for everyone to see.
           </GameText>
           {!!error && <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.error}>{error}</GameText>}
           {confirming && (

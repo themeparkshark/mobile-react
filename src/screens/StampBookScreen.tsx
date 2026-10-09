@@ -17,7 +17,7 @@
  * focus refetch is throttled to 30 s, and tile thumbs are prefetched.
  */
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from 'react-native';
+import { InteractionManager, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -99,6 +99,14 @@ export default function StampBookScreen() {
   const [titleOverride, setTitleOverride] = useState<{ title: string | null } | null>(null);
   const [claimAllOpen, setClaimAllOpen] = useState<readonly BookStamp[] | null>(null);
   const sectionY = useRef<Record<string, number>>({});
+  // First frame: the cover, Almost there and the first two pages; the rest mount once the push has settled.
+  const [allPages, setAllPages] = useState(false);
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => setAllPages(true));
+    return () => task.cancel();
+  }, []);
+  // Dev overlay only: milliseconds from mount to the first real page on screen.
+  const mountedAt = useRef(Date.now());
   const boardY = useRef(0);
   const [boardTopState, setBoardTopState] = useState(0);
   // Seen stamps live in a ref so opening a card never changes `open` (no tile re-render on the slam frame).
@@ -432,6 +440,12 @@ export default function StampBookScreen() {
     waiting.forEach(s => openedRef.current.push(s.id));
   }, [queue, openNextClaim]);
 
+  /** From a stamp card with 2+ gifts still waiting: close the card, then open Claim all (one Modal at a time). */
+  const claimAllFromCard = useCallback(() => {
+    close();
+    setTimeout(() => openClaimRef.current(), 420);
+  }, [close]);
+
   const closeClaimAll = useCallback(() => {
     setClaimAllOpen(null);
     if (!previewMode) refreshPlayer().catch(() => undefined);
@@ -496,6 +510,11 @@ export default function StampBookScreen() {
     chipScroller.current?.scrollTo({ x: Math.max(0, c.x + c.w / 2 - width / 2), animated: !reducedMotion });
   }, [filter, width, reducedMotion]);
 
+  const markOpen = useCallback(() => {
+    const g = globalThis as { __stampOpenMs?: number };
+    if (g.__stampOpenMs === undefined || g.__stampOpenMs < 0) g.__stampOpenMs = Date.now() - mountedAt.current;
+  }, []);
+  useEffect(() => { if (__DEV__) (globalThis as { __stampOpenMs?: number }).__stampOpenMs = -1; }, []);
   pickRef.current = pick;
   openClaimRef.current = openClaim;
   const onScroll = useAnimatedScrollHandler(e => { fx.scrollY.value = e.contentOffset.y; });
@@ -554,8 +573,9 @@ export default function StampBookScreen() {
               {/* One book board behind every page: blue cloth, stitched edge, gold corners (the cover's binding). */}
               <View style={styles.board} onLayout={e => { boardY.current = e.nativeEvent.layout.y; setBoardTopState(e.nativeEvent.layout.y); }}>
                 <View style={styles.boardStitch} pointerEvents="none" />
-              {sections.map(section => (
+              {(allPages ? sections : sections.slice(0, 2)).map(section => (
                 <SectionPage key={section.key} section={section} width={width} boardTop={boardTopState} onTop={y => { sectionY.current[section.key] = boardY.current + y; }}
+                  onFirstLayout={__DEV__ ? markOpen : undefined}
                   seenRef={seenRef} seenVersion={seenVersion} celebrating={celebrate === section.key} onOpen={open} />
               ))}
               </View>
@@ -578,6 +598,7 @@ export default function StampBookScreen() {
           nextCount={queue.filter(s => s.id !== selected?.id && !pendingPatch.current.includes(s.id)).length}
           onClaim={claim}
           onNext={openNextClaim}
+          onClaimAll={claimAllFromCard}
           onGo={go}
           onToggleTitle={toggleTitle}
           onClose={close}
@@ -722,8 +743,8 @@ function Tab({ label, color, icon, active, earned, total, dot, onPress, onLayout
   );
 }
 
-const SectionPage = memo(function SectionPage({ section, width, boardTop, onTop, seenRef, seenVersion, celebrating, onOpen }: {
-  section: BookSection; width: number; boardTop: number; onTop: (y: number) => void; seenRef: { readonly current: Set<string> | null }; seenVersion: number;
+const SectionPage = memo(function SectionPage({ section, width, boardTop, onTop, onFirstLayout, seenRef, seenVersion, celebrating, onOpen }: {
+  section: BookSection; width: number; boardTop: number; onTop: (y: number) => void; onFirstLayout?: () => void; seenRef: { readonly current: Set<string> | null }; seenVersion: number;
   celebrating: boolean; onOpen: (s: BookStamp) => void;
 }) {
   void seenVersion; // re-render this section (only) when NEW tags change
@@ -737,7 +758,7 @@ const SectionPage = memo(function SectionPage({ section, width, boardTop, onTop,
   const pct = section.total > 0 ? Math.round((section.earned / section.total) * 100) : 0;
   const complete = section.total > 0 && section.earned >= section.total;
   return (
-    <View style={styles.pageWrap} onLayout={e => { sectionTop.value = boardTop + e.nativeEvent.layout.y; onTop(e.nativeEvent.layout.y); }}>
+    <View style={styles.pageWrap} onLayout={e => { sectionTop.value = boardTop + e.nativeEvent.layout.y; onTop(e.nativeEvent.layout.y); onFirstLayout?.(); }}>
       <View style={styles.pageLip} />
       <View style={styles.page}>
         <View style={styles.stitch} pointerEvents="none" />

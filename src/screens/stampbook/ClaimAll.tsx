@@ -69,8 +69,21 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
     setPhase('claiming');
     haptic('hitMedium');
     const queue = stamps.filter(s => status[s.id] !== 'done');
-    for (const stamp of queue) {
-      const ok = await onClaimOne(stamp);
+    // Claims run up to 3 at a time; the stamps still land one by one, in order, on a steady beat.
+    const results: Promise<boolean>[] = [];
+    let next = 0;
+    const lanes = Array.from({ length: Math.min(3, queue.length) }, async () => {
+      while (next < queue.length) {
+        const i = next++;
+        results[i] = onClaimOne(queue[i]);
+        await results[i].catch(() => false);
+      }
+    });
+    void Promise.all(lanes);
+    for (let i = 0; i < queue.length; i++) {
+      const stamp = queue[i];
+      while (!results[i]) await new Promise(r => setTimeout(r, 16));
+      const ok = await results[i].catch(() => false);
       if (!alive.current) return;
       setStatus(prev => ({ ...prev, [stamp.id]: ok ? 'done' : 'failed' }));
       if (ok) {
@@ -81,7 +94,7 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
           xp: prev.xp + stamp.rewards.xp, coins: prev.coins + stamp.rewards.coins,
         }));
       }
-      await new Promise(r => setTimeout(r, reducedMotion ? 60 : 160));
+      await new Promise(r => setTimeout(r, reducedMotion ? 60 : 140));
     }
     if (!alive.current) return;
     setPhase('done');

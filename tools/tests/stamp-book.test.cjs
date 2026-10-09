@@ -504,3 +504,13 @@ test('round 5: the unlock sparkle plays only on claim, never on taking a title o
 test('round 6: the resting broadcast banner stays hidden behind the header at the largest text size', () => {
   assert.match(read('src/components/Broadcasts.tsx'), /<Text\s+maxFontSizeMultiplier=\{1\.2\}/);
 });
+
+test('round 6: Claim all from a card with 2+ gifts, claims run 3 at a time, idle gift beats slower, first frame mounts two pages', () => {
+  const card = read('src/screens/stampbook/StampCard.tsx');
+  assert.match(card, /nextCount > 1 && onClaimAll\) action = \{ label: `Claim all \$\{nextCount\}!`/);
+  assert.match(read('src/screens/stampbook/ClaimAll.tsx'), /Math\.min\(3, queue\.length\)/);
+  assert.match(read('src/screens/stampbook/BookFx.tsx'), /awake \? PULSE_EVERY_MS : PULSE_IDLE_MS/);
+  assert.match(read('src/screens/StampBookScreen.tsx'), /\(allPages \? sections : sections\.slice\(0, 2\)\)/);
+  // A secret shows its real art only as a navy silhouette under a gold "?".
+  assert.match(card, /tint="#1B2B4A"/);
+});

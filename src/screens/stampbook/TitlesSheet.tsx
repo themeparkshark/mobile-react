@@ -52,7 +52,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
               <TitlePillText title={worn as string} owned />
               <Text style={styles.line} numberOfLines={1} maxFontSizeMultiplier={1.2}>On your profile now</Text>
             </View>
-            <SmallButton label={busy === '__remove' ? 'Saving...' : 'Take off'} kind="quiet" onPress={onRemove} a11y={`Take off the title ${worn}`} />
+            <SmallButton label={busy === '__remove' ? 'Saving...' : 'Take off'} icon="close" kind="quiet" onPress={onRemove} a11y={`Take off the title ${worn}`} />
           </View>
         )}
         {entries.map(entry => {
@@ -72,7 +72,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
                 </View>
               </Pressable>
               {entry.state === 'wearing' ? (
-                <SmallButton label={busy === '__remove' ? 'Saving...' : 'Take off'} kind="quiet" onPress={onRemove} a11y={`Take off the title ${entry.title}`} />
+                <SmallButton label={busy === '__remove' ? 'Saving...' : 'Take off'} icon="close" kind="quiet" onPress={onRemove} a11y={`Take off the title ${entry.title}`} />
               ) : entry.state === 'ready' ? (
                 <SmallButton label={busy === entry.title ? 'Saving...' : 'Wear'} icon="crown" kind="gold" onPress={() => onWear(entry)} a11y={`Wear the title ${entry.title}`} />
               ) : entry.state === 'claim' ? (
@@ -112,7 +112,7 @@ function TitlePillText({ title, owned }: { title: string; owned: boolean }) {
 }
 
 function SmallButton({ label, icon, kind, onPress, a11y }: {
-  label: string; icon?: 'crown' | 'gift'; kind: 'gold' | 'red' | 'quiet'; onPress: () => void; a11y: string;
+  label: string; icon?: 'crown' | 'gift' | 'close'; kind: 'gold' | 'red' | 'quiet'; onPress: () => void; a11y: string;
 }) {
   return (
     <Pressable onPress={() => { haptic('tapLight'); playSfx('ui.tap', 0.6); onPress(); }} hitSlop={6} accessibilityRole="button" accessibilityLabel={a11y}

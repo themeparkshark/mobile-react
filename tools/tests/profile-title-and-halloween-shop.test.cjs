@@ -45,7 +45,7 @@ test('a title says how you earned it in kid-simple words', () => {
   assert.equal(earned[0].meaning, 'You found 8 churros in your Churro Collection book.');
   assert.deepEqual(earned[0].equip, { kind: 'set', slug: 'churro_collection', tier: 'starter' });
   assert.equal(earned[1].meaning, 'You found all 16 finds and finished your Night Lights book.');
-  assert.equal(earned[2].meaning, 'You earned the Coaster Champ stamp: Ride 10 coasters.');
+  assert.equal(earned[2].meaning, 'Ride 10 coasters!'); // one line, the how-to (the stamp art sits above it)
   assert.deepEqual(earned[2].equip, { kind: 'stamp', stampId: 4 });
   // The worn title explains itself even before the lists load.
   assert.equal(m.describeTitle('Churro Collection Scout', []), 'You found your first churros in your Churro Collection book.');

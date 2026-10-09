@@ -41,6 +41,7 @@ export const BookFxProvider = Ctx.Provider;
 
 export const SHINE_EVERY_MS = 3600;
 export const PULSE_EVERY_MS = 2000;
+export const PULSE_IDLE_MS = 6000;
 
 /** Pause the idle clocks after this long with no touch or scroll; the next touch wakes them. */
 export const IDLE_MS = 30_000;
@@ -90,7 +91,8 @@ export function useBookClocks(running: boolean, reducedMotion: boolean, needs: {
     };
     const timers: ReturnType<typeof setInterval>[] = [];
     if (shineOn && awake) { sweep(); timers.push(setInterval(sweep, SHINE_EVERY_MS)); }
-    if (pulseOn) { beat(); timers.push(setInterval(beat, PULSE_EVERY_MS)); }
+    // Idle (30 s no touch): the gift keeps a slow beat, one every 6 s instead of every 2 s.
+    if (pulseOn) { beat(); timers.push(setInterval(beat, awake ? PULSE_EVERY_MS : PULSE_IDLE_MS)); }
     return () => {
       timers.forEach(clearInterval);
       cancelAnimation(shine); cancelAnimation(pulse);

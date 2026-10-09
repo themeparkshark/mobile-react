@@ -80,7 +80,8 @@ export function stampMeaning(stamp: StampLike | undefined): string {
   if (!stamp) return 'You earned it with a stamp in your Stamp Book.';
   // The short kid copy ("Catch 2 legendary finds") when the server sends it, else the full goal.
   const goal = (clean(stamp.how_to) || clean(stamp.goal)).replace(/[.!]+$/, '');
-  return goal ? `You earned the ${clean(stamp.name)} stamp: ${goal}.` : `You earned the ${clean(stamp.name)} stamp.`;
+  // One line, the kid how-to ("Catch 2 legendary finds"); the stamp art above the pill says where it came from.
+  return goal ? `${goal}!` : `From the ${clean(stamp.name)} stamp`;
 }
 
 /** Every title the player has earned and can wear, books first, no duplicates. */
