@@ -372,8 +372,8 @@ const styles = StyleSheet.create({
   coins: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 36, paddingHorizontal: 11, borderRadius: 18,
     backgroundColor: V.card, borderWidth: 2, borderColor: '#ffffff' },
   coinsText: { fontFamily: FONT.display, fontSize: 16, color: '#ffffff' },
-  guest: { marginHorizontal: 14, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(8,22,56,0.75)',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
+  // A plain caption, not a pill that looks tappable (art director r6).
+  guest: { marginHorizontal: 14, paddingVertical: 2 },
   guestText: { fontFamily: FONT.body, fontSize: 15, lineHeight: 19, color: V.inkSoft, textAlign: 'center' },
   guestStrong: { fontFamily: FONT.display, color: V.ink },
   panelWrap: { marginBottom: 0 },
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
   featherRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 12 },
   tileName: { position: 'absolute', left: 4, right: 4, bottom: 30, textAlign: 'center', fontFamily: FONT.display, fontSize: 12, color: '#ffffff' },
   tilePrice: { position: 'absolute', bottom: 6, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, height: 22,
-    borderRadius: 11, backgroundColor: V.well },
+    borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,207,59,0.55)' },
   tileOwned: { backgroundColor: '#1f9d55' },
   tilePriceText: { fontFamily: FONT.display, fontSize: 13, color: '#ffffff' },
 });

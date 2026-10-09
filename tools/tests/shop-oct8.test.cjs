@@ -129,3 +129,9 @@ test('money stream hand-off: out of coins shows the need and the top-up offer, n
   assert.match(sheet, /accessibilityLabel="See VIP">\s*<GameIcon name="member"/);
   assert.equal(shelves.tryOnCta({ owned: false, worn: false, vipLocked: true, secret: true, short: 0, phase: 'idle', wear: 'idle', finishes: false, cost: 140, paused: false, wearLocked: false }).label, 'See VIP');
 });
+
+test('round 7: the slot chip sits beside the rarity only when both truly fit the measured band', () => {
+  assert.equal(shelves.slotFitsBand(100, 'Face', 'RARE'), true);
+  assert.equal(shelves.slotFitsBand(100, 'Backdrop', 'UNCOMMON'), false);
+  assert.equal(shelves.slotFitsBand(70, 'Face', 'RARE', 1.3), false, 'big text on a narrow tile drops the slot chip');
+});

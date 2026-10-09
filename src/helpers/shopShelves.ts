@@ -181,6 +181,14 @@ export function passesFilter(item: { item_type?: { id: number } | null; cost: nu
   return key === `slot:${item.item_type?.id}`;
 }
 
+/** Whether a slot chip fits beside the rarity chip in a tile band of this width (measured, at this text size). */
+export function slotFitsBand(bandW: number, slot: string, rarityLabel: string, fontScale = 1): boolean {
+  const scale = Math.min(Math.max(fontScale, 1), 1.1);
+  const slotW = (displayTextWidth(slot, 12, 0.4) + 12) * scale;
+  const rarityW = (displayTextWidth(rarityLabel, 12, 0.4) + 10) * scale;
+  return slotW + 4 + rarityW <= bandW - 8;
+}
+
 /** The classic shelf's star: the rarest piece you don't own yet (first on ties); null when you own them all. */
 export function starPick<T extends { id: number; rarity?: number; has_purchased?: boolean; is_member_item?: boolean }>(items: readonly T[], member: boolean): T | null {
   let best: T | null = null;

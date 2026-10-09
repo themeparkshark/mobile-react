@@ -338,14 +338,16 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const lapsedCta = lapsed && vipLocked ? { ...baseCta, note: 'Your VIP ended, so this one is locked. Your coins are safe.' } : baseCta;
   // The buy confirmation says the member rule out loud before any coins move (DESIGN.md 4.3).
   // A Secret piece already says it in its card above (no second copy at the moment of buying, monetization round 1).
-  const cta = !lapsedCta.note && phase === 'confirm' && memberItem && !fxKey ? { ...lapsedCta, note: MEMBER_PROMISE } : lapsedCta;
+  // A member already is one: the promise alone. Guests hear the VIP rule (kids UX round 2).
+  const keepLine = player?.is_subscribed ? MEMBER_KEEP : MEMBER_PROMISE;
+  const vipLine = vipPriceLine(cachedVipPlans());
+  // On confirm a Secret piece's card steps aside and its promise sits right above the buttons (one line, never under the fade).
+  const cta = !lapsedCta.note && phase === 'confirm' && memberItem ? { ...lapsedCta, note: fxKey ? keepLine : MEMBER_PROMISE } : lapsedCta;
   // No set strip under the stage: the stage takes that room.
   const solo = !secret && !(set && pieces.length > 1);
   const stageH = secret ? SECRET_STAGE_H : solo ? SOLO_STAGE_H : STAGE_H;
   // The kid-fair promise, in a 7-year-old's words (kids UX round 1).
-  // A member already is one: the promise alone. Guests hear the VIP rule (kids UX round 2).
-  const keepLine = player?.is_subscribed ? MEMBER_KEEP : MEMBER_PROMISE;
-  const vipLine = vipPriceLine(cachedVipPlans());
+
   const card = secret ? SECRET_CARD : solo ? SOLO_CARD : CARD;
   const boughtNow = landed > 0;
 
@@ -518,7 +520,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   <Animated.View entering={still ? undefined : FadeIn.duration(140)} style={styles.equation} accessible
                     accessibilityLabel={`It costs ${formatCoins(item.cost)} coins. You have ${formatCoins(balance)}. After, you’ll have ${formatCoins(balance - item.cost)} left.`}>
                     <CoinAmount n={balance} />
-                    <Text style={styles.op}>−</Text>
+                    <Text style={styles.op}>-</Text>
                     <CoinAmount n={item.cost} />
                     <Text style={styles.op}>=</Text>
                     <CoinAmount n={balance - item.cost} label="left" />
@@ -558,7 +560,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{sentence(rarity.label)}</Text></View>}
                   </View>
                 )}
-                {fxKey && (
+                {fxKey && !confirming && (
                   // Secret pieces: what it does, and the kid-fair promise (secret-shop/DESIGN.md 4.3). Leaving and rarity join this one card.
                   <View style={styles.fxCard} accessible accessibilityLabel={`${leaveText ? `${leaveText} ` : ''}${FX_BLURB[fxKey]} ${keepLine}${rarity ? ` ${sentence(rarity.label)}` : ''}`}>
                     {goingAway && <View style={styles.fxRow}><View style={styles.lifeIcon}><GameIcon name={leavingIcon(goingAway)} size={22} /></View>
@@ -718,7 +720,7 @@ const styles = StyleSheet.create({
   balanceText: { fontFamily: FONT.display, fontSize: 17, color: S.ink, padding: 0, minWidth: 54 },
   stage: { marginHorizontal: 14, marginTop: 8, borderRadius: 22, overflow: 'hidden', borderWidth: 3, borderColor: S.border },
   flatArt: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  tag: { position: 'absolute', left: 12, top: 12, backgroundColor: 'rgba(5,52,110,0.82)', borderRadius: 8,
+  tag: { position: 'absolute', left: 12, top: 12, backgroundColor: 'rgba(5,52,110,0.82)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.75)', borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 3, transform: [{ rotate: '-6deg' }] },
   tagText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.white, letterSpacing: 1 },
   newTag: { backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.white },
@@ -763,7 +765,7 @@ const styles = StyleSheet.create({
   fxRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   fxText: { flex: 1, fontFamily: FONT.display, fontSize: 17, lineHeight: 21, color: SECRET_THEME.ink },
   // One font in the card (shop critic round 3): the condensed display face, softer ink.
-  fxKeep: { flex: 1, fontFamily: FONT.display, fontSize: 15, lineHeight: 19, color: SECRET_THEME.inkSoft },
+  fxKeep: { flex: 1, fontFamily: FONT.display, fontSize: 15, lineHeight: 19, color: SECRET_THEME.ink },
   actions: { paddingHorizontal: 16, paddingTop: 6, gap: 6 },
   note: { textAlign: 'center', fontFamily: FONT.body, fontSize: 15, color: S.inkSoft },
   alert: { alignSelf: 'center', backgroundColor: S.alert, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 2, borderColor: S.border },
