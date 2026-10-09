@@ -41,7 +41,7 @@ export function startHelpTour(hooks: TourHooks, playerId?: number | null): () =>
   let at = Number(process.env.EXPO_PUBLIC_HELP_TOUR_DELAY ?? 9000);
   const step = (ms: number, fn: () => void) => { timers.push(setTimeout(fn, at)); at += ms; };
   for (const stop of stops) {
-    if (stop.route) step(3500, () => RootNavigation.navigate(stop.route!, { ...(stop.params ?? {}), ...(stop.route === 'Park' ? { player: playerId } : {}) }));
+    if (stop.route) step(6500, () => RootNavigation.navigate(stop.route!, { ...(stop.params ?? {}), ...(stop.route === 'Park' ? { player: playerId } : {}) }));
     step(4200, () => (stop.sheet === 'term' ? hooks.explain() : hooks.open(stop.sheet)));
     const pages = stop.sheet === 'term' ? 1 : hooks.pages(stop.sheet);
     for (let i = 1; i < pages; i += 1) step(4200, () => pageListener?.());

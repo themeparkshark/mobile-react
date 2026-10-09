@@ -886,7 +886,7 @@ function TermScene({ t, w, h, icon, caption }: SceneProps & { readonly icon: Gam
   const cy = caption ? h * 0.42 : h * 0.5;
   return (
     <>
-      <Abs x={w / 2 - size * 0.85} y={cy - size * 0.85} w={size * 1.7} h={size * 1.7} style={glow}>
+      <Abs x={w / 2 - size * 0.7} y={cy - size * 0.7} w={size * 1.4} h={size * 1.4} style={glow}>
         <View style={styles.termGlow} />
       </Abs>
       <Abs x={w / 2 - size / 2} y={cy - size / 2} w={size} h={size} style={bob}><GameIcon name={icon} size={size} /></Abs>
