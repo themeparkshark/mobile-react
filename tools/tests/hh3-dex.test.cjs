@@ -404,7 +404,7 @@ test('round 3: swap story, recycled tiles, focus refresh, light ticks, small pho
   assert.match(screen, /CTA_CLEARANCE = BOTTOM_BAR_OVERHANG \+ 84/);
   assert.match(screen, /ListFooterComponent=\{<View style=\{\{ height: CTA_CLEARANCE/);
   // Rare-or-better never says "Anytime, anywhere".
-  assert.equal(dex.rarityHint('Anytime, anywhere', 4), 'Very rare: about 1 in 25 finds');
+  assert.equal(dex.rarityHint('Anytime, anywhere', 4), 'Very hard to find. Keep looking!');
   assert.equal(dex.rarityHint('Anytime, anywhere', 1), 'Anytime, anywhere');
   assert.equal(dex.rarityHint('After sunset', 5), 'After sunset');
   // Reduce Motion: header and shelf cards fade only.

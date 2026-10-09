@@ -636,7 +636,7 @@ const styles = StyleSheet.create({
   dot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5, borderColor: BRAND.white },
   nowText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
   hunt: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 10, paddingRight: 8, minHeight: 56, borderRadius: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingLeft: 10, paddingRight: 8, minHeight: 56, borderRadius: 16,
     backgroundColor: '#f2f7fc', borderWidth: 2, borderColor: '#cfe0f1',
   },
   huntOn: { backgroundColor: '#eaf6ff', borderColor: BRAND.blueBright },

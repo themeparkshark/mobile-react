@@ -484,9 +484,10 @@ const GENERIC_HINT = /^(anytime,? anywhere\.?|pops up on the map near you, any t
  */
 export function rarityHint(hint: string, rarity: number): string {
   if (!GENERIC_HINT.test(hint.trim())) return hint;
-  if (rarity >= 5) return 'Super rare! Watch for the daily rare';
-  if (rarity === 4) return 'Very rare: about 1 in 25 finds';
-  if (rarity === 3) return 'Rare: about 1 in 8 finds';
+  // The same words as the rarity headings on the page.
+  if (rarity >= 5) return 'Super rare! Watch for the rare find of the day';
+  if (rarity === 4) return 'Very hard to find. Keep looking!';
+  if (rarity === 3) return 'Hard to find. Keep looking!';
   return hint;
 }
 

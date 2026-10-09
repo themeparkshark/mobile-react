@@ -794,7 +794,7 @@ const styles = StyleSheet.create({
   sparesMap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
   sparesMapText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.navySoft, flexShrink: 1 },
   sparesTimes: {
-    position: 'absolute', right: -6, bottom: -6, minWidth: 34, height: 26, paddingHorizontal: 6, borderRadius: 13,
+    position: 'absolute', right: -6, top: -6, minWidth: 34, height: 26, paddingHorizontal: 6, borderRadius: 13,
     backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
   },
   sparesTimesText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
