@@ -103,7 +103,7 @@ test('round 2: the try-on lands in one beat and opens on confirm only when asked
   assert.match(sheet, /setPhase\(startConfirm && !startBought \? 'confirm' : 'idle'\)/);
   assert.match(sheet, /accessibilityLabel=\{`\$\{formatCoins\(balanceAfter \?\? balance\)\} coins`\}/);
   const room = src('src/screens/StoreScreen/SecretShowroom.tsx');
-  assert.match(room, /const resting = still \|\| paused \|\| covered \|\| !focused \|\| idle;/, 'the room rests under any sheet, dialog, the gate, and when idle');
+  assert.match(room, /const resting = still \|\| paused \|\| covered \|\| !focused \|\| idle \|\| !power\.ambient;/, 'the room rests under any sheet, dialog, the gate, and when idle');
   assert.match(room, /<TileArt item=\{item\} size=\{TILE \+ 6\} still=\{still\} \/>/, 'every piece in the picker moves');
 });
 
