@@ -10,6 +10,7 @@ import { playSfx } from '../../gamekit/SFX';
 import { isBigReward, rewardRows, rowSchedule, type RewardRow } from '../../services/retention/logic';
 import { BRAND, GameIcon } from '../../ui';
 import RewardBurst from '../RewardBurst';
+import { useAmbient } from './power';
 
 const BOX = require('../../../assets/images/retention/mystery-box.png');
 const FREEZE = require('../../../assets/images/retention/freeze.png');
@@ -45,6 +46,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   /** The chest drops in when it appears (level-ups). */
   readonly dropIn?: boolean;
 }) {
+  const ambient = useAmbient();
   const { width, height } = useWindowDimensions();
   const size = Math.min(width * 0.46, height * 0.24, 200);
   // Rows get a fixed area (scrolls on small phones), so the card never changes height.
@@ -78,14 +80,14 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   useEffect(() => {
     cancelAnimation(bob); cancelAnimation(glow);
     bob.value = 0; glow.value = revealed ? 1 : 0;
-    if (reducedMotion || revealed || opening) return;
+    if (reducedMotion || revealed || opening || !ambient) return;
     bob.value = withRepeat(withSequence(
       withTiming(-7, { duration: 850, easing: Easing.inOut(Easing.sin) }),
       withTiming(0, { duration: 850, easing: Easing.inOut(Easing.sin) }),
     ), -1);
     glow.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }), -1, true);
     return () => { cancelAnimation(bob); cancelAnimation(glow); };
-  }, [revealed, opening, reducedMotion, bob, glow]);
+  }, [revealed, opening, reducedMotion, ambient, bob, glow]);
 
   // Anticipation: the shake builds over three ticks while the server answers, then settles if it is slow.
   useEffect(() => {
@@ -95,7 +97,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     if (!reducedMotion) {
       shake.value = withSequence(
         ...[4, -4, 7, -7, 10, -10].map(v => withTiming(v, { duration: 55 })),
-        withRepeat(withSequence(withTiming(13, { duration: 50 }), withTiming(-13, { duration: 50 })), -1, true),
+        withRepeat(withSequence(withTiming(13, { duration: 50 }), withTiming(-13, { duration: 50 })), 30, true),
       );
       [0, 200, 400].forEach((ms, i) => later(() => { haptic(i < 2 ? 'tickSelection' : 'hitMedium'); playSfx('ui.button', 0.5 + i * 0.2); }, ms));
     }

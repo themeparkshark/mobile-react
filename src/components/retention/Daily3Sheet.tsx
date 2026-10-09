@@ -10,6 +10,7 @@ import {
   doneCount, goalAction, milestoneLine, resetLabel, showsBar, streakSubline, tomorrowLine, weekdayLetter, weeklyLine,
 } from '../../services/retention/logic';
 import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
+import { useAmbient } from './power';
 
 const DAILY_CHEST = require('../../../assets/images/daily/chest-closed.png');
 const SNACK = require('../../../assets/images/social/topic_snacks.png');
@@ -151,11 +152,12 @@ function CoachLine({ icon, text }: { readonly icon: React.ReactNode; readonly te
 function Flame({ days, reducedMotion }: { readonly days: number; readonly reducedMotion: boolean }) {
   const t = useSharedValue(0);
   const lit = days > 0;
+  const ambient = useAmbient();
   useEffect(() => {
-    if (reducedMotion || !lit) { t.value = 0; return; }
+    if (reducedMotion || !lit || !ambient) { t.value = 0; return; }
     t.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.sin) }), -1, true);
     return () => cancelAnimation(t);
-  }, [lit, reducedMotion, t]);
+  }, [lit, reducedMotion, ambient, t]);
   const style = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 + t.value * 0.07 }, { rotate: `${(t.value - 0.5) * 6}deg` }] }));
   return (
     <View style={styles.flameWrap}>
@@ -217,14 +219,15 @@ function ChestBlock({ state, done, busy, onClaim, reducedMotion }: {
 }) {
   const bob = useSharedValue(0);
   const ready = state.claimable;
+  const ambient = useAmbient();
   useEffect(() => {
-    if (!ready || reducedMotion) { bob.value = 0; return; }
+    if (!ready || reducedMotion || !ambient) { bob.value = 0; return; }
     bob.value = withRepeat(withSequence(
       withTiming(-6, { duration: 700, easing: Easing.inOut(Easing.sin) }),
       withTiming(0, { duration: 700, easing: Easing.inOut(Easing.sin) }),
     ), -1);
     return () => cancelAnimation(bob);
-  }, [ready, reducedMotion, bob]);
+  }, [ready, reducedMotion, ambient, bob]);
   const chestStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bob.value }, { rotate: `${bob.value * 0.6}deg` }] }));
   const r = state.reward;
   const opened = state.claimed && !ready;
@@ -270,11 +273,12 @@ function Chip({ icon, n }: { readonly icon: 'coins' | 'ticket' | 'energy' | 'xp'
 
 function WeekDay({ letter, state, reducedMotion }: { readonly letter: string; readonly state: WeekDayState; readonly reducedMotion: boolean }) {
   const pulse = useSharedValue(0);
+  const ambient = useAmbient();
   useEffect(() => {
-    if (state !== 'today' || reducedMotion) return;
+    if (state !== 'today' || reducedMotion || !ambient) return;
     pulse.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.sin) }), -1, true);
     return () => cancelAnimation(pulse);
-  }, [state, reducedMotion, pulse]);
+  }, [state, reducedMotion, ambient, pulse]);
   const ringStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pulse.value * 0.08 }] }));
   return (
     <View style={styles.day}>

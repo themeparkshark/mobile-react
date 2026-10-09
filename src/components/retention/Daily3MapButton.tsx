@@ -5,6 +5,7 @@ import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
+import { useAmbient } from './power';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
 import type { ButtonAttention } from '../../services/retention/logic';
 
@@ -33,7 +34,9 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
     const sub = AppState.addEventListener('change', s => setForeground(s === 'active'));
     return () => sub.remove();
   }, []);
-  const running = active && foreground;
+  const ambient = useAmbient();
+  // Rests unless something is ready to open; a streak-at-risk flame flickers a few times, then rests.
+  const running = active && foreground && ambient;
   const bounce = useSharedValue(0);
   const flicker = useSharedValue(0);
   const pop = useSharedValue(0);
@@ -51,7 +54,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
         withDelay(1800, withTiming(0, { duration: 1 })),
       ), -1);
     } else if (attention === 'risk') {
-      flicker.value = withRepeat(withTiming(1, { duration: 700, easing: Easing.inOut(Easing.sin) }), -1, true);
+      flicker.value = withRepeat(withTiming(1, { duration: 700, easing: Easing.inOut(Easing.sin) }), 6, true);
     }
     return () => { cancelAnimation(bounce); cancelAnimation(flicker); };
   }, [running, reducedMotion, ready, attention, bounce, flicker]);
