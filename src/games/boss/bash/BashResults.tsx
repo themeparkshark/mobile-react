@@ -1,0 +1,186 @@
+/**
+ * Boss Bash result: what you did to the boss, what the team still needs, what
+ * you win if the team finishes it, and the next attack with its cost and your
+ * Energy right on the button. Numbers are the server's formula (home rate in).
+ */
+import { Image } from 'expo-image';
+import { useEffect, useRef } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import type { BossId } from '../../../api/endpoints/parks/raid';
+import { BOSS_ART } from '../../../components/boss/bossArt';
+import { CountUpText, haptic, type ShellResultsArgs } from '../../../gamekit';
+import { GameAudio } from '../../../gamekit/audio/GameAudio';
+import { BRAND } from '../../../ui/tokens';
+import GameIcon from '../../../ui/GameIcon';
+import { BASH_ART } from './art';
+
+export interface BashNext {
+  /** Attacks left before this round is sent. */
+  readonly attacksLeft: number;
+  /** Energy before this round is charged. */
+  readonly energy: number;
+  readonly energyCost: number;
+}
+export interface BashRewards { readonly coins: number; readonly xp: number; readonly energy: number; readonly parts: number }
+
+function clock(endsAt: string | undefined, now: number) {
+  if (!endsAt) return null;
+  const s = Math.max(0, Math.floor((new Date(endsAt).getTime() - now) / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Next-attack state after this round's charge. Pure (tested). */
+export function nextAttack(next: BashNext | undefined): { can: boolean; energyAfter: number; reason: string | null; attacksAfter: number } {
+  if (!next) return { can: false, energyAfter: 0, reason: null, attacksAfter: 0 };
+  const energyAfter = Math.max(0, next.energy - next.energyCost);
+  const attacksAfter = Math.max(0, next.attacksLeft - 1);
+  if (attacksAfter <= 0) return { can: false, energyAfter, attacksAfter, reason: 'That was your last attack on this boss.' };
+  if (energyAfter < next.energyCost) {
+    return { can: false, energyAfter, attacksAfter, reason: `Next attack needs ${next.energyCost} Energy. You will have ${energyAfter}.` };
+  }
+  return { can: true, energyAfter, attacksAfter, reason: null };
+}
+
+export default function BashResults({ args, bossName, boss, startHp, hpMax, damage, rate, meta, fighters, endsAt, next, rewards, onAgain }: {
+  args: ShellResultsArgs; bossName: string; boss: BossId; rideName: string | null; startHp: number; hpMax: number; damage: number;
+  rate: number; meta: Record<string, unknown>; fighters: number; endsAt?: string; next?: BashNext; rewards?: BashRewards;
+  onAgain?: () => void;
+}) {
+  const { stars, claim, reducedMotion: reduced } = args;
+  const hpAfter = Math.max(0, startHp - damage);
+  const ko = startHp > 0 && hpAfter === 0;
+  const n = nextAttack(next);
+  const noHits = damage <= 0;
+  const drain = useSharedValue(0);
+  const starsIn = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
+  const pressed = useRef(false);
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    drain.value = reduced ? 1 : withDelay(700, withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) }));
+    starsIn.forEach((s, i) => {
+      if (i >= stars) return;
+      const at = 450 + i * 260;
+      s.value = reduced ? 1 : withDelay(at, withSequence(withTiming(1.4, { duration: 120 }), withSpring(1, { damping: 8, stiffness: 260 })));
+      const t = setTimeout(() => { GameAudio.play('fx.reveal', { pitch: i * 3, volume: 0.6 }); haptic('hitMedium'); }, reduced ? 0 : at);
+      timers.push(t);
+    });
+    return () => timers.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const pct = (v: number) => `${Math.min(100, (Math.max(0, v) / Math.max(1, hpMax)) * 100)}%` as `${number}%`;
+  const fill = useAnimatedStyle(() => {
+    const v = startHp - (startHp - hpAfter) * drain.value;
+    return { width: `${Math.min(100, (Math.max(0, v) / Math.max(1, hpMax)) * 100)}%` as `${number}%` };
+  });
+  const s0 = useAnimatedStyle(() => ({ transform: [{ scale: starsIn[0].value }], opacity: starsIn[0].value > 0 ? 1 : 0 }));
+  const s1 = useAnimatedStyle(() => ({ transform: [{ scale: starsIn[1].value }], opacity: starsIn[1].value > 0 ? 1 : 0 }));
+  const s2 = useAnimatedStyle(() => ({ transform: [{ scale: starsIn[2].value }], opacity: starsIn[2].value > 0 ? 1 : 0 }));
+  const left = clock(endsAt, Date.now());
+  const once = (f?: () => void) => () => { if (pressed.current || !f) return; pressed.current = true; f(); };
+
+  return (
+    <View style={styles.card} accessibilityViewIsModal>
+      <View style={styles.head}>
+        <Image source={BOSS_ART[boss]} style={styles.bossPic} contentFit="contain" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.kicker}>{noHits ? 'NO HITS THIS TIME' : `YOU HIT ${bossName.toUpperCase()} FOR`}</Text>
+          {noHits ? <Text style={styles.zero}>No Energy was spent.</Text>
+            : <CountUpText value={damage} delayMs={reduced ? 0 : 200} durationMs={reduced ? 1 : 700} style={styles.dmg} />}
+          {rate < 1 && !noHits && <Text style={styles.rate}>From home, {Math.round(rate * 100)}% power</Text>}
+        </View>
+      </View>
+
+      {!noHits && <View style={styles.stars}>
+        {[s0, s1, s2].map((st, i) => <View key={i} style={styles.starSlot}>
+          <Image source={BASH_ART.star} style={[StyleSheet.absoluteFill, { opacity: 0.18 }]} contentFit="contain" tintColor={BRAND.navy} />
+          <Animated.View style={[StyleSheet.absoluteFill, st]}><Image source={BASH_ART.star} style={StyleSheet.absoluteFill} contentFit="contain" /></Animated.View>
+        </View>)}
+      </View>}
+
+      <View style={styles.raid}>
+        <View style={styles.hpTrack}>
+          <View style={[styles.hpGold, { width: pct(startHp) }]} />
+          <Animated.View style={[styles.hpRed, fill]} />
+        </View>
+        <Text style={styles.raidLine} numberOfLines={1}>
+          {ko ? 'You knocked it out!' : `${hpAfter.toLocaleString()} HP left`}{left ? `  ·  ${left} to go` : ''}{fighters > 0 ? `  ·  ${fighters} fighting` : ''}
+        </Text>
+      </View>
+
+      {rewards && <View style={styles.loot} accessible accessibilityLabel={`If your team beats it you get ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`}>
+        <Text style={styles.lootTitle}>{ko ? 'Your loot is on the way' : 'Team wins, you get'}</Text>
+        <View style={styles.lootRow}>
+          <Loot icon="coins" n={rewards.coins} />
+          <Loot icon="xp" n={rewards.xp} />
+          <Loot icon="energy" n={rewards.energy} />
+          {rewards.parts > 0 && <Loot icon="parts" n={rewards.parts} />}
+        </View>
+      </View>}
+
+      <View style={styles.chips}>
+        <Chip label="Bonks" value={Number(meta.bonks ?? 0)} />
+        <Chip label="Smashes" value={Number(meta.smashes ?? 0)} />
+        <Chip label="Best streak" value={Number(meta.best_streak ?? 0)} />
+      </View>
+
+      {!noHits && n.can && onAgain ? <>
+        <Pressable accessibilityRole="button" onPress={once(onAgain)} style={({ pressed: p }) => [styles.again, p && { transform: [{ scale: 0.97 }] }]}
+          accessibilityLabel={`Attack again for ${next?.energyCost} Energy. You will have ${n.energyAfter} Energy.`}>
+          <Text style={styles.againText}>ATTACK AGAIN</Text>
+          <View style={styles.cost}><GameIcon name="energy" size={22} /><Text style={styles.costText}>{next?.energyCost}</Text></View>
+        </Pressable>
+        <Text style={styles.wallet}>You have <Text style={styles.walletNum}>{n.energyAfter}</Text> Energy  ·  {n.attacksAfter} {n.attacksAfter === 1 ? 'attack' : 'attacks'} left</Text>
+        <Pressable accessibilityRole="button" onPress={once(claim)} style={styles.done} hitSlop={8}><Text style={styles.doneText}>Done</Text></Pressable>
+      </> : <>
+        {!noHits && n.reason && <Text style={styles.wallet}>{n.reason}</Text>}
+        <Pressable accessibilityRole="button" onPress={once(claim)} style={[styles.again, styles.doneBig]}>
+          <Text style={[styles.againText, { color: BRAND.navy }]}>{noHits ? 'BACK' : 'DONE'}</Text>
+        </Pressable>
+      </>}
+    </View>
+  );
+}
+
+function Loot({ icon, n }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: number }) {
+  return <View style={styles.lootItem}><GameIcon name={icon} size={26} /><Text style={styles.lootNum}>{n}</Text></View>;
+}
+function Chip({ label, value }: { label: string; value: number }) {
+  return <View style={styles.chip}><Text style={styles.chipNum}>{value}</Text><Text style={styles.chipLabel}>{label}</Text></View>;
+}
+
+const styles = StyleSheet.create({
+  card: { width: '92%', backgroundColor: BRAND.cream, borderRadius: 26, borderWidth: 4, borderColor: BRAND.navy, padding: 16 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  bossPic: { width: 76, height: 76 },
+  kicker: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, letterSpacing: 0.4 },
+  dmg: { alignSelf: 'stretch', textAlign: 'left', fontFamily: 'Shark', fontSize: 48, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0, padding: 0 },
+  zero: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 4 },
+  rate: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
+  stars: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 4 },
+  starSlot: { width: 46, height: 46 },
+  raid: { marginTop: 10 },
+  hpTrack: { height: 20, borderRadius: 10, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.sky, overflow: 'hidden' },
+  hpGold: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.gold },
+  hpRed: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.red },
+  raidLine: { marginTop: 4, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, textAlign: 'center' },
+  loot: { marginTop: 10, backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 2, borderColor: BRAND.sky, paddingVertical: 8, alignItems: 'center' },
+  lootTitle: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft },
+  lootRow: { flexDirection: 'row', gap: 16, marginTop: 4 },
+  lootItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  lootNum: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy },
+  chips: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 10 },
+  chip: { flex: 1, alignItems: 'center', backgroundColor: BRAND.sky, borderRadius: 12, paddingVertical: 4 },
+  chipNum: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
+  chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.navySoft },
+  again: { marginTop: 14, minHeight: 64, borderRadius: 20, backgroundColor: BRAND.red, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 7,
+    borderBottomColor: BRAND.redLip, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  doneBig: { backgroundColor: BRAND.gold, borderBottomColor: BRAND.goldLip },
+  againText: { fontFamily: 'Shark', fontSize: 24, color: BRAND.white, letterSpacing: 0.5 },
+  cost: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: BRAND.cream, borderRadius: 14, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
+  costText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
+  wallet: { marginTop: 6, fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy, textAlign: 'center' },
+  walletNum: { fontFamily: 'Shark', color: BRAND.navy },
+  done: { alignSelf: 'center', marginTop: 6, minHeight: 44, minWidth: 120, alignItems: 'center', justifyContent: 'center' },
+  doneText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navySoft, textDecorationLine: 'underline' },
+});

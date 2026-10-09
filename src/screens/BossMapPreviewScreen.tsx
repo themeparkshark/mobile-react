@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BOSS_NAMES, type BossId, type BossRaid } from '../api/endpoints/parks/raid';
@@ -62,6 +63,8 @@ export default function BossMapPreviewScreen() {
   const [section, setSection] = useState<Section>('map');
   const [boss, setBoss] = useState<BossId>('kraken'), [run, setRun] = useState(0), [selected, setSelected] = useState(false);
   const [held, setHeld] = useState(false);
+  // Capture knobs (deep link): energy, tickets, attacks used, joined from home already.
+  const [knobs, setKnobs] = useState({ energy: 120, tickets: 2, attacks: 0, joined: false, autoplay: 0 });
   const auth = useContext(AuthContext);
   const place = useContext(LocationContext);
   useEffect(() => {
@@ -73,7 +76,11 @@ export default function BossMapPreviewScreen() {
       const b = query.get('boss') as BossId | null;
       if (b && b in BOSS_NAMES) setBoss(b);
       setHeld(query.get('held') === '1');
+      const num = (k: string, d: number) => (query.get(k) !== null && Number.isFinite(Number(query.get(k))) ? Number(query.get(k)) : d);
+      setKnobs({ energy: num('energy', 120), tickets: num('tickets', 2), attacks: num('attacks', 0), joined: query.get('joined') === '1', autoplay: num('autoplay', 0) });
       if (query.get('play') === '1') setRun(value => value + 1);
+      // First-time Boss Bash lesson again (capture only).
+      if (query.get('fresh') === '1') void AsyncStorage.removeItem('boss_bash_seen_v1').catch(() => undefined);
     };
     void Linking.getInitialURL().then(apply).catch(() => undefined);
     const sub = Linking.addEventListener('url', event => apply(event.url));
@@ -99,8 +106,11 @@ export default function BossMapPreviewScreen() {
     refreshControl: async () => fixture.control });
   useEffect(() => { if (section === 'map' && run > 0) void map.enqueue(fixture.defeated); }, [run, section]);
 
-  const fakeAuth = useMemo(() => ({ ...auth, player: { ...(auth?.player ?? {}), id: 900005, energy: 120, tickets: 2 } as never,
-    refreshPlayer: async () => auth?.player as never }), [auth]);
+  const fakeAuth = useMemo(() => ({ ...auth, player: { ...(auth?.player ?? {}), id: 900005, energy: knobs.energy, tickets: knobs.tickets } as never,
+    refreshPlayer: async () => auth?.player as never }), [auth, knobs.energy, knobs.tickets]);
+  const log = [{ damage: 512, remote: section === 'home' }, { damage: 416, remote: section === 'home' }, { damage: 388, remote: section === 'home' },
+    { damage: 604, remote: section === 'home' }].slice(0, knobs.attacks);
+  const youFixture = { attacks: knobs.attacks, attacks_left: 5 - knobs.attacks, damage: log.reduce((a, b) => a + b.damage, 0), reward: null, log };
   const fakePlace = useMemo(() => ({ ...place, location: { latitude: RIDE.latitude + 0.0004, longitude: RIDE.longitude } as never }), [place]);
   const rushes: RushPick[] = [{ task: fixture.task, wait: 10, rush: { ends_at: new Date(Date.now() + 12 * 60000).toISOString(), wait: 10, typical: 55 } as never }];
 
@@ -146,8 +156,9 @@ export default function BossMapPreviewScreen() {
     </View>
     {(section === 'sheet' || section === 'home') && <AuthContext.Provider value={fakeAuth}>
       <LocationContext.Provider value={fakePlace}>
-        <BossRaidFlow parkId={1} open recoveryService={fixtureRecovery} roundService={fixtureRound} onClose={() => setSection('map')} onState={() => undefined}
-          raid={fixtureRaid(boss, section === 'home' ? { latitude: null, longitude: null } : {})} />
+        <BossRaidFlow parkId={1} open recoveryService={fixtureRecovery} roundService={fixtureRound} devAutoplay={knobs.autoplay} onClose={() => setSection('map')} onState={() => undefined}
+          raid={fixtureRaid(boss, { ...(section === 'home' ? { latitude: null, longitude: null } : {}), you: youFixture,
+            remote: { joined: knobs.joined, ticket_cost: 1, damage_rate: 0.6, reward_rate: 0.6, fighters: 1 } })} />
       </LocationContext.Provider>
     </AuthContext.Provider>}
     <View style={styles.controls}>

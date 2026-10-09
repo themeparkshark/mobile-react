@@ -11,14 +11,16 @@ import {
 import { applyTeamNames } from '../../constants/teams';
 import { AuthContext } from '../../context/AuthProvider';
 import { LocationContext } from '../../context/LocationProvider';
-import { BossBrawl } from '../../games/boss/v1/BossBrawl';
+import { BossBash } from '../../games/boss/bash/BossBash';
 import useBossAttackRecovery from '../../hooks/useBossAttackRecovery';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import type { BossAttackCheckpoint, BossAttackRecovery } from '../../services/boss/attackRecovery';
 import { BRAND, GameButton, GameIcon } from '../../ui';
 import BossAttackStatus from './BossAttackStatus';
 import { BOSS_ART } from './bossArt';
-import { AttackPips, BossHpBar, BossSheetSkeleton, TeamDamage, TopFighters } from './BossSheetParts';
+import { AttackPips, BossSheetSkeleton, TeamDamage, TopFighters } from './BossSheetParts';
+import BossJoinCard from './BossJoinCard';
+import { joinCost, rewardPreview, shortfallCopy } from './joinModel';
 import BossWinCard from './BossWinCard';
 import PushSoftAsk from '../PushSoftAsk';
 import useLivePoll from '../../hooks/useLivePoll';
@@ -113,7 +115,7 @@ export const PRESENCE: Record<PresenceReason, string> = {
 };
 
 /** Boss sheet (who's fighting, HP, your attacks), the Boss Brawl, and the victory/escape moment. */
-export default function BossRaidFlow({ raid, parkId, open, onClose, onState, recoveryService, roundService = startRaidRound, onCelebrationDismiss, onMapOcclusionChange, presentationAvailable = true, loading = false, link = 'live', onRetryLink }: {
+export default function BossRaidFlow({ raid, parkId, open, onClose, onState, recoveryService, roundService = startRaidRound, devAutoplay = 0, onCelebrationDismiss, onMapOcclusionChange, presentationAvailable = true, loading = false, link = 'live', onRetryLink }: {
   readonly raid: BossRaid | null;
   readonly parkId: number | null;
   readonly open: boolean;
@@ -123,6 +125,8 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   readonly recoveryService?: BossAttackRecovery;
   /** Local fixture injection for dev previews; normal screens ask the server. */
   readonly roundService?: typeof startRaidRound;
+  /** Dev capture only: the fight plays itself at this skill (0-1). */
+  readonly devAutoplay?: number;
   readonly onCelebrationDismiss?: (raid: BossRaid) => void;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
   readonly presentationAvailable?: boolean;
@@ -223,6 +227,8 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     onClose();
   };
   const closeSheet = () => { round.current = null; setFighting(false); if (celebrate) dismissCelebration(); else onClose(); };
+  // Result screen "Attack again": send this round, then start the next one once it is confirmed.
+  const [againPending, setAgainPending] = useState(false);
   const submit = (expectedRound: typeof round.current, meta?: Record<string, unknown>) => {
     const finished = round.current;
     if (!finished || finished !== expectedRound) return;
@@ -256,9 +262,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     : !raid || !active ? 'The fight is over.'
     : atThisPark && !validLocation && !away ? 'Waiting for your location…'
     : raid.you.attacks_left <= 0 ? `You've used all ${maxAttacks} attacks. Cheer them on!`
-      : energy < raid.energy_cost ? `Need ${raid.energy_cost} Energy to attack`
-        : needsPass && tickets < raid.remote.ticket_cost ? 'Joining from home needs 1 ticket' : null;
-  const fightLabel = !remote ? 'FIGHT' : !needsPass ? 'FIGHT FROM HERE' : 'JOIN FROM HOME';
+      : shortfallCopy(joinCost(raid, remote, energy, tickets).short);
 
   const startBrawl = async () => {
     if (!currentView.current.open || !currentView.current.focused || currentView.current.contextKey !== contextKey ||
@@ -290,6 +294,15 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     setFighting(true);
   };
   const renderedRound = round.current;
+  useEffect(() => {
+    if (!againPending || fighting || starting) return;
+    if (!open || !focused) { setAgainPending(false); return; }
+    if (receiptBlocked) return;
+    setAgainPending(false);
+    if (!blocked) void startBrawl();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [againPending, receiptBlocked, fighting, starting, open, focused, blocked]);
+  const rewards = raid ? rewardPreview(raid, remote) : null;
 
   // iOS shows one modal at a time: with the sheet open, the win takes over the sheet.
   const winView = celebrate?.you.reward ? (
@@ -316,67 +329,47 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
         style={winView ? styles.winModal : styles.sheetModal} backdropColor={BRAND.navy} backdropOpacity={0.4}>
           {/* The brawl presents from inside the sheet (iOS can't present a new
               modal while another is dismissing); the sheet waits underneath. */}
-          {raid && <BossBrawl
+          {raid && <BossBash
             visible={fighting}
             boss={raid.boss}
             bossName={BOSS_NAMES[raid.boss]}
+            rideName={raid.ride_name}
             hpLeft={raid.hp_left}
             hpMax={raid.hp_max}
+            fighters={raid.fighters}
+            endsAt={raid.ends_at}
             damageRate={round.current?.body.remote ? roundRate : 1}
             damage={raid.damage ?? DEFAULT_DAMAGE}
             maxHits={roundLimits.current?.max_hits}
+            next={{ attacksLeft: raid.you.attacks_left, energy, energyCost: raid.energy_cost }}
+            rewards={rewards ?? undefined}
+            autoplay={__DEV__ ? devAutoplay : 0}
             onComplete={(_, meta) => submit(renderedRound, meta)}
+            onAgain={meta => { setAgainPending(true); submit(renderedRound, meta); }}
             onClose={() => { if (round.current === renderedRound) { round.current = null; setFighting(false); } }}
           />}
           {winView ?? (raid ? <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetContent} bounces={false}>
             <View style={styles.grabber} />
-            <Pressable accessibilityRole="button" accessibilityLabel="Close boss raid" onPress={closeSheet} style={styles.close} hitSlop={8}>
-              <GameIcon name="close" size={36} />
-            </Pressable>
-            <View style={styles.head}>
-              <View style={styles.bossDisc}>
-                <Image source={BOSS_ART[raid.boss]} style={styles.bossArt} contentFit="contain" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={[styles.kickerChip, !active && styles.kickerDone]}>
-                  <GameIcon name="timer" size={16} />
-                  <Text style={styles.kicker}>{active ? `${clock(raid.ends_at, now)} LEFT` : raid.status === 'defeated' ? 'DEFEATED' : 'ESCAPED'}</Text>
-                </View>
-                <Text style={styles.name}>{BOSS_NAMES[raid.boss]}</Text>
-                <Text style={styles.where} numberOfLines={1}>at {raid.ride_name}</Text>
-              </View>
-            </View>
             <MatchLinkBanner phase={link} onRetry={() => onRetryLink?.()} onLeave={closeSheet} leaveLabel="Leave fight" />
-            <View style={{ marginTop: 12 }}><BossHpBar hpLeft={raid.hp_left} hpMax={raid.hp_max} /></View>
-            <Text style={styles.hpText}>{raid.hp_left.toLocaleString()} / {raid.hp_max.toLocaleString()} HP  ·  {raid.fighters} {raid.fighters === 1 ? 'shark' : 'sharks'} fighting</Text>
-
+            {receiptBlocked && recovery.snapshot && !againPending
+              ? <><BossJoinCard raid={raid} remote={remote} walkCloser={walkCloser} energy={energy} tickets={tickets}
+                  clockText={active ? clock(raid.ends_at, now) : raid.status === 'defeated' ? 'BEATEN' : 'GONE'} rewards={rewards!}
+                  blocked="Saving your last attack..." starting={false} onFight={() => undefined} onClose={closeSheet} note={note} />
+                <BossAttackStatus snapshot={recovery.snapshot} onRetry={() => { void recovery.retry(); }} /></>
+              : <BossJoinCard raid={raid} remote={remote} walkCloser={walkCloser} energy={energy} tickets={tickets}
+                  clockText={active ? clock(raid.ends_at, now) : raid.status === 'defeated' ? 'BEATEN' : 'GONE'} rewards={rewards!}
+                  blocked={againPending ? 'Sending your attack...' : blocked} starting={starting || againPending}
+                  onFight={() => { void startBrawl(); }} onClose={closeSheet} note={note} />}
+            {raid.you.attacks > 0 && <View style={{ marginTop: 6 }}><PushSoftAsk /></View>}
+            <Text style={styles.section}>Your attacks</Text>
             <AttackPips raid={raid} />
-            <Text style={styles.you}>Your damage {raid.you.damage.toLocaleString()}  ·  {raid.you.attacks_left} of {maxAttacks} attacks left</Text>
+            <Text style={styles.section}>Teams</Text>
             <TeamDamage raid={raid} />
             <TopFighters raid={raid} />
-
-            {walkCloser && <View style={styles.hint}>
-              <GameIcon name="pin" size={22} />
-              <Text style={styles.hintText}>Walk closer to {raid.ride_name ?? 'the ride'} for full damage. From here you deal {Math.round(raid.remote.damage_rate * 100)}%.</Text>
-            </View>}
-            {note && <Text style={styles.note}>{note}</Text>}
-            {raid.you.attacks > 0 && <View style={{ marginTop: 8 }}><PushSoftAsk /></View>}
-
-            {receiptBlocked && recovery.snapshot ? <BossAttackStatus snapshot={recovery.snapshot} onRetry={() => { void recovery.retry(); }} />
-              : <View style={styles.cta}>
-                {blocked && <Text style={styles.blocked}>{blocked}</Text>}
-                <GameButton testID="boss-fight" label={fightLabel} variant="danger" disabled={!!blocked} loading={starting}
-                  onPress={() => { void startBrawl(); }}
-                  accessibilityHint={remote ? `Costs ${needsPass ? `${raid.remote.ticket_cost} ticket and ` : ''}${raid.energy_cost} energy` : `Costs ${raid.energy_cost} Energy`} />
-                <View style={styles.cost}>
-                  {needsPass && <><GameIcon name="ticket" size={20} /><Text style={styles.costText}>{raid.remote.ticket_cost}  +</Text></>}
-                  <GameIcon name="energy" size={20} /><Text style={styles.costText}>{raid.energy_cost} per attack</Text>
-                </View>
-              </View>}
             <Text style={styles.fine}>
               {remote
-                ? `From here you deal ${Math.round(raid.remote.damage_rate * 100)}% damage and can't be MVP. ${raid.remote.joined ? "You're in! " : ''}Everyone who lands a hit gets the loot.`
-                : 'Beat it together before time runs out. Everyone who lands a hit gets the loot. The top hitter is MVP.'}
+                ? `From home your hits count ${Math.round(raid.remote.damage_rate * 100)}% and the top-hitter prize stays at the ride. Everyone who lands a hit shares the loot if the team wins.`
+                : 'Everyone who lands a hit shares the loot if the team wins. The top hitter is MVP and wins a Ticket.'}
             </Text>
           </ScrollView> : emptyView)}
       </Modal>
@@ -420,5 +413,6 @@ const styles = StyleSheet.create({
   blocked: { marginBottom: 6, fontFamily: 'Shark', fontSize: 15, color: BRAND.white, textAlign: 'center' },
   cost: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   costText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white },
+  section: { marginTop: 14, fontFamily: 'Shark', fontSize: 15, color: BRAND.white, opacity: 0.9 },
   fine: { marginTop: 8, fontFamily: 'Knockout', fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center' },
 });
