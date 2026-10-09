@@ -25,7 +25,7 @@
  */
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Image } from 'expo-image';
-import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -56,6 +56,12 @@ import {
 } from './model';
 
 const ART = 220;
+const STAGE_H = ART + 30 + 4;
+/** 1 on tall phones (900 pt and up); down to 0.42 on a 667 pt iPhone SE so the card never clips. */
+export function stageScaleFor(screenH: number): number {
+  if (screenH >= 900) return 1;
+  return Math.max(0.42, Math.min(1, (screenH - 560) / 340));
+}
 /** Badge centre inside the art canvas (plates are normalised a little below centre). */
 const BADGE_CY = 0.55;
 const INK = '#14213D';
@@ -309,6 +315,9 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
   shake, nextCount, bus, overlay, wearingTitle, onShown, onClaim, onNext, onPhase, onClaimed }, ref) {
   const tone = stampRarity(stamp.rarity);
   const rank = rarityRank(stamp.rarity);
+  // Small phones (iPhone SE): the art stage shrinks so the whole card fits under the status bar and above the home bar.
+  const { height: screenH } = useWindowDimensions();
+  const stageScale = stageScaleFor(screenH);
   const legendary = stamp.earned && stamp.rarity === 'legendary';
   const req = requirement(stamp);
   const bleed = bleedFraction(stamp);
@@ -509,8 +518,9 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
   return (
     <View collapsable={false} style={[styles.content, overlay && styles.overlay]} pointerEvents={overlay ? 'none' : 'auto'}
       importantForAccessibility={overlay ? 'no-hide-descendants' : 'auto'} accessibilityElementsHidden={overlay}>
+      <View style={{ height: STAGE_H * stageScale, marginVertical: 0, alignItems: 'center', justifyContent: 'center' }}>
       <Pressable
-        style={styles.stage}
+        style={[styles.stage, stageScale < 1 && { transform: [{ scale: stageScale }] }]}
         onPress={stamp.earned ? () => repress(true) : undefined}
         accessibilityRole={stamp.earned ? 'button' : 'image'}
         accessibilityLabel={`${stamp.name} stamp, ${tone.label}${stamp.earned ? '. Tap to stamp it again' : '. Locked'}`}
@@ -544,6 +554,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
         </Animated.View>
         <Animated.View pointerEvents="none" style={[styles.flash, flashStyle]} />
       </Pressable>
+      </View>
 
       {/* App-wide ramp (rarity.ts): light chip, rarity frame, navy ink; gold is Legendary only. */}
       <View style={[styles.rarity, { backgroundColor: tone.chip, borderColor: tone.frame }, pillGold && styles.rarityGold]}>
