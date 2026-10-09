@@ -33,7 +33,7 @@ import {
   type SharkPassReward, type SharkPassState, type SharkPassTier,
 } from '../api/endpoints/me/shark-pass';
 import { askGrownUp } from '../components/GrownUpGate';
-import { GotIt, MAX_FONT, PackArt, artSource, type PackArtKey } from '../components/money/moneyUi';
+import { GotIt, MAX_FONT, PackArt, Sticker, artSource, type PackArtKey } from '../components/money/moneyUi';
 import RealMoneyMark from '../components/RealMoneyMark';
 import { AuthContext } from '../context/AuthProvider';
 import { haptic } from '../gamekit/Haptics';
@@ -66,6 +66,7 @@ const SEASON_ART: Record<string, number> = {
   'aurora-crown': require('../../assets/images/sharkpass/aurora-crown.webp'),
 };
 const EMBLEM = require('../../assets/images/sharkpass/pass-emblem.webp');
+const SCENE = require('../../assets/images/sharkpass/scene-northern-lights.webp');
 
 /** The player's own look with a season pin on its pin spot (nothing is saved): the hero's "this could be you". */
 function withSeasonPin(base: InventoryType | undefined, reward: SharkPassReward | null | undefined): InventoryType | null {
@@ -125,6 +126,7 @@ function Flake({ x, size, dur, delay, drift, height, running }: { x: number; siz
 }
 
 const CELL_W = 92;
+const stepLabel = (n: number) => `Step ${n}`;
 
 /** For the grown-up holding the phone: what the Shark Pass is, in plain words. All true of the server rules. */
 const PASS_GROWN_UP_NOTES = [
@@ -326,6 +328,14 @@ export default function SharkPassScreen() {
     const worth = formatLike(price.price, Math.floor(value * 100) / 100);
     return worth ? `Climb all ${steps} steps and the Shark Pass row's coins, tickets and Rescue Passes come to ${worth} at Supplies' regular prices. Plus ${g.pins} season items.` : null;
   }, [tiers, price, supplies.catalog, supplies.prices, steps]);
+  const worthValue = worthLine?.match(/come to (\S+) at/)?.[1] ?? null;
+  // The panel's showcase: the season items on the Shark Pass row, the next ones first (up to 5).
+  const showcase = useMemo(() => {
+    const items = tiers.filter(t => t.paid.type === 'item');
+    const ahead = items.filter(t => !t.unlocked || !premium);
+    return (ahead.length ? ahead : items).slice(0, 5);
+  }, [tiers, premium]);
+  const readyCount = tiers.filter(t => t.unlocked && !t.paid_claimed).length;
   const nextPaid = tiers.filter(t => !t.unlocked || !premium).filter(t => t.paid.type === 'item' || t.paid.type === 'mystery_box').slice(0, 3);
 
   return (
@@ -358,17 +368,18 @@ export default function SharkPassScreen() {
             {/* Season hero: the emblem, the season, the real last day, the climb. */}
             <Animated.View entering={reduced ? undefined : FadeInDown.springify().damping(15)} style={s.heroLip}>
               <View style={s.hero}>
+                {/* The season's top prize is the hero's world: your shark standing in the Northern Lights. */}
+                <Image source={SCENE} style={StyleSheet.absoluteFill} contentFit="cover" />
+                <LinearGradient pointerEvents="none" colors={['rgba(8,45,92,0)', 'rgba(8,45,92,0.55)', 'rgba(8,45,92,0.9)']}
+                  start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
                 <View style={s.heroStage}>
-                  <View style={s.heroSnow} />
+                  <View style={s.heroShadow} />
                   {heroLook ? (
                     <Playercard inventory={heroLook} showBackground={false} pinAnchor="body" still={reduced} style={StyleSheet.absoluteFill} />
                   ) : (
                     <Image source={EMBLEM} style={s.emblem} contentFit="contain" />
                   )}
                   <Image source={EMBLEM} style={s.heroBadge} contentFit="contain" />
-                  {nextPrize?.reward.type === 'item' && (
-                    <View style={s.heroPin}><RewardPicture reward={nextPrize.reward} size={46} /></View>
-                  )}
                   {heroLook && nextPrize?.reward.type === 'item' && nextPrize.reward.slot === 'pin' && (
                     <View style={s.tryTag}><Text maxFontSizeMultiplier={1.1} style={s.tryTagText}>TRY-ON</Text></View>
                   )}
@@ -388,10 +399,13 @@ export default function SharkPassScreen() {
               </View>
               {nextPrize && nextStep > 0 && (
                 <View style={s.nextPrize}>
-                  <RewardPicture reward={nextPrize.reward} size={40} />
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
-                    {`${nextPrize.pointsAway.toLocaleString('en-US')} points to the ${rewardWords(nextPrize.reward)} at step ${nextStep}${nextPrize.pass && !premium ? ' (Shark Pass)' : ''}`}
-                  </Text>
+                  <View style={s.nextCircle}><RewardPicture reward={nextPrize.reward} size={50} /></View>
+                  <View style={{ flex: 1 }}>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextKicker}>{nextPrize.pass && !premium ? 'NEXT SHARK PASS PRIZE' : 'NEXT PRIZE'}</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
+                      {`${rewardWords(nextPrize.reward)} · ${nextPrize.pointsAway.toLocaleString('en-US')} points away`}
+                    </Text>
+                  </View>
                 </View>
               )}
               {progress.vip && <Text maxFontSizeMultiplier={MAX_FONT} style={s.vipLine}>{`VIP: +${progress.vip_bonus_percent}% points on everything`}</Text>}
@@ -437,17 +451,17 @@ export default function SharkPassScreen() {
               <Animated.View entering={reduced ? undefined : FadeInUp.delay(200).springify().damping(15)} style={s.buyLip}>
                 <View style={s.buy}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyTitle}>UNLOCK THE SHARK PASS ROW</Text>
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{`A reward on all ${steps} steps: ${summary}.`}</Text>
-                  {worthLine && <Text maxFontSizeMultiplier={MAX_FONT} style={[s.buyBody, s.readyNow]}>{worthLine}</Text>}
-                  {readyNow && <Text maxFontSizeMultiplier={MAX_FONT} style={[s.buyBody, s.readyNow]}>{readyNow}</Text>}
+                  {worthValue && <Sticker text={`WORTH ${worthValue}+`} tone="gold" style={{ position: 'relative', alignSelf: 'center', transform: [{ rotate: '-3deg' }] }} />}
                   <View style={s.preview}>
-                    {nextPaid.map(t => (
+                    {showcase.map(t => (
                       <View key={t.tier} style={s.previewCell}>
-                        <RewardPicture reward={t.paid} size={54} />
-                        <Text maxFontSizeMultiplier={MAX_FONT} style={s.previewText} numberOfLines={2}>{rewardWords(t.paid)}</Text>
+                        <RewardPicture reward={t.paid} size={48} />
+                        <Text maxFontSizeMultiplier={1.1} style={s.previewText} numberOfLines={1}>{stepLabel(t.tier)}</Text>
                       </View>
                     ))}
                   </View>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{`A reward on all ${steps} steps: ${summary}.`}</Text>
+                  {worthLine && <Text maxFontSizeMultiplier={MAX_FONT} style={s.worthSmall}>{worthLine}</Text>}
                   {storeAvailable() ? (
                     <Pressable onPress={() => void buy(false)} disabled={!price || !!busy} accessibilityRole="button"
                       accessibilityLabel={price ? `Get the Shark Pass for ${price.price}. Real money, one time, a grown-up buys it.` : 'Loading the price'}
@@ -456,7 +470,9 @@ export default function SharkPassScreen() {
                         {price && busy !== 'buy' && <RealMoneyMark size={26} />}
                         <Text maxFontSizeMultiplier={1.15} style={s.ctaText}>{busy === 'buy' ? 'ONE MOMENT…' : price ? `GET IT · ${price.price}` : 'LOADING'}</Text>
                       </View>
-                      <Text maxFontSizeMultiplier={1.15} style={s.ctaSub}>One time for this season. It doesn’t renew.</Text>
+                      <Text maxFontSizeMultiplier={1.15} style={s.ctaSub}>
+                        {readyCount > 0 ? `Claim ${readyCount} right away · one time, never renews` : 'One time for this season. It doesn’t renew.'}
+                      </Text>
                     </Pressable>
                   ) : (
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>Update Theme Park Shark to get the Shark Pass.</Text>
@@ -604,7 +620,7 @@ function Cell({ reward, claimed, ready, locked, pass, pulse, busy, onPress }: {
         accessibilityLabel={`${rewardWords(reward)}. ${claimed ? 'Claimed.' : ready ? 'Tap to claim.' : locked ? (pass ? 'Shark Pass reward.' : 'Keep playing to reach it.') : ''}`}
         style={[s.cell, pass && s.cellPass, pass && !locked && s.cellPassOwned, ready && s.cellReady, claimed && s.cellClaimed]}>
         <View style={{ opacity: claimed ? 0.45 : 1 }}><RewardPicture reward={reward} size={50} /></View>
-        <Text maxFontSizeMultiplier={1.1} style={[s.cellText, pass && s.cellTextPass]} numberOfLines={2}>{rewardWords(reward)}</Text>
+        <Text maxFontSizeMultiplier={1.1} style={[s.cellText, pass && s.cellTextPass, pass && !locked && s.cellTextOwned]} numberOfLines={2}>{rewardWords(reward)}</Text>
         {claimed && <View style={s.badge}><GameIcon name="check" size={22} /></View>}
         {!claimed && locked && <View style={s.badge}><GameIcon name="lock" size={20} /></View>}
         {ready && !busy && <View style={s.claimTag}><Text maxFontSizeMultiplier={1.1} style={s.claimTagText}>CLAIM</Text></View>}
@@ -623,10 +639,10 @@ const s = StyleSheet.create({
   offBody: { fontFamily: FONT.body, fontSize: 17, color: '#ffffff', textAlign: 'center' },
   scroll: { paddingBottom: 48, gap: 14 },
   heroLip: { marginHorizontal: 14, borderRadius: 22, backgroundColor: BRAND.navy, paddingBottom: 6 },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 22, borderWidth: 4, borderColor: '#ffffff', backgroundColor: '#1680d8', padding: 12 },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 22, borderWidth: 4, borderColor: '#ffffff', backgroundColor: '#0b2f63', padding: 12, overflow: 'hidden' },
   emblem: { width: 96, height: 96 },
-  heroStage: { width: 116, height: 132, alignItems: 'center', justifyContent: 'flex-end' },
-  heroSnow: { position: 'absolute', bottom: 2, width: 104, height: 26, borderRadius: 52, backgroundColor: '#eaf6ff', borderWidth: 3, borderColor: '#ffffff' },
+  heroStage: { width: 128, height: 150, alignItems: 'center', justifyContent: 'flex-end' },
+  heroShadow: { position: 'absolute', bottom: 6, width: 86, height: 14, borderRadius: 43, backgroundColor: 'rgba(5,40,80,0.35)' },
   heroPin: { position: 'absolute', right: -8, bottom: 24, width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: BRAND.gold },
   tryTag: { position: 'absolute', bottom: -2, alignSelf: 'center', backgroundColor: BRAND.navy, borderRadius: 8, paddingHorizontal: 6, borderWidth: 2, borderColor: '#ffffff' },
@@ -641,8 +657,10 @@ const s = StyleSheet.create({
   barFill: { height: '100%', backgroundColor: BRAND.gold, borderRadius: 6 },
   points: { fontFamily: FONT.body, fontSize: 14, color: '#ffffff' },
   ended: { marginHorizontal: 14, borderRadius: 20, borderWidth: 3, borderColor: BRAND.gold, backgroundColor: '#123f80', padding: 14, gap: 6, alignItems: 'center' },
-  nextPrize: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: 'rgba(5,52,110,0.35)', borderRadius: 12, padding: 6 },
-  nextPrizeText: { flex: 1, fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
+  nextPrize: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: 8 },
+  nextCircle: { width: 62, height: 62, borderRadius: 31, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 3, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center' },
+  nextKicker: { fontFamily: FONT.display, fontSize: 12, color: BRAND.gold, letterSpacing: 0.6 },
+  nextPrizeText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   readyNow: { fontFamily: FONT.display, color: '#7dffb0' },
   vipLine: { fontFamily: FONT.display, fontSize: 14, color: BRAND.gold, textAlign: 'center', marginTop: 6 },
   trackHead: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: -6 },
@@ -653,11 +671,12 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, gap: 2, borderBottomWidth: 6, borderBottomColor: BRAND.navy },
   cellEmpty: { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.18)', borderBottomColor: 'rgba(5,52,110,0.4)' },
   cellPass: { backgroundColor: '#123f80', borderColor: BRAND.gold, borderBottomColor: '#5a3a00' },
-  cellPassOwned: { backgroundColor: '#1f5fae', borderColor: '#ffe07a' },
+  cellPassOwned: { backgroundColor: '#f7c531', borderColor: '#ffffff', borderBottomColor: '#a86b00' },
   cellReady: { borderColor: '#7dffb0' },
   cellClaimed: { backgroundColor: '#5b8fbf' },
   cellText: { fontFamily: FONT.display, fontSize: 11, color: '#ffffff', textAlign: 'center', lineHeight: 13 },
   cellTextPass: { color: '#ffe07a' },
+  cellTextOwned: { color: '#5a3a00' },
   badge: { position: 'absolute', top: -8, right: -6 },
   claimTag: { position: 'absolute', bottom: -10, backgroundColor: '#2fb44a', borderRadius: 8, borderWidth: 2, borderColor: '#ffffff', paddingHorizontal: 6 },
   claimTagText: { fontFamily: FONT.display, fontSize: 11, color: '#ffffff' },
@@ -673,8 +692,9 @@ const s = StyleSheet.create({
   buy: { borderRadius: 22, borderWidth: 4, borderColor: BRAND.gold, backgroundColor: '#123f80', padding: 14, gap: 8, alignItems: 'center' },
   buyTitle: { fontFamily: FONT.display, fontSize: 20, color: BRAND.gold, textAlign: 'center' },
   buyBody: { fontFamily: FONT.body, fontSize: 15, color: '#ffffff', textAlign: 'center', lineHeight: 19 },
-  preview: { flexDirection: 'row', gap: 10, justifyContent: 'center' },
-  previewCell: { width: 92, alignItems: 'center', gap: 2, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 4 },
+  preview: { flexDirection: 'row', gap: 6, justifyContent: 'center', flexWrap: 'wrap' },
+  worthSmall: { fontFamily: FONT.body, fontSize: 12, color: '#cfe4fb', textAlign: 'center', lineHeight: 15 },
+  previewCell: { width: 62, alignItems: 'center', gap: 2, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 4 },
   previewText: { fontFamily: FONT.display, fontSize: 11, color: '#ffe07a', textAlign: 'center' },
   cta: { alignSelf: 'stretch', backgroundColor: BRAND.gold, borderRadius: 18, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 5, borderBottomColor: BRAND.goldLip },
   ctaPressed: { transform: [{ translateY: 3 }], borderBottomWidth: 2 },
@@ -697,15 +717,15 @@ const s = StyleSheet.create({
   questCount: { fontFamily: FONT.display, fontSize: 14, color: '#e2f6ff', minWidth: 34, textAlign: 'right' },
   questBonus: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold, minWidth: 54, textAlign: 'right' },
   questFoot: { fontFamily: FONT.body, fontSize: 13, color: '#e2f6ff', textAlign: 'center' },
-  grownUps: { marginHorizontal: 14, backgroundColor: BRAND.cream, borderRadius: 18, padding: 12, gap: 6, borderWidth: 3, borderColor: BRAND.navy },
-  grownUpsHead: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, letterSpacing: 0.6 },
+  grownUps: { marginHorizontal: 14, backgroundColor: 'rgba(5,40,90,0.55)', borderRadius: 18, padding: 12, gap: 6, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
+  grownUpsHead: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff', letterSpacing: 0.6 },
   grownUpRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  grownUpText: { flex: 1, fontFamily: FONT.body, fontSize: 14, color: BRAND.navy, lineHeight: 18 },
-  earn: { marginHorizontal: 14, backgroundColor: BRAND.cream, borderRadius: 20, padding: 12, gap: 6, borderWidth: 3, borderColor: BRAND.navy },
-  earnTitle: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy },
+  grownUpText: { flex: 1, fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff', lineHeight: 18 },
+  earn: { marginHorizontal: 14, backgroundColor: 'rgba(5,40,90,0.55)', borderRadius: 20, padding: 12, gap: 6, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
+  earnTitle: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff' },
   earnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  earnLabel: { flex: 1, fontFamily: FONT.body, fontSize: 16, color: BRAND.navy },
-  earnCount: { fontFamily: FONT.body, fontSize: 13, color: BRAND.navySoft },
-  earnPts: { fontFamily: FONT.display, fontSize: 16, color: '#1f8a3e', minWidth: 46, textAlign: 'right' },
+  earnLabel: { flex: 1, fontFamily: FONT.body, fontSize: 16, color: '#ffffff' },
+  earnCount: { fontFamily: FONT.body, fontSize: 13, color: '#cfe4fb' },
+  earnPts: { fontFamily: FONT.display, fontSize: 16, color: '#7dffb0', minWidth: 46, textAlign: 'right' },
   fine: { fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff', textAlign: 'center', marginHorizontal: 24 },
 });
