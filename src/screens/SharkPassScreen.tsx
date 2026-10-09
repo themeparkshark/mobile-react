@@ -20,7 +20,9 @@ import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { AppState, FlatList, Image as RNImage, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import Playercard from '../components/Playercard';
+import type { InventoryType } from '../models/inventory-type';
 import Animated, {
   Easing, FadeInDown, FadeInUp, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
@@ -52,6 +54,15 @@ const SEASON_ART: Record<string, number> = {
   'finisher-medal': require('../../assets/images/sharkpass/finisher-medal.webp'),
 };
 const EMBLEM = require('../../assets/images/sharkpass/pass-emblem.webp');
+
+/** The player's own look with a season pin on its pin spot (nothing is saved): the hero's "this could be you". */
+function withSeasonPin(base: InventoryType | undefined, reward: SharkPassReward | null | undefined): InventoryType | null {
+  if (!base?.skin_item || !reward || reward.type !== 'item') return base ?? null;
+  const bundled = SEASON_ART[reward.art];
+  const uri = bundled ? RNImage.resolveAssetSource(bundled)?.uri : reward.icon_url;
+  if (!uri) return base;
+  return { ...base, pin_item: { id: -1, name: reward.name, icon_url: uri, paper_url: null, item_type: { id: 8 } } } as unknown as InventoryType;
+}
 
 function rewardArt(reward: SharkPassReward): { kind: 'art'; key: PackArtKey } | { kind: 'image'; source: number | { uri: string } } | { kind: 'icon'; name: GameIconName } {
   switch (reward.type) {
@@ -233,6 +244,8 @@ export default function SharkPassScreen() {
   const into = progress?.points_into_tier ?? 0;
   const summary = useMemo(() => passSummary(tiers), [tiers]);
   const nextPrize = progress ? nextBigPrize(tiers, progress.points, perStep) : null;
+  const heroLook = useMemo(() => withSeasonPin(player?.inventory as InventoryType | undefined, nextPrize?.reward ?? progress?.top_prize),
+    [player?.inventory, nextPrize?.reward, progress?.top_prize]);
   const readyNow = useMemo(() => readyNowLine(tiers), [tiers]);
   const nextPaid = tiers.filter(t => !t.unlocked || !premium).filter(t => t.paid.type === 'item' || t.paid.type === 'mystery_box').slice(0, 3);
 
@@ -266,7 +279,15 @@ export default function SharkPassScreen() {
             {/* Season hero: the emblem, the season, the real last day, the climb. */}
             <Animated.View entering={reduced ? undefined : FadeInDown.springify().damping(15)} style={s.heroLip}>
               <View style={s.hero}>
-                <Image source={EMBLEM} style={s.emblem} contentFit="contain" />
+                <View style={s.heroStage}>
+                  <View style={s.heroSnow} />
+                  {heroLook ? (
+                    <Playercard inventory={heroLook} showBackground={false} pinAnchor="body" still={reduced} style={StyleSheet.absoluteFill} />
+                  ) : (
+                    <Image source={EMBLEM} style={s.emblem} contentFit="contain" />
+                  )}
+                  <Image source={EMBLEM} style={s.heroBadge} contentFit="contain" />
+                </View>
                 <View style={{ flex: 1, gap: 4 }}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.season}>{season.title.toUpperCase()}</Text>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.ends}>{`Ends ${lastDayText(season.last_day)}`}</Text>
@@ -478,6 +499,9 @@ const s = StyleSheet.create({
   heroLip: { marginHorizontal: 14, borderRadius: 22, backgroundColor: BRAND.navy, paddingBottom: 6 },
   hero: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 22, borderWidth: 4, borderColor: '#ffffff', backgroundColor: '#1680d8', padding: 12 },
   emblem: { width: 96, height: 96 },
+  heroStage: { width: 116, height: 132, alignItems: 'center', justifyContent: 'flex-end' },
+  heroSnow: { position: 'absolute', bottom: 2, width: 104, height: 26, borderRadius: 52, backgroundColor: '#eaf6ff', borderWidth: 3, borderColor: '#ffffff' },
+  heroBadge: { position: 'absolute', top: -4, left: -6, width: 38, height: 38 },
   season: { fontFamily: FONT.display, fontSize: 24, color: BRAND.gold, textShadowColor: '#5a3a00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   ends: { fontFamily: FONT.body, fontSize: 15, color: '#e2f6ff' },
   stepRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },

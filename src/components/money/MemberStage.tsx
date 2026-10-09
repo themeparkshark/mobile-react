@@ -79,6 +79,8 @@ export default function MemberStage() {
       ) : (
         <Image source={require('../../../assets/images/vip-hero.png')} style={st.fallback} contentFit="contain" />
       )}
+      {/* No Secret piece to show: the VIP look is a gold crown on your own shark, never a bare stage. */}
+      {!piece && look && <View style={st.crown} pointerEvents="none"><GameIcon name="crown" size={70} /></View>}
       <View style={st.badge}><GameIcon name="member" size={34} /></View>
       {piece && (
         <View style={st.caption}>
@@ -97,6 +99,7 @@ const st = StyleSheet.create({
     borderWidth: 4, borderColor: '#ffffff', borderBottomWidth: 7, borderBottomColor: '#d99a00' },
   card: { width: 210, height: 236, marginBottom: -8 },
   fallback: { width: 150, height: 150, marginBottom: 30 },
+  crown: { position: 'absolute', top: 2, alignSelf: 'center', marginLeft: 26, transform: [{ rotate: '-10deg' }] },
   badge: { position: 'absolute', right: 58, top: 30, transform: [{ rotate: '12deg' }] },
   caption: { position: 'absolute', bottom: -6, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#05346e',
     borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 2, borderColor: '#ffcf3b' },
