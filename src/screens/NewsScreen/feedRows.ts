@@ -27,17 +27,29 @@ export function dayLabel(date: string, now: number): string {
   return 'Earlier';
 }
 
-/** Inside each day, park stories first and shopping stories (collections, watches, decor) after them. */
+/** Inside each day, park stories lead and shopping stories (collections, watches, decor) are spread out after them. */
 export function shopLast(list: readonly NewsEntry[], now: number): NewsEntry[] {
   const days: string[] = [];
   const groups = new Map<string, { park: NewsEntry[]; shop: NewsEntry[] }>();
   for (const entry of list) {
-    const day = dayLabel(entry.date, now);
+    // One calendar day at a time, so dates never run backwards.
+    const ms = newsTime(entry.date);
+    const d = new Date(Number.isFinite(ms) ? ms : now);
+    const day = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
     let group = groups.get(day);
     if (!group) { groups.set(day, (group = { park: [], shop: [] })); days.push(day); }
     (isShopStory(entry) ? group.shop : group.park).push(entry);
   }
-  return days.flatMap(day => [...groups.get(day)!.park, ...groups.get(day)!.shop]);
+  // Never a wall of shopping: one shopping story after every three park stories, the rest at the day's end.
+  return days.flatMap(day => {
+    const { park, shop } = groups.get(day)!;
+    const out: NewsEntry[] = [];
+    park.forEach((entry, i) => {
+      out.push(entry);
+      if ((i + 1) % 3 === 0 && shop.length) out.push(shop.shift()!);
+    });
+    return [...out, ...shop];
+  });
 }
 
 export function buildFeedRows({ entries, lead, now, searchLabel, loadingMore, failed, end, stale }: {
@@ -75,7 +87,8 @@ export function buildFeedRows({ entries, lead, now, searchLabel, loadingMore, fa
       }
     }
     sinceFeature += 1;
-    const feature = !searchLabel && sinceFeature > FEATURE_EVERY && !!entry.featured_image;
+    // The big photo frame is for park and ride stories, never a shopping story.
+    const feature = !searchLabel && sinceFeature > FEATURE_EVERY && !!entry.featured_image && !isShopStory(entry);
     if (feature) sinceFeature = 0;
     rows.push({ type: feature ? 'feature' : 'row', key: `${feature ? 'f' : 'r'}-${entry.id}`, entry, fresh: fresh.has(entry.id) });
   }

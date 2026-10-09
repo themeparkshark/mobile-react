@@ -25,7 +25,7 @@ export const INK_SOFT = BRAND.navySoft;
 export const RIM = 'rgba(5,52,110,0.4)';
 export const FRAME = { borderWidth: 3, borderBottomWidth: 6, borderColor: RIM } as const;
 const PLACEHOLDER = '#dcecf9';
-export const ROW_HEIGHT = 138;
+export const ROW_HEIGHT = 128;
 export const SIDE = 14;
 
 /** Small park tag: navy on sky, Shark face. */
@@ -111,7 +111,7 @@ export const HeroCard = memo(function HeroCard({ entry, read, now, onPress }: Ca
         ...FRAME, borderColor: BRAND.white, ...SHADOW.lifted, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
       <View style={{ borderRadius: RADIUS.lg - 3, overflow: 'hidden' }}>
         <View>
-          <Picture uri={entry.featured_image} recycle={`hero-${entry.id}`} style={{ width: '100%', aspectRatio: 2.4 }} />
+          <Picture uri={entry.featured_image} recycle={`hero-${entry.id}`} style={{ width: '100%', aspectRatio: 2.8 }} />
           <View style={{ position: 'absolute', left: 10, top: 10, paddingHorizontal: 9, height: 26, borderRadius: 13, justifyContent: 'center',
             backgroundColor: BRAND.navy, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.white }}>
             <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white, letterSpacing: 0.4 }}>TOP STORY</Text>
@@ -150,7 +150,7 @@ export const StoryRow = memo(function StoryRow({ entry, read, fresh, now, onPres
           <Meta entry={entry} now={now} />
         </View>
         <View>
-          <Picture uri={entry.featured_image_small || entry.featured_image} recycle={`row-${entry.id}`} style={{ width: 104, height: 98, borderRadius: 10, opacity: read ? 0.7 : 1 }} />
+          <Picture uri={entry.featured_image_small || entry.featured_image} recycle={`row-${entry.id}`} style={{ width: 104, height: 92, borderRadius: 10, opacity: read ? 0.7 : 1 }} />
           {read && <ReadCheck />}
         </View>
       </Pressable>
@@ -217,11 +217,11 @@ export function SkeletonRow() {
     <View style={{ height: ROW_HEIGHT, paddingHorizontal: SIDE, justifyContent: 'center', backgroundColor: BRAND.cream }} accessible={false}>
       <Animated.View style={[{ height: ROW_HEIGHT - 10, borderRadius: RADIUS.md, backgroundColor: 'rgba(5,52,110,0.10)', flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 }, style]}>
         <View style={{ flex: 1, gap: 9 }}>
-          <View style={{ width: 90, height: 16, borderRadius: 8, backgroundColor: 'rgba(5,52,110,0.16)' }} />
-          <View style={{ width: '95%', height: 16, borderRadius: 8, backgroundColor: 'rgba(5,52,110,0.16)' }} />
-          <View style={{ width: '70%', height: 16, borderRadius: 8, backgroundColor: 'rgba(5,52,110,0.16)' }} />
+          <View style={{ width: 90, height: 16, borderRadius: 8, backgroundColor: '#d9e9f6' }} />
+          <View style={{ width: '95%', height: 16, borderRadius: 8, backgroundColor: '#d9e9f6' }} />
+          <View style={{ width: '70%', height: 16, borderRadius: 8, backgroundColor: '#d9e9f6' }} />
         </View>
-        <View style={{ width: 104, height: 98, borderRadius: 10, backgroundColor: 'rgba(5,52,110,0.16)' }} />
+        <View style={{ width: 104, height: 92, borderRadius: 10, backgroundColor: '#d9e9f6' }} />
       </Animated.View>
     </View>
   );
@@ -233,13 +233,13 @@ export function FeedSkeleton() {
   return (
     <View accessibilityLabel="Loading news" style={{ flex: 1 }}>
       <Animated.View style={[{ marginHorizontal: SIDE, marginTop: 6, marginBottom: 14, borderRadius: RADIUS.lg, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 3, borderBottomWidth: 6, borderColor: BRAND.white, overflow: 'hidden' }, style]}>
-        <View style={{ width: '100%', aspectRatio: 2.4, backgroundColor: BRAND.sky, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: '100%', aspectRatio: 2.8, backgroundColor: BRAND.sky, alignItems: 'center', justifyContent: 'center' }}>
           <Image source={TPS_SHARK} style={{ width: 72, height: 72, opacity: 0.85 }} contentFit="contain" accessibilityLabel="Loading news" />
         </View>
         <View style={{ padding: 14, gap: 10 }}>
-          <View style={{ width: 110, height: 18, borderRadius: 9, backgroundColor: 'rgba(5,52,110,0.16)' }} />
-          <View style={{ width: '92%', height: 22, borderRadius: 11, backgroundColor: 'rgba(5,52,110,0.16)' }} />
-          <View style={{ width: '60%', height: 22, borderRadius: 11, backgroundColor: 'rgba(5,52,110,0.16)' }} />
+          <View style={{ width: 110, height: 18, borderRadius: 9, backgroundColor: '#d9e9f6' }} />
+          <View style={{ width: '92%', height: 22, borderRadius: 11, backgroundColor: '#d9e9f6' }} />
+          <View style={{ width: '60%', height: 22, borderRadius: 11, backgroundColor: '#d9e9f6' }} />
         </View>
       </Animated.View>
       <SheetTop />

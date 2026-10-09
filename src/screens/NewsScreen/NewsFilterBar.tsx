@@ -53,7 +53,7 @@ function ChipRow({ items, value, small, onChange, leading, endInset = 0 }: {
   const [atEnd, setAtEnd] = useState(false);
   return (
     // The row ends before the docked Back-to-top button, so no chip ever sits under it.
-    <View style={{ marginRight: endInset }}>
+    <View style={{ marginRight: endInset, ...(endInset ? { overflow: 'hidden', borderTopRightRadius: 24, borderBottomRightRadius: 24 } : null) }}>
       <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" scrollEventThrottle={64}
         onScroll={e => {
           const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
@@ -69,7 +69,7 @@ function ChipRow({ items, value, small, onChange, leading, endInset = 0 }: {
         ))}
       </ScrollView>
       {/* More chips this way: a soft water fade at the edge until the row is scrolled to its end. */}
-      {!atEnd && (
+      {!atEnd && !endInset && (
         <LinearGradient pointerEvents="none" start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
           colors={['rgba(14,127,217,0)', 'rgba(14,127,217,0.85)']}
           style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 36 }} />

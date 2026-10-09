@@ -371,7 +371,15 @@ export default function NewsScreen() {
             onFilter={pickFilter} onPark={pickPark}
             onSearchOpen={() => setSearching(true)} onSearchClose={closeSearch} onQuery={setQuery} />
           </View>
-          {waitingFirst ? (
+          {searching && !search ? (
+            // Search is open but nothing typed yet: say what to type, not the old feed.
+            <View style={{ marginHorizontal: 16, marginTop: 12, padding: 18, borderRadius: RADIUS.xl, alignItems: 'center', gap: 8,
+              backgroundColor: BRAND.cream, borderWidth: 3, borderBottomWidth: 6, borderColor: BRAND.white }}>
+              <GameIcon name="search" size={44} />
+              <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, textAlign: 'center' }}>Type a park, ride or food</Text>
+              <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft, textAlign: 'center' }}>Like "Space Mountain" or "churros"</Text>
+            </View>
+          ) : waitingFirst ? (
             <FeedSkeleton />
           ) : emptyNow ? (
             <View style={{ marginHorizontal: 16, marginTop: 12, paddingVertical: 18, paddingHorizontal: 12, borderRadius: RADIUS.xl,

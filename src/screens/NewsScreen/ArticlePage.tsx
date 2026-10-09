@@ -99,7 +99,7 @@ function ArticlePage({ entry, index, width, live, near, next, related, onOpen, o
   return (
     <View style={{ width, flex: 1, backgroundColor: BRAND.white }}>
       <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: 22, paddingBottom: 36 }}>
+        contentContainerStyle={{ paddingTop: 30, paddingBottom: 36 }}>
         {/* The official photo at its real shape, in the same framed card as the feed. */}
         <View style={{ marginHorizontal: 12, borderRadius: RADIUS.lg, overflow: 'hidden', ...FRAME, backgroundColor: '#dcecf9' }}>
           {hero ? (
@@ -168,13 +168,18 @@ function ArticlePage({ entry, index, width, live, near, next, related, onOpen, o
         )}
       </Animated.ScrollView>
       {/* A soft white edge under the wave so text slides under it instead of being cut. */}
-      <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,1)', 'rgba(255,255,255,0)']}
-        style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 24 }} />
-      {live && (
-        <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 6, height: 5, backgroundColor: 'rgba(5,52,110,0.08)', zIndex: 2 }}>
-          <Animated.View style={[{ height: 5, width, backgroundColor: BRAND.gold, transformOrigin: 'left' }, bar]} />
+      {/* A solid cream band under the wavy header (text slides under it, never cut by the wave),
+          with the gold reading bar on it, then a short fade. */}
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0 }}>
+        <View style={{ height: 16, backgroundColor: BRAND.cream, justifyContent: 'flex-end', paddingBottom: 4 }}>
+          {live && (
+            <View style={{ marginHorizontal: 12, height: 6, borderRadius: 3, backgroundColor: 'rgba(5,52,110,0.12)', overflow: 'hidden' }}>
+              <Animated.View style={[{ height: 6, width: width - 24, backgroundColor: BRAND.gold, transformOrigin: 'left' }, bar]} />
+            </View>
+          )}
         </View>
-      )}
+        <LinearGradient colors={[BRAND.cream, 'rgba(255,248,228,0)']} style={{ height: 12 }} />
+      </View>
     </View>
   );
 }

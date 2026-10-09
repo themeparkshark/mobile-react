@@ -219,8 +219,11 @@ export function parkLabel(entry: NewsEntry): string | null {
   if (hit === undefined) labelMemo.set(entry, (hit = labelOf(entry)));
   return hit;
 }
+const CRUISE = /\b(cruise|disney (?:believe|wish|treasure|wonder|magic|dream|fantasy|destiny|adventure)|castaway cay|lookout cay)\b/i;
 function labelOf(entry: NewsEntry): string | null {
   if (isScreenStory(entry)) return 'Movies & TV';
+  // A cruise story filed only under Disney says so.
+  if (CRUISE.test(plainText(entry.title)) && !(entry.categories ?? []).some(id => PARK_LEVEL.has(id))) return 'Disney Cruise Line';
   if (entry.categories && entry.categories.length) {
     for (const id of LABEL_ORDER) if (entry.categories.includes(id)) return PARK_LABELS[id];
   }
@@ -439,7 +442,7 @@ export function relatedFor(entry: NewsEntry, list: readonly NewsEntry[], n = 3):
   return [...ranked.filter(e => !isShopStory(e)), ...ranked.filter(e => isShopStory(e))].slice(0, n);
 }
 
-const SHOP_WORDS = /\b(products?|gifts?|collections?|watch(?:es)?|toys?|lego|funko|plush|loungefly|apparel|home d[e\u00e9]cor|d[e\u00e9]cor|ornaments?|shopdisney|macy'?s|pop-up shop|figures?|merch(?:andise)?|ears|spirit jersey|mugs?)\b/i;
+const SHOP_WORDS = /\b(disney store|products?|gifts?|collections?|watch(?:es)?|toys?|lego|funko|plush|loungefly|apparel|home d[e\u00e9]cor|d[e\u00e9]cor|ornaments?|shopdisney|macy'?s|pop-up shop|figures?|merch(?:andise)?|ears|spirit jersey|mugs?)\b/i;
 
 /** A shopping story (a collection, a watch, decor): fine in the feed, never the lead story. */
 export function isShopStory(entry: NewsEntry): boolean {

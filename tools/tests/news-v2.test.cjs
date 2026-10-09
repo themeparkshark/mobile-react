@@ -206,6 +206,21 @@ test('shopping stories never lead and sink to the end of their day', () => {
   assert.deepEqual([...out.filter(r => r.entry).map(r => r.entry.id)], [3, 4, 1, 2]);
 });
 
+test('cruise stories filed under Disney get a cruise tag; shop sorting keeps calendar days in order', () => {
+  assert.equal(model.parkLabel({ ...entry(1, ''), title: 'Disney Believe Dining: Frozen Feast', categories: [39] }), 'Disney Cruise Line');
+  assert.equal(model.parkLabel({ ...entry(2, ''), title: 'Disney Cruise Line brings three events to Alaska', categories: [39] }), 'Disney Cruise Line');
+  assert.equal(model.parkLabel({ ...entry(3, ''), title: 'Disney Wish dining at EPCOT', categories: [39, 42] }), 'EPCOT');
+  const day = d => `2026-09-${d}T12:00:00`;
+  const list = [
+    { ...entry(1, day(17)), title: 'Disney Store Holiday Toys We Love' },
+    { ...entry(2, day(16)), title: 'Halloween Horror Nights adds a house' },
+    { ...entry(3, day(3)), title: 'Disney World Adds New Churros' },
+    { ...entry(4, day(3)), title: 'Marvel Products to Check Out' },
+  ];
+  const sorted = rows.shopLast(list, NOW).map(e => e.id);
+  assert.deepEqual([...sorted], [1, 2, 3, 4]);
+});
+
 test('kid safety: every way out of the reader goes through services/external', () => {
   for (const file of ['src/screens/ArticleScreen.tsx', 'src/screens/NewsScreen.tsx', 'src/screens/NewsScreen/ArticleBody.tsx', 'src/screens/NewsScreen/ArticlePage.tsx', 'src/screens/NewsScreen/NewsCards.tsx']) {
     const src = read(file);
