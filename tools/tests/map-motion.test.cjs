@@ -10,6 +10,7 @@ const { loadTs } = require('./helpers/ts-module.cjs');
 
 const root = path.resolve(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+const map0 = () => read('src/components/Map.tsx');
 const hf = loadTs('src/components/map/headingFilter.ts');
 const cf = loadTs('src/components/map/cameraFollow.ts');
 const { PositionFilter } = loadTs('src/context/positionFilter.ts');
@@ -145,8 +146,8 @@ test('the compass says what it does: two named states, a pill after each tap and
     'expo-image': { Image: () => null }, 'react': { useEffect() {}, useRef: v => ({ current: v }), useState: v => [v, () => {}] },
     'react-native': { Pressable: () => null, StyleSheet: { create: s => s, absoluteFill: {} }, Text: () => null, View: () => null },
     'react-native-reanimated': { __esModule: true, default: { View: () => null }, Easing: { out: () => 0, quad: 0 },
-      useAnimatedStyle: () => ({}), useSharedValue: v => ({ value: v }), withSequence: () => 0, withSpring: () => 0, withTiming: () => 0 },
-    'react-native-svg': { __esModule: true, default: () => null, Path: () => null },
+      useAnimatedStyle: () => ({}), useSharedValue: v => ({ value: v }), withSequence: () => 0, withSpring: () => 0, withTiming: () => 0, withRepeat: () => 0, withDelay: () => 0 },
+    'react-native-svg': { __esModule: true, default: () => null, Path: () => null, Circle: () => null },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'f' },
     '../../ui': { BRAND: {}, SHADOW: { card: {} } },
   });
@@ -156,8 +157,15 @@ test('the compass says what it does: two named states, a pill after each tap and
   assert.equal(btn.shouldFlashPill('heading', 'away'), false);
   assert.ok(btn.FOLLOW_COPY.hintBody.split(' ').length <= 12 && btn.FOLLOW_COPY.hintBodyNorth.split(' ').length <= 12);
   assert.match(btn.followButtonLabel('away'), /Find your shark/);
-  assert.match(btn.followButtonLabel('heading'), /turns with you/);
-  assert.match(btn.followButtonLabel('north'), /north stays up/);
+  assert.match(btn.followButtonLabel('heading'), /spins with you/);
+  assert.match(btn.followButtonLabel('north'), /stays still, north up/);
+  // Pictures, not letters: no "N" badge, no compass rose (the footer owns the gold compass).
+  const src = read('src/components/map/FollowButton.tsx');
+  assert.doesNotMatch(src, />N</);
+  assert.doesNotMatch(src, /compass-rose/);
+  assert.doesNotMatch(src, /setTimeout\(onHintDone/, 'the hint waits for a tap, no timer');
+  // Panned away, a tap on your own shark brings the map back (hit box around the body above the ground point).
+  assert.match(map0(), /sharkHit\(pt as/);
   const map = read('src/components/Map.tsx');
   assert.match(map, /useOneTimeTip\('map_compass'/);
   assert.match(map, /FOLLOW_MODE_KEY/);

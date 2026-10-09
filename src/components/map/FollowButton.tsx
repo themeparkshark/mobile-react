@@ -1,13 +1,12 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming,
+import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue } from 'react-native-reanimated';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { BRAND, SHADOW } from '../../ui';
 import type { FollowMode } from './cameraFollow';
 
-const ROSE = require('../../../assets/images/map/compass-rose.png');
 /** Panned away the button shows your own shark (its look), or Alex's Classic: "take me back to it". */
 const CLASSIC = require('../../../assets/images/map/follow-shark-classic.png');
 
@@ -16,13 +15,13 @@ export type FollowButtonState = 'away' | FollowMode;
 
 /** The words a player sees (short enough to read at a glance; tested in map-motion.test.cjs). */
 export const FOLLOW_COPY = {
-  heading: 'Map turns with you',
-  north: 'North stays up',
+  heading: 'Map spins with you',
+  north: 'Map stays still',
   away: 'Tap to find your shark',
   noCompass: 'No compass here',
-  hintTitle: 'Your compass',
-  hintBody: 'The map turns when you turn. Tap me to keep north up.',
-  hintBodyNorth: 'North stays on top. Tap me to turn the map with you.',
+  hintTitle: 'Shark finder',
+  hintBody: 'Tap me to stop the map spinning.',
+  hintBodyNorth: 'Tap me to spin the map with you.',
 } as const;
 
 type PillKey = 'heading' | 'north' | 'noCompass' | 'away';
@@ -37,8 +36,32 @@ export function shouldFlashPill(was: FollowButtonState, now: FollowButtonState):
 export function followButtonLabel(state: FollowButtonState): string {
   if (state === 'away') return 'Find your shark. The map follows you again.';
   return state === 'heading'
-    ? 'Compass: the map turns with you. Tap to keep north up.'
-    : 'Compass: north stays up. Tap to turn the map with you.';
+    ? 'Shark finder: the map spins with you. Tap to keep it still, north up.'
+    : 'Shark finder: the map stays still, north up. Tap to spin it with you.';
+}
+
+/**
+ * The button's face: a locator, not a compass (the footer already has the gold compass). A gold shark fin
+ * in a target ring; while the map turns with you, a view cone shows the way you face (up the screen).
+ * Flat fills, cel bands and navy outlines in the house style.
+ */
+function LocatorFace({ facing }: { readonly facing: boolean }) {
+  return (
+    <Svg width={44} height={44} viewBox="0 0 44 44">
+      {facing && (
+        <>
+          <Path d="M22 26 L9.5 6.5 A19 19 0 0 1 34.5 6.5 Z" fill={BRAND.skyDeep} stroke={BRAND.navy} strokeWidth={2} strokeLinejoin="round" />
+          <Path d="M22 24 L15 10.5 A13 13 0 0 1 29 10.5 Z" fill={BRAND.sky} />
+        </>
+      )}
+      <Circle cx={22} cy={28} r={11} fill={BRAND.white} stroke={BRAND.navy} strokeWidth={2.4} />
+      <Circle cx={22} cy={28} r={6.6} fill="none" stroke={BRAND.skyDeep} strokeWidth={1.8} />
+      {/* The fin: gold, a lighter cel band on its lit (left) side, a navy outline. */}
+      <Path d="M16.5 31.5 C17.5 26 20.5 21 26.5 18.5 C25 23 25.5 27.5 27.5 31.5 Z" fill={BRAND.gold} stroke={BRAND.navy} strokeWidth={2} strokeLinejoin="round" />
+      <Path d="M18.6 30 C19.4 26.4 21.4 23.2 24.2 21.4 C23.4 24.4 23.4 27.2 24.2 30 Z" fill={BRAND.goldLight} />
+      <Path d="M15 31.8 H29" stroke={BRAND.navy} strokeWidth={2.2} strokeLinecap="round" />
+    </Svg>
+  );
 }
 
 /**
@@ -75,7 +98,7 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
   const flashPill = (key: PillKey) => {
     setPill(key);
     if (pillTimer.current) clearTimeout(pillTimer.current);
-    pillTimer.current = setTimeout(() => setPill(null), 1800);
+    pillTimer.current = setTimeout(() => setPill(null), 2500);
   };
   useEffect(() => {
     const was = lastState.current;
@@ -85,11 +108,14 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
   }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (noCompassFlash > 0) flashPill('noCompass'); }, [noCompassFlash]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (pillTimer.current) clearTimeout(pillTimer.current); }, []);
+  // The hint stays until the first tap on the button or the map (no timer): a ring pulses round the
+  // button meanwhile, so a child who cannot read still sees "tap here".
+  const ring = useSharedValue(0);
   useEffect(() => {
-    if (!hint) return;
-    const timer = setTimeout(onHintDone, 7000);
-    return () => clearTimeout(timer);
-  }, [hint, onHintDone]);
+    if (!hint || reducedMotion) { ring.value = 0; return; }
+    ring.value = withRepeat(withSequence(withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 0 }), withDelay(300, withTiming(0, { duration: 0 }))), -1);
+  }, [hint, reducedMotion, ring]);
+  const ringStyle = useAnimatedStyle(() => ({ opacity: ring.value > 0 ? 0.9 * (1 - ring.value) : 0, transform: [{ scale: 1 + 0.45 * ring.value }] }));
 
   // The pill fades and slides in on the UI thread, and stays mounted while it fades out.
   const [shownPill, setShownPill] = useState<PillKey | null>(null);
@@ -146,25 +172,41 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
         </Reanimated.View>
         </View>
       )}
+      {hint && <Reanimated.View pointerEvents="none" style={[styles.ring, ringStyle]} />}
       <Pressable onPress={tap} accessibilityRole="button" accessibilityLabel={followButtonLabel(state)} hitSlop={8}>
         <Reanimated.View style={[styles.button, state === 'north' && styles.north, state === 'away' && styles.away, buttonStyle]}>
+          <View pointerEvents="none" style={styles.gloss} />
           {state === 'away' ? (
             <Reanimated.View style={[styles.sharkBox, nudgeStyle]}>
               {awayArt ?? <Image source={CLASSIC} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />}
             </Reanimated.View>
           ) : (
-            <Reanimated.View style={[styles.rose, roseStyle]}>
-              <Image source={ROSE} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
-            </Reanimated.View>
+            <>
+              <LocatorFace facing={state === 'heading'} />
+              {/* The red north tick rides the rim and always points at north on the map. */}
+              <Reanimated.View pointerEvents="none" style={[styles.northRing, roseStyle]}>
+                <Svg width={54} height={54} viewBox="0 0 54 54">
+                  <Path d="M27 1.5 L31.5 9.5 L22.5 9.5 Z" fill={BRAND.red} stroke={BRAND.navy} strokeWidth={1.6} strokeLinejoin="round" />
+                </Svg>
+              </Reanimated.View>
+            </>
           )}
           {state !== 'away' && (
             <Reanimated.View style={[styles.badge, state === 'north' ? styles.badgeNorth : styles.badgeHeading, badgeStyle]}>
-              {state === 'north' ? <Text style={styles.badgeN}>N</Text> : (
-                // The beam under your shark, in small: "the map follows where you face".
-                // A turning arrow: "the map turns".
+              {state === 'north' ? (
+                // A padlock: the map is locked still.
                 <Svg width={16} height={16} viewBox="0 0 16 16">
-                  <Path d="M13.2 8.6 A5.3 5.3 0 1 1 10.6 3.6" stroke={BRAND.white} strokeWidth={2.4} fill="none" strokeLinecap="round" />
-                  <Path d="M9.2 0.9 L13.6 3.4 L9.6 6.6 Z" fill={BRAND.white} />
+                  <Path d="M5 7.2 V5.2 a3 3 0 0 1 6 0 V7.2" stroke={BRAND.white} strokeWidth={2.2} fill="none" strokeLinecap="round" />
+                  <Path d="M3.2 7.2 H12.8 V14 H3.2 Z" fill={BRAND.white} stroke={BRAND.white} strokeWidth={1} strokeLinejoin="round" />
+                  <Circle cx={8} cy={10.5} r={1.3} fill={BRAND.navy} />
+                </Svg>
+              ) : (
+                // Two curved arrows chasing each other: the map spins with you.
+                <Svg width={17} height={17} viewBox="0 0 17 17">
+                  <Path d="M3 7.2 A5.6 5.6 0 0 1 12.6 4" stroke={BRAND.white} strokeWidth={2.6} fill="none" strokeLinecap="round" />
+                  <Path d="M14.6 1.2 L14.8 6.4 L9.8 5.4 Z" fill={BRAND.white} stroke={BRAND.white} strokeWidth={1} strokeLinejoin="round" />
+                  <Path d="M14 9.8 A5.6 5.6 0 0 1 4.4 13" stroke={BRAND.white} strokeWidth={2.6} fill="none" strokeLinecap="round" />
+                  <Path d="M2.4 15.8 L2.2 10.6 L7.2 11.6 Z" fill={BRAND.white} stroke={BRAND.white} strokeWidth={1} strokeLinejoin="round" />
                 </Svg>
               )}
             </Reanimated.View>
@@ -177,17 +219,19 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
 
 const styles = StyleSheet.create({
   wrap: { width: 54, height: 54 },
+  // House button chrome: a thick navy outline, a lighter inner ring, a lip underneath.
   button: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },
-  north: { backgroundColor: BRAND.white, borderColor: BRAND.navy },
-  away: { backgroundColor: BRAND.gold },
-  rose: { width: 40, height: 40 },
-  sharkBox: { width: 44, height: 44, marginTop: 4 },
-  badge: { position: 'absolute', right: -7, bottom: -7, width: 26, height: 26, borderRadius: 13, borderWidth: 2.5,
-    borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
+    backgroundColor: BRAND.blueBright, borderWidth: 4.5, borderColor: BRAND.navy, borderBottomWidth: 6.5, ...SHADOW.card },
+  north: { backgroundColor: BRAND.cream },
+  away: { backgroundColor: BRAND.gold, borderBottomColor: BRAND.navy },
+  ring: { position: 'absolute', left: 0, top: 0, width: 54, height: 54, borderRadius: 27, borderWidth: 4, borderColor: BRAND.gold },
+  northRing: { position: 'absolute', left: -4.5, top: -4.5, width: 54, height: 54 },
+  gloss: { position: 'absolute', left: 8, top: 4, width: 22, height: 9, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.45)', transform: [{ rotate: '-18deg' }] },
+  sharkBox: { width: 40, height: 40 },
+  badge: { position: 'absolute', right: -10, bottom: -10, width: 26, height: 26, borderRadius: 13, borderWidth: 2.5,
+    borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   badgeHeading: { backgroundColor: BRAND.blue },
   badgeNorth: { backgroundColor: BRAND.navy },
-  badgeN: { fontFamily: 'Shark', fontSize: 15, lineHeight: 17, color: BRAND.white, marginTop: 1 },
   pillLane: { position: 'absolute', right: 64, top: 0, width: 240, alignItems: 'flex-end' },
   pill: { marginTop: 11, height: 32, paddingHorizontal: 12, borderRadius: 16,
     backgroundColor: BRAND.white, borderWidth: 2.5, borderColor: BRAND.navy, justifyContent: 'center', ...SHADOW.card },

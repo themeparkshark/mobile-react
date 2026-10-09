@@ -88,6 +88,11 @@ const BEAM_PT = 176;
  * 52 x 60 above this point) already assumed it.
  */
 const SHARK_GROUND = { x: 50, y: 100 } as const;
+/** A tap at `tap` lands on the panned-away shark standing at `ground` (its body sits above the ground point). */
+export function sharkHit(ground: readonly [number, number], tap: readonly [number, number]): boolean {
+  const dx = tap[0] - ground[0], dy = tap[1] - ground[1];
+  return Math.abs(dx) <= 42 && dy >= -104 && dy <= 14;
+}
 /**
  * The following shark's footprint for the declutter (from its ground point): the 60 pt art with
  * its idle bob, a hop, the fin and worn pieces on top (a hat, a jetpack). Cards and chips keep out.
@@ -845,9 +850,16 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             cam.recenter(followZoomRef.current);
           }
         }}
-        onPress={() => {
+        onPress={(feature: { properties?: { [k: string]: unknown } | null }) => {
           // Any tap on the map closes the compass hint.
           if (compassHint.visible) compassHint.dismiss();
+          // Panned away: a tap on your own shark does a trick and brings the map back to it.
+          const sx = Number(feature?.properties?.screenPointX), sy = Number(feature?.properties?.screenPointY);
+          if (!focusedOnPlayer && location && playerOnScreen && Number.isFinite(sx) && Number.isFinite(sy)) {
+            void mapViewRef.current?.getPointInView([location.longitude, location.latitude]).then(pt => {
+              if (pt && sharkHit(pt as [number, number], [sx as number, sy as number])) { onSharkTap(); recenterOnPlayer(); }
+            }).catch(() => undefined);
+          }
           onPress?.();
         }}
       >
