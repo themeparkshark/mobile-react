@@ -142,7 +142,7 @@ const RailTile = memo(function RailTile({ entry, selected, owned, member, still,
         <View style={styles.tileClip} pointerEvents="none">
           <LinearGradient colors={[...V.tilePlate]} style={StyleSheet.absoluteFill} />
           <LinearGradient colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)']} style={styles.tileGloss} />
-          <View style={styles.tileArt}><TileArt item={item} size={TILE - 22} still={still} /></View>
+          <View style={styles.tileArt}><TileArt item={item} size={TILE + 6} still={still} /></View>
         </View>
         <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.tileName}>{name}</Text>
         <View style={[styles.tilePrice, owned && styles.tileOwned]} pointerEvents="none">
@@ -274,9 +274,8 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
       {!member && (
         <Animated.View entering={still ? undefined : FadeInDown.delay(60).duration(240)} style={styles.guest}
           accessible accessibilityLabel={`${SECRET_PREVIEW_COPY.title} ${SECRET_PREVIEW_COPY.body}`}>
-          {/* Two balanced lines: the invite, then the promise (no lone word wrapping). */}
-          <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.guestText, styles.guestStrong]}>{SECRET_PREVIEW_COPY.title}</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={styles.guestText}>{SECRET_PREVIEW_COPY.body}</Text>
+          {/* One line, so a guest's stage keeps the member's size (the price says "for VIP", the button "See VIP"). */}
+          <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} style={[styles.guestText, styles.guestStrong]}>{SECRET_PREVIEW_COPY.title}</Text>
         </Animated.View>
       )}
 
@@ -363,7 +362,7 @@ const styles = StyleSheet.create({
   coins: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 36, paddingHorizontal: 11, borderRadius: 18,
     backgroundColor: V.card, borderWidth: 2, borderColor: '#ffffff' },
   coinsText: { fontFamily: FONT.display, fontSize: 16, color: '#ffffff' },
-  guest: { marginHorizontal: 14, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: 'rgba(8,22,56,0.75)',
+  guest: { marginHorizontal: 14, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(8,22,56,0.75)',
     borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
   guestText: { fontFamily: FONT.body, fontSize: 15, lineHeight: 19, color: V.inkSoft, textAlign: 'center' },
   guestStrong: { fontFamily: FONT.display, color: V.ink },
@@ -403,7 +402,8 @@ const styles = StyleSheet.create({
   tileOn: { borderWidth: 3.5, borderColor: V.gold },
   tileClip: { ...StyleSheet.absoluteFillObject, borderRadius: 16, overflow: 'hidden' },
   tileGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },
-  tileArt: { position: 'absolute', left: 0, right: 0, top: 4, height: TILE - 22, alignItems: 'center', justifyContent: 'center' },
+  // The art box spans the tile, so a beam or spark ends at the tile's own rim, never a cut mid-tile.
+  tileArt: { position: 'absolute', left: 0, right: 0, top: 0, height: TILE - 8, alignItems: 'center', justifyContent: 'center' },
   tileKind: { position: 'absolute', top: 5, left: 5, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(5,12,34,0.8)' },
   tileName: { position: 'absolute', left: 4, right: 4, bottom: 30, textAlign: 'center', fontFamily: FONT.display, fontSize: 12, color: '#ffffff' },

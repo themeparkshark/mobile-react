@@ -136,7 +136,7 @@ export function slotLine(itemTypeId: number | null | undefined): string | null {
     case 2: return 'Goes on your shark’s face.';
     case 3: return 'Goes on your shark’s back.';
     case 4: return 'An outfit for your shark.';
-    case 5: return 'Your shark holds it in its fin.';
+    case 5: return 'Goes on your shark’s fin.';
     case 6: return 'A new place behind your shark.';
     case 7: return 'A new color for your whole shark.';
     case 8: return 'A pin for your shark’s collection.';

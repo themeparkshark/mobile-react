@@ -104,7 +104,7 @@ test('round 2: the try-on lands in one beat and opens on confirm only when asked
   assert.match(sheet, /accessibilityLabel=\{`\$\{formatCoins\(balanceAfter \?\? balance\)\} coins`\}/);
   const room = src('src/screens/StoreScreen/SecretShowroom.tsx');
   assert.match(room, /const resting = still \|\| paused \|\| covered \|\| !focused;/, 'the room rests under any sheet, dialog or the gate');
-  assert.match(room, /<TileArt item=\{item\} size=\{TILE - 22\} still=\{still\} \/>/, 'every piece in the picker moves');
+  assert.match(room, /<TileArt item=\{item\} size=\{TILE \+ 6\} still=\{still\} \/>/, 'every piece in the picker moves');
 });
 
 test('round 3: filter chips (All, each slot on the shelf, Can buy) and one word per slot', () => {

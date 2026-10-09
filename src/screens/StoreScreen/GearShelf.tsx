@@ -145,7 +145,7 @@ const StarTile = memo(function StarTile({ item, balance, still, onOpen, onWish }
         ) : (
           <View style={styles.starPrice}>
             <GameIcon name="coins" size={17} />
-            <Text maxFontSizeMultiplier={1.15} style={styles.starPriceText}>{short > 0 ? `Need ${formatCoins(short)} more` : formatCoins(item.cost)}</Text>
+            <Text maxFontSizeMultiplier={1.15} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={styles.starPriceText}>{short > 0 ? `Need ${formatCoins(short)} more` : formatCoins(item.cost)}</Text>
           </View>
         )}
       </View>
@@ -333,7 +333,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
 
 const styles = StyleSheet.create({
   scroll: {},
-  fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 22 },
+  fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 34 },
   filters: { gap: 8, paddingHorizontal: 12, paddingTop: 12 },
   restock: { position: 'absolute', top: 8, left: 10 },
   filter: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, paddingHorizontal: 13, borderRadius: 17,
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   starClip: { ...StyleSheet.absoluteFillObject, borderRadius: 13, overflow: 'hidden' },
   starGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },
   starArt: { width: '54%', marginVertical: 2 },
-  starText: { flex: 1, paddingTop: 12, paddingBottom: 10, paddingRight: 10, gap: 4 },
+  starText: { flex: 1, paddingTop: 12, paddingBottom: 10, paddingRight: 12, gap: 4 },
   starKicker: { alignSelf: 'flex-start', backgroundColor: '#0a2350', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
   starKickerText: { fontFamily: FONT.display, fontSize: 12, color: '#ffe07a', letterSpacing: 0.8 },
   starName: { fontFamily: FONT.display, fontSize: 18, lineHeight: 21, color: '#0a2350' },
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   starRarityText: { fontFamily: FONT.display, fontSize: 12, color: '#ffffff', letterSpacing: 0.4 },
   starSlot: { fontFamily: FONT.body, fontSize: 14, lineHeight: 17, color: '#34506f' },
   starPrice: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  starPriceText: { fontFamily: FONT.display, fontSize: 17, color: '#0a2350' },
+  starPriceText: { flexShrink: 1, fontFamily: FONT.display, fontSize: 17, color: '#0a2350' },
   starHeart: { position: 'absolute', top: 4, right: 4 },
   starYours: { color: '#1b7f45' },
   heartDot: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: '#ff9bbf' },

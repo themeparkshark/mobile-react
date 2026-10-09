@@ -470,7 +470,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }, duskStyle]} />
           <Pressable style={StyleSheet.absoluteFill} onPress={closeAnimated} accessibilityLabel="Close try-on" />
           <Animated.View entering={still ? undefined : SlideInDown.springify().damping(18).stiffness(180)}
-            style={[styles.sheet, secret && { backgroundColor: SECRET_THEME.panel, borderColor: SECRET_THEME.border },
+            style={[styles.sheet, secret && { backgroundColor: SECRET_THEME.panel, borderColor: 'rgba(255,255,255,0.35)' },
               { height: SHEET_H, paddingBottom: Math.max(16, insets.bottom + 8) }, sheetStyle]}>
             <GestureDetector gesture={pan}>
               <View>

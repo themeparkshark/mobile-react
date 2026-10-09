@@ -25,6 +25,7 @@ import type { ShopToday } from '../../models/shop-today';
 import { fixturePlayer, fixtureToday } from './SecretShopPreviewScreen';
 import { sharkToday } from './ShopLifecyclePreviewScreen';
 import { resetSecretShopFlag } from '../../services/secretShopFlag';
+import { slotForItem } from '../../helpers/wardrobe';
 import { LEGACY_CATALOG, LEGACY_ITEMS, LEGACY_STORE } from './shopTabsFixture';
 
 LogBox.ignoreAllLogs();
@@ -104,7 +105,15 @@ function route(fx: Fixture, config: AxiosRequestConfig): { status: number; data:
   if (/^\/me\/wishlist\/\d+/.test(url)) {
     return { status: 200, data: { data: { item_ids: config.method === 'delete' ? [] : [Number(url.split('/').pop())] } } };
   }
-  if (url === '/me/inventory' && config.method === 'put') return { status: 200, data: { data: fx.player.inventory } };
+  if (url === '/me/inventory' && config.method === 'put') {
+    // Wear: the piece goes into its slot, so the shelf and the stage show "Wearing".
+    const id = Number((typeof config.data === 'string' ? JSON.parse(config.data) : config.data)?.item_id);
+    const all = [...LEGACY_ITEMS, ...sharkToday().sections.flatMap(x => x.items), ...fixtureToday(1, 0).sections.flatMap(x => x.items)];
+    const worn = all.find(i => i.id === id);
+    const slot = worn ? slotForItem(worn as never) : null;
+    if (worn && slot) fx.player = { ...fx.player, inventory: { ...(fx.player.inventory as object), [slot]: worn } } as unknown as PlayerType;
+    return { status: 200, data: { data: fx.player.inventory } };
+  }
   const buy = /^\/me\/inventory\/items\/(\d+)\/purchase/.exec(url);
   if (buy) {
     const all = [...LEGACY_ITEMS, ...sharkToday().sections.flatMap(x => x.items), ...fixtureToday(1, 0).sections.flatMap(x => x.items)];
@@ -204,7 +213,7 @@ function Body({ mode: raw }: { mode: string }) {
   const auth = useMemo(() => ({
     player, isReady: true, setPlayer: () => undefined,
     refreshPlayer: async () => {
-      const next = { ...player, coins: fx.wallet.coins, tickets: fx.wallet.tickets, energy: fx.wallet.energy, rescue_passes: fx.wallet.rescue_passes } as PlayerType;
+      const next = { ...player, inventory: fx.player.inventory, coins: fx.wallet.coins, tickets: fx.wallet.tickets, energy: fx.wallet.energy, rescue_passes: fx.wallet.rescue_passes } as PlayerType;
       setPlayer(next);
       return next;
     },
