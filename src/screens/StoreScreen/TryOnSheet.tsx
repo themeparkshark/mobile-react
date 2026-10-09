@@ -462,7 +462,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
 
   const secondary = row.secondary === 'keep_shopping' ? { label: 'Keep shopping', onPress: closeAnimated }
     : row.secondary === 'not_now' ? { label: 'Not now', onPress: () => setPhase('idle') } : null;
-  const confirming = phase === 'confirm' || phase === 'buying';
+  // Through the landing too: the TRY-ON tag and the blurb never flash back while the coins fly (game feel r8).
+  const confirming = phase === 'confirm' || phase === 'buying' || phase === 'landing';
 
   return (
     <Modal visible={!leaving} transparent animationType="none" onRequestClose={closeAnimated} onDismiss={finishClose} statusBarTranslucent>

@@ -191,6 +191,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   if (!firstIds.current && items.length) firstIds.current = new Set(items.slice(0, 9).map(i => i.id));
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
+  const winH = Dimensions.get('window').height;
   const vip = !!player?.is_subscribed;
   const balance = Number(player?.coins ?? 0);
   // The stage rests once it has scrolled away, off screen, and under the try-on.
@@ -232,8 +233,9 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
     if (!focusRequest) return;
     const item = items.find(i => i.id === focusRequest.id);
     if (item) { setOpen(item as ShopItem); return; }
-    // Wait for the shelf (and its next pages) before saying it isn't here.
-    if (items.length === 0 || loading) return;
+    // Wait for the shelf (and its next pages, asking for them) before saying it isn't here.
+    if (items.length === 0) return;
+    if (loading) { onEndReached?.(); return; }
     setToast('That one isn’t on the shelf today.');
   }, [focusRequest?.nonce, items.length, loading]);
 
@@ -270,6 +272,8 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 28 }]} showsVerticalScrollIndicator={false} scrollEventThrottle={64}
+        // A shelf shorter than the screen still asks for the next page (performance r8: page 2 never loaded).
+        onContentSizeChange={(_, h) => { if (h < winH + 240 && !nearEnd.current) { nearEnd.current = true; onEndReached?.(); } else if (h >= winH + 240) nearEnd.current = false; }}
         onScroll={e => {
           const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
           const away = contentOffset.y > GEAR_STAGE_H - 10;

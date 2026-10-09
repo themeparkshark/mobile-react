@@ -56,6 +56,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 
 const SCREEN_W = Dimensions.get('window').width;
+/** Items per catalog page (the server's simplePaginate default). */
+const CATALOG_PAGE = 15;
 
 /** Bobbing + tilting shark shopkeeper — perfect symmetric loops */
 function AnimatedShark({ imageUrl, still }: { imageUrl: string | undefined; still: boolean }) {
@@ -440,7 +442,7 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       setCatalog(nextCatalog);
       setItems(firstPage);
       setPage(1);
-      setHasMore(firstPage.length > 0);
+      setHasMore(firstPage.length >= CATALOG_PAGE);
       setStatus('ready');
     // A failed background restock keeps the shelves the player is browsing.
     })().catch((error: unknown) => {
@@ -484,7 +486,8 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       const response = await getItems(catalog.id, next);
       // The page only advances once its items are in, so no page is ever skipped.
       setPage(next);
-      if (response.length === 0) setHasMore(false);
+      // A short page is the last one (Laravel simplePaginate: 15 a page), so no empty fetch is needed to know.
+      if (response.length < CATALOG_PAGE) setHasMore(false);
       setItems(prev => [...prev, ...response.filter(item => !prev.some(p => p.id === item.id))]);
     } catch {
       setHasMore(false);
