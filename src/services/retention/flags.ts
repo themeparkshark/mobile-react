@@ -10,16 +10,16 @@ export interface RetentionFlags {
   readonly levelChests: boolean;
 }
 
-const OFF: RetentionFlags = { dailyThree: false, levelChests: false };
 let cached: RetentionFlags | null = null;
 let pending: Promise<RetentionFlags> | null = null;
 
-export function loadRetentionFlags(read: typeof getFeatureFlags = getFeatureFlags): Promise<RetentionFlags> {
+/** Null when the read failed (offline, slow server): the caller tries again on the next focus. */
+export function loadRetentionFlags(read: typeof getFeatureFlags = getFeatureFlags): Promise<RetentionFlags | null> {
   if (cached) return Promise.resolve(cached);
-  pending ??= read().then(payload => {
+  pending ??= read().then((payload): RetentionFlags => {
     cached = { dailyThree: payload.flags.daily_three === true, levelChests: payload.flags.level_chests === true };
     return cached;
-  }).catch(() => { pending = null; return OFF; });
+  }).catch(() => { pending = null; return null; });
   return pending;
 }
 

@@ -95,11 +95,11 @@ test('each goal opens the right place', () => {
   assert.equal(L.goalAction(goal('x', true, 'look')), null);
 });
 
-test('retention flags: absent or failing reads as off; only a true turns a feature on', async () => {
+test('retention flags: absent reads as off, a failed read is retried; only a true turns a feature on', async () => {
   const F = load('src/services/retention/flags.ts');
   assert.deepEqual(plain(await F.loadRetentionFlags(async () => ({ flags: {} }))), { dailyThree: false, levelChests: false });
   F.resetRetentionFlagsForTests();
-  assert.deepEqual(plain(await F.loadRetentionFlags(async () => { throw new Error('offline'); })), { dailyThree: false, levelChests: false });
+  assert.equal(await F.loadRetentionFlags(async () => { throw new Error('offline'); }), null, 'a failed read is retried later, never cached as off');
   F.resetRetentionFlagsForTests();
   assert.deepEqual(plain(await F.loadRetentionFlags(async () => ({ flags: { daily_three: true, level_chests: 'yes' } }))), { dailyThree: true, levelChests: false });
 });

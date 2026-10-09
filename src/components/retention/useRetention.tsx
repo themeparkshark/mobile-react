@@ -76,10 +76,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
 
+  // Read the switches; a failed read (offline, slow server) is retried on the next map focus.
   useEffect(() => {
-    if (!o.enabled) return;
-    void loadRetentionFlags().then(f => { if (mounted.current) setFlags(f); });
-  }, [o.enabled]);
+    if (!o.enabled || flags) return;
+    void loadRetentionFlags().then(f => { if (mounted.current && f) setFlags(f); });
+  }, [o.enabled, o.mapFocused, o.refreshKey, flags]);
 
   const applyDaily = useCallback((next: DailyThreeState) => {
     const fresh = newlyDone(prevGoals.current, next.goals);
