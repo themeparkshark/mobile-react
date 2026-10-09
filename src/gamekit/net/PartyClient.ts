@@ -680,6 +680,8 @@ export class PartyClient {
     if (next === 'inactive') return;
     if (next !== 'active') {
       if (this.local && !this.local.ended) this.hold('background');
+      // Battery: no open socket in the background; resume reconnects and one snapshot catches up.
+      if (this.socket && this.socket.connection.state !== 'disconnected') this.socket.disconnect();
       return;
     }
     if (this.local?.heldAt != null && this.state.hold?.reason === 'background') this.release();
