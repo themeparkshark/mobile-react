@@ -14,7 +14,6 @@ import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchFeed, fetchPinned } from '../api/endpoints/social';
 import Avatar from '../components/Avatar';
@@ -34,6 +33,7 @@ import { BRAND, GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import ChestButton from './threads/ChestButton';
 import ShortcutTiles from './threads/ShortcutTiles';
+import SocialSheet from './threads/SocialSheet';
 import Composer from './threads/Composer';
 import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import SocialHelp from './threads/SocialHelp';
@@ -347,24 +347,15 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         }}
       />
 
-      <Modal
-        isVisible={shortcuts}
-        onBackdropPress={() => setShortcuts(false)}
-        onSwipeComplete={() => setShortcuts(false)}
-        onModalHide={() => {
+      <SocialSheet
+        visible={shortcuts}
+        reduced={reduced}
+        onClose={() => setShortcuts(false)}
+        onHidden={() => {
           const action = afterShortcutsHide.current;
           afterShortcutsHide.current = null;
           action?.();
         }}
-        swipeDirection="down"
-        style={{ margin: 0, justifyContent: 'flex-end' }}
-        backdropColor={BRAND.navy}
-        backdropOpacity={0.35}
-        animationIn={reduced ? 'fadeIn' : 'slideInUp'}
-        animationOut={reduced ? 'fadeOut' : 'slideOutDown'}
-        useNativeDriverForBackdrop
-        // The backdrop finishes fading before the sheet is gone, so it never blinks back for a frame on close.
-        backdropTransitionOutTiming={160}
       >
         <View style={[styles.shortcuts, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.handle} />
@@ -405,7 +396,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
             ]}
           />
         </View>
-      </Modal>
+      </SocialSheet>
     </Wrapper>
   );
 }

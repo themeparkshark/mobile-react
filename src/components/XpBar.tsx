@@ -289,10 +289,11 @@ function XpBarImpl({
           // First full frame: the full number shows for a beat, then LEVEL UP!; badge, sound and haptic one hop later.
           banner.value = withDelay(BANNER_LAG_MS, withTiming(1, { duration: 0 }));
           flash.value = 1;
-          flash.value = withDelay(GOLD_HOLD_MS + DRAIN_MS - 60, withTiming(0, { duration: 80 }));
           runOnJS(onBrim)(token);
         }),
         withDelay(GOLD_HOLD_MS, withTiming(0, { duration: DRAIN_MS, easing: Easing.inOut(Easing.quad) }, (finished) => {
+          // Gold off in one frame as the bar empties: never a gold-over-green (olive) fade.
+          flash.value = 0;
           if (finished) runOnJS(onDrained)(token, next.level);
         })),
       );
@@ -301,7 +302,7 @@ function XpBarImpl({
       fizz.value = withSequence(withTiming(1.4, { duration: BURST_AT_MS - 200 }), withTiming(3, { duration: 200 }),
         withTiming(1, { duration: 1800 }));
       // Gold snaps on at the brim (set in the brim callback, never a fade over green), drains as gold,
-      // then flips back to green in 80 ms as the bar empties (never lime, never olive).
+      // and snaps off as the bar empties (never lime, never olive).
       flash.value = 0;
       // One bright pulse on the gold (no scaling, so the bar never touches the badge or the cap).
       whiteFlash.value = withDelay(BURST_AT_MS, withSequence(withTiming(0.3, { duration: 90 }), withTiming(0, { duration: 240 })));
@@ -376,11 +377,16 @@ function XpBarImpl({
   const asleep = useRef(false);
   const applyClock = useRef(() => {});
   applyClock.current = () => frameRef.current.setActive(!asleep.current && !paused && reduced === false && appActive.current && width > 0);
+  // The UI thread asks to rest one frame before JS hears it: a change in that frame must win.
+  const lastWake = useRef(0);
   function sleep() {
+    const busy = slosh.value > 0.05 || fizz.value > 1.05 || glint.value > 0 || burst.value > 0 || flash.value > 0;
+    if (busy || Date.now() - lastWake.current < 250) { quiet.value = 0; return; }
     asleep.current = true;
     applyClock.current();
   }
   function wake() {
+    lastWake.current = Date.now();
     if (!asleep.current) return;
     asleep.current = false;
     quiet.value = 0;

@@ -102,7 +102,9 @@ test('XP level up: gold hold with a pulse, bounded stars, LEVEL UP!, refill show
   }
   const starMs = Number(/const STAR_MS = (\d+);/.exec(bar)[1]);
   assert.ok(starMs <= Number(/const GOLD_HOLD_MS = (\d+);/.exec(bar)[1]), 'the stars are gone before the drain');
-  assert.match(bar, /flash\.value = 1;\n\s+flash\.value = withDelay\(GOLD_HOLD_MS \+ DRAIN_MS - 60, withTiming\(0, \{ duration: 80 \}\)\)/, 'gold snaps on at the brim (no lime) and drains as gold (no olive)');
+  assert.match(bar, /banner\.value = withDelay\(BANNER_LAG_MS[^\n]*\n\s+flash\.value = 1;/, 'gold snaps on at the brim (no lime)');
+  assert.match(bar, /flash\.value = 0;\n\s+if \(finished\) runOnJS\(onDrained\)/, 'gold snaps off as the bar empties (no olive)');
+  assert.match(bar, /if \(busy \|\| Date\.now\(\) - lastWake\.current < 250\) \{ quiet\.value = 0; return; \}/, 'a change in the frame before sleep keeps the bar awake');
   assert.doesNotMatch(bar, /BURST_AT_MS - 40/, 'no gold pre-fade over green');
 });
 
@@ -130,6 +132,11 @@ test('Social chest: squash on press, lid pop, wiggle, stars, haptic, Chris sound
   assert.match(chest, /if \(!reduced\) \{\n\s+lift\.value/, 'Reduce Motion: no hop or stars');
   const social = read('src/screens/SocialScreen.tsx');
   assert.match(social, /<ChestButton open=\{shortcuts\} onPress=\{\(\) => \{ setTileClosed\(false\); setShortcuts\(true\); \}\} label="More" accessibilityLabel="More"/);
+  assert.match(social, /<SocialSheet\n\s+visible=\{shortcuts\}/, 'the More sheet slides on the UI thread');
+  assert.doesNotMatch(social, /react-native-modal/);
+  const sheet = read('src/screens/threads/SocialSheet.tsx');
+  assert.match(sheet, /Gesture\.Pan\(\)/);
+  assert.match(sheet, /onDismiss=/, 'shortcuts run after the native modal is gone (iOS Safari/push)');
   assert.match(social, /quietClose=\{tileClosed\}/, 'a tile tap already clicked: no second sound when the sheet closes');
   assert.match(chest, /if \(reduced\) \{ dim\.value = withTiming\(0\.7/, 'Reduce Motion press dim');
 });
