@@ -111,8 +111,8 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
                   </View>
                 )}
               </View>
-              <Text style={styles.name} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}
-                maxFontSizeMultiplier={1.3}>{stamp.shortName}</Text>
+              <Text style={styles.name} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}
+                maxFontSizeMultiplier={1.1}>{stamp.shortName}</Text>
             </View>
           </>
         ) : (
@@ -136,7 +136,7 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
               )}
             </View>
             <Text style={[styles.name, styles.nameSlot]} numberOfLines={state === 'secret' ? 1 : 2} adjustsFontSizeToFit minimumFontScale={0.8}
-              maxFontSizeMultiplier={1.3}>{state === 'secret' ? 'Secret' : stamp.shortName}</Text>
+              maxFontSizeMultiplier={1.1}>{state === 'secret' ? 'Secret' : stamp.shortName}</Text>
             {state !== 'secret' && (req.pips ? (
               <View style={styles.reqCol}>
                 <View style={styles.reqRow}>
