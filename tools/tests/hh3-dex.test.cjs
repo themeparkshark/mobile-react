@@ -663,7 +663,7 @@ test('R5: solid slot ink, numbered slot plates, compact locked finish row, Weari
   assert.match(parts, /ink: '#bfb08a', inkOpacity: 1/);
   assert.match(tile, />#\{slot\}<\/Text>/);
   assert.match(screen, /slot=\{slotOf\.get\(item\.id\) \?\? 0\}/);
-  assert.match(parts, /state\.kind === 'locked' && hero \? \(/);
+  assert.match(parts, /\{hero \? \(/);
   assert.match(parts, />Wearing<\/Text>/);
   assert.match(parts, /finished \|\| set\.isComplete \? BRAND\.gold : set\.color/);
   assert.match(screen, /Now hunting \$\{set\.name\} instead of \$\{before\.name\}\./);
