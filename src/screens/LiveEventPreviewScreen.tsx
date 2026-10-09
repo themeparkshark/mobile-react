@@ -9,6 +9,7 @@ import EventStatusChip from '../components/liveEvents/EventStatusChip';
 import FrenzyBanner, { resetFrenzyBannerForTests } from '../components/liveEvents/FrenzyBanner';
 import StarRideBadge from '../components/liveEvents/StarRideBadge';
 import NextUpRail from '../components/nextUp/NextUpRail';
+import ParkPulseChip from '../components/liveEvents/ParkPulseChip';
 import { openableKeys } from '../services/liveEvents/model';
 import { goldenReefFixture } from '../services/liveEvents/fixture';
 import { BRAND, GameIcon } from '../ui';
@@ -81,6 +82,7 @@ export default function LiveEventPreviewScreen() {
             <EventHomeChip event={live} onPress={() => setSheet(true)} />
           </View>
         ) : <EventStatusChip inline event={live} onPress={() => setSheet(true)} />}
+        {!home && <View style={{ marginTop: 8 }}><ParkPulseChip pulse={{ bucket: '10+', team_leader: 'globe' }} /></View>}
         <View style={styles.toastSlot}>
           <EventGainToast gained={gain.n} gainedAt={gain.at} artKey={live.art_key} />
         </View>
