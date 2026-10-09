@@ -201,10 +201,10 @@ export function SheetTop() {
 
 function usePulse() {
   const reduced = useUiReducedMotion();
-  const pulse = useSharedValue(0.55);
+  const pulse = useSharedValue(0.75);
   useEffect(() => {
     if (reduced) return;
-    pulse.value = withRepeat(withSequence(withTiming(1, { duration: 650 }), withTiming(0.55, { duration: 650 })), -1);
+    pulse.value = withRepeat(withSequence(withTiming(1, { duration: 650 }), withTiming(0.75, { duration: 650 })), -1);
     return () => cancelAnimation(pulse);
   }, [reduced, pulse]);
   return useAnimatedStyle(() => ({ opacity: pulse.value }));
