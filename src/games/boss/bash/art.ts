@@ -51,6 +51,8 @@ export interface BossSkin {
   readonly hurt: number | null;
   readonly laugh: number | null;
   readonly roar: number | null;
+  /** Cheeks full of ink: the INK tell (its own face, never the phase roar). */
+  readonly puff: number | null;
   /** The limb that pops out of the water. */
   readonly limb: number;
   readonly limbAspect: number;
@@ -69,6 +71,7 @@ const KRAKEN: BossSkin = {
   hurt: require('../../../assets/games/boss/bash/kraken_hurt.png'),
   laugh: require('../../../assets/games/boss/bash/kraken_laugh.png'),
   roar: require('../../../assets/games/boss/bash/kraken_roar.png'),
+  puff: require('../../../assets/games/boss/bash/kraken_puff.png'),
   limb: require('../../../assets/games/boss/bash/tentacle.png'),
   limbAspect: 261 / 600,
   // Between the eyes (the hat sits above), so the smash ring frames the face.
@@ -83,7 +86,7 @@ export const BOSS_SKINS: Record<BossId, BossSkin> = {
   robo_shark: {
     ...KRAKEN,
     body: require('../../../../assets/images/boss/robo_shark-crop.png'),
-    dizzy: null, hurt: null, laugh: null, roar: null,
+    dizzy: null, hurt: null, laugh: null, roar: null, puff: null,
     limb: require('../../../assets/games/boss/bash/robo_arm.png'),
     limbAspect: 259 / 600,
     head: [0.5, 0.36],
@@ -93,7 +96,7 @@ export const BOSS_SKINS: Record<BossId, BossSkin> = {
   ghost_squid: {
     ...KRAKEN,
     body: require('../../../../assets/images/boss/ghost_squid.png'),
-    dizzy: null, hurt: null, laugh: null, roar: null,
+    dizzy: null, hurt: null, laugh: null, roar: null, puff: null,
     limb: require('../../../assets/games/boss/bash/ghost_tentacle.png'),
     limbAspect: 270 / 600,
     head: [0.5, 0.32],

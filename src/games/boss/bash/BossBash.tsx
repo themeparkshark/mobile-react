@@ -49,7 +49,7 @@ const LANES = [0.2, 0.5, 0.8] as const;
 const SKY_WORD_Y = 128;
 
 type SharkPose = 'idle' | 'cheer' | 'bonked' | 'dizzy';
-type Face = 'angry' | 'dizzy' | 'hurt' | 'laugh' | 'roar';
+type Face = 'angry' | 'dizzy' | 'hurt' | 'laugh' | 'roar' | 'puff';
 type Fx =
   | { id: number; t: 'num'; text: string; x: number; y: number; big: boolean }
   | { id: number; t: 'burst'; src: number; x: number; y: number; size: number; spin?: boolean }
@@ -444,7 +444,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
   const onInkTell = () => {
     setInkTell(true);
-    flashFace('roar', 1150);
+    flashFace('puff', 1150);
     if (!reduced) bossPuff.value = withRepeat(withSequence(withTiming(1, { duration: 280 }), withTiming(0.6, { duration: 200 })), -1, false);
     addFx({ t: 'bubble', text: 'BLOCK IT!', x: L.w / 2, y: L.bossTop + L.bossSize * 0.62, tone: 'red' }, 1150);
     if (!firstBlocked.current) setHint('ink');
@@ -705,7 +705,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
   const hpNow = Math.max(0, hpLeft - (capLeft === undefined ? hud.damage : Math.min(hud.damage, capLeft)));
   // Every face is mounted once and cross-cut by opacity: no decode hitch on a swap.
-  const faces = ([['angry', skin.body], ['dizzy', skin.dizzy], ['hurt', skin.hurt], ['laugh', skin.laugh], ['roar', skin.roar]] as const)
+  const faces = ([['angry', skin.body], ['dizzy', skin.dizzy], ['hurt', skin.hurt], ['laugh', skin.laugh], ['roar', skin.roar], ['puff', skin.puff]] as const)
     .filter((f): f is readonly [Face, number] => f[1] !== null);
   const shownFace: Face = faces.some(f => f[0] === face) ? face : 'angry';
   const bodySrc = faces.find(f => f[0] === shownFace)?.[1] ?? skin.body;
@@ -898,7 +898,7 @@ function IntroCard({ phase, firstTime, skin, limbWord, reduced, onGo }: {
             <Text style={styles.noText} maxFontSizeMultiplier={1.2}>Not this!</Text>
           </View>
           <View style={styles.inkTip}>
-            <Image source={skin.roar ?? skin.body} style={{ width: 34, height: 34 }} contentFit="contain" />
+            <Image source={skin.puff ?? skin.roar ?? skin.body} style={{ width: 34, height: 34 }} contentFit="contain" />
             <Image source={BASH_ART.tapHand} style={{ width: 20, height: 26, marginLeft: -12, marginTop: 10 }} contentFit="contain" />
             <Text style={styles.inkText} maxFontSizeMultiplier={1.2}>Puffs up? Tap it!</Text>
           </View>
