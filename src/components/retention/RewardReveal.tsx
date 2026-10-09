@@ -230,7 +230,7 @@ function Row({ row, shown, reducedMotion, onWear, onPins }: {
     if (reducedMotion) { t.value = withTiming(1, { duration: 150 }); return; }
     t.value = big ? withSequence(withTiming(1, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 260 }))
       : withSpring(1, { damping: 10, stiffness: 220 });
-    if (big) beam.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0.35, { duration: 700 }));
+    if (big) beam.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: 900 }));
   }, [shown, reducedMotion, big, t, beam]);
   const style = useAnimatedStyle(() => ({
     opacity: t.value,
