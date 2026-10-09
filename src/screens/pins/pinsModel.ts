@@ -99,9 +99,6 @@ export interface MysterySeries {
   /** Trade in traders: points from spares; a missing regular pin costs pick_cost. */
   readonly points?: number;
   readonly pick_cost?: number;
-  /** Limited edition size for the gold chaser (#3 of 500), and whether all are found. */
-  readonly edition_size?: number | null;
-  readonly sold_out?: boolean;
   /** Finishing the series pays this pin. */
   readonly completer?: PinRow | null;
   readonly pins: PinRow[];
@@ -125,6 +122,8 @@ export interface PinHome {
   readonly free_box_from?: string | null;
   readonly counts: { pins: number; sets_done: number; sets: number; traders: number; chasers: number };
   readonly park_sets: ParkSet[];
+  /** Daily pips toward a free box: one per day you visit, 7 = a box; never reset by a missed day. */
+  readonly pips?: { filled: number; of: number } | null;
   /** Pin of the Day at each park today (null when the feature is off). */
   readonly pin_days?: PinDay[] | null;
   readonly mystery: MysterySeries[];

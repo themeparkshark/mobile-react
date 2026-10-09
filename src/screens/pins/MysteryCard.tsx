@@ -39,9 +39,7 @@ const HOLD_MS = 650;
  * What can be inside a box and the chance of each, in pictures + numbers.
  * Every pin in the series is listed; the chaser is last, in gold.
  */
-export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compact = false, pity, fresh, edition, soldOut }: {
-  /** Limited edition of the gold chaser, and whether all are found. */
-  edition?: number | null; soldOut?: boolean;
+export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compact = false, pity, fresh }: {
   pins: readonly PinRow[]; size?: number; shine?: SharedValue<number>; compact?: boolean;
   /** The guarantee box, said next to the chaser's odds. */
   pity?: number;
@@ -71,9 +69,9 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
           <PinTile uri={chaser.icon_url} size={size + 10} owned={chaser.owned} kind={chaser.kind} tradable={chaser.tradable} chaser
             badge={false} serial={chaser.serial} shine={chaser.owned ? shine : undefined} lag={0.7} lagSpan={0.8} />
           <View style={{ flex: 1 }}>
-            <Text maxFontSizeMultiplier={1.3} style={styles.chaserLabel}>Gold chaser{edition ? ` \u00b7 only ${edition}` : ''}</Text>
+            <Text maxFontSizeMultiplier={1.3} style={styles.chaserLabel}>Gold chaser</Text>
             <Text maxFontSizeMultiplier={1.3} style={styles.chaserPct}>
-              {soldOut ? `All ${edition} found! 0%` : `${formatChance(chaser.chance_bp)}${pity ? `  \u00b7  always by box ${pity}` : ''}`}
+              {`${formatChance(chaser.chance_bp)}${pity ? `  \u00b7  always by box ${pity}` : ''}`}
             </Text>
           </View>
         </View>
@@ -247,10 +245,18 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
   }, [fresh, still, bump]);
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
   const nextFree = !free ? nextFreeLabel(series.free.weekly_resets_at) : null;
+  // Honest heads-up in the last 2 weeks: chaser progress belongs to this series.
+  const meterEnds = (() => {
+    if (!series.ends_at || series.chaser_within >= series.pity) return null;
+    const end = new Date(series.ends_at);
+    const days = (end.getTime() - Date.now()) / 86400000;
+    if (days > 14 || days < 0) return null;
+    return `Meter ends ${end.toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles' })}`;
+  })();
 
   const tryOpen = (count: number) => {
     const short = count === 1 ? shortOne : shortFive;
-    if (short > 0) { queueHaptic('failBuzz', 1); setTopUp(short); return; }
+    if (short > 0) { queueHaptic('tapLight', 1); setTopUp(short); return; }
     setTopUp(null);
     onOpen(series, count, 'coins');
   };
@@ -278,8 +284,9 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
       </View>
 
       <View style={styles.body}>
-        <OddsTable pins={series.pins} shine={shine} pity={series.pity} fresh={fresh} edition={series.edition_size} soldOut={series.sold_out} />
-        {series.open && !series.sold_out && <ChaserMeter series={series} still={still} />}
+        <OddsTable pins={series.pins} shine={shine} pity={series.pity} fresh={fresh} />
+        {series.open && <ChaserMeter series={series} still={still} />}
+        {series.open && meterEnds && <Text maxFontSizeMultiplier={1.3} style={styles.meterEnds}>{meterEnds}</Text>}
         {series.open && <TradersRow series={series} busy={busy} still={still} onPick={() => onPick(series)} />}
         {series.open ? (
           <View style={{ gap: SPACE.sm }}>
@@ -298,15 +305,27 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
                   accessibilityRole="button" accessibilityLabel={shortOne > 0 ? `Need ${shortOne} more coins` : `Open one box for ${series.price} coins`}>
                   <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
                   <Text maxFontSizeMultiplier={1.1} style={styles.openOneText}>x1</Text>
-                  <View style={styles.price}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{series.price}</Text></View>
+                  <View style={[styles.price, shortOne > 0 && styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{shortOne > 0 ? `+${shortOne}` : series.price}</Text></View>
                 </Pressable>
                 </Animated.View>
-                <HoldToOpen label={series.bundle.price.toLocaleString('en-US')} saving={bundleSaving(series)} disabled={busy} tone={tone}
-                  onOpen={() => tryOpen(series.bundle.count)} />
+                {shortFive > 0 ? (
+                  // Short for the bundle: a plain tap shows the top-up (nothing to hold, nothing spent).
+                  <Pressable onPress={() => tryOpen(series.bundle.count)} disabled={busy} hitSlop={4}
+                    style={({ pressed }) => [styles.openBtn, styles.openFive, pressed && { transform: [{ scale: 0.96 }] }]}
+                    accessibilityRole="button" accessibilityLabel={`Need ${shortFive} more coins for five boxes`}>
+                    <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
+                    <Text maxFontSizeMultiplier={1.1} style={styles.openFiveText}>x5</Text>
+                    <View style={[styles.price, styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>+{shortFive.toLocaleString('en-US')}</Text></View>
+                  </Pressable>
+                ) : (
+                  <HoldToOpen label={series.bundle.price.toLocaleString('en-US')} saving={bundleSaving(series)} disabled={busy} tone={tone}
+                    onOpen={() => tryOpen(series.bundle.count)} />
+                )}
               </View>
             ) : (
               <Text maxFontSizeMultiplier={1.3} style={styles.closed}>Free boxes only here</Text>
             )}
+            {paid && <Text maxFontSizeMultiplier={1.3} style={styles.floorNote}>x5 = at least 1 new pin</Text>}
             {nextFree && !free && <Text maxFontSizeMultiplier={1.3} style={styles.nextFree}>{nextFree}</Text>}
             {topUp !== null && topUp > 0 && (
               <Animated.View entering={FadeIn.duration(160)}>
@@ -387,5 +406,8 @@ const styles = StyleSheet.create({
   freeChip: { backgroundColor: BRAND.green, borderRadius: 999, borderWidth: 2, borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 2 },
   freeText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, paddingTop: 2 },
   nextFree: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft, textAlign: 'center', paddingTop: 2 },
+  priceShort: { backgroundColor: '#ffe3df', borderColor: BRAND.red },
+  meterEnds: { fontFamily: FONT.display, fontSize: 14, color: BRAND.red, textAlign: 'center', marginTop: -6, paddingTop: 2 },
+  floorNote: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navySoft, textAlign: 'center', paddingTop: 2 },
   closed: { fontFamily: FONT.body, fontSize: 17, color: BRAND.navySoft, textAlign: 'center' },
 });

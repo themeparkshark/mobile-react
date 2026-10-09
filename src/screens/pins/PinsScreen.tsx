@@ -13,7 +13,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Animated, { FadeIn, useSharedValue, withDelay, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
+import Animated, { FadeIn, ZoomIn, useSharedValue, withDelay, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
 import { claimParkSet, getPinHome, openMysteryBoxes, pickWithPoints, saveLanyard, storefrontRegion } from '../../api/endpoints/pins';
 import { warmPinImages } from '../pinTrading/pinImageCache';
 import { PickSheet, PinsHelp } from './PinsSheets';
@@ -63,7 +63,7 @@ export default function PinsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [reveal, setReveal] = useState<{
-    pulls: RevealPull[]; tone: 'blue' | 'coral'; variant?: 'box' | 'catch' | 'pick'; coins?: number; seriesId?: number; waiting?: boolean; edition?: number | null;
+    pulls: RevealPull[]; tone: 'blue' | 'coral'; variant?: 'box' | 'catch' | 'pick'; coins?: number; seriesId?: number; waiting?: boolean;
     tag?: (p: RevealPull) => { text: string; tone: 'new' | 'trader' | 'gold' }; subtitle?: (p: RevealPull) => string | null;
   } | null>(null);
   const [fresh, setFresh] = useState<{ seriesId: number; ids: Set<number> } | null>(null);
@@ -139,7 +139,7 @@ export default function PinsScreen() {
     queueHaptic('tapLight', 1);
     // The box drops in right away; the server answers while it lands (no dead beat).
     const placeholder: RevealPull = { id: -1, item_id: -1, pin_id: 0, name: '', icon_url: null, is_chaser: false, by_pity: false, serial: null, duplicate: false };
-    setReveal({ pulls: [placeholder], tone: boxTone(series.theme_color), seriesId: series.id, waiting: true, edition: series.edition_size });
+    setReveal({ pulls: [placeholder], tone: boxTone(series.theme_color), seriesId: series.id, waiting: true });
     try {
       const r = await openMysteryBoxes(series.id, { count, pay, request_id: requestId, region: region.current });
       delete pending.current[series.id];
@@ -148,7 +148,7 @@ export default function PinsScreen() {
       const order = new Map(series.pins.filter(p => !p.is_chaser).map((p, i) => [p.item_id, i + 1]));
       const regularCount = order.size;
       setReveal({
-        pulls: r.pulls, tone: boxTone(series.theme_color), seriesId: series.id, waiting: false, edition: series.edition_size,
+        pulls: r.pulls, tone: boxTone(series.theme_color), seriesId: series.id, waiting: false,
         subtitle: p => (p.is_chaser ? series.name : `${series.name} \u00b7 ${order.get(p.item_id) ?? '?'} of ${regularCount}`),
       });
       // The page updates when the reveal closes (pins land in their slots then).
@@ -339,6 +339,17 @@ export default function PinsScreen() {
               </View>
             </Animated.View>
 
+            {home.pips && (
+              <View style={styles.pips} accessible accessibilityLabel={`Daily visits: ${home.pips.filled} of ${home.pips.of}. Seven fills a free box`}>
+                <Text maxFontSizeMultiplier={1.3} style={styles.pipsLabel}>Daily</Text>
+                {Array.from({ length: home.pips.of }, (_, i) => (
+                  <Animated.View key={`${i}:${i < home.pips!.filled ? 1 : 0}`} entering={!still && i === home.pips!.filled - 1 ? ZoomIn.springify().damping(8).delay(300) : undefined}
+                    style={[styles.pip, i < home.pips!.filled && styles.pipOn]} />
+                ))}
+                <Image source={require('../../../assets/images/pins/box-blue-closed.webp')} style={{ width: 30, height: 30 }} contentFit="contain" />
+              </View>
+            )}
+
             <View style={styles.tabs} accessibilityRole="tablist">
               <TabButton label={PINS_COPY.tabMystery} icon={require('../../../assets/images/pins/box-blue-closed.webp')} active={tab === 'mystery'} badge={freeWaiting} onPress={() => setTab('mystery')} />
               <TabButton label={PINS_COPY.tabSets} icon={PIN_ART.seal} active={tab === 'sets'} badge={claimWaiting || huntToday} onPress={() => setTab('sets')} />
@@ -397,7 +408,7 @@ export default function PinsScreen() {
         )}
       </View>
       {reveal && (
-        <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant} waiting={reveal.waiting} edition={reveal.edition}
+        <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant} waiting={reveal.waiting}
           tagFor={reveal.tag} subtitleFor={reveal.subtitle}
           canWear={p => p.is_chaser || reveal.variant === 'catch' || !!p.rare}
           onWear={p => wear(p.item_id)}
@@ -446,6 +457,10 @@ const styles = StyleSheet.create({
   countChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2 },
   countText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.white, paddingTop: 2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   tabs: { flexDirection: 'row', gap: SPACE.sm },
+  pips: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: 'rgba(5,52,110,0.32)', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 12, alignSelf: 'center' },
+  pipsLabel: { fontFamily: FONT.display, fontSize: 15, color: '#e2f6ff', paddingTop: 3, marginRight: 2 },
+  pip: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(255,255,255,0.15)' },
+  pipOn: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
   tab: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 48,
     backgroundColor: 'rgba(5,52,110,0.35)', borderRadius: RADIUS.md, borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)',
