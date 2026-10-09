@@ -7,6 +7,7 @@
  * Motion is cheap: one UI-thread sway value for the whole strap, off with
  * Reduce Motion and while the screen is not focused.
  */
+import { useAmbient } from '../../services/money/useAmbient';
 import { memo, useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -64,8 +65,9 @@ export function slotPoints(count: number, w: number, h: number, from = 0.1, to =
 
 function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, onPressSlot, onLongPressSlot, still = false, active = true, shine }: Props) {
   const sway = useSharedValue(0);
+  const ambient = useAmbient();
   useEffect(() => {
-    if (still || !active) {
+    if (still || !active || !ambient) {
       cancelAnimation(sway);
       sway.value = withTiming(0, { duration: 200 });
       return;
@@ -75,7 +77,7 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
       withTiming(-1, { duration: 2600, easing: Easing.inOut(Easing.sin) }),
     ), -1, true);
     return () => cancelAnimation(sway);
-  }, [still, active, sway]);
+  }, [still, active, ambient, sway]);
 
   const swayStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${sway.value * 0.9}deg` }] }));
   // The strap's shapes depend only on size: built once per size, not every render.

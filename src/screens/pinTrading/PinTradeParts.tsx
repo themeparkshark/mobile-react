@@ -4,6 +4,7 @@
  * cards, navy ink, gold accents (src/ui/tokens.ts). No player identity and no
  * free text anywhere.
  */
+import { useAmbient } from '../../services/money/useAmbient';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -268,12 +269,13 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
     pop.value = 0.6;
     pop.value = withSpring(1, { damping: 9, stiffness: 320, mass: 0.6 });
   }, [id, still, pop]);
+  const ambient = useAmbient();
   useEffect(() => {
     cancelAnimation(wiggle);
-    if (!charging || still) { wiggle.value = withTiming(0, { duration: 120 }); return; }
+    if (!charging || still || !ambient) { wiggle.value = withTiming(0, { duration: 120 }); return; }
     wiggle.value = withRepeat(withSequence(withTiming(1, { duration: 110 }), withTiming(-1, { duration: 220 }), withTiming(0, { duration: 110 })), -1, false);
     return () => cancelAnimation(wiggle);
-  }, [charging, still, wiggle]);
+  }, [charging, still, ambient, wiggle]);
   const hand = useSharedValue(0);
   useEffect(() => { hand.value = hidden ? withTiming(1, { duration: 160 }) : 0; }, [hidden, hand]);
   // The pin lifts out of its card; the card itself settles back and fades.

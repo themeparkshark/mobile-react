@@ -27,6 +27,7 @@
  * shared value, rays only for gold moments. Reduce Motion: no shake, flip or
  * confetti; the pin fades in with the same sounds.
  */
+import { useAmbient } from '../../services/money/useAmbient';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -206,6 +207,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const phaseRef = useRef<Phase>('drop');
   const setPhase = (p: Phase) => { phaseRef.current = p; setPhaseState(p); };
   const [worn, setWorn] = useState<Set<number>>(new Set());
+  const ambient = useAmbient();
   const [swappedOut, setSwappedOut] = useState<string | null>(null);
   // Paid opens: the coins visibly go into the box (3 for one box, 5 for a bundle).
   const [spending, setSpending] = useState(() => (spend > 0 && !still && variant === 'box' ? (rawPulls.length > 1 || spend >= 1000 ? 5 : 3) : 0));
@@ -396,18 +398,18 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
   // When an auto-opened box reaches 'drop' -> open, `open` needs the current phase; re-run once ready.
   useEffect(() => {
-    if (phase === 'ready' && !still) {
+    if (phase === 'ready' && !still && ambient) {
       hint.value = withRepeat(withSequence(withTiming(1, { duration: 520 }), withTiming(0, { duration: 520 })), -1, false);
     } else { cancelAnimation(hint); hint.value = 0; }
-  }, [phase, still, hint]);
+  }, [phase, still, ambient, hint]);
 
   // Gold rays keep turning slowly while a gold moment is on screen.
   useEffect(() => {
-    if (gold && !still && phase !== 'summary' && phase !== 'drop' && phase !== 'ready') {
+    if (gold && !still && ambient && phase !== 'summary' && phase !== 'drop' && phase !== 'ready') {
       raySpin.value = withRepeat(withTiming(360, { duration: 14000, easing: Easing.linear }), -1, false);
     } else { cancelAnimation(raySpin); }
     return () => cancelAnimation(raySpin);
-  }, [gold, still, phase, raySpin]);
+  }, [gold, still, ambient, phase, raySpin]);
 
   const next = useCallback(() => {
     play('ui.tap');

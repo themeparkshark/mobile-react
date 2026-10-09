@@ -9,6 +9,7 @@
  *
  * A server without Pins v2 (404 on /pins/home) gets the old Pin Packs screen.
  */
+import { useAmbient } from '../../services/money/useAmbient';
 import { useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -124,12 +125,13 @@ export default function PinsScreen() {
   const visible = focused && appActive && !reveal && !hunt && !picking && !help;
 
   // One shine sweep across the visible pins every ~7 s while the page is up (UI thread, nothing redraws at rest).
+  const ambient = useAmbient();
   useEffect(() => {
-    if (still || !visible || state !== 'ready') { cancelAnimation(shine); return; }
+    if (still || !ambient || !visible || state !== 'ready') { cancelAnimation(shine); return; }
     shine.value = 0;
     shine.value = withRepeat(withDelay(5200, withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.quad) })), -1, false);
     return () => cancelAnimation(shine);
-  }, [still, visible, state, shine]);
+  }, [still, ambient, visible, state, shine]);
 
   useEffect(() => { if (tab) setVisited(v => (v.has(tab) ? v : new Set(v).add(tab))); }, [tab]);
 

@@ -12,6 +12,7 @@
  *
  * OddsTable is exported for other screens that offer a box (Trail Boxes).
  */
+import { useAmbient } from '../../services/money/useAmbient';
 import { Image } from 'expo-image';
 import { memo, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -135,15 +136,16 @@ function TradersRow({ series, busy, onPick, still }: { series: MysterySeries; bu
 
 function BobbingBox({ tone, active, still, free }: { tone: 'blue' | 'coral'; active: boolean; still: boolean; free: boolean }) {
   const t = useSharedValue(0);
+  const ambient = useAmbient();
   useEffect(() => {
-    if (!active || still) { cancelAnimation(t); t.value = 0; return; }
+    if (!active || still || !ambient) { cancelAnimation(t); t.value = 0; return; }
     t.value = withRepeat(withSequence(
       withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }),
       withTiming(0, { duration: 1300, easing: Easing.inOut(Easing.sin) }),
       withDelay(free ? 200 : 900, withTiming(0, { duration: 10 })),
     ), -1, false);
     return () => cancelAnimation(t);
-  }, [active, still, free, t]);
+  }, [ambient, active, still, free, t]);
   const style = useAnimatedStyle(() => ({
     transform: [{ translateY: -t.value * 6 }, { rotate: `${free ? Math.sin(t.value * Math.PI * 4) * 4 : 0}deg` }],
   }));

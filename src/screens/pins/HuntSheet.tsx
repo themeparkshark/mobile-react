@@ -7,6 +7,7 @@
  * Location is read from the app's existing GPS watch (no new watch, no extra
  * battery); polling stops when the sheet closes or the app is backgrounded.
  */
+import { useAmbient } from '../../services/money/useAmbient';
 import { Image } from 'expo-image';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { AppState, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -27,11 +28,13 @@ const SONAR_MS = { here: 500, hot: 800, warm: 1300, cold: 2000 } as const;
 function Sonar({ warmth, color }: { warmth: HuntStatus['warmth']; color: string }) {
   const t = useSharedValue(0);
   const ms = warmth ? SONAR_MS[warmth] : 2400;
+  const ambient = useAmbient();
   useEffect(() => {
     t.value = 0;
+    if (!ambient) return;
     t.value = withRepeat(withTiming(1, { duration: ms, easing: Easing.out(Easing.quad) }), -1, false);
     return () => cancelAnimation(t);
-  }, [ms, t]);
+  }, [ms, ambient, t]);
   const a = useAnimatedStyle(() => ({ opacity: 1 - t.value, transform: [{ scale: 0.6 + t.value * 1.4 }] }));
   const b = useAnimatedStyle(() => { const v = (t.value + 0.5) % 1; return { opacity: 1 - v, transform: [{ scale: 0.6 + v * 1.4 }] }; });
   return (

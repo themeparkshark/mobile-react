@@ -9,6 +9,7 @@
  * (gold, pulsing), caught, or no pin today. At the park, Hunt opens the
  * warmer/colder hunt (HuntSheet).
  */
+import { useAmbient } from '../../services/money/useAmbient';
 import { Image } from 'expo-image';
 import { memo, useEffect, useState } from 'react';
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -22,11 +23,12 @@ const CORK = require('../../../assets/images/screens/pin-swaps/corkboard.png');
 
 function TodayChip({ day, still, onHunt }: { day: PinDay; still: boolean; onHunt?: () => void }) {
   const pulse = useSharedValue(0);
+  const ambient = useAmbient();
   useEffect(() => {
-    if (day.status === 'hunt' && !still) pulse.value = withRepeat(withSequence(withTiming(1, { duration: 700 }), withTiming(0, { duration: 700 })), -1, false);
+    if (day.status === 'hunt' && !still && ambient) pulse.value = withRepeat(withSequence(withTiming(1, { duration: 700 }), withTiming(0, { duration: 700 })), -1, false);
     else { cancelAnimation(pulse); pulse.value = 0; }
     return () => cancelAnimation(pulse);
-  }, [day.status, still, pulse]);
+  }, [day.status, still, ambient, pulse]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pulse.value * 0.05 }] }));
   if (day.status === 'none') {
     return (

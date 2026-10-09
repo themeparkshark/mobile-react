@@ -8,6 +8,7 @@
  * the trade-complete moment layer above it. The scrim never closes the sheet:
  * only the X, "Not now" and "Back to board" do, so a stray tap can't drop a hold.
  */
+import { useAmbient } from '../../services/money/useAmbient';
 import { memo, useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
@@ -59,11 +60,12 @@ const fadeOut = (ms: number) => FadeOut.duration(ms).reduceMotion(ReduceMotion.N
 /** "Tap one of your pins": plain words with a nudging arrow, not a button shape. */
 function PickHint({ still }: { still: boolean }) {
   const nudge = useSharedValue(0);
+  const ambient = useAmbient();
   useEffect(() => {
-    if (still) return;
+    if (still || !ambient) return;
     nudge.value = withRepeat(withSequence(withTiming(1, { duration: 380 }), withTiming(0, { duration: 380 })), -1, false);
     return () => cancelAnimation(nudge);
-  }, [still, nudge]);
+  }, [still, ambient, nudge]);
   const arrow = useAnimatedStyle(() => ({ transform: [{ translateY: -nudge.value * 5 }, { rotate: '-90deg' }] }));
   return (
     <View style={styles.pickHint} accessible accessibilityLabel={COPY.pickFirst}>
