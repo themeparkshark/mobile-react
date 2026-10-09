@@ -93,8 +93,8 @@ export type LevelChestsPayload = { readonly enabled: true; readonly level: numbe
 
 const tz = () => { const t = deviceTimezone(); return t ? { timezone: t } : {}; };
 
-export async function getDailyThree(): Promise<DailyThreePayload> {
-  const { data } = await client.get<{ data: DailyThreePayload }>('/me/daily-three', { params: tz(), timeout: 10000 });
+export async function getDailyThree(timeout = 10000): Promise<DailyThreePayload> {
+  const { data } = await client.get<{ data: DailyThreePayload }>('/me/daily-three', { params: tz(), timeout });
   if (!data?.data || typeof data.data !== 'object') throw new Error('Daily 3 response was malformed.');
   return data.data;
 }
@@ -127,8 +127,8 @@ export async function markFreezeSeen(): Promise<{ state: DailyThreeState }> {
   return data.data;
 }
 
-export async function getLevelChests(): Promise<LevelChestsPayload> {
-  const { data } = await client.get<{ data: LevelChestsPayload }>('/me/level-chests', { timeout: 10000 });
+export async function getLevelChests(timeout = 10000): Promise<LevelChestsPayload> {
+  const { data } = await client.get<{ data: LevelChestsPayload }>('/me/level-chests', { timeout });
   if (!data?.data || typeof data.data !== 'object') throw new Error('Level chests response was malformed.');
   return data.data;
 }

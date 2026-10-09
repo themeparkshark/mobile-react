@@ -82,7 +82,6 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const [pop, setPop] = useState<{ index: number | null; key: number }>({ index: null, key: 0 });
   const [celebrate, setCelebrate] = useState<string[]>([]);
   const [coach, setCoach] = useState(false);
-  const [appActive, setAppActive] = useState(true);
   const lastRead = useRef(0);
   const lastChestRead = useRef(-1);
   const prevGoals = useRef<DailyThreeState['goals'] | null>(null);
@@ -145,7 +144,6 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   useEffect(() => { if (o.enabled && level > 0 && lastChestRead.current !== -1) void refresh(true); }, [level]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const sub = AppState.addEventListener('change', s => {
-      setAppActive(s === 'active');
       if (s === 'active' && o.enabled) void refresh(false);
     });
     return () => sub.remove();
@@ -209,12 +207,12 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const recoverPaid = async (src: 'daily' | 'weekly' | 'level', level_: number, claimDate: string | null | undefined): Promise<PaidRewards | null> => {
     try {
       if (src === 'level') {
-        const c = await getLevelChests();
+        const c = await getLevelChests(6000);
         const chest = c.enabled ? c.chests.find(x => x.level === level_) : undefined;
         if (c.enabled) setChests(c.chests);
         return chest?.opened && chest.rewards ? chest.rewards : null;
       }
-      const d = await getDailyThree();
+      const d = await getDailyThree(6000);
       if (!d.enabled) return null;
       applyDaily(d);
       if (src === 'weekly') return d.week.claimed ? d.week.claimed_rewards ?? null : null;
@@ -241,7 +239,12 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       if (result.state?.goals) applyDaily(result.state);
       if (current.src === 'level') setChests(cs => cs.map(c => (c.level === current.level ? { ...c, opened: true, rewards: result.rewards } : c)));
     } catch {
-      const paid = await recoverPaid(current.src, current.level ?? 0, current.claimDate);
+      // The claim may still be committing: read back up to 3 times, 1.5 s apart (the card says "Still opening...").
+      let paid: PaidRewards | null = null;
+      for (let i = 0; i < 3 && !paid && mounted.current; i++) {
+        if (i > 0) await new Promise(r => setTimeout(r, 1500));
+        paid = await recoverPaid(current.src, current.level ?? 0, current.claimDate);
+      }
       if (!mounted.current) return;
       if (paid) { setView({ ...current, opening: false, rewards: paid }); return; }
       setView(null);
@@ -302,7 +305,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     const b = buttonState(daily, new Date().getHours());
     button = (
       <Daily3MapButton pips={b.pips} streak={b.streak} attention={b.attention} popIndex={pop.index} popKey={pop.key}
-        active={o.mapFocused && !o.mapCovered && !visible && appActive} reducedMotion={reducedMotion}
+        active={o.mapFocused && !o.mapCovered && !visible} reducedMotion={reducedMotion}
         onPress={() => { playSfx('ui.tap'); openSheet(); }} />
     );
   }

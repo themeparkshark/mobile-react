@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
-import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -27,6 +27,13 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
   readonly active: boolean;
   readonly reducedMotion: boolean;
 }) {
+  // Loops stop while the app is in the background (listened to here, so the map never re-renders for it).
+  const [foreground, setForeground] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', s => setForeground(s === 'active'));
+    return () => sub.remove();
+  }, []);
+  const running = active && foreground;
   const bounce = useSharedValue(0);
   const flicker = useSharedValue(0);
   const pop = useSharedValue(0);
@@ -35,7 +42,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
   useEffect(() => {
     cancelAnimation(bounce); cancelAnimation(flicker);
     bounce.value = 0; flicker.value = 0;
-    if (!active || reducedMotion) return;
+    if (!running || reducedMotion) return;
     if (ready) {
       // A hop every ~2.4 s: noticeable from across the map, never frantic.
       bounce.value = withRepeat(withSequence(
@@ -47,7 +54,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
       flicker.value = withRepeat(withTiming(1, { duration: 700, easing: Easing.inOut(Easing.sin) }), -1, true);
     }
     return () => { cancelAnimation(bounce); cancelAnimation(flicker); };
-  }, [active, reducedMotion, ready, attention, bounce, flicker]);
+  }, [running, reducedMotion, ready, attention, bounce, flicker]);
 
   useEffect(() => {
     if (popIndex === null || popKey === 0) return;
