@@ -175,9 +175,31 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       setTimeout(() => { if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards }); }, wait);
       if (result.state?.goals) applyDaily(result.state);
     } catch {
+      // A slow answer can arrive after the server already paid: read back what it paid and keep the reveal going.
+      const paid = await recoverPaid(current.src, current.level ?? 0);
+      if (!mounted.current) return;
+      if (paid) { setView({ ...current, opening: false, rewards: paid }); return; }
       setView(null);
       void refresh(true);
       gameAlert('Could not open it yet', 'Your reward is safe. Check your internet and try again.');
+    }
+  };
+
+  const recoverPaid = async (src: 'daily' | 'weekly' | 'level', level: number): Promise<PaidRewards | null> => {
+    try {
+      if (src === 'level') {
+        const c = await getLevelChests();
+        const chest = c.enabled ? c.chests.find(x => x.level === level) : undefined;
+        if (c.enabled) setChests(c.chests);
+        return chest?.opened && chest.rewards ? chest.rewards : null;
+      }
+      const d = await getDailyThree();
+      if (!d.enabled) return null;
+      applyDaily(d);
+      if (src === 'weekly') return d.week.claimed ? d.week.claimed_rewards ?? null : null;
+      return d.claimed ? d.claimed_rewards ?? null : null;
+    } catch {
+      return null;
     }
   };
 

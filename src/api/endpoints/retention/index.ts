@@ -36,6 +36,8 @@ export interface DailyThreeState {
   readonly claimable: boolean;
   readonly claimable_date: string | null;
   readonly claimed: boolean;
+  /** What the last Daily 3 chest paid (today or yesterday), for a claim whose answer was lost. */
+  readonly claimed_rewards?: (PaidRewards & { readonly date?: string }) | null;
   readonly reward: DailyThreeReward;
   readonly streak: {
     readonly days: number; readonly best: number; readonly freezes: number; readonly freeze_cap: number;
@@ -46,6 +48,7 @@ export interface DailyThreeState {
     readonly days: readonly { readonly date: string; readonly state: WeekDayState }[];
     readonly done: number; readonly needed: number; readonly claimable: boolean; readonly claimed: boolean;
     readonly reward: WeeklyReward;
+    readonly claimed_rewards?: PaidRewards | null;
   };
 }
 
