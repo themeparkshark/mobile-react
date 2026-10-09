@@ -31,7 +31,7 @@ function fixture(scene: string, step: number): TrailState {
     : scene === 'catchup' && step > 0 ? [box(1, 'blue', 2000, 2000, 'ready', null)] : [];
   const walking = scene === 'catchup' && step > 0
     ? [box(4, 'red', 5000, 1420, 'walking', 0), box(2, 'gold', 10000, 7800, 'walking', 1), box(3, 'blue', 2000, 1180, 'walking', 2)]
-    : [box(1, 'blue', 2000, scene === 'catchup' ? 820 : 1380, 'walking', 0), box(2, 'gold', 10000, scene === 'catchup' ? 6600 : 7180, 'walking', 1),
+    : [box(1, 'blue', 2000, scene === 'catchup' ? 820 : 1380, 'walking', 0), box(2, scene.startsWith('reveal') ? 'red' : 'gold', 10000, scene === 'catchup' ? 6600 : 7180, 'walking', 1),
       box(3, 'red', 5000, scene === 'catchup' ? 0 : 640, 'walking', 2)];
   const waiting = scene === 'catchup' && step > 0 ? [box(5, 'blue', 2000, 0, 'queued', null)]
     : [box(4, 'red', 5000, 0, 'queued', null), box(5, 'blue', 2000, 0, 'queued', null)];
@@ -41,7 +41,8 @@ function fixture(scene: string, step: number): TrailState {
     today: { park_id: 10, park_day: '2026-10-08', steps, meters: Math.round(steps * 0.75) },
     best_day: { park_day: '2026-10-08', steps, meters: Math.round(steps * 0.75) },
     lifetime: { steps: 84210, meters: 63158, boxes_opened: 11 },
-    week: { steps: steps + 6100, goal_steps: 25000, goal_hit: false, goal_options: [10000, 25000, 50000] },
+    week: scene === 'ready' ? { steps: 26200, goal_steps: 25000, goal_hit: true, goal_options: [10000, 25000, 50000] }
+      : { steps: steps + 6100, goal_steps: 25000, goal_hit: false, goal_options: [10000, 25000, 50000] },
     wheels: false, gold_in: 3, next_ride_box: 1,
     odds: {
       gold_pity: 8, exclusives: ['Propeller Hat', 'Party Inflatable Duck', 'Blue Inflatable Duck', 'Green Inflatable Duck'],
