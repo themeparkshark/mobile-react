@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -6,6 +7,8 @@ import Animated, {
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
 import type { ButtonAttention } from '../../services/retention/logic';
+
+const WEEKLY = require('../../../assets/images/retention/weekly-box-closed.png');
 
 /**
  * Daily 3 on the map, in the same column and style as the recenter and chest
@@ -64,7 +67,9 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
       <Pressable onPress={() => { haptic('tapLight'); onPress(); }} accessibilityRole="button" accessibilityLabel={label}
         hitSlop={6} style={({ pressed }) => [styles.button, ready && styles.buttonReady, pressed && styles.pressed]}>
         <Animated.View style={flameStyle}>
-          <GameIcon name={ready ? 'chest' : 'streak'} size={ready ? 34 : 30} />
+          {attention === 'weekly'
+            ? <Image source={WEEKLY} style={{ width: 36, height: 36 }} contentFit="contain" />
+            : <GameIcon name={ready ? 'chest' : 'streak'} size={ready ? 34 : 30} />}
         </Animated.View>
         <View style={styles.pips} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           {pips.map((on, i) => (
@@ -93,6 +98,7 @@ const styles = StyleSheet.create({
   badge: { position: 'absolute', top: -5, right: -7, minWidth: 22, height: 22, paddingHorizontal: 5, borderRadius: 11,
     backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   badgeText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy, marginTop: 1 },
+  // The same gold ready dot as the daily chest button above it.
   dot: { position: 'absolute', top: -3, right: -3, width: 16, height: 16, borderRadius: 8,
-    backgroundColor: BRAND.red, borderWidth: 2.5, borderColor: BRAND.white },
+    backgroundColor: BRAND.gold, borderWidth: 2.5, borderColor: BRAND.white },
 });

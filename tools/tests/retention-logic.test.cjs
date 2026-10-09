@@ -91,7 +91,9 @@ test('each goal opens the right place', () => {
   assert.equal(L.goalAction(goal('x', false, 'chest')), 'chest');
   assert.equal(L.goalAction(goal('x', false, 'look')), 'closet');
   assert.equal(L.goalAction(goal('x', false, 'heart')), 'friends');
-  assert.equal(L.goalAction(goal('x', false, 'catch')), 'map');
+  assert.equal(L.goalAction(goal('x', false, 'catch')), 'snack');
+  assert.equal(L.goalAction({ ...goal('x', false, 'catch'), park: true }), 'ride');
+  assert.equal(L.goalAction(goal('x', false, 'play')), 'ride');
   assert.equal(L.goalAction(goal('x', true, 'look')), null);
 });
 
@@ -108,9 +110,35 @@ test('weekly line is honest about what is still reachable this week', () => {
   const days = states => states.map((state, i) => ({ date: `2026-10-${12 + i}`, state }));
   const wk = (over) => state({ week: { ...state().week, ...over } });
   assert.equal(L.weeklyLine(wk({ done: 0, days: days(['before', 'before', 'before', 'before', 'today', 'future', 'future']) })),
-    'New week Monday: 5 days opens the Weekly Box');
-  assert.equal(L.weeklyLine(wk({ done: 3, days: days(['done', 'done', 'done', 'today', 'future', 'future', 'future']) })), '2 more days for the Weekly Box');
-  assert.equal(L.weeklyLine(wk({ done: 4, days: days(['done', 'done', 'done', 'done', 'today', 'future', 'future']) })), '1 more day for the Weekly Box');
+    'A new week starts Monday');
+  assert.equal(L.weeklyLine(wk({ done: 3, days: days(['done', 'done', 'done', 'today', 'future', 'future', 'future']) })), '2 more flames open the gift');
+  assert.equal(L.weeklyLine(wk({ done: 4, days: days(['done', 'done', 'done', 'done', 'today', 'future', 'future']) })), '1 more flame open the gift');
   assert.equal(L.weeklyLine(wk({ claimable: true })), 'Your Weekly Box is ready!');
-  assert.equal(L.weeklyLine(wk({ claimed: true })), 'Weekly Box opened. A new week starts Monday.');
+  assert.equal(L.weeklyLine(wk({ claimed: true })), 'Gift opened! A new week starts Monday.');
+  assert.equal(L.weeklyLine(wk({ done: 0, days: days(['today', 'future', 'future', 'future', 'future', 'future', 'future']) })), '5 flames this week open the gift');
+});
+
+test('bars only where the title names the count; the park catch never shows 0/2', () => {
+  const g = (over) => ({ ...goal('x', false, 'catch'), target: 2, ...over });
+  assert.equal(L.showsBar(g({ park: false })), true);
+  assert.equal(L.showsBar(g({ park: true })), false);
+  assert.equal(L.showsBar(g({ park: true, bar: false })), false);
+  assert.equal(L.showsBar({ ...goal('x', false, 'play'), target: 2 }), true);
+  assert.equal(L.showsBar({ ...goal('x', false, 'look'), target: 1 }), false);
+});
+
+test('the reveal holds before gear and boxes so each gets its own beat', () => {
+  const rows = L.rewardRows({ coins: 50, tickets: 1, item: { id: 1, name: 'Cap', image: null, rarity: 1 }, mystery_boxes: 1 });
+  const t = L.rowSchedule(rows, 380, 450, 420);
+  assert.deepEqual(plain(t), [420, 800, 1630, 2460]);
+  assert.equal(L.rewardRows({ coins: 50, bonus_coins: 150 })[1].label, 'bonus coins');
+});
+
+test('closing beats point at tomorrow and the next milestone, and a lost streak keeps its record', () => {
+  const s = state({ done: true, claimed: true, streak: { ...state().streak, days: 6, next_milestone: { day: 7, gear: true, mystery_boxes: 0, label: 'New gear', days_away: 1 } } });
+  assert.equal(L.tomorrowLine(s), 'Come back tomorrow: Day 7 holds new gear!');
+  assert.equal(L.milestoneLine(s), 'Tomorrow: New gear!');
+  assert.equal(L.milestoneLine(state({ streak: { ...state().streak, next_milestone: { day: 7, gear: true, mystery_boxes: 0, label: 'New gear', days_away: 4 } } })), '4 more days: New gear');
+  assert.equal(L.streakSubline(state({ streak: { ...state().streak, days: 0, best: 5, at_risk: false } })), 'Best: 5 days. Start a new flame!');
+  assert.equal(L.sameJson({ a: 1 }, { a: 1 }), true);
 });

@@ -1,30 +1,33 @@
 import { Image, type ImageSource } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import type { PaidRewards } from '../../api/endpoints/retention';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
-import { rewardRows, type RewardRow } from '../../services/retention/logic';
+import { isBigReward, rewardRows, rowSchedule, type RewardRow } from '../../services/retention/logic';
 import { BRAND, GameIcon } from '../../ui';
 import RewardBurst from '../RewardBurst';
 
 const BOX = require('../../../assets/images/retention/mystery-box.png');
 const FREEZE = require('../../../assets/images/retention/freeze.png');
 
-/** Rows land this far apart: one beat each, so a kid sees every prize. */
-export const ROW_BEAT_MS = 380;
+/** After this long the shake settles into a calm "Still opening..." (the request has its own 6 s timeout). */
+const STALL_MS = 6000;
 
 /**
- * A chest you open yourself. Tap: the chest shakes (anticipation, haptic),
- * the server pays, the lid pops with a burst, then each prize drops in on
- * its own beat with a tick and a buzz; a wearable or a Mystery Box gets a
- * bigger card and a heavier hit. Shows only what the server paid.
+ * A chest you open yourself.
+ * - Tap: the shake builds (three rising ticks), the server pays.
+ * - Pop: squash, a white flash hides the art swap, overshoot, a burst from the chest itself.
+ * - Prizes: every row is laid out at once (nothing jumps) and fades in on its beat with a
+ *   tick and a count-up; gear and Mystery Boxes wait a held beat, then slam in as hero cards.
+ * - The button appears only after the last prize lands, under a line that points at what is next.
+ * Shows only what the server paid.
  */
-export default function RewardReveal({ title, subtitle, closedArt, openArt, rewards, opening, onOpen, onDone, reducedMotion, doneLabel }: {
-  readonly title: string;
+export default function RewardReveal({ subtitle, closedArt, openArt, rewards, opening, onOpen, onDone, onWear, onPins,
+  reducedMotion, doneLabel, footer, dropIn = false }: {
   readonly subtitle: string;
   readonly closedArt: ImageSource | number;
   readonly openArt: ImageSource | number;
@@ -33,91 +36,146 @@ export default function RewardReveal({ title, subtitle, closedArt, openArt, rewa
   readonly opening: boolean;
   readonly onOpen: () => void;
   readonly onDone: () => void;
+  readonly onWear?: () => void;
+  readonly onPins?: () => void;
   readonly reducedMotion: boolean;
   readonly doneLabel?: string;
+  /** The closing beat (what comes next), shown with the button. */
+  readonly footer?: React.ReactNode;
+  /** The chest drops in when it appears (level-ups). */
+  readonly dropIn?: boolean;
 }) {
   const { width, height } = useWindowDimensions();
-  const size = Math.min(width * 0.5, 210);
+  const size = Math.min(width * 0.46, height * 0.24, 200);
+  // Rows get a fixed area (scrolls on small phones), so the card never changes height.
+  const rowsHeight = Math.max(190, Math.min(300, height - size - 330));
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
   const pop = useSharedValue(1);
+  const squash = useSharedValue(1);
+  const flash = useSharedValue(0);
   const glow = useSharedValue(0);
   const burst = useSharedValue(0);
-  const [shownRows, setShownRows] = useState(0);
+  const drop = useSharedValue(dropIn && !reducedMotion ? 1 : 0);
+  const [landed, setLanded] = useState(0);
+  const [swapped, setSwapped] = useState(false);
+  const [stalled, setStalled] = useState(false);
+  const [stage, setStage] = useState<{ x: number; y: number } | null>(null);
   const rows = rewards ? rewardRows(rewards) : [];
   const revealed = !!rewards;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
 
+  // Arrival: a level chest drops in with a thump.
+  useEffect(() => {
+    if (!dropIn || reducedMotion) return;
+    drop.value = withSpring(0, { damping: 9, stiffness: 140 });
+    later(() => { haptic('hitMedium'); playSfx('fx.hit', 0.8); }, 260);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Idle: a gentle bob and glow, so it asks to be tapped.
   useEffect(() => {
     cancelAnimation(bob); cancelAnimation(glow);
     bob.value = 0; glow.value = revealed ? 1 : 0;
-    if (reducedMotion) return;
-    if (!revealed && !opening) {
-      bob.value = withRepeat(withSequence(
-        withTiming(-8, { duration: 850, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration: 850, easing: Easing.inOut(Easing.sin) }),
-      ), -1);
-      glow.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }), -1, true);
-    }
+    if (reducedMotion || revealed || opening) return;
+    bob.value = withRepeat(withSequence(
+      withTiming(-7, { duration: 850, easing: Easing.inOut(Easing.sin) }),
+      withTiming(0, { duration: 850, easing: Easing.inOut(Easing.sin) }),
+    ), -1);
+    glow.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }), -1, true);
     return () => { cancelAnimation(bob); cancelAnimation(glow); };
   }, [revealed, opening, reducedMotion, bob, glow]);
 
-  // Anticipation while the server answers.
+  // Anticipation: the shake builds over three ticks while the server answers, then settles if it is slow.
   useEffect(() => {
-    if (!opening || reducedMotion) return;
-    shake.value = withRepeat(withSequence(...[9, -11, 13, -13, 0].map(v => withTiming(v, { duration: 55 }))), -1);
-    haptic('hitMedium');
+    if (!opening || revealed) return;
+    setStalled(false);
+    const stall = setTimeout(() => { setStalled(true); cancelAnimation(shake); shake.value = withTiming(0, { duration: 200 }); }, STALL_MS);
+    if (!reducedMotion) {
+      shake.value = withSequence(
+        ...[4, -4, 7, -7, 10, -10].map(v => withTiming(v, { duration: 55 })),
+        withRepeat(withSequence(withTiming(13, { duration: 50 }), withTiming(-13, { duration: 50 })), -1, true),
+      );
+      [0, 200, 400].forEach((ms, i) => later(() => { haptic(i < 2 ? 'tickSelection' : 'hitMedium'); playSfx('ui.button', 0.5 + i * 0.2); }, ms));
+    }
     playSfx('fx.redeemOpen', 0.8);
-    return () => { cancelAnimation(shake); shake.value = 0; };
-  }, [opening, reducedMotion, shake]);
+    return () => { clearTimeout(stall); cancelAnimation(shake); shake.value = 0; };
+  }, [opening, revealed, reducedMotion, shake]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The pop, then one row per beat.
+  // The pop, then one row per beat (held beats before the big ones).
   useEffect(() => {
-    if (!revealed) { setShownRows(0); return; }
+    if (!revealed) { setLanded(0); setSwapped(false); return; }
     cancelAnimation(shake); shake.value = 0;
-    haptic('success');
-    playSfx('fx.reward');
-    if (reducedMotion) { setShownRows(rows.length); return; }
-    pop.value = withSequence(withTiming(1.22, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 }));
+    timers.current.forEach(clearTimeout); timers.current = [];
+    if (reducedMotion) {
+      setSwapped(true);
+      haptic('success'); playSfx('fx.reward');
+      rows.forEach((row, i) => later(() => setLanded(n => Math.max(n, i + 1)), 120 * (i + 1)));
+      return;
+    }
+    // Squash, flash, swap behind the flash, overshoot.
+    squash.value = withSequence(withTiming(0.82, { duration: 90, easing: Easing.in(Easing.quad) }), withSpring(1, { damping: 6, stiffness: 240 }));
+    flash.value = withDelay(80, withSequence(withTiming(1, { duration: 60 }), withTiming(0, { duration: 260 })));
+    later(() => setSwapped(true), 120);
+    pop.value = withDelay(110, withSequence(withTiming(1.18, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 })));
     burst.value = 0;
-    burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) });
-    timers.current.forEach(clearTimeout);
-    timers.current = rows.map((row, i) => setTimeout(() => {
-      setShownRows(n => Math.max(n, i + 1));
-      const big = row.kind === 'item' || row.kind === 'mystery_boxes';
+    burst.value = withDelay(120, withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }));
+    later(() => { haptic('success'); playSfx('fx.reward'); }, 120);
+    rowSchedule(rows).forEach((ms, i) => later(() => {
+      setLanded(n => Math.max(n, i + 1));
+      const big = isBigReward(rows[i].kind);
       haptic(big ? 'comboHeavy' : 'tickSelection');
-      playSfx(big ? 'fx.firework' : row.kind === 'coins' ? 'fx.coin' : 'fx.coinTick', big ? 1 : 0.8);
-    }, 380 + i * ROW_BEAT_MS));
+      playSfx(big ? 'fx.firework' : rows[i].kind === 'coins' || rows[i].kind === 'bonus_coins' ? 'fx.coin' : 'fx.coinTick', big ? 1 : 0.8);
+    }, ms));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealed, reducedMotion]);
 
-  const chestStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bob.value }, { rotate: `${shake.value}deg` }, { scale: pop.value }] }));
-  const glowStyle = useAnimatedStyle(() => ({ opacity: 0.3 + glow.value * 0.45, transform: [{ scale: 0.9 + glow.value * 0.15 }] }));
-  const allIn = shownRows >= rows.length;
+  const chestStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: bob.value - drop.value * 140 }, { rotate: `${shake.value}deg` }, { scale: pop.value },
+      { scaleY: squash.value }],
+  }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: 0.35 + glow.value * 0.4, transform: [{ scale: 0.92 + glow.value * 0.08 }] }));
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+  const allIn = revealed && landed >= rows.length;
+  const skip = () => { if (!revealed || allIn) return; timers.current.forEach(clearTimeout); timers.current = []; setLanded(rows.length); setSwapped(true); };
 
   return (
     <View style={styles.card}>
       <Text style={styles.subtitle}>{subtitle}</Text>
-      <Pressable onPress={!revealed && !opening ? onOpen : undefined} disabled={revealed || opening} accessibilityRole="button"
-        accessibilityLabel={revealed ? `${title} opened` : `Open: ${title}`} style={[styles.stage, { height: size + 8 }]}>
-        <Animated.View style={[styles.glow, { width: size * 1.25, height: size * 1.25, borderRadius: size }, glowStyle]} />
+      <Pressable onPress={!revealed && !opening ? onOpen : skip} disabled={opening && !revealed} accessibilityRole="button"
+        accessibilityLabel={revealed ? 'Opened' : 'Tap to open'} style={[styles.stage, { height: size + 8 }]}
+        onLayout={e => setStage({ x: e.nativeEvent.layout.x + e.nativeEvent.layout.width / 2, y: e.nativeEvent.layout.y + e.nativeEvent.layout.height / 2 })}>
+        <Animated.View style={[styles.glow, { width: size * 0.98, height: size * 0.98, borderRadius: size }, glowStyle]} />
         <Animated.View style={chestStyle}>
-          <Image source={revealed ? openArt : closedArt} style={{ width: size, height: size }} contentFit="contain" />
+          <Image source={swapped ? openArt : closedArt} style={{ width: size, height: size }} contentFit="contain" />
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, { borderRadius: size / 2 }, flashStyle]} />
         </Animated.View>
       </Pressable>
-      <View style={styles.rows}>
-        {!revealed ? (
-          <Text style={styles.hint}>{opening ? 'Opening...' : 'Tap to open!'}</Text>
-        ) : rows.slice(0, shownRows).map(row => <Row key={row.kind} row={row} reducedMotion={reducedMotion} />)}
+      <Pressable onPress={skip} disabled={!revealed || allIn} accessible={false} style={{ alignSelf: 'stretch' }}>
+        <ScrollView style={{ height: rowsHeight }} contentContainerStyle={styles.rows} scrollEnabled={allIn}
+          showsVerticalScrollIndicator={false}>
+          {!revealed ? (
+            <View style={[styles.hintBox, { height: rowsHeight - 8 }]}>
+              <Text style={styles.hint}>{stalled ? 'Still opening...' : opening ? 'Opening...' : 'Tap to open!'}</Text>
+            </View>
+          ) : rows.map((row, i) => (
+            <Row key={row.kind} row={row} shown={i < landed} reducedMotion={reducedMotion}
+              onWear={row.kind === 'item' ? onWear : undefined} onPins={row.kind === 'mystery_boxes' ? onPins : undefined} />
+          ))}
+        </ScrollView>
+      </Pressable>
+      <View style={styles.bottom}>
+        {allIn ? (
+          <>
+            {footer}
+            <Pressable onPress={onDone} accessibilityRole="button" style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
+              <Text style={styles.buttonText}>{doneLabel ?? 'AWESOME!'}</Text>
+            </Pressable>
+          </>
+        ) : null}
       </View>
-      {revealed && (
-        <Pressable onPress={allIn ? onDone : () => { timers.current.forEach(clearTimeout); setShownRows(rows.length); }}
-          accessibilityRole="button" style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
-          <Text style={styles.buttonText}>{allIn ? (doneLabel ?? 'AWESOME!') : 'SHOW ALL'}</Text>
-        </Pressable>
-      )}
-      <RewardBurst progress={burst} x={width * 0.47} y={height * 0.3} />
+      {stage && <RewardBurst progress={burst} x={stage.x} y={stage.y} />}
     </View>
   );
 }
@@ -125,39 +183,82 @@ export default function RewardReveal({ title, subtitle, closedArt, openArt, rewa
 function rowIcon(row: RewardRow) {
   switch (row.kind) {
     case 'coins': return <GameIcon name="coins" size={40} />;
+    case 'bonus_coins': return <GameIcon name="coins" size={40} />;
     case 'tickets': return <GameIcon name="ticket" size={40} />;
     case 'energy': return <GameIcon name="energy" size={40} />;
     case 'xp': return <GameIcon name="xp" size={40} />;
     case 'freezes': return <Image source={FREEZE} style={{ width: 40, height: 40 }} contentFit="contain" />;
-    case 'mystery_boxes': return <Image source={BOX} style={{ width: 54, height: 54 }} contentFit="contain" />;
+    case 'mystery_boxes': return <Image source={BOX} style={{ width: 72, height: 72 }} contentFit="contain" />;
     case 'item': return row.image
-      ? <Image source={{ uri: row.image }} style={{ width: 58, height: 58 }} contentFit="contain" />
-      : <GameIcon name="gift" size={44} />;
+      ? <Image source={{ uri: row.image }} style={{ width: 80, height: 80 }} contentFit="contain" />
+      : <GameIcon name="shark" size={64} />;
   }
 }
 
-function Row({ row, reducedMotion }: { readonly row: RewardRow; readonly reducedMotion: boolean }) {
-  const t = useSharedValue(reducedMotion ? 1 : 0);
-  useEffect(() => { if (!reducedMotion) t.value = withSpring(1, { damping: 9, stiffness: 200 }); }, [reducedMotion, t]);
-  const style = useAnimatedStyle(() => ({ opacity: t.value, transform: [{ translateY: (1 - t.value) * -24 }, { scale: 0.6 + t.value * 0.4 }] }));
-  const big = row.kind === 'item' || row.kind === 'mystery_boxes';
+/** Counts a number up once it is shown (instant when motion is reduced). */
+function useCountUp(target: number, run: boolean, instant: boolean): number {
+  const [n, setN] = useState(instant ? target : 0);
+  useEffect(() => {
+    if (!run) return;
+    if (instant || target <= 1) { setN(target); return; }
+    const frames = 14;
+    let f = 0;
+    const id = setInterval(() => {
+      f += 1;
+      const t = 1 - Math.pow(1 - f / frames, 3);
+      setN(f >= frames ? target : Math.max(1, Math.round(target * t)));
+      if (f >= frames) clearInterval(id);
+    }, 32);
+    return () => clearInterval(id);
+  }, [run, target, instant]);
+  return n;
+}
+
+function Row({ row, shown, reducedMotion, onWear, onPins }: {
+  readonly row: RewardRow; readonly shown: boolean; readonly reducedMotion: boolean;
+  readonly onWear?: () => void; readonly onPins?: () => void;
+}) {
+  const big = isBigReward(row.kind);
+  const t = useSharedValue(0);
+  const beam = useSharedValue(0);
+  useEffect(() => {
+    if (!shown) { t.value = 0; return; }
+    if (reducedMotion) { t.value = withTiming(1, { duration: 150 }); return; }
+    t.value = big ? withSequence(withTiming(1, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 260 }))
+      : withSpring(1, { damping: 10, stiffness: 220 });
+    if (big) beam.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0.35, { duration: 700 }));
+  }, [shown, reducedMotion, big, t, beam]);
+  const style = useAnimatedStyle(() => ({
+    opacity: t.value,
+    transform: big
+      ? [{ scale: 1.35 - t.value * 0.35 }]
+      : [{ translateY: (1 - t.value) * -18 }, { scale: 0.7 + t.value * 0.3 }],
+  }));
+  const beamStyle = useAnimatedStyle(() => ({ opacity: beam.value }));
+  const amount = useCountUp(row.amount, shown, reducedMotion);
   return (
-    // The transform lives on a plain wrapper; the card face is an ordinary View (iOS clips a
-    // bordered background that is scaled mid-spring).
+    // Laid out from the start (no jump); the face is a plain View (iOS clips a scaled bordered background).
     <Animated.View style={style}>
-    <View style={[styles.row, big && styles.rowBig]}>
-      <View style={styles.rowIcon}>{rowIcon(row)}</View>
-      {big ? (
-        <View style={{ flex: 1 }}>
-          <Text style={styles.bigKicker}>{row.kind === 'item' ? 'NEW GEAR' : 'MYSTERY BOX'}</Text>
-          <Text style={styles.bigName} numberOfLines={2}>{row.kind === 'item' ? row.label : 'Open it in your Pins!'}</Text>
-        </View>
-      ) : (
-        <Text style={styles.rowText} numberOfLines={1}>
-          <Text style={styles.rowAmount}>{`+${row.amount} `}</Text>{row.label}
-        </Text>
-      )}
-    </View>
+      {big && <Animated.View pointerEvents="none" style={[styles.beam, beamStyle]} />}
+      <View style={[styles.row, big && styles.rowBig]}>
+        <View style={[styles.rowIcon, big && styles.rowIconBig]}>{rowIcon(row)}</View>
+        {big ? (
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={styles.bigKicker}>{row.kind === 'item' ? 'NEW GEAR' : 'FREE MYSTERY BOX'}</Text>
+            <Text style={styles.bigName} numberOfLines={2}>{row.kind === 'item' ? row.label : 'A surprise pin is inside'}</Text>
+            {(onWear || onPins) && (
+              <Pressable onPress={onWear ?? onPins} accessibilityRole="button" hitSlop={6}
+                style={({ pressed }) => [styles.smallBtn, pressed && styles.buttonPressed]}>
+                <Text style={styles.smallBtnText}>{onWear ? 'WEAR IT' : 'SEE PINS'}</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : (
+          <Text style={styles.rowText} numberOfLines={1}>
+            <Text style={styles.rowAmount}>{`+${amount} `}</Text>{row.label}
+          </Text>
+        )}
+      </View>
     </Animated.View>
   );
 }
@@ -165,20 +266,28 @@ function Row({ row, reducedMotion }: { readonly row: RewardRow; readonly reduced
 const styles = StyleSheet.create({
   card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
     paddingTop: 20, paddingBottom: 14, paddingHorizontal: 12, alignItems: 'center' },
-  subtitle: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', textAlign: 'center' },
-  stage: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
-  glow: { position: 'absolute', backgroundColor: 'rgba(255, 226, 92, 0.38)' },
-  rows: { alignSelf: 'stretch', gap: 6, minHeight: 60, justifyContent: 'center' },
+  subtitle: { fontFamily: 'Knockout', fontSize: 17, color: '#e4f7ff', textAlign: 'center', minHeight: 22 },
+  stage: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  glow: { position: 'absolute', backgroundColor: 'rgba(255, 244, 196, 0.55)' },
+  flash: { backgroundColor: BRAND.white },
+  rows: { gap: 6, paddingVertical: 4 },
+  hintBox: { alignItems: 'center', justifyContent: 'center' },
   hint: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold, textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14,
     paddingHorizontal: 10, paddingVertical: 4 },
-  rowBig: { backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold, paddingVertical: 6 },
+  rowBig: { backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold, paddingVertical: 8 },
   rowIcon: { width: 58, alignItems: 'center' },
+  rowIconBig: { width: 84 },
+  beam: { position: 'absolute', left: -8, right: -8, top: -6, bottom: -6, borderRadius: 18, backgroundColor: 'rgba(255, 226, 92, 0.55)' },
   rowText: { flex: 1, fontFamily: 'Shark', fontSize: 18, color: BRAND.white },
   rowAmount: { color: BRAND.gold, fontSize: 22 },
   bigKicker: { fontFamily: 'Shark', fontSize: 13, color: BRAND.goldLip },
-  bigName: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy },
-  button: { marginTop: 12, alignSelf: 'stretch', backgroundColor: BRAND.gold, borderRadius: 16, paddingVertical: 12,
+  bigName: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
+  smallBtn: { alignSelf: 'flex-start', backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 5,
+    borderBottomWidth: 3, borderBottomColor: BRAND.goldLip },
+  smallBtnText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
+  bottom: { alignSelf: 'stretch', minHeight: 104, justifyContent: 'flex-end', gap: 8, marginTop: 6 },
+  button: { alignSelf: 'stretch', backgroundColor: BRAND.gold, borderRadius: 16, paddingVertical: 12,
     alignItems: 'center', borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },
   buttonPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },
   buttonText: { fontFamily: 'Shark', fontSize: 20, color: '#075083' },

@@ -4,7 +4,7 @@
  */
 import type { DailyGoal, DailyThreeState, LevelChest, PaidRewards } from '../../api/endpoints/retention';
 
-export type RewardKind = 'coins' | 'tickets' | 'energy' | 'xp' | 'freezes' | 'mystery_boxes' | 'item';
+export type RewardKind = 'coins' | 'bonus_coins' | 'tickets' | 'energy' | 'xp' | 'freezes' | 'mystery_boxes' | 'item';
 
 export interface RewardRow {
   readonly kind: RewardKind;
@@ -15,6 +15,7 @@ export interface RewardRow {
 
 const LABEL: Record<Exclude<RewardKind, 'item'>, [string, string]> = {
   coins: ['coin', 'coins'],
+  bonus_coins: ['bonus coin', 'bonus coins'],
   tickets: ['Ticket', 'Tickets'],
   energy: ['Energy', 'Energy'],
   xp: ['XP', 'XP'],
@@ -23,7 +24,27 @@ const LABEL: Record<Exclude<RewardKind, 'item'>, [string, string]> = {
 };
 
 /** The reveal order: the rare stuff lands last, the way a pack opening saves the chase. */
-const ORDER: RewardKind[] = ['coins', 'tickets', 'energy', 'xp', 'freezes', 'item', 'mystery_boxes'];
+const ORDER: RewardKind[] = ['coins', 'bonus_coins', 'tickets', 'energy', 'xp', 'freezes', 'item', 'mystery_boxes'];
+
+/** Big rows get their own held beat and a hero card. */
+export function isBigReward(kind: RewardKind): boolean {
+  return kind === 'item' || kind === 'mystery_boxes';
+}
+
+/**
+ * When each row lands (ms after the lid pops): small rows every beat, a held
+ * pause before each big one so it reads as its own moment.
+ */
+export function rowSchedule(rows: readonly RewardRow[], beat = 380, hold = 450, first = 420): number[] {
+  const out: number[] = [];
+  let t = first;
+  rows.forEach((row, i) => {
+    if (i > 0) t += beat;
+    if (isBigReward(row.kind) && i > 0) t += hold;
+    out.push(t);
+  });
+  return out;
+}
 
 /** What the server actually paid, as reveal rows (zeros skipped). */
 export function rewardRows(paid: PaidRewards): RewardRow[] {
@@ -58,6 +79,7 @@ export type ButtonAttention = 'claim' | 'weekly' | 'risk' | 'none';
  * only nags from 5 PM local, so the morning is calm.
  */
 export function buttonState(s: DailyThreeState, localHour: number): { pips: boolean[]; streak: number; attention: ButtonAttention } {
+  // (attention 'weekly' draws the gift, 'claim' the Daily 3 chest)
   const pips = s.goals.slice(0, 3).map(g => g.done);
   while (pips.length < 3) pips.push(false);
   const attention: ButtonAttention = s.claimable ? 'claim' : s.week.claimable ? 'weekly'
@@ -74,6 +96,27 @@ export function weekdayLetter(date: string): string {
   return LETTERS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
 }
 
+/** The closing beat after a claim: always points at tomorrow. */
+export function tomorrowLine(s: DailyThreeState): string {
+  const next = s.streak.days + 1;
+  const m = s.streak.next_milestone;
+  if (m && m.days_away === 1) return `Come back tomorrow: Day ${next} holds ${m.label.toLowerCase()}!`;
+  return s.streak.days > 0 ? `Come back tomorrow for Day ${next}!` : 'Come back tomorrow for new goals!';
+}
+
+/** The tease under the streak: the next milestone prize and how far it is. */
+export function milestoneLine(s: DailyThreeState): string | null {
+  const m = s.streak.next_milestone;
+  if (!m || !m.days_away || m.days_away < 1) return null;
+  return m.days_away === 1 ? `Tomorrow: ${m.label}!` : `${m.days_away} more days: ${m.label}`;
+}
+
+/** Under the streak when it is 0: keep the record, never shame. */
+export function streakSubline(s: DailyThreeState): string {
+  if (s.streak.days === 0 && s.streak.best > 1 && !s.done) return `Best: ${s.streak.best} days. Start a new flame!`;
+  return streakLine(s);
+}
+
 /** "New goals in 5h" / "in 40m": whole hours above an hour, minutes below. */
 export function resetLabel(resetsAt: string, now: number): string {
   const ms = Date.parse(resetsAt) - now;
@@ -85,12 +128,13 @@ export function resetLabel(resetsAt: string, now: number): string {
 /** The line under the week strip: honest when this week's box is already out of reach. */
 export function weeklyLine(s: DailyThreeState): string {
   const w = s.week;
-  if (w.claimed) return 'Weekly Box opened. A new week starts Monday.';
+  if (w.claimed) return 'Gift opened! A new week starts Monday.';
   if (w.claimable) return 'Your Weekly Box is ready!';
   const open = w.days.filter(d => d.state === 'today' || d.state === 'future').length;
   const left = w.needed - w.done;
-  if (left > open) return `New week Monday: ${w.needed} days opens the Weekly Box`;
-  return `${left} more day${left === 1 ? '' : 's'} for the Weekly Box`;
+  if (left > open) return 'A new week starts Monday';
+  if (w.done === 0) return `${w.needed} flames this week open the gift`;
+  return `${left} more flame${left === 1 ? '' : 's'} open the gift`;
 }
 
 /** The next chest to present: the lowest unopened level. */
@@ -125,12 +169,25 @@ export function pushAskAllowed(record: PushAskRecord, pushState: string, now: nu
 }
 
 /** Whether a goal can be started from the sheet, and where the tap goes. */
-export function goalAction(goal: DailyGoal): 'chest' | 'closet' | 'friends' | 'map' | null {
+export function goalAction(goal: DailyGoal): 'chest' | 'closet' | 'friends' | 'snack' | 'ride' | null {
   if (goal.done) return null;
   switch (goal.kind) {
     case 'chest': return 'chest';
     case 'look': return 'closet';
     case 'heart': return 'friends';
-    default: return 'map';
+    case 'catch': return goal.park ? 'ride' : 'snack';
+    case 'play': return 'ride';
+    default: return null;
   }
+}
+
+/** A progress bar only where the title names the count (never "Catch a ride coin" over 0/2). */
+export function showsBar(goal: DailyGoal): boolean {
+  if (typeof goal.bar === 'boolean') return goal.bar && goal.target > 1;
+  return goal.target > 1 && (goal.kind === 'play' || (goal.kind === 'catch' && !goal.park));
+}
+
+/** Change detection for reads: identical answers never re-render the map. */
+export function sameJson(a: unknown, b: unknown): boolean {
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
 }

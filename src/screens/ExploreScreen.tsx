@@ -952,10 +952,22 @@ function ExploreScreen() {
     // A level chest waits for the daily chest, any find, ride, boss or tutorial to finish.
     screenFree: chestScreenFree && !chestShowing && !dailyGiftOccluded && !redeemFlowOpen
       && !(chestUnclaimed && !!dailyGift && !chestDismissed(dailyGift.id)),
-    refreshKey: `${dailyGift?.redeemed_at ?? ''}|${homeCollectionVersion}|${collectFlight?.key ?? 0}|${redeemFlowOpen}`,
+    // Real events that can finish a goal (a ride closing is caught by the next map focus, not here).
+    refreshKey: `${dailyGift?.redeemed_at ?? ''}|${homeCollectionVersion}|${collectFlight?.key ?? 0}`,
+    mapCovered: redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded || showPrepItemModal,
     openRequest: openParam === 'daily3' || openParam === 'chest' ? openParam : null,
     onOpenRequestHandled: () => navigation.setParams({ open: undefined }),
     onOpenChest: () => setChestRequested(true),
+    onFind: what => {
+      if (what === 'snack') { setHighlightNearestFind(Date.now()); return; }
+      // The nearest ride coin on this park map, guided like a checklist tap.
+      const here = location;
+      const tasks = (redeemables?.tasks ?? []).filter(t => Number.isFinite(Number(t.latitude)) && Number.isFinite(Number(t.longitude)));
+      if (!here || !tasks.length) return;
+      const nearest = tasks.reduce((best, t) => calculateDistance(here.latitude, here.longitude, Number(t.latitude), Number(t.longitude))
+        < calculateDistance(here.latitude, here.longitude, Number(best.latitude), Number(best.longitude)) ? t : best);
+      guideTo(nearest);
+    },
   });
   useEffect(() => { setRetentionOccluding(retention.occluding); }, [retention.occluding]);
   const mapControls = retention.button ? <>{chestButton}{retention.button}</> : chestButton;

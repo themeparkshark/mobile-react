@@ -1,9 +1,11 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Asset } from 'expo-asset';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Modal from 'react-native-modal';
 import {
-  buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, openLevelChest,
+  buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
   type DailyThreeState, type LevelChest, type PaidRewards,
 } from '../../api/endpoints/retention';
 import { AuthContext } from '../../context/AuthProvider';
@@ -14,7 +16,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
-import { buttonState, newlyDone, nextLevelChest } from '../../services/retention/logic';
+import { buttonState, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
 import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
 import { useModalLayer } from '../../ui/modalLayers';
@@ -25,30 +27,40 @@ import RewardReveal from './RewardReveal';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
+const WEEKLY = require('../../../assets/images/retention/weekly-box-closed.png');
+const WEEKLY_OPEN = require('../../../assets/images/retention/weekly-box-open.png');
 const FREEZE = require('../../../assets/images/retention/freeze.png');
+const BOX = require('../../../assets/images/retention/mystery-box.png');
+const ART = [LEVEL_CHEST, LEVEL_CHEST_OPEN, WEEKLY, WEEKLY_OPEN, FREEZE, BOX];
 
-/** Reads are cheap but not free: at most one refresh every 15 s unless something just happened. */
+/** Reads are cheap but not free: focus and app-resume reads wait at least 15 s; real events read at once. */
 const MIN_REFRESH_MS = 15000;
+const COACH_KEY = 'tps.retention.coach.v1';
 
 type View_ =
   | { k: 'sheet' }
-  | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; rewards: PaidRewards | null; opening: boolean }
+  | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean }
   | { k: 'freeze' }
+  | { k: 'freezeSaved'; days: number; streak: number }
   | { k: 'push' };
 
 export interface RetentionOptions {
   /** Signed in, on the map, onboarding done. */
   readonly enabled: boolean;
   readonly mapFocused: boolean;
+  /** Something else covers the map (ride, boss, chest, find): map-button loops pause. */
+  readonly mapCovered: boolean;
   /** Nothing else (chest, find, boss, ride, tutorial) is on screen: a level chest may present itself. */
   readonly screenFree: boolean;
-  /** Something changed that can finish a goal (chest opened, find collected, ride won). */
+  /** Something happened that can finish a goal (chest opened, find collected, ride won). */
   readonly refreshKey: string;
   /** A push asked to open Daily 3 or the daily chest. */
   readonly openRequest: 'daily3' | 'chest' | null;
   readonly onOpenRequestHandled: () => void;
   /** Show today's daily chest (the "Open your daily chest" goal). */
   readonly onOpenChest: () => void;
+  /** GO on a snack or ride goal: point the map at the nearest one. */
+  readonly onFind: (what: 'snack' | 'ride') => void;
 }
 
 /**
@@ -60,8 +72,8 @@ export interface RetentionOptions {
 export default function useRetention(o: RetentionOptions): { button: ReactNode | null; overlay: ReactNode; occluding: boolean } {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { triggerFly } = useCurrencyFly();
-  const { width, height } = useWindowDimensions();
   const reducedMotion = useReducedGameMotion();
+  const { width, height } = useWindowDimensions();
   const [flags, setFlags] = useState<RetentionFlags | null>(null);
   const [daily, setDaily] = useState<DailyThreeState | null>(null);
   const [chests, setChests] = useState<readonly LevelChest[]>([]);
@@ -69,8 +81,12 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const [busy, setBusy] = useState(false);
   const [pop, setPop] = useState<{ index: number | null; key: number }>({ index: null, key: 0 });
   const [celebrate, setCelebrate] = useState<string[]>([]);
+  const [coach, setCoach] = useState(false);
+  const [appActive, setAppActive] = useState(true);
   const lastRead = useRef(0);
+  const lastChestRead = useRef(-1);
   const prevGoals = useRef<DailyThreeState['goals'] | null>(null);
+  const opening = useRef(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
@@ -80,43 +96,58 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     void loadRetentionFlags().then(f => { if (mounted.current && f) setFlags(f); });
   }, [o.enabled, o.mapFocused, o.refreshKey, flags]);
 
+  // Warm the art once the features are on, so the first reveal never pops in.
+  useEffect(() => {
+    if (flags?.dailyThree || flags?.levelChests) void Asset.loadAsync(ART).catch(() => undefined);
+  }, [flags?.dailyThree, flags?.levelChests]);
+
   const applyDaily = useCallback((next: DailyThreeState) => {
     const fresh = newlyDone(prevGoals.current, next.goals);
     prevGoals.current = next.goals;
-    setDaily(next);
+    // Identical answers never re-render the map.
+    setDaily(prev => (prev && sameJson(prev, next) ? prev : next));
     if (fresh.length) {
       const index = next.goals.findIndex(g => g.key === fresh[fresh.length - 1]);
       setPop(p => ({ index, key: p.key + 1 }));
       setCelebrate(c => [...new Set([...c, ...fresh])]);
       haptic('success');
-      playSfx(next.claimable ? 'fx.jingle' : 'fx.coinTick');
+      playSfx(next.claimable ? 'fx.reveal' : 'fx.coinTick');
     }
   }, []);
 
+  const level = player?.experience_level?.level ?? 0;
   const refresh = useCallback(async (force = false) => {
     if (!flags || (!flags.dailyThree && !flags.levelChests)) return;
     const now = Date.now();
     if (!force && now - lastRead.current < MIN_REFRESH_MS) return;
     lastRead.current = now;
+    // Level chests only change with the level: read them once, then on each level-up.
+    const wantChests = flags.levelChests && lastChestRead.current !== level;
     try {
       const [d, c] = await Promise.all([
         flags.dailyThree ? getDailyThree() : Promise.resolve(null),
-        flags.levelChests ? getLevelChests() : Promise.resolve(null),
+        wantChests ? getLevelChests() : Promise.resolve(null),
       ]);
       if (!mounted.current) return;
       if (d && d.enabled) applyDaily(d); else if (d) setDaily(null);
-      if (c && c.enabled) setChests(c.chests); else if (c) setChests([]);
+      if (c) {
+        lastChestRead.current = level;
+        const list = c.enabled ? c.chests : [];
+        setChests(prev => (sameJson(prev, list) ? prev : list));
+      }
     } catch {
       // Offline or a server without these routes: keep what we had, try again on the next focus.
     }
-  }, [flags, applyDaily]);
+  }, [flags, applyDaily, level]);
 
-  useEffect(() => { if (o.enabled && o.mapFocused) void refresh(true); }, [o.enabled, o.mapFocused, flags, refresh]);
+  useEffect(() => { if (o.enabled && o.mapFocused) void refresh(lastRead.current === 0); }, [o.enabled, o.mapFocused, flags, refresh]);
   useEffect(() => { if (o.enabled) void refresh(true); }, [o.refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const level = player?.experience_level?.level ?? 0;
-  useEffect(() => { if (o.enabled && level > 0) void refresh(true); }, [level]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (o.enabled && level > 0 && lastChestRead.current !== -1) void refresh(true); }, [level]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const sub = AppState.addEventListener('change', s => { if (s === 'active' && o.enabled) void refresh(false); });
+    const sub = AppState.addEventListener('change', s => {
+      setAppActive(s === 'active');
+      if (s === 'active' && o.enabled) void refresh(false);
+    });
     return () => sub.remove();
   }, [o.enabled, refresh]);
 
@@ -124,30 +155,45 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   useEffect(() => {
     if (!o.openRequest || !o.enabled) return;
     if (o.openRequest === 'chest') o.onOpenChest();
-    else if (daily) setView({ k: 'sheet' });
+    else if (daily) openSheet();
     else return; // wait for the first read
     o.onOpenRequestHandled();
   }, [o.openRequest, o.enabled, daily]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A level-up chest presents itself as soon as the map is free.
+  // A level-up chest presents itself as soon as the map is free; then a freeze that saved the streak says so once.
   const pendingChest = flags?.levelChests ? nextLevelChest(chests) : null;
+  const freezeSaved = daily?.streak.freeze_saved ?? 0;
   useEffect(() => {
-    if (!pendingChest || view || !o.screenFree || !o.mapFocused || !o.enabled) return;
-    const timer = setTimeout(() => {
-      setView(v => v ?? { k: 'reveal', src: 'level', level: pendingChest.level, rewards: null, opening: false });
-      haptic('hitMedium');
-      playSfx('fx.jingle');
-    }, 700);
-    return () => clearTimeout(timer);
-  }, [pendingChest?.level, view, o.screenFree, o.mapFocused, o.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (view || !o.screenFree || !o.mapFocused || !o.enabled) return;
+    if (pendingChest) {
+      const timer = setTimeout(() => {
+        setView(v => v ?? { k: 'reveal', src: 'level', level: pendingChest.level, rewards: null, opening: false });
+        playSfx('fx.reveal');
+      }, 700);
+      return () => clearTimeout(timer);
+    }
+    if (freezeSaved > 0 && daily) {
+      const timer = setTimeout(() => setView(v => v ?? { k: 'freezeSaved', days: freezeSaved, streak: daily.streak.days }), 700);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingChest?.level, freezeSaved, view, o.screenFree, o.mapFocused, o.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openSheet = () => {
+    setView({ k: 'sheet' });
+    void AsyncStorage.getItem(COACH_KEY).then(v => { if (!v && mounted.current) setCoach(true); }).catch(() => undefined);
+  };
+  const coachDone = () => {
+    setCoach(false);
+    void AsyncStorage.setItem(COACH_KEY, '1').catch(() => undefined);
+  };
 
   const fly = (paid: PaidRewards) => {
-    const send = (kind: 'coins' | 'ticket' | 'energy', n: number | undefined, target: string) => {
-      if (n && n > 0) triggerFly({ imageSource: ICON_SOURCES[kind], amount: Math.min(8, n), startX: width / 2, startY: height * 0.5, targetPosition: target });
+    const send = (kind: 'coins' | 'ticket' | 'energy', n: number | undefined, target: string, delay: number) => {
+      if (n && n > 0) setTimeout(() => triggerFly({ imageSource: ICON_SOURCES[kind], amount: Math.min(8, n), startX: width / 2, startY: height * 0.5, targetPosition: target }), delay);
     };
-    send('coins', paid.coins, 'coins');
-    send('ticket', paid.tickets, 'tickets');
-    send('energy', paid.energy, 'energy');
+    send('coins', (paid.coins ?? 0) + (paid.bonus_coins ?? 0), 'coins', 0);
+    send('ticket', paid.tickets, 'tickets', 80);
+    send('energy', paid.energy, 'energy', 160);
   };
 
   const finishReveal = async (paid: PaidRewards | null) => {
@@ -159,35 +205,12 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     setView(null);
   };
 
-  const openReveal = async () => {
-    if (!view || view.k !== 'reveal' || view.opening || view.rewards) return;
-    const current = view;
-    setView({ ...current, opening: true });
-    const started = Date.now();
-    try {
-      const result: { rewards: PaidRewards; state?: DailyThreeState } = current.src === 'daily' ? await claimDailyThree()
-        : current.src === 'weekly' ? await claimWeeklyBox()
-        : await openLevelChest(current.level ?? 0);
-      // Let the shake land before the lid pops (anticipation reads as 400 ms+).
-      const wait = reducedMotion ? 0 : Math.max(0, 520 - (Date.now() - started));
-      setTimeout(() => { if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards }); }, wait);
-      if (result.state?.goals) applyDaily(result.state);
-    } catch {
-      // A slow answer can arrive after the server already paid: read back what it paid and keep the reveal going.
-      const paid = await recoverPaid(current.src, current.level ?? 0);
-      if (!mounted.current) return;
-      if (paid) { setView({ ...current, opening: false, rewards: paid }); return; }
-      setView(null);
-      void refresh(true);
-      gameAlert('Could not open it yet', 'Your reward is safe. Check your internet and try again.');
-    }
-  };
-
-  const recoverPaid = async (src: 'daily' | 'weekly' | 'level', level: number): Promise<PaidRewards | null> => {
+  /** A claim whose answer was lost: read back what the server paid for that exact chest. */
+  const recoverPaid = async (src: 'daily' | 'weekly' | 'level', level_: number, claimDate: string | null | undefined): Promise<PaidRewards | null> => {
     try {
       if (src === 'level') {
         const c = await getLevelChests();
-        const chest = c.enabled ? c.chests.find(x => x.level === level) : undefined;
+        const chest = c.enabled ? c.chests.find(x => x.level === level_) : undefined;
         if (c.enabled) setChests(c.chests);
         return chest?.opened && chest.rewards ? chest.rewards : null;
       }
@@ -195,9 +218,37 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       if (!d.enabled) return null;
       applyDaily(d);
       if (src === 'weekly') return d.week.claimed ? d.week.claimed_rewards ?? null : null;
-      return d.claimed ? d.claimed_rewards ?? null : null;
+      const last = d.claimed_rewards;
+      return last && claimDate && last.date === claimDate ? last : null;
     } catch {
       return null;
+    }
+  };
+
+  const openReveal = async () => {
+    if (!view || view.k !== 'reveal' || view.rewards || opening.current) return;
+    opening.current = true;
+    const current = view;
+    setView({ ...current, opening: true });
+    const started = Date.now();
+    try {
+      const result: { rewards: PaidRewards; state?: DailyThreeState } = current.src === 'daily' ? await claimDailyThree()
+        : current.src === 'weekly' ? await claimWeeklyBox()
+        : await openLevelChest(current.level ?? 0);
+      // Let the shake build before the lid pops (anticipation reads at 450 ms+).
+      const wait = reducedMotion ? 0 : Math.max(0, 560 - (Date.now() - started));
+      setTimeout(() => { if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards }); }, wait);
+      if (result.state?.goals) applyDaily(result.state);
+      if (current.src === 'level') setChests(cs => cs.map(c => (c.level === current.level ? { ...c, opened: true, rewards: result.rewards } : c)));
+    } catch {
+      const paid = await recoverPaid(current.src, current.level ?? 0, current.claimDate);
+      if (!mounted.current) return;
+      if (paid) { setView({ ...current, opening: false, rewards: paid }); return; }
+      setView(null);
+      void refresh(true);
+      gameAlert('Could not open it yet', 'Your reward is safe. Check your internet and try again.');
+    } finally {
+      opening.current = false;
     }
   };
 
@@ -206,6 +257,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     if (tap === 'chest') o.onOpenChest();
     else if (tap === 'closet') RootNavigation.navigate('Inventory');
     else if (tap === 'friends') RootNavigation.navigate('Friends');
+    else o.onFind(tap);
   };
 
   const buyFreeze = async () => {
@@ -224,9 +276,21 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     }
   };
 
+  const toggleReminders = async (on: boolean) => {
+    haptic('tapLight');
+    try {
+      const { state } = await setReminders(on);
+      applyDaily(state);
+      if (on) void enablePush().catch(() => undefined);
+    } catch {
+      gameAlert('Could not change reminders', 'Check your internet and try again.');
+    }
+  };
+
   const close = () => {
     if (view?.k === 'sheet') setCelebrate([]);
     if (view?.k === 'push') void notePushAsked();
+    if (view?.k === 'freezeSaved') void markFreezeSeen().then(r => applyDaily(r.state)).catch(() => undefined);
     setView(null);
   };
 
@@ -238,30 +302,48 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     const b = buttonState(daily, new Date().getHours());
     button = (
       <Daily3MapButton pips={b.pips} streak={b.streak} attention={b.attention} popIndex={pop.index} popKey={pop.key}
-        active={o.mapFocused && !visible} reducedMotion={reducedMotion}
-        onPress={() => { playSfx('ui.tap'); setView({ k: 'sheet' }); }} />
+        active={o.mapFocused && !o.mapCovered && !visible && appActive} reducedMotion={reducedMotion}
+        onPress={() => { playSfx('ui.tap'); openSheet(); }} />
     );
   }
+
+  const nextLevel = (lv: number) => (
+    <View style={styles.nextRow}>
+      <Image source={LEVEL_CHEST} style={{ width: 30, height: 30 }} contentFit="contain" />
+      <Text style={styles.nextText}>{`Next: the Level ${lv + 1} chest`}</Text>
+    </View>
+  );
 
   let title = 'Daily 3';
   let content: ReactNode = null;
   if (view?.k === 'sheet' && daily) {
     content = (
       <Daily3Sheet state={daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
-        reducedMotion={reducedMotion} onClose={close} onGoal={onGoal}
-        onClaim={() => setView({ k: 'reveal', src: 'daily', rewards: null, opening: false })}
+        reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone}
+        onReminders={on => { void toggleReminders(on); }}
+        onClaim={() => setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false })}
         onClaimWeekly={() => setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false })}
         onBuyFreeze={() => setView({ k: 'freeze' })} />
     );
   } else if (view?.k === 'reveal') {
     const r = view;
     title = r.src === 'level' ? `Level ${r.level}!` : r.src === 'weekly' ? 'Weekly Box' : 'Daily 3 done!';
+    const footer = r.src === 'level' ? nextLevel(r.level ?? 1)
+      : r.src === 'weekly' ? <Text style={styles.nextText}>A new box waits next week.</Text>
+      : daily ? (
+        <View style={styles.nextRow}>
+          <GameIcon name="streak" size={26} />
+          <Text style={styles.nextText}>{tomorrowLine(daily)}</Text>
+        </View>
+      ) : null;
     content = (
-      <RewardReveal title={title} reducedMotion={reducedMotion} rewards={r.rewards} opening={r.opening}
-        subtitle={r.src === 'level' ? 'You leveled up! Your Level Chest is here.'
-          : r.src === 'weekly' ? 'A whole week of Daily 3. Big box time!' : 'All three goals done. Your chest is ready!'}
-        closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? ICON_SOURCES.gift : ICON_SOURCES.chest}
-        openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? ICON_SOURCES.gift : ICON_SOURCES.chestOpen}
+      <RewardReveal reducedMotion={reducedMotion} rewards={r.rewards} opening={r.opening} footer={footer} dropIn={r.src === 'level'}
+        subtitle={r.src === 'level' ? `You reached Level ${r.level}! Tap your chest.`
+          : r.src === 'weekly' ? 'A whole week of flames. Tap the box!' : 'All three goals done. Tap your chest!'}
+        closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? WEEKLY : ICON_SOURCES.chest}
+        openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? WEEKLY_OPEN : ICON_SOURCES.chestOpen}
+        onWear={() => { void finishReveal(r.rewards).then(() => RootNavigation.navigate('Inventory')); }}
+        onPins={() => { void finishReveal(r.rewards).then(() => RootNavigation.navigate('PinCollections')); }}
         onOpen={() => { void openReveal(); }} onDone={() => { void finishReveal(r.rewards); }} />
     );
   } else if (view?.k === 'freeze' && daily) {
@@ -269,16 +351,28 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     content = (
       <View style={styles.card}>
         <Image source={FREEZE} style={styles.bigArt} contentFit="contain" />
-        <Text style={styles.lead}>Miss a day? A freeze keeps your streak safe.</Text>
+        <Text style={styles.lead}>Miss a day? A freeze keeps your flame safe.</Text>
         <Text style={styles.small}>{`You have ${daily.streak.freezes} of ${daily.streak.freeze_cap}. It works by itself.`}</Text>
         <Pressable onPress={() => { void buyFreeze(); }} disabled={busy} accessibilityRole="button"
           accessibilityLabel={`Get a Streak Freeze for ${daily.streak.freeze_price} coins`}
           style={({ pressed }) => [styles.gold, pressed && styles.pressed]}>
-          <GameIcon name="coins" size={26} />
-          <Text style={styles.goldText}>{busy ? '...' : `GET ONE  ${daily.streak.freeze_price}`}</Text>
+          <Text style={styles.goldText}>{busy ? '...' : 'GET ONE'}</Text>
+          <View style={styles.priceChip}><GameIcon name="coins" size={20} /><Text style={styles.priceText}>{daily.streak.freeze_price}</Text></View>
         </Pressable>
-        <Pressable onPress={() => setView({ k: 'sheet' })} accessibilityRole="button" style={styles.later}>
-          <Text style={styles.laterText}>NOT NOW</Text>
+        <Pressable onPress={() => setView({ k: 'sheet' })} accessibilityRole="button" style={({ pressed }) => [styles.plain, pressed && styles.pressed]}>
+          <Text style={styles.plainText}>NOT NOW</Text>
+        </Pressable>
+      </View>
+    );
+  } else if (view?.k === 'freezeSaved') {
+    title = 'Saved!';
+    content = (
+      <View style={styles.card}>
+        <Image source={FREEZE} style={styles.bigArt} contentFit="contain" />
+        <Text style={styles.lead}>{`A freeze saved your ${view.streak}-day flame!`}</Text>
+        <Text style={styles.small}>{view.days > 1 ? `It covered ${view.days} missed days.` : 'It covered the day you missed.'}</Text>
+        <Pressable onPress={close} accessibilityRole="button" style={({ pressed }) => [styles.gold, pressed && styles.pressed]}>
+          <Text style={styles.goldText}>KEEP IT GOING</Text>
         </Pressable>
       </View>
     );
@@ -287,14 +381,14 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     content = (
       <View style={styles.card}>
         <GameIcon name="bell" size={86} />
-        <Text style={styles.lead}>Want a heads-up when your chest is ready?</Text>
-        <Text style={styles.small}>One friendly reminder a day. Never at night.</Text>
+        <Text style={styles.lead}>Want a friendly reminder each day?</Text>
+        <Text style={styles.small}>One a day, never at night. Turn it off anytime.</Text>
         <Pressable onPress={() => { void notePushAsked(); setView(null); void enablePush().catch(() => undefined); }}
           accessibilityRole="button" style={({ pressed }) => [styles.gold, pressed && styles.pressed]}>
           <Text style={styles.goldText}>YES, REMIND ME</Text>
         </Pressable>
-        <Pressable onPress={close} accessibilityRole="button" style={styles.later}>
-          <Text style={styles.laterText}>NOT NOW</Text>
+        <Pressable onPress={close} accessibilityRole="button" style={({ pressed }) => [styles.plain, pressed && styles.pressed]}>
+          <Text style={styles.plainText}>NOT NOW</Text>
         </Pressable>
       </View>
     );
@@ -306,7 +400,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'} animationInTiming={reducedMotion ? 120 : 240}
       animationOutTiming={reducedMotion ? 120 : 180} backdropColor={BRAND.navy} backdropOpacity={0.55}
       onBackdropPress={revealing ? undefined : close} onBackButtonPress={revealing ? undefined : close}
-      useNativeDriverForBackdrop hideModalContentWhileAnimating={false}>
+      useNativeDriver useNativeDriverForBackdrop hideModalContentWhileAnimating={false}>
       <View style={styles.wrap}>
         <Ribbon text={title} />
         {content}
@@ -324,11 +418,17 @@ const styles = StyleSheet.create({
   bigArt: { width: 110, height: 110 },
   lead: { fontFamily: 'Shark', fontSize: 21, color: BRAND.white, textAlign: 'center' },
   small: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', textAlign: 'center' },
-  gold: { flexDirection: 'row', gap: 8, alignSelf: 'stretch', backgroundColor: BRAND.gold, borderRadius: 16, paddingVertical: 12,
+  gold: { flexDirection: 'row', gap: 10, alignSelf: 'stretch', minHeight: 54, backgroundColor: BRAND.gold, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center', borderBottomWidth: 4, borderBottomColor: BRAND.goldLip, marginTop: 6 },
   pressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },
   goldText: { fontFamily: 'Shark', fontSize: 20, color: '#075083' },
-  later: { minHeight: 44, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', borderRadius: 12, borderWidth: 2,
-    borderColor: '#8fcdff', backgroundColor: '#075395' },
-  laterText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.white },
+  // Same size and type as the gold button: an equal choice, never a buried "no".
+  plain: { alignSelf: 'stretch', minHeight: 54, backgroundColor: BRAND.white, borderRadius: 16, alignItems: 'center',
+    justifyContent: 'center', borderBottomWidth: 4, borderBottomColor: '#a9cdea' },
+  plainText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
+  priceChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.navy, borderRadius: 12,
+    paddingHorizontal: 8, paddingVertical: 3 },
+  priceText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, marginTop: 1 },
+  nextRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  nextText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, textAlign: 'center', flexShrink: 1 },
 });
