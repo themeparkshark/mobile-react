@@ -23,6 +23,7 @@ import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { useAmbient } from '../../services/money/useAmbient';
 import RealMoneyMark from '../RealMoneyMark';
 import RewardBurst from '../RewardBurst';
 import { unitWord } from '../../services/money/copy';
@@ -175,7 +176,7 @@ export function Contents({ grants, size = 'big', tone = 'onBlue' }: { grants: Sh
 
 /** The art with a soft bob (UI thread; still under Reduce Motion). */
 export function PackArt({ art, size, bob = true }: { art: PackArtKey; size: number; bob?: boolean }) {
-  const still = useUiReducedMotion();
+  const still = !useAmbient();
   const t = useSharedValue(0);
   useEffect(() => {
     if (still || !bob) return undefined;

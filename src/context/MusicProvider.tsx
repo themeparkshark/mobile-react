@@ -1,5 +1,6 @@
 import { Audio } from 'expo-av';
-import React, { createContext, useCallback, useContext, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { AuthContext } from './AuthProvider';
 
@@ -144,6 +145,24 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
     await playNext();
   }, [playNext, withLock]);
+
+  // Battery (FIXES row 16/32): music never plays on in a pocket. Background pauses it; coming
+  // back resumes the same track only if this pause stopped it and music is still on.
+  const pausedByBackground = useRef(false);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      const s = soundRef.current;
+      if (state === 'background' || state === 'inactive') {
+        if (state === 'inactive' || !s || !isPlayingRef.current) return;
+        pausedByBackground.current = true;
+        void s.pauseAsync().catch(() => undefined);
+      } else if (state === 'active' && pausedByBackground.current) {
+        pausedByBackground.current = false;
+        if (s && (!player || player.enabled_music)) void s.playAsync().catch(() => undefined);
+      }
+    });
+    return () => sub.remove();
+  }, [player]);
 
   // Override: crossfade to a specific track on loop
   const overrideTrack = useCallback((track: any) => withLock(async () => {

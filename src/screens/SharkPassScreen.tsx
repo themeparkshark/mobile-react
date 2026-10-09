@@ -16,6 +16,7 @@
  * in the background, none under Reduce Motion), a pulse on claimable cells,
  * and the GotIt payoff on every claim.
  */
+import { useAmbient } from '../services/money/useAmbient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
@@ -679,11 +680,12 @@ function Cell({ reward, claimed, ready, locked, pass, pulse, busy, onPress }: {
   reward: SharkPassReward | null; claimed: boolean; ready: boolean; locked: boolean; pass: boolean; pulse: boolean; busy: boolean; onPress: () => void;
 }) {
   const glow = useSharedValue(0);
+  const ambient = useAmbient();
   useEffect(() => {
-    if (!ready || !pulse) { cancelAnimation(glow); glow.value = 0; return undefined; }
+    if (!ready || !pulse || !ambient) { cancelAnimation(glow); glow.value = 0; return undefined; }
     glow.value = withRepeat(withSequence(withTiming(1, { duration: 650 }), withTiming(0, { duration: 650 })), -1, false);
     return () => cancelAnimation(glow);
-  }, [ready, pulse, glow]);
+  }, [ready, pulse, ambient, glow]);
   const ring = useAnimatedStyle(() => ({ transform: [{ scale: 1 + glow.value * 0.05 }] }));
   if (!reward) return <View style={[s.cell, s.cellEmpty]} />;
   return (

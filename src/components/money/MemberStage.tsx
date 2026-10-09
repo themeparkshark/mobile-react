@@ -5,6 +5,7 @@
  * today, the shark wears its own look with the VIP badge. Rays turn slowly on
  * the UI thread; Reduce Motion holds everything still. Nothing here is bought.
  */
+import { useAmbient } from '../../services/money/useAmbient';
 import { Image } from 'expo-image';
 import { useContext, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -18,7 +19,6 @@ import type { InventoryType } from '../../models/inventory-type';
 import type { ShopItem } from '../../models/shop-today';
 import { loadSecretShopFlag } from '../../services/secretShopFlag';
 import { FONT, GameIcon } from '../../ui';
-import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import Playercard from '../Playercard';
 
 const RAYS = require('../../../assets/images/reveal/rays.webp');
@@ -55,7 +55,7 @@ async function loadPiece(): Promise<ShopItem | null> {
 
 export default function MemberStage() {
   const { player } = useContext(AuthContext);
-  const still = useUiReducedMotion();
+  const still = !useAmbient();
   const [piece, setPiece] = useState<ShopItem | null>(cachedPiece ?? null);
   const spin = useSharedValue(0);
   useEffect(() => { let live = true; void loadPiece().then(p => { if (live) setPiece(p); }); return () => { live = false; }; }, []);
