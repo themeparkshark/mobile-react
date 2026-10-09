@@ -223,7 +223,8 @@ export default function NewsScreen() {
   const scrollY = useRef(0);
   const refreshRef = useRef<() => void>(() => undefined);
   useEffect(() => onTabReselect('News', () => {
-    if (scrollY.current < 40) refreshRef.current();
+    // Already at the top: look for new stories, and say so right away.
+    if (scrollY.current < 40) { setToast('Looking for new stories...'); refreshRef.current(); }
     else listRef.current?.scrollToOffset({ offset: 0, animated: !reduced });
   }), [reduced]);
 
