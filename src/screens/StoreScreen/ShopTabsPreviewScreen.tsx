@@ -99,6 +99,17 @@ function route(fx: Fixture, config: AxiosRequestConfig): { status: number; data:
     return { status: 200, data: { data: page === 1 ? LEGACY_ITEMS : [] } };
   }
   if (/^\/catalogs\/\d+$/.test(url)) return { status: 200, data: { data: LEGACY_CATALOG } };
+  if (url === '/me/wishlist') return { status: 200, data: { data: { item_ids: [], items: [] } } };
+  if (/^\/me\/wishlist\/\d+/.test(url)) {
+    return { status: 200, data: { data: { item_ids: config.method === 'delete' ? [] : [Number(url.split('/').pop())] } } };
+  }
+  const buy = /^\/me\/inventory\/items\/(\d+)\/purchase/.exec(url);
+  if (buy) {
+    const item = LEGACY_ITEMS.find(i => i.id === Number(buy[1]));
+    fx.player = { ...fx.player, coins: Number(fx.player.coins ?? 0) - (item?.cost ?? 0) } as PlayerType;
+    fx.wallet = { ...fx.wallet, coins: Number(fx.player.coins) };
+    return { status: 200, data: { data: { ...(item ?? { id: Number(buy[1]) }), has_purchased: true }, set_reward: null } };
+  }
   if (url === '/me/shop') return { status: 200, data: { data: shopCatalog(fx.wallet) } };
   if (url === '/me/ads') return { status: 200, data: { data: adSummary(!!fx.player.is_subscribed) } };
   if (url === '/me/secret-shop') return { status: 200, data: { data: { secret_shop_v2: secret, preview: secret } } };
@@ -155,7 +166,7 @@ function useMode(): string {
     // Capture rigs: the shop stream's own mode server (tools/modeserver), no "Open in" prompt.
     let last = '';
     const poll = setInterval(() => {
-      fetch('http://127.0.0.1:8806/mode').then(r => r.text()).then(t => { const m = t.trim(); if (m && m !== last) { last = m; setMode(m); } }, () => undefined);
+      fetch(`http://127.0.0.1:8806/mode?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.text()).then(t => { const m = t.trim(); if (m && m !== last) { last = m; setMode(m); } }, () => undefined);
     }, 500);
     return () => { sub.remove(); clearInterval(poll); };
   }, []);

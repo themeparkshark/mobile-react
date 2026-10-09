@@ -104,6 +104,25 @@ export function featuredPill(section: SectionLike, nowMs: number): Pill {
   return { label: `New on ${day}`, urgent: false, a11y: `New featured items on ${day}` };
 }
 
+/**
+ * The classic Shark Shop's restock (rotation next_rotation_at), as one small calm chip that names
+ * the day (Dustin, Oct 8: "the countdown for new items doesn't need to be that big"). No seconds,
+ * no hours: "New gear on Monday", "New gear tomorrow", "New gear tonight", "New gear soon" at zero.
+ * The day is read in park time (the shop flips at midnight Pacific; 7 h back lands on its date).
+ */
+export function restockPill(nextAt: string | null | undefined, nowMs: number): Pill | null {
+  const at = nextAt ? Date.parse(nextAt) : NaN;
+  if (!Number.isFinite(at)) return null;
+  const left = at - nowMs;
+  if (left <= 0) return { label: 'New gear soon', urgent: false, a11y: 'New gear is on its way' };
+  if (left < 12 * HOUR) return { label: 'New gear tonight', urgent: false, a11y: 'New gear arrives tonight' };
+  if (left < 36 * HOUR) return { label: 'New gear tomorrow', urgent: false, a11y: 'New gear arrives tomorrow' };
+  const days = Math.ceil(left / DAY);
+  if (left > 6 * DAY) return { label: `New gear in ${days} days`, urgent: false, a11y: `New gear in ${days} days` };
+  const day = weekdayOf(new Date(at - 7 * HOUR).toISOString()) ?? 'soon';
+  return { label: `New gear on ${day}`, urgent: false, a11y: `New gear arrives on ${day}` };
+}
+
 /** Event, timer 1 of 2: when the shelf gets its next drop (null on the final shelf). */
 export function eventDropPill(section: SectionLike, nowMs: number): Pill | null {
   if (section.final_shelf) return null;
