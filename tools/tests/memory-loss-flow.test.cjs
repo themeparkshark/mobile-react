@@ -68,7 +68,7 @@ test('a low-signal turn limit says OUT OF FLIPS, not TIME\'S UP', () => {
 
 test('a lost ride shows no NEW BEST and no luck jargon; the board shows ~1.5 s before the card', () => {
   assert.match(src, /newBest: r\.mode === 'ride' && !won \? false :/);
-  assert.match(src, /chipText = won \? luckyChip\(e\) : null;/);
+  assert.match(src, /chipText = won && !perfect \? luckyChip\(e\) : null;/);
   assert.match(src, /later\(k > 0 \? 1500 : 600, \(\) => \{\s*\/\/ Ride challenge/);
 });
 
@@ -78,4 +78,9 @@ test('a kid who never flipped is taught the move; every try saves its album card
   assert.match(src, /flipped: r\.eng\.turns > 0/);
   const tryAgain = src.slice(src.indexOf('const tryAgain = useCallback('), src.indexOf('const giveUp = useCallback('));
   assert.match(tryAgain, /void collectRewards\(prev, false, false, 0\)/);
+});
+
+test('0-1 pair loss is a gentle shrug; near misses keep the gag', () => {
+  assert.match(src, /const gentle = r\.eng\.pairs <= 1;/);
+  assert.match(src, /if \(gentle\) stage\.current\?\.pose\('hmm', 2600\);\s*else stage\.current\?\.tumble\(\);/);
 });

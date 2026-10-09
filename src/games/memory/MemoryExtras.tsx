@@ -99,7 +99,7 @@ export interface DailySummary {
   recall: number;
 }
 
-export function NewChip({ index, label, face, foil, stamp, reducedMotion, dark }: { index: number; label: string; face: CardFace | null; foil: boolean; stamp: boolean; reducedMotion: boolean; dark?: boolean }) {
+export function NewChip({ index, label, face, foil, stamp, reducedMotion, dark, startMs = 0 }: { index: number; label: string; face: CardFace | null; foil: boolean; stamp: boolean; reducedMotion: boolean; dark?: boolean; startMs?: number }) {
   // Card flip in, 180ms apart, with the twinkle (design 5.6).
   const r = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
@@ -107,10 +107,10 @@ export function NewChip({ index, label, face, foil, stamp, reducedMotion, dark }
     const t = setTimeout(() => {
       GameAudio.playLadder('mm_sharp_twinkle', Math.min(7, 3 + index), { volume: 0.6 });
       Haptic.tickSelection();
-    }, 120 + index * 180);
-    r.value = withDelay(120 + index * 180, withTiming(1, { duration: 320, easing: Easing.out(Easing.back(1.4)) }));
+    }, startMs + 120 + index * 180);
+    r.value = withDelay(startMs + 120 + index * 180, withTiming(1, { duration: 320, easing: Easing.out(Easing.back(1.4)) }));
     return () => clearTimeout(t);
-  }, [index, r, reducedMotion]);
+  }, [index, r, reducedMotion, startMs]);
   const back = useAnimatedStyle(() => ({ opacity: r.value < 0.5 ? 1 : 0, transform: [{ perspective: 600 }, { rotateY: `${r.value * 180}deg` }] }));
   const front = useAnimatedStyle(() => ({ opacity: r.value >= 0.5 ? 1 : 0, transform: [{ perspective: 600 }, { rotateY: `${r.value * 180 - 180}deg` }] }));
   return (

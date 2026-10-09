@@ -26,7 +26,7 @@ test('pips land one per beat after the ribbon; the button comes last', () => {
   assert.ok(s.line > s.pips[2] && s.button > s.line);
   assert.equal(tryCardSchedule(0).puff, null, 'nothing found: no puff');
   assert.ok(tryCardSchedule(8).button < 1400, 'a full row still lands well under 1.5 s');
-  assert.ok(PUFF_STARS <= 8, 'particle cap');
+  assert.ok(PUFF_STARS <= 3 && schedule().LAST_PUFF_STARS <= 6, 'particle cap');
 });
 
 test('feel: ribbon impact, per-pip sound ladder + tick, breathing TRY AGAIN, all skipped under Reduce Motion', () => {

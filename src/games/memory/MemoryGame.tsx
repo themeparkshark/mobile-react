@@ -955,7 +955,8 @@ export default function MemoryGame({
         if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
         if (ridePb != null && !r.signal) numbers.push({ label: 'BEST', value: `${(ridePb / 1000).toFixed(1)}s`, hot: newRidePb });
         if (won) numbers.push({ label: 'SCORE', value: finalScore.toLocaleString('en-US') });
-        chipText = won ? luckyChip(e) : null;
+        // The luck chip contradicts PERFECT!, and it is jargon on a loss.
+        chipText = won && !perfect ? luckyChip(e) : null;
         if (perfect && won) banner = 'PERFECT!';
       } else if (r.mode === 'timeAttack') {
         banner = `BOARD ${e.board}`;
@@ -1162,9 +1163,17 @@ export default function MemoryGame({
     r.playing = false;
     GameAudio.music.stop(300);
     GameAudio.music.setState('open', 0);
-    GameAudio.play(out ? 'mm_strike' : 'sh_whistle');
-    later(260, () => GameAudio.play('mm_lose'));
-    Haptic.warning();
+    // A kid who found 0-1 pairs gets a gentle shrug, not the full fail stack
+    // (whistle + lose + warning buzz + dizzy tumble); near misses keep the gag.
+    const gentle = r.eng.pairs <= 1;
+    if (gentle) {
+      GameAudio.play('mm_lose', { volume: 0.55 });
+      Haptic.hitSoft();
+    } else {
+      GameAudio.play(out ? 'mm_strike' : 'sh_whistle');
+      later(260, () => GameAudio.play('mm_lose'));
+      Haptic.warning();
+    }
     // Show where every card was, but only cards whose picture we know: a
     // server board can keep its layout until it settles, and flipping a card
     // with no picture showed a blank white card (a dead-looking board).
@@ -1185,7 +1194,8 @@ export default function MemoryGame({
     // A light veil only: the cards stay readable behind the end card.
     wash.value = withDelay(200, withTiming(0.4, { duration: 300 }));
     stage.current?.hatGag(false);
-    stage.current?.tumble();
+    if (gentle) stage.current?.pose('hmm', 2600);
+    else stage.current?.tumble();
     rope.urgent.value = 0;
     const left = RIDE_TRIES - 1 - r.tryIndex;
     // With nothing to reveal there is nothing to look at: the card comes up fast.
@@ -2297,6 +2307,8 @@ export default function MemoryGame({
       onQuit={onQuit}
       onRematch={mode !== 'ride' && mode !== 'warmup' ? onRematch : undefined}
       onWrapUp={onWrapUp}
+      // MemoryResults draws its own navy scrim; the shell's would flash first for a frame.
+      resultsScrim={resultData ? 'none' : undefined}
       renderResults={resultData ? (args) => { shellClaim.current = args.claim; return renderResults(args); } : undefined}
     >
       <View style={styles.field} onLayout={onFieldLayout}>

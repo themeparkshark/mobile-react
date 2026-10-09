@@ -36,8 +36,9 @@ const STAR = require('../../assets/games/memory/studio/coin_alex.png');
 export const TRY_BEAT_MS = 232;
 /** Gap between pips filling: fast enough that 8 pips take under a second. */
 export const PIP_STEP_MS = 95;
-/** Stars in the last pip's puff (capped; the brief's particle budget). */
-export const PUFF_STARS = 6;
+/** Sparks per pip puff (capped; the brief's particle budget). The last found pip gets double. */
+export const PUFF_STARS = 3;
+export const LAST_PUFF_STARS = 6;
 
 /** When each part of the card lands (ms after it starts to rise). */
 export function tryCardSchedule(pairs: number): { pips: number[]; puff: number | null; line: number; button: number } {
@@ -82,11 +83,12 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
     banner.value = withSequence(withTiming(1.12, { duration: 150, easing: Easing.in(Easing.quad) }), withSpring(1, { damping: 9, stiffness: 260 }));
     impact.value = withDelay(150, withSequence(withTiming(1, { duration: 16 }), withTiming(0, { duration: 160 })));
     at(150, () => { Haptic.hitMedium(); GameAudio.play('fx.hit', { volume: 0.5 }); });
+    // Every coin that fills is a small reward; the last one lands with the match chime.
     sched.pips.forEach((ms, i) => at(ms, () => {
       Haptic.tickSelection();
       GameAudio.playLadder('mm_sharp_twinkle', 2 + i, { volume: 0.6 });
     }));
-    if (sched.puff !== null && pairs >= total - 2) at(sched.puff, () => Haptic.hitSoft());
+    if (sched.puff !== null) at(sched.puff, () => { Haptic.hitSoft(); GameAudio.playLadder('mm_match', Math.min(7, 2 + pairs), { volume: 0.7 }); });
     line.value = withDelay(sched.line, withTiming(1, { duration: 200 }));
     button.value = withDelay(sched.button, withSpring(1, { damping: 10, stiffness: 220 }));
     if (canRetry) {
@@ -128,7 +130,7 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
         </Animated.View>
         <View style={styles.pips} accessible accessibilityLabel={`${pairs} of ${total} pairs found`}>
           {Array.from({ length: total }, (_, i) => (
-            <Pip key={i} on={i < pairs} delay={sched.pips[i] ?? 0} puff={i === pairs - 1 && pairs >= total - 2}
+            <Pip key={i} on={i < pairs} delay={sched.pips[i] ?? 0} sparks={i === pairs - 1 ? LAST_PUFF_STARS : PUFF_STARS}
               reducedMotion={reducedMotion} />
           ))}
         </View>
@@ -156,25 +158,25 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
 }
 
 /** One pair pip: empty ring, or a gold coin that pops in on its beat. */
-function Pip({ on, delay, puff, reducedMotion }: { on: boolean; delay: number; puff: boolean; reducedMotion: boolean }) {
+function Pip({ on, delay, sparks, reducedMotion }: { on: boolean; delay: number; sparks: number; reducedMotion: boolean }) {
   const fill = useSharedValue(on && reducedMotion ? 1 : 0);
   const burst = useSharedValue(0);
   useEffect(() => {
     if (!on || reducedMotion) return;
     fill.value = withDelay(delay, withSequence(withTiming(1.35, { duration: 110, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 8, stiffness: 280 })));
-    if (puff) burst.value = withDelay(delay + 40, withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) }));
-  }, [on, delay, puff, reducedMotion, fill, burst]);
+    burst.value = withDelay(delay + 40, withTiming(1, { duration: 480, easing: Easing.out(Easing.cubic) }));
+  }, [on, delay, reducedMotion, fill, burst]);
   const coinSt = useAnimatedStyle(() => ({ opacity: fill.value > 0.02 ? 1 : 0, transform: [{ scale: fill.value }] }));
   return (
     <View style={styles.pip}>
       {on ? <Animated.Image source={STAR} style={[styles.pipCoin, coinSt]} resizeMode="contain" /> : null}
-      {on && puff && !reducedMotion ? Array.from({ length: PUFF_STARS }, (_, k) => <Spark key={k} k={k} t={burst} />) : null}
+      {on && !reducedMotion ? Array.from({ length: sparks }, (_, k) => <Spark key={k} k={k} n={sparks} t={burst} />) : null}
     </View>
   );
 }
 
-function Spark({ k, t }: { k: number; t: SharedValue<number> }) {
-  const a = (k / PUFF_STARS) * Math.PI * 2 + 0.3;
+function Spark({ k, n, t }: { k: number; n: number; t: SharedValue<number> }) {
+  const a = (k / n) * Math.PI * 2 + 0.3;
   const st = useAnimatedStyle(() => ({
     opacity: t.value > 0 && t.value < 1 ? 1 - t.value : 0,
     transform: [{ translateX: Math.cos(a) * 26 * t.value }, { translateY: Math.sin(a) * 26 * t.value }, { scale: 1 - t.value * 0.5 }],
