@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject }
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { createHeadingFilter, angleDelta } from './headingFilter';
-import { CAM_MODE_SPIN_MS, CAM_RECENTER_MS, CAM_TICK_MS, camChanged, glideActive, glideAt, nextGlide,
-  targetBearing, segmentGap, segmentMs, walkGlideMs, WalkPace, type CamGlide, type CamStop, type FollowMode } from './cameraFollow';
+import { CAM_MODE_SPIN_MS, CAM_RECENTER_MS, CAM_TICK_MS, camChanged, chaseActive, chaseAdvance, chaseFix, chasePeek, newChaser,
+  targetBearing, segmentGap, segmentMs, walkGlideMs, WalkPace, type Chaser, type CamStop, type FollowMode } from './cameraFollow';
 import { GLIDE_MAX_M, GLIDE_MIN_M, glideMeters, type GlidePoint } from './glide';
 import { probeCount } from '../../dev/motionProbe';
 
@@ -31,7 +31,7 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
 }) {
   const filter = useRef(createHeadingFilter()).current;
   const pace = useRef(new WalkPace()).current;
-  const glide = useRef<CamGlide | null>(null);
+  const chaser = useRef<Chaser | null>(null);
   const prevFix = useRef<{ p: GlidePoint; t: number } | null>(null);
   const last = useRef<CamStop | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -64,7 +64,7 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
     const u = unwrapTo(facingU, deg);
     facing.value = ms > 0 && !reducedRef.current ? withTiming(u, { duration: ms, easing: LINEAR }) : u;
   };
-  const position = (tMs: number) => (glide.current ? glideAt(glide.current, tMs) : null);
+  const position = (tMs: number) => (chaser.current ? chasePeek(chaser.current, tMs) : null);
 
   const tick = () => {
     timer.current = null;
@@ -100,7 +100,8 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
       const mapBearing = following ? (target ?? 0) : freeBearing.current;
       animateFacing(mode.current === 'heading' && following ? 0 : angleDelta(mapBearing, h), seg);
     }
-    if (quiet.current < 3 || glideActive(glide.current, now) || !filter.settled()) schedule(CAM_TICK_MS);
+    if (chaser.current) chaseAdvance(chaser.current, now);
+    if (quiet.current < 3 || chaseActive(chaser.current, now) || !filter.settled()) schedule(CAM_TICK_MS);
   };
   const schedule = (ms: number) => {
     if (timer.current || !running.current) return;
@@ -124,7 +125,8 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
     const jump = !prev || reducedRef.current || meters < GLIDE_MIN_M || meters > GLIDE_MAX_M;
     if (meters > GLIDE_MAX_M) pace.reset();
     const ms = jump ? 0 : walkGlideMs(meters, walk);
-    glide.current = nextGlide(glide.current, loc, now, ms, prev?.p ?? null, prev ? (now - prev.t) / 1000 : 0);
+    if (!chaser.current) chaser.current = newChaser(loc, now);
+    else chaseFix(chaser.current, loc, now, walk, jump);
     prevFix.current = { p: loc, t: now };
     if (!prev) {
       // First fix: put the camera there at once.

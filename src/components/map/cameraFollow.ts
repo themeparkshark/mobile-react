@@ -9,8 +9,8 @@
  *
  * Now one small loop drives the camera while something moves: about ten
  * times a second it sends a short LINEAR move toward where the shark will be
- * one segment from now (the same glide the marker uses) and toward the
- * cleaned compass heading. Each move starts from wherever the last one had
+ * one segment from now (the pace chaser below) and toward the cleaned
+ * compass heading. Each move starts from wherever the last one had
  * got to, so the camera keeps an even speed across segments. When nothing is
  * moving it sends nothing at all (battery).
  */
@@ -30,7 +30,7 @@ export function segmentMs(gapMs: number): number {
   return Math.round(Math.min(480, Math.max(CAM_SEGMENT_MS, gapMs * 1.5)));
 }
 /** Part of the turn speed added ahead of the heading, so the linear chase does not trail the turn. */
-export const CAM_HEADING_LEAD = 0.8;
+export const CAM_HEADING_LEAD = 0.3;
 /** Changes smaller than these are not worth a camera move. */
 export const CAM_EPS_DEG = 0.08;
 export const CAM_EPS_M = 0.03;
@@ -41,84 +41,8 @@ export const CAM_RECENTER_MS = 450;
 /** Which way is up while following: the way you face, or north. */
 export type FollowMode = 'heading' | 'north';
 
-/** Degrees per second of latitude and longitude (a velocity on the map). */
-export interface LatLngRate { readonly latitude: number; readonly longitude: number }
-const STILL: LatLngRate = { latitude: 0, longitude: 0 };
-
-/**
- * The shark's path between filtered fixes. A cubic (Hermite) curve from where
- * the shark is, moving the way it is moving, to the new fix, arriving at the
- * walking speed: speed and direction carry across fixes, so a walk reads as
- * one smooth swim instead of a glide, a stop and a glide. Past the end it
- * coasts on and eases to a stop within GLIDE_COAST_S (half a metre at a walk),
- * so a fix that comes a little late never leaves the shark standing.
- */
-export interface CamGlide {
-  readonly from: GlidePoint;
-  readonly fromRate: LatLngRate;
-  readonly to: GlidePoint;
-  readonly toRate: LatLngRate;
-  readonly start: number;
-  readonly ms: number;
-}
-/** How long the shark coasts past a fix before it settles (seconds, the coast's time constant). */
-export const GLIDE_COAST_S = 0.45;
-/** The arrival speed is this share of the walking speed between the last two fixes. */
-export const GLIDE_ARRIVE_SHARE = 0.85;
-/** Faster than this (m/s) between fixes is not a walk: no carried speed. */
+/** Faster than this (m/s) between fixes is not a walk. */
 export const GLIDE_MAX_CARRY_MPS = 3.5;
-
-/** Where the shark is along its path at `tMs`. */
-export function glideAt(g: CamGlide, tMs: number): GlidePoint {
-  if (g.ms <= 0) return g.to;
-  const T = g.ms / 1000;
-  const el = (tMs - g.start) / 1000;
-  if (el >= T) {
-    const k = GLIDE_COAST_S * (1 - Math.exp(-(el - T) / GLIDE_COAST_S));
-    return { latitude: g.to.latitude + g.toRate.latitude * k, longitude: g.to.longitude + g.toRate.longitude * k };
-  }
-  const s = Math.max(0, el / T), s2 = s * s, s3 = s2 * s;
-  const h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
-  return {
-    latitude: h00 * g.from.latitude + h10 * T * g.fromRate.latitude + h01 * g.to.latitude + h11 * T * g.toRate.latitude,
-    longitude: h00 * g.from.longitude + h10 * T * g.fromRate.longitude + h01 * g.to.longitude + h11 * T * g.toRate.longitude,
-  };
-}
-
-/** How fast the shark is moving along its path at `tMs` (degrees a second). */
-export function glideRate(g: CamGlide, tMs: number): LatLngRate {
-  if (g.ms <= 0) return STILL;
-  const T = g.ms / 1000;
-  const el = (tMs - g.start) / 1000;
-  if (el >= T) {
-    const k = Math.exp(-(el - T) / GLIDE_COAST_S);
-    return { latitude: g.toRate.latitude * k, longitude: g.toRate.longitude * k };
-  }
-  const s = Math.max(0, el / T), s2 = s * s;
-  const d00 = 6 * s2 - 6 * s, d10 = 3 * s2 - 4 * s + 1, d01 = -6 * s2 + 6 * s, d11 = 3 * s2 - 2 * s;
-  return {
-    latitude: (d00 * g.from.latitude + d01 * g.to.latitude) / T + d10 * g.fromRate.latitude + d11 * g.toRate.latitude,
-    longitude: (d00 * g.from.longitude + d01 * g.to.longitude) / T + d10 * g.fromRate.longitude + d11 * g.toRate.longitude,
-  };
-}
-
-/**
- * The next path: from wherever (and however fast) the shark is at `tMs` to the new fix
- * over `ms`, arriving at the walk speed measured from `prevFix` (`sinceLastS` ago).
- * `ms` 0 is a jump (a re-seat, Reduce Motion, the first fix).
- */
-export function nextGlide(current: CamGlide | null, to: GlidePoint, tMs: number, ms: number,
-  prevFix?: GlidePoint | null, sinceLastS?: number): CamGlide {
-  if (!current || ms <= 0) return { from: to, fromRate: STILL, to, toRate: STILL, start: tMs, ms: 0 };
-  let toRate = STILL;
-  if (prevFix && sinceLastS && sinceLastS > 0) {
-    const dt = Math.max(0.5, sinceLastS);
-    const dLat = (to.latitude - prevFix.latitude) / dt, dLng = (to.longitude - prevFix.longitude) / dt;
-    const mps = Math.hypot(dLat * 111_320, dLng * 111_320 * Math.cos(to.latitude * Math.PI / 180));
-    if (mps <= GLIDE_MAX_CARRY_MPS) toRate = { latitude: dLat * GLIDE_ARRIVE_SHARE, longitude: dLng * GLIDE_ARRIVE_SHARE };
-  }
-  return { from: glideAt(current, tMs), fromRate: glideRate(current, tMs), to, toRate, start: tMs, ms };
-}
 
 /**
  * Walking pace (m/s) from the last few fixes: straight-line distance over time across up to
@@ -149,15 +73,6 @@ export function walkGlideMs(meters: number, walkSpeedMps: number): number {
   return Math.round(Math.min(4000, Math.max(450, (meters / Math.max(0.6, walkSpeedMps)) * 1000 * 1.12)));
 }
 
-/** Still moving (gliding or coasting) at `tMs`. */
-export function glideActive(g: CamGlide | null, tMs: number): boolean {
-  if (!g || g.ms <= 0) return false;
-  const end = g.start + g.ms;
-  if (tMs < end) return true;
-  const still = g.toRate.latitude === 0 && g.toRate.longitude === 0;
-  return !still && tMs < end + GLIDE_COAST_S * 4000;
-}
-
 /** The bearing the camera aims for: north, or the heading plus a little of the turn speed. */
 export function targetBearing(mode: FollowMode, heading: number | null, speedDps: number, segmentMs = CAM_SEGMENT_MS): number | null {
   if (mode === 'north') return 0;
@@ -183,52 +98,65 @@ export function needleDeg(mapBearing: number): number {
 }
 
 /**
- * Dead-reckoning follower (alternative to the Hermite path): the target runs on from the last fix
- * at the walking velocity for up to TRACK_EXTRAP_S, and a critically damped spring chases it.
+ * Pace chaser: the shark swims toward the newest fix at the walking pace (measured over several
+ * fixes, so it barely changes step to step), speeding up or easing off only gently with how far
+ * behind it is. GPS scatter moves where it is heading, not how fast it goes: an even walk.
+ * Steered with a capped turn rate, so a noisy fix bends the path instead of kinking it.
  */
-export const TRACK_EXTRAP_S = 1.6;
-export const TRACK_OMEGA = 2.6;
-export interface Tracker {
-  p: GlidePoint; v: LatLngRate; t: number;
-  fix: GlidePoint; fixRate: LatLngRate; fixT: number;
+export const CHASE_LAG_S = 2.4;
+export const CHASE_GAIN = 0.08;
+export const CHASE_TURN_DPS = 220;
+export interface Chaser {
+  p: GlidePoint; dir: number; speed: number; t: number;
+  target: GlidePoint; pace: number;
 }
-export function newTracker(at: GlidePoint, tMs: number): Tracker {
-  return { p: at, v: STILL, t: tMs, fix: at, fixRate: STILL, fixT: tMs };
+export function newChaser(at: GlidePoint, tMs: number): Chaser {
+  return { p: at, dir: 0, speed: 0, t: tMs, target: at, pace: 0 };
 }
-function trackTarget(k: Tracker, tMs: number): GlidePoint {
-  const el = Math.max(0, (tMs - k.fixT) / 1000);
-  // Runs on at the walk velocity, easing off over the last part of the window.
-  const s = el <= TRACK_EXTRAP_S ? el - (el * el) / (4 * TRACK_EXTRAP_S) : TRACK_EXTRAP_S * 0.75;
-  return { latitude: k.fix.latitude + k.fixRate.latitude * s, longitude: k.fix.longitude + k.fixRate.longitude * s };
-}
-/** Steps the follower to `tMs` (mutates); returns its position. */
-export function trackAdvance(k: Tracker, tMs: number): GlidePoint {
-  const w = TRACK_OMEGA;
-  while (k.t < tMs) {
-    const dt = Math.min(0.016, (tMs - k.t) / 1000);
-    const g = trackTarget(k, k.t + dt * 1000);
-    const aLat = w * w * (g.latitude - k.p.latitude) - 2 * w * k.v.latitude;
-    const aLng = w * w * (g.longitude - k.p.longitude) - 2 * w * k.v.longitude;
-    k.v = { latitude: k.v.latitude + aLat * dt, longitude: k.v.longitude + aLng * dt };
-    k.p = { latitude: k.p.latitude + k.v.latitude * dt, longitude: k.p.longitude + k.v.longitude * dt };
-    k.t += dt * 1000;
+const enM = (a: GlidePoint, b: GlidePoint): [number, number] => [
+  (b.longitude - a.longitude) * 111_320 * Math.cos(a.latitude * Math.PI / 180), (b.latitude - a.latitude) * 111_320];
+/** Steps the chaser to `tMs` (mutates). */
+export function chaseAdvance(c: Chaser, tMs: number): GlidePoint {
+  while (c.t < tMs) {
+    const dt = Math.min(0.016, (tMs - c.t) / 1000);
+    const [e, n] = enM(c.p, c.target);
+    const d = Math.hypot(e, n);
+    // Wanted speed: the pace, nudged by how far behind it is; near the target it eases in.
+    const lagM = Math.max(0.3, c.pace * CHASE_LAG_S);
+    let want = c.pace > 0 ? c.pace + CHASE_GAIN * (d - lagM) : d / 0.6;
+    want = Math.max(0, Math.min(Math.max(want, 0), d / 0.35, Math.max(3.5, c.pace * 2)));
+    // Speed changes gently (no lurch on a fix).
+    const acc = 0.5;
+    c.speed += Math.max(-acc * dt * 2, Math.min(acc * dt, want - c.speed));
+    if (d > 0.02) {
+      const goal = Math.atan2(e, n);
+      let turn = goal - c.dir;
+      while (turn > Math.PI) turn -= 2 * Math.PI;
+      while (turn < -Math.PI) turn += 2 * Math.PI;
+      const maxTurn = (CHASE_TURN_DPS * Math.PI / 180) * dt;
+      // Far off course (a reverse, a re-seat): turn at once rather than orbit.
+      c.dir = Math.abs(turn) > 2.2 ? goal : c.dir + Math.max(-maxTurn, Math.min(maxTurn, turn));
+    }
+    const step = Math.min(c.speed * dt, d + 0.05);
+    const k = Math.cos(c.p.latitude * Math.PI / 180);
+    c.p = { latitude: c.p.latitude + (Math.cos(c.dir) * step) / 111_320, longitude: c.p.longitude + (Math.sin(c.dir) * step) / (111_320 * k) };
+    c.t += dt * 1000;
   }
-  return k.p;
+  return c.p;
 }
-/** Where the follower will be at `tMs` (no mutation). */
-export function trackPeek(k: Tracker, tMs: number): GlidePoint {
-  return trackAdvance({ ...k }, tMs);
+export function chasePeek(c: Chaser, tMs: number): GlidePoint {
+  return chaseAdvance({ ...c }, tMs);
 }
-/** A new fix: the target restarts from it at the walk velocity measured from the previous fix. */
-export function trackFix(k: Tracker, fix: GlidePoint, tMs: number, prevFix: GlidePoint | null, sinceLastS: number, jump: boolean): void {
-  trackAdvance(k, tMs);
-  if (jump) { k.p = fix; k.v = STILL; k.fix = fix; k.fixRate = STILL; k.fixT = tMs; return; }
-  let rate = STILL;
-  if (prevFix && sinceLastS > 0) {
-    const dt = Math.max(0.5, sinceLastS);
-    const dLat = (fix.latitude - prevFix.latitude) / dt, dLng = (fix.longitude - prevFix.longitude) / dt;
-    const mps = Math.hypot(dLat * 111_320, dLng * 111_320 * Math.cos(fix.latitude * Math.PI / 180));
-    if (mps <= GLIDE_MAX_CARRY_MPS) rate = { latitude: 0.5 * (dLat + k.fixRate.latitude), longitude: 0.5 * (dLng + k.fixRate.longitude) };
-  }
-  k.fix = fix; k.fixRate = rate; k.fixT = tMs;
+/** A new fix (and the current pace); `jump` re-seats at once. */
+export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, pace: number, jump: boolean): void {
+  chaseAdvance(c, tMs);
+  c.target = fix;
+  c.pace = pace;
+  if (jump) { c.p = fix; c.speed = 0; }
+}
+/** Still moving at `tMs` (not yet settled on its target). */
+export function chaseActive(c: Chaser | null, tMs: number): boolean {
+  if (!c) return false;
+  const [e, n] = enM(chasePeek(c, tMs), c.target);
+  return Math.hypot(e, n) > 0.03 || c.speed > 0.05;
 }

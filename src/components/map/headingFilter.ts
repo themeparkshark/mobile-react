@@ -26,6 +26,8 @@ export const HEADING_D_CUTOFF_HZ = 1.5;
 export const HEADING_HOLD_DEG = 3;
 /** A still phone that drifted past the hold window is eased back at this rate (degrees a second). */
 export const HEADING_CREEP_DPS = 12;
+/** A reading this far (degrees) from the last one is a glitch (a magnet, a car door) until the next confirms it. */
+export const HEADING_JUMP_DEG = 45;
 /** Below this turn speed (degrees a second) the phone counts as still. */
 export const HEADING_STILL_DPS = 16;
 
@@ -69,6 +71,8 @@ export function createHeadingFilter(opts?: { minCutoff?: number; beta?: number; 
   let moving = false;
   // After a turn, the output keeps tracking this long (ms) so it lands on the reading, not short of it.
   let trackUntil = 0;
+  // A big jump waits here until a second reading agrees with it.
+  let suspect: number | null = null;
 
   const step = (u: number, tMs: number) => {
     const dt = Math.min(0.5, Math.max(0.005, (tMs - t) / 1000));
@@ -99,7 +103,13 @@ export function createHeadingFilter(opts?: { minCutoff?: number; beta?: number; 
     push(raw, tMs) {
       if (!Number.isFinite(raw)) return rawU === null ? 0 : normDeg(out);
       if (rawU === null) { rawU = raw; x = raw; out = raw; lastOut = raw; dx = 0; vs = 0; t = tMs; return normDeg(raw); }
-      rawU = rawU + angleDelta(normDeg(rawU), normDeg(raw));
+      const jump = angleDelta(normDeg(rawU), normDeg(raw));
+      if (Math.abs(jump) > HEADING_JUMP_DEG) {
+        // One wild reading is ignored; two that agree (a real fast spin) are taken.
+        if (suspect === null || Math.abs(angleDelta(suspect, normDeg(raw))) > HEADING_JUMP_DEG / 2) { suspect = normDeg(raw); return normDeg(out); }
+      }
+      suspect = null;
+      rawU = rawU + jump;
       return step(rawU, tMs);
     },
     tick(tMs) {
@@ -110,6 +120,6 @@ export function createHeadingFilter(opts?: { minCutoff?: number; beta?: number; 
     value() { return rawU === null ? null : normDeg(out); },
     speed() { return moving ? vs : 0; },
     settled() { return rawU !== null && !moving && Math.abs(out - lastOut) < 0.01; },
-    reset() { rawU = null; x = 0; dx = 0; vs = 0; t = 0; out = 0; lastOut = 0; moving = false; trackUntil = 0; },
+    reset() { suspect = null; rawU = null; x = 0; dx = 0; vs = 0; t = 0; out = 0; lastOut = 0; moving = false; trackUntil = 0; },
   };
 }

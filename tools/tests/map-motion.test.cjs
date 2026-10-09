@@ -52,26 +52,38 @@ test('a quick turn is followed closely and lands on the new heading (through nor
   assert.equal(f.speed(), 0, 'no lead once still');
 });
 
-test('the path to a fix starts where the shark is, moving the way it was (no jump, no stop)', () => {
-  const a = { latitude: 33.8122, longitude: -117.919 };
-  const b = { latitude: 33.81223, longitude: -117.919 };
-  const c = { latitude: 33.81226, longitude: -117.91897 };
-  let g = cf.nextGlide(null, a, 0, 0);
-  assert.deepEqual(JSON.parse(JSON.stringify(cf.glideAt(g, 50))), JSON.parse(JSON.stringify(a)));
-  g = cf.nextGlide(g, b, 1000, 2400, a, 2);
-  const mid = cf.glideAt(g, 2200);
-  assert.ok(mid.latitude > a.latitude && mid.latitude < b.latitude);
-  // A new fix mid-path: position and speed carry over exactly.
-  const at = 2800, before = cf.glideAt(g, at), rateBefore = cf.glideRate(g, at);
-  const g2 = cf.nextGlide(g, c, at, 2200, b, 1.8);
-  const after = cf.glideAt(g2, at), rateAfter = cf.glideRate(g2, at);
-  assert.ok(Math.abs(after.latitude - before.latitude) < 1e-12 && Math.abs(after.longitude - before.longitude) < 1e-12);
-  assert.ok(Math.abs(rateAfter.latitude - rateBefore.latitude) < 1e-12);
-  // Past the end it coasts and stops within about half a metre.
-  const end = cf.glideAt(g2, at + 2200), later = cf.glideAt(g2, at + 2200 + 5000);
-  const coast = Math.hypot((later.latitude - end.latitude) * 111320, (later.longitude - end.longitude) * 111320 * 0.83);
-  assert.ok(coast > 0.05 && coast < 1, `coast ${coast.toFixed(2)} m`);
-  assert.equal(cf.glideActive(g2, at + 2200 + 5000), false);
+test('the shark swims at an even walking pace between fixes (never a stop-go, never past the fix)', () => {
+  const k = 111320;
+  const fixAt = n => ({ latitude: 33.8122 + n / k, longitude: -117.919 });
+  const c = cf.newChaser(fixAt(0), 0);
+  const pace = new cf.WalkPace();
+  pace.push(fixAt(0), 0);
+  // Fixes 2.8 m apart, uneven gaps (1.4 m/s on average), as a phone with a 3 m filter delivers them.
+  const gaps = [2000, 1300, 2700, 1800, 2400, 1500, 2600, 2000, 1700, 2300];
+  let t = 0, n = 0;
+  const speeds = [];
+  let prev = cf.chaseAdvance(c, 0);
+  for (const gap of gaps) {
+    for (let s2 = 0; s2 < gap; s2 += 50) {
+      const p = cf.chaseAdvance(c, t + s2);
+      speeds.push(Math.hypot((p.latitude - prev.latitude) * k, (p.longitude - prev.longitude) * k * 0.83) / 0.05);
+      prev = p;
+    }
+    t += gap; n += 2.8;
+    cf.chaseFix(c, fixAt(n), t, pace.push(fixAt(n), t), false);
+  }
+  const steady = speeds.slice(Math.floor(speeds.length * 0.4));
+  const mu = steady.reduce((a, b) => a + b) / steady.length;
+  const sd = Math.sqrt(steady.reduce((a, b) => a + (b - mu) ** 2, 0) / steady.length);
+  assert.ok(sd / mu < 0.2, `speed variation ${(sd / mu).toFixed(2)}`);
+  assert.ok(Math.min(...steady) > 0.4 * mu, 'never stops mid-walk');
+  // Standing still after the last fix: it settles on it and does not pass it.
+  const end = cf.chaseAdvance(c, t + 8000);
+  assert.ok(Math.abs((end.latitude - fixAt(n).latitude) * k) < 0.1);
+  assert.equal(cf.chaseActive(c, t + 8000), false);
+  // A re-seat jumps.
+  cf.chaseFix(c, fixAt(500), t + 9000, 1.4, true);
+  assert.ok(Math.abs((cf.chaseAdvance(c, t + 9000).latitude - fixAt(500).latitude) * k) < 0.01);
 });
 
 test('walking pace is measured over several fixes, so GPS scatter does not speed the shark up', () => {
@@ -180,4 +192,16 @@ test('the selected coin card sits where the declutter put it, clear of the follo
   const map = read('src/components/Map.tsx');
   assert.match(map, /export const PLAYER_BODY = \{ x: -38, y: -96, w: 76, h: 102 \} as const;/);
   assert.match(map, /tagObstacleOnly: true, body: PLAYER_BODY/);
+});
+
+test('one wild compass reading is ignored; two that agree are a real spin', () => {
+  const f = hf.createHeadingFilter();
+  for (let t = 0; t < 1500; t += 33) f.push(90, t);
+  f.push(250, 1533);
+  for (let t = 1566; t < 2500; t += 33) f.push(90, t);
+  assert.ok(Math.abs(ad(90, f.value())) < 1, `glitch ignored: ${f.value()}`);
+  const g = hf.createHeadingFilter();
+  for (let t = 0; t < 1500; t += 33) g.push(0, t);
+  for (let t = 1500; t < 3000; t += 33) g.push(180, t);
+  assert.ok(Math.abs(ad(180, g.value())) < 5, `about-face taken: ${g.value()}`);
 });
