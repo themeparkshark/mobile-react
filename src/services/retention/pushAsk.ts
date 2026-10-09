@@ -16,6 +16,8 @@ async function read(): Promise<PushAskRecord> {
 
 /** May the reminders pre-prompt show right now (after a win)? */
 export async function mayAskForPush(now = Date.now()): Promise<boolean> {
+  // Dev capture only (the simulator has no push): show the card so it can be graded.
+  if (__DEV__ && process.env.EXPO_PUBLIC_RETENTION_PUSH_ASK_CAPTURE === '1') return true;
   try {
     return pushAskAllowed(await read(), await pushState(), now);
   } catch {
