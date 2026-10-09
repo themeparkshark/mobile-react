@@ -204,7 +204,6 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
               <GameButton label="More titles" icon="medal1" variant="secondary" tone="onBlue" disabled={!!busy} onPress={openStampBook}
                 accessibilityHint="Opens the Titles list in your Stamp Book" />
             )}
-            <GameButton label="Back" variant="ghost" tone="onBlue" icon="back" disabled={!!busy} onPress={() => setMode('about')} />
           </View>
         </View>
       )}

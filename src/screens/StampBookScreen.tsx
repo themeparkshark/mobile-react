@@ -121,7 +121,7 @@ export default function StampBookScreen() {
   const totals = useMemo(() => bookTotals(sections), [sections]);
   const shinyOwned = useMemo(() => sections.some(s => s.stamps.some(hasShine)), [sections]);
   // Clocks rest when nothing uses them: pulse only with a reward waiting, shine only with a rare-or-better stamp owned.
-  const fx = useBookClocks(focused && !selected && !titlesOpen && !claimAllOpen, reducedMotion, { pulseOn: totals.toClaim > 0, shineOn: shinyOwned });
+  const fx = useBookClocks(focused && !selected && !titlesOpen && !claimAllOpen, reducedMotion, { pulseOn: totals.toClaim > 0, shineOn: shinyOwned, pulseWhenIdle: totals.toClaim > 0 });
   const queue = useMemo(() => claimQueue(sections), [sections]);
   const almost = useMemo(() => almostThereList(sections, 3), [sections]);
   const accentFor = useCallback((key: string) => sections.find(s => s.key === key)?.color ?? '#2F6BFF', [sections]);
@@ -649,7 +649,7 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
                 <Animated.View style={!fx.reducedMotion && bounce}><GameIcon name="gift" size={30} /></Animated.View>
                 <Text style={styles.claimAllText} maxFontSizeMultiplier={1.2}>{toClaim === 1 ? 'Claim your reward!' : `Claim all ${toClaim}!`}</Text>
               </View>
-              <View style={styles.badge}><Text style={styles.badgeText}>{toClaim}</Text></View>
+              <View style={styles.badge}><Text style={styles.badgeText} maxFontSizeMultiplier={1}>{toClaim}</Text></View>
             </Pressable>
           </Animated.View>
         )}
@@ -840,7 +840,8 @@ const styles = StyleSheet.create({
   tabText: { fontFamily: 'Shark', fontSize: 15, color: '#FFFFFF' },
   tabCount: { fontFamily: 'Knockout', fontSize: 14, color: '#E2F6FF' },
   tabTextActive: { color: INK },
-  dot: { position: 'absolute', top: -3, right: -3, width: 14, height: 14, borderRadius: 7, backgroundColor: '#E3262E', borderWidth: 2, borderColor: '#FFFFFF' },
+  // Solid red with a dark rim, so the gift dot survives grayscale.
+  dot: { position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: 8, backgroundColor: '#E3262E', borderWidth: 2.5, borderColor: '#7A0F14' },
 
   // Paper page
   board: {

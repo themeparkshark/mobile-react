@@ -51,7 +51,7 @@ export const IDLE_MS = 30_000;
  * clock rest when nothing on the page uses it. The app going to the
  * background, or 30 s with no touch, also rests both; `poke()` wakes them.
  */
-export function useBookClocks(running: boolean, reducedMotion: boolean, needs: { pulseOn: boolean; shineOn: boolean } = { pulseOn: true, shineOn: true }): BookFx & { poke: () => void } {
+export function useBookClocks(running: boolean, reducedMotion: boolean, needs: { pulseOn: boolean; shineOn: boolean; pulseWhenIdle?: boolean } = { pulseOn: true, shineOn: true }): BookFx & { poke: () => void } {
   const shine = useSharedValue(1);
   const pulse = useSharedValue(0);
   const paused = useSharedValue(!running);
@@ -72,8 +72,9 @@ export function useBookClocks(running: boolean, reducedMotion: boolean, needs: {
     return () => sub.remove();
   }, []);
 
-  const live = running && awake && foreground;
-  const { pulseOn, shineOn } = needs;
+  // Idle rests the shine; a waiting gift keeps its slow bounce (a few small tags, cheap) so it never looks dead.
+  const { pulseOn, shineOn, pulseWhenIdle = false } = needs;
+  const live = running && foreground && (awake || (pulseOn && pulseWhenIdle));
   useEffect(() => {
     paused.value = !live;
     if (!live || reducedMotion) return;
@@ -88,14 +89,14 @@ export function useBookClocks(running: boolean, reducedMotion: boolean, needs: {
       );
     };
     const timers: ReturnType<typeof setInterval>[] = [];
-    if (shineOn) { sweep(); timers.push(setInterval(sweep, SHINE_EVERY_MS)); }
+    if (shineOn && awake) { sweep(); timers.push(setInterval(sweep, SHINE_EVERY_MS)); }
     if (pulseOn) { beat(); timers.push(setInterval(beat, PULSE_EVERY_MS)); }
     return () => {
       timers.forEach(clearInterval);
       cancelAnimation(shine); cancelAnimation(pulse);
       shine.value = 1; pulse.value = 0;
     };
-  }, [live, reducedMotion, shineOn, pulseOn, shine, pulse, paused]);
+  }, [live, awake, reducedMotion, shineOn, pulseOn, shine, pulse, paused]);
 
   const fx = useMemo(() => ({ shine, pulse, paused, scrollY, viewportH, reducedMotion }),
     [shine, pulse, paused, scrollY, viewportH, reducedMotion]);

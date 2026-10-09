@@ -52,7 +52,7 @@ import StampArt from './StampArt';
 import Foil from './Foil';
 import { Confetti, InkBurst, InkEdge, Particle, RarityBurst, SoftShadow, Sunburst } from './SlamFx';
 import {
-  bleedFraction, earnedDate, hasRewards, hasShine, progressLabel, rarityRank, remainingLine, requirement, rewardChips, rewardSpeech, whereFor,
+  bleedFraction, fillFraction, earnedDate, hasRewards, hasShine, progressLabel, rarityRank, remainingLine, requirement, rewardChips, rewardSpeech, whereFor,
   type BookStamp, type Where,
 } from './model';
 
@@ -299,7 +299,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
                 {wearFirst || justWore ? (
                   nextCount > 0 ? <GameButton label={`Next reward (${nextCount} left)`} variant="secondary" icon="gift" onPress={onNext} /> : null
                 ) : (
-                  <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Take off' : 'Wear title'} variant={wearingTitle ? 'ghost' : 'secondary'}
+                  <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Take off' : 'Wear title'} variant="secondary"
                     tone="onBlue" icon="crown" loading={equipping} onPress={onToggleTitle} />
                 )}
               </View>
@@ -342,7 +342,8 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
   const stageScale = stageScaleFor(screenH);
   const legendary = stamp.earned && stamp.rarity === 'legendary';
   const req = requirement(stamp);
-  const bleed = bleedFraction(stamp);
+  // The big art fills with colour from the bottom like its grid slot (40/100 fills 40%), with the ink line on top.
+  const bleed = stamp.earned || stamp.secret ? 0 : Math.max(bleedFraction(stamp), fillFraction(stamp.percent));
 
   const flash = useSharedValue(0);
   // A fresh slam starts in its hover pose with the thumb visible, so the hold before the drop is never an empty stage.
@@ -546,7 +547,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
         style={[styles.stage, stageScale < 1 && { transform: [{ scale: stageScale }] }]}
         onPress={stamp.earned ? () => repress(true) : undefined}
         accessibilityRole={stamp.earned ? 'button' : 'image'}
-        accessibilityLabel={`${stamp.name} stamp, ${tone.label}${stamp.earned ? '. Tap to stamp it again' : '. Locked'}`}
+        accessibilityLabel={`${stamp.name} stamp, ${tone.label}${stamp.earned ? '. Tap to stamp it again' : `. Not yet, ${progressLabel(stamp)}`}`}
       >
         {legendary && !reducedMotion && <Sunburst size={ART * 1.38} color={LEGENDARY_GOLD} running />}
         {stamp.earned && rank >= 3 && !reducedMotion && <RarityBurst size={ART * 1.3} color={tone.frame} hit={hit} />}
@@ -612,7 +613,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
 
       {!!stamp.rewards.title && !stamp.secret && (
         <TitleBox title={stamp.rewards.title} state={!stamp.earned ? 'locked' : !claimed ? 'claim' : wearingTitle ? 'wearing' : 'ready'}
-          reducedMotion={reducedMotion} showShark={stageScale >= 0.8} />
+          reducedMotion={reducedMotion} smallShark={stageScale < 0.8} />
       )}
 
       {chips.length > 0 && (
@@ -642,24 +643,28 @@ function WhereChip({ where }: { where: Where }) {
 const SHARK = require('../../../assets/images/howto/shark-happy.webp');
 
 /** The title this stamp gives, worn under a little shark the way it shows on your profile, with one line on how to get or wear it. */
-function TitleBox({ title, state, reducedMotion, showShark }: { title: string; state: 'locked' | 'claim' | 'ready' | 'wearing'; reducedMotion: boolean; showShark: boolean }) {
+function TitleBox({ title, state, reducedMotion, smallShark }: { title: string; state: 'locked' | 'claim' | 'ready' | 'wearing'; reducedMotion: boolean; smallShark: boolean }) {
   // Unlock: the pill pops with its own sparkle sound. Wear: the pill pops (the wear sound comes from the button).
   const pop = useSharedValue(1);
-  const first = useRef(true);
+  const prev = useRef(state);
   useEffect(() => {
-    if (first.current) { first.current = false; return; }
+    const was = prev.current;
+    prev.current = state;
+    if (was === state) return;
     if (state !== 'ready' && state !== 'wearing') return;
+    // The unlock sparkle belongs to claiming only: taking a title off (wearing -> ready) is quiet here.
+    if (state === 'ready' && was !== 'claim') return;
     if (state === 'ready') { playSfx('fx.reveal', 0.8); haptic('success'); }
     if (reducedMotion) return;
     pop.value = withSequence(withTiming(1.22, { duration: 140, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 9, stiffness: 260 }));
   }, [state, pop, reducedMotion]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
-  const line = state === 'wearing' ? 'On your profile now!' : state === 'ready' ? 'Yours! Tap Wear title' : state === 'claim' ? 'Claim to unlock this title' : 'Earn this stamp to unlock';
+  const line = state === 'wearing' ? 'On your profile!' : state === 'ready' ? 'New title! Wear it' : state === 'claim' ? 'Claim to unlock' : 'Earn to unlock';
   const owned = state === 'ready' || state === 'wearing';
   return (
     <View style={[styles.titleBox, owned && styles.titleBoxOwned]} accessible accessibilityLabel={`Title: ${title}. ${line}`}>
       <Animated.View style={[styles.titleWear, popStyle]}>
-        {showShark && <Image source={SHARK} style={[styles.titleShark, !owned && styles.titleSharkLocked]} contentFit="contain" />}
+        <Image source={SHARK} style={[styles.titleShark, smallShark && styles.titleSharkSmall, !owned && styles.titleSharkLocked]} contentFit="contain" />
         <View style={[styles.titlePill, !owned && styles.titlePillLocked]}>
           <GameIcon name="crown" size={18} />
           <Text style={[styles.titlePillText, !owned && styles.titlePillTextLocked]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}
@@ -786,6 +791,7 @@ const styles = StyleSheet.create({
   titleWear: { alignItems: 'center', maxWidth: '58%', flexShrink: 1 },
   titleShark: { width: 46, height: 50, marginBottom: -8 },
   titleSharkLocked: { opacity: 0.45 },
+  titleSharkSmall: { width: 32, height: 34, marginBottom: -6 },
   titlePill: {
     flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFCF3B', borderRadius: 16,
     paddingHorizontal: 9, minHeight: 32, borderWidth: 2, borderColor: '#FFFFFF', borderBottomWidth: 4, borderBottomColor: '#D99A00',

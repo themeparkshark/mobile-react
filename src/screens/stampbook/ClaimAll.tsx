@@ -109,11 +109,11 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
           <View style={styles.grid}>
             {stamps.map(s => <Gift key={s.id} stamp={s} status={status[s.id] ?? 'waiting'} reducedMotion={reducedMotion} compact={compact} />)}
           </View>
-          <View style={styles.totals} accessible accessibilityLabel={kinds.map(k => `${phase === 'done' ? got[k] : all[k]} ${k}`).join(', ')}>
+          <View style={styles.totals} accessible accessibilityLabel={kinds.map(k => `${phase === 'ready' ? all[k] : got[k]} ${k}`).join(', ')}>
             {kinds.map(k => (
               <View key={k} style={styles.total}>
                 <View style={styles.disc}><GameIcon name={TOTAL_ICON[k]} size={24} /></View>
-                <Text style={styles.totalText} maxFontSizeMultiplier={1.2}>+{compactCount(phase === 'done' ? got[k] : all[k])}</Text>
+                <Text style={styles.totalText} maxFontSizeMultiplier={1.2}>+{compactCount(phase === 'ready' ? all[k] : got[k])}</Text>
               </View>
             ))}
           </View>

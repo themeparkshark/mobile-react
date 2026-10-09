@@ -153,14 +153,15 @@ const styles = StyleSheet.create({
   progressDot: { minWidth: 56, maxWidth: 74, minHeight: 34, borderRadius: 12, backgroundColor: 'rgba(91,103,130,0.14)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   progressText: { fontFamily: 'Shark', fontSize: 13, color: MUTED_INK },
   btn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 40, minWidth: 64, paddingHorizontal: 10, borderRadius: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, minWidth: 64, paddingHorizontal: 10, borderRadius: 14,
     borderWidth: 2.5, borderColor: '#FFFFFF', justifyContent: 'center',
   },
   btnGold: { backgroundColor: GOLD, borderBottomWidth: 4, borderBottomColor: '#C98A00' },
   btnRed: { backgroundColor: '#E3262E', borderBottomWidth: 4, borderBottomColor: '#9E1218' },
-  btnQuiet: { backgroundColor: 'transparent', borderColor: 'rgba(91,103,130,0.5)', borderWidth: 2 },
+  // Take off: the same real button as on the card and the profile (white face, navy words), never a faint outline.
+  btnQuiet: { backgroundColor: '#FFFFFF', borderColor: '#9FB2C9', borderWidth: 2.5, borderBottomWidth: 4 },
   btnText: { fontFamily: 'Shark', fontSize: 15, color: '#FFFFFF' },
   btnTextGold: { color: INK },
-  btnTextQuiet: { color: MUTED_INK, fontSize: 14 },
+  btnTextQuiet: { color: INK, fontSize: 15 },
   message: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF', textAlign: 'center' },
 });

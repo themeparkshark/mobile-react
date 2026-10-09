@@ -198,7 +198,7 @@ test('clocks truly rest: JS-kicked sweeps, per-tile gate, tags mounted only wher
   assert.match(screen, /const open = useCallback\(\(stamp: BookStamp\) => \{[^]*?\}, \[\]\);/);
   assert.match(screen, /const seenRef = useRef/);
   assert.match(screen, /const SectionPage = memo\(/);
-  assert.match(screen, /useBookClocks\(focused && !selected && !titlesOpen && !claimAllOpen, reducedMotion, \{ pulseOn: totals\.toClaim > 0, shineOn: shinyOwned \}\)/);
+  assert.match(screen, /useBookClocks\(focused && !selected && !titlesOpen && !claimAllOpen, reducedMotion, \{ pulseOn: totals\.toClaim > 0, shineOn: shinyOwned, pulseWhenIdle: totals\.toClaim > 0 \}\)/);
   assert.match(screen, /buildBook\(response, prevIndex\.current\)/);
 });
 
@@ -488,4 +488,13 @@ test('v3 round 2: compact counts, colour fills up but never reads as owned, clai
   assert.ok(!/'Remove'/.test(read('src/screens/stampbook/TitlesSheet.tsx')));
   assert.match(read('src/screens/stampbook/StampCard.tsx'), /wearingTitle \? 'Take off' : 'Wear title'/);
   assert.equal(model.secretHint({ metric: 'prep_items_collected', target: 100 }), 'Hint: keep catching finds!');
+});
+
+test('round 5: the unlock sparkle plays only on claim, never on taking a title off; Take off is one real button everywhere', () => {
+  const card = read('src/screens/stampbook/StampCard.tsx');
+  assert.match(card, /if \(state === 'ready' && was !== 'claim'\) return;/);
+  assert.match(card, /wearingTitle \? 'Take off' : 'Wear title'\} variant="secondary"/);
+  assert.ok(!/'Remove'/.test(read('src/screens/stampbook/TitlesSheet.tsx')));
+  // The header title stops growing at 1.2x so it never outgrows its art at the largest text size.
+  assert.match(read('src/components/Topbar/TopbarText.tsx'), /maxFontSizeMultiplier=\{1\.2\}/);
 });
