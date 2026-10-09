@@ -52,14 +52,15 @@ function ChipRow({ items, value, small, onChange, leading, endInset = 0 }: {
   useEffect(() => { reveal(value); }, [value, reveal]);
   const [atEnd, setAtEnd] = useState(false);
   return (
-    <View>
+    // The row ends before the docked Back-to-top button, so no chip ever sits under it.
+    <View style={{ marginRight: endInset }}>
       <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" scrollEventThrottle={64}
         onScroll={e => {
           const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
           const end = contentOffset.x + layoutMeasurement.width >= contentSize.width - 8;
           if (end !== atEnd) setAtEnd(end);
         }}
-        contentContainerStyle={{ paddingLeft: 14, paddingRight: 14 + endInset, paddingVertical: 2, gap: 8, alignItems: 'center' }}>
+        contentContainerStyle={{ paddingLeft: 14, paddingRight: 14, paddingVertical: 2, gap: 8, alignItems: 'center' }}>
         {leading}
         {items.map(item => (
           <Chip key={item.key} label={item.label} icon={item.icon} on={item.key === value} small={small}
