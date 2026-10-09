@@ -37,7 +37,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Canvas, Group, Path, Skia } from '@shopify/react-native-skia';
+import { Canvas, Group, Path, Skia, useImage } from '@shopify/react-native-skia';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -59,7 +59,7 @@ import { TryCard } from './TryCard';
 import { comboCall } from './comboCallout';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { MemoryCard, makeCardValues, type CardValues, type MemoryCardHandle, type ShimmerState } from './MemoryCard';
+import { MemoryCard, makeCardValues, sharedReady, type CardValues, type MemoryCardHandle, type SharedSheets, type ShimmerState } from './MemoryCard';
 import { deckById, deckIdForRideName, type Deck } from './decks';
 import {
   ENGINE_VERSION,
@@ -539,6 +539,15 @@ export default function MemoryGame({
   // ---------------------------------------------------------------------------
   // Board setup
   // ---------------------------------------------------------------------------
+  // The deck's face sheets, decoded once and shared by all 16 cards (Skia).
+  const mainSheetImg = useImage((deck.faceSheet ?? null) as number | null);
+  const extraSheetImg = useImage((deck.extraFaceSheet ?? null) as number | null);
+  const sharedSheets = useMemo<SharedSheets>(() => ({
+    main: deck.faceSheet != null ? { src: deck.faceSheet, img: mainSheetImg } : null,
+    extra: deck.extraFaceSheet != null ? { src: deck.extraFaceSheet, img: extraSheetImg } : null,
+  }), [deck.faceSheet, deck.extraFaceSheet, mainSheetImg, extraSheetImg]);
+  const sheetsReady = sharedReady(sharedSheets);
+
   const cardFaceFor = useCallback((id: number) => {
     const f = faces[id];
     return f == null ? EMPTY_FACE : faceFor(deck, f);
@@ -2361,8 +2370,10 @@ export default function MemoryGame({
                   w={g.cw}
                   h={g.ch}
                   back={CARD_BACK}
-                  preloadSheet={deck.faceSheet}
-                  preloadExtraSheet={deck.extraFaceSheet}
+                  shared={sharedSheets}
+                  // Until the shared sheets are decoded, fall back to per-card hidden preloads.
+                  preloadSheet={sheetsReady ? undefined : deck.faceSheet}
+                  preloadExtraSheet={sheetsReady ? undefined : deck.extraFaceSheet}
                   face={cardFaceFor(id)}
                   goldBack={faces[id] === FACE_GOLD}
                   reducedMotion={reducedMotion}

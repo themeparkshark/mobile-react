@@ -40,6 +40,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle, Ellipse, Line, Path } from 'react-native-svg';
+import { Canvas, Group, Image as SkImg, rect, rrect, type SkImage } from '@shopify/react-native-skia';
 import { MM } from './theme';
 
 const GRAIN = require('../../assets/games/memory/v8/grain.png');
@@ -124,6 +125,25 @@ export interface MemoryCardHandle {
   taken: () => void;
 }
 
+/** Decoded face sheets shared by a whole board, keyed by their require() source. */
+export interface SharedSheets {
+  main: { src: ImageSourcePropType; img: SkImage | null } | null;
+  extra: { src: ImageSourcePropType; img: SkImage | null } | null;
+}
+
+/** The shared decoded sheet for a face, or null when it is not ready. */
+export function sharedSheetFor(shared: SharedSheets | undefined, sheet: ImageSourcePropType | undefined): SkImage | null {
+  if (!shared || sheet == null) return null;
+  if (shared.main && shared.main.src === sheet) return shared.main.img;
+  if (shared.extra && shared.extra.src === sheet) return shared.extra.img;
+  return null;
+}
+
+/** True when every sheet this board can show is decoded and shared. */
+export function sharedReady(shared: SharedSheets | undefined): boolean {
+  return !!shared && (!shared.main || !!shared.main.img) && (!shared.extra || !!shared.extra.img);
+}
+
 interface Props {
   w: number;
   h: number;
@@ -137,6 +157,13 @@ interface Props {
   preloadSheet?: ImageSourcePropType;
   /** The deck's second (extra) face sheet, preloaded the same way. */
   preloadExtraSheet?: ImageSourcePropType;
+  /**
+   * The deck's face sheets, decoded once per board (MemoryGame useImage) and
+   * shared by every card. When present, a card draws its face from these
+   * with one small Skia canvas (mounted at the deal), so no card holds a
+   * full-size sheet of its own and no face waits on a decode.
+   */
+  shared?: SharedSheets;
   goldBack?: boolean;
   reducedMotion: boolean;
   sv: CardValues;
@@ -147,7 +174,7 @@ interface Props {
 const INK = '#0B5CAD';
 
 export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function MemoryCard(
-  { w, h, back, face, preloadSheet, preloadExtraSheet, goldBack, reducedMotion, sv, shimmer, id },
+  { w, h, back, face, preloadSheet, preloadExtraSheet, shared, goldBack, reducedMotion, sv, shimmer, id },
   ref,
 ) {
   const v = useMemo(() => ({
@@ -461,6 +488,27 @@ export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function Memo
         </View>
       );
     }
+    // Shared path: one small canvas per card, drawing from the board's
+    // decoded sheets. The canvas is mounted from the deal on (empty until
+    // the face is known), so a flip only changes what it draws.
+    if (sharedReady(shared) && !failed) {
+      const img = face.sheet != null && face.slot != null ? sharedSheetFor(shared, face.sheet) : null;
+      const cols = face.cols ?? 4;
+      const rows = face.rows ?? 2;
+      const slot = face.slot ?? 0;
+      const clip = rrect(rect(0, 0, w, h), r, r);
+      return (
+        <View style={[size, styles.clip, { backgroundColor: MM.cream }]}>
+          <Canvas style={{ width: w, height: h }} pointerEvents="none">
+            {img ? (
+              <Group clip={clip}>
+                <SkImg image={img} fit="fill" x={-(slot % cols) * w} y={-Math.floor(slot / cols) * h} width={w * cols} height={h * rows} />
+              </Group>
+            ) : null}
+          </Canvas>
+        </View>
+      );
+    }
     // Stable sheet Images per card, mounted at the deal (hidden) for both of
     // the deck's sheets; on flip only position and opacity change, so a face
     // is never waiting on a decode (no blank cream frame mid-flip).
@@ -500,7 +548,7 @@ export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function Memo
     }
     return <View style={[size, styles.plate, { backgroundColor: MM.cream }]} />;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [face, preloadSheet, preloadExtraSheet, failed, w, h]);
+  }, [face, preloadSheet, preloadExtraSheet, shared, failed, w, h]);
 
   const pip = Math.max(8, Math.round(w * 0.12));
   return (

@@ -79,9 +79,36 @@ test('three crowns never read as "not perfect"; both face sheets are preloaded',
   assert.match(src, /data\.crownHint \? <Reveal show=\{step >= 3\}>/);
   const card = fs.readFileSync(path.join(root, 'src/games/memory/MemoryCard.tsx'), 'utf8');
   assert.match(card, /if \(preloadExtraSheet != null\) sheets\.push/);
-  assert.match(game, /preloadExtraSheet=\{deck\.extraFaceSheet\}/);
+  assert.match(game, /preloadExtraSheet=\{sheetsReady \? undefined : deck\.extraFaceSheet\}/);
 });
 
 test('the flame pill hides while the results card is up', () => {
   assert.match(game, /\{resultData \? null : <ChainPlate ref=\{chainPlate\}/);
+});
+
+test('faces draw from one shared decoded sheet per board, with a preload fallback until it is ready', () => {
+  const card = fs.readFileSync(path.join(root, 'src/games/memory/MemoryCard.tsx'), 'utf8');
+  assert.match(game, /const mainSheetImg = useImage\(/);
+  assert.match(game, /const extraSheetImg = useImage\(/);
+  assert.match(game, /shared=\{sharedSheets\}/);
+  assert.match(card, /if \(sharedReady\(shared\) && !failed\) \{/);
+  assert.match(card, /<SkImg image=\{img\} fit="fill"/);
+  // The canvas is mounted from the deal on, even before the face is known.
+  assert.match(card, /\{img \? \(\s*<Group clip=\{clip\}>/);
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const stub = new Proxy({}, { get: () => () => null });
+  const m = loadTs('src/games/memory/MemoryCard.tsx', {
+    react: { forwardRef: (f) => f, memo: (f) => f, useImperativeHandle() {}, useMemo: (f) => f(), useState: (v) => [v, () => {}] },
+    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'F' },
+    'react-native': { StyleSheet: { create: (s) => s, absoluteFill: {} }, Image: 'Image', Text: 'Text', View: 'View' },
+    'react-native-reanimated': { __esModule: true, default: { View: 'AView', createAnimatedComponent: (c) => c }, Easing: stub, cancelAnimation() {}, interpolate: () => 0, useAnimatedProps: () => ({}), useAnimatedStyle: () => ({}), useSharedValue: (v) => ({ value: v }), withDelay: (d, v) => v, withRepeat: (v) => v, withSequence: (...v) => v[0], withSpring: (v) => v, withTiming: (v) => v, makeMutable: (v) => ({ value: v }) },
+    'react-native-svg': { __esModule: true, default: 'Svg', Circle: 'C', Ellipse: 'E', Line: 'L', Path: 'P' },
+    '@shopify/react-native-skia': { Canvas: 'Canvas', Group: 'Group', Image: 'SkImg', rect: () => ({}), rrect: () => ({}) },
+  });
+  const A = 1, B = 2;
+  const ready = { main: { src: A, img: { id: 'a' } }, extra: { src: B, img: { id: 'b' } } };
+  assert.equal(m.sharedReady(ready), true);
+  assert.equal(m.sharedReady({ main: { src: A, img: null }, extra: null }), false);
+  assert.equal(m.sharedSheetFor(ready, B).id, 'b');
+  assert.equal(m.sharedSheetFor(ready, 9), null);
 });
