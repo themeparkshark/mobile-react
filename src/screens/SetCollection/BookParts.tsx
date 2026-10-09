@@ -218,7 +218,8 @@ export function BookHeader({ set, onFocus, focusBusy, stamp, onClaim, busyId }: 
   const [badgeFailed, setBadgeFailed] = useState(false);
   useEffect(() => { setBadgeFailed(false); }, [set.slug]);
   // The header says only what no row says: a prize is waiting, or the set is done. "N to go" lives on its prize row.
-  const pill = ready ? 'Prize ready!' : null;
+  // CLAIM PRIZE sits right under the count, so no extra "ready" pill is needed.
+  const pill: string | null = null;
   const complete = finished || set.isComplete;
   const readyEntry = prizeList(set).find(entry => entry.reward.status === 'claimable') ?? null;
   return (
@@ -447,7 +448,7 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
             <Text style={styles.wearingText} maxFontSizeMultiplier={1.3}>Wearing</Text>
           </Pressable>
         )}
-        <View style={[styles.state, styles.stateDone]}><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
+        <View style={[styles.state, styles.stateDone, styles.stateRow]}><GameIcon name="check" size={16} /><Text style={styles.stateText} maxFontSizeMultiplier={1.3}>Got it!</Text></View>
       </View>
     );
   }
@@ -472,10 +473,10 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
               </View>
             )}
           </View>
-          {state.kind === 'locked' && hero ? (
+          {hero ? (
             <View style={{ gap: 6 }}>
               <PrizeMini reward={reward} />
-              {!!reward.title && (
+              {!!reward.title && state.kind === 'locked' && (
                 <View style={[styles.chip, styles.chipTitle, { alignSelf: 'flex-start' }]}>
                   <GameIcon name="crown" size={22} />
                   <Text style={[styles.chipText, styles.chipTitleText]} numberOfLines={1} maxFontSizeMultiplier={1.3}>Title: {reward.title}</Text>
@@ -538,7 +539,7 @@ export function FindsHeader({ set, extras, onExtras }: {
     <View style={styles.finds}>
       <SectionTitle icon="chest" text="Your finds" right={extras > 0 && onExtras ? (
         <SpringPress onPress={onExtras} accessibilityLabel={`${extras} ${extras === 1 ? 'extra' : 'extras'}. Give one to a friend.`} style={styles.extras}>
-          <GameIcon name="gift" size={22} />
+          <GameIcon name="heart" size={22} />
           <Text style={styles.extrasText} maxFontSizeMultiplier={1.3}>{extras} {extras === 1 ? 'extra' : 'extras'} to give</Text>
         </SpringPress>
       ) : null} />
@@ -742,6 +743,7 @@ const styles = StyleSheet.create({
   // Settled, not a button: cream with a gold edge.
   stateDone: { backgroundColor: '#fff8e4', borderWidth: 2, borderColor: '#f1dca0' },
   stateText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy },
+  stateRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   stateDoneText: { color: BROWN },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chipTitle: { backgroundColor: '#fff3c4', borderColor: BRAND.gold },
@@ -777,11 +779,13 @@ const styles = StyleSheet.create({
   finds: { paddingHorizontal: 16, marginTop: 0 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, minHeight: 46 },
   sectionText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy },
+  // Extras are for sharing, never a prize: Alex's heart (not the gift, which means "prize ready" on this page)
+  // on a white button with a navy outline, so it never reads as a gold CLAIM.
   extras: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, minHeight: 46, borderRadius: 23,
-    backgroundColor: BRAND.gold, borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 5, borderBottomColor: BRAND.goldLip,
+    backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 5,
   },
-  extrasText: { fontFamily: 'Shark', fontSize: 16, color: BROWN },
+  extrasText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
   key: { flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 2 },
   keyItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   keySticker: {

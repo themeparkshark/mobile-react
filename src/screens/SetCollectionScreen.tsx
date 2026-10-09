@@ -726,12 +726,12 @@ function SparesSheet({ visible, items, onClose, onShare }: {
         <View style={styles.sparesCard} accessibilityViewIsModal>
           <Text style={styles.sparesTitle} accessibilityRole="header">Your extras</Text>
           <View style={styles.sparesHint}>
-            <GameIcon name="gift" size={24} />
+            <GameIcon name="heart" size={24} />
             <Text style={styles.sparesBody}>Tap one to give it to a friend!</Text>
           </View>
           {/* Whole rows only (two at a time) and a soft fade at the edge, so it plainly scrolls. */}
           <View style={{ alignSelf: 'stretch' }}>
-          <ScrollView style={{ maxHeight: 268, alignSelf: 'stretch' }} contentContainerStyle={styles.sparesGrid}>
+          <ScrollView style={{ maxHeight: 316, alignSelf: 'stretch' }} contentContainerStyle={styles.sparesGrid}>
             {list.map(item => (
               <Pressable key={item.id} accessibilityRole="button" disabled={!onShare}
                 accessibilityLabel={`${item.name}, ${item.spares} extra. Give one to a friend.`}
@@ -805,7 +805,7 @@ const styles = StyleSheet.create({
   sparesBody: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.navy, textAlign: 'center', flexShrink: 1 },
   sparesGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, paddingVertical: 6 },
   spareTile: { width: 76, height: 122, alignItems: 'center' },
-  sparesFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 28 },
+  sparesFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 44 },
   spareName: { fontFamily: 'Knockout', fontSize: 14, lineHeight: 16, color: BRAND.navy, textAlign: 'center', marginTop: 8 },
   spareArtWrap: { width: 72, height: 72, justifyContent: 'center' },
   sparesArt: { width: 54, height: 54 },

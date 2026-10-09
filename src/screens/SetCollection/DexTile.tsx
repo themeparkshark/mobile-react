@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   newTag: { position: 'absolute', top: -6, left: -6 },
   shine: { position: 'absolute', width: 60, left: '35%' },
   rim: { ...StyleSheet.absoluteFillObject, borderRadius: 18, borderWidth: 4, borderColor: '#ffe07a' },
-  plate: { alignSelf: 'center', marginTop: 5, paddingHorizontal: 8, height: 20, borderRadius: 10, backgroundColor: '#f3e7c6', justifyContent: 'center' },
+  plate: { alignSelf: 'center', marginTop: 4, paddingHorizontal: 8, height: 20, borderRadius: 10, backgroundColor: '#f3e7c6', justifyContent: 'center' },
   plateText: { fontFamily: 'Knockout', fontSize: 14, color: '#a8925c' },
   name: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 17, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
   foil: { position: 'absolute', top: 4, right: 4 },
