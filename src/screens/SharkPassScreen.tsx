@@ -64,6 +64,8 @@ const SEASON_ART: Record<string, number> = {
   'bd-snow-plaza': require('../../assets/images/sharkpass/bd-snow-plaza.webp'),
   'bd-northern-lights': require('../../assets/images/sharkpass/bd-northern-lights.webp'),
   'aurora-crown': require('../../assets/images/sharkpass/aurora-crown.webp'),
+  'cozy-mittens': require('../../assets/images/sharkpass/cozy-mittens.webp'),
+  'gingerbread-shark': require('../../assets/images/sharkpass/gingerbread-shark.webp'),
 };
 const EMBLEM = require('../../assets/images/sharkpass/pass-emblem.webp');
 const SCENE = require('../../assets/images/sharkpass/scene-northern-lights.webp');
