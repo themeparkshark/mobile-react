@@ -65,15 +65,26 @@ export default function MemberStage() {
     return () => cancelAnimation(spin);
   }, [still, spin]);
   const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
+  // A slow idle bob (UI thread; still under Reduce Motion).
+  const bob = useSharedValue(0);
+  useEffect(() => {
+    if (still) return undefined;
+    bob.value = withRepeat(withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.sin) }), -1, true);
+    return () => cancelAnimation(bob);
+  }, [still, bob]);
+  const bobStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -bob.value * 6 }] }));
   const base = player?.inventory as InventoryType | undefined;
   const look = base?.skin_item ? (piece ? withPiece(base, piece) : base) : null;
 
   return (
     <View style={st.stage} accessible accessibilityLabel={piece ? `Your shark wearing ${piece.name}, a VIP piece from the Secret Shop.` : 'Your shark as a VIP.'}>
       <Animated.Image source={RAYS} style={[st.rays, rays]} resizeMode="contain" />
-      <View style={st.disc} />
+      {/* A gold-and-navy podium with a VIP plaque: the member's stage. */}
+      <View style={st.podiumBase} />
+      <View style={st.podiumTop} />
+      <View style={st.plaque}><GameIcon name="member" size={22} /><Text maxFontSizeMultiplier={1.1} style={st.plaqueText}>VIP</Text></View>
       {look ? (
-        <Animated.View entering={still ? undefined : ZoomIn.springify().damping(12)} style={st.card}>
+        <Animated.View entering={still ? undefined : ZoomIn.springify().damping(12)} style={[st.card, bobStyle]}>
           <Playercard inventory={look} showBackground={false} style={StyleSheet.absoluteFill} shadow fxLod="full" fxSound={false} />
         </Animated.View>
       ) : (
@@ -81,7 +92,6 @@ export default function MemberStage() {
       )}
       {/* No Secret piece to show: the VIP look is a gold crown on your own shark, never a bare stage. */}
       {!piece && look && <View style={st.crown} pointerEvents="none"><GameIcon name="crown" size={70} /></View>}
-      <View style={st.badge}><GameIcon name="member" size={34} /></View>
       {piece && (
         <View style={st.caption}>
           <GameIcon name="crown" size={18} />
@@ -95,13 +105,18 @@ export default function MemberStage() {
 const st = StyleSheet.create({
   stage: { width: 300, height: 232, alignItems: 'center', justifyContent: 'flex-end', marginTop: 2 },
   rays: { position: 'absolute', top: -60, width: 360, height: 360, opacity: 0.35 },
-  disc: { position: 'absolute', bottom: 14, width: 190, height: 40, borderRadius: 95, backgroundColor: '#ffcf3b',
-    borderWidth: 4, borderColor: '#ffffff', borderBottomWidth: 7, borderBottomColor: '#d99a00' },
-  card: { width: 210, height: 236, marginBottom: -8 },
+  podiumBase: { position: 'absolute', bottom: 0, width: 210, height: 44, borderRadius: 105, backgroundColor: '#0b3a75',
+    borderWidth: 4, borderColor: '#ffffff' },
+  podiumTop: { position: 'absolute', bottom: 18, width: 186, height: 36, borderRadius: 93, backgroundColor: '#ffcf3b',
+    borderWidth: 4, borderColor: '#ffffff', borderBottomWidth: 6, borderBottomColor: '#d99a00' },
+  plaque: { position: 'absolute', bottom: 2, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#05346e', borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 1, borderWidth: 2, borderColor: '#ffcf3b' },
+  plaqueText: { fontFamily: FONT.display, fontSize: 14, color: '#ffcf3b' },
+  card: { width: 210, height: 236, marginBottom: 14 },
   fallback: { width: 150, height: 150, marginBottom: 30 },
   crown: { position: 'absolute', top: 2, alignSelf: 'center', marginLeft: 26, transform: [{ rotate: '-10deg' }] },
   badge: { position: 'absolute', right: 58, top: 30, transform: [{ rotate: '12deg' }] },
-  caption: { position: 'absolute', bottom: -6, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#05346e',
+  caption: { position: 'absolute', top: 0, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#05346e',
     borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 2, borderColor: '#ffcf3b' },
   captionText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
 });

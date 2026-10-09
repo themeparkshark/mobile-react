@@ -11,6 +11,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { openExternal, openLegal } from '../services/external';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -187,7 +188,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   return (
     <View style={s.root}>
       <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
-      <View style={[StyleSheet.absoluteFill, s.tint]} />
+      <LinearGradient pointerEvents="none" colors={['rgba(9,90,170,0.82)', 'rgba(7,72,150,0.9)', 'rgba(5,52,110,0.95)']} style={StyleSheet.absoluteFill} />
       <SafeAreaView style={{ flex: 1 }}>
         {/* The X sits in its own row, so nothing ever scrolls under it. */}
         <View style={s.closeRow}>
@@ -409,20 +410,20 @@ const s = StyleSheet.create({
   radioOn: { borderColor: '#d99a00' },
   radioDot: { position: 'absolute', top: 2, left: 2, width: 10, height: 10, borderRadius: 5, backgroundColor: '#d99a00' },
   planPer: { fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c', marginTop: 1 },
-  memberNote: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, backgroundColor: 'rgba(5,52,110,0.6)',
+  memberNote: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, backgroundColor: 'rgba(5,40,90,0.55)',
     borderRadius: 16, padding: 12, borderWidth: 2, borderColor: '#ffcf3b' },
   memberNoteText: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: '#fff', lineHeight: 20 },
-  giftBox: { width: '100%', marginTop: 16, backgroundColor: '#fff8e4', borderRadius: 18, padding: 12, gap: 8, borderWidth: 3, borderColor: '#05346e' },
+  giftBox: { width: '100%', marginTop: 16, backgroundColor: 'rgba(5,40,90,0.55)', borderRadius: 18, padding: 12, gap: 8, borderWidth: 2, borderColor: '#ffcf3b' },
   giftRow: { flexDirection: 'row', gap: 10 },
   giftBtn: { flex: 1, alignItems: 'center', gap: 2, backgroundColor: '#ffffff', borderRadius: 16, paddingVertical: 10, borderWidth: 3, borderColor: '#ffcf3b', borderBottomWidth: 6, borderBottomColor: '#d99a00' },
   giftName: { fontFamily: 'Shark', fontSize: 16, color: '#09268f' },
   giftPrice: { fontFamily: 'Shark', fontSize: 20, color: '#09268f' },
   giftNote: { fontFamily: 'Knockout', fontSize: 13, color: '#3d5f8c' },
-  grownUps: { width: '100%', marginTop: 16, backgroundColor: '#fff8e4', borderRadius: 18, padding: 12, gap: 6,
-    borderWidth: 3, borderColor: '#05346e' },
-  grownUpsHead: { fontFamily: 'Shark', fontSize: 16, color: '#05346e', letterSpacing: 0.6 },
+  grownUps: { width: '100%', marginTop: 16, backgroundColor: 'rgba(5,40,90,0.55)', borderRadius: 18, padding: 12, gap: 6,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
+  grownUpsHead: { fontFamily: 'Shark', fontSize: 16, color: '#ffffff', letterSpacing: 0.6 },
   grownUpRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  grownUpText: { flex: 1, fontFamily: 'Knockout', fontSize: 15, color: '#05346e', lineHeight: 19 },
+  grownUpText: { flex: 1, fontFamily: 'Knockout', fontSize: 15, color: '#e2f6ff', lineHeight: 19 },
   guest: { width: '100%', marginTop: 18, alignItems: 'center', gap: 12 },
   guestText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.white, textAlign: 'center' },
   plans: { flexDirection: 'row', gap: 10, marginTop: 18 },
