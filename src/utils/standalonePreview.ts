@@ -38,6 +38,7 @@ export function isStandalonePreviewMode(): boolean {
     process.env.EXPO_PUBLIC_TUTORIAL_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_INVENTORY_PREVIEW === '1'
     || process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1'
+    || process.env.EXPO_PUBLIC_SOCIAL_PREVIEW === '1'
     || process.env.EXPO_PUBLIC_RIDE_LOG_SUCCESS_PREVIEW === '1'
     || process.env.EXPO_PUBLIC_RIDE_LOG_PREVIEW === '1'
     || process.env.EXPO_PUBLIC_RIDE_BATCH_PREVIEW === '1'

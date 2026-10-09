@@ -5,7 +5,7 @@
  * for topics. Every press springs on the UI thread and has a Reduce Motion path.
  */
 import { Image } from 'expo-image';
-import { memo, useEffect, useState, type ReactNode } from 'react';
+import { memo, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   FadeIn,
@@ -16,6 +16,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import * as Haptics from '../../helpers/haptics';
 import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
@@ -45,6 +46,9 @@ export const INK_SOFT = BRAND.navySoft;
 
 // ── Press with a spring ────────────────────────────────────────────────
 
+/** Every Social tap clicks (Chris's tap.mp3, quiet) unless the action plays its own sound. */
+export const PRESS_SOUND = require('../../../assets/sounds/tap.mp3');
+
 /** The Pressable itself scales, so layout styles (flex, absolute) apply to the touch area. */
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -55,6 +59,7 @@ export function PressScale({
   style,
   scaleTo = 0.95,
   haptic = 'light',
+  sound = 'tap',
   disabled,
   accessibilityLabel,
   accessibilityHint,
@@ -69,6 +74,8 @@ export function PressScale({
   readonly style?: StyleProp<ViewStyle>;
   readonly scaleTo?: number;
   readonly haptic?: 'light' | 'medium' | 'none';
+  /** 'none' when the action plays its own sound (a sheet opening, a reaction, a send). */
+  readonly sound?: 'tap' | 'none';
   readonly disabled?: boolean;
   readonly accessibilityLabel?: string;
   readonly accessibilityHint?: string;
@@ -78,6 +85,7 @@ export function PressScale({
   readonly testID?: string;
 }) {
   const reduced = useUiReducedMotion();
+  const { playSound } = useContext(SoundEffectContext);
   const scale = useSharedValue(1);
   const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
@@ -99,6 +107,7 @@ export function PressScale({
       }}
       onPress={() => {
         if (haptic !== 'none') void Haptics.impactAsync(haptic === 'medium' ? 'medium' : 'light');
+        if (sound === 'tap') playSound(PRESS_SOUND, { volume: 0.4 });
         onPress?.();
       }}
       onLongPress={onLongPress}
@@ -232,6 +241,7 @@ function ReactionFace({
       onPress={onPress}
       onLongPress={() => setNamed(true)}
       disabled={disabled}
+      sound="none"
       scaleTo={0.85}
       accessibilityLabel={`${type.name}${count ? `, ${count}` : ''}`}
       accessibilityHint={mine ? 'Takes your reaction back' : 'Adds your reaction'}
@@ -359,6 +369,7 @@ export function GoldPill({
       onPress={onPress}
       disabled={disabled || loading}
       haptic="medium"
+      sound="none"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: Boolean(disabled || loading) }}
       style={[styles.gold, small && styles.goldSmall, ((disabled || dimmed) && !loading) && styles.goldDisabled]}

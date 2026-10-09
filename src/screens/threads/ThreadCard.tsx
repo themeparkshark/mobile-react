@@ -102,6 +102,7 @@ function ThreadCard({
 
         {player && (
           <PressScale
+            sound="none"
             onPress={() => onMenu(thread)}
             style={styles.more}
             hitSlop={10}

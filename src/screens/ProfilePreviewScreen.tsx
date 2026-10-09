@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { AuthContext } from '../context/AuthProvider';
 import { InventoryType } from '../models/inventory-type';
 import { PlayerType } from '../models/player-type';
@@ -40,10 +40,27 @@ export const previewPlayer: PlayerType = {
   title: process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE_SHEET === 'undo' ? null : 'Churro Finder',
 };
 
+// EXPO_PUBLIC_XP_DEMO=1: XP gains every 2.6 s on a loop, a level up every third or fourth gain, for captures.
+const XP_DEMO_STEP_MS = 2600;
+const neededFor = (level: number) => 1000 + level * 400;
+
 export default function ProfilePreviewScreen() {
   const auth = useContext(AuthContext);
+  const [player, setPlayer] = useState(previewPlayer);
+  useEffect(() => {
+    if (process.env.EXPO_PUBLIC_XP_DEMO !== '1') return undefined;
+    const timer = setInterval(() => setPlayer((current) => {
+      const level = current.experience_level.level;
+      const needed = current.experience_level.experience;
+      const next = (current.experience ?? 0) + Math.round(needed * 0.3);
+      return next < needed
+        ? { ...current, experience: next }
+        : { ...current, experience: next - needed, experience_level: { id: level + 1, level: level + 1, experience: neededFor(level + 1) } };
+    }), XP_DEMO_STEP_MS);
+    return () => clearInterval(timer);
+  }, []);
   return (
-    <AuthContext.Provider value={{ ...auth, player: previewPlayer, isReady: true }}>
+    <AuthContext.Provider value={{ ...auth, player, isReady: true }}>
       <ProfileScreen />
     </AuthContext.Provider>
   );

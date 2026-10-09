@@ -18,7 +18,6 @@ import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchFeed, fetchPinned } from '../api/endpoints/social';
 import Avatar from '../components/Avatar';
-import PlayerButtons from '../components/PlayerButtons';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -26,7 +25,6 @@ import Wrapper from '../components/Wrapper';
 import { isTeam, TEAMS } from '../constants/teams';
 import { outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
 import { AuthContext } from '../context/AuthProvider';
-import { SoundEffectContext } from '../context/SoundEffectProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
@@ -34,6 +32,8 @@ import type { ThreadType } from '../models/thread-type';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import ChestButton from './threads/ChestButton';
+import ShortcutTiles from './threads/ShortcutTiles';
 import Composer from './threads/Composer';
 import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import SocialHelp from './threads/SocialHelp';
@@ -44,13 +44,10 @@ import CleanScreenBackground, { CLEAN } from '../components/CleanScreenBackgroun
 import { COMPOSE_ART, PressScale } from './threads/socialLook';
 import { DEFAULT_PROMPT, mergePage, type FeedTab } from './threads/socialModel';
 
-const TAB_SOUND = require('../../assets/sounds/tap.mp3');
-
 type Status = 'loading' | 'ready' | 'error';
 
 export default function SocialScreen({ navigation }: { navigation: { navigate: (screen: string, params?: object) => void; addListener?: (event: string, cb: () => void) => () => void } }) {
   const { player } = useContext(AuthContext);
-  const { playSound } = useContext(SoundEffectContext);
   const { checkPermission } = usePermissions();
   const { urls } = useCrumbs();
   const reduced = useUiReducedMotion();
@@ -143,7 +140,6 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
       listRef.current?.scrollToOffset({ offset: 0, animated: !reduced });
       return;
     }
-    playSound(TAB_SOUND, { volume: 0.45 });
     setFreshId(null);
     setTab(next);
   };
@@ -225,7 +221,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   const header = (
     <View>
       {player ? (
-        <PressScale onPress={() => void openComposer()} scaleTo={0.97} haptic="medium" style={styles.compose} accessibilityLabel="Write a post" accessibilityHint="Opens the new post screen">
+        <PressScale onPress={() => void openComposer()} scaleTo={0.97} haptic="medium" sound="none" style={styles.compose} accessibilityLabel="Write a post" accessibilityHint="Opens the new post screen">
           <Avatar player={player as ThreadType['player']} size="sm" />
           <View style={styles.composeField}>
             <Text style={styles.composeText} numberOfLines={1}>{DEFAULT_PROMPT}</Text>
@@ -289,10 +285,8 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <PressScale onPress={() => setShortcuts(true)} accessibilityLabel="More: VIP, Merch, Pin Trading, Coin Codes" hitSlop={8} style={styles.more}>
-            <GameIcon name="chest" size={36} />
-            <Text style={styles.moreText}>{player && !player.is_subscribed ? 'VIP' : 'More'}</Text>
-          </PressScale>
+          <ChestButton open={shortcuts} onPress={() => setShortcuts(true)} accessibilityLabel="More: VIP, Merch, Pin Trading, Coin Codes"
+            label={player && !player.is_subscribed ? 'VIP' : 'More'} />
         </TopbarColumn>
         <TopbarColumn><TopbarText>Social</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false}><SocialHelp /></TopbarColumn>
@@ -368,8 +362,8 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         <View style={[styles.shortcuts, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.handle} />
           <Text style={styles.shortcutsTitle}>More Shark fun</Text>
-          <PlayerButtons
-            buttons={[
+          <ShortcutTiles
+            tiles={[
               {
                 image: require('../../assets/images/screens/social/pin_swaps.png'),
                 onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.TradePins)) navigation.navigate('PinSwaps'); }),
@@ -443,8 +437,6 @@ const styles = StyleSheet.create({
   tabOn: { backgroundColor: BRAND.gold, borderWidth: 1.5, borderBottomWidth: 3, borderColor: BRAND.goldLip },
   tabText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navySoft, marginTop: 3 },
   tabTextOn: { color: '#7a3d00' },
-  more: { alignItems: 'center', minWidth: 48 },
-  moreText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.white, marginTop: -2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
   state: { marginTop: 40, paddingHorizontal: 24 },
   shortcuts: {
     backgroundColor: BRAND.cream,
