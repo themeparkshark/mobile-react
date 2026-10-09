@@ -161,9 +161,13 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
             <GameButton label="Change title" tone="onBlue" icon="swap" disabled={!!busy}
               onPress={() => setMode('change')} accessibilityHint="Shows the titles you have and where to get more" />
             {!!worn && (
-              <GameButton label={busy === 'remove' ? 'Saving...' : 'Take off'} icon="close" variant="secondary" size="compact" tone="onBlue"
-                loading={busy === 'remove'} disabled={!!busy || earned === null} onPress={() => { void remove(); }}
-                accessibilityLabel="Take off title" accessibilityHint="Takes the title off your profile" />
+              // The same quiet white pill as the Stamp Book's Take off: one gold button per sheet.
+              <Pressable onPress={() => { void remove(); }} disabled={!!busy || earned === null} hitSlop={6}
+                accessibilityRole="button" accessibilityLabel="Take off title" accessibilityHint="Takes the title off your profile"
+                style={({ pressed }) => [styles.takeOff, (busy || earned === null) && styles.removeOff, pressed && styles.rowPressed]}>
+                <GameIcon name="close" size={18} />
+                <Text style={styles.takeOffText} maxFontSizeMultiplier={1.4}>{busy === 'remove' ? 'Saving...' : 'Take off'}</Text>
+              </Pressable>
             )}
           </View>
         </View>
@@ -244,5 +248,10 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center' },
   pair: { flexDirection: 'row', gap: 8, alignSelf: 'stretch', justifyContent: 'center' },
   pairItem: { flex: 1 },
+  takeOff: {
+    alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 18, borderRadius: 14,
+    backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: '#9FB2C9', borderBottomWidth: 4,
+  },
+  takeOffText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
   rowMeaning: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 14, marginTop: 2 },
 });
