@@ -23,8 +23,6 @@ import Daily3MapButton from './Daily3MapButton';
 import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
 import RewardReveal from './RewardReveal';
 
-const DAILY_CHEST = require('../../../assets/images/daily/chest-closed.png');
-const DAILY_CHEST_OPEN = require('../../../assets/images/daily/chest-open.png');
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
 const FREEZE = require('../../../assets/images/retention/freeze.png');
@@ -262,8 +260,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       <RewardReveal title={title} reducedMotion={reducedMotion} rewards={r.rewards} opening={r.opening}
         subtitle={r.src === 'level' ? 'You leveled up! Your Level Chest is here.'
           : r.src === 'weekly' ? 'A whole week of Daily 3. Big box time!' : 'All three goals done. Your chest is ready!'}
-        closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? ICON_SOURCES.gift : DAILY_CHEST}
-        openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? ICON_SOURCES.gift : DAILY_CHEST_OPEN}
+        closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? ICON_SOURCES.gift : ICON_SOURCES.chest}
+        openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? ICON_SOURCES.gift : ICON_SOURCES.chestOpen}
         onOpen={() => { void openReveal(); }} onDone={() => { void finishReveal(r.rewards); }} />
     );
   } else if (view?.k === 'freeze' && daily) {

@@ -91,7 +91,7 @@ export function nextLevelChest(chests: readonly LevelChest[]): LevelChest | null
 export function streakLine(s: DailyThreeState): string {
   const d = s.streak.days;
   if (s.done) return d > 1 ? `${d} days in a row!` : 'Streak started!';
-  if (d > 0) return `${d}-day streak. Finish today to make it ${d + 1}!`;
+  if (d > 0) return `Finish today to make it ${d + 1}!`;
   return 'Finish all 3 to start a streak';
 }
 

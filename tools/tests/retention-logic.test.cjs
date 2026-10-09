@@ -72,7 +72,7 @@ test('next level chest is the lowest unopened', () => {
 });
 
 test('streak copy never shames and says what to do', () => {
-  assert.equal(L.streakLine(state()), '3-day streak. Finish today to make it 4!');
+  assert.equal(L.streakLine(state()), 'Finish today to make it 4!');
   assert.equal(L.streakLine(state({ done: true, streak: { ...state().streak, days: 4 } })), '4 days in a row!');
   assert.equal(L.streakLine(state({ streak: { ...state().streak, days: 0 } })), 'Finish all 3 to start a streak');
 });

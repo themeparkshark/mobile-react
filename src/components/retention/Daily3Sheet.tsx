@@ -7,9 +7,11 @@ import Animated, {
 import type { DailyGoal, DailyThreeState, WeekDayState } from '../../api/endpoints/retention';
 import { haptic } from '../../gamekit/Haptics';
 import { doneCount, goalAction, resetLabel, streakLine, weekdayLetter } from '../../services/retention/logic';
-import { BRAND, GameIcon } from '../../ui';
+import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 
 const CHEST = require('../../../assets/images/daily/chest-closed.png');
+/** The Daily 3 prize is the treasure chest, never the blue daily chest that goal 1 opens. */
+const PRIZE_CHEST = ICON_SOURCES.chest;
 const SNACK = require('../../../assets/images/social/topic_snacks.png');
 const FREEZE = require('../../../assets/images/retention/freeze.png');
 
@@ -175,7 +177,7 @@ function ChestBlock({ state, done, busy, onClaim, reducedMotion }: {
   return (
     <View style={[styles.chestBlock, ready && styles.chestBlockReady]}>
       <Animated.View style={[styles.chestArt, chestStyle, !ready && !state.claimed && styles.chestLocked]}>
-        <Image source={CHEST} style={{ width: 74, height: 74 }} contentFit="contain" />
+        <Image source={PRIZE_CHEST} style={{ width: 74, height: 74 }} contentFit="contain" />
       </Animated.View>
       <View style={styles.chestRight}>
         {state.claimed && !ready ? (

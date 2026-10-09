@@ -142,7 +142,10 @@ function Row({ row, reducedMotion }: { readonly row: RewardRow; readonly reduced
   const style = useAnimatedStyle(() => ({ opacity: t.value, transform: [{ translateY: (1 - t.value) * -24 }, { scale: 0.6 + t.value * 0.4 }] }));
   const big = row.kind === 'item' || row.kind === 'mystery_boxes';
   return (
-    <Animated.View style={[styles.row, big && styles.rowBig, style]}>
+    // The transform lives on a plain wrapper; the card face is an ordinary View (iOS clips a
+    // bordered background that is scaled mid-spring).
+    <Animated.View style={style}>
+    <View style={[styles.row, big && styles.rowBig]}>
       <View style={styles.rowIcon}>{rowIcon(row)}</View>
       {big ? (
         <View style={{ flex: 1 }}>
@@ -154,6 +157,7 @@ function Row({ row, reducedMotion }: { readonly row: RewardRow; readonly reduced
           <Text style={styles.rowAmount}>{`+${row.amount} `}</Text>{row.label}
         </Text>
       )}
+    </View>
     </Animated.View>
   );
 }
