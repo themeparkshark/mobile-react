@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   tilePic: { height: 58, alignItems: 'center', justifyContent: 'center' },
   tileLabel: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, marginTop: 2 },
   tileSmall: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navySoft },
-  homeWhy: { fontFamily: 'Shark', fontSize: 11, color: BRAND.navySoft },
+  homeWhy: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
   bigPct: { fontFamily: 'Shark', fontSize: 30, lineHeight: 34, color: BRAND.navy },
   mvp: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   crossOut: { position: 'absolute', left: -2, top: 7, width: 22, height: 4, borderRadius: 2, backgroundColor: BRAND.red, transform: [{ rotate: '-35deg' }] },

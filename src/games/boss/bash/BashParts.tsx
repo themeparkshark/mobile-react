@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BRAND } from '../../../ui/tokens';
 import { BASH_ART, WM_ASPECT } from './art';
-import { PERFECT_FROM, PERFECT_UNTIL, type Kind } from './rules';
+import { DIZZY_DROP_MS, ringScaleAt, type Kind } from './rules';
 
 export type ActorExit = null | 'bonk' | 'sink' | 'ouch' | 'dive';
 
@@ -150,8 +150,9 @@ function Fin({ filled, bonus, size, reduced, popKey }: { filled: boolean; bonus:
  * and a white ring closing onto it. While the ring sits on the core it turns
  * gold and the core pulses: that is PERFECT (shape and motion, not colour alone).
  */
-export function DizzyTarget({ x, y, size, from, until, reduced, paused }: {
+export function DizzyTarget({ x, y, size, from, until, reduced, paused, band }: {
   x: number; y: number; size: number; from: number; until: number; clock?: SharedValue<number>; reduced: boolean; paused?: boolean;
+  band: readonly [number, number];
 }) {
   const appear = useSharedValue(0);
   // The ring runs its own UI-thread timer, so a JS hitch never freezes the PERFECT timing.
@@ -162,20 +163,21 @@ export function DizzyTarget({ x, y, size, from, until, reduced, paused }: {
   useEffect(() => {
     if (paused) { cancelAnimation(prog); return; }
     const left = Math.max(1, (until - from) * (1 - prog.value));
-    prog.value = withTiming(1, { duration: left, easing: Easing.linear });
+    // The window opens after the flop (DIZZY_DROP_MS): the ring waits for it, so the gold you see is the gold that scores.
+    const wait = prog.value === 0 ? DIZZY_DROP_MS : 0;
+    prog.value = withDelay(wait, withTiming(1, { duration: left, easing: Easing.linear }));
     return () => cancelAnimation(prog);
   }, [from, until, paused, prog]);
   const ring = useAnimatedStyle(() => {
     const p = prog.value;
-    const on = p >= PERFECT_FROM && p <= PERFECT_UNTIL;
-    // Closes from 2x to the core across the perfect band, then shrinks inside it.
-    const scale = p <= PERFECT_UNTIL ? 2 - (p / PERFECT_UNTIL) : Math.max(0.45, 1 - (p - PERFECT_UNTIL) * 1.2);
-    return { borderColor: on ? BRAND.gold : BRAND.white, borderWidth: on ? 9 : 6, opacity: p > PERFECT_UNTIL ? 0.55 : 1,
+    const on = p >= band[0] && p <= band[1];
+    const scale = ringScaleAt(p, band);
+    return { borderColor: on ? BRAND.gold : BRAND.white, borderWidth: on ? 9 : 6, opacity: p > band[1] ? 0.55 : 1,
       transform: [{ scale: scale * appear.value }] };
   });
   const core = useAnimatedStyle(() => {
     const p = prog.value;
-    const on = p >= PERFECT_FROM && p <= PERFECT_UNTIL;
+    const on = p >= band[0] && p <= band[1];
     return { transform: [{ scale: appear.value * (on && !reduced ? 1 + Math.sin(p * 60) * 0.06 : 1) }] };
   });
   return <View pointerEvents="none" style={{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size }}>

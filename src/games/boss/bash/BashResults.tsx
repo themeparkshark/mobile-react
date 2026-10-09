@@ -49,7 +49,7 @@ export function creditedDamage(damage: number, capLeft: number | undefined): num
 }
 
 export default function BashResults({ args, bossName, boss, startHp, hpMax, damage: rawDamage, capLeft, rate, meta, fighters, endsAt, next, rewards, onAgain,
-  receipt = null, receiptNote = null }: {
+  receipt = null, receiptNote = null, bestBefore = 0 }: {
   args: ShellResultsArgs; bossName: string; boss: BossId; rideName: string | null; startHp: number; hpMax: number; damage: number;
   /** Per-player raid cap left before this round (config boss.max_damage_per_player_per_raid). */
   capLeft?: number;
@@ -58,18 +58,17 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   /** The round was sent at the bell: what the server said. */
   receipt?: 'saving' | 'saved' | 'error' | null;
   receiptNote?: string | null;
+  /** Your best on this boss as read at the start of the round. */
+  bestBefore?: number;
 }) {
   const { stars, claim, reducedMotion: reduced } = args;
   const damage = creditedDamage(rawDamage, capLeft);
   const capped = damage < rawDamage;
-  const [best, setBest] = useState<boolean>(false);
+  // NEW BEST compares with the best read when the round started (stable across remounts).
+  const best = bestBefore > 0 && damage > bestBefore;
   useEffect(() => {
-    if (damage <= 0) return;
-    const key = `boss_bash_best_${boss}`;
-    void AsyncStorage.getItem(key).then(v => {
-      if (Number(v ?? 0) < damage) { setBest(Number(v ?? 0) > 0); void AsyncStorage.setItem(key, String(damage)); }
-    }).catch(() => undefined);
-  }, [boss, damage]);
+    if (damage > bestBefore) void AsyncStorage.setItem(`boss_bash_best_${boss}`, String(damage)).catch(() => undefined);
+  }, [boss, damage, bestBefore]);
   const hpAfter = Math.max(0, startHp - damage);
   const ko = startHp > 0 && hpAfter === 0;
   const n = nextAttack(next);
@@ -153,7 +152,8 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       <View style={styles.chips}>
         <Chip label="Bonks" value={Number(meta.bonks ?? 0)} />
         <Chip label="Smashes" value={Number(meta.smashes ?? 0)} />
-        <Chip label="Blocks" value={Number(meta.blocks ?? 0)} />
+        {Number(meta.inks ?? 0) > 0 ? <Chip label={`Blocks of ${Number(meta.inks)}`} value={Number(meta.blocks ?? 0)} />
+          : <Chip label="Perfects" value={Number(meta.perfects ?? 0)} />}
       </View>
 
       {!noHits && n.can && onAgain ? <>

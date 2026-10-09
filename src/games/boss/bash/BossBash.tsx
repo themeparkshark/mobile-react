@@ -37,7 +37,7 @@ import {
 } from './BashParts';
 import BashResults, { type BashNext, type BashRewards } from './BashResults';
 import {
-  DEFAULT_WEIGHTS, INKED_MS, OUCH_MS, ROUND_MS, bashScore, bashStars, createBash, finsNeeded, phaseAt, tapBoss, tapPopup, tapWater, tick,
+  DEFAULT_WEIGHTS, INKED_MS, OUCH_MS, ROUND_MS, perfectBand, bashScore, bashStars, createBash, finsNeeded, phaseAt, tapBoss, tapPopup, tapWater, tick,
   type BashEvent, type BashState, type PhaseId, type Popup,
 } from './rules';
 
@@ -507,7 +507,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       stars: bashStars(s, weights),
       message: total > 0 ? 'NICE HIT!' : 'TRY AGAIN',
       meta: { hits: s.hits, weak_hits: s.weak, duration_ms: Math.round(Math.min(ROUND_MS, Math.max(12000, played.current))),
-        stars: bashStars(s, weights), bonks: s.bonks, smashes: s.smashes, perfects: s.perfects, ouches: s.ouches, blocks: s.blocks,
+        stars: bashStars(s, weights), bonks: s.bonks, smashes: s.smashes, perfects: s.perfects, ouches: s.ouches, blocks: s.blocks, inks: s.inks,
         best_streak: s.bestStreak, game: 'boss_bash_v2' },
     };
   };
@@ -630,9 +630,16 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     if (played.current < s.ouchUntil) {
       const p = spotXY(lane + 3);
       addFx({ t: 'burst', src: BASH_ART.star, x: p.x, y: p.y - 40, size: 40 }, 380);
+      haptic('hitSoft'); GameAudio.play('ui.tap', { volume: 0.4, pitch: -5 });
       return;
     }
     const popup = s.up.find(p => p.spot % 3 === lane);
+    if (popup && played.current < s.splashUntil) {
+      // Held by a splash: the tap is not lost, it lands when the hold ends (still slower than aiming).
+      const wait = Math.max(16, Math.round(s.splashUntil - played.current));
+      later(wait, () => { if (playing.current) tapLaneRef.current(lane); });
+      return;
+    }
     const r = popup ? tapPopup(s, popup.id, played.current, cap, weights) : tapWater(s, lane, played.current);
     engine.current = r.state;
     apply(r.events);
@@ -708,7 +715,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const renderResults = (args: ShellResultsArgs) => (
     <BashResults args={args} bossName={bossName} boss={boss} rideName={rideName ?? null} startHp={hpAtBell.current ?? hpLeft} capLeft={capLeft}
       hpMax={hpMax} damage={args.result.score} rate={damageRate} meta={args.result.meta ?? {}} fighters={fighters}
-      endsAt={endsAt} next={next} rewards={rewards} receipt={receipt} receiptNote={receiptNote}
+      endsAt={endsAt} next={next} rewards={rewards} receipt={receipt} receiptNote={receiptNote} bestBefore={best}
       onAgain={onAgain && args.result.meta ? () => onAgain(args.result.meta!) : undefined} />
   );
 
@@ -783,7 +790,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
               hint={hint === 'tentacle' && !exit && popup.kind === 'tentacle' && actors.find(a => !a.exit && a.popup.kind === 'tentacle')?.popup.id === popup.id} />;
           })}
 
-          {dizzy && <DizzyTarget x={L.head.x + flopSide * L.w * 0.13} y={L.head.y + L.dropBy} size={L.bossSize * 0.34} from={dizzy.from} until={dizzy.until} paused={held}
+          {dizzy && <DizzyTarget x={L.head.x + flopSide * L.w * 0.13} y={L.head.y + L.dropBy} size={L.bossSize * 0.34} from={dizzy.from} until={dizzy.until} paused={held} band={perfectBand(dizzy.from)}
             clock={clock} reduced={reduced} />}
           {dizzy && hint === 'head' && <TapHand x={L.head.x + flopSide * L.w * 0.13 + 18} y={L.head.y + L.dropBy + 4} reduced={reduced} size={72} />}
           {inkTell && hint === 'ink' && <TapHand x={L.head.x + 18} y={L.head.y + L.bossSize * 0.18} reduced={reduced} size={72} />}
