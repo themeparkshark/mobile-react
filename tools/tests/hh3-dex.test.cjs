@@ -443,7 +443,7 @@ test('the set says when its finds are on the map, once, and marks the hunted set
   assert.match(read('src/screens/SetCollectionScreen.tsx'), /finds will show up more on your map/, 'turning it on says what it does');
   // The shelf card carries its own count and prize marker.
   assert.match(parts, /\{set\.found\}\/\{set\.total\}<\/Text>/);
-  assert.match(parts, /<Animated\.View style=\{\[styles\.cardPrize, bobStyle\]\}/);
+  assert.match(parts, /styles\.cardPrize, styles\.cardPrizeInner, bobStyle/);
 });
 
 test('round 4: instant book, menu above the map, grades, shimmer, title stamp', () => {

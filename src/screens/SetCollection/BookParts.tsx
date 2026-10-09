@@ -104,8 +104,11 @@ export const ShelfCard = memo(function ShelfCard({ set, selected, onPress, activ
           </View>
         )}
         {claim && (
-          <Animated.View style={[styles.cardPrize, bobStyle]} exiting={reduced ? undefined : ZoomOut.duration(260)}>
-            <GameIcon name="gift" size={26} />
+          // The exit pop lives on a bare wrapper, so it never fights the bob's transform.
+          <Animated.View pointerEvents="none" style={styles.cardPrizeSlot} exiting={reduced ? undefined : ZoomOut.duration(260)}>
+            <Animated.View style={[styles.cardPrize, styles.cardPrizeInner, bobStyle]}>
+              <GameIcon name="gift" size={26} />
+            </Animated.View>
           </Animated.View>
         )}
         {finished && !claim && <View style={styles.cardPrize}><GameIcon name="star" size={24} /></View>}
@@ -635,6 +638,8 @@ const styles = StyleSheet.create({
     borderRadius: 13, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.white,
   },
   cardHuntText: { fontFamily: 'Knockout', fontSize: 15, color: BROWN },
+  cardPrizeSlot: { position: 'absolute', top: -6, right: -2, width: 38, height: 38 },
+  cardPrizeInner: { position: 'relative', top: 0, right: 0 },
   cardPrize: {
     position: 'absolute', top: -6, right: -2, width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: BRAND.gold, ...SHADOW.card,
