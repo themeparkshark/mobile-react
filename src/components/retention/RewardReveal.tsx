@@ -51,7 +51,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   // The chest never resizes at the reveal (no jump); the rows area takes the rest of the screen.
   const size = Math.min(width * 0.44, height * 0.21, 190);
   // Rows get a fixed area (scrolls only on small phones), so the card never changes height.
-  const rowsHeight = Math.max(200, Math.min(380, height - size - 300));
+  // Sized so the ribbon always clears the Dynamic Island on a Pro and gear plus four rows fit whole.
+  const rowsHeight = Math.max(200, Math.min(330, height - size - 350));
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
   const pop = useSharedValue(1);
@@ -277,7 +278,7 @@ const styles = StyleSheet.create({
   hintBox: { alignItems: 'center', justifyContent: 'center' },
   hint: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold, textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14,
-    paddingHorizontal: 10, paddingVertical: 4 },
+    paddingHorizontal: 10, paddingVertical: 2 },
   rowBig: { backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold, paddingVertical: 8 },
   rowIcon: { width: 58, alignItems: 'center' },
   rowIconBig: { width: 84 },
