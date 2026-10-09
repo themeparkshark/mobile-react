@@ -22,6 +22,9 @@ export type SharkPassSeasonInfo = {
   readonly key: string;
   readonly title: string;
   readonly product_id: string;
+  /** Shark Pass Plus: the Shark Pass row plus these extras (never steps or points). */
+  readonly plus_product_id?: string | null;
+  readonly plus_rewards?: readonly SharkPassReward[];
   readonly starts_at: string;
   readonly ends_at: string;
   /** The last day it runs ('YYYY-MM-DD', parks' time zone). */
@@ -52,7 +55,7 @@ export type SharkPassState =
     readonly season: SharkPassSeasonInfo | null;
     readonly next_season: SharkPassSeasonInfo | null;
     readonly progress?: {
-      readonly points: number; readonly tier: number; readonly points_into_tier: number; readonly premium: boolean;
+      readonly points: number; readonly tier: number; readonly points_into_tier: number; readonly premium: boolean; readonly plus?: boolean;
       readonly vip: boolean; readonly vip_bonus_percent: number; readonly claimable: number; readonly today: readonly SharkPassEvent[];
       readonly catch_up?: boolean; readonly catch_up_percent?: number; readonly top_prize?: SharkPassReward | null;
     };

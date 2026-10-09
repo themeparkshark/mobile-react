@@ -67,6 +67,7 @@ function connect(): Promise<Iap> {
           void deliver(store, [purchase]).catch(() => undefined);
           void deliverShop(store, purchase).catch(() => undefined);
           void deliverPass(store, purchase).catch(() => undefined);
+          void deliverVipGift(store, purchase).catch(() => undefined);
         });
       }
       await store.initConnection();
@@ -266,15 +267,21 @@ async function currentVipEntitlements(store: Iap): Promise<StorePurchase[]> {
 
 // ── Supplies shop (consumables) ─────────────────────────────
 
-/** Every Supplies product is ours and not VIP or a Shark Pass (server config/shop.php owns the list). */
+/** Every Supplies product is ours and not VIP, a VIP gift plan or a Shark Pass (server config/shop.php owns the list). */
 export function isShopProduct(productId: string | undefined | null): boolean {
   return typeof productId === 'string' && productId.startsWith('com.themeparkshark.app.')
-    && !(VIP_PRODUCT_IDS as readonly string[]).includes(productId) && !isSharkPassProduct(productId);
+    && !(VIP_PRODUCT_IDS as readonly string[]).includes(productId) && !isSharkPassProduct(productId) && !isVipGiftProduct(productId);
+}
+
+/** Non-renewing VIP a grown-up buys (1 or 12 months): com.themeparkshark.app.vip.gift.<n>m. */
+export const VIP_GIFT_PRODUCT_IDS = ['com.themeparkshark.app.vip.gift.1m', 'com.themeparkshark.app.vip.gift.12m'] as const;
+export function isVipGiftProduct(productId: string | undefined | null): boolean {
+  return typeof productId === 'string' && productId.startsWith('com.themeparkshark.app.vip.gift.');
 }
 
 /** One App Store Non-Consumable per Shark Pass season: com.themeparkshark.app.sharkpass.<season>. */
 export function isSharkPassProduct(productId: string | undefined | null): boolean {
-  return typeof productId === 'string' && productId.startsWith(SHARK_PASS_PREFIX);
+  return typeof productId === 'string' && /^com\.themeparkshark\.app\.sharkpass(_plus)?\./.test(productId);
 }
 export const SHARK_PASS_PREFIX = 'com.themeparkshark.app.sharkpass.';
 
@@ -527,5 +534,66 @@ export async function restoreSharkPass(productId: string): Promise<'restored' | 
     return restored ? 'restored' : 'nothing';
   } catch (error) {
     return sharkPassApi().sharkPassErrorCode(error) === 'SHARK_PASS_OTHER_PLAYER' ? 'other_account' : 'failed';
+  }
+}
+
+// ── VIP gift plans (non-renewing) ─────────────
+
+const giftDelivered = new Map<string, Promise<VipGiftPlanState>>();
+export type VipGiftPlanState = { readonly vip: boolean; readonly gift_until: string | null; readonly gift_last_day: string | null };
+
+function deliverVipGift(store: Iap, purchase: StorePurchase): Promise<VipGiftPlanState | null> {
+  const jws = jwsOf(purchase);
+  if (!isVipGiftProduct(purchase.productId) || !jws) return Promise.resolve(null);
+  const key = keyOf(purchase);
+  const pending = giftDelivered.get(key);
+  if (pending) return pending;
+  const promise = (async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const api = require('../api/endpoints/me/vip-gift') as typeof import('../api/endpoints/me/vip-gift');
+    const state = await api.redeemVipGiftPlan(jws);
+    await store.finishTransaction({ purchase, isConsumable: false }).catch(() => undefined);
+    return state;
+  })();
+  giftDelivered.set(key, promise);
+  promise.catch(() => { if (giftDelivered.get(key) === promise) giftDelivered.delete(key); });
+  return promise;
+}
+
+/** Apple's prices for the VIP gift plans. Empty when the products don't exist yet. */
+export async function loadVipGiftPrices(): Promise<Record<string, ShopPrice>> {
+  if (__DEV__) { const cap = devCapture(); if (cap?.capturePrices()) return { 'com.themeparkshark.app.vip.gift.1m': { productId: 'com.themeparkshark.app.vip.gift.1m', price: '$4.99', amount: 4.99 }, 'com.themeparkshark.app.vip.gift.12m': { productId: 'com.themeparkshark.app.vip.gift.12m', price: '$39.99', amount: 39.99 } }; }
+  if (!storeAvailable()) return {};
+  const store = await connect();
+  const products: StoreProduct[] = await store.getProducts({ skus: [...VIP_GIFT_PRODUCT_IDS] });
+  const out: Record<string, ShopPrice> = {};
+  for (const p of products) if (p?.productId && p.localizedPrice) out[p.productId] = { productId: p.productId, price: p.localizedPrice, amount: Number(p.price) || 0 };
+  return out;
+}
+
+/** Buys a VIP gift plan. The caller has already asked a grown-up. */
+export async function buyVipGift(productId: string, accountToken?: string | null): Promise<{ status: 'success'; state: VipGiftPlanState } | { status: 'cancelled' | 'pending' | 'unverified' | 'other_account' | 'unavailable' | 'failed' }> {
+  if (!storeAvailable()) return { status: 'unavailable' };
+  if (!isVipGiftProduct(productId)) return { status: 'failed' };
+  let store: Iap;
+  let purchase: StorePurchase | null = null;
+  try {
+    store = await connect();
+    const bought = await store.requestPurchase({ sku: productId, andDangerouslyFinishTransactionAutomaticallyIOS: false,
+      ...(accountToken ? { appAccountToken: accountToken } : {}) });
+    purchase = (Array.isArray(bought) ? bought[0] : bought) ?? null;
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === 'E_USER_CANCELLED') return { status: 'cancelled' };
+    if (code === 'E_DEFERRED_PAYMENT') return { status: 'pending' };
+    return { status: 'failed' };
+  }
+  if (!purchase) return { status: 'pending' };
+  try {
+    const state = await deliverVipGift(store, purchase);
+    return state ? { status: 'success', state } : { status: 'unverified' };
+  } catch (error) {
+    const code = String((error as { response?: { data?: { code?: unknown } } })?.response?.data?.code ?? '');
+    return code === 'VIP_GIFT_OTHER_PLAYER' ? { status: 'other_account' } : { status: 'unverified' };
   }
 }

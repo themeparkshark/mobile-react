@@ -175,7 +175,9 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const showDaily = !!ads?.enabled && !!daily && (vip || adsAvailable());
   const featured = sections.get('featured') ?? [];
   const starter = featured.find(p => p.limit === 'once');
-  const todays = featured.filter(p => p !== starter);
+  // Bigger featured bundles with no daily limit (the Park Trip Pack) get Alex's big card like the Starter Pack.
+  const bigBundles = featured.filter(p => p !== starter && !p.limit);
+  const todays = featured.filter(p => p !== starter && !bigBundles.includes(p));
   // A product Apple hasn't priced (not set up yet in this storefront) is never shown as a dead card.
   const priced = (p: ShopProduct) => !!prices[p.product_id] || Object.keys(prices).length === 0;
   const holdCap = catalog.ticket_hold_cap;
@@ -224,6 +226,11 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
               <StarterCard product={starter} price={prices[starter.product_id]?.price} worth={bundleWorth(starter, prices, rates)}
                 busy={busy === starter.product_id} disabled={!!busy} onBuy={() => void buy(starter, 'chest')} />
             )}
+            {bigBundles.filter(priced).map(p => (
+              <StarterCard key={p.product_id} product={p} price={prices[p.product_id]?.price} worth={bundleWorth(p, prices, rates)}
+                busy={busy === p.product_id} disabled={!!busy} onBuy={() => void buy(p, 'bag')}
+                band={`${p.title.toUpperCase()} · FOR A PARK TRIP`} art="bag" />
+            ))}
             {todays.length > 0 && (
               <View style={st.row}>
                 {todays.filter(priced).map((p, i) => (
@@ -301,16 +308,17 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
 }
 
 /** The one-time Starter Pack: Alex's big card, his open chest, the honest worth. */
-function StarterCard({ product, price, worth, busy, disabled, onBuy }: {
+function StarterCard({ product, price, worth, busy, disabled, onBuy, band = 'STARTER PACK · JUST ONCE', art = 'chest' }: {
   product: ShopProduct; price?: string; worth: ReturnType<typeof bundleWorth>; busy: boolean; disabled: boolean; onBuy: () => void;
+  band?: string; art?: PackArtKey;
 }) {
   return (
     <Animated.View entering={FadeInUp.delay(60).springify().damping(15)}>
       <ShopCard onPress={onBuy} disabled={disabled || !price} glow
-        accessibilityLabel={`${product.title}, just once. ${price ? `${price}, real money, a grown-up buys it.` : ''}${worth ? ` Worth ${worth.worth} in regular packs.` : ''}`}>
-        <Band text="STARTER PACK · JUST ONCE" color="gold" size={18} />
+        accessibilityLabel={`${product.title}${product.limit === 'once' ? ', just once' : ''}. ${price ? `${price}, real money, a grown-up buys it.` : ''}${worth ? ` Worth ${worth.worth} in regular packs.` : ''}`}>
+        <Band text={band} color={art === 'chest' ? 'gold' : 'blue'} size={18} />
         <View style={st.starterBody}>
-          <View style={st.starterArt}><PackArt art="chest" size={118} /></View>
+          <View style={st.starterArt}><PackArt art={art} size={118} /></View>
           <View style={{ flex: 1, gap: 6 }}>
             {worth && (
               <Text maxFontSizeMultiplier={MAX_FONT} style={st.worth}>

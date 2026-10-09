@@ -27,6 +27,9 @@ import {
 import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import { perMonthText } from '../services/money/offers';
 import MemberStage from '../components/money/MemberStage';
+import MonthlyGiftCard from '../components/money/MonthlyGiftCard';
+import { askGrownUp } from '../components/GrownUpGate';
+import { VIP_GIFT_PRODUCT_IDS, buyVipGift, loadVipGiftPrices } from '../services/purchases';
 import { trackImpression, trackMoney } from '../services/money/track';
 import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../services/money/flags';
 
@@ -211,10 +214,13 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
           </View>
 
           {member ? (
-            <Animated.View entering={FadeInUp.delay(560)} style={s.memberNote}>
-              <GameIcon name="member" size={30} />
-              <Text style={s.memberNoteText}>Your VIP is on. A grown-up can change it anytime in Apple ID settings.</Text>
-            </Animated.View>
+            <>
+              <MonthlyGiftCard />
+              <Animated.View entering={FadeInUp.delay(560)} style={s.memberNote}>
+                <GameIcon name="member" size={30} />
+                <Text style={s.memberNoteText}>Your VIP is on. A grown-up can change it anytime in Apple ID settings.</Text>
+              </Animated.View>
+            </>
           ) : !player ? (
             // Guests see the perks and a way in, never a dead purchase button.
             <Animated.View entering={FadeInUp.delay(620)} style={s.guest}>
@@ -271,6 +277,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
             </Animated.View>
           )}
 
+          {!member && player && canBuy && plan && <GiftPlans />}
           {!member && player && canBuy && plan && <GrownUpNotes />}
 
           <View style={s.links}>
@@ -300,6 +307,58 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
         </View>
       )}
     </View>
+  );
+}
+
+/**
+ * VIP as a gift (Dustin, Oct 9 2026): 1 month or 12 months that never renew, for a birthday or a
+ * park trip. Shown only while the server sells them and Apple has priced them. Gated on the buy tap.
+ */
+function GiftPlans() {
+  const { refreshPlayer } = useContext(AuthContext);
+  const on = useMoneyFlag('vip_gift_plans');
+  const [prices, setPrices] = useState<Record<string, { price: string; amount: number }>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  useEffect(() => { if (on) void loadVipGiftPrices().then(setPrices).catch(() => undefined); }, [on]);
+  const options = VIP_GIFT_PRODUCT_IDS.filter(id => prices[id]);
+  if (!on || !options.length) return null;
+  const buy = async (id: string) => {
+    if (busy) return;
+    const months = id.endsWith('.12m') ? 12 : 1;
+    trackMoney('tap', 'vip.gift', id);
+    if (!(await askGrownUp({ kind: 'money', price: prices[id].price, gets: `${months === 12 ? '12 months' : '1 month'} of VIP. It doesn’t renew` }))) return;
+    trackMoney('gate_passed', 'vip.gift', id);
+    setBusy(id);
+    const outcome = await buyVipGift(id);
+    setBusy(null);
+    trackMoney(outcome.status === 'success' ? 'bought' : outcome.status === 'pending' ? 'pending' : outcome.status === 'cancelled' ? 'cancelled' : 'failed', 'vip.gift', id);
+    if (outcome.status === 'success') {
+      await refreshPlayer().catch(() => undefined);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      gameAlert('Welcome to VIP!', outcome.state.gift_last_day ? `VIP is on until ${outcome.state.gift_last_day}. It won’t renew.` : 'VIP is on. It won’t renew.');
+    } else if (outcome.status === 'pending') gameAlert('Waiting for a grown-up', 'A grown-up needs to say yes on their phone. VIP turns on after that.');
+    else if (outcome.status === 'unverified') gameAlert('Almost there', 'It worked! VIP turns on in a minute.');
+    else if (outcome.status === 'other_account') gameAlert('On another account', 'This VIP gift belongs to a different Theme Park Shark account.');
+    else if (outcome.status === 'failed') gameAlert('That didn’t work', 'You weren’t charged. Check your internet, then try again.');
+  };
+  return (
+    <Animated.View entering={FadeInUp.delay(660)} style={s.giftBox}>
+      <Text style={s.grownUpsHead}>GIVE VIP AS A GIFT</Text>
+      <Text style={s.grownUpText}>Pay once for a set time. It never renews. Great for a birthday or a park trip.</Text>
+      <View style={s.giftRow}>
+        {options.map(id => (
+          <Pressable key={id} onPress={() => void buy(id)} disabled={!!busy} style={({ pressed }) => [s.giftBtn, pressed && { opacity: 0.85 }]}
+            accessibilityRole="button" accessibilityLabel={`VIP for ${id.endsWith('.12m') ? '12 months' : '1 month'}, ${prices[id].price}, one time, real money. A grown-up buys it.`}>
+            <Text style={s.giftName}>{id.endsWith('.12m') ? '12 MONTHS' : '1 MONTH'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <RealMoneyMark size={20} />
+              <Text style={s.giftPrice}>{busy === id ? 'ONE MOMENT' : prices[id].price}</Text>
+            </View>
+            <Text style={s.giftNote}>One time</Text>
+          </Pressable>
+        ))}
+      </View>
+    </Animated.View>
   );
 }
 
@@ -353,6 +412,12 @@ const s = StyleSheet.create({
   memberNote: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, backgroundColor: 'rgba(5,52,110,0.6)',
     borderRadius: 16, padding: 12, borderWidth: 2, borderColor: '#ffcf3b' },
   memberNoteText: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: '#fff', lineHeight: 20 },
+  giftBox: { width: '100%', marginTop: 16, backgroundColor: '#fff8e4', borderRadius: 18, padding: 12, gap: 8, borderWidth: 3, borderColor: '#05346e' },
+  giftRow: { flexDirection: 'row', gap: 10 },
+  giftBtn: { flex: 1, alignItems: 'center', gap: 2, backgroundColor: '#ffffff', borderRadius: 16, paddingVertical: 10, borderWidth: 3, borderColor: '#ffcf3b', borderBottomWidth: 6, borderBottomColor: '#d99a00' },
+  giftName: { fontFamily: 'Shark', fontSize: 16, color: '#09268f' },
+  giftPrice: { fontFamily: 'Shark', fontSize: 20, color: '#09268f' },
+  giftNote: { fontFamily: 'Knockout', fontSize: 13, color: '#3d5f8c' },
   grownUps: { width: '100%', marginTop: 16, backgroundColor: '#fff8e4', borderRadius: 18, padding: 12, gap: 6,
     borderWidth: 3, borderColor: '#05346e' },
   grownUpsHead: { fontFamily: 'Shark', fontSize: 16, color: '#05346e', letterSpacing: 0.6 },

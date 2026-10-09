@@ -63,6 +63,7 @@ const SEASON_ART: Record<string, number> = {
   'frost-crown': require('../../assets/images/sharkpass/frost-crown.webp'),
   'bd-snow-plaza': require('../../assets/images/sharkpass/bd-snow-plaza.webp'),
   'bd-northern-lights': require('../../assets/images/sharkpass/bd-northern-lights.webp'),
+  'aurora-crown': require('../../assets/images/sharkpass/aurora-crown.webp'),
 };
 const EMBLEM = require('../../assets/images/sharkpass/pass-emblem.webp');
 
@@ -142,6 +143,7 @@ export default function SharkPassScreen() {
   const [state, setState] = useState<SharkPassState | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [price, setPrice] = useState<ShopPrice | null>(null);
+  const [plusPrice, setPlusPrice] = useState<ShopPrice | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [landed, setLanded] = useState<{ reward: SharkPassReward; title: string; caption?: string; itemId?: number; emblem?: boolean } | null>(null);
   const buying = useRef(false);
@@ -184,6 +186,7 @@ export default function SharkPassScreen() {
   useEffect(() => {
     if (!season || premium || !storeAvailable()) return;
     void loadSharkPassPrice(season.product_id).then(setPrice).catch(() => setPrice(null));
+    if (season.plus_product_id) void loadSharkPassPrice(season.plus_product_id).then(setPlusPrice).catch(() => setPlusPrice(null));
   }, [season?.product_id, premium]);
 
   // Open on the step the player is on.
@@ -239,19 +242,23 @@ export default function SharkPassScreen() {
     }
   };
 
-  const buy = async () => {
-    if (!season || !price || busy || buying.current) return;
+  const buy = async (plus = false) => {
+    const productId = plus ? season?.plus_product_id : season?.product_id;
+    const cost = plus ? plusPrice : price;
+    if (!season || !productId || !cost || busy || buying.current) return;
     buying.current = true;
     try {
       // Real money: a grown-up answers first, and the gate says the price and what it is.
-      trackMoney('tap', 'sharkpass', season.product_id);
-      trackMoney('gate_shown', 'sharkpass', season.product_id);
-      if (!(await askGrownUp({ kind: 'money', price: price.price, gets: `the Shark Pass for ${season.title}. One time. It doesn’t renew` }))) return;
+      const where = plus ? 'sharkpass.plus' : 'sharkpass';
+      trackMoney('tap', where, productId);
+      trackMoney('gate_shown', where, productId);
+      if (!(await askGrownUp({ kind: 'money', price: cost.price,
+        gets: `${plus ? 'Shark Pass Plus' : 'the Shark Pass'} for ${season.title}. One time. It doesn’t renew` }))) return;
       haptic('hitMedium');
       setBusy('buy');
-      trackMoney('gate_passed', 'sharkpass', season.product_id);
-      const outcome = await buySharkPass(season.product_id, state && state.enabled ? state.account_token : null);
-      trackMoney(outcome.status === 'success' ? 'bought' : outcome.status === 'pending' ? 'pending' : outcome.status === 'cancelled' ? 'cancelled' : 'failed', 'sharkpass', season.product_id);
+      trackMoney('gate_passed', where, productId);
+      const outcome = await buySharkPass(productId, state && state.enabled ? state.account_token : null);
+      trackMoney(outcome.status === 'success' ? 'bought' : outcome.status === 'pending' ? 'pending' : outcome.status === 'cancelled' ? 'cancelled' : 'failed', where, productId);
       if (outcome.status === 'success') {
         setState(outcome.state);
         haptic('success');
@@ -442,7 +449,7 @@ export default function SharkPassScreen() {
                     ))}
                   </View>
                   {storeAvailable() ? (
-                    <Pressable onPress={() => void buy()} disabled={!price || !!busy} accessibilityRole="button"
+                    <Pressable onPress={() => void buy(false)} disabled={!price || !!busy} accessibilityRole="button"
                       accessibilityLabel={price ? `Get the Shark Pass for ${price.price}. Real money, one time, a grown-up buys it.` : 'Loading the price'}
                       style={({ pressed }) => [s.cta, pressed && s.ctaPressed, (!price || !!busy) && { opacity: 0.6 }]}>
                       <View style={s.ctaRow}>
@@ -453,6 +460,23 @@ export default function SharkPassScreen() {
                     </Pressable>
                   ) : (
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>Update Theme Park Shark to get the Shark Pass.</Text>
+                  )}
+                  {plusPrice && season.plus_rewards && season.plus_rewards.length > 0 && (
+                    <Pressable onPress={() => void buy(true)} disabled={!!busy} accessibilityRole="button"
+                      accessibilityLabel={`Shark Pass Plus for ${plusPrice.price}: the Shark Pass row plus ${season.plus_rewards.map(rewardWords).join(' and ')}. Real money, one time.`}
+                      style={({ pressed }) => [s.plus, pressed && { opacity: 0.9 }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        {season.plus_rewards.filter(r => r.type === 'item').slice(0, 1).map(r => <RewardPicture key="p" reward={r} size={54} />)}
+                        <View style={{ flex: 1 }}>
+                          <Text maxFontSizeMultiplier={MAX_FONT} style={s.plusTitle}>SHARK PASS PLUS</Text>
+                          <Text maxFontSizeMultiplier={MAX_FONT} style={s.plusBody}>{`Everything above, plus ${season.plus_rewards.map(rewardWords).join(' and ')} right away.`}</Text>
+                        </View>
+                      </View>
+                      <View style={s.ctaRow}>
+                        {busy !== 'buy' && <RealMoneyMark size={22} />}
+                        <Text maxFontSizeMultiplier={1.15} style={s.plusPrice}>{busy === 'buy' ? 'ONE MOMENT…' : `${plusPrice.price} · one time`}</Text>
+                      </View>
+                    </Pressable>
                   )}
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.realMoney}>Real money. A grown-up buys it.</Text>
                   <Pressable onPress={() => void restore()} hitSlop={8} disabled={!!busy}>
@@ -657,6 +681,10 @@ const s = StyleSheet.create({
   ctaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   ctaText: { fontFamily: FONT.display, fontSize: 24, color: '#6a3b00' },
   ctaSub: { fontFamily: FONT.body, fontSize: 14, color: '#6a3b00' },
+  plus: { alignSelf: 'stretch', backgroundColor: '#1f5fae', borderRadius: 18, padding: 12, gap: 8, borderWidth: 3, borderColor: '#7dffb0', alignItems: 'center' },
+  plusTitle: { fontFamily: FONT.display, fontSize: 18, color: '#7dffb0' },
+  plusBody: { fontFamily: FONT.body, fontSize: 14, color: '#ffffff', lineHeight: 18 },
+  plusPrice: { fontFamily: FONT.display, fontSize: 20, color: '#ffffff' },
   realMoney: { fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff' },
   restore: { fontFamily: FONT.body, fontSize: 15, color: '#ffffff', textDecorationLine: 'underline' },
   quests: { marginHorizontal: 14, backgroundColor: '#123f80', borderRadius: 20, padding: 12, gap: 8, borderWidth: 3, borderColor: '#7dffb0' },
