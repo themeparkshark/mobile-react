@@ -291,9 +291,9 @@ export const Bubble = memo(function Bubble({ text, x, y, tone = 'white', reduced
 });
 
 /** A damage number that pops at the hit and flies up to the score. */
-const OUTLINE = [[-2.5, 0], [2.5, 0], [0, -2.5], [0, 2.5]] as const;
-export const DamageNumber = memo(function DamageNumber({ text, x, y, big, toX, toY, reduced }: {
-  text: string; x: number; y: number; big: boolean; toX: number; toY: number; reduced: boolean;
+const OUTLINE = [[-2.5, 0], [2.5, 0], [0, -2.5], [0, 2.5], [-1.8, -1.8], [1.8, -1.8], [-1.8, 1.8], [1.8, 1.8]] as const;
+export const DamageNumber = memo(function DamageNumber({ text, x, y, big, badge = true, toX, toY, reduced }: {
+  text: string; x: number; y: number; big: boolean; badge?: boolean; toX: number; toY: number; reduced: boolean;
 }) {
   const p = useSharedValue(0);
   useEffect(() => {
@@ -313,9 +313,9 @@ export const DamageNumber = memo(function DamageNumber({ text, x, y, big, toX, t
     };
   });
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - 70, top: y - 24, width: 140, alignItems: 'center' }, style]}>
-    {big && <Image source={BASH_ART.impactGold} style={styles.dmgBadge} contentFit="contain" />}
-    {/* Hand-drawn look: a thick navy outline (4 offset copies) under the number. */}
-    {OUTLINE.map(([dx, dy], i) => <Text key={i} style={[styles.dmg, styles.dmgOutline, { transform: [{ translateX: dx }, { translateY: dy }] }]}
+    {big && badge && <Image source={BASH_ART.impactGold} style={styles.dmgBadge} contentFit="contain" />}
+    {/* Hand-drawn look: a thick navy outline (8 offset copies on big hits, 4 on small ones) under the number. */}
+    {(big ? OUTLINE : OUTLINE.slice(0, 4)).map(([dx, dy], i) => <Text key={i} style={[styles.dmg, styles.dmgOutline, { transform: [{ translateX: dx }, { translateY: dy }] }]}
       maxFontSizeMultiplier={1}>{text}</Text>)}
     <Text style={[styles.dmg, big && styles.dmgBig]} maxFontSizeMultiplier={1}>{text}</Text>
   </Animated.View>;

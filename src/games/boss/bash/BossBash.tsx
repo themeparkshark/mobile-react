@@ -766,6 +766,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const wanted: Face = face === 'angry' ? idle : face;
   const shownFace: Face = faces.some(f => f[0] === wanted) ? wanted : 'angry';
   const sharkSrc = BASH_ART.shark[pose];
+  const perfectShowing = fx.some(f => (f.t === 'wm' && f.wm === 'perfect') || (f.t === 'bubble' && f.text.startsWith('PERFECT')));
   const finSize = Math.min(54, L.w * 0.13);
 
   const renderResults = (args: ShellResultsArgs) => (
@@ -855,8 +856,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
             <Image source={sharkSrc} style={StyleSheet.absoluteFill} contentFit="contain" />
           </View>
 
-          {/* Effects. */}
-          {fx.map(f => f.t === 'num' ? <DamageNumber key={f.id} text={f.text} x={f.x} y={f.y} big={f.big} toX={scoreTarget.x} toY={scoreTarget.y} reduced={reduced} />
+          {/* Effects (one message on the boss at a time: no gold badge while PERFECT shows). */}
+          {fx.map(f => f.t === 'num' ? <DamageNumber key={f.id} text={f.text} x={f.x} y={f.y} big={f.big} badge={!perfectShowing} toX={scoreTarget.x} toY={scoreTarget.y} reduced={reduced} />
             : f.t === 'burst' ? (reduced ? null : <Burst key={f.id} src={f.src} x={f.x} y={f.y} size={f.size} spin={f.spin} reduced={reduced} />)
               : f.t === 'wm' ? <Wordmark key={f.id} id={f.wm} x={L.w / 2}
                 y={streakWord.current === f.id ? L.h - 104 : SKY_WORD_Y + 12}
@@ -1062,10 +1063,12 @@ const BossFigure = memo(function BossFigure({ left, top, size, flopped, bossStyl
   hatGone: boolean; hatStyle: AnimStyle; hatOffStyle: AnimStyle; dizzy: boolean; reduced: boolean;
 }) {
   const faces = useMemo(() => facesOf(skin), [skin]);
+  // Only the resting face, the current face and the one fading out are mounted (memory); others mount on first use.
+  const prevFace = useRef<Face>(shownFace); const curFace = useRef<Face>(shownFace);
+  if (curFace.current !== shownFace) { prevFace.current = curFace.current; curFace.current = shownFace; }
   return <View pointerEvents="none" style={{ position: 'absolute', left, top, width: size, height: size, zIndex: flopped ? 3 : 1 }}>
     <Animated.View style={[StyleSheet.absoluteFill, bossStyle]}>
-      {faces.map(([id, src]) => <Image key={id} source={src} contentFit="contain"
-        style={[StyleSheet.absoluteFill, { opacity: id === shownFace ? (skin.ghostly ? 0.92 : 1) : 0 }]} />)}
+      {faces.filter(([id]) => id === shownFace || id === prevFace.current || id === 'angry').map(([id, src]) => <FaceFrame key={id} src={src} on={id === shownFace} max={skin.ghostly ? 0.92 : 1} reduced={reduced} />)}
       {skin.hat && !hatGone && <Animated.View style={[{ position: 'absolute', left: size * 0.22, top: -size * 0.02,
         width: size * 0.56, height: size * 0.42 }, hatStyle, hatOffStyle]}>
         <Image source={BASH_ART.hat} style={StyleSheet.absoluteFill} contentFit="contain" />
@@ -1073,4 +1076,15 @@ const BossFigure = memo(function BossFigure({ left, top, size, flopped, bossStyl
       {dizzy && <DizzyStars x={size * skin.head[0]} y={size * 0.08} r={size * 0.24} reduced={reduced} />}
     </Animated.View>
   </View>;
+});
+
+/** One face frame; swaps cross-fade over 70 ms with a tiny squash on the incoming face (instant under Reduce Motion). */
+const FaceFrame = memo(function FaceFrame({ src, on, max, reduced }: { src: number; on: boolean; max: number; reduced: boolean }) {
+  const v = useSharedValue(on ? 1 : 0);
+  useEffect(() => { v.value = reduced ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: 70 }); }, [on, reduced, v]);
+  const style = useAnimatedStyle(() => ({ opacity: v.value * max,
+    transform: [{ scaleX: 1 + (1 - v.value) * 0.04 }, { scaleY: 1 - (1 - v.value) * 0.04 }] }));
+  return <Animated.View style={[StyleSheet.absoluteFill, style]}>
+    <Image source={src} style={StyleSheet.absoluteFill} contentFit="contain" />
+  </Animated.View>;
 });
