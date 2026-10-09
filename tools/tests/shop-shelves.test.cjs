@@ -844,7 +844,7 @@ test('polish 3: the hand-off covers the whole screen, the reveal shows at once, 
 
 test('polish 4: the active chip scales in a fixed box (the row never shifts)', () => {
   const code = src('src/screens/StoreScreen/ShopShelves.tsx');
-  assert.match(code, /jumpSlot: \{ width: 50, height: 50/);
+  assert.match(code, /jumpSlot: \{ width: 64, height: 66/, "a fixed box with room for the one-word label");
   const on = /jumpChipOn: \{([^}]*\}[^}]*)\}/.exec(code)[1];
   assert.equal(/width|height/.test(on), false, 'no size change on the active chip');
   assert.match(on, /scale: 1\.14/);
