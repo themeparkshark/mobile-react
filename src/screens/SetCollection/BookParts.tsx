@@ -474,7 +474,8 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
           <View style={styles.prizeHeadRow}>
             <Text style={[styles.prizeHead, hero && styles.prizeHeadHero]} maxFontSizeMultiplier={1.3}>{heading}</Text>
             {status && (
-              <View style={[styles.state, state.kind === 'done' && styles.stateDone]}>
+              <View style={[styles.state, state.kind === 'done' && [styles.stateDone, styles.stateRow]]}>
+                {state.kind === 'done' && <GameIcon name="check" size={16} />}
                 <Text style={[styles.stateText, state.kind === 'done' && styles.stateDoneText]} maxFontSizeMultiplier={1.3}>{status}</Text>
               </View>
             )}
