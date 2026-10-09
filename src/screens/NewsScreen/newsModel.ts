@@ -445,8 +445,11 @@ export function relatedFor(entry: NewsEntry, list: readonly NewsEntry[], n = 3):
 const SHOP_WORDS = /\b(disney store|products?|gifts?|collections?|watch(?:es)?|toys?|lego|funko|plush|loungefly|apparel|home d[e\u00e9]cor|d[e\u00e9]cor|ornaments?|shopdisney|macy'?s|pop-up shop|figures?|merch(?:andise)?|ears|spirit jersey|mugs?)\b/i;
 
 /** A shopping story (a collection, a watch, decor): fine in the feed, never the lead story. */
+const shopMemo = new WeakMap<NewsEntry, boolean>();
 export function isShopStory(entry: NewsEntry): boolean {
-  return SHOP_WORDS.test(plainText(entry.title));
+  let hit = shopMemo.get(entry);
+  if (hit === undefined) shopMemo.set(entry, (hit = SHOP_WORDS.test(plainText(entry.title))));
+  return hit;
 }
 
 /** The lead story: the newest that is not a shopping story (the list keeps its order otherwise). */

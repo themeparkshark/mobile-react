@@ -13,8 +13,8 @@ import { Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { BRAND, GameIcon, RADIUS } from '../../ui';
 import ArticleBody, { READ_INK, type ArticleBodyHandlers } from './ArticleBody';
-import { FRAME, INK, INK_SOFT, NewBadge, ParkTag, SiteCard, TPS_SHARK } from './NewsCards';
-import { filterByKey, filterOf, imageAspect, isFresh, isScreenStory, longDate, parkLabel, plainText, readMinutes, timeAgo, type NewsEntry } from './newsModel';
+import { FRAME, INK, INK_SOFT, ParkTag, SiteCard, TPS_SHARK } from './NewsCards';
+import { filterByKey, filterOf, imageAspect, longDate, parkLabel, plainText, readMinutes, timeAgo, type NewsEntry } from './newsModel';
 
 export const PAGE_SIDE = 20;
 
@@ -37,7 +37,7 @@ function MiniStory({ entry, label, onPress }: { readonly entry: NewsEntry; reado
         <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 18, lineHeight: 21, color: INK }}>{plainText(entry.title)}</Text>
         <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 13, color: INK_SOFT }}>{timeAgo(entry.date)}</Text>
       </View>
-      <Image source={entry.featured_image ? { uri: entry.featured_image } : TPS_SHARK} style={{ width: 92, height: 70, borderRadius: 9, backgroundColor: '#dcecf9' }}
+      <Image source={entry.featured_image_small || entry.featured_image ? { uri: (entry.featured_image_small || entry.featured_image) as string } : TPS_SHARK} style={{ width: 92, height: 70, borderRadius: 9, backgroundColor: '#dcecf9' }}
         contentFit={entry.featured_image ? 'cover' : 'contain'} transition={150} />
     </Pressable>
   );
@@ -94,7 +94,6 @@ function ArticlePage({ entry, index, width, live, near, next, related, onOpen, o
   });
   const bar = useAnimatedStyle(() => ({ transform: [{ scaleX: progress.value }] }));
   const tag = parkLabel(entry);
-  const fresh = isFresh(entry.date) && !isScreenStory(entry);
 
   return (
     <View style={{ width, flex: 1, backgroundColor: BRAND.white }}>
@@ -119,10 +118,9 @@ function ArticlePage({ entry, index, width, live, near, next, related, onOpen, o
         )}
 
         <View style={{ paddingHorizontal: PAGE_SIDE, paddingTop: 16, gap: 10 }}>
-          {(tag || fresh) && (
+          {tag && (
             <View style={{ flexDirection: 'row', gap: 6 }}>
               <ParkTag label={tag} />
-              {fresh && <NewBadge />}
             </View>
           )}
           <Text accessibilityRole="header" maxFontSizeMultiplier={1.4} style={{ fontFamily: 'Knockout', fontSize: 33, lineHeight: 37, color: INK }}>

@@ -202,8 +202,13 @@ test('shopping stories never lead and sink to the end of their day', () => {
   assert.equal(model.isShopStory(list[2]), false);
   const led = model.withLead(list);
   assert.equal(led[0].id, 3);
-  const out = rows.buildFeedRows({ entries: led, lead: true, now: NOW, searchLabel: null, loadingMore: false, failed: false, end: true, stale: false });
-  assert.deepEqual([...out.filter(r => r.entry).map(r => r.entry.id)], [3, 4, 1, 2]);
+  const spaced = [led[0], ...rows.shopLast(led.slice(1), NOW)];
+  assert.deepEqual([...spaced.map(e => e.id)], [3, 4, 1, 2]);
+  // Paging: rows already shown keep their place; a refresh with a new top story starts fresh.
+  const grown = rows.keepOrder([3, 4, 1], [...led, { ...entry(9, at(30)), title: 'Older park story' }]);
+  assert.deepEqual([...grown.map(e => e.id)], [3, 4, 1, 2, 9]);
+  const refreshed = rows.keepOrder([3, 4, 1], [{ ...entry(10, at(0)), title: 'Brand new' }, ...led]);
+  assert.equal(refreshed[0].id, 10);
 });
 
 test('cruise stories filed under Disney get a cruise tag; shop sorting keeps calendar days in order', () => {

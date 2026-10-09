@@ -10,7 +10,7 @@
  *   goes through the grown-up gate (services/external).
  */
 import { Image } from 'expo-image';
-import { memo, useMemo, useState } from 'react';
+import { createContext, memo, useContext, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import RenderHtml, {
   defaultSystemFonts,
@@ -81,11 +81,30 @@ export function smallerUpload(src: string, w: number, h: number): string | null 
   return `${m[1]}-1024x${Math.round((h * 1024) / w)}.${m[3]}`;
 }
 
-function BodyImage({ src, w, h, width, aspect, live, alt, onPress }: {
-  readonly src: string; readonly w: number; readonly h: number; readonly width: number; readonly aspect: number; readonly live: boolean;
+/**
+ * Whether this page is the one on screen. Read through context so a swipe only
+ * changes image priority; the renderers (and the images they drew) stay mounted.
+ */
+const LiveContext = createContext(true);
+
+/** The srcset candidate closest to 1024 px wide (WordPress lists the sizes it really has). */
+export function pickFromSrcset(srcset: string | undefined): string | null {
+  if (!srcset) return null;
+  const options = srcset.split(',').map(part => {
+    const [url, size] = part.trim().split(/\s+/);
+    return { url, w: Number(String(size ?? '').replace(/w$/, '')) || 0 };
+  }).filter(o => o.url && o.w > 0);
+  if (!options.length) return null;
+  const fit = options.filter(o => o.w >= 900).sort((a, b) => a.w - b.w)[0] ?? options.sort((a, b) => b.w - a.w)[0];
+  return fit.url;
+}
+
+function BodyImage({ src, srcset, w, h, width, aspect, alt, onPress }: {
+  readonly src: string; readonly srcset?: string; readonly w: number; readonly h: number; readonly width: number; readonly aspect: number;
   readonly alt: string; readonly onPress: () => void;
 }) {
-  const [uri, setUri] = useState(() => smallerUpload(src, w, h) ?? src);
+  const live = useContext(LiveContext);
+  const [uri, setUri] = useState(() => pickFromSrcset(srcset) ?? smallerUpload(src, w, h) ?? src);
   return (
     <Pressable accessibilityRole="imagebutton" accessibilityLabel={`${alt}. Tap to look closer`} onPress={onPress}>
       <Image source={{ uri }} style={{ width, aspectRatio: aspect, borderRadius: RADIUS.md, backgroundColor: '#dcecf9' }}
@@ -109,7 +128,7 @@ function ArticleBody({ html, width, live = true, handlers }: {
       const h = Number(attrs.height) || 0;
       const aspect = w > 0 && h > 0 ? Math.min(2.4, Math.max(0.6, w / h)) : 16 / 9;
       const alt = attrs.alt && !/^official source photo/i.test(attrs.alt) ? attrs.alt : 'Photo';
-      return <BodyImage src={uri} w={w} h={h} width={width} aspect={aspect} live={live} alt={alt} onPress={() => handlers.onImage(uri, aspect)} />;
+      return <BodyImage src={uri} srcset={attrs.srcset} w={w} h={h} width={width} aspect={aspect} alt={alt} onPress={() => handlers.onImage(uri, aspect)} />;
     };
     const tpsvideo: CustomBlockRenderer = ({ tnode }) => {
       const id = tnode.attributes['data-id'];
@@ -134,13 +153,14 @@ function ArticleBody({ html, width, live = true, handlers }: {
       );
     };
     return { img, tpsvideo };
-  }, [width, handlers, live]);
+  }, [width, handlers]);
 
   const renderersProps = useMemo(() => ({
     a: { onPress: (_: unknown, href: string) => handlers.onLink(href) },
   }), [handlers]);
 
   return (
+    <LiveContext.Provider value={live}>
     <RenderHtml
       contentWidth={width}
       source={source}
@@ -154,6 +174,7 @@ function ArticleBody({ html, width, live = true, handlers }: {
       enableExperimentalMarginCollapsing
       defaultTextProps={DEFAULT_TEXT_PROPS}
     />
+    </LiveContext.Provider>
   );
 }
 

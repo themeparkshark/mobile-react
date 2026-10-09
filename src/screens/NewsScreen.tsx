@@ -61,7 +61,7 @@ import {
   type NewsEntry,
   type NewsFilterKey,
 } from './NewsScreen/newsModel';
-import { buildFeedRows, type FeedRow } from './NewsScreen/feedRows';
+import { buildFeedRows, keepOrder, shopLast, type FeedRow } from './NewsScreen/feedRows';
 
 
 type ListState = {
@@ -109,7 +109,8 @@ export default function NewsScreen() {
   }).current;
   const listsRef = useRef(lists);
   listsRef.current = lists;
-  const inflight = useRef(new Set<string>());
+  /** Requests in flight by list and mode: a second ask joins the first (so Refresh never reports early). */
+  const inflight = useRef(new Map<string, Promise<void>>());
   /** Bumped by pull to refresh: a page that started before it is dropped (never shrinks or skips the list). */
   const generation = useRef(new Map<string, number>());
   const searchAbort = useRef<AbortController | null>(null);
@@ -122,13 +123,21 @@ export default function NewsScreen() {
   }, []);
 
   /** Loads the next page (or page 1 again on refresh) for one list. */
-  const load = useCallback(async (f: NewsFilterKey, p: string | null, s: string, mode: 'first' | 'more' | 'refresh') => {
+  const load = useCallback((f: NewsFilterKey, p: string | null, s: string, mode: 'first' | 'more' | 'refresh'): Promise<void> => {
     const k = keyOf(f, p, s);
     const flight = `${k}:${mode}`;
-    if (inflight.current.has(flight)) return;
+    const running = inflight.current.get(flight);
+    if (running) return running;
     const current = listsRef.current[k] ?? EMPTY;
-    if (mode === 'more' && (!current.hasMore || current.loading !== 'idle' || current.page === 0)) return;
-    inflight.current.add(flight);
+    if (mode === 'more' && (!current.hasMore || current.loading !== 'idle' || current.page === 0)) return Promise.resolve();
+    const task = runLoad(k, f, p, s, mode, current).finally(() => { inflight.current.delete(flight); });
+    inflight.current.set(flight, task);
+    return task;
+  }, []);
+  const runLoadRef = useRef<(k: string, f: NewsFilterKey, p: string | null, s: string, mode: 'first' | 'more' | 'refresh', current: ListState) => Promise<void>>(async () => undefined);
+  const runLoad = (k: string, f: NewsFilterKey, p: string | null, s: string, mode: 'first' | 'more' | 'refresh', current: ListState) =>
+    runLoadRef.current(k, f, p, s, mode, current);
+  runLoadRef.current = async (k, f, p, s, mode, current) => {
     if (mode !== 'more') generation.current.set(k, (generation.current.get(k) ?? 0) + 1);
     const gen = generation.current.get(k) ?? 0;
     const page = mode === 'more' ? current.page + 1 : 1;
@@ -170,11 +179,10 @@ export default function NewsScreen() {
         return;
       }
       patch(k, { loading: 'idle', failed: true });
-      if (k === 'all:') setOffline(true);
-    } finally {
-      inflight.current.delete(flight);
+      // Only a failed first page means "showing saved stories"; a failed page 2 just offers Try again.
+      if (k === 'all:' && mode !== 'more') setOffline(true);
     }
-  }, [patch]);
+  };
 
   // Saved copy first, then the network.
   useEffect(() => {
@@ -263,8 +271,20 @@ export default function NewsScreen() {
   }, [key, topEntries, search, allLoaded, state.entries, filter, park, withCats]);
 
   const waitingFirst = shown.length === 0 && (state.loading === 'first' || (key === 'all:' && saved === null) || (state.page === 0 && !state.failed));
+  // Park stories lead each day with shopping spread out (only for days that are complete),
+  // then rows already on screen keep their place while more pages load.
+  const orderRef = useRef<{ key: string; ids: number[] }>({ key: '', ids: [] });
+  const ordered = useMemo(() => {
+    if (search) return shown;
+    const [lead, ...rest] = shown;
+    const spaced = lead ? [lead, ...shopLast(rest, now, !state.hasMore)] : [];
+    const prev = orderRef.current.key === key ? orderRef.current.ids : [];
+    const next = keepOrder(prev, spaced);
+    orderRef.current = { key, ids: next.map(e => e.id) };
+    return next;
+  }, [shown, search, now, state.hasMore, key]);
   const rows = useMemo(() => buildFeedRows({
-    entries: shown,
+    entries: ordered,
     lead: !search,
     now,
     searchLabel: search ? search : null,

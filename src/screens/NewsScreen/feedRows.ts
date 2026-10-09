@@ -28,7 +28,12 @@ export function dayLabel(date: string, now: number): string {
 }
 
 /** Inside each day, park stories lead and shopping stories (collections, watches, decor) are spread out after them. */
-export function shopLast(list: readonly NewsEntry[], now: number): NewsEntry[] {
+/**
+ * The newest day can still grow while pages load (the last day in the list may continue
+ * on the next page), so only days that are complete are reshuffled: rows already on
+ * screen never move when page 2 arrives.
+ */
+export function shopLast(list: readonly NewsEntry[], now: number, lastDayComplete = true): NewsEntry[] {
   const days: string[] = [];
   const groups = new Map<string, { park: NewsEntry[]; shop: NewsEntry[] }>();
   for (const entry of list) {
@@ -41,8 +46,11 @@ export function shopLast(list: readonly NewsEntry[], now: number): NewsEntry[] {
     (isShopStory(entry) ? group.shop : group.park).push(entry);
   }
   // Never a wall of shopping: one shopping story after every three park stories, the rest at the day's end.
-  return days.flatMap(day => {
+  return days.flatMap((day, index) => {
     const { park, shop } = groups.get(day)!;
+    if (index === days.length - 1 && !lastDayComplete) {
+      return list.filter(e => park.includes(e) || shop.includes(e));
+    }
     const out: NewsEntry[] = [];
     park.forEach((entry, i) => {
       out.push(entry);
@@ -70,7 +78,6 @@ export function buildFeedRows({ entries, lead, now, searchLabel, loadingMore, fa
     rows.push({ type: 'hero', key: `hero-${entries[0].id}`, entry: entries[0], fresh: false });
     rest = entries.slice(1);
   }
-  if (!searchLabel) rest = shopLast(rest, now);
   rows.push({ type: 'sheet', key: 'sheet' });
   if (stale) rows.push({ type: 'stale', key: 'stale' });
   if (searchLabel) {
@@ -99,4 +106,18 @@ export function buildFeedRows({ entries, lead, now, searchLabel, loadingMore, fa
   }
   if (end || failed) rows.push({ type: 'site', key: 'site' });
   return rows;
+}
+
+/**
+ * Paging keeps rows still: when a list only grew at the end (same first story,
+ * nothing removed), every story already shown keeps its place and the new ones
+ * follow. A refresh with new stories on top or a new filter starts fresh.
+ */
+export function keepOrder(previous: readonly number[], next: readonly NewsEntry[]): NewsEntry[] {
+  if (!previous.length || !next.length || next[0].id !== previous[0]) return [...next];
+  const byId = new Map(next.map(e => [e.id, e] as const));
+  if (!previous.every(id => byId.has(id))) return [...next];
+  const kept = previous.map(id => byId.get(id)!);
+  const seen = new Set(previous);
+  return [...kept, ...next.filter(e => !seen.has(e.id))];
 }

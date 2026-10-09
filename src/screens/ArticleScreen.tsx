@@ -223,7 +223,7 @@ export default function ArticleScreen({ route, navigation }: any) {
           <Pressable accessibilityRole="button" accessibilityLabel={`Next story. ${plainText(next.title)}`} hitSlop={6} onPress={() => goTo(index + 1)}
             style={({ pressed }) => ({ flex: 1, height: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 5, paddingRight: 8,
               backgroundColor: BRAND.white, borderWidth: 3, borderBottomWidth: 5, borderColor: BRAND.gold, transform: [{ scale: pressed ? 0.96 : 1 }] })}>
-            <Image source={next.featured_image ? { uri: next.featured_image } : undefined} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.sky }}
+            <Image source={next.featured_image_small || next.featured_image ? { uri: (next.featured_image_small || next.featured_image) as string } : undefined} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.sky }}
               contentFit="cover" transition={120} />
             <View style={{ flex: 1 }}>
               <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.goldLip }}>NEXT</Text>
