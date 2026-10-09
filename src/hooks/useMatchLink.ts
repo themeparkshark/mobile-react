@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MatchLinkController, type LinkPhase } from '../services/match/matchLink';
-import { useAppActive } from './useLivePoll';
+import { useAppActive } from './appActive';
 
 const clock = {
   now: () => Date.now(),

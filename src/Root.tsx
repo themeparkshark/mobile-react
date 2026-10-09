@@ -97,7 +97,7 @@ export default function App() {
   if (!fontsLoaded) return null;
 
   return (
-    <View style={{ flex: 1 }} onTouchStart={onAnyTouch}>
+    <View style={{ flex: 1 }} onTouchStart={onAnyTouch} onTouchMove={onAnyTouch}>
     {/* A render error anywhere shows a reload card instead of closing the app. */}
     <AppErrorBoundary>
     {/* Keep ride detection alive as the guest moves between map, queue, and profile,

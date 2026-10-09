@@ -4,7 +4,8 @@
  * or the app is in the background). Touches pass through, and any touch
  * removes the cover at once and restarts the 3 s wait.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { modalLayers } from '../ui/modalLayers';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
 import { lastUserTouchAt, onUserTouch } from '../hooks/useUserIdle';
@@ -12,7 +13,13 @@ import { POCKET_START, nextPocketState, toIosTilt, type PocketState } from './po
 
 const SAMPLE_MS = 500;
 
-export default function PocketDim({ enabled }: { readonly enabled: boolean }) {
+const noLayers = () => modalLayers.count() === 0;
+
+export default function PocketDim({ enabled: wanted }: { readonly enabled: boolean }) {
+  // A sheet or dialog is a separate native window: its touches never reach
+  // Root's touch clock, so pocket dim stands down while one is open.
+  const clear = useSyncExternalStore(modalLayers.subscribe, noLayers, noLayers);
+  const enabled = wanted && clear;
   const [dim, setDim] = useState(false);
   useEffect(() => {
     if (!enabled) { setDim(false); return undefined; }

@@ -179,6 +179,6 @@ test('an idle map polls 3x slower; touches and steps count as activity', () => {
   assert.equal(view.timers.size, 0, 'no timers while idle');
   const raid = read('src/components/boss/BossRaidFlow.tsx');
   assert.match(raid, /idle && !raidRunning/, 'an active raid keeps its 20 s cadence even when idle');
-  assert.match(read('src/Root.tsx'), /<View style=\{\{ flex: 1 \}\} onTouchStart=\{onAnyTouch\}>/);
+  assert.match(read('src/Root.tsx'), /<View style=\{\{ flex: 1 \}\} onTouchStart=\{onAnyTouch\} onTouchMove=\{onAnyTouch\}>/);
   assert.match(read('src/screens/ExploreScreen.tsx'), /useEffect\(\(\) => \{ if \(playerLat != null\) markUserActivity\(\); \}, \[playerLat, playerLng\]\);/);
 });

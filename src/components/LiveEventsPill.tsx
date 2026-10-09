@@ -8,7 +8,7 @@ import { BOSS_NAMES, type BossRaid } from '../api/endpoints/parks/raid';
 import type { RideControlClaim } from '../api/endpoints/parks/rideControl';
 import { TEAMS, teamName } from '../constants/teams';
 import type { BossMapMoment } from '../hooks/useBossMapMoment';
-import { useAppActive } from '../hooks/useLivePoll';
+import { useAppActive } from '../hooks/appActive';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import type { TaskType } from '../models/task-type';
 import type { BossAttackCheckpoint } from '../services/boss/attackRecovery';

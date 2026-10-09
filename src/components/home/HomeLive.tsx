@@ -13,7 +13,8 @@ import BossRaidFlow, { useParkRaid } from '../boss/BossRaidFlow';
 import { BOSS_ART } from '../boss/bossArt';
 import { BRAND, GameButton, GameIcon } from '../../ui';
 import PushSoftAsk from '../PushSoftAsk';
-import useLivePoll, { useAppActive } from '../../hooks/useLivePoll';
+import useLivePoll from '../../hooks/useLivePoll';
+import { useAppActive } from '../../hooks/appActive';
 import { homeLiveBar } from './homeLiveBar';
 
 const ORDER = TEAM_ORDER;
