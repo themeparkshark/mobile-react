@@ -40,6 +40,8 @@ function ChestReveal({ art, rewards, onDone, title = 'You got' }: {
 }) {
   const reduced = useReducedGameMotion();
   const [open, setOpen] = useState(false);
+  /** Tap anywhere once it is open: every prize lands now. */
+  const [skip, setSkip] = useState(false);
   const shake = useSharedValue(0);
   const flash = useSharedValue(0);
   useEffect(() => {
@@ -61,15 +63,16 @@ function ChestReveal({ art, rewards, onDone, title = 'You got' }: {
   const chips = rewards ? rewardChips(rewards) : [];
   useEffect(() => {
     if (!open) return;
+    if (skip) return;
     const ids = chips.map((_, i) => setTimeout(() => { playSfx('tick'); haptic('tickSelection'); }, 350 + i * 260));
     return () => ids.forEach(clearTimeout);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, skip]); // eslint-disable-line react-hooks/exhaustive-deps
   const chestStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${shake.value * 7}deg` }, { scale: 1 + Math.abs(shake.value) * 0.04 }] }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
   const empty = !!rewards && chips.length === 0;
 
   return (
-    <View style={styles.scrim} accessibilityViewIsModal>
+    <Pressable style={styles.scrim} accessibilityViewIsModal onPress={() => { if (open) setSkip(true); }} accessible={false}>
       <View style={styles.card}>
         <Text style={styles.title}>{!rewards ? 'Opening...' : title}</Text>
         <View style={styles.stage}>
@@ -81,7 +84,7 @@ function ChestReveal({ art, rewards, onDone, title = 'You got' }: {
         </View>
         <View style={styles.chips}>
           {open && chips.map((c, i) => (
-            <Animated.View key={c.icon + i} entering={reduced ? FadeIn.delay(i * 120) : ZoomIn.delay(350 + i * 260).springify().damping(12)} style={styles.chip}>
+            <Animated.View key={c.icon + i} entering={skip || reduced ? FadeIn.delay(skip ? 0 : i * 120) : ZoomIn.delay(350 + i * 260).springify().damping(12)} style={styles.chip}>
               <GameIcon name={c.icon} size={28} />
               <Text style={styles.chipText} numberOfLines={1}>{c.icon === 'gift' ? c.text : `+${c.text}`}</Text>
             </Animated.View>
@@ -89,14 +92,14 @@ function ChestReveal({ art, rewards, onDone, title = 'You got' }: {
           {open && empty && <Text style={styles.chipText}>Already opened</Text>}
         </View>
         {open && (
-          <Animated.View entering={FadeIn.delay(reduced ? 0 : 350 + chips.length * 260)}>
+          <Animated.View entering={FadeIn.delay(reduced || skip ? 0 : 350 + chips.length * 260)}>
             <Pressable accessibilityRole="button" onPress={onDone} style={({ pressed }) => [styles.button, pressed && { transform: [{ scale: 0.96 }] }]}>
               <Text style={styles.buttonText}>NICE!</Text>
             </Pressable>
           </Animated.View>
         )}
       </View>
-    </View>
+    </Pressable>
   );
 }
 

@@ -31,11 +31,13 @@ function HopChest({ art, size }: { readonly art: EventArt; readonly size: number
  * dim with a lock, a ready chest hops with a red dot, an opened chest shows
  * open with a green check. Tap a ready chest to open it.
  */
-function ChestTrack({ chests, value, art, onOpen, opening, label }: {
+function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label }: {
   readonly chests: readonly EventChest[];
   readonly value: number;
   readonly art: EventArt;
   readonly onOpen?: (key: string) => void;
+  /** Tap a chest that is not ready: show what it holds. */
+  readonly onPeek?: (chest: EventChest) => void;
   readonly opening?: string | null;
   /** Screen-reader name of the track ("Your chests"). */
   readonly label: string;
@@ -58,9 +60,9 @@ function ChestTrack({ chests, value, art, onOpen, opening, label }: {
         const done = chest.claimed;
         const locked = !chest.reached;
         return (
-          <Pressable key={chest.key} disabled={!ready || !onOpen || !!opening} onPress={() => onOpen?.(chest.key)} hitSlop={10}
-            accessibilityRole="button" accessibilityState={{ disabled: !ready }}
-            accessibilityLabel={ready ? 'Chest ready. Open it.' : done ? 'Chest opened.' : chest.reached ? 'Chest reached. Help once to open it.' : 'Chest locked.'}
+          <Pressable key={chest.key} disabled={!!opening} onPress={() => (ready ? onOpen?.(chest.key) : onPeek?.(chest))} hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={ready ? 'Chest ready. Open it.' : done ? 'Chest opened. See what it held.' : chest.reached ? 'Chest reached. Help once to open it.' : 'Chest locked. See what is inside.'}
             style={[styles.chestSlot, { left }]}>
             {ready ? <HopChest art={art} size={CHEST} />
               : <Image source={done ? art.chestOpen : art.chestClosed} style={[styles.chest, locked && styles.locked]} contentFit="contain" />}

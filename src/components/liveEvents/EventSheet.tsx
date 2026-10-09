@@ -2,11 +2,11 @@ import { memo, useCallback, useState } from 'react';
 import { Image } from 'expo-image';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { EventReward, LiveEvent, TeamKey } from '../../api/endpoints/live-events';
+import type { EventChest, EventReward, LiveEvent, TeamKey } from '../../api/endpoints/live-events';
 import { TEAMS, TEAM_ORDER } from '../../constants/teams';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
-import { clockTime, frenzyLine, nextStepHint, ordinal, teamPlace, timeLine } from '../../services/liveEvents/model';
+import { clockTime, frenzyLine, nextStepHint, ordinal, rewardChips, teamPlace, timeLine } from '../../services/liveEvents/model';
 import { useOpenChest } from '../../services/liveEvents/useLiveEvent';
 import { BRAND, GameIcon } from '../../ui';
 import ChestReveal from './ChestReveal';
@@ -20,6 +20,24 @@ function Section({ title, children }: { readonly title: string; readonly childre
     <View style={styles.section}>
       <Text style={styles.sectionTitle} accessibilityRole="header">{title}</Text>
       {children}
+    </View>
+  );
+}
+
+/** What a chest holds, shown under its track after a tap. */
+function Peek({ chest, track }: { readonly chest: EventChest | null; readonly track: string }) {
+  if (!chest) return null;
+  const chips = rewardChips(chest.reward);
+  return (
+    <View style={styles.peek} accessible accessibilityLiveRegion="polite"
+      accessibilityLabel={`${track} chest holds ${chips.map(c => (c.icon === 'gift' ? c.text : `${c.text} ${c.icon}`)).join(', ')}`}>
+      <Text style={styles.peekLabel}>{chest.claimed ? 'Had' : 'Inside'}</Text>
+      {chips.map((c, i) => (
+        <View key={c.icon + i} style={styles.peekChip}>
+          <GameIcon name={c.icon} size={20} />
+          <Text style={styles.peekText} numberOfLines={1}>{c.icon === 'gift' ? c.text : c.text}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -97,6 +115,7 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
   const insets = useSafeAreaInsets();
   const art = eventArt(event.art_key);
   const [details, setDetails] = useState(false);
+  const [peek, setPeek] = useState<{ track: 'me' | 'together'; chest: EventChest } | null>(null);
   const [opened, setOpened] = useState<Opened | null>(null);
   const { open, opening } = useOpenChest();
   const onOpen = useCallback(async (key: string) => {
@@ -116,6 +135,13 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
   const together = event.together;
   const live = event.phase === 'live';
   const showStars = atPark && event.here && live && event.star_rides.length > 0;
+  const firstStar = showStarsFor(event, atPark, live) ? event.star_rides[0] : null;
+  const readyCount = event.me.chests.filter(c => c.claimable).length + together.chests.filter(c => c.claimable).length + (event.team_race?.claimable ? 1 : 0);
+  const doNow: { icon: 'chest' | 'star' | 'ride' | 'coin'; text: string; go?: () => void } | null = readyCount > 0
+    ? { icon: 'chest', text: readyCount === 1 ? 'Open your chest below' : `Open ${readyCount} chests below` }
+    : !live ? null
+      : firstStar ? { icon: 'star', text: `Win a Star Ride: x${event.points.spotlight_win / Math.max(1, event.points.ride_win)}`, go: onShowRide ? () => { onClose(); onShowRide(firstStar.task_id); } : undefined }
+        : hint ? { icon: atPark && event.here ? 'ride' : 'coin', text: hint } : null;
   const nextFrenzy = live && atPark && event.here && !frenzy && event.frenzy.next_starts_at ? `Next Frenzy ${clockTime(event.frenzy.next_starts_at)}` : null;
 
   return (
@@ -134,6 +160,17 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+            {doNow && (
+              <View style={styles.doNow} accessible accessibilityLabel={`Next: ${doNow.text}`}>
+                <GameIcon name={doNow.icon} size={30} />
+                <Text style={styles.doNowText} numberOfLines={1}>{doNow.text}</Text>
+                {doNow.go && (
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Go: ${doNow.text}`} onPress={doNow.go} style={styles.go} hitSlop={6}>
+                    <Text style={styles.goText}>GO</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
             <HowTo art={art} />
             {frenzy && (
               <View style={styles.frenzy} accessible accessibilityLabel={`Frenzy! Everything ${frenzy}`}>
@@ -142,13 +179,17 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
               </View>
             )}
             <Section title="YOUR CHESTS">
-              <ChestTrack chests={event.me.chests} value={event.me.points} art={art} onOpen={onOpen} opening={opening} label="Your chests" />
+              <ChestTrack chests={event.me.chests} value={event.me.points} art={art} onOpen={onOpen} opening={opening} label="Your chests"
+                onPeek={chest => setPeek(p => (p?.chest.key === chest.key ? null : { track: 'me', chest }))} />
+              <Peek chest={peek?.track === 'me' ? peek.chest : null} track="Your" />
               <Text style={styles.line}>{event.phase === 'upcoming' ? timeLine(event, now)
                 : hint ?? (event.me.chests.every(c => c.claimed) ? 'All your chests opened!' : 'Open your chests!')}</Text>
             </Section>
             {together.chests.length > 0 && (
               <Section title="EVERYONE'S REEF">
-                <ChestTrack chests={together.chests} value={together.total} art={art} onOpen={onOpen} opening={opening} label="Everyone's chests" />
+                <ChestTrack chests={together.chests} value={together.total} art={art} onOpen={onOpen} opening={opening} label="Everyone's chests"
+                  onPeek={chest => setPeek(p => (p?.chest.key === chest.key ? null : { track: 'together', chest }))} />
+                <Peek chest={peek?.track === 'together' ? peek.chest : null} track="Everyone's" />
                 <View style={styles.helpedRow}>
                   {event.me.helped ? <><GameIcon name="check" size={20} /><Text style={styles.line}>You helped!</Text></>
                     : <Text style={styles.line}>{together.min_personal <= 1 ? 'Help 1 time to share' : 'Help to share these'}</Text>}
@@ -207,7 +248,22 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
 
 export default memo(EventSheet);
 
+function showStarsFor(event: LiveEvent, atPark: boolean, live: boolean): boolean {
+  return atPark && event.here && live && event.star_rides.length > 0;
+}
+
 const styles = StyleSheet.create({
+  doNow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.sky, borderRadius: 18, borderWidth: 3, borderColor: BRAND.navy,
+    paddingVertical: 6, paddingLeft: 10, paddingRight: 6, minHeight: 56 },
+  doNowText: { flex: 1, fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
+  go: { backgroundColor: BRAND.gold, borderRadius: 12, borderWidth: 2.5, borderColor: BRAND.white, borderBottomWidth: 5, borderBottomColor: BRAND.goldLip,
+    paddingHorizontal: 14, paddingVertical: 6, minHeight: 44, justifyContent: 'center' },
+  goText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
+  peek: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 2 },
+  peekLabel: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft },
+  peekChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.cream, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy,
+    paddingLeft: 3, paddingRight: 8, height: 30, maxWidth: 220 },
+  peekText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
   scrim: { flex: 1, backgroundColor: BRAND.scrim, justifyContent: 'flex-end' },
   sheet: { flex: 1, backgroundColor: BRAND.cream, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 4, borderBottomWidth: 0,
     borderColor: BRAND.navy, overflow: 'hidden' },
