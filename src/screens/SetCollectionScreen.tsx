@@ -483,7 +483,13 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   // Extras: copies past the first, counted from the tiles when they are loaded (one number everywhere).
   const extras = items ? items.reduce((sum, item) => sum + (item.found ? item.spares : 0), 0) : spares;
   const canShare = !(preview && process.env.EXPO_PUBLIC_CREW_GIFT_PREVIEW !== '1');
-  const rows = useMemo(() => (items ? findRows(items, COLUMNS) : null), [items]);
+  // A set switch keeps the last grid on screen until the new set's rows are ready (never a frame of ghost slots).
+  const lastRows = useRef<FindRow[] | null>(null);
+  const rows = useMemo(() => {
+    const next = items ? findRows(items, COLUMNS) : null;
+    if (next) lastRows.current = next;
+    return next ?? lastRows.current;
+  }, [items]);
   const slotOf = useMemo(() => new Map((items ?? []).map((item, index) => [item.id, index + 1])), [items]);
 
   const header = (

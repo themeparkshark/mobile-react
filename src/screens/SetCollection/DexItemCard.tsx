@@ -133,7 +133,8 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
                   <Text style={styles.firstFoundText}>First found {new Date(item.firstFoundAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
                 </View>
               )}
-              <Text style={styles.flavor}>{item.flavor || (item.found ? `A ${look.label} find from the ${set?.name ?? 'collection'}.` : `A ${look.label} find still out there. Keep looking!`)}</Text>
+              {/* Only an authored line; never boilerplate that repeats the pills. */}
+              {!!item.flavor && <Text style={styles.flavor}>{item.flavor}</Text>}
               <View style={styles.where} accessible accessibilityLabel={`When to look: ${item.spawnHint}`}>
                 <GameIcon name={spawnIcon(item.spawnHint)} size={30} />
                 <View style={{ flex: 1 }}>
