@@ -1,10 +1,16 @@
 /**
- * Stamp Book v2: a passport sticker book on Alex's shark-camo ocean.
- * Hero: progress ring, a gold "Claim n!" button that starts the claim chain,
- * and a "Next stamp" slot with a Go button. Section chips with icons, counts
- * and red dots scroll themselves into view. Each section is a page with a
- * chest at the end of its bar; a small filtered section becomes a two-column
- * album page with a "Next up" callout. Tap a stamp for the big card.
+ * Stamp Book v3: a passport book in a sunlit lagoon (the Standings ocean art).
+ *
+ * At a glance, top to bottom:
+ *  - The cover: a ring with stamps earned, the title you wear (tap: Titles),
+ *    and, when rewards wait, one big gold "Claim n!" that starts the claim chain.
+ *  - Almost there: the 3 stamps closest to done, each with its ring and "14/25".
+ *  - Bookmark tabs with counts and a red dot where a reward waits.
+ *  - One paper page per section. Owned stamps are white sticker cards pressed
+ *    onto the page; stamps not earned yet wait in recessed dashed slots with
+ *    their ghost art, a progress ring and "3/5". Title stamps wear a crown.
+ * Tap a stamp for the big card. The Titles list says how a stamp becomes a
+ * title (earn, claim, wear) and wears or removes one in a tap.
  *
  * Performance: one shared shine clock (BookFx), tiles never re-render on card
  * open/close or scroll, stamp objects keep identity across refetches, the
@@ -13,7 +19,7 @@
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type ScrollView } from 'react-native';
 import { Image } from 'expo-image';
-import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
@@ -29,31 +35,36 @@ import { playSfx } from '../gamekit/SFX';
 import GameIcon from '../ui/GameIcon';
 import type { GameIconName } from '../ui/iconNames';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import StampTile, { INK } from './stampbook/StampTile';
+import StampTile, { INK, MUTED_INK, PAPER, SLOT_EDGE } from './stampbook/StampTile';
 import StampCard, { type ClaimResult, type Wallet } from './stampbook/StampCard';
 import StampArt from './stampbook/StampArt';
+import TitlesSheet from './stampbook/TitlesSheet';
 import { BookFxProvider, useBookClocks, useBookFx } from './stampbook/BookFx';
 import { Confetti } from './stampbook/SlamFx';
 import { prefetchList } from './stampbook/art';
 import { loadCelebrated, loadSeen, saveCelebrated, saveSeen } from './stampbook/seen';
 import { takeStampsDirty } from './stampbook/dirty';
 import {
-  bookTotals, buildBook, claimQueue, nextUp, remainingLine, requirement, ring, stampIndex,
-  type BookSection, type BookStamp, type GoTarget,
+  almostThereList, bookTotals, buildBook, claimQueue, progressLabel, remainingLine, requirement, ring, stampIndex, titleCounts, titleEntries,
+  type BookSection, type BookStamp, type GoTarget, type TitleEntry,
 } from './stampbook/model';
 
-const GAP = 10;
-const SIDE = 14;
+const GAP = 9;
+const SIDE = 12;
+const PAGE_PAD = 12;
+const PAGE_BORDER = 3;
 const REFETCH_MS = 30_000;
 /** The floating compass nav covers about this much of the bottom. */
 const NAV_COVER = 150;
 const SECTION_ICON: Record<string, GameIconName> = {
   parks: 'map', hunt: 'pin', rides: 'coin', friends: 'member', streaks: 'streak', milestones: 'trophy', special: 'star',
 };
+const BACKGROUND = require('../../assets/images/screens/leaderboard/standings-bg.png');
 
 export default function StampBookScreen() {
   const previewMode = __DEV__ && process.env.EXPO_PUBLIC_STAMP_BOOK_PREVIEW === '1';
   const { player, refreshPlayer } = useContext(AuthContext);
+  const route = useRoute();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
@@ -69,6 +80,11 @@ export default function StampBookScreen() {
   const [fresh, setFresh] = useState(false);
   const [equipping, setEquipping] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [titlesOpen, setTitlesOpen] = useState(() => !!(route.params as { titles?: boolean } | undefined)?.titles);
+  const [titleBusy, setTitleBusy] = useState<string | null>(null);
+  const [titleMessage, setTitleMessage] = useState<string | null>(null);
+  // Dev preview only: the worn title lives here (there is no signed-in player).
+  const [previewTitle, setPreviewTitle] = useState<string | null>(null);
   // Seen stamps live in a ref so opening a card never changes `open` (no tile re-render on the slam frame).
   const seenRef = useRef<Set<string> | null>(null);
   const [seenVersion, setSeenVersion] = useState(0);
@@ -79,7 +95,7 @@ export default function StampBookScreen() {
   const prevIndex = useRef<Map<number, BookStamp>>(new Map());
   const pendingPatch = useRef<number[]>([]);
 
-  const fx = useBookClocks(focused && !selected, reducedMotion);
+  const fx = useBookClocks(focused && !selected && !titlesOpen, reducedMotion);
 
   const sections = useMemo(() => {
     if (!response) return [];
@@ -89,16 +105,23 @@ export default function StampBookScreen() {
   }, [response]);
   const totals = useMemo(() => bookTotals(sections), [sections]);
   const queue = useMemo(() => claimQueue(sections), [sections]);
-  const next = useMemo(() => nextUp(sections, filter), [sections, filter]);
+  const almost = useMemo(() => almostThereList(sections, 3), [sections]);
   const shown = filter === 'all' ? sections : sections.filter(s => s.key === filter);
   const accentFor = useCallback((key: string) => sections.find(s => s.key === key)?.color ?? '#2F6BFF', [sections]);
+  const wornTitle = (previewMode ? previewTitle ?? response?.equipped_title ?? null : player?.title ?? response?.equipped_title ?? null) || null;
+  const titles = useMemo(() => titleEntries(sections, response?.unlocked_titles, wornTitle), [sections, response?.unlocked_titles, wornTitle]);
+  const titleCount = titleCounts(titles);
+
+  // Opened again with { titles: true } (the profile's "More titles"): show the Titles list.
+  const wantTitles = !!(route.params as { titles?: boolean } | undefined)?.titles;
+  useEffect(() => { if (wantTitles) setTitlesOpen(true); }, [wantTitles, route.params]);
 
   useEffect(() => { loadSeen().then(set => { seenRef.current = set; setSeenVersion(v => v + 1); }); }, []);
 
   const load = useCallback((force: boolean) => {
     if (previewMode) {
       const { PREVIEW_BOOK } = require('./stampbook/preview');
-      setResponse(PREVIEW_BOOK);
+      setResponse(current => current ?? PREVIEW_BOOK);
       setStatus('ready');
       return;
     }
@@ -133,12 +156,13 @@ export default function StampBookScreen() {
     load(force);
   }, [load]));
 
-  // Dev-only visual checks: open a section or a stamp card straight away.
+  // Dev-only visual checks: open a section, the Titles list or a stamp card straight away.
   const devHooks = __DEV__ && (previewMode || process.env.EXPO_PUBLIC_STAMP_BOOK_LIVE === '1');
   useEffect(() => {
     if (!devHooks || status !== 'ready') return;
     const tab = process.env.EXPO_PUBLIC_STAMP_BOOK_TAB;
     if (tab) setFilter(tab);
+    if (process.env.EXPO_PUBLIC_STAMP_BOOK_TITLES === '1') setTitlesOpen(true);
     // Scroll the book down by N points, for capturing tiles below the fold.
     const scrollY = Number(process.env.EXPO_PUBLIC_STAMP_BOOK_SCROLL ?? 0);
     if (scrollY > 0) setTimeout(() => scroller.current?.scrollTo({ y: scrollY, animated: false }), 1200);
@@ -148,6 +172,24 @@ export default function StampBookScreen() {
     // Preview should only run once on load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devHooks, status]);
+
+  // Dev-only capture driver (Metro inspector): globalThis.__stampBook.open('explorer'), .titles(), .scroll(600), .tab('hunt'), .close().
+  useEffect(() => {
+    if (!devHooks) return;
+    const g = globalThis as unknown as { __stampBook?: object };
+    g.__stampBook = {
+      open: (slug: string) => { const s = sections.flatMap(x => x.stamps).find(x => x.slug === slug); if (s) open(s); return !!s; },
+      fresh: (slug: string) => { const s = sections.flatMap(x => x.stamps).find(x => x.slug === slug); if (s) { setFresh(true); setSelected(s); } return !!s; },
+      titles: () => setTitlesOpen(true),
+      closeTitles: () => setTitlesOpen(false),
+      scroll: (y: number) => scroller.current?.scrollTo({ y, animated: false }),
+      tab: (key: string) => setFilter(key),
+      close: () => closeRef.current(),
+      claimNext: () => openNextClaim(),
+    };
+    return () => { delete g.__stampBook; };
+  }, [devHooks, sections, open, openNextClaim]);
+  const closeRef = useRef<() => void>(() => undefined);
 
   // Section completion moment: once per section per device.
   useEffect(() => {
@@ -172,10 +214,21 @@ export default function StampBookScreen() {
     const ids = pendingPatch.current;
     if (!ids.length) return;
     pendingPatch.current = [];
-    setResponse(current => current && {
-      ...current,
-      stamps: Object.fromEntries(Object.entries(current.stamps).map(([key, list]) =>
-        [key, list.map(s => (ids.includes(s.id) ? { ...s, reward_claimed: true } : s))])),
+    setResponse(current => {
+      if (!current) return current;
+      const all = Object.values(current.stamps).flat();
+      // A claimed title stamp unlocks its title (the server writes player_stamp_titles in the same claim).
+      const unlocked = [...(current.unlocked_titles ?? [])];
+      for (const id of ids) {
+        const s = all.find(x => x.id === id);
+        if (s?.rewards?.title && !unlocked.some(u => u.stamp_id === id)) unlocked.push({ stamp_id: id, title: s.rewards.title });
+      }
+      return {
+        ...current,
+        unlocked_titles: unlocked,
+        stamps: Object.fromEntries(Object.entries(current.stamps).map(([key, list]) =>
+          [key, list.map(s => (ids.includes(s.id) ? { ...s, reward_claimed: true } : s))])),
+      };
     });
   }, []);
 
@@ -212,6 +265,8 @@ export default function StampBookScreen() {
     flushPatches();
     flushSeen();
   }, [flushPatches, flushSeen]);
+
+  closeRef.current = close;
 
   const nextClaim = useMemo(() => {
     const waiting = queue.filter(s => !pendingPatch.current.includes(s.id));
@@ -261,22 +316,60 @@ export default function StampBookScreen() {
     }
   }, [selected, previewMode, refreshPlayer]);
 
+  /** Wear (stampId) or take off (null) a title through the server, then refresh the player so every surface agrees. */
+  const setTitle = useCallback(async (stampId: number | null, title: string | null): Promise<boolean> => {
+    if (previewMode) { setPreviewTitle(title ?? ''); return true; }
+    await equipStampTitle(stampId);
+    await refreshPlayer();
+    setResponse(current => current && { ...current, equipped_title: title });
+    return true;
+  }, [previewMode, refreshPlayer]);
+
   const toggleTitle = useCallback(async () => {
-    if (!selected?.rewards.title || equipping || previewMode) return;
-    const wearing = player?.title === selected.rewards.title;
+    if (!selected?.rewards.title || equipping) return;
+    const wearing = wornTitle === selected.rewards.title;
     setEquipping(true);
     setMessage(null);
     try {
-      await equipStampTitle(wearing ? null : selected.id);
-      await refreshPlayer();
+      await setTitle(wearing ? null : selected.id, wearing ? null : selected.rewards.title);
       haptic('success');
-      setMessage(wearing ? 'Title removed from your profile.' : 'Title is now on your profile.');
+      playSfx(wearing ? 'ui.select' : 'fx.reward', 0.8);
     } catch {
       setMessage('Could not update your title. Try again.');
     } finally {
       setEquipping(false);
     }
-  }, [selected, equipping, previewMode, player?.title, refreshPlayer]);
+  }, [selected, equipping, wornTitle, setTitle]);
+
+  const wearFromList = useCallback(async (entry: TitleEntry | null) => {
+    if (titleBusy) return;
+    setTitleBusy(entry ? entry.title : '__remove');
+    setTitleMessage(null);
+    try {
+      await setTitle(entry ? entry.stamp.id : null, entry ? entry.title : null);
+      haptic('success');
+      playSfx(entry ? 'fx.reward' : 'ui.select', 0.8);
+      setTitleMessage(entry ? `${entry.title} is on your profile!` : 'Title taken off your profile.');
+    } catch {
+      haptic('warning');
+      setTitleMessage('That did not save. Try again.');
+    } finally {
+      setTitleBusy(null);
+    }
+  }, [titleBusy, setTitle]);
+
+  const openTitles = useCallback(() => {
+    playSfx('ui.modalOpen', 0.5);
+    haptic('tapLight');
+    setTitleMessage(null);
+    setTitlesOpen(true);
+  }, []);
+
+  /** From the Titles list: close it first (one Modal at a time on iOS), then open the stamp. */
+  const openFromTitles = useCallback((stamp: BookStamp) => {
+    setTitlesOpen(false);
+    setTimeout(() => open(stamp), 320);
+  }, [open]);
 
   const go = useCallback((stamp: BookStamp) => {
     const target = requirement(stamp).go;
@@ -314,9 +407,8 @@ export default function StampBookScreen() {
       </Topbar>
 
       <BookFxProvider value={fx}>
-        <View style={styles.page} onLayout={e => { fx.viewportH.value = e.nativeEvent.layout.height; }}>
-          <Image source={require('../../assets/images/shark_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
-          <View style={styles.dim} />
+        <View style={styles.screen} onLayout={e => { fx.viewportH.value = e.nativeEvent.layout.height; }}>
+          <Image source={BACKGROUND} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />
 
           {status !== 'ready' ? (
             <View style={styles.state}>
@@ -329,9 +421,11 @@ export default function StampBookScreen() {
             </View>
           ) : (
             <Animated.ScrollView ref={scroller as never} onScroll={onScroll} scrollEventThrottle={16}
-              contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} stickyHeaderIndices={[1]}>
-              <Hero earned={totals.earned} total={totals.total} toClaim={totals.toClaim} next={next}
-                accentFor={accentFor} onClaim={openNextClaim} onOpen={open} onGo={go} />
+              contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} stickyHeaderIndices={[2]}>
+              <Cover earned={totals.earned} total={totals.total} toClaim={totals.toClaim} worn={wornTitle}
+                titlesOwned={titleCount.owned} titlesTotal={titleCount.total} onClaim={openNextClaim} onTitles={openTitles} />
+
+              <AlmostThere stamps={filter === 'all' ? almost : almostThereList(shown, 3)} accentFor={accentFor} onOpen={open} />
 
               <View style={styles.tabsWrap}>
                 <Animated.ScrollView ref={chipScroller as never} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
@@ -353,8 +447,8 @@ export default function StampBookScreen() {
               {sections.length === 0 && <Text style={styles.stateText}>No stamps yet. Check back soon.</Text>}
 
               {shown.map(section => (
-                <SectionBlock key={section.key} section={section} width={width} album={filter !== 'all' && section.stamps.length < 6}
-                  seenRef={seenRef} seenVersion={seenVersion} celebrating={celebrate === section.key} onOpen={open} onGo={go} />
+                <SectionPage key={section.key} section={section} width={width}
+                  seenRef={seenRef} seenVersion={seenVersion} celebrating={celebrate === section.key} onOpen={open} />
               ))}
               <View style={{ height: NAV_COVER + insets.bottom + 24 }} />
             </Animated.ScrollView>
@@ -370,7 +464,7 @@ export default function StampBookScreen() {
           wallet={wallet}
           equipping={equipping}
           message={message}
-          wearingTitle={!!selected?.rewards.title && player?.title === selected.rewards.title}
+          wearingTitle={!!selected?.rewards.title && wornTitle === selected.rewards.title}
           nextStamp={nextClaim}
           nextCount={queue.filter(s => s.id !== selected?.id && !pendingPatch.current.includes(s.id)).length}
           onClaim={claim}
@@ -379,71 +473,113 @@ export default function StampBookScreen() {
           onToggleTitle={toggleTitle}
           onClose={close}
         />
+        <TitlesSheet visible={titlesOpen} entries={titles} worn={wornTitle} busy={titleBusy} message={titleMessage}
+          onWear={entry => { void wearFromList(entry); }} onRemove={() => { void wearFromList(null); }}
+          onOpenStamp={openFromTitles} onClose={() => setTitlesOpen(false)} />
       </BookFxProvider>
     </Wrapper>
   );
 }
 
-function Hero({ earned, total, toClaim, next, accentFor, onClaim, onOpen, onGo }: {
-  earned: number; total: number; toClaim: number; next: BookStamp | null; accentFor: (k: string) => string;
-  onClaim: () => void; onOpen: (s: BookStamp) => void; onGo: (s: BookStamp) => void;
+/** The book's cover: stamps earned, the worn title (opens Titles) and the claim button when rewards wait. */
+function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim, onTitles }: {
+  earned: number; total: number; toClaim: number; worn: string | null; titlesOwned: number; titlesTotal: number;
+  onClaim: () => void; onTitles: () => void;
 }) {
   const fx = useBookFx();
-  const R = 36;
+  const R = 34;
   const { circumference, offset } = ring(total > 0 ? earned / total : 0, R);
   const bounce = useAnimatedStyle(() => ({ transform: [{ translateY: -4 * fx.pulse.value }, { rotate: `${-8 * fx.pulse.value}deg` }] }));
-  const pulse = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.04 * fx.pulse.value }] }));
+  const pulse = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.03 * fx.pulse.value }] }));
   return (
-    <View style={styles.hero}>
-      <View style={styles.heroTop}>
-        <View style={styles.heroRing} accessible accessibilityLabel={`${earned} of ${total} stamps`}>
-          <Svg width={92} height={92} viewBox="0 0 92 92">
-            <Circle cx={46} cy={46} r={R} stroke="rgba(255,255,255,0.25)" strokeWidth={10} fill="none" />
-            <Circle cx={46} cy={46} r={R} stroke="#FFCF3B" strokeWidth={10} fill="none" strokeLinecap="round"
-              strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={offset} rotation={-90} origin="46, 46" />
-          </Svg>
-          <View style={styles.heroCount}>
-            <Text style={styles.heroNum} maxFontSizeMultiplier={1.2}>{earned}</Text>
-            <Text style={styles.heroOf} maxFontSizeMultiplier={1.2}>of {total}</Text>
+    <View style={styles.coverWrap}>
+      <View style={styles.coverLip} />
+      <View style={styles.cover}>
+        <View style={styles.coverTop}>
+          <View style={styles.coverRing} accessible accessibilityLabel={`${earned} of ${total} stamps`}>
+            <Svg width={86} height={86} viewBox="0 0 86 86">
+              <Circle cx={43} cy={43} r={R} stroke="rgba(255,255,255,0.28)" strokeWidth={10} fill="none" />
+              <Circle cx={43} cy={43} r={R} stroke="#FFCF3B" strokeWidth={10} fill="none" strokeLinecap="round"
+                strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={offset} rotation={-90} origin="43, 43" />
+            </Svg>
+            <View style={styles.coverCount}>
+              <Text style={styles.coverNum} maxFontSizeMultiplier={1.2}>{earned}</Text>
+              <Text style={styles.coverOf} maxFontSizeMultiplier={1.2}>of {total}</Text>
+            </View>
+          </View>
+          <View style={styles.coverText}>
+            <Text style={styles.coverTitle} maxFontSizeMultiplier={1.2}>My Stamps</Text>
+            <Pressable onPress={onTitles} style={({ pressed }) => [styles.titleRow, pressed && styles.pressed]} hitSlop={4}
+              accessibilityRole="button"
+              accessibilityLabel={worn ? `Your title: ${worn}. Titles, ${titlesOwned} of ${titlesTotal}.` : `No title yet. Titles, ${titlesOwned} of ${titlesTotal}.`}
+              accessibilityHint="Shows every title and how to get it">
+              <View style={[styles.titlePill, !worn && styles.titlePillEmpty]}>
+                <GameIcon name="crown" size={20} />
+                <Text style={[styles.titlePillText, !worn && styles.titlePillTextEmpty]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}
+                  maxFontSizeMultiplier={1.2}>{worn ?? 'Get a title!'}</Text>
+              </View>
+              <View style={styles.titlesBtn}>
+                <Text style={styles.titlesBtnText} maxFontSizeMultiplier={1.2}>Titles</Text>
+                <Text style={styles.titlesBtnCount} maxFontSizeMultiplier={1.2}>{titlesOwned}/{titlesTotal}</Text>
+              </View>
+            </Pressable>
           </View>
         </View>
-        <View style={styles.heroText}>
-          <Text style={styles.heroTitle} maxFontSizeMultiplier={1.2}>My Passport</Text>
-          {toClaim > 0 ? (
-            <Animated.View style={!fx.reducedMotion && pulse}>
-              <Pressable onPress={onClaim} style={styles.claimAll} accessibilityRole="button"
-                accessibilityLabel={`Claim rewards from ${toClaim} ${toClaim === 1 ? 'stamp' : 'stamps'}`}>
-                <View style={styles.claimAllFace}>
-                  <Animated.View style={!fx.reducedMotion && bounce}><GameIcon name="gift" size={26} /></Animated.View>
-                  <Text style={styles.claimAllText} maxFontSizeMultiplier={1.2}>Claim {toClaim}!</Text>
-                </View>
-                <View style={styles.badge}><Text style={styles.badgeText}>{toClaim}</Text></View>
-              </Pressable>
-            </Animated.View>
-          ) : (
-            <Text style={styles.heroSub} maxFontSizeMultiplier={1.3}>Every stamp is something you did!</Text>
-          )}
-        </View>
+        {toClaim > 0 && (
+          <Animated.View style={!fx.reducedMotion && pulse}>
+            <Pressable onPress={onClaim} style={({ pressed }) => [styles.claimAll, pressed && styles.pressed]} accessibilityRole="button"
+              accessibilityLabel={`Claim rewards from ${toClaim} ${toClaim === 1 ? 'stamp' : 'stamps'}`}>
+              <View style={styles.claimAllFace}>
+                <Animated.View style={!fx.reducedMotion && bounce}><GameIcon name="gift" size={30} /></Animated.View>
+                <Text style={styles.claimAllText} maxFontSizeMultiplier={1.2}>{toClaim === 1 ? 'Claim your reward!' : `Claim ${toClaim} rewards!`}</Text>
+              </View>
+              <View style={styles.badge}><Text style={styles.badgeText}>{toClaim}</Text></View>
+            </Pressable>
+          </Animated.View>
+        )}
       </View>
-      {next && (
-        <View style={styles.next}>
-          <Pressable style={styles.nextMain} onPress={() => onOpen(next)} accessibilityRole="button"
-            accessibilityLabel={`Next stamp: ${next.name}. ${remainingLine(next)}`}>
-            <View style={styles.nextArt}><StampArt stamp={next} size="thumb" placeholder={accentFor(next.section)} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.nextLabel} maxFontSizeMultiplier={1.2}>NEXT STAMP</Text>
-              <Text style={styles.nextName} numberOfLines={1} maxFontSizeMultiplier={1.2}>{next.shortName}</Text>
-              <Text style={styles.nextLine} numberOfLines={1} maxFontSizeMultiplier={1.2}>{remainingLine(next)}</Text>
+    </View>
+  );
+}
+
+/** The 3 stamps closest to done: ghost art in its ring, the name and "14/25". */
+function AlmostThere({ stamps, accentFor, onOpen }: { stamps: readonly BookStamp[]; accentFor: (k: string) => string; onOpen: (s: BookStamp) => void }) {
+  if (!stamps.length) return null;
+  return (
+    <View style={styles.almost}>
+      <View style={styles.almostHead}>
+        <GameIcon name="star" size={20} />
+        <Text style={styles.almostTitle} maxFontSizeMultiplier={1.2}>Almost there</Text>
+      </View>
+      <View style={styles.almostRow}>
+        {stamps.map(s => (
+          <Pressable key={s.id} style={({ pressed }) => [styles.almostItem, pressed && styles.pressed]} onPress={() => { playSfx('ui.tap'); haptic('tapLight'); onOpen(s); }}
+            accessibilityRole="button" accessibilityLabel={`${s.name}. ${progressLabel(s)}. ${remainingLine(s)}`}>
+            <View style={styles.almostArt}>
+              <View style={styles.almostGhost}><StampArt stamp={s} size="thumb" /></View>
+              <MiniRing fraction={s.percent / 100} color={accentFor(s.section)} />
+            </View>
+            <Text style={styles.almostName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.2}>{s.shortName}</Text>
+            <View style={styles.almostCount}>
+              <GameIcon name={requirement(s).icon} size={14} />
+              <Text style={styles.almostCountText} maxFontSizeMultiplier={1.2}>{progressLabel(s)}</Text>
             </View>
           </Pressable>
-          {requirement(next).go && (
-            <Pressable onPress={() => onGo(next)} style={styles.go} accessibilityRole="button" accessibilityLabel={`Go. ${next.howTo}`}>
-              <Text style={styles.goText}>Go!</Text>
-            </Pressable>
-          )}
-        </View>
-      )}
+        ))}
+      </View>
     </View>
+  );
+}
+
+function MiniRing({ fraction, color }: { fraction: number; color: string }) {
+  const size = 60; const r = 26;
+  const { circumference, offset } = ring(fraction, r);
+  return (
+    <Svg width={size} height={size} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Circle cx={30} cy={30} r={r} stroke="rgba(20,33,61,0.14)" strokeWidth={5} fill="none" />
+      <Circle cx={30} cy={30} r={r} stroke={color} strokeWidth={5} fill="none" strokeLinecap="round"
+        strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={offset} rotation={-90} origin="30, 30" />
+    </Svg>
   );
 }
 
@@ -451,110 +587,123 @@ function Tab({ label, color, icon, active, earned, total, dot, onPress, onLayout
   label: string; color: string; icon: GameIconName; active: boolean; earned: number; total: number; dot: boolean;
   onPress: () => void; onLayout: (e: LayoutChangeEvent) => void;
 }) {
+  const done = total > 0 && earned >= total;
   return (
     <Pressable onPress={onPress} onLayout={onLayout} accessibilityRole="tab" accessibilityState={{ selected: active }}
       accessibilityLabel={`${label}, ${earned} of ${total}${dot ? ', rewards to claim' : ''}`}
-      style={[styles.tab, active && { backgroundColor: color, borderColor: '#FFFFFF' }]}>
+      style={[styles.tab, active && { backgroundColor: color === '#FFFFFF' ? PAPER : color, borderColor: '#FFFFFF' }]}>
       <GameIcon name={icon} size={20} />
       <Text style={[styles.tabText, active && styles.tabTextActive]} maxFontSizeMultiplier={1.2}>{label}</Text>
       <Text style={[styles.tabCount, active && styles.tabTextActive]} maxFontSizeMultiplier={1.2}>{earned}/{total}</Text>
+      {done && <GameIcon name="check" size={18} />}
       {dot && <View style={styles.dot} />}
     </Pressable>
   );
 }
 
-const SectionBlock = memo(function SectionBlock({ section, width, album, seenRef, seenVersion, celebrating, onOpen, onGo }: {
-  section: BookSection; width: number; album: boolean; seenRef: { readonly current: Set<string> | null }; seenVersion: number;
-  celebrating: boolean; onOpen: (s: BookStamp) => void; onGo: (s: BookStamp) => void;
+const SectionPage = memo(function SectionPage({ section, width, seenRef, seenVersion, celebrating, onOpen }: {
+  section: BookSection; width: number; seenRef: { readonly current: Set<string> | null }; seenVersion: number;
+  celebrating: boolean; onOpen: (s: BookStamp) => void;
 }) {
   void seenVersion; // re-render this section (only) when NEW tags change
   const seen = seenRef.current;
   const sectionTop = useSharedValue(0);
   const gridLocal = useSharedValue(0);
   const gridTop = useDerivedValue(() => sectionTop.value + gridLocal.value);
-  const cols = album ? 2 : 3;
-  const tile = Math.floor((width - SIDE * 2 - GAP * (cols - 1)) / cols);
-  const tileH = Math.round(tile * (album ? 1.3 : 1.45));
+  const cols = 3;
+  const tile = Math.floor((width - SIDE * 2 - PAGE_PAD * 2 - PAGE_BORDER * 2 - GAP * (cols - 1)) / cols);
+  const tileH = Math.round(tile * 1.36);
   const pct = section.total > 0 ? Math.round((section.earned / section.total) * 100) : 0;
   const complete = section.total > 0 && section.earned >= section.total;
-  // Same pick as the hero's Next stamp on a filtered tab, so both point at one stamp.
-  const upNext = album ? nextUp([section]) ?? section.stamps.find(s => !s.earned && !s.secret) ?? null : null;
   return (
-    <View style={styles.section} onLayout={e => { sectionTop.value = e.nativeEvent.layout.y; }}>
-      <View style={styles.sectionHead}>
-        <View style={[styles.sectionBadge, { backgroundColor: section.color }]}><GameIcon name={SECTION_ICON[section.key] ?? 'star'} size={22} /></View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>{section.label}</Text>
-          <Text style={styles.sectionBlurb} maxFontSizeMultiplier={1.3}>{section.blurb}</Text>
+    <View style={styles.pageWrap} onLayout={e => { sectionTop.value = e.nativeEvent.layout.y; }}>
+      <View style={styles.pageLip} />
+      <View style={styles.page}>
+        <View style={styles.stitch} pointerEvents="none" />
+        <View style={styles.pageHead}>
+          <View style={[styles.sectionBadge, { backgroundColor: section.color }]}><GameIcon name={SECTION_ICON[section.key] ?? 'star'} size={24} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>{section.label}</Text>
+            <Text style={styles.sectionBlurb} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.2}>{section.blurb}</Text>
+          </View>
+          <GameIcon name={complete || celebrating ? 'chestOpen' : 'chest'} size={36} accessibilityLabel={complete ? 'Page complete' : 'Finish the page'} />
         </View>
-      </View>
-      <View style={styles.sectionBarRow}>
-        <View style={styles.sectionBar}>
-          <View style={[styles.sectionFill, { width: `${Math.max(pct, 3)}%`, backgroundColor: section.color }]} />
+        <View style={styles.sectionBar} accessible accessibilityLabel={`${section.earned} of ${section.total} stamped`}>
+          <View style={[styles.sectionFill, { width: `${Math.max(pct, 0)}%`, backgroundColor: section.color }]} />
           <Text style={styles.sectionBarText} maxFontSizeMultiplier={1.2}>{section.earned} / {section.total}</Text>
         </View>
-        <GameIcon name={complete || celebrating ? 'chestOpen' : 'chest'} size={34} accessibilityLabel={complete ? 'Section complete' : 'Finish the section'} />
-      </View>
-      {upNext && (
-        <View style={styles.callout}>
-          <Pressable style={styles.calloutMain} onPress={() => onOpen(upNext)} accessibilityRole="button"
-            accessibilityLabel={`Next up: ${upNext.name}. ${remainingLine(upNext)}`}>
-            <GameIcon name={requirement(upNext).icon} size={26} />
-            <Text style={styles.calloutText} maxFontSizeMultiplier={1.3}>Next up: {upNext.shortName}. {remainingLine(upNext)}</Text>
-          </Pressable>
-          {requirement(upNext).go && (
-            <Pressable onPress={() => onGo(upNext)} style={styles.go} accessibilityRole="button" accessibilityLabel={`Go. ${upNext.howTo}`}>
-              <Text style={styles.goText}>Go!</Text>
-            </Pressable>
-          )}
+        <View style={styles.grid} onLayout={(e: LayoutChangeEvent) => { gridLocal.value = e.nativeEvent.layout.y; }}>
+          {section.stamps.map((stamp, i) => (
+            <StampTile key={stamp.id} stamp={stamp} size={tile} height={tileH} accent={section.color} col={i % cols}
+              isNew={!!seen && stamp.earned && !seen.has(String(stamp.id))} gridTop={gridTop as SharedValue<number>} onPress={onOpen} />
+          ))}
         </View>
-      )}
-      <View style={styles.grid} onLayout={(e: LayoutChangeEvent) => { gridLocal.value = e.nativeEvent.layout.y; }}>
-        {section.stamps.map((stamp, i) => (
-          <StampTile key={stamp.id} stamp={stamp} size={tile} height={tileH} accent={section.color} col={i % cols}
-            isNew={!!seen && stamp.earned && !seen.has(String(stamp.id))} gridTop={gridTop as SharedValue<number>} onPress={onOpen} />
-        ))}
       </View>
     </View>
   );
 });
 
 const styles = StyleSheet.create({
-  page: { flex: 1, overflow: 'hidden' },
-  dim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,52,110,0.28)' },
+  screen: { flex: 1, overflow: 'hidden', backgroundColor: '#0a77bf' },
   scroll: { paddingTop: 12 },
   state: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  stateText: { color: '#FFFFFF', fontFamily: 'Shark', fontSize: 18, textAlign: 'center', paddingHorizontal: 24 },
+  stateText: { color: '#FFFFFF', fontFamily: 'Shark', fontSize: 18, textAlign: 'center', paddingHorizontal: 24, textShadowColor: '#05346e', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
   retry: { marginTop: 14, borderRadius: 14, backgroundColor: '#FFCF3B', paddingHorizontal: 22, paddingVertical: 11, borderWidth: 3, borderColor: INK },
   retryText: { color: INK, fontFamily: 'Shark', fontSize: 16 },
+  pressed: { opacity: 0.88, transform: [{ scale: 0.98 }] },
 
-  hero: { marginHorizontal: SIDE, padding: 12, borderRadius: 22, backgroundColor: '#0a77bf', borderWidth: 2.5, borderColor: '#FFFFFF' },
-  heroTop: { flexDirection: 'row', alignItems: 'center' },
-  heroRing: { width: 92, height: 92, alignItems: 'center', justifyContent: 'center' },
-  heroCount: { position: 'absolute', alignItems: 'center' },
-  heroNum: { fontFamily: 'Shark', fontSize: 28, color: '#FFFFFF', lineHeight: 30 },
-  heroOf: { fontFamily: 'Knockout', fontSize: 13, color: '#E2F6FF' },
-  heroText: { flex: 1, marginLeft: 12 },
-  heroTitle: { fontFamily: 'Shark', fontSize: 26, color: '#FFFFFF', textTransform: 'uppercase', textShadowColor: '#05346e', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
-  heroSub: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF', marginTop: 2 },
-  claimAll: { marginTop: 6, alignSelf: 'flex-start', borderRadius: 16, backgroundColor: '#C98A00', paddingBottom: 5 },
-  claimAllFace: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 46, paddingHorizontal: 14, borderRadius: 16,
-    backgroundColor: '#FFCF3B', borderWidth: 2.5, borderColor: '#FFFFFF',
+  // Cover
+  coverWrap: { marginHorizontal: SIDE },
+  coverLip: { position: 'absolute', left: 0, right: 0, top: 8, bottom: -6, borderRadius: 24, backgroundColor: '#045089' },
+  cover: { padding: 12, borderRadius: 24, backgroundColor: '#0a77bf', borderWidth: 3, borderColor: '#FFFFFF', gap: 10 },
+  coverTop: { flexDirection: 'row', alignItems: 'center' },
+  coverRing: { width: 86, height: 86, alignItems: 'center', justifyContent: 'center' },
+  coverCount: { position: 'absolute', alignItems: 'center' },
+  coverNum: { fontFamily: 'Shark', fontSize: 28, color: '#FFFFFF', lineHeight: 30 },
+  coverOf: { fontFamily: 'Knockout', fontSize: 14, color: '#E2F6FF' },
+  coverText: { flex: 1, marginLeft: 12, gap: 6 },
+  coverTitle: { fontFamily: 'Shark', fontSize: 25, color: '#FFFFFF', textTransform: 'uppercase', textShadowColor: '#05346e', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
+  titlePill: {
+    flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 38, backgroundColor: '#FFCF3B', borderRadius: 19,
+    paddingHorizontal: 10, borderWidth: 2, borderColor: '#FFFFFF', borderBottomWidth: 4, borderBottomColor: '#D99A00',
   },
-  claimAllText: { fontFamily: 'Shark', fontSize: 20, color: '#FFFFFF', textShadowColor: '#8A5A00', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
-  badge: { position: 'absolute', top: -8, right: -8, minWidth: 24, height: 24, borderRadius: 12, backgroundColor: '#E3262E', borderWidth: 2, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
-  badgeText: { fontFamily: 'Shark', fontSize: 13, color: '#FFFFFF' },
-  next: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, backgroundColor: 'rgba(0,40,90,0.4)', borderRadius: 16, padding: 8 },
-  nextMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  nextArt: { width: 54, height: 54 },
-  nextLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#FFCF3B', letterSpacing: 1 },
-  nextName: { fontFamily: 'Shark', fontSize: 17, color: '#FFFFFF' },
-  nextLine: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF' },
-  go: { minHeight: 44, minWidth: 64, borderRadius: 14, backgroundColor: '#3FBF3F', borderWidth: 2.5, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  goText: { fontFamily: 'Shark', fontSize: 19, color: '#FFFFFF', textShadowColor: '#1E6B1E', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
+  titlePillEmpty: { backgroundColor: 'rgba(255,255,255,0.18)', borderBottomColor: 'rgba(0,40,90,0.5)', borderStyle: 'dashed' },
+  titlePillText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 16, color: INK },
+  titlePillTextEmpty: { color: '#FFFFFF' },
+  titlesBtn: {
+    alignItems: 'center', justifyContent: 'center', minHeight: 44, minWidth: 58, paddingHorizontal: 8, borderRadius: 14,
+    backgroundColor: '#05559A', borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)',
+  },
+  titlesBtnText: { fontFamily: 'Shark', fontSize: 14, color: '#FFFFFF', lineHeight: 16 },
+  titlesBtnCount: { fontFamily: 'Knockout', fontSize: 13, color: '#FFCF3B', lineHeight: 15 },
+  claimAll: { borderRadius: 18, backgroundColor: '#C98A00', paddingBottom: 5 },
+  claimAllFace: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 52, paddingHorizontal: 14, borderRadius: 18,
+    backgroundColor: '#FFCF3B', borderWidth: 3, borderColor: '#FFFFFF',
+  },
+  claimAllText: { fontFamily: 'Shark', fontSize: 22, color: '#FFFFFF', textShadowColor: '#8A5A00', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
+  badge: { position: 'absolute', top: -9, right: -6, minWidth: 28, height: 28, borderRadius: 14, backgroundColor: '#E3262E', borderWidth: 2.5, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  badgeText: { fontFamily: 'Shark', fontSize: 15, color: '#FFFFFF' },
 
-  tabsWrap: { paddingVertical: 10 },
+  // Almost there
+  almost: {
+    marginHorizontal: SIDE, marginTop: 16, borderRadius: 20, backgroundColor: PAPER, borderWidth: 3, borderColor: '#FFFFFF',
+    paddingHorizontal: 10, paddingTop: 8, paddingBottom: 10,
+    shadowColor: '#022a55', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.45, shadowRadius: 0,
+  },
+  almostHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  almostTitle: { fontFamily: 'Shark', fontSize: 17, color: INK, textTransform: 'uppercase' },
+  almostRow: { flexDirection: 'row', gap: 8 },
+  almostItem: { flex: 1, alignItems: 'center', borderRadius: 14, paddingVertical: 4, minHeight: 44 },
+  almostArt: { width: 60, height: 60, alignItems: 'center', justifyContent: 'center' },
+  almostGhost: { width: 44, height: 44, opacity: 0.6 },
+  almostName: { fontFamily: 'Shark', fontSize: 13, color: INK, marginTop: 2, textTransform: 'uppercase', maxWidth: '100%' },
+  almostCount: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  almostCountText: { fontFamily: 'Shark', fontSize: 13, color: MUTED_INK },
+
+  // Bookmark tabs: a solid band so the page never shows through when it sticks.
+  tabsWrap: { paddingVertical: 9, marginTop: 8, backgroundColor: 'rgba(4,72,140,0.94)', borderBottomWidth: 2, borderBottomColor: 'rgba(255,255,255,0.35)' },
   tabs: { paddingHorizontal: SIDE, gap: 8 },
   tab: {
     flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 12, borderRadius: 22,
@@ -566,17 +715,20 @@ const styles = StyleSheet.create({
   tabTextActive: { color: INK },
   dot: { position: 'absolute', top: -3, right: -3, width: 14, height: 14, borderRadius: 7, backgroundColor: '#E3262E', borderWidth: 2, borderColor: '#FFFFFF' },
 
-  section: { marginTop: 10, paddingHorizontal: SIDE },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  sectionBadge: { width: 40, height: 40, borderRadius: 20, borderWidth: 2.5, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  sectionTitle: { fontFamily: 'Shark', fontSize: 22, color: '#FFFFFF', textTransform: 'uppercase', textShadowColor: '#05346e', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
-  sectionBlurb: { fontFamily: 'Knockout', fontSize: 14, color: '#E2F6FF' },
-  sectionBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, marginBottom: 14 },
-  sectionBar: { flex: 1, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,20,60,0.5)', overflow: 'hidden', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
+  // Paper page
+  pageWrap: { marginHorizontal: SIDE, marginTop: 16 },
+  pageLip: { position: 'absolute', left: 0, right: 0, top: 8, bottom: -6, borderRadius: 24, backgroundColor: '#C9AE78' },
+  page: { borderRadius: 24, backgroundColor: PAPER, borderWidth: PAGE_BORDER, borderColor: '#FFFFFF', padding: PAGE_PAD, paddingBottom: PAGE_PAD + 4, overflow: 'hidden' },
+  stitch: { position: 'absolute', left: 6, right: 6, top: 6, bottom: 6, borderRadius: 19, borderWidth: 1.5, borderStyle: 'dashed', borderColor: SLOT_EDGE, opacity: 0.8 },
+  pageHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sectionBadge: { width: 42, height: 42, borderRadius: 21, borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: { fontFamily: 'Shark', fontSize: 21, color: INK, textTransform: 'uppercase' },
+  sectionBlurb: { fontFamily: 'Knockout', fontSize: 14, color: MUTED_INK },
+  sectionBar: {
+    height: 20, borderRadius: 10, backgroundColor: 'rgba(20,33,61,0.10)', overflow: 'hidden', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'rgba(20,33,61,0.2)', marginTop: 8, marginBottom: 16,
+  },
   sectionFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 9 },
-  sectionBarText: { fontFamily: 'Shark', fontSize: 13, color: '#FFFFFF', textAlign: 'center', textShadowColor: '#05346e', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
-  callout: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0a77bf', borderRadius: 16, borderWidth: 2.5, borderColor: '#FFFFFF', padding: 10, marginBottom: 14 },
-  calloutMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  calloutText: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: '#FFFFFF' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, rowGap: GAP + 6 },
+  sectionBarText: { fontFamily: 'Shark', fontSize: 13, color: INK, textAlign: 'center' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, rowGap: GAP + 8 },
 });

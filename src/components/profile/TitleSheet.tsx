@@ -15,6 +15,7 @@ import getPrepItemSets, { equipSetTitle } from '../../api/endpoints/me/prep-item
 import { equipStampTitle, getStamps } from '../../api/endpoints/me/stamps';
 import { BRAND, GameButton, GameDialog, GameIcon, GameText } from '../../ui';
 import { setBadge } from '../../screens/SetCollection/DexParts';
+import * as RootNavigation from '../../RootNavigation';
 import { describeTitle, earnedTitles, findEarned, titleBadgeSlug, type EarnedTitle } from './titleModel';
 
 const STAMP_SEAL = require('../../../assets/images/stamps/stamp-logo.png');
@@ -28,7 +29,11 @@ export function TitleArt({ entry, title, size }: { readonly entry: EarnedTitle |
   if (slug) {
     return <Image source={setBadge({ slug, badgeUrl: entry?.iconUrl ?? null })} style={{ width: size, height: size }} contentFit="contain" />;
   }
-  if (entry?.equip.kind === 'stamp') return <Image source={STAMP_SEAL} style={{ width: size, height: size }} contentFit="contain" />;
+  if (entry?.equip.kind === 'stamp') {
+    // The stamp's own art when the book sent it, else the passport seal.
+    return <Image source={entry.iconUrl ? { uri: entry.iconUrl, cacheKey: entry.iconUrl } : STAMP_SEAL} placeholder={STAMP_SEAL}
+      style={{ width: size, height: size }} contentFit="contain" />;
+  }
   return <GameIcon name="crown" size={size - 4} />;
 }
 
@@ -112,6 +117,9 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
     return save('remove', () => equipStampTitle(null), () => onRemoved?.(previous));
   };
 
+  /** Every stamp title and how to get it lives in the Stamp Book's Titles list. */
+  const openStampBook = () => { onClose(); setTimeout(() => RootNavigation.navigate('StampBook', { titles: true }), 260); };
+
   const worn = title?.trim() || null;
   const others = (earned ?? []).filter(entry => entry.title !== worn);
 
@@ -122,13 +130,18 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
       {mode === 'about' ? (
         <View style={styles.body}>
           {!!worn && (
+            <View style={styles.source} accessible={false}>
+              <TitleArt entry={findEarned(worn, earned ?? [])} title={worn} size={84} />
+            </View>
+          )}
+          {!!worn && (
             <View style={styles.pill} accessible accessibilityLabel={`Title: ${worn}`}>
               <TitleArt entry={findEarned(worn, earned ?? [])} title={worn} size={30} />
               <Text style={styles.pillText} numberOfLines={2} maxFontSizeMultiplier={1.3}>{worn}</Text>
             </View>
           )}
           <GameText preset="body" tone="onBlue" align="center" style={styles.copy}>
-            {worn ? describeTitle(worn, earned ?? []) : 'You are not wearing a title.'}
+            {worn ? describeTitle(worn, earned ?? []) : 'No title yet. Earn stamps to unlock titles, then wear one here.'}
           </GameText>
           <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.hint}>
             Your title shows under your shark for everyone to see.
@@ -146,16 +159,23 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
           )}
           <View style={[styles.actions, confirming && styles.hiddenActions]} pointerEvents={confirming ? 'none' : 'auto'}
             accessibilityElementsHidden={confirming} importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}>
-            <GameButton label="Change title" tone="onBlue" icon="swap" disabled={!!busy}
-              onPress={() => setMode('change')} accessibilityHint="Shows the titles you have earned" />
-            {!!worn && (
-              // Quiet on purpose: taking a title off is the rare choice, and the profile offers Undo.
-              <Pressable accessibilityRole="button" accessibilityLabel="Remove title" accessibilityHint="Takes the title off your profile"
-                disabled={!!busy || earned === null} hitSlop={8} onPress={() => { void remove(); }} style={({ pressed }) => [styles.remove, earned === null && styles.removeOff, pressed && styles.rowPressed]}>
-                <GameIcon name="close" size={18} />
-                <Text style={styles.removeText} maxFontSizeMultiplier={1.3}>{busy === 'remove' ? 'Removing...' : 'Remove title'}</Text>
-              </Pressable>
+            {(earned === null || earned.some(entry => entry.title !== worn)) && (
+              <GameButton label="Change title" tone="onBlue" icon="swap" disabled={!!busy}
+                onPress={() => setMode('change')} accessibilityHint="Shows the titles you have earned" />
             )}
+            <View style={styles.pair}>
+              {!!worn && (
+                <View style={styles.pairItem}>
+                  <GameButton label={busy === 'remove' ? 'Saving...' : 'Take off'} icon="close" variant="ghost" tone="onBlue" size="compact"
+                    loading={busy === 'remove'} disabled={!!busy || earned === null} onPress={() => { void remove(); }}
+                    accessibilityLabel="Take off title" accessibilityHint="Takes the title off your profile" />
+                </View>
+              )}
+              <View style={styles.pairItem}>
+                <GameButton label="More titles" icon="medal1" variant="secondary" tone="onBlue" size="compact" disabled={!!busy}
+                  onPress={openStampBook} accessibilityHint="Opens the Titles list in your Stamp Book" />
+              </View>
+            </View>
           </View>
         </View>
       ) : (
@@ -166,6 +186,9 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
             <GameText preset="body" tone="onBlue" align="center" style={styles.copy}>
               No other titles yet. Finish Collection Book steps and stamps to earn more.
             </GameText>
+          ) : null}
+          {earned === null ? null : others.length === 0 ? (
+            <GameButton label="Find titles" icon="medal1" variant="secondary" tone="onBlue" onPress={openStampBook} />
           ) : (
             <ScrollView style={styles.list} contentContainerStyle={{ gap: 8 }}>
               {others.map(entry => (
@@ -225,5 +248,9 @@ const styles = StyleSheet.create({
     minWidth: 160, justifyContent: 'center' },
   removeOff: { opacity: 0.45 },
   removeText: { fontFamily: 'Knockout', fontSize: 18, color: 'rgba(255,255,255,0.85)', textDecorationLine: 'underline' },
+  source: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#ffcf3b',
+    alignItems: 'center', justifyContent: 'center' },
+  pair: { flexDirection: 'row', gap: 8, alignSelf: 'stretch', justifyContent: 'center' },
+  pairItem: { flex: 1 },
   rowMeaning: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 14, marginTop: 2 },
 });

@@ -51,8 +51,8 @@ import StampArt from './StampArt';
 import Foil from './Foil';
 import { Confetti, InkBurst, InkEdge, Particle, RarityBurst, SoftShadow, Sunburst } from './SlamFx';
 import {
-  bleedFraction, earnedDate, hasRewards, hasShine, progressLabel, rarityRank, remainingLine, requirement, rewardChips, rewardSpeech,
-  type BookStamp,
+  bleedFraction, earnedDate, hasRewards, hasShine, progressLabel, rarityRank, remainingLine, requirement, rewardChips, rewardSpeech, whereFor,
+  type BookStamp, type Where,
 } from './model';
 
 const ART = 220;
@@ -187,7 +187,11 @@ function Frame(props: Props & { stamp: BookStamp }) {
   // One button, always mounted while it has a job; only its label and action change.
   const busy = phase === 'claiming' || phase === 'cascading' || phase === 'gotIt';
   let action: { label: string; icon: GameIconName; onPress: () => void; a11y: string } | null = null;
+  // A claimed title stamp: wearing the title is the main job, the claim chain moves to the second button.
+  const titleReady = !!stamp.rewards.title && stamp.earned && claimed && !stamp.secret;
+  const wearFirst = titleReady && !wearingTitle;
   if (claimable || phase === 'claiming') action = { label: 'Claim!', icon: 'gift', onPress: () => content.current?.claim(), a11y: `Claim rewards: ${rewardSpeech(stamp.rewards)}` };
+  else if (wearFirst) action = { label: equipping ? 'Saving...' : 'Wear title', icon: 'crown', onPress: onToggleTitle, a11y: `Wear the title ${stamp.rewards.title}` };
   else if (claimed && stamp.earned && nextCount > 0) action = { label: `Next reward (${nextCount} left)`, icon: 'gift', onPress: onNext, a11y: `Next reward, ${nextCount} left` };
   else if (!stamp.earned && req.go) action = { label: 'Go!', icon: req.icon, onPress: () => onGo(stamp), a11y: `Go. ${stamp.howTo}` };
   const status = phase === 'gotIt' ? 'Got it!' : phase === 'cascading' ? 'Stamped!' : claimed && stamp.earned && !action ? 'Stamped!' : null;
@@ -258,13 +262,18 @@ function Frame(props: Props & { stamp: BookStamp }) {
                 )}
               </View>
             )}
-            {/* Mounted (invisible) as soon as the stamp has a title, so its art and label are measured before it shows:
-                a freshly mounted GameButton otherwise flashes one frame of blank art. */}
+            {/* Second button, mounted (invisible) as soon as the stamp has a title so its art is measured before it shows:
+                a freshly mounted GameButton otherwise flashes one frame of blank art. Wearing the title first: the claim chain;
+                already wearing it: a quiet Take off. */}
             {!!display.rewards.title && display.earned && (
               <View style={!(displayClaimed && !busy) && styles.hidden} pointerEvents={displayClaimed && !busy && !holding ? 'auto' : 'none'}
                 importantForAccessibility={displayClaimed && !busy ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!(displayClaimed && !busy)}>
-                <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Remove title' : 'Wear title'} variant="secondary"
-                  icon="crown" loading={equipping} onPress={onToggleTitle} />
+                {wearFirst ? (
+                  nextCount > 0 ? <GameButton label={`Next reward (${nextCount} left)`} variant="secondary" icon="gift" onPress={onNext} /> : null
+                ) : (
+                  <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Take off title' : 'Wear title'} variant={wearingTitle ? 'ghost' : 'secondary'}
+                    tone="onBlue" icon="crown" loading={equipping} onPress={onToggleTitle} />
+                )}
               </View>
             )}
           </View>
@@ -297,7 +306,7 @@ type ContentProps = Props & {
 };
 
 const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp, accent, reducedMotion, fresh, claimed,
-  shake, nextCount, bus, overlay, onShown, onClaim, onNext, onPhase, onClaimed }, ref) {
+  shake, nextCount, bus, overlay, wearingTitle, onShown, onClaim, onNext, onPhase, onClaimed }, ref) {
   const tone = stampRarity(stamp.rarity);
   const rank = rarityRank(stamp.rarity);
   const legendary = stamp.earned && stamp.rarity === 'legendary';
@@ -557,6 +566,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
           <GameIcon name={stamp.earned ? 'check' : req.icon} size={22} />
           {!stamp.earned && req.count !== null && <Text style={styles.howCount}>x{req.count.toLocaleString('en-US')}</Text>}
           <Text style={styles.howText} maxFontSizeMultiplier={1.3}>{stamp.howTo}</Text>
+          {!stamp.earned && !stamp.secret && <WhereChip where={whereFor(stamp.metric)} />}
         </View>
         {!stamp.earned && !stamp.secret && (
           <View style={styles.bar}>
@@ -565,6 +575,10 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
           </View>
         )}
       </View>
+
+      {!!stamp.rewards.title && !stamp.secret && (
+        <TitleBox title={stamp.rewards.title} state={!stamp.earned ? 'locked' : !claimed ? 'claim' : wearingTitle ? 'wearing' : 'ready'} />
+      )}
 
       {chips.length > 0 && (
         <Animated.View style={[styles.tokens, tokensStyle]} onLayout={onChipsRow}>
@@ -578,6 +592,43 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
     </View>
   );
 });
+
+/** Where you earn it: in a park, or anywhere (home, friends, streaks). */
+function WhereChip({ where }: { where: Where }) {
+  return (
+    <View style={styles.where} accessible accessibilityLabel={where === 'park' ? 'At a park' : 'Anywhere'}>
+      <GameIcon name={where === 'park' ? 'map' : 'shark'} size={16} />
+      <Text style={styles.whereText} maxFontSizeMultiplier={1.2}>{where === 'park' ? 'At a park' : 'Anywhere'}</Text>
+    </View>
+  );
+}
+
+/** The title this stamp gives, as it reads under your shark, with one line on how to get or wear it. */
+function TitleBox({ title, state }: { title: string; state: 'locked' | 'claim' | 'ready' | 'wearing' }) {
+  // Unlock and wear moments: the pill pops (UI thread) with a sparkle sound when the title becomes yours or goes on.
+  const pop = useSharedValue(1);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    if (state !== 'ready' && state !== 'wearing') return;
+    playSfx(state === 'ready' ? 'fx.reveal' : 'fx.reward', 0.8);
+    haptic('success');
+    pop.value = withSequence(withTiming(1.22, { duration: 140, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 9, stiffness: 260 }));
+  }, [state, pop]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const line = state === 'wearing' ? 'On your profile now!' : state === 'ready' ? 'Yours! Wear it on your profile' : state === 'claim' ? 'Claim to unlock this title' : 'Earn this stamp to unlock';
+  const owned = state === 'ready' || state === 'wearing';
+  return (
+    <View style={[styles.titleBox, owned && styles.titleBoxOwned]} accessible accessibilityLabel={`Title: ${title}. ${line}`}>
+      <Animated.View style={[styles.titlePill, !owned && styles.titlePillLocked, popStyle]}>
+        <GameIcon name="crown" size={20} />
+        <Text style={[styles.titlePillText, !owned && styles.titlePillTextLocked]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}
+          maxFontSizeMultiplier={1.2}>{title}</Text>
+      </Animated.View>
+      <Text style={styles.titleLine} numberOfLines={2} maxFontSizeMultiplier={1.2}>{line}</Text>
+    </View>
+  );
+}
 
 function Token({ kind, label, done, pop, index, onLayout }: {
   kind: Kind; label: string; done: boolean; pop: SharedValue<number>; index: number; onLayout: (e: LayoutChangeEvent) => void;
@@ -671,6 +722,23 @@ const styles = StyleSheet.create({
   levelUpTitle: { fontFamily: 'Shark', fontSize: 34, color: '#FFFFFF', textShadowColor: '#8A5A00', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   levelUpLevel: { fontFamily: 'Shark', fontSize: 22, color: '#FFFFFF' },
   message: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF', textAlign: 'center', marginTop: 8 },
+  where: {
+    flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(0,40,90,0.45)', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 3,
+  },
+  whereText: { fontFamily: 'Knockout', fontSize: 13, color: '#FFFFFF' },
+  titleBox: {
+    width: '100%', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, paddingVertical: 7, paddingHorizontal: 9,
+    borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,207,59,0.75)', backgroundColor: 'rgba(0,40,90,0.3)',
+  },
+  titleBoxOwned: { borderStyle: 'solid', borderColor: '#FFCF3B', backgroundColor: 'rgba(255,207,59,0.16)' },
+  titlePill: {
+    flexShrink: 1, maxWidth: '58%', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFCF3B', borderRadius: 16,
+    paddingHorizontal: 9, minHeight: 32, borderWidth: 2, borderColor: '#FFFFFF', borderBottomWidth: 4, borderBottomColor: '#D99A00',
+  },
+  titlePillLocked: { backgroundColor: '#DCE6F2', borderBottomColor: '#9FB2C9' },
+  titlePillText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 16, color: INK },
+  titlePillTextLocked: { color: '#4A5A78' },
+  titleLine: { flex: 1, fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, color: '#FFFFFF' },
 });
 
 /** Level-up moment: the stamp's XP moved the level bar. A gold ribbon pops over the card with a fanfare. */

@@ -13,7 +13,7 @@ const STAMPS: StampData[] = [
   "name": "Magic Kingdom",
   "category": "parks",
   "goal": "Visit Magic Kingdom with the app open",
-  "metric": "",
+  "metric": "visited_magic_kingdom",
   "target_value": 1,
   "rarity": "common",
   "image_key": null,
@@ -36,7 +36,8 @@ const STAMPS: StampData[] = [
   },
   "section": "parks",
   "icon_url": null,
-  "how_to": "Visit Magic Kingdom with the app open"
+  "how_to": "Go to Magic Kingdom!",
+  "short_name": "Magic Kingdom"
  },
  {
   "id": 901,
@@ -44,7 +45,7 @@ const STAMPS: StampData[] = [
   "name": "Epic Universe",
   "category": "parks",
   "goal": "Visit Epic Universe with the app open",
-  "metric": "",
+  "metric": "visited_epic_universe",
   "target_value": 1,
   "rarity": "rare",
   "image_key": null,
@@ -67,7 +68,8 @@ const STAMPS: StampData[] = [
   },
   "section": "parks",
   "icon_url": null,
-  "how_to": "Visit Epic Universe with the app open"
+  "how_to": "Go to Epic Universe!",
+  "short_name": "Epic Universe"
  },
  {
   "id": 902,
@@ -75,7 +77,7 @@ const STAMPS: StampData[] = [
   "name": "Islands of Adventure",
   "category": "parks",
   "goal": "Visit Islands of Adventure with the app open",
-  "metric": "",
+  "metric": "visited_islands_of_adventure",
   "target_value": 1,
   "rarity": "uncommon",
   "image_key": null,
@@ -98,7 +100,8 @@ const STAMPS: StampData[] = [
   },
   "section": "parks",
   "icon_url": null,
-  "how_to": "Visit Islands of Adventure with the app open"
+  "how_to": "Go to Islands of Adventure!",
+  "short_name": "Islands of Adventure"
  },
  {
   "id": 903,
@@ -106,7 +109,7 @@ const STAMPS: StampData[] = [
   "name": "Volcano Bay",
   "category": "parks",
   "goal": "Visit Volcano Bay with the app open",
-  "metric": "",
+  "metric": "visited_volcano_bay",
   "target_value": 1,
   "rarity": "uncommon",
   "image_key": null,
@@ -129,7 +132,8 @@ const STAMPS: StampData[] = [
   },
   "section": "parks",
   "icon_url": null,
-  "how_to": "Visit Volcano Bay with the app open"
+  "how_to": "Go to Volcano Bay!",
+  "short_name": "Volcano Bay"
  },
  {
   "id": 904,
@@ -137,7 +141,7 @@ const STAMPS: StampData[] = [
   "name": "Disneyland",
   "category": "parks",
   "goal": "Visit Disneyland with the app open",
-  "metric": "",
+  "metric": "visited_disneyland",
   "target_value": 1,
   "rarity": "common",
   "image_key": null,
@@ -160,7 +164,8 @@ const STAMPS: StampData[] = [
   },
   "section": "parks",
   "icon_url": null,
-  "how_to": "Visit Disneyland with the app open"
+  "how_to": "Go to Disneyland!",
+  "short_name": "Disneyland"
  },
  {
   "id": 905,
@@ -168,7 +173,7 @@ const STAMPS: StampData[] = [
   "name": "Explorer",
   "category": "parks",
   "goal": "Visit 2 different parks",
-  "metric": "",
+  "metric": "parks_visited",
   "target_value": 2,
   "rarity": "uncommon",
   "image_key": null,
@@ -191,7 +196,8 @@ const STAMPS: StampData[] = [
   },
   "section": "parks",
   "icon_url": null,
-  "how_to": "Visit 2 different parks"
+  "how_to": "Visit 2 different parks",
+  "short_name": "Explorer"
  },
  {
   "id": 906,
@@ -199,7 +205,7 @@ const STAMPS: StampData[] = [
   "name": "Hop Star",
   "category": "parks",
   "goal": "Visit 5 different parks",
-  "metric": "",
+  "metric": "parks_visited",
   "target_value": 5,
   "rarity": "rare",
   "image_key": null,
@@ -222,7 +228,8 @@ const STAMPS: StampData[] = [
   },
   "section": "parks",
   "icon_url": null,
-  "how_to": "Visit 5 different parks"
+  "how_to": "Visit 5 different parks",
+  "short_name": "Hop Star"
  },
  {
   "id": 907,
@@ -230,7 +237,7 @@ const STAMPS: StampData[] = [
   "name": "Magic Kingdom Ride Passport",
   "category": "parks",
   "goal": "Complete the current Magic Kingdom ride coin collection",
-  "metric": "",
+  "metric": "ride_passport_magic_kingdom",
   "target_value": 100,
   "rarity": "legendary",
   "image_key": null,
@@ -253,7 +260,8 @@ const STAMPS: StampData[] = [
   },
   "section": "parks",
   "icon_url": null,
-  "how_to": "Complete the current Magic Kingdom ride coin collection"
+  "how_to": "Get every MK ride coin",
+  "short_name": "MK Ride Passport"
  },
  {
   "id": 908,
@@ -261,7 +269,7 @@ const STAMPS: StampData[] = [
   "name": "First Steps",
   "category": "hunt",
   "goal": "Catch your first find on the map",
-  "metric": "",
+  "metric": "prep_items_collected",
   "target_value": 1,
   "rarity": "common",
   "image_key": null,
@@ -284,7 +292,8 @@ const STAMPS: StampData[] = [
   },
   "section": "hunt",
   "icon_url": null,
-  "how_to": "Catch your first find on the map"
+  "how_to": "Catch your first find",
+  "short_name": "First Steps"
  },
  {
   "id": 909,
@@ -292,7 +301,7 @@ const STAMPS: StampData[] = [
   "name": "Treasure Hunter",
   "category": "hunt",
   "goal": "Catch 25 finds on the map",
-  "metric": "",
+  "metric": "prep_items_collected",
   "target_value": 25,
   "rarity": "uncommon",
   "image_key": null,
@@ -315,7 +324,8 @@ const STAMPS: StampData[] = [
   },
   "section": "hunt",
   "icon_url": null,
-  "how_to": "Catch 25 finds on the map"
+  "how_to": "Catch 25 finds",
+  "short_name": "Treasure Hunter"
  },
  {
   "id": 910,
@@ -323,7 +333,7 @@ const STAMPS: StampData[] = [
   "name": "Deep Dive",
   "category": "hunt",
   "goal": "Catch 50 finds on the map",
-  "metric": "",
+  "metric": "prep_items_collected",
   "target_value": 50,
   "rarity": "rare",
   "image_key": null,
@@ -346,7 +356,8 @@ const STAMPS: StampData[] = [
   },
   "section": "hunt",
   "icon_url": null,
-  "how_to": "Catch 50 finds on the map"
+  "how_to": "Catch 50 finds",
+  "short_name": "Deep Dive"
  },
  {
   "id": 911,
@@ -354,7 +365,7 @@ const STAMPS: StampData[] = [
   "name": "Wild Legend Finder",
   "category": "hunt",
   "goal": "Catch two different legendary finds",
-  "metric": "",
+  "metric": "wild_legendary_variants",
   "target_value": 2,
   "rarity": "legendary",
   "image_key": null,
@@ -377,7 +388,8 @@ const STAMPS: StampData[] = [
   },
   "section": "hunt",
   "icon_url": null,
-  "how_to": "Catch two different legendary finds"
+  "how_to": "Catch 2 legendary finds",
+  "short_name": "Wild Legend"
  },
  {
   "id": 912,
@@ -385,7 +397,7 @@ const STAMPS: StampData[] = [
   "name": "Set Collector",
   "category": "hunt",
   "goal": "Finish any collection set",
-  "metric": "",
+  "metric": "sets_completed",
   "target_value": 1,
   "rarity": "uncommon",
   "image_key": null,
@@ -408,7 +420,8 @@ const STAMPS: StampData[] = [
   },
   "section": "hunt",
   "icon_url": null,
-  "how_to": "Finish any collection set"
+  "how_to": "Finish a collection set",
+  "short_name": "Set Collector"
  },
  {
   "id": 913,
@@ -416,7 +429,7 @@ const STAMPS: StampData[] = [
   "name": "???",
   "category": "hunt",
   "goal": "Keep hunting. This one finds you.",
-  "metric": "",
+  "metric": "prep_items_collected",
   "target_value": 100,
   "rarity": "legendary",
   "image_key": null,
@@ -439,7 +452,8 @@ const STAMPS: StampData[] = [
   },
   "section": "hunt",
   "icon_url": null,
-  "how_to": "Keep hunting. This one finds you."
+  "how_to": "Keep hunting!",
+  "short_name": "???"
  },
  {
   "id": 914,
@@ -447,7 +461,7 @@ const STAMPS: StampData[] = [
   "name": "First Ride Coin",
   "category": "rides",
   "goal": "Collect your first ride coin",
-  "metric": "",
+  "metric": "park_coins_collected",
   "target_value": 1,
   "rarity": "common",
   "image_key": null,
@@ -470,7 +484,8 @@ const STAMPS: StampData[] = [
   },
   "section": "rides",
   "icon_url": null,
-  "how_to": "Collect your first ride coin"
+  "how_to": "Get your first ride coin",
+  "short_name": "First Ride Coin"
  },
  {
   "id": 915,
@@ -478,7 +493,7 @@ const STAMPS: StampData[] = [
   "name": "Ride Coin Collector",
   "category": "rides",
   "goal": "Collect five different ride coins",
-  "metric": "",
+  "metric": "park_coins_collected",
   "target_value": 5,
   "rarity": "rare",
   "image_key": null,
@@ -501,7 +516,8 @@ const STAMPS: StampData[] = [
   },
   "section": "rides",
   "icon_url": null,
-  "how_to": "Collect five different ride coins"
+  "how_to": "Get 5 different ride coins",
+  "short_name": "Coin Collector"
  },
  {
   "id": 916,
@@ -509,7 +525,7 @@ const STAMPS: StampData[] = [
   "name": "Queue Navigator",
   "category": "rides",
   "goal": "Play 10 minutes of LinePlay in one ride line",
-  "metric": "",
+  "metric": "verified_lineplay_sessions",
   "target_value": 1,
   "rarity": "uncommon",
   "image_key": null,
@@ -532,7 +548,8 @@ const STAMPS: StampData[] = [
   },
   "section": "rides",
   "icon_url": null,
-  "how_to": "Play 10 minutes of LinePlay in one ride line"
+  "how_to": "Play 10 min of LinePlay",
+  "short_name": "Queue Navigator"
  },
  {
   "id": 917,
@@ -540,7 +557,7 @@ const STAMPS: StampData[] = [
   "name": "Trivia Champ",
   "category": "rides",
   "goal": "Win 5 trivia ride challenges",
-  "metric": "",
+  "metric": "trivia_wins",
   "target_value": 5,
   "rarity": "rare",
   "image_key": null,
@@ -563,7 +580,8 @@ const STAMPS: StampData[] = [
   },
   "section": "rides",
   "icon_url": null,
-  "how_to": "Win 5 trivia ride challenges"
+  "how_to": "Win 5 ride trivia games",
+  "short_name": "Trivia Champ"
  },
  {
   "id": 918,
@@ -571,7 +589,7 @@ const STAMPS: StampData[] = [
   "name": "Beach Day",
   "category": "friends",
   "goal": "Add 3 friends",
-  "metric": "",
+  "metric": "friends_count",
   "target_value": 3,
   "rarity": "common",
   "image_key": null,
@@ -594,7 +612,8 @@ const STAMPS: StampData[] = [
   },
   "section": "friends",
   "icon_url": null,
-  "how_to": "Add 3 friends"
+  "how_to": "Add 3 friends",
+  "short_name": "Beach Day"
  },
  {
   "id": 919,
@@ -602,7 +621,7 @@ const STAMPS: StampData[] = [
   "name": "Social Shark",
   "category": "friends",
   "goal": "Have 10 friends",
-  "metric": "",
+  "metric": "friends_count",
   "target_value": 10,
   "rarity": "uncommon",
   "image_key": null,
@@ -625,7 +644,8 @@ const STAMPS: StampData[] = [
   },
   "section": "friends",
   "icon_url": null,
-  "how_to": "Have 10 friends"
+  "how_to": "Have 10 friends",
+  "short_name": "Social Shark"
  },
  {
   "id": 920,
@@ -633,7 +653,7 @@ const STAMPS: StampData[] = [
   "name": "Wave Rider",
   "category": "streaks",
   "goal": "Catch a find 3 days in a row",
-  "metric": "",
+  "metric": "longest_streak",
   "target_value": 3,
   "rarity": "uncommon",
   "image_key": null,
@@ -656,7 +676,8 @@ const STAMPS: StampData[] = [
   },
   "section": "streaks",
   "icon_url": null,
-  "how_to": "Catch a find 3 days in a row"
+  "how_to": "Catch finds 3 days in a row",
+  "short_name": "Wave Rider"
  },
  {
   "id": 921,
@@ -664,7 +685,7 @@ const STAMPS: StampData[] = [
   "name": "Shark Streak",
   "category": "streaks",
   "goal": "Catch a find 7 days in a row",
-  "metric": "",
+  "metric": "longest_streak",
   "target_value": 7,
   "rarity": "rare",
   "image_key": null,
@@ -687,7 +708,8 @@ const STAMPS: StampData[] = [
   },
   "section": "streaks",
   "icon_url": null,
-  "how_to": "Catch a find 7 days in a row"
+  "how_to": "Catch finds 7 days in a row",
+  "short_name": "Shark Streak"
  },
  {
   "id": 922,
@@ -695,7 +717,7 @@ const STAMPS: StampData[] = [
   "name": "Streak Legend",
   "category": "streaks",
   "goal": "Catch a find 14 days in a row",
-  "metric": "",
+  "metric": "longest_streak",
   "target_value": 14,
   "rarity": "epic",
   "image_key": null,
@@ -718,7 +740,8 @@ const STAMPS: StampData[] = [
   },
   "section": "streaks",
   "icon_url": null,
-  "how_to": "Catch a find 14 days in a row"
+  "how_to": "Catch finds 14 days in a row",
+  "short_name": "Streak Legend"
  },
  {
   "id": 923,
@@ -726,7 +749,7 @@ const STAMPS: StampData[] = [
   "name": "Shark Scholar",
   "category": "milestones",
   "goal": "Earn 5,000 XP",
-  "metric": "",
+  "metric": "total_experience",
   "target_value": 5000,
   "rarity": "uncommon",
   "image_key": null,
@@ -749,7 +772,8 @@ const STAMPS: StampData[] = [
   },
   "section": "milestones",
   "icon_url": null,
-  "how_to": "Earn 5,000 XP"
+  "how_to": "Earn 5,000 XP",
+  "short_name": "Shark Scholar"
  },
  {
   "id": 924,
@@ -757,7 +781,7 @@ const STAMPS: StampData[] = [
   "name": "XP Machine",
   "category": "milestones",
   "goal": "Earn 30,000 XP",
-  "metric": "",
+  "metric": "total_experience",
   "target_value": 30000,
   "rarity": "rare",
   "image_key": null,
@@ -780,7 +804,8 @@ const STAMPS: StampData[] = [
   },
   "section": "milestones",
   "icon_url": null,
-  "how_to": "Earn 30,000 XP"
+  "how_to": "Earn 30,000 XP",
+  "short_name": "XP Machine"
  },
  {
   "id": 925,
@@ -788,7 +813,7 @@ const STAMPS: StampData[] = [
   "name": "Captain",
   "category": "milestones",
   "goal": "Save up 2,500 coins",
-  "metric": "",
+  "metric": "coins_held",
   "target_value": 2500,
   "rarity": "rare",
   "image_key": null,
@@ -811,7 +836,8 @@ const STAMPS: StampData[] = [
   },
   "section": "milestones",
   "icon_url": null,
-  "how_to": "Save up 2,500 coins"
+  "how_to": "Save up 2,500 coins",
+  "short_name": "Captain"
  },
  {
   "id": 926,
@@ -819,7 +845,7 @@ const STAMPS: StampData[] = [
   "name": "Vault Boss",
   "category": "milestones",
   "goal": "Save up 10,000 coins",
-  "metric": "",
+  "metric": "coins_held",
   "target_value": 10000,
   "rarity": "epic",
   "image_key": null,
@@ -842,7 +868,8 @@ const STAMPS: StampData[] = [
   },
   "section": "milestones",
   "icon_url": null,
-  "how_to": "Save up 10,000 coins"
+  "how_to": "Save up 10,000 coins",
+  "short_name": "Vault Boss"
  },
  {
   "id": 927,
@@ -850,7 +877,7 @@ const STAMPS: StampData[] = [
   "name": "Night Owl",
   "category": "special",
   "goal": "Play between midnight and 4 AM",
-  "metric": "",
+  "metric": "night_owl",
   "target_value": 1,
   "rarity": "rare",
   "image_key": null,
@@ -873,7 +900,9 @@ const STAMPS: StampData[] = [
   },
   "section": "special",
   "icon_url": null,
-  "how_to": "Play between midnight and 4 AM"
+  "how_to": "Play from 12 to 4 AM",
+  "short_name": "Night Owl",
+  "retired": true
  },
  {
   "id": 928,
@@ -881,7 +910,7 @@ const STAMPS: StampData[] = [
   "name": "Holiday Shark",
   "category": "special",
   "goal": "Play on a holiday, like Halloween or New Year's Day",
-  "metric": "",
+  "metric": "holiday_login",
   "target_value": 1,
   "rarity": "rare",
   "image_key": null,
@@ -904,15 +933,16 @@ const STAMPS: StampData[] = [
   },
   "section": "special",
   "icon_url": null,
-  "how_to": "Play on a holiday, like Halloween or New Year's Day"
+  "how_to": "Play on a holiday",
+  "short_name": "Holiday Shark"
  }
 ];
 
 export const PREVIEW_BOOK: StampsResponse = {
   stamps: { book: STAMPS },
   newly_earned: [],
-  unlocked_titles: [],
-  equipped_title: null,
+  unlocked_titles: STAMPS.filter(s => s.is_earned && s.reward_claimed && s.rewards.title).map(s => ({ stamp_id: s.id, title: s.rewards.title as string })),
+  equipped_title: 'Explorer',
   sections: [...FALLBACK_SECTIONS],
   summary: { total: STAMPS.length, earned: STAMPS.filter(s => s.is_earned).length },
 };

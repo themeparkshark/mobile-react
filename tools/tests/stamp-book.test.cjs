@@ -193,8 +193,8 @@ test('clocks truly rest: JS-kicked sweeps, per-tile gate, tags mounted only wher
   const screen = read('src/screens/StampBookScreen.tsx');
   assert.match(screen, /const open = useCallback\(\(stamp: BookStamp\) => \{[^]*?\}, \[\]\);/);
   assert.match(screen, /const seenRef = useRef/);
-  assert.match(screen, /const SectionBlock = memo\(/);
-  assert.match(screen, /useBookClocks\(focused && !selected, reducedMotion\)/);
+  assert.match(screen, /const SectionPage = memo\(/);
+  assert.match(screen, /useBookClocks\(focused && !selected && !titlesOpen, reducedMotion\)/);
   assert.match(screen, /buildBook\(response, prevIndex\.current\)/);
 });
 
@@ -236,11 +236,14 @@ test('every Go! target opens with no params (Park needs a park id and is never a
   assert.equal(model.sectionForMetric('night_show', false), 'special');
 });
 
-test('VoiceOver reaches the Go buttons in the hero and the album callout (siblings, not nested)', () => {
+test('v3: the cover opens Titles, Almost there shows the 3 closest stamps, each stamp card owns its Go button', () => {
   const screen = read('src/screens/StampBookScreen.tsx');
-  assert.match(screen, /<View style=\{styles\.next\}>\s*<Pressable style=\{styles\.nextMain\}/);
-  assert.match(screen, /<View style=\{styles\.callout\}>\s*<Pressable style=\{styles\.calloutMain\}/);
-  assert.equal((screen.match(/accessibilityLabel=\{`Go\. /g) || []).length, 2);
+  assert.match(screen, /<Cover [^>]*onTitles=\{openTitles\}/);
+  assert.match(screen, /almostThereList\(sections, 3\)/);
+  assert.match(screen, /<TitlesSheet visible=\{titlesOpen\}/);
+  // The Titles list closes before a stamp card opens (one Modal at a time on iOS).
+  assert.match(screen, /setTitlesOpen\(false\);\s*setTimeout\(\(\) => open\(stamp\), 320\)/);
+  assert.match(read('src/screens/stampbook/StampCard.tsx'), /action = \{ label: 'Go!'/);
 });
 
 test('locked bleed never reads as earned; postmark sits in the free corner; rarity shows on earned tiles', () => {
@@ -251,7 +254,7 @@ test('locked bleed never reads as earned; postmark sits in the free corner; rari
   assert.equal(model.toBookStamp(stamp({ art_free_corner: 'bl' })).freeCorner, 'bl');
   assert.equal(model.toBookStamp(stamp({ art_free_corner: 'nope' })).freeCorner, 'tr');
   const tile = read('src/screens/stampbook/StampTile.tsx');
-  assert.match(tile, /<View style=\{\[styles\.postmark, CORNER\[postmarkCorner\(stamp\.freeCorner, stamp\.claimable \|\| isNew \|\| almost\)\]\]\}/);
+  assert.match(tile, /<View style=\{\[styles\.postmark, CORNER\[postmarkCorner\(stamp\.freeCorner, !!tag\)\]\]\}/);
   // One app-wide palette: stamps read design-system colors.rarity (shop and wardrobe ladder); gold is Legendary only.
   const rarity = loadTs('src/screens/stampbook/rarity.ts');
   const ds = loadTs('src/design-system.ts');
@@ -347,7 +350,7 @@ test('round 6: coin stamps show coins in the HUD; Holiday Shark and Wild Legend 
 
 test('round 6: event haunt stamps get the pumpkin pictogram; the postmark stays off the badge and the name', () => {
   assert.equal(model.requirement({ metric: 'fright_haunts', target: 5 }).icon, 'pumpkin');
-  assert.match(read('src/screens/stampbook/StampTile.tsx'), /bl: \{ left: -10, bottom: 0 \}, br: \{ right: -10, bottom: 0 \}/);
+  assert.match(read('src/screens/stampbook/StampTile.tsx'), /bl: \{ left: -12, bottom: -2 \}, br: \{ right: -12, bottom: -2 \}/);
 });
 
 test('round 6: the outgoing stamp stays drawn until the incoming art is on screen (no one-frame gap)', () => {
@@ -388,4 +391,62 @@ test('round 7: claim broadcasts are not doubled; a pending hand-off is cancelled
   const screen = read('src/screens/StampBookScreen.tsx');
   assert.match(screen, /handoffCancelled\.current = true;\n\s+if \(handoffTimer\.current\) clearTimeout\(handoffTimer\.current\);\n\s+playSfx\('ui\.modalClose'/);
   assert.ok(!/Park Collector|Park Coin/.test(read('src/screens/stampbook/preview.ts')));
+});
+
+test('v3: five tile states, each its own look; where to play; Almost there', () => {
+  const b = (over) => model.toBookStamp(stamp(over));
+  assert.equal(model.stampState(b({ is_earned: true, reward_claimed: false })), 'claim');
+  assert.equal(model.stampState(b({ is_earned: true, reward_claimed: true })), 'owned');
+  assert.equal(model.stampState(b({ progress: 1 })), 'progress');
+  assert.equal(model.stampState(b({ progress: 0 })), 'fresh');
+  assert.equal(model.stampState(b({ is_hidden: true })), 'secret');
+  // An earned stamp with no rewards is owned, never stuck on claim.
+  assert.equal(model.stampState(b({ is_earned: true, rewards: rewards() })), 'owned');
+  assert.equal(model.whereFor('visited_epcot'), 'park');
+  assert.equal(model.whereFor('ride_passport_magic_kingdom'), 'park');
+  assert.equal(model.whereFor('parks_visited'), 'park');
+  assert.equal(model.whereFor('prep_items_collected'), 'anywhere');
+  assert.equal(model.whereFor('friends_count'), 'anywhere');
+  const book = model.buildBook({ stamps: { a: [
+    stamp({ id: 1, progress: 1, target: 2 }), stamp({ id: 2, progress: 9, target: 10 }), stamp({ id: 3, progress: 0 }),
+    stamp({ id: 4, progress: 3, target: 4 }), stamp({ id: 5, progress: 1, target: 100 }), stamp({ id: 6, is_hidden: true, progress: 5, target: 6 }),
+    stamp({ id: 7, is_earned: true, progress: 2 }),
+  ] } });
+  assert.deepEqual(plain(model.almostThereList(book, 3).map(s => s.id)), [2, 4, 1]);
+  // The tile tags are mutually exclusive and sit top-centre; title stamps wear a crown.
+  const tile = read('src/screens/stampbook/StampTile.tsx');
+  assert.match(tile, /const tag = state === 'claim' \? 'claim' : isNew && stamp\.earned \? 'new' : almost \? 'almost' : null;/);
+  assert.match(tile, /\{hasTitle && \(/);
+});
+
+test('v3: titles list: wearing, ready, claim, progress, locked; secrets and unheld retired titles stay hidden', () => {
+  const book = model.buildBook({ stamps: { a: [
+    stamp({ id: 1, slug: 'a', is_earned: true, reward_claimed: true, progress: 2, rewards: rewards({ title: 'Explorer' }) }),
+    stamp({ id: 2, slug: 'b', is_earned: true, reward_claimed: true, progress: 2, rewards: rewards({ title: 'Captain' }) }),
+    stamp({ id: 3, slug: 'c', is_earned: true, reward_claimed: false, progress: 2, rewards: rewards({ title: 'Wild Legend' }) }),
+    stamp({ id: 4, slug: 'd', progress: 1, rewards: rewards({ title: 'Hop Star' }) }),
+    stamp({ id: 5, slug: 'e', progress: 0, rewards: rewards({ title: 'XP Machine' }) }),
+    stamp({ id: 6, slug: 'f', is_hidden: true, rewards: rewards({ title: 'Legendary Explorer' }) }),
+    stamp({ id: 7, slug: 'g', retired: true, rewards: rewards({ title: 'Night Owl' }) }),
+    stamp({ id: 8, slug: 'h', rewards: rewards({ xp: 10 }) }),
+  ] } });
+  const list = model.titleEntries(book, [{ stamp_id: 1, title: 'Explorer' }, { stamp_id: 2, title: 'Captain' }], 'Captain');
+  assert.deepEqual(plain(list.map(e => [e.title, e.state])), [
+    ['Captain', 'wearing'], ['Explorer', 'ready'], ['Wild Legend', 'claim'], ['Hop Star', 'progress'], ['XP Machine', 'locked'],
+  ]);
+  assert.deepEqual(plain(model.titleCounts(list)), { owned: 2, total: 5 });
+  assert.equal(model.titleLine(list[2]), 'Claim the stamp to unlock');
+  assert.match(model.titleLine(list[3]), /^1 \/ 2 to the /);
+  for (const e of list) assert.ok(!/\u2014/.test(model.titleLine(e)));
+});
+
+test('v3: a claimed title stamp makes Wear title the main button; the book unlocks the title locally on close', () => {
+  const card = read('src/screens/stampbook/StampCard.tsx');
+  assert.match(card, /const wearFirst = titleReady && !wearingTitle;/);
+  assert.match(card, /else if \(wearFirst\) action = \{ label: equipping \? 'Saving\.\.\.' : 'Wear title'/);
+  assert.match(card, /function TitleBox\(/);
+  const screen = read('src/screens/StampBookScreen.tsx');
+  assert.match(screen, /if \(s\?\.rewards\?\.title && !unlocked\.some\(u => u\.stamp_id === id\)\) unlocked\.push/);
+  // Wearing refreshes the player so the profile pill matches.
+  assert.match(screen, /await equipStampTitle\(stampId\);\s*await refreshPlayer\(\);/);
 });

@@ -76,7 +76,9 @@ test('the title sheet: tap your own pill, change or remove through the server, n
   assert.match(sheet, /equipSetTitle\(entry\.equip\.slug, true, entry\.equip\.tier\)/);
   assert.match(sheet, /await onChanged\(\);/, 'the pill follows the server after a change');
   assert.match(sheet, /label="Change title"/);
-  assert.match(sheet, /accessibilityLabel="Remove title"/, 'Remove is a quiet text action, not a big red button');
+  // Oct 8 (Dustin: "no way to remove the title"): Take off is a visible button beside More titles, not a hidden link.
+  assert.match(sheet, /accessibilityLabel="Take off title"/, 'Take off is a real, visible button');
+  assert.match(sheet, /RootNavigation\.navigate\('StampBook', \{ titles: true \}\)/, 'More titles opens the Stamp Book Titles list');
   assert.doesNotMatch(sheet, /label="Remove title"/);
   assert.match(sheet, /onRemoved\?\.\(previous\)/, 'the profile gets the removed title for Undo');
   assert.match(sheet, /haptic\('success'\)/);

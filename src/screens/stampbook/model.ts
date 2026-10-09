@@ -325,3 +325,91 @@ export function postmark(iso: string | null): { month: string; day: string; year
   if (Number.isNaN(date.getTime())) return null;
   return { month: MONTHS[date.getMonth()].toUpperCase(), day: String(date.getDate()), year: String(date.getFullYear()) };
 }
+
+// ── Stamp Book v3: five states, where to play, titles ──────────────────
+
+/**
+ * The five tile states, each with its own look (tested in grayscale):
+ * claim (earned, rewards waiting), owned, progress (started), fresh (not
+ * started yet) and secret.
+ */
+export type StampState = 'claim' | 'owned' | 'progress' | 'fresh' | 'secret';
+
+export function stampState(s: Pick<BookStamp, 'earned' | 'claimable' | 'secret' | 'progress'>): StampState {
+  if (s.earned) return s.claimable ? 'claim' : 'owned';
+  if (s.secret) return 'secret';
+  return s.progress > 0 ? 'progress' : 'fresh';
+}
+
+/** Where a stamp is earned: in a park (GPS check-ins, ride passports, night shows) or anywhere (home finds, friends, streaks). */
+export type Where = 'park' | 'anywhere';
+
+export function whereFor(metric: string): Where {
+  if (/^(visited_|park_shelf:|ride_passport_|park_coins_|ride_coins_|ride_boss|verified_lineplay|trivia_|line_bonus)/.test(metric)) return 'park';
+  if (['parks_visited', 'night_show', 'night_owl'].includes(metric)) return 'park';
+  return 'anywhere';
+}
+
+/** Up to `n` stamps closest to done across the whole book (not secret, not retired, started). */
+export function almostThereList(sections: readonly BookSection[], n = 3): BookStamp[] {
+  const open = sections.flatMap(s => s.stamps).filter(s => !s.earned && !s.secret && !s.retired && s.progress > 0);
+  open.sort((a, b) => b.percent - a.percent || (a.target - a.progress) - (b.target - b.progress) || a.sortOrder - b.sortOrder);
+  return open.slice(0, n);
+}
+
+/** Title states, in the order the Titles list shows them. */
+export type TitleState = 'wearing' | 'ready' | 'claim' | 'progress' | 'locked';
+
+export interface TitleEntry {
+  readonly title: string;
+  readonly stamp: BookStamp;
+  readonly state: TitleState;
+}
+
+const TITLE_ORDER: Record<TitleState, number> = { wearing: 0, ready: 1, claim: 2, progress: 3, locked: 4 };
+
+/**
+ * Every stamp title in the book: worn, unlocked (claimed, ready to wear),
+ * earned but not claimed yet (claim it to unlock the title), in progress, and
+ * locked. Secret stamps keep their title secret too, so they are left out
+ * until found. A title is unlocked by claiming its stamp (the server writes
+ * player_stamp_titles on claim); `unlocked` is GET /me/stamps unlocked_titles.
+ */
+export function titleEntries(
+  sections: readonly BookSection[],
+  unlocked: readonly { readonly stamp_id: number; readonly title: string }[] | null | undefined,
+  worn: string | null | undefined,
+): TitleEntry[] {
+  const open = new Set((unlocked ?? []).map(u => Number(u.stamp_id)));
+  const wearing = (worn ?? '').trim();
+  const out: TitleEntry[] = [];
+  const seen = new Set<string>();
+  for (const stamp of sections.flatMap(s => s.stamps)) {
+    const title = (stamp.rewards?.title ?? '').trim();
+    if (!title || stamp.secret || seen.has(title)) continue;
+    // A retired stamp's title only shows to players who hold it.
+    if (stamp.retired && !stamp.earned) continue;
+    seen.add(title);
+    const isOpen = open.has(stamp.id) || (stamp.earned && stamp.rewardClaimed);
+    const state: TitleState = isOpen ? (title === wearing ? 'wearing' : 'ready')
+      : stamp.earned ? 'claim' : stamp.progress > 0 ? 'progress' : 'locked';
+    out.push({ title, stamp, state });
+  }
+  return out.sort((a, b) => TITLE_ORDER[a.state] - TITLE_ORDER[b.state] || b.stamp.percent - a.stamp.percent || a.stamp.sortOrder - b.stamp.sortOrder);
+}
+
+/** "2 of 9" for the Titles button: titles you can wear out of every title shown. */
+export function titleCounts(entries: readonly TitleEntry[]): { owned: number; total: number } {
+  return { owned: entries.filter(e => e.state === 'wearing' || e.state === 'ready').length, total: entries.length };
+}
+
+/** One short line under a title in the Titles list. */
+export function titleLine(entry: TitleEntry): string {
+  switch (entry.state) {
+    case 'wearing': return 'On your profile now';
+    case 'ready': return 'Yours! Tap Wear';
+    case 'claim': return 'Claim the stamp to unlock';
+    case 'progress': return `${progressLabel(entry.stamp)} to the ${entry.stamp.shortName} stamp`;
+    default: return `Earn the ${entry.stamp.shortName} stamp`;
+  }
+}
