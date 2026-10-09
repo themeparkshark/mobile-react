@@ -15,8 +15,10 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
-  Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  Easing, cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring,
+  withTiming, type SharedValue,
 } from 'react-native-reanimated';
+import GameIcon from '../../../ui/GameIcon';
 import type { BossId, RaidDamageWeights } from '../../../api/endpoints/parks/raid';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import { BRAND } from '../../../ui/tokens';
@@ -30,11 +32,12 @@ import { useGameMusic } from '../../../gamekit/audio/useGameMusic';
 import { BASH_ART, BOSS_SKINS } from './art';
 import WaterFront from './WaterFront';
 import {
-  Bubble, Burst, DamageNumber, DizzyStars, DizzyTarget, FinMeter, PopupActor, TapHand, Wordmark, type ActorExit, type WordmarkId,
+  Bubble, Burst, CountBeat, DamageNumber, DizzyStars, DizzyTarget, FinMeter, InkSplat, PopupActor, TapHand, Wordmark, type ActorExit,
+  type WordmarkId,
 } from './BashParts';
 import BashResults, { type BashNext, type BashRewards } from './BashResults';
 import {
-  DEFAULT_WEIGHTS, ROUND_MS, bashScore, bashStars, createBash, finsNeeded, phaseAt, tapBoss, tapPopup, tick,
+  DEFAULT_WEIGHTS, INKED_MS, ROUND_MS, bashScore, bashStars, createBash, finsNeeded, phaseAt, tapBoss, tapPopup, tapWater, tick,
   type BashEvent, type BashState, type PhaseId, type Popup,
 } from './rules';
 
@@ -49,8 +52,11 @@ type Fx =
   | { id: number; t: 'num'; text: string; x: number; y: number; big: boolean }
   | { id: number; t: 'burst'; src: number; x: number; y: number; size: number; spin?: boolean }
   | { id: number; t: 'wm'; wm: WordmarkId }
-  | { id: number; t: 'bubble'; text: string; x: number; y: number; tone: 'white' | 'gold' | 'red' };
+  | { id: number; t: 'bubble'; text: string; x: number; y: number; tone: 'white' | 'gold' | 'red' }
+  | { id: number; t: 'ink'; x: number; y: number; size: number; rot: number }
+  | { id: number; t: 'count'; text: string };
 type FxIn = Fx extends infer F ? (F extends Fx ? Omit<F, 'id'> : never) : never;
+type FxLive = Fx & { until: number };
 
 /** Studio cue when it exists, else the shipped Chris sound. */
 function cue(id: string, fallback: string): string {
@@ -80,6 +86,8 @@ export interface BossBashProps {
   /** What the next attack costs and what you have (result screen). */
   readonly next?: BashNext;
   readonly rewards?: BashRewards;
+  /** Damage this player can still add to this raid (server per-player cap). */
+  readonly capLeft?: number;
   readonly onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   readonly onClose: () => void;
   /** Result screen "Attack again": submit this round, then start the next. */
@@ -92,7 +100,7 @@ export interface BossBashProps {
 }
 
 export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fighters = 0, endsAt, damageRate = 1,
-  damage: weightsIn, maxHits, next, rewards, onComplete, onClose, onAgain, onQuit, autoplay = 0, forceIntro = false }: BossBashProps) {
+  damage: weightsIn, maxHits, next, rewards, capLeft, onComplete, onClose, onAgain, onQuit, autoplay = 0, forceIntro = false }: BossBashProps) {
   const weights = weightsIn ?? DEFAULT_WEIGHTS;
   const skin = BOSS_SKINS[boss];
   const reduced = useReducedGameMotion();
@@ -103,12 +111,15 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const [intro, setIntro] = useState<'off' | 'rise' | 'teach' | 'go'>('off');
   const [firstTime, setFirstTime] = useState(false);
   const [actors, setActors] = useState<{ popup: Popup; exit: ActorExit }[]>([]);
-  const [fx, setFx] = useState<Fx[]>([]);
+  const [fx, setFx] = useState<FxLive[]>([]);
+  const [held, setHeld] = useState(false);
+  const [inkTell, setInkTell] = useState(false);
   const [hud, setHud] = useState({ power: 0, need: 3, headStart: 0, popKey: 0, damage: 0, phase: 'warm' as PhaseId });
   const [dizzy, setDizzy] = useState<{ from: number; until: number } | null>(null);
   const [pose, setPose] = useState<SharkPose>('idle');
   const [face, setFace] = useState<Face>('angry');
-  const [hint, setHint] = useState<'none' | 'tentacle' | 'head'>('none');
+  const [hint, setHintState] = useState<'none' | 'tentacle' | 'head' | 'ink'>('none');
+  const setHint = (h: 'none' | 'tentacle' | 'head' | 'ink') => { hintRef.current = h; setHintState(h); };
   const [result, setResult] = useState<GameResult | null>(null);
   const [ending, setEnding] = useState(false);
   const [teamHit, setTeamHit] = useState<number | null>(null);
@@ -118,34 +129,49 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const playing = useRef(false), finished = useRef(false);
   const played = useRef(0), lastFrame = useRef(0), frozenUntil = useRef(0), raf = useRef<number | null>(null);
   const fxId = useRef(0), timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const firstBlocked = useRef(false);
   const firstBonked = useRef(false), firstSmashed = useRef(false), idleSince = useRef(0), blocks = useRef(0);
   const startHp = useRef(hpLeft), seenHp = useRef(hpLeft);
   const introDone = useRef(false);
   const clock = useSharedValue(0);
   const bossFlinch = useSharedValue(0);
   const bossDrop = useSharedValue(0), bossHit = useSharedValue(0), bossRise = useSharedValue(0), bossShake = useSharedValue(0);
-  const cam = useSharedValue(1), fury = useSharedValue(0), hatPop = useSharedValue(0);
+  const cam = useSharedValue(1), fury = useSharedValue(0), hatPop = useSharedValue(0), bossPuff = useSharedValue(0);
+  const countdown = useRef(4);
+  const hintRef = useRef<'none' | 'tentacle' | 'head' | 'ink'>('none');
   const shake = useShake(), flash = useFlash();
 
-  const later = (ms: number, f: () => void) => { const t = setTimeout(f, ms); timers.current.push(t); };
   const addFx = useCallback((item: FxIn, life = 900) => {
     const id = ++fxId.current;
-    // One hero wordmark at a time: a new one replaces the old, never stacks.
-    setFx(list => [...list.filter(f => !(item.t === 'wm' && f.t === 'wm')).slice(-10), { ...item, id } as Fx]);
-    const t = setTimeout(() => setFx(list => list.filter(f => f.id !== id)), life);
-    timers.current.push(t);
+    // One hero wordmark at a time: a new one replaces the old, never stacks. Expiry is one sweeper, not a timer each.
+    setFx(list => [...list.filter(f => !(item.t === 'wm' && f.t === 'wm') && !(item.t === 'count' && f.t === 'count')).slice(-12),
+      { ...item, id, until: Date.now() + life } as FxLive]);
   }, []);
+  useEffect(() => {
+    if (!visible) return;
+    const id = setInterval(() => setFx(list => {
+      const now = Date.now();
+      return list.some(f => f.until <= now) ? list.filter(f => f.until > now) : list;
+    }), 200);
+    return () => clearInterval(id);
+  }, [visible]);
+  /** Sweep finished timers so the list never grows during a round. */
+  const later = (ms: number, f: () => void) => {
+    const t = setTimeout(() => { timers.current = timers.current.filter(x => x !== t); f(); }, ms);
+    timers.current.push(t);
+  };
 
   // Layout.
   const L = useMemo(() => {
     const { w, h } = field;
-    const bossSize = Math.min(w * 0.84, h * 0.46);
-    const bossTop = h * 0.075;
-    const waterY = h * 0.44;
-    const rows = [h * 0.64, h * 0.83];
+    const bossSize = Math.min(w * 0.8, h * 0.42);
+    const bossTop = h * 0.11;
+    const waterY = h * 0.45;
+    const rows = [h * 0.645, h * 0.83];
     const limbH = [h * 0.22, h * 0.27];
     const head = { x: w / 2 + (skin.head[0] - 0.5) * bossSize, y: bossTop + skin.head[1] * bossSize };
-    return { w, h, bossSize, bossTop, waterY, rows, limbH, head, dropBy: h * 0.11 };
+    // Dizzy: the boss flops forward onto the water so its head lands in the thumb zone (~57% down).
+    return { w, h, bossSize, bossTop, waterY, rows, limbH, head, dropBy: Math.max(0, h * 0.57 - head.y) };
   }, [field, skin.head]);
   const spotXY = (spot: number) => ({ x: L.w * LANES[spot % 3], y: L.rows[spot < 3 ? 0 : 1], h: L.limbH[spot < 3 ? 0 : 1] });
   const scoreTarget = { x: L.w - 46, y: -30 };
@@ -171,7 +197,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setActors([]); setFx([]); setDizzy(null); setPose('idle'); setFace('angry'); setHint('none'); setResult(null); setEnding(false);
     setTeamHit(null);
     setHud({ power: 0, need: 3, headStart: 0, popKey: 0, damage: 0, phase: 'warm' });
+    cancelAnimation(bossShake); cancelAnimation(bossPuff);
     clock.value = 0; bossDrop.value = 0; bossHit.value = 0; bossRise.value = 0; fury.value = 0; cam.value = 1; hatPop.value = 0;
+    bossShake.value = 0; bossPuff.value = 0; setInkTell(false); setHeld(false); countdown.current = 4;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hpLeft]);
 
@@ -223,11 +251,15 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
         case 'dizzy': onDizzy(e.from, e.until); break;
         case 'smash': onSmash(e); break;
         case 'shakeOff': onShakeOff(); break;
-        case 'block': onBlock(); break;
+        case 'clank': onClank(); break;
+        case 'inkTell': onInkTell(); break;
+        case 'inkBlock': onInkBlock(e); break;
+        case 'inked': onInked(); break;
+        case 'splash': onSplash(e.lane); break;
         case 'phase': onPhase(e.phase); break;
       }
     }
-    syncHud(s, events.some(e => e.type === 'ouch' && e.lostFins > 0) ? Date.now() : undefined);
+    syncHud(engine.current, events.some(e => e.type === 'ouch' && e.lostFins > 0) ? Date.now() : undefined);
   };
 
   /** Show a face for a moment, then go back to angry (never over a dizzy head). */
@@ -242,7 +274,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     const p = spotXY(e.popup.spot);
     const tipY = p.y - p.h * 0.78;
     firstBonked.current = true; idleSince.current = played.current;
-    if (hint === 'tentacle') setHint('none');
+    if (hintRef.current === 'tentacle') setHint('none');
     addFx({ t: 'burst', src: BASH_ART.impact, x: p.x, y: tipY, size: p.h * 0.55, spin: true }, 420);
     addFx({ t: 'burst', src: BASH_ART.splash, x: p.x, y: p.y - 18, size: p.h * 0.5 }, 420);
     const d = dealt();
@@ -274,13 +306,20 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const onDizzy = (from: number, until: number) => {
     setDizzy({ from, until });
     setFace('dizzy');
-    bossDrop.value = reduced ? withTiming(1, { duration: 120 }) : withSpring(1, { damping: 8, stiffness: 170 });
+    setInkTell(false); cancelAnimation(bossPuff); bossPuff.value = withTiming(0, { duration: 100 });
+    bossDrop.value = reduced ? withTiming(1, { duration: 120 }) : withTiming(1, { duration: 150, easing: Easing.in(Easing.quad) });
     if (!reduced) {
-      bossShake.value = withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(-1, { duration: 260 })), -1, true);
+      later(150, () => {
+        addFx({ t: 'burst', src: BASH_ART.splash, x: L.w * 0.3, y: L.waterY + 30, size: L.w * 0.3 }, 420);
+        addFx({ t: 'burst', src: BASH_ART.splash, x: L.w * 0.7, y: L.waterY + 30, size: L.w * 0.3 }, 420);
+        shake.shake(6, 160);
+      });
+      bossShake.value = withDelay(160, withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(-1, { duration: 260 })), -1, true));
     }
-    addFx({ t: 'bubble', text: 'SMASH IT!', x: L.w / 2, y: L.head.y + L.dropBy + L.bossSize * 0.33, tone: 'gold' }, 1100);
+    addFx({ t: 'bubble', text: 'SMASH IT!', x: L.w / 2, y: Math.min(L.h * 0.8, L.head.y + L.dropBy + L.bossSize * 0.3), tone: 'gold' }, 1000);
     if (!firstSmashed.current) setHint('head');
     sfx('bo_finisher_ready', 'fx.whooshRev', { volume: 0.9 });
+    later(150, () => sfx('bo_pin_slam_kraken', 'fx.hit', { pitch: -5, volume: 1 }));
     haptic('hitMedium');
   };
 
@@ -299,14 +338,14 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     frozenUntil.current = Date.now() + SMASH_STOP_MS;
     addFx({ t: 'burst', src: BASH_ART.impact, x, y, size: L.bossSize * 0.7, spin: true }, 500);
     addFx({ t: 'num', text: `+${dealt()}`, x, y: y - 10, big: true }, 1300);
-    addFx({ t: 'wm', wm: e.final ? 'finish' : e.perfect ? 'perfect' : 'great' }, 1000);
+    addFx({ t: 'wm', wm: e.perfect ? 'perfect' : e.final ? 'superb' : 'great' }, 1000);
     if (!reduced) {
       particles.current?.burst({ x, y, preset: 'burst', count: 16, colors: [BRAND.gold, BRAND.white, BRAND.goldLight], speed: 1.3 });
       shake.shake(e.perfect ? 10 : 7, 200);
-      if (e.perfect) flash.flash(0.22, 140);
+      if (e.perfect) flash.flash(0.18, 120);
       cam.value = withSequence(withTiming(1.07, { duration: 60 }), withSpring(1, { damping: 10, stiffness: 180 }));
       bossHit.value = withSequence(withTiming(1, { duration: 30 }), withDelay(SMASH_STOP_MS, withTiming(0, { duration: 150 })));
-      if (skin.hat && e.perfect) { hatPop.value = 0; hatPop.value = withTiming(1, { duration: 820, easing: Easing.linear }); }
+      if (skin.hat) { hatPop.value = 0; hatPop.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.quad) }); }
     }
     setPose('cheer'); later(900, () => setPose(cur => (cur === 'cheer' ? 'idle' : cur)));
     sfx('bo_crit', 'fx.hit', { pitch: e.perfect ? 7 : 2, volume: 1 });
@@ -314,7 +353,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     haptic(e.perfect ? 'comboHeavy' : 'hitMedium');
     // Knocked out by your own hit: the shared HP is gone.
     const total = bashScore(engine.current, damageRate, weights);
-    if (startHp.current > 0 && total >= startHp.current) addFx({ t: 'wm', wm: 'knockout' }, 1400);
+    if (hpLeft > 0 && total >= hpLeft) addFx({ t: 'wm', wm: 'knockout' }, 1400);
   };
 
   const onShakeOff = () => {
@@ -326,7 +365,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     haptic('warning');
   };
 
-  const onBlock = () => {
+  const onClank = () => {
     blocks.current += 1;
     if (!reduced) bossRise.value = withSequence(withTiming(-0.3, { duration: 60 }), withSpring(0, { damping: 9 }));
     sfx('bo_guard_kraken', 'ui.tap', { volume: 0.5 });
@@ -335,6 +374,46 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       addFx({ t: 'bubble', text: `Bonk the ${skin.limbWord}!`, x: L.w / 2, y: L.waterY + 6, tone: 'white' }, 1100);
       setHint('tentacle');
     }
+  };
+
+  const onInkTell = () => {
+    setInkTell(true);
+    flashFace('roar', 1150);
+    if (!reduced) bossPuff.value = withRepeat(withSequence(withTiming(1, { duration: 280 }), withTiming(0.6, { duration: 200 })), -1, false);
+    addFx({ t: 'bubble', text: 'BLOCK IT!', x: L.w / 2, y: L.waterY - 26, tone: 'red' }, 1150);
+    if (!firstBlocked.current) setHint('ink');
+    sfx('bo_laser_charge', 'fx.whooshRev', { volume: 0.9 });
+    haptic('warning');
+  };
+  const endInkTell = () => {
+    setInkTell(false);
+    cancelAnimation(bossPuff); bossPuff.value = withTiming(0, { duration: 140 });
+    if (hintRef.current === 'ink') setHint('none');
+  };
+  const onInkBlock = (e: Extract<BashEvent, { type: 'inkBlock' }>) => {
+    firstBlocked.current = true;
+    endInkTell();
+    const x = L.head.x, y = L.head.y + L.bossSize * 0.22;
+    addFx({ t: 'burst', src: BASH_ART.impact, x, y, size: L.bossSize * 0.5, spin: true }, 420);
+    addFx({ t: 'bubble', text: 'BLOCKED!', x, y: y + 40, tone: 'gold' }, 900);
+    addFx({ t: 'num', text: e.counted ? `+${dealt()}` : 'MAX', x, y: y - 30, big: false }, 900);
+    flashFace('hurt', 500);
+    if (!reduced) bossRise.value = withSequence(withTiming(-0.5, { duration: 70 }), withSpring(0, { damping: 9 }));
+    sfx('bo_perfect_clang', 'ui.confirm', { volume: 1 });
+    haptic('hitMedium');
+  };
+  const onInked = () => {
+    endInkTell();
+    flashFace('laugh', 900);
+    const spots = [[0.25, 0.62], [0.68, 0.7], [0.45, 0.86]];
+    spots.forEach(([fx0, fy0], i) => later(i * 70, () => addFx({ t: 'ink', x: L.w * fx0, y: L.h * fy0, size: L.w * 0.42, rot: (i - 1) * 20 }, INKED_MS)));
+    if (!reduced) shake.shake(5, 160);
+    sfx('bo_feint_giggle', 'fx.nopeShort', { volume: 0.9 });
+    haptic('failBuzz');
+  };
+  const onSplash = (lane: number) => {
+    const p = spotXY(lane + 3);
+    addFx({ t: 'burst', src: BASH_ART.splash, x: p.x, y: p.y - 12, size: 46 }, 380);
   };
 
   const onPhase = (phase: PhaseId) => {
@@ -353,6 +432,17 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   };
 
   // --- The loop ----------------------------------------------------------------
+  const buildResult = (s: BashState): GameResult => {
+    const total = bashScore(s, damageRate, weights);
+    return {
+      score: total,
+      stars: bashStars(s, weights),
+      message: total > 0 ? 'NICE HIT!' : 'TRY AGAIN',
+      meta: { hits: s.hits, weak_hits: s.weak, duration_ms: Math.round(Math.min(ROUND_MS, Math.max(12000, played.current))),
+        stars: bashStars(s, weights), bonks: s.bonks, smashes: s.smashes, perfects: s.perfects, ouches: s.ouches, blocks: s.blocks,
+        best_streak: s.bestStreak, game: 'boss_bash_v2' },
+    };
+  };
   const finish = useCallback(() => {
     if (finished.current) return;
     finished.current = true;
@@ -362,27 +452,22 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     const s = engine.current;
     setEnding(true);
     setActors(list => list.map(a => ({ ...a, exit: 'sink' as ActorExit })));
-    if (dizzy) endDizzy();
-    addFx({ t: 'wm', wm: 'finish' }, 1200);
-    bossRise.value = reduced ? withTiming(2.2, { duration: 200 }) : withDelay(350, withTiming(2.2, { duration: 700, easing: Easing.in(Easing.back(1.4)) }));
+    // Always settle: read the live engine, never a stale render (round 1 left the ring up after the bell).
+    endDizzy(); endInkTell(); setHint('none');
+    cancelAnimation(bossShake); bossShake.value = 0;
+    setFx(list => list.filter(f => f.t === 'num'));
+    addFx({ t: 'wm', wm: 'finish' }, 1000);
+    bossRise.value = reduced ? withTiming(2.2, { duration: 200 }) : withDelay(250, withTiming(2.2, { duration: 550, easing: Easing.in(Easing.back(1.4)) }));
     sfx('bo_ko_kraken', 'fx.reveal', { volume: 0.9 });
     haptic('success');
-    const total = bashScore(s, damageRate, weights);
-    later(reduced ? 500 : 1400, () => setResult({
-      score: total,
-      stars: bashStars(s, weights),
-      message: total > 0 ? 'NICE HIT!' : 'TRY AGAIN',
-      meta: { hits: s.hits, weak_hits: s.weak, duration_ms: Math.round(Math.min(ROUND_MS, Math.max(12000, played.current))),
-        stars: bashStars(s, weights), bonks: s.bonks, smashes: s.smashes, perfects: s.perfects, ouches: s.ouches,
-        best_streak: s.bestStreak, game: 'boss_bash_v1' },
-    }));
+    later(reduced ? 400 : 1000, () => setResult(buildResult(s)));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [damageRate, weights, reduced]);
 
   const frame = useCallback(() => {
     if (!playing.current) return;
     const now = Date.now();
-    const dt = Math.min(50, Math.max(0, now - lastFrame.current));
+    const dt = Math.min(250, Math.max(0, now - lastFrame.current));
     lastFrame.current = now;
     if (now >= frozenUntil.current) played.current = Math.min(ROUND_MS, played.current + dt);
     clock.value = played.current;
@@ -390,11 +475,21 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     engine.current = r.state;
     if (r.events.length) applyRef.current(r.events);
     // A first-timer who has not bonked yet gets the pointing hand.
-    if (!firstBonked.current && played.current > 1200 && hint === 'none' && engine.current.up.length) setHint('tentacle');
-    if (played.current >= ROUND_MS) { finish(); return; }
+    if (!firstBonked.current && played.current > 900 && hintRef.current === 'none' && engine.current.up.length) setHint('tentacle');
+    // The last three seconds count down out loud (FINISH! only at the bell).
+    const left = Math.ceil((ROUND_MS - played.current) / 1000);
+    if (left <= 3 && left >= 1 && left < countdown.current) {
+      countdown.current = left;
+      addFx({ t: 'count', text: String(left) }, 900);
+      GameAudio.play('ui.select', { volume: 0.9, pitch: (3 - left) * 2 });
+      haptic('tickSelection');
+    }
+    if (played.current >= ROUND_MS) { finishRef.current(); return; }
     raf.current = requestAnimationFrame(frame);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finish, hint]);
+  }, []);
+  const finishRef = useRef(finish);
+  finishRef.current = finish;
 
   const run = useCallback(() => {
     if (!visible || playing.current || finished.current || intro !== 'off' || !introDone.current) return;
@@ -424,8 +519,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       flashFace('roar', 1100);
       sfx(`bo_enter_${boss === 'kraken' ? 'kraken' : boss === 'robo_shark' ? 'robo' : 'ghost'}`, 'fx.whoosh', { volume: 1 });
       if (!reduced) later(380, () => { shake.shake(7, 260); haptic('hitMedium'); });
-      later(reduced ? 200 : 700, () => setIntro('teach'));
-      if (!first) later(reduced ? 1300 : 2000, goNow);
+      later(reduced ? 150 : first ? 600 : 350, () => setIntro('teach'));
+      if (!first) later(reduced ? 700 : 1100, goNow);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduced, boss, forceIntro]);
@@ -433,7 +528,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setIntro(cur => {
       if (cur === 'off' || cur === 'go') return cur;
       void AsyncStorage.setItem(SEEN_KEY, '1').catch(() => undefined);
-      later(450, () => { introDone.current = true; setIntro('off'); });
+      later(380, () => { introDone.current = true; setIntro('off'); });
       sfx('sh_go_horn', 'ui.confirm', { volume: 0.9 });
       haptic('tickSelection');
       return 'go';
@@ -446,14 +541,10 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const tapLane = (lane: number) => {
     if (!playing.current) return;
     const s = engine.current;
-    if (s.dizzy) { setHint('head'); return; }
+    // Dizzy (flopped on the water) or puffed up for ink: the boss is the target, anywhere you tap.
+    if (s.dizzy || s.ink) { tapHead(); return; }
     const popup = s.up.find(p => p.spot % 3 === lane);
-    if (!popup) {
-      const p = spotXY(lane + 3);
-      addFx({ t: 'burst', src: BASH_ART.splash, x: p.x, y: p.y - 12, size: 46 }, 380);
-      return;
-    }
-    const r = tapPopup(s, popup.id, played.current, cap, weights);
+    const r = popup ? tapPopup(s, popup.id, played.current, cap, weights) : tapWater(s, lane, played.current);
     engine.current = r.state;
     apply(r.events);
   };
@@ -471,7 +562,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     const id = setInterval(() => {
       if (!playing.current) return;
       const s = engine.current, ms = played.current;
-      if (s.dizzy) { if (ms > s.dizzy.from + 250 + (1 - autoplay) * 700) tapHead(); return; }
+      if (s.dizzy) { if (ms > s.dizzy.from + 300 + (1 - autoplay) * 500) tapHead(); return; }
+      if (s.ink) { if (autoplay > 0.6 && ms > s.ink.from + 350) tapHead(); }
       for (const p of s.up) {
         if (!plan.has(p.id)) plan.set(p.id, p.kind === 'puffer' ? (Math.random() < (1 - autoplay) * 0.6 ? p.at + 500 : Infinity) : p.at + 260 + (1 - autoplay) * 500);
         if (ms >= (plan.get(p.id) ?? Infinity)) { tapLane(p.spot % 3); break; }
@@ -485,8 +577,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const bossStyle = useAnimatedStyle(() => ({
     transform: [
       { translateY: bossDrop.value * L.dropBy + bossRise.value * L.bossSize * 0.32 },
-      { rotate: `${bossShake.value * 7 * bossDrop.value}deg` },
-      { scaleX: 1 + bossHit.value * 0.05 + bossFlinch.value * 0.025 }, { scaleY: 1 - bossHit.value * 0.07 - bossFlinch.value * 0.03 },
+      { rotate: `${bossShake.value * 6 * bossDrop.value}deg` },
+      { scaleX: 1 + bossHit.value * 0.05 + bossFlinch.value * 0.025 + bossPuff.value * 0.09 },
+      { scaleY: 1 - bossHit.value * 0.07 - bossFlinch.value * 0.03 + bossPuff.value * 0.06 },
     ],
   }));
   const bossFlash = useAnimatedStyle(() => ({ opacity: bossHit.value * 0.6 }));
@@ -495,9 +588,10 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const timerStyle = useAnimatedStyle(() => ({ width: `${Math.max(0, 1 - clock.value / ROUND_MS) * 100}%` as `${number}%`,
     backgroundColor: clock.value > ROUND_MS - 3000 ? BRAND.red : BRAND.gold }));
   const hatStyle = useAnimatedStyle(() => {
+    // A hop and a wobble in place: the hat never leaves the head (round 1 flew it into the HUD).
     const v = hatPop.value;
     const up = v < 1 && v > 0 ? Math.sin(v * Math.PI) : 0;
-    return { transform: [{ translateY: -up * L.bossSize * 0.18 }, { translateX: up * L.bossSize * 0.1 }, { rotate: `${v * 360}deg` }] };
+    return { transform: [{ translateY: -up * L.bossSize * 0.06 }, { rotate: `${up * 14 * Math.sin(v * 9)}deg` }] };
   });
 
   const hpNow = Math.max(0, hpLeft - hud.damage);
@@ -510,7 +604,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const finSize = Math.min(54, L.w * 0.13);
 
   const renderResults = (args: ShellResultsArgs) => (
-    <BashResults args={args} bossName={bossName} boss={boss} rideName={rideName ?? null} startHp={startHp.current}
+    <BashResults args={args} bossName={bossName} boss={boss} rideName={rideName ?? null} startHp={hpLeft} capLeft={capLeft}
       hpMax={hpMax} damage={args.result.score} rate={damageRate} meta={args.result.meta ?? {}} fighters={fighters}
       endsAt={endsAt} next={next} rewards={rewards}
       onAgain={onAgain && args.result.meta ? () => onAgain(args.result.meta!) : undefined} />
@@ -530,8 +624,16 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       renderResults={renderResults}
       gameId="boss_bash"
       onStart={startIntro}
-      onPause={() => halt()}
-      onResume={() => { if (introDone.current) run(); }}
+      onPause={() => { halt(); setHeld(true); }}
+      onResume={() => { setHeld(false); if (introDone.current) run(); }}
+      hideHeaderScore={!!result}
+      onWrapUp={() => {
+        // Boarding the ride mid-round keeps what you earned (the server needs at least 12 s since FIGHT, which the intro covers).
+        halt();
+        if (played.current < 9000 || engine.current.hits <= 0) return null;
+        finished.current = true;
+        return buildResult(engine.current);
+      }}
       onComplete={onComplete}
       onClose={onClose}
       onQuit={onQuit}
@@ -542,7 +644,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           <Image source={BASH_ART.lagoon} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />
 
           {/* The boss, rising out of the lagoon. */}
-          <View pointerEvents="none" style={{ position: 'absolute', left: (L.w - L.bossSize) / 2, top: L.bossTop, width: L.bossSize, height: L.bossSize }}>
+          <View pointerEvents="none" style={{ position: 'absolute', left: (L.w - L.bossSize) / 2, top: L.bossTop, width: L.bossSize, height: L.bossSize,
+            zIndex: dizzy ? 3 : 1 }}>
             <Animated.View style={[StyleSheet.absoluteFill, bossStyle]}>
               {faces.map(([id, src]) => <Image key={id} source={src} contentFit="contain"
                 style={[StyleSheet.absoluteFill, { opacity: id === shownFace ? (skin.ghostly ? 0.92 : 1) : 0 }]} />)}
@@ -558,11 +661,14 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           </View>
 
           {/* The water in front of the boss (hides its lower half). */}
-          <WaterFront width={L.w} height={L.h} top={L.waterY} reduced={reduced} running={visible && !result} />
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 2 }]}>
+            <WaterFront width={L.w} height={L.h} top={L.waterY} reduced={reduced} running={visible && !result && !held} />
+          </View>
           <Image source={BASH_ART.beach} pointerEvents="none" contentFit="cover" contentPosition="bottom"
-            style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: L.w * 0.66 }} />
+            style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: L.w * 0.66, zIndex: 2 }} />
           <Animated.View pointerEvents="none" style={[styles.fury, { height: L.waterY }, furyStyle]} />
 
+          <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 4 }]}>
           {/* Pop-ups. */}
           {actors.map(({ popup, exit }) => {
             const p = spotXY(popup.spot);
@@ -571,17 +677,19 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
               hint={hint === 'tentacle' && !exit && popup.kind === 'tentacle' && actors.find(a => !a.exit && a.popup.kind === 'tentacle')?.popup.id === popup.id} />;
           })}
 
-          {dizzy && <DizzyTarget x={L.head.x} y={L.head.y + L.dropBy} size={L.bossSize * 0.36} from={dizzy.from} until={dizzy.until}
+          {dizzy && <DizzyTarget x={L.head.x} y={L.head.y + L.dropBy} size={L.bossSize * 0.34} from={dizzy.from} until={dizzy.until}
             clock={clock} reduced={reduced} />}
-          {dizzy && hint === 'head' && <TapHand x={L.head.x + 10} y={L.head.y + L.dropBy + 6} reduced={reduced} size={72} />}
+          {dizzy && hint === 'head' && <TapHand x={L.head.x + 18} y={L.head.y + L.dropBy + 4} reduced={reduced} size={72} />}
+          {inkTell && hint === 'ink' && <TapHand x={L.head.x + 18} y={L.head.y + L.bossSize * 0.18} reduced={reduced} size={72} />}
 
-          {/* Input: the boss on top, three lanes of water below. */}
-          <Pressable accessibilityRole="button" accessibilityLabel={dizzy ? `Smash ${bossName}'s head now` : `${bossName}. Bonk the ${skin.limbWord} first`}
-            onPressIn={tapHead} style={{ position: 'absolute', left: L.w * 0.1, width: L.w * 0.8, top: L.bossTop, height: L.waterY - L.bossTop + L.dropBy * 0.6 }} />
+          {/* Input: the boss on top, three lanes of water below. Dizzy or puffed up, every tap goes to the boss. */}
+          <Pressable accessibilityRole="button"
+            accessibilityLabel={dizzy ? `Smash ${bossName} now` : inkTell ? `Block the ink: tap ${bossName}` : `${bossName}. Bonk the ${skin.limbWord} first`}
+            onPressIn={tapHead} style={{ position: 'absolute', left: L.w * 0.1, width: L.w * 0.8, top: L.bossTop, height: L.waterY - L.bossTop }} />
           {[0, 1, 2].map(lane => <Pressable key={lane} accessibilityRole="button"
             accessibilityLabel={`${['Left', 'Middle', 'Right'][lane]} water. Bonk what pops up here, never the pufferfish`}
             onPressIn={() => tapLane(lane)}
-            style={{ position: 'absolute', left: (L.w / 3) * lane, width: L.w / 3, top: L.waterY + L.dropBy * 0.6, bottom: 0 }} />)}
+            style={{ position: 'absolute', left: (L.w / 3) * lane, width: L.w / 3, top: L.waterY, bottom: 0 }} />)}
 
           {/* Shark cheerleader on the beach. */}
           <View pointerEvents="none" style={[styles.shark, { width: L.h * 0.13, height: L.h * 0.16 }]}>
@@ -591,26 +699,34 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           {/* Effects. */}
           {fx.map(f => f.t === 'num' ? <DamageNumber key={f.id} text={f.text} x={f.x} y={f.y} big={f.big} toX={scoreTarget.x} toY={scoreTarget.y} reduced={reduced} />
             : f.t === 'burst' ? (reduced ? null : <Burst key={f.id} src={f.src} x={f.x} y={f.y} size={f.size} spin={f.spin} reduced={reduced} />)
-              : f.t === 'wm' ? <Wordmark key={f.id} id={f.wm} x={L.w / 2} y={L.h * 0.18} width={L.w * 0.72} reduced={reduced} />
-                : <Bubble key={f.id} text={f.text} x={f.x} y={f.y} tone={f.tone} reduced={reduced} />)}
-          {!reduced && <ParticleField ref={particles} width={L.w} height={L.h} />}
+              : f.t === 'wm' ? <Wordmark key={f.id} id={f.wm} x={L.w / 2} y={L.h * 0.2} width={L.w * 0.7} reduced={reduced} />
+                : f.t === 'ink' ? <InkSplat key={f.id} x={f.x} y={f.y} size={f.size} rot={f.rot} life={INKED_MS} reduced={reduced} />
+                  : f.t === 'count' ? <CountBeat key={f.id} text={f.text} x={L.w / 2} y={L.h * 0.33} reduced={reduced} />
+                    : <Bubble key={f.id} text={f.text} x={f.x} y={f.y} tone={f.tone} reduced={reduced} />)}
+          {!reduced && <ParticleField ref={particles} width={L.w} height={L.h} paused={held} />}
+          </View>
         </Animated.View>}
 
-        {/* HUD: shared HP and the round clock on top, the fins at the bottom. */}
+        {/* HUD: shared HP, seconds left and the round bar on top; the fins at the bottom. */}
         {L.w > 0 && <View pointerEvents="none" style={styles.hud}>
           <View style={styles.hpRow}>
             <Text style={styles.hpName} numberOfLines={1}>{bossName.toUpperCase()}</Text>
-            <Text style={styles.hpCount} numberOfLines={1}>{hpNow.toLocaleString()} HP left</Text>
+            <Text style={styles.hpCount} numberOfLines={1}>{hpNow.toLocaleString()} HP left{fighters > 0 ? `  ·  ${fighters} fighting` : ''}</Text>
           </View>
           <View style={styles.hpTrack}>
             <View style={[styles.hpYours, { width: `${Math.min(100, (Math.max(0, hpLeft) / Math.max(1, hpMax)) * 100)}%` }]} />
             <View style={[styles.hpFill, { width: `${Math.min(100, (hpNow / Math.max(1, hpMax)) * 100)}%` }]} />
           </View>
-          <View style={styles.timerTrack}><Animated.View style={[styles.timerFill, timerStyle]} /></View>
-          {teamHit !== null && <View style={styles.teamChip}><Text style={styles.teamText}>Your team hit it! -{teamHit.toLocaleString()}</Text></View>}
-          {damageRate < 1 && <View style={styles.homeChip}><Text style={styles.homeText}>From home: {Math.round(damageRate * 100)}% power</Text></View>}
+          <View style={styles.clockRow}>
+            <View style={styles.timerTrack}><Animated.View style={[styles.timerFill, timerStyle]} /></View>
+            <SecondsLeft clock={clock} />
+          </View>
+          <View style={styles.chipRow}>
+            {damageRate < 1 ? <View style={styles.homeChip}><Text style={styles.homeText}>From home: {Math.round(damageRate * 100)}% power</Text></View> : <View />}
+            {teamHit !== null && <View style={styles.teamChip}><Text style={styles.teamText}>Your team hit it! -{teamHit.toLocaleString()}</Text></View>}
+          </View>
         </View>}
-        {L.w > 0 && <View pointerEvents="none" style={styles.finDock}>
+        {L.w > 0 && !result && <View pointerEvents="none" style={styles.finDock}>
           <FinMeter power={hud.power} need={hud.need} headStart={hud.headStart} popKey={hud.popKey} ready={!!dizzy} size={finSize} reduced={reduced} />
         </View>}
         {!reduced && <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#fff' }, flash.style]} />}
@@ -688,11 +804,16 @@ const styles = StyleSheet.create({
   hpTrack: { marginTop: 3, height: 18, borderRadius: 9, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.sky, overflow: 'hidden' },
   hpYours: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.gold },
   hpFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.red },
-  timerTrack: { marginTop: 5, height: 8, borderRadius: 4, borderWidth: 2, borderColor: BRAND.navy, backgroundColor: 'rgba(255,255,255,0.7)', overflow: 'hidden' },
+  clockRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 5 },
+  chipRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  secs: { minWidth: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 12,
+    borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 6, paddingVertical: 1 },
+  secsText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, padding: 0, minWidth: 22, textAlign: 'center' },
+  timerTrack: { flex: 1, height: 10, borderRadius: 4, borderWidth: 2, borderColor: BRAND.navy, backgroundColor: 'rgba(255,255,255,0.7)', overflow: 'hidden' },
   timerFill: { height: '100%', borderRadius: 2 },
-  teamChip: { alignSelf: 'flex-end', marginTop: 6, backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
+  teamChip: { marginTop: 6, backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
   teamText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
-  homeChip: { alignSelf: 'flex-start', marginTop: 6, backgroundColor: 'rgba(5,52,110,0.75)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
+  homeChip: { marginTop: 6, backgroundColor: 'rgba(5,52,110,0.75)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
   homeText: { fontFamily: 'Knockout', fontSize: 13, color: BRAND.white },
   finDock: { position: 'absolute', bottom: 14, alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 26,
     backgroundColor: 'rgba(255,255,255,0.88)', borderWidth: 3, borderColor: BRAND.navy },
@@ -722,3 +843,14 @@ const styles = StyleSheet.create({
   goWord: { position: 'absolute', top: '30%', alignSelf: 'center' },
   goWordText: { fontFamily: 'Shark', fontSize: 92, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 6 }, textShadowRadius: 0 },
 });
+
+/** Seconds left, as a number kids can read (the bar alone is too subtle). */
+function SecondsLeft({ clock }: { clock: SharedValue<number> }) {
+  const [secs, setSecs] = useState(Math.ceil(ROUND_MS / 1000));
+  useAnimatedReaction(() => Math.max(0, Math.ceil((ROUND_MS - clock.value) / 1000)), (v, prev) => {
+    if (v !== prev) runOnJS(setSecs)(v);
+  });
+  return <View style={[styles.secs, secs <= 3 && { backgroundColor: BRAND.gold }]} accessibilityLabel={`${secs} seconds left`}>
+    <GameIcon name="timer" size={16} /><Text style={styles.secsText}>{secs}</Text>
+  </View>;
+}

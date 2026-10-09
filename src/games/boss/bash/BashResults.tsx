@@ -4,7 +4,8 @@
  * Energy right on the button. Numbers are the server's formula (home rate in).
  */
 import { Image } from 'expo-image';
-import { useEffect, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { BossId } from '../../../api/endpoints/parks/raid';
@@ -42,12 +43,29 @@ export function nextAttack(next: BashNext | undefined): { can: boolean; energyAf
   return { can: true, energyAfter, attacksAfter, reason: null };
 }
 
-export default function BashResults({ args, bossName, boss, startHp, hpMax, damage, rate, meta, fighters, endsAt, next, rewards, onAgain }: {
+/** What the server will credit: your damage, but never past the per-player raid cap. Pure (tested). */
+export function creditedDamage(damage: number, capLeft: number | undefined): number {
+  return capLeft === undefined ? damage : Math.max(0, Math.min(damage, capLeft));
+}
+
+export default function BashResults({ args, bossName, boss, startHp, hpMax, damage: rawDamage, capLeft, rate, meta, fighters, endsAt, next, rewards, onAgain }: {
   args: ShellResultsArgs; bossName: string; boss: BossId; rideName: string | null; startHp: number; hpMax: number; damage: number;
+  /** Per-player raid cap left before this round (config boss.max_damage_per_player_per_raid). */
+  capLeft?: number;
   rate: number; meta: Record<string, unknown>; fighters: number; endsAt?: string; next?: BashNext; rewards?: BashRewards;
   onAgain?: () => void;
 }) {
   const { stars, claim, reducedMotion: reduced } = args;
+  const damage = creditedDamage(rawDamage, capLeft);
+  const capped = damage < rawDamage;
+  const [best, setBest] = useState<boolean>(false);
+  useEffect(() => {
+    if (damage <= 0) return;
+    const key = `boss_bash_best_${boss}`;
+    void AsyncStorage.getItem(key).then(v => {
+      if (Number(v ?? 0) < damage) { setBest(Number(v ?? 0) > 0); void AsyncStorage.setItem(key, String(damage)); }
+    }).catch(() => undefined);
+  }, [boss, damage]);
   const hpAfter = Math.max(0, startHp - damage);
   const ko = startHp > 0 && hpAfter === 0;
   const n = nextAttack(next);
@@ -81,6 +99,10 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
 
   return (
     <View style={styles.card} accessibilityViewIsModal>
+      <View style={[styles.banner, ko && styles.bannerWin]} accessibilityRole="header">
+        <Text style={styles.bannerText}>{noHits ? 'MISSED IT' : ko ? 'FINAL BLOW!' : 'STILL FIGHTING'}</Text>
+      </View>
+      {best && !noHits && <View style={styles.best}><Text style={styles.bestText}>NEW BEST!</Text></View>}
       <View style={styles.head}>
         <Image source={BOSS_ART[boss]} style={styles.bossPic} contentFit="contain" />
         <View style={{ flex: 1 }}>
@@ -88,6 +110,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           {noHits ? <Text style={styles.zero}>No Energy was spent.</Text>
             : <CountUpText value={damage} delayMs={reduced ? 0 : 200} durationMs={reduced ? 1 : 700} style={styles.dmg} />}
           {rate < 1 && !noHits && <Text style={styles.rate}>From home, {Math.round(rate * 100)}% power</Text>}
+          {capped && <Text style={styles.rate}>That hits the most one shark can do to this boss.</Text>}
         </View>
       </View>
 
@@ -104,7 +127,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <Animated.View style={[styles.hpRed, fill]} />
         </View>
         <Text style={styles.raidLine} numberOfLines={1}>
-          {ko ? 'You knocked it out!' : `${hpAfter.toLocaleString()} HP left`}{left ? `  ·  ${left} to go` : ''}{fighters > 0 ? `  ·  ${fighters} fighting` : ''}
+          {ko ? 'Your hit could finish it!' : `${hpAfter.toLocaleString()} HP left`}{left ? `  ·  ${left} to go` : ''}{fighters > 0 ? `  ·  ${fighters} fighting` : ''}
         </Text>
       </View>
 
@@ -150,7 +173,14 @@ function Chip({ label, value }: { label: string; value: number }) {
 }
 
 const styles = StyleSheet.create({
-  card: { width: '92%', backgroundColor: BRAND.cream, borderRadius: 26, borderWidth: 4, borderColor: BRAND.navy, padding: 16 },
+  card: { width: '92%', backgroundColor: BRAND.cream, borderRadius: 26, borderWidth: 4, borderColor: BRAND.navy, padding: 16, paddingTop: 24 },
+  banner: { position: 'absolute', top: -20, alignSelf: 'center', backgroundColor: BRAND.blue, borderRadius: 16, borderWidth: 3, borderColor: BRAND.navy,
+    paddingHorizontal: 16, paddingVertical: 4 },
+  bannerWin: { backgroundColor: BRAND.gold },
+  bannerText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white, letterSpacing: 0.6, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  best: { position: 'absolute', right: 12, top: 18, backgroundColor: BRAND.red, borderRadius: 10, borderWidth: 2, borderColor: BRAND.white,
+    paddingHorizontal: 8, paddingVertical: 2, transform: [{ rotate: '8deg' }] },
+  bestText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   bossPic: { width: 76, height: 76 },
   kicker: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, letterSpacing: 0.4 },

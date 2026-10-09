@@ -16,6 +16,9 @@ export interface JoinCost {
   readonly short: null | { readonly kind: 'energy' | 'ticket'; readonly need: number; readonly have: number };
 }
 
+/** config('boss.max_damage_per_player_per_raid'): the most one player can add to one raid. */
+export const MAX_DAMAGE_PER_PLAYER = 3000;
+
 /** config('boss.rewards.defeated') defaults, used when the raid does not send its own. */
 export const DEFAULT_WIN_REWARDS: RewardPreview = { coins: 50, xp: 100, energy: 20, parts: 2 };
 

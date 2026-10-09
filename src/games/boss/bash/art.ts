@@ -8,7 +8,8 @@ import type { BossId } from '../../../api/endpoints/parks/raid';
 export const BASH_ART = {
   lagoon: require('../../../assets/games/boss/bg_lagoon.jpg'),
   beach: require('../../../assets/games/boss/k1_fore.png'),
-  hat: require('../../../assets/games/boss/kraken_hat.png'),
+  hat: require('../../../assets/games/boss/bash/hat.png'),
+  ink: require('../../../assets/games/boss/bash/ink.png'),
   puffer: require('../../../assets/games/boss/bash/puffer.png'),
   splash: require('../../../assets/games/boss/fx_splash_l.png'),
   impact: require('../../../assets/games/boss/fx_impact_l.png'),

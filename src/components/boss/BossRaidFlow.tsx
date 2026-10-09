@@ -20,7 +20,7 @@ import BossAttackStatus from './BossAttackStatus';
 import { BOSS_ART } from './bossArt';
 import { AttackPips, BossSheetSkeleton, TeamDamage, TopFighters } from './BossSheetParts';
 import BossJoinCard from './BossJoinCard';
-import { joinCost, rewardPreview, shortfallCopy } from './joinModel';
+import { MAX_DAMAGE_PER_PLAYER, joinCost, rewardPreview, shortfallCopy } from './joinModel';
 import BossWinCard from './BossWinCard';
 import PushSoftAsk from '../PushSoftAsk';
 import useLivePoll from '../../hooks/useLivePoll';
@@ -351,6 +351,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             maxHits={roundLimits.current?.max_hits}
             next={{ attacksLeft: raid.you.attacks_left, energy, energyCost: raid.energy_cost }}
             rewards={rewards ?? undefined}
+            capLeft={Math.max(0, MAX_DAMAGE_PER_PLAYER - raid.you.damage)}
             autoplay={__DEV__ ? devAutoplay : 0}
             onComplete={(_, meta) => submit(renderedRound, meta)}
             onAgain={meta => { setAgainPending(true); submit(renderedRound, meta); }}

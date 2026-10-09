@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BRAND } from '../../../ui/tokens';
 import { BASH_ART, WM_ASPECT } from './art';
-import type { Kind } from './rules';
+import { PERFECT_FROM, PERFECT_UNTIL, type Kind } from './rules';
 
 export type ActorExit = null | 'bonk' | 'sink' | 'ouch' | 'dive';
 
@@ -145,7 +145,11 @@ function Fin({ filled, bonus, size, reduced, popKey }: { filled: boolean; bonus:
   </Animated.View>;
 }
 
-/** The dizzy head: a gold target with a closing ring. Gold ring = PERFECT. */
+/**
+ * The dizzy head: a clean gold bullseye (outline only, the face shows through)
+ * and a white ring closing onto it. While the ring sits on the core it turns
+ * gold and the core pulses: that is PERFECT (shape and motion, not colour alone).
+ */
 export function DizzyTarget({ x, y, size, from, until, clock, reduced }: {
   x: number; y: number; size: number; from: number; until: number; clock: SharedValue<number>; reduced: boolean;
 }) {
@@ -155,15 +159,55 @@ export function DizzyTarget({ x, y, size, from, until, clock, reduced }: {
   }, [appear, reduced]);
   const ring = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, (clock.value - from) / Math.max(1, until - from)));
-    const gold = p <= 0.42;
-    return { borderColor: gold ? BRAND.gold : BRAND.white, opacity: 0.95 - p * 0.35,
-      transform: [{ scale: (reduced ? 1 : 2.1 - p * 1.1) * appear.value }] };
+    const on = p >= PERFECT_FROM && p <= PERFECT_UNTIL;
+    // Closes from 2x to the core across the perfect band, then shrinks inside it.
+    const scale = p <= PERFECT_UNTIL ? 2 - (p / PERFECT_UNTIL) : Math.max(0.45, 1 - (p - PERFECT_UNTIL) * 1.2);
+    return { borderColor: on ? BRAND.gold : BRAND.white, borderWidth: on ? 9 : 6, opacity: p > PERFECT_UNTIL ? 0.55 : 1,
+      transform: [{ scale: scale * appear.value }] };
   });
-  const core = useAnimatedStyle(() => ({ transform: [{ scale: appear.value }] }));
+  const core = useAnimatedStyle(() => {
+    const p = Math.max(0, Math.min(1, (clock.value - from) / Math.max(1, until - from)));
+    const on = p >= PERFECT_FROM && p <= PERFECT_UNTIL;
+    return { transform: [{ scale: appear.value * (on && !reduced ? 1 + Math.sin(clock.value / 45) * 0.06 : 1) }] };
+  });
   return <View pointerEvents="none" style={{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size }}>
-    <Animated.View style={[styles.targetCore, { borderRadius: size / 2 }, core]} />
+    <Animated.View style={[styles.targetCore, { borderRadius: size / 2 }, core]}>
+      <View style={[styles.targetInner, { borderRadius: size / 2 }]} />
+    </Animated.View>
     <Animated.View style={[styles.targetRing, { borderRadius: size / 2 }, ring]} />
   </View>;
+}
+
+/** Ink on the lens: splats in, wobbles, fades away (looks only). */
+export function InkSplat({ x, y, size, rot, life, reduced }: { x: number; y: number; size: number; rot: number; life: number; reduced: boolean }) {
+  const p = useSharedValue(0);
+  useEffect(() => {
+    p.value = reduced ? withSequence(withTiming(1, { duration: 60 }), withDelay(life - 400, withTiming(2, { duration: 300 })))
+      : withSequence(withSpring(1, { damping: 7, stiffness: 320 }), withDelay(life - 650, withTiming(2, { duration: 450 })));
+  }, [p, reduced, life]);
+  const style = useAnimatedStyle(() => {
+    const v = p.value;
+    return { opacity: v <= 1 ? 1 : 2 - v, transform: [{ rotate: `${rot}deg` }, { scale: v <= 1 ? 0.3 + v * 0.7 : 1 + (v - 1) * 0.05 },
+      { translateY: v > 1 ? (v - 1) * 18 : 0 }] };
+  });
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size }, style]}>
+    <Image source={BASH_ART.ink} style={StyleSheet.absoluteFill} contentFit="contain" />
+  </Animated.View>;
+}
+
+/** 3, 2, 1: the last seconds, big and short. */
+export function CountBeat({ text, x, y, reduced }: { text: string; x: number; y: number; reduced: boolean }) {
+  const p = useSharedValue(0);
+  useEffect(() => {
+    p.value = reduced ? withSequence(withTiming(1, { duration: 60 }), withDelay(500, withTiming(2, { duration: 200 })))
+      : withSequence(withSpring(1, { damping: 6, stiffness: 340 }), withDelay(350, withTiming(2, { duration: 260 })));
+  }, [p, reduced, text]);
+  const style = useAnimatedStyle(() => ({ opacity: p.value <= 1 ? p.value : 2 - p.value,
+    transform: [{ scale: p.value <= 1 ? 0.4 + p.value * 0.6 : 1 + (p.value - 1) * 0.3 }] }));
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - 60, top: y - 60, width: 120, height: 120,
+    alignItems: 'center', justifyContent: 'center' }, style]}>
+    <Text style={styles.countText} maxFontSizeMultiplier={1}>{text}</Text>
+  </Animated.View>;
 }
 
 /** Stars circling a dizzy head. */
@@ -267,8 +311,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.28)' },
   finRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   finGlow: { ...StyleSheet.absoluteFillObject, margin: -8, borderRadius: 30, backgroundColor: 'rgba(255,207,59,0.55)' },
-  targetCore: { ...StyleSheet.absoluteFillObject, borderWidth: 5, borderColor: BRAND.navy, backgroundColor: 'rgba(255,207,59,0.45)' },
+  targetCore: { ...StyleSheet.absoluteFillObject, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  targetInner: { ...StyleSheet.absoluteFillObject, margin: 3, borderWidth: 7, borderColor: BRAND.gold },
   targetRing: { ...StyleSheet.absoluteFillObject, borderWidth: 6 },
+  countText: { fontFamily: 'Shark', fontSize: 84, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 5 },
+    textShadowRadius: 0 },
   bubble: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 18, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.white },
   bubbleGold: { backgroundColor: BRAND.gold },
   bubbleRed: { backgroundColor: BRAND.red },
