@@ -21,6 +21,14 @@ import { angleDelta, normDeg } from './headingFilter';
 export const CAM_TICK_MS = 100;
 /** Each camera move lasts this long (longer than a tick, so a late tick never lets the camera stop). */
 export const CAM_SEGMENT_MS = 170;
+/** Running estimate of the real gap between loop ticks (ms); a busy JS thread runs them late. */
+export function segmentGap(previous: number, observedMs: number): number {
+  return 0.7 * previous + 0.3 * Math.max(CAM_TICK_MS, observedMs);
+}
+/** A camera move lasts past the next tick (1.5x the real gap), so the camera never stops between moves. */
+export function segmentMs(gapMs: number): number {
+  return Math.round(Math.min(480, Math.max(CAM_SEGMENT_MS, gapMs * 1.5)));
+}
 /** Part of the turn speed added ahead of the heading, so the linear chase does not trail the turn. */
 export const CAM_HEADING_LEAD = 0.8;
 /** Changes smaller than these are not worth a camera move. */

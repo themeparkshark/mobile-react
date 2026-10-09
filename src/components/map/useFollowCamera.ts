@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject }
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { createHeadingFilter, angleDelta } from './headingFilter';
-import { CAM_MODE_SPIN_MS, CAM_RECENTER_MS, CAM_SEGMENT_MS, CAM_TICK_MS, camChanged, glideActive, glideAt, nextGlide,
-  targetBearing, walkGlideMs, WalkPace, type CamGlide, type CamStop, type FollowMode } from './cameraFollow';
+import { CAM_MODE_SPIN_MS, CAM_RECENTER_MS, CAM_TICK_MS, camChanged, glideActive, glideAt, nextGlide,
+  targetBearing, segmentGap, segmentMs, walkGlideMs, WalkPace, type CamGlide, type CamStop, type FollowMode } from './cameraFollow';
 import { GLIDE_MAX_M, GLIDE_MIN_M, glideMeters, type GlidePoint } from './glide';
 import { probeCount } from '../../dev/motionProbe';
 
@@ -36,6 +36,9 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
   const last = useRef<CamStop | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quiet = useRef(0);
+  // How late ticks really run (a busy JS thread): each segment lasts long enough to reach the next tick.
+  const lastTick = useRef(0);
+  const gapEst = useRef(CAM_TICK_MS);
   const holdUntil = useRef(0);
   const mode = useRef<FollowMode>('heading');
   const running = useRef(true);
@@ -68,11 +71,14 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
     if (!running.current) return;
     const now = Date.now();
     if (now < holdUntil.current) { schedule(holdUntil.current - now); return; }
+    if (lastTick.current && now - lastTick.current < 1000) gapEst.current = segmentGap(gapEst.current, now - lastTick.current);
+    lastTick.current = now;
+    const seg = segmentMs(gapEst.current);
     const h = filter.tick(now);
     const following = followRef.current;
-    const target = targetBearing(mode.current, h, filter.speed());
+    const target = targetBearing(mode.current, h, filter.speed(), seg);
     if (following) {
-      const pos = position(now + CAM_SEGMENT_MS);
+      const pos = position(now + seg);
       if (pos) {
         const stop: CamStop = { bearing: target, latitude: pos.latitude, longitude: pos.longitude };
         if (camChanged(last.current, stop)) {
@@ -80,19 +86,19 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
           cameraRef.current?.setCamera({
             centerCoordinate: [pos.longitude, pos.latitude],
             ...(target !== null ? { heading: target } : {}),
-            animationDuration: CAM_SEGMENT_MS,
+            animationDuration: seg,
             animationMode: 'linearTo',
           });
           last.current = stop;
           quiet.current = 0;
-          if (target !== null) animateBearing(target, CAM_SEGMENT_MS);
+          if (target !== null) animateBearing(target, seg);
         } else quiet.current += 1;
       }
     } else quiet.current += 1;
     // The beam: the phone's heading on the map. Straight up while the map turns with you.
     if (h !== null) {
       const mapBearing = following ? (target ?? 0) : freeBearing.current;
-      animateFacing(mode.current === 'heading' && following ? 0 : angleDelta(mapBearing, h), CAM_SEGMENT_MS);
+      animateFacing(mode.current === 'heading' && following ? 0 : angleDelta(mapBearing, h), seg);
     }
     if (quiet.current < 3 || glideActive(glide.current, now) || !filter.settled()) schedule(CAM_TICK_MS);
   };
@@ -100,7 +106,7 @@ export function useFollowCamera({ cameraRef, followRef, reducedMotion }: {
     if (timer.current || !running.current) return;
     timer.current = setTimeout(tick, ms);
   };
-  const kick = () => { quiet.current = 0; schedule(0); };
+  const kick = () => { quiet.current = 0; if (!timer.current) lastTick.current = 0; schedule(0); };
 
   /** One compass reading. */
   const onHeading = useCallback((deg: number, atMs: number) => {

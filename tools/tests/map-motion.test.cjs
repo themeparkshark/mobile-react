@@ -157,3 +157,12 @@ test('Fin-ister layers place chips by the map bearing, not the raw compass', () 
   assert.match(map, /<FrightBearing store=\{frightBearing\}>\n\s*<View/);
   assert.match(map, /if \(frightOn\) frightBearing\.set\(bearing\)/);
 });
+
+test('a busy JS thread stretches each camera move so the camera never stops between ticks', () => {
+  let gap = cf.CAM_TICK_MS;
+  for (let i = 0; i < 20; i++) gap = cf.segmentGap(gap, 320);
+  assert.ok(Math.abs(gap - 320) < 5);
+  assert.ok(cf.segmentMs(gap) >= 320 * 1.4 && cf.segmentMs(gap) <= 480);
+  assert.equal(cf.segmentMs(cf.CAM_TICK_MS), cf.CAM_SEGMENT_MS);
+  assert.equal(cf.segmentMs(5000), 480, 'capped: a stalled thread never sends a slow drift');
+});
