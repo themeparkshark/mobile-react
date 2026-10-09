@@ -115,7 +115,7 @@ function flow({reduced=false,round,stubs={}}={}){
   '../../api/endpoints/parks/raid':{BOSS_NAMES:{kraken:'The Kraken'},DEFAULT_DAMAGE:{},fitToRound:m=>({hits:m.hits,weak_hits:m.weak_hits,duration_ms:m.duration_ms}),
    startRaidRound:async(id,body)=>{rounds.push([id,body]);return answer(body);},acknowledgeRaid:async id=>{acks.push(id);return true;}},
   './bossArt':{BOSS_ART:{kraken:1}},'../../games/boss/bash/BossBash':{BossBash:'BossBrawl'},
-  './BossJoinCard':{default:'BossJoinCard'},'./joinModel':joinModel,
+  './BossJoinCard':{default:'BossJoinCard',BossJoinCta:'BossJoinCta'},'./joinModel':joinModel,
   '../../ui':{BRAND:{},GameButton:'GameButton',GameIcon:'GameIcon'},
   './BossSheetParts':{AttackPips:'AttackPips',BossSheetSkeleton:'BossSheetSkeleton',TeamDamage:'TeamDamage',TopFighters:'TopFighters'},
   './BossWinCard':{default:'BossWinCard'},
@@ -125,9 +125,9 @@ function flow({reduced=false,round,stubs={}}={}){
  },{raid,parkId:1,open:true,onClose(){},onState:state=>states.push(state)},
  {setInterval(){return 1;},clearInterval(){}});
  // The FIGHT button lives in the join card: read it through the card's props.
- const fight=()=>{const c=view.find(n=>n.type==='BossJoinCard');if(!c||c.props.cta===false)return undefined;
+ const fight=()=>{const c=view.find(n=>n.type==='BossJoinCta');if(!c)return undefined;const card=view.find(n=>n.type==='BossJoinCard');
   return{props:{onPress:c.props.onFight,disabled:!!c.props.blocked||!!c.props.starting,label:joinModel.joinLabel(c.props.raid,c.props.remote),
-   blocked:c.props.blocked,note:c.props.note}};};
+   blocked:c.props.blocked,note:card?.props.note}};};
  return{view,captures,auth,location,snapshot,writes,reads,rounds,acks,focus,fight,
   async start(){fight().props.onPress();await view.settle();return view.find(n=>n.type==='BossBrawl');}};
 }

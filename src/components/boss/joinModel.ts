@@ -52,3 +52,9 @@ export function shortfallCopy(short: JoinCost['short']): string | null {
 export function joinLabel(raid: Pick<BossRaid, 'you'>, remote: boolean): string {
   return raid.you.attacks > 0 ? 'ATTACK AGAIN' : remote ? 'JOIN FROM HOME' : 'FIGHT!';
 }
+
+/** Whole minutes left in the raid, rounded up (never "0 min" while it is still on). */
+export function minutesLeft(endsAt: string, now: number): number {
+  const ms = new Date(endsAt).getTime() - now;
+  return ms <= 0 ? 0 : Math.max(1, Math.ceil(ms / 60000));
+}

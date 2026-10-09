@@ -19,7 +19,7 @@ import { BRAND, GameButton, GameIcon } from '../../ui';
 import BossAttackStatus from './BossAttackStatus';
 import { BOSS_ART } from './bossArt';
 import { AttackPips, BossSheetSkeleton, TeamDamage, TopFighters } from './BossSheetParts';
-import BossJoinCard from './BossJoinCard';
+import BossJoinCard, { BossJoinCta } from './BossJoinCard';
 import { MAX_DAMAGE_PER_PLAYER, joinCost, rewardPreview, shortfallCopy } from './joinModel';
 import BossWinCard from './BossWinCard';
 import PushSoftAsk from '../PushSoftAsk';
@@ -357,30 +357,33 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             onAgain={meta => { setAgainPending(true); submit(renderedRound, meta); }}
             onClose={() => { if (round.current === renderedRound) { round.current = null; setFighting(false); } }}
           />}
-          {winView ?? (raid ? <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetContent} bounces={false}>
-            <View style={styles.grabber} />
-            <MatchLinkBanner phase={link} onRetry={() => onRetryLink?.()} onLeave={closeSheet} leaveLabel="Leave fight" />
-            {receiptBlocked && recovery.snapshot && !againPending
-              ? <><BossJoinCard raid={raid} remote={remote} walkCloser={walkCloser} energy={energy} tickets={tickets}
-                  clockText={active ? clock(raid.ends_at, now) : raid.status === 'defeated' ? 'BEATEN' : 'GONE'} rewards={rewards!}
-                  blocked={null} starting={false} onFight={() => undefined} onClose={closeSheet} note={note} cta={false} />
-                <BossAttackStatus snapshot={recovery.snapshot} onRetry={() => { void recovery.retry(); }} /></>
-              : <BossJoinCard raid={raid} remote={remote} walkCloser={walkCloser} energy={energy} tickets={tickets}
-                  clockText={active ? clock(raid.ends_at, now) : raid.status === 'defeated' ? 'BEATEN' : 'GONE'} rewards={rewards!}
-                  blocked={againPending ? 'Sending your attack...' : blocked} starting={starting || againPending}
-                  onFight={() => { void startBrawl(); }} onClose={closeSheet} note={note} />}
-            {raid.you.attacks > 0 && <View style={{ marginTop: 6 }}><PushSoftAsk /></View>}
-            <Text style={styles.section}>Your attacks</Text>
-            <AttackPips raid={raid} />
-            <Text style={styles.section}>Teams</Text>
-            <TeamDamage raid={raid} />
-            <TopFighters raid={raid} />
-            <Text style={styles.fine}>
-              {remote
-                ? `From home your hits count ${Math.round(raid.remote.damage_rate * 100)}% and the top-hitter prize stays at the ride. Everyone who lands a hit shares the loot if the team wins.`
-                : 'Everyone who lands a hit shares the loot if the team wins. The top hitter is MVP and wins a Ticket.'}
-            </Text>
-          </ScrollView> : emptyView)}
+          {winView ?? (raid ? <View style={[styles.sheet, styles.sheetFrame]}>
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.sheetScroll} bounces={false}>
+              <View style={styles.grabber} />
+              <MatchLinkBanner phase={link} onRetry={() => onRetryLink?.()} onLeave={closeSheet} leaveLabel="Leave fight" />
+              <BossJoinCard raid={raid} remote={remote} walkCloser={walkCloser} energy={energy} tickets={tickets}
+                endsAt={raid.ends_at} now={now} rewards={rewards!} onClose={closeSheet} note={note} />
+              {receiptBlocked && recovery.snapshot && !againPending &&
+                <BossAttackStatus snapshot={recovery.snapshot} onRetry={() => { void recovery.retry(); }} />}
+              {raid.you.attacks > 0 && <View style={{ marginTop: 6 }}><PushSoftAsk /></View>}
+              <Text style={styles.section}>Your attacks</Text>
+              <AttackPips raid={raid} />
+              <Text style={styles.section}>Teams</Text>
+              <TeamDamage raid={raid} />
+              <TopFighters raid={raid} />
+              <Text style={styles.fine}>
+                {remote
+                  ? `From home your hits count ${Math.round(raid.remote.damage_rate * 100)}%, loot is ${Math.round((raid.remote.reward_rate ?? raid.remote.damage_rate) * 100)}% and the MVP prize stays at the ride. Everyone who lands a hit shares the loot if the team wins.`
+                  : 'Everyone who lands a hit shares the loot if the team wins. The top hitter is MVP and wins a Ticket.'}
+              </Text>
+            </ScrollView>
+            {/* The button is pinned in the thumb zone; while a saved attack is being confirmed there is no button. */}
+            {!(receiptBlocked && recovery.snapshot && !againPending) && <View style={styles.footer}>
+              <BossJoinCta raid={raid} remote={remote} energy={energy} tickets={tickets}
+                blocked={!active ? (raid.status === 'defeated' ? 'Your team beat it!' : 'The fight is over.') : againPending ? 'Sending your attack...' : blocked}
+                starting={starting || againPending} onFight={() => { void startBrawl(); }} onClose={closeSheet} />
+            </View>}
+          </View> : emptyView)}
       </Modal>
 
       <Modal isVisible={!!celebrate?.you.reward && !open && focused && sheetSettled} onBackdropPress={dismissCelebration} onBackButtonPress={dismissCelebration}
@@ -399,6 +402,9 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: BRAND.blue, borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 4, borderColor: BRAND.white,
     flexGrow: 0 },
   sheetContent: { padding: 18, paddingBottom: 40 },
+  sheetFrame: { maxHeight: '100%', overflow: 'hidden' },
+  sheetScroll: { padding: 18, paddingBottom: 18 },
+  footer: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 30, borderTopWidth: 3, borderTopColor: 'rgba(255,255,255,0.35)', backgroundColor: BRAND.blue },
   close: { position: 'absolute', right: 12, top: 14, zIndex: 2, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   grabber: { alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.5)', marginBottom: 8 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingRight: 36 },
