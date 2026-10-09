@@ -383,6 +383,20 @@ function TitleRibbon({ title }: { readonly title: string }) {
   );
 }
 
+/**
+ * The prize rows worth a row: every won or ready prize, the NEXT locked step, and the big finish prize. Later
+ * locked steps stay as notches on the bar (so the list never pushes the finds off the screen).
+ */
+export function visiblePrizes(set: DexSet): { readonly reward: DexReward; readonly final: boolean }[] {
+  let nextShown = false;
+  return prizeList(set).filter(({ reward, final }) => {
+    if (final || reward.status !== 'locked') return true;
+    if (nextShown) return false;
+    nextShown = true;
+    return true;
+  });
+}
+
 /** Every prize for the set, in target order. A won step folds to one slim line; the finish prize is the hero row. */
 export function PrizeRows({ set, titleWorn, titleBusy, onTitle, popKey }: {
   readonly set: DexSet;
@@ -397,7 +411,7 @@ export function PrizeRows({ set, titleWorn, titleBusy, onTitle, popKey }: {
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   return (
     <Animated.View style={[styles.prizes, popStyle]}>
-      {prizeList(set).map(({ reward, final }) => (
+      {visiblePrizes(set).map(({ reward, final }) => (
         <PrizeRow key={reward.id} set={set} reward={reward} final={final}
           titleWorn={titleWorn} titleBusy={titleBusy} onTitle={final ? onTitle : null} reduced={reduced} />
       ))}
