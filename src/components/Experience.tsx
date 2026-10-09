@@ -72,10 +72,11 @@ export default function Experience({
   const pop = useRef(new Animated.Value(1)).current;
   const wiggle = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    seen.set(player.id, { ...live, progress });
+  // Last seen = what the bar actually showed (recorded when it plays), so a level up earned while this
+  // card was hidden still plays on the next visit.
+  const remember = useCallback(() => { seen.set(player.id, { ...live, progress }); },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [player.id, level, current, needed, progress]);
+    [player.id, level, current, needed, progress]);
 
   // Own profile: the gain tick and the refill tick are preloaded, so they land with the motion.
   useEffect(() => {
@@ -99,6 +100,7 @@ export default function Experience({
   }, [reduced, wiggle]);
 
   const onTransition = useCallback((kind: PotionTransition) => {
+    remember();
     if (kind === 'levelUp') return; // the badge waits for the burst
     if (kind === 'gain') {
       shake(false);
@@ -108,11 +110,11 @@ export default function Experience({
       }
     }
     setShownLevel(level);
-  }, [shake, own, level]);
+  }, [shake, own, level, remember]);
 
-  const onBurst = useCallback(() => {
+  const onBurst = useCallback((hidden: boolean) => {
     setShownLevel(level);
-    if (own) {
+    if (own && !hidden) {
       HapticPatterns.levelUp();
       playSfx('fx.reward');
       // Once per level, even if a refetch replays a celebration.
@@ -138,7 +140,7 @@ export default function Experience({
   const handlers = useRef({ onTransition, onBurst, onRefill });
   handlers.current = { onTransition, onBurst, onRefill };
   const barTransition = useCallback((kind: PotionTransition) => handlers.current.onTransition(kind), []);
-  const barBurst = useCallback(() => handlers.current.onBurst(), []);
+  const barBurst = useCallback((hidden: boolean) => handlers.current.onBurst(hidden), []);
   const barRefill = useCallback(() => handlers.current.onRefill(), []);
   const xp = useMemo(() => ({ current, needed }), [current, needed]);
   const initial = useMemo(() => (before ? { level: before.level, progress: before.progress, xp: { current: before.current, needed: before.needed } } : undefined),

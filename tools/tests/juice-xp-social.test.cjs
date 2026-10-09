@@ -56,7 +56,8 @@ test('XP bar is cheap: one canvas, reused paths, a stopped clock that pauses, no
   assert.doesNotMatch(bar, /BlurMask|setInterval/);
   assert.doesNotMatch(read('src/components/Experience.tsx'), /setInterval/, 'no 30 Hz React count-up');
   assert.match(bar, /count\.value = withTiming\(now\.current/, 'the XP counts on the UI thread');
-  assert.match(bar, /if \(!busy && acc\.value < \(quiet\.value > SLEEPY_AFTER_S \? SLEEPY_FRAME_MS : IDLE_FRAME_MS\)\) return;/, 'calm idle frame rate, sleepier after a while');
+  assert.match(bar, /if \(!active && !shining && acc\.value < \(sleepy \? SLEEPY_FRAME_MS : IDLE_FRAME_MS\)\) return;/, 'calm idle frame rate, sleepier after a while');
+  assert.match(bar, /const shining = !sleepy &&/, 'the idle shine never keeps the bar awake');
   assert.match(bar, /createPotionDriver/, 'same level-up rules as the potion (tested in profile-v2)');
   const card = read('src/components/Experience.tsx');
   assert.match(card, /const barTransition = useCallback\(\(kind: PotionTransition\) => handlers\.current\.onTransition\(kind\), \[\]\)/);
@@ -70,11 +71,12 @@ test('XP level up: gold hold with a pulse, bounded stars, LEVEL UP!, refill show
   assert.match(card, /playSfx\('fx\.reward'\)/, 'preloaded reward cue');
   // The payoff lands on the first full frame (UI thread), and the refill waits for the drain.
   assert.match(bar, /withTiming\(1, \{ duration: BURST_AT_MS, easing: Easing\.in\(Easing\.quad\) \}, \(finished\) => \{[\s\S]*?\/\/ First full frame[\s\S]*?runOnJS\(onBrim\)\(token\)/);
-  assert.match(bar, /if \(!reducedRef\.current && !party\.current\.drained\) \{\n\s+party\.current\.pending = latest;/);
+  assert.match(bar, /const now = gate\.due\(latest\);/);
+  assert.match(bar, /const now = gate\.drained\(token, \{ level, progress: progressOf\(latestXp\.current\) \}\);/);
   assert.doesNotMatch(bar, /pulse\.value|scale: pulse/, 'no scaling pulse that could touch the badge or cap');
   assert.match(bar, /if \(r < 4\) continue;/, 'no outline-only specks');
   assert.match(bar, /if \(!finished\) return; \/\/ a cancelled run-up never pays out/);
-  assert.match(bar, /if \(paused\) return;\n\s+driver\.update/, 'a hidden profile holds the level up until it is seen');
+  assert.match(bar, /if \(paused\) return;\n[\s\S]{0,80}driver\.update\(next, reduced\)/, 'a hidden profile holds the level up until it is seen');
   assert.match(card, /announceForAccessibility\(`Level \$\{level\}!`\)/);
   assert.match(card, /toValue: 1\.3, duration: 140/, 'badge pop');
   // The refill reads the latest props, so a refetch during the celebration never leaves stale numbers.
@@ -84,17 +86,22 @@ test('XP level up: gold hold with a pulse, bounded stars, LEVEL UP!, refill show
   const drain = Number(/const DRAIN_MS = (\d+);/.exec(bar)[1]);
   assert.ok(520 + hold + drain <= 1400, 'drain ends before the refill');
   assert.match(read('src/components/xpPotionModel.ts'), /BURST_AT_MS = 520;[\s\S]*REFILL_AT_MS = 1400/);
-  // Stars stay in their lane: never more than PAD_TOP above the bar.
+  // Stars stay in their lane: a row above the bar end, 18 pt apart (no overlap), never more than 18 pt up.
   const padTop = Number(/const PAD_TOP = (\d+);/.exec(bar)[1]);
-  const sparks = [...bar.matchAll(/\{ a: (-?[\d.]+), d: (\d+), s: ([\d.]+) \}/g)].map((m) => m.slice(1).map(Number));
+  const sparks = [...bar.matchAll(/\{ dx: (-?[\d.]+), dy: (-?[\d.]+), s: ([\d.]+) \}/g)].map((m) => m.slice(1).map(Number));
   assert.ok(sparks.length >= 5);
-  const innerHalf = (28 - 2 * 5.5) / 2;
-  const start = Number(/const STAR_START = (\d+);/.exec(bar)[1]);
-  for (const [a, d, size] of sparks) {
-    const above = -Math.sin(a) * (start + d) - innerHalf - 5.5 + size; // star top above the bar top
-    assert.ok(above <= padTop, `star at ${a} reaches ${above.toFixed(1)} pt above the bar`);
-    assert.ok(above <= 18, 'never reaches the title pill');
+  for (const [, dy, size] of sparks) {
+    const above = -dy + size;
+    assert.ok(above <= Math.min(18, padTop), `star reaches ${above} pt above the bar`);
   }
+  for (let i = 1; i < sparks.length; i++) {
+    const [x1, y1, s1] = sparks[i - 1];
+    const [x2, y2, s2] = sparks[i];
+    assert.ok(Math.hypot(x2 - x1, y2 - y1) >= s1 + s2, 'neighbouring stars never overlap');
+  }
+  const starMs = Number(/const STAR_MS = (\d+);/.exec(bar)[1]);
+  assert.ok(starMs <= Number(/const GOLD_HOLD_MS = (\d+);/.exec(bar)[1]), 'the stars are gone before the drain');
+  assert.match(bar, /withDelay\(GOLD_HOLD_MS \+ DRAIN_MS - 60, withTiming\(0, \{ duration: 80 \}\)\)/, 'gold drains as gold, never olive');
 });
 
 test('XP numbers format on the UI thread', () => {
@@ -144,4 +151,43 @@ test('no Social sound points at the broken success.mp3', () => {
     assert.doesNotMatch(read(file).replace(/\/\/.*$/gm, ''), /sounds\/success\.mp3/, file);
   }
   assert.ok(fs.statSync(path.join(root, 'assets/sounds/success.mp3')).size < 200, 'still the broken file: keep it unused');
+});
+
+test('level-up gate: refill once, the moment the drain ends, with the latest data', () => {
+  const { createCelebrationGate } = require('./helpers/ts-module.cjs').loadTs('src/components/xpPotionModel.ts');
+  const g = createCelebrationGate();
+  assert.equal(g.celebrating, false);
+  const t = g.start();
+  assert.equal(g.celebrating, true);
+  // The drain ends first: refill now; the driver's later refill time does nothing.
+  assert.deepEqual(g.drained(t, { level: 6, progress: 0.2 }), { level: 6, progress: 0.2 });
+  assert.equal(g.due({ level: 6, progress: 0.3 }), null);
+  assert.equal(g.celebrating, false);
+  // The driver's time arrives first: wait for the drain, then refill once.
+  const t2 = g.start();
+  assert.equal(g.due({ level: 7, progress: 0.1 }), null);
+  assert.deepEqual(g.drained(t2, { level: 7, progress: 0.15 }), { level: 7, progress: 0.15 });
+  assert.equal(g.fallback(t2), null, 'no second refill');
+  // The drain never reports: the fallback refills with what the driver gave.
+  const t3 = g.start();
+  g.due({ level: 8, progress: 0.4 });
+  assert.deepEqual(g.fallback(t3), { level: 8, progress: 0.4 });
+  // A stale drain from an old celebration, or anything after unmount, is ignored.
+  const t4 = g.start();
+  assert.equal(g.drained(t3, { level: 8, progress: 0.5 }), null);
+  g.cancel();
+  assert.equal(g.drained(t4, { level: 8, progress: 0.5 }), null);
+});
+
+test('the bar holds changes while hidden and never replays on return', () => {
+  const { shouldPlay } = require('./helpers/ts-module.cjs').loadTs('src/components/xpPotionModel.ts');
+  const a = { level: 5, progress: 0.4 };
+  const b = { level: 6, progress: 0.1 };
+  assert.equal(shouldPlay(true, a, b), false, 'hidden: hold the level up');
+  assert.equal(shouldPlay(false, a, b), true, 'seen again: play it');
+  assert.equal(shouldPlay(false, b, { ...b }), false, 'nothing new on return: no snap, no replay');
+  assert.equal(shouldPlay(false, null, a), true, 'first view');
+  const card = read('src/components/Experience.tsx');
+  assert.match(card, /if \(own && !hidden\) \{/, 'no sound or haptic for a level up that lands on a hidden screen');
+  assert.doesNotMatch(card, /useEffect\(\(\) => \{\n\s+seen\.set/, 'last seen is recorded when the bar plays, not on data change');
 });

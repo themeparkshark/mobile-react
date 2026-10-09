@@ -56,7 +56,7 @@ import {
   withTiming,
 } from 'react-native-reanimated';
 import { useReduceMotionPreference } from '../hooks/useReducedGameMotion';
-import { BURST_AT_MS, REFILL_AT_MS, createPotionDriver, groupDigits, type PotionState, type PotionTransition } from './xpPotionModel';
+import { BURST_AT_MS, REFILL_AT_MS, createCelebrationGate, createPotionDriver, groupDigits, shouldPlay, type PotionState, type PotionTransition } from './xpPotionModel';
 
 const INK = '#05346e';
 const LIP = '#032552';
@@ -85,7 +85,8 @@ const SLEEPY_AFTER_S = 15;
 const SLEEPY_FRAME_MS = 100;
 /** The full number shows this long before LEVEL UP! replaces it. */
 const BANNER_LAG_MS = 90;
-const STAR_START = 9;
+/** The stars' whole life: up, hold, gone before the drain (GOLD_HOLD_MS). */
+const STAR_MS = 440;
 const FONT_PX = 15;
 /** Idle shine: one soft sweep every SHINE_EVERY seconds. */
 const SHINE_EVERY = 7.5;
@@ -102,13 +103,17 @@ const BUBBLES = [
   { phase: 0.18, speed: 21, rise: 9, r: 1.8 },
 ];
 /** Stars puff out of the end of the bar, up and back along it: never more than ~16 pt above the bar. */
+/**
+ * Stars pop up out of the liquid near the end of the bar and settle in a row above it: final offsets
+ * (dx, dy) from the bar's top edge at that spot, 18 pt apart so they never overlap, never more than
+ * 18 pt above the bar (clear of the title pill).
+ */
 export const SPARKS = [
-  { a: -3.05, d: 26, s: 7.5 },
-  { a: -2.6, d: 18, s: 9 },
-  { a: -2.15, d: 13, s: 8.5 },
-  { a: -1.7, d: 11, s: 9.5 },
-  { a: -1.25, d: 12, s: 8.5 },
-  { a: -0.85, d: 10, s: 7 },
+  { dx: -72, dy: -4, s: 6.5 },
+  { dx: -54, dy: -9, s: 7.5 },
+  { dx: -36, dy: -10, s: 8 },
+  { dx: -18, dy: -9, s: 7.5 },
+  { dx: 0, dy: -4, s: 6.5 },
 ];
 
 function clamp01(n: number) {
@@ -131,7 +136,7 @@ export type XpBarProps = {
   /** Called once per change with what will play. */
   readonly onTransition?: (kind: PotionTransition) => void;
   /** Called at the burst of a level up (at once under Reduce Motion). */
-  readonly onLevelUpBurst?: () => void;
+  readonly onLevelUpBurst?: (hidden: boolean) => void;
   /** Called as the new level starts filling after a level up. */
   readonly onRefill?: () => void;
   readonly style?: StyleProp<ViewStyle>;
@@ -182,7 +187,10 @@ function XpBarImpl({
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // One celebration at a time: the burst lands on the first full frame (UI thread), and the refill waits
   // for both the driver's refill time and the end of the drain, so the new XP never counts over a falling bar.
-  const party = useRef({ token: 0, drained: false, pending: null as PotionState | null });
+  const gate = useRef(createCelebrationGate()).current;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  const progressOf = (x: XpNumbers) => (x.needed > 0 ? clamp01(x.current / x.needed) : 0);
 
   const driver = useMemo(() => createPotionDriver(
     initial ? { level: initial.level, progress: clamp01(initial.progress) } : null,
@@ -197,21 +205,20 @@ function XpBarImpl({
         rmGold.value = withSequence(withTiming(1, { duration: 150 }), withDelay(600, withTiming(0, { duration: 300 })));
         const now = latestXp.current;
         shownNeeded.value = now.needed;
+        anchor.value = now.current;
         count.value = now.current;
         if (bannerTimer.current) clearTimeout(bannerTimer.current);
         bannerTimer.current = setTimeout(() => { banner.value = 0; }, 1600);
-        cbs.current.onLevelUpBurst?.();
+        cbs.current.onLevelUpBurst?.(pausedRef.current);
       },
       // The refill always shows the latest data, even if it changed during the celebration.
       refill: (latest) => {
-        if (!reducedRef.current && !party.current.drained) {
-          party.current.pending = latest;
-          // If the drain never completes (its animation was replaced), refill anyway shortly after.
-          const token = party.current.token;
-          setTimeout(() => { if (party.current.token === token && party.current.pending) startRefill(party.current.pending); }, 600);
-          return;
-        }
-        startRefill(latest);
+        if (reducedRef.current) { startRefill(latest); return; }
+        const now = gate.due(latest);
+        if (now) { startRefill(now); return; }
+        // If the drain never reports (its animation was replaced), refill anyway shortly after.
+        const token = gate.token;
+        setTimeout(() => { const late = gate.fallback(token); if (late) startRefill(late); }, 600);
       },
       play: (kind, next) => {
         playKind(kind, next);
@@ -221,7 +228,6 @@ function XpBarImpl({
   ), []);
 
   function startRefill(latest: PotionState) {
-    party.current.pending = null;
     const now = latestXp.current;
     banner.value = 0;
     shownNeeded.value = now.needed;
@@ -235,13 +241,14 @@ function XpBarImpl({
   }
 
   function onBrim(token: number) {
-    if (token !== party.current.token) return;
-    cbs.current.onLevelUpBurst?.();
+    if (token !== gate.token) return;
+    // Left the screen during the run-up: the badge still updates, but no sound or haptic on a hidden screen.
+    cbs.current.onLevelUpBurst?.(pausedRef.current);
   }
-  function onDrained(token: number) {
-    if (token !== party.current.token) return;
-    party.current.drained = true;
-    if (party.current.pending) startRefill(party.current.pending);
+  function onDrained(token: number, level: number) {
+    // Refill the moment the drain ends, with the latest data (no frame of LEVEL UP! on an empty bar).
+    const now = gate.drained(token, { level, progress: progressOf(latestXp.current) });
+    if (now) startRefill(now);
   }
 
   function playKind(kind: PotionTransition, next: PotionState) {
@@ -254,14 +261,19 @@ function XpBarImpl({
       burst.value = 0;
       if (kind !== 'levelUp') {
         shownNeeded.value = now.needed;
+        anchor.value = now.current;
         count.value = now.current;
       }
       return;
     }
     if (kind === 'levelUp') {
       // Anticipation: rush to the brim and fizz harder in the last 200 ms.
-      const token = party.current.token + 1;
-      party.current = { token, drained: false, pending: null };
+      // A level up queued right after another: start this rush from the new level's numbers.
+      if (gate.celebrating) {
+        shownNeeded.value = now.needed;
+        count.value = 0;
+      }
+      const token = gate.start();
       // The numbers race to full with the liquid.
       anchor.value = shownNeeded.value;
       count.value = withTiming(shownNeeded.value, { duration: BURST_AT_MS, easing: Easing.in(Easing.quad) });
@@ -273,7 +285,7 @@ function XpBarImpl({
           runOnJS(onBrim)(token);
         }),
         withDelay(GOLD_HOLD_MS, withTiming(0, { duration: DRAIN_MS, easing: Easing.inOut(Easing.quad) }, (finished) => {
-          if (finished) runOnJS(onDrained)(token);
+          if (finished) runOnJS(onDrained)(token, next.level);
         })),
       );
       slosh.value = withSequence(withTiming(0.6, { duration: BURST_AT_MS - 200 }), withTiming(2.2, { duration: 200 }),
@@ -282,7 +294,8 @@ function XpBarImpl({
         withTiming(1, { duration: 1800 }));
       flash.value = withSequence(
         withDelay(BURST_AT_MS - 40, withTiming(1, { duration: 40 })),
-        withDelay(GOLD_HOLD_MS - 120, withTiming(0, { duration: DRAIN_MS })),
+        // The gold drains as gold, then flips back to green in 80 ms as the bar empties (never olive).
+        withDelay(GOLD_HOLD_MS + DRAIN_MS - 60, withTiming(0, { duration: 80 })),
       );
       // One bright pulse on the gold (no scaling, so the bar never touches the badge or the cap).
       whiteFlash.value = withDelay(BURST_AT_MS, withSequence(withTiming(0.5, { duration: 90 }), withTiming(0, { duration: 260 })));
@@ -291,7 +304,7 @@ function XpBarImpl({
         if (done) sweep.value = 0;
       }));
       burst.value = 0;
-      burst.value = withDelay(BURST_AT_MS, withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) }, (done) => {
+      burst.value = withDelay(BURST_AT_MS, withTiming(1, { duration: STAR_MS, easing: Easing.linear }, (done) => {
         if (done) burst.value = 0;
       }));
       return;
@@ -313,15 +326,20 @@ function XpBarImpl({
   }
   useEffect(() => () => {
     driver.dispose();
-    party.current.token = -1; // a brim or drain callback landing after unmount does nothing
+    gate.cancel(); // a brim or drain callback landing after unmount does nothing
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
   }, [driver]);
 
   // Hidden (another screen on top, scrolled away): hold every change, so a level up earned elsewhere
   // plays, with its sound and haptic, when the bar is seen again, never on a hidden screen.
+  const lastSent = useRef<PotionState | null>(null);
+  const lastReduced = useRef(reduced);
   useEffect(() => {
+    const next = { level, progress: target };
+    if (!shouldPlay(paused, lastSent.current, next) && lastReduced.current === reduced) return;
     if (paused) return;
-    driver.update({ level, progress: target }, reduced);
+    lastReduced.current = reduced;
+    if (driver.update(next, reduced) !== 'wait') lastSent.current = next;
   }, [driver, target, level, reduced, paused]);
 
   // The clock: UI thread. Calm at rest (about 20 redraws a second), display rate while something is happening.
@@ -331,11 +349,13 @@ function XpBarImpl({
     if (dt == null) return;
     acc.value += Math.min(dt, 100);
     // The idle shine also runs at the display rate, so it glides instead of stepping.
-    const shining = time.value % SHINE_EVERY < SHINE_FOR + 0.1;
-    const busy = shining || slosh.value > 0.05 || fizz.value > 1.05 || glint.value > 0 || burst.value > 0 || flash.value > 0;
-    if (busy) quiet.value = 0;
+    const active = slosh.value > 0.05 || fizz.value > 1.05 || glint.value > 0 || burst.value > 0 || flash.value > 0;
+    if (active) quiet.value = 0;
     else quiet.value += Math.min(dt, 100) / 1000;
-    if (!busy && acc.value < (quiet.value > SLEEPY_AFTER_S ? SLEEPY_FRAME_MS : IDLE_FRAME_MS)) return;
+    const sleepy = quiet.value > SLEEPY_AFTER_S;
+    // The idle shine glides at the display rate, but only until the bar goes sleepy (then no shine at all).
+    const shining = !sleepy && time.value % SHINE_EVERY < SHINE_FOR + 0.1;
+    if (!active && !shining && acc.value < (sleepy ? SLEEPY_FRAME_MS : IDLE_FRAME_MS)) return;
     time.value += acc.value / 1000;
     acc.value = 0;
   }, false);
@@ -448,6 +468,7 @@ function XpBarImpl({
     if (sweep.value > 0) {
       x = x0 - 20 + sweep.value * span;
     } else {
+      if (quiet.value > SLEEPY_AFTER_S) return;
       const phase = time.value % SHINE_EVERY;
       if (phase > SHINE_FOR) return;
       x = x0 - 20 + (phase / SHINE_FOR) * span;
@@ -463,17 +484,16 @@ function XpBarImpl({
     'worklet';
     const q = burst.value;
     if (q <= 0) return;
-    const cx = x0 + Math.max(1, w.value - INSET * 2) - 12;
-    const cy = y0 + innerH / 2;
+    const cx = x0 + Math.max(1, w.value - INSET * 2) - 14;
+    const top = PAD_TOP;
+    const e = 1 - (1 - Math.min(1, q * 2.2)) * (1 - Math.min(1, q * 2.2));
+    // Grow fast (visible within ~2 frames), hold, shrink out before the drain starts.
+    const size = Math.min(1, q * 7) * (1 - Math.max(0, q - 0.6) / 0.4);
     for (let i = 0; i < SPARKS.length; i++) {
       const s = SPARKS[i];
-      // Spread first, then grow: each star starts STAR_START pt out, so they never stack on one point.
-      const e = Math.min(1, q * 1.8);
-      const reach = STAR_START + s.d * e;
-      const x = cx + Math.cos(s.a) * reach;
-      const y = cy + Math.sin(s.a) * reach + q * q * 6;
-      const grow = Math.min(1, Math.max(0, (q - 0.08) * 1.6));
-      const r = s.s * Math.sin(grow * Math.PI * 0.5) * (1 - Math.max(0, q - 0.7) / 0.3);
+      const x = cx + s.dx;
+      const y = top + 6 + (s.dy - 6) * e;
+      const r = s.s * size;
       if (r < 4) continue; // small stars would be all outline: skip them
       // Four-point star.
       p.moveTo(x, y - r);

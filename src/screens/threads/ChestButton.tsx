@@ -54,14 +54,14 @@ const SIZE = 36;
 const OPEN_SIZE = 35;
 const FX = 96; // the star canvas, centred on the chest
 const STARS = [
-  { a: -2.55, d: 18, s: 6 },
-  { a: -2.0, d: 20, s: 7.5 },
-  { a: -1.5, d: 17, s: 6.5 },
-  { a: -1.0, d: 20, s: 7.5 },
-  { a: -0.5, d: 18, s: 6 },
+  { a: -2.75, d: 14, s: 6 },
+  { a: -2.15, d: 12, s: 7 },
+  { a: -1.57, d: 10, s: 7.5 },
+  { a: -1.0, d: 12, s: 7 },
+  { a: -0.4, d: 14, s: 6 },
 ];
 /** Stars start this far out from the lid and spread before they grow, so they never stack. */
-const STAR_START = 10;
+const STAR_START = 8;
 
 export default function ChestButton({
   label,
