@@ -12,7 +12,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   Easing, cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring,
@@ -29,7 +29,10 @@ import {
 import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { registerStudioAudio } from '../../../gamekit/audio/studioLibrary';
 import { useGameMusic } from '../../../gamekit/audio/useGameMusic';
-import { BASH_ART, BOSS_SKINS } from './art';
+import { BASH_ART, BOSS_SKINS, type BossSkin } from './art';
+import type { StyleProp, ViewStyle } from 'react-native';
+import type { AnimatedStyle } from 'react-native-reanimated';
+type AnimStyle = StyleProp<AnimatedStyle<ViewStyle>>;
 import WaterFront from './WaterFront';
 import { usePowerBudget } from '../../../power';
 import {
@@ -412,7 +415,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     flashFace('hurt', 650);
     const x = L.head.x + flopSide * L.w * 0.13, y = L.head.y + L.dropBy;
     frozenUntil.current = Date.now() + SMASH_STOP_MS;
-    addFx({ t: 'burst', src: BASH_ART.impact, x, y, size: L.bossSize * 0.7, spin: true }, 500);
+    addFx({ t: 'burst', src: BASH_ART.impactGold, x, y, size: L.bossSize * 0.7, spin: true }, 500);
     addFx({ t: 'num', text: `+${dealt()}`, x, y: y - 10, big: true }, 1300);
     if (e.perfect) {
       perfectChain.current += 1;
@@ -478,7 +481,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     firstBlocked.current = true;
     endInkTell();
     const x = L.head.x, y = L.head.y + L.bossSize * 0.22;
-    addFx({ t: 'burst', src: BASH_ART.impact, x, y, size: L.bossSize * 0.5, spin: true }, 420);
+    addFx({ t: 'burst', src: BASH_ART.impactGold, x, y, size: L.bossSize * 0.5, spin: true }, 420);
     addFx({ t: 'bubble', text: 'BLOCKED!', x, y: y + 40, tone: 'gold' }, 900);
     addFx({ t: 'num', text: e.counted ? `+${dealt()}` : 'MAX', x, y: y - 30, big: false }, 900);
     flashFace('hurt', 500);
@@ -755,15 +758,13 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const stage = hpLeft / Math.max(1, hpMax) < 0.25 ? 2 : hpLeft / Math.max(1, hpMax) < 0.5 ? 1 : 0;
   const hpNow = Math.max(0, hpLeft - (capLeft === undefined ? hud.damage : Math.min(hud.damage, capLeft)));
   // Every face is mounted once and cross-cut by opacity: no decode hitch on a swap.
-  const faces = ([['angry', skin.body], ['dizzy', skin.dizzy], ['hurt', skin.hurt], ['laugh', skin.laugh], ['roar', skin.roar], ['puff', skin.puff]] as const)
-    .filter((f): f is readonly [Face, number] => f[1] !== null);
+  const faces = useMemo(() => facesOf(skin), [skin]);
   const idle: Face = stage >= 1 && skin.roar ? 'roar' : 'angry';
   const hatOffStyle = useAnimatedStyle(() => ({ opacity: 1 - hatOff.value,
     transform: [{ translateY: -hatOff.value * L.bossSize * 0.5 + hatOff.value * hatOff.value * L.bossSize * 0.9 },
       { translateX: hatOff.value * L.bossSize * 0.35 }, { rotate: `${hatOff.value * 220}deg` }] }));
   const wanted: Face = face === 'angry' ? idle : face;
   const shownFace: Face = faces.some(f => f[0] === wanted) ? wanted : 'angry';
-  const bodySrc = faces.find(f => f[0] === shownFace)?.[1] ?? skin.body;
   const sharkSrc = BASH_ART.shark[pose];
   const finSize = Math.min(54, L.w * 0.13);
 
@@ -813,28 +814,11 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       <Animated.View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }, shake.style]}
         onLayout={(e: LayoutChangeEvent) => { setField({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }); }}>
         {L.w > 0 && <Animated.View style={[StyleSheet.absoluteFill, camStyle]}>
-          <Image source={BASH_ART.lagoon} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />
-
-          {/* The boss, rising out of the lagoon. */}
-          <View pointerEvents="none" style={{ position: 'absolute', left: (L.w - L.bossSize) / 2, top: L.bossTop, width: L.bossSize, height: L.bossSize,
-            zIndex: flopped ? 3 : 1 }}>
-            <Animated.View style={[StyleSheet.absoluteFill, bossStyle]}>
-              {faces.map(([id, src]) => <Image key={id} source={src} contentFit="contain"
-                style={[StyleSheet.absoluteFill, { opacity: id === shownFace ? (skin.ghostly ? 0.92 : 1) : 0 }]} />)}
-              {skin.hat && !hatGone && <Animated.View style={[{ position: 'absolute', left: L.bossSize * 0.22, top: -L.bossSize * 0.02,
-                width: L.bossSize * 0.56, height: L.bossSize * 0.42 }, hatStyle, hatOffStyle]}>
-                <Image source={BASH_ART.hat} style={StyleSheet.absoluteFill} contentFit="contain" />
-              </Animated.View>}
-              {dizzy && <DizzyStars x={L.bossSize * skin.head[0]} y={L.bossSize * 0.08} r={L.bossSize * 0.24} reduced={reduced} />}
-            </Animated.View>
-          </View>
-
-          {/* The water in front of the boss (hides its lower half). */}
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 2 }]}>
-            <WaterFront width={L.w} height={L.h} top={L.waterY} reduced={reduced} running={visible && !result && !held && power.ambient} />
-          </View>
-          <Image source={BASH_ART.beach} pointerEvents="none" contentFit="cover" contentPosition="bottom"
-            style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: L.w * 0.66, zIndex: 2 }} />
+          <Lagoon />
+          {/* The boss, rising out of the lagoon (memoized: a hit that changes only the score does not re-render it). */}
+          <BossFigure left={(L.w - L.bossSize) / 2} top={L.bossTop} size={L.bossSize} flopped={flopped} bossStyle={bossStyle}
+            skin={skin} shownFace={shownFace} hatGone={hatGone} hatStyle={hatStyle} hatOffStyle={hatOffStyle} dizzy={!!dizzy} reduced={reduced} />
+          <Shore width={L.w} height={L.h} waterY={L.waterY} reduced={reduced} running={visible && !result && !held && power.ambient} />
           <Animated.View pointerEvents="none" style={[styles.fury, { height: L.waterY }, furyStyle]} />
 
           <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 4 }]}>
@@ -1050,3 +1034,43 @@ function SecondsLeft({ clock }: { clock: SharedValue<number> }) {
     <GameIcon name="timer" size={16} /><Text style={styles.secsText}>{secs}</Text>
   </View>;
 }
+
+function facesOf(skin: BossSkin) {
+  return ([['angry', skin.body], ['dizzy', skin.dizzy], ['hurt', skin.hurt], ['laugh', skin.laugh], ['roar', skin.roar], ['puff', skin.puff]] as const)
+    .filter((f): f is readonly [Face, number] => f[1] !== null);
+}
+
+const Lagoon = memo(function Lagoon() {
+  return <Image source={BASH_ART.lagoon} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />;
+});
+
+const Shore = memo(function Shore({ width, height, waterY, reduced, running }: {
+  width: number; height: number; waterY: number; reduced: boolean; running: boolean;
+}) {
+  return <>
+    {/* The water in front of the boss (hides its lower half). */}
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 2 }]}>
+      <WaterFront width={width} height={height} top={waterY} reduced={reduced} running={running} />
+    </View>
+    <Image source={BASH_ART.beach} pointerEvents="none" contentFit="cover" contentPosition="bottom"
+      style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: width * 0.66, zIndex: 2 }} />
+  </>;
+});
+
+const BossFigure = memo(function BossFigure({ left, top, size, flopped, bossStyle, skin, shownFace, hatGone, hatStyle, hatOffStyle, dizzy, reduced }: {
+  left: number; top: number; size: number; flopped: boolean; bossStyle: AnimStyle; skin: BossSkin; shownFace: Face;
+  hatGone: boolean; hatStyle: AnimStyle; hatOffStyle: AnimStyle; dizzy: boolean; reduced: boolean;
+}) {
+  const faces = useMemo(() => facesOf(skin), [skin]);
+  return <View pointerEvents="none" style={{ position: 'absolute', left, top, width: size, height: size, zIndex: flopped ? 3 : 1 }}>
+    <Animated.View style={[StyleSheet.absoluteFill, bossStyle]}>
+      {faces.map(([id, src]) => <Image key={id} source={src} contentFit="contain"
+        style={[StyleSheet.absoluteFill, { opacity: id === shownFace ? (skin.ghostly ? 0.92 : 1) : 0 }]} />)}
+      {skin.hat && !hatGone && <Animated.View style={[{ position: 'absolute', left: size * 0.22, top: -size * 0.02,
+        width: size * 0.56, height: size * 0.42 }, hatStyle, hatOffStyle]}>
+        <Image source={BASH_ART.hat} style={StyleSheet.absoluteFill} contentFit="contain" />
+      </Animated.View>}
+      {dizzy && <DizzyStars x={size * skin.head[0]} y={size * 0.08} r={size * 0.24} reduced={reduced} />}
+    </Animated.View>
+  </View>;
+});

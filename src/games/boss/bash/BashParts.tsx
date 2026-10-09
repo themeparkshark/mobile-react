@@ -291,6 +291,7 @@ export const Bubble = memo(function Bubble({ text, x, y, tone = 'white', reduced
 });
 
 /** A damage number that pops at the hit and flies up to the score. */
+const OUTLINE = [[-2.5, 0], [2.5, 0], [0, -2.5], [0, 2.5]] as const;
 export const DamageNumber = memo(function DamageNumber({ text, x, y, big, toX, toY, reduced }: {
   text: string; x: number; y: number; big: boolean; toX: number; toY: number; reduced: boolean;
 }) {
@@ -312,6 +313,10 @@ export const DamageNumber = memo(function DamageNumber({ text, x, y, big, toX, t
     };
   });
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - 70, top: y - 24, width: 140, alignItems: 'center' }, style]}>
+    {big && <Image source={BASH_ART.impactGold} style={styles.dmgBadge} contentFit="contain" />}
+    {/* Hand-drawn look: a thick navy outline (4 offset copies) under the number. */}
+    {OUTLINE.map(([dx, dy], i) => <Text key={i} style={[styles.dmg, styles.dmgOutline, { transform: [{ translateX: dx }, { translateY: dy }] }]}
+      maxFontSizeMultiplier={1}>{text}</Text>)}
     <Text style={[styles.dmg, big && styles.dmgBig]} maxFontSizeMultiplier={1}>{text}</Text>
   </Animated.View>;
 });
@@ -345,5 +350,7 @@ const styles = StyleSheet.create({
   bubbleText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, letterSpacing: 0.5, textAlign: 'center' },
   dmg: { fontFamily: 'Shark', fontSize: 26, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 },
     textShadowRadius: 0 },
-  dmgBig: { color: BRAND.gold },
+  dmgBig: { color: BRAND.white },
+  dmgOutline: { position: 'absolute', color: BRAND.navy, textShadowRadius: 0, textShadowOffset: { width: 0, height: 0 } },
+  dmgBadge: { position: 'absolute', width: 64, height: 64, top: -14 },
 });

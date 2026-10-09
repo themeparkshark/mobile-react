@@ -11,8 +11,10 @@ export const BASH_ART = {
   hat: require('../../../assets/games/boss/bash/hat.png'),
   ink: require('../../../assets/games/boss/bash/ink.png'),
   puffer: require('../../../assets/games/boss/bash/puffer.png'),
-  splash: require('../../../assets/games/boss/fx_splash_l.png'),
-  impact: require('../../../assets/games/boss/fx_impact_l.png'),
+  // Hand-drawn hit bursts (Codex, r9): white for bonks, gold for smashes.
+  splash: require('../../../assets/games/boss/bash/splash_hd.webp'),
+  impact: require('../../../assets/games/boss/bash/burst_white.webp'),
+  impactGold: require('../../../assets/games/boss/bash/burst_gold.webp'),
   star: require('../../../assets/games/boss/fx_small_dizzy_star.png'),
   swirl: require('../../../assets/games/boss/bo_fx_09.png'),
   sparkle: require('../../../assets/games/boss/bo_fx_11.png'),
@@ -66,12 +68,12 @@ export interface BossSkin {
 }
 
 const KRAKEN: BossSkin = {
-  body: require('../../../assets/games/boss/kraken_body.png'),
-  dizzy: require('../../../assets/games/boss/bash/kraken_dizzy.png'),
-  hurt: require('../../../assets/games/boss/bash/kraken_hurt.png'),
-  laugh: require('../../../assets/games/boss/bash/kraken_laugh.png'),
-  roar: require('../../../assets/games/boss/bash/kraken_roar.png'),
-  puff: require('../../../assets/games/boss/bash/kraken_puff.png'),
+  body: require('../../../assets/games/boss/bash/kraken_body_hd.webp'),
+  dizzy: require('../../../assets/games/boss/bash/kraken_dizzy_hd.webp'),
+  hurt: require('../../../assets/games/boss/bash/kraken_hurt_hd.webp'),
+  laugh: require('../../../assets/games/boss/bash/kraken_laugh_hd.webp'),
+  roar: require('../../../assets/games/boss/bash/kraken_roar_hd.webp'),
+  puff: require('../../../assets/games/boss/bash/kraken_puff_hd.webp'),
   limb: require('../../../assets/games/boss/bash/tentacle.png'),
   limbAspect: 261 / 600,
   // Between the eyes (the hat sits above), so the smash ring frames the face.
