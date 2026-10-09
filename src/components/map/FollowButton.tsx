@@ -22,7 +22,7 @@ export const FOLLOW_COPY = {
   noCompass: 'No compass here',
   hintTitle: 'Your compass',
   hintBody: 'The map turns when you turn. Tap me to keep north up.',
-  hintBodyNorth: 'North stays at the top. Tap me to turn the map with you.',
+  hintBodyNorth: 'North stays on top. Tap me to turn the map with you.',
 } as const;
 
 type PillKey = 'heading' | 'north' | 'noCompass' | 'away';
