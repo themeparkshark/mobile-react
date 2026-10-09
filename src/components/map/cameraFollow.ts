@@ -154,9 +154,12 @@ export interface Chaser {
   hx: number | null; hy: number | null;
   /** Standing but carried (the GPS keeps moving steadily): the run-on comes back. */
   carried: boolean;
+  fastPrev: boolean;
+  /** Kalman estimate: position, its time, and the shared 2x2 covariance (null before the first fix). */
+  kX: GlidePoint; kT: number; kP: [number, number, number, number] | null;
 }
 export function newChaser(at: GlidePoint, tMs: number): Chaser {
-  return { p: at, ve: 0, vn: 0, t: tMs, fix: at, fixT: tMs, re: 0, rn: 0, leadS: 0, walking: null, lastFix: at, lastFixT: tMs, walkSince: 0, offStep: null, hx: null, hy: null, carried: false };
+  return { p: at, ve: 0, vn: 0, t: tMs, fix: at, fixT: tMs, re: 0, rn: 0, leadS: 0, walking: null, lastFix: at, lastFixT: tMs, walkSince: 0, offStep: null, hx: null, hy: null, carried: false, fastPrev: false, kX: at, kT: tMs, kP: null };
 }
 const leadFor = (c: Chaser, v: number, gapS: number) => {
   // Standing (step sensor): no run-on, but every fix still moves the shark (a ride vehicle, a stroller).
@@ -179,12 +182,17 @@ export function chaseWalk(c: Chaser, walking: boolean, tMs: number, headingDeg: 
     // fidget): then back to the last real fix, so jiggling the phone never walks the shark away.
     const confirmed = c.lastFixT >= c.walkSince;
     c.fix = confirmed ? tp : (c.lastFix ?? tp); c.fixT = tMs; c.re = 0; c.rn = 0; c.leadS = 0;
+    // Zero-velocity update: standing is a measurement too (the estimate stops where the shark stops).
+    c.kX = c.fix; c.kT = tMs;
+    if (c.kP) c.kP = [c.kP[0], 0, 0, 0.05];
   } else if (headingDeg !== null && Math.hypot(c.re, c.rn) < 0.3 && c.lastFix) {
     // Starting off: the phone points the way you walk, so the shark sets off at once at a stroll,
     // and the next fixes correct the direction and pace.
     const h = headingDeg * Math.PI / 180;
     c.fix = c.lastFix; c.fixT = tMs; c.re = FOLLOW_START_MPS * Math.sin(h); c.rn = FOLLOW_START_MPS * Math.cos(h);
     c.leadS = FOLLOW_START_LEAD_M / FOLLOW_START_MPS;
+    c.kX = c.lastFix; c.kT = tMs;
+    if (c.kP) c.kP = [c.kP[0], 0, 0, 1];
   }
   if (walking) c.walkSince = tMs;
   c.walking = walking;
@@ -267,68 +275,51 @@ export const FOLLOW_SNAP_M = 5;
 export const FOLLOW_BETA = 0.08;
 /** A step at least this long (m) that turns more than 35 degrees is a corner. */
 export const FOLLOW_TURN_STEP_M = 2;
+/** Kalman (constant velocity): how much a walker's velocity may change per second (m/s^2 noise density). */
+export const FOLLOW_Q = 0.3;
+/** Kalman: the spread of a filtered fix (m). */
+export const FOLLOW_R_M = 1.6;
 /**
- * A new fix. The target restarts from the fix itself (the position filter has already smoothed it, and the
- * game's coin ranges use the same point, so the drawn shark never disagrees with the game for long) and runs on
- * at the walking velocity for about one expected gap, at most FOLLOW_MAX_LEAD_M: you are somewhere between
- * this fix and the next. The velocity comes from the last few fixes; when the newest fix turns away from it
- * (a corner, a turn back) only the last two count, so the run-on never carries on into a building.
+ * A new fix, folded into a constant-velocity Kalman estimate of where you are and how you walk (each axis
+ * the same way). A scattered fix nudges; a corner or a ride vehicle turns the velocity within a fix or two,
+ * because the filter weighs how far the fix lands against how sure it was. The target then runs on from
+ * the estimate at the estimated velocity for about the expected gap to the next fix (leadFor).
  * `jump` re-seats at once.
  */
-export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, rate: readonly [number, number], gapS: number, jump: boolean): void {
+export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, _rate: readonly [number, number], gapS: number, jump: boolean): void {
   chaseAdvance(c, tMs);
-  const prevFix = c.lastFix, prevT = c.lastFixT;
+  const first = !c.lastFix || c.lastFix === c.fix && c.lastFixT === c.fixT && c.kP === null;
   c.lastFix = fix; c.lastFixT = tMs;
-  if (jump || !prevFix) {
+  if (jump || first || c.kP === null) {
     if (jump) { c.p = fix; c.ve = 0; c.vn = 0; }
     c.fix = fix; c.fixT = tMs; c.re = 0; c.rn = 0; c.leadS = 0;
+    c.kP = [FOLLOW_R_M * FOLLOW_R_M, 0, 0, 1];
     return;
   }
-  let [re, rn] = rate;
-  // The newest step, from the last fix: if it turns away from the measured velocity, it wins.
-  const dt = Math.max(0.3, (tMs - prevT) / 1000);
-  const [se, sn] = enM(prevFix, fix);
-  const stepV: [number, number] = [se / dt, sn / dt];
-  const sp = Math.hypot(re, rn), ssp = Math.hypot(stepV[0], stepV[1]);
-  // A corner needs two steps in a row that agree with each other and not with the current pace
-  // (one scattered fix looks like a turn too often).
-  let turned = false;
-  const off = sp > 0.2 && ssp > 0.2 && Math.hypot(se, sn) >= FOLLOW_TURN_STEP_M
-    && (re * stepV[0] + rn * stepV[1]) / (sp * ssp) < Math.cos(35 * Math.PI / 180);
-  // A sharp one (over 60 degrees on a full step) is a corner at once; a gentle one needs the next step to agree.
-  const sharp = off && Math.hypot(se, sn) >= 2.5 && (re * stepV[0] + rn * stepV[1]) / (sp * ssp) < Math.cos(60 * Math.PI / 180);
-  if (sharp) { turned = true; re = stepV[0] * 0.85; rn = stepV[1] * 0.85; }
-  else if (off && c.offStep) {
-    const [pe2, pn2] = c.offStep;
-    const agree = (pe2 * stepV[0] + pn2 * stepV[1]) / (Math.hypot(pe2, pn2) * ssp) > Math.cos(30 * Math.PI / 180);
-    if (agree) { turned = true; re = stepV[0] * 0.85; rn = stepV[1] * 0.85; }
-  }
-  c.offStep = off && !turned ? stepV : null;
-  // Where the estimate predicts you are now, and how far the fix lands from it. A small miss is GPS
-  // scatter: it nudges the position and the pace (alpha-beta). A corner, a long miss or steady movement
-  // while "standing" (a ride vehicle) is real: take the fix and the newest step's velocity.
-  const [rde, rdn] = runDirection(c);
-  const pred = move(c.fix, rde * Math.min(dt, Math.max(c.leadS, 0)), rdn * Math.min(dt, Math.max(c.leadS, 0)));
-  const [rx, ry] = enM(pred, fix);
-  const miss = Math.hypot(rx, ry);
-  // "Standing" but the fixes keep moving the same way (a ride vehicle, a stroller, a scooter): believe the GPS.
-  const movingWhileStill = c.walking === false && ssp > 0.6 && Math.hypot(rate[0], rate[1]) > 0.6;
-  let est: GlidePoint;
-  c.carried = movingWhileStill;
-  if (turned || miss > FOLLOW_SNAP_M || movingWhileStill) {
-    est = fix;
-    if (!turned) { re = stepV[0] * 0.8; rn = stepV[1] * 0.8; }
-  } else {
-    const alpha = c.walking === false ? FOLLOW_STILL_ALPHA : FOLLOW_ALPHA;
-    est = move(pred, rx * alpha, ry * alpha);
-    if (c.walking !== false || movingWhileStill) {
-      // The pace: the previous estimate's velocity, corrected by the miss (no running on into a stop).
-      re = c.re + (FOLLOW_BETA * rx) / dt; rn = c.rn + (FOLLOW_BETA * ry) / dt;
-      if (Math.hypot(c.re, c.rn) < 0.2) { re = rate[0]; rn = rate[1]; }
-    } else { re = 0; rn = 0; }
-  }
-  const cap = Math.hypot(re, rn);
-  if (cap > GLIDE_MAX_CARRY_MPS) { re *= GLIDE_MAX_CARRY_MPS / cap; rn *= GLIDE_MAX_CARRY_MPS / cap; }
+  const dt = Math.min(10, Math.max(0.2, (tMs - c.kT) / 1000));
+  // Predict from the last update (position, not the run-on target: the filter owns the estimate).
+  const [P00, P01, P10, P11] = c.kP;
+  const q = FOLLOW_Q;
+  const p00 = P00 + dt * (P10 + P01) + dt * dt * P11 + q * dt * dt * dt / 3;
+  const p01 = P01 + dt * P11 + q * dt * dt / 2;
+  const p10 = P10 + dt * P11 + q * dt * dt / 2;
+  const p11 = P11 + q * dt;
+  const pred = move(c.kX, c.re * dt, c.rn * dt);
+  const [ye, yn] = enM(pred, fix);
+  // Standing (step sensor): a fix is mostly scatter, so it counts for less (a ride vehicle still wins over a few fixes).
+  const r = c.walking === false ? FOLLOW_R_M * 2 : FOLLOW_R_M;
+  const S = p00 + r * r;
+  const k0 = p00 / S, k1 = p10 / S;
+  const est = move(pred, k0 * ye, k0 * yn);
+  let re = c.re + k1 * ye, rn = c.rn + k1 * yn;
+  c.kP = [(1 - k0) * p00, (1 - k0) * p01, p10 - k1 * p00, p11 - k1 * p01];
+  const sp = Math.hypot(re, rn);
+  if (sp > GLIDE_MAX_CARRY_MPS) { re *= GLIDE_MAX_CARRY_MPS / sp; rn *= GLIDE_MAX_CARRY_MPS / sp; }
+  c.kX = est; c.kT = tMs;
+  // Carried (standing, yet the estimate keeps moving for two fixes in a row): the run-on comes back.
+  const fast = Math.hypot(re, rn) > 0.8;
+  c.carried = c.walking === false && fast && c.fastPrev;
+  c.fastPrev = fast;
   c.fix = est; c.fixT = tMs; c.re = re; c.rn = rn;
   c.leadS = leadFor(c, Math.hypot(re, rn), gapS);
 }
