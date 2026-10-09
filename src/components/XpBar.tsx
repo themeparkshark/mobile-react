@@ -109,11 +109,11 @@ const BUBBLES = [
  * 18 pt above the bar (clear of the title pill).
  */
 export const SPARKS = [
-  { dx: -76, dy: -7, s: 6.5 },
+  { dx: -76, dy: -8.5, s: 6.5 },
   { dx: -57, dy: -9, s: 7.5 },
   { dx: -38, dy: -9, s: 7.5 },
   { dx: -19, dy: -9, s: 7.5 },
-  { dx: -2, dy: -7, s: 6.5 },
+  { dx: -2, dy: -8.5, s: 6.5 },
 ];
 
 function clamp01(n: number) {
@@ -527,7 +527,7 @@ function XpBarImpl({
     for (let i = 0; i < SPARKS.length; i++) {
       const s = SPARKS[i];
       // A small outward drift from the middle star, like a pop.
-      const x = cx + s.dx + (s.dx + 38) * 0.12 * e;
+      const x = cx + s.dx + (s.dx + 38) * 0.16 * e;
       const y = top + 6 + (s.dy - 6) * e;
       const r = s.s * size;
       if (r < 4) continue; // small stars would be all outline: skip them
