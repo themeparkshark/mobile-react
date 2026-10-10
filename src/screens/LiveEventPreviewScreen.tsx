@@ -42,6 +42,7 @@ const RIDES = [
 
 export default function LiveEventPreviewScreen() {
   const insets = useSafeAreaInsets();
+  const tour = process.env.EXPO_PUBLIC_LIVE_EVENT_PREVIEW === 'tour';
   const initial = (MODES as string[]).includes(process.env.EXPO_PUBLIC_LIVE_EVENT_PREVIEW ?? '') ? process.env.EXPO_PUBLIC_LIVE_EVENT_PREVIEW as Mode : 'progress';
   const [mode, setMode] = useState<Mode>(initial);
   const [sheet, setSheet] = useState(initial === 'sheet');
@@ -69,6 +70,16 @@ export default function LiveEventPreviewScreen() {
       team_race: e.team_race && key === 'team' ? { ...e.team_race, claimed: true, claimable: false } : e.team_race }));
     return reward;
   };
+  // Tour (captures): every state on a fixed clock, no taps needed. 3 s per step.
+  useEffect(() => {
+    if (!tour) return;
+    const steps: [Mode, boolean, (() => void)?][] = [
+      ['progress', false], ['progress', false, () => setGain({ n: 8, at: Date.now() })], ['frenzy', false], ['upcoming', false],
+      ['ended', false], ['home', false], ['stamp', false], ['recap', false], ['sheet', true], ['climb', true],
+    ];
+    const ids = steps.map(([m, open, act], i) => setTimeout(() => { setMode(m); setSheet(open); act?.(); }, i * 3000));
+    return () => ids.forEach(clearTimeout);
+  }, [tour]);
   const home = mode === 'home';
   const ready = openableKeys(live).length;
   const rail = ready ? { kind: 'event_chest', icon: 'chest', title: ready === 1 ? 'Open your reef chest' : `Open ${ready} reef chests`, action: { type: 'open_event' as const, event_id: live.id } }

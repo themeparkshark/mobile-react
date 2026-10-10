@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   barFill: { height: '100%', backgroundColor: BRAND.gold },
   miniChest: { width: 20, height: 20 },
   frenzyRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  frenzy: { color: BRAND.goldLight },
+  frenzy: { color: BRAND.goldLight, fontSize: 14 },
   openTag: { backgroundColor: BRAND.gold, borderRadius: 10, borderWidth: 2, borderColor: BRAND.white, borderBottomWidth: 4,
     borderBottomColor: BRAND.goldLip, paddingHorizontal: 9, paddingVertical: 3 },
   openText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
