@@ -83,7 +83,8 @@ type Props = {
   readonly golden?: boolean;
 };
 
-const CROWN = require('../../../assets/images/help/crown-gold.webp');
+// Alex-style crown (approved art pilot, crown-v2), the same crown family as the Golden Box lid.
+const CROWN = require('../../../assets/images/pins/crown-gold.webp');
 const MINI_CROWNS = 6;
 
 /** The crown burst: one big crown springs up out of the lid, six small ones fan out and fall away. */

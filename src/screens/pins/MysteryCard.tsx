@@ -241,7 +241,7 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
     glint.value = withRepeat(withSequence(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), withDelay(2600, withTiming(0, { duration: 0 }))), -1, false);
     return () => cancelAnimation(glint);
   }, [active, still, ambient, glint]);
-  const glintStyle = useAnimatedStyle(() => ({ opacity: glint.value <= 0 || glint.value >= 1 ? 0 : 0.7, transform: [{ translateX: -120 + glint.value * 520 }, { rotate: '20deg' }] }));
+  const glintStyle = useAnimatedStyle(() => ({ opacity: glint.value <= 0 || glint.value >= 1 ? 0 : 0.45, transform: [{ translateX: -120 + glint.value * 520 }, { rotate: '20deg' }] }));
   if (!golden) return null;
   const short = goldenShort(series, coins);
   const pins = goldenPins(series);
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
   openGoldText: { color: BRAND.navy },
   golden: { backgroundColor: '#fff1c2', borderWidth: 3, borderColor: BRAND.goldLip, borderRadius: RADIUS.md, padding: SPACE.sm, gap: SPACE.sm, overflow: 'hidden' },
   goldenHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, minHeight: 58 },
-  goldenGlint: { position: 'absolute', top: -40, width: 34, height: 160, backgroundColor: 'rgba(255,255,255,0.75)' },
+  goldenGlint: { position: 'absolute', top: -40, width: 22, height: 160, backgroundColor: 'rgba(255,255,255,0.75)' },
   goldenTitle: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, paddingTop: 3 },
   goldenChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 999, borderWidth: 2, borderColor: BRAND.goldLip, paddingHorizontal: 7, paddingVertical: 1 },
   goldenChipNew: { backgroundColor: BRAND.green, borderColor: BRAND.white },

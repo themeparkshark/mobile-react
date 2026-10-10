@@ -47,3 +47,13 @@ test('coins short is for the Golden Box price', () => {
   assert.equal(m.goldenShort(series(), 250), 650);
   assert.equal(m.goldenShort(series(), -5), 900);
 });
+
+test('the gold edge reaches every pin view: lanyard strap, My Pins, profile lanyard', () => {
+  const fs = require('node:fs');
+  const screen = fs.readFileSync('src/screens/pins/PinsScreen.tsx', 'utf8');
+  assert.match(screen, /found: p\.found, golden: p\.golden/);
+  assert.match(screen, /golden=\{p\.golden\}/);
+  assert.match(fs.readFileSync('src/screens/pins/Lanyard.tsx', 'utf8'), /golden=\{pin\.golden\}/);
+  // Golden opens send box=golden; a retried tap reuses the Golden Box's own request id.
+  assert.match(screen, /box: 'golden' as const/);
+});

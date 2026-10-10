@@ -319,7 +319,7 @@ export default function PinsScreen() {
   const owned = useMemo(() => (home ? myPins(home) : []), [home]);
   const byId = useMemo(() => new Map(owned.map(p => [p.item_id, p])), [owned]);
   const lanyardPins = useMemo(() => lanyardIds.map(id => byId.get(id)).filter((p): p is PinRow => !!p).map(p => ({
-    item_id: p.item_id, name: p.name, icon_url: p.icon_url, kind: p.kind, is_chaser: !!p.is_chaser, tradable: p.tradable, serial: p.serial, found: p.found,
+    item_id: p.item_id, name: p.name, icon_url: p.icon_url, kind: p.kind, is_chaser: !!p.is_chaser, tradable: p.tradable, serial: p.serial, found: p.found, golden: p.golden,
   })), [lanyardIds, byId]);
   /** "Wear it" from a reveal: saves now; a full lanyard swaps out its last pin. True once saved. */
   const wear = useCallback(async (itemId: number, removeId?: number): Promise<{ ok: boolean; removed?: string | null }> => {
