@@ -163,7 +163,7 @@ export const PINS_COPY = {
   title: 'Pins',
   tabMystery: 'Mystery',
   soonTitle: 'New boxes coming soon',
-  soonLine: 'Check back soon for the next mystery pins.',
+  soonLine: 'Check back later for new mystery pins.',
   tabSets: 'Park Sets',
   tabMine: 'My Pins',
   trade: 'Trade',
