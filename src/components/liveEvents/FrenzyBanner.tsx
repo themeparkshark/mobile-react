@@ -52,9 +52,9 @@ export default memo(FrenzyBanner);
 
 const styles = StyleSheet.create({
   banner: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: BRAND.gold, borderRadius: 20,
-    borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 6, borderBottomColor: BRAND.goldLip, paddingVertical: 8, paddingLeft: 8, paddingRight: 18,
+    borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 5, borderBottomColor: BRAND.goldLip, paddingVertical: 4, paddingLeft: 5, paddingRight: 14,
     shadowColor: BRAND.shadow, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
-  bolt: { width: 46, height: 46, borderRadius: 23, backgroundColor: BRAND.blue, borderWidth: 3, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
-  big: { fontFamily: 'Shark', fontSize: 24, color: BRAND.navy },
+  bolt: { width: 36, height: 36, borderRadius: 18, backgroundColor: BRAND.blue, borderWidth: 3, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
+  big: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
   small: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
 });

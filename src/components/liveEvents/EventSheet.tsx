@@ -157,14 +157,24 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
   const [opened, setOpened] = useState<Opened | null>(null);
   const { open, opening } = useOpenChest();
   /** Every way out clears the reveal, so a reopened sheet never flashes an old one. */
+  // The bottom fade shows only while there is more below.
+  const [more, setMore] = useState(false);
+  const viewH = useRef(0); const contentH = useRef(0); const scrollY = useRef(0);
+  const updateMore = useCallback(() => {
+    const next = contentH.current - (scrollY.current + viewH.current) > 24;
+    setMore(m => (m === next ? m : next));
+  }, []);
   // Live "+N" on everyone's bar when the shared total grows between refreshes (others playing right now).
   const [togetherTick, setTogetherTick] = useState<{ n: number; at: number } | null>(null);
-  const lastTotal = useRef<number | null>(null);
+  const lastTotal = useRef<{ total: number; mine: number } | null>(null);
   useEffect(() => {
     const prev = lastTotal.current;
-    lastTotal.current = event.together.total;
-    if (prev != null && event.together.total > prev) setTogetherTick({ n: event.together.total - prev, at: Date.now() });
-  }, [event.together.total]);
+    lastTotal.current = { total: event.together.total, mine: event.me.points };
+    if (!prev) return;
+    // Only what OTHER players added (your own points have their own toast).
+    const others = (event.together.total - prev.total) - Math.max(0, event.me.points - prev.mine);
+    if (others > 0) setTogetherTick({ n: others, at: Date.now() });
+  }, [event.together.total, event.me.points]);
   const close = useCallback(() => { setOpened(null); setPeek(null); onClose(); }, [onClose]);
   const onOpen = useCallback(async (key: string) => {
     if (opening) return; // one open at a time (a double tap on Try again never sends two)
@@ -219,7 +229,10 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
               <GameIcon name="close" size={26} />
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} scrollEventThrottle={64}
+            onLayout={e => { viewH.current = e.nativeEvent.layout.height; updateMore(); }}
+            onContentSizeChange={(_, h) => { contentH.current = h; updateMore(); }}
+            onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; updateMore(); }}>
             {doNow && (
               <View style={styles.doNow} accessible accessibilityLabel={`Next: ${doNow.text}`}>
                 <GameIcon name={doNow.icon} size={30} />
@@ -300,7 +313,7 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
             )}
           </ScrollView>
           {/* More below: a soft cream fade at the bottom edge. */}
-          <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={[styles.fade, { bottom: insets.bottom }]} />
+          {more && <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={[styles.fade, { bottom: insets.bottom }]} />}
         </View>
         {opened && (
           <ChestReveal art={art} rewards={opened.rewards} onDone={() => setOpened(null)} already={opened.already} failed={opened.failed}
