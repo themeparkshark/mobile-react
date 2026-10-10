@@ -1023,7 +1023,7 @@ function OddsBar({ t, i, x, y, w, h, tier, percent }: {
   readonly tier: RarityTier; readonly percent: number; readonly max: number;
 }) {
   const look = RARITY_LOOK[tier];
-  const inStyle = useAnimatedStyle(() => ({ opacity: seg(t.value, 0.05 + i * 0.06, 0.2 + i * 0.06), transform: [{ translateX: (1 - seg(t.value, 0.05 + i * 0.06, 0.2 + i * 0.06)) * 12 }] }));
+  const inStyle = useAnimatedStyle(() => ({ opacity: seg(t.value, 0.03 + i * 0.03, 0.12 + i * 0.03), transform: [{ translateX: (1 - seg(t.value, 0.03 + i * 0.03, 0.12 + i * 0.03)) * 12 }] }));
   return (
     <Abs x={x} y={y} w={w} h={h} style={inStyle}>
       <View style={[styles.oddsLabel, { height: h, backgroundColor: look.chip, borderColor: look.frame, flexDirection: 'row', paddingHorizontal: 8 }]}>
