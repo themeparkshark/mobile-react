@@ -37,6 +37,8 @@ export interface BookStamp {
   readonly claimable: boolean;
   /** The empty corner of the art (server hint), where the postmark goes. */
   readonly freeCorner: Corner;
+  /** The server's riddle for a secret stamp (null when found or not secret). */
+  readonly secretHint: string | null;
 }
 
 export type Corner = 'tl' | 'tr' | 'bl' | 'br';
@@ -101,8 +103,9 @@ export function toBookStamp(s: StampData): BookStamp {
     metric: s.metric ?? '',
     retired: !!s.retired,
     freeCorner: (['tl', 'tr', 'bl', 'br'] as const).find(c => c === s.art_free_corner) ?? 'tr',
+    secretHint: secret && typeof s.secret_hint === 'string' && s.secret_hint.trim() ? s.secret_hint.trim() : null,
     claimable: !!s.is_earned && !s.reward_claimed && hasRewards(s.rewards),
-    howTo: secret ? 'Keep playing to discover this one.' : (s.how_to ?? s.goal ?? '').trim(),
+    howTo: secret ? 'A secret stamp! Who will find it?' : (s.how_to ?? s.goal ?? '').trim(),
     section: s.section ?? sectionForMetric(s.metric ?? '', !!s.is_hidden),
     rarity: s.rarity,
     earned: !!s.is_earned,
@@ -133,7 +136,7 @@ export function compareStamps(a: BookStamp, b: BookStamp): number {
 
 /** Fields that change what a tile shows. Same key: reuse the old object so memoized tiles skip. */
 function stampKey(s: BookStamp): string {
-  return [s.progress, s.earned, s.earnedAt, s.rewardClaimed, s.iconUrl, s.thumbUrl, s.lockedThumbUrl, s.shortName, s.howTo, s.retired, s.freeCorner].join('|');
+  return [s.progress, s.earned, s.earnedAt, s.rewardClaimed, s.iconUrl, s.thumbUrl, s.lockedThumbUrl, s.shortName, s.howTo, s.retired, s.freeCorner, s.secretHint].join('|');
 }
 
 /**
@@ -248,30 +251,43 @@ export function requirement(s: Pick<BookStamp, 'metric' | 'target'>): Requiremen
   if (m === 'night_show') return r('moon', ['night', 'nights'], 'Explore', null);
   if (m === 'holiday_login') return r('gift', ['holiday', 'holidays'], null, null);
   if (m.startsWith('fright_')) return r('pumpkin', ['haunt', 'haunts'], null);
+  if (/^trail_box/.test(m)) return r('gift', ['box', 'boxes'], 'Explore');
+  if (isMeters(m)) return r('map', ['km', 'km'], 'Explore', null);
   if (m === 'total_experience' || m === 'experience_level') return r('xp', ['XP', 'XP'], 'Explore');
   if (m === 'coins_earned' || m === 'coins_held') return r('coins', ['coin', 'coins'], 'Explore');
-  return r('star', ['step', 'steps'], null, null);
+  // Unknown (newer server) metric: a star, a plain count and no unit word, so it never needs an app update.
+  return r('star', ['', ''], null, null);
 }
+
+/** Distance metrics count meters (e.g. `park_distance_m`); the book shows kilometres. */
+export function isMeters(metric: string): boolean {
+  return /(_m|_meters)$/.test(metric) || /distance/.test(metric);
+}
+
+const km = (meters: number) => (Math.floor(meters / 100) / 10).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /** A positive "how close" line for a locked card: "3 more days!", "11 more finds!". */
 export function remainingLine(s: Pick<BookStamp, 'metric' | 'target' | 'progress' | 'earned' | 'secret'>): string {
   if (s.earned) return 'Stamped!';
-  if (s.secret) return 'A secret. Keep playing!';
+  if (s.secret) return secretHint(s);
   const req = requirement(s);
   const left = Math.max(0, s.target - s.progress);
   if (req.unit[0] === 'percent') return left > 0 ? `${left}% to go!` : 'Almost there!';
+  if (isMeters(s.metric)) return left > 0 ? `${km(left)} km to go!` : 'Almost there!';
   if (s.target <= 1 || left <= 0) return s.progress > 0 ? 'Almost there!' : "Let's go!";
   const fmt = left.toLocaleString('en-US');
+  if (!req.unit[0]) return `${fmt} to go!`;
   return `${fmt} more ${left === 1 ? req.unit[0] : req.unit[1]}!`;
 }
 
 /** VoiceOver line for a tile: state, progress and what to do. */
 export function tileLabel(s: BookStamp): string {
   if (s.earned) return `${s.name}. Earned${s.claimable ? '. Rewards ready to claim' : ''}.`;
-  if (s.secret) return 'Secret stamp. Keep playing to discover it.';
+  if (s.secret) return `Secret stamp. ${secretHint(s)}`;
   const req = requirement(s);
-  const prog = req.unit[0] === 'percent' ? `${Math.min(100, s.progress)} percent` : `${Math.min(s.progress, s.target)} of ${s.target}`;
-  return `${s.name}. Locked. ${prog}. ${s.howTo}`;
+  const prog = req.unit[0] === 'percent' ? `${Math.min(100, s.progress)} percent` : isMeters(s.metric) ? progressLabel(s).replace('/', 'of')
+    : `${Math.min(s.progress, s.target)} of ${s.target}`;
+  return `${s.name}. ${s.progress > 0 ? 'In progress' : 'Not yet'}. ${prog}. ${s.howTo}`;
 }
 
 export function hasRewards(r: StampRewards | null | undefined): boolean {
@@ -294,6 +310,37 @@ export function rewardChips(r: StampRewards): { kind: 'energy' | 'tickets' | 'xp
   return chips;
 }
 
+/** 9,999 and under as is; then 10K, 12.5K, 1.2M (one decimal, trailing .0 dropped, rounded down so it never overstates progress). */
+export function compactCount(n: number): string {
+  const v = Math.max(0, Math.floor(n));
+  if (v < 10_000) return v.toLocaleString('en-US');
+  const [div, unit] = v >= 1_000_000 ? [1_000_000, 'M'] : [1_000, 'K'];
+  const x = Math.floor((v / div) * 10) / 10;
+  return `${Number.isInteger(x) ? x.toFixed(0) : x.toFixed(1)}${unit}`;
+}
+
+/** Thousands with one decimal, rounded down: 3,100 -> "3.1K", 950 -> "0.9K", 0 -> "0". */
+function kCount(n: number): string {
+  const v = Math.max(0, Math.floor(n));
+  if (v >= 1_000_000 || v === 0) return compactCount(v);
+  const x = Math.floor(v / 100) / 10;
+  return `${Number.isInteger(x) ? x.toFixed(0) : x.toFixed(1)}K`;
+}
+
+/** A secret's teaser: which kind of play finds it, never its name or goal. */
+export function secretHint(s: Pick<BookStamp, 'metric' | 'target'> & { readonly secretHint?: string | null }): string {
+  // The server's own riddle first (round 8); else a hint from the kind of play.
+  if (s.secretHint) return s.secretHint;
+  const req = requirement(s);
+  if (req.icon === 'pin' || req.icon === 'sparkle') return 'Hint: keep catching finds!';
+  if (req.icon === 'map' || req.icon === 'ride') return 'Hint: explore the parks!';
+  if (req.icon === 'coin' || req.icon === 'trophy' || req.icon === 'queue') return 'Hint: play for ride coins!';
+  if (req.icon === 'streak') return 'Hint: come back every day!';
+  if (req.icon === 'member') return 'Hint: play with friends!';
+  if (req.icon === 'moon') return 'Hint: stay for the night!';
+  return 'Hint: keep playing!';
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "Oct 2, 2026" in the player's local time. Never a relative date. */
@@ -304,11 +351,14 @@ export function earnedDate(iso: string | null): string | null {
   return `${MONTHS[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
 }
 
-/** "3 / 10" for a count, "40%" for a percent-based passport. */
-export function progressLabel(stamp: Pick<BookStamp, 'progress' | 'target'>): string {
-  if (stamp.target === 100 && stamp.progress <= 100) return `${Math.min(100, stamp.progress)}%`;
-  const fmt = (n: number) => n.toLocaleString('en-US');
-  return `${fmt(Math.min(stamp.progress, stamp.target))} / ${fmt(stamp.target)}`;
+/** "3 / 10" for a count; "8.1K / 30K" once a number passes 9,999; km for distance. */
+export function progressLabel(stamp: Pick<BookStamp, 'progress' | 'target'> & { readonly metric?: string }): string {
+  if (stamp.metric && isMeters(stamp.metric)) return `${km(Math.min(stamp.progress, stamp.target))} / ${km(stamp.target)} km`;
+  // One number-first format everywhere ("40 / 100", never "40%"); big counts shorten so they fit a tile ("8.1K / 30K").
+  const done = Math.min(stamp.progress, stamp.target);
+  // Both sides in one style: "3.1K / 10K", never "3,100 / 10K".
+  if (stamp.target >= 10_000) return `${kCount(done)} / ${compactCount(stamp.target)}`;
+  return `${compactCount(done)} / ${compactCount(stamp.target)}`;
 }
 
 /** Ring geometry for a 0..1 fraction (SVG stroke-dasharray). */
@@ -324,4 +374,114 @@ export function postmark(iso: string | null): { month: string; day: string; year
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
   return { month: MONTHS[date.getMonth()].toUpperCase(), day: String(date.getDate()), year: String(date.getFullYear()) };
+}
+
+// ── Stamp Book v3: five states, where to play, titles ──────────────────
+
+/**
+ * The five tile states, each with its own look (tested in grayscale):
+ * claim (earned, rewards waiting), owned, progress (started), fresh (not
+ * started yet) and secret.
+ */
+export type StampState = 'claim' | 'owned' | 'progress' | 'fresh' | 'secret';
+
+export function stampState(s: Pick<BookStamp, 'earned' | 'claimable' | 'secret' | 'progress'>): StampState {
+  if (s.earned) return s.claimable ? 'claim' : 'owned';
+  if (s.secret) return 'secret';
+  return s.progress > 0 ? 'progress' : 'fresh';
+}
+
+/** Where a stamp is earned: in a park (GPS check-ins, ride passports, night shows) or anywhere (home finds, friends, streaks). */
+export type Where = 'park' | 'anywhere';
+
+export function whereFor(metric: string): Where {
+  if (/^(visited_|park_shelf:|ride_passport_|park_coins_|ride_coins_|ride_boss|verified_lineplay|trivia_|line_bonus)/.test(metric)) return 'park';
+  if (['parks_visited', 'night_show', 'night_owl'].includes(metric) || /^(park_distance|trail_box)/.test(metric)) return 'park';
+  return 'anywhere';
+}
+
+/** The rarest stamp you own (highest rarity, newest first): the cover's showcase. */
+export function rarestOwned(sections: readonly BookSection[]): BookStamp | null {
+  const owned = sections.flatMap(s => s.stamps).filter(s => s.earned);
+  owned.sort((a, b) => rarityRank(b.rarity) - rarityRank(a.rarity) || (b.earnedAt ?? '').localeCompare(a.earnedAt ?? ''));
+  return owned[0] ?? null;
+}
+
+/** Up to `n` stamps closest to done across the whole book (not secret, not retired, started). */
+export function almostThereList(sections: readonly BookSection[], n = 3): BookStamp[] {
+  const open = sections.flatMap(s => s.stamps).filter(s => !s.earned && !s.secret && !s.retired && s.progress > 0);
+  open.sort((a, b) => b.percent - a.percent || (a.target - a.progress) - (b.target - b.progress) || a.sortOrder - b.sortOrder);
+  return open.slice(0, n);
+}
+
+/** Title states, in the order the Titles list shows them. */
+export type TitleState = 'wearing' | 'ready' | 'claim' | 'progress' | 'locked';
+
+export interface TitleEntry {
+  readonly title: string;
+  readonly stamp: BookStamp;
+  readonly state: TitleState;
+}
+
+const TITLE_ORDER: Record<TitleState, number> = { wearing: 0, ready: 1, claim: 2, progress: 3, locked: 4 };
+
+/**
+ * Every stamp title in the book: worn, unlocked (claimed, ready to wear),
+ * earned but not claimed yet (claim it to unlock the title), in progress, and
+ * locked. Secret stamps keep their title secret too, so they are left out
+ * until found. A title is unlocked by claiming its stamp (the server writes
+ * player_stamp_titles on claim); `unlocked` is GET /me/stamps unlocked_titles.
+ */
+export function titleEntries(
+  sections: readonly BookSection[],
+  unlocked: readonly { readonly stamp_id: number; readonly title: string }[] | null | undefined,
+  worn: string | null | undefined,
+): TitleEntry[] {
+  const open = new Set((unlocked ?? []).map(u => Number(u.stamp_id)));
+  const wearing = (worn ?? '').trim();
+  const out: TitleEntry[] = [];
+  const seen = new Set<string>();
+  for (const stamp of sections.flatMap(s => s.stamps)) {
+    const title = (stamp.rewards?.title ?? '').trim();
+    if (!title || stamp.secret || seen.has(title)) continue;
+    // A retired stamp's title only shows to players who hold it.
+    if (stamp.retired && !stamp.earned) continue;
+    seen.add(title);
+    const isOpen = open.has(stamp.id) || (stamp.earned && stamp.rewardClaimed);
+    const state: TitleState = isOpen ? (title === wearing ? 'wearing' : 'ready')
+      : stamp.earned ? 'claim' : stamp.progress > 0 ? 'progress' : 'locked';
+    out.push({ title, stamp, state });
+  }
+  return out.sort((a, b) => TITLE_ORDER[a.state] - TITLE_ORDER[b.state] || b.stamp.percent - a.stamp.percent || a.stamp.sortOrder - b.stamp.sortOrder);
+}
+
+/** "2 of 9" for the Titles button: titles you can wear out of every title shown. */
+export function titleCounts(entries: readonly TitleEntry[]): { owned: number; total: number } {
+  return { owned: entries.filter(e => e.state === 'wearing' || e.state === 'ready').length, total: entries.length };
+}
+
+/** One short line under a title in the Titles list. */
+export function titleLine(entry: TitleEntry): string {
+  switch (entry.state) {
+    case 'wearing': return 'On your profile now';
+    case 'ready': return '';
+    case 'claim': return '';
+    case 'progress': return `From the ${entry.stamp.shortName} stamp`;
+    default: return `From the ${entry.stamp.shortName} stamp`;
+  }
+}
+
+/** How much of the art an in-progress slot fills with colour: the progress itself (40/100 fills 40%), capped at 85% so it never reads as owned. */
+export function fillFraction(percent: number): number {
+  return Math.max(0, Math.min(0.85, percent / 100));
+}
+
+export type RewardTotals = { energy: number; tickets: number; xp: number; coins: number };
+
+/** Claim all: what every waiting gift adds up to. */
+export function sumRewards(stamps: readonly Pick<BookStamp, 'rewards'>[]): RewardTotals {
+  return stamps.reduce((t, s) => ({
+    energy: t.energy + (s.rewards?.energy ?? 0), tickets: t.tickets + (s.rewards?.tickets ?? 0),
+    xp: t.xp + (s.rewards?.xp ?? 0), coins: t.coins + (s.rewards?.coins ?? 0),
+  }), { energy: 0, tickets: 0, xp: 0, coins: 0 });
 }

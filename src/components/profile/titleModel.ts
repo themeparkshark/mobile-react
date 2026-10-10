@@ -1,6 +1,7 @@
 /**
  * Profile titles in kid-simple words: what a title means, how it was earned,
- * and the list of titles the player can wear instead.
+ * and the list of titles the player can wear instead. Stamp titles carry the
+ * stamp's own art (icon_thumb_url) so the sheet shows where the title came from.
  *
  * Titles come from two places on the server:
  *  - Collection Books (Home Hunt): the starter step ("Churro Finder" for the
@@ -41,7 +42,10 @@ type SetLike = {
   readonly completion_rewards?: { readonly title?: string | null } | null;
 };
 
-type StampLike = { readonly id: number; readonly name: string; readonly goal?: string | null };
+type StampLike = {
+  readonly id: number; readonly name: string; readonly goal?: string | null; readonly how_to?: string | null;
+  readonly icon_thumb_url?: string | null; readonly icon_url?: string | null;
+};
 type StampsLike = {
   readonly stamps?: Record<string, readonly StampLike[]> | null;
   readonly unlocked_titles?: readonly { readonly stamp_id: number; readonly title: string }[] | null;
@@ -65,17 +69,20 @@ export function bookNoun(bookName: string): string {
 }
 
 export function starterMeaning(bookName: string, target: number): string {
-  return `You found ${target} ${bookNoun(bookName)} in your ${clean(bookName)} book.`;
+  // Short on purpose (a title row is art + title + a few words): "8 churros found".
+  return `${target} ${bookNoun(bookName)} found`;
 }
 
 export function completeMeaning(bookName: string, total: number): string {
-  return `You found all ${total} ${bookNoun(bookName)} and finished your ${clean(bookName)} book.`;
+  return `All ${total} ${bookNoun(bookName)} found`;
 }
 
 export function stampMeaning(stamp: StampLike | undefined): string {
   if (!stamp) return 'You earned it with a stamp in your Stamp Book.';
-  const goal = clean(stamp.goal).replace(/[.!]+$/, '');
-  return goal ? `You earned the ${clean(stamp.name)} stamp: ${goal}.` : `You earned the ${clean(stamp.name)} stamp.`;
+  // The short kid copy ("Catch 2 legendary finds") when the server sends it, else the full goal.
+  const goal = (clean(stamp.how_to) || clean(stamp.goal)).replace(/[.!]+$/, '');
+  // One line, the kid how-to ("Catch 2 legendary finds"); the stamp art above the pill says where it came from.
+  return goal ? `${goal}!` : `From the ${clean(stamp.name)} stamp`;
 }
 
 /** Every title the player has earned and can wear, books first, no duplicates. */
@@ -105,7 +112,8 @@ export function earnedTitles(sets: readonly SetLike[] | null | undefined, stamps
   for (const unlocked of stamps?.unlocked_titles ?? []) {
     const title = clean(unlocked.title);
     push({ key: `stamp:${unlocked.stamp_id}`, title, meaning: stampMeaning(byId.get(Number(unlocked.stamp_id))),
-      equip: { kind: 'stamp', stampId: Number(unlocked.stamp_id) }, iconUrl: null });
+      equip: { kind: 'stamp', stampId: Number(unlocked.stamp_id) },
+      iconUrl: byId.get(Number(unlocked.stamp_id))?.icon_thumb_url ?? byId.get(Number(unlocked.stamp_id))?.icon_url ?? null });
   }
   return out;
 }

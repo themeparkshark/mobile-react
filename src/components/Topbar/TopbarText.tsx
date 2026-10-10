@@ -33,6 +33,8 @@ export default function TopbarText({ children }: { readonly children: ReactNode 
           key={i}
           numberOfLines={1}
           adjustsFontSizeToFit={true}
+          // The header art is a fixed height: past 1.2x Dynamic Type the title outgrows it and the bar draws a pale box below.
+          maxFontSizeMultiplier={1.2}
           style={[
             baseTextStyle,
             {
@@ -51,6 +53,8 @@ export default function TopbarText({ children }: { readonly children: ReactNode 
       <Text
         numberOfLines={1}
         adjustsFontSizeToFit={true}
+          // The header art is a fixed height: past 1.2x Dynamic Type the title outgrows it and the bar draws a pale box below.
+          maxFontSizeMultiplier={1.2}
         style={[
           baseTextStyle,
           {

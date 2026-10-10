@@ -166,7 +166,9 @@ test('stamp book cards and detail are bright parchment or Alex blue, never dark 
     for (const dark of ['#1a1510', 'rgba(60,40,20', '#9C27B0', "backgroundColor: 'rgba(0,0,0,0.4)'"])
       assert.ok(!src.includes(dark), `${file} still has ${dark}`);
   }
-  assert.match(fs.readFileSync(files[1], 'utf8'), /pageEarned: \{ backgroundColor: '#FFF8E4'/);
+  // v3: owned stamps are white sticker cards on the parchment page; unearned ones wait in a parchment slot.
+  assert.match(fs.readFileSync(files[1], 'utf8'), /export const PAPER = '#FFF6DE';/);
+  assert.match(fs.readFileSync(files[1], 'utf8'), /borderStyle: 'dashed', borderColor: SLOT_EDGE,\s*backgroundColor: SLOT/);
   assert.match(fs.readFileSync(files[2], 'utf8'), /body: \{ \.\.\.DIALOG_CARD/);
 });
 

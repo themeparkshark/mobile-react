@@ -13,8 +13,10 @@ import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import getPrepItemSets, { equipSetTitle } from '../../api/endpoints/me/prep-item-sets';
 import { equipStampTitle, getStamps } from '../../api/endpoints/me/stamps';
-import { BRAND, GameButton, GameDialog, GameIcon, GameText } from '../../ui';
+import { BRAND, GameButton, GameIcon, GameText } from '../../ui';
+import StampSheet from '../../screens/stampbook/StampSheet';
 import { setBadge } from '../../screens/SetCollection/DexParts';
+import * as RootNavigation from '../../RootNavigation';
 import { describeTitle, earnedTitles, findEarned, titleBadgeSlug, type EarnedTitle } from './titleModel';
 
 const STAMP_SEAL = require('../../../assets/images/stamps/stamp-logo.png');
@@ -28,7 +30,11 @@ export function TitleArt({ entry, title, size }: { readonly entry: EarnedTitle |
   if (slug) {
     return <Image source={setBadge({ slug, badgeUrl: entry?.iconUrl ?? null })} style={{ width: size, height: size }} contentFit="contain" />;
   }
-  if (entry?.equip.kind === 'stamp') return <Image source={STAMP_SEAL} style={{ width: size, height: size }} contentFit="contain" />;
+  if (entry?.equip.kind === 'stamp') {
+    // The stamp's own art when the book sent it; with no art, the crown (never a generic badge).
+    if (!entry.iconUrl) return <GameIcon name="crown" size={size - 4} />;
+    return <Image source={{ uri: entry.iconUrl, cacheKey: entry.iconUrl }} style={{ width: size, height: size }} contentFit="contain" />;
+  }
   return <GameIcon name="crown" size={size - 4} />;
 }
 
@@ -67,7 +73,8 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
       setEarned(earnedTitles([
         { slug: 'churro_collection', name: 'Churro Collection', total_items: 24, starter_milestone: { target: 8, rewards_claimed: true, rewards: { title: 'Churro Finder' } } },
         { slug: 'pretzel_collection', name: 'Pretzel Collection', total_items: 16, rewards_claimed: true, completion_rewards: { title: 'Pretzel Pro' } },
-      ], { stamps: { rides: [{ id: 4, name: 'Coaster Champ', goal: 'Ride 10 coasters' }] }, unlocked_titles: [{ stamp_id: 4, title: 'Coaster Champ' }] }));
+      // The same dev book as the Stamp Book preview, so the profile list and the book's Titles list match in captures.
+      ], require('../../screens/stampbook/preview').PREVIEW_BOOK));
       return () => { live = false; };
     }
     void Promise.allSettled([getPrepItemSets(), getStamps()]).then(([sets, stamps]) => {
@@ -112,48 +119,53 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
     return save('remove', () => equipStampTitle(null), () => onRemoved?.(previous));
   };
 
+  /** Every stamp title and how to get it lives in the Stamp Book's Titles list. */
+  const openStampBook = () => { onClose(); RootNavigation.navigate('StampBook', { titles: true }); };
+
   const worn = title?.trim() || null;
   const others = (earned ?? []).filter(entry => entry.title !== worn);
 
   return (
-    <GameDialog visible={visible} title={mode === 'about' ? 'Your title' : 'Change title'}
-      buttons={[{ text: 'Close', style: 'cancel', variant: 'ghost' }]}
-      onAnswer={() => onClose()} testID="title-sheet">
+    <StampSheet visible={visible} title={mode === 'about' ? 'Your title' : 'Change title'} onClose={onClose} testID="title-sheet">
       {mode === 'about' ? (
         <View style={styles.body}>
           {!!worn && (
+            <View style={styles.source} accessible={false}>
+              <TitleArt entry={findEarned(worn, earned ?? [])} title={worn} size={84} />
+            </View>
+          )}
+          {!!worn && (
             <View style={styles.pill} accessible accessibilityLabel={`Title: ${worn}`}>
-              <TitleArt entry={findEarned(worn, earned ?? [])} title={worn} size={30} />
+              <GameIcon name="crown" size={26} />
               <Text style={styles.pillText} numberOfLines={2} maxFontSizeMultiplier={1.3}>{worn}</Text>
             </View>
           )}
-          <GameText preset="body" tone="onBlue" align="center" style={styles.copy}>
-            {worn ? describeTitle(worn, earned ?? []) : 'You are not wearing a title.'}
+          <GameText preset="body" tone="onLight" align="center" style={styles.copy}>
+            {worn ? describeTitle(worn, earned ?? []) : 'No title yet. Earn stamps to unlock titles, then wear one here.'}
           </GameText>
-          <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.hint}>
-            Your title shows under your shark for everyone to see.
-          </GameText>
-          {!!error && <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.error}>{error}</GameText>}
+          {!!error && <GameText preset="bodySmall" tone="onLight" align="center" style={styles.error}>{error}</GameText>}
           {confirming && (
             <View style={styles.confirm} accessibilityLiveRegion="polite">
-              <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.copy}>
+              <GameText preset="bodySmall" tone="onLight" align="center" style={styles.copy}>
                 There is no Undo for this one. You might not get it back.
               </GameText>
-              <GameButton label="Remove it" icon="close" variant="danger" tone="onBlue" size="compact" loading={busy === 'remove'} disabled={!!busy}
+              <GameButton label="Remove it" icon="close" variant="danger" tone="onLight" size="compact" loading={busy === 'remove'} disabled={!!busy}
                 onPress={() => { void remove(); }} />
-              <GameButton label="Keep it" icon="check" variant="ghost" tone="onBlue" size="compact" disabled={!!busy} onPress={() => setConfirming(false)} />
+              <GameButton label="Keep it" icon="check" variant="ghost" tone="onLight" size="compact" disabled={!!busy} onPress={() => setConfirming(false)} />
             </View>
           )}
           <View style={[styles.actions, confirming && styles.hiddenActions]} pointerEvents={confirming ? 'none' : 'auto'}
             accessibilityElementsHidden={confirming} importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}>
-            <GameButton label="Change title" tone="onBlue" icon="swap" disabled={!!busy}
-              onPress={() => setMode('change')} accessibilityHint="Shows the titles you have earned" />
+            {/* Two jobs only: change it (the list ends with More titles) or take it off. */}
+            <GameButton label="Change title" tone="onLight" icon="swap" disabled={!!busy}
+              onPress={() => setMode('change')} accessibilityHint="Shows the titles you have and where to get more" />
             {!!worn && (
-              // Quiet on purpose: taking a title off is the rare choice, and the profile offers Undo.
-              <Pressable accessibilityRole="button" accessibilityLabel="Remove title" accessibilityHint="Takes the title off your profile"
-                disabled={!!busy || earned === null} hitSlop={8} onPress={() => { void remove(); }} style={({ pressed }) => [styles.remove, earned === null && styles.removeOff, pressed && styles.rowPressed]}>
+              // The same quiet white pill as the Stamp Book's Take off: one gold button per sheet.
+              <Pressable onPress={() => { void remove(); }} disabled={!!busy || earned === null} hitSlop={6}
+                accessibilityRole="button" accessibilityLabel="Take off title" accessibilityHint="Takes the title off your profile"
+                style={({ pressed }) => [styles.takeOff, (busy || earned === null) && styles.removeOff, pressed && styles.rowPressed]}>
                 <GameIcon name="close" size={18} />
-                <Text style={styles.removeText} maxFontSizeMultiplier={1.3}>{busy === 'remove' ? 'Removing...' : 'Remove title'}</Text>
+                <Text style={styles.takeOffText} maxFontSizeMultiplier={1.4}>{busy === 'remove' ? 'Saving...' : 'Take off'}</Text>
               </Pressable>
             )}
           </View>
@@ -161,11 +173,14 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
       ) : (
         <View style={styles.body}>
           {earned === null ? (
-            <GameText preset="body" tone="onBlue" align="center" style={styles.copy}>Finding your titles...</GameText>
+            <GameText preset="body" tone="onLight" align="center" style={styles.copy}>Finding your titles...</GameText>
           ) : others.length === 0 ? (
-            <GameText preset="body" tone="onBlue" align="center" style={styles.copy}>
+            <GameText preset="body" tone="onLight" align="center" style={styles.copy}>
               No other titles yet. Finish Collection Book steps and stamps to earn more.
             </GameText>
+          ) : null}
+          {earned === null ? null : others.length === 0 ? (
+            <GameButton label="Find titles" icon="medal1" variant="secondary" tone="onLight" onPress={openStampBook} />
           ) : (
             <ScrollView style={styles.list} contentContainerStyle={{ gap: 8 }}>
               {others.map(entry => (
@@ -176,20 +191,23 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}
                       maxFontSizeMultiplier={1.3}>{entry.title}</Text>
-                    <Text style={styles.rowMeaning} numberOfLines={2} maxFontSizeMultiplier={1.3}>{entry.meaning}</Text>
+                    <Text style={styles.rowMeaning} maxFontSizeMultiplier={1.3}>{entry.meaning}</Text>
                   </View>
                   <View style={styles.wear}><Text style={styles.wearText} maxFontSizeMultiplier={1.2}>WEAR</Text></View>
                 </Pressable>
               ))}
             </ScrollView>
           )}
-          {!!error && <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.error}>{error}</GameText>}
+          {!!error && <GameText preset="bodySmall" tone="onLight" align="center" style={styles.error}>{error}</GameText>}
           <View style={styles.actions}>
-            <GameButton label="Back" variant="secondary" tone="onBlue" icon="back" disabled={!!busy} onPress={() => setMode('about')} />
+            {earned !== null && others.length > 0 && (
+              <GameButton label="More titles" icon="medal1" variant="secondary" tone="onLight" disabled={!!busy} onPress={openStampBook}
+                accessibilityHint="Opens the Titles list in your Stamp Book" />
+            )}
           </View>
         </View>
       )}
-    </GameDialog>
+    </StampSheet>
   );
 }
 
@@ -201,9 +219,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 6,
   },
   pillText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 18, flexShrink: 1, textAlign: 'center' },
-  copy: { color: '#e2f6ff' },
-  hint: { color: '#bfe6ff' },
-  error: { color: '#ffd6d6' },
+  copy: { color: BRAND.navy },
+  hint: { color: '#4A5A78' },
+  error: { color: '#B3261E' },
   actions: { alignSelf: 'stretch', gap: 2, marginTop: 4, marginBottom: -6 },
   list: { alignSelf: 'stretch', maxHeight: 300 },
   row: {
@@ -219,11 +237,20 @@ const styles = StyleSheet.create({
   wear: { backgroundColor: '#ffcf3b', borderRadius: 14, borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4,
     borderBottomColor: '#d99a00', paddingHorizontal: 12, paddingVertical: 5, minHeight: 32, justifyContent: 'center' },
   wearText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, letterSpacing: 0.5 },
-  confirm: { alignSelf: 'stretch', gap: 4, backgroundColor: 'rgba(5,52,110,0.35)', borderRadius: 14, padding: 10 },
+  confirm: { alignSelf: 'stretch', gap: 4, backgroundColor: 'rgba(20,33,61,0.07)', borderRadius: 14, padding: 10 },
   hiddenActions: { opacity: 0.3 },
   remove: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 44,
     minWidth: 160, justifyContent: 'center' },
   removeOff: { opacity: 0.45 },
   removeText: { fontFamily: 'Knockout', fontSize: 18, color: 'rgba(255,255,255,0.85)', textDecorationLine: 'underline' },
+  source: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#ffcf3b',
+    alignItems: 'center', justifyContent: 'center' },
+  pair: { flexDirection: 'row', gap: 8, alignSelf: 'stretch', justifyContent: 'center' },
+  pairItem: { flex: 1 },
+  takeOff: {
+    alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 18, borderRadius: 14,
+    backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: '#9FB2C9', borderBottomWidth: 4,
+  },
+  takeOffText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
   rowMeaning: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 14, marginTop: 2 },
 });

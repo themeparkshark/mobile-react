@@ -20,6 +20,20 @@ export default function TitlePill({ title, trophy, onPress, art }: {
   /** The title's own art (your profile: the book badge); the crown when absent. */
   readonly art?: ReactNode;
 }) {
+  // Your own profile with no title: a quiet dashed pill that opens the sheet (how to get one, the titles you have).
+  if (!title && onPress) {
+    return (
+      <View style={styles.row}>
+        <Pressable style={({ pressed }) => [styles.pill, styles.empty, pressed && styles.pressed]} hitSlop={6}
+          onPress={() => { haptic('tapLight'); playSfx('ui.tap', 0.6); onPress(); }}
+          accessibilityRole="button" accessibilityLabel="No title yet" accessibilityHint="Shows how to get a title and the titles you have">
+          <GameIcon name="crown" size={22} />
+          <Text style={[styles.text, styles.emptyText]} maxFontSizeMultiplier={1.3}>Get a title</Text>
+        </Pressable>
+        {trophy}
+      </View>
+    );
+  }
   if (!title && !trophy) return null;
   const label = (
     <>
@@ -72,4 +86,6 @@ const styles = StyleSheet.create({
   },
   text: { color: '#05346e', fontFamily: 'Shark', fontSize: 18, flexShrink: 1 },
   pressed: { transform: [{ scale: 0.96 }] },
+  empty: { backgroundColor: '#ffffff', borderStyle: 'dashed', borderColor: '#d99a00', borderBottomColor: '#d99a00', borderWidth: 2, borderBottomWidth: 2, shadowOpacity: 0 },
+  emptyText: { color: '#8a5a00', fontSize: 16 },
 });

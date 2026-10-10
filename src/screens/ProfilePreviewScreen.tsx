@@ -37,7 +37,7 @@ export const previewPlayer: PlayerType = {
   verified_at: '',
   visited_parks_count: 1,
   // The undo capture shows the profile right after Remove (no title).
-  title: process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE_SHEET === 'undo' ? null : 'Churro Finder',
+  title: process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE_SHEET === 'undo' ? null : process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE || 'Churro Finder',
 };
 
 // EXPO_PUBLIC_XP_DEMO=1: XP gains every 2.6 s on a loop, a level up every third or fourth gain, for captures.
