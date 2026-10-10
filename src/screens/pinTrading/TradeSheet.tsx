@@ -219,7 +219,9 @@ function TradeSheet(props: TradeSheetProps) {
                   {/* Pins v2, in pictures: x2 -> x1 (you keep one) or LAST ONE; a gold number goes with its pin. */}
                   {selected.spares !== undefined && (
                     <View style={styles.confirmChips} accessible accessibilityLabel={(selected.spares ?? 0) > 0 ? COPY.confirmSpare : COPY.confirmKeeper(pinName(selected))}>
-                      {(selected.spares ?? 0) > 0
+                      {selected.id === swap.pin.item.id && !!swap.serial
+                        ? null /* an upgrade: you keep the pin, only the number changes (#3 -> #1 below) */
+                        : (selected.spares ?? 0) > 0
                         ? <View style={[styles.confirmChip, { backgroundColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={styles.confirmChipText}>x{(selected.spares ?? 0) + 1} {'\u2192'} x{selected.spares}</Text></View>
                         : <View style={[styles.confirmChip, { backgroundColor: BRAND.red }]}><Text maxFontSizeMultiplier={1} style={[styles.confirmChipText, { color: BRAND.white }]}>LAST ONE</Text></View>}
                       {!!swap.serial && (

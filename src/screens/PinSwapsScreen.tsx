@@ -57,7 +57,7 @@ const MAX_PIN_PAGES = 10;
 const CONFIRM_GUARD_MS = 450;
 
 type Hold = { swap: PinSwapType; deadline: number; totalMs: number };
-type Done = { got: ItemType; gave: ItemType; from: { get?: SlotRect; give?: SlotRect } };
+type Done = { got: ItemType; gave: ItemType; from: { get?: SlotRect; give?: SlotRect }; upgrade?: number | null };
 
 /** A stable number from a card key (for its tilt). */
 function keySeed(key: string): number {
@@ -376,7 +376,7 @@ export default function PinSwapsScreen() {
       await acceptPinSwap(h.swap.id, pick.id);
       const root = rootOffset.current;
       const shift = (r?: SlotRect) => (r ? { ...r, x: r.x - root.x, y: r.y - root.y } : undefined);
-      setDone({ got: h.swap.pin.item, gave: pick, from: { get: shift(slotsRef.current.get), give: shift(slotsRef.current.give) } });
+      setDone({ got: h.swap.pin.item, gave: pick, upgrade: pick.id === h.swap.pin.item.id ? h.swap.serial ?? null : null, from: { get: shift(slotsRef.current.get), give: shift(slotsRef.current.give) } });
       setLastGiven(pick.id);
       // The traded card's slot now shows your pin (FROM YOU), in place, before the board refresh.
       tradedSlot.current = { swapId: h.swap.id, gave: pick };
@@ -615,7 +615,7 @@ export default function PinSwapsScreen() {
       {/* Mounted (invisible, idle) while the player confirms, so its layers are built before the trade lands. */}
       {celeGot && celeGave && (
         <SwapCelebration key={`cele-${celeGot.id}-${celeGave.id}`} got={celeGot} gave={celeGave} from={celeFrom} still={still}
-          armed={!!done} onDone={finishCelebration} onStart={onCelebrationStart} tradeNumber={sessionTrades} />
+          armed={!!done} onDone={finishCelebration} onStart={onCelebrationStart} tradeNumber={sessionTrades} upgradeSerial={done?.upgrade ?? null} />
       )}
     </View>
   );

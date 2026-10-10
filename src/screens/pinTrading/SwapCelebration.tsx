@@ -40,12 +40,14 @@ import { queueHaptic } from '../../gamekit/Haptics';
 const SHARK = require('../../../assets/images/howto/shark-happy.webp');
 const never = { reduceMotion: ReduceMotion.Never } as const;
 
-export default function SwapCelebration({ got, gave, from, still, onDone, onStart, tradeNumber = 1, armed = true }: {
+export default function SwapCelebration({ got, gave, from, still, onDone, onStart, tradeNumber = 1, armed = true, upgradeSerial = null }: {
   got: ItemType; gave: ItemType; still: boolean; onDone: () => void;
   /** Fired on the first frame the moment is drawn, so the sheet only fades out once this covers it. */
   onStart?: () => void;
   /** Trades this visit (2+ shows a "Trade #n this visit!" line). */
   tradeNumber?: number;
+  /** Pins v2: a numbered upgrade (your #3 for the board's #1): stamps the number, not NEW. */
+  upgradeSerial?: number | null;
   /**
    * false: mounted ahead of time (while the player confirms), invisible and idle, so the moment's
    * layers are already built when the trade goes through. true: play.
@@ -320,7 +322,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
             style={[styles.pin, { width: bigSize, height: bigSize }, still ? { transform: [{ translateX: cx - bigSize / 2 }, { translateY: cy - bigSize / 2 }] } : gotStyle]}>
             <Animated.View style={restStyle}>
               <Animated.View style={[styles.abs, { left: -bigSize * 0.08, top: -bigSize * 0.1, zIndex: 2 }, stampStyle]}>
-                <View style={styles.newStamp}><Text maxFontSizeMultiplier={1} style={styles.newStampText}>{COPY.newStamp}</Text></View>
+                <View style={styles.newStamp}><Text maxFontSizeMultiplier={1} style={styles.newStampText}>{upgradeSerial ? `#${upgradeSerial}` : COPY.newStamp}</Text></View>
               </Animated.View>
               <EnamelPin uri={got.icon_url} size={bigSize} tilt={-4} shine={still ? undefined : shine} surface="panel" transition={0}
                 recyclingKey={`slot-${got.id}`} />
@@ -345,7 +347,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
           <Text maxFontSizeMultiplier={1.15} style={[textPreset('hero', 'onBlue'), styles.title, compact && { fontSize: 38, lineHeight: 44 }]}>{COPY.doneTitle}</Text>
           <View style={styles.subPill}>
             <Text maxFontSizeMultiplier={1.25} style={[styles.sub, compact && { fontSize: 17, lineHeight: 22 }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>
-              {balanceName(COPY.doneMessage(name), 26)}
+              {balanceName(upgradeSerial ? COPY.upgradeMessage(name, upgradeSerial) : COPY.doneMessage(name), 26)}
             </Text>
           </View>
           <View style={styles.gaveRow} accessible accessibilityLabel={`${COPY.gaveCaption} ${pinName(gave)}. ${COPY.doneGave(pinName(gave))}`}>

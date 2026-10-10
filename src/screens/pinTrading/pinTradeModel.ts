@@ -152,6 +152,7 @@ export const PIN_TRADE_COPY = {
   tryAgain: 'Try again',
   doneTitle: 'Pin traded!',
   doneMessage: (got: string) => `You got the ${got}!`,
+  upgradeMessage: (got: string, serial: number) => `Your ${got} is now #${serial}!`,
   doneAction: 'Awesome!',
   doneGave: (_gave: string) => 'Now on the board for another fan.',
   tradeCount: (n: number) => `Trade #${n} this visit!`,
