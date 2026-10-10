@@ -158,7 +158,8 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
         // A fixed-width lane left of the button: an absolute view with no width would be squeezed to
         // the 54 pt column it hangs from. The pill sizes to its words at the lane's right edge.
         <View pointerEvents="none" style={styles.pillLane}>
-        <Reanimated.View style={[styles.pill, hint && styles.hint, pillStyle]}>
+        {/* The hint is static: the shared fade left it at opacity 0 when it mounted with the map (never seen in r3 to r6 frames). */}
+        <Reanimated.View style={[styles.pill, hint && styles.hint, hint ? null : pillStyle]}>
           {hint ? (
             <>
               <Text style={styles.hintTitle}>{FOLLOW_COPY.hintTitle}</Text>
