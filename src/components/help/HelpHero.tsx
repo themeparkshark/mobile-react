@@ -62,6 +62,9 @@ const ART = {
   energy: require('../../../assets/images/energy.png'),
   compose: require('../../../assets/images/social/compose.png'),
   socialShark: require('../../../assets/images/screens/pin-collections/shark.png'),
+  treasure: require('../../../assets/images/help/treasure-pile.webp'),
+  jar: require('../../../assets/images/help/prize-jar.webp'),
+  pushpin: require('../../../assets/images/help/pushpin.webp'),
   churro: require('../../../assets/images/prep-items/churros/churro_18.png'),
 } as const;
 
@@ -167,7 +170,13 @@ export default function HelpHero({ hero, width, height, running, reduced, data, 
         : { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const })}>
       {cork
         // The board's own cork, tiled at its drawn size so it stays crisp (never stretched).
-        ? <ImageBackground source={ART.corkTile} style={[StyleSheet.absoluteFill, { backgroundColor: '#c99a63' }]} resizeMode="repeat" />
+        ? (
+          <>
+            <ImageBackground source={ART.corkTile} style={[StyleSheet.absoluteFill, { backgroundColor: '#c99a63' }]} resizeMode="repeat" />
+            {/* Depth: the board's wooden frame casts a soft inner shadow on the cork. */}
+            <View pointerEvents="none" style={styles.corkFrame} />
+          </>
+        )
         : <Image source={ART.water} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />}
       {hero === 'standings_climb' && <ClimbScene {...sp} />}
       {hero === 'standings_podium' && <PodiumScene {...sp} />}
@@ -187,7 +196,9 @@ export default function HelpHero({ hero, width, height, running, reduced, data, 
           <HowToDemo art={hero === 'basics_map' ? 'find' : hero === 'basics_park' ? 'park' : 'line'} size={height * 0.98} active={running && p.ambient} reduced={reduced} />
         </View>
       )}
-      {hero === 'term' && <TermScene {...sp} icon={data?.icon ?? 'info'} caption={data?.caption ?? null} />}
+      {hero === 'term' && (data?.icon === 'coins'
+        ? <TreasureScene {...sp} caption={data?.caption ?? null} />
+        : <TermScene {...sp} icon={data?.icon ?? 'info'} caption={data?.caption ?? null} />)}
       {hero === 'odds' && <OddsScene {...sp} rows={data?.odds ?? []} />}
       {hero === 'rules' && <TermScene {...sp} icon={data?.icon ?? 'trophy'} caption={null} />}
     </View>
@@ -453,10 +464,22 @@ function PinSwapScene({ t, w, h }: SceneProps) {
     <>
       <View style={[styles.slot, { left: slot.x - pin * 0.72, top: slot.y - pin * 0.72, width: pin * 1.44, height: pin * 1.44, borderRadius: pin * 0.4 }]} />
       <Abs x={w / 2 - 22} y={h * 0.44 - 22} w={44} h={44} style={swapIcon}><GameIcon name="swap" size={44} /></Abs>
-      <Abs x={0} y={0} w={pin} h={pin} style={mine}><Art source={ART.pinHoney} w={pin} h={pin} /></Abs>
-      <Abs x={0} y={0} w={pin} h={pin} style={theirs}><Art source={ART.pinBurger} w={pin} h={pin} /></Abs>
+      <Abs x={0} y={0} w={pin} h={pin} style={mine}><PinnedPin source={ART.pinHoney} size={pin} /></Abs>
+      <Abs x={0} y={0} w={pin} h={pin} style={theirs}><PinnedPin source={ART.pinBurger} size={pin} /></Abs>
       {[0, 1, 2].map(i => <Sparkle key={i} t={t} at={0.6 + i * 0.04} x={slot.x + (i - 1) * pin * 0.55} y={slot.y - pin * (0.55 + (i % 2) * 0.2)} />)}
     </>
+  );
+}
+
+/** An enamel pin pinned to the cork: a soft cast shadow, the pin art, and a red push pin on top. */
+function PinnedPin({ source, size }: { readonly source: number; readonly size: number }) {
+  const head = size * 0.26;
+  return (
+    <View style={{ width: size, height: size }}>
+      <Image source={source} tintColor="rgba(60,30,8,0.35)" style={{ position: 'absolute', left: size * 0.05, top: size * 0.08, width: size, height: size }} contentFit="contain" />
+      <Image source={source} style={{ width: size, height: size }} contentFit="contain" />
+      <Image source={ART.pushpin} style={{ position: 'absolute', left: size / 2 - head / 2, top: -head * 0.35, width: head, height: head * (76 / 72) }} contentFit="contain" />
+    </View>
   );
 }
 
@@ -490,9 +513,9 @@ function PinClockScene({ t, w, h }: SceneProps) {
             strokeDasharray={`${c} ${c}`} animatedProps={ring} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
         </Svg>
       </Abs>
-      <Abs x={cx - pin / 2} y={cy - pin / 2} w={pin} h={pin} style={lift}><Art source={ART.pinAstro} w={pin} h={pin} /></Abs>
+      <Abs x={cx - pin / 2} y={cy - pin / 2} w={pin} h={pin} style={lift}><PinnedPin source={ART.pinAstro} size={pin} /></Abs>
       <Abs x={cx + r + 14} y={cy - 26} w={52} h={52} style={tick}><GameIcon name="timer" size={50} /></Abs>
-      <Abs x={w * 0.1} y={h * 0.2} w={52} h={52} style={{ transform: [{ rotate: '-10deg' }] }}><Art source={ART.pinHat} w={50} h={50} /></Abs>
+      <Abs x={w * 0.1} y={h * 0.2} w={52} h={52} style={{ transform: [{ rotate: '-10deg' }] }}><PinnedPin source={ART.pinHat} size={50} /></Abs>
     </>
   );
 }
@@ -918,6 +941,38 @@ function SafeDisc({ t, at, icon, size, x, y }: {
 
 /* ------------------------------------------------------------------ Data heroes */
 
+/** Coins: Alex's shark dives into a treasure pile and coins splash up (the pile is new art; the shark is his PNG). */
+function TreasureScene({ t, w, h, caption }: SceneProps & { readonly caption: string | null }) {
+  const pw = Math.min(w * 0.82, 330);
+  const ph = pw * (270 / 560);
+  const px = (w - pw) / 2;
+  const py = h - ph + 4;
+  const s = Math.min(h * 0.5, 92);
+  const dive = useAnimatedStyle(() => {
+    const k = seg(t.value, 0.05, 0.3);
+    const ease = k * k;
+    return {
+      opacity: interpolate(t.value, [0, 0.03, 0.3, 0.33, 0.97, 1], [0, 1, 1, 0, 0, 0], 'clamp'),
+      transform: [{ translateX: -s * 0.6 * (1 - ease) }, { translateY: -h * 0.55 * (1 - ease) + h * 0.12 * ease }, { rotate: '58deg' }, { scale: 1 - 0.25 * ease }],
+    };
+  });
+  const pile = useAnimatedStyle(() => ({ transform: [{ scaleY: interpolate(t.value, [0.3, 0.34, 0.42], [1, 0.94, 1], 'clamp') }] }));
+  return (
+    <>
+      <Abs x={px} y={py} w={pw} h={ph} style={pile}><Art source={ART.treasure} w={pw} h={ph} /></Abs>
+      <Abs x={w / 2 - s / 2} y={py - s * 0.35} w={s} h={s} style={dive}><Art source={ART.sharks[0]} w={s} h={s} /></Abs>
+      {[-1.3, -0.5, 0.4, 1.2].map((dx, i) => (
+        <Burst key={dx} t={t} cx={w / 2} cy={py + ph * 0.25} reach={pw * 0.32} icon="coin" dx={dx} dy={1.1 - Math.abs(dx) * 0.25} at={0.31 + i * 0.03} size={26} />
+      ))}
+      {caption ? (
+        <Abs x={w / 2 - 110} y={8} w={220} h={32} style={{ alignItems: 'center' }}>
+          <View style={styles.captionPill}><Text allowFontScaling={false} style={styles.captionText} numberOfLines={1}>{caption}</Text></View>
+        </Abs>
+      ) : null}
+    </>
+  );
+}
+
 function TermScene({ t, w, h, icon, caption }: SceneProps & { readonly icon: GameIconName; readonly caption: string | null }) {
   const size = Math.min(h * 0.5, 92);
   const bob = useAnimatedStyle(() => ({ transform: [{ translateY: Math.sin(t.value * Math.PI * 2) * 3 }, { rotate: `${Math.sin(t.value * Math.PI * 2 + 1) * 3}deg` }] }));
@@ -942,44 +997,40 @@ function TermScene({ t, w, h, icon, caption }: SceneProps & { readonly icon: Gam
   );
 }
 
+/** Drop odds as a prize jar: the bands are the rarities, the legend gives the server's percents. */
 function OddsScene({ t, w, h, rows }: SceneProps & { readonly rows: readonly { tier: RarityTier; percent: number }[] }) {
-  const bw = Math.min(w - 40, 320);
-  const x0 = (w - bw) / 2;
-  const rowH = Math.min(24, (h - 24) / Math.max(1, rows.length) - 5);
-  const top = (h - rows.length * (rowH + 5)) / 2;
-  const max = Math.max(1, ...rows.map(row => row.percent));
+  const jh = h * 0.92;
+  const jw = jh * (300 / 317);
+  const jx = Math.max(16, w * 0.12);
+  const lx = jx + jw + 18;
+  const rowH = Math.min(26, (h - 16) / Math.max(1, rows.length));
+  const top = (h - rows.length * rowH) / 2;
+  const wobble = useAnimatedStyle(() => ({ transform: [{ rotate: `${Math.sin(seg(t.value, 0, 0.5) * Math.PI * 3) * 3 * (1 - seg(t.value, 0, 0.5))}deg` }] }));
   return (
     <>
-      {rows.map((row, i) => (
-        <OddsBar key={row.tier} t={t} i={i} x={x0} y={top + i * (rowH + 5)} w={bw} h={rowH} tier={row.tier} percent={row.percent} max={max} />
+      <Abs x={jx} y={(h - jh) / 2} w={jw} h={jh} style={wobble}><Art source={ART.jar} w={jw} h={jh} /></Abs>
+      <Sparkle t={t} at={0.45} x={jx + jw * 0.5} y={(h - jh) / 2 + jh * 0.22} size={18} />
+      {[...rows].reverse().map((row, i) => (
+        <OddsBar key={row.tier} t={t} i={i} x={lx} y={top + i * rowH} w={w - lx - 14} h={rowH - 4} tier={row.tier} percent={row.percent} max={100} />
       ))}
     </>
   );
 }
 
-function OddsBar({ t, i, x, y, w, h, tier, percent, max }: {
+function OddsBar({ t, i, x, y, w, h, tier, percent }: {
   readonly t: SharedValue<number>; readonly i: number; readonly x: number; readonly y: number; readonly w: number; readonly h: number;
   readonly tier: RarityTier; readonly percent: number; readonly max: number;
 }) {
   const look = RARITY_LOOK[tier];
-  const labelW = 104;
-  const trackW = w - labelW - 50;
-  // True scale against the biggest share; a tiny share still shows as a dot.
-  const dot = h * 0.62;
-  const fill = Math.max(dot, trackW * (percent / max));
-  const grow = useAnimatedStyle(() => ({ width: dot + (fill - dot) * seg(t.value, i * 0.08, 0.5 + i * 0.08) }));
+  const inStyle = useAnimatedStyle(() => ({ opacity: seg(t.value, 0.05 + i * 0.06, 0.2 + i * 0.06), transform: [{ translateX: (1 - seg(t.value, 0.05 + i * 0.06, 0.2 + i * 0.06)) * 12 }] }));
   return (
-    <Abs x={x} y={y} w={w} h={h}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', height: h }}>
-        <View style={[styles.oddsLabel, { width: labelW, height: h, backgroundColor: look.chip, borderColor: look.frame }]}>
-          <Text allowFontScaling={false} numberOfLines={1} style={[styles.oddsLabelText, { color: look.ink }]}>{look.label}</Text>
-        </View>
-        <View style={[styles.oddsTrack, { width: trackW, height: h * 0.62 }]}>
-          <Animated.View style={[{ height: '100%', borderRadius: h, backgroundColor: look.frame }, grow]} />
-        </View>
+    <Abs x={x} y={y} w={w} h={h} style={inStyle}>
+      <View style={[styles.oddsLabel, { height: h, backgroundColor: look.chip, borderColor: look.frame, flexDirection: 'row', paddingHorizontal: 8 }]}>
+        <View style={{ width: h * 0.5, height: h * 0.5, borderRadius: h, backgroundColor: look.frame, marginRight: 6 }} />
+        <Text allowFontScaling={false} numberOfLines={1} style={[styles.oddsLabelText, { color: look.ink, flex: 1 }]}>{look.label}</Text>
         <Text allowFontScaling={false} style={styles.oddsPct}>{percent}%</Text>
       </View>
-      {tier === 5 && <Sparkle t={t} at={0.55} x={labelW - 6} y={h * 0.1} size={16} />}
+      {tier === 5 && <Sparkle t={t} at={0.55} x={w - 8} y={2} size={16} />}
     </Abs>
   );
 }
@@ -1027,6 +1078,7 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#d7ecfb',
   },
   grownUpText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 2 },
+  corkFrame: { ...StyleSheet.absoluteFillObject, borderWidth: 6, borderColor: 'rgba(90,52,18,0.28)', borderRadius: 20 },
   coinPanel: { position: 'absolute', backgroundColor: BRAND.blue, borderRadius: 22, borderWidth: 3, borderColor: BRAND.white },
   coinSlot: {
     position: 'absolute', backgroundColor: '#0a4f9c', borderWidth: 3, borderColor: '#2f86d6', alignItems: 'center', justifyContent: 'center',
