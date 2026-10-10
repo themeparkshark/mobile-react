@@ -453,8 +453,10 @@ export default function StampBookScreen() {
   /** From a stamp card with 2+ gifts still waiting: close the card, then open Claim all (one Modal at a time). */
   const claimAllFromCard = useCallback(() => {
     close();
-    setTimeout(() => openClaimRef.current(), 420);
+    claimAllTimer.current = setTimeout(() => openClaimRef.current(), 420);
   }, [close]);
+  const claimAllTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (claimAllTimer.current) clearTimeout(claimAllTimer.current); }, []);
 
   const closeClaimAll = useCallback(() => {
     setClaimAllOpen(null);
