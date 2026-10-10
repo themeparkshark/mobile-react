@@ -7,7 +7,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import type { ShopProduct } from '../../api/endpoints/me/shop';
 import type { BundleWorth } from '../../services/money/offers';
-import { Band, CARD, Contents, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, type PackArtKey } from './moneyUi';
+import { Band, CARD, Contents, MAX_FONT, PackArt, PriceBar, ShopCard, type PackArtKey } from './moneyUi';
 import { FONT } from '../../ui';
 
 export default function BundleCard({ product, price, worth, busy, disabled, onBuy, band = 'STARTER PACK · ONE PER PLAYER', art = 'chest', compact = false }: {
@@ -22,17 +22,17 @@ export default function BundleCard({ product, price, worth, busy, disabled, onBu
         <View style={st.body}>
           <View style={[st.art, compact && st.artCompact]}><PackArt art={art} size={compact ? 84 : 118} /></View>
           <View style={{ flex: 1, gap: 6 }}>
+            {/* Kid words first; the grown-up's number small under it (psychology + kids UX r4). */}
+            {worth && <Text maxFontSizeMultiplier={MAX_FONT} style={[st.worth, compact && st.worthCompact]}>Lots more than buying them one by one</Text>}
             {worth && (
-              <Text maxFontSizeMultiplier={MAX_FONT} style={[st.worth, compact && st.worthCompact]}>
-                {`Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}`}
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.kid}>
+                {`Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''} in regular packs`}
               </Text>
             )}
-            {worth && <Text maxFontSizeMultiplier={MAX_FONT} style={st.kid}>Lots more than buying them one by one</Text>}
             <Contents grants={product.grants} size="tight" />
           </View>
         </View>
         <PriceBar price={price} busy={busy} big={!compact} />
-        {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: compact ? 30 : 36, left: 8 }} />}
       </ShopCard>
     </Animated.View>
   );
@@ -42,7 +42,7 @@ const st = StyleSheet.create({
   body: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 10, alignSelf: 'stretch' },
   art: { width: 128, height: 118, alignItems: 'center', justifyContent: 'center' },
   artCompact: { width: 92, height: 88 },
-  worth: { fontFamily: FONT.display, fontSize: 19, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  worth: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   worthCompact: { fontSize: 16 },
   kid: { fontFamily: FONT.body, fontSize: 14, color: '#ffffff' },
 });

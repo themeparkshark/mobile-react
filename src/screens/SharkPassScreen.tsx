@@ -36,6 +36,7 @@ import {
 import { askGrownUp } from '../components/GrownUpGate';
 import { GotIt, MAX_FONT, PackArt, artSource, type PackArtKey } from '../components/money/moneyUi';
 import MemberFlex from '../components/money/MemberFlex';
+import { noteSharkPassPoints } from '../components/money/SharkPassBanner';
 import CoinTopUpOffer from '../components/money/CoinTopUpOffer';
 import { FRAME_ART, GOLD_ART } from '../components/money/frames';
 import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../share';
@@ -185,6 +186,7 @@ export default function SharkPassScreen() {
     try {
       const next = await getSharkPass();
       setState(next);
+      noteSharkPassPoints(next);
       setStatus('ready');
       return next;
     } catch {

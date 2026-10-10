@@ -318,7 +318,7 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
     <Animated.View entering={FadeInUp.delay(120 + index * 70).springify().damping(15)} style={{ flex: 1 }}>
       <ShopCard onPress={onBuy} disabled={disabled || !price || !!note} style={{ flex: 1 }} fill
         accessibilityLabel={`${product.title}. ${deal ? 'A new deal every day.' : 'One a day.'} ${price ?? ''}, real money.`}>
-        <Band text={deal ? 'TODAY’S DEAL' : 'PARK DAY'} color={deal ? 'green' : 'blue'} size={15} />
+        <Band text={deal ? 'TODAY’S PICK' : 'PARK DAY'} color={deal ? 'green' : 'blue'} size={15} />
         <View style={st.dayBody}>
           <PackArt art={packArtKey(product)} size={64} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{product.title.toUpperCase()}</Text>
@@ -330,7 +330,6 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
           )}
         </View>
         <PriceBar price={price} busy={busy} note={note} />
-        {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: 34, right: 4 }} />}
       </ShopCard>
     </Animated.View>
   );

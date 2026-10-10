@@ -74,7 +74,7 @@ export function packArtKey(product: Pick<ShopProduct, 'product_id' | 'grants' | 
   const only = (Object.keys(g) as (keyof ShopGrants)[]).filter(k => (g[k] ?? 0) > 0);
   if (only.length === 1 && only[0] === 'rescue_passes') return 'rescue';
   if (only.length === 1 && only[0] === 'tickets') return (['tickets-1', 'tickets-2', 'tickets-3'] as const)[Math.min(2, tier)];
-  if (only.length === 1 && only[0] === 'coins') return (['coins-1', 'coins-2', 'coins-3', 'coins-4'] as const)[Math.min(3, tier)];
+  if (only.length === 1 && only[0] === 'coins') return (['coins-1', 'coins-2', 'coins-3', 'coins-4', 'coins-4'] as const)[Math.min(4, tier)];
   return 'gift';
 }
 

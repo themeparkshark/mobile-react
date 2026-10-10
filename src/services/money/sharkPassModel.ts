@@ -1,7 +1,7 @@
 /**
  * Shark Pass words and sums, pure (tools/tests/money-offers.test.cjs).
  */
-import type { SharkPassReward, SharkPassTier } from '../../api/endpoints/me/shark-pass';
+import type { SharkPassReward, SharkPassState, SharkPassTier } from '../../api/endpoints/me/shark-pass';
 import type { GameIconName } from '../../ui/iconNames';
 
 /** The server's events in the player's words. Unknown events are left out. */
@@ -161,3 +161,12 @@ export function pieceSource(piece: SetPiece): string {
   if (piece.row === 'plus') return 'Shark Pass Plus';
   return piece.row === 'free' ? `Free at step ${piece.step}` : `Shark Pass, step ${piece.step}`;
 }
+
+/** What changed since the last look: points gained and whether a step was crossed. Exported for tests. */
+export function passGain(prev: { season: string; points: number; tier: number } | null, state: SharkPassState | null): { gained: number; stepUp: number | null } | null {
+  if (!prev || !state || !state.enabled || !state.season || !state.progress || prev.season !== state.season.key) return null;
+  const gained = state.progress.points - prev.points;
+  if (gained <= 0) return null;
+  return { gained, stepUp: state.progress.tier > prev.tier ? state.progress.tier : null };
+}
+

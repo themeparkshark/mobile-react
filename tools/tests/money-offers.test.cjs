@@ -165,3 +165,11 @@ test('the season set counts every wearable, owned = claimed, and says where each
   assert.equal(pass.seasonSet(tiers, [it('crown')], true).owned, 3, 'Plus extras are owned with Plus');
   assert.match(read('src/screens/SharkPassScreen.tsx'), /YOUR SEASON SET/);
 });
+
+test('after a win the pass banner says what was gained, and a step crossed', () => {
+  const st = (points, tier) => ({ enabled: true, season: { key: 's1', points_per_tier: 400 }, progress: { points, tier } });
+  assert.equal(pass.passGain(null, st(500, 1)), null, 'first look: nothing to compare');
+  assert.deepEqual(plain(pass.passGain({ season: 's1', points: 380, tier: 0 }, st(500, 1))), { gained: 120, stepUp: 1 });
+  assert.deepEqual(plain(pass.passGain({ season: 's1', points: 420, tier: 1 }, st(540, 1))), { gained: 120, stepUp: null });
+  assert.equal(pass.passGain({ season: 's0', points: 1, tier: 0 }, st(540, 1)), null, 'another season');
+});
