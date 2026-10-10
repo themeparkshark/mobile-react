@@ -231,9 +231,10 @@ const styles = StyleSheet.create({
   },
   pillText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 15, color: INK },
   newTitle: { flex: 1, fontFamily: 'Shark', fontSize: 17, color: '#FFFFFF' },
+  // Quiet white pill (DONE is the one gold button on this sheet).
   wear: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#FFCF3B',
-    borderWidth: 2.5, borderColor: '#FFFFFF', borderBottomWidth: 4, borderBottomColor: '#C98A00',
+    flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#FFFFFF',
+    borderWidth: 2.5, borderColor: '#9FB2C9', borderBottomWidth: 4,
   },
   wearOn: { backgroundColor: '#E2F6FF', borderBottomColor: '#9FB2C9' },
   wearText: { fontFamily: 'Shark', fontSize: 16, color: INK },

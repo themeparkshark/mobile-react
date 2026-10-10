@@ -309,8 +309,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
                   nextCount > 1 && onClaimAll ? <QuietButton label={`Claim all ${nextCount}`} icon="gift" onPress={onClaimAll} />
                     : nextCount > 0 ? <QuietButton label={`Next reward (${nextCount} left)`} icon="gift" onPress={onNext} /> : null
                 ) : (
-                  <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Take off' : 'Wear title'} variant="secondary" size="compact"
-                    tone="onBlue" icon={wearingTitle ? 'close' : 'crown'} loading={equipping} onPress={onToggleTitle} />
+                  <QuietButton label={equipping ? 'Saving...' : wearingTitle ? 'Take off' : 'Wear title'} icon={wearingTitle ? 'close' : 'crown'} onPress={onToggleTitle} />
                 )}
               </View>
             )}

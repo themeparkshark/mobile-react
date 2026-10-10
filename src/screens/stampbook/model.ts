@@ -464,7 +464,7 @@ export function titleCounts(entries: readonly TitleEntry[]): { owned: number; to
 export function titleLine(entry: TitleEntry): string {
   switch (entry.state) {
     case 'wearing': return 'On your profile now';
-    case 'ready': return 'Yours! Tap Wear';
+    case 'ready': return '';
     case 'claim': return '';
     case 'progress': return `From the ${entry.stamp.shortName} stamp`;
     default: return `From the ${entry.stamp.shortName} stamp`;
