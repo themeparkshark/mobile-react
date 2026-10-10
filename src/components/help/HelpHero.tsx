@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import { useEffect, type ReactNode } from 'react';
 import { ImageBackground, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, interpolate, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
+  cancelAnimation, Easing, interpolate, runOnJS, useAnimatedProps, useAnimatedReaction, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
@@ -22,6 +22,7 @@ import HowToDemo from '../../screens/HowToPlay/HowToDemos';
 import Ribbon from '../Ribbon';
 import { RARITY_LOOK, type RarityTier } from '../../screens/SetCollection/dexLook';
 import type { HelpHeroKey } from '../../services/help/helpSheets';
+import { playSfx } from '../../gamekit/SFX';
 import { usePowerBudget } from '../../power';
 import { BRAND, GameIcon, type GameIconName } from '../../ui';
 
@@ -95,6 +96,22 @@ export interface HeroData {
   readonly odds?: readonly { readonly tier: RarityTier; readonly percent: number }[];
 }
 
+/** One short sound at each scene's key moment (first play and taps to replay only; the SFX helper respects mute). */
+const BEAT: Partial<Record<HelpHeroKey, { at: number; sfx: string; volume: number }>> = {
+  standings_climb: { at: 0.55, sfx: 'ui.select', volume: 0.5 },
+  standings_podium: { at: 0.34, sfx: 'fx.reward', volume: 0.45 },
+  pins_swap: { at: 0.58, sfx: 'fx.whoosh', volume: 0.45 },
+  shop_gear: { at: 0.62, sfx: 'fx.purchase', volume: 0.4 },
+  shop_daily: { at: 0.4, sfx: 'fx.reveal', volume: 0.4 },
+  shop_supplies: { at: 0.12, sfx: 'fx.reveal', volume: 0.4 },
+  park_shelf: { at: 0.37, sfx: 'fx.coin', volume: 0.5 },
+  park_levels: { at: 0.26, sfx: 'fx.jingle', volume: 0.4 },
+  redeem_chest: { at: 0.44, sfx: 'fx.reward', volume: 0.45 },
+  social_share: { at: 0.5, sfx: 'ui.tap', volume: 0.45 },
+  term: { at: 0.3, sfx: 'fx.coin', volume: 0.35 },
+};
+const beatSound = (sfx: string, volume: number) => playSfx(sfx, volume);
+
 /** Scenes already watched this session (they reopen on their payoff). */
 const SEEN = new Set<HelpHeroKey>();
 
@@ -133,6 +150,14 @@ export default function HelpHero({ hero, width, height, running, reduced, data, 
   // Battery: the decorative loop rests when the phone is idle or backgrounded (full power: no change).
   const p = usePowerBudget();
   const t = useLoop(hero, running && p.ambient, reduced, replay);
+  // The beat plays once per open (and again on a tap to replay), never on every loop.
+  const beat = BEAT[hero];
+  const beatDone = useSharedValue(0);
+  useEffect(() => { beatDone.value = 0; }, [replay, running, beatDone]);
+  useAnimatedReaction(() => t.value, (now, before) => {
+    if (!beat || !running || reduced || beatDone.value === 1 || before == null) return;
+    if (before < beat.at && now >= beat.at) { beatDone.value = 1; runOnJS(beatSound)(beat.sfx, beat.volume); }
+  });
   const cork = hero === 'pins_swap' || hero === 'pins_clock';
   const sp = { t, w: width, h: height };
   return (
