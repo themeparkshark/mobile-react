@@ -5,7 +5,7 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import type { LiveEvent } from '../../api/endpoints/live-events';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { useEventAmbient } from '../../services/liveEvents/ambient';
-import { chipState, timeLine } from '../../services/liveEvents/model';
+import { chipState, shortEnd, timeLine } from '../../services/liveEvents/model';
 import { BRAND, GameIcon } from '../../ui';
 import { eventArt } from './eventArt';
 
@@ -59,7 +59,7 @@ function EventStatusChip({ event, onPress, inline = false, paused = false, now =
             <Text style={styles.ends} numberOfLines={1}>{timeLine(event, now)}</Text>
           </View>
         )}
-        {s.kind === 'open' && <Text style={styles.sub} numberOfLines={1}>{s.count === 1 ? 'Chest ready!' : `${s.count} chests ready!`}<Text style={styles.ends}>{event.phase === 'live' ? `  ${timeLine(event, now)}` : ''}</Text></Text>}
+        {s.kind === 'open' && <Text style={styles.sub} numberOfLines={1}>{s.count === 1 ? 'Chest ready!' : `${s.count} chests ready!`}<Text style={styles.ends}>{event.phase === 'live' ? `  ${shortEnd(event, now)}` : ''}</Text></Text>}
         {s.kind === 'frenzy' && (
           <View style={styles.frenzyRow}><GameIcon name="rush" size={16} /><Text style={[styles.sub, styles.frenzy]} numberOfLines={1}>{s.line}</Text></View>
         )}

@@ -21,7 +21,7 @@ export function goldenReefFixture(opts: { mine?: number; total?: number; claimed
     id: 1, slug: 'golden-reef-week-2026', title: 'Golden Reef Week', tagline: 'Fill the reef!', art_key: 'golden_reef',
     theme: { primary: '#0b7fd1', accent: '#ffc629', deep: '#05346e' }, phase,
     starts_at: new Date(phase === 'upcoming' ? now + 30 * hour : now - 26 * hour).toISOString(),
-    ends_at: new Date(phase === 'ended' ? now - 2 * hour : now + 4 * 24 * hour).toISOString(),
+    ends_at: new Date(phase === 'ended' ? now - 2 * hour : Math.ceil((now + 4 * 24 * hour) / hour) * hour).toISOString(),
     claim_until: new Date(now + 9 * 24 * hour).toISOString(), server_now: new Date(now).toISOString(),
     how_to: [{ icon: 'win_find', text: 'Win and find' }, { icon: 'fill', text: 'Fill the reef' }, { icon: 'chest', text: 'Open chests' }],
     points: { home_find: 1, ride_win: 4, spotlight_win: 8, boss_hit: 1 }, daily_caps: { home_find: 8, boss_hit: 8 },

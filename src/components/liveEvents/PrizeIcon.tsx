@@ -9,10 +9,10 @@ import { BRAND, GameIcon, type GameIconName } from '../../ui';
  */
 function PrizeIcon({ name, size }: { readonly name: GameIconName; readonly size: number }) {
   if (name !== 'ticket') return <GameIcon name={name} size={size} />;
-  const d = size + 6;
+  const d = size + 4;
   return (
     <View style={[styles.disc, { width: d, height: d, borderRadius: d / 2 }]}>
-      <GameIcon name="ticket" size={size - 2} />
+      <GameIcon name="ticket" size={size + 2} />
     </View>
   );
 }
@@ -20,5 +20,5 @@ function PrizeIcon({ name, size }: { readonly name: GameIconName; readonly size:
 export default memo(PrizeIcon);
 
 const styles = StyleSheet.create({
-  disc: { backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  disc: { backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
 });

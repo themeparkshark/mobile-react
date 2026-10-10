@@ -186,6 +186,12 @@ export function activityLine(event: LiveEvent, now: number): string | null {
   return parts.length ? parts.join('  ·  ') : null;
 }
 
+/** Short end for tight spots: "until Tue" (or a clock time on the last day). */
+export function shortEnd(event: LiveEvent, now: number): string {
+  const left = Date.parse(event.ends_at) - now;
+  return left < DAY_MS ? `until ${clockTime(event.ends_at)}` : `until ${weekday(event.ends_at).slice(0, 3)}`;
+}
+
 /** Star Rides at this park as a Set for marker lookups. */
 export function starRideIds(event: LiveEvent | null): ReadonlySet<number> {
   if (!event || event.phase !== 'live' || !event.here) return EMPTY;

@@ -139,7 +139,7 @@ function TeamRace({ event }: { readonly event: LiveEvent }) {
  * the team race, today's Star Rides and Frenzy. No point totals or tables up
  * front; grown-ups can open "How it works".
  */
-function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.now(), openOverride }: {
+function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.now(), openOverride, devAutoOpen = null }: {
   readonly event: LiveEvent;
   readonly visible: boolean;
   readonly onClose: () => void;
@@ -150,6 +150,8 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
   readonly now?: number;
   /** Dev preview only: open without the server. */
   readonly openOverride?: (key: string) => Promise<EventReward | null>;
+  /** Dev preview only: open this chest by itself a moment after the sheet shows (captures). */
+  readonly devAutoOpen?: string | null;
 }) {
   const insets = useSafeAreaInsets();
   const art = eventArt(event.art_key);
@@ -201,6 +203,11 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
     setOpened({ key, rewards, already });
   }, [event.id, open, openOverride, opening]);
 
+  useEffect(() => {
+    if (!__DEV__ || !devAutoOpen || !visible) return;
+    const id = setTimeout(() => { void onOpen(devAutoOpen); }, 900);
+    return () => clearTimeout(id);
+  }, [devAutoOpen, visible]); // eslint-disable-line react-hooks/exhaustive-deps
   const frenzy = frenzyLine(event);
   const hint = event.phase === 'live' ? nextStepHint(event, atPark && event.here) : null;
   const together = event.together;
@@ -268,7 +275,7 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
                   onPeek={chest => setPeek(p => (p?.chest.key === chest.key ? null : { track: 'together', chest }))} />
                 <Peek chest={peek?.track === 'together' ? peek.chest : null} track="Everyone's" />
                 <View style={styles.helpedRow}>
-                  {activityLine(event, now) && <Text style={styles.small}>{activityLine(event, now)}</Text>}
+                  {activityLine(event, now) && <Text style={styles.activity}>{activityLine(event, now)}</Text>}
                 </View>
                 <View style={styles.helpedRow}>
                   {event.me.helped ? <><GameIcon name="check" size={20} /><Text style={styles.line}>You helped!</Text></>
@@ -373,6 +380,7 @@ const styles = StyleSheet.create({
   frenzyText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
   section: { backgroundColor: BRAND.white, borderRadius: 20, borderWidth: 3, borderColor: BRAND.navy, paddingVertical: 10, paddingHorizontal: 12 },
   sectionTitle: { fontFamily: 'Shark', fontSize: 16, color: BRAND.blue, marginBottom: 2 },
+  activity: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
   teamLine: { marginTop: 0, marginBottom: 4, fontFamily: 'Shark', fontSize: 16 },
   small: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft, textAlign: 'center', marginTop: 2 },
   line: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.navy, textAlign: 'center', marginTop: 4 },

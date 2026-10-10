@@ -23,15 +23,15 @@ import { BRAND, GameIcon } from '../ui';
  * fixture data, for captures and grading. EXPO_PUBLIC_LIVE_EVENT_PREVIEW picks
  * the opening state: progress | ready | frenzy | upcoming | ended | sheet | home.
  */
-type Mode = 'progress' | 'ready' | 'frenzy' | 'upcoming' | 'ended' | 'sheet' | 'home' | 'recap' | 'stamp' | 'climb' | 'live';
-const MODES: Mode[] = ['progress', 'ready', 'frenzy', 'upcoming', 'ended', 'sheet', 'home', 'recap', 'stamp', 'climb', 'live'];
+type Mode = 'progress' | 'ready' | 'frenzy' | 'upcoming' | 'ended' | 'sheet' | 'home' | 'recap' | 'stamp' | 'climb' | 'live' | 'reveal';
+const MODES: Mode[] = ['progress', 'ready', 'frenzy', 'upcoming', 'ended', 'sheet', 'home', 'recap', 'stamp', 'climb', 'live', 'reveal'];
 
 function fixtureFor(mode: Mode) {
   if (mode === 'ready') return goldenReefFixture({ mine: 13, claimed: 1 });
   if (mode === 'frenzy') return goldenReefFixture({ mine: 9, claimed: 2, total: 20, frenzy: true });
   if (mode === 'upcoming') return goldenReefFixture({ phase: 'upcoming', mine: 0, total: 0 });
   if (mode === 'ended' || mode === 'recap') return goldenReefFixture({ phase: 'ended', mine: 34, total: 290, claimed: 3 });
-  if (mode === 'sheet' || mode === 'climb' || mode === 'live') return goldenReefFixture({ mine: 13, claimed: 1, total: 140 });
+  if (mode === 'sheet' || mode === 'climb' || mode === 'live' || mode === 'reveal') return goldenReefFixture({ mine: 13, claimed: 1, total: 140 });
   return goldenReefFixture({ mine: 9, claimed: 2 });
 }
 
@@ -87,7 +87,7 @@ export default function LiveEventPreviewScreen() {
     if (!tour) return;
     const steps: [Mode, boolean, (() => void)?][] = [
       ['progress', false], ['progress', false, () => setGain({ n: 8, at: Date.now() })], ['frenzy', false], ['upcoming', false],
-      ['ended', false], ['home', false], ['stamp', false], ['recap', false], ['sheet', true, () => setTimeout(() => setLive(e => ({ ...e, together: { ...e.together, total: e.together.total + 12 } })), 1200)], ['climb', true], ['live', true], ['live', true],
+      ['ended', false], ['home', false], ['stamp', false], ['recap', false], ['sheet', true, () => setTimeout(() => setLive(e => ({ ...e, together: { ...e.together, total: e.together.total + 12 } })), 1200)], ['climb', true], ['live', true], ['live', true], ['reveal', true],
     ];
     const ids = steps.map(([m, open, act], i) => setTimeout(() => { setMode(m); setSheet(open); act?.(); }, i * 3000));
     return () => ids.forEach(clearTimeout);
@@ -138,7 +138,7 @@ export default function LiveEventPreviewScreen() {
         <Pressable onPress={() => setGain({ n: 8, at: Date.now() })} style={styles.ctl}><Text style={styles.ctlText}>+8</Text></Pressable>
       </ScrollView>
       {mode === 'live' && <View style={styles.devTag} pointerEvents="none"><Text style={styles.devText}>DEV: simulated players</Text></View>}
-      <EventSheet event={live} visible={sheet} onClose={() => setSheet(false)} atPark={!home} onShowRide={() => undefined} openOverride={fakeOpen} />
+      <EventSheet devAutoOpen={mode === 'reveal' ? 'p2' : null} event={live} visible={sheet} onClose={() => setSheet(false)} atPark={!home} onShowRide={() => undefined} openOverride={fakeOpen} />
     </View>
   );
 }
