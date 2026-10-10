@@ -117,6 +117,8 @@ interface Props {
   chestButtonCount?: number;
   /** The park story, as a small chip in the top HUD row. */
   parkStory?: ParkStoryChip | null;
+  /** Shark Events home chip (ExploreScreen builds it; null when no event). */
+  eventChip?: ReactNode;
   /**
    * How to Play's "Let's go!" sends `highlightNearestFind` (a timestamp) with
    * Explore: each new value glides the camera to the nearest find once.
@@ -130,7 +132,7 @@ interface Props {
  */
 export default function HomeExplore({ onPrepItemNearby, catching = null, onCatchCollected, onCatchUnavailable,
   onCatchDone, refreshVersion, homeLocationConfirmed,
-  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null }: Props) {
+  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null, eventChip = null }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -682,7 +684,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       {homeLocationConfirmed && (
         <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
           <HomeHudChips top={hudTop} onWidth={setHudWidth} findsUntilTicket={ticket.until} ticketsCapped={ticket.capped} onTicketPress={showTicketLine}
-            parkStory={parkStory} />
+            parkStory={parkStory} eventChip={eventChip} />
         </Animated.View>
       )}
 

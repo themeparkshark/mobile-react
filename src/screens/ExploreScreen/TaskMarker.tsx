@@ -27,6 +27,7 @@ import { FoldBadge, Placed, TagSlot, usePlacement } from '../../components/map/d
 import type { Placement } from '../../components/map/declutter/solver';
 import { RIDE_BODY, RIDE_BOX, rideLayoutId, rideTagKind, rideTagSize } from './parkMapLayout';
 import { findClock } from './FindLife';
+import StarRideBadge from '../../components/liveEvents/StarRideBadge';
 
 const LANDMARKS: Record<LandmarkId, number> = {
   shark: require('../../../assets/images/map/landmarks/shark.png'),
@@ -330,6 +331,8 @@ export interface TaskMarkerProps {
   readonly onPress: (task: TaskType) => void;
   /** An empty pool slot: both markers stay mounted, parked and empty (MapView children never mount mid-list). */
   readonly parked?: boolean;
+  /** Shark Events: today's Star Ride (x2). A small star on the coin's corner; the coin stays the hero. */
+  readonly star?: boolean;
 }
 
 /**
@@ -342,7 +345,7 @@ export interface TaskMarkerProps {
 function TaskMarker({
   task, isSelected, isTripGoal = false, control, flagRaiseKey, ambient = false, live, onPress,
   near = false, playable = false, adventure = false, clusterCount = 0, restingUntil = null,
-  distanceMeters = null, ticketCost = 1, revealDelay, aliveRank, parked = false,
+  distanceMeters = null, ticketCost = 1, revealDelay, aliveRank, parked = false, star = false,
 }: TaskMarkerProps) {
   const reducedMotion = useReducedGameMotion();
   const alive = useMapAlive();
@@ -476,6 +479,7 @@ function TaskMarker({
           </TagSlot>
       ) : undefined}>
       <Animated.View style={[styles.container, dropStyle]}>
+        {star && !parked && <View pointerEvents="none" style={styles.starRide}><StarRideBadge paused={!alive.running} /></View>}
         {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
         {!isSelected && showTimer && tagKind !== 'timer' && (
           <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
@@ -554,6 +558,7 @@ const PARKED_PLACEMENT: Placement = { visible: false, scale: 1, folded: 0, folde
 const styles = StyleSheet.create({
   waterBox: { width: 110, height: 70 },
   teamFlag: { position: 'absolute', top: 25, right: -3, zIndex: 21 },
+  starRide: { position: 'absolute', top: 0, right: -4, zIndex: 3 },
   container: { width: 72, height: 96, position: 'relative', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 10 },
   goalBadge: { backgroundColor: BRAND.gold,
     borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 2, borderColor: BRAND.navy },

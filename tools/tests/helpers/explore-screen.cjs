@@ -85,6 +85,12 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     './ExploreScreen/mapPresentationQueue': queue,
     './ExploreScreen/dailyChestPresence': chestPresence,
     '../components/map/statusStack': statusStack,
+    // Shark Events + Next Up: off (no event, no rail), as on an old server. Options can turn an event on.
+    '../components/liveEvents': stubModule('../components/liveEvents', {
+      useLiveEvent: () => ({ event: options.liveEvent ?? null, gained: 0, gainedAt: 0, refresh: async () => undefined }),
+      useStarRides: () => options.starRides ?? new Set(), useRecapDue: () => [false, () => undefined] }),
+    '../components/nextUp/NextUpRail': stubModule('../components/nextUp/NextUpRail', {
+      useNextUp: () => ({ item: options.nextUp ?? null, refresh: async () => undefined }) }),
     // Fixed slot pools: items in order, then empty slots (the real assignment is unit tested in map-declutter-stability).
     '../components/map/markerSlots': { SLOTS: { rides: 80, coins: 24, keys: 8, redeemables: 8, items: 8, pins: 8, vaults: 4, swords: 8 },
       useMarkerSlots: (items, _keyOf, size) => Array.from({ length: size }, (_, i) => items[i] ?? null) },

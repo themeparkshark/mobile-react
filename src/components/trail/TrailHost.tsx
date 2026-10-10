@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { playSfx } from '../../gamekit/SFX';
 import { useTrail } from '../../services/trail/TrailProvider';
 import { boxName, formatSteps, headlineBox, stepsToGo, type TrailBox, type TrailReward } from '../../services/trail/trailModel';
@@ -13,11 +13,13 @@ import TrailSheet from './TrailSheet';
  * the first state arrives. `active` pauses every idle animation when the map
  * is covered or not focused.
  */
-function TrailHost({ active, inPark = true, preview }: {
+function TrailHost({ active, inPark = true, preview, openRequest = 0 }: {
   readonly active: boolean;
   readonly inPark?: boolean;
   /** Dev previews only: start with the sheet, its odds page, or the reveal open. */
   readonly preview?: 'sheet' | 'inside' | 'reveal';
+  /** Bump to open the sheet (or the ready boxes) from elsewhere, e.g. the map's Next Up rail. */
+  readonly openRequest?: number;
 }) {
   const trail = useTrail();
   const [open, setOpen] = useState(preview === 'sheet' || preview === 'inside');
@@ -30,6 +32,12 @@ function TrailHost({ active, inPark = true, preview }: {
     setOpen(true);
     void trail.flush();
   }, [trail]);
+  const lastRequest = useRef(openRequest);
+  useEffect(() => {
+    if (openRequest === lastRequest.current) return;
+    lastRequest.current = openRequest;
+    if (trail.enabled && trail.state) show();
+  }, [openRequest, show, trail.enabled, trail.state]);
   const nextHint = useMemo(() => {
     const b = trail.state ? headlineBox({ ready: [], walking: trail.state.walking }) : null;
     return b ? `Next up: ${boxName(b)}, ${formatSteps(stepsToGo(b))} steps to go` : null;

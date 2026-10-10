@@ -120,7 +120,11 @@ import HelpButton from '../components/help/HelpButton';
 import { mapTipReady, parkTipFor } from '../services/help/tipGate';
 // Map declutter: one HUD row, and every marker placed by priority (no overlaps).
 import MapStatusStack, { TONES, type StatusEntry } from '../components/map/MapStatusStack';
-import { statusOrder } from '../components/map/statusStack';
+import { statusOrder, HUD_BOTTOM } from '../components/map/statusStack';
+import { EventStatusChip, EventHomeChip, EventSheet, EventGainToast, FrenzyBanner, FrenzySweep, EventRecapCard, useRecapDue, useLiveEvent, useStarRides } from '../components/liveEvents';
+import { openableKeys } from '../services/liveEvents/model';
+import NextUpRail, { useNextUp } from '../components/nextUp/NextUpRail';
+import { nextUpRoute, NEXT_UP_RAIL_SPACE } from '../components/nextUp/nextUpRoute';
 import { createDeclutterStore } from '../components/map/declutter/store';
 import type { MapDeclutterInput } from '../components/map/declutter/useMapDeclutter';
 import { offsetMeters, validPoint } from '../components/map/fright/geo';
@@ -503,6 +507,14 @@ function ExploreScreen() {
   // Posted waits refresh each minute while the map is on screen; paused under
   // another screen or in the background, caught up on return.
   useLivePoll(loadLivePark, idlePollInterval(60000, mapIdle, 2), { enabled: !!park?.id, focused: mapFocused, key: park?.id ?? null });
+  // Shark Events (server flag live_events): one shared poll; everything renders nothing while it is off or the route 404s.
+  const liveEvt = useLiveEvent(park?.id ?? null, { poll: !!player, focused: mapFocused, enabled: !!player });
+  const [eventOpen, setEventOpen] = useState(false);
+  const starRides = useStarRides(park?.id ?? null);
+  const [recapDue, recapSeen] = useRecapDue(liveEvt.event);
+  // The "what now" rail (server flag next_up): one next thing, one GO.
+  const nextUp = useNextUp(park?.id ?? null, mapFocused, !!player);
+  const [trailOpenRequest, setTrailOpenRequest] = useState(0);
   const liveByTask = useMemo(() => new globalThis.Map<number, LiveRide>(
     (livePark?.rides ?? []).map(r => [r.task_id, r])), [livePark]);
   // Park pulse: a warm haze over the busiest rides on today's map.
@@ -947,6 +959,15 @@ function ExploreScreen() {
     ? <ChestMapButton onPress={() => setChestRequested(true)} /> : null;
   // Daily 3, the Weekly Box and level-up chests (server flags daily_three / level_chests, off by default).
   const openParam = (route.params as { open?: string } | undefined)?.open;
+  // The nearest ride coin on this park map, guided like a checklist tap.
+  const guideToNearestRide = useCallback(() => {
+    const here = location;
+    const tasks = (redeemables?.tasks ?? []).filter(t => Number.isFinite(Number(t.latitude)) && Number.isFinite(Number(t.longitude)));
+    if (!here || !tasks.length) return;
+    const nearest = tasks.reduce((best, t) => calculateDistance(here.latitude, here.longitude, Number(t.latitude), Number(t.longitude))
+      < calculateDistance(here.latitude, here.longitude, Number(best.latitude), Number(best.longitude)) ? t : best);
+    guideTo(nearest);
+  }, [location, redeemables, guideTo]);
   const retention = useRetention({
     enabled: !!player && permissionGranted && isReady && hasCompleted('onboarding'),
     mapFocused,
@@ -961,16 +982,29 @@ function ExploreScreen() {
     onOpenChest: () => setChestRequested(true),
     onFind: what => {
       if (what === 'snack') { setHighlightNearestFind(Date.now()); return; }
-      // The nearest ride coin on this park map, guided like a checklist tap.
-      const here = location;
-      const tasks = (redeemables?.tasks ?? []).filter(t => Number.isFinite(Number(t.latitude)) && Number.isFinite(Number(t.longitude)));
-      if (!here || !tasks.length) return;
-      const nearest = tasks.reduce((best, t) => calculateDistance(here.latitude, here.longitude, Number(t.latitude), Number(t.longitude))
-        < calculateDistance(here.latitude, here.longitude, Number(best.latitude), Number(best.longitude)) ? t : best);
-      guideTo(nearest);
+      guideToNearestRide();
     },
   });
   useEffect(() => { setRetentionOccluding(retention.occluding); }, [retention.occluding]);
+  const nextUpRefresh = nextUp.refresh;
+  const railShowing = !!player && !!park && !!nextUp.item && suggestionSlots.left == null && suggestionSlots.right == null;
+  const handleNextUp = useCallback((action: Parameters<typeof nextUpRoute>[0]) => {
+    const route = nextUpRoute(action);
+    if (route.kind === 'event') setEventOpen(true);
+    else if (route.kind === 'daily_chest') setChestRequested(true);
+    else if (route.kind === 'retention') navigation.setParams({ open: route.open });
+    else if (route.kind === 'trail') setTrailOpenRequest(n => n + 1);
+    else if (route.kind === 'task') { const task = visibleTasks.find(t => t.id === route.taskId); if (task) setSelectedTask(task); }
+    else if (route.kind === 'nearest_ride') guideToNearestRide();
+    else if (route.kind === 'home_find') setHighlightNearestFind(Date.now());
+  }, [navigation, visibleTasks, guideToNearestRide]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The rail refreshes after any sheet or overlay it opened closes.
+  const nextUpBusy = eventOpen || chestShowing || retention.occluding;
+  const nextUpWasBusy = useRef(false);
+  useEffect(() => {
+    if (nextUpWasBusy.current && !nextUpBusy) void nextUpRefresh();
+    nextUpWasBusy.current = nextUpBusy;
+  }, [nextUpBusy, nextUpRefresh]);
   const mapControls = retention.button ? <>{chestButton}{retention.button}</> : chestButton;
   const mapControlsCount = (chestButton ? 1 : 0) + (retention.button ? 1 : 0);
   const homeIntroQueue = {
@@ -1089,7 +1123,9 @@ function ExploreScreen() {
   const statusEntries: StatusEntry[] = player && park ? statusOrder({
     live: busyLiveSlot, show: nightPill ? (nightShow.phase === 'live' ? 'live' : 'teaser') : null,
     nightMode: frightNight.modeOn, control: true,
+    event: liveEvt.event ? (openableKeys(liveEvt.event).length ? 'ready' : 'on') : null,
   }).map(key => {
+    if (key === 'event' && liveEvt.event) return { key, label: liveEvt.event.title, tone: TONES.park, node: <EventStatusChip inline event={liveEvt.event} onPress={() => setEventOpen(true)} /> };
     if (key === 'live') return { key, label: 'Live in the park', tone: rushes.length && !raidActive && !bossMap.moment ? TONES.rush : TONES.park, node: <LiveEventsPill inline raid={raid} rushes={rushes} onBoss={() => setBossOpen(true)}
       mapMoment={bossMap.moment} mapFlag={bossMap.flag} onDismissMoment={bossMap.dismiss}
       onMapMoment={() => {
@@ -1205,6 +1241,10 @@ function ExploreScreen() {
       {chestShowing && dailyGift &&
         <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} onClosed={onChestClosed} />}
       {retention.overlay}
+      {player && liveEvt.event && <EventSheet event={liveEvt.event} visible={eventOpen} onClose={() => setEventOpen(false)} atPark={!!park}
+        onShowRide={id => { const t = visibleTasks.find(task => task.id === id); if (t) { setEventOpen(false); setSelectedTask(t); } }} />}
+      {player && liveEvt.event && <EventRecapCard event={liveEvt.event} visible={recapDue && mapFocused && !eventOpen} onClose={recapSeen}
+        onOpenChests={() => { recapSeen(); setEventOpen(true); }} />}
       {/* Monday Home Hunt results come through the presentation queue, after the daily chest (2 full-screen moments per app open). */}
       <HomeHuntResultsHost enabled={!!player && !park && mapFocused && permissionGranted && hasCompleted('onboarding') && chestReady
         && !dailyGiftOccluded && !chestShowing && !(chestUnclaimed && !chestDismissed(dailyGift!.id))} />
@@ -1220,12 +1260,13 @@ function ExploreScreen() {
           introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
           onIntroOpenChange={setHomeIntroOpen} chestButton={mapControls} chestButtonCount={mapControlsCount} highlightNearestFind={highlightNearestFind}
           parkStory={activeParkProject ? { title: activeParkProject.title, points: activeParkProject.total_points,
-            goal: activeParkProject.goal_points, onPress: openParkStory } : null} />
+            goal: activeParkProject.goal_points, onPress: openParkStory } : null}
+          eventChip={liveEvt.event?.include_home ? <EventHomeChip event={liveEvt.event} onPress={() => setEventOpen(true)} /> : null} />
       )}
       {/* Trail Boxes at home: your boxes wait for the next park day (pill above the avatar menu; only when you have boxes). */}
       {player && !park && permissionGranted && (
         <View pointerEvents="box-none" style={{ position: 'absolute', right: 16, bottom: 194, zIndex: 10, alignItems: 'flex-end' }}>
-          <TrailHost active={mapFocused} inPark={false} />
+          <TrailHost active={mapFocused} inPark={false} openRequest={trailOpenRequest} />
         </View>
       )}
       {/* Guest: a bright sign-in invitation over the live map */}
@@ -1367,7 +1408,7 @@ function ExploreScreen() {
             {/* Energy and Swords: bright pills in the header's Currency language. */}
             <View style={{ marginBottom: 12, gap: 6, alignItems: 'flex-end' }}>
               {/* Trail Boxes (server flag trail_boxes): walk in the park to open them. */}
-              <TrailHost active={mapFocused && !isActive} />
+              <TrailHost active={mapFocused && !isActive} openRequest={trailOpenRequest} />
               <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0}
                 onPress={() => explain('energy', { count: player?.energy ?? 0 })} />
               {mapFlags.gymSwords && <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0}
@@ -1405,6 +1446,17 @@ function ExploreScreen() {
         )}
         {/* One HUD row floats over the map (the map runs right up to the header). */}
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
+        {/* The "what now" rail: one row in the suggestion slot, only while no suggestion card holds it. */}
+        {railShowing && <View pointerEvents="box-none" style={{ position: 'absolute', top: slotTop, left: 12, right: 12, zIndex: 38 }}>
+          <NextUpRail item={nextUp.item} onAction={handleNextUp} />
+        </View>}
+        {player && liveEvt.event && <>
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 37 }]}><FrenzySweep event={liveEvt.event} /></View>
+          <View pointerEvents="none" style={{ position: 'absolute', top: HUD_BOTTOM + 6 + (railShowing ? NEXT_UP_RAIL_SPACE : 0), left: 0, right: 0, alignItems: 'center', zIndex: 39 }}>
+            <EventGainToast gained={liveEvt.gained} gainedAt={liveEvt.gainedAt} artKey={liveEvt.event.art_key ?? null} />
+            <FrenzyBanner event={liveEvt.event} />
+          </View>
+        </>}
         {leftSlotSwapGuard && <View testID="left-slot-swap-guard" onStartShouldSetResponder={() => true}
           accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           style={{ position: 'absolute', top: slotTop, left: 0, width: '52%', height: 120, zIndex: 40 }} />}
@@ -1536,6 +1588,7 @@ function ExploreScreen() {
               ambient={ambientTaskIds.has(task.id)}
               live={liveByTask.get(task.id)}
               aliveRank={clampAliveRank(aliveRanks.get(task.id))}
+              star={starRides.has(task.id)}
               onPress={handleTaskPress}
             />;
           })}

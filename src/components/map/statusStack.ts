@@ -4,7 +4,7 @@
  * shows, the rest wait behind a "+N" stack button.
  */
 
-export type StatusKey = 'live' | 'show' | 'fright' | 'control';
+export type StatusKey = 'live' | 'show' | 'fright' | 'control' | 'event';
 
 export interface StatusState {
   /** A boss raid, a Rush, a boss map receipt or a saved brawl to confirm. */
@@ -15,6 +15,8 @@ export interface StatusState {
   readonly nightMode: boolean;
   /** Ride Control is available (signed in at a park). */
   readonly control: boolean;
+  /** Shark Events: a chest is ready to open, the event is on, or none (optional so older callers stay the same). */
+  readonly event?: 'ready' | 'on' | null;
 }
 
 /** Most important first: right now beats tonight beats always-on. */
@@ -23,6 +25,8 @@ export function statusOrder(state: StatusState): StatusKey[] {
   if (state.live) ranked.push(['live', 100]);
   if (state.show === 'live') ranked.push(['show', 95]);
   if (state.nightMode) ranked.push(['fright', 90]);
+  if (state.event === 'ready') ranked.push(['event', 98]);
+  else if (state.event) ranked.push(['event', 60]);
   if (state.show === 'teaser') ranked.push(['show', 40]);
   if (state.control) ranked.push(['control', 30]);
   return ranked.sort((a, b) => b[1] - a[1]).map(([key]) => key);
