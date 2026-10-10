@@ -75,8 +75,9 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
   const drag = useSharedValue(0);
   const reveal = useSharedValue(0);
   const closing = useRef(false);
-  // One modal at a time: other dialogs wait while a help sheet is up.
-  useModalLayer(visible, 'show');
+
+  // One modal at a time: other dialogs (like the grown-up gate) wait until the sheet has fully left.
+  useModalLayer(mounted, 'show');
 
   const finishClose = useCallback(() => { closing.current = false; setMounted(false); }, []);
 
