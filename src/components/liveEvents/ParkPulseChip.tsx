@@ -30,8 +30,7 @@ function ParkPulseChip({ pulse }: { readonly pulse: Pulse | null }) {
   return (
     <View style={styles.chip} accessible accessibilityLabel={`${pulse.bucket} sharks playing here${leader ? `. ${leader.name} leads today` : ''}`}>
       <GameIcon name="shark" size={22} />
-      <Text style={styles.text}>{pulse.bucket} here</Text>
-      {leader && <Image source={leader.badge} style={styles.crest} contentFit="contain" />}
+      <Text style={styles.text}>{pulse.bucket} sharks here!</Text>
     </View>
   );
 }

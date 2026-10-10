@@ -11,7 +11,7 @@ import { useEventAmbient } from '../../services/liveEvents/ambient';
  * The twinkle is a UI-thread scale that stops when `paused` (marker parked,
  * off-screen) and under reduced motion.
  */
-function StarRideBadge({ size = 22, paused = false, times = 2 }: { readonly size?: number; readonly paused?: boolean; readonly times?: number }) {
+function StarRideBadge({ size = 30, paused = false, times = 2 }: { readonly size?: number; readonly paused?: boolean; readonly times?: number }) {
   const reduced = useReducedGameMotion();
   const t = useSharedValue(0);
   const ambient = useEventAmbient().ambient; // always called: hooks never sit behind ||
@@ -25,8 +25,10 @@ function StarRideBadge({ size = 22, paused = false, times = 2 }: { readonly size
   const starStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.14 * t.value }, { rotate: `${t.value * 12}deg` }] }));
   return (
     <View style={styles.wrap} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Animated.View style={starStyle}><GameIcon name="star" size={size} /></Animated.View>
-      <View style={styles.tag}><Text style={styles.tagText}>x{times}</Text></View>
+      <Animated.View style={[starStyle, { width: size, height: size, alignItems: 'center', justifyContent: 'center' }]}>
+        <GameIcon name="star" size={size} />
+        <Text style={[styles.tagText, { position: 'absolute', top: size * 0.3 }]}>x{times}</Text>
+      </Animated.View>
     </View>
   );
 }
@@ -36,5 +38,5 @@ export default memo(StarRideBadge);
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center' },
   tag: { marginTop: -5, backgroundColor: BRAND.navy, borderRadius: 7, borderWidth: 1.5, borderColor: BRAND.white, paddingHorizontal: 4, paddingVertical: 0 },
-  tagText: { fontFamily: 'Shark', fontSize: 10, color: BRAND.gold },
+  tagText: { fontFamily: 'Shark', fontSize: 10, color: BRAND.navy },
 });

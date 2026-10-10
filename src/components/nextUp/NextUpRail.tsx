@@ -5,7 +5,9 @@ import { getNextUp, type NextUpAction, type NextUpItem } from '../../api/endpoin
 import { haptic } from '../../gamekit/Haptics';
 import useLivePoll from '../../hooks/useLivePoll';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { Image } from 'expo-image';
 import { BRAND, GameIcon, isGameIconName } from '../../ui';
+import { eventArt } from '../liveEvents/eventArt';
 
 /** Every 3 minutes while the map is focused and awake (the host also refreshes after a chest opens or a sheet closes); slower when the server has nothing. */
 export const NEXT_UP_POLL_MS = 180_000;
@@ -38,7 +40,10 @@ function NextUpRail({ item, onAction }: { readonly item: NextUpItem | null; read
     <Animated.View key={item.kind + item.title} entering={reduced ? undefined : FadeInDown.duration(220)} exiting={reduced ? undefined : FadeOutUp.duration(160)}>
       <Pressable accessibilityRole="button" accessibilityLabel={`Next: ${item.title}. Go.`} onPress={go}
         style={({ pressed }) => [styles.rail, pressed && styles.pressed]}>
-        <View style={styles.iconWell}><GameIcon name={icon} size={30} /></View>
+        <View style={styles.iconWell}>
+          {item.kind.startsWith('event') ? <Image source={eventArt(null).chestClosed} style={{ width: 34, height: 34 }} contentFit="contain" />
+            : <GameIcon name={icon} size={30} />}
+        </View>
         <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
         <View style={styles.go}><Text style={styles.goText}>GO</Text></View>
       </Pressable>

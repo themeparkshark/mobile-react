@@ -5,7 +5,7 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import type { LiveEvent } from '../../api/endpoints/live-events';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { useEventAmbient } from '../../services/liveEvents/ambient';
-import { chipState } from '../../services/liveEvents/model';
+import { chipState, timeLine } from '../../services/liveEvents/model';
 import { BRAND, GameIcon } from '../../ui';
 import { eventArt } from './eventArt';
 
@@ -48,14 +48,15 @@ function EventStatusChip({ event, onPress, inline = false, paused = false, now =
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
       style={({ pressed }) => [styles.pill, inline && styles.inline, s.kind === 'open' && styles.pillReady, pressed && styles.pressed]}>
       <Animated.View style={emblemStyle}>
-        <Image source={art.emblem} style={styles.emblem} contentFit="contain" />
+        <Image source={s.kind === 'open' ? art.chestOpen : art.chestClosed} style={styles.emblem} contentFit="contain" />
+        {s.kind === 'open' && <View style={styles.dot} />}
       </Animated.View>
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
         {s.kind === 'progress' && (
           <View style={styles.barRow}>
             <View style={styles.bar}><View style={[styles.barFill, { width: `${Math.max(4, s.fill * 100)}%` }]} /></View>
-            <Image source={art.chestClosed} style={styles.miniChest} contentFit="contain" />
+            <Text style={styles.ends} numberOfLines={1}>{timeLine(event, now)}</Text>
           </View>
         )}
         {s.kind === 'open' && <Text style={styles.sub} numberOfLines={1}>{s.count === 1 ? 'Chest ready!' : `${s.count} chests ready!`}</Text>}
@@ -64,9 +65,8 @@ function EventStatusChip({ event, onPress, inline = false, paused = false, now =
         )}
         {s.kind === 'upcoming' && <Text style={styles.sub} numberOfLines={1}>{s.line}</Text>}
       </View>
-      {s.kind === 'open'
-        ? <View style={styles.openTag}><Text style={styles.openText}>OPEN</Text></View>
-        : <GameIcon name="arrow" size={18} />}
+      {/* No OPEN button here: the what-now rail owns the one action; the chip says what's ready. */}
+      <GameIcon name="arrow" size={18} />
     </Pressable>
   );
 }
@@ -82,8 +82,10 @@ const styles = StyleSheet.create({
   pressed: { transform: [{ scale: 0.97 }] },
   emblem: { width: 42, height: 42 },
   body: { flex: 1, minWidth: 0 },
-  title: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
-  sub: { fontFamily: 'Knockout', fontSize: 13, color: BRAND.white },
+  title: { fontFamily: 'Shark', fontSize: 12, letterSpacing: 0.3, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
+  sub: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white },
+  ends: { fontFamily: 'Knockout', fontSize: 12, color: '#e4f7ff' },
+  dot: { position: 'absolute', top: 0, right: -2, width: 13, height: 13, borderRadius: 7, backgroundColor: BRAND.red, borderWidth: 2, borderColor: BRAND.white },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   bar: { flex: 1, height: 10, borderRadius: 5, backgroundColor: 'rgba(5,52,110,0.55)', borderWidth: 2, borderColor: BRAND.white, overflow: 'hidden' },
   barFill: { height: '100%', backgroundColor: BRAND.gold },
