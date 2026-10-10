@@ -14,7 +14,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Animated, { FadeIn, ZoomIn, useSharedValue, withDelay, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
+import Animated, { FadeIn, ZoomIn, useSharedValue, withDelay, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
 import { claimParkSet, getPinHome, openMysteryBoxes, pickWithPoints, saveLanyard, storefrontRegion } from '../../api/endpoints/pins';
 import { warmPinImages } from '../pinTrading/pinImageCache';
 import { PickSheet, PinsHelp } from './PinsSheets';
@@ -148,7 +148,8 @@ export default function PinsScreen() {
   useEffect(() => {
     if (still || !ambient || !visible || state !== 'ready') { cancelAnimation(shine); return; }
     shine.value = 0;
-    shine.value = withRepeat(withDelay(5200, withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.quad) })), -1, false);
+    // One slow pass of light over the pins each time the page comes into view (not a loop).
+    shine.value = withDelay(900, withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.quad) }));
     return () => cancelAnimation(shine);
   }, [still, ambient, visible, state, shine]);
 
