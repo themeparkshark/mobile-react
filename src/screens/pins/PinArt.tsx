@@ -8,7 +8,7 @@
  *   chaser, and a "x2" chip for spare copies.
  */
 import { Image } from 'expo-image';
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 import { BRAND, FONT, GameIcon } from '../../ui';
@@ -59,6 +59,8 @@ type Props = {
   readonly tilt?: number;
   /** Hide the corner badge (the shelf already says it, or the tile is tiny). */
   readonly badge?: boolean;
+  /** Silhouette only, no "?" on top (the box odds row: the shape is the picture). The "?" still shows if the art is missing. */
+  readonly plainGhost?: boolean;
   readonly shine?: SharedValue<number>;
   readonly lag?: number;
   readonly lagSpan?: number;
@@ -74,7 +76,8 @@ type Props = {
   readonly finder?: number | null;
 };
 
-function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, tilt = 0, badge = true, shine, lag, lagSpan, surface = 'panel', style, serial, flat, badgeScale = 1, finder }: Props) {
+function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, tilt = 0, badge = true, shine, lag, lagSpan, surface = 'panel', style, serial, flat, badgeScale = 1, finder, plainGhost }: Props) {
+  const [artFailed, setArtFailed] = useState(false);
   const b = badgeFor(kind, tradable);
   const badgeSize = Math.max(16, Math.round(size * 0.34 * badgeScale));
   return (
@@ -86,12 +89,13 @@ function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, til
         // Missing: a soft ghost of the real pin (like the lineup printed on a mystery box), never a solid block.
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <Image source={uri} style={[StyleSheet.absoluteFill, { transform: [{ rotate: `${tilt}deg` }], opacity: 0.42 }]}
-            contentFit="contain" tintColor={chaser ? '#c99a1e' : '#2a5c9a'} cachePolicy="memory-disk" transition={0} />
+            contentFit="contain" tintColor={chaser ? '#c99a1e' : '#2a5c9a'} cachePolicy="memory-disk" transition={0}
+            onError={() => setArtFailed(true)} />
           <Image source={uri} style={[StyleSheet.absoluteFill, { transform: [{ rotate: `${tilt}deg` }], opacity: chaser ? 0.3 : 0.2 }]}
             contentFit="contain" cachePolicy="memory-disk" transition={0} />
-          <View style={styles.qWrap}>
+          {(!plainGhost || artFailed) && <View style={styles.qWrap}>
             <Text maxFontSizeMultiplier={1} style={[styles.q, { fontSize: Math.round(size * 0.34) }, chaser && { color: BRAND.goldLight }]}>?</Text>
-          </View>
+          </View>}
         </View>
       )}
       {badge && owned && b === 'trophy' && (

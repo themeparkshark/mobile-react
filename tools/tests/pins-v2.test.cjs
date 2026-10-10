@@ -158,3 +158,10 @@ test('your numbered gold can go for the board\'s numbered copy of the same pin',
   assert.deepEqual(givablePins(mine, 482, 1).map(p => p.id), [482, 10]);
   assert.deepEqual(givablePins(mine, 482, null).map(p => p.id), [10]);
 });
+
+test('box odds row shows each pin as its real picture or silhouette, no "?" placeholders unless the art fails', () => {
+  const card = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/pins/MysteryCard.tsx'), 'utf8');
+  const art = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/pins/PinArt.tsx'), 'utf8');
+  require('node:assert/strict').equal((card.match(/plainGhost \/>/g) || []).length, 2);
+  require('node:assert/strict').match(art, /\(!plainGhost \|\| artFailed\) &&/);
+});

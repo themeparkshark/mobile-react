@@ -59,7 +59,7 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
               style={[styles.oddsCell, { width: size + 9 }]}>
               {isFresh && <View style={[styles.freshRing, { width: size + 8, height: size + 8, borderRadius: (size + 8) / 2 }]} />}
               <PinTile uri={p.icon_url} size={size} owned={p.owned} kind={p.kind} tradable={p.tradable} spares={p.spares}
-                badge={false} tilt={((i * 29) % 9) - 4} flat shine={undefined} />
+                badge={false} tilt={((i * 29) % 9) - 4} flat shine={undefined} plainGhost />
               <View style={styles.pctRow}><View style={styles.pctDot} /><Text maxFontSizeMultiplier={1.3} style={styles.pct}>{formatChance(p.chance_bp)}</Text></View>
             </Animated.View>
           );
@@ -68,7 +68,7 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
       {chaser && (
         <View style={[styles.chaserSlot, compact && { paddingVertical: 4 }]}>
           <PinTile uri={chaser.icon_url} size={size + 10} owned={chaser.owned} kind={chaser.kind} tradable={chaser.tradable} chaser
-            badge={false} serial={chaser.serial} shine={chaser.owned ? shine : undefined} lag={0.7} lagSpan={0.8} />
+            badge={false} serial={chaser.serial} shine={chaser.owned ? shine : undefined} lag={0.7} lagSpan={0.8} plainGhost />
           {/* One number on screen (the meter below shows the guarantee); the guarantee is still read out and in the help. */}
           <View style={{ flex: 1 }} accessible accessibilityLabel={`Gold chaser, ${formatChance(chaser.chance_bp)} a box${pity ? `, always by box ${pity}` : ''}`}>
             <Text maxFontSizeMultiplier={1.3} style={styles.chaserLabel}>Gold chaser</Text>
