@@ -13,7 +13,8 @@ export type GlossaryKey =
   | 'keys' | 'swords' | 'xp' | 'coin_levels' | 'limited_coins' | 'ride_challenge'
   | 'lineplay' | 'ride_passport' | 'coin_guide' | 'adventure_ticket' | 'park_goal'
   | 'stamps' | 'sets' | 'pins' | 'home_finds' | 'crew' | 'standings' | 'daily_chest'
-  | 'day_streak' | 'travel_mode' | 'ride_control' | 'vip' | 'supplies' | 'bonus_ads';
+  | 'day_streak' | 'travel_mode' | 'ride_control' | 'vip' | 'supplies' | 'bonus_ads'
+  | 'map_spin';
 
 export interface GlossaryTerm {
   readonly key: GlossaryKey;
@@ -128,6 +129,10 @@ const TERMS: readonly GlossaryTerm[] = [
   { key: 'bonus_ads', label: 'Bonus ads', icon: 'play', topic: 'shop',
     what: 'Short ads you can skip. Watch one for a small bonus.',
     earn: 'Tap Watch when you see one. Skipping costs nothing.' },
+  // Motion stream (claude/fb-motion): the map's shark-finder button. Revert this commit if motion is left out.
+  { key: 'map_spin', label: 'Map Spin', icon: 'shark', topic: 'basics',
+    what: 'Spins the map with you, or keeps it still.',
+    earn: 'Tap the round button to switch. Map moved away? Tap it again.' },
 ];
 
 export const LOCAL_GLOSSARY: Readonly<Record<GlossaryKey, GlossaryTerm>> =
