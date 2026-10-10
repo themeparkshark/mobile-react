@@ -42,8 +42,8 @@ export default function MemberFlex({ inventory, frame, vip = false, size = 56, v
         )}
         {ring && <Image source={ring} style={[StyleSheet.absoluteFill, { width: size, height: size }]} contentFit="contain" />}
         {vip && (
-          <View style={[st.vip, { width: card ? 30 : 20, height: card ? 30 : 20, borderRadius: card ? 15 : 10 }]}>
-            <GameIcon name="member" size={card ? 20 : 13} />
+          <View style={[st.vip, { width: card ? 34 : 24, height: card ? 34 : 24, borderRadius: card ? 17 : 12 }]}>
+            <GameIcon name="member" size={card ? 24 : 20} />
           </View>
         )}
       </View>
@@ -53,7 +53,7 @@ export default function MemberFlex({ inventory, frame, vip = false, size = 56, v
 }
 
 const st = StyleSheet.create({
-  vip: { position: 'absolute', right: 0, bottom: 0, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.gold,
+  vip: { position: 'absolute', right: -2, bottom: -2, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: '#ffffff',
     alignItems: 'center', justifyContent: 'center' },
   caption: { marginTop: 6, fontFamily: FONT.display, fontSize: 16, color: '#ffffff', textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
 });

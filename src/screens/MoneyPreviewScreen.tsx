@@ -37,7 +37,7 @@ export default function MoneyPreviewScreen({ route }: { route?: { params?: { scr
         <ScrollView contentContainerStyle={s.scroll}>
           <Text style={s.label}>Standings rows</Text>
           {rows.map(r => (
-            <View key={r.rank} style={s.row}>
+            <View key={r.rank} style={[s.row, r.vip && { borderLeftWidth: 6, borderLeftColor: BRAND.gold }]}>
               <Text style={s.rank}>{r.rank}</Text>
               <MemberFlex inventory={look} frame={r.frame} vip={r.vip} size={56} />
               <Text style={s.name}>{r.name}</Text>

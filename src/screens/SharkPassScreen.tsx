@@ -469,7 +469,7 @@ export default function SharkPassScreen() {
                   </View>
                   <ProgressBar value={progress.points_into_tier / season.points_per_tier} reduced={reduced} />
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.points}>
-                    {step >= steps ? 'You finished the season!' : `${into} / ${perStep} points to step ${step + 1}`}
+                    {step >= steps ? 'You finished the season!' : into === 0 ? `${perStep} points to step ${step + 1}` : `${into} / ${perStep} points to step ${step + 1}`}
                   </Text>
                 </View>
               </View>
@@ -491,7 +491,7 @@ export default function SharkPassScreen() {
                 // The season's top prize, always in view: tap to see it behind your own shark.
                 <Pressable onPress={() => setTryOn({ reward: progress.top_prize as SetPiece['reward'], step: steps, row: 'pass', owned: false })}
                   accessibilityRole="button" accessibilityLabel={`Top prize at step ${steps}: ${rewardWords(progress.top_prize)}. Tap to try it.`} style={s.topChip}>
-                  <GameIcon name="star" size={18} />
+                  <RewardPicture reward={progress.top_prize} size={24} />
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.topChipText} numberOfLines={1}>{`Step ${steps}: ${rewardWords(progress.top_prize)}`}</Text>
                 </Pressable>
               )}
@@ -711,7 +711,10 @@ export default function SharkPassScreen() {
                           }}>
                           <View style={[s.goldBtnBox, (!!goldBusy || !g.ready) && { opacity: 0.6 }]}>
                             <Text maxFontSizeMultiplier={1.1} style={s.goldBtnText}>{goldBusy === g.art ? '…' : 'Make gold'}</Text>
-                            <Text maxFontSizeMultiplier={1.1} style={s.goldBtnPrice}>{`${commas(state.cosmetics?.gold.coins ?? 0)} coins`}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                              <GameIcon name="coins" size={14} />
+                              <Text maxFontSizeMultiplier={1.1} style={s.goldBtnPrice}>{commas(state.cosmetics?.gold.coins ?? 0)}</Text>
+                            </View>
                           </View>
                         </Pressable>
                       )}
@@ -835,7 +838,8 @@ function TopRing() {
 function ProgressBar({ value, reduced }: { value: number; reduced: boolean }) {
   const w = useSharedValue(0);
   useEffect(() => { w.value = reduced ? value : withTiming(Math.max(0, Math.min(1, value)), { duration: 700, easing: Easing.out(Easing.cubic) }); }, [value, reduced, w]);
-  const fill = useAnimatedStyle(() => ({ width: `${w.value * 100}%` }));
+  // A small gold stub at 0 so an empty bar never reads as broken.
+  const fill = useAnimatedStyle(() => ({ width: `${Math.max(0.04, w.value) * 100}%` }));
   return (
     <View style={s.bar}><Animated.View style={[s.barFill, fill]} /></View>
   );
@@ -912,10 +916,10 @@ const s = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 22, borderWidth: 4, borderColor: '#ffffff', backgroundColor: '#0b2f63', padding: 12, overflow: 'hidden' },
   emblem: { width: 96, height: 96 },
   heroStage: { width: 128, height: 150, alignItems: 'center', justifyContent: 'flex-end' },
-  heroShadow: { position: 'absolute', bottom: 6, width: 86, height: 14, borderRadius: 43, backgroundColor: 'rgba(5,40,80,0.35)' },
-  heroPin: { position: 'absolute', right: -8, bottom: 24, width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.9)',
+  heroShadow: { position: 'absolute', bottom: 6, width: 96, height: 16, borderRadius: 48, backgroundColor: 'rgba(255,255,255,0.35)' },
+  heroPin: { position: 'absolute', right: -8, bottom: 24, width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: BRAND.gold },
-  tryTag: { position: 'absolute', bottom: -2, alignSelf: 'center', backgroundColor: BRAND.navy, borderRadius: 8, paddingHorizontal: 6, borderWidth: 2, borderColor: '#ffffff' },
+  tryTag: { position: 'absolute', top: 0, right: 0, backgroundColor: BRAND.gold, borderRadius: 8, paddingHorizontal: 6, borderWidth: 2, borderColor: '#ffffff', transform: [{ rotate: '6deg' }] },
   tryTagText: { fontFamily: FONT.display, fontSize: 10, color: '#ffffff' },
   heroBadge: { position: 'absolute', top: -4, left: -6, width: 38, height: 38 },
   season: { fontFamily: FONT.display, fontSize: 24, color: BRAND.gold, textShadowColor: '#5a3a00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
@@ -934,12 +938,12 @@ const s = StyleSheet.create({
   twinText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.gold, letterSpacing: 0.5 },
   twinCell: { width: 56, height: 56, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', opacity: 0.85 },
   twinLock: { position: 'absolute', top: -6, right: -6 },
-  nextPrize: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: 8 },
-  nextCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 3, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center' },
+  nextPrize: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, backgroundColor: '#123f80', borderRadius: 16, padding: 8, borderWidth: 3, borderColor: '#ffffff', borderBottomWidth: 5, borderBottomColor: '#061f45' },
+  nextCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#0b2f63', borderWidth: 4, borderColor: '#f5c430', alignItems: 'center', justifyContent: 'center' },
   nextKicker: { fontFamily: FONT.display, fontSize: 12, color: BRAND.gold, letterSpacing: 0.6 },
   nextPrizeText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   readyNow: { fontFamily: FONT.display, color: '#7dffb0' },
-  vipLine: { fontFamily: FONT.display, fontSize: 14, color: BRAND.gold, textAlign: 'center', marginTop: 6 },
+  vipLine: { fontFamily: FONT.display, fontSize: 14, color: BRAND.gold, textAlign: 'center', marginTop: 6, alignSelf: 'center', borderWidth: 2, borderColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2, overflow: 'hidden' },
   trackHead: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: -6 },
   rowLabelFree: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   rowLabelPass: { fontFamily: FONT.display, fontSize: 15, color: BRAND.gold },
@@ -1002,7 +1006,7 @@ const s = StyleSheet.create({
   grownUpText: { flex: 1, fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff', lineHeight: 18 },
   nextWins: { fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff' },
   topChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginHorizontal: 12, marginTop: 4, paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 999, backgroundColor: 'rgba(255,211,77,0.18)', borderWidth: 2, borderColor: BRAND.gold },
+    borderRadius: 999, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.gold },
   topChipText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.gold },
   freeSet: { fontFamily: FONT.display, fontSize: 15, color: BRAND.gold },
   topRing: { position: 'absolute', top: -4, left: -4, right: -4, bottom: -4, borderRadius: 18, borderWidth: 3, borderColor: BRAND.gold },
@@ -1011,8 +1015,8 @@ const s = StyleSheet.create({
   frameName: { flex: 1, fontFamily: FONT.display, fontSize: 16, color: '#ffffff' },
   frameSub: { fontFamily: FONT.body, fontSize: 13, color: '#e2f6ff' },
   offBtn: { backgroundColor: 'rgba(255,255,255,0.85)' },
-  goldGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
-  goldCell: { width: 98, alignItems: 'center', gap: 4, padding: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 2, borderColor: 'rgba(255,211,77,0.5)' },
+  goldGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' },
+  goldCell: { width: '48%', alignItems: 'center', gap: 4, padding: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 2, borderColor: 'rgba(255,211,77,0.5)' },
   goldName: { fontFamily: FONT.body, fontSize: 12, color: '#ffffff', textAlign: 'center' },
   goldBtnBox: { minHeight: 44, minWidth: 84, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.gold, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },
   goldBtnText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy },

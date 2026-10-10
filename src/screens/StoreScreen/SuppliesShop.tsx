@@ -306,7 +306,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
 
       {drops.length > 0 && (
         <View style={st.drops} accessible accessibilityLabel={`New gear in the Shark Shop: ${drops.join(', ')}.`}>
-          <GameIcon name="new" size={26} />
+          <GameIcon name="shark" size={30} />
           <View style={{ flex: 1 }}>
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.dropsHead}>NEW GEAR IN THE SHARK SHOP</Text>
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.dropsText}>{drops.join('\n')}</Text>
@@ -425,8 +425,8 @@ function Notice({ icon, title, body, action }: {
 }
 
 const st = StyleSheet.create({
-  drops: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 16, backgroundColor: 'rgba(5,40,90,0.55)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
-  dropsHead: { fontFamily: FONT.display, fontSize: 14, color: '#ffd34d' },
+  drops: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 16, backgroundColor: BRAND.navy, borderWidth: 3, borderColor: BRAND.gold },
+  dropsHead: { fontFamily: FONT.display, fontSize: 16, color: '#ffd34d' },
   dropsText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff', lineHeight: 22 },
   center: { flex: 1, justifyContent: 'center' },
   scroll: { padding: 14, paddingBottom: 48, gap: 14 },

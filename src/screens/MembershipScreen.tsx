@@ -419,6 +419,15 @@ export function recapLines(recap: NonNullable<VipPlanTime['recap']>): string[] {
   return lines;
 }
 
+/** The real item icon for a recap line (coin, ticket, energy, pin, no-ad). */
+function recapIcon(line: string): GameIconName {
+  if (/coins/.test(line)) return 'coins';
+  if (/ticket/.test(line)) return 'ticket';
+  if (/energy/.test(line)) return 'energy';
+  if (/^Your /.test(line)) return 'gift';
+  return 'member';
+}
+
 function RecapCard({ recap }: { recap: NonNullable<VipPlanTime['recap']> }) {
   const lines = recapLines(recap);
   if (!lines.length) return null;
@@ -426,7 +435,7 @@ function RecapCard({ recap }: { recap: NonNullable<VipPlanTime['recap']> }) {
     <Animated.View entering={FadeInUp.delay(300)} style={s.recap} accessible accessibilityLabel={`This month VIP got you: ${lines.join(', ')}.`}>
       <Text style={s.recapHead}>THIS MONTH VIP GOT YOU</Text>
       {lines.map(l => (
-        <View key={l} style={s.grownUpRow}><GameIcon name="check" size={18} /><Text style={s.recapLine}>{l}</Text></View>
+        <View key={l} style={s.grownUpRow}><GameIcon name={recapIcon(l)} size={22} /><Text style={s.recapLine}>{l}</Text></View>
       ))}
     </Animated.View>
   );

@@ -20,10 +20,10 @@ export default function BundleCard({ product, price, worth, busy, disabled, onBu
         accessibilityLabel={`${product.title}${product.limit === 'once' ? ', just once' : ''}. ${price ? `${price}, real money, a grown-up buys it.` : ''}${worth ? ` Worth ${worth.worth} in regular packs.` : ''}`}>
         <Band text={band} color={art === 'chest' ? 'gold' : 'blue'} size={compact ? 15 : 18} />
         <View style={st.body}>
-          <View style={[st.art, compact && st.artCompact]}><PackArt art={art} size={compact ? 84 : 118} /></View>
+          <View style={[st.art, compact && st.artCompact]}><PackArt art={art} size={compact ? 92 : 142} /></View>
           <View style={{ flex: 1, gap: 6 }}>
             {/* Kid words first; the grown-up's number small under it (psychology + kids UX r4). */}
-            {worth && <Text maxFontSizeMultiplier={MAX_FONT} style={[st.worth, compact && st.worthCompact]}>Lots more than buying them one by one</Text>}
+            {worth && <Text maxFontSizeMultiplier={MAX_FONT} style={[st.worth, compact && st.worthCompact]} numberOfLines={2}>{compact ? 'Way more than one by one' : 'Way more than buying them one by one'}</Text>}
             {worth && (
               <Text maxFontSizeMultiplier={MAX_FONT} style={st.kid}>
                 {`Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''} in regular packs`}
@@ -40,9 +40,9 @@ export default function BundleCard({ product, price, worth, busy, disabled, onBu
 
 const st = StyleSheet.create({
   body: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 10, alignSelf: 'stretch' },
-  art: { width: 128, height: 118, alignItems: 'center', justifyContent: 'center' },
+  art: { width: 150, height: 140, alignItems: 'center', justifyContent: 'center' },
   artCompact: { width: 92, height: 88 },
   worth: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   worthCompact: { fontSize: 16 },
-  kid: { fontFamily: FONT.body, fontSize: 14, color: '#ffffff' },
+  kid: { fontFamily: FONT.display, fontSize: 15, color: '#e2f6ff' },
 });
