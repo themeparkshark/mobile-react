@@ -29,6 +29,8 @@ import { BRAND, FONT, gameAlert, GameButton, GameIcon, OUTLINE, RADIUS, SharkLoa
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { PageWash } from '../pinTrading/PinTradeParts';
 import LegacyPinPacks from '../PinCollectionsScreen';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import PinsLanding, { type Landing } from './PinsLanding';
 import BoxReveal, { preloadRevealAudio, type RevealPull } from './BoxReveal';
 import HuntSheet from './HuntSheet';
 import { Lanyard } from './Lanyard';
@@ -53,11 +55,17 @@ function TabButton({ label, icon, active, badge, onPress }: { label: string; ico
   );
 }
 
+/** The Pins header bar under the status bar (back, title, coins), for the landing pins' target. */
+const HEADER_H = 58;
+
 export default function PinsScreen() {
   const { player, refreshPlayer } = useContext(AuthContext);
   const still = useUiReducedMotion();
   const focused = useIsFocused();
   const { width } = useWindowDimensions();
+  const winW = width;
+  const insetsTop = useSafeAreaInsets().top;
+  const [landing, setLanding] = useState<Landing[]>([]);
   const [home, setHome] = useState<PinHome | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error' | 'legacy'>('loading');
   const [tab, setTab] = useState<Tab | null>(null);
@@ -259,11 +267,25 @@ export default function PinsScreen() {
       setFresh({ seriesId: r.seriesId, ids });
       const y = cardY.current[r.seriesId];
       if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y + listY.current - 80), animated: !still });
+      // The new pins fly from the stage into their slots on the card (it is scrolling to ~80 pt below the header).
+      if (!still && y !== undefined) {
+        const regular = next.pins.filter(p => !p.is_chaser);
+        const slotW = (winW - 64) / Math.max(1, regular.length);
+        setLanding(shown.filter(p => p.icon_url && !p.duplicate).slice(0, 5).map((p, k) => {
+          const at = regular.findIndex(q => q.item_id === p.item_id);
+          return {
+            key: `${p.item_id}-${k}`, icon: p.icon_url as string,
+            // The chaser lands on its row under the pins; regular pins in their own slot.
+            toX: at >= 0 ? 32 + slotW * (at + 0.5) : winW * 0.18,
+            toY: insetsTop + HEADER_H + 80 + (at >= 0 ? 170 : 245),
+          };
+        }));
+      }
       later(2600, () => setFresh(f => (f && f.ids === ids ? null : f)));
     } else if (r?.variant === 'catch') {
       void load(true);
     }
-  }, [reveal, load, home, later]);
+  }, [reveal, load, home, later, still, winW, insetsTop]);
 
   const onPin = useCallback((_set: ParkSet, _pin: PinRow) => { queueHaptic('tapLight', 1); }, []);
 
@@ -464,6 +486,7 @@ export default function PinsScreen() {
           </ScrollView>
         )}
       </View>
+      {landing.length > 0 && <PinsLanding pins={landing} onDone={() => setLanding([])} />}
       {reveal && (
         <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant} waiting={reveal.waiting} spend={reveal.spend}
           tagFor={reveal.tag} subtitleFor={reveal.subtitle}
