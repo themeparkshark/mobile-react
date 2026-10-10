@@ -254,11 +254,18 @@ function ClimbScene({ t, w, h }: SceneProps) {
   });
   const rise = (dir: 1 | -1, v: number) => {
     'worklet';
-    const k = interpolate(v, [0.46, 0.58, 0.63, 0.9, 0.98], [0, 1.08, 1, 1, 0], 'clamp');
+    // The climb holds to the end of the loop (no slide back), so every paused frame matches its ranks.
+    const k = interpolate(v, [0.46, 0.58, 0.63], [0, 1.08, 1], 'clamp');
     return dir * k * step;
   };
-  const youStyle = useAnimatedStyle(() => ({ transform: [{ translateY: rise(-1, t.value) }, { scale: interpolate(t.value, [0.44, 0.52, 0.62], [1, 1.04, 1], 'clamp') }] }));
-  const midStyle = useAnimatedStyle(() => ({ transform: [{ translateY: rise(1, t.value) }] }));
+  // Each loop fades the board in at the start and out at the end, instead of rewinding it.
+  const fade = (v: number) => {
+    'worklet';
+    return interpolate(v, [0, 0.05, 0.93, 1], [0, 1, 1, 0], 'clamp');
+  };
+  const topStyle = useAnimatedStyle(() => ({ opacity: fade(t.value) }));
+  const youStyle = useAnimatedStyle(() => ({ opacity: fade(t.value), transform: [{ translateY: rise(-1, t.value) }, { scale: interpolate(t.value, [0.44, 0.52, 0.62], [1, 1.04, 1], 'clamp') }] }));
+  const midStyle = useAnimatedStyle(() => ({ opacity: fade(t.value), transform: [{ translateY: rise(1, t.value) }] }));
   const upChip = useAnimatedStyle(() => ({
     opacity: interpolate(t.value, [0.6, 0.66, 0.86, 0.9], [0, 1, 1, 0], 'clamp'),
     transform: [{ translateY: rise(-1, t.value) }, { scale: pop(t.value, 0.6, 0.1) || 0.001 }],
@@ -267,7 +274,7 @@ function ClimbScene({ t, w, h }: SceneProps) {
   const countStyle = [styles.count, { fontSize: rowH * 0.5 }];
   return (
     <>
-      <Abs x={x0} y={y0} w={bw} h={rowH}>
+      <Abs x={x0} y={y0} w={bw} h={rowH} style={topStyle}>
         <MiniRow width={bw} height={rowH} face={2} name="TOONS" rank={<Text allowFontScaling={false} style={rankStyle}>3</Text>}><Text allowFontScaling={false} style={countStyle}>9</Text></MiniRow>
       </Abs>
       <Abs x={x0} y={y0 + step} w={bw} h={rowH} style={midStyle}>
