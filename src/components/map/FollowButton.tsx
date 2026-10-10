@@ -20,8 +20,8 @@ export const FOLLOW_COPY = {
   away: 'Tap to find your shark',
   noCompass: 'No compass here',
   hintTitle: 'Map spin',
-  hintBody: 'Tap me to stop the map spinning.',
-  hintBodyNorth: 'Tap me to spin the map with you.',
+  hintBody: 'The map spins with you. Tap to keep it still.',
+  hintBodyNorth: 'The map stays still. Tap to spin it with you.',
 } as const;
 
 type PillKey = 'heading' | 'north' | 'noCompass' | 'away';
@@ -54,7 +54,8 @@ function LocatorFace({ facing }: { readonly facing: boolean }) {
           <Path d="M22 24 L15 10.5 A13 13 0 0 1 29 10.5 Z" fill={BRAND.sky} />
         </>
       )}
-      <Circle cx={22} cy={28} r={12} fill={BRAND.white} stroke={BRAND.navy} strokeWidth={2.4} />
+      {/* A map pin (round head, point at the bottom): "where you are on the map", unlike the character button. */}
+      <Path d="M22 41.5 C19 37 10 33 10 26 A12 12 0 0 1 34 26 C34 33 25 37 22 41.5 Z" fill={BRAND.white} stroke={BRAND.navy} strokeWidth={2.4} strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -194,10 +195,11 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
                   <Circle cx={8} cy={10.5} r={1.3} fill={BRAND.navy} />
                 </Svg>
               ) : (
-                // A view cone: the map follows the way you face.
+                // One chunky arrow circling a little map: the map spins.
                 <Svg width={17} height={17} viewBox="0 0 17 17">
-                  <Path d="M8.5 13.5 L2.4 3.6 A9 9 0 0 1 14.6 3.6 Z" fill={BRAND.white} stroke={BRAND.white} strokeWidth={1.2} strokeLinejoin="round" />
-                  <Circle cx={8.5} cy={13.6} r={2.4} fill={BRAND.gold} stroke={BRAND.white} strokeWidth={1.2} />
+                  <Path d="M5.6 5.6 H11.4 V11.4 H5.6 Z" fill={BRAND.gold} stroke={BRAND.white} strokeWidth={1.4} strokeLinejoin="round" />
+                  <Path d="M14.6 8.5 A6.1 6.1 0 1 1 11.6 3.2" stroke={BRAND.white} strokeWidth={2.4} fill="none" strokeLinecap="round" />
+                  <Path d="M10.2 0.6 L14.9 2.6 L11.6 6.3 Z" fill={BRAND.white} stroke={BRAND.white} strokeWidth={0.8} strokeLinejoin="round" />
                 </Svg>
               )}
             </Reanimated.View>
@@ -216,8 +218,8 @@ const styles = StyleSheet.create({
   north: { backgroundColor: BRAND.cream },
   away: { backgroundColor: BRAND.gold, borderBottomColor: BRAND.navy },
   ring: { position: 'absolute', left: 0, top: 0, width: 54, height: 54, borderRadius: 27, borderWidth: 4, borderColor: BRAND.gold },
-  // Centered on the ring (ring center at 22.5, 27.5 inside the border).
-  ringShark: { position: 'absolute', width: 26, height: 26, left: 9.5, top: 12.5 },
+  // Centered in the pin head (22.5, 25.5 inside the border).
+  ringShark: { position: 'absolute', width: 24, height: 24, left: 10.5, top: 12 },
   northRing: { position: 'absolute', left: -4.5, top: -4.5, width: 54, height: 54 },
   gloss: { position: 'absolute', left: 8, top: 4, width: 22, height: 9, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.45)', transform: [{ rotate: '-18deg' }] },
   sharkBox: { width: 40, height: 40 },
@@ -233,6 +235,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 2.5, borderRightWidth: 2.5, borderColor: BRAND.navy, transform: [{ rotate: '45deg' }] },
   hint: { marginTop: 0, height: 'auto', width: 210, paddingVertical: 8, borderRadius: 14, backgroundColor: BRAND.cream },
   hintTail: { top: 20, backgroundColor: BRAND.cream },
-  hintTitle: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
+  hintTitle: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.navy },
   hintBody: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, color: BRAND.navySoft },
 });
