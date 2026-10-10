@@ -60,7 +60,9 @@ import StreakFlame from '../components/retention/StreakFlame';
 import useOwnStreak from '../services/retention/useOwnStreak';
 
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
-const STAGE_H = Math.round(Math.max(270, Math.min(315, Dimensions.get('window').height * 0.33)));
+// Short phones (iPhone SE, 667 pt) get a 230 pt stage so the Shop / Stamp Book / Pins labels sit clear of the center compass at rest.
+const WIN_H = Dimensions.get('window').height;
+const STAGE_H = Math.round(Math.max(WIN_H < 700 ? 230 : 270, Math.min(315, WIN_H * 0.33)));
 
 export default function ProfileScreen() {
   const isProfilePreview = __DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1';
