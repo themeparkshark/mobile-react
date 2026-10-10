@@ -1,8 +1,11 @@
 /**
- * A sticker slot in the book: the rarity frame and gems, the item art (or a
- * dark silhouette), the name underneath, an "x3" badge from two copies up,
- * a shimmer sweep on found
- * Legendaries, and a one-time flip from silhouette to color for a new find.
+ * A sticker in the album. Found: a bright white sticker in its rarity frame,
+ * the art in full color, a "+2" badge for extra copies, a shimmer sweep on
+ * Legendaries, and a one-time flip from shape to color for a new find.
+ * Still to find: an empty slot printed in the album (dashed edge, faded
+ * shape), so found and missing read apart at arm's length. The rarity lives
+ * on the group heading above the row, so tiles carry no gems and no names
+ * (the name is on the card a tap opens and in the VoiceOver label).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
@@ -10,12 +13,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
+  Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming,
 } from 'react-native-reanimated';
-import { BRAND, GameIcon } from '../../ui';
+import { playSfx } from '../../gamekit/SFX';
+import * as Haptics from '../../helpers/haptics';
+import { BRAND, GameIcon, SHADOW } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { GIFT, itemArt, SILHOUETTE, SpringPress } from './DexParts';
-import { RarityGems, rarityLook, TilePanel } from './dexLook';
+import { GIFT, itemArt, SpringPress } from './DexParts';
+import { SLOT_COLORS } from './BookParts';
+import { SHEEN, sweepAt } from './bookClock';
+import { rarityLook } from './dexLook';
 import type { DexItem } from './dexModel';
 
 // New finds flip once per device; the ids are remembered here.
@@ -30,23 +37,45 @@ function seenIds(): Promise<Set<number>> {
     .then(set => { seen = set; return set; });
   return loading;
 }
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function markSeen(id: number) {
   void seenIds().then(set => {
     if (set.has(id)) return;
     set.add(id);
-    void AsyncStorage.setItem(SEEN_KEY, JSON.stringify([...set].slice(-400))).catch(() => undefined);
+    // One write per batch of new finds, not one per tile.
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void AsyncStorage.setItem(SEEN_KEY, JSON.stringify([...set].slice(-400))).catch(() => undefined);
+    }, 400);
   });
 }
+// Several new finds on one page flip one after another (120 ms apart) with one pop and one haptic for the group.
+let flipQueue = 0;
+let lastFlipAt = 0;
+function nextFlipDelay(): { delay: number; lead: boolean } {
+  const now = Date.now();
+  if (now - lastFlipAt > 900) flipQueue = 0;
+  lastFlipAt = now;
+  const slot = flipQueue;
+  flipQueue += 1;
+  return { delay: 250 + slot * 120, lead: slot === 0 };
+}
 
-export const ItemTile = memo(function ItemTile({ item, width, onPress }: {
+/** Height of a tile row: the sticker plus its one-line name. */
+export const tileHeight = (width: number) => width + NAME_H;
+const NAME_H = 40;
+
+export const ItemTile = memo(function ItemTile({ item, width, onPress, slot = 0 }: {
   readonly item: DexItem; readonly width: number; readonly onPress: (item: DexItem) => void;
+  /** The find's number in its set (shown on a missing slot's plate: "#14"). */
+  readonly slot?: number;
 }) {
   const reduced = useUiReducedMotion();
   const look = rarityLook(item.rarity);
   const [artFailed, setArtFailed] = useState(false);
   const [flipping, setFlipping] = useState(false);
   const turn = useSharedValue(0);
-  const shine = useSharedValue(-1);
 
   // FlashList recycles this cell for other items: drop every per-item state on a new id.
   useEffect(() => {
@@ -60,89 +89,143 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress }: {
     if (!item.isNew || !item.found || reduced) return;
     let live = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let flipTimer: ReturnType<typeof setTimeout> | null = null;
     void seenIds().then(set => {
       if (!live || set.has(item.id)) return;
       setFlipping(true);
+      const { delay, lead } = nextFlipDelay();
       turn.value = 0;
-      turn.value = withDelay(250, withTiming(1, { duration: 620, easing: Easing.out(Easing.back(1.4)) }));
-      timer = setTimeout(() => { if (live) setFlipping(false); }, 1000);
+      turn.value = withDelay(delay, withTiming(1, { duration: 620, easing: Easing.out(Easing.back(1.4)) }));
+      // The pop lands as the first sticker turns its face (about the 90 degree point).
+      if (lead) {
+        flipTimer = setTimeout(() => {
+          if (!live) return;
+          playSfx('ui.select', 0.55);
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+        }, delay + 230);
+      }
+      timer = setTimeout(() => { if (live) setFlipping(false); }, delay + 760);
       markSeen(item.id);
     });
     return () => {
       live = false;
       if (timer) clearTimeout(timer);
+      if (flipTimer) clearTimeout(flipTimer);
       setFlipping(false);
     };
   }, [item.id, item.isNew, item.found, reduced, turn]);
 
-  // Legendary shimmer every ~3.5 s while the tile is mounted (the list unmounts off-screen tiles).
-  useEffect(() => {
-    if (item.rarity < 5 || !item.found || reduced) { cancelAnimation(shine); shine.value = -1; return; }
-    // Every 3 s: a wide bright sweep, and the gold rim pulses with it.
-    shine.value = withRepeat(withSequence(withTiming(-1, { duration: 0 }), withDelay(2100, withTiming(1, { duration: 900 }))), -1, false);
-    return () => cancelAnimation(shine);
-  }, [item.rarity, item.found, reduced, shine]);
+  // A sheen that says "rare": Rare every ~7 s, Epic every ~5 s, Legendary every 3 s with its gold rim pulse.
+  // Off while the screen is covered, and with Reduce Motion.
+  // One page clock drives every sweep (bookClock.SHEEN); each sticker reads it at its own phase, so a row of
+  // rare finds never flashes in sync. Legendary sweeps twice per period.
+  // The sweep lives in its own child, mounted only on rare stickers: common tiles never touch the clock, and the
+  // clock itself stops (no frames) while the page is covered (useBookClocks).
+  const sheen = item.found && item.rarity >= 3 && !reduced;
 
-  const flipStyle = useAnimatedStyle(() => (flipping ? {
-    transform: [{ perspective: 600 }, { rotateY: `${interpolate(turn.value, [0, 0.5, 1], [0, 90, 0])}deg` }],
-  } : {}));
+  // Always returns the transform (0 deg when idle), so a recycled cell never keeps a half-turned tilt.
+  const flipStyle = useAnimatedStyle(() => ({
+    transform: [{ perspective: 600 }, { rotateY: `${flipping ? interpolate(turn.value, [0, 0.5, 1], [0, 90, 0]) : 0}deg` }],
+  }));
   const colorStyle = useAnimatedStyle(() => ({ opacity: flipping ? (turn.value >= 0.5 ? 1 : 0) : 1 }));
   const shadowStyle = useAnimatedStyle(() => ({ opacity: flipping && turn.value < 0.5 ? 1 : 0 }));
-  const shineStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shine.value * width * 1.4 }, { rotate: '20deg' }] }));
-  const rimStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(shine.value) * 1.4) }));
 
   const art = artFailed ? GIFT : itemArt(item);
-  const artSize = width * 0.7;
+  const artSize = width * (item.found ? 0.72 : 0.66);
   const label = item.found
-    ? `${item.name}, ${look.label}${item.caught > 1 ? `, caught ${item.caught} times` : ''}`
-    : `Missing: ${item.name}, ${look.label}`;
+    ? `${item.name}, ${look.label}, found${item.spares > 0 ? `, ${item.spares} extra` : ''}${item.isNew ? ', new' : ''}`
+    : `${item.name}, ${look.label}, still to find`;
+  // A die-cut sticker sits a hair off straight (from its id, so it never changes): an album, not a spreadsheet.
+  const tilt = item.found && !reduced ? (((item.id * 7) % 5) - 2) * 1.5 : 0;
   return (
-    <SpringPress onPress={() => onPress(item)} accessibilityLabel={label} style={{ width, marginBottom: 10 }}>
+    <SpringPress onPress={() => onPress(item)} accessibilityLabel={label} accessibilityHint="Double-tap to see it." style={{ width, height: tileHeight(width) }}>
       <Animated.View style={flipStyle}>
-        <TilePanel key={item.id} rarity={item.rarity} found={item.found} style={{ width, height: width, justifyContent: 'center' }}>
-          <Animated.View style={[StyleSheet.absoluteFill, styles.center, colorStyle]}>
+        {item.found ? (
+          <View style={[styles.sticker, { width, height: width, transform: [{ rotate: `${tilt}deg` }] }]}>
+            <View style={[styles.stickerFace, { borderColor: look.frame }, sheen && styles.clip]}>
+              <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(5,52,110,0.07)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+              <Animated.View style={[StyleSheet.absoluteFill, styles.center, colorStyle]}>
+                <Image source={art} contentFit="contain" allowDownscaling recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
+                  style={{ width: artSize, height: artSize }} />
+              </Animated.View>
+              {flipping && (
+                <Animated.View style={[StyleSheet.absoluteFill, styles.center, shadowStyle]}>
+                  <Image source={art} contentFit="contain" allowDownscaling tintColor={SLOT_COLORS.ink} style={{ width: artSize, height: artSize, opacity: 0.35 }} />
+                </Animated.View>
+              )}
+              {sheen && <Sheen id={item.id} rarity={item.rarity} width={width} />}
+            </View>
+            {item.rarity >= 5 && sheen && <Rim id={item.id} />}
+            {item.spares > 0 && (
+              <View style={styles.count}><Text style={styles.countText} maxFontSizeMultiplier={1.2}>+{item.spares}</Text></View>
+            )}
+            {item.isNew && <View style={styles.newTag}><GameIcon name="new" size={32} /></View>}
+            {/* A still foil star on Rare and up, so rarity shows even when nothing moves. */}
+            {item.rarity >= 3 && <View style={styles.foil} pointerEvents="none"><GameIcon name="sparkle" size={item.rarity >= 5 ? 22 : 18} /></View>}
+          </View>
+        ) : (
+          <View style={[styles.slot, { width, height: width }]}>
             <Image source={art} contentFit="contain" allowDownscaling recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
-              tintColor={item.found ? undefined : SILHOUETTE}
-              style={{ width: artSize, height: artSize, opacity: item.found ? 1 : 0.85 }} />
-          </Animated.View>
-          {flipping && (
-            <Animated.View style={[StyleSheet.absoluteFill, styles.center, shadowStyle]}>
-              <Image source={art} contentFit="contain" allowDownscaling tintColor={SILHOUETTE} style={{ width: artSize, height: artSize }} />
-            </Animated.View>
-          )}
-          {item.rarity >= 5 && item.found && (
-            <Animated.View style={[styles.shine, { height: width * 1.6, top: -width * 0.3 }, shineStyle]} pointerEvents="none">
-              <LinearGradient start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.95)', 'rgba(255,255,255,0)']} style={StyleSheet.absoluteFill} />
-            </Animated.View>
-          )}
-          {item.rarity >= 5 && item.found && <Animated.View style={[styles.rim, rimStyle]} pointerEvents="none" />}
-          <RarityGems rarity={item.rarity} size={Math.min(10, Math.floor((width - 16) / (Math.max(1, item.rarity) * 1.6)))} style={styles.gems} />
-          {item.caught > 1 && (
-            <View style={styles.count}><Text style={styles.countText} maxFontSizeMultiplier={1.2}>x{item.caught}</Text></View>
-          )}
-          {item.isNew && item.found && <View style={styles.newTag}><GameIcon name="new" size={30} /></View>}
-        </TilePanel>
+              tintColor={SLOT_COLORS.ink} style={{ width: artSize, height: artSize, opacity: SLOT_COLORS.inkOpacity }} />
+          </View>
+        )}
       </Animated.View>
-      <Text numberOfLines={2} style={[styles.name, !item.found && styles.nameMissing]} maxFontSizeMultiplier={1.25}>{item.name}</Text>
+      {/* Every tile keeps the same label height (tileHeight), so the grid stays even; a missing find leaves it blank. */}
+      {item.found
+        ? <Text numberOfLines={2} style={styles.name} maxFontSizeMultiplier={1.15}>{item.name}</Text>
+        : <View style={styles.plate}><Text style={styles.plateText} maxFontSizeMultiplier={1.15} importantForAccessibility="no">#{slot}</Text></View>}
     </SpringPress>
   );
-}, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress);
+}, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress && a.slot === b.slot);
+
+const phaseOf = (id: number) => ((id * 397) % 1000) / 1000;
+
+/** The rare sweep, reading the page clock at this sticker's own phase (Legendary twice per period). */
+function Sheen({ id, rarity, width }: { readonly id: number; readonly rarity: number; readonly width: number }) {
+  const phase = phaseOf(id);
+  const twice = rarity >= 5;
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: sweepAt(SHEEN.value, phase, twice) * width * 1.4 }, { rotate: '20deg' }],
+  }), [phase, twice, width]);
+  return (
+    <Animated.View style={[styles.shine, { height: width * 1.6, top: -width * 0.3 }, style]} pointerEvents="none">
+      <LinearGradient start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+        colors={['rgba(255,255,255,0)', rarity >= 5 ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.7)', 'rgba(255,255,255,0)']} style={StyleSheet.absoluteFill} />
+    </Animated.View>
+  );
+}
+
+/** The Legendary gold rim that pulses with its sweep. */
+function Rim({ id }: { readonly id: number }) {
+  const phase = phaseOf(id);
+  const style = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(sweepAt(SHEEN.value, phase, true)) * 1.4) }), [phase]);
+  return <Animated.View style={[styles.rim, style]} pointerEvents="none" />;
+}
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  gems: { position: 'absolute', top: 7, left: 6 },
+  // A found sticker: a rarity-colored die-cut edge, a thick white border, a lip and a soft lift off the page.
+  // One sticker: a thick even rarity frame on a white face, a soft navy shadow under it, a slight tilt.
+  // An opaque background lets iOS take the fast shadow path.
+  sticker: { borderRadius: 18, backgroundColor: BRAND.white, ...SHADOW.card, shadowOpacity: 0.22, shadowRadius: 2, shadowOffset: { width: 0, height: 3 } },
+  stickerFace: { flex: 1, borderRadius: 18, backgroundColor: BRAND.white, borderWidth: 4 },
+  // Only a sticker with a moving sheen needs the mask (the art already fits inside).
+  clip: { overflow: 'hidden' },
+  // An empty slot pressed into the album page: dashed edge, the shape faded in navy.
+  slot: {
+    borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: SLOT_COLORS.edge, backgroundColor: SLOT_COLORS.fill,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
   count: {
-    position: 'absolute', bottom: 5, right: 4, minWidth: 30, height: 24, paddingHorizontal: 5, borderRadius: 12,
+    position: 'absolute', bottom: -4, right: -4, minWidth: 34, height: 26, paddingHorizontal: 5, borderRadius: 13,
     backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
   },
-  countText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white },
-  newTag: { position: 'absolute', bottom: 2, left: 2 },
+  countText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
+  newTag: { position: 'absolute', top: -6, left: -6 },
   shine: { position: 'absolute', width: 60, left: '35%' },
-  rim: { ...StyleSheet.absoluteFillObject, borderRadius: 13, borderWidth: 4, borderColor: '#ffe07a' },
-  name: {
-    fontFamily: 'Shark', fontSize: 14, lineHeight: 15, color: BRAND.navy, textAlign: 'center', marginTop: 4,
-    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 8, overflow: 'hidden', paddingHorizontal: 3, paddingVertical: 2,
-  },
-  nameMissing: { color: '#2e4866', backgroundColor: 'rgba(225,236,247,0.94)' },
+  rim: { ...StyleSheet.absoluteFillObject, borderRadius: 18, borderWidth: 4, borderColor: '#ffe07a' },
+  plate: { alignSelf: 'center', marginTop: 4, paddingHorizontal: 8, height: 20, borderRadius: 10, backgroundColor: '#f3e7c6', justifyContent: 'center' },
+  plateText: { fontFamily: 'Knockout', fontSize: 14, color: '#a8925c' },
+  name: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 17, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
+  foil: { position: 'absolute', top: 4, right: 4 },
 });

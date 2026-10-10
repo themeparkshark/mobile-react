@@ -19,13 +19,16 @@ import { parkDayCaptureSize } from '../../components/parkDayShareMetrics';
 import { playSfx } from '../../gamekit/SFX';
 import { BRAND, GameButton, GameIcon, gameAlert } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { BluePanel, CLOSE_X, itemArt, RIBBON, SILHOUETTE, StarBurst } from './DexParts';
+import { HuntSwitch, SLOT_COLORS } from './BookParts';
+import { CLOSE_X, itemArt, RIBBON, StarBurst } from './DexParts';
 import { RarityGems, rarityLook } from './dexLook';
 import { caughtLine, spawnIcon, type DexItem, type DexSet } from './dexModel';
 import { Offscreen, RidePhoto, RidePhotoShareCard } from './RidePhoto';
 
-export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
+export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = null }: {
   readonly item: DexItem | null; readonly set: DexSet | null;
+  /** The set's Hunt switch, offered on a missing find (null when the set cannot be hunted). */
+  readonly hunt?: { readonly on: boolean; readonly busy: boolean; readonly onPress: () => void } | null;
   readonly onClose: () => void;
   readonly onShare: (() => void) | null; readonly onFind: () => void; readonly error: string | null;
 }) {
@@ -94,19 +97,21 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
                 {item.name}
               </Text>
             </View>
-            <BluePanel style={styles.body}>
+            {/* The card frame wears the find's rarity color. */}
+            <View style={[styles.body, { borderColor: look.frame }]}>
               <ScrollView style={{ maxHeight: height * 0.78 }} contentContainerStyle={styles.bodyInner} showsVerticalScrollIndicator={false} bounces={false}>
               <View style={[styles.hero, { height: Math.min(photo ? 262 : 230, Math.round(height * (photo ? 0.31 : 0.27))) },
-                photo && styles.heroPhoto, item.goldenHour && !photo && styles.heroGolden]}>
-                {!item.found && <Animated.View style={[styles.halo, { backgroundColor: look.frame }, glowStyle]} />}
-                {item.found && !photo && <View style={[styles.halo, { backgroundColor: 'rgba(255,255,255,0.35)' }]} />}
+                photo && styles.heroPhoto, !item.found && styles.heroSlot, item.found && !photo && { borderColor: look.frame },
+                item.goldenHour && !photo && styles.heroGolden]}>
+                {!item.found && <Animated.View style={[styles.halo, { backgroundColor: 'rgba(255,255,255,0.5)' }, glowStyle]} />}
+                {item.found && !photo && <View style={[styles.halo, { backgroundColor: look.chip }]} />}
                 {/* The burst sits behind the art, never over it. */}
                 {item.found && item.isNew && <StarBurst key={item.id} color={look.frame} />}
                 {photo ? (
                   <RidePhoto grade={photo} art={itemArt(item)} photoUrl={item.photoUrl} width={Math.min(300, width - 110)} />
                 ) : (
-                  <Image source={itemArt(item)} contentFit="contain" tintColor={item.found ? undefined : SILHOUETTE}
-                    style={{ width: Math.min(190, height * 0.22), height: Math.min(190, height * 0.22) }} />
+                  <Image source={itemArt(item)} contentFit="contain" tintColor={item.found ? undefined : SLOT_COLORS.ink}
+                    style={{ width: Math.min(190, height * 0.22), height: Math.min(190, height * 0.22), opacity: 1 }} />
                 )}
                 {item.goldenHour && <View style={styles.goldenTag}><GameIcon name="sparkle" size={18} /><Text style={styles.goldenText}>Golden Hour</Text></View>}
               </View>
@@ -117,17 +122,31 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
                 </View>
                 <View style={[styles.caughtChip, item.found && item.foundInWorld !== false ? styles.caughtYes : null]}
                   accessible accessibilityLabel={caughtLine(item)}>
-                  <GameIcon name={item.found ? 'check' : 'search'} size={20} />
+                  <GameIcon name={item.found ? 'check' : 'lock'} size={20} />
                   <Text style={styles.caughtText}>{item.found && item.foundInWorld === false ? 'Swapped in' : caughtLine(item)}</Text>
                 </View>
               </View>
+              {/* The pride line: when it was first found, and a short line about it. */}
+              {item.found && !!item.firstFoundAt && !Number.isNaN(Date.parse(item.firstFoundAt)) && (
+                <View style={[styles.firstFound, { borderColor: look.frame }]}>
+                  <GameIcon name="star" size={18} />
+                  <Text style={styles.firstFoundText}>First found {new Date(item.firstFoundAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
+                </View>
+              )}
+              {/* Only an authored line; never boilerplate that repeats the pills. */}
               {!!item.flavor && <Text style={styles.flavor}>{item.flavor}</Text>}
-              <Pressable accessibilityRole="button" accessibilityLabel={`Where to find it: ${item.spawnHint}. Open the map.`}
-                onPress={onFind} style={({ pressed }) => [styles.where, pressed && { opacity: 0.85 }]}>
+              <View style={styles.where} accessible accessibilityLabel={`When to look: ${item.spawnHint}`}>
                 <GameIcon name={spawnIcon(item.spawnHint)} size={30} />
-                <Text style={styles.whereText}>{item.spawnHint}</Text>
-                <GameIcon name="arrow" size={24} />
-              </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.whereLabel}>When to look</Text>
+                  <Text style={styles.whereText}>{item.spawnHint}</Text>
+                </View>
+              </View>
+              {!item.found && hunt && (
+                <View style={{ marginTop: 10, alignItems: 'stretch' }}>
+                  <HuntSwitch on={hunt.on} busy={hunt.busy} onPress={hunt.onPress} reduced={reduced} />
+                </View>
+              )}
               {/* A missing find is earned on the map: one big, obvious way there. A swapped-in one points there too. */}
               {(!item.found || item.foundInWorld === false) && (
                 <GameButton label={item.found ? 'Catch one on the map' : 'Find it on the map'} icon="map" onPress={onFind} fullWidth
@@ -139,11 +158,11 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
                   onPress={() => { playSfx('ui.tap', 0.6); setSharing(true); setShareMount(true); }} fullWidth style={{ marginTop: 10 }} />
               )}
               {item.found && onShare && item.spares > 0 && (
-                <GameButton label="Share a spare" icon="gift" variant="secondary" onPress={onShare} fullWidth style={{ marginTop: 8 }} />
+                <GameButton label="Give to a friend" icon="heart" onPress={onShare} fullWidth style={{ marginTop: 10 }} />
               )}
               {!!error && <Text style={styles.error}>{error}</Text>}
               </ScrollView>
-            </BluePanel>
+            </View>
             <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={10} style={styles.close}>
               <Image source={CLOSE_X} style={StyleSheet.absoluteFill} contentFit="contain" />
             </Pressable>
@@ -165,12 +184,17 @@ const styles = StyleSheet.create({
   cardWrap: { width: '100%', maxWidth: 390, paddingTop: 26 },
   ribbon: { position: 'absolute', top: 0, left: 24, right: 24, height: 62, zIndex: 3, justifyContent: 'center', paddingHorizontal: 34 },
   ribbonText: { fontFamily: 'Shark', fontSize: 24, color: '#7a3d00', textAlign: 'center', marginTop: -6 },
-  body: { paddingTop: 34 },
+  // The cream album page (same as the Collections sheet and the extras sheet).
+  body: {
+    paddingTop: 34, backgroundColor: BRAND.cream, borderRadius: 22, borderWidth: 4, borderColor: BRAND.white, borderBottomWidth: 8,
+    borderBottomColor: '#e3d3a3', overflow: 'hidden',
+  },
   bodyInner: { paddingHorizontal: 14, paddingBottom: 16 },
   hero: {
-    borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 3, borderColor: 'rgba(255,255,255,0.55)', overflow: 'hidden',
+    borderRadius: 18, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 4, borderColor: '#efe1b8', overflow: 'hidden',
   },
+  heroSlot: { backgroundColor: SLOT_COLORS.fill, borderColor: SLOT_COLORS.edge, borderWidth: 3, borderStyle: 'dashed' },
   heroPhoto: { backgroundColor: 'transparent', borderWidth: 0 },
   heroGolden: { backgroundColor: '#ffd66b', borderColor: BRAND.gold, borderWidth: 3 },
   halo: { position: 'absolute', width: 210, height: 210, borderRadius: 105 },
@@ -188,15 +212,20 @@ const styles = StyleSheet.create({
   },
   caughtYes: { borderColor: BRAND.green },
   caughtText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
+  firstFound: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 5, marginTop: 10, paddingHorizontal: 10, height: 30,
+    borderRadius: 15, borderWidth: 2, backgroundColor: BRAND.white,
+  },
+  firstFoundText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
   flavor: {
-    fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.white, textAlign: 'center', marginTop: 10,
-    textShadowColor: 'rgba(5,52,110,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0,
+    fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.navy, textAlign: 'center', marginTop: 10,
   },
   where: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 52, marginTop: 12, paddingHorizontal: 12,
-    borderRadius: 16, backgroundColor: BRAND.white, borderWidth: 3, borderColor: '#bcd9f2',
+    flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, marginTop: 12, paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 16, backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#efe1b8',
   },
-  whereText: { flex: 1, fontFamily: 'Shark', fontSize: 16, lineHeight: 19, color: BRAND.navy },
-  error: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.white, marginTop: 8, textAlign: 'center' },
+  whereLabel: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft },
+  whereText: { fontFamily: 'Shark', fontSize: 17, lineHeight: 20, color: BRAND.navy },
+  error: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.red, marginTop: 8, textAlign: 'center' },
   close: { position: 'absolute', top: 14, right: -6, width: 50, height: 50, zIndex: 4 },
 });

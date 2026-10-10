@@ -153,9 +153,9 @@ test('items: found in color with a caught count, missing as silhouettes with a r
   assert.equal(items[1].canExchange, false);
   assert.equal(items[2].spawnHint, 'Rainy days only.', 'an item gate wins');
   assert.equal(items[1].spawnHint, 'After sunset', 'then the set gate');
-  assert.equal(dex.caughtLine(items[3]), 'Swapped in. Catch one on the map too!');
-  assert.equal(dex.caughtLine(items[1]), 'Not caught yet');
-  assert.equal(dex.caughtLine(items[0]), 'Caught 3 times');
+  assert.equal(dex.caughtLine(items[3]), 'Swapped in. Find one on the map too!');
+  assert.equal(dex.caughtLine(items[1]), 'Not found yet');
+  assert.equal(dex.caughtLine(items[0]), 'Found 3 times');
   assert.equal(items[3].isNew, false);
   // v3 item fields overlay by id.
   const v3 = plain(dex.buildItems(detail, [{ id: 2, is_found: true, caught_count: 4, copies: 2, spares: 1, flavor: 'Shiny!',
@@ -211,19 +211,26 @@ test('Ride Photo frames: plain for Good, nicer for Great, gold with a plaque for
   assert.doesNotMatch(src, /water_background/, 'the TASKS-sign background is gone');
 });
 
-test('the book screen: Alex chrome, icon rewards, 4-column FlashList, stable tiles, quiet refresh, all claim routes', () => {
+test('the book screen: one hierarchy (shelf, set, prizes, finds by rarity), FlashList rows, stable tiles, quiet refresh, all claim routes', () => {
   const screen = read('src/screens/SetCollectionScreen.tsx');
-  const parts = read('src/screens/SetCollection/DexParts.tsx');
-  for (const piece of ['<BookStrip', '<SetTab', '<SetHeader', '<SparesMeter', '<RewardTrack', '<ItemTile', '<ItemCard', '<RewardReveal',
-    'MilestonePickSheet', 'ClaimResultCard', 'GiftPrepVariantPanel', 'HomeHuntInfoSheet', 'FlashList']) assert.ok(screen.includes(piece), piece);
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  for (const piece of ['<ShelfCard', '<BookHeader', '<PrizeRows', '<FindsHeader', '<RarityHeading', '<ItemTile', '<ItemCard', '<RewardReveal',
+    'MilestonePickSheet', 'ClaimResultCard', 'GiftPrepVariantPanel', 'FlashList', 'findRows(items, COLUMNS)']) assert.ok(screen.includes(piece), piece);
+  // Order on the page: shelf, then the set header, prizes, finds header (each fact once).
+  const order = ['<ShelfCard', '<BookHeader', '<PrizeRows', '<FindsHeader'].map(piece => screen.indexOf(piece));
+  assert.deepEqual(order, [...order].sort((a, b) => a - b));
+  // Gone: the whole-book strip, the duplicate ribbon header and ring, the mystery icon buttons, the empty odds sheet.
+  assert.doesNotMatch(screen, /BookStrip|SetHeader|RewardTrack|SparesMeter|HomeHuntInfoSheet|oddsOpen/);
   assert.match(screen, /const COLUMNS = 4;/);
-  assert.match(screen, /source=\{WATER\}/, 'the shark water texture background');
-  assert.match(parts, /source=\{RIBBON\}/, 'the gold ribbon set header');
-  assert.match(parts, /export function PrizeRow[\s\S]*prizeChips\(reward\)/, 'rewards are icons');
-  assert.match(parts, /'You got it!'/);
-  assert.doesNotMatch(parts, /reward\.label\}<\/Text>/, 'the reward sentence is never shown as text');
-  assert.match(parts, /scaleX: Math\.max\(0\.001, fill\.value\)/, 'the track fill animates a transform, not width');
-  // Picker keeps the chosen set on screen.
+  assert.match(screen, /source=\{BOOK_BG\}/, 'the Standings underwater art');
+  assert.match(parts, /standings-bg\.png/);
+  assert.match(parts, /export function PrizeChips[\s\S]*prizeChips\(reward\)/, 'prizes are icons plus words');
+  assert.match(parts, />Title: \{title\}<\/Text>/, 'the title is shown up front, as a ribbon');
+  assert.match(parts, /prizeMarks\(set\)/, 'a notch on the bar for every prize');
+  assert.match(parts, /const goal = goalLine\(set\);/);
+  assert.match(parts, /Find all \$\{set\.total\}/);
+  assert.match(parts, /scaleX: Math\.max\(0\.001, fill\.value\)/, 'the count bar animates a transform, not width');
+  // Shelf keeps the chosen set on screen.
   assert.match(screen, /pickerRef\.current\?\.scrollTo/);
   // Stable tiles and a quiet refresh.
   assert.match(screen, /mergeStable\(/);
@@ -236,7 +243,38 @@ test('the book screen: Alex chrome, icon rewards, 4-column FlashList, stable til
   const api = read('src/api/endpoints/me/homeHuntDex.ts');
   assert.match(api, /'\/me\/home-hunt\/dex'/);
   assert.match(api, /status === 404/);
-  assert.match(screen, /if \(!isFocused \|\| preview\) return;/);
+  assert.match(screen, /if \(!isFocused \|\| preview \|\| !foreground\) return;/);
+});
+
+test('page model: finds grouped by rarity in rows, when-line, open-now, prize states, next goal', () => {
+  const item = (id, rarity, found) => ({ id, rarity, found });
+  const items = [item(1, 1, true), item(2, 3, false), item(3, 1, false), item(4, 1, true), item(5, 1, false), item(6, 1, false), item(7, 5, false)];
+  const rows = plain(dex.findRows(items, 4));
+  assert.deepEqual(rows.map(row => row.kind), ['heading', 'tiles', 'tiles', 'heading', 'tiles', 'heading', 'tiles']);
+  assert.deepEqual(rows[0], { kind: 'heading', key: 'h1', rarity: 1, label: 'Common', found: 2, total: 5 });
+  assert.deepEqual(rows[1].items.map(entry => entry.id), [1, 3, 4, 5], 'set order inside a group');
+  assert.deepEqual(rows[2].items.map(entry => entry.id), [6]);
+  assert.equal(rows[5].label, 'Legendary', 'Legendary last: the big goal at the bottom');
+  assert.equal(dex.findRows([], 4).length, 0);
+  const now = new Date('2026-10-02T12:00:00Z');
+  assert.equal(dex.whenLine({ spawnHint: 'Anytime, anywhere', status: 'active' }, now), 'On the map anytime');
+  assert.equal(dex.whenLine({ spawnHint: null, status: 'active' }, now), 'On the map anytime');
+  assert.equal(dex.whenLine({ spawnHint: 'After sunset', status: 'active' }, now), 'On the map after sunset');
+  assert.equal(dex.whenLine({ spawnHint: 'On rainy days', status: 'resting' }, now), 'On the map on rainy days');
+  assert.equal(dex.whenLine({ spawnHint: null, status: 'upcoming', startsAt: '2026-10-15T07:00:00Z' }, now), 'On the map from Oct 15');
+  assert.equal(dex.whenLine({ spawnHint: null, status: 'retired' }, now), 'No longer on the map. Yours to keep!');
+  assert.equal(dex.openNow({ spawnHint: 'Anytime, anywhere', spawningNow: true, status: 'active' }), null, 'always open: nothing to say');
+  assert.equal(dex.openNow({ spawnHint: 'After sunset', spawningNow: true, status: 'active' }), true);
+  assert.equal(dex.openNow({ spawnHint: 'After sunset', spawningNow: false, status: 'active' }), false);
+  assert.equal(dex.openNow({ spawnHint: 'Weekends', spawningNow: null, status: 'resting' }), false);
+  assert.deepEqual(plain(dex.prizeState({ status: 'locked', target: 8 }, 3)), { kind: 'locked', toGo: 5 });
+  assert.deepEqual(plain(dex.prizeState({ status: 'claimable', target: 8 }, 9)), { kind: 'claim', toGo: 0 });
+  assert.equal(dex.prizeState({ status: 'claimed', target: 8 }, 9).kind, 'done');
+  assert.equal(dex.prizeState({ status: 'pending', target: 40 }, 40).kind, 'pending');
+  const base = dex.fromLegacySet(legacySet());
+  const list = plain(dex.prizeList(base));
+  assert.equal(list[list.length - 1].final, true, 'the finish prize is last');
+  assert.ok(list.slice(0, -1).every(entry => !entry.final && entry.reward.target < base.total));
 });
 
 test('stable items, refresh pacing, swap progress, color separation, prize icons', () => {
@@ -262,7 +300,7 @@ test('stable items, refresh pacing, swap progress, color separation, prize icons
   assert.equal(dex.spawnIcon('Anytime, anywhere'), 'map');
 });
 
-test('rarity: the app-wide design-system palette, navy ink on light chips, gems on every tile', () => {
+test('rarity: the app-wide design-system palette, navy ink on light chips, named on every group heading', () => {
   const design = loadTs('src/design-system.ts');
   const look = loadTs('src/screens/SetCollection/dexLook.tsx', { 'expo-linear-gradient': {}, react: {}, 'react-native': { StyleSheet: { create: x => x } },
     '../../ui': { BRAND: { navy: '#05346e', white: '#fff' } }, '../../design-system': design });
@@ -277,11 +315,16 @@ test('rarity: the app-wide design-system palette, navy ink on light chips, gems 
     const ratio = (lum(entry.chip) + 0.05) / (lum('#05346e') + 0.05);
     assert.ok(ratio >= 4.5, `${entry.key} chip contrast ${ratio.toFixed(2)}`);
   }
+  // Rarity is named once per group (gems plus the word), never a lone gem on a tile that reads as a check mark.
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  assert.match(parts, /<RarityGems rarity=\{rarity\}/);
+  assert.match(parts, /\{label\}<\/Text>/);
   const tile = read('src/screens/SetCollection/DexTile.tsx');
-  assert.match(tile, /<RarityGems rarity=\{item\.rarity\}/);
-  assert.match(tile, /item\.rarity >= 5 && item\.found/, 'Legendary shimmer');
-  assert.match(tile, /item\.caught > 1 &&/, 'count badge only from two');
-  assert.match(tile, /\{item\.name\}<\/Text>/, 'names on tiles');
+  assert.doesNotMatch(tile, /<RarityGems/);
+  assert.match(tile, /const sheen = item\.found && item\.rarity >= 3 && !reduced;/, 'Rare and up shine (the clock stops when covered)');
+  assert.match(tile, /\{item\.spares > 0 && \(/, 'the extras badge only when there are extras (inside the found sticker)');
+  assert.match(tile, /\+\{item\.spares\}/, 'one notation for extras: +N');
+  assert.match(tile, /borderStyle: 'dashed'/, 'a missing find is an empty album slot');
   assert.doesNotMatch(tile, /swapReady|name="swap"/, 'no swap badge: swaps are retired');
 });
 
@@ -332,15 +375,13 @@ test('the set-complete reveal: beats in order with the button last, sprite rays,
   assert.doesNotMatch(parts, /'Claiming\.\.\.'/);
 });
 
-test('round 3: swap story, recycled tiles, focus refresh, light ticks, small phones, gems', () => {
+test('round 3: swap story, recycled tiles, focus refresh, light ticks, small phones', () => {
   const screen = read('src/screens/SetCollectionScreen.tsx');
   const tile = read('src/screens/SetCollection/DexTile.tsx');
   const card = read('src/screens/SetCollection/DexItemCard.tsx');
-  const parts = read('src/screens/SetCollection/DexParts.tsx');
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
   const look = read('src/screens/SetCollection/dexLook.tsx');
-  // Spares: a plain count, and the sheet shows the real stack ("xN"), never a price.
   assert.equal(dex.swapGoal, undefined);
-  assert.match(screen, /\+\{spare\.spares\}/, "the sheet shows the real spare count, never the tile's xN");
   for (const src of [tile, card, parts]) assert.doesNotMatch(src, /name="retry"/, 'never a refresh icon');
   // Recycled FlashList cells drop per-item state.
   assert.match(tile, /setArtFailed\(false\);\s*setFlipping\(false\);/);
@@ -350,28 +391,25 @@ test('round 3: swap story, recycled tiles, focus refresh, light ticks, small pho
   assert.doesNotMatch(screen, /eslint-disable/);
   // A tick re-reads only the v3 dex when it is live.
   assert.match(screen, /void loadSets\(true\);/);
-  assert.match(screen, /reuse = light && dex != null/);
+  assert.match(screen, /const reuse = dex != null;/);
+  // Full reads run the dex and legacy calls together.
+  assert.match(screen, /\[dex, legacy\] = await Promise\.all\(/);
+  assert.match(screen, /\[dex, raw\] = await Promise\.all\(/);
   // The item card scrolls and scales on small phones.
   assert.match(card, /<ScrollView style=\{\{ maxHeight: height \* 0\.78 \}\}/);
-  // Swaps are retired: no flip-in stamp, but items swapped in earlier keep their chip.
   assert.doesNotMatch(card, /Swapped!/);
   assert.match(card, /'Swapped in'/);
-  // One unclipped gem: each diamond in its own box.
   assert.match(look, /const box = Math\.ceil\(\(gem \+ 4\) \* 1\.45\)/);
-  assert.match(tile, /count: \{\s*position: 'absolute', bottom: 5, right: 4/, 'the count badge never covers the gems');
-  // Claim clears the compass.
+  // The last row clears the compass.
   assert.match(screen, /CTA_CLEARANCE = BOTTOM_BAR_OVERHANG \+ 84/);
-  assert.match(screen, /listRef\.current\?\.scrollToOffset/);
-  // Spares sheet keeps Got it reachable.
-  assert.doesNotMatch(screen, /sparesCard\} accessibilityViewIsModal accessible/);
+  assert.match(screen, /ListFooterComponent=\{<View style=\{\{ height: CTA_CLEARANCE/);
   // Rare-or-better never says "Anytime, anywhere".
-  assert.equal(dex.rarityHint('Anytime, anywhere', 4), 'Very rare: about 1 in 25 finds');
+  assert.equal(dex.rarityHint('Anytime, anywhere', 4), 'Very hard to find. Keep looking!');
   assert.equal(dex.rarityHint('Anytime, anywhere', 1), 'Anytime, anywhere');
   assert.equal(dex.rarityHint('After sunset', 5), 'After sunset');
-  // Reduce Motion: set header and cards fade only.
-  assert.match(parts, /reduced \? \{ opacity: 0\.85 \+ 0\.15 \* lift\.value \}/);
-  assert.match(parts, /reduced \? \{ opacity: enter\.value \}/);
-  // Pick sheet text floor.
+  // Reduce Motion: header and shelf cards fade only.
+  assert.match(parts, /reduced \? \{ opacity: 0\.8 \+ 0\.2 \* lift\.value \}/);
+  assert.match(parts, /enter\.value = reduced \? 1 :/);
   assert.doesNotMatch(read('src/screens/SetCollection/SetHuntSections.tsx'), /fontSize: 1[0-4]\b/);
 });
 
@@ -379,7 +417,8 @@ test('collection book files: no em dashes, no emoji, no purple', () => {
   const EMOJI = /[\p{Extended_Pictographic}]/u;
   for (const file of ['src/screens/SetCollectionScreen.tsx', 'src/screens/SetCollection/DexParts.tsx', 'src/screens/SetCollection/dexModel.ts',
     'src/screens/SetCollection/RidePhoto.tsx', 'src/api/endpoints/me/homeHuntDex.ts', 'src/screens/SetCollection/DexTile.tsx',
-    'src/screens/SetCollection/DexItemCard.tsx', 'src/screens/SetCollection/DexReveal.tsx', 'src/screens/SetCollection/dexLook.tsx']) {
+    'src/screens/SetCollection/DexItemCard.tsx', 'src/screens/SetCollection/DexReveal.tsx', 'src/screens/SetCollection/dexLook.tsx',
+    'src/screens/SetCollection/BookParts.tsx']) {
     const src = read(file);
     assert.doesNotMatch(src, EM_DASH, file);
     assert.doesNotMatch(src, EMOJI, file);
@@ -387,26 +426,31 @@ test('collection book files: no em dashes, no emoji, no purple', () => {
   assert.ok(!fs.existsSync(path.join(root, 'src/data/mockChurroSet.ts')));
 });
 
-test('each set card says when it spawns and marks the focused set (moved from the home map card)', () => {
+test('the set says when its finds are on the map, once, and marks the hunted set with a labeled switch', () => {
   const base = dex.fromLegacySet(legacySet());
   const now = new Date('2026-10-02T12:00:00Z');
-  assert.equal(dex.tabStatus({ ...base, spawningNow: true, spawnHint: null }, now), null, 'an always-on set has no pill');
-  assert.deepEqual(plain(dex.tabStatus({ ...base, spawningNow: true, spawnHint: 'After sunset' }, now)), { text: 'After sunset', live: true }, 'the special fact, never "On now"');
-  assert.deepEqual(plain(dex.tabStatus({ ...base, spawningNow: false, spawnHint: 'After sunset' }, now)), { text: 'After sunset', live: false });
-  assert.deepEqual(plain(dex.tabStatus({ ...base, status: 'resting', spawnHint: 'Weekends' }, now)), { text: 'Weekends', live: false });
+  // tabStatus stays for other readers (home map card).
+  assert.equal(dex.tabStatus({ ...base, spawningNow: true, spawnHint: null }, now), null);
   assert.equal(dex.tabStatus({ ...base, status: 'upcoming', startsAt: '2026-10-15T07:00:00Z' }, now).text, 'Opens Oct 15');
-  assert.equal(dex.tabStatus({ ...base, status: 'retired' }, now).text, 'Kept forever');
-  const parts = read('src/screens/SetCollection/DexParts.tsx');
-  assert.match(parts, /set\.focused && <View style=\{styles\.tabHunt\}>/);
-  assert.match(parts, /your hunt/);
-  assert.match(parts, /tabStatus\(set\)/);
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  assert.match(parts, /const when = whenLine\(set\);/);
+  assert.match(parts, /open \? 'On now' : 'Not right now'/);
+  assert.match(parts, /accessibilityRole="switch"/, 'a real switch');
+  assert.match(parts, />More on your map<\/Text>/, 'the hunt switch says what it does');
+  assert.match(parts, /set\.focused && \(\s*<View style=\{styles\.cardHunt\}>/);
+  assert.match(parts, />Hunting<\/Text>/, 'the shelf tag is a word');
+  assert.match(parts, /you are hunting this set/);
+  assert.match(read('src/screens/SetCollectionScreen.tsx'), /finds will show up more on your map/, 'turning it on says what it does');
+  // The shelf card carries its own count and prize marker.
+  assert.match(parts, /\{set\.found\}\/\{set\.total\}<\/Text>/);
+  assert.match(parts, /function GiftBob\(\)/);
 });
 
-test('round 4: instant book, menu above the map, swap slot, grades, shimmer, title stamp', () => {
+test('round 4: instant book, menu above the map, grades, shimmer, title stamp', () => {
   const screen = read('src/screens/SetCollectionScreen.tsx');
   const menu = read('src/components/QuickAccessMenu.tsx');
   const card = read('src/screens/SetCollection/DexItemCard.tsx');
-  const parts = read('src/screens/SetCollection/DexParts.tsx');
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
   const tile = read('src/screens/SetCollection/DexTile.tsx');
   const cache = read('src/screens/SetCollection/dexCache.ts');
   // The book opens from the menu-prefetched copy, or a skeleton in the real layout. Never a spinner.
@@ -415,34 +459,24 @@ test('round 4: instant book, menu above the map, swap slot, grades, shimmer, tit
   assert.doesNotMatch(screen, /SharkLoader/);
   assert.match(menu, /void prefetchBook\(player\?\.id, location\);/);
   assert.match(cache, /has_claimable/);
-  // The open menu is a Modal: nothing from the map draws above its scrim.
   assert.match(menu, /<Modal visible=\{mounted\}/);
   assert.match(menu, /rgba\(5,52,110,0\.86\)/);
   assert.match(menu, /intensity: 32 \* scrim\.value/);
   assert.doesNotMatch(menu, /isRight|row-reverse/, 'the unused right-side layout is gone');
-  // The burst draws behind the art.
   assert.doesNotMatch(card, /swappedSlot/);
   assert.ok(card.indexOf('<StarBurst') < card.indexOf('{photo ? ('), 'burst behind the art');
-  // Done panel: a white title plaque, a navy track.
-  assert.match(parts, /styles\.titleButton/);
-  assert.match(parts, /finished \? BRAND\.navy : set\.color/);
-  assert.match(parts, /tabFaceGold/);
+  // Done: a gold shelf card and the wear-title button in the finish prize row.
+  assert.match(parts, /styles\.wear/);
+  assert.match(parts, /cardFaceGold/);
   assert.match(parts, /const t = useSharedValue\(reduced \? 1 : 1\.6\)/, 'the title stamp slams from 1.6');
-  // No bare "+N" once a swap is ready.
-  assert.doesNotMatch(parts, /`\+\$\{extra\}`/);
-  // Shimmer reads; recycled panels never flash.
   assert.match(tile, /styles\.rim/);
-  assert.match(tile, /<TilePanel key=\{item\.id\}/);
-  // Timers are cleared.
-  assert.match(screen, /clearTimeout\(revealTimer\.current\)/);
-  assert.match(menu, /timers\.current\.forEach\(clearTimeout\)/);
+  assert.match(tile, /<View style=\{\[styles\.slot/);
   assert.match(read('src/screens/SetCollection/RidePhoto.tsx'), /great: \{ outer: '#9fb8d4'/);
   assert.match(card, /position: 'absolute', top: 10, left: 10/, 'Golden Hour tag in the photo corner, away from the grade');
 });
 
-test('round 5: header stamp has no slab, cache is per player, smooth entry, retired pill, Common gem', () => {
-  const parts = read('src/screens/SetCollection/DexParts.tsx');
-  // The animated (scaled, rotated) layer is a bare wrapper; the gold plate inside it never animates (no stale scaled copy).
+test('round 5: header stamp has no slab, cache is per player, Common gem', () => {
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
   const wrap = parts.match(/titleStampWrap: \{([^}]*)\}/)[1];
   assert.doesNotMatch(wrap, /background|border|shadow/i);
   assert.match(parts, /<Animated\.View style=\{\[styles\.titleStampWrap, style\]\}/);
@@ -453,25 +487,19 @@ test('round 5: header stamp has no slab, cache is per player, smooth entry, reti
   assert.match(read('src/components/QuickAccessMenu.tsx'), /clearBook\(\);/);
   const screen = read('src/screens/SetCollectionScreen.tsx');
   assert.match(screen, /cachedBook\(player\?\.id\)/);
-  assert.match(screen, /scrollToOffset\(\{ offset, animated: false \}\)/, 'first land jumps before the list shows');
-  assert.match(screen, /backgroundColor: '#11b8db'/);
+  assert.match(screen, /backgroundColor: '#5cc3f2'/, 'the page color matches the art while it decodes');
   assert.match(read('src/components/QuickAccessMenu.tsx'), /export function useQuickMenuOpen/);
   assert.match(read('src/screens/SetCollection/DexItemCard.tsx'), /item\.goldenHour && !photo && styles\.heroGolden/);
-  assert.match(parts, /set\.status === 'retired' \? 'star' : 'timer'/);
   assert.match(read('src/screens/SetCollection/dexLook.tsx'), /const gem = count === 1 \? Math\.round\(size \* 1\.35\) : size;/);
 });
 
-test('round 6: plurals, collect hold, no empty page, straight push, claim answers at once, player-tied prefetch', () => {
-  const parts = read('src/screens/SetCollection/DexParts.tsx');
-  assert.doesNotMatch(parts, /\{spares\} spares/);
-  assert.match(parts, /suffix=\{spares === 1 \? ' spare' : ' spares'\}/);
-  assert.match(parts, /function AnimatedCount/);
+test('round 6: plurals, collect hold, claim answers at once, player-tied prefetch', () => {
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  assert.match(parts, /extras === 1 \? 'extra' : 'extras'/);
   const reveal = read('src/screens/SetCollection/DexReveal.tsx');
   assert.match(reveal, /function onCountsDone/);
   assert.match(reveal, /later\(closeWithFade, 470\)/, 'pop plus a 350 ms hold after the totals land');
   const screen = read('src/screens/SetCollectionScreen.tsx');
-  assert.match(screen, /contentOffset=\{seededOffset != null/);
-  assert.match(screen, /onLayout=\{armSafety\}/, 'safety timer starts at first layout');
   assert.match(screen, /claimDim\.value = reduced \? 0\.6 : withTiming\(0\.6/);
   const menu = read('src/components/QuickAccessMenu.tsx');
   assert.match(menu, /RootNavigation\.navigate\(item\.screen, item\.params\);\s*closeMenu\(\);/);
@@ -484,7 +512,8 @@ test('round 6: plurals, collect hold, no empty page, straight push, claim answer
 
 test('no book file hard-codes a rarity color: only dexLook, which reads design-system', () => {
   const files = ['src/screens/SetCollection/SetHuntSections.tsx', 'src/screens/SetCollection/DexParts.tsx', 'src/screens/SetCollection/DexTile.tsx',
-    'src/screens/SetCollection/DexItemCard.tsx', 'src/screens/SetCollection/DexReveal.tsx', 'src/screens/SetCollectionScreen.tsx'];
+    'src/screens/SetCollection/DexItemCard.tsx', 'src/screens/SetCollection/DexReveal.tsx', 'src/screens/SetCollectionScreen.tsx',
+    'src/screens/SetCollection/BookParts.tsx'];
   // RidePhoto.tsx is left out on purpose: its gold frame and blue share background are photo-grade art, not rarity.
   // Old per-file rarity ramps (round 1 and earlier) and any copy of the design-system values outside dexLook.
   const banned = /#(0879ca|ff9800|9c27b0|4caf50|00a5f5|ff6b00|ffd700|8fa9c2|1d9bf0|0a5fb0|e0a100|ff8a00|2fb35d|9b4dff|ff5a2b|f5b400|6f849c)\b/i;
@@ -492,7 +521,7 @@ test('no book file hard-codes a rarity color: only dexLook, which reads design-s
   assert.doesNotMatch(read('src/screens/SetCollection/SetHuntSections.tsx'), /RARITY_COLOR/);
 });
 
-test('round 7: reveal clears the dim and busy state at once, refreshes in background, Wear title clears the compass', () => {
+test('round 7: reveal clears the dim and busy state at once, refreshes in background', () => {
   const screen = read('src/screens/SetCollectionScreen.tsx');
   const celebrate = screen.slice(screen.indexOf('const celebrate = useCallback'), screen.indexOf('const claim = useCallback'));
   assert.match(celebrate, /claimDim\.value = withTiming\(0/);
@@ -501,9 +530,13 @@ test('round 7: reveal clears the dim and busy state at once, refreshes in backgr
   assert.doesNotMatch(screen, /await refreshPlayer\(\)\.catch\(\(\) => undefined\);\s*await reloadAll\(\);/);
   assert.match(screen, /<Modal visible=\{claimWaiting && !picking\}/, 'the whole window dims during the wait');
   assert.match(screen, /function ClaimBuildUp/);
-  assert.match(screen, /trackBottom\.current - \(viewportH\.current - CTA_CLEARANCE \+ 24\)[\s\S]{0,260}scrollToOffset\(\{ offset, animated: !reduced \}\)/);
-  assert.match(screen, /if \(firstLand\.current\) \{/, 'the jump is first land only');
-  assert.match(read('src/screens/SetCollection/dexCache.ts'), /dex_land_offsets_v1_/);
+  // The page is laid out so the prize rows sit in the first screen: no jump-scroll that hides the shelf.
+  assert.doesNotMatch(screen, /firstLand|seededOffset/);
+  // Idle loops share one page clock and stop under any sheet, card or reveal.
+  assert.match(screen, /const active = isFocused && !selectedItem && !reveal && !sparesOpen && !giftItem && !claimWaiting && !picking;/);
+  assert.match(read('src/screens/SetCollection/bookClock.ts'), /export const SHEEN = makeMutable\(0\);/);
+  assert.doesNotMatch(read('src/screens/SetCollection/DexTile.tsx'), /withRepeat/, 'no per-tile endless loop');
+  assert.doesNotMatch(read('src/screens/SetCollection/BookParts.tsx'), /withRepeat/, 'no per-card endless loop');
   assert.match(read('src/screens/SetCollection/DexReveal.tsx'), /if \(countTargets === 0\) later\(onCountsDone/);
   assert.match(read('src/screens/SetCollection/dexLook.tsx'), /gemOutline/);
 });
@@ -525,27 +558,11 @@ test('ship gate: Ride Photo stays off unless the server sends player_stats.ride_
   }
 });
 
-test('round 7b: the after-stamp scroll only moves down and never stops with the set cards cut in half', () => {
-  const screen = read('src/screens/SetCollectionScreen.tsx');
-  const onClose = screen.slice(screen.indexOf('<RewardReveal reveal={reveal} onClose'), screen.indexOf('<MilestonePickSheet'));
-  assert.match(onClose, /const offset = Math\.max\(overflow, pickerBottom\.current\)/);
-  assert.match(onClose, /overflow > scrollY\.current \+ 2/);
-  assert.match(screen, /onScroll=\{event => \{ scrollY\.current = event\.nativeEvent\.contentOffset\.y; \}\}/);
-});
-
 test('round 7b: a wearable pick claim shows the build-up inside the sheet (one iOS modal at a time)', () => {
   const screen = read('src/screens/SetCollectionScreen.tsx');
   assert.match(screen, /overlay=\{claimWaiting \? buildUp : null\}/);
   const sheet = read('src/screens/SetCollection/SetHuntSections.tsx');
   assert.match(sheet, /\{overlay\}\s*<\/Modal>/);
-});
-
-test('round 7b: the first land always applies the claim offset, and the seeded offset is read once at mount', () => {
-  const screen = read('src/screens/SetCollectionScreen.tsx');
-  assert.match(screen, /const \[seededOffset\] = useState\(\(\) => \(seed \? landOffset\(player\?\.id, seedSlug\) : null\)\)/);
-  const land = screen.slice(screen.indexOf('if (firstLand.current) {'), screen.indexOf('showList();', screen.indexOf('if (firstLand.current) {')));
-  assert.match(land, /listRef\.current\?\.scrollToOffset\(\{ offset, animated: false \}\)/);
-  assert.doesNotMatch(land, /Math\.abs\(seededOffset/);
 });
 
 test('round 7b: a finished set the live list sends without rewards_claimed reads its claim state from the detail', async () => {
@@ -615,13 +632,92 @@ test('swaps are retired: rare finds are earned on the map, spares stay a count, 
   }
   // The pickup card never sends a kid toward a spare exchange.
   assert.doesNotMatch(modal, /EXCHANGE|spares toward|exchange_cost/);
-  // Spares: a count chip only when there are any, and the sheet explains sharing, not trading.
-  assert.match(screen, /\{spares > 0 && <SparesMeter spares=\{spares\}/);
-  assert.match(screen, /Spares are extra copies/);
+  // Extras: a share button only when there are any and sharing is on; the sheet lists every extra and explains sharing.
+  const parts2 = read('src/screens/SetCollection/BookParts.tsx');
+  assert.match(parts2, /extras > 0 && onExtras \?/);
+  assert.match(screen, /Tap one to give it to a friend!/);
+  assert.match(screen, /const list = \[\.\.\.items\]\.filter\(item => item\.found && item\.spares > 0\)/, 'every extra, not just one');
   assert.doesNotMatch(screen, /swap for new finds/i);
   // Items swapped in while swaps were live keep the label.
-  assert.equal(dex.caughtLine({ found: true, foundInWorld: false, caught: 1 }), 'Swapped in. Catch one on the map too!');
+  assert.equal(dex.caughtLine({ found: true, foundInWorld: false, caught: 1 }), 'Swapped in. Find one on the map too!');
   assert.match(card, /item\.foundInWorld === false \? 'Swapped in'/);
   // A missing find gets one big way to the map in the slot the Swap button used.
   assert.match(card, /\(!item\.found \|\| item\.foundInWorld === false\) && \([\s\S]{0,120}'Catch one on the map' : 'Find it on the map'\} icon="map" onPress=\{onFind\}/);
+});
+
+test('R4: the ready prize claims from the set header (always on the first screen); rare find is a shelf card; worn finish folds', () => {
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(parts, /const readyEntry = prizeList\(set\)\.find\(entry => entry\.reward\.status === 'claimable'\)/);
+  assert.match(parts, /label=\{readyEntry\.reward\.needsPick \? 'Pick and claim' : 'Claim prize!'\}/);
+  assert.match(screen, /<BookHeader set=\{set\} busyId=\{busy\} onClaim=\{reward => void claim\(reward\)\}/);
+  assert.doesNotMatch(screen, /RareBanner/);
+  assert.match(screen, /\{daily && <RareShelfCard onPress=\{goToMap\} \/>\}/);
+  assert.match(parts, /state\.kind === 'done' && \(!final \|\| !reward\.title \|\| titleWorn\)/);
+});
+
+test('R5: solid slot ink, numbered slot plates, compact locked finish row, Wearing pill, gold bar at 40/40, one-hunt toast', () => {
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  const tile = read('src/screens/SetCollection/DexTile.tsx');
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(parts, /ink: '#bfb08a', inkOpacity: 1/);
+  assert.match(tile, />#\{slot\}<\/Text>/);
+  assert.match(screen, /slot=\{slotOf\.get\(item\.id\) \?\? 0\}/);
+  assert.match(parts, /\{hero \? \(/);
+  assert.match(parts, /Wearing: \{set\.reward\.title\}/, 'the worn title is said in words on the header, a tap takes it off');
+  assert.match(parts, /finished \|\| set\.isComplete \? BRAND\.gold : set\.color/);
+  assert.match(screen, /Now hunting \$\{set\.name\} instead of \$\{before\.name\}\./);
+  // Extras use the heart (sharing); the gift only ever means a prize.
+  assert.match(parts, /<GameIcon name="heart" size=\{22\} \/>/);
+});
+
+test('in-between prizes (server steps): parsed into the prize list, own claim route, old servers unchanged', () => {
+  const base = legacySet();
+  const without = plain(dex.fromLegacySet(base));
+  const total = without.total;
+  const set = plain(dex.fromLegacySet({ ...base, steps: [
+    { key: 'step_16', target: 16, status: 'claimed', rewards: { energy: 20, experience: 60 } },
+    { key: 'step_24', target: 24, status: 'claimable', rewards: { energy: 25, experience: 90 } },
+    { key: 'bad', target: 0 }, 'junk', { target: total + 5 },
+  ] }));
+  const ids = set.steps.map(step => step.id);
+  assert.ok(ids.includes('step_16') && ids.includes('step_24'));
+  assert.equal(set.steps.length, without.steps.length + 2, 'malformed entries skipped');
+  const ready = set.steps.find(step => step.id === 'step_24');
+  assert.deepEqual(ready.claim, { kind: 'step', target: 24 });
+  assert.equal(ready.energy, 25);
+  assert.equal(ready.status, 'claimable');
+  assert.deepEqual(plain(dex.claimFromPath('/me/prep-item-sets/churro_collection/steps/32/claim')), { kind: 'step', target: 32 });
+  assert.equal(dex.goalLine({ ...set, found: 20, steps: set.steps.map(s => s.id === 'step_24' ? { ...s, status: 'locked' } : s) }), 'Next prize at 24: 4 to go');
+  const api = read('src/api/endpoints/me/prep-item-sets/index.ts');
+  assert.match(api, /`\/me\/prep-item-sets\/\$\{slug\}\/steps\/\$\{target\}\/claim`/);
+  assert.match(read('src/screens/SetCollectionScreen.tsx'), /reward\.claim\.kind === 'step'\) \{[\s\S]{0,120}claimSetStep\(set\.slug, reward\.claim\.target\)/);
+});
+
+test('perf: clocks run only when read, sweeps live in rare-only children, sticky bar owns its state, background pauses refresh', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  const tile = read('src/screens/SetCollection/DexTile.tsx');
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  assert.match(screen, /useBookClocks\(active && anyClaim, active && anyRare, reduced\)/);
+  assert.match(tile, /\{sheen && <Sheen id=\{item\.id\}/);
+  assert.match(tile, /sticker: \{ borderRadius: 18, backgroundColor: BRAND\.white/);
+  assert.doesNotMatch(tile + parts, /active\?: boolean|readonly active: boolean/);
+  assert.match(parts, /\{claim && \([\s\S]{0,300}<GiftBob \/>/);
+  assert.match(screen, /stickyRef\.current\?\.show\(y > stickAt\.current\)/);
+  assert.match(screen, /AppState\.addEventListener\('change'/);
+  assert.doesNotMatch(screen, /timers\.push/);
+});
+
+test('juice: notches pop as the fill passes, count rolls up, rows pop in on a set switch, gift shakes harder, item card pride line', () => {
+  const parts = read('src/screens/SetCollection/BookParts.tsx');
+  const screen = read('src/screens/SetCollection/../SetCollectionScreen.tsx');
+  const card = read('src/screens/SetCollection/DexItemCard.tsx');
+  assert.match(parts, /function Notch\(/);
+  assert.match(parts, /function RollCount\(/);
+  assert.match(screen, /function RowPop\(/);
+  assert.match(screen, /grow\.value = withTiming\(Math\.min\(1, step \/ 4\)/);
+  assert.match(card, /First found \{new Date\(item\.firstFoundAt\)/);
+  assert.match(card, /\[styles\.body, \{ borderColor: look\.frame \}\]/);
+  const item = dex.buildItems({ items: [{ id: 1, name: 'A', rarity: 1, is_collected: true, quantity_collected: 1, first_collected_at: '2026-10-01T10:00:00Z' }], progress: {} })[0];
+  assert.equal(item.firstFoundAt, '2026-10-01T10:00:00Z');
 });

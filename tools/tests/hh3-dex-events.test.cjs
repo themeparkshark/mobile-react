@@ -37,12 +37,12 @@ test('empty, missing or junk payloads mean no Events card', () => {
 
 test('the picker shows Events after the Home Hunt sets and opens FrightCardScreen; no hard-coded names', () => {
   const screen = read('src/screens/SetCollectionScreen.tsx');
-  const sets = screen.indexOf('{sets.map(entry => <SetTab');
-  const ev = screen.indexOf('<EventTab');
+  const sets = screen.indexOf('{sets.map(entry => <ShelfCard');
+  const ev = screen.indexOf('<ShelfEventCard');
   assert.ok(sets > 0 && ev > sets, 'Events come after the Home Hunt sets in the same row');
   assert.match(screen, /RootNavigation\.navigate\('FrightCard', \{ eventSlug: card\.eventSlug \}\)/);
   assert.match(screen, /events\.cards\.length > 0 && eventRouteExists\(\)/);
-  for (const file of ['src/screens/SetCollection/eventCards.ts', 'src/screens/SetCollection/DexParts.tsx', 'src/screens/SetCollectionScreen.tsx']) {
+  for (const file of ['src/screens/SetCollection/eventCards.ts', 'src/screens/SetCollection/BookParts.tsx', 'src/screens/SetCollectionScreen.tsx']) {
     assert.doesNotMatch(read(file), /Fin-ister|Deep Lantern|Halloween|Horror/i, `${file}: names come from the server`);
   }
 });

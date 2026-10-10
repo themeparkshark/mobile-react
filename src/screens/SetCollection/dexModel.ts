@@ -23,7 +23,8 @@ export type DexRewardStatus = 'locked' | 'claimable' | 'claimed' | 'pending';
 export type DexClaim =
   | { readonly kind: 'complete' }                       // POST /me/prep-item-sets/{slug}/claim
   | { readonly kind: 'starter' }                        // legacy POST .../claim-starter (with optional item_id)
-  | { readonly kind: 'milestone'; readonly key: SetMilestone['key'] }; // POST .../milestones/{key}/claim
+  | { readonly kind: 'milestone'; readonly key: SetMilestone['key'] } // POST .../milestones/{key}/claim
+  | { readonly kind: 'step'; readonly target: number };              // POST .../steps/{target}/claim (in-between prizes)
 
 export interface DexReward {
   readonly id: string;
@@ -98,6 +99,8 @@ export interface DexItem {
   readonly photoUrl: string | null;
   /** Caught during Golden Hour (cosmetic gold card). */
   readonly goldenHour: boolean;
+  /** When this find was first caught (ISO), for the card's "First found" line. */
+  readonly firstFoundAt: string | null;
 }
 
 export type PhotoGrade = 'good' | 'great' | 'frame_it';
@@ -220,7 +223,7 @@ function fromMilestone(milestone: SetMilestone, total: number, isFinal: boolean)
   };
 }
 
-type LegacySetLike = Pick<PrepItemSetListItem, 'is_complete' | 'rewards_claimed' | 'starter_milestone' | 'completion_rewards' | 'milestones'>
+type LegacySetLike = Pick<PrepItemSetListItem, 'is_complete' | 'rewards_claimed' | 'starter_milestone' | 'completion_rewards' | 'milestones' | 'steps'>
   & { total_items: number };
 
 /** Final reward plus earlier steps from a legacy list entry or detail. */
@@ -265,7 +268,28 @@ export function legacyRewards(set: LegacySetLike): { reward: DexReward; steps: D
       claim: { kind: 'starter' }, needsPick: !starter.rewards_claimed && pick, choices, titleTier: 'starter',
     });
   }
-  return { reward, steps };
+  return { reward, steps: [...steps, ...stepRewards(set.steps, total)] };
+}
+
+/** In-between prizes (server SetSteps): small energy + XP prizes every ~8 finds. Malformed entries are skipped. */
+export function stepRewards(raw: unknown, total: number): DexReward[] {
+  if (!Array.isArray(raw)) return [];
+  const out: DexReward[] = [];
+  for (const entry of raw) {
+    const step = record(entry);
+    const target = num(step?.target);
+    if (!step || target < 1 || target >= total) continue;
+    const rewards = record(step.rewards) ?? {};
+    const status = step.status === 'claimed' || step.status === 'claimable' ? step.status : 'locked';
+    const prize = prizeLine({ energy: num(rewards.energy), experience: num(rewards.experience) });
+    out.push({
+      id: `step_${target}`, target, status,
+      energy: num(rewards.energy), tickets: 0, experience: num(rewards.experience), coins: 0, title: null, wearableName: null,
+      prize, label: stepLabel(target, prize), claim: { kind: 'step', target },
+      needsPick: false, choices: [], titleTier: 'starter',
+    });
+  }
+  return out;
 }
 
 function legacyStatusOf(set: Pick<PrepItemSetListItem, 'availability' | 'is_in_rotation'> & { status?: unknown; is_retired?: unknown }): DexSetStatus {
@@ -309,6 +333,8 @@ const MILESTONE_KEYS = ['starter', 'explorer', 'complete', 'master', 'encore'];
 /** The claim route named by a v3 claim_path, or null to keep the legacy route. */
 export function claimFromPath(path: unknown): DexClaim | null {
   if (typeof path !== 'string') return null;
+  const step = /^\/me\/prep-item-sets\/[a-z0-9_-]+\/steps\/(\d+)\/claim$/.exec(path);
+  if (step) return { kind: 'step', target: Number(step[1]) };
   const match = /^\/me\/prep-item-sets\/[a-z0-9_-]+\/(claim|claim-starter|milestones\/([a-z]+)\/claim)$/.exec(path);
   if (!match) return null;
   if (match[2]) return MILESTONE_KEYS.includes(match[2]) ? { kind: 'milestone', key: match[2] as SetMilestone['key'] } : null;
@@ -484,9 +510,10 @@ const GENERIC_HINT = /^(anytime,? anywhere\.?|pops up on the map near you, any t
  */
 export function rarityHint(hint: string, rarity: number): string {
   if (!GENERIC_HINT.test(hint.trim())) return hint;
-  if (rarity >= 5) return 'Super rare! Watch for the daily rare';
-  if (rarity === 4) return 'Very rare: about 1 in 25 finds';
-  if (rarity === 3) return 'Rare: about 1 in 8 finds';
+  // The same words as the rarity headings on the page.
+  if (rarity >= 5) return 'Super rare! Watch for the rare find of the day';
+  if (rarity === 4) return 'Very hard to find. Keep looking!';
+  if (rarity === 3) return 'Hard to find. Keep looking!';
   return hint;
 }
 
@@ -551,6 +578,7 @@ export function buildItems(
       photoGrade: photo.grade,
       photoUrl: photo.url,
       goldenHour: photo.goldenHour,
+      firstFoundAt: found ? firstFound : null,
     };
   });
 }
@@ -558,9 +586,9 @@ export function buildItems(
 
 /** The item card's catch line. */
 export function caughtLine(item: DexItem): string {
-  if (!item.found) return 'Not caught yet';
-  if (item.foundInWorld === false) return 'Swapped in. Catch one on the map too!';
-  return item.caught === 1 ? 'Caught 1 time' : `Caught ${item.caught} times`;
+  if (!item.found) return 'Not found yet';
+  if (item.foundInWorld === false) return 'Swapped in. Find one on the map too!';
+  return item.caught === 1 ? 'Found 1 time' : `Found ${item.caught} times`;
 }
 
 
@@ -610,4 +638,93 @@ export function prizeChips(reward: Pick<DexReward, 'energy' | 'tickets' | 'exper
   if (reward.wearableName) list.push({ icon: 'shark', value: reward.wearableName, label: reward.wearableName });
   if (reward.title) list.push({ icon: 'crown', value: reward.title, label: `the ${reward.title} title` });
   return list;
+}
+
+/** One row of the finds list: a rarity heading, or up to `columns` tiles. */
+export type FindRow =
+  | { readonly kind: 'heading'; readonly key: string; readonly rarity: 1 | 2 | 3 | 4 | 5; readonly label: string; readonly found: number; readonly total: number }
+  | { readonly kind: 'tiles'; readonly key: string; readonly items: readonly DexItem[] };
+
+/**
+ * The finds grouped by rarity, Common first and Legendary last (the big goal at the bottom), each group under
+ * a heading that names the rarity and its count. Set order is kept inside a group. Rows, not cells, so every
+ * tile sits on the same grid and recycled rows never shift.
+ */
+export function findRows(items: readonly DexItem[], columns: number): FindRow[] {
+  const rows: FindRow[] = [];
+  for (const rarity of [1, 2, 3, 4, 5] as const) {
+    const group = items.filter(item => item.rarity === rarity);
+    if (group.length === 0) continue;
+    rows.push({ kind: 'heading', key: `h${rarity}`, rarity, label: rarityLabel(rarity),
+      found: group.filter(item => item.found).length, total: group.length });
+    for (let i = 0; i < group.length; i += columns) {
+      const slice = group.slice(i, i + columns);
+      rows.push({ kind: 'tiles', key: `r${rarity}-${slice[0].id}`, items: slice });
+    }
+  }
+  return rows;
+}
+
+/** "On the map after sunset", "On the map anytime", "On the map on rainy days": where and when this book's finds show up. */
+export function whenLine(set: Pick<DexSet, 'spawnHint' | 'status' | 'startsAt'>, now: Date = new Date()): string {
+  if (set.status === 'retired') return 'No longer on the map. Yours to keep!';
+  if (set.status === 'upcoming') {
+    const start = set.startsAt ? new Date(set.startsAt) : null;
+    return start && !Number.isNaN(start.getTime()) && start.getTime() > now.getTime()
+      ? `On the map from ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'On the map soon';
+  }
+  const hint = (set.spawnHint ?? '').trim().replace(/\.$/, '');
+  if (!hint || GENERIC_HINT.test(hint) || /^anytime/i.test(hint)) return 'On the map anytime';
+  return `On the map ${hint.charAt(0).toLowerCase()}${hint.slice(1)}`;
+}
+
+/** Is the book's map window open right now? Null when it is always open (nothing to say). */
+export function openNow(set: Pick<DexSet, 'spawnHint' | 'spawningNow' | 'status'>): boolean | null {
+  if (set.status === 'retired' || set.status === 'upcoming') return false;
+  if (set.status === 'resting') return false;
+  if (set.spawningNow === false) return false;
+  if (!set.spawnHint || GENERIC_HINT.test(set.spawnHint.trim()) || /^anytime/i.test(set.spawnHint.trim())) return null;
+  return set.spawningNow === true ? true : null;
+}
+
+/** How hard a rarity is to find, in words a 7-year-old reads (same kind of hint for all five). */
+export const RARITY_WORDS: Readonly<Record<1 | 2 | 3 | 4 | 5, string>> = {
+  1: 'Easy to find', 2: 'A little harder', 3: 'Hard to find', 4: 'Very hard to find', 5: 'Super rare!',
+};
+
+/** The bar notches: where each prize sits on the count bar (0..1), and its state. */
+export function prizeMarks(set: Pick<DexSet, 'total' | 'reward' | 'steps'>): { readonly at: number; readonly final: boolean; readonly status: DexRewardStatus; readonly target: number }[] {
+  const total = Math.max(1, set.total);
+  return prizeList(set).map(({ reward, final }) => ({
+    at: final ? 1 : Math.max(0.05, Math.min(0.95, reward.target / total)), final, status: reward.status, target: final ? total : reward.target,
+  }));
+}
+
+/** The next goal in words, naming the target ("Next prize at 8: 3 to go", "Next: find all 40 (31 to go)"). Null while a prize waits (its row says so). */
+export function goalLine(set: Pick<DexSet, 'total' | 'found' | 'reward' | 'steps' | 'isComplete'>): string | null {
+  if (hasClaimable(set as DexSet)) return null;
+  const finished = set.reward.status === 'claimed' || set.reward.status === 'pending';
+  if (finished || set.isComplete) return 'You found them all!';
+  const next = prizeList(set).find(entry => entry.reward.status === 'locked');
+  if (!next) return null;
+  const toGo = Math.max(1, (next.final ? set.total : next.reward.target) - set.found);
+  return next.final ? `Next: find all ${set.total} (${toGo} to go)` : `Next prize at ${next.reward.target}: ${toGo} to go`;
+}
+
+/** A prize row's state in words a kid reads at a glance. */
+export function prizeState(reward: Pick<DexReward, 'status' | 'target'>, found: number):
+  { readonly kind: 'claim' | 'done' | 'pending' | 'locked'; readonly toGo: number } {
+  if (reward.status === 'claimable') return { kind: 'claim', toGo: 0 };
+  if (reward.status === 'claimed') return { kind: 'done', toGo: 0 };
+  if (reward.status === 'pending') return { kind: 'pending', toGo: 0 };
+  return { kind: 'locked', toGo: Math.max(1, reward.target - found) };
+}
+
+/** Earlier steps then the finish reward, in target order (the prize list). */
+export function prizeList(set: Pick<DexSet, 'total' | 'reward' | 'steps'>): { readonly reward: DexReward; readonly final: boolean }[] {
+  return [
+    ...set.steps.filter(step => step.target < Math.max(1, set.total)).slice().sort((a, b) => a.target - b.target)
+      .map(reward => ({ reward, final: false })),
+    { reward: set.reward, final: true },
+  ];
 }

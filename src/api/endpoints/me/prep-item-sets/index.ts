@@ -99,6 +99,8 @@ export interface PrepItemSetListItem {
   rewards_claimed?: boolean;
   starter_milestone: StarterMilestone | null;
   milestones?: SetMilestone[] | null;
+  /** In-between prizes on legacy sets (server SetSteps, new field; absent on older servers). */
+  steps?: SetStep[] | null;
   completion_rewards: {
     energy: number;
     tickets: number;
@@ -297,6 +299,22 @@ export interface MilestoneClaimResult {
   };
   new_totals?: { energy: number; tickets: number; experience: number };
   milestone?: SetMilestone;
+}
+
+/** An in-between prize (every ~8 finds) on a legacy set. */
+export interface SetStep {
+  key: string;
+  target: number;
+  collected: number;
+  status: 'locked' | 'claimable' | 'claimed';
+  rewards: { energy?: number; experience?: number };
+  claim_path?: string;
+}
+
+export async function claimSetStep(slug: string, target: number): Promise<MilestoneClaimResult> {
+  const { data } = await client.post<{ success: boolean; data: MilestoneClaimResult }>(
+    `/me/prep-item-sets/${slug}/steps/${target}/claim`, {});
+  return data.data;
 }
 
 export async function claimSetMilestone(slug: string, key: SetMilestoneKey, itemId?: number): Promise<MilestoneClaimResult> {

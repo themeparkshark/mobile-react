@@ -16,7 +16,8 @@ const LEGACY = process.env.EXPO_PUBLIC_DEX_PREVIEW_LEGACY === '1';
 const ART = LEGACY ? '' : process.env.EXPO_PUBLIC_DEX_PREVIEW_ART ?? '';
 const RARITY = ['', 'common', 'uncommon', 'rare', 'epic', 'legendary'];
 const HINTS: Record<string, string> = {
-  always: 'Pops up near you, any time.',
+  // The live server's words (SpawnGate::hint).
+  always: process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real' ? 'Anytime, anywhere' : 'Pops up near you, any time.',
   time: 'After sunset',
   days: 'Weekends',
   seasonal: 'October only',
@@ -30,10 +31,12 @@ interface Scenario {
   readonly status?: 'active' | 'resting' | 'upcoming' | 'retired';
   readonly spawning?: boolean | null;
   readonly focused?: boolean;
+  /** Also own the top find (a Legendary) to show its shimmer. */
+  readonly ownTop?: boolean;
 }
 
 // One story per set: mid-hunt, finished and ready to claim, starter ready, resting at night, coming soon.
-const SCENARIOS: Record<string, Scenario> = {
+const SCENARIOS_ALL: Record<string, Scenario> = {
   snack_stand: { found: 8, starter: 'claimed', focused: true },
   churro_cart: { found: 9, starter: 'claimed' },
   sweet_treats: { found: 5, starter: 'claimable' },
@@ -49,6 +52,20 @@ const SCENARIOS: Record<string, Scenario> = {
   spooky_snacks: { found: 0, status: 'upcoming' },
 };
 
+// EXPO_PUBLIC_DEX_PREVIEW_SCENE=real: a typical mid-game player on today's five live sets (one set hunted,
+// a starter step ready, a night set and a rain set waiting for their time, one untouched).
+const REAL: Record<string, Scenario & { hint?: string }> = {
+  churro_collection: { found: 14, starter: 'claimed', focused: true, ownTop: true },
+  pretzel_collection: { found: 9, starter: 'claimable' },
+  night_lights: { found: 3, starter: 'locked', spawning: false, hint: 'After sunset' },
+  rain_parade: { found: 1, starter: 'locked', spawning: false, hint: 'On rainy days' },
+  // One finished set whose big prize is waiting (claim it to see the title stamp, then the trophy case).
+  camera_crew: { found: 40, starter: 'claimed' },
+};
+const SCENARIOS: Record<string, Scenario & { hint?: string }> = process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real' ? REAL : SCENARIOS_ALL;
+const REAL_SCENE = process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real';
+const STARTER_TARGET = process.env.EXPO_PUBLIC_DEX_PREVIEW_SCENE === 'real' ? 8 : 5;
+
 function owned(index: number, count: number, total: number): boolean {
   // Spread the finds so silhouettes mix in, Legendary last.
   const order = Array.from({ length: total }, (_, i) => i).sort((a, b) => ((a * 7) % total) - ((b * 7) % total));
@@ -59,7 +76,7 @@ function build(set: MockDexSet, setIndex: number) {
   const scene = SCENARIOS[set.slug] ?? { found: 0 };
   const total = set.items.length;
   const items: PrepItemSetItem[] = set.items.map((item, index) => {
-    const have = scene.found >= total || owned(index, scene.found, total);
+    const have = scene.found >= total || owned(index, scene.found, total) || (scene.ownTop === true && index === total - 1);
     const copies = have ? 1 + ((index * 5 + setIndex) % 4) : 0;
     return {
       id: setIndex * 100 + index + 1, name: item.name, variant_slug: '', description: item.flavor,
@@ -77,12 +94,12 @@ function build(set: MockDexSet, setIndex: number) {
   const found = items.filter(item => item.is_collected).length;
   const complete = found >= total;
   const starter: StarterMilestone | null = scene.starter ? {
-    target: 5, collected: Math.min(5, found), is_unlocked: scene.starter !== 'locked', rewards_claimed: scene.starter === 'claimed',
+    target: STARTER_TARGET, collected: Math.min(STARTER_TARGET, found), is_unlocked: scene.starter !== 'locked', rewards_claimed: scene.starter === 'claimed',
     rewards: { energy: 15, tickets: 1, experience: 30 },
   } : null;
   const rewards = { energy: set.reward.energy, tickets: set.reward.tickets, experience: set.reward.xp, title: set.reward.title, badge_url: null };
   const status = scene.status ?? 'active';
-  const timeGate = scene.spawning === false ? { start_hour: null, end_hour: null, description: 'After sunset', is_spawning_now: false } : null;
+  const timeGate = scene.spawning === false ? { start_hour: null, end_hour: null, description: scene.hint ?? 'After sunset', is_spawning_now: false } : null;
   const list: PrepItemSetListItem = {
     id: setIndex + 1, slug: set.slug, name: set.name, description: '', icon_url: null, theme: 'food',
     theme_config: { label: set.name, color: set.color }, rarity: 'common', is_focused: scene.focused === true,
@@ -91,6 +108,13 @@ function build(set: MockDexSet, setIndex: number) {
     time_gate: timeGate, weather_gate: null, total_items: total, collected_count: found,
     progress_percentage: Math.round((found / total) * 100), is_complete: complete, spare_count: 6, exchange_cost: 4,
     rewards_claimed: scene.claimed === true, starter_milestone: starter, completion_rewards: rewards,
+    // In-between prizes (server SetSteps) in the real scene: every ~8 finds between the starter and the full set.
+    steps: REAL_SCENE && total >= 16 ? [16, 24, 32].filter(target => target < total).map((target, index) => ({
+      key: `step_${target}`, target, collected: Math.min(found, target),
+      status: found >= target ? (scene.claimed || found >= total ? 'claimed' as const : 'claimable' as const) : 'locked' as const,
+      rewards: { energy: [20, 25, 30][index], experience: [60, 90, 120][index] },
+      claim_path: `/me/prep-item-sets/${set.slug}/steps/${target}/claim`,
+    })) : null,
   };
   const detail: PrepItemSetDetailResponse['data'] = {
     set: { id: list.id, slug: set.slug, name: set.name, description: '', icon_url: null, theme: 'food',
@@ -106,7 +130,7 @@ function build(set: MockDexSet, setIndex: number) {
   const dexSet = {
     // Set badges are still being drawn: the set's top item stands in.
     slug: set.slug, color: set.color, badge_url: ART ? `${ART}/items/${set.items[set.items.length - 1].slug}.png` : null,
-    status, spawning_now: scene.spawning ?? (status === 'active' ? true : null), spawn_hint: HINTS[set.spawn] ?? null,
+    status, spawning_now: scene.spawning ?? (status === 'active' ? true : null), spawn_hint: scene.hint ?? HINTS[set.spawn] ?? null,
     reward: { coins: set.reward.coins },
   };
   const dexItems = items.map((item, index) => ({
@@ -126,7 +150,7 @@ export default function SetCollectionPreviewScreen() {
     <SetCollectionScreen
       previewSets={BUILT.map(entry => entry.list)}
       previewDetails={Object.fromEntries(BUILT.map(entry => [entry.list.slug, entry.detail]))}
-      previewDex={{ sets: BUILT.map(entry => entry.dexSet) }}
+      previewDex={{ sets: BUILT.map(entry => entry.dexSet), ...(REAL_SCENE ? { daily_rare: { available: true, on_map: false, caught_today: false } } : {}) }}
       previewDexDetails={Object.fromEntries(BUILT.map(entry => [entry.list.slug, { items: entry.dexItems }]))}
     />
   );
