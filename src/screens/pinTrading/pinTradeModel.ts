@@ -81,7 +81,8 @@ export function givablePins(pins: readonly ItemType[], boardItemId: number): Ite
 
 /** Only what the screen needs from a swap: the board never keeps who posted it. */
 export function boardEntry(swap: PinSwapType): PinSwapType {
-  return { id: swap.id, pin: swap.pin, held_from: swap.held_from, held_to: swap.held_to };
+  // Pins v2: the gold copy's number rides along (it decides the #1 plate, the picker locks and the upgrade path).
+  return { id: swap.id, pin: swap.pin, held_from: swap.held_from, held_to: swap.held_to, ...(swap.serial ? { serial: swap.serial } : {}) };
 }
 
 export type TradeErrorKind = 'taken' | 'owned' | 'network' | 'generic' | 'gold_for_gold' | 'daily_limit';

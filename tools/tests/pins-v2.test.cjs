@@ -142,3 +142,12 @@ test('pack pace: honest days left and how many pins are still out there', () => 
   assert.equal(packPace({ have: 5, total: 5, ends_on: '2026-12-31' }, '2026-10-09'), 'All found!');
   assert.equal(packPace({ have: 1, total: 5, ends_on: null }, '2026-10-09'), '4 to find');
 });
+
+test('the trading board keeps a gold copy\'s number on its card', () => {
+  const { toCards, mergeBoard } = loadTs('src/screens/pinTrading/pinTradeModel.ts');
+  const swap = { id: 68, pin: { item: { id: 482, name: 'Golden Magic Shark Pin' } }, held_from: null, held_to: null, serial: 1 };
+  const cards = toCards([swap]);
+  assert.equal(cards[0].serial, 1);
+  assert.equal(mergeBoard(cards, [swap], [])[0].serial, 1);
+  assert.equal(toCards([{ ...swap, serial: null }])[0].serial, undefined);
+});
