@@ -24,8 +24,9 @@ export const GROWN_UP_LINES: readonly string[] = [
 /** "This month on this account: $6.98 in 2 buys." Exported for tests. */
 export function spendLine(spend: { usd: number; buys: number } | null): string | null {
   if (!spend) return null;
-  if (spend.buys === 0) return 'This month on this account: nothing bought yet.';
-  return `This month on this account: $${spend.usd.toFixed(2)} in ${spend.buys} ${spend.buys === 1 ? 'buy' : 'buys'} (Supplies, Shark Pass, gift plans; list prices). VIP renewals show in the Apple ID's history of buys.`;
+  const what = 'Counts Supplies, the Shark Pass and VIP gift plans at US list prices before tax, refunds left out. VIP plans (first payment and renewals) are in the Apple ID\u2019s history of buys.';
+  if (spend.buys === 0) return `This month on this account: none of these bought yet. ${what}`;
+  return `This month on this account: $${spend.usd.toFixed(2)} in ${spend.buys} ${spend.buys === 1 ? 'buy' : 'buys'}. ${what}`;
 }
 
 export default function GrownUpsInfo({ tone = 'onNavy' }: { tone?: 'onNavy' | 'onLight' }) {

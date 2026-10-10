@@ -238,5 +238,9 @@ test('the grown-up page: this account\'s spend this month and the kid\'s wishlis
   assert.equal(a.length, 1);
   assert.equal(wl.toggled(a, { id: 'x', name: 'Starter Pack' }).length, 0, 'tap again to remove');
   assert.doesNotMatch(read('src/services/money/wishlist.ts'), /client\.|fetch\(/, 'never sent anywhere');
-  assert.match(read('src/components/money/GrownUpsInfo.tsx'), /This month on this account: nothing bought yet\./);
+  assert.match(read('src/components/money/GrownUpsInfo.tsx'), /none of these bought yet/);
+  assert.match(read('src/components/money/GrownUpsInfo.tsx'), /US list prices before tax, refunds left out/);
+  // The wishlist never imports anything that can send: no API client, no notifications, no links.
+  assert.doesNotMatch(read('src/services/money/wishlist.ts'), /import .*(api\/|client|notifications|Linking|share|external)/);
+  assert.doesNotMatch(read('src/components/money/WishHeart.tsx'), /import .*(api\/|client|notifications|Linking|share|external)/);
 });

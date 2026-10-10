@@ -200,6 +200,8 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     delete client.defaults.headers.common.Authorization;
     setToken(undefined);
     setPlayer(null);
+    // Signed out: a waiting free-trial reminder is dropped (it belonged to that account's plan).
+    try { void require('../services/money/trialReminder').cancelTrialReminder(); } catch { /* not loaded */ }
     clearBook(); // the collection book copy belongs to the signed-out player
     setIsReady(true);
     await clearQueueBackgroundHeartbeat().catch(error =>
