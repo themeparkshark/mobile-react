@@ -173,6 +173,19 @@ export function goalWord(event: LiveEvent | null | undefined): string {
   return event?.goal_word?.trim() || 'event';
 }
 
+/** "+46 in the last 15 min · a chest opened 3 min ago" (null when nothing recent: never "0"). */
+export function activityLine(event: LiveEvent, now: number): string | null {
+  const a = event.activity;
+  if (!a || event.phase === 'upcoming') return null;
+  const parts: string[] = [];
+  if (a.recent_points > 0) parts.push(`+${a.recent_points} in the last 15 min`);
+  if (a.last_open_at) {
+    const mins = Math.max(0, Math.round((now - Date.parse(a.last_open_at)) / 60_000));
+    if (mins < 120) parts.push(mins <= 1 ? 'a chest just opened' : `a chest opened ${mins} min ago`);
+  }
+  return parts.length ? parts.join('  ·  ') : null;
+}
+
 /** Star Rides at this park as a Set for marker lookups. */
 export function starRideIds(event: LiveEvent | null): ReadonlySet<number> {
   if (!event || event.phase !== 'live' || !event.here) return EMPTY;

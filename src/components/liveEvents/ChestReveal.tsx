@@ -10,6 +10,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { rewardChips } from '../../services/liveEvents/model';
 import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 import type { EventArt } from './eventArt';
+import PrizeIcon from './PrizeIcon';
 
 const COINS = 8;
 
@@ -142,7 +143,7 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
         <View style={styles.chips}>
           {open && chips.map((c, i) => (
             <Animated.View key={c.icon + i} entering={skip || reduced ? FadeIn.delay(skip ? 0 : i * 120) : ZoomIn.delay(350 + i * 260).springify().damping(12)} style={styles.chip}>
-              <GameIcon name={c.icon} size={28} />
+              <PrizeIcon name={c.icon} size={26} />
               <Text style={styles.chipText} numberOfLines={1}>{c.icon === 'gift' ? c.text : <>+<CountUp to={Number(c.text)} delay={skip || reduced ? 0 : 350 + i * 260} still={skip || reduced} /></>}</Text>
             </Animated.View>
           ))}

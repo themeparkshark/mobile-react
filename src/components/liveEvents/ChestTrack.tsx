@@ -8,6 +8,7 @@ import { useEventAmbient } from '../../services/liveEvents/ambient';
 import { trackFill } from '../../services/liveEvents/model';
 import { BRAND, GameIcon } from '../../ui';
 import type { EventArt } from './eventArt';
+import PrizeIcon from './PrizeIcon';
 
 const CHEST = 40;
 
@@ -86,7 +87,7 @@ function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label, paused
             {done && <View style={styles.badge}><GameIcon name="check" size={14} /></View>}
             {locked && <View style={styles.badge}><GameIcon name="lock" size={14} /></View>}
             {ready && <Text style={styles.openTag}>OPEN!</Text>}
-            {!ready && !done && <View style={styles.prize}><GameIcon name={chest.reward.item ? 'gift' : chest.reward.tickets ? 'ticket' : 'coin'} size={22} /></View>}
+            {!ready && !done && <View style={styles.prize}><PrizeIcon name={chest.reward.item ? 'gift' : chest.reward.tickets ? 'ticket' : 'coin'} size={20} /></View>}
           </Pressable>
         );
       })}

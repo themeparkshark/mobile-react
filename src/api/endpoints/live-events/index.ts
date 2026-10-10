@@ -57,6 +57,8 @@ export interface LiveEvent {
   readonly star_rides: readonly { readonly task_id: number; readonly name: string; readonly latitude: number; readonly longitude: number }[];
   readonly me: { readonly points: number; readonly team: TeamKey | null; readonly helped: boolean; readonly chests: readonly EventChest[] };
   readonly together: { readonly total: number; readonly goal: number; readonly min_personal: number; readonly chests: readonly EventChest[] };
+  /** Signs of life, counts only: points everyone added in the last 15 min, and when any chest was last opened. */
+  readonly activity?: { readonly recent_points: number; readonly last_open_at: string | null };
   readonly team_race: {
     readonly scores: Readonly<Record<TeamKey, number>>;
     readonly leaders: readonly TeamKey[];

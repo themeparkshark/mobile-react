@@ -9,11 +9,12 @@ import type { EventChest, EventReward, LiveEvent, TeamKey } from '../../api/endp
 import { TEAMS, TEAM_ORDER } from '../../constants/teams';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
-import { clockTime, frenzyLine, goalWord, openableKeys, nextStepHint, ordinal, rewardChips, starTimes, teamPlace, timeLine } from '../../services/liveEvents/model';
+import { activityLine, clockTime, frenzyLine, goalWord, openableKeys, nextStepHint, ordinal, rewardChips, starTimes, teamPlace, timeLine } from '../../services/liveEvents/model';
 import { useOpenChest } from '../../services/liveEvents/useLiveEvent';
 import { BRAND, GameIcon } from '../../ui';
 import ChestReveal from './ChestReveal';
 import ChestTrack from './ChestTrack';
+import PrizeIcon from './PrizeIcon';
 import { eventArt, type EventArt } from './eventArt';
 
 type Opened = { key: string; rewards: EventReward | null; already?: boolean; failed?: 'not_ready' | 'network' | false };
@@ -37,7 +38,7 @@ function Peek({ chest, track }: { readonly chest: EventChest | null; readonly tr
       <Text style={styles.peekLabel}>{chest.claimed ? 'Had' : 'Inside'}</Text>
       {chips.map((c, i) => (
         <View key={c.icon + i} style={styles.peekChip}>
-          <GameIcon name={c.icon} size={20} />
+          <PrizeIcon name={c.icon} size={20} />
           <Text style={styles.peekText} numberOfLines={1}>{c.icon === 'gift' ? c.text : c.text}</Text>
         </View>
       ))}
@@ -266,6 +267,9 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
                 <ChestTrack chests={together.chests} value={together.total} tick={togetherTick} art={art} onOpen={onOpen} opening={opening} label="Everyone's chests"
                   onPeek={chest => setPeek(p => (p?.chest.key === chest.key ? null : { track: 'together', chest }))} />
                 <Peek chest={peek?.track === 'together' ? peek.chest : null} track="Everyone's" />
+                <View style={styles.helpedRow}>
+                  {activityLine(event, now) && <Text style={styles.small}>{activityLine(event, now)}</Text>}
+                </View>
                 <View style={styles.helpedRow}>
                   {event.me.helped ? <><GameIcon name="check" size={20} /><Text style={styles.line}>You helped!</Text></>
                     : <Text style={styles.line}>{together.min_personal <= 1 ? 'Win or find 1 time to share' : 'Play to share these'}</Text>}

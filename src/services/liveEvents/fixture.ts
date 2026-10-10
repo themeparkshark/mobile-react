@@ -26,6 +26,7 @@ export function goldenReefFixture(opts: { mine?: number; total?: number; claimed
     how_to: [{ icon: 'win_find', text: 'Win and find' }, { icon: 'fill', text: 'Fill the reef' }, { icon: 'chest', text: 'Open chests' }],
     points: { home_find: 1, ride_win: 4, spotlight_win: 8, boss_hit: 1 }, daily_caps: { home_find: 8, boss_hit: 8 },
     here: opts.here ?? true, include_home: true, star_times: 2, goal_word: 'reef',
+    activity: phase === 'upcoming' ? { recent_points: 0, last_open_at: null } : { recent_points: 46, last_open_at: new Date(now - 3 * 60_000).toISOString() },
     frenzy: { active: !!opts.frenzy && phase === 'live', ends_at: opts.frenzy ? new Date(Math.ceil((now + 1) / hour) * hour).toISOString() : null,
       next_starts_at: opts.frenzy ? null : new Date(now + 3 * hour).toISOString(), multiplier: 2,
       hours: [{ from: '12:00', to: '13:00' }, { from: '18:00', to: '19:00' }] },

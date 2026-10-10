@@ -23,15 +23,15 @@ import { BRAND, GameIcon } from '../ui';
  * fixture data, for captures and grading. EXPO_PUBLIC_LIVE_EVENT_PREVIEW picks
  * the opening state: progress | ready | frenzy | upcoming | ended | sheet | home.
  */
-type Mode = 'progress' | 'ready' | 'frenzy' | 'upcoming' | 'ended' | 'sheet' | 'home' | 'recap' | 'stamp' | 'climb';
-const MODES: Mode[] = ['progress', 'ready', 'frenzy', 'upcoming', 'ended', 'sheet', 'home', 'recap', 'stamp', 'climb'];
+type Mode = 'progress' | 'ready' | 'frenzy' | 'upcoming' | 'ended' | 'sheet' | 'home' | 'recap' | 'stamp' | 'climb' | 'live';
+const MODES: Mode[] = ['progress', 'ready', 'frenzy', 'upcoming', 'ended', 'sheet', 'home', 'recap', 'stamp', 'climb', 'live'];
 
 function fixtureFor(mode: Mode) {
   if (mode === 'ready') return goldenReefFixture({ mine: 13, claimed: 1 });
   if (mode === 'frenzy') return goldenReefFixture({ mine: 9, claimed: 2, total: 20, frenzy: true });
   if (mode === 'upcoming') return goldenReefFixture({ phase: 'upcoming', mine: 0, total: 0 });
   if (mode === 'ended' || mode === 'recap') return goldenReefFixture({ phase: 'ended', mine: 34, total: 290, claimed: 3 });
-  if (mode === 'sheet' || mode === 'climb') return goldenReefFixture({ mine: 13, claimed: 1, total: 140 });
+  if (mode === 'sheet' || mode === 'climb' || mode === 'live') return goldenReefFixture({ mine: 13, claimed: 1, total: 140 });
   return goldenReefFixture({ mine: 9, claimed: 2 });
 }
 
@@ -56,6 +56,18 @@ export default function LiveEventPreviewScreen() {
     const id = setTimeout(() => setLive(e => e.team_race ? { ...e, team_race: { ...e.team_race, scores: { mouse: 21, globe: 34, shark: 38 }, leaders: ['shark'] } } : e), 1500);
     return () => clearTimeout(id);
   }, [mode]);
+  // DEV ONLY 'live': simulated other players add points every 1.6 s so the '+N' ticks and the activity line can be captured.
+  useEffect(() => {
+    if (mode !== 'live') return;
+    const adds = [4, 8, 1, 4, 8];
+    let i = 0;
+    const id = setInterval(() => {
+      const n = adds[i++ % adds.length];
+      setLive(e => ({ ...e, together: { ...e.together, total: e.together.total + n },
+        activity: { recent_points: (e.activity?.recent_points ?? 0) + n, last_open_at: e.activity?.last_open_at ?? null } }));
+    }, 1600);
+    return () => clearInterval(id);
+  }, [mode]);
   const [stampAt, setStampAt] = useState(0);
   useEffect(() => { if (mode === 'stamp') setStampAt(Date.now()); }, [mode]);
   useEffect(() => { resetFrenzyBannerForTests(); }, [mode]);
@@ -75,7 +87,7 @@ export default function LiveEventPreviewScreen() {
     if (!tour) return;
     const steps: [Mode, boolean, (() => void)?][] = [
       ['progress', false], ['progress', false, () => setGain({ n: 8, at: Date.now() })], ['frenzy', false], ['upcoming', false],
-      ['ended', false], ['home', false], ['stamp', false], ['recap', false], ['sheet', true, () => setTimeout(() => setLive(e => ({ ...e, together: { ...e.together, total: e.together.total + 12 } })), 1200)], ['climb', true],
+      ['ended', false], ['home', false], ['stamp', false], ['recap', false], ['sheet', true, () => setTimeout(() => setLive(e => ({ ...e, together: { ...e.together, total: e.together.total + 12 } })), 1200)], ['climb', true], ['live', true], ['live', true],
     ];
     const ids = steps.map(([m, open, act], i) => setTimeout(() => { setMode(m); setSheet(open); act?.(); }, i * 3000));
     return () => ids.forEach(clearTimeout);
@@ -119,12 +131,13 @@ export default function LiveEventPreviewScreen() {
       </View>
       <ScrollView horizontal style={[styles.controls, { bottom: insets.bottom + 12 }]} contentContainerStyle={{ gap: 6, paddingHorizontal: 10 }}>
         {MODES.map(m => (
-          <Pressable key={m} onPress={() => { setMode(m); setSheet(m === 'sheet' || m === 'climb'); }} style={[styles.ctl, m === mode && styles.ctlOn]}>
+          <Pressable key={m} onPress={() => { setMode(m); setSheet(m === 'sheet' || m === 'climb' || m === 'live'); }} style={[styles.ctl, m === mode && styles.ctlOn]}>
             <Text style={styles.ctlText}>{m}</Text>
           </Pressable>
         ))}
         <Pressable onPress={() => setGain({ n: 8, at: Date.now() })} style={styles.ctl}><Text style={styles.ctlText}>+8</Text></Pressable>
       </ScrollView>
+      {mode === 'live' && <View style={styles.devTag} pointerEvents="none"><Text style={styles.devText}>DEV: simulated players</Text></View>}
       <EventSheet event={live} visible={sheet} onClose={() => setSheet(false)} atPark={!home} onShowRide={() => undefined} openOverride={fakeOpen} />
     </View>
   );
@@ -140,6 +153,8 @@ const styles = StyleSheet.create({
   homeRow: { flexDirection: 'row', gap: 10 },
   fakeChip: { height: 36, paddingHorizontal: 8, borderRadius: 18, backgroundColor: BRAND.blue, borderWidth: 2.5, borderColor: BRAND.white, justifyContent: 'center' },
   toastSlot: { marginTop: 10, alignItems: 'center' },
+  devTag: { position: 'absolute', top: 54, alignSelf: 'center', backgroundColor: '#000a', paddingHorizontal: 8, borderRadius: 6, zIndex: 99 },
+  devText: { color: '#fff', fontSize: 11 },
   stamp: { position: 'absolute', top: '40%', alignSelf: 'center' },
   rail: { position: 'absolute', left: 12, right: 12 },
   controls: { position: 'absolute', left: 0, right: 0, flexGrow: 0 },
