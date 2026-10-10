@@ -32,14 +32,16 @@ function Rays({ go }: { readonly go: boolean }) {
 
 /** A number that counts up from 0 (about 0.5 s, 10 steps; instant under reduced motion or skip). */
 function CountUp({ to, delay, still }: { readonly to: number; readonly delay: number; readonly still: boolean }) {
-  const [n, setN] = useState(still ? to : 0);
+  // Small prizes (a Ticket or two) never count: a kid must never read '+0'.
+  const instant = still || to <= 10;
+  const [n, setN] = useState(instant ? to : Math.max(1, Math.round(to / 10)));
   useEffect(() => {
-    if (still) { setN(to); return; }
+    if (instant) { setN(to); return; }
     let i = 0;
     let id: ReturnType<typeof setInterval> | null = null;
     const start = setTimeout(() => { id = setInterval(() => { i++; setN(Math.round((to * i) / 10)); if (i >= 10 && id) clearInterval(id); }, 50); }, delay);
     return () => { clearTimeout(start); if (id) clearInterval(id); };
-  }, [to, delay, still]);
+  }, [to, delay, instant]);
   return <>{n}</>;
 }
 
@@ -124,7 +126,7 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
     }
     onDone();
   };
-  const chestStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${shake.value * 7}deg` }, { scale: 1 + Math.abs(shake.value) * 0.04 }] }));
+  const chestStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${shake.value * 10}deg` }, { scale: 1 + Math.abs(shake.value) * 0.04 }] }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
   const empty = already && !!rewards;
 
@@ -173,12 +175,13 @@ export default memo(ChestReveal);
 const styles = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,56,128,0.55)', alignItems: 'center', justifyContent: 'center', zIndex: 20 },
   card: { width: 300, alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 28, borderWidth: 4, borderColor: BRAND.navy, paddingVertical: 18, paddingHorizontal: 16 },
-  title: { fontFamily: 'Shark', fontSize: 24, color: BRAND.navy },
+  title: { fontFamily: 'Shark', fontSize: 24, color: BRAND.navy, zIndex: 5, elevation: 5 },
+  stageBelow: { zIndex: 1 },
   stage: { width: 200, height: 160, alignItems: 'center', justifyContent: 'center' },
   chest: { width: 140, height: 140 },
   coin: { position: 'absolute', top: 60, left: 89 },
   glow: { position: 'absolute', width: 150, height: 150, borderRadius: 75, backgroundColor: 'rgba(255,207,59,0.28)', left: 25, top: 5 },
-  chipBig: { transform: [{ scale: 1.15 }], marginHorizontal: 4 },
+  chipBig: { transform: [{ scale: 1.3 }], marginHorizontal: 10 },
   rays: { position: 'absolute', width: 1, height: 1, left: 100, top: 80 },
   ray: { position: 'absolute', left: -9, top: -34, width: 18, height: 68, borderRadius: 9, backgroundColor: BRAND.goldLight },
   flash: { ...StyleSheet.absoluteFillObject, backgroundColor: BRAND.white, borderRadius: 80 },

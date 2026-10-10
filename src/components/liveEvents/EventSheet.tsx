@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontFamily: 'Shark', fontSize: 16, color: BRAND.blue, marginBottom: 2 },
   activity: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
   teamLine: { marginTop: 0, marginBottom: 4, fontFamily: 'Shark', fontSize: 16 },
-  small: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft, textAlign: 'center', marginTop: 2 },
+  small: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, textAlign: 'center', marginTop: 2 },
   line: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
   helpedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   teamRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3, paddingHorizontal: 4, borderRadius: 12 },
