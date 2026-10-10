@@ -61,6 +61,8 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
       else if (screen === 'supplies') RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies' });
       else if (screen === 'pass') RootNavigation.navigate('SharkPass');
       else if (screen === 'store') RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'gear' });
+      else if (screen === 'postwin') RootNavigation.navigate('PostWinRewardsPreview');
+      else if (screen === 'gate') void (require('../components/GrownUpGate') as typeof import('../components/GrownUpGate')).devShowGateOffer();
       else RootNavigation.navigate('MoneyPreview', { screen });
     });
   }, [isReady, player?.id]);

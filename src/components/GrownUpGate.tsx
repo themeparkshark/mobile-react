@@ -59,7 +59,7 @@ let pass: { flow: GateFlow; until: number } | null = null;
 let vipMember = false;
 const REST_KEY = 'grown-up-gate:rest-until';
 let gateRestUntil = 0;
-type GateRequest = { resolve: (ok: boolean) => void; seed: number; reason?: GateReason | null };
+type GateRequest = { resolve: (ok: boolean) => void; seed: number; reason?: GateReason | null; devOffer?: GateReason };
 let showGate: ((r: GateRequest | null) => void) | null = null;
 let open: Promise<boolean> | null = null;
 
@@ -148,6 +148,12 @@ export function restMsFor(missCount: number): number {
 let lastRestText = '30 seconds';
 function restText(ms: number): string {
   return ms < 60_000 ? `${Math.round(ms / 1000)} seconds` : `${Math.round(ms / 60_000)} minutes`;
+}
+
+/** Dev only (captures): open the gate straight at the grown-up's offer card for a VIP yearly trial. */
+export function devShowGateOffer(): Promise<boolean> {
+  if (!__DEV__ || !showGate) return Promise.resolve(false);
+  return new Promise(resolve => showGate?.({ resolve, seed: 42, devOffer: { kind: 'renews', what: 'VIP', price: '$39.99', period: 'year', trial: 'One week free' } }));
 }
 
 /** Judges a typed answer; a wrong one rests the gate (longer after repeated misses). Exported for tests. */
@@ -277,7 +283,7 @@ export function GrownUpGateHost() {
   const [details, setDetails] = useState<{ head: string; lines: string[] } | null>(null);
   const [more, setMore] = useState(false);
   useEffect(() => {
-    showGate = r => { setTyped(''); setDetails(null); setMore(false); setReq(r); };
+    showGate = r => { setTyped(''); setDetails(r?.devOffer ? gateDetails(r.devOffer) : null); setMore(false); setReq(r); };
     return () => { showGate = null; };
   }, []);
   // Waits behind any open sheet instead of stacking a second <Modal> (ui/modalLayers.ts).

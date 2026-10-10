@@ -3,12 +3,28 @@
  * the top-up card in each place other screens will put it, on the real
  * catalog and the capture prices.
  */
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { GotIt } from '../components/money/moneyUi';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CoinTopUpOffer from '../components/money/CoinTopUpOffer';
 import { BRAND, FONT } from '../ui';
 
-export default function MoneyPreviewScreen() {
+export default function MoneyPreviewScreen({ route }: { route?: { params?: { screen?: string } } }) {
+  const screen = route?.params?.screen;
+  // Payoff captures: a Supplies buy landing, and a late Ask to Buy approval of the Shark Pass.
+  const [payoff, setPayoff] = useState(screen === 'payoff' || screen === 'asktobuy');
+  if (payoff && screen === 'payoff') {
+    return <View style={{ flex: 1, backgroundColor: BRAND.blue }}><GotIt grants={{ tickets: 15, coins: 1500, energy: 150, rescue_passes: 2 }} art="chest" onDone={() => setPayoff(false)} /></View>;
+  }
+  if (payoff && screen === 'asktobuy') {
+    return (
+      <View style={{ flex: 1, backgroundColor: BRAND.blue }}>
+        <GotIt grants={{}} art="gift" title="Shark Pass on!" onDone={() => setPayoff(false)}
+          caption="A grown-up said yes. Every Shark Pass reward you reach is yours." />
+      </View>
+    );
+  }
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.blue }}>
       <ScrollView contentContainerStyle={s.scroll}>
