@@ -244,3 +244,10 @@ test('the grown-up page: this account\'s spend this month and the kid\'s wishlis
   assert.doesNotMatch(read('src/services/money/wishlist.ts'), /import .*(api\/|client|notifications|Linking|share|external)/);
   assert.doesNotMatch(read('src/components/money/WishHeart.tsx'), /import .*(api\/|client|notifications|Linking|share|external)/);
 });
+
+test('the season ring is earned on the free track (10/25/40/50), never bought', () => {
+  const src = read('src/components/money/MemberFlex.tsx');
+  assert.match(src, /if \(s >= 50\) return \{ color: '#7cf5d0', label: 'Season finisher' \}/);
+  assert.match(src, /if \(s >= 10\) return \{ color: '#d08a4a', label: 'Bronze climber' \}/);
+  assert.doesNotMatch(src.replace(/\/\*[\s\S]*?\*\//g, ''), /premium|\.plus\b|price/i, 'the ring never looks at money');
+});

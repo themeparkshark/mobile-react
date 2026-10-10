@@ -49,7 +49,7 @@ export default function MoneyPreviewScreen({ route }: { route?: { params?: { scr
     // C9 dev preview: how MemberFlex reads in a Standings row and on a share card (the coordinator wires the real ones).
     const rows = [
       { rank: 1, name: 'You', pts: 2480, frame: 's1:aurora-frame', vip: true },
-      { rank: 2, name: 'Player two', pts: 2310, frame: null, vip: false },
+      { rank: 2, name: 'Player two', pts: 2310, frame: null, vip: false, step: 50 },
       { rank: 3, name: 'Player three', pts: 2205, frame: 's1:snowbound-frame', vip: false },
     ];
     return (
@@ -59,7 +59,7 @@ export default function MoneyPreviewScreen({ route }: { route?: { params?: { scr
           {rows.map(r => (
             <View key={r.rank} style={[s.row, r.vip && { borderLeftWidth: 6, borderLeftColor: BRAND.gold }]}>
               <Text style={s.rank}>{r.rank}</Text>
-              <MemberFlex inventory={look} frame={r.frame} vip={r.vip} size={56} />
+              <MemberFlex inventory={look} frame={r.frame} vip={r.vip} size={56} step={'step' in r ? (r as { step: number }).step : null} />
               <Text style={s.name}>{r.name}</Text>
               <Text style={s.pts}>{r.pts.toLocaleString('en-US')}</Text>
             </View>

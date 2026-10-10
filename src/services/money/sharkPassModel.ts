@@ -15,7 +15,7 @@ export const EVENT_COPY: Record<string, { label: string; icon: GameIconName }> =
   trail_box_open: { label: 'Open a Trail Box', icon: 'chest' },
   pin_of_day: { label: 'Catch the Pin of the Day', icon: 'pin' },
   mystery_box_open: { label: 'Open a Mystery Pin Box', icon: 'gift' },
-  daily_login: { label: 'Play today', icon: 'star' },
+  first_win: { label: 'First win of the day', icon: 'star' },
 };
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

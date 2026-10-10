@@ -343,11 +343,8 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
           <PackArt art={packArtKey(product)} size={64} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{product.title.toUpperCase()}</Text>
           <View style={{ flex: 1, justifyContent: 'center', alignSelf: 'stretch' }}><Contents grants={product.grants} size="tight" /></View>
-          {worth ? (
-            <View style={st.worthPill}><Text maxFontSizeMultiplier={MAX_FONT} style={st.worthPillText}>{`WORTH ${worth.worth}`}</Text></View>
-          ) : (
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>{deal ? 'New deal every day' : 'One a day'}</Text>
-          )}
+          {/* No WORTH pill (psychology r8): one BEST VALUE per shelf is the only value badge. */}
+          <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>{deal ? 'New deal every day' : 'One a day'}</Text>
         </View>
         <PriceBar price={price} busy={busy} note={note} />
       </ShopCard>

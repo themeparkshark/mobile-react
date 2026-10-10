@@ -15,9 +15,21 @@ import { frameArt } from './frames';
  * - `variant`: 'row' (compact, Standings) or 'card' (share card: bigger, with a caption line).
  * - `still`: no idle motion (lists, Reduce Motion, share captures).
  */
-export default function MemberFlex({ inventory, frame, vip = false, size = 56, variant = 'row', caption, still = true, style }: {
+/** The season ring by free-track step (earned by playing, never bought): 10, 25, 40, 50. Exported for tests. */
+export function seasonRing(step: number | null | undefined): { color: string; label: string } | null {
+  const s = Number(step) || 0;
+  if (s >= 50) return { color: '#7cf5d0', label: 'Season finisher' };
+  if (s >= 40) return { color: '#ffd34d', label: 'Gold climber' };
+  if (s >= 25) return { color: '#dfe8f2', label: 'Silver climber' };
+  if (s >= 10) return { color: '#d08a4a', label: 'Bronze climber' };
+  return null;
+}
+
+export default function MemberFlex({ inventory, frame, vip = false, size = 56, variant = 'row', caption, still = true, style, step }: {
   inventory: InventoryType | null | undefined;
   frame?: string | null;
+  /** The player's Shark Pass step on the free track: shows the season ring when no frame is worn. */
+  step?: number | null;
   vip?: boolean;
   size?: number;
   variant?: 'row' | 'card';
@@ -27,11 +39,12 @@ export default function MemberFlex({ inventory, frame, vip = false, size = 56, v
   style?: StyleProp<ViewStyle>;
 }) {
   const ring = frameArt(frame);
+  const earned = !ring ? seasonRing(step) : null;
   const card = variant === 'card';
   const inner = ring ? size * 0.72 : size;
   return (
     <View style={[{ alignItems: 'center' }, style]}
-      accessible accessibilityLabel={`${vip ? 'VIP member. ' : ''}${ring ? 'Wearing a season frame. ' : ''}${caption ?? ''}`.trim() || 'Player'}>
+      accessible accessibilityLabel={`${vip ? 'VIP member. ' : ''}${ring ? 'Wearing a season frame. ' : earned ? `${earned.label}. ` : ''}${caption ?? ''}`.trim() || 'Player'}>
       <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
         {inventory?.skin_item ? (
           <View style={{ width: inner, height: inner * 1.1, marginTop: ring ? size * 0.02 : 0 }}>
@@ -40,6 +53,7 @@ export default function MemberFlex({ inventory, frame, vip = false, size = 56, v
         ) : (
           <GameIcon name="shark" size={inner * 0.8} />
         )}
+        {earned && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: size / 2, borderWidth: Math.max(3, size * 0.07), borderColor: earned.color }]} />}
         {ring && <Image source={ring} style={[StyleSheet.absoluteFill, { width: size, height: size }]} contentFit="contain" />}
         {vip && (
           <View style={[st.vip, { width: card ? 34 : 24, height: card ? 34 : 24, borderRadius: card ? 17 : 12 }]}>
