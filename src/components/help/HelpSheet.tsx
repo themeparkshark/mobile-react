@@ -242,7 +242,8 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
     // A Modal is its own native root, so the app's idle tracker never sees these touches: report them.
     <View style={StyleSheet.absoluteFill} accessibilityViewIsModal onTouchStart={() => markUserActivity()}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, scrim]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityRole="button" accessibilityLabel="Close help" />
+        {/* VoiceOver uses the X; the scrim tap is for fingers only (no second "Close help"). */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessible={false} importantForAccessibility="no" accessibilityElementsHidden />
       </Animated.View>
       <GestureDetector gesture={pan}>
         <Animated.View
@@ -261,9 +262,8 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
               <GameIcon name="close" size={32} />
             </Pressable>
           </View>
-          <Text accessibilityRole="header" style={styles.srOnly}>
-            {`${sheet.name} help${pages.length > 1 ? `, page ${page + 1} of ${pages.length}` : ''}`}
-          </Text>
+          <View accessible accessibilityRole="header" style={styles.srOnly}
+            accessibilityLabel={`${sheet.name} help${pages.length > 1 ? `, page ${page + 1} of ${pages.length}` : ''}`} />
           {ready ? (
             <PagerScroll ref={scroll} horizontal pagingEnabled showsHorizontalScrollIndicator={false} bounces={pages.length > 1}
               scrollEnabled={pages.length > 1} onScroll={onScroll} scrollEventThrottle={16} onMomentumScrollEnd={onSettle}
@@ -410,7 +410,8 @@ const styles = StyleSheet.create({
   },
   header: { height: 40, alignItems: 'center', justifyContent: 'center', marginTop: -6 },
   handle: { width: 44, height: 5, borderRadius: 3, backgroundColor: 'rgba(5,52,110,0.18)' },
-  srOnly: { position: 'absolute', width: 1, height: 1, opacity: 0 },
+  // Read by VoiceOver first; a near-invisible 1 pt box so iOS keeps it in the tree.
+  srOnly: { position: 'absolute', top: 0, left: 0, width: 1, height: 1, opacity: 0.01 },
   heroWindow: {
     borderRadius: 24, borderWidth: 3, borderColor: BRAND.white, overflow: 'hidden', backgroundColor: BRAND.skyDeep,
     shadowColor: BRAND.navy, shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4,
