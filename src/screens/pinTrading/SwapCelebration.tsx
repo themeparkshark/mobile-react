@@ -354,7 +354,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
             <View style={styles.gaveChip}><EnamelPin uri={gave.icon_url} size={34} surface="none" flat recyclingKey={`mine-${gave.id}`} /></View>
             <View style={{ flexShrink: 1 }}>
               <Text maxFontSizeMultiplier={1.2} style={styles.gaveCaption}>{COPY.gaveCaption}</Text>
-              <Text maxFontSizeMultiplier={1.25} style={styles.gaveLine}>{COPY.doneGave(pinName(gave), gave.spares ?? 0)}</Text>
+              <Text maxFontSizeMultiplier={1.25} style={styles.gaveLine}>{upgradeSerial && gave.serial ? `Your #${gave.serial} is on the board for another fan.` : COPY.doneGave(pinName(gave), gave.spares ?? 0)}</Text>
             </View>
           </View>
           {tradeNumber >= 2 && <Text maxFontSizeMultiplier={1.2} style={styles.countLine}>{COPY.tradeCount(tradeNumber)}</Text>}
@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
   gaveCaption: { fontFamily: FONT.body, fontSize: 12, letterSpacing: 0.9, textTransform: 'uppercase', color: '#ffe07a' },
   countLine: { fontFamily: FONT.display, fontSize: 16, color: '#ffe07a', paddingTop: 2 },
   gaveChip: { width: 44, height: 44, borderRadius: 22, backgroundColor: BRAND.cream, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.white },
-  gaveLine: { flexShrink: 1, fontFamily: FONT.body, fontSize: 16, lineHeight: 20, color: '#e2f6ff' },
+  gaveLine: { flexShrink: 1, fontFamily: FONT.body, fontSize: 17, lineHeight: 20, color: '#e2f6ff' },
   shark: { position: 'absolute', alignItems: 'center' },
   cta: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, alignItems: 'center' },
 });

@@ -240,8 +240,10 @@ export type SlotRect = { x: number; y: number; size: number };
  * dashed outline. `stamp` greys the pin under a TIME'S UP or TAKEN stamp;
  * `charging` makes it rise and wiggle while the trade is in flight.
  */
-export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, shine, still, placeholder, onMeasure, hidden = false, measureKey, stamp, charging = false }: {
+export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, shine, still, placeholder, onMeasure, hidden = false, measureKey, stamp, charging = false, serial }: {
   caption: string; item?: ItemType; hidden?: boolean;
+  /** Pins v2: a gold copy's number, big on the tile (it is the whole point of an upgrade). */
+  serial?: number | null;
   /** Re-measure when this changes (the sheet grows or shrinks between phases). */
   measureKey?: string; tilt: number; size: number; shine?: SharedValue<number>; still: boolean; placeholder?: string;
   /** Window-space centre and drawn size of the pin, so the trade-complete moment starts exactly where the pin sits. */
@@ -297,9 +299,11 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
                 transition={0} recyclingKey={`slot-${item.id}`} />
             </Animated.View>
           </View>
-        ) : (
-          <Text maxFontSizeMultiplier={1.2} style={styles.slotQuestion}>?</Text>
+        ) : null}
+        {item && !!serial && (
+          <View style={styles.slotSerial} pointerEvents="none"><Text maxFontSizeMultiplier={1} style={styles.slotSerialText}>#{serial}</Text></View>
         )}
+        {!item && <Text maxFontSizeMultiplier={1.2} style={styles.slotQuestion}>?</Text>}
         {!!stamp && !!item && (
           <View pointerEvents="none" style={[styles.stamp, { maxWidth: (size + SPACE.xl) * 0.7, bottom: SPACE.sm }]}><Text maxFontSizeMultiplier={1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={styles.stampText}>{stamp}</Text></View>
         )}
@@ -354,6 +358,8 @@ const styles = StyleSheet.create({
   pickSpares: { position: 'absolute', left: 2, bottom: 2, minWidth: 24, height: 20, borderRadius: 10, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   pickSparesText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.navy, paddingTop: 2 },
   pickSerial: { position: 'absolute', right: 2, top: 2, height: 18, borderRadius: 5, backgroundColor: '#3b2a05', borderWidth: 2, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  slotSerial: { position: 'absolute', right: -6, bottom: -6, backgroundColor: '#3b2a05', borderColor: BRAND.gold, borderWidth: 3, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 1 },
+  slotSerialText: { fontFamily: FONT.display, fontSize: 24, color: BRAND.gold, paddingTop: 3 },
   boardSerial: { position: 'absolute', top: 10, left: 8, zIndex: 4, elevation: 4, height: 22, borderRadius: 6, backgroundColor: '#3b2a05', borderWidth: 2, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, transform: [{ rotate: '6deg' }] },
   pickSerialText: { fontFamily: FONT.display, fontSize: 11, color: BRAND.gold, paddingTop: 2 },
   chip: {
