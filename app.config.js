@@ -43,7 +43,7 @@ const PURPOSE_STRINGS = {
 export default {
   name: 'Theme Park Shark',
   slug: 'mobile-react',
-  version: '1.7.2',
+  version: '1.7.3',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',

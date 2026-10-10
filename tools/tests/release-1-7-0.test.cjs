@@ -36,14 +36,16 @@ test('adsAvailable() is false whenever ads are off, before touching the native m
   assert.match(ads, /if \(!ADS_ENABLED \|\| Platform\.OS !== 'ios'\) return false;/);
 });
 
-test('version 1.7.2 everywhere and 120 Hz off', () => {
-  // 1.7.2: Release 2 store binary with the native MapLibre marker-frame patch (new fingerprint).
-  assert.match(read('app.config.js'), /version: '1\.7\.2'/);
+test('version 1.7.3 (build 20260930.18) everywhere and 120 Hz off', () => {
+  // 1.7.3: Release 3 store binary (1.7.2 was .16 production and .17 testflight); new build number above both.
+  assert.match(read('app.config.js'), /version: '1\.7\.3'/);
   const plist = read('ios/ThemeParkShark/Info.plist');
-  assert.match(plist, /<key>CFBundleShortVersionString<\/key>\n\t<string>1\.7\.2<\/string>/);
+  assert.match(plist, /<key>CFBundleShortVersionString<\/key>\n\t<string>1\.7\.3<\/string>/);
+  assert.match(plist, /<key>CFBundleVersion<\/key>\n\t<string>20260930\.18<\/string>/);
   assert.doesNotMatch(plist, /CADisableMinimumFrameDurationOnPhone/);
   const pbx = read('ios/ThemeParkShark.xcodeproj/project.pbxproj');
-  assert.equal((pbx.match(/MARKETING_VERSION = 1\.7\.2;/g) || []).length, 4);
+  assert.equal((pbx.match(/MARKETING_VERSION = 1\.7\.3;/g) || []).length, 4);
+  assert.equal((pbx.match(/CURRENT_PROJECT_VERSION = 20260930\.18;/g) || []).length, 4);
   assert.doesNotMatch(pbx, /MARKETING_VERSION = 1\.6\.0;/);
 });
 
