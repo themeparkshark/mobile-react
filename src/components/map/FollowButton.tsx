@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
   pillText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy },
   tail: { position: 'absolute', right: -7, top: 9, width: 10, height: 10, backgroundColor: BRAND.white,
     borderTopWidth: 2.5, borderRightWidth: 2.5, borderColor: BRAND.navy, transform: [{ rotate: '45deg' }] },
-  hint: { marginTop: 0, height: undefined, width: 210, paddingVertical: 8, borderRadius: 14, backgroundColor: BRAND.cream },
+  hint: { marginTop: 0, height: 'auto', width: 210, paddingVertical: 8, borderRadius: 14, backgroundColor: BRAND.cream },
   hintTail: { top: 20, backgroundColor: BRAND.cream },
   hintTitle: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
   hintBody: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, color: BRAND.navySoft },
