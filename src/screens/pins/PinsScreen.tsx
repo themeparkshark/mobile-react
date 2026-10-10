@@ -124,6 +124,12 @@ export default function PinsScreen() {
   }, [later]);
 
   useEffect(() => { void load(); preloadRevealAudio(); }, [load]);
+  // Back from the trading board (or anywhere): a quiet refresh, so traded pins and numbers are current.
+  const wasFocused = useRef(true);
+  useEffect(() => {
+    if (focused && !wasFocused.current) void load(true);
+    wasFocused.current = focused;
+  }, [focused, load]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', s => setAppActive(s === 'active'));
