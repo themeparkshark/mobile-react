@@ -254,8 +254,6 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
           <Animated.View style={[styles.footer, footerStyle]}>
             {/* Always the same slot, so the button sits at one height on every sheet. */}
             <View style={styles.dots}>
-              {/* One-page sheets put their quiet links in this slot, so the gold button sits where it does everywhere. */}
-              {ready && pages.length <= 1 && !!links?.length && linkRow}
               {ready && pages.length > 1 && pages.map((p, index) => (
                 <Dot key={p.key} index={index} width={pageW} scrollX={scrollX} count={pages.length} onPress={() => goTo(index)} />
               ))}
@@ -264,7 +262,8 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
               icon={!ready || last ? undefined : 'arrow'}
               accessibilityHint={!ready || last ? 'Closes help' : `Shows page ${page + 2} of ${pages.length}`}
               style={{ alignSelf: 'center', width: Math.min(pageW - SIDE * 4, 300) }} />
-            {!!links?.length && pages.length > 1 && linkRow}
+            {/* One rule everywhere: quiet links sit under the gold button. */}
+            {linkRow}
           </Animated.View>
         </Animated.View>
       </GestureDetector>

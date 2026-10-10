@@ -110,7 +110,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
           { icon: 'new', text: 'Fresh pieces land on the Daily shelf.' },
           { icon: 'timer', text: 'Pieces change, so check back daily.' },
         ] },
-      { key: 'supplies', hero: 'shop_supplies', headline: 'Supplies are for grown-ups',
+      { key: 'supplies', hero: 'shop_supplies', headline: 'Packs for grown-ups',
         points: [
           { icon: 'ticket', text: 'Packs of Tickets, Energy and more.' },
           { icon: 'lock', text: 'A grown-up buys them with real money.' },

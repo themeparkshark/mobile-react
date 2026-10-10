@@ -947,6 +947,7 @@ function OddsBar({ t, i, x, y, w, h, tier, percent, max }: {
         </View>
         <Text allowFontScaling={false} style={styles.oddsPct}>{percent}%</Text>
       </View>
+      {tier === 5 && <Sparkle t={t} at={0.55} x={labelW - 6} y={h * 0.1} size={16} />}
     </Abs>
   );
 }
