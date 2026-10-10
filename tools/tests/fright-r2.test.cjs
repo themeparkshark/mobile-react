@@ -112,5 +112,5 @@ test('R2-19 one "?": the pill has no own help on the map; the map "?" offers Fin
   const choices = hooks.frightHelpChoices({ title: 'Fin-ister Nights', onFright: () => {}, onPark: () => {} });
   assert.equal(choices[0].text, 'Fin-ister Nights');
   assert.equal(choices[1].text, 'Park help');
-  assert.match(read('src/components/help/HelpButton.tsx'), /if \(onPress\) onPress\(\); else openHowToPlay\(topic\);/);
+  assert.match(read('src/components/help/HelpButton.tsx'), /if \(onPress\) onPress\(\); else if \(sheet\) openHelpSheet\(sheet\); else openHowToPlay\(topic\);/);
 });

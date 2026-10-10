@@ -110,15 +110,10 @@ test('How to play cards are short, cover every term, and the "?" sheets are neve
     const term = glossary.LOCAL_GLOSSARY[key];
     assert.ok(covered.has(key) || topics.helpTopic(term.topic), key);
   }
-  // Every old information-modal id, and no id at all, gets local cards.
-  for (const id of [1, 2, 3, 4, 5, undefined, 99]) {
-    const sections = topics.infoSheetSections(id, '');
-    assert.ok(sections.length > 0 && sections.every(section => section.lines.length > 0), String(id));
-  }
-  const withServer = topics.infoSheetSections(3, '<p>New gear every day — check back!</p>');
-  assert.equal(withServer[0].key, 'server');
-  assert.deepEqual(plain(withServer[0].lines), ['New gear every day, check back!']);
-  assert.equal(topics.infoSheetSections(5, null)[0].key, 'standings');
+  // Every old information-modal id, and no id at all, gets a local help sheet.
+  const sheets = loadTs('src/services/help/helpSheets.ts');
+  for (const id of [1, 2, 3, 4, 5, undefined, 99]) assert.ok(sheets.helpSheetForInfoModal(id).pages.length > 0, String(id));
+  assert.equal(sheets.helpSheetForInfoModal(5).id, 'standings');
 });
 
 test('every one-time tip and mini-game intro has copy without em dashes', () => {
@@ -146,6 +141,10 @@ test('the Supplies shop and ad offers are explained: optional, what is sold, nev
   assert.equal(glossary.glossaryKeyForName('Supplies'), 'supplies');
   assert.ok(topics.TIP_COPY.supplies_tab && topics.TIP_COPY.bonus_ads);
   assert.match(topics.TIP_COPY.bonus_ads.body, /lose nothing/);
-  // The Shark Shop "?" opens the shop card.
-  assert.equal(topics.infoSheetSections(3, '')[0].key, 'shop');
+  // The Shark Shop "?" opens the shop sheet, which says Supplies are for grown-ups and ads are optional.
+  const shop = loadTs('src/services/help/helpSheets.ts').helpSheetForInfoModal(3);
+  assert.equal(shop.id, 'shop');
+  const shopText = shop.pages.flatMap(page => page.points.map(point => point.text)).join(' ');
+  assert.match(shopText, /grown-up/);
+  assert.match(shopText, /skip it/);
 });

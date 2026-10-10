@@ -22,6 +22,10 @@ import {
   createSeenTipStore, initialSeenFor, isExistingPlayer, shouldShowTip, type TipId,
 } from '../../services/help/seenTips';
 import { useTutorial } from '../Tutorial';
+import { helpSheet, type HelpSheetId } from '../../services/help/helpSheets';
+import HelpSheet from './HelpSheet';
+import { startHelpTour } from './helpTour';
+import { storeAvailable } from '../../services/purchases';
 import TermSheet from './TermSheet';
 
 /** How long a shown tip may be hidden by a busy blink before it is dropped. */
@@ -38,6 +42,8 @@ export interface HelpContextValue {
   readonly glossary: Readonly<Record<GlossaryKey, GlossaryTerm>>;
   explain: (key: GlossaryKey, options?: ExplainOptions) => void;
   openHowToPlay: (topic?: HelpTopicId) => void;
+  /** Opens a screen's "?" sheet from anywhere (the map's "?" uses it). */
+  openHelpSheet: (id: HelpSheetId) => void;
   /** True once this player's seen state has loaded. */
   readonly tipsReady: boolean;
   hasSeenTip: (id: TipId) => boolean;
@@ -55,6 +61,7 @@ export const HelpContext = createContext<HelpContextValue>({
   glossary: LOCAL_GLOSSARY,
   explain: noop,
   openHowToPlay: noop,
+  openHelpSheet: noop,
   tipsReady: false,
   hasSeenTip: () => true,
   claimTip: () => false,
@@ -79,6 +86,8 @@ export default function HelpProvider({ children }: { readonly children: React.Re
 
   const [glossary, setGlossary] = useState<Record<GlossaryKey, GlossaryTerm>>(glossaryCache ?? { ...LOCAL_GLOSSARY });
   const [sheet, setSheet] = useState<{ key: GlossaryKey; count: number | null } | null>(null);
+  const [helpId, setHelpId] = useState<HelpSheetId | null>(null);
+  const [lastHelpId, setLastHelpId] = useState<HelpSheetId | null>(null);
   const [seen, setSeen] = useState<Set<string>>(new Set());
   const [tipsReady, setTipsReady] = useState(false);
   const [activeTip, setActiveTip] = useState<TipId | null>(null);
@@ -123,10 +132,23 @@ export default function HelpProvider({ children }: { readonly children: React.Re
     setSheet({ key, count: options?.count ?? null });
   }, []);
 
+  const openHelpSheet = useCallback((id: HelpSheetId) => {
+    setSheet(null);
+    setLastHelpId(id);
+    setHelpId(id);
+  }, []);
+
   const openHowToPlay = useCallback((topic?: HelpTopicId) => {
     setSheet(null);
+    setHelpId(null);
     RootNavigation.navigate('HowToPlay', topic ? { topic } : undefined);
   }, []);
+
+  // Dev-only capture tour (EXPO_PUBLIC_HELP_TOUR); a no-op otherwise.
+  useEffect(() => startHelpTour({
+    open: openHelpSheet, explain: () => setSheet({ key: 'coins', count: 120 }),
+    close: () => { setHelpId(null); setSheet(null); }, pages: id => helpSheet(id).pages.length,
+  }, playerId), [openHelpSheet, playerId]);
 
   const hasSeenTip = useCallback((id: TipId) => seenRef.current.has(id), []);
 
@@ -165,8 +187,8 @@ export default function HelpProvider({ children }: { readonly children: React.Re
   }, [resetFinn, store, playerId]);
 
   const value = useMemo<HelpContextValue>(() => ({
-    glossary, explain, openHowToPlay, tipsReady, hasSeenTip, claimTip, releaseTip, markTipSeen, activeTip, replayAllTutorials,
-  }), [glossary, explain, openHowToPlay, tipsReady, hasSeenTip, claimTip, releaseTip, markTipSeen, activeTip, replayAllTutorials]);
+    glossary, explain, openHowToPlay, openHelpSheet, tipsReady, hasSeenTip, claimTip, releaseTip, markTipSeen, activeTip, replayAllTutorials,
+  }), [glossary, explain, openHowToPlay, openHelpSheet, tipsReady, hasSeenTip, claimTip, releaseTip, markTipSeen, activeTip, replayAllTutorials]);
 
   const term = sheet ? glossary[sheet.key] : null;
   return (
@@ -176,7 +198,13 @@ export default function HelpProvider({ children }: { readonly children: React.Re
         glossary={glossary}
         onOpenTerm={key => setSheet({ key, count: null })}
         onOpenGuide={term ? () => openHowToPlay(term.topic) : undefined}
+        onGetMore={playerId != null && storeAvailable() ? key => {
+          setSheet(null);
+          RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies', focus: key });
+        } : undefined}
         onClose={() => setSheet(null)} />
+      <HelpSheet visible={helpId != null} sheet={lastHelpId ? helpSheet(lastHelpId) : null} onClose={() => setHelpId(null)}
+        links={lastHelpId === 'park_map' ? [{ label: 'How to play', onPress: () => openHowToPlay('park') }] : undefined} />
     </HelpContext.Provider>
   );
 }

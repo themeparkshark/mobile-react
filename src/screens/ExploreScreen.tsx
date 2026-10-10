@@ -276,7 +276,7 @@ function ExploreScreen() {
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted, isReady, isActive } = useTutorial();
-  const { explain, openHowToPlay } = useHelp();
+  const { explain, openHelpSheet } = useHelp();
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
   const [adventureOccluded, setAdventureOccluded] = useState(false);
@@ -1243,10 +1243,10 @@ function ExploreScreen() {
           >
             {/* How to play, reachable at the park too (the home menu is not shown here). */}
             {/* One "?": while Fin-ister Nights is on it offers the Fin-ister tutorial or the park help. */}
-            <HelpButton topic="park" size={44} style={{ marginBottom: 10, marginLeft: 13 }}
+            <HelpButton sheet="park_map" size={44} style={{ marginBottom: 10, marginLeft: 13 }}
               label={frightNight.modeOn ? `How to play: ${frightNight.title} or the park` : 'How to play at the park'}
               onPress={frightNight.modeOn ? () => gameAlert('How to play', undefined, frightHelpChoices({
-                title: frightNight.title, onFright: frightEngine.replayTutorial, onPark: () => openHowToPlay('park'),
+                title: frightNight.title, onFright: frightEngine.replayTutorial, onPark: () => openHelpSheet('park_map'),
               })) : undefined} />
             {/* Queue Times - moved from right side */}
             <View style={{ marginBottom: 8 }}>

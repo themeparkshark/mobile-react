@@ -14,7 +14,7 @@ import {
 import FloatingParticles from '../../components/FloatingParticles';
 import HomeHuntInfoSheet, { useHomeHuntInfo } from '../../components/home/HomeHuntInfoSheet';
 import HomeHuntResultsModal from '../../components/home/HomeHuntResultsModal';
-import { standingsInfoSections } from '../../components/home/homeHuntInfoModel';
+import { homeHuntInfoSheet } from '../../components/home/homeHuntInfoModel';
 import { presentableResults, resultPresentationId } from '../../components/home/homeHuntResultsModel';
 import { HOME_HUNT_COPY, firstHunterLine } from '../../constants/homeHuntCopy';
 import { AuthContext } from '../../context/AuthProvider';
@@ -318,7 +318,7 @@ export default function HomeHunt() {
         </View>
       )}
 
-      <HomeHuntInfoSheet visible={infoOpen} title={HOME_HUNT_COPY.infoTitle} sections={standingsInfoSections(info)}
+      <HomeHuntInfoSheet visible={infoOpen} sheet={homeHuntInfoSheet(info)}
         loading={!info} error={infoError} onRetry={retryInfo} onClose={() => setInfoOpen(false)} />
       <HomeHuntResultsModal result={resultFor} visible={resultFor != null}
         onClose={() => setResultFor(null)}

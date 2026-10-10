@@ -1,60 +1,41 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, Text } from 'react-native';
-import getInformationModal from '../api/endpoints/information-modals/get';
-import { SoundEffectContext } from '../context/SoundEffectProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import { INFO_MODAL_TOPICS, infoSheetSections } from '../services/help/helpTopics';
+import { helpSheetForInfoModal, type HelpSheetId } from '../services/help/helpSheets';
 import { BRAND } from '../ui';
-import { useHelp } from './help/HelpProvider';
-import HomeHuntInfoSheet from './home/HomeHuntInfoSheet';
-
-const modalOpenSound = require('../../assets/sounds/modal_open.mp3');
-const modalCloseSound = require('../../assets/sounds/modal_close.mp3');
+import HelpSheet from './help/HelpSheet';
 
 /**
- * The "?" on a screen's top bar. It opens right away with the matching How to
- * play cards; any text the team wrote on the server shows on top when it loads.
- * It is never empty and never stuck on a spinner.
+ * The "?" on a screen's top bar. It opens this screen's help sheet: a short,
+ * picture-led explainer (src/services/help/helpSheets.ts). The old server text
+ * for these ids described retired boards, so it is no longer shown.
  */
-export default function InformationModal({ id }: { readonly id?: number }) {
+export default function InformationModal({ id, sheet }: {
+  /** Information-modal id from src/models/information-modal-enums.ts. */
+  readonly id?: number;
+  /** Or name the sheet directly (screens without an old id, like Redeem). */
+  readonly sheet?: HelpSheetId;
+}) {
   const [visible, setVisible] = useState(false);
-  const [serverContent, setServerContent] = useState<string | null>(null);
-  const fetched = useRef(false);
-  const { playSound } = useContext(SoundEffectContext);
-  const { openHowToPlay } = useHelp();
   const reduced = useReducedGameMotion();
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    if (reduced) return;
+    if (reduced || visible) return;
     const loop = Animated.loop(Animated.sequence([
       Animated.timing(pulseAnim, { toValue: 1.1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
     ]));
     loop.start();
     return () => loop.stop();
-  }, [pulseAnim, reduced]);
+  }, [pulseAnim, reduced, visible]);
 
-  useEffect(() => {
-    if (!visible || id == null || fetched.current) return;
-    fetched.current = true;
-    let live = true;
-    getInformationModal(id)
-      .then(response => { if (live) setServerContent(typeof response?.content === 'string' ? response.content : null); })
-      .catch(() => undefined); // The local cards already explain the screen.
-    return () => { live = false; };
-  }, [visible, id]);
-
-  const close = () => {
-    playSound(modalCloseSound);
-    setVisible(false);
-  };
-  const topic = id != null ? INFO_MODAL_TOPICS[id]?.[0] : undefined;
+  const content = helpSheetForInfoModal(id, sheet ?? 'basics');
 
   return (
     <>
-      <Pressable accessibilityRole="button" accessibilityLabel="Help for this screen" hitSlop={8}
-        onPress={() => { playSound(modalOpenSound); setVisible(true); }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${content.name} help`} hitSlop={8}
+        onPress={() => setVisible(true)}>
         <Animated.View style={{
           transform: [{ scale: pulseAnim }], width: 35, height: 35, borderRadius: 999, backgroundColor: BRAND.blueBright,
           justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: BRAND.white,
@@ -62,8 +43,7 @@ export default function InformationModal({ id }: { readonly id?: number }) {
           <Text style={{ fontFamily: 'Shark', fontSize: 20, color: 'white', textAlign: 'center', lineHeight: 22 }}>?</Text>
         </Animated.View>
       </Pressable>
-      <HomeHuntInfoSheet visible={visible} title="How it works" sections={infoSheetSections(id, serverContent)}
-        onClose={close} moreLabel="Open How to play" onMore={() => { setVisible(false); openHowToPlay(topic); }} />
+      <HelpSheet visible={visible} sheet={content} onClose={() => setVisible(false)} />
     </>
   );
 }

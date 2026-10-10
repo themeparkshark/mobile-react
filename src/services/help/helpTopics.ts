@@ -90,19 +90,6 @@ export function helpTopic(id: HelpTopicId | string | null | undefined): HelpTopi
   return HELP_TOPICS.find(topic => topic.id === id) ?? null;
 }
 
-/**
- * The old "?" buttons ask the server for an information modal by id. When the
- * server has no text, the matching local card fills the sheet instead.
- * Ids from src/models/information-modal-enums.ts.
- */
-export const INFO_MODAL_TOPICS: Readonly<Record<number, readonly HelpTopicId[]>> = {
-  1: ['extras'],                         // Pin Trading
-  2: ['park', 'coins_levels'],           // Park shelf
-  3: ['shop'],                           // Shark Shop (Gear and Supplies)
-  4: ['extras', 'basics'],               // Social
-  5: ['standings'],                      // Standings
-};
-
 export interface TipCopy { readonly title: string; readonly body: string }
 
 /** One line each. Finn says these once, at the moment they happen. */
@@ -145,26 +132,4 @@ export const GAME_INTROS: Readonly<Record<MiniGameKind, GameIntro>> = {
 
 export function gameIntroTip(kind: string): TipId {
   return `game:${kind}`;
-}
-
-export interface HelpSheetSection { readonly key: string; readonly title: string; readonly lines: readonly string[] }
-
-/**
- * What a screen's "?" sheet shows: the server's text when it has any, then the
- * matching How to play cards, so the sheet is never empty or stuck loading.
- */
-export function infoSheetSections(id: number | null | undefined, serverContent?: unknown): HelpSheetSection[] {
-  const topics = (id != null && INFO_MODAL_TOPICS[id]) || ['basics'];
-  const sections: HelpSheetSection[] = [];
-  const server = typeof serverContent === 'string'
-    ? serverContent.replace(/<[^>]+>/g, ' ').replace(/[ \t]+/g, ' ').trim() : '';
-  if (server) {
-    sections.push({ key: 'server', title: 'Good to know',
-      lines: server.split(/\n+/).map(line => line.trim().replace(/\s*—\s*/g, ', ')).filter(Boolean) });
-  }
-  topics.forEach(topicId => {
-    const topic = helpTopic(topicId);
-    if (topic) sections.push({ key: topic.id, title: topic.title, lines: topic.lines });
-  });
-  return sections;
 }
