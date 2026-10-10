@@ -252,7 +252,8 @@ export default function PinSwapsScreen() {
     const swap = again ? holdRef.current?.swap : now.board.find(s => s.id === swapId);
     if (!swap) return;
     // No server call when the answer is already known: you own it, you just put it up, or you have nothing to give.
-    if (now.owned.has(swap.pin.item.id)) {
+    // A numbered gold copy is the exception: trading your #3 for the board's #1 is the whole point.
+    if (now.owned.has(swap.pin.item.id) && !swap.serial) {
       beat('ui.select');
       gameAlert(COPY.ownedTitle, COPY.ownedMessage, undefined, { icon: 'info' });
       return;

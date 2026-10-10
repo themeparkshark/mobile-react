@@ -190,7 +190,7 @@ function TradeSheet(props: TradeSheetProps) {
                 onEndReached={props.onMorePins}
                 renderItem={({ item }) => (
                   <PickPin item={item} size={cell} selected={selected?.id === item.id} still={still} onPress={props.onSelect}
-                    locked={!!swap.serial && !item.serial} />
+                    locked={!!swap.serial !== !!item.serial} />
                 )}
               />
             )}
