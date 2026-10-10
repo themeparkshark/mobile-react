@@ -16,13 +16,14 @@
  * Island, and keeps the home indicator clear.
  */
 import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import Animated, {
-  Easing, interpolate, runOnJS, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming,
+  Easing, interpolate, runOnJS, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,6 +48,10 @@ export type HelpSheetPage = HelpPage & { readonly heroData?: HeroData };
 export type HelpSheetContent = Omit<HelpSheetSpec, 'pages'> & { readonly pages: readonly HelpSheetPage[] };
 
 /** A small overshoot and settle, like the game's popups. */
+/** The tap-to-replay hint (Alex's pointer art) shows once per app session. */
+let tapHintShown = false;
+const POINTER = require('../../../assets/images/howto/pointer.webp');
+
 const SPRING_IN = { damping: 16, stiffness: 260, mass: 0.85 } as const;
 const OUT_MS = 190;
 const seatTick = () => { void Haptics.selectionAsync().catch(() => undefined); };
@@ -312,6 +317,20 @@ function PageView({ page, index, width, heroW, heroH, running, reduced, reveal, 
   const p2 = useAnimatedStyle(textStyle(0.54));
   const pointStyles = [p0, p1, p2];
   const [replay, setReplay] = useState(0);
+  // Once per session, a pointer taps the first picture so kids learn it replays.
+  const [hint] = useState(() => index === 0 && !reduced && !tapHintShown && (tapHintShown = true));
+  const hintT = useSharedValue(0);
+  useEffect(() => {
+    if (hint) hintT.value = withDelay(900, withTiming(1, { duration: 1700 }));
+  }, [hint, hintT]);
+  const hintStyle = useAnimatedStyle(() => {
+    if (!hint) return { opacity: 0 };
+    const v = hintT.value;
+    return {
+      opacity: interpolate(v, [0, 0.15, 0.85, 1], [0, 1, 1, 0], 'clamp'),
+      transform: [{ translateY: interpolate(v, [0, 0.35, 0.45, 0.55, 0.65, 0.75], [24, 0, 6, 0, 6, 0], 'clamp') }, { scale: interpolate(v, [0.35, 0.45, 0.55, 0.65, 0.75], [1, 0.88, 1, 0.88, 1], 'clamp') }],
+    };
+  });
   const label = `${page.headline}. ${page.points.map(point => point.text).join(' ')}`;
   return (
     <View style={{ width, paddingHorizontal: SIDE }}>
@@ -322,6 +341,11 @@ function PageView({ page, index, width, heroW, heroH, running, reduced, reveal, 
       }}>
         <Animated.View style={[styles.heroWindow, { height: heroH }, heroStyle]}>
           <HelpHero hero={page.hero} width={heroW - 6} height={heroH - 6} running={running} reduced={reduced} data={page.heroData} replay={replay} />
+          {hint && (
+            <Animated.View pointerEvents="none" style={[styles.hint, hintStyle]}>
+              <Image source={POINTER} style={{ width: 44, height: 52 }} contentFit="contain" />
+            </Animated.View>
+          )}
         </Animated.View>
       </Pressable>
       <View accessible accessibilityLabel={label} style={styles.textBlock}>
@@ -400,5 +424,6 @@ const styles = StyleSheet.create({
   links: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
   more: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 12 },
   moreText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.blue, marginTop: 2 },
+  hint: { position: 'absolute', right: 26, bottom: 14 },
   close: { position: 'absolute', right: 10, top: -2, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });
