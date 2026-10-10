@@ -64,7 +64,10 @@ type Props = {
   readonly subtitleFor?: (pull: RevealPull) => string | null;
   /** Offer "Wear it" for this pull (chaser, park pin): puts it on the lanyard. */
   /** Puts the pin on the lanyard; resolves true once saved (a full lanyard swaps out its last pin). */
-  readonly onWear?: (pull: RevealPull) => Promise<{ ok: boolean; removed?: string | null }>;
+  readonly onWear?: (pull: RevealPull, removeId?: number) => Promise<{ ok: boolean; removed?: string | null }>;
+  /** What's on the lanyard now: when it is full, the kid picks which pin comes off. */
+  readonly lanyard?: readonly { item_id: number; name: string; icon_url: string | null }[];
+  readonly lanyardMax?: number;
   readonly canWear?: (pull: RevealPull) => boolean;
   /** The box is on stage while the server answers; a tap waits for it, then opens. */
   readonly waiting?: boolean;
@@ -192,7 +195,7 @@ function Ring({ size, t }: { size: number; t: SharedValue<number> }) {
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 10, borderColor: '#ffffff' }, style]} />;
 }
 
-export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear, waiting = false, spend = 0 }: Props) {
+export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear, waiting = false, spend = 0, lanyard = [], lanyardMax = 6 }: Props) {
   const wantOpen = useRef(false);
   const waitingRef = useRef(waiting);
   waitingRef.current = waiting;
@@ -209,6 +212,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const [worn, setWorn] = useState<Set<number>>(new Set());
   const ambient = useAmbient();
   const [swappedOut, setSwappedOut] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState(false);
   // Paid opens: the coins visibly go into the box (3 for one box, 5 for a bundle).
   const [spending, setSpending] = useState(() => (spend > 0 && !still && variant === 'box' ? (rawPulls.length > 1 || spend >= 1000 ? 5 : 3) : 0));
   const landed = useRef(0);
@@ -497,6 +501,16 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     : { text: PINS_COPY.newPin, tone: 'new' as const };
   const subtitle = subtitleFor?.(pull) ?? null;
   const wearable = !!onWear && !!canWear?.(pull) && !worn.has(pull.item_id);
+  const doWear = (removeId?: number) => {
+    void onWear?.(pull, removeId).then(({ ok, removed }) => {
+      if (!ok) return;
+      setSwappedOut(removed ?? null);
+      queueHaptic('success', 1); play('fx.whoosh', { volume: 0.6 }); later(380, () => play('fx.hit', { pitch: 1.4 }));
+      // The pin flies up to your lanyard, then comes back to rest.
+      if (!still) wearFly.value = withSequence(withTiming(1, { duration: 380, easing: Easing.in(Easing.quad) }), withDelay(250, withTiming(0, { duration: 1 })), withSpring(0));
+      setWorn(w => new Set(w).add(pull.item_id));
+    });
+  };
   const summarySize = Math.min(104, (width - 100) / 3.3);
 
   return (
@@ -661,20 +675,28 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                 {pulls.map((p, i) => <View key={p.id} style={[styles.pip, i <= index && styles.pipOn, p.is_chaser && i <= index && styles.pipGold]} />)}
               </View>
             )}
-            {phase === 'show' && wearable && (
+            {phase === 'show' && wearable && !choosing && (
               <Pressable onPress={() => {
-                void onWear?.(pull).then(({ ok, removed }) => {
-                  if (!ok) return;
-                  setSwappedOut(removed ?? null);
-                  queueHaptic('success', 1); play('fx.whoosh', { volume: 0.6 }); later(380, () => play('fx.hit', { pitch: 1.4 }));
-                  // The pin flies up to your lanyard, then comes back to rest.
-                  if (!still) wearFly.value = withSequence(withTiming(1, { duration: 380, easing: Easing.in(Easing.quad) }), withDelay(250, withTiming(0, { duration: 1 })), withSpring(0));
-                  setWorn(w => new Set(w).add(pull.item_id));
-                });
+                // A full lanyard: the kid chooses which pin comes off (nothing is removed for them).
+                if (lanyard.length >= lanyardMax) { queueHaptic('tapLight', 1); setChoosing(true); return; }
+                doWear();
               }}
                 style={({ pressed }) => [styles.wear, pressed && { transform: [{ scale: 0.96 }] }]} accessibilityRole="button" accessibilityLabel="Wear it on your lanyard">
                 <Text maxFontSizeMultiplier={1.1} style={styles.wearText}>Wear it</Text>
               </Pressable>
+            )}
+            {phase === 'show' && wearable && choosing && (
+              <View style={styles.offPick} accessible={false}>
+                <Text maxFontSizeMultiplier={1.2} style={styles.offPickTitle}>Lanyard full! Tap one to take off</Text>
+                <View style={styles.offPickRow}>
+                  {lanyard.map(p => (
+                    <Pressable key={p.item_id} onPress={() => { setChoosing(false); doWear(p.item_id); }} hitSlop={4}
+                      style={({ pressed }) => [styles.offPickPin, pressed && { transform: [{ scale: 0.92 }] }]} accessibilityRole="button" accessibilityLabel={`Take off ${p.name}`}>
+                      {p.icon_url && <Image source={p.icon_url} style={{ width: 40, height: 40 }} contentFit="contain" />}
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
             )}
             {phase === 'show' && worn.has(pull.item_id) && (
               <View style={styles.wornChip}>
@@ -752,6 +774,10 @@ const styles = StyleSheet.create({
   plusText: { fontFamily: FONT.display, fontSize: 24, color: BRAND.goldLight, paddingTop: 3, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   wear: { minHeight: 44, paddingHorizontal: 22, borderRadius: 999, borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.blueBright, alignItems: 'center', justifyContent: 'center' },
   wearText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.white, paddingTop: 3 },
+  offPick: { alignItems: 'center', gap: 6, backgroundColor: 'rgba(3,32,79,0.85)', borderRadius: 16, borderWidth: 2, borderColor: BRAND.gold, padding: 8 },
+  offPickTitle: { fontFamily: FONT.display, fontSize: 17, color: BRAND.white, paddingTop: 2 },
+  offPickRow: { flexDirection: 'row', gap: 6 },
+  offPickPin: { width: 48, height: 48, borderRadius: 24, backgroundColor: BRAND.cream, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   wornChip: { backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 4 },
-  wornText: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy, paddingTop: 2 },
+  wornText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.navy, paddingTop: 2 },
 });

@@ -59,7 +59,12 @@ function TabButton({ label, icon, active, badge, onPress }: { label: string; ico
 const HEADER_H = 58;
 
 export default function PinsScreen() {
-  const { player, refreshPlayer } = useContext(AuthContext);
+  const { player, refreshPlayer, setPlayer } = useContext(AuthContext);
+  // The server sends the new balance with every open, claim and catch: set it, no extra request.
+  const setCoins = useCallback((n: number | undefined) => {
+    if (typeof n === 'number' && player) setPlayer({ ...player, coins: n });
+    else void refreshPlayer().catch(() => undefined);
+  }, [player, setPlayer, refreshPlayer]);
   const still = useUiReducedMotion();
   const focused = useIsFocused();
   const { width } = useWindowDimensions();
@@ -176,7 +181,7 @@ export default function PinsScreen() {
       // The page updates when the reveal closes (pins land in their slots then).
       pendingSeries.current = r.series;
       if (r.counts) pendingCounts.current = r.counts;
-      void refreshPlayer().catch(() => undefined);
+      setCoins(r.coins);
     } catch (e: unknown) {
       setReveal(null);
       const data = (e as { response?: { status?: number; data?: { code?: string; message?: string; need?: number; have?: number } } })?.response;
@@ -188,7 +193,7 @@ export default function PinsScreen() {
       }
       else gameAlert('That box didn’t open', data?.data?.message ?? 'Check your internet and try again. Your coins are safe.');
     } finally { setBusy(null); }
-  }, [busy, coins, refreshPlayer]);
+  }, [busy, coins, refreshPlayer, setCoins]);
 
   const claim = useCallback(async (set: ParkSet) => {
     if (busy) return;
@@ -209,12 +214,12 @@ export default function PinsScreen() {
           gameAlert(`${set.name} done!`, `+${r.coins} coins${r.boxes ? ` and ${r.boxes} free box` : ''}.`);
         }
       }
-      void refreshPlayer().catch(() => undefined);
+      setCoins(r.coins_now);
       await load(true);
     } catch {
       gameAlert('Not yet', 'Check your internet and try again.');
     } finally { setBusy(null); }
-  }, [busy, load, refreshPlayer]);
+  }, [busy, load, setCoins]);
 
   const pick = useCallback(async (series: MysterySeries, pin: PinRow) => {
     if (busy) return;
@@ -313,10 +318,11 @@ export default function PinsScreen() {
     item_id: p.item_id, name: p.name, icon_url: p.icon_url, kind: p.kind, is_chaser: !!p.is_chaser, tradable: p.tradable, serial: p.serial, found: p.found,
   })), [lanyardIds, byId]);
   /** "Wear it" from a reveal: saves now; a full lanyard swaps out its last pin. True once saved. */
-  const wear = useCallback(async (itemId: number): Promise<{ ok: boolean; removed?: string | null }> => {
+  const wear = useCallback(async (itemId: number, removeId?: number): Promise<{ ok: boolean; removed?: string | null }> => {
     if (lanyardIds.includes(itemId)) return { ok: true };
     const max = home?.lanyard_max ?? 6;
-    const base = lanyardIds.length >= max ? lanyardIds.slice(0, max - 1) : [...lanyardIds];
+    // Full: the pin the kid chose comes off (or the last one, for a caller that doesn't ask).
+    const base = lanyardIds.length >= max ? (removeId ? lanyardIds.filter(id => id !== removeId) : lanyardIds.slice(0, max - 1)) : [...lanyardIds];
     // A gold chaser takes the middle of the strap, the spot everyone looks at first.
     const isChaser = !!byId.get(itemId)?.is_chaser || !!home?.mystery.some(s => s.pins.some(p => p.item_id === itemId && p.is_chaser));
     const ids = isChaser ? [...base.slice(0, 2), itemId, ...base.slice(2)] : [...base, itemId];
@@ -497,7 +503,7 @@ export default function PinsScreen() {
         <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant} waiting={reveal.waiting} spend={reveal.spend}
           tagFor={reveal.tag} subtitleFor={reveal.subtitle}
           canWear={p => p.is_chaser || reveal.variant === 'catch' || !!p.rare}
-          onWear={p => wear(p.item_id)}
+          onWear={(p, removeId) => wear(p.item_id, removeId)} lanyard={lanyardPins} lanyardMax={home?.lanyard_max ?? 6}
           onDone={closeReveal} />
       )}
       {hunt && (
@@ -511,7 +517,7 @@ export default function PinsScreen() {
             tag: p => (p.duplicate ? { text: `+${r.coins} coins`, tone: 'trader' } : p.rare ? { text: 'RARE park pin!', tone: 'gold' } : { text: 'Park pin!', tone: 'new' }),
             subtitle: () => [r.park_name ?? hunt.park_name, day, r.catch_number ? `#${r.catch_number} to find it` : null].filter(Boolean).join(' \u00b7 '),
           });
-          void refreshPlayer().catch(() => undefined);
+          setCoins(r.coins_now);
         }} />
       )}
       {picking && (

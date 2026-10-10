@@ -42,7 +42,7 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
         <View style={styles.chip}><Image source={PIN_ART.seal} style={styles.icon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>{data.sets_done}</Text></View>
         {chasers > 0 && <View style={styles.chip}><Image source={PIN_ART.chaser} style={styles.icon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>{chasers}</Text></View>}
         {!!data.best_serial && <View style={[styles.chip, styles.serialChip]}><Text maxFontSizeMultiplier={1.1} style={[styles.chipText, { color: BRAND.gold }]}>#{data.best_serial}</Text></View>}
-        {!!data.first_finds && <View style={[styles.chip, { backgroundColor: BRAND.gold }]} accessible accessibilityLabel={`First to find ${data.first_finds} park pins`}><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>#1 x{data.first_finds}</Text></View>}
+        {!!data.first_finds && <View style={[styles.chip, { backgroundColor: BRAND.gold }]} accessible accessibilityLabel={`First to find ${data.first_finds} park pins`}><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>First finder x{data.first_finds}</Text></View>}
         <Text maxFontSizeMultiplier={1.1} style={styles.count}>{data.pins} pins</Text>
       </View>
       {(!!data.title || !!data.showcase) && (

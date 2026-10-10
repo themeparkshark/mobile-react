@@ -69,11 +69,10 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
         <View style={[styles.chaserSlot, compact && { paddingVertical: 4 }]}>
           <PinTile uri={chaser.icon_url} size={size + 10} owned={chaser.owned} kind={chaser.kind} tradable={chaser.tradable} chaser
             badge={false} serial={chaser.serial} shine={chaser.owned ? shine : undefined} lag={0.7} lagSpan={0.8} />
-          <View style={{ flex: 1 }}>
+          {/* One number on screen (the meter below shows the guarantee); the guarantee is still read out and in the help. */}
+          <View style={{ flex: 1 }} accessible accessibilityLabel={`Gold chaser, ${formatChance(chaser.chance_bp)} a box${pity ? `, always by box ${pity}` : ''}`}>
             <Text maxFontSizeMultiplier={1.3} style={styles.chaserLabel}>Gold chaser</Text>
-            <Text maxFontSizeMultiplier={1.3} style={styles.chaserPct}>
-              {`${formatChance(chaser.chance_bp)}${pity ? `  \u00b7  always by box ${pity}` : ''}`}
-            </Text>
+            <Text maxFontSizeMultiplier={1.3} style={styles.chaserPct}>{`${formatChance(chaser.chance_bp)} a box`}</Text>
           </View>
         </View>
       )}

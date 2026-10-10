@@ -48,7 +48,7 @@ function Sonar({ warmth, color }: { warmth: HuntStatus['warmth']; color: string 
 type Props = {
   readonly set: ParkSet;
   readonly onClose: () => void;
-  readonly onCaught: (result: { new: boolean; coins: number; pin: NonNullable<HuntStatus['pin']> & { rarity?: string }; park_name?: string | null; day?: string; catch_number?: number }) => void;
+  readonly onCaught: (result: { new: boolean; coins: number; coins_now?: number; pin: NonNullable<HuntStatus['pin']> & { rarity?: string }; park_name?: string | null; day?: string; catch_number?: number }) => void;
 };
 
 export default function HuntSheet({ set, onClose, onCaught, still = false }: Props & { still?: boolean }) {
@@ -141,7 +141,7 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
     setBusy(true); setMiss(false); setFuzzy(false);
     try {
       const r = await catchPinOfTheDay(set.park_id, { latitude: l.latitude, longitude: l.longitude, ...(gpsSignal.accuracyMeters ? { accuracy: gpsSignal.accuracyMeters } : {}) });
-      if (r.caught) onCaught({ new: r.new, coins: r.coins, pin: r.pin, park_name: r.park_name, day: r.day, catch_number: r.catch_number });
+      if (r.caught) onCaught({ new: r.new, coins: r.coins, coins_now: r.coins_now, pin: r.pin, park_name: r.park_name, day: r.day, catch_number: r.catch_number });
       else onClose();
     } catch (e: unknown) {
       // A fuzzy GPS fix gets its own plain hint (the pin is still there).
