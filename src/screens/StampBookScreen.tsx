@@ -144,7 +144,11 @@ export default function StampBookScreen() {
   const wantTitles = !!(route.params as { titles?: boolean } | undefined)?.titles;
   useEffect(() => { if (wantTitles) setTitlesOpen(true); }, [wantTitles, route.params]);
 
-  useEffect(() => { loadSeen().then(set => { seenRef.current = set; setSeenVersion(v => v + 1); }); }, []);
+  // NEW tags load after the push settles (they are not on the first frame's critical path).
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => { loadSeen().then(set => { seenRef.current = set; setSeenVersion(v => v + 1); }); });
+    return () => task.cancel();
+  }, []);
   // Cold app start: the device copy of the last book, if the network has not answered first.
   useEffect(() => {
     if (previewMode || response) return;
@@ -383,8 +387,9 @@ export default function StampBookScreen() {
       setTitleOverride({ title: before });
       throw e;
     }
-    setResponse(current => current && { ...current, equipped_title: title });
-    refreshPlayer().catch(() => undefined).finally(() => setTitleOverride(null));
+    // No book rebuild while the card is up: the override carries the worn title until the player refresh lands,
+    // and that refresh runs after the current interaction (off the tap's frame).
+    InteractionManager.runAfterInteractions(() => { refreshPlayer().catch(() => undefined).finally(() => setTitleOverride(null)); });
     return true;
   }, [previewMode, refreshPlayer, wornTitle]);
 

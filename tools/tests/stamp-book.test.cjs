@@ -168,7 +168,7 @@ test('claim cascade: instant feedback, rising pitch, per-landing count-up, fresh
   assert.match(src, /const step = n;/);
   assert.match(src, /pitch: Math\.min\(12, step\)/);
   assert.match(src, /bus\.add\(kind, share\);/);
-  assert.match(src, /add: \(kind, n\) => setShown\(w => \(\{ \.\.\.w, \[kind\]: w\[kind\] \+ n \}\)\)/);
+  assert.match(src, /pendingAdds\.current\[kind\] = \(pendingAdds\.current\[kind\] \?\? 0\) \+ n;/);
   assert.match(src, /if \(cascadingRef\.current\) return;\s*setShown\(prev => \(claimedIds\.length === 0 \? wallet : \{\s*energy: Math\.max\(prev\.energy, wallet\.energy\)/);
   assert.match(src, /AccessibilityInfo\.announceForAccessibility/);
   assert.match(src, /tokenShake\.value = withSequence/);

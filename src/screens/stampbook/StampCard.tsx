@@ -161,10 +161,22 @@ function Frame(props: Props & { stamp: BookStamp }) {
   }, [wallet.energy, wallet.tickets, wallet.xp, wallet.coins]);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [levelUp, setLevelUp] = useState<number | null>(null);
+  const pendingAdds = useRef<Partial<Record<HudKind, number>>>({});
+  const addFrame = useRef<number | null>(null);
+  useEffect(() => () => { if (addFrame.current !== null) cancelAnimationFrame(addFrame.current); }, []);
   const hudLayout = useRef({ hud: {} as Record<string, { x: number; y: number }>, hudRow: { x: 0, y: 0 }, content: { x: 0, y: 0 } });
   const bus = useMemo<HudBus>(() => ({
     layout: hudLayout,
-    add: (kind, n) => setShown(w => ({ ...w, [kind]: w[kind] + n })),
+    // Counter ticks are batched to one render per frame (16 landings no longer mean 16 renders of the card).
+    add: (kind, n) => {
+      pendingAdds.current[kind] = (pendingAdds.current[kind] ?? 0) + n;
+      if (addFrame.current !== null) return;
+      addFrame.current = requestAnimationFrame(() => {
+        addFrame.current = null;
+        const adds = pendingAdds.current; pendingAdds.current = {};
+        setShown(w => ({ energy: w.energy + (adds.energy ?? 0), tickets: w.tickets + (adds.tickets ?? 0), xp: w.xp + (adds.xp ?? 0), coins: w.coins + (adds.coins ?? 0) }));
+      });
+    },
     burst: list => setBursts(list),
     setCascading: on => { cascadingRef.current = on; },
     levelUp: level => setLevelUp(level),

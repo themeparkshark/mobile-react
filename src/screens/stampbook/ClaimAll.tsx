@@ -22,7 +22,7 @@ import Ribbon from '../../components/Ribbon';
 import { DIALOG_CARD } from '../../ui/GameDialog';
 import type { GameIconName } from '../../ui/iconNames';
 import StampArt from './StampArt';
-import { Confetti } from './SlamFx';
+import { Confetti, Particle } from './SlamFx';
 import { INK, PAPER } from './StampTile';
 import { compactCount, sumRewards, type BookStamp, type RewardTotals as Totals } from './model';
 
@@ -56,6 +56,11 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
   const [got, setGot] = useState<Totals>({ energy: 0, tickets: 0, xp: 0, coins: 0 });
   const [party, setParty] = useState(false);
   const [wearing, setWearing] = useState<string | null>(null);
+  // Coins fly from each stamp to its total as it lands (positions measured once; UI-thread particles).
+  const giftPos = useRef<Record<number, { x: number; y: number }>>({});
+  const totalPos = useRef<Partial<Record<keyof Totals, { x: number; y: number }>>>({});
+  const gridY = useRef(0); const totalsY = useRef(0); const gridX = useRef(0); const totalsX = useRef(0);
+  const [flights, setFlights] = useState<{ id: string; icon: GameIconName; sx: number; sy: number; ex: number; ey: number; delay: number; lift: number }[]>([]);
   const alive = useRef(true);
   // Short phones (iPhone SE): smaller gifts and a shorter titles list, so the sheet stays inside the safe area.
   const compact = useWindowDimensions().height < 700;
@@ -86,6 +91,15 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
       const ok = await results[i].catch(() => false);
       if (!alive.current) return;
       setStatus(prev => ({ ...prev, [stamp.id]: ok ? 'done' : 'failed' }));
+      if (ok && !reducedMotion) {
+        const from = giftPos.current[stamp.id];
+        const kindsHere = (Object.keys(TOTAL_ICON) as (keyof Totals)[]).filter(k => stamp.rewards[k] > 0);
+        if (from) setFlights(f => [...f.slice(-12), ...kindsHere.flatMap((k, ki) => {
+          const to = totalPos.current[k];
+          return to ? [0, 1].map(j => ({ id: `${stamp.id}-${k}-${j}`, icon: TOTAL_ICON[k], sx: gridX.current + from.x + j * 8, sy: gridY.current + from.y,
+            ex: totalsX.current + to.x, ey: totalsY.current + to.y, delay: ki * 60 + j * 70, lift: 60 + j * 20 })) : [];
+        })]);
+      }
       if (ok) {
         haptic('hitRigid');
         playSfx('fx.hit', 0.7);
@@ -119,12 +133,13 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
               <GameIcon name="close" size={44} />
             </Pressable>
           )}
-          <View style={styles.grid}>
-            {stamps.map(s => <Gift key={s.id} stamp={s} status={status[s.id] ?? 'waiting'} reducedMotion={reducedMotion} compact={compact} />)}
+          <View style={styles.grid} onLayout={e => { gridY.current = e.nativeEvent.layout.y; gridX.current = e.nativeEvent.layout.x; }}>
+            {stamps.map(s => <Gift key={s.id} stamp={s} status={status[s.id] ?? 'waiting'} reducedMotion={reducedMotion} compact={compact}
+              onPos={(x, y) => { giftPos.current[s.id] = { x, y }; }} />)}
           </View>
-          <View style={styles.totals} accessible accessibilityLabel={kinds.map(k => `${phase === 'ready' ? all[k] : got[k]} ${k}`).join(', ')}>
+          <View style={styles.totals} onLayout={e => { totalsY.current = e.nativeEvent.layout.y; totalsX.current = e.nativeEvent.layout.x; }} accessible accessibilityLabel={kinds.map(k => `${phase === 'ready' ? all[k] : got[k]} ${k}`).join(', ')}>
             {kinds.map(k => (
-              <View key={k} style={styles.total}>
+              <View key={k} style={styles.total} onLayout={e => { const l = e.nativeEvent.layout; totalPos.current[k] = { x: l.x + l.width / 2, y: l.y + 23 }; }}>
                 <View style={styles.disc}><GameIcon name={TOTAL_ICON[k]} size={24} /></View>
                 <Text style={styles.totalText} maxFontSizeMultiplier={1.4}>+{compactCount(phase === 'ready' ? all[k] : got[k])}</Text>
               </View>
@@ -162,6 +177,7 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
             <GameButton label={label} icon={phase === 'done' && !failed.length ? 'check' : 'gift'} loading={phase === 'claiming'}
               onPress={phase === 'claiming' ? undefined : phase === 'done' && !failed.length ? onClose : () => { void claimAll(); }} />
           </View>
+          {flights.map(f => <Particle key={f.id} icon={f.icon} sx={f.sx} sy={f.sy} ex={f.ex} ey={f.ey} delay={f.delay} lift={f.lift} />)}
           {party && <View pointerEvents="none" style={StyleSheet.absoluteFill}><Confetti width={340} height={520} seed={stamps.length} count={36} /></View>}
         </View>
       </View>
@@ -170,7 +186,7 @@ function Sheet({ stamps, reducedMotion, worn, onClaimOne, onWear, onClose }: {
 }
 
 /** One gift-wrapped stamp: the art waits under a red gift tag, then stamps in with a pop and a check. */
-function Gift({ stamp, status, reducedMotion, compact }: { stamp: BookStamp; status: Status; reducedMotion: boolean; compact: boolean }) {
+function Gift({ stamp, status, reducedMotion, compact, onPos }: { stamp: BookStamp; status: Status; reducedMotion: boolean; compact: boolean; onPos: (x: number, y: number) => void }) {
   const pop = useSharedValue(1);
   useEffect(() => {
     if (status !== 'done' || reducedMotion) return;
@@ -178,7 +194,8 @@ function Gift({ stamp, status, reducedMotion, compact }: { stamp: BookStamp; sta
   }, [status, pop, reducedMotion]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   return (
-    <Animated.View style={[styles.gift, compact && styles.giftCompact, status === 'done' && styles.giftDone, style]} accessible
+    <Animated.View onLayout={e => { const l = e.nativeEvent.layout; onPos(l.x + l.width / 2, l.y + l.height / 2); }}
+      style={[styles.gift, compact && styles.giftCompact, status === 'done' && styles.giftDone, style]} accessible
       accessibilityLabel={`${stamp.name}${status === 'done' ? ', claimed' : status === 'failed' ? ', not claimed yet' : ''}`}>
       <StampArt stamp={stamp} size="thumb" />
       {status === 'done' ? (
