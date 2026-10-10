@@ -205,15 +205,15 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   };
 
   /** A claim whose answer was lost: read back what the server paid for that exact chest. */
-  const recoverPaid = async (src: 'daily' | 'weekly' | 'level', level_: number, claimDate: string | null | undefined): Promise<PaidRewards | null> => {
+  const recoverPaid = async (src: 'daily' | 'weekly' | 'level', level_: number, claimDate: string | null | undefined, timeoutMs = 6000): Promise<PaidRewards | null> => {
     try {
       if (src === 'level') {
-        const c = await getLevelChests(6000);
+        const c = await getLevelChests(timeoutMs);
         const chest = c.enabled ? c.chests.find(x => x.level === level_) : undefined;
         if (c.enabled) setChests(c.chests);
         return chest?.opened && chest.rewards ? chest.rewards : null;
       }
-      const d = await getDailyThree(6000);
+      const d = await getDailyThree(timeoutMs);
       if (!d.enabled) return null;
       applyDaily(d);
       if (src === 'weekly') return d.week.claimed ? d.week.claimed_rewards ?? null : null;
@@ -246,7 +246,9 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       const giveUp = Date.now() + 12000; // never more than ~12 s of "Still opening..."
       for (let i = 0; i < 3 && !paid && mounted.current && Date.now() < giveUp; i++) {
         if (i > 0) await new Promise(r => setTimeout(r, 1500));
-        paid = await recoverPaid(current.src, current.level ?? 0, current.claimDate);
+        const left = giveUp - Date.now();
+        if (left < 1000) break;
+        paid = await recoverPaid(current.src, current.level ?? 0, current.claimDate, Math.min(6000, left));
       }
       if (!mounted.current) return;
       if (paid) { setView({ ...current, opening: false, rewards: paid }); return; }
@@ -348,7 +350,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         <View style={styles.nextRow}>
           <Image source={WEEKLY} style={{ width: 28, height: 28 }} contentFit="contain" />
           <Text style={styles.nextText}>Next box: 5 flames next week</Text>
-          <View style={styles.pips}>{[0, 1, 2, 3, 4].map(i => <View key={i} style={styles.pip} />)}</View>
+          <View style={styles.pips}>{[0, 1, 2, 3, 4].map(i => <View key={i} style={[styles.pip, i < 5 && styles.pipLit]} />)}</View>
         </View>
       )
       : daily ? (
@@ -456,6 +458,8 @@ const styles = StyleSheet.create({
   nextBlock: { gap: 6 },
   pips: { flexDirection: 'row', gap: 3 },
   pip: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: BRAND.gold },
+  // This week's five flames, all earned (the box just opened).
+  pipLit: { backgroundColor: BRAND.gold },
   xpTrack: { height: 16, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'visible', justifyContent: 'center',
     marginHorizontal: 18, paddingLeft: 0 },
   xpFill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 8, backgroundColor: BRAND.gold },
