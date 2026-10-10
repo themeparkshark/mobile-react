@@ -26,7 +26,7 @@ export default function BundleCard({ product, price, worth, busy, disabled, onBu
           <View style={[st.art, compact && st.artCompact]}><PackArt art={art} size={compact ? 92 : 142} /></View>
           <View style={{ flex: 1, gap: 6 }}>
             {/* Kid words first; the grown-up's number small under it (psychology + kids UX r4). */}
-            {worth && <Text maxFontSizeMultiplier={MAX_FONT} style={[st.worth, compact && st.worthCompact]} numberOfLines={2}>{compact ? 'Way more than one by one' : 'Way more than buying them one by one'}</Text>}
+            {worth && <Text maxFontSizeMultiplier={MAX_FONT} style={[st.worth, compact && st.worthCompact]} numberOfLines={2}>Way more than one by one</Text>}
             {worth && (
               <Text maxFontSizeMultiplier={MAX_FONT} style={st.kid}>
                 {`Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''} in regular packs`}

@@ -85,7 +85,7 @@ export default function MemberStage() {
       <View style={st.medal}><GameIcon name="member" size={30} /></View>
       {look ? (
         <Animated.View entering={still ? undefined : ZoomIn.springify().damping(12)} style={[st.card, bobStyle]}>
-          <Playercard inventory={look} showBackground={false} style={StyleSheet.absoluteFill} shadow fxLod="full" fxSound={false} />
+          <Playercard inventory={look} showBackground={false} style={StyleSheet.absoluteFill} fxLod="full" fxSound={false} />
         </Animated.View>
       ) : (
         <Image source={require('../../../assets/images/vip-hero.png')} style={st.fallback} contentFit="contain" />
