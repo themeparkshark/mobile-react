@@ -450,7 +450,6 @@ export default function SharkPassScreen() {
                   start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
                 <View style={s.heroStage}>
                   <View style={s.heroShadow} />
-                  <View style={s.heroShadowCore} />
                   {heroLook ? (
                     <Playercard inventory={heroLook} showBackground={false} pinAnchor="body" still={reduced} style={StyleSheet.absoluteFill} />
                   ) : (

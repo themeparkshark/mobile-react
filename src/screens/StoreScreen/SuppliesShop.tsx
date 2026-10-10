@@ -372,7 +372,7 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
         </View>
         <Band text={`${n.toLocaleString('en-US')} ${main === 'rescue_passes' ? (n === 1 ? 'RESCUE PASS' : 'RESCUE PASSES') : unitWord(main, n).toUpperCase()}`}
           color={best ? 'gold' : 'navy'} size={columns === 3 ? 14 : 16} />
-        {gear && <Text maxFontSizeMultiplier={MAX_FONT} style={st.gearLine} numberOfLines={2}>{gear}</Text>}
+        {gear && <Text maxFontSizeMultiplier={MAX_FONT} style={st.gearLine} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.85}>{gear}</Text>}
         <PriceBar price={price} busy={busy} note={note} />
         <WishHeart id={product.product_id} name={`${n.toLocaleString('en-US')} ${unitWord(main, n)}`} />
         {sticker && <Sticker text={sticker} style={{ top: 6, right: 4 }} />}
