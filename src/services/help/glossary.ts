@@ -40,7 +40,7 @@ export const SERVER_CURRENCY_KEYS: readonly GlossaryKey[] = [
 const TERMS: readonly GlossaryTerm[] = [
   { key: 'coins', label: 'Coins', icon: 'coins', topic: 'basics',
     what: 'Spend them in the Shark Shop and Community Center.',
-    earn: 'Catch ride coins, open your daily chest and win raids.' },
+    earn: 'Open daily chests and win raids.' },
   { key: 'tickets', label: 'Tickets', icon: 'ticket', topic: 'basics',
     what: 'Each ride challenge costs one Ticket.',
     earn: 'Grab home finds and open your day 7 daily chest.' },

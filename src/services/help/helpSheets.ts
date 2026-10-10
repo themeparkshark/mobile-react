@@ -61,7 +61,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
     pages: [
       { key: 'climb', hero: 'standings_climb', headline: 'Win rides, climb up',
         points: [
-          { icon: 'ride', text: 'Win a ride challenge: +1 on the board.' },
+          { icon: 'ride', text: 'Every ride you win adds 1 to your score.' },
           { icon: 'check', text: 'Each ride counts once per park day.' },
           { icon: 'timer', text: 'A new week starts every Monday.' },
         ] },

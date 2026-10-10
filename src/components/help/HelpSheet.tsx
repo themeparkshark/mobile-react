@@ -16,7 +16,7 @@
  * Island, and keeps the home indicator clear.
  */
 import * as Haptics from 'expo-haptics';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
@@ -53,19 +53,17 @@ const SIDE = 16;
 /** The sheet's white side border; pages are exactly the space inside it, so a swiped page lands centered. */
 const BORDER = 3;
 /** Text never grows past this, so a page never needs to scroll at large text sizes. */
-const MAX_FONT = 1.25;
+const MAX_FONT = 1.35;
 
 export interface HelpLink { readonly label: string; readonly onPress: () => void }
 
-export default function HelpSheet({ visible, sheet, onClose, state = 'ready', onRetry, pageFooter, links }: {
+export default function HelpSheet({ visible, sheet, onClose, state = 'ready', onRetry, links }: {
   readonly visible: boolean;
   readonly sheet: HelpSheetContent | null;
   readonly onClose: () => void;
   /** Sheets built from server data show a loader or an error with Try again while it loads. */
   readonly state?: 'ready' | 'loading' | 'error';
   readonly onRetry?: () => void;
-  /** Extra controls under one page's points (Shark Social's safety links). */
-  readonly pageFooter?: (page: HelpSheetPage) => ReactNode;
   /** Quiet links under the main button (How to play, Get more), secondary to the explanation. */
   readonly links?: readonly HelpLink[];
 }) {
@@ -109,7 +107,7 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
         <GestureHandlerRootView style={{ flex: 1 }}>
           {mounted && sheet && (
             <SheetBody sheet={sheet} open={open} drag={drag} reveal={reveal} reduced={reduced} active={visible}
-              onClose={onClose} state={state} onRetry={onRetry} pageFooter={pageFooter} links={links} />
+              onClose={onClose} state={state} onRetry={onRetry} links={links} />
           )}
         </GestureHandlerRootView>
       </SafeAreaProvider>
@@ -117,7 +115,7 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
   );
 }
 
-function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state, onRetry, pageFooter, links }: {
+function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state, onRetry, links }: {
   readonly sheet: HelpSheetContent;
   readonly open: SharedValue<number>;
   readonly drag: SharedValue<number>;
@@ -127,7 +125,6 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
   readonly onClose: () => void;
   readonly state: 'ready' | 'loading' | 'error';
   readonly onRetry?: () => void;
-  readonly pageFooter?: (page: HelpSheetPage) => ReactNode;
   readonly links?: readonly HelpLink[];
 }) {
   const { width, height } = useWindowDimensions();
@@ -243,8 +240,7 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
                 <View key={p.key} style={{ width: pageW }} />
               ) : (
                 <PageView key={p.key} page={p} index={index} width={pageW} heroW={heroW} heroH={heroH}
-                  running={active && index === page} reduced={reduced} reveal={reveal} scrollX={scrollX}
-                  footer={pageFooter?.(p) ?? null} />
+                  running={active && index === page} reduced={reduced} reveal={reveal} scrollX={scrollX} />
               ))}
             </PagerScroll>
           ) : (
@@ -273,10 +269,9 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
   );
 }
 
-function PageView({ page, index, width, heroW, heroH, running, reduced, reveal, scrollX, footer }: {
+function PageView({ page, index, width, heroW, heroH, running, reduced, reveal, scrollX }: {
   readonly page: HelpSheetPage; readonly index: number; readonly width: number; readonly heroW: number; readonly heroH: number;
   readonly running: boolean; readonly reduced: boolean; readonly reveal: SharedValue<number>; readonly scrollX: SharedValue<number>;
-  readonly footer: ReactNode;
 }) {
   // The first page staggers in with the sheet; later pages drift in a little as they are swiped to.
   const heroStyle = useAnimatedStyle(() => {
@@ -327,7 +322,6 @@ function PageView({ page, index, width, heroW, heroH, running, reduced, reveal, 
           </View>
         )}
       </View>
-      {footer}
     </View>
   );
 }

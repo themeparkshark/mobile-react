@@ -275,7 +275,7 @@ function ClimbScene({ t, w, h }: SceneProps) {
       </Abs>
       <Abs x={x0} y={y0 + step * 2} w={bw} h={rowH} style={youStyle}>
         <MiniRow width={bw} height={rowH} face={0} you rank={<Swap t={t} a={0.52} b={0.6} from="5" to="4" style={rankStyle} />}>
-          <Swap t={t} a={0.3} b={0.36} from="6" to="7" style={countStyle} />
+          <Swap t={t} a={0.46} b={0.52} from="6" to="7" style={countStyle} />
         </MiniRow>
       </Abs>
       <Abs x={x0 + bw * 0.4} y={y0 + step * 2 - rowH * 0.5} w={78} h={30} style={upChip}>
