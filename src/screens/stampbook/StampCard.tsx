@@ -247,7 +247,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
         <View style={[styles.body, compact && styles.bodyCompact, displayLegendary && styles.bodyLegendary]}>
           {/* Alex's popup finish: a soft top gloss band and an inner bevel line. */}
           <View pointerEvents="none" style={styles.bevel} />
-          <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']} style={styles.gloss} />
+          <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']} style={styles.gloss} />
           <View style={styles.ribbon}><Ribbon text={display.name} /></View>
           <Pressable onPress={onClose} hitSlop={14} style={styles.close} accessibilityRole="button" accessibilityLabel="Close">
             <GameIcon name="close" size={44} />
@@ -705,7 +705,7 @@ function TitleBox({ title, state, reducedMotion, smallShark }: { title: string; 
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const hopStyle = useAnimatedStyle(() => ({ transform: [{ translateY: hop.value }] }));
   const shineStyle = useAnimatedStyle(() => ({ opacity: shine.value < 1 ? 0.85 : 0, transform: [{ translateX: -120 + 420 * shine.value }, { rotate: '18deg' }] }));
-  const line = state === 'wearing' ? 'On your profile!' : state === 'ready' ? 'New title! Wear it' : state === 'claim' ? 'Claim to unlock' : 'Earn to unlock';
+  const line = state === 'wearing' ? 'On your profile!' : state === 'ready' ? 'New title!' : state === 'claim' ? 'Claim to unlock' : 'Earn to unlock';
   const owned = state === 'ready' || state === 'wearing';
   return (
     <View style={[styles.titleBox, owned && styles.titleBoxOwned]} accessible accessibilityLabel={`Title: ${title}. ${line}`}>
@@ -746,7 +746,7 @@ const styles = StyleSheet.create({
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,52,110,0.82)' },
   card: { width: '100%', maxWidth: 370, marginTop: 24, borderRadius: 24, borderWidth: 3, borderColor: '#0B2A55', backgroundColor: '#0B2A55' },
   lip: { position: 'absolute', left: -3, right: -3, top: 8, bottom: -10, borderRadius: 24, backgroundColor: '#03305E' },
-  body: { ...DIALOG_CARD, alignItems: 'center', paddingHorizontal: 18, paddingBottom: 18, paddingTop: 34 },
+  body: { ...DIALOG_CARD, backgroundColor: '#FFF6DE', alignItems: 'center', paddingHorizontal: 18, paddingBottom: 18, paddingTop: 34 },
   bodyLegendary: { borderColor: LEGENDARY_GOLD, borderWidth: 4 },
   rootCompact: { paddingTop: 30, paddingBottom: 6 },
   rarityCol: { alignItems: 'center', zIndex: 3 },
@@ -769,16 +769,17 @@ const styles = StyleSheet.create({
   actionsCompact: { marginTop: 8 },
   howBoxCompact: { marginTop: 6, padding: 9 },
   tokensCompact: { marginTop: 6 },
-  bevel: { position: 'absolute', left: 4, right: 4, top: 4, bottom: 4, borderRadius: 16, borderWidth: 2, borderColor: 'rgba(0,40,90,0.35)' },
+  // Book paper inside the slate frame: the same stitched dashed edge as the pages.
+  bevel: { position: 'absolute', left: 6, right: 6, top: 6, bottom: 6, borderRadius: 15, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#C9AE78' },
   gloss: { position: 'absolute', left: 3, right: 3, top: 3, height: 90, borderTopLeftRadius: 17, borderTopRightRadius: 17 },
   ribbon: { position: 'absolute', top: -34, left: 18, right: 18, alignItems: 'center' },
   close: { position: 'absolute', top: -18, right: -14, zIndex: 5 },
   content: { alignSelf: 'stretch', alignItems: 'center' },
   contentWrap: { alignSelf: 'stretch' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: DIALOG_CARD.backgroundColor, zIndex: 20, elevation: 20 },
-  hud: { zIndex: 3, elevation: 3, flexDirection: 'row', gap: 12, backgroundColor: 'rgba(0,40,90,0.45)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, marginTop: 6 },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#FFF6DE', zIndex: 20, elevation: 20 },
+  hud: { zIndex: 3, elevation: 3, flexDirection: 'row', gap: 12, backgroundColor: 'rgba(20,33,61,0.08)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, marginTop: 6 },
   hudItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  hudText: { fontFamily: 'Shark', fontSize: 18, color: '#FFFFFF' },
+  hudText: { fontFamily: 'Shark', fontSize: 18, color: INK },
   stage: { zIndex: 1, width: ART + 50, height: ART + 30, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   // Pale core with the section colour as a ring: a bright accent at low alpha over the blue card reads olive.
   breathe: { position: 'absolute', width: ART * 0.9, height: ART * 0.9, borderRadius: ART, top: 15 + ART * (BADGE_CY - 0.45), backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 5 },
@@ -801,24 +802,24 @@ const styles = StyleSheet.create({
   rarity: { zIndex: 3, elevation: 3, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 3, borderWidth: 2.5 },
   rarityGold: { backgroundColor: LEGENDARY_GOLD, borderColor: INK, borderWidth: 2.5 },
   rarityText: { fontFamily: 'Shark', fontSize: 14, color: RARITY_INK, letterSpacing: 1 },
-  earned: { zIndex: 3, fontFamily: 'Shark', fontSize: 18, color: '#FFFFFF', marginTop: 6, textShadowColor: '#05346e', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
+  earned: { zIndex: 3, fontFamily: 'Shark', fontSize: 18, color: INK, marginTop: 6 },
   remainingRow: { zIndex: 3, flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
-  remaining: { fontFamily: 'Shark', fontSize: 22, color: '#FFCF3B', textShadowColor: '#05346e', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
-  howBox: { width: '100%', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16, padding: 12, marginTop: 10, borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
+  remaining: { fontFamily: 'Shark', fontSize: 22, color: '#B06A00' },
+  howBox: { width: '100%', backgroundColor: 'rgba(20,33,61,0.06)', borderRadius: 16, padding: 12, marginTop: 10, borderWidth: 2, borderColor: 'rgba(20,33,61,0.15)' },
   howHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  howCount: { fontFamily: 'Shark', fontSize: 17, color: '#FFFFFF' },
-  howText: { flex: 1, fontFamily: 'Shark', fontSize: 18, lineHeight: 22, color: '#FFFFFF' },
+  howCount: { fontFamily: 'Shark', fontSize: 17, color: INK },
+  howText: { flex: 1, fontFamily: 'Shark', fontSize: 18, lineHeight: 22, color: INK },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   bar: { flex: 1, height: 14, borderRadius: 7, backgroundColor: 'rgba(0,20,60,0.55)', overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)' },
   barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 9 },
-  barText: { fontFamily: 'Shark', fontSize: 17, color: '#FFFFFF', textShadowColor: '#05346e', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
+  barText: { fontFamily: 'Shark', fontSize: 17, color: INK },
   tokens: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 12 },
   token: { alignItems: 'center', minWidth: 58 },
   disc: {
     width: 46, height: 46, borderRadius: 23, backgroundColor: '#FFF8E4', borderWidth: 3, borderColor: '#FFFFFF',
     alignItems: 'center', justifyContent: 'center', shadowColor: '#022a55', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 0,
   },
-  tokenText: { fontFamily: 'Shark', fontSize: 16, color: '#FFFFFF', marginTop: 2, textShadowColor: '#05346e', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
+  tokenText: { fontFamily: 'Shark', fontSize: 16, color: INK, marginTop: 2 },
   tokenCheck: { position: 'absolute', top: -4, right: 2 },
   actions: { alignSelf: 'stretch', gap: 8, marginTop: 14, alignItems: 'center' },
   actionSlot: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
@@ -838,7 +839,7 @@ const styles = StyleSheet.create({
   levelUpPill: { marginTop: 6, backgroundColor: INK, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 4, borderWidth: 2, borderColor: '#FFFFFF' },
   levelUpTitle: { fontFamily: 'Shark', fontSize: 34, color: '#FFFFFF', textShadowColor: '#8A5A00', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   levelUpLevel: { fontFamily: 'Shark', fontSize: 22, color: '#FFFFFF' },
-  message: { fontFamily: 'Shark', fontSize: 15, color: '#E2F6FF', textAlign: 'center', marginTop: 8 },
+  message: { fontFamily: 'Shark', fontSize: 15, color: INK, textAlign: 'center', marginTop: 8 },
   where: {
     flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(0,40,90,0.45)', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 3,
   },
@@ -846,10 +847,10 @@ const styles = StyleSheet.create({
   titleBox: {
     overflow: 'hidden',
     width: '100%', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, paddingVertical: 7, paddingHorizontal: 9,
-    borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,207,59,0.75)', backgroundColor: 'rgba(0,40,90,0.3)',
+    borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: '#D9A21B', backgroundColor: 'rgba(20,33,61,0.05)',
   },
   titleShine: { position: 'absolute', top: -20, bottom: -20, width: 44, backgroundColor: 'rgba(255,236,150,0.75)' },
-  titleBoxOwned: { borderStyle: 'solid', borderColor: '#FFCF3B', backgroundColor: 'rgba(255,207,59,0.16)' },
+  titleBoxOwned: { borderStyle: 'solid', borderColor: '#FFCF3B', backgroundColor: 'rgba(255,207,59,0.22)' },
   titleWear: { alignItems: 'center', maxWidth: '58%', flexShrink: 1 },
   titleShark: { width: 46, height: 50, marginBottom: -8 },
   titleSharkLocked: { opacity: 0.45 },
@@ -861,7 +862,7 @@ const styles = StyleSheet.create({
   titlePillLocked: { backgroundColor: '#DCE6F2', borderBottomColor: '#9FB2C9' },
   titlePillText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 16, color: INK },
   titlePillTextLocked: { color: '#4A5A78' },
-  titleLine: { flex: 1, fontFamily: 'Shark', fontSize: 15, lineHeight: 18, color: '#FFFFFF' },
+  titleLine: { flex: 1, fontFamily: 'Shark', fontSize: 15, lineHeight: 18, color: INK, textAlign: 'center' },
 });
 
 /** Level-up moment: the stamp's XP moved the level bar. A gold ribbon pops over the card with a fanfare. */

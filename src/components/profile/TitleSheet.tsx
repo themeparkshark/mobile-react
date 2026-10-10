@@ -140,24 +140,24 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
               <Text style={styles.pillText} numberOfLines={2} maxFontSizeMultiplier={1.3}>{worn}</Text>
             </View>
           )}
-          <GameText preset="body" tone="onBlue" align="center" style={styles.copy}>
+          <GameText preset="body" tone="onLight" align="center" style={styles.copy}>
             {worn ? describeTitle(worn, earned ?? []) : 'No title yet. Earn stamps to unlock titles, then wear one here.'}
           </GameText>
-          {!!error && <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.error}>{error}</GameText>}
+          {!!error && <GameText preset="bodySmall" tone="onLight" align="center" style={styles.error}>{error}</GameText>}
           {confirming && (
             <View style={styles.confirm} accessibilityLiveRegion="polite">
-              <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.copy}>
+              <GameText preset="bodySmall" tone="onLight" align="center" style={styles.copy}>
                 There is no Undo for this one. You might not get it back.
               </GameText>
-              <GameButton label="Remove it" icon="close" variant="danger" tone="onBlue" size="compact" loading={busy === 'remove'} disabled={!!busy}
+              <GameButton label="Remove it" icon="close" variant="danger" tone="onLight" size="compact" loading={busy === 'remove'} disabled={!!busy}
                 onPress={() => { void remove(); }} />
-              <GameButton label="Keep it" icon="check" variant="ghost" tone="onBlue" size="compact" disabled={!!busy} onPress={() => setConfirming(false)} />
+              <GameButton label="Keep it" icon="check" variant="ghost" tone="onLight" size="compact" disabled={!!busy} onPress={() => setConfirming(false)} />
             </View>
           )}
           <View style={[styles.actions, confirming && styles.hiddenActions]} pointerEvents={confirming ? 'none' : 'auto'}
             accessibilityElementsHidden={confirming} importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}>
             {/* Two jobs only: change it (the list ends with More titles) or take it off. */}
-            <GameButton label="Change title" tone="onBlue" icon="swap" disabled={!!busy}
+            <GameButton label="Change title" tone="onLight" icon="swap" disabled={!!busy}
               onPress={() => setMode('change')} accessibilityHint="Shows the titles you have and where to get more" />
             {!!worn && (
               // The same quiet white pill as the Stamp Book's Take off: one gold button per sheet.
@@ -173,14 +173,14 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
       ) : (
         <View style={styles.body}>
           {earned === null ? (
-            <GameText preset="body" tone="onBlue" align="center" style={styles.copy}>Finding your titles...</GameText>
+            <GameText preset="body" tone="onLight" align="center" style={styles.copy}>Finding your titles...</GameText>
           ) : others.length === 0 ? (
-            <GameText preset="body" tone="onBlue" align="center" style={styles.copy}>
+            <GameText preset="body" tone="onLight" align="center" style={styles.copy}>
               No other titles yet. Finish Collection Book steps and stamps to earn more.
             </GameText>
           ) : null}
           {earned === null ? null : others.length === 0 ? (
-            <GameButton label="Find titles" icon="medal1" variant="secondary" tone="onBlue" onPress={openStampBook} />
+            <GameButton label="Find titles" icon="medal1" variant="secondary" tone="onLight" onPress={openStampBook} />
           ) : (
             <ScrollView style={styles.list} contentContainerStyle={{ gap: 8 }}>
               {others.map(entry => (
@@ -198,10 +198,10 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
               ))}
             </ScrollView>
           )}
-          {!!error && <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.error}>{error}</GameText>}
+          {!!error && <GameText preset="bodySmall" tone="onLight" align="center" style={styles.error}>{error}</GameText>}
           <View style={styles.actions}>
             {earned !== null && others.length > 0 && (
-              <GameButton label="More titles" icon="medal1" variant="secondary" tone="onBlue" disabled={!!busy} onPress={openStampBook}
+              <GameButton label="More titles" icon="medal1" variant="secondary" tone="onLight" disabled={!!busy} onPress={openStampBook}
                 accessibilityHint="Opens the Titles list in your Stamp Book" />
             )}
           </View>
@@ -219,9 +219,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 6,
   },
   pillText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 18, flexShrink: 1, textAlign: 'center' },
-  copy: { color: '#e2f6ff' },
-  hint: { color: '#bfe6ff' },
-  error: { color: '#ffd6d6' },
+  copy: { color: BRAND.navy },
+  hint: { color: '#4A5A78' },
+  error: { color: '#B3261E' },
   actions: { alignSelf: 'stretch', gap: 2, marginTop: 4, marginBottom: -6 },
   list: { alignSelf: 'stretch', maxHeight: 300 },
   row: {
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   wear: { backgroundColor: '#ffcf3b', borderRadius: 14, borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4,
     borderBottomColor: '#d99a00', paddingHorizontal: 12, paddingVertical: 5, minHeight: 32, justifyContent: 'center' },
   wearText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, letterSpacing: 0.5 },
-  confirm: { alignSelf: 'stretch', gap: 4, backgroundColor: 'rgba(5,52,110,0.35)', borderRadius: 14, padding: 10 },
+  confirm: { alignSelf: 'stretch', gap: 4, backgroundColor: 'rgba(20,33,61,0.07)', borderRadius: 14, padding: 10 },
   hiddenActions: { opacity: 0.3 },
   remove: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 44,
     minWidth: 160, justifyContent: 'center' },

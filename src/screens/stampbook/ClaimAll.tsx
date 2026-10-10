@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   backdrop: { backgroundColor: 'rgba(5,52,110,0.82)' },
   card: { width: '100%', maxWidth: 370, borderRadius: 24, borderWidth: 3, borderColor: '#0B2A55', backgroundColor: '#0B2A55' },
   lip: { position: 'absolute', left: 0, right: 0, top: 8, bottom: -7, borderRadius: 22, backgroundColor: '#045089' },
-  body: { ...DIALOG_CARD, alignItems: 'center', paddingHorizontal: 16, paddingBottom: 16, paddingTop: 40, gap: 12 },
+  body: { ...DIALOG_CARD, backgroundColor: '#FFF6DE', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 16, paddingTop: 40, gap: 12 },
   ribbon: { position: 'absolute', top: -34, left: 18, right: 18, alignItems: 'center' },
   close: { position: 'absolute', top: -18, right: -14, zIndex: 5 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
@@ -214,10 +214,10 @@ const styles = StyleSheet.create({
   totals: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 14 },
   total: { alignItems: 'center', minWidth: 58 },
   disc: {
-    width: 46, height: 46, borderRadius: 23, backgroundColor: PAPER, borderWidth: 3, borderColor: '#FFFFFF',
+    width: 46, height: 46, borderRadius: 23, backgroundColor: '#FFFFFF', borderWidth: 3, borderColor: '#E6D3A6',
     alignItems: 'center', justifyContent: 'center',
   },
-  totalText: { fontFamily: 'Shark', fontSize: 18, color: '#FFFFFF', marginTop: 2, textShadowColor: '#05346e', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
+  totalText: { fontFamily: 'Shark', fontSize: 18, color: '#14213D', marginTop: 2 },
   titles: { alignSelf: 'stretch', maxHeight: 200 },
   titleRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,207,59,0.16)', borderRadius: 16, borderWidth: 2,
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#FFFFFF', borderBottomWidth: 4, borderBottomColor: '#D99A00',
   },
   pillText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 15, color: INK },
-  newTitle: { flex: 1, fontFamily: 'Shark', fontSize: 17, color: '#FFFFFF' },
+  newTitle: { flex: 1, fontFamily: 'Shark', fontSize: 17, color: '#14213D' },
   // Quiet white pill (DONE is the one gold button on this sheet).
   wear: {
     flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#FFFFFF',
@@ -239,6 +239,6 @@ const styles = StyleSheet.create({
   wearOn: { backgroundColor: '#E2F6FF', borderBottomColor: '#9FB2C9' },
   wearText: { fontFamily: 'Shark', fontSize: 16, color: INK },
   pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
-  message: { fontFamily: 'Shark', fontSize: 15, color: '#E2F6FF', textAlign: 'center' },
+  message: { fontFamily: 'Shark', fontSize: 15, color: '#14213D', textAlign: 'center' },
   actions: { alignSelf: 'stretch' },
 });

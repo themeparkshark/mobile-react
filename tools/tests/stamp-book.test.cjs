@@ -382,7 +382,7 @@ test('round 7: opaque level-up plate above everything; the held stamp drives the
   assert.match(lv, /const fade = useSharedValue\(1\);/);
   assert.doesNotMatch(lv, /fade\.value = withTiming\(1/);
   // Hand-off: overlay on top, never flattened; ribbon, frame and button from the held stamp.
-  assert.match(card, /overlay: \{ \.\.\.StyleSheet\.absoluteFillObject, backgroundColor: DIALOG_CARD\.backgroundColor, zIndex: 20, elevation: 20 \}/);
+  assert.match(card, /overlay: \{ \.\.\.StyleSheet\.absoluteFillObject, backgroundColor: '#FFF6DE', zIndex: 20, elevation: 20 \}/);
   assert.match(card, /<View collapsable=\{false\} style=\{\[styles\.content, overlay && styles\.overlay\]\}/);
   assert.match(card, /<Ribbon text=\{display\.name\} \/>/);
   assert.match(card, /if \(holding\) action = \{ label: `Next reward \(\$\{nextCount \+ 1\} left\)`/);

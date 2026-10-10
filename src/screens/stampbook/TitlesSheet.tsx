@@ -129,14 +129,14 @@ const styles = StyleSheet.create({
   steps: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, alignSelf: 'stretch' },
   step: { alignItems: 'center', width: 70 },
   stepDisc: {
-    width: 48, height: 48, borderRadius: 24, backgroundColor: PAPER, borderWidth: 3, borderColor: '#FFFFFF',
+    width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFFFFF', borderWidth: 3, borderColor: '#E6D3A6',
     alignItems: 'center', justifyContent: 'center', shadowColor: '#022a55', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 0,
   },
-  stepText: { fontFamily: 'Shark', fontSize: 13, color: '#FFFFFF', marginTop: 3 },
+  stepText: { fontFamily: 'Shark', fontSize: 13, color: INK, marginTop: 3 },
   list: { alignSelf: 'stretch', maxHeight: 420 },
   listInner: { gap: 8, paddingVertical: 2 },
   row: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PAPER, borderRadius: 16, borderWidth: 2.5, borderColor: '#FFFFFF',
+    flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 2.5, borderColor: '#E6D3A6',
     paddingVertical: 6, paddingHorizontal: 8, minHeight: 64,
   },
   rowWearing: { borderColor: GOLD, borderWidth: 3 },
@@ -165,5 +165,5 @@ const styles = StyleSheet.create({
   btnText: { fontFamily: 'Shark', fontSize: 15, color: '#FFFFFF' },
   btnTextGold: { color: INK },
   btnTextQuiet: { color: INK, fontSize: 15 },
-  message: { fontFamily: 'Shark', fontSize: 15, color: '#E2F6FF', textAlign: 'center' },
+  message: { fontFamily: 'Shark', fontSize: 15, color: INK, textAlign: 'center' },
 });
