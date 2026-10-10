@@ -666,9 +666,10 @@ export default function SharkPassScreen() {
                         </Text>
                       </View>
                       {f.owned && (
-                        <GameButton label={wearing ? 'Take off' : 'Wear'} size="compact" disabled={!!busy}
-                          onPress={() => { setBusy('frame'); void wearFrame(wearing ? null : f.key).then(() => load()).catch(() => gameAlert('That didn’t work', 'Check your internet and try again.')).finally(() => setBusy(null)); }}
-                          accessibilityLabel={wearing ? `Take off the ${f.name}` : `Wear the ${f.name}`} />
+                        <Pressable disabled={!!busy} accessibilityRole="button" accessibilityLabel={wearing ? `Take off the ${f.name}` : `Wear the ${f.name}`}
+                          onPress={() => { setBusy('frame'); void wearFrame(wearing ? null : f.key).then(() => load()).catch(() => gameAlert('That didn’t work', 'Check your internet and try again.')).finally(() => setBusy(null)); }}>
+                          <Text maxFontSizeMultiplier={1.1} style={[s.goldBtn, wearing && s.offBtn]}>{wearing ? 'TAKE OFF' : 'WEAR'}</Text>
+                        </Pressable>
                       )}
                     </View>
                   );
@@ -966,10 +967,11 @@ const s = StyleSheet.create({
   frameRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
   frameName: { flex: 1, fontFamily: FONT.display, fontSize: 16, color: '#ffffff' },
   frameSub: { fontFamily: FONT.body, fontSize: 13, color: '#e2f6ff' },
+  offBtn: { backgroundColor: 'rgba(255,255,255,0.85)' },
   goldGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   goldCell: { width: 98, alignItems: 'center', gap: 4, padding: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 2, borderColor: 'rgba(255,211,77,0.5)' },
   goldName: { fontFamily: FONT.body, fontSize: 12, color: '#ffffff', textAlign: 'center' },
-  goldBtn: { fontFamily: FONT.display, fontSize: 13, color: BRAND.navy, backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', textAlign: 'center' },
+  goldBtn: { fontFamily: FONT.display, fontSize: 14, minWidth: 64, lineHeight: 28, color: BRAND.navy, backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', textAlign: 'center' },
   setHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   setCount: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold },
   setBar: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
