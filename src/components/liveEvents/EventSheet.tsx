@@ -1,9 +1,10 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { Image } from 'expo-image';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { EventChest, EventReward, LiveEvent, TeamKey } from '../../api/endpoints/live-events';
 import { TEAMS, TEAM_ORDER } from '../../constants/teams';
 import { haptic } from '../../gamekit/Haptics';
@@ -67,6 +68,18 @@ function HowTo({ art, steps }: { readonly art: EventArt; readonly steps: readonl
   );
 }
 
+/** "  ·  3 to pass" or "  ·  ahead by 3": makes 2nd feel winnable. Scores are points per player. */
+function gapLine(scores: Readonly<Record<TeamKey, number>>, team: TeamKey, place: number): string {
+  const mine = scores[team] ?? 0;
+  const others = (Object.keys(scores) as TeamKey[]).filter(t => t !== team).map(t => scores[t] ?? 0);
+  if (place === 1) {
+    const next = Math.max(0, ...others);
+    return mine > next ? `  ·  ahead by ${mine - next}` : '';
+  }
+  const above = Math.min(...others.filter(v => v > mine));
+  return Number.isFinite(above) ? `  ·  ${above - mine + 1} to pass` : '';
+}
+
 /** Your team's last place seen per event (this app run), so a climb gets its moment once. */
 const lastPlace = new Map<number, number>();
 
@@ -94,7 +107,7 @@ function TeamRace({ event }: { readonly event: LiveEvent }) {
   const winner = race.winners.length === 1 ? race.winners[0] : null;
   const line = ended
     ? winner ? `${TEAMS[winner].name} won!` : race.winners.length ? 'A tie at the top!' : 'Race over'
-    : place ? `Your team: ${ordinal(place)}` : event.me.team ? 'Help your team!' : '';
+    : place && event.me.team ? `${TEAMS[event.me.team].name}: ${ordinal(place)}${gapLine(race.scores, event.me.team, place)}` : event.me.team ? 'Help your team!' : '';
   return (
     <View>
       {TEAM_ORDER.map((team: TeamKey) => {
@@ -144,6 +157,14 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
   const [opened, setOpened] = useState<Opened | null>(null);
   const { open, opening } = useOpenChest();
   /** Every way out clears the reveal, so a reopened sheet never flashes an old one. */
+  // Live "+N" on everyone's bar when the shared total grows between refreshes (others playing right now).
+  const [togetherTick, setTogetherTick] = useState<{ n: number; at: number } | null>(null);
+  const lastTotal = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = lastTotal.current;
+    lastTotal.current = event.together.total;
+    if (prev != null && event.together.total > prev) setTogetherTick({ n: event.together.total - prev, at: Date.now() });
+  }, [event.together.total]);
   const close = useCallback(() => { setOpened(null); setPeek(null); onClose(); }, [onClose]);
   const onOpen = useCallback(async (key: string) => {
     if (opening) return; // one open at a time (a double tap on Try again never sends two)
@@ -223,10 +244,13 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
               <Peek chest={peek?.track === 'me' ? peek.chest : null} track="Your" />
               <Text style={styles.line}>{event.phase === 'upcoming' ? timeLine(event, now)
                 : hint ?? (event.me.chests.every(c => c.claimed) ? 'All your chests opened!' : 'Open your chests!')}</Text>
+              {live && !(atPark && event.here) && event.include_home && (event.daily_caps.home_find ?? 0) > 0 && (
+                <Text style={styles.small}>At home: up to {event.daily_caps.home_find} snacks count each day. Rides count most!</Text>
+              )}
             </Section>
             {together.chests.length > 0 && (
               <Section title={`EVERYONE'S ${goalWord(event).toUpperCase()}`}>
-                <ChestTrack chests={together.chests} value={together.total} art={art} onOpen={onOpen} opening={opening} label="Everyone's chests"
+                <ChestTrack chests={together.chests} value={together.total} tick={togetherTick} art={art} onOpen={onOpen} opening={opening} label="Everyone's chests"
                   onPeek={chest => setPeek(p => (p?.chest.key === chest.key ? null : { track: 'together', chest }))} />
                 <Peek chest={peek?.track === 'together' ? peek.chest : null} track="Everyone's" />
                 <View style={styles.helpedRow}>
@@ -275,6 +299,8 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
               </View>
             )}
           </ScrollView>
+          {/* More below: a soft cream fade at the bottom edge. */}
+          <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={[styles.fade, { bottom: insets.bottom }]} />
         </View>
         {opened && (
           <ChestReveal art={art} rewards={opened.rewards} onDone={() => setOpened(null)} already={opened.already} failed={opened.failed}
@@ -315,7 +341,8 @@ const styles = StyleSheet.create({
   title: { fontFamily: 'Shark', fontSize: 26, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   when: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.white },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  body: { padding: 14, gap: 12, paddingBottom: 48 },
+  body: { padding: 14, gap: 12, paddingBottom: 72 },
+  fade: { position: 'absolute', left: 0, right: 0, height: 36 },
   howRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: BRAND.white, borderRadius: 20,
     borderWidth: 3, borderColor: BRAND.navy, paddingVertical: 10, paddingHorizontal: 6 },
   step: { flex: 1, alignItems: 'center', gap: 4 },
@@ -329,6 +356,7 @@ const styles = StyleSheet.create({
   frenzyText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
   section: { backgroundColor: BRAND.white, borderRadius: 20, borderWidth: 3, borderColor: BRAND.navy, paddingVertical: 10, paddingHorizontal: 12 },
   sectionTitle: { fontFamily: 'Shark', fontSize: 16, color: BRAND.blue, marginBottom: 2 },
+  small: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft, textAlign: 'center', marginTop: 2 },
   line: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
   helpedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   teamRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3, paddingHorizontal: 4, borderRadius: 12 },

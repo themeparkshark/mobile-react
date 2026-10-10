@@ -75,7 +75,7 @@ export default function LiveEventPreviewScreen() {
     if (!tour) return;
     const steps: [Mode, boolean, (() => void)?][] = [
       ['progress', false], ['progress', false, () => setGain({ n: 8, at: Date.now() })], ['frenzy', false], ['upcoming', false],
-      ['ended', false], ['home', false], ['stamp', false], ['recap', false], ['sheet', true], ['climb', true],
+      ['ended', false], ['home', false], ['stamp', false], ['recap', false], ['sheet', true, () => setTimeout(() => setLive(e => ({ ...e, together: { ...e.together, total: e.together.total + 12 } })), 1200)], ['climb', true],
     ];
     const ids = steps.map(([m, open, act], i) => setTimeout(() => { setMode(m); setSheet(open); act?.(); }, i * 3000));
     return () => ids.forEach(clearTimeout);
@@ -101,7 +101,6 @@ export default function LiveEventPreviewScreen() {
       <View style={[styles.hud, { top: insets.top + 64 }]} pointerEvents="box-none">
         {home ? (
           <View style={styles.homeRow}>
-            <View style={styles.fakeChip}><GameIcon name="ticket" size={24} /></View>
             <EventHomeChip event={live} onPress={() => setSheet(true)} />
           </View>
         ) : <EventStatusChip inline event={live} onPress={() => setSheet(true)} />}

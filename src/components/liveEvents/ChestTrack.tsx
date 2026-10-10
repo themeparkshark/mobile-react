@@ -28,12 +28,20 @@ function HopChest({ art, size, paused = false }: { readonly art: EventArt; reado
   return <Animated.View style={style}><Image source={art.chestClosed} style={{ width: size, height: size }} contentFit="contain" /></Animated.View>;
 }
 
+/** "+12" rising off the bar where it fills (others playing). One UI-thread pop, then gone. */
+function Tick({ n, left }: { readonly n: number; readonly left: number }) {
+  const t = useSharedValue(0);
+  useEffect(() => { t.value = withTiming(1, { duration: 1400, easing: Easing.out(Easing.quad) }); }, [t]);
+  const style = useAnimatedStyle(() => ({ opacity: t.value < 0.7 ? 1 : (1 - t.value) / 0.3, transform: [{ translateY: -22 * t.value }] }));
+  return <Animated.Text style={[styles.tick, { left: `${Math.max(4, Math.min(88, left * 100))}%` }, style]}>+{n}</Animated.Text>;
+}
+
 /**
  * A row of chests on one bar. Chests sit at even steps. Locked chests are
  * dim with a lock, a ready chest hops with a red dot, an opened chest shows
  * open with a green check. Tap a ready chest to open it.
  */
-function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label, paused = false }: {
+function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label, paused = false, tick = null }: {
   readonly chests: readonly EventChest[];
   readonly value: number;
   readonly art: EventArt;
@@ -45,6 +53,8 @@ function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label, paused
   readonly label: string;
   /** The sheet is hidden or covered: ready chests rest. */
   readonly paused?: boolean;
+  /** Others just added points: a '+N' floats up off the bar. */
+  readonly tick?: { readonly n: number; readonly at: number } | null;
 }) {
   const reduced = useReducedGameMotion();
   const { fill, stops } = trackFill(chests, value);
@@ -56,6 +66,7 @@ function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label, paused
   const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.03, width.value) }] }));
   return (
     <View style={styles.wrap} accessibilityLabel={`${label}: ${chests.filter(c => c.reached).length} of ${chests.length} chests reached`}>
+      {tick && <Tick key={tick.at} n={tick.n} left={fill} />}
       <View style={styles.track}>
         <Animated.View style={[styles.fill, fillStyle]} />
       </View>
@@ -75,7 +86,7 @@ function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label, paused
             {done && <View style={styles.badge}><GameIcon name="check" size={14} /></View>}
             {locked && <View style={styles.badge}><GameIcon name="lock" size={14} /></View>}
             {ready && <Text style={styles.openTag}>OPEN!</Text>}
-            {!ready && !done && <View style={styles.prize}><GameIcon name={chest.reward.item ? 'gift' : chest.reward.tickets ? 'ticket' : 'coin'} size={15} /></View>}
+            {!ready && !done && <View style={styles.prize}><GameIcon name={chest.reward.item ? 'gift' : chest.reward.tickets ? 'ticket' : 'coin'} size={22} /></View>}
           </Pressable>
         );
       })}
@@ -95,6 +106,7 @@ const styles = StyleSheet.create({
   dot: { position: 'absolute', top: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: BRAND.red, borderWidth: 2, borderColor: BRAND.white },
   badge: { position: 'absolute', top: 24, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: BRAND.white,
     borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
-  prize: { marginTop: -2 },
+  prize: { marginTop: -4 },
+  tick: { position: 'absolute', top: 0, fontFamily: 'Shark', fontSize: 15, color: BRAND.goldLip, zIndex: 3 },
   openTag: { fontFamily: 'Shark', fontSize: 13, color: BRAND.red, marginTop: -3 },
 });

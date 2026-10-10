@@ -29,6 +29,19 @@ function Rays({ go }: { readonly go: boolean }) {
   );
 }
 
+/** A number that counts up from 0 (about 0.5 s, 10 steps; instant under reduced motion or skip). */
+function CountUp({ to, delay, still }: { readonly to: number; readonly delay: number; readonly still: boolean }) {
+  const [n, setN] = useState(still ? to : 0);
+  useEffect(() => {
+    if (still) { setN(to); return; }
+    let i = 0;
+    let id: ReturnType<typeof setInterval> | null = null;
+    const start = setTimeout(() => { id = setInterval(() => { i++; setN(Math.round((to * i) / 10)); if (i >= 10 && id) clearInterval(id); }, 50); }, delay);
+    return () => { clearTimeout(start); if (id) clearInterval(id); };
+  }, [to, delay, still]);
+  return <>{n}</>;
+}
+
 /** One coin flying out of the chest (capped at 8, UI thread, runs once). */
 function Burst({ i, go }: { readonly i: number; readonly go: boolean }) {
   const t = useSharedValue(0);
@@ -130,7 +143,7 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
           {open && chips.map((c, i) => (
             <Animated.View key={c.icon + i} entering={skip || reduced ? FadeIn.delay(skip ? 0 : i * 120) : ZoomIn.delay(350 + i * 260).springify().damping(12)} style={styles.chip}>
               <GameIcon name={c.icon} size={28} />
-              <Text style={styles.chipText} numberOfLines={1}>{c.icon === 'gift' ? c.text : `+${c.text}`}</Text>
+              <Text style={styles.chipText} numberOfLines={1}>{c.icon === 'gift' ? c.text : <>+<CountUp to={Number(c.text)} delay={skip || reduced ? 0 : 350 + i * 260} still={skip || reduced} /></>}</Text>
             </Animated.View>
           ))}
           {open && empty && <Text style={styles.chipText}>Already opened</Text>}
