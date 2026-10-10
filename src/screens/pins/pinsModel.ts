@@ -162,6 +162,8 @@ export interface OpenResult {
 export const PINS_COPY = {
   title: 'Pins',
   tabMystery: 'Mystery',
+  soonTitle: 'New boxes coming soon',
+  soonLine: 'Check back soon for the next mystery pins.',
   tabSets: 'Park Sets',
   tabMine: 'My Pins',
   trade: 'Trade',
@@ -362,8 +364,18 @@ export function bundleSaving(series: Pick<MysterySeries, 'price' | 'bundle'>): n
 }
 
 /** Which tab opens first: Mystery when a free box waits, else Park Sets if one is ready to claim, else Mystery. */
+/**
+ * What the Mystery shelf shows, so the tab is never blank: open boxes, the
+ * next series' closed box with its opening day, or a friendly "coming soon".
+ */
+export function mysteryShelf(home: { mystery?: readonly unknown[] | null; upcoming?: readonly unknown[] | null }): 'boxes' | 'upcoming' | 'soon' {
+  if ((home.mystery ?? []).length > 0) return 'boxes';
+  if ((home.upcoming ?? []).length > 0) return 'upcoming';
+  return 'soon';
+}
+
 export function initialTab(home: Pick<PinHome, 'mystery' | 'park_sets'>): 'mystery' | 'sets' {
-  if (home.mystery.some(s => s.free_now)) return 'mystery';
+  if ((home.mystery ?? []).some(s => s.free_now)) return 'mystery';
   if (home.park_sets.some(s => s.complete && !s.claimed)) return 'sets';
   return 'mystery';
 }

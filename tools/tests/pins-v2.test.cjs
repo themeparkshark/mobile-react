@@ -165,3 +165,14 @@ test('box odds row shows each pin as its real picture or silhouette, no "?" plac
   require('node:assert/strict').equal((card.match(/plainGhost \/>/g) || []).length, 2);
   require('node:assert/strict').match(art, /\(!plainGhost \|\| artFailed\) &&/);
 });
+
+test('the Mystery tab is never blank: boxes, the next series, or coming soon', () => {
+  assert.equal(m.mysteryShelf({ mystery: [series()], upcoming: [] }), 'boxes');
+  assert.equal(m.mysteryShelf({ mystery: [], upcoming: [{ id: 2 }] }), 'upcoming');
+  assert.equal(m.mysteryShelf({ mystery: [], upcoming: [] }), 'soon');
+  assert.equal(m.mysteryShelf({ mystery: null, upcoming: undefined }), 'soon');
+  assert.equal(m.initialTab({ mystery: undefined, park_sets: [] }), 'mystery');
+  const screen = fs.readFileSync('src/screens/pins/PinsScreen.tsx', 'utf8');
+  assert.match(screen, /mysteryShelf\(home\) === 'soon'/);
+  assert.match(m.PINS_COPY.soonTitle, /coming soon/i);
+});

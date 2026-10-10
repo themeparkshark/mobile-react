@@ -38,7 +38,7 @@ import { MysteryCard, setBankedFrom } from './MysteryCard';
 import { BOX_ART, boxTone, PIN_ART, PinTile } from './PinArt';
 import { ParkSetCard } from './ParkSetCard';
 import {
-  coinsShort, deviceRegion, freeFromLabel, initialTab, myPins, newRequestId, PINS_COPY, toggleLanyard,
+  coinsShort, deviceRegion, freeFromLabel, initialTab, myPins, mysteryShelf, newRequestId, PINS_COPY, toggleLanyard,
   type MysterySeries, type ParkSet, type PinHome, type PinRow, type Pull,
 } from './pinsModel';
 
@@ -339,7 +339,7 @@ export default function PinsScreen() {
 
   if (state === 'legacy') return <LegacyPinPacks />;
 
-  const freeWaiting = !!home?.mystery.some(s => s.free_now);
+  const freeWaiting = !!(home?.mystery ?? []).some(s => s.free_now);
   const claimWaiting = !!home?.park_sets.some(s => s.complete && !s.claimed);
   const huntToday = !!home?.pin_days?.some(d => d.status === 'hunt' && d.here);
 
@@ -430,13 +430,22 @@ export default function PinsScreen() {
                     <Text maxFontSizeMultiplier={1.3} style={styles.carriedText}>Your chaser meter moved: +{c.boxes}</Text>
                   </View>
                 ))}
-                {home.mystery.map(s => (
+                {mysteryShelf(home) === 'soon' && (
+                  <View style={styles.upcoming} accessible accessibilityLabel={`${PINS_COPY.soonTitle}. ${PINS_COPY.soonLine}`}>
+                    <Image source={BOX_ART.blue.closed} style={{ width: 70, height: 70, opacity: 0.85 }} contentFit="contain" />
+                    <View style={{ flex: 1, gap: 4 }}>
+                      <Text maxFontSizeMultiplier={1.3} style={styles.upName}>{PINS_COPY.soonTitle}</Text>
+                      <Text maxFontSizeMultiplier={1.3} style={styles.upDate}>{PINS_COPY.soonLine}</Text>
+                    </View>
+                  </View>
+                )}
+                {(home.mystery ?? []).map(s => (
                   <View key={s.id} onLayout={e => { cardY.current[s.id] = e.nativeEvent.layout.y; }}>
                   <MysteryCard key={s.id} series={s} coins={coins} busy={!!busy && (busy.startsWith(`${s.id}:`) || busy === `pick:${s.id}`)}
                     active={visible && tab === 'mystery'} still={still} shine={tab === 'mystery' ? shine : undefined}
                     fresh={fresh?.seriesId === s.id ? fresh.ids : undefined} onOpen={open}
                     serverShort={serverShort?.seriesId === s.id ? serverShort.need : null}
-                    nextSeriesName={[...home.mystery.filter(o => o.id !== s.id && o.open && (o.ends_at ?? '') > (s.ends_at ?? '')), ...(home.upcoming ?? [])][0]?.name ?? null}
+                    nextSeriesName={[...(home.mystery ?? []).filter(o => o.id !== s.id && o.open && (o.ends_at ?? '') > (s.ends_at ?? '')), ...(home.upcoming ?? [])][0]?.name ?? null}
                     onPick={series => {
                       // A finished series turns 5 extras into a free box; otherwise pick a missing pin.
                       if (series.pins.every(p => p.is_chaser || p.owned)) void extrasForBox(series); else setPicking(series);
