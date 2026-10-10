@@ -150,3 +150,12 @@ test('copy stays short: how-to steps are 3 words or fewer', () => {
   for (const t of ['Win and find', 'Fill the bar', 'Open chests']) assert.ok(sheet.includes(`'${t}'`), t);
   for (const s of steps) assert.ok(s.split(' ').length <= 3, s);
 });
+
+test('hooks are never called behind || / && / ? (hook order stays fixed)', () => {
+  for (const dir of ['src/components/liveEvents', 'src/components/nextUp', 'src/services/liveEvents']) {
+    for (const f of fs.readdirSync(path.join(root, dir))) {
+      const code = src(`${dir}/${f}`);
+      assert.doesNotMatch(code, /(\|\||&&|\?)\s*!?\s*use[A-Z]\w*\(/, `${dir}/${f}`);
+    }
+  }
+});

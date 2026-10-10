@@ -14,7 +14,8 @@ import { useEventAmbient } from '../../services/liveEvents/ambient';
 function StarRideBadge({ size = 22, paused = false, times = 2 }: { readonly size?: number; readonly paused?: boolean; readonly times?: number }) {
   const reduced = useReducedGameMotion();
   const t = useSharedValue(0);
-  const still = paused || reduced || !useEventAmbient().ambient;
+  const ambient = useEventAmbient().ambient; // always called: hooks never sit behind ||
+  const still = paused || reduced || !ambient;
   useEffect(() => {
     if (still) { cancelAnimation(t); t.value = 0; return; }
     t.value = withRepeat(withSequence(withTiming(1, { duration: 700, easing: Easing.inOut(Easing.sin) }),
