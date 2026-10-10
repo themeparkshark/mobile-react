@@ -629,8 +629,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     // Always settle: read the live engine, never a stale render (round 1 left the ring up after the bell).
     endDizzy(); endInkTell(); setHint('none');
     cancelAnimation(bossShake); bossShake.value = 0;
-    setFx(list => list.filter(f => f.t === 'num'));
-    addFx({ t: 'wm', wm: 'finish' }, 1000);
+    setFx(list => list.filter(f => f.t === 'num' || (koShown.current && f.t === 'wm' && f.wm === 'knockout')));
+    // After a knockout the beaten face and KNOCKOUT stay; FINISH! is for rounds the boss survived.
+    if (koShown.current) setFace('dizzy'); else addFx({ t: 'wm', wm: 'finish' }, 1000);
     bossRise.value = reduced ? withTiming(2.2, { duration: 200 }) : withDelay(250, withTiming(2.2, { duration: 550, easing: Easing.in(Easing.back(1.4)) }));
     // It dives all the way under (no see-through ghost under the water): fade as it goes, then a big splash.
     bossFade.value = withDelay(reduced ? 0 : 450, withTiming(0, { duration: reduced ? 150 : 300 }));
