@@ -94,8 +94,9 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
     starsIn.forEach((s, i) => {
       if (i >= stars) return;
       const at = 450 + i * 260;
-      s.value = reduced ? 1 : withDelay(at, withSequence(withTiming(1.4, { duration: 120 }), withSpring(1, { damping: 8, stiffness: 260 })));
-      const t = setTimeout(() => { GameAudio.play('fx.reveal', { pitch: i * 3, volume: 0.6 }); haptic('hitMedium'); }, reduced ? 0 : at);
+      // Reduce Motion and a won raid: the stars are simply there (no slam to wait for).
+      s.value = reduced || won ? 1 : withDelay(at, withSequence(withTiming(1.4, { duration: 120 }), withSpring(1, { damping: 8, stiffness: 260 })));
+      const t = setTimeout(() => { GameAudio.play('fx.reveal', { pitch: i * 3, volume: 0.6 }); haptic('hitMedium'); }, reduced || won ? 0 : at);
       timers.push(t);
     });
     return () => timers.forEach(clearTimeout);
@@ -221,9 +222,9 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   bossPic: { width: 76, height: 76 },
   perf: { marginTop: 4, fontSize: 9, color: '#333', textAlign: 'center' },
-  stamp: { position: 'absolute', left: 4, top: 22, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 3, borderColor: BRAND.red, borderRadius: 6,
+  stamp: { position: 'absolute', right: -10, top: -6, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 2, borderColor: BRAND.red, borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.85)', transform: [{ rotate: '-14deg' }] },
-  stampText: { fontFamily: 'Shark', fontSize: 15, lineHeight: 15, color: BRAND.red, textAlign: 'center' },
+  stampText: { fontFamily: 'Shark', fontSize: 11, lineHeight: 11, color: BRAND.red, textAlign: 'center' },
   kicker: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, letterSpacing: 0.4 },
   dmg: { alignSelf: 'stretch', textAlign: 'left', fontFamily: 'Shark', fontSize: 48, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0, padding: 0 },
   zero: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 4 },

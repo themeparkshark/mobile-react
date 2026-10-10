@@ -264,7 +264,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     if (raf.current !== null) cancelAnimationFrame(raf.current);
     raf.current = null; playing.current = false; finished.current = false; played.current = 0;
     heldRef.current = false; goPending.current = false; perfectChain.current = 0; hpAtBell.current = null;
-    shownStage.current = 0; setHatGone(false); hatOff.value = 0; koShown.current = false; koMine.current = false; hpNowRef.current = hpLeft;
+    shownStage.current = 0; setHatGone(false); hatOff.value = 0; koShown.current = false; koMine.current = false; setVictory(false); hpNowRef.current = hpLeft;
     seedRef.current = (seedRef.current * 7919 + 17) % 1000003;
     engine.current = { ...createBash(seedRef.current), ...(warmStart ? { headStart: 1, power: 1 } : {}) };
     frameStats.current = { n: 0, slow: 0, worst: 0, sum: 0 };
@@ -545,6 +545,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   // --- Live knockout: the moment the raid HP hits 0 in your round is the biggest beat of the fight ---------
   const koShown = useRef(false);
   const koMine = useRef(false);
+  const [victory, setVictory] = useState(false);
   const hpNowLive = Math.max(0, hpLeft - (capLeft === undefined ? hud.damage : Math.min(hud.damage, capLeft)));
   const teamHitRef = useRef<number | null>(null); teamHitRef.current = teamHit;
   const hpNowRef = useRef(hpLeft);
@@ -571,6 +572,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     haptic('comboHeavy'); later(160, () => haptic('success'));
     // The wait to the bell is a victory lap: the beaten boss bobs, coins rain, the shark cheers, taps make sparkles.
     setPose('cheer');
+    setVictory(true);
+    later(700, () => addFx({ t: 'bubble', text: 'TAP THE BOSS!', x: L.w / 2, y: L.waterY + 70, tone: 'gold' }, Math.max(1500, 12_000 - played.current)));
     if (!reduced) {
       bossRise.value = withDelay(400, withRepeat(withSequence(withTiming(-0.05, { duration: 420, easing: Easing.inOut(Easing.quad) }),
         withTiming(0, { duration: 420, easing: Easing.inOut(Easing.quad) })), -1, false));
@@ -647,6 +650,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setFx(list => list.filter(f => f.t === 'num' || (koShown.current && f.t === 'wm' && f.wm === 'knockout')));
     // After a knockout the beaten face and KNOCKOUT stay; FINISH! is for rounds the boss survived.
     if (koShown.current) setFace('dizzy'); else addFx({ t: 'wm', wm: 'finish' }, 1000);
+    setVictory(false);
     bossRise.value = reduced ? withTiming(2.2, { duration: 200 }) : withDelay(250, withTiming(2.2, { duration: 550, easing: Easing.in(Easing.back(1.4)) }));
     // It dives all the way under (no see-through ghost under the water): fade as it goes, then a big splash.
     bossFade.value = withDelay(reduced ? 0 : 450, withTiming(0, { duration: reduced ? 150 : 300 }));
@@ -913,7 +917,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           <Lagoon />
           {/* The boss, rising out of the lagoon (memoized: a hit that changes only the score does not re-render it). */}
           <BossFigure left={(L.w - L.bossSize) / 2} top={L.bossTop} size={L.bossSize} flopped={flopped} bossStyle={bossStyle}
-            skin={skin} shownFace={shownFace} hatGone={hatGone} hatStyle={hatStyle} hatOffStyle={hatOffStyle} dizzy={!!dizzy} reduced={reduced} />
+            skin={skin} shownFace={shownFace} hatGone={hatGone} hatStyle={hatStyle} hatOffStyle={hatOffStyle} dizzy={!!dizzy || victory} reduced={reduced} />
           <Shore width={L.w} height={L.h} waterY={L.waterY} reduced={reduced} running={visible && !result && !held && power.ambient} />
           <Animated.View pointerEvents="none" style={[styles.fury, { height: L.waterY }, furyStyle]} />
 
@@ -955,6 +959,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
             <Image source={sharkSrc} style={StyleSheet.absoluteFill} contentFit="contain" />
           </View>
 
+          {victory && <CoinRain width={L.w} top={L.bossTop} height={L.waterY - L.bossTop + 120} reduced={reduced} />}
+          {victory && <TapHand x={L.head.x + 24} y={L.head.y + 10} reduced={reduced} size={72} />}
+          {victory && <VictoryClock clock={clock} />}
           {/* Effects (one message on the boss at a time: no gold badge while PERFECT shows). */}
           {fx.map(f => f.t === 'num' ? <DamageNumber key={f.id} text={f.text} x={f.x} y={f.y} big={f.big} badge={!perfectShowing} toX={scoreTarget.x} toY={scoreTarget.y} reduced={reduced} />
             : f.t === 'fin' ? <FinFly key={f.id} x={f.x} y={f.y} toX={f.toX} toY={f.toY} delay={f.delay} size={finSize} reduced={reduced} />
@@ -1101,6 +1108,9 @@ const styles = StyleSheet.create({
   minChip: { marginLeft: 6, paddingHorizontal: 7, height: 26, borderRadius: 13, borderWidth: 2, borderColor: BRAND.navy, backgroundColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center' },
   minText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
+  victoryClock: { position: 'absolute', right: 14, bottom: 90, width: 40, height: 40, borderRadius: 20, borderWidth: 3, borderColor: BRAND.navy,
+    backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', zIndex: 6 },
+  victoryText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy },
   finDock: { position: 'absolute', bottom: 14, alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 26,
     backgroundColor: 'rgba(255,255,255,0.88)', borderWidth: 3, borderColor: BRAND.navy },
   introWrap: { alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 26, backgroundColor: 'rgba(8,56,128,0.18)' },
@@ -1199,3 +1209,32 @@ const FaceFrame = memo(function FaceFrame({ src, on, max, reduced }: { src: numb
     <Image source={src} style={StyleSheet.absoluteFill} contentFit="contain" />
   </Animated.View>;
 });
+
+/** Victory lap: big gold coins tumbling down past the beaten boss (a few still coins under Reduce Motion). */
+const CoinRain = memo(function CoinRain({ width, top, height, reduced }: { width: number; top: number; height: number; reduced: boolean }) {
+  const coins = useMemo(() => Array.from({ length: reduced ? 5 : 12 }, (_, i) => ({
+    x: ((i * 37) % 100) / 100 * (width - 40) + 4, delay: (i * 173) % 900, size: 30 + ((i * 11) % 14), spin: i % 2 ? 1 : -1 })), [width, reduced]);
+  return <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top, height, overflow: 'hidden', zIndex: 5 }}>
+    {coins.map((c, i) => <FallingCoin key={i} {...c} height={height} reduced={reduced} />)}
+  </View>;
+});
+function FallingCoin({ x, delay, size, spin, height, reduced }: { x: number; delay: number; size: number; spin: number; height: number; reduced: boolean }) {
+  const v = useSharedValue(reduced ? 0.3 + (delay / 900) * 0.5 : 0);
+  useEffect(() => {
+    if (reduced) return;
+    v.value = withDelay(delay, withRepeat(withTiming(1, { duration: 1100, easing: Easing.in(Easing.quad) }), -1, false));
+    return () => cancelAnimation(v);
+  }, [v, delay, reduced]);
+  const style = useAnimatedStyle(() => ({ opacity: v.value < 0.9 ? 1 : (1 - v.value) * 10,
+    transform: [{ translateY: -size + v.value * (height + size) }, { rotate: `${spin * v.value * 540}deg` }] }));
+  return <Animated.View style={[{ position: 'absolute', left: x, top: 0, width: size, height: size }, style]}>
+    <GameIcon name="coins" size={size} />
+  </Animated.View>;
+}
+/** Victory lap: seconds until the result (the server's 12.5 s minimum round). */
+function VictoryClock({ clock }: { clock: SharedValue<number> }) {
+  const [left, setLeft] = useState(3);
+  useAnimatedReaction(() => Math.max(0, Math.ceil((12_500 - clock.value) / 1000)), (n, prev) => { if (n !== prev) runOnJS(setLeft)(n); });
+  if (left <= 0) return null;
+  return <View pointerEvents="none" style={styles.victoryClock}><Text style={styles.victoryText} maxFontSizeMultiplier={1.1}>{left}</Text></View>;
+}
