@@ -1,0 +1,164 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { EventReward } from '../api/endpoints/live-events';
+import EventGainToast from '../components/liveEvents/EventGainToast';
+import EventHomeChip from '../components/liveEvents/EventHomeChip';
+import EventSheet from '../components/liveEvents/EventSheet';
+import EventStatusChip from '../components/liveEvents/EventStatusChip';
+import FrenzyBanner, { resetFrenzyBannerForTests } from '../components/liveEvents/FrenzyBanner';
+import StarRideBadge from '../components/liveEvents/StarRideBadge';
+import FrenzySweep from '../components/liveEvents/FrenzySweep';
+import StarRideStamp from '../components/liveEvents/StarRideStamp';
+import EventRecapCard from '../components/liveEvents/EventRecapCard';
+import { trackFill } from '../services/liveEvents/model';
+import NextUpRail from '../components/nextUp/NextUpRail';
+import ParkPulseChip from '../components/liveEvents/ParkPulseChip';
+import { openableKeys } from '../services/liveEvents/model';
+import { goldenReefFixture } from '../services/liveEvents/fixture';
+import { BRAND, GameIcon } from '../ui';
+
+/**
+ * Dev-only (DEV_SCREENS): Shark Events pieces on a stand-in park map, with
+ * fixture data, for captures and grading. EXPO_PUBLIC_LIVE_EVENT_PREVIEW picks
+ * the opening state: progress | ready | frenzy | upcoming | ended | sheet | home.
+ */
+type Mode = 'progress' | 'ready' | 'frenzy' | 'upcoming' | 'ended' | 'sheet' | 'home' | 'recap' | 'stamp' | 'climb' | 'live' | 'reveal';
+const MODES: Mode[] = ['progress', 'ready', 'frenzy', 'upcoming', 'ended', 'sheet', 'home', 'recap', 'stamp', 'climb', 'live', 'reveal'];
+
+function fixtureFor(mode: Mode) {
+  if (mode === 'ready') return goldenReefFixture({ mine: 13, claimed: 1 });
+  if (mode === 'frenzy') return goldenReefFixture({ mine: 9, claimed: 2, total: 20, frenzy: true });
+  if (mode === 'upcoming') return goldenReefFixture({ phase: 'upcoming', mine: 0, total: 0 });
+  if (mode === 'ended' || mode === 'recap') return goldenReefFixture({ phase: 'ended', mine: 34, total: 290, claimed: 3 });
+  if (mode === 'sheet' || mode === 'climb' || mode === 'live' || mode === 'reveal') return goldenReefFixture({ mine: 13, claimed: 1, total: 140 });
+  return goldenReefFixture({ mine: 9, claimed: 2 });
+}
+
+const RIDES = [
+  { id: 101, x: 0.22, y: 0.38, star: true }, { id: 7, x: 0.62, y: 0.3, star: false },
+  { id: 102, x: 0.7, y: 0.58, star: true }, { id: 8, x: 0.3, y: 0.66, star: false }, { id: 103, x: 0.48, y: 0.47, star: true },
+];
+
+export default function LiveEventPreviewScreen() {
+  const insets = useSafeAreaInsets();
+  const tour = process.env.EXPO_PUBLIC_LIVE_EVENT_PREVIEW === 'tour';
+  const initial = (MODES as string[]).includes(process.env.EXPO_PUBLIC_LIVE_EVENT_PREVIEW ?? '') ? process.env.EXPO_PUBLIC_LIVE_EVENT_PREVIEW as Mode : 'progress';
+  const [mode, setMode] = useState<Mode>(initial);
+  const [sheet, setSheet] = useState(initial === 'sheet');
+  const [gain, setGain] = useState({ n: 0, at: 0 });
+  const event = useMemo(() => fixtureFor(mode), [mode]);
+  const [live, setLive] = useState(event);
+  useEffect(() => { setLive(event); }, [event]);
+  // Climb: the sheet opens with your team 2nd, then a moment later it moves to 1st.
+  useEffect(() => {
+    if (mode !== 'climb') return;
+    const id = setTimeout(() => setLive(e => e.team_race ? { ...e, team_race: { ...e.team_race, scores: { mouse: 21, globe: 34, shark: 38 }, leaders: ['shark'] } } : e), 1500);
+    return () => clearTimeout(id);
+  }, [mode]);
+  // DEV ONLY 'live': simulated other players add points every 1.6 s so the '+N' ticks and the activity line can be captured.
+  useEffect(() => {
+    if (mode !== 'live') return;
+    const adds = [4, 8, 1, 4, 8];
+    let i = 0;
+    const id = setInterval(() => {
+      const n = adds[i++ % adds.length];
+      setLive(e => ({ ...e, together: { ...e.together, total: e.together.total + n },
+        activity: { recent_points: (e.activity?.recent_points ?? 0) + n, last_open_at: e.activity?.last_open_at ?? null } }));
+    }, 1600);
+    return () => clearInterval(id);
+  }, [mode]);
+  const [stampAt, setStampAt] = useState(0);
+  useEffect(() => { if (mode === 'stamp') setStampAt(Date.now()); }, [mode]);
+  useEffect(() => { resetFrenzyBannerForTests(); }, [mode]);
+  const fakeOpen = async (key: string): Promise<EventReward | null> => {
+    await new Promise(r => setTimeout(r, 700));
+    const all = [...live.me.chests, ...live.together.chests];
+    const chest = all.find(c => c.key === key);
+    const reward = key === 'team' ? live.team_race!.reward_all : chest?.reward ?? null;
+    setLive(e => ({ ...e,
+      me: { ...e.me, chests: e.me.chests.map(c => c.key === key ? { ...c, claimed: true, claimable: false } : c) },
+      together: { ...e.together, chests: e.together.chests.map(c => c.key === key ? { ...c, claimed: true, claimable: false } : c) },
+      team_race: e.team_race && key === 'team' ? { ...e.team_race, claimed: true, claimable: false } : e.team_race }));
+    return reward;
+  };
+  // Tour (captures): every state on a fixed clock, no taps needed. 3 s per step.
+  useEffect(() => {
+    if (!tour) return;
+    const steps: [Mode, boolean, (() => void)?][] = [
+      ['progress', false], ['progress', false, () => setGain({ n: 8, at: Date.now() })], ['frenzy', false], ['upcoming', false],
+      ['ended', false], ['home', false], ['stamp', false], ['recap', false], ['sheet', true, () => setTimeout(() => setLive(e => ({ ...e, together: { ...e.together, total: e.together.total + 12 } })), 1200)], ['climb', true], ['live', true], ['live', true], ['reveal', true],
+    ];
+    const ids = steps.map(([m, open, act], i) => setTimeout(() => { setMode(m); setSheet(open); act?.(); }, i * 3000));
+    return () => ids.forEach(clearTimeout);
+  }, [tour]);
+  const home = mode === 'home';
+  const ready = openableKeys(live).length;
+  const rail = ready ? { kind: 'event_chest', icon: 'chest', title: ready === 1 ? 'Open your reef chest' : `Open ${ready} reef chests`, action: { type: 'open_event' as const, event_id: live.id } }
+    : live.phase !== 'live' ? { kind: 'daily_chest', icon: 'gift', title: 'Open your daily chest', action: { type: 'daily_chest' as const } }
+      : home ? { kind: 'event_progress', icon: 'chest', title: 'Fill the reef', action: { type: 'open_event' as const, event_id: live.id } }
+        : { kind: 'star_ride', icon: 'star', title: live.frenzy.active ? 'Frenzy! Win a Star Ride' : 'Win a Star Ride: x2', action: { type: 'show_ride' as const, task_id: 101 } };
+
+  return (
+    <View style={styles.map}>
+      {/* Stand-in park map: paths and rides. Not the real map (the motion stream owns it). */}
+      <View style={[styles.path, { top: '35%', left: 0, right: 0, transform: [{ rotate: '-8deg' }] }]} />
+      <View style={[styles.path, { top: 0, bottom: 0, left: '46%', width: 26, height: undefined, transform: [{ rotate: '12deg' }] }]} />
+      {!home && RIDES.map(r => (
+        <View key={r.id} style={[styles.ride, { left: `${r.x * 100}%`, top: `${r.y * 100}%` }]}>
+          <View style={styles.coin}><GameIcon name="coin" size={36} /></View>
+          {r.star && live.phase === 'live' && <View style={styles.badge}><StarRideBadge /></View>}
+        </View>
+      ))}
+      <View style={[styles.hud, { top: insets.top + 64 }]} pointerEvents="box-none">
+        {home ? (
+          <View style={styles.homeRow}>
+            <EventHomeChip event={live} onPress={() => setSheet(true)} />
+          </View>
+        ) : <EventStatusChip inline event={live} onPress={() => setSheet(true)} />}
+        {!home && <View style={{ marginTop: 8 }}><ParkPulseChip pulse={{ bucket: '10+', team_leader: 'globe' }} /></View>}
+        <View style={styles.toastSlot}>
+          <EventGainToast gained={gain.n} gainedAt={gain.at} artKey={live.art_key}
+            fillFrom={trackFill(live.me.chests, Math.max(0, live.me.points - gain.n)).fill} fillTo={trackFill(live.me.chests, live.me.points).fill} />
+        </View>
+        <View style={styles.toastSlot}><FrenzyBanner event={live} /></View>
+      </View>
+      <FrenzySweep event={live} />
+      {mode === 'stamp' && <View style={styles.stamp}><StarRideStamp at={stampAt} /></View>}
+      <EventRecapCard event={live} visible={mode === 'recap'} onClose={() => setMode('progress')} onOpenChests={() => { setMode('ended'); setSheet(true); }} />
+      <View style={[styles.rail, { bottom: insets.bottom + 120 }]}>
+        <NextUpRail item={rail} onAction={a => { if (a.type === 'open_event') setSheet(true); }} />
+      </View>
+      <ScrollView horizontal style={[styles.controls, { bottom: insets.bottom + 12 }]} contentContainerStyle={{ gap: 6, paddingHorizontal: 10 }}>
+        {MODES.map(m => (
+          <Pressable key={m} onPress={() => { setMode(m); setSheet(m === 'sheet' || m === 'climb' || m === 'live'); }} style={[styles.ctl, m === mode && styles.ctlOn]}>
+            <Text style={styles.ctlText}>{m}</Text>
+          </Pressable>
+        ))}
+        <Pressable onPress={() => setGain({ n: 8, at: Date.now() })} style={styles.ctl}><Text style={styles.ctlText}>+8</Text></Pressable>
+      </ScrollView>
+      {mode === 'live' && <View style={styles.devTag} pointerEvents="none"><Text style={styles.devText}>DEV: simulated players</Text></View>}
+      <EventSheet devAutoOpen={mode === 'reveal' ? 'p2' : null} event={live} visible={sheet} onClose={() => setSheet(false)} atPark={!home} onShowRide={() => undefined} openOverride={fakeOpen} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  map: { flex: 1, backgroundColor: '#dfeccf', overflow: 'hidden' },
+  path: { position: 'absolute', height: 26, backgroundColor: '#f4ead2', borderColor: '#d9cba6', borderWidth: 2 },
+  ride: { position: 'absolute', marginLeft: -24, marginTop: -24, width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  coin: { width: 48, height: 48, borderRadius: 24, backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  badge: { position: 'absolute', top: -14, right: -14 },
+  hud: { position: 'absolute', left: 12, right: 12 },
+  homeRow: { flexDirection: 'row', gap: 10 },
+  fakeChip: { height: 36, paddingHorizontal: 8, borderRadius: 18, backgroundColor: BRAND.blue, borderWidth: 2.5, borderColor: BRAND.white, justifyContent: 'center' },
+  toastSlot: { marginTop: 10, alignItems: 'center' },
+  devTag: { position: 'absolute', top: 54, alignSelf: 'center', backgroundColor: '#000a', paddingHorizontal: 8, borderRadius: 6, zIndex: 99 },
+  devText: { color: '#fff', fontSize: 11 },
+  stamp: { position: 'absolute', top: '40%', alignSelf: 'center' },
+  rail: { position: 'absolute', left: 12, right: 12 },
+  controls: { position: 'absolute', left: 0, right: 0, flexGrow: 0 },
+  ctl: { backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 10, paddingVertical: 8 },
+  ctlOn: { backgroundColor: BRAND.gold },
+  ctlText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
+});

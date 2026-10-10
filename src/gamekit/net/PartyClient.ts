@@ -544,6 +544,8 @@ export class PartyClient {
         ...base, board, spawns: round.game === 'bonk_race' ? (board as Spawn[]) : [],
         goAt, lateStart, ended: false, submitted: false,
       };
+      // A round just began: wake now so its 3 s heartbeat starts on time.
+      if (this.state.room && !this.backgrounded) this.startLoops();
       this.clearTimers(this.holdTimers);
       if (this.state.hold) this.set({ ...this.state, hold: null });
       this.log('round scheduled', { round: round.round_no, inMs: Math.round(goAt - nowPerf), lateStart });
@@ -684,11 +686,19 @@ export class PartyClient {
     this.backgrounded = next !== 'active';
     if (next !== 'active') {
       if (this.local && !this.local.ended) this.hold('background');
+      this.backgrounded = true;
+      this.loopTimers.forEach((t) => this.clearTimer(t));
+      this.loopTimers = [];
+      // Battery: no open socket in the background; resume reconnects and one snapshot catches up.
+      if (this.socket && this.socket.connection.state !== 'disconnected') this.socket.disconnect();
       return;
     }
+    const wasBackgrounded = this.backgrounded;
+    this.backgrounded = false;
     if (this.local?.heldAt != null && this.state.hold?.reason === 'background') this.release();
     // Back in front: the safety poll wakes again; refresh() below catches up now.
     if (this.state.room) {
+      if (wasBackgrounded) this.startLoops();
       void this.clock.sync(3, 100).then(() => this.set({ ...this.state, clockOffsetMs: this.clock.offsetMs }));
       this.refresh();
       if (this.socket && this.socket.connection.state !== 'connected') this.socket.connect();
@@ -703,6 +713,8 @@ export class PartyClient {
       .catch((e) => this.handleError(e));
   };
 
+  /** In the background: no socket and no timers (resume restarts both). */
+  private backgrounded = false;
   private lastBeatAt = 0;
   /** Last time any request brought back a room snapshot (a heartbeat counts as a poll). */
   private lastSyncAt = 0;
@@ -723,21 +735,38 @@ export class PartyClient {
       .catch((e) => this.handleError(e));
   };
 
+  /**
+   * One timer for the heartbeat and the safety poll, set to whichever is due
+   * next (battery: no 250 ms wake-ups while a room sits in a lobby). A fresh
+   * snapshot moves lastSyncAt, so the next wake simply finds nothing due.
+   */
+  private nextDueMs(): number {
+    const r = this.local;
+    const inRound = !!r && !r.ended && this.state.phase === 'playing';
+    const beatEvery = inRound ? ROUND_HEARTBEAT_MS : HEARTBEAT_MS;
+    const pollEvery = this.state.connection === 'live' ? POLL_LIVE_MS : POLL_FALLBACK_MS;
+    const now = this.now();
+    let due = Math.min(this.lastBeatAt + beatEvery, this.lastSyncAt + pollEvery) - now;
+    // Counting down to GO: wake right at GO so the round's first scored heartbeat is on time.
+    if (r && !r.ended && !inRound) {
+      const toGo = r.goAt - this.perfNow();
+      if (toGo > 0) due = Math.min(due, toGo + 20);
+    }
+    // A new round restarts the loop (startLoops), so no short cap is needed here.
+    return Math.max(LOOP_MS, Math.min(due, POLL_LIVE_MS));
+  }
+
   private startLoops(): void {
     this.loopTimers.forEach((t) => this.clearTimer(t));
     this.loopTimers = [];
-    const loop = (fn: () => void, ms: () => number) => {
-      const tick = () => {
-        if (this.destroyed || !this.state.room) return;
-        fn();
-        const h = this.setTimer(tick, ms());
-        this.loopTimers.push(h);
-        if (this.loopTimers.length > 16) this.loopTimers.splice(0, this.loopTimers.length - 16);
-      };
-      this.loopTimers.push(this.setTimer(tick, ms()));
+    const tick = () => {
+      this.loopTimers = [];
+      if (this.destroyed || !this.state.room || this.backgrounded) return;
+      this.heartbeat();
+      this.pollIfNeeded();
+      this.loopTimers = [this.setTimer(tick, this.nextDueMs())];
     };
-    loop(this.heartbeat, () => LOOP_MS);
-    loop(this.pollIfNeeded, () => LOOP_MS);
+    this.loopTimers = [this.setTimer(tick, LOOP_MS)];
   }
 
   /** Safety poll: every 1.25 s without a socket, every 5 s with one; any fresh snapshot resets the wait. */
