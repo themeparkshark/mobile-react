@@ -1,8 +1,6 @@
-/**
- * Battery shim for retention loops. At integration with claude/fb-battery,
- * replace the body with `return usePowerBudget().ambient;` from '../../power'
- * (Saver, idle and pocket then rest every loop here). Until then: always on.
- */
+import { usePowerBudget } from '../../power';
+
+/** Retention loops follow the app's power budget (src/power): Saver, idle, pocket and background rest them. */
 export function useAmbient(): boolean {
-  return true;
+  return usePowerBudget().ambient;
 }

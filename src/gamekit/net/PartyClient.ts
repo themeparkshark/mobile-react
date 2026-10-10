@@ -769,9 +769,7 @@ export class PartyClient {
     this.loopTimers = [this.setTimer(tick, LOOP_MS)];
   }
 
-  /** Safety poll: every 1.25 s without a socket, every 5 s with one; any fresh snapshot resets the wait. */
-  /** In the background nobody sees the room; the safety poll rests (heartbeats keep the seat). Resume refreshes at once. */
-  private backgrounded = false;
+  /** Safety poll: every 1.25 s without a socket, every 5 s with one; any fresh snapshot resets the wait. Rests in the background. */
 
   private pollIfNeeded = (): void => {
     if (!this.state.room || this.backgrounded) return;

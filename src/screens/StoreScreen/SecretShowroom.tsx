@@ -48,7 +48,7 @@ import { SECRET_PREVIEW_COPY, StarMotes } from './SecretShopUi';
 import { VaultPanel, VaultSecondaryButton } from './SecretVault';
 import { TileArt } from './ShopTile';
 import useIdleRest from './useIdleRest';
-import { usePowerBudget } from './powerShim';
+import { usePowerBudget } from '../../power';
 import { previewLook } from './TryOnSheet';
 import { MAX_FONT, Sheen, ShopCta, ShopStage, useShopNow, WishHeart } from './shopUi';
 import { useWishCount, useWished } from './wishStore';

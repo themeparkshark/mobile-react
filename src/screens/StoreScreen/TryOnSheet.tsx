@@ -51,8 +51,7 @@ import { CoinArc, LandFlash, MAX_FONT, PieceChip, REVEAL_NAVY, SHOP_SURFACE, She
 import { wearItem } from './inventoryQueue';
 import { isMemberWearItem, memberWearLocked, useMemberWearLock } from '../../services/memberLook';
 import { TileArt } from './ShopTile';
-// The money stream's offer; a no-op shim on this branch until integration (see coinTopUpShim.tsx).
-import CoinTopUpOffer from './coinTopUpShim';
+import CoinTopUpOffer from '../../components/money/CoinTopUpOffer';
 import { cachedVipPlans, priceText } from '../../services/purchases';
 import { useWished, wishStore } from './wishStore';
 

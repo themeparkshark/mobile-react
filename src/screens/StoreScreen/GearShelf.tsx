@@ -35,7 +35,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import ShopTile from './ShopTile';
 import TryOnSheet from './TryOnSheet';
 import useIdleRest from './useIdleRest';
-import { budgetedParticles, usePowerBudget } from './powerShim';
+import { budgetedParticles, usePowerBudget } from '../../power';
 import { MAX_FONT, plateFor, SHOP_SURFACE as S, Sheen, ShopToast, TimerPill, useShopNow, useShopToast, WishHeart } from './shopUi';
 import { useWished, wishStore } from './wishStore';
 

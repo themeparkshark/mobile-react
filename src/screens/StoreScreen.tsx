@@ -52,7 +52,7 @@ import { loadSecretShopFlag } from '../services/secretShopFlag';
 import Item from './StoreScreen/Item';
 import SuppliesShop, { type SuppliesFocus } from './StoreScreen/SuppliesShop';
 import GearShelf from './StoreScreen/GearShelf';
-import useBudgetedPoll from './StoreScreen/powerShim';
+import { useBudgetedPoll } from '../power';
 import { SecretRoomSkeleton } from './StoreScreen/SecretShowroom';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
