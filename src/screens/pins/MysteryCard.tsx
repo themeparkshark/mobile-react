@@ -24,9 +24,9 @@ import CoinTopUpOffer from '../../components/money/CoinTopUpOffer';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon, OUTLINE, RADIUS, SHADOW, SPACE } from '../../ui';
-import { BOX_ART, boxTone, PIN_ART, PinTile } from './PinArt';
+import { BOX_ART, boxTone, GOLDEN_ICON, PIN_ART, PinTile, type BoxTone } from './PinArt';
 import {
-  bundleSaving, chaserMeter, coinsShort, endsLabel, formatChance, nextFreeBox, nextFreeLabel, pointsView, seriesProgress, splitSeries,
+  bundleSaving, chaserMeter, coinsShort, endsLabel, formatChance, goldenPins, goldenShort, nextFreeBox, nextFreeLabel, oneIn, pointsView, seriesProgress, showGolden, splitSeries,
   type MysterySeries, type PinRow,
 } from './pinsModel';
 
@@ -160,7 +160,9 @@ function BobbingBox({ tone, active, still, free }: { tone: 'blue' | 'coral'; act
  * then it opens. A quick tap wiggles it and says "Hold!", so nobody thinks it's
  * broken, and VoiceOver/Switch users get a plain activate action.
  */
-function HoldToOpen({ label, saving, disabled, tone, onOpen }: { label: string; saving: number; disabled: boolean; tone: 'blue' | 'coral'; onOpen: () => void }) {
+function HoldToOpen({ label, saving, disabled, tone, onOpen, word = 'x5', a11y = 'Hold to open five boxes' }: {
+  label: string; saving: number; disabled: boolean; tone: BoxTone; onOpen: () => void; word?: string; a11y?: string;
+}) {
   const p = useSharedValue(0);
   const wiggle = useSharedValue(0);
   const fired = useRef(false);
@@ -204,16 +206,96 @@ function HoldToOpen({ label, saving, disabled, tone, onOpen }: { label: string; 
         </Animated.View>
       )}
       <Pressable onPressIn={start} onPressOut={end} disabled={disabled} hitSlop={4}
-        style={[styles.openBtn, styles.openFive, disabled && { opacity: 0.5 }]}
-        accessibilityRole="button" accessibilityLabel={`${label}. Hold to open five boxes`} accessibilityHint="Press and hold"
+        style={[styles.openBtn, tone === 'gold' ? styles.openGold : styles.openFive, disabled && { opacity: 0.5 }]}
+        accessibilityRole="button" accessibilityLabel={`${label}. ${a11y}`} accessibilityHint="Press and hold"
         accessibilityActions={[{ name: 'activate' }]} onAccessibilityAction={e => { if (e.nativeEvent.actionName === 'activate' && !disabled) onOpen(); }}>
-        <Animated.View style={[styles.holdFill, fillStyle]} />
-        <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
-        <Text maxFontSizeMultiplier={1.1} style={styles.openFiveText}>x5</Text>
+        <Animated.View style={[styles.holdFill, tone === 'gold' && styles.holdFillGold, fillStyle]} />
+        <Image source={tone === 'gold' ? GOLDEN_ICON : BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
+        <Text maxFontSizeMultiplier={1.1} style={[styles.openFiveText, tone === 'gold' && styles.openGoldText]}>{word}</Text>
         <View style={styles.price}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{label}</Text></View>
         {saving > 0 && <View style={styles.save}><Text maxFontSizeMultiplier={1} style={styles.saveText}>Save {saving}</Text></View>}
       </Pressable>
     </Animated.View>
+  );
+}
+
+/**
+ * The Golden Box: the rare box under the regular ones. One look says what it is:
+ * the gold box, "Golden Box", the chaser's 1-in-4, "Only new pins" while you
+ * still need some, and its price. Tap it and its own odds open (pins you have
+ * show 0%), with the hold-to-open button right under them: odds always come
+ * before the buy. Coins only, one at a time.
+ */
+function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
+  series: MysterySeries; coins: number; busy: boolean; still: boolean; active: boolean;
+  onOpen: (series: MysterySeries, count: number, pay: 'coins' | 'free', box?: 'golden') => void;
+}) {
+  const golden = series.golden;
+  const [openOdds, setOpenOdds] = useState(false);
+  const [topUp, setTopUp] = useState<number | null>(null);
+  const ambient = useAmbient();
+  const glint = useSharedValue(0);
+  useEffect(() => {
+    if (!active || still || !ambient) { cancelAnimation(glint); glint.value = 0; return; }
+    // A slow gold glint across the panel every few seconds (one shared value, UI thread).
+    glint.value = withRepeat(withSequence(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), withDelay(2600, withTiming(0, { duration: 0 }))), -1, false);
+    return () => cancelAnimation(glint);
+  }, [active, still, ambient, glint]);
+  const glintStyle = useAnimatedStyle(() => ({ opacity: glint.value <= 0 || glint.value >= 1 ? 0 : 0.7, transform: [{ translateX: -120 + glint.value * 520 }, { rotate: '20deg' }] }));
+  if (!golden) return null;
+  const short = goldenShort(series, coins);
+  const pins = goldenPins(series);
+  const toggle = () => {
+    queueHaptic('tapLight', 1);
+    try { GameAudio.play(openOdds ? 'ui.tap' : 'fx.coinTick', { pitch: 1.5, volume: 0.6 }); } catch { /* audio is decoration */ }
+    setOpenOdds(o => !o);
+  };
+  const go = () => {
+    if (short > 0) { queueHaptic('tapLight', 1); setTopUp(short); return; }
+    setTopUp(null);
+    onOpen(series, 1, 'coins', 'golden');
+  };
+  return (
+    <View style={styles.golden}>
+      <Pressable onPress={toggle} hitSlop={4} style={({ pressed }) => [styles.goldenHead, pressed && { transform: [{ scale: 0.98 }] }]}
+        accessibilityRole="button" accessibilityState={{ expanded: openOdds }}
+        accessibilityLabel={`Golden Box, ${golden.price} coins. Gold chaser ${formatChance(golden.chaser_bp)}${golden.no_duplicates ? '. Only pins you need' : ''}. ${openOdds ? 'Hide' : 'Show'} what can be inside`}>
+        <Animated.View pointerEvents="none" style={[styles.goldenGlint, glintStyle]} />
+        <Image source={GOLDEN_ICON} style={{ width: 54, height: 54 }} contentFit="contain" />
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text maxFontSizeMultiplier={1.2} style={styles.goldenTitle}>Golden Box</Text>
+          <View style={styles.chips}>
+            <View style={styles.goldenChip}>
+              <Image source={PIN_ART.chaser} style={{ width: 18, height: 18 }} contentFit="contain" />
+              <Text maxFontSizeMultiplier={1.1} style={styles.goldenChipText}>{oneIn(golden.chaser_bp)}</Text>
+            </View>
+            {golden.no_duplicates && <View style={[styles.goldenChip, styles.goldenChipNew]}><Text maxFontSizeMultiplier={1.1} style={[styles.goldenChipText, { color: BRAND.white }]}>Only new pins</Text></View>}
+          </View>
+        </View>
+        <View style={[styles.price, short > 0 && styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{golden.price.toLocaleString('en-US')}</Text></View>
+        <View style={[styles.goldenCaret, openOdds && { transform: [{ rotate: '180deg' }] }]}><Text maxFontSizeMultiplier={1} style={styles.goldenCaretText}>{'\u25BE'}</Text></View>
+      </Pressable>
+      {openOdds && (
+        <Animated.View entering={FadeIn.duration(160)} style={{ gap: SPACE.sm }}>
+          <OddsTable pins={pins} size={38} pity={series.pity} compact />
+          {short > 0 ? (
+            <Pressable onPress={go} disabled={busy} hitSlop={4}
+              style={({ pressed }) => [styles.openBtn, styles.openGold, pressed && { transform: [{ scale: 0.96 }] }]}
+              accessibilityRole="button" accessibilityLabel={`Need ${short} more coins for a Golden Box`}>
+              <Image source={GOLDEN_ICON} style={{ width: 30, height: 30 }} contentFit="contain" />
+              <View style={[styles.price, styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{short.toLocaleString('en-US')} more</Text></View>
+            </Pressable>
+          ) : (
+            <HoldToOpen label={golden.price.toLocaleString('en-US')} saving={0} disabled={busy} tone="gold" word="Open" a11y="Hold to open a Golden Box" onOpen={go} />
+          )}
+          {topUp !== null && topUp > 0 && (
+            <Animated.View entering={FadeIn.duration(160)}>
+              <CoinTopUpOffer need={topUp} reason="mystery-box" onDone={() => setTopUp(null)} />
+            </Animated.View>
+          )}
+        </Animated.View>
+      )}
+    </View>
   );
 }
 
@@ -225,7 +307,7 @@ type Props = {
   readonly still: boolean;
   readonly shine?: SharedValue<number>;
   readonly fresh?: ReadonlySet<number>;
-  readonly onOpen: (series: MysterySeries, count: number, pay: 'coins' | 'free') => void;
+  readonly onOpen: (series: MysterySeries, count: number, pay: 'coins' | 'free', box?: 'golden') => void;
   readonly onPick: (series: MysterySeries) => void;
   /** The server said coins were short (a stale balance): show the top-up right here. */
   readonly serverShort?: number | null;
@@ -339,6 +421,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
             {/* The bundle floor holds only while a regular pin is missing (same rule as the server). */}
             {paid && <Text maxFontSizeMultiplier={1.3} style={styles.floorNote}>{progress.have < progress.total ? 'x5 = at least 1 new pin' : allDone ? 'You have every pin and the gold! Boxes now give extras to trade.' : 'You have them all: boxes give extras'}</Text>}
             {nextFree && !free && <Text maxFontSizeMultiplier={1.3} style={styles.nextFree}>{nextFree}</Text>}
+            {showGolden(series) && <GoldenBoxPanel series={series} coins={coins} busy={busy} still={still} active={active} onOpen={onOpen} />}
             {topUp !== null && topUp > 0 && (
               <Animated.View entering={FadeIn.duration(160)}>
                 <CoinTopUpOffer need={topUp} reason="mystery-box" onDone={() => {
@@ -409,6 +492,18 @@ const styles = StyleSheet.create({
   openOne: { backgroundColor: BRAND.gold },
   openFive: { backgroundColor: BRAND.blueBright },
   holdFill: { position: 'absolute', left: 0, bottom: 0, height: 7, backgroundColor: BRAND.gold },
+  holdFillGold: { backgroundColor: BRAND.navy },
+  openGold: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
+  openGoldText: { color: BRAND.navy },
+  golden: { backgroundColor: '#fff1c2', borderWidth: 3, borderColor: BRAND.goldLip, borderRadius: RADIUS.md, padding: SPACE.sm, gap: SPACE.sm, overflow: 'hidden' },
+  goldenHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, minHeight: 58 },
+  goldenGlint: { position: 'absolute', top: -40, width: 34, height: 160, backgroundColor: 'rgba(255,255,255,0.75)' },
+  goldenTitle: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, paddingTop: 3 },
+  goldenChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 999, borderWidth: 2, borderColor: BRAND.goldLip, paddingHorizontal: 7, paddingVertical: 1 },
+  goldenChipNew: { backgroundColor: BRAND.green, borderColor: BRAND.white },
+  goldenChipText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, paddingTop: 2 },
+  goldenCaret: { width: 28, height: 28, borderRadius: 14, backgroundColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  goldenCaretText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.gold, lineHeight: 18 },
   holdHint: { position: 'absolute', top: -34, alignSelf: 'center', zIndex: 2, backgroundColor: BRAND.navy, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 3 },
   holdHintText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.white, paddingTop: 3 },
   openOneText: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, paddingTop: 3 },

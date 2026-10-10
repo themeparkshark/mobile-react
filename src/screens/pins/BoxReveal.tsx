@@ -22,6 +22,12 @@
  * Bundles: new pins first, extras next, the chaser last; one tap per box
  * (Next drops the next box and opens it), then everything on a cork board.
  *
+ * Golden Box: the gold box drops in heavier, every shake is the big gold one
+ * (rays from the start), and the pop throws a crown burst: a gold crown springs
+ * out of the lid and six small crowns fan out, over its own chime (a bright
+ * rising arpeggio on top of the reveal). The pin says "From a Golden Box".
+ * The chaser keeps its held breath, so the rarity tell still means something.
+ *
  * Cheap: UI-thread animation (Reanimated), the pop starts from the shake's
  * own completion on the UI thread, confetti is capped at 22 pieces on one
  * shared value, rays only for gold moments. Reduce Motion: no shake, flip or
@@ -73,7 +79,56 @@ type Props = {
   readonly waiting?: boolean;
   /** Coins this open cost: a few coins drop from the top bar into the box as it lands. */
   readonly spend?: number;
+  /** The Golden Box: heavier gold shake, crown burst, its own chime. */
+  readonly golden?: boolean;
 };
+
+const CROWN = require('../../../assets/images/help/crown-gold.webp');
+const MINI_CROWNS = 6;
+
+/** The crown burst: one big crown springs up out of the lid, six small ones fan out and fall away. */
+function CrownBurst({ t, size }: { t: SharedValue<number>; size: number }) {
+  const big = useAnimatedStyle(() => {
+    const v = t.value;
+    if (v <= 0 || v >= 1) return { opacity: 0 };
+    const up = Math.min(1, v / 0.35);
+    return {
+      opacity: v < 0.75 ? 1 : 1 - (v - 0.75) / 0.25,
+      transform: [{ translateY: -size * 0.95 * up - v * 30 }, { scale: 0.4 + up * 0.8 - Math.max(0, v - 0.35) * 0.3 }, { rotate: `${(1 - up) * -25}deg` }],
+    };
+  });
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
+      {Array.from({ length: MINI_CROWNS }, (_, i) => <MiniCrown key={i} i={i} t={t} size={size} />)}
+      <Animated.View style={[{ position: 'absolute', width: size * 0.62, height: size * 0.62 }, big]}>
+        <Image source={CROWN} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+      </Animated.View>
+    </View>
+  );
+}
+
+function MiniCrown({ i, t, size }: { i: number; t: SharedValue<number>; size: number }) {
+  const angle = -Math.PI / 2 + ((i - (MINI_CROWNS - 1) / 2) / MINI_CROWNS) * Math.PI * 1.35;
+  const dist = size * (0.95 + (i % 2) * 0.25);
+  const style = useAnimatedStyle(() => {
+    const v = t.value;
+    if (v <= 0.12 || v >= 1) return { opacity: 0 };
+    const k = (v - 0.12) / 0.88;
+    return {
+      opacity: 1 - k * k,
+      transform: [
+        { translateX: Math.cos(angle) * dist * k },
+        { translateY: -size * 0.5 + Math.sin(angle) * dist * k + 160 * k * k },
+        { rotate: `${(i % 2 ? 1 : -1) * 200 * k}deg` }, { scale: 1 - k * 0.3 },
+      ],
+    };
+  });
+  return (
+    <Animated.View style={[{ position: 'absolute', width: size * 0.2, height: size * 0.2 }, style]}>
+      <Image source={CROWN} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+    </Animated.View>
+  );
+}
 
 export const REVEAL_CUES = ['fx.whoosh', 'fx.whooshRev', 'fx.coinTick', 'fx.reveal', 'fx.reward', 'fx.firework', 'fx.hit', 'ui.tap', 'ui.complete'] as const;
 
@@ -195,7 +250,7 @@ function Ring({ size, t }: { size: number; t: SharedValue<number> }) {
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 10, borderColor: '#ffffff' }, style]} />;
 }
 
-export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear, waiting = false, spend = 0, lanyard = [], lanyardMax = 6 }: Props) {
+export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear, waiting = false, spend = 0, lanyard = [], lanyardMax = 6, golden = false }: Props) {
   const wantOpen = useRef(false);
   const waitingRef = useRef(waiting);
   waitingRef.current = waiting;
@@ -219,6 +274,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const pull = pulls[Math.min(index, pulls.length - 1)];
   // Gold moments: the chaser, rare park pins, and every in-person catch.
   const gold = !!pull?.is_chaser || !!pull?.rare || isCatch;
+  // The Golden Box stage is gold from the first shake (glow, rays, confetti), whatever is inside.
+  const goldStage = gold || golden;
   const art = BOX_ART[tone];
   const boxSize = Math.min(240, width * 0.58);
   const pinSize = Math.min(210, width * 0.52);
@@ -247,13 +304,14 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const stamp = useSharedValue(0);
   const plusOne = useSharedValue(0);
   const wearFly = useSharedValue(0);
+  const crown = useSharedValue(0);
   const popped = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = (ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); };
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
   useEffect(() => () => clearTimers(), []);
 
-  const confetti = useMemo(() => pieces((pull?.id ?? 1) * 7919, gold), [pull?.id, gold]);
+  const confetti = useMemo(() => pieces((pull?.id ?? 1) * 7919, goldStage), [pull?.id, goldStage]);
 
   const shownAt = useRef(0);
   const showPin = useCallback(() => {
@@ -304,7 +362,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     opened.value = 1;
     if (still) {
       lid.value = 1; rise.value = 1; flip.value = 1; settle.value = withTiming(1, { duration: 220 });
-      glow.value = withTiming(isGold ? 0.9 : 0.6, { duration: 200 });
+      glow.value = withTiming(isGold || golden ? 0.9 : 0.6, { duration: 200 });
     } else {
       if (isGold) punch.value = withSequence(withTiming(1.07, { duration: 70 }), withSpring(1, { damping: 7, stiffness: 260 }));
       lid.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
@@ -313,10 +371,20 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       flip.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.cubic) }, done => { if (done) runOnJS(showPin)(); });
       settle.value = withDelay(380, withSpring(1, { damping: 14, stiffness: 180 }));
       burst.value = 0; burst.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.quad) });
-      glow.value = withTiming(isGold ? 1 : 0.65, { duration: 200 });
-      if (isGold) rays.value = withTiming(1, { duration: 300 });
+      glow.value = withTiming(isGold || golden ? 1 : 0.65, { duration: 200 });
+      if (isGold || golden) rays.value = withTiming(1, { duration: 300 });
+      if (golden) {
+        if (!isGold) punch.value = withSequence(withTiming(1.05, { duration: 70 }), withSpring(1, { damping: 8, stiffness: 240 }));
+        crown.value = 0; crown.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.quad) });
+      }
     }
     seal.value = withTiming(0, { duration: 160 });
+    if (golden) {
+      // The Golden Box chime: a bright fanfare, then a rising four-note sparkle (its own sound, every golden open).
+      play('ui.complete', { pitch: 1.2, volume: 0.9 });
+      [1.45, 1.7, 1.95, 2.3].forEach((pitch, k) => later(140 + k * 85, () => play('fx.coinTick', { pitch, volume: 0.85 })));
+      later(150, () => queueHaptic('hitMedium', 2));
+    }
     if (isGold) {
       play('fx.reward'); later(110, () => play('fx.firework'));
       queueHaptic('comboHeavy', 2); later(260, () => queueHaptic('success', 2));
@@ -334,7 +402,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       }
     }
     if (still) later(240, showPin);
-  }, [index, pulls, showPin, still]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [index, pulls, showPin, still, golden]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** The chaser's held breath: dim, two heartbeats, a heavy buzz, then pop. */
   const holdBreath = useCallback(() => {
@@ -363,28 +431,31 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (still) { play('fx.whooshRev', { volume: 0.6 }); pop(); return; }
     setPhase('shake');
     play('fx.whooshRev', { volume: 0.9 });
-    const beats = isGold ? [6, 8, 10, 12, 15] : [5, 7, 10];
-    const step = isGold ? 190 : 175;
+    // Golden Box: the heaviest shake in the game, every time (the chaser still gets its held breath after).
+    const beats = golden ? [8, 11, 14, 17, 21] : isGold ? [6, 8, 10, 12, 15] : [5, 7, 10];
+    const step = golden ? 200 : isGold ? 190 : 175;
     const seq = beats.flatMap((deg, i) => [
       withTiming(-deg, { duration: step / 2 - i * 6 }), withTiming(deg, { duration: step / 2 - i * 6 }),
     ]);
     // The pop starts from the shake's own end, on the UI thread (no JS-timer drift).
     shake.value = withSequence(...seq, withTiming(0, { duration: 60 }, done => { if (done) runOnJS(afterShake)(); }));
-    glow.value = withTiming(isGold ? 0.95 : 0.6, { duration: beats.length * step });
-    if (isGold) rays.value = withDelay(beats.length * step * 0.5, withTiming(0.7, { duration: beats.length * step * 0.5 }));
+    glow.value = withTiming(isGold || golden ? 0.95 : 0.6, { duration: beats.length * step });
+    if (golden) rays.value = withTiming(0.8, { duration: beats.length * step });
+    else if (isGold) rays.value = withDelay(beats.length * step * 0.5, withTiming(0.7, { duration: beats.length * step * 0.5 }));
     if (isCatch) seal.value = withSequence(withTiming(1.15, { duration: beats.length * step * 0.8 }), withTiming(1, { duration: 120 }));
     beats.forEach((_, i) => later(i * step, () => {
-      play('fx.coinTick', { pitch: 1 + i * 0.12, volume: 0.8 });
-      queueHaptic(i === beats.length - 1 ? 'hitMedium' : 'tickSelection', 1);
+      play('fx.coinTick', { pitch: (golden ? 0.85 : 1) + i * 0.12, volume: 0.8 });
+      if (golden && i % 2 === 0) play('fx.hit', { pitch: 0.6 + i * 0.05, volume: 0.6 });
+      queueHaptic(i === beats.length - 1 ? 'hitMedium' : golden ? 'tapLight' : 'tickSelection', 1);
     }));
-  }, [phase, pulls, index, still, pop, afterShake, isCatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, pulls, index, still, pop, afterShake, isCatch, golden]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A new box (or a catch) arrives: reset and bring it in.
   useEffect(() => {
     if (!pull) return;
     clearTimers();
     popped.current = false;
-    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, lift, plusOne, wearFly, foil].forEach(v => { cancelAnimation(v); v.value = 0; });
+    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, lift, plusOne, wearFly, foil, crown].forEach(v => { cancelAnimation(v); v.value = 0; });
     punch.value = 1;
     setPhase('drop');
     if (noBox) {
@@ -397,7 +468,9 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     }
     drop.value = 0;
     play('fx.whoosh', { volume: 0.7 });
-    drop.value = still ? withTiming(1, { duration: 180 }) : withSpring(1, { damping: 11, stiffness: 170, mass: 0.9 });
+    // The Golden Box lands heavier: more mass, a low thud and a buzz.
+    drop.value = still ? withTiming(1, { duration: 180 }) : golden ? withSpring(1, { damping: 9, stiffness: 150, mass: 1.4 }) : withSpring(1, { damping: 11, stiffness: 170, mass: 0.9 });
+    if (golden && !still) later(330, () => { play('fx.hit', { pitch: 0.5, volume: 1 }); queueHaptic('comboHeavy', 1); });
     // The first box waits for your tap; in a bundle, "Next box" already was the tap.
     later(still ? 200 : 520, () => { if (index > 0) open(); else setPhase('ready'); });
   }, [index]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -415,11 +488,11 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
   // Gold rays keep turning slowly while a gold moment is on screen.
   useEffect(() => {
-    if (gold && !still && ambient && phase !== 'summary' && phase !== 'drop' && phase !== 'ready') {
+    if (goldStage && !still && ambient && phase !== 'summary' && phase !== 'drop' && phase !== 'ready') {
       raySpin.value = withRepeat(withTiming(360, { duration: 14000, easing: Easing.linear }), -1, false);
     } else { cancelAnimation(raySpin); }
     return () => cancelAnimation(raySpin);
-  }, [gold, still, ambient, phase, raySpin]);
+  }, [goldStage, still, ambient, phase, raySpin]);
 
   const next = useCallback(() => {
     play('ui.tap');
@@ -497,7 +570,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const spotStyle = useAnimatedStyle(() => ({ opacity: 0.55 + settle.value * 0.45, transform: [{ scale: LOWRES }] }));
 
   if (!pull) return null;
-  const glowColor = gold ? '#ffcf3b' : '#bfe5ff';
+  const glowColor = goldStage ? '#ffcf3b' : '#bfe5ff';
   const tag = tagFor ? tagFor(pull) : pull.duplicate
     ? { text: 'Extra! Trade it', tone: 'trader' as const }
     : { text: PINS_COPY.newPin, tone: 'new' as const };
@@ -536,8 +609,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
         {/* The held breath dims everything except the box. */}
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
         <Animated.View pointerEvents="none" style={[styles.stage, { top: centerY - boxSize / 2, width, height: boxSize }, stageStyle]}>
-          <Glow size={boxSize * 2.3} color={glowColor} amount={glow} id={gold ? 'glowGold' : 'glowSky'} />
-          {gold && !still && <Rays size={boxSize * 2.6} spin={raySpin} on={rays} />}
+          <Glow size={boxSize * 2.3} color={glowColor} amount={glow} id={goldStage ? 'glowGold' : 'glowSky'} />
+          {goldStage && !still && <Rays size={boxSize * 2.6} spin={raySpin} on={rays} />}
           <Ring size={boxSize * 1.2} t={ring} />
           {!noBox && (
             <Animated.View style={[{ width: boxSize, height: boxSize }, boxStyle]}>
@@ -547,7 +620,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               <Animated.View style={[StyleSheet.absoluteFill, baseStyle]}>
                 <Image source={art.base} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
               </Animated.View>
-              <Animated.View style={[{ position: 'absolute', left: boxSize * 0.044, top: -boxSize * 0.146, width: boxSize * 0.915, height: boxSize * 0.915 }, lidStyle]}>
+              {/* The gold lid art is drawn registered to its closed box (full frame); the blue/coral lid sits in its own box. */}
+              <Animated.View style={[tone === 'gold' ? { position: 'absolute', left: 0, top: 0, width: boxSize, height: boxSize } : { position: 'absolute', left: boxSize * 0.044, top: -boxSize * 0.146, width: boxSize * 0.915, height: boxSize * 0.915 }, lidStyle]}>
                 <Image source={art.lid} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
               </Animated.View>
             </Animated.View>
@@ -592,6 +666,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               </Animated.View>
             )}
           </Animated.View>
+          {golden && !still && !noBox && <CrownBurst t={crown} size={boxSize} />}
           <View style={[styles.confettiOrigin, { top: boxSize * 0.2 }]}>
             {!still && phase !== 'summary' && confetti.map((p, i) => <ConfettiPiece key={i} p={p} burst={burst} />)}
           </View>
@@ -623,6 +698,12 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             )}
             {pull.is_chaser && pull.by_pity && <View style={styles.guaranteedPill}><Text maxFontSizeMultiplier={1.1} style={styles.guaranteed}>Guaranteed!</Text></View>}
             <Text maxFontSizeMultiplier={1.35} style={styles.name} numberOfLines={2}>{pull.name}</Text>
+            {golden && !isCatch && (
+              <View style={styles.goldenTag}>
+                <Image source={BOX_ART.gold.closed} style={{ width: 24, height: 24 }} contentFit="contain" />
+                <Text maxFontSizeMultiplier={1.2} style={styles.goldenTagText}>From a Golden Box</Text>
+              </View>
+            )}
             {subtitle && (isCatch
               ? <View style={styles.ticket}><Image source={PIN_ART.seal} style={{ width: 22, height: 22 }} contentFit="contain" /><Text maxFontSizeMultiplier={1.3} style={styles.ticketText} numberOfLines={1}>{subtitle}</Text></View>
               : <Text maxFontSizeMultiplier={1.35} style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>)}
@@ -754,6 +835,8 @@ const styles = StyleSheet.create({
   backerHole: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#021a45', marginTop: 10 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 3, paddingHorizontal: 14, paddingVertical: 4 },
   tagNew: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
+  goldenTag: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff1c2', borderColor: BRAND.goldLip, borderWidth: 2, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 2 },
+  goldenTagText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 2 },
   tagGold: { backgroundColor: BRAND.goldLight, borderColor: BRAND.navy },
   tagTrader: { backgroundColor: BRAND.blueBright, borderColor: BRAND.white },
   tagText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.navy, paddingTop: 2 },

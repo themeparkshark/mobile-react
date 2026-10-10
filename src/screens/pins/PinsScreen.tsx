@@ -35,10 +35,10 @@ import BoxReveal, { preloadRevealAudio, type RevealPull } from './BoxReveal';
 import HuntSheet from './HuntSheet';
 import { Lanyard } from './Lanyard';
 import { MysteryCard, setBankedFrom } from './MysteryCard';
-import { BOX_ART, boxTone, PIN_ART, PinTile } from './PinArt';
+import { BOX_ART, boxTone, PIN_ART, PinTile, type BoxTone } from './PinArt';
 import { ParkSetCard } from './ParkSetCard';
 import {
-  coinsShort, deviceRegion, freeFromLabel, initialTab, myPins, mysteryShelf, newRequestId, PINS_COPY, toggleLanyard,
+  coinsShort, goldenShort, deviceRegion, freeFromLabel, initialTab, myPins, mysteryShelf, newRequestId, PINS_COPY, toggleLanyard,
   type MysterySeries, type ParkSet, type PinHome, type PinRow, type Pull,
 } from './pinsModel';
 
@@ -77,7 +77,7 @@ export default function PinsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [reveal, setReveal] = useState<{
-    pulls: RevealPull[]; tone: 'blue' | 'coral'; variant?: 'box' | 'catch' | 'pick'; coins?: number; seriesId?: number; waiting?: boolean; spend?: number;
+    pulls: RevealPull[]; tone: BoxTone; golden?: boolean; variant?: 'box' | 'catch' | 'pick'; coins?: number; seriesId?: number; waiting?: boolean; spend?: number;
     tag?: (p: RevealPull) => { text: string; tone: 'new' | 'trader' | 'gold' }; subtitle?: (p: RevealPull) => string | null;
   } | null>(null);
   const [fresh, setFresh] = useState<{ seriesId: number; ids: Set<number> } | null>(null);
@@ -155,28 +155,31 @@ export default function PinsScreen() {
 
   useEffect(() => { if (tab) setVisited(v => (v.has(tab) ? v : new Set(v).add(tab))); }, [tab]);
 
-  const open = useCallback(async (series: MysterySeries, count: number, pay: 'coins' | 'free') => {
+  const open = useCallback(async (series: MysterySeries, count: number, pay: 'coins' | 'free', box?: 'golden') => {
     if (busy) return;
-    if (pay === 'coins' && coinsShort(series, count, coins) > 0) return; // the card shows the top-up
-    const key = `${series.id}:${count}:${pay}`;
-    // A retried tap after a failure reuses its id, so it can never charge twice.
-    const requestId = pending.current[series.id] ?? newRequestId();
-    pending.current[series.id] = requestId;
+    const golden = box === 'golden' && !!series.golden;
+    if (golden ? goldenShort(series, coins) > 0 : pay === 'coins' && coinsShort(series, count, coins) > 0) return; // the card shows the top-up
+    const key = `${series.id}:${count}:${pay}${golden ? ':golden' : ''}`;
+    // A retried tap after a failure reuses its id, so it can never charge twice (one id per series and box).
+    const slot = golden ? -series.id : series.id;
+    const requestId = pending.current[slot] ?? newRequestId();
+    pending.current[slot] = requestId;
     setBusy(key);
     queueHaptic('tapLight', 1);
     // The box drops in right away; the server answers while it lands (no dead beat).
     const placeholder: RevealPull = { id: -1, item_id: -1, pin_id: 0, name: '', icon_url: null, is_chaser: false, by_pity: false, serial: null, duplicate: false };
-    const spend = pay === 'coins' ? (count === series.bundle.count ? series.bundle.price : series.price * count) : 0;
-    setReveal({ pulls: [placeholder], tone: boxTone(series.theme_color), seriesId: series.id, waiting: true, spend });
+    const spend = golden ? (series.golden?.price ?? 0) : pay === 'coins' ? (count === series.bundle.count ? series.bundle.price : series.price * count) : 0;
+    const tone: BoxTone = golden ? 'gold' : boxTone(series.theme_color);
+    setReveal({ pulls: [placeholder], tone, golden, seriesId: series.id, waiting: true, spend });
     try {
-      const r = await openMysteryBoxes(series.id, { count, pay, request_id: requestId, region: region.current });
-      delete pending.current[series.id];
+      const r = await openMysteryBoxes(series.id, { count, pay, request_id: requestId, region: region.current, ...(golden ? { box: 'golden' as const } : {}) });
+      delete pending.current[slot];
       // Decode the pins at reveal size while the box sits there.
       void warmPinImages(r.pulls.map(p => p.icon_url ?? undefined), 210);
       const order = new Map(series.pins.filter(p => !p.is_chaser).map((p, i) => [p.item_id, i + 1]));
       const regularCount = order.size;
       setReveal({
-        pulls: r.pulls, tone: boxTone(series.theme_color), seriesId: series.id, waiting: false,
+        pulls: r.pulls, tone, golden, seriesId: series.id, waiting: false,
         subtitle: p => (p.is_chaser ? series.name : `${series.name} \u00b7 ${order.get(p.item_id) ?? '?'} of ${regularCount}`),
       });
       // The page updates when the reveal closes (pins land in their slots then).
@@ -186,7 +189,7 @@ export default function PinsScreen() {
     } catch (e: unknown) {
       setReveal(null);
       const data = (e as { response?: { status?: number; data?: { code?: string; message?: string; need?: number; have?: number } } })?.response;
-      if (data?.status && data.status < 500) delete pending.current[series.id];
+      if (data?.status && data.status < 500) delete pending.current[slot];
       if (data?.data?.code === 'not_enough_currency') {
         // A stale balance: the card shows the top-up for exactly what's missing.
         setServerShort({ seriesId: series.id, need: Math.max(1, (data.data.need ?? 0) - (data.data.have ?? 0)) });
@@ -495,8 +498,8 @@ export default function PinsScreen() {
                     return (
                       <Pressable key={p.item_id} onPress={() => toggleWear(p)} style={[styles.cell, { width: cellW }, on && styles.cellOn]}
                         accessibilityRole="button" accessibilityState={{ selected: on }}
-                        accessibilityLabel={`${p.name}${p.is_chaser ? ', chaser' : ''}${p.tradable ? ', can trade' : ', park only'}${on ? ', on your lanyard' : ''}`}>
-                        <PinTile uri={p.icon_thumb_url ?? p.icon_url} size={size} owned kind={p.kind} tradable={p.tradable} chaser={p.is_chaser} spares={p.spares}
+                        accessibilityLabel={`${p.name}${p.is_chaser ? ', chaser' : ''}${p.golden ? ', from a Golden Box' : ''}${p.tradable ? ', can trade' : ', park only'}${on ? ', on your lanyard' : ''}`}>
+                        <PinTile uri={p.icon_thumb_url ?? p.icon_url} size={size} owned kind={p.kind} tradable={p.tradable} chaser={p.is_chaser} spares={p.spares} golden={p.golden}
                           serial={p.serial} finder={p.found?.order} tilt={((i * 23) % 9) - 4} flat badgeScale={0.8} />
                         {on && <View style={styles.onCheck}><GameIcon name="check" size={16} /></View>}
                       </Pressable>
@@ -510,9 +513,9 @@ export default function PinsScreen() {
       </View>
       {landing.length > 0 && <PinsLanding pins={landing} onDone={() => setLanding([])} />}
       {reveal && (
-        <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant} waiting={reveal.waiting} spend={reveal.spend}
+        <BoxReveal pulls={reveal.pulls} tone={reveal.tone} golden={reveal.golden} still={still} variant={reveal.variant} waiting={reveal.waiting} spend={reveal.spend}
           tagFor={reveal.tag} subtitleFor={reveal.subtitle}
-          canWear={p => p.is_chaser || reveal.variant === 'catch' || !!p.rare}
+          canWear={p => p.is_chaser || reveal.variant === 'catch' || !!p.rare || (!!p.golden && !p.duplicate)}
           onWear={(p, removeId) => wear(p.item_id, removeId)} lanyard={lanyardPins} lanyardMax={home?.lanyard_max ?? 6}
           onDone={closeReveal} />
       )}

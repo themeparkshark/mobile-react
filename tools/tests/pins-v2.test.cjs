@@ -89,8 +89,10 @@ test('region comes from the locale (paid boxes are off in BE/NL on the server)',
 
 test('a retried open reuses its request id (never charges twice)', () => {
   const src = fs.readFileSync('src/screens/pins/PinsScreen.tsx', 'utf8');
-  assert.match(src, /pending\.current\[series\.id\] \?\? newRequestId\(\)/);
-  assert.match(src, /delete pending\.current\[series\.id\]/);
+  // One pending id per series and box (the Golden Box uses its own slot).
+  assert.match(src, /const slot = golden \? -series\.id : series\.id;/);
+  assert.match(src, /pending\.current\[slot\] \?\? newRequestId\(\)/);
+  assert.match(src, /delete pending\.current\[slot\]/);
   assert.notEqual(m.newRequestId(0.1), m.newRequestId(0.2));
 });
 

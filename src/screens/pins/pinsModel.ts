@@ -32,6 +32,22 @@ export interface PinRow {
   readonly serial?: number | null;
   /** Park pins you caught: the park day and your finder order that day (#1 = first). */
   readonly found?: { day: string; order: number } | null;
+  /** Pulled from a Golden Box: wears a gold edge. */
+  readonly golden?: boolean;
+}
+
+/**
+ * The Golden Box (the rare box): same series pins, coins only, the gold chaser
+ * at 25%, and while you're missing a regular pin it only gives pins you need.
+ * The odds are this player's own (pins you have show 0%), shown before the buy.
+ */
+export interface GoldenBox {
+  readonly price: number;
+  readonly chaser_bp: number;
+  /** True while you're missing a regular pin: no extras from this box. */
+  readonly no_duplicates: boolean;
+  readonly odds: { pin_id: number; is_chaser: boolean; chance_bp: number }[];
+  readonly paid_allowed: boolean;
 }
 
 export interface PinDay {
@@ -103,6 +119,8 @@ export interface MysterySeries {
   readonly pick_cost?: number;
   /** Finishing the series pays this pin. */
   readonly completer?: PinRow | null;
+  /** The Golden Box for this series (null/absent when it's off for you). */
+  readonly golden?: GoldenBox | null;
   readonly pins: PinRow[];
 }
 
@@ -115,6 +133,8 @@ export interface LanyardPin {
   readonly tradable: boolean;
   readonly serial?: number | null;
   readonly found?: { day: string; order: number } | null;
+  /** Pulled from a Golden Box: wears a gold edge. */
+  readonly golden?: boolean;
 }
 
 export interface PinHome {
@@ -147,6 +167,8 @@ export interface Pull {
   readonly by_pity: boolean;
   readonly serial: number | null;
   readonly duplicate: boolean;
+  /** Came out of a Golden Box. */
+  readonly golden?: boolean;
 }
 
 export interface OpenResult {
@@ -392,4 +414,20 @@ export function packPace(set: Pick<ParkSet, 'have' | 'total'> & { ends_on?: stri
   const days = Math.round((Date.parse(`${set.ends_on}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
   if (days < 0) return null;
   return `${days === 0 ? 'Last day!' : days === 1 ? '1 day left' : `${days} days left`} \u00b7 ${out}`;
+}
+
+/** The series pins with the Golden Box chances in place of the regular ones (for its odds table). */
+export function goldenPins(series: Pick<MysterySeries, 'pins' | 'golden'>): PinRow[] {
+  const odds = new Map((series.golden?.odds ?? []).map(o => [o.pin_id, o.chance_bp]));
+  return series.pins.map(p => ({ ...p, chance_bp: p.pin_id != null ? (odds.get(p.pin_id) ?? 0) : 0 }));
+}
+
+/** Show the Golden Box on a series card: it's on for you, the series is open and coin boxes are allowed where you are. */
+export function showGolden(series: Pick<MysterySeries, 'golden' | 'open' | 'paid_allowed'>): boolean {
+  return !!series.golden && series.open && series.golden.paid_allowed !== false && series.paid_allowed !== false;
+}
+
+/** Coins short for one Golden Box (0 when you have enough). */
+export function goldenShort(series: Pick<MysterySeries, 'golden'>, balance: number): number {
+  return Math.max(0, (series.golden?.price ?? 0) - Math.max(0, balance));
 }

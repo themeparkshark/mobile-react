@@ -33,12 +33,21 @@ export const BOX_ART = {
     lid: require('../../../assets/images/pins/box-coral-lid.webp'),
     base: require('../../../assets/images/pins/box-coral-base.webp'),
   },
+  /** The Golden Box (the rare box): same registration as blue so the lid lines up in the reveal. */
+  gold: {
+    closed: require('../../../assets/images/pins/box-gold-closed.webp'),
+    lid: require('../../../assets/images/pins/box-gold-lid.webp'),
+    base: require('../../../assets/images/pins/box-gold-base.webp'),
+  },
 } as const;
+
+/** The small Golden Box icon (buttons, badges, the "from a Golden Box" tag). */
+export const GOLDEN_ICON = require('../../../assets/images/pins/box-gold-icon.webp');
 
 export type BoxTone = keyof typeof BOX_ART;
 
-/** The box colour for a series (its theme colour picks blue or coral). */
-export function boxTone(themeColor: string | null | undefined): BoxTone {
+/** The box colour for a series (its theme colour picks blue or coral; gold is only the Golden Box). */
+export function boxTone(themeColor: string | null | undefined): 'blue' | 'coral' {
   const hex = (themeColor ?? '').replace('#', '');
   if (hex.length !== 6) return 'blue';
   const r = parseInt(hex.slice(0, 2), 16);
@@ -74,14 +83,20 @@ type Props = {
   readonly badgeScale?: number;
   /** A park pin you caught: your finder number that day (#1 = first). */
   readonly finder?: number | null;
+  /** Pulled from a Golden Box: a gold edge and a tiny gold box tag. */
+  readonly golden?: boolean;
 };
 
-function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, tilt = 0, badge = true, shine, lag, lagSpan, surface = 'panel', style, serial, flat, badgeScale = 1, finder, plainGhost }: Props) {
+function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, tilt = 0, badge = true, shine, lag, lagSpan, surface = 'panel', style, serial, flat, badgeScale = 1, finder, plainGhost, golden }: Props) {
   const [artFailed, setArtFailed] = useState(false);
   const b = badgeFor(kind, tradable);
   const badgeSize = Math.max(16, Math.round(size * 0.34 * badgeScale));
   return (
     <View style={[{ width: size, height: size }, style]}>
+      {golden && owned && (
+        // The gold edge: a thick gold ring with a navy keyline, behind the pin (Alex's outline weight).
+        <View pointerEvents="none" style={[styles.goldEdge, { width: size + 8, height: size + 8, borderRadius: (size + 8) / 2, left: -4, top: -4, borderWidth: Math.max(3, Math.round(size * 0.06)) }]} />
+      )}
       {uri && owned && (
         <EnamelPin uri={uri} size={size} tilt={tilt} shine={shine} lag={lag} lagSpan={lagSpan} surface={surface} flat={flat} />
       )}
@@ -122,6 +137,10 @@ function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, til
           <Text maxFontSizeMultiplier={1} style={[styles.finderText, finder === 1 && { color: BRAND.navy }]}>#{finder}</Text>
         </View>
       )}
+      {golden && owned && !serial && (
+        <Image source={GOLDEN_ICON} accessibilityLabel="From a Golden Box"
+          style={[styles.badge, { width: badgeSize * 0.9, height: badgeSize * 0.9, right: -badgeSize * 0.2, top: -badgeSize * 0.22 }]} contentFit="contain" />
+      )}
       {spares > 0 && owned && (
         <View style={[styles.spares, { left: -4, bottom: -4 }]}>
           <Text maxFontSizeMultiplier={1} style={styles.sparesText}>x{spares + 1}</Text>
@@ -137,6 +156,7 @@ const styles = StyleSheet.create({
   qWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   q: { fontFamily: FONT.display, color: '#7cc6f5', textShadowColor: BRAND.navy, textShadowRadius: 0, textShadowOffset: { width: 0, height: 2 } },
   badge: { position: 'absolute' },
+  goldEdge: { position: 'absolute', borderColor: BRAND.gold, backgroundColor: 'rgba(255,207,59,0.22)', shadowColor: BRAND.navy, shadowOpacity: 0.9, shadowRadius: 0, shadowOffset: { width: 0, height: 0 } },
   spares: {
     position: 'absolute', minWidth: 26, height: 22, paddingHorizontal: 5, borderRadius: 11,
     backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center',

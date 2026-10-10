@@ -10,7 +10,7 @@ export async function getPinHome(region?: string | null): Promise<PinHome> {
   return data.data;
 }
 
-export async function openMysteryBoxes(seriesId: number, body: { count: number; pay: 'coins' | 'free'; request_id: string; region: string | null }): Promise<OpenResult> {
+export async function openMysteryBoxes(seriesId: number, body: { count: number; pay: 'coins' | 'free'; request_id: string; region: string | null; box?: 'golden' }): Promise<OpenResult> {
   const { data } = await client.post<{ data: OpenResult }>(`/mystery-series/${seriesId}/open`, body,
     // The reveal says what you got; no duplicate banner.
     { skipBroadcasts: true } as object);

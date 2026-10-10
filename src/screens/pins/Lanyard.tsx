@@ -150,12 +150,12 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
             onPress={() => onPressSlot?.(i, pin)}
             onLongPress={pin && onLongPressSlot ? () => onLongPressSlot(i, pin) : undefined}
             accessibilityRole={onPressSlot ? 'button' : 'image'}
-            accessibilityLabel={pin ? `${pin.name}${pin.is_chaser ? ', chaser' : ''}` : 'Empty spot. Add a pin'}
+            accessibilityLabel={pin ? `${pin.name}${pin.is_chaser ? ', chaser' : ''}${pin.golden ? ', from a Golden Box' : ''}` : 'Empty spot. Add a pin'}
             hitSlop={6}
             style={{ position: 'absolute', left: p.x - pinSize / 2, top: p.y - pinSize * 0.42, width: pinSize, height: pinSize }}>
             {pin ? (
               <PinTile uri={pin.icon_url} size={pinSize} owned kind={pin.kind} tradable={pin.tradable}
-                chaser={pin.is_chaser} badge={!pin.tradable} badgeScale={0.75} serial={pin.serial} finder={pin.found?.order} tilt={tilt} shine={pin.is_chaser || i % 2 === 0 ? shine : undefined}
+                chaser={pin.is_chaser} golden={pin.golden} badge={!pin.tradable} badgeScale={0.75} serial={pin.serial} finder={pin.found?.order} tilt={tilt} shine={pin.is_chaser || i % 2 === 0 ? shine : undefined}
                 lag={i * 0.12} lagSpan={0.6} surface="panel" />
             ) : (
               // An empty spot reads as a pin back waiting on the strap.
