@@ -30,6 +30,7 @@ import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapD
 import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
 import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { TrailBoxCue } from './map/TrailBoxBadge';
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -786,7 +787,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       )}
       {location && (
         <View pointerEvents="none" style={[styles.centerOverlay, { opacity: focusedOnPlayer ? 1 : 0 }]}>
-          <View style={styles.centerShark}>{sharkArt(overlayStyles, overlayLive, focusedOnPlayer)}</View>
+          <View style={styles.centerShark}>{sharkArt(overlayStyles, overlayLive, focusedOnPlayer)}
+            {/* Trail Boxes: the walking box rides on the shark's back while it fills (ported from motion). */}
+            <TrailBoxCue live={focusedOnPlayer && screenFocused && !reducedMotion && !ambientFrozen} />
+          </View>
         </View>
       )}
     </View>

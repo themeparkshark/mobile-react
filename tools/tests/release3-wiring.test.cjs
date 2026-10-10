@@ -110,3 +110,15 @@ test('StreakFlame: own streak only from an enabled Daily 3 payload; friend rows,
     ['src/screens/ProfileScreen.tsx', /\{ownStreak && <StreakFlame /],
   ]) assert.match(fs.readFileSync(file, 'utf8'), re, file);
 });
+
+test('Trail Box cue on the map shark: off flag or no boxes = nothing; the soonest walking box drives tier and fill', () => {
+  const t = loadTs('src/components/map/mapTrail.ts');
+  const box = (id, tier, goal, prog) => ({ id, tier, status: 'walking', goal_steps: goal, progress_steps: prog });
+  assert.equal(t.mapTrailOf({ walking: [box(1, 'gold', 1000, 10)], ready: [] }, false), null);
+  assert.equal(t.mapTrailOf(null, true), null);
+  assert.deepEqual(plain(t.mapTrailOf({ walking: [], ready: [] }, true)), { walking: false, tier: null, progress: 0, readyCount: 0 });
+  const on = t.mapTrailOf({ walking: [box(1, 'gold', 4000, 1000), box(2, 'red', 1000, 500)], ready: [{}] }, true);
+  assert.deepEqual(plain(on), { walking: true, tier: 'red', progress: 0.5, readyCount: 1 });
+  const map = fs.readFileSync('src/components/Map.tsx', 'utf8');
+  assert.equal((map.match(/<TrailBoxCue /g) ?? []).length, 1, 'one badge, on the centered shark');
+});
