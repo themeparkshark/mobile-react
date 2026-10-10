@@ -194,6 +194,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     try { require('../screens/social/socialStore').resetSocialStore(); } catch { /* not loaded */ }
     // Secret Shop v2 can be on for one account only (the preview list).
     try { require('../services/secretShopFlag').resetSecretShopFlag(); } catch { /* not loaded */ }
+    try { require('../services/liveEvents/useLiveEvent').resetLiveEvent(); } catch { /* not loaded */ }
     hasInitialNavigated.current = false; // Allow navigation on next login
     // Standings boards (friends' photos included) never outlive the session.
     endStandingsSession();

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { openMembership } from './GrownUpGate';
 import StarterOfferCard from './money/StarterOfferCard';
 import { storeAvailable } from '../services/purchases';
@@ -44,6 +44,7 @@ import type { GameIconName } from '../ui/iconNames';
 import { milestoneHeadline, nextUnlockLine, partsProgress, rewardChips } from './rewards/postWinModel';
 import { adsAvailable, rewardText, watchForReward } from '../services/ads';
 import { hasWinNote, holdWinNotes, takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
+import StarRideStamp from './liveEvents/StarRideStamp';
 
 const { width: SW } = Dimensions.get('window');
 const HERO = 150;
@@ -79,6 +80,8 @@ interface Props {
   onClose: () => void;
   /** The won attempt, for the opt-in "double coins" offer. */
   attemptId?: number | null;
+  /** Shark Events: the won ride was today's Star Ride (a gold x2 stamp slams onto the card). */
+  starRide?: boolean;
 }
 
 /* ─── Ride Control: what this win did for your team at the ride ─── */
@@ -227,7 +230,10 @@ export default function PostWinRewardsModal({
   onHidden,
   onClose,
   attemptId = null,
+  starRide = false,
 }: Props) {
+  // Each time the card shows, the Star Ride stamp replays.
+  const starAt = useMemo(() => (visible ? Date.now() : 0), [visible]);
   const { player, refreshPlayer } = useContext(AuthContext);
   const afterHide = useRef<(() => void) | null>(null);
   useEffect(() => () => { afterHide.current = null; }, []);
@@ -485,6 +491,8 @@ export default function PostWinRewardsModal({
                 </Animated.View>}
                 {!parts.ready && !parts.maxed && <Text style={styles.partsHint}>{parts.hint}</Text>}
               </View>}
+
+              {starRide && visible && <View style={{ alignItems: 'center', marginVertical: 6 }}><StarRideStamp at={starAt} /></View>}
 
               {rideControl && <RideControlBanner result={rideControl} playerId={playerId ?? null}
                 onPickTeam={() => closeTo(() => RootNavigation.navigate('TeamSelection', {}))} />}

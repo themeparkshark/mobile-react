@@ -6,6 +6,7 @@ import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
+import { useStarRides } from '../services/liveEvents/useLiveEvent';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import {
@@ -103,6 +104,8 @@ export default function RedeemRedeemableModal({
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const { player, refreshPlayer } = useContext(AuthContext);
   const { location } = useContext(LocationContext);
+  // Shark Events: today's Star Rides at this park (empty while the event flag is off).
+  const starRides = useStarRides(park?.id ?? null);
   const progress = useRef(new Animated.Value(0)).current;
   const doubleXP = !!player?.is_subscribed;
   const doubleCoins = !!player?.is_subscribed;
@@ -926,6 +929,7 @@ export default function RedeemRedeemableModal({
           next?.();
         }}
         onClose={handlePostWinClose}
+        starRide={redeemable?.type === 'task' && starRides.has((redeemable.model as TaskType)?.id)}
         attemptId={attemptRef.current?.status === 'won' ? attemptRef.current.id : null}
       />
     </>

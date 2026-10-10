@@ -102,6 +102,8 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       // Money offers on reward sheets (money stream): no server multiplier, so the generic VIP line.
       if (/(^|\/)services\/money\/offers$/.test(name)) return { vipWinLine: () => null };
       if (/(^|\/)services\/money\/vipPerks$/.test(name)) return { warmVipPerks: async () => undefined, vipRideMultiplierNow: () => null };
+      // Shark Events: no event, no Star Rides (the flag is off on an old server).
+      if (/(^|\/)services\/liveEvents\/useLiveEvent$/.test(name)) return { useStarRides: () => new Set(), resetLiveEvent() {} };
       if (name.includes('assets/')) return name;
       return { default: name };
     },
