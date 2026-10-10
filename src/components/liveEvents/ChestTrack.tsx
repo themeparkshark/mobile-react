@@ -108,6 +108,6 @@ const styles = StyleSheet.create({
   badge: { position: 'absolute', top: 24, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: BRAND.white,
     borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   prize: { marginTop: -4 },
-  tick: { position: 'absolute', top: 0, fontFamily: 'Shark', fontSize: 15, color: BRAND.goldLip, zIndex: 3 },
+  tick: { position: 'absolute', top: -6, fontFamily: 'Shark', fontSize: 20, color: BRAND.goldLip, zIndex: 3, textShadowColor: BRAND.white, textShadowRadius: 3, textShadowOffset: { width: 0, height: 0 } },
   openTag: { fontFamily: 'Shark', fontSize: 13, color: BRAND.red, marginTop: -3 },
 });
