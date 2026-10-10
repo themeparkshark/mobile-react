@@ -19,7 +19,7 @@ export const FOLLOW_COPY = {
   north: 'Map stays still',
   away: 'Tap to find your shark',
   noCompass: 'No compass here',
-  hintTitle: 'Shark finder',
+  hintTitle: 'Map spin',
   hintBody: 'Tap me to stop the map spinning.',
   hintBodyNorth: 'Tap me to spin the map with you.',
 } as const;
@@ -36,8 +36,8 @@ export function shouldFlashPill(was: FollowButtonState, now: FollowButtonState):
 export function followButtonLabel(state: FollowButtonState): string {
   if (state === 'away') return 'Find your shark. The map follows you again.';
   return state === 'heading'
-    ? 'Shark finder: the map spins with you. Tap to keep it still, north up.'
-    : 'Shark finder: the map stays still, north up. Tap to spin it with you.';
+    ? 'Map spin: the map spins with you. Tap to keep it still, north up.'
+    : 'Map spin: the map stays still, north up. Tap to spin it with you.';
 }
 
 /**
@@ -54,13 +54,13 @@ function LocatorFace({ facing }: { readonly facing: boolean }) {
           <Path d="M22 24 L15 10.5 A13 13 0 0 1 29 10.5 Z" fill={BRAND.sky} />
         </>
       )}
-      <Circle cx={22} cy={28} r={11} fill={BRAND.white} stroke={BRAND.navy} strokeWidth={2.4} />
-      {/* The fin: hooked back like a shark's, gold with a lighter cel band, a navy outline, cutting a wave. */}
-      <Path d="M29 32 C28.5 25 24 19.5 15.5 17.5 C18.5 21.5 19.5 26.5 18.5 32 Z" fill={BRAND.gold} stroke={BRAND.navy} strokeWidth={2} strokeLinejoin="round" />
-      <Path d="M26.5 31 C26 26.5 23.5 22.5 19.5 20.3 C21 23.5 21.5 27 21 31 Z" fill={BRAND.goldLight} />
-      <Path d="M13 32.5 q2.25 -2 4.5 0 t4.5 0 t4.5 0 t4.5 0" fill="none" stroke={BRAND.navy} strokeWidth={2} strokeLinecap="round" />
+      <Circle cx={22} cy={28} r={12} fill={BRAND.white} stroke={BRAND.navy} strokeWidth={2.4} />
     </Svg>
   );
+}
+/** Your shark (Alex's Classic art) sits in the locator ring, so the button reads "where my shark is". */
+function LocatorShark() {
+  return <Image source={CLASSIC} style={styles.ringShark} contentFit="contain" transition={0} />;
 }
 
 /**
@@ -182,6 +182,7 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
           ) : (
             <>
               <LocatorFace facing={state === 'heading'} />
+              <LocatorShark />
               {/* The red north tick rides the rim and always points at north on the map. */}
               <Reanimated.View pointerEvents="none" style={[styles.northRing, roseStyle]}>
                 <Svg width={54} height={54} viewBox="0 0 54 54">
@@ -200,12 +201,10 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
                   <Circle cx={8} cy={10.5} r={1.3} fill={BRAND.navy} />
                 </Svg>
               ) : (
-                // Two curved arrows chasing each other: the map spins with you.
+                // A view cone: the map follows the way you face.
                 <Svg width={17} height={17} viewBox="0 0 17 17">
-                  <Path d="M3 7.2 A5.6 5.6 0 0 1 12.6 4" stroke={BRAND.white} strokeWidth={2.6} fill="none" strokeLinecap="round" />
-                  <Path d="M14.6 1.2 L14.8 6.4 L9.8 5.4 Z" fill={BRAND.white} stroke={BRAND.white} strokeWidth={1} strokeLinejoin="round" />
-                  <Path d="M14 9.8 A5.6 5.6 0 0 1 4.4 13" stroke={BRAND.white} strokeWidth={2.6} fill="none" strokeLinecap="round" />
-                  <Path d="M2.4 15.8 L2.2 10.6 L7.2 11.6 Z" fill={BRAND.white} stroke={BRAND.white} strokeWidth={1} strokeLinejoin="round" />
+                  <Path d="M8.5 13.5 L2.4 3.6 A9 9 0 0 1 14.6 3.6 Z" fill={BRAND.white} stroke={BRAND.white} strokeWidth={1.2} strokeLinejoin="round" />
+                  <Circle cx={8.5} cy={13.6} r={2.4} fill={BRAND.gold} stroke={BRAND.white} strokeWidth={1.2} />
                 </Svg>
               )}
             </Reanimated.View>
@@ -224,6 +223,8 @@ const styles = StyleSheet.create({
   north: { backgroundColor: BRAND.cream },
   away: { backgroundColor: BRAND.gold, borderBottomColor: BRAND.navy },
   ring: { position: 'absolute', left: 0, top: 0, width: 54, height: 54, borderRadius: 27, borderWidth: 4, borderColor: BRAND.gold },
+  // Centered on the ring (ring center at 22.5, 27.5 inside the border).
+  ringShark: { position: 'absolute', width: 26, height: 26, left: 9.5, top: 12.5 },
   northRing: { position: 'absolute', left: -4.5, top: -4.5, width: 54, height: 54 },
   gloss: { position: 'absolute', left: 8, top: 4, width: 22, height: 9, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.45)', transform: [{ rotate: '-18deg' }] },
   sharkBox: { width: 40, height: 40 },
