@@ -106,6 +106,9 @@ export interface BashState {
   /** Real hits since the last smash: the server's share rule needs 2 before every weak hit. */
   readonly bonksSince: number;
   readonly golds: number;
+  /** Sum and count of bonk reaction times (tap ms - pop-up ms), for the slow-player assist. */
+  readonly latSum?: number;
+  readonly latN?: number;
   /** First-time players: no gold tentacles yet (learn bonk / smash / puffer first). */
   readonly noGold?: boolean;
   readonly inks: number;
@@ -159,6 +162,12 @@ export function createBash(seed: number): BashState {
     power: 0, headStart: 0, dizzy: null, ouchUntil: -1, hits: 0, weak: 0, bonks: 0, smashes: 0, perfects: 0, ouches: 0,
     missedDizzy: 0, streak: 0, bestStreak: 0, capped: 0, ink: null, nextInkAt: INK_FIRST_MS, inkedUntil: -1, blocks: 0, inked: 0,
     splashUntil: -1, splashChain: 0, inks: 0, burst: 0, bonksSince: 0, golds: 0 };
+}
+
+/** Slow hands (average bonk reaction over ASSIST_MS after a few bonks): quietly help. Fast players never qualify. */
+export const ASSIST_MS = 650;
+export function needsAssist(state: Pick<BashState, 'latSum' | 'latN'>): boolean {
+  return (state.latN ?? 0) >= 4 && (state.latSum ?? 0) / (state.latN ?? 1) > ASSIST_MS;
 }
 
 /** Fins to fill for the next dizzy (the head start counts as a filled fin). */
@@ -268,7 +277,8 @@ export function tapPopup(state: BashState, id: number, ms: number, maxHits = Num
   const need = finsNeeded({ headStart: state.headStart, power: raw, bonksSince }, ms);
   const power = Math.min(need, raw);
   let s: BashState = { ...state, up, hits, bonks: state.bonks + 1, streak, bestStreak: Math.max(state.bestStreak, streak),
-    power, bonksSince, golds: state.golds + (popup.kind === 'gold' ? 1 : 0), capped: state.capped + (counted ? 0 : 1),
+    power, bonksSince, golds: state.golds + (popup.kind === 'gold' ? 1 : 0),
+    latSum: (state.latSum ?? 0) + Math.max(0, ms - popup.at), latN: (state.latN ?? 0) + 1, capped: state.capped + (counted ? 0 : 1),
     nextSpawnAt: Math.min(state.nextSpawnAt, ms + 60) };
   const events: BashEvent[] = [{ type: 'bonk', popup, damage: counted ? w.per_hit : 0, streak, power, need, counted }];
   if (power >= need && bonksSince >= MIN_BONKS) s = goDizzy(s, ms, events);
@@ -324,7 +334,8 @@ export function tapBoss(state: BashState, ms: number, maxHits = Number.POSITIVE_
   const band = perfectBand(ms);
   const perfect = p >= band[0] && p <= band[1];
   const damage = (counted ? w.per_hit : 0) + (weakOk ? w.per_weak_hit : 0);
-  const headStart = perfect ? 1 : 0;
+  // Assist: a player whose bonks land slowly (a young kid) gets the head-start fin on every smash, not just PERFECT.
+  const headStart = perfect || needsAssist(state) ? 1 : 0;
   const s: BashState = { ...state, hits, weak, dizzy: null, power: headStart, headStart, bonksSince: 0, smashes: state.smashes + 1,
     perfects: state.perfects + (perfect ? 1 : 0), capped: state.capped + (counted ? 0 : 1), nextSpawnAt: ms + 60, burst: 2 };
   return { state: s, events: [{ type: 'smash', damage, perfect, weak: weakOk, final: ms >= ROUND_MS - 3000 }] };

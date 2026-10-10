@@ -340,11 +340,12 @@ export const FinFly = memo(function FinFly({ x, y, toX, toY, delay, size, reduce
 });
 
 /** A one-shot sprite (impact star, splash, puff) that pops and fades. */
-export const Burst = memo(function Burst({ src, x, y, size, reduced, spin = false }: {
-  src: number; x: number; y: number; size: number; reduced: boolean; spin?: boolean;
+export const Burst = memo(function Burst({ src, x, y, size, reduced, spin = false, delay = 0 }: {
+  src: number; x: number; y: number; size: number; reduced: boolean; spin?: boolean; delay?: number;
 }) {
   const p = useSharedValue(0);
-  useEffect(() => { p.value = withTiming(1, { duration: reduced ? 200 : 360, easing: Easing.out(Easing.cubic) }); }, [p, reduced]);
+  // delay = hit-stop: the burst shows at its impact size and holds, then blooms.
+  useEffect(() => { p.value = withDelay(delay, withTiming(1, { duration: reduced ? 200 : 360, easing: Easing.out(Easing.cubic) })); }, [p, reduced, delay]);
   const style = useAnimatedStyle(() => ({ opacity: 1 - p.value * p.value,
     transform: [{ scale: reduced ? 1 : 0.4 + p.value * 0.9 }, { rotate: spin ? `${p.value * 40}deg` : '0deg' }] }));
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size }, style]}>

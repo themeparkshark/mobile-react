@@ -58,8 +58,8 @@ type Face = 'angry' | 'dizzy' | 'hurt' | 'laugh' | 'roar' | 'puff';
 type Fx =
   | { id: number; t: 'num'; text: string; x: number; y: number; big: boolean }
   | { id: number; t: 'fin'; x: number; y: number; toX: number; toY: number; delay: number }
-  | { id: number; t: 'burst'; src: number; x: number; y: number; size: number; spin?: boolean }
-  | { id: number; t: 'wm'; wm: WordmarkId }
+  | { id: number; t: 'burst'; src: number; x: number; y: number; size: number; spin?: boolean; delay?: number }
+  | { id: number; t: 'wm'; wm: WordmarkId; small?: boolean }
   | { id: number; t: 'bubble'; text: string; x: number; y: number; tone: 'white' | 'gold' | 'red' }
   | { id: number; t: 'ink'; x: number; y: number; size: number; rot: number }
   | { id: number; t: 'count'; text: string };
@@ -71,7 +71,8 @@ function wordRank(f: { t: string; wm?: string; text?: string }): number {
   if (f.t === 'count' || (f.t === 'wm' && f.wm === 'finish')) return 5;
   if (f.t === 'bubble' && f.text === 'BLOCK IT!') return 4;
   if (f.t === 'wm' && (f.wm === 'nice' || f.wm === 'great' || f.wm === 'superb')) return 1;
-  if ((f.t === 'wm' && f.wm === 'fury') || (f.t === 'bubble' && f.text === 'FASTER!')) return 2;
+  if (f.t === 'wm' && f.wm === 'knockout') return 6;
+  if ((f.t === 'wm' && f.wm === 'fury') || (f.t === 'bubble' && f.text === 'FASTER!')) return 4;
   return 3;
 }
 
@@ -263,7 +264,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     if (raf.current !== null) cancelAnimationFrame(raf.current);
     raf.current = null; playing.current = false; finished.current = false; played.current = 0;
     heldRef.current = false; goPending.current = false; perfectChain.current = 0; hpAtBell.current = null;
-    shownStage.current = 0; setHatGone(false); hatOff.value = 0;
+    shownStage.current = 0; setHatGone(false); hatOff.value = 0; koShown.current = false; hpNowRef.current = hpLeft;
     seedRef.current = (seedRef.current * 7919 + 17) % 1000003;
     engine.current = { ...createBash(seedRef.current), ...(warmStart ? { headStart: 1, power: 1 } : {}) };
     frameStats.current = { n: 0, slow: 0, worst: 0, sum: 0 };
@@ -355,7 +356,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     addFx({ t: 'burst', src: BASH_ART.impact, x: p.x, y: tipY, size: p.h * 0.55, spin: true }, 420);
     addFx({ t: 'burst', src: BASH_ART.splash, x: p.x, y: p.y - 18, size: p.h * 0.5 }, 420);
     const d = dealt();
-    addFx({ t: 'num', text: e.counted ? `+${d}` : 'MAX', x: p.x, y: tipY - 20, big: false }, 900);
+    addFx({ t: 'num', text: e.counted ? `+${d}` : 'MAX', x: p.x, y: tipY - 20, big: false }, 600);
     if (e.popup.kind === 'gold') {
       // Two fins fly from the gold tentacle into the fin row, each landing with its own coin pling (no words to read).
       const toY = L.h - 14 - 6 - finSize / 2;
@@ -387,7 +388,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     setPose('bonked'); later(OUCH_MS, () => setPose('idle'));
     setStunned(true); later(OUCH_MS, () => setStunned(false));
     flashFace('laugh', 900);
-    sfx('bo_feint_giggle', 'fx.nopeShort', { volume: 0.9 });
+    sfx('bo_feint_giggle', 'fx.purchaseCancel', { volume: 0.9 });
     haptic('failBuzz');
   };
 
@@ -429,25 +430,30 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     endDizzy();
     flashFace('hurt', 650);
     const x = L.head.x + flopSide * L.w * 0.13, y = L.head.y + L.dropBy;
+    // Hit-stop: the game clock and every motion hold on the impact frame, then everything lets go together.
+    const stop = reduced ? 0 : SMASH_STOP_MS;
     frozenUntil.current = Date.now() + SMASH_STOP_MS;
-    addFx({ t: 'burst', src: BASH_ART.impactGold, x, y, size: L.bossSize * 0.7, spin: true }, 500);
-    addFx({ t: 'num', text: `+${dealt()}`, x, y: y - 10, big: true }, 1300);
+    addFx({ t: 'burst', src: BASH_ART.impactGold, x, y, size: L.bossSize * 0.7, spin: true, delay: stop }, 500 + stop);
+    // Older numbers make room: at most the new big one and one more on screen.
+    setFx(list => { const nums = list.filter(f => f.t === 'num'); const keep = new Set(nums.slice(-1).map(f => f.id));
+      return list.filter(f => f.t !== 'num' || keep.has(f.id)); });
+    addFx({ t: 'num', text: `+${dealt()}`, x, y: y - 10, big: true }, 900);
     if (e.perfect) {
       perfectChain.current += 1;
       if (perfectChain.current === 1) addFx({ t: 'wm', wm: 'perfect' }, 900);
       else addFx({ t: 'bubble', text: `PERFECT x${perfectChain.current}`, x: L.w / 2, y: SKY_WORD_Y, tone: 'gold' }, 800);
     } else {
       perfectChain.current = 0;
-      addFx({ t: 'bubble', text: 'SMASH!', x: L.w / 2, y: SKY_WORD_Y, tone: 'white' }, 700);
+      addFx({ t: 'wm', wm: 'great', small: true }, 700);
     }
-    if (!reduced) {
+    if (!reduced) later(stop, () => {
       particles.current?.burst({ x, y, preset: 'burst', count: 16, colors: [BRAND.gold, BRAND.white, BRAND.goldLight], speed: 1.3 });
       shake.shake(e.perfect ? 10 : 7, 200);
       if (e.perfect) flash.flash(0.18, 120);
       cam.value = withSequence(withTiming(1.07, { duration: 60 }), withSpring(1, { damping: 10, stiffness: 180 }));
       bossHit.value = withSequence(withTiming(1, { duration: 30 }), withDelay(40, withTiming(0, { duration: 90 })));
       if (skin.hat) { hatPop.value = 0; hatPop.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.quad) }); }
-    }
+    });
     setPose('cheer'); later(900, () => setPose(cur => (cur === 'cheer' ? 'idle' : cur)));
     sfx('bo_crit', 'fx.coin', { pitch: e.perfect ? 7 : 2, volume: 1 });
     sfx('bo_kraken_slam', 'fx.firework', { volume: 0.8 });
@@ -496,11 +502,12 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     firstBlocked.current = true;
     endInkTell();
     const x = L.head.x, y = L.head.y + L.bossSize * 0.22;
-    addFx({ t: 'burst', src: BASH_ART.impactGold, x, y, size: L.bossSize * 0.5, spin: true }, 420);
+    frozenUntil.current = Date.now() + 40;
+    addFx({ t: 'burst', src: BASH_ART.impactGold, x, y, size: L.bossSize * 0.5, spin: true, delay: reduced ? 0 : 40 }, 460);
     addFx({ t: 'bubble', text: 'BLOCKED!', x, y: y + 40, tone: 'gold' }, 900);
     addFx({ t: 'num', text: e.counted ? `+${dealt()}` : 'MAX', x, y: y - 30, big: false }, 900);
     flashFace('hurt', 500);
-    if (!reduced) bossRise.value = withSequence(withTiming(0.08, { duration: 70 }), withSpring(0, { damping: 9 }));
+    if (!reduced) bossRise.value = withDelay(40, withSequence(withTiming(0.08, { duration: 70 }), withSpring(0, { damping: 9 })));
     sfx('bo_perfect_clang', 'ui.confirm', { volume: 1 });
     haptic('hitMedium');
   };
@@ -511,7 +518,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     const spots = [[0.25, 0.62], [0.68, 0.7], [0.45, 0.86]];
     spots.forEach(([fx0, fy0], i) => later(i * 70, () => addFx({ t: 'ink', x: L.w * fx0, y: L.h * fy0, size: L.w * 0.42, rot: (i - 1) * 20 }, INKED_MS)));
     if (!reduced) shake.shake(5, 160);
-    sfx('bo_feint_giggle', 'fx.nopeShort', { volume: 0.9 });
+    sfx('bo_feint_giggle', 'fx.nope', { volume: 0.9 });
     haptic('failBuzz');
   };
   const onSplash = (lane: number) => {
@@ -523,16 +530,44 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     flashFace('roar', 900);
     if (phase === 'angry') {
       if (!reduced) { shake.shake(6, 220); bossRise.value = withSequence(withTiming(-0.12, { duration: 120 }), withSpring(0, { damping: 9 })); haptic('hitMedium'); }
-      addFx({ t: 'bubble', text: 'FASTER!', x: L.w / 2, y: L.waterY - 30, tone: 'gold' }, 1000);
+      addFx({ t: 'wm', wm: 'fury' }, 1000);
+      if (reduced) haptic('warning');
       sfx('bo_phase_kraken', 'fx.whoosh', { volume: 0.9 });
     } else if (phase === 'fury') {
       addFx({ t: 'wm', wm: 'fury' }, 1100);
       fury.value = withTiming(1, { duration: 500 });
       if (!reduced) shake.shake(8, 260);
-      sfx('bo_phase_up', 'fx.reveal', { volume: 1 });
+      sfx('bo_phase_up', 'fx.redeemOpen', { volume: 1 });
       haptic('warning');
     }
   };
+
+  // --- Live knockout: the moment the raid HP hits 0 in your round is the biggest beat of the fight ---------
+  const koShown = useRef(false);
+  const hpNowLive = Math.max(0, hpLeft - (capLeft === undefined ? hud.damage : Math.min(hud.damage, capLeft)));
+  const teamHitRef = useRef<number | null>(null); teamHitRef.current = teamHit;
+  const hpNowRef = useRef(hpLeft);
+  useEffect(() => {
+    const before = hpNowRef.current; hpNowRef.current = hpNowLive;
+    if (koShown.current || !visible || !playing.current || finished.current || hpNowLive > 0 || before <= 0) return;
+    koShown.current = true;
+    const mine = teamHitRef.current === null;
+    frozenUntil.current = Date.now() + 150;
+    endDizzy(); endInkTell(); setHint('none');
+    setFx(list => list.filter(f => f.t === 'num'));
+    setFace('dizzy');
+    addFx({ t: 'wm', wm: 'knockout' }, 1300);
+    if (mine) later(250, () => addFx({ t: 'bubble', text: 'YOU FINISHED IT!', x: L.w / 2, y: L.waterY - 40, tone: 'gold' }, 1100));
+    if (!reduced) {
+      flash.flash(0.25, 160);
+      later(150, () => { shake.shake(12, 280); particles.current?.burst({ x: L.head.x, y: L.head.y + L.dropBy * 0.3, preset: 'burst', count: 28, colors: [BRAND.gold, BRAND.white, BRAND.goldLight], speed: 1.6 }); });
+    }
+    sfx('bo_ko_kraken', 'fx.reward', { volume: 1 });
+    haptic('comboHeavy'); later(160, () => haptic('success'));
+    // The server needs a 12 s round: a knockout earlier than that ends the round at 12.5 s.
+    later(Math.max(reduced ? 600 : 1300, 12_500 - played.current), () => finishRef.current());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hpNowLive, visible]);
 
   // --- Raid stages: the boss looks worse as the team wears it down (announced once, with sound) ------
   const [hatGone, setHatGone] = useState(false);
@@ -600,7 +635,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       addFx({ t: 'burst', src: BASH_ART.splash, x: L.w / 2, y: L.waterY + 10, size: L.w * 0.5 }, 500);
       sfx('bo_kraken_slam', 'fx.whoosh', { volume: 0.8 });
     });
-    sfx('bo_ko_kraken', 'fx.reveal', { volume: 0.9 });
+    sfx('bo_ko_kraken', 'fx.reward', { volume: 0.9 });
     haptic('success');
     const built = buildResult(s);
     onActiveChange?.(false);
@@ -892,10 +927,10 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           {/* Effects (one message on the boss at a time: no gold badge while PERFECT shows). */}
           {fx.map(f => f.t === 'num' ? <DamageNumber key={f.id} text={f.text} x={f.x} y={f.y} big={f.big} badge={!perfectShowing} toX={scoreTarget.x} toY={scoreTarget.y} reduced={reduced} />
             : f.t === 'fin' ? <FinFly key={f.id} x={f.x} y={f.y} toX={f.toX} toY={f.toY} delay={f.delay} size={finSize} reduced={reduced} />
-            : f.t === 'burst' ? (reduced ? null : <Burst key={f.id} src={f.src} x={f.x} y={f.y} size={f.size} spin={f.spin} reduced={reduced} />)
+            : f.t === 'burst' ? (reduced ? null : <Burst key={f.id} src={f.src} x={f.x} y={f.y} size={f.size} spin={f.spin} delay={f.delay} reduced={reduced} />)
               : f.t === 'wm' ? <Wordmark key={f.id} id={f.wm} x={L.w / 2}
                 y={streakWord.current === f.id ? L.h - 104 : SKY_WORD_Y + 12}
-                width={streakWord.current === f.id ? L.w * 0.34 : L.w * 0.56} reduced={reduced} />
+                width={streakWord.current === f.id ? L.w * 0.34 : f.small ? L.w * 0.4 : L.w * 0.56} reduced={reduced} />
                 : f.t === 'ink' ? <InkSplat key={f.id} x={f.x} y={f.y} size={f.size} rot={f.rot} life={INKED_MS} reduced={reduced} />
                   : f.t === 'count' ? <CountBeat key={f.id} text={f.text} x={L.w - 58} y={L.h * 0.2} reduced={reduced} />
                     : <Bubble key={f.id} text={f.text} tone={f.tone} reduced={reduced}
@@ -1111,7 +1146,8 @@ const BossFigure = memo(function BossFigure({ left, top, size, flopped, bossStyl
   if (curFace.current !== shownFace) { prevFace.current = curFace.current; curFace.current = shownFace; }
   return <View pointerEvents="none" style={{ position: 'absolute', left, top, width: size, height: size, zIndex: flopped ? 3 : 1 }}>
     <Animated.View style={[StyleSheet.absoluteFill, bossStyle]}>
-      {faces.filter(([id]) => id === shownFace || id === prevFace.current || id === 'angry').map(([id, src]) => <FaceFrame key={id} src={src} on={id === shownFace} max={skin.ghostly ? 0.92 : 1} reduced={reduced} />)}
+      {faces.filter(([id]) => id === shownFace || id === prevFace.current || id === 'angry').map(([id, src]) => <FaceFrame key={id} src={src} on={id === shownFace} max={skin.ghostly ? 0.92 : 1}
+        reduced={reduced || shownFace === 'dizzy' || prevFace.current === 'dizzy'} />)}
       {skin.hat && !hatGone && <Animated.View style={[{ position: 'absolute', left: size * 0.22, top: -size * 0.02,
         width: size * 0.56, height: size * 0.42 }, hatStyle, hatOffStyle]}>
         <Image source={BASH_ART.hat} style={StyleSheet.absoluteFill} contentFit="contain" />
@@ -1121,7 +1157,8 @@ const BossFigure = memo(function BossFigure({ left, top, size, flopped, bossStyl
   </View>;
 });
 
-/** One face frame; swaps cross-fade over 70 ms with a tiny squash on the incoming face (instant under Reduce Motion). */
+/** One face frame; swaps cross-fade over 70 ms with a tiny squash on the incoming face. Instant (a hard cut, never two
+ * see-through bosses) under Reduce Motion and on the dizzy flop / get-up, where the burst hides the cut. */
 const FaceFrame = memo(function FaceFrame({ src, on, max, reduced }: { src: number; on: boolean; max: number; reduced: boolean }) {
   const v = useSharedValue(on ? 1 : 0);
   useEffect(() => { v.value = reduced ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: 70 }); }, [on, reduced, v]);
