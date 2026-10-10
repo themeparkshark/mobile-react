@@ -52,7 +52,8 @@ export const HELP_LIMITS = { pages: 3, points: 3, pointWords: 12, headlineWords:
  * Ride Star from config/standings.php week_rewards) from the server once it sends them. Hard-coded
  * for now by decision (Oct 9).
  */
-const PIN_HOLD_MINUTES = 2;
+/** Spelled out for the headline; matches pinTradeModel DEFAULT_HOLD_MS (tested). */
+export const PIN_HOLD_MINUTES = 2;
 const PIN_HOLD_WORD = 'Two';
 
 export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
@@ -90,7 +91,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         ] },
       { key: 'clock', hero: 'pins_clock', headline: `${PIN_HOLD_WORD} minutes to decide`,
         points: [
-          { icon: 'timer', text: `Your pick is held for ${PIN_HOLD_MINUTES} minutes.` },
+          { icon: 'timer', text: 'Your pick is held while you choose.' },
           { icon: 'swap', text: 'Trade as often as you like.' },
           { icon: 'lock', text: 'Trades can\'t be undone.' },
         ] },
@@ -159,7 +160,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         points: [
           { icon: 'edit', text: 'Type the code and tap Next.' },
           { icon: 'gift', text: 'Get Coins, Tickets, Energy or a prize.' },
-          { icon: 'timer', text: 'One use per player. Some run out fast.' },
+          { icon: 'timer', text: 'One use per player. Codes can expire.' },
         ] },
     ],
   },

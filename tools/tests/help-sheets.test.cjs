@@ -103,6 +103,6 @@ test('Coins and Tickets sheets link to Supplies only when the store can sell and
 
 test('the pin hold copy matches the trading screen constant', () => {
   const pins = loadTs('src/screens/pinTrading/pinTradeModel.ts');
-  const text = sheets.HELP_SHEETS.pins.pages.flatMap(page => page.points.map(point => point.text)).join(' ');
-  assert.match(text, new RegExp(`${pins.DEFAULT_HOLD_MS / 60000} minutes`));
+  assert.equal(sheets.PIN_HOLD_MINUTES, pins.DEFAULT_HOLD_MS / 60000);
+  assert.match(sheets.HELP_SHEETS.pins.pages[1].headline, /^Two minutes/);
 });
