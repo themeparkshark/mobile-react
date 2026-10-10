@@ -30,6 +30,12 @@ export function joinCost(raid: Pick<BossRaid, 'energy_cost' | 'remote'>, remote:
   return { energy: cost, ticket, energyAfter: Math.max(0, energy - cost), ticketsAfter: Math.max(0, tickets - ticket), short };
 }
 
+/** The cost in plain words for the join card: "Costs 1 Ticket + 10 Energy · You'll have 24 left" (Energy left). */
+export function costWords(cost: Pick<JoinCost, 'energy' | 'ticket' | 'energyAfter'>): string {
+  const t = cost.ticket > 0 ? `${cost.ticket} ${cost.ticket === 1 ? 'Ticket' : 'Tickets'} + ` : '';
+  return `Costs ${t}${cost.energy} Energy \u00b7 You'll have ${cost.energyAfter} left`;
+}
+
 /** What this player gets if the team wins: home-only fighters get the remote rate and no Ride Parts. */
 export function rewardPreview(raid: Pick<BossRaid, 'remote' | 'you'> & { rewards?: Partial<RewardPreview> | null }, remote: boolean): RewardPreview {
   const base = { ...DEFAULT_WIN_REWARDS, ...(raid.rewards ?? {}) };

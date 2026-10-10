@@ -24,7 +24,7 @@ import { usePowerBudget } from '../../power';
 /** Hand-drawn house (Codex, Alex style): playing from home. */
 const HOUSE = require('../../assets/games/boss/bash/house.webp');
 import { BossHpBar } from './BossSheetParts';
-import { joinCost, joinLabel, minutesLeft, type RewardPreview } from './joinModel';
+import { costWords, joinCost, joinLabel, minutesLeft, type RewardPreview } from './joinModel';
 
 export function Wallet({ energy, tickets, showTickets, short }: {
   energy: number; tickets: number; showTickets: boolean; short: 'energy' | 'ticket' | null;
@@ -189,12 +189,10 @@ export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, 
         </View>}
       </>
       : blocked ? <Text style={styles.blocked} maxFontSizeMultiplier={1.3}>{blocked}</Text>
-        : <View style={styles.afterRow} accessible accessibilityLabel={`After this attack you will have ${cost.energyAfter} Energy. Attack ${raid.you.attacks + 1} of ${raid.max_attacks ?? 5}.`}>
-          <Text style={styles.after} maxFontSizeMultiplier={1.3}>After</Text>
-          <GameIcon name="energy" size={18} /><Text style={styles.afterNum} maxFontSizeMultiplier={1.3}>{cost.energyAfter}</Text>
-          {cost.ticket > 0 && <><GameIcon name="ticket" size={18} /><Text style={styles.afterNum} maxFontSizeMultiplier={1.3}>{cost.ticketsAfter}</Text></>}
-          {remote && raid.remote.joined && <><GameIcon name="ticket" size={18} /><Text style={styles.after} maxFontSizeMultiplier={1.3}>paid</Text></>}
-          {raid.you.attacks > 0 && <Text style={styles.after} maxFontSizeMultiplier={1.3}>  ·  Attack {raid.you.attacks + 1} of {raid.max_attacks ?? 5}</Text>}
+        : <View style={styles.afterRow} accessible accessibilityLabel={`${costWords(cost).replace(' \u00b7 ', '. ').replace(' + ', ' and ').replace(' left', ' Energy left')}.${remote && raid.remote.joined ? ' Your Ticket is paid.' : ''} Attack ${raid.you.attacks + 1} of ${raid.max_attacks ?? 5}.`}>
+          <Text style={styles.after} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.3}>{costWords(cost)}</Text>
+          {(raid.you.attacks > 0 || (remote && raid.remote.joined)) && <Text style={styles.after} maxFontSizeMultiplier={1.3}>
+            {[remote && raid.remote.joined ? 'Ticket paid' : '', raid.you.attacks > 0 ? `Attack ${raid.you.attacks + 1} of ${raid.max_attacks ?? 5}` : ''].filter(Boolean).join('  \u00b7  ')}</Text>}
         </View>}
       <Pressable accessibilityRole="button" onPress={onClose} style={styles.notNow} hitSlop={6}>
         <Text style={styles.notNowText} maxFontSizeMultiplier={1.3}>Not now</Text></Pressable>
@@ -289,10 +287,8 @@ const styles = StyleSheet.create({
   costNum: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy },
   plus: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navySoft, marginHorizontal: 3 },
   blocked: { marginTop: 8, fontFamily: 'Shark', fontSize: 16, color: BRAND.white, textAlign: 'center' },
-  afterRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 },
+  afterRow: { marginTop: 8, alignItems: 'center', gap: 2 },
   after: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
-  afterNum: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, backgroundColor: BRAND.cream, borderRadius: 8, paddingHorizontal: 5,
-    overflow: 'hidden', marginRight: 4 },
   howBtn: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: BRAND.cream, borderRadius: 16,
     borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 12, paddingVertical: 6, minHeight: 44 },
   howText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },

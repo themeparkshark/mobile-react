@@ -26,3 +26,8 @@ test('home-only fighters see the home rate and no Ride Parts; one in-person hit 
   assert.deepEqual({...j.rewardPreview(raid({you:{log:[{damage:5,remote:false}]}}),true)},{coins:50,xp:100,energy:20,parts:2});
   assert.deepEqual({...j.rewardPreview(raid({rewards:{coins:80,xp:150,energy:25,parts:3}}),true)},{coins:48,xp:90,energy:25,parts:0});
 });
+test('the join card says the cost in words, singular and plural right', ()=>{
+  assert.equal(j.costWords(j.joinCost(raid(),true,34,2)),"Costs 1 Ticket + 10 Energy · You'll have 24 left");
+  assert.equal(j.costWords(j.joinCost(raid({remote:{joined:false,ticket_cost:2,damage_rate:0.6}}),true,34,2)),"Costs 2 Tickets + 10 Energy · You'll have 24 left");
+  assert.equal(j.costWords(j.joinCost(raid(),false,10,0)),"Costs 10 Energy · You'll have 0 left");
+});
