@@ -97,12 +97,12 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
           style={({ pressed }) => [st.lip, pressed && st.lipPressed]}>
           <View style={st.card}>
             <View style={st.artWell}><PackArt art={packArtKey(pack, Math.max(0, tier))} size={58} /></View>
-            <View style={{ flex: 1, paddingVertical: 8 }}>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={st.packName} numberOfLines={1}>
+            <View style={{ flex: 1, minWidth: 0, paddingVertical: 8 }}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.packName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>
                 {pack.section === 'featured' ? pack.title : `${amount.toLocaleString('en-US')} ${unitWord(kind, amount)}`}
               </Text>
               {pack.section === 'featured' && (
-                <Text maxFontSizeMultiplier={MAX_FONT} style={st.packSub} numberOfLines={1}>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={st.packSub} numberOfLines={2}>
                   {`${amount.toLocaleString('en-US')} ${unitWord(kind, amount)} and more`}
                 </Text>
               )}
@@ -139,7 +139,7 @@ const st = StyleSheet.create({
   artWell: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center' },
   packName: { fontFamily: FONT.display, fontSize: 19, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   packSub: { fontFamily: FONT.body, fontSize: 13, color: '#e2f6ff' },
-  priceCol: { width: 112, alignSelf: 'stretch', justifyContent: 'center' },
+  priceCol: { width: 104, alignSelf: 'stretch', justifyContent: 'center' },
   free: { fontFamily: FONT.body, fontSize: 14, color: BRAND.navySoft, textAlign: 'center' },
   more: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 32 },
   moreText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy },
