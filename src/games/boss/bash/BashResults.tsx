@@ -6,12 +6,13 @@
 import { Image } from 'expo-image';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { BossId } from '../../../api/endpoints/parks/raid';
 import { BOSS_ART } from '../../../components/boss/bossArt';
 import { CountUpText, haptic, type ShellResultsArgs } from '../../../gamekit';
 import { GameAudio } from '../../../gamekit/audio/GameAudio';
+import { ParticleField, type ParticleHandle } from '../../../gamekit/Particles';
 import { BRAND } from '../../../ui/tokens';
 import GameIcon from '../../../ui/GameIcon';
 import { BASH_ART } from './art';
@@ -150,13 +151,13 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       </View>
 
       {rewards && <View style={styles.loot} accessible accessibilityLabel={`If your team beats it you get ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`}>
-        {won && <ChestPop />}
+        {won && <ChestPop reduced={reduced} />}
         <Text style={styles.lootTitle}>{won ? 'Your loot is on the way' : 'Team wins, you get'}</Text>
         <View style={styles.lootRow}>
-          <Loot icon="coins" n={rewards.coins} />
-          <Loot icon="xp" n={rewards.xp} />
-          <Loot icon="energy" n={rewards.energy} />
-          {rewards.parts > 0 && <Loot icon="parts" n={rewards.parts} />}
+          <Loot icon="coins" n={rewards.coins} count={won} reduced={reduced} />
+          <Loot icon="xp" n={rewards.xp} count={won} reduced={reduced} />
+          <Loot icon="energy" n={rewards.energy} count={won} reduced={reduced} />
+          {rewards.parts > 0 && <Loot icon="parts" n={rewards.parts} count={won} reduced={reduced} />}
         </View>
       </View>}
 
@@ -195,9 +196,12 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   );
 }
 
-function Loot({ icon, n }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: number }) {
+function Loot({ icon, n, count = false, reduced = false }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: number; count?: boolean; reduced?: boolean }) {
   const word = icon === 'xp' ? ' XP' : icon === 'parts' ? ' Parts' : '';
-  return <View style={styles.lootItem}><GameIcon name={icon} size={26} /><Text style={styles.lootNum}>{n}{word}</Text></View>;
+  // Team win: the loot counts up after the chest opens.
+  return <View style={styles.lootItem}><GameIcon name={icon} size={26} />
+    {count ? <CountUpText value={n} delayMs={reduced ? 0 : 1000} durationMs={reduced ? 1 : 650} suffix={word} reducedMotion={reduced} style={styles.lootNum} />
+      : <Text style={styles.lootNum}>{n}{word}</Text>}</View>;
 }
 function Chip({ label, value }: { label: string; value: number | string }) {
   return <View style={styles.chip}><Text style={styles.chipNum}>{value}</Text><Text style={styles.chipLabel}>{label}</Text></View>;
@@ -258,17 +262,28 @@ const styles = StyleSheet.create({
 });
 
 /** Team win: the loot chest pops open over the loot row (a reason to come back to the next raid). */
-function ChestPop() {
+function ChestPop({ reduced }: { reduced: boolean }) {
   const v = useSharedValue(0);
+  const confetti = useRef<ParticleHandle>(null);
+  const { width: W, height: H } = useWindowDimensions();
   useEffect(() => {
     v.value = withDelay(700, withSpring(1, { damping: 6, stiffness: 220 }));
-    const t = setTimeout(() => { GameAudio.play('fx.coin', { volume: 1, pitch: 7 }); haptic('success'); }, 760);
-    return () => clearTimeout(t);
-  }, [v]);
+    const t = setTimeout(() => {
+      GameAudio.play('fx.coin', { volume: 1, pitch: 7 }); haptic('success');
+      if (!reduced) confetti.current?.burst({ x: W * 0.5, y: H * 0.35, preset: 'confetti', count: 60 });
+    }, 760);
+    const t2 = setTimeout(() => { GameAudio.play('fx.coin', { volume: 0.9, pitch: 10 }); haptic('tapLight'); }, 1250);
+    return () => { clearTimeout(t); clearTimeout(t2); };
+  }, [v, reduced, W, H]);
   const style = useAnimatedStyle(() => ({ opacity: v.value > 0.02 ? 1 : 0, transform: [{ scale: v.value }, { rotate: `${(1 - v.value) * -20}deg` }] }));
-  return <Animated.View style={[styles.chest, style]} pointerEvents="none">
-    <Image source={CHEST_OPEN} style={StyleSheet.absoluteFill} contentFit="contain" />
-  </Animated.View>;
+  return <>
+    <Animated.View style={[styles.chest, style]} pointerEvents="none">
+      <Image source={CHEST_OPEN} style={StyleSheet.absoluteFill} contentFit="contain" />
+    </Animated.View>
+    {!reduced && <View pointerEvents="none" style={{ position: 'absolute', left: -1000, top: -1000, width: 0, height: 0 }}>
+      <ParticleField ref={confetti} width={W} height={H} style={{ position: 'absolute', left: 1000, top: 1000 }} />
+    </View>}
+  </>;
 }
 
 /** Team win: the emptied HP bar flashes white twice once it has drained. */

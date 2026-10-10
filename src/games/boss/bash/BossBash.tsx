@@ -789,6 +789,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const wanted: Face = face === 'angry' ? idle : face;
   const shownFace: Face = faces.some(f => f[0] === wanted) ? wanted : 'angry';
   const sharkSrc = BASH_ART.shark[pose];
+  // The raid clock (not the round clock) in the header: how long the team has left to beat it.
+  const raidMinutes = endsAt ? Math.max(0, Math.ceil((Date.parse(endsAt) - Date.now()) / 60000)) : 0;
   // One message on the boss at a time: while any word or bubble shows, damage numbers are plain (no badge).
   const perfectShowing = fx.some(f => f.t === 'wm' || f.t === 'bubble');
   const finSize = Math.min(54, L.w * 0.13);
@@ -806,7 +808,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       ref={shellRef}
       visible={visible}
       title="Boss Fight"
-      subtitle={rideName ? `${bossName} at ${rideName}` : bossName}
+      subtitle={`${rideName ? `${bossName} at ${rideName}` : bossName}${raidMinutes ? `  ·  ${raidMinutes} min left` : ''}`}
       score={hud.damage}
       result={result}
       starMultipliers={{ 0: 0, 1: 1, 2: 1, 3: 1 }}
@@ -971,12 +973,6 @@ function IntroCard({ phase, firstTime, skin, limbWord, reduced, onGo }: {
             <Image source={skin.puff ?? skin.roar ?? skin.body} style={{ width: 34, height: 34 }} contentFit="contain" />
             <Image source={BASH_ART.tapHand} style={{ width: 20, height: 26, marginLeft: -12, marginTop: 10 }} contentFit="contain" />
             <Text style={styles.inkText} maxFontSizeMultiplier={1.2}>Puffs up? Tap it!</Text>
-          </View>
-          <View style={styles.inkTip}>
-            <Image source={skin.goldLimb ?? skin.limb} style={{ width: 16, height: 36 }} contentFit="contain" tintColor={skin.goldLimb ? undefined : BRAND.gold} />
-            <Image source={BASH_ART.finFull} style={{ width: 18, height: 18 }} contentFit="contain" />
-            <Image source={BASH_ART.finFull} style={{ width: 18, height: 18, marginLeft: -6 }} contentFit="contain" />
-            <Text style={styles.inkText} maxFontSizeMultiplier={1.2}>Gold = 2 fins!</Text>
           </View>
         </View>
         <View style={[styles.goBtn, !firstTime && styles.goBtnQuiet]}>
