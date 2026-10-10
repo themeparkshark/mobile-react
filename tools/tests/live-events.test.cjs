@@ -55,7 +55,7 @@ test('chipState: chest ready beats Frenzy beats progress; upcoming says when', (
 
 test('time words are clock times or days, never a ticking countdown', () => {
   const live = ev({});
-  assert.match(m.timeLine(live, NOW), /^Ends (Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)$/);
+  assert.match(m.timeLine(live, NOW), /^Ends (Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d{1,2}(:\d\d)? (AM|PM)$/);
   const soon = { ...live, ends_at: new Date(NOW + 3 * 3600_000).toISOString() };
   assert.match(m.timeLine(soon, NOW), /^Ends \d{1,2}(:\d\d)? (AM|PM)$/);
   assert.equal(m.timeLine(ev({ phase: 'ended' }), NOW), 'Open your chests');

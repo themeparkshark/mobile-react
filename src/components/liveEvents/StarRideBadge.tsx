@@ -38,5 +38,5 @@ export default memo(StarRideBadge);
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center' },
   tag: { marginTop: -5, backgroundColor: BRAND.navy, borderRadius: 7, borderWidth: 1.5, borderColor: BRAND.white, paddingHorizontal: 4, paddingVertical: 0 },
-  tagText: { fontFamily: 'Shark', fontSize: 10, color: BRAND.navy },
+  tagText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy },
 });

@@ -45,7 +45,7 @@ export function timeLine(event: LiveEvent, now: number): string {
   if (event.phase === 'ended') return 'Open your chests';
   const left = Date.parse(event.ends_at) - now;
   if (left < DAY_MS) return `Ends ${clockTime(event.ends_at)}`;
-  if (left < 6 * DAY_MS) return `Ends ${weekday(event.ends_at)}`;
+  if (left < 6 * DAY_MS) return `Ends ${weekday(event.ends_at).slice(0, 3)} ${clockTime(event.ends_at)}`;
   return `Ends ${new Date(event.ends_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 }
 

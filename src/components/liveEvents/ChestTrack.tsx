@@ -75,6 +75,7 @@ function ChestTrack({ chests, value, art, onOpen, onPeek, opening, label, paused
             {done && <View style={styles.badge}><GameIcon name="check" size={14} /></View>}
             {locked && <View style={styles.badge}><GameIcon name="lock" size={14} /></View>}
             {ready && <Text style={styles.openTag}>OPEN!</Text>}
+            {!ready && !done && <View style={styles.prize}><GameIcon name={chest.reward.item ? 'gift' : chest.reward.tickets ? 'ticket' : 'coin'} size={15} /></View>}
           </Pressable>
         );
       })}
@@ -90,9 +91,10 @@ const styles = StyleSheet.create({
   fill: { width: '100%', height: '100%', backgroundColor: BRAND.gold, transformOrigin: 'left center' },
   chestSlot: { position: 'absolute', top: 2, width: CHEST, height: CHEST + 18, marginLeft: -CHEST / 2, alignItems: 'center' },
   chest: { width: CHEST, height: CHEST },
-  locked: { opacity: 0.55 },
+  locked: {},
   dot: { position: 'absolute', top: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: BRAND.red, borderWidth: 2, borderColor: BRAND.white },
   badge: { position: 'absolute', top: 24, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: BRAND.white,
     borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  prize: { marginTop: -2 },
   openTag: { fontFamily: 'Shark', fontSize: 13, color: BRAND.red, marginTop: -3 },
 });

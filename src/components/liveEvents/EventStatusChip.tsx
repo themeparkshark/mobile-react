@@ -66,7 +66,7 @@ function EventStatusChip({ event, onPress, inline = false, paused = false, now =
         {s.kind === 'upcoming' && <Text style={styles.sub} numberOfLines={1}>{s.line}</Text>}
       </View>
       {/* No OPEN button here: the what-now rail owns the one action; the chip says what's ready. */}
-      <GameIcon name="arrow" size={18} />
+      {s.kind !== 'open' && <GameIcon name="arrow" size={18} />}
     </Pressable>
   );
 }
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   pressed: { transform: [{ scale: 0.97 }] },
   emblem: { width: 42, height: 42 },
   body: { flex: 1, minWidth: 0 },
-  title: { fontFamily: 'Shark', fontSize: 12, letterSpacing: 0.3, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
+  title: { fontFamily: 'Shark', fontSize: 13, letterSpacing: 0.3, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
   sub: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white },
   ends: { fontFamily: 'Knockout', fontSize: 12, color: '#e4f7ff' },
   dot: { position: 'absolute', top: 0, right: -2, width: 13, height: 13, borderRadius: 7, backgroundColor: BRAND.red, borderWidth: 2, borderColor: BRAND.white },

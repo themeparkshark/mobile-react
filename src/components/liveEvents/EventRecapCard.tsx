@@ -95,6 +95,6 @@ const styles = StyleSheet.create({
   button: { marginTop: 16, alignSelf: 'stretch', alignItems: 'center', backgroundColor: BRAND.gold, borderRadius: 18, borderWidth: 3, borderColor: BRAND.white,
     borderBottomWidth: 6, borderBottomColor: BRAND.goldLip, paddingVertical: 10, minHeight: 52 },
   buttonText: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy },
-  later: { marginTop: 8, minHeight: 36, justifyContent: 'center' },
+  later: { marginTop: 8, minHeight: 44, justifyContent: 'center' },
   laterText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft, textDecorationLine: 'underline' },
 });

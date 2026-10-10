@@ -1,8 +1,8 @@
 import { memo } from 'react';
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { LiveEvent } from '../../api/endpoints/live-events';
-import { chipState } from '../../services/liveEvents/model';
+import { chipState, goalWord } from '../../services/liveEvents/model';
 import { BRAND } from '../../ui';
 import { eventArt } from './eventArt';
 
@@ -17,7 +17,8 @@ function EventHomeChip({ event, onPress, now = Date.now() }: { readonly event: L
   return (
     <Pressable accessibilityRole="button" onPress={onPress} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }} style={styles.chip}
       accessibilityLabel={s.kind === 'open' ? `${event.title}: a chest is ready. Open.` : `${event.title}. Open event.`}>
-      <Image source={art.emblem} style={styles.emblem} contentFit="contain" />
+      <Image source={s.kind === 'open' ? art.chestOpen : art.chestClosed} style={styles.emblem} contentFit="contain" />
+      <Text style={styles.word}>{s.kind === 'open' ? 'Open!' : goalWord(event).replace(/^./, c => c.toUpperCase())}</Text>
       {s.kind === 'progress' && <View style={styles.bar}><View style={[styles.fill, { width: `${Math.max(6, s.fill * 100)}%` }]} /></View>}
       {s.kind === 'open' && <View style={styles.dot} />}
     </Pressable>
@@ -33,5 +34,6 @@ const styles = StyleSheet.create({
   emblem: { width: 30, height: 30 },
   bar: { width: 34, height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.55)', borderWidth: 1.5, borderColor: BRAND.white, overflow: 'hidden' },
   fill: { height: '100%', backgroundColor: BRAND.gold },
+  word: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white },
   dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: BRAND.red, borderWidth: 2, borderColor: BRAND.white },
 });

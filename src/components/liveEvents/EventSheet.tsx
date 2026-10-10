@@ -8,7 +8,7 @@ import type { EventChest, EventReward, LiveEvent, TeamKey } from '../../api/endp
 import { TEAMS, TEAM_ORDER } from '../../constants/teams';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
-import { clockTime, frenzyLine, goalWord, nextStepHint, ordinal, rewardChips, starTimes, teamPlace, timeLine } from '../../services/liveEvents/model';
+import { clockTime, frenzyLine, goalWord, openableKeys, nextStepHint, ordinal, rewardChips, starTimes, teamPlace, timeLine } from '../../services/liveEvents/model';
 import { useOpenChest } from '../../services/liveEvents/useLiveEvent';
 import { BRAND, GameIcon } from '../../ui';
 import ChestReveal from './ChestReveal';
@@ -175,7 +175,7 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
   const live = event.phase === 'live';
   const showStars = atPark && event.here && live && event.star_rides.length > 0;
   const firstStar = showStarsFor(event, atPark, live) ? event.star_rides[0] : null;
-  const readyCount = event.me.chests.filter(c => c.claimable).length + together.chests.filter(c => c.claimable).length + (event.team_race?.claimable ? 1 : 0);
+  const readyCount = openableKeys(event).length; // the one count every surface uses
   const doNow: { icon: 'chest' | 'star' | 'ride' | 'coin'; text: string; go?: () => void } | null = readyCount > 0
     ? { icon: 'chest', text: readyCount === 1 ? 'Open your chest below' : `Open ${readyCount} chests below` }
     : !live ? null
@@ -312,10 +312,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: BRAND.blue, paddingHorizontal: 14, paddingVertical: 10,
     borderBottomWidth: 3, borderBottomColor: BRAND.navy },
   headerEmblem: { width: 72, height: 72, marginVertical: -6 },
-  title: { fontFamily: 'Shark', fontSize: 26, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  title: { fontFamily: 'Shark', fontSize: 26, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   when: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.white },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  body: { padding: 14, gap: 12 },
+  body: { padding: 14, gap: 12, paddingBottom: 48 },
   howRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: BRAND.white, borderRadius: 20,
     borderWidth: 3, borderColor: BRAND.navy, paddingVertical: 10, paddingHorizontal: 6 },
   step: { flex: 1, alignItems: 'center', gap: 4 },
