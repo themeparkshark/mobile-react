@@ -999,10 +999,10 @@ function TermScene({ t, w, h, icon, caption }: SceneProps & { readonly icon: Gam
 
 /** Drop odds as a prize jar: the bands are the rarities, the legend gives the server's percents. */
 function OddsScene({ t, w, h, rows }: SceneProps & { readonly rows: readonly { tier: RarityTier; percent: number }[] }) {
-  const jh = h * 0.92;
+  const jh = h * 0.8;
   const jw = jh * (300 / 317);
-  const jx = Math.max(16, w * 0.12);
-  const lx = jx + jw + 18;
+  const jx = Math.max(12, w * 0.06);
+  const lx = jx + jw + 12;
   const rowH = Math.min(26, (h - 16) / Math.max(1, rows.length));
   const top = (h - rows.length * rowH) / 2;
   const wobble = useAnimatedStyle(() => ({ transform: [{ rotate: `${Math.sin(seg(t.value, 0, 0.5) * Math.PI * 3) * 3 * (1 - seg(t.value, 0, 0.5))}deg` }] }));
