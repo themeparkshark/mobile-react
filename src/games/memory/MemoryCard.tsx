@@ -40,6 +40,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle, Ellipse, Line, Path } from 'react-native-svg';
+import { Canvas, Group, Image as SkImg, rect, rrect, type SkImage } from '@shopify/react-native-skia';
 import { MM } from './theme';
 
 const GRAIN = require('../../assets/games/memory/v8/grain.png');
@@ -124,11 +125,45 @@ export interface MemoryCardHandle {
   taken: () => void;
 }
 
+/** Decoded face sheets shared by a whole board, keyed by their require() source. */
+export interface SharedSheets {
+  main: { src: ImageSourcePropType; img: SkImage | null } | null;
+  extra: { src: ImageSourcePropType; img: SkImage | null } | null;
+}
+
+/** The shared decoded sheet for a face, or null when it is not ready. */
+export function sharedSheetFor(shared: SharedSheets | undefined, sheet: ImageSourcePropType | undefined): SkImage | null {
+  if (!shared || sheet == null) return null;
+  if (shared.main && shared.main.src === sheet) return shared.main.img;
+  if (shared.extra && shared.extra.src === sheet) return shared.extra.img;
+  return null;
+}
+
+/** True when every sheet this board can show is decoded and shared. */
+export function sharedReady(shared: SharedSheets | undefined): boolean {
+  return !!shared && (!shared.main || !!shared.main.img) && (!shared.extra || !!shared.extra.img);
+}
+
 interface Props {
   w: number;
   h: number;
   back: ImageSourcePropType;
   face: CardFace;
+  /**
+   * The deck's face sheet, mounted (hidden) from the deal on. The face is
+   * then already decoded when the card flips: no blank cream frame while a
+   * fresh sprite-sheet Image loads mid-flip.
+   */
+  preloadSheet?: ImageSourcePropType;
+  /** The deck's second (extra) face sheet, preloaded the same way. */
+  preloadExtraSheet?: ImageSourcePropType;
+  /**
+   * The deck's face sheets, decoded once per board (MemoryGame useImage) and
+   * shared by every card. When present, a card draws its face from these
+   * with one small Skia canvas (mounted at the deal), so no card holds a
+   * full-size sheet of its own and no face waits on a decode.
+   */
+  shared?: SharedSheets;
   goldBack?: boolean;
   reducedMotion: boolean;
   sv: CardValues;
@@ -139,7 +174,7 @@ interface Props {
 const INK = '#0B5CAD';
 
 export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function MemoryCard(
-  { w, h, back, face, goldBack, reducedMotion, sv, shimmer, id },
+  { w, h, back, face, preloadSheet, preloadExtraSheet, shared, goldBack, reducedMotion, sv, shimmer, id },
   ref,
 ) {
   const v = useMemo(() => ({
@@ -453,29 +488,71 @@ export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function Memo
         </View>
       );
     }
-    if (face.sheet != null && face.slot != null && !failed) {
+    // Shared path: one small canvas per card, drawing from the board's
+    // decoded sheets. The canvas is mounted from the deal on (empty until
+    // the face is known), so a flip only changes what it draws.
+    const known = face.sheet != null && face.slot != null;
+    const sharedImg = known ? sharedSheetFor(shared, face.sheet) : null;
+    // A known face on a sheet the board did not share falls through to the
+    // per-card Image path below instead of drawing a blank card.
+    if (sharedReady(shared) && !failed && (!known || sharedImg)) {
+      const img = sharedImg;
       const cols = face.cols ?? 4;
       const rows = face.rows ?? 2;
+      const slot = face.slot ?? 0;
+      const clip = rrect(rect(0, 0, w, h), r, r);
       return (
         <View style={[size, styles.clip, { backgroundColor: MM.cream }]}>
-          <Image
-            source={face.sheet}
-            resizeMode="stretch"
-            onError={() => setFailed(true)}
-            style={{
-              position: 'absolute',
-              width: w * cols,
-              height: h * rows,
-              left: -(face.slot % cols) * w,
-              top: -Math.floor(face.slot / cols) * h,
-            }}
-          />
+          <Canvas style={{ width: w, height: h }} pointerEvents="none">
+            {img ? (
+              <Group clip={clip}>
+                <SkImg image={img} fit="fill" x={-(slot % cols) * w} y={-Math.floor(slot / cols) * h} width={w * cols} height={h * rows} />
+              </Group>
+            ) : null}
+          </Canvas>
+        </View>
+      );
+    }
+    // Stable sheet Images per card, mounted at the deal (hidden) for both of
+    // the deck's sheets; on flip only position and opacity change, so a face
+    // is never waiting on a decode (no blank cream frame mid-flip).
+    const sheets: { src: ImageSourcePropType; cols: number; rows: number }[] = [];
+    if (preloadSheet != null) sheets.push({ src: preloadSheet, cols: 4, rows: 2 });
+    if (preloadExtraSheet != null) sheets.push({ src: preloadExtraSheet, cols: 2, rows: 1 });
+    if (face.sheet != null && !sheets.some((x) => x.src === face.sheet)) {
+      sheets.push({ src: face.sheet, cols: face.cols ?? 4, rows: face.rows ?? 2 });
+    }
+    if (sheets.length && !failed) {
+      return (
+        <View style={[size, styles.clip, { backgroundColor: MM.cream }]}>
+          {sheets.map((sh, i) => {
+            const on = face.sheet === sh.src && face.slot != null;
+            const cols = on ? face.cols ?? sh.cols : sh.cols;
+            const rows = on ? face.rows ?? sh.rows : sh.rows;
+            const slot = on ? face.slot! : 0;
+            return (
+              <Image
+                key={i}
+                source={sh.src}
+                resizeMode="stretch"
+                onError={() => setFailed(true)}
+                style={{
+                  position: 'absolute',
+                  width: w * cols,
+                  height: h * rows,
+                  left: -(slot % cols) * w,
+                  top: -Math.floor(slot / cols) * h,
+                  opacity: on ? 1 : 0,
+                }}
+              />
+            );
+          })}
         </View>
       );
     }
     return <View style={[size, styles.plate, { backgroundColor: MM.cream }]} />;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [face, failed, w, h]);
+  }, [face, preloadSheet, preloadExtraSheet, shared, failed, w, h]);
 
   const pip = Math.max(8, Math.round(w * 0.12));
   return (

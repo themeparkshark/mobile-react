@@ -44,7 +44,9 @@ export const useAxiosSetup = () => {
       (error: AxiosError) => {
         const status = error?.response?.status;
         if (status === 401) {
-          logoutRef.current();
+          // Sign-out clears storage; a failure there must not become an
+          // unhandled rejection on every 401.
+          Promise.resolve(logoutRef.current()).catch(() => undefined);
         }
         if (status && status >= 500) {
           consecutive500Count += 1;

@@ -34,9 +34,10 @@ import Animated, {
   withDelay,
   withRepeat,
   withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Canvas, Group, Path, Skia } from '@shopify/react-native-skia';
+import { Canvas, Group, Path, Skia, useImage } from '@shopify/react-native-skia';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -53,9 +54,12 @@ import {
   type FxStageHandle,
   type GameResult,
 } from '../../gamekit';
+import { memoryLossBanner, memoryLossCopy } from './lossCopy';
+import { TryCard } from './TryCard';
+import { comboCall } from './comboCallout';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { MemoryCard, makeCardValues, type CardValues, type MemoryCardHandle, type ShimmerState } from './MemoryCard';
+import { MemoryCard, makeCardValues, sharedReady, type CardValues, type MemoryCardHandle, type SharedSheets, type ShimmerState } from './MemoryCard';
 import { deckById, deckIdForRideName, type Deck } from './decks';
 import {
   ENGINE_VERSION,
@@ -341,7 +345,8 @@ export default function MemoryGame({
     seconds: null as number | null, urgent: false, chain: 0, gauge: 0, showtime: false, showLeft: 0, showWarn: false,
     strikes: 0, pairs: 0, total: 8, board: 1, turns: 0, turnsLeft: null as number | null,
   });
-  const [tryScreen, setTryScreen] = useState<{ pairs: number; total: number; left: number } | null>(null);
+  const [tryScreen, setTryScreen] = useState<{ pairs: number; total: number; left: number; out: boolean; flipped: boolean } | null>(null);
+  const tryCardIn = useSharedValue(0);
   const [unlock, setUnlock] = useState<{ kicker: string; title: string; hint?: string } | null>(null);
   const [tip, setTip] = useState<{ text: string; kind: 'scout' | 'slip' } | null>(null);
   const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -366,6 +371,7 @@ export default function MemoryGame({
   const fx = useRef<FxStageHandle>(null);
   const stage = useRef<SharkStageHandle>(null);
   const chainPlate = useRef<ChainPlateHandle>(null);
+  const calloutAt = useRef<{ at: number; sweet: boolean }>({ at: 0, sweet: false });
   const chip = useRef<VerdictChipHandle>(null);
   const flights = useRef<FlightLayerHandle>(null);
   const awning = useRef<AwningCalloutsHandle>(null);
@@ -533,6 +539,15 @@ export default function MemoryGame({
   // ---------------------------------------------------------------------------
   // Board setup
   // ---------------------------------------------------------------------------
+  // The deck's face sheets, decoded once and shared by all 16 cards (Skia).
+  const mainSheetImg = useImage((deck.faceSheet ?? null) as number | null);
+  const extraSheetImg = useImage((deck.extraFaceSheet ?? null) as number | null);
+  const sharedSheets = useMemo<SharedSheets>(() => ({
+    main: deck.faceSheet != null ? { src: deck.faceSheet, img: mainSheetImg } : null,
+    extra: deck.extraFaceSheet != null ? { src: deck.extraFaceSheet, img: extraSheetImg } : null,
+  }), [deck.faceSheet, deck.extraFaceSheet, mainSheetImg, extraSheetImg]);
+  const sheetsReady = sharedReady(sharedSheets);
+
   const cardFaceFor = useCallback((id: number) => {
     const f = faces[id];
     return f == null ? EMPTY_FACE : faceFor(deck, f);
@@ -916,13 +931,15 @@ export default function MemoryGame({
     const chargedMs = Math.round(chargedElapsed(e));
     void (async () => {
       const pbKey = r.mode === 'ride' ? 0 : r.mode === 'daily' ? 2 : r.mode === 'warmup' ? 3 : 1;
-      const pb = await savePersonalBest(pbKey, finalScore);
+      // Saving bests and records is on-device and best effort: a storage
+      // failure must never leave the player on a dead board with no result.
+      const pb = await savePersonalBest(pbKey, finalScore).catch(() => ({ best: finalScore, isNewBest: false }));
       const { rewards, daily: dailySum } = await collectRewards(r, won, perfect, stars);
       let edition: CoinEdition | null = null;
       let upgraded = false;
       let ridePb: number | null = null;
       let newRidePb = false;
-      if (r.mode === 'ride') {
+      if (r.mode === 'ride') try {
         const rec = await loadRideRecord(rideKey);
         const minted = won ? editionForStars(stars) : 'none';
         const up = upgradeEdition(rec.edition, minted);
@@ -931,24 +948,33 @@ export default function MemoryGame({
         newRidePb = won && !r.signal && (rec.bestMs == null || chargedMs < rec.bestMs);
         ridePb = newRidePb ? chargedMs : rec.bestMs;
         await saveRideRecord(rideKey, { bestMs: ridePb, edition: up.edition });
+      } catch {
+        edition = won ? editionForStars(stars) : null;
       }
       if (r.mode === 'timeAttack') {
-        await pushRankHistory(e.board);
-        await saveTaRuns((await loadTaRuns()) + 1);
+        await pushRankHistory(e.board).catch(() => undefined);
+        await saveTaRuns((await loadTaRuns().catch(() => 0)) + 1).catch(() => undefined);
       }
       if (runRef.current !== r) return;
       const par = r.mode === 'daily' ? fairParFor(e.pairsTotal) : parFor(e.pairsTotal);
       const numbers: ResultsNumber[] = [];
-      let banner = won ? 'CLEARED!' : `SO CLOSE ${e.pairs}/${e.pairsTotal}`;
+      let banner = won ? 'CLEARED!' : memoryLossBanner(e.pairs, e.pairsTotal, e.status === 'out');
       let tally: MemoryResultsData['tally'] = null;
       let chipText: string | null = null;
+      let crownHint: string | null = null;
       if (r.mode === 'ride') {
         numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
         if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
         if (ridePb != null && !r.signal) numbers.push({ label: 'BEST', value: `${(ridePb / 1000).toFixed(1)}s`, hot: newRidePb });
         if (won) numbers.push({ label: 'SCORE', value: finalScore.toLocaleString('en-US') });
-        chipText = luckyChip(e);
+        // The luck chip contradicts PERFECT!, and it is jargon on a loss.
+        chipText = won && !perfect ? luckyChip(e) : null;
         if (perfect && won) banner = 'PERFECT!';
+        // Three crowns but not PERFECT (turns): warm banner plus how to get PERFECT, so 100% never reads as "not perfect".
+        else if (won && stars >= 3) {
+          banner = 'AMAZING!';
+          crownHint = `Clear it in ${perfectOf(e)} turns for PERFECT!`;
+        }
       } else if (r.mode === 'timeAttack') {
         banner = `BOARD ${e.board}`;
         tally = { parts: `${r.cleared} BOARDS · CHAIN ${e.maxChain} · ${e.showtimes} SHOWTIME`, total: finalScore };
@@ -967,10 +993,12 @@ export default function MemoryGame({
       if (upgraded && edition) extra.push(`UPGRADED TO ${edition.toUpperCase()}`);
       if (r.mode === 'timeAttack' || r.mode === 'ride' || r.mode === 'daily') {
         const xp = xpFor(r.mode, { boardsCleared: r.cleared, cleared: won, stars });
-        if (xp > 0) {
+        if (xp > 0) try {
           const m = addXp(await loadMastery(), deck.id, xp);
           await saveMastery(m.mastery);
-          extra.push(m.after > m.before ? `${deck.label.toUpperCase()} MASTERY LEVEL ${m.after}` : `+${xp} MASTERY XP`);
+          extra.push(m.after > m.before ? `${deck.label.toUpperCase()} LEVEL ${m.after}!` : `+${xp} XP`);
+        } catch {
+          // Mastery waits for the next run.
         }
       }
       const data: MemoryResultsData = {
@@ -986,11 +1014,12 @@ export default function MemoryGame({
         chip: chipText,
         grades: r.mode === 'warmup' ? null : { memory: grades.memory, speed: grades.speed, chain: grades.chain },
         tip: r.mode === 'warmup' ? 'Remember where you saw each card. That is the whole game.' : grades.tip,
-        newBest: pb.isNewBest || newRidePb,
+        newBest: r.mode === 'ride' && !won ? false : pb.isNewBest || newRidePb,
         rewards: r.mode === 'warmup' ? null : rewards,
         daily: dailySum,
         extraRewards: extra,
         againLabel: r.mode === 'ride' ? null : r.mode === 'warmup' ? null : 'PLAY AGAIN',
+        crownHint,
       };
       setResultData(data);
       setResult({
@@ -1078,7 +1107,7 @@ export default function MemoryGame({
     GameAudio.play('mm_win');
     Haptic.comboHeavy();
     // 250ms anticipation shake (+-3deg at 12Hz) with rising haptics, 12 stars.
-    later(470, () => {
+    later(360, () => {
       coinShake.value = withSequence(...Array.from({ length: 6 }, (_, i) => withTiming(i % 2 ? -3 : 3, { duration: 40 })), withTiming(0, { duration: 10 }));
       Haptic.tapLight();
       later(80, () => Haptic.hitMedium());
@@ -1086,9 +1115,10 @@ export default function MemoryGame({
       fx.current?.burst('stars', mx, my, { count: reducedMotion ? 6 : 12 });
       stage.current?.pose('coin');
     });
-    later(720, () => {
-      coinFly.value = withTiming(1, { duration: 300, easing: Easing.in(Easing.cubic) });
-      finishRun(won);
+    // Results are saved while the coin flies, so the card arrives as the coin lands (no empty-board hold).
+    later(420, () => finishRun(won));
+    later(600, () => {
+      coinFly.value = withTiming(1, { duration: 280, easing: Easing.in(Easing.cubic) });
     });
   }, [coin, coinFly, coinShake, finishRun, later, reducedMotion]);
 
@@ -1152,32 +1182,55 @@ export default function MemoryGame({
     r.playing = false;
     GameAudio.music.stop(300);
     GameAudio.music.setState('open', 0);
-    GameAudio.play(out ? 'mm_strike' : 'sh_whistle');
-    later(260, () => GameAudio.play('mm_lose'));
-    Haptic.warning();
-    const layout = r.src.endReveal(r.eng.ids);
-    if (layout) {
-      const map: Record<number, number> = {};
-      r.eng.ids.forEach((id, s) => { map[id] = layout[s]; });
-      setFaces((m) => ({ ...m, ...map }));
+    // A kid who found 0-1 pairs gets a gentle shrug, not the full fail stack
+    // (whistle + lose + warning buzz + dizzy tumble); near misses keep the gag.
+    const gentle = r.eng.pairs <= 1;
+    if (gentle) {
+      GameAudio.play('mm_lose', { volume: 0.55 });
+      Haptic.hitSoft();
+    } else {
+      GameAudio.play(out ? 'mm_strike' : 'sh_whistle');
+      later(260, () => GameAudio.play('mm_lose'));
+      Haptic.warning();
     }
+    // Show where every card was, but only cards whose picture we know: a
+    // server board can keep its layout until it settles, and flipping a card
+    // with no picture showed a blank white card (a dead-looking board).
+    const layout = r.src.endReveal(r.eng.ids);
+    const known: Record<number, number> = {};
+    r.eng.ids.forEach((id, s) => {
+      const face = layout?.[s] ?? r.eng.faces[s];
+      if (typeof face === 'number' && face >= 0) known[id] = face;
+    });
+    if (Object.keys(known).length) setFaces((m) => ({ ...m, ...known }));
     let k = 0;
     for (let s = 0; s < r.eng.n; s++) {
       if (r.eng.know[s] === K_MATCHED) continue;
       const id = r.eng.ids[s];
+      if (known[id] == null) continue;
       later(120 + (k++) * 30, () => cards.current[id]?.timeoutReveal(0));
     }
-    wash.value = withDelay(200, withTiming(1, { duration: 300 }));
+    // A light veil only: the cards stay readable behind the end card.
+    wash.value = withDelay(200, withTiming(0.4, { duration: 300 }));
     stage.current?.hatGag(false);
-    stage.current?.tumble();
+    if (gentle) stage.current?.pose('hmm', 2600);
+    else stage.current?.tumble();
     rope.urgent.value = 0;
     const left = RIDE_TRIES - 1 - r.tryIndex;
-    later(1000, () => {
-      if (r.mode === 'ride' && left > 0) setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left });
-      else finishRun(false);
+    // With nothing to reveal there is nothing to look at: the card comes up fast.
+    later(k > 0 ? 1500 : 600, () => {
+      // Ride challenge: every try ends on the same end card (TRY AGAIN while
+      // the Ticket has tries, then Done), right over the board.
+      if (r.mode === 'ride') {
+        // Short phones: the card covers more board, so veil it a bit more under the ribbon.
+        if ((geoRef.current?.H ?? 999) < 600) wash.value = withTiming(0.95, { duration: 220 });
+        setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left, out, flipped: r.eng.turns > 0 });
+        tryCardIn.value = 0;
+        tryCardIn.value = reducedMotion ? 1 : withSpring(1, { damping: 13, stiffness: 190 });
+      } else finishRun(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finishRun, later, wash]);
+  }, [finishRun, later, wash, reducedMotion]);
 
   // ---------------------------------------------------------------------------
   // Memory Race (house crew seats on the same board, design 4.7)
@@ -1537,9 +1590,22 @@ export default function MemoryGame({
             if (ev.tierUp) {
               Haptic.success();
               if (ev.tierUp === 3) {
-                awning.current?.ribbon('SWEET RUN');
+                awning.current?.ribbon('SWEET RUN', 2);
+                calloutAt.current = { at: Date.now(), sweet: true };
                 GameAudio.play('mm_sting_sweet_run');
               }
+            }
+            // Combo callout: from 3 remembered in a row, each step lands bigger.
+            // Paced so every callout reads once and the stage breathes.
+            const call = grade === 'recall' && ev.tierUp !== 3 ? comboCall(chain, Date.now(), calloutAt.current) : null;
+            if (call === 'retext') {
+              // Keep the ribbon in step with the flame: punch the new number in place.
+              awning.current?.retext(`COMBO x${chain}`, chain - 2);
+              GameAudio.playLadder('mm_sharp_twinkle', Math.min(9, degree + 1), { volume: 0.6 });
+              calloutAt.current = { at: Date.now(), sweet: false };
+            } else if (call === 'show') {
+              awning.current?.ribbon(`COMBO x${chain}`, chain - 2);
+              calloutAt.current = { at: Date.now(), sweet: false };
             }
             // The barker answers.
             stage.current?.pose(grade === 'recall' ? 'fist' : 'wave', 700);
@@ -2128,7 +2194,10 @@ export default function MemoryGame({
   // ---------------------------------------------------------------------------
   const tryAgain = useCallback(() => {
     const prev = runRef.current;
-    if (!prev) return;
+    if (!prev || RIDE_TRIES - 1 - prev.tryIndex <= 0) return;
+    Haptic.tapLight();
+    // Cards matched on this try still go in the album (best effort, on device).
+    void collectRewards(prev, false, false, 0).catch(() => undefined);
     clearTimers();
     setTryScreen(null);
     const r = buildRun({ runIndex: prev.runIndex, tryIndex: prev.tryIndex + 1 });
@@ -2140,12 +2209,26 @@ export default function MemoryGame({
     later(900, () => {
       if (runRef.current === r) beginPlay();
     });
-  }, [beginPlay, buildRun, clearTimers, later, newBoardView, resetScene, syncHud, wash]);
+  }, [beginPlay, buildRun, clearTimers, collectRewards, later, newBoardView, resetScene, syncHud, wash]);
 
   const giveUp = useCallback(() => {
+    Haptic.tapLight();
     setTryScreen(null);
+    // In a ride challenge the ride screen owns the loss card (Ticket, retry
+    // offers): go straight there in one tap instead of a second results card.
+    const r = runRef.current;
+    if (rideChallenge && r?.mode === 'ride') {
+      r.ended = true;
+      r.playing = false;
+      clearTimers();
+      GameAudio.music.stop(300);
+      // The run's new album cards still count: save them (best effort, on device) while the ride shows its card.
+      void collectRewards(r, false, false, 0).catch(() => undefined);
+      onClose();
+      return;
+    }
     finishRun(false);
-  }, [finishRun]);
+  }, [finishRun, rideChallenge, onClose, clearTimers, collectRewards]);
 
   const onRematch = useCallback(() => {
     setRunIndex((k) => k + 1);
@@ -2219,9 +2302,9 @@ export default function MemoryGame({
   const ids = useMemo(() => Array.from({ length: n }, (_, i) => i), [n]);
   const r = runRef.current;
   const g = geo;
-  const title = mode === 'ride' ? 'Ride Sprint' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : mode === 'warmup' ? 'Memory Warm-up' : 'Memory Match';
+  const title = mode === 'ride' ? 'Memory Match' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : mode === 'warmup' ? 'Memory Warm-up' : 'Memory Match';
   const subtitle = mode === 'ride'
-    ? `${deck.label}${r && r.tryIndex > 0 ? ` · Try ${r.tryIndex + 1} of ${RIDE_TRIES}` : ''}${r?.signal ? ' · Low signal' : ''}`
+    ? `${r && r.tryIndex > 0 ? `Try ${r.tryIndex + 1} of ${RIDE_TRIES} · ` : ''}${taskName || deck.label}${r?.signal ? ' · Low signal' : ''}`
     : mode === 'timeAttack' ? `${deck.label} · Board ${hud.board}`
     : mode === 'daily' ? `${deck.label} · ${daily?.ranked && runIndex === 0 ? 'Ranked' : 'Practice'}`
     : mode === 'race' ? `${deck.label} · Practice race` : deck.label;
@@ -2258,6 +2341,8 @@ export default function MemoryGame({
       onQuit={onQuit}
       onRematch={mode !== 'ride' && mode !== 'warmup' ? onRematch : undefined}
       onWrapUp={onWrapUp}
+      // MemoryResults draws its own navy scrim; the shell's would flash first for a frame.
+      resultsScrim={resultData ? 'none' : undefined}
       renderResults={resultData ? (args) => { shellClaim.current = args.claim; return renderResults(args); } : undefined}
     >
       <View style={styles.field} onLayout={onFieldLayout}>
@@ -2285,6 +2370,10 @@ export default function MemoryGame({
                   w={g.cw}
                   h={g.ch}
                   back={CARD_BACK}
+                  shared={sharedSheets}
+                  // Until the shared sheets are decoded, fall back to per-card hidden preloads.
+                  preloadSheet={sheetsReady ? undefined : deck.faceSheet}
+                  preloadExtraSheet={sheetsReady ? undefined : deck.extraFaceSheet}
                   face={cardFaceFor(id)}
                   goldBack={faces[id] === FACE_GOLD}
                   reducedMotion={reducedMotion}
@@ -2344,13 +2433,15 @@ export default function MemoryGame({
               ) : mode === 'daily' ? (
                 <View style={styles.parPlate}><Text style={styles.parText}>{`TURN ${hud.turns} · PAR ${fairParFor(hud.total)}`}</Text></View>
               ) : null}
-              <ChainPlate ref={chainPlate} chain={hud.chain} gauge={hud.gauge} showtime={hud.showtime} showWarn={hud.showWarn} showLeft={hud.showLeft}
-                gaugeOn={!!r?.eng.cfg.gauge} strikes={mode === 'daily' ? hud.strikes : null} strikesMax={2} reducedMotion={reducedMotion} />
+              {/* Hidden under the results card so the card never clips it. */}
+              {resultData ? null : <ChainPlate ref={chainPlate} chain={hud.chain} gauge={hud.gauge} showtime={hud.showtime} showWarn={hud.showWarn} showLeft={hud.showLeft}
+                gaugeOn={!!r?.eng.cfg.gauge} strikes={mode === 'daily' ? hud.strikes : null} strikesMax={2} reducedMotion={reducedMotion} />}
               <View style={styles.chipAnchor}>
                 <VerdictChip ref={chip} reducedMotion={reducedMotion} />
               </View>
             </View>
-            <RopeNumeral x={g.W / 2} y={g.rope.y} seconds={flags.clock !== 'none' ? hud.seconds : null} turnsLeft={hud.turnsLeft} urgent={hud.urgent} reducedMotion={reducedMotion} />
+            {/* The spent clock (0) hides under the end card's ribbon instead of peeking out behind it. */}
+            {tryScreen ? null : <RopeNumeral x={g.W / 2} y={g.rope.y} seconds={flags.clock !== 'none' ? hud.seconds : null} turnsLeft={hud.turnsLeft} urgent={hud.urgent} reducedMotion={reducedMotion} />}
             <AwningCallouts ref={awning} geo={g} reducedMotion={reducedMotion} />
 
             {/* Peek (Time Attack, from its unlock): the counter's right end. */}
@@ -2391,17 +2482,9 @@ export default function MemoryGame({
             ) : null}
 
             {tryScreen ? (
-              <View style={[styles.tryWrap, { top: g.felt.y + g.felt.h * 0.24 }]}>
-                <Text style={styles.tryTitle}>SO CLOSE</Text>
-                <Text style={styles.tryPairs}>{`${tryScreen.pairs}/${tryScreen.total} PAIRS`}</Text>
-                <Pressable onPress={tryAgain} style={styles.tryBtn} accessibilityRole="button">
-                  <Text style={styles.tryBtnText}>TRY AGAIN</Text>
-                </Pressable>
-                <Text style={styles.tryLeft}>{`${tryScreen.left} ${tryScreen.left === 1 ? 'try' : 'tries'} left on this ticket`}</Text>
-                <Pressable onPress={giveUp} hitSlop={10} accessibilityRole="button">
-                  <Text style={styles.tryQuit}>End challenge</Text>
-                </Pressable>
-              </View>
+              <TryCard copy={memoryLossCopy(tryScreen.pairs, tryScreen.total, tryScreen.out, tryScreen.flipped)} pairs={tryScreen.pairs}
+                total={tryScreen.total} left={tryScreen.left} bottom={Math.max(8, g.H - (g.felt.y + g.felt.h) + 6)} compact={g.H < 600}
+                enter={tryCardIn} reducedMotion={reducedMotion} onTryAgain={tryAgain} onDone={giveUp} />
             ) : null}
           </>
         ) : null}
@@ -2491,11 +2574,4 @@ const styles = StyleSheet.create({
   unlockKicker: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, letterSpacing: 1 },
   unlockText: { fontFamily: 'Shark', fontSize: 28, color: MM.navyText },
   unlockHint: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, marginTop: 2 },
-  tryWrap: { position: 'absolute', left: 36, right: 36, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 22, borderWidth: 3, borderColor: MM.ink, paddingVertical: 16 },
-  tryTitle: { fontFamily: 'Shark', fontSize: 36, color: MM.navyText },
-  tryPairs: { fontFamily: 'Shark', fontSize: 20, color: MM.coral, marginBottom: 10 },
-  tryBtn: { backgroundColor: MM.gold, borderRadius: 16, paddingHorizontal: 36, paddingVertical: 12, borderBottomWidth: 4, borderBottomColor: MM.goldDeep },
-  tryBtnText: { fontFamily: 'Shark', fontSize: 24, color: '#075083' },
-  tryLeft: { fontFamily: 'Knockout', fontSize: 15, color: MM.navyText, marginTop: 8 },
-  tryQuit: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, marginTop: 8, textDecorationLine: 'underline' },
 });

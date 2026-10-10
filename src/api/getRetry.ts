@@ -68,6 +68,8 @@ export function withGetRetry<C extends RetryConfig & { signal?: { aborted?: bool
  */
 export function isNetworkFailure(error: RetryError & { message?: string } | undefined): boolean {
   if (!error || httpStatus(error) !== undefined) return false;
+  // A captive-portal page instead of game data (jsonGuard.ts): not online yet.
+  if (error.code === 'ERR_NON_JSON') return true;
   if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') return true;
   return error.response?.status === 0;
 }

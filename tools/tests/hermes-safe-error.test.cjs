@@ -64,7 +64,8 @@ test('every axios rejection gets its own stack first, on the app client and the 
   const handler = client.slice(client.indexOf('(error: AxiosError) => {'));
   assert.ok(handler.indexOf('withOwnStack(error);') < handler.indexOf('axios.isCancel(error)'),
     'before the cancel early return, so CanceledError is covered too');
-  assert.match(client, /axios\.interceptors\.response\.use\(undefined, \(error: unknown\) => Promise\.reject\(withOwnStack\(error\)\)\)/);
+  assert.match(client, /\(error: unknown\) => Promise\.reject\(withOwnStack\(error\)\),\n\);/);
+  assert.match(client, /Promise\.reject\(withOwnStack\(nonJsonError\(response\)\)\)/, 'portal-page rejections get a stack too');
   const telemetry = fs.readFileSync(path.join(root, 'src/services/telemetry/index.ts'), 'utf8');
   assert.match(telemetry, /stack: readStack\(candidate\)/);
   assert.doesNotMatch(telemetry, /candidate\.stack/);
@@ -110,5 +111,5 @@ test('on the real Hermes engine: axios 0.27 AxiosError throws, withOwnStack fixe
 
 test('the launch-time /reaction-types fetch (app root ForumProvider) cannot reject unhandled offline', () => {
   const forum = fs.readFileSync(path.join(root, 'src/context/ForumProvider.tsx'), 'utf8');
-  assert.match(forum, /try \{\s*setReactionTypes\(await all\(\)\);\s*\} catch \{/);
+  assert.match(forum, /try \{\s*const types = await all\(\);\s*if \(Array\.isArray\(types\)\) setReactionTypes\(types\);\s*\} catch \{/);
 });

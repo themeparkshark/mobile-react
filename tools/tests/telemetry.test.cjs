@@ -171,6 +171,7 @@ test('the API client records core-loop breadcrumbs and reports server failures',
     '../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
     './getRetry': { nextGetRetryDelay: () => null },
     './dedupeGet': loadTs('src/api/dedupeGet.ts'),
+    './jsonGuard': loadTs('src/api/jsonGuard.ts'),
   });
   client.recordCoreLoopResponse('post', '/me/task-attempts', 201);
   client.recordCoreLoopResponse('post', '/raids/3/attack', 503);

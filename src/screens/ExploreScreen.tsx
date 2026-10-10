@@ -834,7 +834,7 @@ function ExploreScreen() {
     if (!playerTeam?.has_team) {
       RootNavigation.navigate('TeamSelection', { 
         onTeamSelected: () => {
-          getMyTeam().then(setPlayerTeam);
+          getMyTeam().then(setPlayerTeam).catch(() => undefined);
         }
       });
       return;
@@ -1107,7 +1107,7 @@ function ExploreScreen() {
                 <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
               </TopbarColumn>
             )}
-            {/* TRAVEL MODE: Coins | TRAVEL MODE | Tickets */}
+            {/* Away from a park: Coins | HOME HUNT | Tickets. It names the mode the map is in. */}
             {!park && (
               <>
                 <TopbarColumn>
@@ -1117,7 +1117,7 @@ function ExploreScreen() {
                   )}
                 </TopbarColumn>
                 <TopbarColumn>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Travel Mode" accessibilityHint="Explains Travel Mode"
+                  <Pressable accessibilityRole="button" accessibilityLabel="Home Hunt" accessibilityHint="Explains Home Hunt"
                     hitSlop={8} onPress={() => explain('travel_mode')}>
                     <Text style={{
                       fontSize: 16,
@@ -1129,7 +1129,7 @@ function ExploreScreen() {
                       textShadowOffset: { width: 2, height: 2 },
                       textShadowRadius: 0,
                       textAlign: 'center',
-                    }}>Travel Mode</Text>
+                    }}>Home Hunt</Text>
                   </Pressable>
                 </TopbarColumn>
                 <TopbarColumn>

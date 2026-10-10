@@ -84,7 +84,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
         } catch {}
       }
       setLoaded(true);
-    });
+    }).catch(() => setLoaded(true)); // An unreadable store still lets tutorials run.
   }, []);
 
   // Auto-complete all tutorials for existing players (handles a reinstall or cache wipe).

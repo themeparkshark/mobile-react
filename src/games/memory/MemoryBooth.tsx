@@ -358,7 +358,10 @@ function RailToken({ geo, rail, reducedMotion }: { geo: BoothGeo; rail: NonNulla
 // -----------------------------------------------------------------------------
 
 export interface AwningCalloutsHandle {
-  ribbon: (text: string) => void;
+  /** level > 0: a combo step; each one lands bigger than the last. */
+  ribbon: (text: string, level?: number) => void;
+  /** Change the text of a ribbon that is up, with a scale punch (no exit). */
+  retext: (text: string, level?: number) => void;
   sign: (text: string) => void;
 }
 
@@ -367,28 +370,40 @@ export const AwningCallouts = forwardRef<AwningCalloutsHandle, { geo: BoothGeo; 
   const [signText, setSignText] = useState('');
   const [signKey, setSignKey] = useState(0);
   const unfurl = useSharedValue(0);
+  const peak = useSharedValue(1);
   useImperativeHandle(ref, () => ({
-    ribbon(text) {
+    ribbon(text, level = 0) {
       setRibbonText(text);
       cancelAnimation(unfurl);
       unfurl.value = 0;
+      peak.value = reducedMotion ? 1 : 1 + Math.min(0.3, level * 0.08);
       // Unfurl 180ms from centre, hold 600ms, roll up 160ms.
       unfurl.value = withSequence(
         withTiming(1, { duration: reducedMotion ? 60 : 180, easing: Easing.out(Easing.back(1.2)) }),
-        withDelay(600, withTiming(0, { duration: 160, easing: Easing.in(Easing.quad) })),
+        withDelay(level > 0 ? 480 : 600, withTiming(0, { duration: 160, easing: Easing.in(Easing.quad) })),
+      );
+    },
+    retext(text, level = 0) {
+      setRibbonText(text);
+      cancelAnimation(unfurl);
+      const target = 1 + Math.min(0.3, level * 0.08);
+      peak.value = reducedMotion ? 1 : withSequence(withTiming(target + 0.14, { duration: 70 }), withTiming(target, { duration: 120 }));
+      unfurl.value = withSequence(
+        withTiming(1, { duration: 60 }),
+        withDelay(480, withTiming(0, { duration: 160, easing: Easing.in(Easing.quad) })),
       );
     },
     sign(text) {
       setSignText(text);
       setSignKey((k) => k + 1);
     },
-  }), [reducedMotion, unfurl]);
+  }), [reducedMotion, unfurl, peak]);
   const rw = Math.min(geo.W * 0.66, 270);
   const rh = rw * (74 / 192);
-  const ribbonStyle = useAnimatedStyle(() => ({ opacity: unfurl.value > 0.02 ? 1 : 0, transform: [{ scaleX: unfurl.value }, { scaleY: 0.85 + 0.15 * unfurl.value }] }));
+  const ribbonStyle = useAnimatedStyle(() => ({ opacity: unfurl.value > 0.02 ? 1 : 0, transform: [{ scale: 1 + (peak.value - 1) * unfurl.value }, { scaleX: unfurl.value }, { scaleY: 0.85 + 0.15 * unfurl.value }] }));
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Animated.View style={[styles.ribbon, { left: geo.W / 2 - rw / 2, top: geo.ribbonY - rh * 0.55, width: rw, height: rh }, ribbonStyle]}>
+      <Animated.View style={[styles.ribbon, { left: geo.W / 2 - rw / 2, top: geo.ribbonY - rh * 0.95, width: rw, height: rh }, ribbonStyle]}>
         <Image source={RIBBON} style={{ position: 'absolute', width: rw, height: rh }} resizeMode="stretch" />
         <Text style={[styles.ribbonText, { fontSize: Math.round(rh * 0.36), marginTop: -rh * 0.08 }]} numberOfLines={1} adjustsFontSizeToFit>{ribbonText}</Text>
       </Animated.View>

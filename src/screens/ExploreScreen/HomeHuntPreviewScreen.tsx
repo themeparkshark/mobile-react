@@ -114,7 +114,7 @@ export default function HomeHuntPreviewScreen() {
           <Image source={require('../../../assets/images/coingold.png')} style={styles.headerIcon} contentFit="contain" />
           <Text style={styles.headerCount}>25</Text>
         </View></TopbarColumn>
-        <TopbarColumn><Text style={styles.travelMode}>TRAVEL MODE</Text></TopbarColumn>
+        <TopbarColumn><Text style={styles.travelMode}>HOME HUNT</Text></TopbarColumn>
         <TopbarColumn><View style={styles.headerCurrency}>
           <Image source={require('../../../assets/images/ticket-icon.png')} style={styles.headerIcon} contentFit="contain" />
           <Text style={styles.headerCount}>1</Text>

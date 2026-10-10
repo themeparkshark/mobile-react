@@ -1,5 +1,6 @@
 import api from '../../client';
 import { arenaLocation } from './arenaLocation';
+import { badShapeError, isCoordinate, isRecord } from '../../jsonGuard';
 
 // Re-export getMyParkCoins
 export { getMyParkCoins, type ParkCoin } from './getMyParkCoins';
@@ -17,7 +18,8 @@ export interface TeamInfo {
 
 export async function getMyTeam(): Promise<TeamInfo> {
   const response = await api.get('/me/team');
-  return response.data;
+  if (!isRecord(response.data)) throw badShapeError('/me/team');
+  return response.data as unknown as TeamInfo;
 }
 
 export async function joinTeam(team: 'mouse' | 'globe' | 'shark'): Promise<{
@@ -95,7 +97,12 @@ export interface GymData {
 
 export async function getGym(parkId: number): Promise<GymData> {
   const response = await api.get(`/parks/${parkId}/gym`);
-  return response.data;
+  // The map reads gym.latitude while rendering: no gym, no marker, no crash.
+  const gym = isRecord(response.data) ? response.data.gym : undefined;
+  if (!isRecord(gym) || !isCoordinate(gym.latitude) || !isCoordinate(gym.longitude)) {
+    throw badShapeError('gym');
+  }
+  return response.data as unknown as GymData;
 }
 
 export async function placeCoin(parkId: number, assetId: number): Promise<{
@@ -151,7 +158,14 @@ export async function getSwords(parkId: number): Promise<{
   count: number;
 }> {
   const response = await api.get(`/parks/${parkId}/swords`);
-  return response.data;
+  // The map spreads swords into its markers while rendering, so only real
+  // spawns with coordinates get through.
+  const swords = isRecord(response.data) && Array.isArray(response.data.swords)
+    ? (response.data.swords as unknown[]).filter((spawn): spawn is SwordSpawn =>
+      isRecord(spawn) && isCoordinate(spawn.latitude) && isCoordinate(spawn.longitude))
+    : null;
+  if (!swords) throw badShapeError('swords');
+  return { ...(response.data as Record<string, unknown>), swords, count: swords.length };
 }
 
 export async function claimSword(spawnId: number): Promise<{

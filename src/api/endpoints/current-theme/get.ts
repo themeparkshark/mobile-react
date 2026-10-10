@@ -5,7 +5,11 @@ import bundledTheme from '../../defaults/theme.json';
 
 function unwrapTheme(body: unknown): ThemeType | undefined {
   const data = (body as { data?: { id?: unknown } } | undefined)?.data;
-  return data && typeof data === 'object' && data.id !== undefined ? (data as ThemeType) : undefined;
+  if (!data || typeof data !== 'object' || data.id === undefined) return undefined;
+  // ThemeProvider maps the tracks at the app root: a theme without a list
+  // gets an empty one instead of crashing launch.
+  const tracks = (data as { tracks?: unknown }).tracks;
+  return (Array.isArray(tracks) ? data : { ...data, tracks: [] }) as ThemeType;
 }
 
 export default async function getCurrentTheme(): Promise<ThemeType | undefined> {

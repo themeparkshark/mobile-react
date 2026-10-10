@@ -361,7 +361,7 @@ function HomeCatchPreview() {
   return (
     <Wrapper><View style={styles.root}>
     <Topbar>
-      <TopbarColumn><Text style={styles.travel}>TRAVEL MODE</Text></TopbarColumn>
+      <TopbarColumn><Text style={styles.travel}>HOME HUNT</Text></TopbarColumn>
     </Topbar>
     <View ref={container} collapsable={false} style={styles.content}
       onLayout={event => {

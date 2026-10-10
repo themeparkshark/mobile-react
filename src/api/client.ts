@@ -7,6 +7,7 @@ import { reportReachable, reportUnreachable } from '../services/connectivity';
 import { httpStatus, isNetworkFailure, isTimeout, withGetRetry } from './getRetry';
 import { withInflightDedupe } from './dedupeGet';
 import { withOwnStack } from '../utils/hermesSafeError';
+import { isNonJsonBody, NON_JSON_BEFORE_OFFLINE, nonJsonError, withNonJsonRetry } from './jsonGuard';
 
 const client = axios.create({
   baseURL: config.apiUrl,
@@ -45,7 +46,7 @@ export function recordCoreLoopResponse(
 // interceptor (here and in useAxiosSetup) runs once per logical request.
 // Identical GETs already in flight share one request (dedupeGet.ts).
 if (client.defaults.adapter) {
-  client.defaults.adapter = withInflightDedupe(withGetRetry(client.defaults.adapter as AxiosAdapter)) as AxiosAdapter;
+  client.defaults.adapter = withInflightDedupe(withGetRetry(withNonJsonRetry(client.defaults.adapter as AxiosAdapter))) as AxiosAdapter;
 }
 
 /**
@@ -54,9 +55,23 @@ if (client.defaults.adapter) {
  */
 const TIMEOUTS_BEFORE_OFFLINE = 2;
 let consecutiveTimeouts = 0;
+let consecutiveNonJson = 0;
 
 client.interceptors.response.use(
   (response: AxiosResponse) => {
+    // A captive-portal page (hotel or park Wi-Fi sign-in) is not the server:
+    // reject it like a dropped connection so no caller ever reads HTML as data.
+    if (isNonJsonBody(response)) {
+      // Scoped to this request: one odd reply never takes the whole app
+      // offline. A GET gets one more try after a short pause; only a run of
+      // them (a real captive portal answers everything) marks the app offline.
+      // (The transport already gave a GET one more try: withNonJsonRetry.)
+      consecutiveNonJson += 1;
+      if (consecutiveNonJson >= NON_JSON_BEFORE_OFFLINE) reportUnreachable();
+      recordCoreLoopResponse(response.config?.method, response.config?.url, undefined);
+      return Promise.reject(withOwnStack(nonJsonError(response)));
+    }
+    consecutiveNonJson = 0;
     consecutiveTimeouts = 0;
     reportReachable();
     recordCoreLoopResponse(response.config?.method, response.config?.url, response.status);
@@ -71,6 +86,7 @@ client.interceptors.response.use(
     const status = httpStatus(error);
     if (status !== undefined) {
       consecutiveTimeouts = 0;
+      consecutiveNonJson = 0;
       reportReachable();
     } else if (isNetworkFailure(error)) {
       reportUnreachable();
@@ -85,6 +101,12 @@ client.interceptors.response.use(
 );
 
 // The default axios instance (the News feed) gets the same Hermes-safe stack.
-axios.interceptors.response.use(undefined, (error: unknown) => Promise.reject(withOwnStack(error)));
+// It also gets the non-JSON guard: a portal page is never a news feed.
+axios.interceptors.response.use(
+  (response: AxiosResponse) => (isNonJsonBody(response)
+    ? Promise.reject(withOwnStack(nonJsonError(response)))
+    : response),
+  (error: unknown) => Promise.reject(withOwnStack(error)),
+);
 
 export default client;

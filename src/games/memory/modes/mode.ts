@@ -42,7 +42,9 @@ export const SIXTEENTH_MS = 116;
  *   +350  merge into the edition coin; +250 anticipation shake; then Coin Catch
  */
 export function finalPairSchedule(cashCoins: number): { swap: number; beat1: number; beat2: number; beat3: number; cash: number; merge: number; shake: number; handoff: number } {
-  const swap = 630;
+  // The last pair no longer sits: the clear beats start 320ms after the stamp
+  // (was 630, read as dead air by the mini-game review).
+  const swap = 320;
   const beat1 = swap;
   const beat2 = beat1 + EIGHTH_MS;
   const beat3 = beat2 + EIGHTH_MS;

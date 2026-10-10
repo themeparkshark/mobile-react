@@ -50,7 +50,8 @@ export const ForumProvider: FC<{ children: ReactNode }> = ({ children }) => {
   // park. A failure keeps the empty list; it must never be an unhandled rejection.
   useAsyncEffect(async () => {
     try {
-      setReactionTypes(await all());
+      const types = await all();
+      if (Array.isArray(types)) setReactionTypes(types);
     } catch {
       // Reactions simply stay hidden until the next launch.
     }
@@ -58,7 +59,7 @@ export const ForumProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   // Warm the shark faces so a post never opens on blank reaction buttons.
   useEffect(() => {
-    const urls = reactionTypes.map((type) => type.image_url).filter(Boolean);
+    const urls = reactionTypes.map((type) => type?.image_url).filter(Boolean);
     if (urls.length) Image.prefetch(urls).catch(() => undefined);
   }, [reactionTypes]);
 

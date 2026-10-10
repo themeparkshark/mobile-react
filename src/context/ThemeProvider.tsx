@@ -26,7 +26,7 @@ export const ThemeProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const { initializeTracks } = useContext(MusicContext);
 
   useEffect(() => {
-    if (!themeLoaded || !theme?.tracks.length) {
+    if (!themeLoaded || !Array.isArray(theme?.tracks) || !theme.tracks.length) {
       return;
     }
 

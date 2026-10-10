@@ -26,8 +26,10 @@ import Animated, {
   useSharedValue,
   withDelay,
   withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { GameAudio, Haptic } from '../../gamekit';
 import GameIcon from '../../ui/GameIcon';
 import type { CoinEdition, Grade } from './engine';
@@ -71,9 +73,11 @@ export interface MemoryResultsData {
   /** Extra reward lines (UPGRADED, ON-SITE, GOLD EDITION). */
   extraRewards: string[];
   againLabel: 'PLAY AGAIN' | 'TRY AGAIN' | null;
+  /** One short line under the crowns (e.g. how to get PERFECT). */
+  crownHint?: string | null;
 }
 
-export type ResultsPanel = 'actions' | 'album' | 'challenge';
+export type ResultsPanel = 'actions' | 'album' | 'challenge' | 'stats';
 
 /**
  * Which overlays are mounted for a results state. The single-overlay invariant
@@ -83,6 +87,7 @@ export function mountedOverlays(panel: ResultsPanel, flipped: boolean): string[]
   if (flipped) return ['share'];
   if (panel === 'album') return ['album'];
   if (panel === 'challenge') return ['challenge'];
+  if (panel === 'stats') return ['stats'];
   return [];
 }
 
@@ -110,7 +115,13 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
 }) {
   const win = useWindowDimensions();
   const sched = useMemo(() => revealSchedule(data.stars), [data.stars]);
-  const [step, setStep] = useState(reducedMotion ? 99 : 0);
+  // Step 1 (the ribbon) from the first frame: never an empty card.
+  const [step, setStep] = useState(reducedMotion ? 99 : 1);
+  const rise = useSharedValue(reducedMotion ? 1 : 0);
+  useEffect(() => {
+    if (!reducedMotion) rise.value = withSpring(1, { damping: 11, stiffness: 210 });
+  }, [reducedMotion, rise]);
+  const riseSt = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - rise.value) * 60 }, { scale: 0.92 + rise.value * 0.08 }] }));
   const [panel, setPanel] = useState<ResultsPanel>('actions');
   const [flipped, setFlipped] = useState(false);
   const flip = useSharedValue(0);
@@ -137,25 +148,34 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
   const backSt = useAnimatedStyle(() => ({ opacity: flip.value >= 0.5 ? 1 : 0, transform: [{ perspective: 900 }, { rotateY: `${flip.value * 180 - 180}deg` }] }));
 
   const canAlbum = !!data.rewards;
+  const canStats = data.numbers.length > 0 || !!data.grades;
   const canShare = !!data.daily;
   const canChallenge = !!data.daily?.ranked;
 
   return (
     <View style={[styles.wrap, { width: win.width, height: win.height }]} pointerEvents="box-none">
-      <View style={styles.scrim} />
-      <Animated.View style={[styles.card, { maxHeight: win.height * 0.84 }, frontSt]} pointerEvents={flipped ? 'none' : 'auto'}>
+      {/* Light at the top so the barker's coin payoff stays full color; navy behind the card. */}
+      <LinearGradient pointerEvents="none" style={StyleSheet.absoluteFill}
+        colors={['rgba(4,38,86,0.08)', 'rgba(4,38,86,0.08)', 'rgba(4,38,86,0.62)']} locations={[0, 0.3, 0.42]} />
+      {/* Tall phones: the card sits lower so the barker's celebration stays in view above it. */}
+      <Animated.View style={[styles.card, { maxHeight: win.height * 0.8, marginTop: win.height > 800 ? 90 : 0 }, riseSt, frontSt]} pointerEvents={flipped ? 'none' : 'auto'}>
         <ScrollView contentContainerStyle={styles.cardInner} showsVerticalScrollIndicator={false} bounces={false}>
+          {/* Every section is laid out from frame 0 and revealed in place on its
+              beat, so the card never grows or re-centers while a kid reads it.
+              Front: banner, one big number, crowns, new cards, one button.
+              The stat chips and grades live behind STATS. */}
           <Banner text={data.banner} show={step >= 1} reducedMotion={reducedMotion} />
-          {step >= 2 ? <Headline data={data} reducedMotion={reducedMotion} /> : <View style={styles.headlineSlot} />}
+          <Headline data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.headline} />
           <View style={styles.crownRow}>
             {[0, 1, 2].map((i) => (
               <Crown key={i} on={i < data.stars} delay={reducedMotion ? 0 : (sched.crowns[i] ?? 0)} hang={i === 2} reducedMotion={reducedMotion} />
             ))}
           </View>
-          {step >= 3 ? <Numbers data={data} reducedMotion={reducedMotion} /> : <View style={{ height: 40 }} />}
-          {step >= 4 && data.grades ? <Grades g={data.grades} tip={data.tip} reducedMotion={reducedMotion} /> : null}
-          {step >= 5 ? <Rewards data={data} reducedMotion={reducedMotion} /> : null}
-          {step >= 6 ? (
+          {data.crownHint ? <Reveal show={step >= 3}><Text style={styles.crownHint}>{data.crownHint}</Text></Reveal> : null}
+          {data.newBest ? <Reveal show={step >= 3}><Text style={styles.newBest}>NEW BEST</Text></Reveal> : null}
+          {data.tally ? <Reveal show={step >= 3}>{step >= 3 ? <Numbers data={data} reducedMotion={reducedMotion} tallyOnly /> : <Numbers data={data} reducedMotion tallyOnly />}</Reveal> : null}
+          <Reveal show={step >= 5}><Rewards data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.rewards} /></Reveal>
+          <Reveal show={step >= 6}>{(
             panel === 'actions' ? (
               <View style={styles.actions}>
                 {again && data.againLabel ? (
@@ -167,8 +187,9 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
                     <Text style={styles.bigBtnText}>{data.won ? 'CONTINUE' : 'CLOSE'}</Text>
                   </Pressable>
                 )}
-                {canAlbum || canShare || canChallenge ? (
+                {canStats || canAlbum || canShare || canChallenge ? (
                   <View style={styles.iconRow}>
+                    {canStats ? <IconBtn icon="star" label="STATS" onPress={() => setPanel('stats')} /> : null}
                     {canAlbum ? <IconBtn icon="chest" label="ALBUM" onPress={() => setPanel('album')} /> : null}
                     {canShare ? <IconBtn icon="camera" label="SHARE" onPress={() => doFlip(true)} /> : null}
                     {canChallenge ? <IconBtn icon="swords" label="CHALLENGE" onPress={() => setPanel('challenge')} /> : null}
@@ -187,9 +208,17 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
               <View style={styles.panel}>
                 <ChallengeBody daily={data.daily} onDone={() => setPanel('actions')} />
               </View>
+            ) : panel === 'stats' ? (
+              <View style={styles.panel}>
+                <Numbers data={data} reducedMotion={reducedMotion} statsOnly />
+                {data.grades ? <Grades g={data.grades} tip={data.tip} reducedMotion={reducedMotion} /> : null}
+                <Pressable style={[styles.bigBtn, { marginTop: 10 }]} onPress={() => setPanel('actions')} accessibilityRole="button"><Text style={styles.bigBtnText}>DONE</Text></Pressable>
+              </View>
             ) : null
-          ) : null}
+          )}</Reveal>
         </ScrollView>
+        {/* PERFECT: coins burst from the medal, above the ribbon and card. */}
+        {data.banner === 'PERFECT!' && !reducedMotion ? <CoinBurst fire /> : null}
       </Animated.View>
       {data.daily ? (
         <Animated.View style={[styles.card, styles.cardBack, { maxHeight: win.height * 0.84 }, backSt]} pointerEvents={flipped ? 'auto' : 'none'}>
@@ -200,13 +229,48 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
   );
 }
 
+/** Fades a section in on its beat. It is always laid out, so nothing reflows. */
+function Reveal({ show, children }: { show: boolean; children: React.ReactNode }) {
+  const o = useSharedValue(show ? 1 : 0);
+  useEffect(() => { o.value = withTiming(show ? 1 : 0, { duration: 160 }); }, [show, o]);
+  const st = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ translateY: (1 - o.value) * 6 }] }));
+  return <Animated.View style={[styles.reveal, st]} pointerEvents={show ? 'box-none' : 'none'}>{children}</Animated.View>;
+}
+
+/** PERFECT: one capped burst of gold coins behind the ribbon (UI thread). */
+export const PERFECT_COINS = 10;
+function CoinBurst({ fire }: { fire: boolean }) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    if (!fire) return;
+    t.value = withDelay(180, withTiming(1, { duration: 1000, easing: Easing.out(Easing.quad) }));
+    const h = setTimeout(() => Haptic.comboHeavy(), 180);
+    return () => clearTimeout(h);
+  }, [fire, t]);
+  return <View pointerEvents="none" style={styles.burst}>{Array.from({ length: PERFECT_COINS }, (_, k) => <BurstCoin key={k} k={k} t={t} />)}</View>;
+}
+function BurstCoin({ k, t }: { k: number; t: import('react-native-reanimated').SharedValue<number> }) {
+  // An upward fan from the ribbon, so the MEMORY count-up below stays readable.
+  const a = Math.PI + (k / (PERFECT_COINS - 1)) * Math.PI;
+  const r = 100 + (k % 3) * 18;
+  const st = useAnimatedStyle(() => ({
+    opacity: t.value > 0 && t.value < 1 ? 1 - t.value * t.value * t.value : 0,
+    // Out on an arc, then a little gravity.
+    transform: [{ translateX: Math.cos(a) * r * t.value }, { translateY: Math.sin(a) * r * 0.8 * t.value + t.value * t.value * 45 },
+      { rotateZ: `${t.value * 360 * (k % 2 ? 1 : -1)}deg` }, { scale: 0.6 + (1 - t.value) * 0.5 }],
+  }));
+  return <Animated.Image source={COIN} style={[styles.burstCoin, st]} resizeMode="contain" />;
+}
+
 function Banner({ text, show, reducedMotion }: { text: string; show: boolean; reducedMotion: boolean }) {
-  const drop = useSharedValue(reducedMotion ? 1 : 0);
+  // Visible on the card's first frame (never an empty card), then it slams.
+  const drop = useSharedValue(reducedMotion ? 1 : 0.6);
   const impact = useSharedValue(0);
   useEffect(() => {
     if (!show || reducedMotion) return;
     drop.value = withSequence(withTiming(1.08, { duration: 140, easing: Easing.in(Easing.quad) }), withTiming(1, { duration: 80 }));
-    impact.value = withDelay(140, withSequence(withTiming(1, { duration: 1 }), withTiming(1, { duration: 16 }), withTiming(0, { duration: 120 })));
+    // A 1-2 frame white impact, so PERFECT! never looks washed out.
+    impact.value = withDelay(140, withSequence(withTiming(0.8, { duration: 16 }), withTiming(0, { duration: 110 })));
   }, [show, reducedMotion, drop, impact]);
   const st = useAnimatedStyle(() => ({ opacity: drop.value > 0 ? 1 : 0, transform: [{ translateY: (1 - Math.min(1, drop.value)) * -40 }, { scale: drop.value || 1 }] }));
   const flash = useAnimatedStyle(() => ({ opacity: impact.value }));
@@ -223,14 +287,26 @@ function Banner({ text, show, reducedMotion }: { text: string; show: boolean; re
 
 const EDITION_TINT: Record<string, string> = { bronze: '#C87533', silver: '#DCE9F5', gold: '#FFD23F' };
 
-function Headline({ data, reducedMotion }: { data: MemoryResultsData; reducedMotion: boolean }) {
+function Headline({ data, reducedMotion, startMs = 0 }: { data: MemoryResultsData; reducedMotion: boolean; startMs?: number }) {
   const pop = useSharedValue(reducedMotion ? 1 : 0);
   const spin = useSharedValue(reducedMotion ? 0 : 1);
+  // One big number that counts up with a coin-tick ladder (Royal Match style).
+  const target = data.headline ? null : data.recallPct;
+  const [shown, setShown] = useState(reducedMotion || target == null ? target : 0);
   useEffect(() => {
-    if (reducedMotion) return;
-    pop.value = withSequence(withTiming(1.15, { duration: 120 }), withTiming(1, { duration: 100 }));
-    spin.value = withTiming(0, { duration: 420, easing: Easing.out(Easing.back(1.4)) });
-  }, [reducedMotion, pop, spin]);
+    if (reducedMotion) return undefined;
+    pop.value = withDelay(startMs, withSequence(withTiming(1.15, { duration: 120 }), withTiming(1, { duration: 100 })));
+    spin.value = withDelay(startMs, withTiming(0, { duration: 420, easing: Easing.out(Easing.back(1.4)) }));
+    if (target == null) return undefined;
+    const steps = 10;
+    const timers = Array.from({ length: steps }, (_, i) => setTimeout(() => {
+      setShown(Math.round((target * (i + 1)) / steps));
+      if (i % 2 === 1) GameAudio.playLadder('coin_tick', Math.min(12, 2 + i), { volume: 0.35 });
+    }, startMs + 60 + i * 45));
+    return () => timers.forEach(clearTimeout);
+    // Once per card.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const st = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const coinSt = useAnimatedStyle(() => ({ transform: [{ perspective: 600 }, { rotateY: `${spin.value * 540}deg` }] }));
   const ed = data.edition && data.edition !== 'none' ? data.edition : null;
@@ -245,10 +321,11 @@ function Headline({ data, reducedMotion }: { data: MemoryResultsData; reducedMot
         </Animated.View>
       ) : null}
       <View style={styles.recallPlate}>
-        <Text style={styles.recallLabel}>{data.headline?.label ?? 'RECALL'}</Text>
-        <Text style={styles.recallValue}>{data.headline?.value ?? `${data.recallPct}%`}</Text>
+        <Text style={styles.recallLabel}>{data.headline?.label ?? 'MEMORY'}</Text>
+        <Text style={styles.recallValue}>{data.headline?.value ?? `${shown ?? data.recallPct}%`}</Text>
       </View>
-      {ed ? <Text style={styles.editionText}>{`${ed.toUpperCase()} EDITION${data.upgraded ? ' · UPGRADED' : ''}`}</Text> : null}
+      {/* The medal's color says the edition; no "EDITION" jargon for kids. */}
+      {ed && data.upgraded ? <Text style={styles.editionText}>COIN UPGRADED!</Text> : null}
     </Animated.View>
   );
 }
@@ -274,7 +351,7 @@ function Crown({ on, delay, hang, reducedMotion }: { on: boolean; delay: number;
   );
 }
 
-function Numbers({ data, reducedMotion }: { data: MemoryResultsData; reducedMotion: boolean }) {
+function Numbers({ data, reducedMotion, tallyOnly = false, statsOnly = false }: { data: MemoryResultsData; reducedMotion: boolean; tallyOnly?: boolean; statsOnly?: boolean }) {
   const jig = useSharedValue(0);
   const total = useSharedValue(0);
   useEffect(() => {
@@ -287,23 +364,21 @@ function Numbers({ data, reducedMotion }: { data: MemoryResultsData; reducedMoti
   const totSt = useAnimatedStyle(() => ({ opacity: total.value > 0 ? 1 : 0, transform: [{ scale: total.value || 1 }, { translateX: total.value > 1.05 ? shake * 0.3 : 0 }] }));
   return (
     <View style={styles.numbers}>
-      {data.tally ? (
+      {data.tally && !statsOnly ? (
         <View style={styles.tally}>
           <Animated.Text style={[styles.tallyParts, jigSt]} numberOfLines={1} adjustsFontSizeToFit>{data.tally.parts}</Animated.Text>
           <Animated.Text style={[styles.tallyTotal, totSt]}>{data.tally.total.toLocaleString('en-US')}</Animated.Text>
-          {data.newBest ? <Text style={styles.newBest}>NEW BEST</Text> : null}
         </View>
       ) : null}
-      <View style={styles.numRow}>
+      {tallyOnly ? null : <View style={styles.numRow}>
         {data.numbers.map((n) => (
           <View key={n.label} style={[styles.num, n.hot && styles.numHot]}>
             <Text style={styles.numLabel}>{n.label}</Text>
             <Text style={styles.numValue} numberOfLines={1} adjustsFontSizeToFit>{n.value}</Text>
           </View>
         ))}
-      </View>
-      {data.chip ? <View style={styles.luckChip}><Text style={styles.luckText}>{data.chip}</Text></View> : null}
-      {data.newBest && !data.tally ? <Text style={styles.newBest}>NEW BEST</Text> : null}
+      </View>}
+      {data.chip && !tallyOnly ? <View style={styles.luckChip}><Text style={styles.luckText}>{data.chip}</Text></View> : null}
     </View>
   );
 }
@@ -340,7 +415,7 @@ function GradeStamp({ label, grade, delay, reducedMotion }: { label: string; gra
   );
 }
 
-function Rewards({ data, reducedMotion }: { data: MemoryResultsData; reducedMotion: boolean }) {
+function Rewards({ data, reducedMotion, startMs = 0 }: { data: MemoryResultsData; reducedMotion: boolean; startMs?: number }) {
   const deck = data.rewards ? deckById(data.rewards.deckId) : null;
   const chips: { key: string; label: string; face?: number; stamp?: boolean }[] = [];
   if (data.rewards && deck) {
@@ -354,7 +429,7 @@ function Rewards({ data, reducedMotion }: { data: MemoryResultsData; reducedMoti
       {chips.length ? (
         <View style={styles.chipRow}>
           {chips.slice(0, 4).map((c, i) => (
-            <NewChip key={c.key} index={i} label={c.label} reducedMotion={reducedMotion} dark
+            <NewChip key={c.key} index={i} label={c.label} reducedMotion={reducedMotion} dark startMs={startMs}
               face={c.face != null && deck ? faceFor(deck, c.face) : null} foil={c.label === 'NEW FOIL'} stamp={!!c.stamp} />
           ))}
         </View>
@@ -364,7 +439,7 @@ function Rewards({ data, reducedMotion }: { data: MemoryResultsData; reducedMoti
   );
 }
 
-function IconBtn({ icon, label, onPress }: { icon: 'chest' | 'camera' | 'swords'; label: string; onPress: () => void }) {
+function IconBtn({ icon, label, onPress }: { icon: 'chest' | 'camera' | 'swords' | 'star'; label: string; onPress: () => void }) {
   return (
     <Pressable onPress={() => { Haptic.tapLight(); onPress(); }} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
       accessibilityRole="button" accessibilityLabel={label.toLowerCase()} hitSlop={4}>
@@ -376,7 +451,11 @@ function IconBtn({ icon, label, onPress }: { icon: 'chest' | 'camera' | 'swords'
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center' },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.7)' },
+  // Navy, not milky white: the shark and board stay readable behind a win.
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,38,86,0.62)' },
+  reveal: { alignSelf: 'stretch', alignItems: 'center' },
+  burst: { position: 'absolute', left: 0, right: 0, top: -10, height: 50, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
+  burstCoin: { position: 'absolute', width: 38, height: 38 },
   card: {
     width: '90%', maxWidth: 400, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
     backfaceVisibility: 'hidden',
@@ -404,6 +483,7 @@ const styles = StyleSheet.create({
   crownWrap: { marginHorizontal: 6 },
   crown: { width: 44, height: 40 },
   crownOff: { opacity: 0.2 },
+  crownHint: { fontFamily: 'Knockout', fontSize: 15, color: MM.navyText, marginTop: 2, textAlign: 'center' },
   numbers: { alignSelf: 'stretch', alignItems: 'center', marginTop: 4 },
   tally: { alignItems: 'center', marginBottom: 4 },
   tallyParts: { fontFamily: 'Shark', fontSize: 16, color: MM.ink },
@@ -415,7 +495,8 @@ const styles = StyleSheet.create({
   numValue: { fontFamily: 'Shark', fontSize: 18, color: MM.navyText },
   luckChip: { marginTop: 6, backgroundColor: '#ffffff', borderRadius: 10, borderWidth: 1.5, borderColor: MM.ink, paddingHorizontal: 8, paddingVertical: 2 },
   luckText: { fontFamily: 'Knockout', fontSize: 12, color: MM.ink },
-  newBest: { fontFamily: 'Shark', fontSize: 16, color: MM.goldDeep, marginTop: 2 },
+  newBest: { fontFamily: 'Shark', fontSize: 16, color: '#ffffff', marginTop: 4, backgroundColor: MM.coral, borderWidth: 2.5,
+    borderColor: MM.ink, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 1, overflow: 'hidden', transform: [{ rotateZ: '-4deg' }] },
   grades: { alignItems: 'center', marginTop: 8 },
   gradeRow: { flexDirection: 'row', gap: 18 },
   grade: { alignItems: 'center' },
@@ -425,7 +506,8 @@ const styles = StyleSheet.create({
   tip: { fontFamily: 'Knockout', fontSize: 14, color: MM.navyText, textAlign: 'center', marginTop: 6, paddingHorizontal: 6 },
   rewards: { alignItems: 'center', marginTop: 8 },
   chipRow: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  extraReward: { fontFamily: 'Shark', fontSize: 14, color: MM.goldDeep },
+  extraReward: { fontFamily: 'Shark', fontSize: 15, color: '#ffffff', backgroundColor: MM.ink, borderRadius: 10, overflow: 'hidden',
+    paddingHorizontal: 10, paddingVertical: 2, marginTop: 4 },
   actions: { alignSelf: 'stretch', alignItems: 'center', marginTop: 10 },
   bigBtn: { alignSelf: 'stretch', backgroundColor: MM.gold, borderRadius: 16, paddingVertical: 13, alignItems: 'center', borderBottomWidth: 4, borderBottomColor: MM.goldDeep, minHeight: 54 },
   bigBtnText: { fontFamily: 'Shark', fontSize: 24, color: '#075083' },

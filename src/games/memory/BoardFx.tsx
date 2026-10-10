@@ -329,8 +329,11 @@ export const BoardFxOver = memo(function BoardFxOver({ arc, slipArc, flash, flas
         </Path>
       </Group>
       <Group opacity={arcAlpha}>
-        <Path path={arcPath} style="stroke" strokeWidth={5} strokeCap="round" color={MM.ink} start={0} end={arcEnd} />
-        <Path path={arcPath} style="stroke" strokeWidth={3} strokeCap="round" color={MM.gold} start={0} end={arcEnd} />
+        {/* A bold gold link (6px core, 2px ink edge, soft glow) so the memory link reads as a reward, not a debug line. */}
+        <Path path={arcPath} style="stroke" strokeWidth={14} strokeCap="round" color="rgba(255,213,74,0.28)" start={0} end={arcEnd} />
+        <Path path={arcPath} style="stroke" strokeWidth={10} strokeCap="round" color={MM.ink} start={0} end={arcEnd} />
+        <Path path={arcPath} style="stroke" strokeWidth={6} strokeCap="round" color={MM.gold} start={0} end={arcEnd} />
+        <Path path={arcPath} style="stroke" strokeWidth={2} strokeCap="round" color="rgba(255,255,255,0.7)" start={0} end={arcEnd} />
       </Group>
       <Group opacity={slipAlpha}>
         <Path path={slipPath} style="stroke" strokeWidth={4} strokeCap="round" color={MM.ink} start={0} end={slipEnd}>
