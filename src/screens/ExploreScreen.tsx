@@ -89,6 +89,7 @@ import PinMarker from './ExploreScreen/PinMarker';
 import Redeemable from './ExploreScreen/Redeemable';
 import TaskMarker from './ExploreScreen/TaskMarker';
 import MapResourcePill from './ExploreScreen/MapResourcePill';
+import TrailHost from '../components/trail/TrailHost';
 import TooFarDialog from './ExploreScreen/TooFarDialog';
 import DwellCard from './ExploreScreen/DwellCard';
 import MapSuggestionStub from './ExploreScreen/MapSuggestionStub';
@@ -1189,6 +1190,12 @@ function ExploreScreen() {
           parkStory={activeParkProject ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null} />
       )}
+      {/* Trail Boxes at home: your boxes wait for the next park day (pill above the avatar menu; only when you have boxes). */}
+      {player && !park && permissionGranted && (
+        <View pointerEvents="box-none" style={{ position: 'absolute', right: 16, bottom: 194, zIndex: 10, alignItems: 'flex-end' }}>
+          <TrailHost active={mapFocused} inPark={false} />
+        </View>
+      )}
       {/* Guest: a bright sign-in invitation over the live map */}
       {!player && <GuestInvite />}
       
@@ -1327,6 +1334,8 @@ function ExploreScreen() {
           >
             {/* Energy and Swords: bright pills in the header's Currency language. */}
             <View style={{ marginBottom: 12, gap: 6, alignItems: 'flex-end' }}>
+              {/* Trail Boxes (server flag trail_boxes): walk in the park to open them. */}
+              <TrailHost active={mapFocused && !isActive} />
               <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0}
                 onPress={() => explain('energy', { count: player?.energy ?? 0 })} />
               {mapFlags.gymSwords && <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0}

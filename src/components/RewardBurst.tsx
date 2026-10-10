@@ -20,14 +20,17 @@ const PIECES = Array.from({ length: 22 }, (_, i) => {
   };
 });
 
-export default function RewardBurst({ progress, x, y }: {
+export default function RewardBurst({ progress, x, y, colors }: {
   readonly progress: SharedValue<number>;
   readonly x: number;
   readonly y: number;
+  /** Optional palette (e.g. a Trail Box tier); defaults to the brand mix. */
+  readonly colors?: readonly string[];
 }) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {PIECES.map((piece, i) => <Piece key={i} piece={piece} progress={progress} x={x} y={y} />)}
+      {PIECES.map((piece, i) => <Piece key={i} piece={colors?.length ? { ...piece, color: colors[i % colors.length] } : piece}
+        progress={progress} x={x} y={y} />)}
     </View>
   );
 }
