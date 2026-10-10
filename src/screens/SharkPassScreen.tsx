@@ -675,7 +675,7 @@ export default function SharkPassScreen() {
                         </Text>
                       </View>
                       {f.owned && (
-                        <Pressable disabled={!!busy} accessibilityRole="button" accessibilityLabel={wearing ? `Take off the ${f.name}` : `Wear the ${f.name}`}
+                        <Pressable disabled={!!busy} accessibilityRole="button" hitSlop={8} accessibilityLabel={wearing ? `Take off the ${f.name}` : `Wear the ${f.name}`}
                           onPress={() => { setBusy('frame'); void wearFrame(wearing ? null : f.key).then(() => load()).catch(() => gameAlert('That didn’t work', 'Check your internet and try again.')).finally(() => setBusy(null)); }}>
                           <Text maxFontSizeMultiplier={1.1} style={[s.goldBtn, wearing && s.offBtn]}>{wearing ? 'TAKE OFF' : 'WEAR'}</Text>
                         </Pressable>
@@ -697,12 +697,21 @@ export default function SharkPassScreen() {
                       <Image source={GOLD_ART[g.art] ?? (g.icon_url ? { uri: g.icon_url } : EMBLEM)} style={{ width: 56, height: 56, opacity: g.owns_gold ? 1 : 0.8 }} contentFit="contain" />
                       <Text maxFontSizeMultiplier={1.1} style={s.goldName} numberOfLines={2}>{g.name}</Text>
                       {g.owns_gold ? <GameIcon name="check" size={20} /> : (
-                        <Pressable disabled={!!goldBusy || !g.ready} accessibilityRole="button"
-                          accessibilityLabel={`Make it gold for ${state.cosmetics?.gold.coins} coins`}
-                          onPress={() => void makeGold(g.art, state.cosmetics?.gold.coins ?? 0)}>
-                          <Text maxFontSizeMultiplier={1.1} style={[s.goldBtn, (!!goldBusy || !g.ready) && { opacity: 0.6 }]}>
-                            {goldBusy === g.art ? '…' : `${commas(state.cosmetics?.gold.coins ?? 0)} coins`}
-                          </Text>
+                        <Pressable disabled={!!goldBusy || !g.ready} accessibilityRole="button" hitSlop={8}
+                          accessibilityLabel={`Make it gold for ${commas(state.cosmetics?.gold.coins ?? 0)} coins`}
+                          onPress={() => {
+                            // A coin spend this big asks once, naming the piece (never gated: no real money moves).
+                            const cost = state.cosmetics?.gold.coins ?? 0;
+                            const piece = g.name.replace(/^Gold /, '');
+                            gameAlert('Make it gold?', `Your ${piece} turns gold for ${commas(cost)} coins. It stays yours forever.`, [
+                              { text: 'Make it gold', onPress: () => void makeGold(g.art, cost) },
+                              { text: 'Not now', style: 'cancel' },
+                            ]);
+                          }}>
+                          <View style={[s.goldBtnBox, (!!goldBusy || !g.ready) && { opacity: 0.6 }]}>
+                            <Text maxFontSizeMultiplier={1.1} style={s.goldBtnText}>{goldBusy === g.art ? '…' : 'Make gold'}</Text>
+                            <Text maxFontSizeMultiplier={1.1} style={s.goldBtnPrice}>{`${commas(state.cosmetics?.gold.coins ?? 0)} coins`}</Text>
+                          </View>
                         </Pressable>
                       )}
                     </View>
@@ -990,7 +999,10 @@ const s = StyleSheet.create({
   goldGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   goldCell: { width: 98, alignItems: 'center', gap: 4, padding: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 2, borderColor: 'rgba(255,211,77,0.5)' },
   goldName: { fontFamily: FONT.body, fontSize: 12, color: '#ffffff', textAlign: 'center' },
-  goldBtn: { fontFamily: FONT.display, fontSize: 14, minWidth: 64, lineHeight: 28, color: BRAND.navy, backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', textAlign: 'center' },
+  goldBtnBox: { minHeight: 44, minWidth: 84, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.gold, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },
+  goldBtnText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy },
+  goldBtnPrice: { fontFamily: FONT.body, fontSize: 12, color: BRAND.navy },
+  goldBtn: { fontFamily: FONT.display, fontSize: 14, minWidth: 64, lineHeight: 28, minHeight: 44, textAlignVertical: 'center', paddingTop: 8, color: BRAND.navy, backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', textAlign: 'center' },
   setHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   setCount: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold },
   setBar: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },

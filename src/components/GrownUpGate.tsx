@@ -339,7 +339,7 @@ export function GrownUpGateHost() {
         <View style={[styles.card, resting && styles.cardRest]} accessibilityViewIsModal>
           {/* The lock means "grown-ups only". The VIP badge means VIP and nothing else. */}
           <GameIcon name={resting ? 'moon' : 'lock'} size={resting ? 56 : 40} />
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title}>{resting ? 'Not quite' : 'Ask a grown-up'}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title}>{resting ? 'Take a short break' : 'Ask a grown-up'}</Text>
           {resting ? (
             <Text maxFontSizeMultiplier={MAX_FONT} style={styles.body}>{`A grown-up can try again in ${lastRestText}. No worries!`}</Text>
           ) : (
