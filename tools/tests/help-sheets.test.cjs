@@ -65,7 +65,7 @@ test('the sheet is safe-area correct, dismissable every way, and its scenes stop
 test('Shark Social keeps its safety rules and grown-up links', () => {
   const social = sheets.HELP_SHEETS.social;
   const text = social.pages.flatMap(page => page.points.map(point => point.text)).join(' ');
-  for (const words of [/Mean posts get removed/, /name, school and address private/, /Report/]) assert.match(text, words);
+  for (const words of [/Mean posts get removed/, /name, school and home private/, /Report/]) assert.match(text, words);
   const help = read('src/screens/threads/SocialHelp.tsx');
   assert.match(help, /BlockedPlayers/);
   assert.match(help, /Grown-ups: email us/);

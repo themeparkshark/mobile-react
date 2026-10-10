@@ -69,7 +69,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         points: [
           { icon: 'crown', text: '1st Ride Champ, 2nd Ride Ace, 3rd Ride Star.' },
           { icon: 'ticket', text: 'Plus bonus Tickets for all three.' },
-          { icon: 'star', text: 'Hit your weekly goals for bonus XP.' },
+          { icon: 'star', text: 'Weekly goals add bonus XP.' },
         ] },
       { key: 'boards', hero: 'standings_boards', headline: 'Pick your board',
         points: [
@@ -108,7 +108,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
       { key: 'daily', hero: 'shop_daily', headline: 'New gear every day',
         points: [
           { icon: 'new', text: 'Fresh pieces land on the Daily shelf.' },
-          { icon: 'timer', text: 'Some pieces leave, so grab favorites early.' },
+          { icon: 'timer', text: 'Pieces change, so check back daily.' },
         ] },
       { key: 'supplies', hero: 'shop_supplies', headline: 'Supplies are for grown-ups',
         points: [
@@ -131,7 +131,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         points: [
           { icon: 'coin', text: 'Tap a coin to level it up.' },
           { icon: 'parts', text: 'Use Energy and that ride\'s Ride Parts.' },
-          { icon: 'queue', text: 'Get Ride Parts from LinePlay in its line, or by winning.' },
+          { icon: 'queue', text: 'Win the ride or play LinePlay in its line.' },
         ] },
     ],
   },
@@ -175,7 +175,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
       { key: 'safe', hero: 'social_safe', headline: 'Kind and safe',
         points: [
           { icon: 'heart', text: 'Nice words only. Mean posts get removed.' },
-          { icon: 'lock', text: 'Keep your name, school and address private.' },
+          { icon: 'lock', text: 'Keep your name, school and home private.' },
           { icon: 'info', text: 'Tap the dots on a post, then Report.' },
         ] },
     ],
