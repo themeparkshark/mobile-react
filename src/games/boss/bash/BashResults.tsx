@@ -139,7 +139,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <Animated.View style={[styles.hpRed, fill]} />
         </View>
         <Text style={styles.raidLine} numberOfLines={1}>
-          {ko ? 'Your hit could finish it!' : won ? 'Boss down!' : `${hpAfter.toLocaleString()} HP left`}{left ? `  ·  ${left}` : ''}{fighters > 0 ? `  ·  ${fighters} fighting` : ''}
+          {ko ? 'Your hit could finish it!' : won ? 'Boss down!' : `${hpAfter.toLocaleString()} HP left`}{left && !won ? `  ·  ${left}` : ''}{fighters > 0 && !won ? `  ·  ${fighters} fighting` : ''}
         </Text>
       </View>
 
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: BRAND.navy, backgroundColor: BRAND.gold },
   warmText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
   againFin: { width: 26, height: 26, marginRight: 6 },
-  chest: { position: 'absolute', right: 6, top: -34, width: 64, height: 64 },
+  chest: { position: 'absolute', right: 4, top: -16, width: 52, height: 52 },
   lootTitle: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft },
   lootRow: { flexDirection: 'row', gap: 16, marginTop: 4 },
   lootItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
