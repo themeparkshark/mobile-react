@@ -122,6 +122,8 @@ export interface BossBashProps {
   /** Your best damage on this boss so far (a target to beat during the round). */
   /** 3+ attacks on this raid already: start with a free head-start fin. */
   readonly warmStart?: boolean;
+  /** The next attack (after this round) starts with a free fin. */
+  readonly warmNext?: boolean;
   /** Dev capture: autoplay with this skill (0 = off). */
   readonly autoplay?: number;
   /** Dev capture: force the first-time intro. */
@@ -130,7 +132,7 @@ export interface BossBashProps {
 
 export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fighters = 0, endsAt, damageRate = 1,
   damage: weightsIn, maxHits, next, rewards, capLeft, teamDamage = 0, onComplete, onClose, onAgain, onQuit, onActiveChange, onRoundEnd, receipt = null, receiptNote = null,
-  warmStart = false, autoplay = 0, forceIntro = false }: BossBashProps) {
+  warmStart = false, warmNext = false, autoplay = 0, forceIntro = false }: BossBashProps) {
   const weights = weightsIn ?? DEFAULT_WEIGHTS;
   const skin = BOSS_SKINS[boss];
   const reduced = useReducedGameMotion();
@@ -163,6 +165,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const [teamHit, setTeamHit] = useState<number | null>(null);
 
   const engine = useRef<BashState>(createBash(1));
+  const frameStats = useRef({ n: 0, slow: 0, worst: 0, sum: 0 });
   const seedRef = useRef(Date.now() % 100000);
   const playing = useRef(false), finished = useRef(false);
   const played = useRef(0), lastFrame = useRef(0), frozenUntil = useRef(0), raf = useRef<number | null>(null);
@@ -259,7 +262,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     heldRef.current = false; goPending.current = false; perfectChain.current = 0; hpAtBell.current = null;
     shownStage.current = 0; setHatGone(false); hatOff.value = 0;
     seedRef.current = (seedRef.current * 7919 + 17) % 1000003;
-    engine.current = warmStart ? { ...createBash(seedRef.current), headStart: 1, power: 1 } : createBash(seedRef.current);
+    engine.current = { ...createBash(seedRef.current), ...(warmStart ? { headStart: 1, power: 1 } : {}) };
+    frameStats.current = { n: 0, slow: 0, worst: 0, sum: 0 };
     shownTotal.current = 0;
     firstBonked.current = false; firstSmashed.current = false; blocks.current = 0; idleSince.current = 0; introDone.current = false;
     startHp.current = hpLeft; seenHp.current = hpLeft;
@@ -606,7 +610,11 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const frame = useCallback(() => {
     if (!playing.current) return;
     const now = Date.now();
-    const dt = Math.min(250, Math.max(0, now - lastFrame.current));
+    const raw = now - lastFrame.current;
+    if (__DEV__ && autoplay && lastFrame.current > 0 && raw < 1000) {
+      const f = frameStats.current; f.n++; f.sum += raw; f.worst = Math.max(f.worst, raw); if (raw > 20) f.slow++;
+    }
+    const dt = Math.min(250, Math.max(0, raw));
     lastFrame.current = now;
     if (now >= frozenUntil.current) played.current = Math.min(ROUND_MS, played.current + dt);
     clock.value = played.current;
@@ -623,7 +631,11 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       GameAudio.play('ui.select', { volume: 0.9, pitch: (3 - left) * 2 });
       haptic('tickSelection');
     }
-    if (played.current >= ROUND_MS) { finishRef.current(); return; }
+    if (played.current >= ROUND_MS) {
+      if (__DEV__ && autoplay) { const f = frameStats.current;
+        console.log(`[boss-frames] frames=${f.n} avg=${(f.sum / Math.max(1, f.n)).toFixed(1)}ms slow>20ms=${f.slow} (${((f.slow / Math.max(1, f.n)) * 100).toFixed(1)}%) worst=${f.worst}ms`); }
+      finishRef.current(); return;
+    }
     raf.current = requestAnimationFrame(frame);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -653,7 +665,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     if (finished.current) return;
     void AsyncStorage.getItem(SEEN_KEY).catch(() => null).then(seen => {
       const first = forceIntro || !seen;
-      setFirstTime(first);
+      setFirstTime(first); engine.current = { ...engine.current, noGold: first };
       setIntro('rise');
       bossRise.value = 2.2;
       bossRise.value = reduced ? withTiming(0, { duration: 150 }) : withSpring(0, { damping: 10, stiffness: 90 });
@@ -784,7 +796,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     <BashResults args={args} bossName={bossName} boss={boss} rideName={rideName ?? null} startHp={hpAtBell.current ?? hpLeft} capLeft={capLeft}
       hpMax={hpMax} damage={args.result.score} rate={damageRate} meta={args.result.meta ?? {}} fighters={fighters}
       endsAt={endsAt} next={next} rewards={rewards} receipt={receipt} receiptNote={receiptNote} bestBefore={best}
-      teamDamage={teamDamage} portrait={skin.hurt ?? skin.dizzy ?? undefined}
+      teamDamage={teamDamage} warmNext={warmNext} portrait={skin.hurt ?? skin.dizzy ?? undefined}
       onAgain={onAgain && args.result.meta ? () => onAgain(args.result.meta!) : undefined} />
   );
 

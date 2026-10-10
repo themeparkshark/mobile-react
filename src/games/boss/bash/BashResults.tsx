@@ -50,11 +50,12 @@ export function creditedDamage(damage: number, capLeft: number | undefined): num
   return capLeft === undefined ? damage : Math.max(0, Math.min(damage, capLeft));
 }
 
-export default function BashResults({ args, bossName, boss, startHp, hpMax, damage: rawDamage, capLeft, rate, meta, fighters, endsAt, next, rewards, onAgain,
+export default function BashResults({ args, bossName, boss, startHp, hpMax, damage: rawDamage, capLeft, rate, meta, fighters, endsAt, next, rewards, onAgain, warmNext,
   receipt = null, receiptNote = null, bestBefore = 0, teamDamage = 0, portrait }: {
   args: ShellResultsArgs; bossName: string; boss: BossId; rideName: string | null; startHp: number; hpMax: number; damage: number;
   /** Per-player raid cap left before this round (config boss.max_damage_per_player_per_raid). */
   capLeft?: number;
+  warmNext?: boolean;
   rate: number; meta: Record<string, unknown>; fighters: number; endsAt?: string; next?: BashNext; rewards?: BashRewards;
   onAgain?: () => void;
   /** The round was sent at the bell: what the server said. */
@@ -163,9 +164,14 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           : <Chip label="Perfects" value={Number(meta.perfects ?? 0)} />}
       </View>
 
+      {!noHits && n.can && onAgain && warmNext && <View style={styles.warm} accessible accessibilityLabel="Head start earned: your next attack starts with a free fin">
+        <Image source={BASH_ART.finFull} style={{ width: 20, height: 20 }} contentFit="contain" />
+        <Text style={styles.warmText} maxFontSizeMultiplier={1.2}>HEAD START EARNED</Text>
+      </View>}
       {!noHits && n.can && onAgain ? <>
         <Pressable accessibilityRole="button" onPress={once(onAgain)} style={({ pressed: p }) => [styles.again, p && { transform: [{ scale: 0.97 }] }]}
-          accessibilityLabel={`Attack again for ${next?.energyCost} Energy. You have ${n.energyAfter} Energy.`}>
+          accessibilityLabel={`Attack again for ${next?.energyCost} Energy${warmNext ? ', with a free head start fin' : ''}. You have ${n.energyAfter} Energy.`}>
+          {warmNext && <Image source={BASH_ART.finFull} style={styles.againFin} contentFit="contain" />}
           <Text style={styles.againText}>ATTACK AGAIN</Text>
           <View style={styles.cost}><GameIcon name="energy" size={22} /><Text style={styles.costText}>{next?.energyCost}</Text></View>
         </Pressable>
@@ -212,6 +218,10 @@ const styles = StyleSheet.create({
   hpRed: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.red },
   raidLine: { marginTop: 4, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, textAlign: 'center' },
   loot: { marginTop: 10, backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 2, borderColor: BRAND.sky, paddingVertical: 8, alignItems: 'center' },
+  warm: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 14,
+    borderWidth: 2, borderColor: BRAND.navy, backgroundColor: BRAND.gold },
+  warmText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
+  againFin: { width: 26, height: 26, marginRight: 6 },
   chest: { position: 'absolute', right: 6, top: -34, width: 64, height: 64 },
   lootTitle: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft },
   lootRow: { flexDirection: 'row', gap: 16, marginTop: 4 },

@@ -91,11 +91,11 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
         </View>
       </View>
 
-      <View style={{ marginTop: 10 }}><BossHpBar hpLeft={raid.hp_left} hpMax={raid.hp_max} height={22} /></View>
+      <Pulse value={raid.hp_left} reduced={reduced} style={{ marginTop: 10 }}><BossHpBar hpLeft={raid.hp_left} hpMax={raid.hp_max} height={22} /></Pulse>
       <View style={styles.hpRow}>
         <View />
-        <View style={styles.fighters}><GameIcon name="shark" size={18} />
-          <Text style={styles.hpText} maxFontSizeMultiplier={1.3}>{raid.fighters} fighting</Text></View>
+        <Pulse value={raid.fighters} reduced={reduced} style={styles.fighters}><GameIcon name="shark" size={18} />
+          <Text style={styles.hpText} maxFontSizeMultiplier={1.3}>{raid.fighters} fighting</Text></Pulse>
       </View>
 
       <View style={styles.tiles}>
@@ -208,9 +208,20 @@ function Tile({ label, children, tone, wide, a11y }: { label: string; children: 
     <Text style={styles.tileLabel} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.2}>{label}</Text>
   </View>;
 }
+/** A live value (HP, fighters) gives a small bump when it changes while the card is open. */
+function Pulse({ value, reduced, style, children }: { value: number; reduced: boolean; style?: object; children: React.ReactNode }) {
+  const v = useSharedValue(0);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    if (!reduced) v.value = withSequence(withTiming(1, { duration: 120 }), withSpring(0, { damping: 8, stiffness: 260 }));
+  }, [value, reduced, v]);
+  const a = useAnimatedStyle(() => ({ transform: [{ scale: 1 + v.value * 0.08 }] }));
+  return <Animated.View style={[style, a]}>{children}</Animated.View>;
+}
 function Loot({ icon, n }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: number }) {
   return <View style={styles.loot}><GameIcon name={icon} size={18} />
-    <Text style={styles.lootNum} maxFontSizeMultiplier={1.2}>{n}{icon === 'xp' ? ' XP' : ''}</Text></View>;
+    <Text style={styles.lootNum} maxFontSizeMultiplier={1.2}>{n}{icon === 'xp' ? ' XP' : icon === 'parts' ? ' Ride Parts' : ''}</Text></View>;
 }
 
 const styles = StyleSheet.create({

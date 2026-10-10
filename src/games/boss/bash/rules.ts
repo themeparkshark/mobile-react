@@ -106,6 +106,8 @@ export interface BashState {
   /** Real hits since the last smash: the server's share rule needs 2 before every weak hit. */
   readonly bonksSince: number;
   readonly golds: number;
+  /** First-time players: no gold tentacles yet (learn bonk / smash / puffer first). */
+  readonly noGold?: boolean;
   readonly inks: number;
   readonly hits: number;
   readonly weak: number;
@@ -227,7 +229,7 @@ export function tick(state: BashState, ms: number): { state: BashState; events: 
         const golds = s.up.some(p => p.kind === 'gold');
         // A gold tentacle only shows beside a pufferfish (next lane), so grabbing it is a real risk.
         const goldLane = puffer && !golds ? [puffer.spot % 3 - 1, puffer.spot % 3 + 1].find(l => lanes.includes(l)) : undefined;
-        const gold = goldLane !== undefined && unit(r) < GOLD_CHANCE;
+        const gold = !s.noGold && goldLane !== undefined && unit(r) < GOLD_CHANCE;
         const kind: Kind = gold ? 'gold' : !puffers && s.smashes + s.missedDizzy > 0 && unit(r) < now.puffer ? 'puffer' : 'tentacle';
         r = next(r);
         const spotLane = gold ? goldLane! : lane;
