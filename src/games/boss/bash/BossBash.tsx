@@ -383,7 +383,6 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const onOuch = (popup: Popup) => {
     const p = spotXY(popup.spot);
     addFx({ t: 'burst', src: BASH_ART.puff, x: p.x, y: p.y - p.h * 0.35, size: p.h * 0.7 }, 420);
-    addFx({ t: 'bubble', text: 'OUCH!', x: p.x, y: p.y - p.h * 0.85, tone: 'red' }, 800);
     if (!reduced) shake.shake(5, 160);
     setPose('bonked'); later(OUCH_MS, () => setPose('idle'));
     setStunned(true); later(OUCH_MS, () => setStunned(false));
@@ -812,7 +811,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       ref={shellRef}
       visible={visible}
       title="Boss Fight"
-      subtitle={`${rideName ? `${bossName} at ${rideName}` : bossName}${raidMinutes ? `  ·  ${raidMinutes} min left` : ''}`}
+      subtitle={rideName ? `${bossName} at ${rideName}` : bossName}
       score={hud.damage}
       result={result}
       starMultipliers={{ 0: 0, 1: 1, 2: 1, 3: 1 }}
@@ -918,6 +917,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
               <View style={[styles.hpYours, { width: `${Math.min(100, (Math.max(0, hpLeft) / Math.max(1, hpMax)) * 100)}%` }]} />
               <View style={[styles.hpFill, { width: `${Math.min(100, (hpNow / Math.max(1, hpMax)) * 100)}%` }]} />
             </View>
+            {raidMinutes > 0 && <View style={styles.minChip} accessible accessibilityLabel={`The raid ends in ${raidMinutes} minutes`}>
+              <Text style={styles.minText} maxFontSizeMultiplier={1.1}>{raidMinutes}m</Text></View>}
             <SecondsLeft clock={clock} />
           </View>
           <View style={styles.chipRow}>
@@ -1031,6 +1032,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', zIndex: 6 },
   bangSpark: { position: 'absolute', width: 64, height: 64, left: -15, top: -15 },
   bangText: { fontFamily: 'Shark', fontSize: 30, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  minChip: { marginLeft: 6, paddingHorizontal: 7, height: 26, borderRadius: 13, borderWidth: 2, borderColor: BRAND.navy, backgroundColor: BRAND.white,
+    alignItems: 'center', justifyContent: 'center' },
+  minText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
   finDock: { position: 'absolute', bottom: 14, alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 26,
     backgroundColor: 'rgba(255,255,255,0.88)', borderWidth: 3, borderColor: BRAND.navy },
   introWrap: { alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 26, backgroundColor: 'rgba(8,56,128,0.18)' },

@@ -228,7 +228,8 @@ export function tick(state: BashState, ms: number): { state: BashState; events: 
         const puffer = s.up.find(p => p.kind === 'puffer');
         const golds = s.up.some(p => p.kind === 'gold');
         // A gold tentacle only shows beside a pufferfish (next lane), so grabbing it is a real risk.
-        const goldLane = puffer && !golds ? [puffer.spot % 3 - 1, puffer.spot % 3 + 1].find(l => lanes.includes(l)) : undefined;
+        // Gold appears while a pufferfish is up but in the far lane (a safe distance, never right beside it).
+        const goldLane = puffer && !golds ? [puffer.spot % 3 - 2, puffer.spot % 3 + 2].find(l => lanes.includes(l)) : undefined;
         const gold = !s.noGold && !s.dizzy && goldLane !== undefined && unit(r) < GOLD_CHANCE;
         const kind: Kind = gold ? 'gold' : !puffers && s.smashes + s.missedDizzy > 0 && unit(r) < now.puffer ? 'puffer' : 'tentacle';
         r = next(r);

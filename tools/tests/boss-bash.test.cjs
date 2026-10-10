@@ -124,8 +124,8 @@ test('a gold tentacle fills two fins, but a dizzy still needs two real hits (ser
   r=b.tapPopup(h,1,200);assert.equal(r.state.dizzy,null,'gold + head start alone is not enough');
   assert.ok(r.state.power<b.finsNeeded(r.state,200),'never a full fin row that waits: '+r.state.power+'/'+b.finsNeeded(r.state,200));
 });
-test('gold only appears beside a pufferfish', ()=>{
+test('gold only appears with a pufferfish up, in the far lane', ()=>{
   let seen=0;for(let seed=1;seed<40;seed++){let s={...b.createBash(seed),smashes:1};for(let ms=0;ms<b.ROUND_MS;ms+=16){const r=b.tick(s,ms);s=r.state;
-    for(const e of r.events)if(e.type==='spawn'&&e.popup.kind==='gold'){seen++;const p=s.up.find(q=>q.kind==='puffer');assert.ok(p);assert.equal(Math.abs(p.spot%3-e.popup.spot%3),1);}}}
+    for(const e of r.events)if(e.type==='spawn'&&e.popup.kind==='gold'){seen++;const p=s.up.find(q=>q.kind==='puffer');assert.ok(p);assert.equal(Math.abs(p.spot%3-e.popup.spot%3),2);}}}
   assert.ok(seen>0);
 });

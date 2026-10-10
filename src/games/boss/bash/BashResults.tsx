@@ -6,13 +6,12 @@
 import { Image } from 'expo-image';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { BossId } from '../../../api/endpoints/parks/raid';
 import { BOSS_ART } from '../../../components/boss/bossArt';
 import { CountUpText, haptic, type ShellResultsArgs } from '../../../gamekit';
 import { GameAudio } from '../../../gamekit/audio/GameAudio';
-import { ParticleField, type ParticleHandle } from '../../../gamekit/Particles';
 import { BRAND } from '../../../ui/tokens';
 import GameIcon from '../../../ui/GameIcon';
 import { BASH_ART } from './art';
@@ -142,11 +141,11 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       </View>}
 
       <View style={styles.raid}>
-        <View style={styles.hpTrack}>
-          {won && <EmptyFlash />}
+        {/* Won: the stamp and "Boss down!" say it; an empty pale bar read as broken. */}
+        {!won && <View style={styles.hpTrack}>
           <View style={[styles.hpGold, { width: pct(startHp) }]} />
           <Animated.View style={[styles.hpRed, fill]} />
-        </View>
+        </View>}
         <Text style={styles.raidLine} numberOfLines={1}>
           {ko ? 'Your hit could finish it!' : won ? 'Boss down!' : `${hpAfter.toLocaleString()} HP left`}{left && !won ? `  ·  ${left}` : ''}{fighters > 0 && !won ? `  ·  ${fighters} fighting` : ''}
         </Text>
@@ -171,7 +170,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       <View style={styles.chips}>
         <Chip label="Bonks" value={Number(meta.bonks ?? 0)} />
         <Chip label="Smashes" value={Number(meta.smashes ?? 0)} />
-        {Number(meta.inks ?? 0) > 0 ? <Chip label="Blocks" value={`${Number(meta.blocks ?? 0)}/${Number(meta.inks)}`} />
+        {Number(meta.blocks ?? 0) > 0 ? <Chip label="Blocks" value={`${Number(meta.blocks ?? 0)}/${Number(meta.inks)}`} />
           : <Chip label="Perfects" value={Number(meta.perfects ?? 0)} />}
       </View>
 
@@ -265,28 +264,24 @@ const styles = StyleSheet.create({
   doneText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navySoft, textDecorationLine: 'underline' },
 });
 
-/** Team win: the loot chest pops open over the loot row (a reason to come back to the next raid). */
+/** Team win: the loot chest pops open over the loot row (a reason to come back to the next raid). The shell's own
+ * confetti (3 stars, not under Reduce Motion) is the celebration burst. */
 function ChestPop({ reduced }: { reduced: boolean }) {
   const v = useSharedValue(0);
-  const confetti = useRef<ParticleHandle>(null);
-  const { width: W, height: H } = useWindowDimensions();
+
   useEffect(() => {
     v.value = withDelay(700, withSpring(1, { damping: 6, stiffness: 220 }));
     const t = setTimeout(() => {
       GameAudio.play('fx.coin', { volume: 1, pitch: 7 }); haptic('success');
-      if (!reduced) confetti.current?.burst({ x: W * 0.5, y: H * 0.35, preset: 'confetti', count: 60 });
     }, 760);
     const t2 = setTimeout(() => { GameAudio.play('fx.coin', { volume: 0.9, pitch: 10 }); haptic('tapLight'); }, 1250);
     return () => { clearTimeout(t); clearTimeout(t2); };
-  }, [v, reduced, W, H]);
+  }, [v, reduced]);
   const style = useAnimatedStyle(() => ({ opacity: v.value > 0.02 ? 1 : 0, transform: [{ scale: v.value }, { rotate: `${(1 - v.value) * -20}deg` }] }));
   return <>
     <Animated.View style={[styles.chest, style]} pointerEvents="none">
       <Image source={CHEST_OPEN} style={StyleSheet.absoluteFill} contentFit="contain" />
     </Animated.View>
-    {!reduced && <View pointerEvents="none" style={{ position: 'absolute', left: -1000, top: -1000, width: 0, height: 0 }}>
-      <ParticleField ref={confetti} width={W} height={H} style={{ position: 'absolute', left: 1000, top: 1000 }} />
-    </View>}
   </>;
 }
 
