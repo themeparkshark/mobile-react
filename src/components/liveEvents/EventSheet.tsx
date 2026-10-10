@@ -110,6 +110,7 @@ function TeamRace({ event }: { readonly event: LiveEvent }) {
     : place && event.me.team ? `${TEAMS[event.me.team].name}: ${ordinal(place)}${gapLine(race.scores, event.me.team, place)}` : event.me.team ? 'Help your team!' : '';
   return (
     <View>
+      {!!line && <Text style={[styles.line, styles.teamLine]}>{line}</Text>}
       {TEAM_ORDER.map((team: TeamKey) => {
         const score = race.scores[team] ?? 0;
         const mine = event.me.team === team;
@@ -128,7 +129,6 @@ function TeamRace({ event }: { readonly event: LiveEvent }) {
           </View>
         );
       })}
-      {!!line && <Text style={styles.line}>{line}</Text>}
     </View>
   );
 }
@@ -369,6 +369,7 @@ const styles = StyleSheet.create({
   frenzyText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
   section: { backgroundColor: BRAND.white, borderRadius: 20, borderWidth: 3, borderColor: BRAND.navy, paddingVertical: 10, paddingHorizontal: 12 },
   sectionTitle: { fontFamily: 'Shark', fontSize: 16, color: BRAND.blue, marginBottom: 2 },
+  teamLine: { marginTop: 0, marginBottom: 4, fontFamily: 'Shark', fontSize: 16 },
   small: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft, textAlign: 'center', marginTop: 2 },
   line: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.navy, textAlign: 'center', marginTop: 4 },
   helpedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
