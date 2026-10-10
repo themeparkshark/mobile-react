@@ -16,6 +16,11 @@ const CLASSIC = require('../../../assets/images/map/follow-shark-classic.png');
  * still pointing at the button.
  */
 const SHORT_SCREEN = Dimensions.get('window').height < 700;
+/**
+ * Risen, the bubble shares rows with the Adventure Ticket card (left 12 pt, 43% wide), so on short phones it
+ * stays in the lane between that card's right edge and the button (lane ends 16 + 64 pt from the right).
+ */
+const SHORT_HINT_WIDTH = Math.min(190, Math.floor(Dimensions.get('window').width * 0.57 - 12 - 6 - 16 - 64));
 
 /** What the map's top-right button is doing right now. */
 export type FollowButtonState = 'away' | FollowMode;
@@ -244,7 +249,7 @@ const styles = StyleSheet.create({
   hintTail: { top: 20, backgroundColor: BRAND.cream },
   // SE: the lane's bottom sits at the button's middle, so the bubble rises above the shark; tail near its bottom.
   pillLaneUp: { top: undefined, bottom: 20 },
-  hintShort: { width: 190 },
+  hintShort: { width: SHORT_HINT_WIDTH },
   hintTailUp: { top: undefined, bottom: 6 },
   hintTitle: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.navy },
   hintBody: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, color: BRAND.navySoft },
