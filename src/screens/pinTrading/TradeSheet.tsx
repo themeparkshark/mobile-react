@@ -8,6 +8,7 @@
  * the trade-complete moment layer above it. The scrim never closes the sheet:
  * only the X, "Not now" and "Back to board" do, so a stray tap can't drop a hold.
  */
+import { useAmbient } from '../../services/money/useAmbient';
 import { memo, useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
@@ -59,11 +60,12 @@ const fadeOut = (ms: number) => FadeOut.duration(ms).reduceMotion(ReduceMotion.N
 /** "Tap one of your pins": plain words with a nudging arrow, not a button shape. */
 function PickHint({ still }: { still: boolean }) {
   const nudge = useSharedValue(0);
+  const ambient = useAmbient();
   useEffect(() => {
-    if (still) return;
+    if (still || !ambient) return;
     nudge.value = withRepeat(withSequence(withTiming(1, { duration: 380 }), withTiming(0, { duration: 380 })), -1, false);
     return () => cancelAnimation(nudge);
-  }, [still, nudge]);
+  }, [still, ambient, nudge]);
   const arrow = useAnimatedStyle(() => ({ transform: [{ translateY: -nudge.value * 5 }, { rotate: '-90deg' }] }));
   return (
     <View style={styles.pickHint} accessible accessibilityLabel={COPY.pickFirst}>
@@ -104,6 +106,9 @@ function TradeSheet(props: TradeSheetProps) {
   const ended = phase === 'expired' || phase === 'failed' || phase === 'taken';
   const sending = phase === 'sending';
   const confirming = phase === 'confirming' || sending;
+  // A numbered upgrade reads as one: "Trade your #3 for #1?" (same pin, better number).
+  const upgrade = !!selected && selected.id === swap.pin.item.id && !!swap.serial && !!selected.serial;
+  const confirmLine = !selected ? '' : upgrade ? COPY.confirmUpgrade(selected.serial as number, swap.serial as number) : COPY.confirmMessage(pinName(selected), pinName(swap.pin.item));
   useEffect(() => { setHurry(false); }, [deadline]);
 
   // Short phones: the second step hides the picker so both choices fit ("Wait, go back" returns to it).
@@ -137,10 +142,13 @@ function TradeSheet(props: TradeSheetProps) {
         </View>
 
         <View style={styles.stage}>
-          <TradeSlot caption={COPY.get} item={swap.pin.item} hidden={props.handedOff} measureKey={measureKey} stamp={stamp} charging={sending && !props.handedOff}
+          <TradeSlot caption={COPY.get} item={swap.pin.item} serial={swap.serial} hidden={props.handedOff} measureKey={measureKey} stamp={stamp} charging={sending && !props.handedOff}
             tilt={pinTilt(swap.id)} size={slotSize} shine={shine} still={still} onMeasure={rect => props.onSlot?.('get', rect)} />
-          <SwapBadge spinning={sending && !still && !props.handedOff} />
-          <TradeSlot caption={COPY.give} item={phase === 'expired' || phase === 'taken' ? undefined : selected} hidden={props.handedOff}
+          <View style={{ alignItems: 'center' }}>
+            {upgrade && <View style={styles.upgradeRibbon}><Text maxFontSizeMultiplier={1} numberOfLines={1} style={styles.upgradeText}>UPGRADE</Text></View>}
+            <SwapBadge spinning={sending && !still && !props.handedOff} />
+          </View>
+          <TradeSlot caption={COPY.give} item={phase === 'expired' || phase === 'taken' ? undefined : selected} serial={selected?.serial} hidden={props.handedOff}
             measureKey={measureKey} charging={sending && !props.handedOff} tilt={selected ? pinTilt(selected.id, 5) : 0} size={slotSize} still={still}
             placeholder={COPY.yourPin} onMeasure={rect => props.onSlot?.('give', rect)} />
         </View>
@@ -187,7 +195,8 @@ function TradeSheet(props: TradeSheetProps) {
                 onEndReachedThreshold={0.5}
                 onEndReached={props.onMorePins}
                 renderItem={({ item }) => (
-                  <PickPin item={item} size={cell} selected={selected?.id === item.id} still={still} onPress={props.onSelect} />
+                  <PickPin item={item} size={cell} selected={selected?.id === item.id} still={still} onPress={props.onSelect}
+                    locked={!!swap.serial !== !!item.serial} />
                 )}
               />
             )}
@@ -205,13 +214,31 @@ function TradeSheet(props: TradeSheetProps) {
             <Animated.View key="confirm" entering={still ? undefined : fade(140)} style={styles.actionSlot}>
               {/* The second step looks different without words: give -> get, in a gold-edged well. */}
               {selected && (
-                <View style={styles.confirmWell} accessible accessibilityLabel={COPY.confirmMessage(pinName(selected), pinName(swap.pin.item))}>
+                <View style={styles.confirmWell} accessible accessibilityLabel={confirmLine}>
                   <EnamelPin uri={selected.icon_url} size={compact ? 34 : 42} surface="none" recyclingKey={`mine-${selected.id}`} />
                   <GameIcon name="arrow" size={26} />
                   <EnamelPin uri={swap.pin.item.icon_url} size={compact ? 34 : 42} surface="none" recyclingKey={`board-${swap.id}`} />
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.confirmLine} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.8}>
-                    {COPY.confirmMessage(pinName(selected), pinName(swap.pin.item))}
+                  <View style={{ flex: 1 }}>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.confirmLine, { flex: 0 }]} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.8}>
+                    {confirmLine}
                   </Text>
+                  {/* Pins v2, in pictures: x2 -> x1 (you keep one) or LAST ONE; a gold number goes with its pin. */}
+                  {selected.spares !== undefined && (
+                    <View style={styles.confirmChips} accessible accessibilityLabel={(selected.spares ?? 0) > 0 ? COPY.confirmSpare : COPY.confirmKeeper(pinName(selected))}>
+                      {selected.id === swap.pin.item.id && !!swap.serial
+                        ? null /* an upgrade: you keep the pin, only the number changes (#3 -> #1 below) */
+                        : (selected.spares ?? 0) > 0
+                        ? <View style={[styles.confirmChip, { backgroundColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={styles.confirmChipText}>x{(selected.spares ?? 0) + 1} {'\u2192'} x{selected.spares}</Text></View>
+                        : <View style={[styles.confirmChip, { backgroundColor: BRAND.red }]}><Text maxFontSizeMultiplier={1} style={[styles.confirmChipText, { color: BRAND.white }]}>LAST ONE</Text></View>}
+                      {!!swap.serial && (
+                        <View style={[styles.confirmChip, { backgroundColor: '#3b2a05', borderColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={[styles.confirmChipText, { color: BRAND.gold }]}>get #{swap.serial}</Text></View>
+                      )}
+                      {!!selected.serial && !(selected.spares ?? 0) && (
+                        <View style={[styles.confirmChip, { backgroundColor: '#3b2a05', borderColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={[styles.confirmChipText, { color: BRAND.gold }]}>#{selected.serial}</Text></View>
+                      )}
+                    </View>
+                  )}
+                  </View>
                 </View>
               )}
               <Animated.View entering={still ? undefined : ZoomIn.springify().damping(11).stiffness(240)} style={{ width: '100%', alignItems: 'center' }}>
@@ -243,6 +270,11 @@ function TradeSheet(props: TradeSheetProps) {
 export default memo(TradeSheet);
 
 const styles = StyleSheet.create({
+  confirmChips: { flexDirection: 'row', gap: 6, marginTop: 4 },
+  upgradeRibbon: { position: 'absolute', top: -30, width: 92, alignItems: 'center', backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 2, borderRadius: 8, zIndex: 3, transform: [{ rotate: '-6deg' }] },
+  upgradeText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, paddingTop: 2 },
+  confirmChip: { borderRadius: 8, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
+  confirmChipText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy, paddingTop: 2 },
   scrim: { backgroundColor: 'rgba(6,30,74,0.86)' },
   sheet: {
     position: 'absolute', bottom: 0, alignSelf: 'center', backgroundColor: TRADE_SURFACE.panel,

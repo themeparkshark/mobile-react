@@ -57,7 +57,7 @@ const MAX_PIN_PAGES = 10;
 const CONFIRM_GUARD_MS = 450;
 
 type Hold = { swap: PinSwapType; deadline: number; totalMs: number };
-type Done = { got: ItemType; gave: ItemType; from: { get?: SlotRect; give?: SlotRect } };
+type Done = { got: ItemType; gave: ItemType; from: { get?: SlotRect; give?: SlotRect }; upgrade?: number | null };
 
 /** A stable number from a card key (for its tilt). */
 function keySeed(key: string): number {
@@ -252,7 +252,8 @@ export default function PinSwapsScreen() {
     const swap = again ? holdRef.current?.swap : now.board.find(s => s.id === swapId);
     if (!swap) return;
     // No server call when the answer is already known: you own it, you just put it up, or you have nothing to give.
-    if (now.owned.has(swap.pin.item.id)) {
+    // A numbered gold copy is the exception: trading your #3 for the board's #1 is the whole point.
+    if (now.owned.has(swap.pin.item.id) && !swap.serial) {
       beat('ui.select');
       gameAlert(COPY.ownedTitle, COPY.ownedMessage, undefined, { icon: 'info' });
       return;
@@ -375,7 +376,7 @@ export default function PinSwapsScreen() {
       await acceptPinSwap(h.swap.id, pick.id);
       const root = rootOffset.current;
       const shift = (r?: SlotRect) => (r ? { ...r, x: r.x - root.x, y: r.y - root.y } : undefined);
-      setDone({ got: h.swap.pin.item, gave: pick, from: { get: shift(slotsRef.current.get), give: shift(slotsRef.current.give) } });
+      setDone({ got: h.swap.pin.item, gave: pick, upgrade: pick.id === h.swap.pin.item.id ? h.swap.serial ?? null : null, from: { get: shift(slotsRef.current.get), give: shift(slotsRef.current.give) } });
       setLastGiven(pick.id);
       // The traded card's slot now shows your pin (FROM YOU), in place, before the board refresh.
       tradedSlot.current = { swapId: h.swap.id, gave: pick };
@@ -386,6 +387,15 @@ export default function PinSwapsScreen() {
       void warmPinImages([pick.icon_url], 120);
     } catch (error) {
       const kind = classifyTradeError(error);
+      if (kind === 'gold_for_gold' || kind === 'daily_limit') {
+        // A board rule, not a glitch: say it with a picture and end the trade kindly.
+        void unHoldPinSwap(h.swap.id).catch(() => undefined);
+        setHold(null);
+        setSelected(undefined);
+        beat('ui.modalClose', { volume: 0.6 });
+        gameAlert(kind === 'gold_for_gold' ? COPY.goldTitle : COPY.dailyTitle, kind === 'gold_for_gold' ? COPY.goldMessage : COPY.dailyMessage, undefined, { icon: kind === 'gold_for_gold' ? 'star' : 'moon' });
+        return;
+      }
       if (kind === 'owned') {
         // Already yours: no pin of yours can fix that, so end the trade kindly (no buzz) and go back to the board.
         void unHoldPinSwap(h.swap.id).catch(() => undefined);
@@ -452,7 +462,7 @@ export default function PinSwapsScreen() {
     rootRef.current?.measureInWindow((x, y) => { rootOffset.current = { x, y }; });
   }, []);
 
-  const givable = useMemo(() => (hold ? givablePins(pins, hold.swap.pin.item.id) : []), [pins, hold]);
+  const givable = useMemo(() => (hold ? givablePins(pins, hold.swap.pin.item.id, hold.swap.serial) : []), [pins, hold]);
   const pagePad = SPACE.lg;
   const panelInner = Math.min(width, 560) - pagePad * 2 - SPACE.md * 2 - OUTLINE.heavy * 2;
   const cellWidth = Math.floor((panelInner - SPACE.sm * (COLUMNS - 1)) / COLUMNS);
@@ -555,7 +565,7 @@ export default function PinSwapsScreen() {
                         style={done && hold?.swap.id === swap.id ? { opacity: 0 } : undefined}>
                         <BoardPinCard item={swap.pin.item} swapId={swap.id} tiltSeed={keySeed(swap.key)} width={cellWidth} height={cardHeight} shine={shine}
                           lag={lagFor(i)} lagSpan={lagSpan} still={still} badge={badgeFor(swap.pin.item)}
-                          busy={busyId === swap.id || hold?.swap.id === swap.id} onPress={onBoardPress} />
+                          busy={busyId === swap.id || hold?.swap.id === swap.id} onPress={onBoardPress} serial={swap.serial} />
                       </Animated.View>
                     ))}
                   </View>
@@ -605,7 +615,7 @@ export default function PinSwapsScreen() {
       {/* Mounted (invisible, idle) while the player confirms, so its layers are built before the trade lands. */}
       {celeGot && celeGave && (
         <SwapCelebration key={`cele-${celeGot.id}-${celeGave.id}`} got={celeGot} gave={celeGave} from={celeFrom} still={still}
-          armed={!!done} onDone={finishCelebration} onStart={onCelebrationStart} tradeNumber={sessionTrades} />
+          armed={!!done} onDone={finishCelebration} onStart={onCelebrationStart} tradeNumber={sessionTrades} upgradeSerial={done?.upgrade ?? null} />
       )}
     </View>
   );

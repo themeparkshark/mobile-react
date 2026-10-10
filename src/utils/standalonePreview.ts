@@ -17,6 +17,7 @@ export function isStandalonePreviewMode(): boolean {
     process.env.EXPO_PUBLIC_PARK_PASSPORT_COMPLETE_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_RESCUE_PASS_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_STAMP_BOOK_PREVIEW === '1' ||
+    process.env.EXPO_PUBLIC_PINS_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_STAMP_BOOK_LIVE === '1' ||
     process.env.EXPO_PUBLIC_QUEUE_STAMP_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_CREW_RELAY_PREVIEW === '1' ||

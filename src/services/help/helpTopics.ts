@@ -80,7 +80,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     terms: ['supplies', 'bonus_ads', 'vip', 'coins'] },
   { id: 'extras', title: 'More to explore', art: 'extras',
     lines: [
-      'Pins come from Pin Packs and Pin Trading.',
+      'Open mystery boxes, find park pins, trade extras.',
       'Ask for help any time from Settings.',
     ],
     terms: ['pins'] },

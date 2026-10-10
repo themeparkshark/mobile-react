@@ -74,17 +74,21 @@ export function mergePins(current: readonly ItemType[], page: readonly ItemType[
   return [...current, ...page.filter(item => !seen.has(item.id) && (seen.add(item.id), true))];
 }
 
-/** Pins you could give for this board pin (never the same pin). */
-export function givablePins(pins: readonly ItemType[], boardItemId: number): ItemType[] {
-  return pins.filter(item => item.id !== boardItemId);
+/**
+ * Pins you could give for this board pin (never the same pin), except a numbered gold copy:
+ * your own numbered copy of that pin can go for the board's (trade your #3 for the #1).
+ */
+export function givablePins(pins: readonly ItemType[], boardItemId: number, boardSerial?: number | null): ItemType[] {
+  return pins.filter(item => item.id !== boardItemId || (!!boardSerial && !!item.serial && item.serial !== boardSerial));
 }
 
 /** Only what the screen needs from a swap: the board never keeps who posted it. */
 export function boardEntry(swap: PinSwapType): PinSwapType {
-  return { id: swap.id, pin: swap.pin, held_from: swap.held_from, held_to: swap.held_to };
+  // Pins v2: the gold copy's number rides along (it decides the #1 plate, the picker locks and the upgrade path).
+  return { id: swap.id, pin: swap.pin, held_from: swap.held_from, held_to: swap.held_to, ...(swap.serial ? { serial: swap.serial } : {}) };
 }
 
-export type TradeErrorKind = 'taken' | 'owned' | 'network' | 'generic';
+export type TradeErrorKind = 'taken' | 'owned' | 'network' | 'generic' | 'gold_for_gold' | 'daily_limit';
 
 type HttpLike = { response?: { status?: number; data?: { message?: string } }; message?: string; code?: string };
 
@@ -94,6 +98,10 @@ export function classifyTradeError(error: unknown): TradeErrorKind {
   const status = e.response?.status;
   const message = (e.response?.data?.message ?? '').toLowerCase();
   if (!e.response) return 'network';
+  // Pins v2 board rules come with their own codes (picture cards, never "try again").
+  const code = (e.response?.data as { code?: string } | undefined)?.code;
+  if (code === 'gold_for_gold') return 'gold_for_gold';
+  if (code === 'daily_limit') return 'daily_limit';
   if (status === 422 && /already (purchased|have|own)/.test(message)) return 'owned';
   if (status === 403 || status === 404 || status === 409 || /unavailable|already been accepted|held/.test(message)) return 'taken';
   return 'generic';
@@ -124,6 +132,15 @@ export const PIN_TRADE_COPY = {
   backToBoard: 'Back to board',
   notNow: 'Not now',
   confirmMessage: (give: string, get: string) => `Give your ${give} for the ${get}? You can’t undo a trade.`,
+  confirmUpgrade: (mine: number, theirs: number) => `Trade your #${mine} for #${theirs}? Same pin, new number. You can’t undo a trade.`,
+  /** Pins v2: say plainly when the trade gives away your last copy or a numbered gold pin. */
+  confirmKeeper: (give: string) => `It’s your only ${give}.`,
+  confirmSpare: 'You keep one!',
+  goldTitle: 'Gold for gold',
+  goldMessage: 'A gold pin trades only for a gold pin.',
+  dailyTitle: 'All done for today',
+  dailyMessage: 'You traded a lot today. Come back tomorrow!',
+  confirmSerial: (n: number) => `Your gold #${n} goes too.`,
   confirmLabel: 'Yes, trade!',
   sendingLabel: 'Trading...',
   confirmBack: 'Wait, go back',
@@ -136,8 +153,9 @@ export const PIN_TRADE_COPY = {
   tryAgain: 'Try again',
   doneTitle: 'Pin traded!',
   doneMessage: (got: string) => `You got the ${got}!`,
+  upgradeMessage: (got: string, serial: number) => `Your ${got} is now #${serial}!`,
   doneAction: 'Awesome!',
-  doneGave: (_gave: string) => 'Now on the board for another fan.',
+  doneGave: (_gave: string, left?: number) => (left && left > 0 ? `Now on the board for another fan. You still have ${left}.` : 'Now on the board for another fan.'),
   tradeCount: (n: number) => `Trade #${n} this visit!`,
   gaveCaption: 'You gave',
   newStamp: 'New!',

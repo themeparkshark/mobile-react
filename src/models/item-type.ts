@@ -32,6 +32,10 @@ export interface ItemType {
   readonly source?: string;
   /** Reviewed name override; shown instead of name when set. */
   readonly display_name?: string | null;
+  /** Pins v2 (/me/pins): spare copies you can give and keep your own. */
+  readonly spares?: number;
+  /** Pins v2: a chaser copy's lowest serial (#3). */
+  readonly serial?: number | null;
   /** Owned rows: false while the item is NEW in the wardrobe. */
   readonly seen?: boolean;
   /** Owned rows: whether this item has ever been worn. */

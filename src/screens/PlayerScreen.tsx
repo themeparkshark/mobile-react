@@ -1,4 +1,5 @@
 import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
+import ProfileLanyardCard from './pins/ProfileLanyardCard';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { ImageBackground, Pressable } from 'react-native';
 import { Dimensions, ScrollView, Text, View } from 'react-native';
@@ -249,6 +250,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                 onNo={() => { void actions.decline(currentPlayer); }}
                 onUndo={() => { void actions.cancel(currentPlayer); }}
               />
+              <ProfileLanyardCard playerId={currentPlayer.id} own={currentPlayer.id === authPlayer?.id} />
               <View style={{ marginTop: 18 }}>
                 <ProfileShortcuts items={shortcuts} />
               </View>

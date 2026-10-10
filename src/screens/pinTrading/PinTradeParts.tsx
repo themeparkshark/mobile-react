@@ -4,6 +4,7 @@
  * cards, navy ink, gold accents (src/ui/tokens.ts). No player identity and no
  * free text anywhere.
  */
+import { useAmbient } from '../../services/money/useAmbient';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -71,7 +72,9 @@ export type BoardBadge = 'owned' | 'yours' | undefined;
  * finger, the pin lifts off the card (deeper shadow). The pin keeps its own
  * tilt; the card tilts the other way.
  */
-export const BoardPinCard = memo(function BoardPinCard({ item, swapId, tiltSeed = swapId, width, height, shine, lag, lagSpan, still, busy, badge, onPress }: {
+export const BoardPinCard = memo(function BoardPinCard({ item, swapId, tiltSeed = swapId, width, height, shine, lag, lagSpan, still, busy, badge, onPress, serial }: {
+  /** Pins v2: a gold chaser's number (#3) shows on its card, so it never looks like a common. */
+  serial?: number | null;
   item: ItemType; swapId: number;
   /** Stable per slot, so a pin changing in place keeps the card's tilt. */
   tiltSeed?: number; width: number; height: number; shine?: SharedValue<number>; lag: number; lagSpan: number;
@@ -124,6 +127,7 @@ export const BoardPinCard = memo(function BoardPinCard({ item, swapId, tiltSeed 
           <EnamelPin uri={item.icon_url} size={pinSize} tilt={pinTilt(tiltSeed)} shine={still ? undefined : shine} lag={lag} lagSpan={lagSpan}
             lift={lift} surface="board" recyclingKey={`board-${swapId}`} />
         </Animated.View>
+        {!!serial && <View style={styles.boardSerial} pointerEvents="none"><Text maxFontSizeMultiplier={1} style={styles.pickSerialText}>#{serial}</Text></View>}
         <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.backerName}>{balanceName(name)}</Text>
         {badge && <CornerRibbon label={badge === 'owned' ? 'Got it' : 'From you'} tone={badge === 'owned' ? 'navy' : 'gold'} icon={badge === 'owned' ? 'check' : 'arrow'} />}
       </Animated.View>
@@ -236,8 +240,10 @@ export type SlotRect = { x: number; y: number; size: number };
  * dashed outline. `stamp` greys the pin under a TIME'S UP or TAKEN stamp;
  * `charging` makes it rise and wiggle while the trade is in flight.
  */
-export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, shine, still, placeholder, onMeasure, hidden = false, measureKey, stamp, charging = false }: {
+export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, shine, still, placeholder, onMeasure, hidden = false, measureKey, stamp, charging = false, serial }: {
   caption: string; item?: ItemType; hidden?: boolean;
+  /** Pins v2: a gold copy's number, big on the tile (it is the whole point of an upgrade). */
+  serial?: number | null;
   /** Re-measure when this changes (the sheet grows or shrinks between phases). */
   measureKey?: string; tilt: number; size: number; shine?: SharedValue<number>; still: boolean; placeholder?: string;
   /** Window-space centre and drawn size of the pin, so the trade-complete moment starts exactly where the pin sits. */
@@ -265,12 +271,13 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
     pop.value = 0.6;
     pop.value = withSpring(1, { damping: 9, stiffness: 320, mass: 0.6 });
   }, [id, still, pop]);
+  const ambient = useAmbient();
   useEffect(() => {
     cancelAnimation(wiggle);
-    if (!charging || still) { wiggle.value = withTiming(0, { duration: 120 }); return; }
+    if (!charging || still || !ambient) { wiggle.value = withTiming(0, { duration: 120 }); return; }
     wiggle.value = withRepeat(withSequence(withTiming(1, { duration: 110 }), withTiming(-1, { duration: 220 }), withTiming(0, { duration: 110 })), -1, false);
     return () => cancelAnimation(wiggle);
-  }, [charging, still, wiggle]);
+  }, [charging, still, ambient, wiggle]);
   const hand = useSharedValue(0);
   useEffect(() => { hand.value = hidden ? withTiming(1, { duration: 160 }) : 0; }, [hidden, hand]);
   // The pin lifts out of its card; the card itself settles back and fades.
@@ -292,9 +299,11 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
                 transition={0} recyclingKey={`slot-${item.id}`} />
             </Animated.View>
           </View>
-        ) : (
-          <Text maxFontSizeMultiplier={1.2} style={styles.slotQuestion}>?</Text>
+        ) : null}
+        {item && !!serial && (
+          <View style={styles.slotSerial} pointerEvents="none"><Text maxFontSizeMultiplier={1} style={styles.slotSerialText}>#{serial}</Text></View>
         )}
+        {!item && <Text maxFontSizeMultiplier={1.2} style={styles.slotQuestion}>?</Text>}
         {!!stamp && !!item && (
           <View pointerEvents="none" style={[styles.stamp, { maxWidth: (size + SPACE.xl) * 0.7, bottom: SPACE.sm }]}><Text maxFontSizeMultiplier={1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={styles.stampText}>{stamp}</Text></View>
         )}
@@ -305,8 +314,10 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
 });
 
 /** One of your pins in the picker: a cream tile like the board cards, a gold ring and check when picked. */
-export const PickPin = memo(function PickPin({ item, size, selected, still, onPress }: {
+export const PickPin = memo(function PickPin({ item, size, selected, still, onPress, locked = false }: {
   item: ItemType; size: number; selected: boolean; still: boolean; onPress: (item: ItemType) => void;
+  /** Pins v2: a gold board pin takes only a gold pin; the rest grey out with a lock. */
+  locked?: boolean;
 }) {
   const on = useSharedValue(selected ? 1 : 0);
   const press = useSharedValue(0);
@@ -318,15 +329,20 @@ export const PickPin = memo(function PickPin({ item, size, selected, still, onPr
   const badge = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ scale: 0.4 + on.value * 0.6 }] }));
   const name = pinName(item);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={name} accessibilityState={{ selected }} hitSlop={2}
+    <Pressable accessibilityRole="button" accessibilityLabel={name} hitSlop={2}
       onPressIn={() => { if (!still) press.value = withTiming(1, { duration: MOTION.pressInMs }); }}
       onPressOut={() => { press.value = still ? 0 : withTiming(0, { duration: MOTION.pressOutMs }); }}
+      disabled={locked} accessibilityState={{ selected, disabled: locked }}
       onPress={() => onPress(item)}>
       <Animated.View style={[styles.pick, { width: size, height: size }, selected && styles.pickOn, tileStyle]}>
         <Animated.View style={pinStyle}>
           <EnamelPin uri={item.icon_url} size={Math.round(size * 0.74)} tilt={pinTilt(item.id, 5)} surface="none" flat recyclingKey={`mine-${item.id}`} />
         </Animated.View>
         <Animated.View style={[styles.pickBadge, badge]} pointerEvents="none"><GameIcon name="check" size={24} /></Animated.View>
+        {/* Pins v2: spares show as x2 (give one, keep yours); a gold serial shows its number. */}
+        {(item.spares ?? 0) > 0 && <View style={styles.pickSpares} pointerEvents="none"><Text maxFontSizeMultiplier={1} style={styles.pickSparesText}>x{(item.spares ?? 0) + 1}</Text></View>}
+        {locked && <View style={styles.pickLocked} pointerEvents="none"><GameIcon name="lock" size={22} /></View>}
+        {!!item.serial && <View style={styles.pickSerial} pointerEvents="none"><Text maxFontSizeMultiplier={1} style={styles.pickSerialText}>#{item.serial}</Text></View>}
       </Animated.View>
     </Pressable>
   );
@@ -338,6 +354,14 @@ export function PageWash() {
 }
 
 const styles = StyleSheet.create({
+  pickLocked: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,56,128,0.55)', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  pickSpares: { position: 'absolute', left: 2, bottom: 2, minWidth: 24, height: 20, borderRadius: 10, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  pickSparesText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.navy, paddingTop: 2 },
+  pickSerial: { position: 'absolute', right: 2, top: 2, height: 18, borderRadius: 5, backgroundColor: '#3b2a05', borderWidth: 2, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  slotSerial: { position: 'absolute', right: -6, bottom: -6, backgroundColor: '#3b2a05', borderColor: BRAND.gold, borderWidth: 3, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 1 },
+  slotSerialText: { fontFamily: FONT.display, fontSize: 24, color: BRAND.gold, paddingTop: 3 },
+  boardSerial: { position: 'absolute', top: 10, left: 8, zIndex: 4, elevation: 4, height: 22, borderRadius: 6, backgroundColor: '#3b2a05', borderWidth: 2, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, transform: [{ rotate: '6deg' }] },
+  pickSerialText: { fontFamily: FONT.display, fontSize: 11, color: BRAND.gold, paddingTop: 2 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
     paddingHorizontal: SPACE.md, paddingVertical: 5, borderRadius: RADIUS.pill, borderWidth: OUTLINE.thin,
