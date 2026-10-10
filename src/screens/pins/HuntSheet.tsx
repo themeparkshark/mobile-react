@@ -68,31 +68,42 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
     let live = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let last: HuntStatus['warmth'] = null;
+    let at: { latitude: number; longitude: number } | null = null;
+    let cold = false;
+    let done = false;
+    const schedule = (ms: number) => { if (live && AppState.currentState === 'active') timer = setTimeout(tick, ms); };
     const tick = async () => {
-      if (AppState.currentState !== 'active') { timer = setTimeout(tick, POLL_MS); return; }
+      timer = null;
+      if (AppState.currentState !== 'active') return; // resumes on foreground (below)
+      const l = loc.current;
+      // Standing still: the reading can't change, so don't ask (check again soon).
+      if (at && l && Math.abs(l.latitude - at.latitude) < 0.00003 && Math.abs(l.longitude - at.longitude) < 0.00003) { schedule(POLL_MS); return; }
       try {
-        const l = loc.current;
         const s = await getPinOfTheDay(set.park_id!, l ? { latitude: l.latitude, longitude: l.longitude } : null);
         if (!live) return;
+        at = l ? { latitude: l.latitude, longitude: l.longitude } : null;
+        cold = s.warmth === 'cold';
         setStatus(s);
         // Nothing left to hunt today: stop asking.
-        if (s.status !== 'hunt') return;
+        if (s.status !== 'hunt') { done = true; return; }
         if (s.warmth === 'here') setMiss(false);
         if (s.warmth && s.warmth !== last) {
           queueHaptic(s.warmth === 'here' ? 'success' : 'tickSelection', 1);
           last = s.warmth;
         }
         // Away from the park there's nothing to measure: check rarely.
-        if (live) timer = setTimeout(tick, s.here ? POLL_MS : POLL_MS * 5);
+        schedule(!s.here ? POLL_MS * 5 : cold ? POLL_MS * 2 : POLL_MS);
         return;
       } catch {
         // Keep the last reading and back off.
-        if (live) timer = setTimeout(tick, POLL_MS * 3);
+        schedule(POLL_MS * 3);
         return;
       }
     };
     void tick();
-    return () => { live = false; if (timer) clearTimeout(timer); };
+    // Backgrounded: no timers at all. Back in the app: one fresh reading.
+    const sub = AppState.addEventListener('change', st => { if (st === 'active' && live && !timer && !done) { at = null; void tick(); } });
+    return () => { live = false; sub.remove(); if (timer) clearTimeout(timer); };
   }, [set.park_id]);
 
   useEffect(() => { fill.value = withSpring(view.fill, { damping: 16, stiffness: 120 }); }, [view.fill, fill]);

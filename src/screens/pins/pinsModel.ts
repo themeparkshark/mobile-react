@@ -375,7 +375,7 @@ export function initialTab(home: Pick<PinHome, 'mystery' | 'park_sets'>): 'myste
 export function packPace(set: Pick<ParkSet, 'have' | 'total'> & { ends_on?: string | null }, today: string): string | null {
   const left = set.total - set.have;
   if (left <= 0) return 'All found!';
-  const out = `${left} still out there`;
+  const out = `${left} to find`;
   if (!set.ends_on) return out;
   const days = Math.round((Date.parse(`${set.ends_on}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
   if (days < 0) return null;

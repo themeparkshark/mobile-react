@@ -546,9 +546,11 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             </Animated.View>
           )}
           {/* A Disney-style pin card behind a regular pin once it lands (gold moments keep their rays). */}
-          {!gold && (phase === 'show' || phase === 'pop') && (
-            <Animated.View style={[styles.backer, { width: pinSize * 1.25, height: pinSize * 1.3, top: (boxSize - pinSize) / 2 - boxSize * 0.5 - pinSize * 0.14 }, backerStyle]}>
+          {(!gold || pull.is_chaser) && (phase === 'show' || phase === 'pop') && (
+            <Animated.View style={[styles.backer, pull.is_chaser && styles.backerGold, { width: pinSize * 1.25, height: pinSize * 1.3, top: (boxSize - pinSize) / 2 - boxSize * 0.5 - pinSize * 0.14 }, backerStyle]}>
               <View style={styles.backerHole} />
+              {/* The best pin gets the best card: gold foil, limited edition, its number. */}
+              {pull.is_chaser && <Text maxFontSizeMultiplier={1} style={styles.backerFoilText}>{pull.serial ? `LIMITED \u00b7 #${pull.serial}` : 'LIMITED'}</Text>}
             </Animated.View>
           )}
           {/* The pin is mounted (and its art decoding) from the start, hidden until it rises. */}
@@ -597,7 +599,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                 <Text maxFontSizeMultiplier={1.1} style={styles.chaserText}>GOLD CHASER {serialLabel(pull.serial)}</Text>
               </View>
             )}
-            {pull.is_chaser && pull.by_pity && <Text maxFontSizeMultiplier={1.1} style={styles.guaranteed}>Guaranteed!</Text>}
+            {pull.is_chaser && pull.by_pity && <View style={styles.guaranteedPill}><Text maxFontSizeMultiplier={1.1} style={styles.guaranteed}>Guaranteed!</Text></View>}
             <Text maxFontSizeMultiplier={1.35} style={styles.name} numberOfLines={2}>{pull.name}</Text>
             {subtitle && (isCatch
               ? <View style={styles.ticket}><Image source={PIN_ART.seal} style={{ width: 22, height: 22 }} contentFit="contain" /><Text maxFontSizeMultiplier={1.3} style={styles.ticketText} numberOfLines={1}>{subtitle}</Text></View>
@@ -703,7 +705,8 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4, transform: [{ rotate: '-3deg' }],
   },
   chaserText: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, letterSpacing: 1, paddingTop: 3 },
-  guaranteed: { fontFamily: FONT.display, fontSize: 22, color: BRAND.gold, paddingTop: 2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  guaranteedPill: { backgroundColor: BRAND.navy, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.gold, marginTop: 4 },
+  guaranteed: { fontFamily: FONT.display, fontSize: 20, color: BRAND.gold, paddingTop: 2 },
   name: { fontFamily: FONT.display, fontSize: 32, color: BRAND.white, textAlign: 'center', textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   subtitle: { fontFamily: FONT.body, fontSize: 18, color: '#cfeaff' },
   ticket: {
@@ -712,6 +715,8 @@ const styles = StyleSheet.create({
   },
   ticketText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 3, flexShrink: 1 },
   backer: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center' },
+  backerGold: { backgroundColor: '#f6d77a', borderColor: '#8a5a12', justifyContent: 'space-between', paddingBottom: 8 },
+  backerFoilText: { fontFamily: FONT.display, fontSize: 14, color: '#5a3a08', letterSpacing: 1 },
   backerHole: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#021a45', marginTop: 10 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 3, paddingHorizontal: 14, paddingVertical: 4 },
   tagNew: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },

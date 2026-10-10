@@ -11,7 +11,7 @@
  */
 import { useAmbient } from '../../services/money/useAmbient';
 import { Image } from 'expo-image';
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useState, type ReactNode } from 'react';
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import { BRAND, FONT, GameButton, GameIcon, OUTLINE, RADIUS, SHADOW, SPACE } from '../../ui';
@@ -20,6 +20,24 @@ import { foundLabel, packPace, seasonLabel, type ParkSet, type PinDay, type PinR
 
 const CORK = require('../../../assets/images/screens/pin-swaps/corkboard.png');
 
+
+/** The set's prize: a gold frame always; a soft gold pulse once the set is done and the prize is waiting. */
+function PrizeGlow({ ready, still, children }: { ready: boolean; still: boolean; children: ReactNode }) {
+  const pulse = useSharedValue(0);
+  const ambient = useAmbient();
+  useEffect(() => {
+    if (ready && !still && ambient) pulse.value = withRepeat(withSequence(withTiming(1, { duration: 800 }), withTiming(0, { duration: 800 })), -1, false);
+    else { cancelAnimation(pulse); pulse.value = ready ? 1 : 0; }
+    return () => cancelAnimation(pulse);
+  }, [ready, still, ambient, pulse]);
+  const ring = useAnimatedStyle(() => ({ opacity: ready ? 0.45 + pulse.value * 0.55 : 1, transform: [{ scale: 1 + pulse.value * 0.06 }] }));
+  return (
+    <View style={styles.prizeFrame}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.prizeRing, ready && styles.prizeRingReady, ring]} />
+      {children}
+    </View>
+  );
+}
 
 function TodayChip({ day, still, onHunt }: { day: PinDay; still: boolean; onHunt?: () => void }) {
   const pulse = useSharedValue(0);
@@ -118,15 +136,22 @@ function ParkSetCardBase({ set, today, busy, still, shine, onClaim, onPin, onHun
                   tilt={((i * 37) % 13) - 6} flat surface="board" />
                 {rare && <View style={styles.rare}><Text maxFontSizeMultiplier={1} style={styles.rareText}>RARE</Text></View>}
                 {tip?.index === i && (
-                  <View style={styles.tip} pointerEvents="none"><Text maxFontSizeMultiplier={1.35} style={styles.tipText} numberOfLines={1}>{tip.text}</Text></View>
+                  <View style={styles.tip} pointerEvents="none"><Text maxFontSizeMultiplier={1.35} style={styles.tipText} numberOfLines={2}>{tip.text}</Text></View>
                 )}
               </Pressable>
             );
           })}
           {set.reward.completer && (
             <View style={styles.prizeSlot} accessible accessibilityLabel={set.reward.completer.owned ? 'Completer pin won' : 'Finish the set to win this Completer pin'}>
-              <PinTile uri={set.reward.completer.icon_url} size={58} owned={set.reward.completer.owned} kind="park" tradable={false} badge={false} flat />
-              {!set.reward.completer.owned && <View style={styles.prizeTag}><Text maxFontSizeMultiplier={1} style={styles.rareText}>PRIZE</Text></View>}
+              <PrizeGlow ready={set.complete && !set.claimed && !set.reward.completer.owned} still={still}>
+                {/* A finished set lights its prize up in full colour, ready to collect. */}
+                <PinTile uri={set.reward.completer.icon_url} size={58} owned={set.reward.completer.owned || set.complete} kind="park" tradable={false} badge={false} flat />
+              </PrizeGlow>
+              {!set.reward.completer.owned && (
+                <View style={[styles.prizeTag, set.complete && styles.prizeTagReady]}>
+                  <Text maxFontSizeMultiplier={1} style={[styles.rareText, set.complete && { color: BRAND.navy }]}>{set.complete ? 'GET IT!' : 'PRIZE'}</Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -165,18 +190,22 @@ const styles = StyleSheet.create({
   dot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: BRAND.navy, backgroundColor: BRAND.white },
   dotOn: { backgroundColor: BRAND.gold },
   count: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft, marginLeft: 4, paddingTop: 2 },
-  pace: { fontFamily: FONT.body, fontSize: 13, color: BRAND.navy, opacity: 0.8, marginTop: 2 },
+  pace: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, marginTop: 3, paddingTop: 2 },
   season: { backgroundColor: BRAND.red, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
   seasonText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.white, paddingTop: 2 },
   cork: { marginHorizontal: SPACE.sm, borderRadius: RADIUS.md, borderWidth: 3, borderColor: '#8a5a2b', overflow: 'hidden' },
   corkImage: { borderRadius: RADIUS.md - 3 },
   pins: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 2 },
   prizeSlot: { alignItems: 'center', paddingLeft: 6, marginLeft: 2, borderLeftWidth: 2, borderLeftColor: 'rgba(138,90,43,0.5)', borderStyle: 'dashed' },
+  prizeFrame: { padding: 4, borderRadius: 40 },
+  prizeRing: { borderRadius: 40, borderWidth: 3, borderColor: BRAND.gold },
+  prizeRingReady: { borderWidth: 4, backgroundColor: 'rgba(255,214,90,0.25)' },
+  prizeTagReady: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
   prizeTag: { position: 'absolute', bottom: -8, backgroundColor: BRAND.blueBright, borderColor: BRAND.white, borderWidth: 2, borderRadius: 6, paddingHorizontal: 5 },
   slot: { alignItems: 'center', minWidth: 48, minHeight: 60 },
   rare: { position: 'absolute', bottom: -8, backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 2, borderRadius: 6, paddingHorizontal: 5 },
-  tip: { position: 'absolute', top: -30, alignSelf: 'center', backgroundColor: BRAND.navy, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, zIndex: 5, minWidth: 90, alignItems: 'center' },
-  tipText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.white, paddingTop: 2 },
+  tip: { position: 'absolute', top: -30, alignSelf: 'center', backgroundColor: BRAND.navy, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, zIndex: 5, minWidth: 110, maxWidth: 170, alignItems: 'center' },
+  tipText: { fontFamily: FONT.display, fontSize: 16, textAlign: 'center', color: BRAND.white, paddingTop: 2 },
   rareText: { fontFamily: FONT.display, fontSize: 11, color: BRAND.navy, paddingTop: 2 },
   foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', paddingHorizontal: SPACE.md, paddingVertical: SPACE.sm, gap: SPACE.sm, minHeight: 56 },
   today: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 2, paddingHorizontal: 10, paddingVertical: 5 },

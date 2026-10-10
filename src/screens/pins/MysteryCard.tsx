@@ -238,6 +238,8 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
   const tone = boxTone(series.theme_color);
   const free = nextFreeBox(series);
   const progress = seriesProgress(series);
+  // Every pin and the chaser owned: boxes only give extras now, so they step back (no bundle push).
+  const allDone = progress.have >= progress.total && progress.chaser;
   const ends = endsLabel(series.ends_at);
   const { regular } = splitSeries(series);
   const accent = series.theme_color ?? BRAND.blueBright;
@@ -314,11 +316,11 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
                   style={({ pressed }) => [styles.openBtn, styles.openOne, pressed && { transform: [{ scale: 0.96 }] }, busy && { opacity: 0.5 }]}
                   accessibilityRole="button" accessibilityLabel={shortOne > 0 ? `Need ${shortOne} more coins` : `Open one box for ${series.price} coins`}>
                   <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
-                  <Text maxFontSizeMultiplier={1.1} style={styles.openOneText}>x1</Text>
+                  <Text maxFontSizeMultiplier={1.1} style={styles.openOneText}>{allDone ? 'Extras for trading' : 'x1'}</Text>
                   <View style={[styles.price, shortOne > 0 && styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{shortOne > 0 ? `${shortOne} more` : series.price}</Text></View>
                 </Pressable>
                 </Animated.View>
-                {shortFive > 0 ? (
+                {allDone ? null : shortFive > 0 ? (
                   // Short for the bundle: a plain tap shows the top-up (nothing to hold, nothing spent).
                   <Pressable onPress={() => tryOpen(series.bundle.count)} disabled={busy} hitSlop={4}
                     style={({ pressed }) => [styles.openBtn, styles.openFive, pressed && { transform: [{ scale: 0.96 }] }]}
@@ -336,7 +338,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
               <Text maxFontSizeMultiplier={1.3} style={styles.closed}>Free boxes only here</Text>
             )}
             {/* The bundle floor holds only while a regular pin is missing (same rule as the server). */}
-            {paid && <Text maxFontSizeMultiplier={1.3} style={styles.floorNote}>{progress.have < progress.total ? 'x5 = at least 1 new pin' : 'You have them all: boxes give extras'}</Text>}
+            {paid && <Text maxFontSizeMultiplier={1.3} style={styles.floorNote}>{progress.have < progress.total ? 'x5 = at least 1 new pin' : allDone ? 'You have every pin and the gold! Boxes now give extras to trade.' : 'You have them all: boxes give extras'}</Text>}
             {nextFree && !free && <Text maxFontSizeMultiplier={1.3} style={styles.nextFree}>{nextFree}</Text>}
             {topUp !== null && topUp > 0 && (
               <Animated.View entering={FadeIn.duration(160)}>
@@ -421,6 +423,6 @@ const styles = StyleSheet.create({
   nextFree: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft, textAlign: 'center', paddingTop: 2 },
   priceShort: { backgroundColor: BRAND.sky, borderColor: BRAND.navy },
   meterEnds: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, textAlign: 'center', marginTop: -6, paddingTop: 2 },
-  floorNote: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navySoft, textAlign: 'center', paddingTop: 2 },
+  floorNote: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, textAlign: 'center', paddingTop: 2 },
   closed: { fontFamily: FONT.body, fontSize: 17, color: BRAND.navySoft, textAlign: 'center' },
 });
