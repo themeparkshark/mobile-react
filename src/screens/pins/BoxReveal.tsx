@@ -257,6 +257,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
   const shownAt = useRef(0);
   const showPin = useCallback(() => {
+    if (phaseRef.current === 'show' || phaseRef.current === 'summary') return; // already shown (UI-thread callback + a tap)
     clearTimers();
     shownAt.current = Date.now();
     setPhase('show');
@@ -308,7 +309,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       if (isGold) punch.value = withSequence(withTiming(1.07, { duration: 70 }), withSpring(1, { damping: 7, stiffness: 260 }));
       lid.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
       rise.value = withSpring(1, { damping: 12, stiffness: 140, mass: 0.9 });
-      flip.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.cubic) });
+      // The pin is shown when its own flip lands, on the UI thread (no JS-timer drift under load).
+      flip.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.cubic) }, done => { if (done) runOnJS(showPin)(); });
       settle.value = withDelay(380, withSpring(1, { damping: 14, stiffness: 180 }));
       burst.value = 0; burst.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.quad) });
       glow.value = withTiming(isGold ? 1 : 0.65, { duration: 200 });
@@ -331,7 +333,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
         later(240, () => queueHaptic('success', 1));
       }
     }
-    later(still ? 240 : 620, showPin);
+    if (still) later(240, showPin);
   }, [index, pulls, showPin, still]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** The chaser's held breath: dim, two heartbeats, a heavy buzz, then pop. */
@@ -340,11 +342,11 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     setPhase('hold');
     dim.value = withTiming(1, { duration: 180 });
     glow.value = withTiming(1, { duration: 300 });
-    lift.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.quad) });
+    // The pop follows the lift (and a short beat), chained on the UI thread.
+    lift.value = withSequence(withTiming(1, { duration: 420, easing: Easing.out(Easing.quad) }), withTiming(1, { duration: 50 }, done => { if (done) runOnJS(pop)(); }));
     shake.value = withRepeat(withSequence(withTiming(-2.5, { duration: 45 }), withTiming(2.5, { duration: 45 })), -1, true);
     play('fx.hit', { pitch: 0.55, volume: 1 }); queueHaptic('hitMedium', 2);
     later(230, () => { play('fx.hit', { pitch: 0.5, volume: 1 }); queueHaptic('comboHeavy', 2); });
-    later(470, pop);
   }, [pop]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const afterShake = useCallback(() => {
