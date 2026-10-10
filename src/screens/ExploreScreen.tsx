@@ -124,6 +124,7 @@ import { statusOrder, HUD_BOTTOM } from '../components/map/statusStack';
 import { EventStatusChip, EventHomeChip, EventSheet, EventGainToast, FrenzyBanner, FrenzySweep, EventRecapCard, useRecapDue, useLiveEvent, useStarRides } from '../components/liveEvents';
 import { openableKeys } from '../services/liveEvents/model';
 import NextUpRail, { useNextUp } from '../components/nextUp/NextUpRail';
+import ParkDayOffer from '../components/money/ParkDayOffer';
 import { nextUpRoute, NEXT_UP_RAIL_SPACE } from '../components/nextUp/nextUpRoute';
 import { createDeclutterStore } from '../components/map/declutter/store';
 import type { MapDeclutterInput } from '../components/map/declutter/useMapDeclutter';
@@ -1018,6 +1019,8 @@ function ExploreScreen() {
   const parkTip = frightOwnsParkTips({ modeOn: frightNight.modeOn, recapUp: !!frightEngine.recapOffer || !!frightEngine.marquee })
     ? null : parkTipFor({ inPark: !!park, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
       rideCoinInRange: activeRedeemable?.type === 'task' || activeRedeemable?.type === 'secret_task' });
+  const parkOfferSlot = !!player && !!park && !railShowing && suggestionSlots.left == null && suggestionSlots.right == null
+    && !parkTip && !isActive && !liveEvt.event;
   const parkTipReady = mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
     dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
@@ -1449,6 +1452,10 @@ function ExploreScreen() {
         {/* The "what now" rail: one row in the suggestion slot, only while no suggestion card holds it. */}
         {railShowing && <View pointerEvents="box-none" style={{ position: 'absolute', top: slotTop, left: 12, right: 12, zIndex: 38 }}>
           <NextUpRail item={nextUp.item} onAction={handleNextUp} />
+        </View>}
+        {/* Park Day Pack: once per park day, quietly in the same free slot (never with the rail, a tip, a card or Finn). */}
+        {parkOfferSlot && <View pointerEvents="box-none" style={{ position: 'absolute', top: slotTop, left: 12, right: 12, zIndex: 38 }}>
+          <ParkDayOffer />
         </View>}
         {player && liveEvt.event && <>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 37 }]}><FrenzySweep event={liveEvt.event} /></View>

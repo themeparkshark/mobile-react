@@ -11,6 +11,8 @@ import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { PlayerType } from '../../models/player-type';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, textPreset, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import MemberFlex from '../../components/money/MemberFlex';
+import { memberFlexOf } from '../../services/money/memberFlex';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 
@@ -38,6 +40,8 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
 }) {
   const reduced = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
+  // Season frame, ring and VIP mark, only when the payload carries them (else the row is unchanged).
+  const flex = memberFlexOf(player);
   const medal: GameIconName | null = highlight && rank <= 3 ? (`medal${rank}` as GameIconName) : null;
   return (
     <Animated.View entering={reduced ? undefined : FadeInRight.delay(rowEnterDelay(index, enterDelayBase)).springify().damping(15).stiffness(170)}>
@@ -62,12 +66,13 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
             <Text style={{ fontFamily: 'Shark', fontSize: rank > 99 ? 12 : 16, color: BRAND.white }}>{rank > 0 ? rank : '-'}</Text>
           </View>
         )}
+        {flex ? <MemberFlex inventory={player.inventory} frame={flex.frame} vip={flex.vip} step={flex.step} size={50} still /> : (
         <View style={{ width: 50, height: 50, borderRadius: 25, overflow: 'hidden', backgroundColor: BRAND.sky }}>
           <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
             <GameIcon name="shark" size={40} />
           </View>
           <Avatar player={player} size="sm" />
-        </View>
+        </View>)}
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, textTransform: 'uppercase' }}>
             {player.screen_name}

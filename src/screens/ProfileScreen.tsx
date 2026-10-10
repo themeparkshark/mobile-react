@@ -55,6 +55,7 @@ import useCrumbs from '../hooks/useCrumbs';
 import { ParkType } from '../models/park-type';
 import { PlayerType } from '../models/player-type';
 import { StoreType } from '../models/store-type';
+import SharkPassBanner from '../components/money/SharkPassBanner';
 
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
 const STAGE_H = Math.round(Math.max(270, Math.min(315, Dimensions.get('window').height * 0.33)));
@@ -546,6 +547,8 @@ export default function ProfileScreen() {
                 {/* Pins v2: the lanyard, the flex other players see too. */}
                 <ProfileLanyardCard playerId={player.id} own />
                 <StatusBadges isVip={!!player.is_subscribed} isVerified={!!player.verified_at} own />
+                {/* Shark Pass: one line and a bar while a season runs (renders nothing when the flag is off). */}
+                <SharkPassBanner style={{ marginTop: 12 }} />
                 {/* The showcase coin sits under the shortcuts so the row is visible on first view. */}
                 {!!player.featured_ride_coin && (
                   <FeaturedRideCoinCard coin={player.featured_ride_coin}

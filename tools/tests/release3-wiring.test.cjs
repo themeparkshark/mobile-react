@@ -76,3 +76,22 @@ test('sign-out clears the live event next to the Secret Shop flag; the badge sta
   const marker = fs.readFileSync('src/screens/ExploreScreen/TaskMarker.tsx', 'utf8');
   assert.match(marker, /\{star && !parked && <View pointerEvents="none" style=\{styles\.starRide\}><StarRideBadge paused=\{!alive\.running\} \/><\/View>\}/);
 });
+
+test('MemberFlex in Standings: only when the row payload carries flex fields; is_subscribed alone changes nothing', () => {
+  const m = loadTs('src/services/money/memberFlex.ts');
+  assert.equal(m.memberFlexOf({ id: 1, is_subscribed: true }), null);
+  assert.equal(m.memberFlexOf({ flex: {} }), null);
+  assert.equal(m.memberFlexOf({ flex: { frame: '', vip: 'yes', step: 0 } }), null);
+  assert.deepEqual(plain(m.memberFlexOf({ flex: { frame: 's1:aurora-frame', vip: true, step: 41.7 } })), { frame: 's1:aurora-frame', vip: true, step: 41 });
+  assert.deepEqual(plain(m.memberFlexOf({ flex: { step: 50 } })), { frame: null, vip: false, step: 50 });
+  const row = fs.readFileSync('src/screens/LeaderboardsScreen/StandingsRow.tsx', 'utf8');
+  assert.match(row, /\{flex \? <MemberFlex [^>]*still \/> : \(/);
+});
+
+test('money on the map and Profile: Park Day Pack in the free suggestion slot only, Shark Pass banner on Profile', () => {
+  const explore = fs.readFileSync('src/screens/ExploreScreen.tsx', 'utf8');
+  assert.match(explore, /const parkOfferSlot = !!player && !!park && !railShowing && suggestionSlots\.left == null && suggestionSlots\.right == null\n\s*&& !parkTip && !isActive && !liveEvt\.event;/);
+  assert.equal((explore.match(/<ParkDayOffer \/>/g) ?? []).length, 1);
+  const profile = fs.readFileSync('src/screens/ProfileScreen.tsx', 'utf8');
+  assert.equal((profile.match(/<SharkPassBanner /g) ?? []).length, 1);
+});
