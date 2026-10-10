@@ -221,7 +221,7 @@ function Pulse({ value, reduced, style, children }: { value: number; reduced: bo
 }
 function Loot({ icon, n }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: number }) {
   return <View style={styles.loot}><GameIcon name={icon} size={18} />
-    <Text style={styles.lootNum} maxFontSizeMultiplier={1.2}>{n}{icon === 'xp' ? ' XP' : icon === 'parts' ? ' Ride Parts' : ''}</Text></View>;
+    <Text style={styles.lootNum} maxFontSizeMultiplier={1.2}>{n}{icon === 'xp' ? ' XP' : icon === 'parts' ? ' Parts' : ''}</Text></View>;
 }
 
 const styles = StyleSheet.create({

@@ -77,6 +77,8 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   }, [boss, damage, bestBefore]);
   const hpAfter = Math.max(0, startHp - damage);
   const ko = startHp > 0 && hpAfter === 0;
+  // The team took the boss down (your round or teammates' hits before the bell): a win, never "still fighting".
+  const won = hpAfter === 0;
   const n = nextAttack(next);
   const noHits = damage <= 0;
   const drain = useSharedValue(0);
@@ -108,8 +110,8 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
 
   return (
     <View style={styles.card} accessibilityViewIsModal>
-      <View style={[styles.banner, ko && styles.bannerWin]} accessibilityRole="header">
-        <Text style={styles.bannerText}>{noHits ? 'MISSED IT' : ko ? 'YOU FINISHED IT!' : 'STILL FIGHTING'}</Text>
+      <View style={[styles.banner, won && styles.bannerWin]} accessibilityRole="header">
+        <Text style={styles.bannerText}>{won ? (ko && !noHits ? 'YOU FINISHED IT!' : 'TEAM WON!') : noHits ? 'MISSED IT' : 'STILL FIGHTING'}</Text>
       </View>
       {best && !noHits && <View style={styles.best}><Text style={styles.bestText}>NEW BEST!</Text></View>}
       <View style={styles.head}>
@@ -137,13 +139,13 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <Animated.View style={[styles.hpRed, fill]} />
         </View>
         <Text style={styles.raidLine} numberOfLines={1}>
-          {ko ? 'Your hit could finish it!' : `${hpAfter.toLocaleString()} HP left`}{left ? `  ·  ${left}` : ''}{fighters > 0 ? `  ·  ${fighters} fighting` : ''}
+          {ko ? 'Your hit could finish it!' : won ? 'Boss down!' : `${hpAfter.toLocaleString()} HP left`}{left ? `  ·  ${left}` : ''}{fighters > 0 ? `  ·  ${fighters} fighting` : ''}
         </Text>
       </View>
 
       {rewards && <View style={styles.loot} accessible accessibilityLabel={`If your team beats it you get ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`}>
-        {ko && <ChestPop />}
-        <Text style={styles.lootTitle}>{ko ? 'Your loot is on the way' : 'Team wins, you get'}</Text>
+        {won && <ChestPop />}
+        <Text style={styles.lootTitle}>{won ? 'Your loot is on the way' : 'Team wins, you get'}</Text>
         <View style={styles.lootRow}>
           <Loot icon="coins" n={rewards.coins} />
           <Loot icon="xp" n={rewards.xp} />
@@ -164,11 +166,11 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           : <Chip label="Perfects" value={Number(meta.perfects ?? 0)} />}
       </View>
 
-      {!noHits && n.can && onAgain && warmNext && <View style={styles.warm} accessible accessibilityLabel="Head start earned: your next attack starts with a free fin">
+      {!won && !noHits && n.can && onAgain && warmNext && <View style={styles.warm} accessible accessibilityLabel="Head start earned: your next attack starts with a free fin">
         <Image source={BASH_ART.finFull} style={{ width: 20, height: 20 }} contentFit="contain" />
         <Text style={styles.warmText} maxFontSizeMultiplier={1.2}>HEAD START EARNED</Text>
       </View>}
-      {!noHits && n.can && onAgain ? <>
+      {!won && !noHits && n.can && onAgain ? <>
         <Pressable accessibilityRole="button" onPress={once(onAgain)} style={({ pressed: p }) => [styles.again, p && { transform: [{ scale: 0.97 }] }]}
           accessibilityLabel={`Attack again for ${next?.energyCost} Energy${warmNext ? ', with a free head start fin' : ''}. You have ${n.energyAfter} Energy.`}>
           {warmNext && <Image source={BASH_ART.finFull} style={styles.againFin} contentFit="contain" />}
