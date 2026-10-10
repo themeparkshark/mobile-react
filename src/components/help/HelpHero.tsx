@@ -99,14 +99,14 @@ export interface HeroData {
 const SEEN = new Set<HelpHeroKey>();
 
 /** 0..1 repeating while running; parked on the scene's still frame otherwise. */
-function useLoop(hero: HelpHeroKey, running: boolean, reduced: boolean): SharedValue<number> {
+function useLoop(hero: HelpHeroKey, running: boolean, reduced: boolean, replay = 0): SharedValue<number> {
   const { ms, rest } = LOOP[hero];
   const t = useSharedValue(rest);
   useEffect(() => {
     cancelAnimation(t);
     if (!running || reduced) { t.value = rest; return undefined; }
     const loop = withRepeat(withTiming(1, { duration: ms, easing: Easing.linear }), -1, false);
-    if (SEEN.has(hero)) {
+    if (SEEN.has(hero) && replay === 0) {
       // Seen before this session: open on the payoff, then keep looping, so the 10th open is not a rerun.
       t.value = rest;
       t.value = withSequence(withTiming(1, { duration: ms * (1 - rest), easing: Easing.linear }), withTiming(0, { duration: 0 }), loop);
@@ -116,21 +116,23 @@ function useLoop(hero: HelpHeroKey, running: boolean, reduced: boolean): SharedV
       t.value = loop;
     }
     return () => cancelAnimation(t);
-  }, [hero, running, reduced, ms, rest, t]);
+  }, [hero, running, reduced, ms, rest, t, replay]);
   return t;
 }
 
-export default function HelpHero({ hero, width, height, running, reduced, data }: {
+export default function HelpHero({ hero, width, height, running, reduced, data, replay = 0 }: {
   readonly hero: HelpHeroKey;
   readonly width: number;
   readonly height: number;
   readonly running: boolean;
   readonly reduced: boolean;
   readonly data?: HeroData;
+  /** Bumped when the player taps the picture: the scene plays again from the start. */
+  readonly replay?: number;
 }) {
   // Battery: the decorative loop rests when the phone is idle or backgrounded (full power: no change).
   const p = usePowerBudget();
-  const t = useLoop(hero, running && p.ambient, reduced);
+  const t = useLoop(hero, running && p.ambient, reduced, replay);
   const cork = hero === 'pins_swap' || hero === 'pins_clock';
   const sp = { t, w: width, h: height };
   return (

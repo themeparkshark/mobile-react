@@ -294,12 +294,19 @@ function PageView({ page, index, width, heroW, heroH, running, reduced, reveal, 
   const p1 = useAnimatedStyle(textStyle(0.44));
   const p2 = useAnimatedStyle(textStyle(0.54));
   const pointStyles = [p0, p1, p2];
+  const [replay, setReplay] = useState(0);
   const label = `${page.headline}. ${page.points.map(point => point.text).join(' ')}`;
   return (
     <View style={{ width, paddingHorizontal: SIDE }}>
-      <Animated.View style={[styles.heroWindow, { height: heroH }, heroStyle]}>
-        <HelpHero hero={page.hero} width={heroW - 6} height={heroH - 6} running={running} reduced={reduced} data={page.heroData} />
-      </Animated.View>
+      {/* Tap the picture to play it again (with a light tap feel). */}
+      <Pressable accessible={false} disabled={reduced} onPress={() => {
+        setReplay(n => n + 1);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+      }}>
+        <Animated.View style={[styles.heroWindow, { height: heroH }, heroStyle]}>
+          <HelpHero hero={page.hero} width={heroW - 6} height={heroH - 6} running={running} reduced={reduced} data={page.heroData} replay={replay} />
+        </Animated.View>
+      </Pressable>
       <View accessible accessibilityLabel={label} style={styles.textBlock}>
         <Animated.Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}
           style={[styles.headline, head]}>{page.headline}</Animated.Text>
