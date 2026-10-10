@@ -195,11 +195,11 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
                   <Circle cx={8} cy={10.5} r={1.3} fill={BRAND.navy} />
                 </Svg>
               ) : (
-                // One chunky arrow circling a little map: the map spins.
-                <Svg width={17} height={17} viewBox="0 0 17 17">
-                  <Path d="M5.6 5.6 H11.4 V11.4 H5.6 Z" fill={BRAND.gold} stroke={BRAND.white} strokeWidth={1.4} strokeLinejoin="round" />
-                  <Path d="M14.6 8.5 A6.1 6.1 0 1 1 11.6 3.2" stroke={BRAND.white} strokeWidth={2.4} fill="none" strokeLinecap="round" />
-                  <Path d="M10.2 0.6 L14.9 2.6 L11.6 6.3 Z" fill={BRAND.white} stroke={BRAND.white} strokeWidth={0.8} strokeLinejoin="round" />
+                // One chunky outlined arrow going round: the map spins (a navy edge under the white stroke).
+                <Svg width={18} height={18} viewBox="0 0 18 18">
+                  <Path d="M15 9 A6 6 0 1 1 12.4 4" stroke={BRAND.navy} strokeWidth={5} fill="none" strokeLinecap="round" />
+                  <Path d="M15 9 A6 6 0 1 1 12.4 4" stroke={BRAND.white} strokeWidth={2.6} fill="none" strokeLinecap="round" />
+                  <Path d="M10.6 1.2 L16.2 2.8 L12.6 7.4 Z" fill={BRAND.white} stroke={BRAND.navy} strokeWidth={1.3} strokeLinejoin="round" />
                 </Svg>
               )}
             </Reanimated.View>
