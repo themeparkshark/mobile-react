@@ -172,7 +172,7 @@ export default function PinsScreen() {
     const tone: BoxTone = golden ? 'gold' : boxTone(series.theme_color);
     setReveal({ pulls: [placeholder], tone, golden, seriesId: series.id, waiting: true, spend });
     try {
-      const r = await openMysteryBoxes(series.id, { count, pay, request_id: requestId, region: region.current, ...(golden ? { box: 'golden' as const } : {}) });
+      const r = await openMysteryBoxes(series.id, { count, pay, request_id: requestId, region: region.current, ...(golden ? { box: 'golden' as const, odds_key: series.golden?.odds_key } : {}) });
       delete pending.current[slot];
       // Decode the pins at reveal size while the box sits there.
       void warmPinImages(r.pulls.map(p => p.icon_url ?? undefined), 210);
@@ -195,9 +195,14 @@ export default function PinsScreen() {
         setServerShort({ seriesId: series.id, need: Math.max(1, (data.data.need ?? 0) - (data.data.have ?? 0)) });
         void refreshPlayer().catch(() => undefined);
       }
+      else if (data?.data?.code === 'odds_changed') {
+        // A trade or another open moved the odds: show the fresh table before anything is spent.
+        void load(true);
+        gameAlert('Your odds changed', 'Take a look at the new odds, then open. No coins were spent.');
+      }
       else gameAlert('That box didn’t open', data?.data?.message ?? 'Check your internet and try again. Your coins are safe.');
     } finally { setBusy(null); }
-  }, [busy, coins, refreshPlayer, setCoins]);
+  }, [busy, coins, refreshPlayer, setCoins, load]);
 
   const claim = useCallback(async (set: ParkSet) => {
     if (busy) return;

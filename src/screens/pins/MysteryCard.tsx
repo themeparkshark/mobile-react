@@ -273,7 +273,7 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
           <View style={styles.goldenChips}>
             <View style={styles.goldenChip}>
               <Image source={PIN_ART.chaser} style={{ width: 18, height: 18 }} contentFit="contain" />
-              <Text maxFontSizeMultiplier={1.1} style={styles.goldenChipText}>{`Gold chaser ${oneIn(golden.chaser_bp)}`}</Text>
+              <Text maxFontSizeMultiplier={1.1} style={styles.goldenChipText}>{golden.chaser_bp >= 10000 ? 'Gold chaser next!' : `Gold chaser ${oneIn(golden.chaser_bp)}`}</Text>
             </View>
             {golden.no_duplicates && <View style={[styles.goldenChip, styles.goldenChipNew]}><Text maxFontSizeMultiplier={1.1} style={[styles.goldenChipText, { color: BRAND.white }]}>Only new pins</Text></View>}
           </View>
@@ -284,6 +284,7 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
       {openOdds && (
         <Animated.View entering={FadeIn.duration(160)} style={{ gap: SPACE.sm }}>
           <OddsTable pins={pins} size={38} pity={series.pity} compact gotIt />
+          <Text maxFontSizeMultiplier={1.3} style={styles.floorNote}>{golden.chaser_bp >= 10000 ? 'This box: gold chaser for sure!' : `Gold chaser always by box ${series.pity}`}</Text>
           {short > 0 ? (
             <Pressable onPress={go} disabled={busy} hitSlop={4}
               style={({ pressed }) => [styles.openBtn, styles.openShort, pressed && { transform: [{ scale: 0.96 }] }]}
@@ -295,9 +296,11 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
           ) : (
             <HoldToOpen label={golden.price.toLocaleString('en-US')} saving={0} disabled={busy} tone="gold" word="Hold to open" a11y="Hold to open a Golden Box" onOpen={go} />
           )}
+          {/* Short on coins: no price card next to a premium random box, just how to earn more (compliance review). */}
           {topUp !== null && topUp > 0 && (
-            <Animated.View entering={FadeIn.duration(160)}>
-              <CoinTopUpOffer need={topUp} reason="mystery-box" onDone={() => setTopUp(null)} />
+            <Animated.View entering={FadeIn.duration(160)} style={styles.earnNote}>
+              <GameIcon name="coin" size={18} />
+              <Text maxFontSizeMultiplier={1.3} style={styles.earnText}>Win coins at the park and in your daily chest.</Text>
             </Animated.View>
           )}
         </Animated.View>
@@ -500,6 +503,8 @@ const styles = StyleSheet.create({
   openFive: { backgroundColor: BRAND.blueBright },
   holdFill: { position: 'absolute', left: 0, bottom: 0, height: 7, backgroundColor: BRAND.gold },
   holdFillGold: { backgroundColor: BRAND.navy },
+  earnNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  earnText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 2, flexShrink: 1, textAlign: 'center' },
   openShort: { backgroundColor: '#e9e2c9', borderColor: BRAND.navy },
   gotIt: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#dff5e3', borderRadius: 999, paddingHorizontal: 4 },
   gotItText: { fontFamily: FONT.display, fontSize: 12, color: '#1f7a3a', paddingTop: 2 },

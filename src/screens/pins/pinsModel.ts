@@ -48,6 +48,10 @@ export interface GoldenBox {
   readonly no_duplicates: boolean;
   readonly odds: { pin_id: number; is_chaser: boolean; chance_bp: number }[];
   readonly paid_allowed: boolean;
+  /** Sent back on open; the server refuses (409 odds_changed) if the odds moved since this was shown. */
+  readonly odds_key?: string;
+  /** Golden Boxes per day (kid-spend guardrail). */
+  readonly daily_cap?: number;
 }
 
 export interface PinDay {
