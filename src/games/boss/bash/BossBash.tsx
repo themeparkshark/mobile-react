@@ -556,7 +556,10 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     endDizzy(); endInkTell(); setHint('none');
     setFx(list => list.filter(f => f.t === 'num'));
     setFace('dizzy');
-    addFx({ t: 'wm', wm: 'knockout' }, 1300);
+    engine.current = { ...engine.current, up: [], dizzy: null, ink: null };
+    setActors(list => list.map(a => ({ ...a, exit: 'sink' as ActorExit })));
+    // The knockout word stays up until the bell.
+    addFx({ t: 'wm', wm: 'knockout' }, Math.max(1300, 12_500 - played.current));
     if (mine) later(250, () => addFx({ t: 'bubble', text: 'YOU FINISHED IT!', x: L.w / 2, y: L.waterY - 40, tone: 'gold' }, 1100));
     if (!reduced) {
       flash.flash(0.25, 160);
@@ -655,7 +658,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     lastFrame.current = now;
     if (now >= frozenUntil.current) played.current = Math.min(ROUND_MS, played.current + dt);
     clock.value = played.current;
-    const r = tick(engine.current, played.current);
+    // After a knockout the boss stays beaten: no spawns, no ink, no input, while the clock runs to the server minimum.
+    const r = koShown.current ? { state: engine.current, events: [] } : tick(engine.current, played.current);
     engine.current = r.state;
     if (r.events.length) applyRef.current(r.events);
     // A first-timer who has not bonked yet gets the pointing hand.
@@ -735,7 +739,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
   // --- Input ---------------------------------------------------------------------
   const tapLane = (lane: number) => {
-    if (!playing.current) return;
+    if (!playing.current || koShown.current) return;
     const s = engine.current;
     // Dizzy (flopped on the water): the boss is the target, anywhere you tap. During the ink, only the boss blocks.
     if (s.dizzy) { tapHead(); return; }
@@ -757,7 +761,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     apply(r.events);
   };
   const tapHead = () => {
-    if (!playing.current) return;
+    if (!playing.current || koShown.current) return;
     const r = tapBoss(engine.current, played.current, cap, weights);
     engine.current = r.state;
     apply(r.events);

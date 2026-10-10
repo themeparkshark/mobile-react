@@ -147,7 +147,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <Animated.View style={[styles.hpRed, fill]} />
         </View>}
         <Text style={styles.raidLine} numberOfLines={1}>
-          {ko ? 'Your hit could finish it!' : won ? 'Boss down!' : `${hpAfter.toLocaleString()} HP left`}{left && !won ? `  ·  ${left}` : ''}{fighters > 0 && !won ? `  ·  ${fighters} fighting` : ''}
+          {won ? 'Boss down!' : `${hpAfter.toLocaleString()} HP left`}{left && !won ? `  ·  ${left}` : ''}{fighters > 0 && !won ? `  ·  ${fighters} fighting` : ''}
         </Text>
       </View>
 
