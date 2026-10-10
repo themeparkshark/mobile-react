@@ -14,6 +14,7 @@ import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 import { CLASSIC_NO_EYE, sharkBaseLayers, slotAtPoint } from '../helpers/wardrobe';
+import { TEAMS, teamName, type TeamId } from '../constants/teams';
 
 /**
  * Where each worn layer lands, normalized on the 1353x1530 paper art
@@ -65,6 +66,8 @@ export default function Playercard({
   inventory,
   style,
   showBackground = true,
+  team = null,
+  teamTop = 88,
   sharkTransform,
   onItemTap,
   popLayers = false,
@@ -88,6 +91,10 @@ export default function Playercard({
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
   readonly showBackground?: boolean;
+  /** The player's team: its crest sits on the card's top-left, opposite the pin (read-only). */
+  readonly team?: TeamId | null;
+  /** Card y for the crest; screens that pull the card up (short stages) push it back down so it never hides under the header. */
+  readonly teamTop?: number;
   readonly sharkTransform?: any[];
   readonly onItemTap?: (item: ItemType, slot: string) => void;
   /** Inventory stage: layers put on after the first frame pop in at their slot. */
@@ -337,6 +344,15 @@ export default function Playercard({
               position: 'absolute',
             }}
             contentFit="cover"
+          />
+        )}
+        {!!team && (
+          <Image
+            source={TEAMS[team].badge}
+            accessible
+            accessibilityLabel={teamName(team)}
+            style={{ width: 44, height: 44, position: 'absolute', left: 18, top: teamTop, zIndex: 19 }}
+            contentFit="contain"
           />
         )}
         {inventory?.pin_item && pinAnchor === 'card' && (

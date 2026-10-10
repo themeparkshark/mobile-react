@@ -11,8 +11,10 @@ import GameIcon from '../../ui/GameIcon';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 
-export default function TitlePill({ title, trophy, onPress, art }: {
+export default function TitlePill({ title, trophy, onPress, art, team }: {
   readonly title?: string | null;
+  /** The team crest + name (or "Pick your team"), first in the row. */
+  readonly team?: ReactNode;
   /** The single event trophy slot (renders nothing without data). */
   readonly trophy?: ReactNode;
   /** Your own profile only: opens the title sheet (what it means, change, remove). */
@@ -24,6 +26,7 @@ export default function TitlePill({ title, trophy, onPress, art }: {
   if (!title && onPress) {
     return (
       <View style={styles.row}>
+        {team}
         <Pressable style={({ pressed }) => [styles.pill, styles.empty, pressed && styles.pressed]} hitSlop={6}
           onPress={() => { haptic('tapLight'); playSfx('ui.tap', 0.6); onPress(); }}
           accessibilityRole="button" accessibilityLabel="No title yet" accessibilityHint="Shows how to get a title and the titles you have">
@@ -34,7 +37,7 @@ export default function TitlePill({ title, trophy, onPress, art }: {
       </View>
     );
   }
-  if (!title && !trophy) return null;
+  if (!title && !trophy && !team) return null;
   const label = (
     <>
       {art ?? <GameIcon name="crown" size={22} />}
@@ -47,6 +50,7 @@ export default function TitlePill({ title, trophy, onPress, art }: {
   );
   return (
     <View style={styles.row}>
+      {team}
       {!!title && (onPress ? (
         <Pressable style={({ pressed }) => [styles.pill, pressed && styles.pressed]} onPress={() => { haptic('tapLight'); playSfx('ui.tap', 0.6); onPress(); }} hitSlop={6}
           accessibilityRole="button" accessibilityLabel={`Title: ${title}`} accessibilityHint="Shows what your title means and lets you change or remove it">
@@ -63,7 +67,8 @@ export default function TitlePill({ title, trophy, onPress, art }: {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16 },
+  // Wraps onto a second line on narrow phones / big text so the team, title and trophies never overlap.
+  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16 },
   pill: {
     flexShrink: 1,
     flexDirection: 'row',

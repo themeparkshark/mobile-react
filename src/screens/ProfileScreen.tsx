@@ -32,6 +32,8 @@ import { profileStores } from '../components/profile/profileStores';
 import { loadSecretShopFlag, secretShopFlagNow } from '../services/secretShopFlag';
 import StatusBadges from '../components/profile/StatusBadges';
 import TitlePill from '../components/profile/TitlePill';
+import TeamChip from '../components/profile/TeamChip';
+import { playerTeamId } from '../components/profile/teamModel';
 import TitleSheet, { TitleArt, equipEarned } from '../components/profile/TitleSheet';
 import TitleUndoBar from '../components/profile/TitleUndoBar';
 import type { EarnedTitle } from '../components/profile/titleModel';
@@ -406,6 +408,8 @@ export default function ProfileScreen() {
               >
                 <Playercard
                   showBackground={false}
+                  team={playerTeamId(player)}
+                  teamTop={76 + (315 - STAGE_H) / 2}
                   inventory={player.inventory}
                   sharkTransform={[
                     { scale: sharkScale },
@@ -523,7 +527,10 @@ export default function ProfileScreen() {
               }}
             >
               <View style={{ marginTop: 12 }}>
-                <TitlePill title={player.title} trophy={<><ProfileEventChip />
+                <TitlePill title={player.title}
+                  team={<TeamChip team={playerTeamId(player)} own
+                    onPick={() => RootNavigation.navigate('TeamSelection', { onTeamSelected: () => { void refreshPlayer(); } })} />}
+                  trophy={<><ProfileEventChip />
                   {ownStreak && <StreakFlame streak={ownStreak.days} best={ownStreak.best} size={28} />}</>} onPress={() => setTitleSheet(true)}
                   art={<TitleArt entry={null} title={player.title} size={28} />} />
                 {!player.title && (

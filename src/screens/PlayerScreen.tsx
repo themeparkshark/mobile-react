@@ -15,6 +15,8 @@ import Stats from '../components/Stats';
 import ProfileShortcuts, { type ProfileShortcut } from '../components/profile/ProfileShortcuts';
 import StatusBadges from '../components/profile/StatusBadges';
 import TitlePill from '../components/profile/TitlePill';
+import TeamChip from '../components/profile/TeamChip';
+import { playerTeamId } from '../components/profile/teamModel';
 import * as RootNavigation from '../RootNavigation';
 import ProfileEventChip from '../components/profile/ProfileEventChip';
 import useCardOnScreen from '../components/profile/useCardOnScreen';
@@ -225,6 +227,8 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
             >
               <Playercard
                 showBackground={false}
+                team={playerTeamId(currentPlayer)}
+                  teamTop={76 + (315 - STAGE_H) / 2}
                 inventory={currentPlayer.inventory}
                 style={{
                   position: 'absolute',
@@ -244,6 +248,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
             >
               <View style={{ marginBottom: 12 }}>
                 <TitlePill title={currentPlayer.title}
+                  team={<TeamChip team={playerTeamId(currentPlayer)} own={false} />}
                   trophy={<><ProfileEventChip playerId={currentPlayer.id} />
                     {currentPlayer.daily3_streak != null && <StreakFlame streak={currentPlayer.daily3_streak} best={currentPlayer.daily3_best ?? 0} size={26} />}</>} />
               </View>
