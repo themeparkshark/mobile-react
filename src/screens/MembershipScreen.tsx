@@ -23,7 +23,7 @@ import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import getVipPerks, { type VipPerk } from '../api/endpoints/economy/vip-perks';
 import {
-  buyVip, legalText, loadVipPlans, priceText, restoreVip, savingsText, storeAvailable, type VipPlan,
+  buyVip, legalText, loadVipPlans, priceText, restoreVip, savingsText, storeAvailable, trialEndsAt, type VipPlan,
 } from '../services/purchases';
 import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import { perMonthText } from '../services/money/offers';
@@ -33,6 +33,7 @@ import { askGrownUp } from '../components/GrownUpGate';
 import { VIP_GIFT_PRODUCT_IDS, buyVipGift, loadVipGiftPrices } from '../services/purchases';
 import { trackImpression, trackMoney } from '../services/money/track';
 import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../services/money/flags';
+import { scheduleTrialReminder } from '../services/money/trialReminder';
 
 // Every line here is backed by live server logic: ride wins pay VIP double
 // (CompleteTaskAction), VIP home maps spawn two extra finds and double their
@@ -53,8 +54,10 @@ const TRIAL_DAYS: Record<string, number> = { day: 1, week: 7, month: 30 };
 const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-/** "Thursday, October 15": the day the free trial ends, from its length ("One week free"). Null if unknown. */
-export function trialEndText(trial: string | null, now: Date = new Date()): string | null {
+/** "Thursday, October 15": the day the free trial ends. From StoreKit's intro period when known, else its words. */
+export function trialEndText(trial: string | null, now: Date = new Date(), length?: VipPlan['trialLength']): string | null {
+  const exact = length ? trialEndsAt({ trialLength: length }, now) : null;
+  if (exact) return `${WEEKDAY[exact.getDay()]}, ${MONTH[exact.getMonth()]} ${exact.getDate()}`;
   const m = trial?.toLowerCase().match(/^(\w+) (day|week|month)s? free$/);
   const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
   const n = m ? words.indexOf(m[1]) : -1;
@@ -64,9 +67,9 @@ export function trialEndText(trial: string | null, now: Date = new Date()): stri
 }
 
 /** "Free for 1 week. Then $4.99 a month." The deal, said once, right above the button. */
-export function dealLine(plan: Pick<VipPlan, 'price' | 'period' | 'trial'>): string {
+export function dealLine(plan: Pick<VipPlan, 'price' | 'period' | 'trial' | 'trialLength'>): string {
   const billing = priceText(plan);
-  const until = trialEndText(plan.trial);
+  const until = trialEndText(plan.trial, new Date(), plan.trialLength);
   return plan.trial
     ? `${capitalize(plan.trial)}${until ? `, until ${until}` : ''}.\nThen ${billing}.`
     : `${billing}.`;
@@ -163,7 +166,12 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   };
 
   const reportBuy = async (outcome: Awaited<ReturnType<typeof buyVip>>) => {
-    if (outcome === 'success') await celebrate();
+    if (outcome === 'success') {
+      // A free trial: one quiet reminder to the grown-up the day before it turns into a paid plan.
+      const end = plan.trial ? trialEndsAt(plan) : null;
+      if (end) void scheduleTrialReminder(end, `${priceText(plan)}`);
+      await celebrate();
+    }
     else if (outcome === 'pending') gameAlert('Waiting for a grown-up', 'A grown-up needs to say yes on their phone. VIP turns on after that.');
     else if (outcome === 'unverified') gameAlert('Almost there', 'It worked! VIP turns on in a minute. If not, it turns on next time you open the game.');
     else if (outcome === 'owned_elsewhere') ownedElsewhere();

@@ -182,3 +182,16 @@ test('the once-ever Starter Pack: seen per player on the server, shown only with
   const sheet = read('src/components/PostWinRewardsModal.tsx');
   assert.match(sheet, /\(starterShown === false \|\| coinsEarned <= 0\)/, 'no VIP line while the Starter Pack is still deciding (null)');
 });
+
+test('free trial: the end date comes from StoreKit, and one calm reminder goes to the grown-up a day before', () => {
+  const rem = loadTs('src/services/money/trialReminder.ts', { '@react-native-async-storage/async-storage': { default: {} } });
+  const end = new Date('2026-11-12T10:00:00Z');
+  assert.equal(rem.trialReminderAt(end, new Date('2026-11-05T10:00:00Z')).toISOString(), '2026-11-11T10:00:00.000Z');
+  assert.equal(rem.trialReminderAt(end, new Date('2026-11-11T12:00:00Z')), null, 'too late: no reminder');
+  const t = rem.trialReminderText('$39.99 a year');
+  assert.match(t.title, /^For grown-ups/);
+  assert.match(t.body, /\$39\.99 a year unless it is turned off\. To cancel: Settings, your name, Subscriptions\./);
+  const src = read('src/services/money/trialReminder.ts');
+  assert.doesNotMatch(src, /requestPermissionsAsync/, 'never asks for permission');
+  assert.match(read('src/services/purchases.ts'), /trialLength: freeTrial/);
+});

@@ -128,7 +128,21 @@ export type VipPlan = {
   readonly period: string;
   /** "1 week free" when the player can still get the intro trial. */
   readonly trial: string | null;
+  /** The free trial's length from StoreKit's intro offer (periods x unit), for the end date. Null with no trial. */
+  readonly trialLength?: { readonly count: number; readonly unit: 'day' | 'week' | 'month' | 'year' } | null;
 };
+
+/** The day a free trial bought now ends, from StoreKit's intro period (calendar months, not 30 days). Exported for tests. */
+export function trialEndsAt(plan: Pick<VipPlan, 'trialLength'>, now: Date = new Date()): Date | null {
+  const t = plan.trialLength;
+  if (!t || t.count <= 0) return null;
+  const end = new Date(now.getTime());
+  if (t.unit === 'day') end.setDate(end.getDate() + t.count);
+  else if (t.unit === 'week') end.setDate(end.getDate() + 7 * t.count);
+  else if (t.unit === 'month') end.setMonth(end.getMonth() + t.count);
+  else end.setFullYear(end.getFullYear() + t.count);
+  return end;
+}
 
 function unitWord(unit: string | undefined): string {
   switch ((unit ?? '').toUpperCase()) {
@@ -165,6 +179,9 @@ export function toPlan(product: StoreSubscription, trialEligible: boolean): VipP
     period: periodText(product.subscriptionPeriodNumberIOS, product.subscriptionPeriodUnitIOS),
     trial: freeTrial
       ? `${trialLength(product.introductoryPriceNumberOfPeriodsIOS, product.introductoryPriceSubscriptionPeriodIOS)} free`
+      : null,
+    trialLength: freeTrial
+      ? { count: Number(product.introductoryPriceNumberOfPeriodsIOS) || 1, unit: unitWord(product.introductoryPriceSubscriptionPeriodIOS) as 'day' | 'week' | 'month' | 'year' }
       : null,
   };
 }
