@@ -30,7 +30,7 @@ import {
   type MysterySeries, type PinRow,
 } from './pinsModel';
 
-const FREE_REASON = { first: 'First box free', weekly: 'Free this week', banked: 'Free box' } as const;
+const FREE_REASON = { first: 'Starter box free', weekly: 'Free this week', banked: 'Free box' } as const;
 let bankedFromLabel: string | null = null;
 /** The page tells cards where the banked box came from ("Free box from VIP"). */
 export function setBankedFrom(label: string | null) { bankedFromLabel = label; }
