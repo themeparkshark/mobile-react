@@ -109,11 +109,11 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
         </Tile>}
         {remote
           ? <Tile label="FROM HOME" tone="home" a11y={`From home your hits count ${Math.round(raid.remote.damage_rate * 100)} percent, loot is ${Math.round((raid.remote.reward_rate ?? raid.remote.damage_rate) * 100)} percent and you cannot be MVP`}>
+            {/* One compact block that fits the 58 pt picture slot (the house, the share and "no MVP" used to spill over the label). */}
             <View style={styles.homeRow}><Image source={HOUSE} style={styles.house} contentFit="contain" />
-              <Text style={styles.homeWhy} maxFontSizeMultiplier={1.2}>Not at the park</Text></View>
-            <Text style={styles.bigPct} maxFontSizeMultiplier={1}>{Math.round(raid.remote.damage_rate * 100)}%</Text>
+              <Text style={styles.bigPct} maxFontSizeMultiplier={1}>{Math.round(raid.remote.damage_rate * 100)}%</Text></View>
             <View style={styles.mvp}>
-              <View><GameIcon name="crown" size={28} /><View style={styles.crossOut} /></View>
+              <View><GameIcon name="crown" size={16} /><View style={styles.crossOut} /></View>
               <Text style={styles.tileSmall} maxFontSizeMultiplier={1.2}>no MVP</Text>
             </View>
           </Tile>
@@ -263,11 +263,10 @@ const styles = StyleSheet.create({
   tileLabel: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, marginTop: 2 },
   tileSmall: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navySoft },
   homeRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  house: { width: 30, height: 30 },
-  homeWhy: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
+  house: { width: 28, height: 28 },
   bigPct: { fontFamily: 'Shark', fontSize: 30, lineHeight: 34, color: BRAND.navy },
   mvp: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  crossOut: { position: 'absolute', left: -3, top: 11, width: 34, height: 5, borderRadius: 2, backgroundColor: BRAND.red, transform: [{ rotate: '-35deg' }] },
+  crossOut: { position: 'absolute', left: -2, top: 6, width: 20, height: 3.5, borderRadius: 2, backgroundColor: BRAND.red, transform: [{ rotate: '-35deg' }] },
   teamDots: { flexDirection: 'row', marginTop: 2 },
   teamDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: BRAND.sky, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   lootGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 4 },
