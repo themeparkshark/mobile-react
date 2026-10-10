@@ -541,7 +541,7 @@ export default function PinsScreen() {
       {picking && (
         <PickSheet series={picking} busy={busy === `pick:${picking.id}`} onClose={() => setPicking(null)} onPick={p => void pick(picking, p)} />
       )}
-      {help && <PinsHelp onClose={() => setHelp(false)} />}
+      {help && <PinsHelp golden={!!home?.mystery.some(s => s.golden)} onClose={() => setHelp(false)} />}
     </>
   );
 }

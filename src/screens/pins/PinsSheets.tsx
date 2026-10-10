@@ -48,7 +48,10 @@ const HELP = [
   { art: PIN_ART.trade, word: 'Can trade', line: 'Swap extras.' },
 ] as const;
 
-export function PinsHelp({ onClose }: { onClose: () => void }) {
+/** Shown in help only when the Golden Box is on for this player. */
+export const GOLDEN_HELP = 'Golden Box: 900 coins, one at a time. Gold chaser 1 in 4 (1 in 14 once you have it). Only pins you need. Shares the box-20 guarantee.';
+
+export function PinsHelp({ onClose, golden = false }: { onClose: () => void; golden?: boolean }) {
   return (
     <Sheet onClose={onClose}>
       <Text maxFontSizeMultiplier={1.35} style={[styles.title, { marginTop: SPACE.sm }]}>Pins</Text>
@@ -61,12 +64,19 @@ export function PinsHelp({ onClose }: { onClose: () => void }) {
           </View>
         ))}
       </View>
+      {golden && (
+        <View style={styles.goldenHelp} accessible accessibilityLabel={GOLDEN_HELP}>
+          <Image source={BOX_ART.gold.closed} style={{ width: 48, height: 48 }} contentFit="contain" />
+          <Text maxFontSizeMultiplier={1.3} style={[styles.helpLine, { flex: 1, textAlign: 'left' }]}>{GOLDEN_HELP}</Text>
+        </View>
+      )}
       <GameButton label="Got it" icon="check" onPress={onClose} />
     </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
+  goldenHelp: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff1c2', borderRadius: 14, borderWidth: 2, borderColor: '#d99a00', padding: 10, marginBottom: 12 },
   scrim: { flex: 1, backgroundColor: BRAND.scrim },
   sheet: {
     backgroundColor: BRAND.cream, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, borderWidth: OUTLINE.heavy,

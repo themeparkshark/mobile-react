@@ -52,7 +52,7 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
   const regular = pins.filter(p => !p.is_chaser);
   const chaser = pins.find(p => p.is_chaser);
   return (
-    <View style={styles.odds} accessible accessibilityLabel={`What can be inside. ${pins.map(p => `${p.owned ? p.name : 'a pin you need'} ${gotIt && p.owned && !p.is_chaser && !p.chance_bp ? 'got it' : formatChance(p.chance_bp)}`).join(', ')}`}>
+    <View style={styles.odds} accessible accessibilityLabel={`What can be inside. ${pins.map(p => `${p.owned ? p.name : 'a pin you need'} ${gotIt && !p.is_chaser && !p.chance_bp ? (p.owned ? 'got it' : 'not in this box, comes later') : formatChance(p.chance_bp)}`).join(', ')}`}>
       <View style={styles.oddsRow}>
         {regular.map((p, i) => {
           const isFresh = !!fresh?.has(p.item_id);
@@ -62,8 +62,10 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
               {isFresh && <View style={[styles.freshRing, { width: size + 8, height: size + 8, borderRadius: (size + 8) / 2 }]} />}
               <PinTile uri={p.icon_url} size={size} owned={p.owned} kind={p.kind} tradable={p.tradable} spares={p.spares}
                 badge={false} tilt={((i * 29) % 9) - 4} flat shine={undefined} plainGhost />
-              {gotIt && p.owned && !p.chance_bp
-                ? <View style={styles.gotIt}><GameIcon name="check" size={13} /><Text maxFontSizeMultiplier={1.2} style={styles.gotItText}>Got it</Text></View>
+              {gotIt && !p.owned && !p.chance_bp
+                ? <Text maxFontSizeMultiplier={1.2} style={styles.laterText}>Later</Text>
+                : gotIt && p.owned && !p.chance_bp
+                ? <View style={styles.gotIt}><GameIcon name="check" size={16} /></View>
                 : <View style={styles.pctRow}><View style={styles.pctDot} /><Text maxFontSizeMultiplier={1.3} style={styles.pct}>{formatChance(p.chance_bp)}</Text></View>}
             </Animated.View>
           );
@@ -76,7 +78,7 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
           {/* One number on screen (the meter below shows the guarantee); the guarantee is still read out and in the help. */}
           <View style={{ flex: 1 }} accessible accessibilityLabel={`Gold chaser, ${formatChance(chaser.chance_bp)} a box${pity ? `, always by box ${pity}` : ''}`}>
             <Text maxFontSizeMultiplier={1.3} style={styles.chaserLabel}>Gold chaser</Text>
-            <Text maxFontSizeMultiplier={1.3} style={styles.chaserPct}>{`${formatChance(chaser.chance_bp)} a box`}</Text>
+            <Text maxFontSizeMultiplier={1.3} style={styles.chaserPct}>{gotIt ? ((chaser.chance_bp ?? 0) >= 10000 ? 'This box!' : `${oneIn(chaser.chance_bp)} boxes`) : `${formatChance(chaser.chance_bp)} a box`}</Text>
           </View>
         </View>
       )}
@@ -275,7 +277,7 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
               <Image source={PIN_ART.chaser} style={{ width: 18, height: 18 }} contentFit="contain" />
               <Text maxFontSizeMultiplier={1.1} style={styles.goldenChipText}>{golden.chaser_bp >= 10000 ? 'Gold chaser next!' : `Gold chaser ${oneIn(golden.chaser_bp)}`}</Text>
             </View>
-            {golden.no_duplicates && golden.chaser_bp < 10000 && <View style={[styles.goldenChip, styles.goldenChipNew]}><Text maxFontSizeMultiplier={1.1} style={[styles.goldenChipText, { color: BRAND.white }]}>Only new pins</Text></View>}
+            {golden.no_duplicates && golden.chaser_bp < 10000 && <View style={[styles.goldenChip, styles.goldenChipNew]}><Text maxFontSizeMultiplier={1.1} style={[styles.goldenChipText, { color: BRAND.white }]}>{golden.chaser_bp < 2500 ? 'New pin or the chaser' : 'Only new pins'}</Text></View>}
           </View>
         </View>
         <View style={[styles.price, short > 0 && styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{golden.price.toLocaleString('en-US')}</Text></View>
@@ -284,7 +286,7 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
       {openOdds && (
         <Animated.View entering={FadeIn.duration(160)} style={{ gap: SPACE.sm }}>
           <OddsTable pins={pins} size={38} pity={series.pity} compact gotIt />
-          <Text maxFontSizeMultiplier={1.3} style={styles.floorNote}>{golden.chaser_bp >= 10000 ? 'This box: gold chaser for sure!' : `Gold chaser always by box ${series.pity}`}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={styles.floorNote}>{golden.chaser_bp >= 10000 ? 'Your next box has the gold chaser. Any box opens it, even a regular or free box.' : `Gold chaser always by box ${series.pity}. Best value for the chaser: the regular box.`}</Text>
           {short > 0 ? (
             <Pressable onPress={go} disabled={busy} hitSlop={4}
               style={({ pressed }) => [styles.openBtn, styles.openShort, pressed && { transform: [{ scale: 0.96 }] }]}
@@ -506,6 +508,7 @@ const styles = StyleSheet.create({
   earnNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   earnText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 2, flexShrink: 1, textAlign: 'center' },
   openShort: { backgroundColor: '#e9e2c9', borderColor: BRAND.navy },
+  laterText: { fontFamily: FONT.display, fontSize: 12, color: '#8aa0b8', paddingTop: 2 },
   gotIt: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#dff5e3', borderRadius: 999, paddingHorizontal: 4 },
   gotItText: { fontFamily: FONT.display, fontSize: 11, color: '#1f7a3a', paddingTop: 2 },
   openGold: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },

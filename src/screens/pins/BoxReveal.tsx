@@ -110,14 +110,14 @@ function CrownBurst({ t, size }: { t: SharedValue<number>; size: number }) {
 
 function MiniCrown({ i, t, size }: { i: number; t: SharedValue<number>; size: number }) {
   const angle = -Math.PI / 2 + ((i - (MINI_CROWNS - 1) / 2) / MINI_CROWNS) * Math.PI * 1.35;
-  const dist = size * (0.95 + (i % 2) * 0.25);
+  const dist = size * (1.35 + (i % 2) * 0.3);
   const style = useAnimatedStyle(() => {
     const v = t.value;
     if (v <= 0.12 || v >= 1) return { opacity: 0 };
     const k = (v - 0.12) / 0.88;
     return {
       // Gone well before the pin card settles (no ghost crowns over the pin).
-      opacity: Math.max(0, 1 - k * 1.8),
+      opacity: Math.max(0, 1 - k * 3.2),
       transform: [
         { translateX: Math.cos(angle) * dist * k },
         { translateY: -size * 0.5 + Math.sin(angle) * dist * k + 160 * k * k },
@@ -359,7 +359,9 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     cancelAnimation(shake); shake.value = 0;
     lift.value = withTiming(0, { duration: 160 });
     dim.value = withTiming(0, { duration: 200 });
-    flash.value = withSequence(withTiming(1, { duration: 60 }), withTiming(0, { duration: 260 }));
+    // Reduce Motion: no full-screen gold flash on the Golden Box.
+    // Golden Box: no full-screen wash (it read as a flat yellow screen); the gold glow and rays bloom on the box instead.
+    flash.value = golden ? 0 : withSequence(withTiming(1, { duration: 60 }), withTiming(0, { duration: 260 }));
     ring.value = 0; ring.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
     opened.value = 1;
     if (still) {
