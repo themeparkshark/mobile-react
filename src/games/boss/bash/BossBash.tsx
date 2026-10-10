@@ -82,6 +82,8 @@ function cue(id: string, fallback: string): string {
 function sfx(id: string, fallback: string, opts?: { pitch?: number; volume?: number; pan?: number }) {
   GameAudio.play(cue(id, fallback), opts);
 }
+/** Dev builds, or a release-mode frame-time capture (never set in store builds). */
+const CAPTURE = __DEV__ || process.env.EXPO_PUBLIC_PERF_CAPTURE === '1';
 /** G minor pentatonic steps for the bonk ladder. */
 const LADDER = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22];
 
@@ -166,6 +168,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
   const engine = useRef<BashState>(createBash(1));
   const frameStats = useRef({ n: 0, slow: 0, worst: 0, sum: 0 });
+  const [perfLine, setPerfLine] = useState<string | null>(null);
   const seedRef = useRef(Date.now() % 100000);
   const playing = useRef(false), finished = useRef(false);
   const played = useRef(0), lastFrame = useRef(0), frozenUntil = useRef(0), raf = useRef<number | null>(null);
@@ -611,7 +614,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     if (!playing.current) return;
     const now = Date.now();
     const raw = now - lastFrame.current;
-    if (__DEV__ && autoplay && lastFrame.current > 0 && raw < 1000) {
+    if (CAPTURE && autoplay && lastFrame.current > 0 && raw < 1000) {
       const f = frameStats.current; f.n++; f.sum += raw; f.worst = Math.max(f.worst, raw); if (raw > 20) f.slow++;
     }
     const dt = Math.min(250, Math.max(0, raw));
@@ -632,8 +635,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       haptic('tickSelection');
     }
     if (played.current >= ROUND_MS) {
-      if (__DEV__ && autoplay) { const f = frameStats.current;
-        console.log(`[boss-frames] frames=${f.n} avg=${(f.sum / Math.max(1, f.n)).toFixed(1)}ms slow>20ms=${f.slow} (${((f.slow / Math.max(1, f.n)) * 100).toFixed(1)}%) worst=${f.worst}ms`); }
+      if (CAPTURE && autoplay) { const f = frameStats.current;
+        const line = `[boss-frames] frames=${f.n} avg=${(f.sum / Math.max(1, f.n)).toFixed(1)}ms slow>20ms=${f.slow} (${((f.slow / Math.max(1, f.n)) * 100).toFixed(1)}%) worst=${f.worst}ms`;
+        console.log(line); setPerfLine(line); }
       finishRef.current(); return;
     }
     raf.current = requestAnimationFrame(frame);
@@ -731,7 +735,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const LRef = useRef(L); LRef.current = L;
   // Dev autoplay for captures: reads the same state a player sees.
   useEffect(() => {
-    if (!__DEV__ || !autoplay || !visible) return;
+    if (!CAPTURE || !autoplay || !visible) return;
     const plan = new Map<number, number>();
     let dizzyAt = { from: -1, at: 0 };
     const id = setInterval(() => {
@@ -799,7 +803,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     <BashResults args={args} bossName={bossName} boss={boss} rideName={rideName ?? null} startHp={hpAtBell.current ?? hpLeft} capLeft={capLeft}
       hpMax={hpMax} damage={args.result.score} rate={damageRate} meta={args.result.meta ?? {}} fighters={fighters}
       endsAt={endsAt} next={next} rewards={rewards} receipt={receipt} receiptNote={receiptNote} bestBefore={best}
-      teamDamage={teamDamage} warmNext={warmNext} defeated={skin.dizzy ?? undefined} portrait={skin.hurt ?? skin.dizzy ?? undefined}
+      teamDamage={teamDamage} warmNext={warmNext} perfLine={CAPTURE && autoplay ? perfLine : null} defeated={skin.dizzy ?? undefined} portrait={skin.hurt ?? skin.dizzy ?? undefined}
       onAgain={onAgain && args.result.meta ? () => onAgain(args.result.meta!) : undefined} />
   );
 

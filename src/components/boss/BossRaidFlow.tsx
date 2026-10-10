@@ -371,7 +371,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             // Come-back reward: from your 4th attack on this raid you start with a free fin.
             warmStart={(atStart.current?.attacks ?? raid.you.attacks) >= 3}
             warmNext={(atStart.current?.attacks ?? raid.you.attacks) + 1 >= 3}
-            autoplay={__DEV__ ? devAutoplay : 0}
+            autoplay={__DEV__ || process.env.EXPO_PUBLIC_PERF_CAPTURE === '1' ? devAutoplay : 0}
             onRoundEnd={meta => submit(renderedRound, meta, true)}
             onActiveChange={setLiveActive}
             receipt={receipt?.state ?? null}

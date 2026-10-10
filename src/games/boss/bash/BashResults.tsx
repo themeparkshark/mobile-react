@@ -51,12 +51,14 @@ export function creditedDamage(damage: number, capLeft: number | undefined): num
   return capLeft === undefined ? damage : Math.max(0, Math.min(damage, capLeft));
 }
 
-export default function BashResults({ args, bossName, boss, startHp, hpMax, damage: rawDamage, capLeft, rate, meta, fighters, endsAt, next, rewards, onAgain, warmNext, defeated,
+export default function BashResults({ args, bossName, boss, startHp, hpMax, damage: rawDamage, capLeft, rate, meta, fighters, endsAt, next, rewards, onAgain, warmNext, defeated, perfLine,
   receipt = null, receiptNote = null, bestBefore = 0, teamDamage = 0, portrait }: {
   args: ShellResultsArgs; bossName: string; boss: BossId; rideName: string | null; startHp: number; hpMax: number; damage: number;
   /** Per-player raid cap left before this round (config boss.max_damage_per_player_per_raid). */
   capLeft?: number;
   warmNext?: boolean;
+  /** Capture builds only: the round's frame-time line. */
+  perfLine?: string | null;
   /** The beaten-boss face for a team win. */
   defeated?: number;
   rate: number; meta: Record<string, unknown>; fighters: number; endsAt?: string; next?: BashNext; rewards?: BashRewards;
@@ -192,6 +194,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <Text style={[styles.againText, { color: BRAND.navy }]}>{noHits ? 'BACK' : 'DONE'}</Text>
         </Pressable>
       </>}
+      {perfLine ? <Text style={styles.perf}>{perfLine}</Text> : null}
     </View>
   );
 }
@@ -218,6 +221,7 @@ const styles = StyleSheet.create({
   bestText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   bossPic: { width: 76, height: 76 },
+  perf: { marginTop: 4, fontSize: 9, color: '#333', textAlign: 'center' },
   stamp: { position: 'absolute', left: 4, top: 22, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 3, borderColor: BRAND.red, borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.85)', transform: [{ rotate: '-14deg' }] },
   stampText: { fontFamily: 'Shark', fontSize: 15, lineHeight: 15, color: BRAND.red, textAlign: 'center' },
