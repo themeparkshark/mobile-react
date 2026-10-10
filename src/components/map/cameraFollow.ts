@@ -355,6 +355,8 @@ export const FOLLOW_PACE_EASE_S = 1;
 /** Pace mode: how fast the path direction may turn (degrees per second), and after a confirmed corner. */
 export const FOLLOW_PACE_TURN_DPS = 40;
 export const FOLLOW_PACE_TURN_FAST_DPS = 150;
+/** Pace mode: a GPS step turning more than this (degrees) from the path is a corner: slow down and turn fast. */
+export const FOLLOW_PACE_CORNER_DEG = 45;
 /** Pace mode: along-path correction per metre ahead or behind (1/s). */
 export const FOLLOW_PACE_GAIN = 0.12;
 /** Kalman (constant velocity): how much a walker's velocity may change per second (m/s^2 noise density). */
@@ -464,6 +466,13 @@ export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, _rate: readonl
   // The pace follows the estimate slowly (an even walk), but fast when it drops by half (a stop) or turns.
   c.sp = c.sp <= 0 ? speed : c.sp + (speed - c.sp) * (sideways || speed < c.sp * 0.5 ? 0.6 : FOLLOW_PACE_BLEND);
   const lead = agree ? leadFor(c, speed, gapS) : 0;
+  // A GPS step turning well away from the path (over 45 degrees, at least 1.5 m): a corner. Slow to the
+  // step's pace and turn fast; the next fixes confirm or undo it.
+  if (prevFix && c.walking === true && (c.ux !== 0 || c.uy !== 0)) {
+    const [se, sn] = enM(prevFix, fix);
+    const sl = Math.hypot(se, sn);
+    if (sl >= 1.5 && (se * c.ux + sn * c.uy) / sl < Math.cos(FOLLOW_PACE_CORNER_DEG * Math.PI / 180)) { sideways = true; turned = true; }
+  }
   c.side = sideways; c.turned = turned; c.paceS = Math.max(0.5, gapS) * (sideways ? 0.7 : FOLLOW_PACE_RUN_GAPS);
   c.leadS = sideways ? Math.min(lead, Math.max(0.5, gapS), FOLLOW_MAX_LEAD_M / Math.max(0.3, speed)) : lead;
 }
