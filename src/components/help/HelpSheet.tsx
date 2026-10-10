@@ -81,6 +81,14 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
 
   const finishClose = useCallback(() => { closing.current = false; setMounted(false); }, []);
 
+  const startOpen = useCallback(() => {
+    if (closing.current) return;
+    playSound(openSound);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    open.value = reduced ? withTiming(1, { duration: 180 }) : withSpring(1, SPRING_IN);
+    reveal.value = reduced ? 1 : withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
+  }, [reduced, open, reveal, playSound]);
+
   useEffect(() => {
     if (visible) {
       closing.current = false;
@@ -88,10 +96,10 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
       drag.value = 0;
       open.value = 0;
       reveal.value = 0;
-      playSound(openSound);
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-      open.value = reduced ? withTiming(1, { duration: 180 }) : withSpring(1, SPRING_IN);
-      reveal.value = reduced ? 1 : withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
+      // The slide starts once the sheet has laid out and the button label has been measured
+      // (see onReady), so the card never arrives with a blank button or an empty picture box.
+      // Reopened while still closing: the sheet is already laid out, so start now.
+      if (mounted) startOpen();
     } else if (mounted && !closing.current) {
       closing.current = true;
       playSound(closeSound);
@@ -111,7 +119,7 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
         <GestureHandlerRootView style={{ flex: 1 }}>
           {mounted && sheet && (
             <SheetBody sheet={sheet} open={open} drag={drag} reveal={reveal} reduced={reduced} active={visible}
-              onClose={onClose} state={state} onRetry={onRetry} links={links} />
+              onClose={onClose} state={state} onRetry={onRetry} links={links} onReady={startOpen} />
           )}
         </GestureHandlerRootView>
       </SafeAreaProvider>
@@ -119,7 +127,7 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
   );
 }
 
-function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state, onRetry, links }: {
+function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state, onRetry, links, onReady }: {
   readonly sheet: HelpSheetContent;
   readonly open: SharedValue<number>;
   readonly drag: SharedValue<number>;
@@ -130,8 +138,11 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
   readonly state: 'ready' | 'loading' | 'error';
   readonly onRetry?: () => void;
   readonly links?: readonly HelpLink[];
+  /** Called once the sheet has laid out and settled for two frames. */
+  readonly onReady: () => void;
 }) {
   const { width, height } = useWindowDimensions();
+  const readyFired = useRef(false);
   const insets = useSafeAreaInsets();
   const pages = sheet.pages;
   const [page, setPage] = useState(0);
@@ -223,6 +234,12 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
       </Animated.View>
       <GestureDetector gesture={pan}>
         <Animated.View
+          onLayout={() => {
+            if (readyFired.current) return;
+            readyFired.current = true;
+            // Two frames: one for the layout, one for children that measure themselves (the gold button label).
+            requestAnimationFrame(() => requestAnimationFrame(onReady));
+          }}
           style={[styles.sheet, { maxHeight: height - insets.top - 12, paddingBottom: Math.max(insets.bottom, 14) + 4 }, sheetStyle]}>
           {/* Header row on the cream: the drag handle, and the close button, which never sits on the art. */}
           <View style={styles.header}>
