@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -9,6 +9,13 @@ import type { FollowMode } from './cameraFollow';
 
 /** Panned away the button shows your own shark (its look), or Alex's Classic: "take me back to it". */
 const CLASSIC = require('../../../assets/images/map/follow-shark-classic.png');
+
+/**
+ * Short phones (iPhone SE, 667 pt): the button sits only ~50 pt above the shark, so a bubble hung
+ * level with it covers the shark. There the one-time hint rises above the button instead, its tail
+ * still pointing at the button.
+ */
+const SHORT_SCREEN = Dimensions.get('window').height < 700;
 
 /** What the map's top-right button is doing right now. */
 export type FollowButtonState = 'away' | FollowMode;
@@ -151,8 +158,8 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
       {(shownPill || hint) && (
         // A fixed-width lane left of the button: an absolute view with no width would be squeezed to
         // the 54 pt column it hangs from. The pill sizes to its words at the lane's right edge.
-        <View pointerEvents="none" style={styles.pillLane}>
-        <View style={[styles.pill, hint && styles.hint]}>
+        <View pointerEvents="none" style={[styles.pillLane, hint && SHORT_SCREEN && styles.pillLaneUp]}>
+        <View style={[styles.pill, hint && styles.hint, hint && SHORT_SCREEN && styles.hintShort]}>
           {hint ? (
             <>
               <Text style={styles.hintTitle}>{FOLLOW_COPY.hintTitle}</Text>
@@ -161,7 +168,7 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
           ) : (
             <Text style={styles.pillText} numberOfLines={1}>{FOLLOW_COPY[shownPill ?? 'heading']}</Text>
           )}
-          <View style={[styles.tail, hint && styles.hintTail]} />
+          <View style={[styles.tail, hint && styles.hintTail, hint && SHORT_SCREEN && styles.hintTailUp]} />
         </View>
         </View>
       )}
@@ -235,6 +242,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 2.5, borderRightWidth: 2.5, borderColor: BRAND.navy, transform: [{ rotate: '45deg' }] },
   hint: { marginTop: 0, height: 'auto', width: 210, paddingVertical: 8, borderRadius: 14, backgroundColor: BRAND.cream },
   hintTail: { top: 20, backgroundColor: BRAND.cream },
+  // SE: the lane's bottom sits at the button's middle, so the bubble rises above the shark; tail near its bottom.
+  pillLaneUp: { top: undefined, bottom: 20 },
+  hintShort: { width: 190 },
+  hintTailUp: { top: undefined, bottom: 6 },
   hintTitle: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.navy },
   hintBody: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, color: BRAND.navySoft },
 });
