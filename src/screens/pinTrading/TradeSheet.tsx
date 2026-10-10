@@ -145,7 +145,7 @@ function TradeSheet(props: TradeSheetProps) {
           <TradeSlot caption={COPY.get} item={swap.pin.item} serial={swap.serial} hidden={props.handedOff} measureKey={measureKey} stamp={stamp} charging={sending && !props.handedOff}
             tilt={pinTilt(swap.id)} size={slotSize} shine={shine} still={still} onMeasure={rect => props.onSlot?.('get', rect)} />
           <View style={{ alignItems: 'center' }}>
-            {upgrade && <View style={styles.upgradeRibbon}><Text maxFontSizeMultiplier={1} style={styles.upgradeText}>UPGRADE</Text></View>}
+            {upgrade && <View style={styles.upgradeRibbon}><Text maxFontSizeMultiplier={1} numberOfLines={1} style={styles.upgradeText}>UPGRADE</Text></View>}
             <SwapBadge spinning={sending && !still && !props.handedOff} />
           </View>
           <TradeSlot caption={COPY.give} item={phase === 'expired' || phase === 'taken' ? undefined : selected} serial={selected?.serial} hidden={props.handedOff}
@@ -271,8 +271,8 @@ export default memo(TradeSheet);
 
 const styles = StyleSheet.create({
   confirmChips: { flexDirection: 'row', gap: 6, marginTop: 4 },
-  upgradeRibbon: { position: 'absolute', top: -30, backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 2, borderRadius: 8, paddingHorizontal: 6, zIndex: 3 },
-  upgradeText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 2 },
+  upgradeRibbon: { position: 'absolute', top: -30, width: 92, alignItems: 'center', backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 2, borderRadius: 8, zIndex: 3, transform: [{ rotate: '-6deg' }] },
+  upgradeText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, paddingTop: 2 },
   confirmChip: { borderRadius: 8, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
   confirmChipText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy, paddingTop: 2 },
   scrim: { backgroundColor: 'rgba(6,30,74,0.86)' },
