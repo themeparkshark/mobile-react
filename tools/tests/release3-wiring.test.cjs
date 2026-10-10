@@ -74,7 +74,7 @@ test('sign-out clears the live event next to the Secret Shop flag; the badge sta
   const auth = fs.readFileSync('src/context/AuthProvider.tsx', 'utf8');
   assert.match(auth, /resetSecretShopFlag\(\);[^\n]*\n\s*try \{ require\('\.\.\/services\/liveEvents\/useLiveEvent'\)\.resetLiveEvent\(\)/);
   const marker = fs.readFileSync('src/screens/ExploreScreen/TaskMarker.tsx', 'utf8');
-  assert.match(marker, /\{star && !parked && <View pointerEvents="none" style=\{styles\.starRide\}><StarRideBadge paused=\{!alive\.running\} \/><\/View>\}/);
+  assert.match(marker, /\{star && !parked && <View pointerEvents="none" style=\{\[styles\.starRide, playable && styles\.standingLift\]\}><StarRideBadge paused=\{!alive\.running\} \/><\/View>\}/);
 });
 
 test('MemberFlex in Standings: only when the row payload carries flex fields; is_subscribed alone changes nothing', () => {

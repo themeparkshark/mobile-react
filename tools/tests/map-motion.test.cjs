@@ -144,7 +144,7 @@ test('the map turns the camera without a React render per compass reading', () =
 test('the compass says what it does: two named states, a pill after each tap and a one-time hint', () => {
   const btn = loadTs('src/components/map/FollowButton.tsx', {
     'expo-image': { Image: () => null }, 'react': { useEffect() {}, useRef: v => ({ current: v }), useState: v => [v, () => {}] },
-    'react-native': { Pressable: () => null, StyleSheet: { create: s => s, absoluteFill: {} }, Text: () => null, View: () => null },
+    'react-native': { Dimensions: { get: () => ({ width: 375, height: 667 }) }, Pressable: () => null, StyleSheet: { create: s => s, absoluteFill: {} }, Text: () => null, View: () => null },
     'react-native-reanimated': { __esModule: true, default: { View: () => null }, Easing: { out: () => 0, quad: 0 },
       useAnimatedStyle: () => ({}), useSharedValue: v => ({ value: v }), withSequence: () => 0, withSpring: () => 0, withTiming: () => 0, withRepeat: () => 0, withDelay: () => 0 },
     'react-native-svg': { __esModule: true, default: () => null, Path: () => null, Circle: () => null },
@@ -324,4 +324,17 @@ test('a straight walk with GPS scatter: even pace (CV under 0.2) and the shark n
   }
   cvs.sort((a, b) => a - b);
   assert.ok(cvs[3] < 0.2, `walk pace CV median ${cvs[3].toFixed(2)}`);
+});
+
+test('iPhone SE: the one-time Map spin hint rises above the button so it never covers the shark', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/map/FollowButton.tsx'), 'utf8');
+  assert.match(src, /const SHORT_SCREEN = Dimensions\.get\('window'\)\.height < 700;/);
+  assert.match(src, /hint && SHORT_SCREEN && styles\.pillLaneUp/);
+  assert.match(src, /pillLaneUp: \{ top: undefined, bottom: 20 \}/);
+});
+
+test('standing at a ride, its timer chip and gift rise clear of the shark and its view cone', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/TaskMarker.tsx'), 'utf8');
+  assert.match(src, /<View style=\{playable \? styles\.standingLift : null\}>/);
+  assert.match(src, /standingLift: \{ transform: \[\{ translateY: -STANDING_LIFT \}\] \}/);
 });

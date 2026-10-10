@@ -307,6 +307,9 @@ function PlayPulse({ color, reducedMotion }: { readonly color: string; readonly 
   return <Animated.View pointerEvents="none" style={[styles.playPulse, { borderColor: color }, style]} />;
 }
 
+/** How far a playable island's timer chip and gift rise so the standing shark never covers them. */
+export const STANDING_LIFT = 46;
+
 export interface TaskMarkerProps {
   /** Posted wait, status and Rush window from the live park feed. */
   readonly live?: LiveRide;
@@ -500,6 +503,8 @@ function TaskMarker({
       ) : tagKind && tagSize ? (
           <TagSlot tag={placement.tag} anchor={RIDE_BOX.anchor} width={tagSize.w} height={tagSize.h}
             fallback={{ x: -tagSize.w / 2, y: RIDE_BODY.y - tagSize.h - 3 }}>
+            {/* Standing here, the shark and its view cone sit on the island: the chip rises clear of them. */}
+            <View style={playable ? styles.standingLift : null}>
             {tagKind === 'rush' && rush && (
               <View style={styles.rushBadge} accessibilityLabel={`Rush: ${live?.wait ?? rush.wait} minute wait`}>
                 <GameIcon name="rush" size={14} />
@@ -514,10 +519,11 @@ function TaskMarker({
               <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
                 badgeStyle={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent]} />
             )}
+            </View>
           </TagSlot>
       ) : undefined}>
       <Animated.View style={[styles.container, dropStyle]}>
-        {star && !parked && <View pointerEvents="none" style={styles.starRide}><StarRideBadge paused={!alive.running} /></View>}
+        {star && !parked && <View pointerEvents="none" style={[styles.starRide, playable && styles.standingLift]}><StarRideBadge paused={!alive.running} /></View>}
         {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
         {!isSelected && showTimer && tagKind !== 'timer' && (
           <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
@@ -571,6 +577,8 @@ const styles = StyleSheet.create({
   waterBox: { width: 110, height: 70 },
   teamFlag: { position: 'absolute', top: 25, right: -3, zIndex: 21 },
   starRide: { position: 'absolute', top: 0, right: -4, zIndex: 3 },
+  // The player's shark (about 70 pt with its cone) stands on a playable island; its chips lift above it.
+  standingLift: { transform: [{ translateY: -STANDING_LIFT }] },
   container: { width: 72, height: 96, position: 'relative', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 10 },
   goalBadge: { backgroundColor: BRAND.gold,
     borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 2, borderColor: BRAND.navy },
