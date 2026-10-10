@@ -286,7 +286,7 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
       {openOdds && (
         <Animated.View entering={FadeIn.duration(160)} style={{ gap: SPACE.sm }}>
           <OddsTable pins={pins} size={38} pity={series.pity} compact gotIt />
-          <Text maxFontSizeMultiplier={1.3} style={styles.floorNote}>{golden.chaser_bp >= 10000 ? 'Your next box has the gold chaser. Any box opens it, even a regular or free box.' : `Gold chaser always by box ${series.pity}. Best value for the chaser: the regular box.`}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={styles.floorNote}>{golden.chaser_bp >= 10000 ? 'Next box = gold chaser! Any box works, even free.' : `Gold chaser by box ${series.pity} for sure. Cheapest chaser: regular box.`}</Text>
           {short > 0 ? (
             <Pressable onPress={go} disabled={busy} hitSlop={4}
               style={({ pressed }) => [styles.openBtn, styles.openShort, pressed && { transform: [{ scale: 0.96 }] }]}
