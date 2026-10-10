@@ -74,9 +74,12 @@ export function mergePins(current: readonly ItemType[], page: readonly ItemType[
   return [...current, ...page.filter(item => !seen.has(item.id) && (seen.add(item.id), true))];
 }
 
-/** Pins you could give for this board pin (never the same pin). */
-export function givablePins(pins: readonly ItemType[], boardItemId: number): ItemType[] {
-  return pins.filter(item => item.id !== boardItemId);
+/**
+ * Pins you could give for this board pin (never the same pin), except a numbered gold copy:
+ * your own numbered copy of that pin can go for the board's (trade your #3 for the #1).
+ */
+export function givablePins(pins: readonly ItemType[], boardItemId: number, boardSerial?: number | null): ItemType[] {
+  return pins.filter(item => item.id !== boardItemId || (!!boardSerial && !!item.serial && item.serial !== boardSerial));
 }
 
 /** Only what the screen needs from a swap: the board never keeps who posted it. */

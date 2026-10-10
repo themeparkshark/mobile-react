@@ -462,7 +462,7 @@ export default function PinSwapsScreen() {
     rootRef.current?.measureInWindow((x, y) => { rootOffset.current = { x, y }; });
   }, []);
 
-  const givable = useMemo(() => (hold ? givablePins(pins, hold.swap.pin.item.id) : []), [pins, hold]);
+  const givable = useMemo(() => (hold ? givablePins(pins, hold.swap.pin.item.id, hold.swap.serial) : []), [pins, hold]);
   const pagePad = SPACE.lg;
   const panelInner = Math.min(width, 560) - pagePad * 2 - SPACE.md * 2 - OUTLINE.heavy * 2;
   const cellWidth = Math.floor((panelInner - SPACE.sm * (COLUMNS - 1)) / COLUMNS);

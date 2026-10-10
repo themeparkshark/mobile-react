@@ -151,3 +151,10 @@ test('the trading board keeps a gold copy\'s number on its card', () => {
   assert.equal(mergeBoard(cards, [swap], [])[0].serial, 1);
   assert.equal(toCards([{ ...swap, serial: null }])[0].serial, undefined);
 });
+
+test('your numbered gold can go for the board\'s numbered copy of the same pin', () => {
+  const { givablePins } = loadTs('src/screens/pinTrading/pinTradeModel.ts');
+  const mine = [{ id: 482, serial: 3 }, { id: 10 }];
+  assert.deepEqual(givablePins(mine, 482, 1).map(p => p.id), [482, 10]);
+  assert.deepEqual(givablePins(mine, 482, null).map(p => p.id), [10]);
+});
