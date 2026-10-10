@@ -9,3 +9,6 @@ ios/.xcode.env.local
 # already in the fingerprint through node_modules and autolinking.
 ios/Podfile.lock
 ios/*/PrivacyInfo.xcprivacy
+# Source map the local archive writes (SOURCEMAP_FILE=ios/main.jsbundle.map). Left in ios/ it
+# changed the fingerprint and sent an OTA to a runtime no binary has (Oct 9).
+ios/main.jsbundle.map
