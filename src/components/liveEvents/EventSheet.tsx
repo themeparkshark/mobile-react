@@ -265,8 +265,8 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
               <Peek chest={peek?.track === 'me' ? peek.chest : null} track="Your" />
               <Text style={styles.line}>{event.phase === 'upcoming' ? timeLine(event, now)
                 : hint ?? (event.me.chests.every(c => c.claimed) ? 'All your chests opened!' : 'Open your chests!')}</Text>
-              {live && !(atPark && event.here) && event.include_home && (event.daily_caps.home_find ?? 0) > 0 && (
-                <Text style={styles.small}>At home: up to {event.daily_caps.home_find} snacks count each day. Rides count most!</Text>
+              {live && event.include_home && (event.daily_caps.home_find ?? 0) > 0 && (
+                <Text style={styles.small}>Rides earn the most  ·  Home snacks: up to {event.daily_caps.home_find} a day</Text>
               )}
             </Section>
             {together.chests.length > 0 && (

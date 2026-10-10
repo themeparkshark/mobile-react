@@ -178,7 +178,7 @@ export function activityLine(event: LiveEvent, now: number): string | null {
   const a = event.activity;
   if (!a || event.phase === 'upcoming') return null;
   const parts: string[] = [];
-  if (a.recent_points > 0) parts.push(`+${a.recent_points} in the last 15 min`);
+  if (a.recent_points > 0) parts.push(`+${a.recent_points} from everyone in 15 min`);
   if (a.last_open_at) {
     const mins = Math.max(0, Math.round((now - Date.parse(a.last_open_at)) / 60_000));
     if (mins < 120) parts.push(mins <= 1 ? 'a chest just opened' : `a chest opened ${mins} min ago`);

@@ -163,7 +163,7 @@ test('hooks are never called behind || / && / ? (hook order stays fixed)', () =>
 test('activity line: counts only, never zero, recent opens only', () => {
   const NOWX = Date.parse('2026-10-17T17:00:00Z');
   const e = fx.goldenReefFixture({ now: NOWX });
-  assert.equal(m.activityLine(e, NOWX), '+46 in the last 15 min  ·  a chest opened 3 min ago');
+  assert.equal(m.activityLine(e, NOWX), '+46 from everyone in 15 min  ·  a chest opened 3 min ago');
   assert.equal(m.activityLine({ ...e, activity: { recent_points: 0, last_open_at: null } }, NOWX), null);
   assert.equal(m.activityLine({ ...e, activity: { recent_points: 0, last_open_at: new Date(NOWX - 5 * 3600_000).toISOString() } }, NOWX), null);
 });

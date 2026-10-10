@@ -135,6 +135,7 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
         <View style={styles.stage} ref={stageRef} collapsable={false}>
           {!reduced && <Rays go={open} />}
           {!reduced && Array.from({ length: COINS }, (_, i) => <Burst key={i} i={i} go={open} />)}
+          {open && <View style={styles.glow} pointerEvents="none" />}
           <Animated.View style={chestStyle}>
             <Image source={open ? art.chestOpen : art.chestClosed} style={styles.chest} contentFit="contain" />
           </Animated.View>
@@ -142,7 +143,7 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
         </View>
         <View style={styles.chips}>
           {open && chips.map((c, i) => (
-            <Animated.View key={c.icon + i} entering={skip || reduced ? FadeIn.delay(skip ? 0 : i * 120) : ZoomIn.delay(350 + i * 260).springify().damping(12)} style={styles.chip}>
+            <Animated.View key={c.icon + i} entering={skip || reduced ? FadeIn.delay(skip ? 0 : i * 120) : ZoomIn.delay(350 + i * 260).springify().damping(12)} style={[styles.chip, i === 0 && styles.chipBig]}>
               <PrizeIcon name={c.icon} size={26} />
               <Text style={styles.chipText} numberOfLines={1}>{c.icon === 'gift' ? c.text : <>+<CountUp to={Number(c.text)} delay={skip || reduced ? 0 : 350 + i * 260} still={skip || reduced} /></>}</Text>
             </Animated.View>
@@ -176,6 +177,8 @@ const styles = StyleSheet.create({
   stage: { width: 200, height: 160, alignItems: 'center', justifyContent: 'center' },
   chest: { width: 140, height: 140 },
   coin: { position: 'absolute', top: 60, left: 89 },
+  glow: { position: 'absolute', width: 150, height: 150, borderRadius: 75, backgroundColor: 'rgba(255,207,59,0.28)', left: 25, top: 5 },
+  chipBig: { transform: [{ scale: 1.15 }], marginHorizontal: 4 },
   rays: { position: 'absolute', width: 1, height: 1, left: 100, top: 80 },
   ray: { position: 'absolute', left: -9, top: -34, width: 18, height: 68, borderRadius: 9, backgroundColor: BRAND.goldLight },
   flash: { ...StyleSheet.absoluteFillObject, backgroundColor: BRAND.white, borderRadius: 80 },
