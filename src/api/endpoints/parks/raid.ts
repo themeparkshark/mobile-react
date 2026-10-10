@@ -20,6 +20,8 @@ export interface RaidDamageWeights {
   readonly per_hit: number;
   readonly per_weak_hit: number;
   readonly weak_share: number;
+  readonly participation_floor?: number;
+  readonly participation_min_bonks?: number;
 }
 
 export interface BossRaid {

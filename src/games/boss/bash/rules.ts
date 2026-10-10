@@ -140,8 +140,12 @@ export type BashEvent =
   | { type: 'inked'; until: number; lostFins: number }
   | { type: 'splash'; lane: number };
 
-export interface Weights { readonly per_hit: number; readonly per_weak_hit: number }
-export const DEFAULT_WEIGHTS: Weights = { per_hit: 4, per_weak_hit: 40 };
+export interface Weights {
+  readonly per_hit: number; readonly per_weak_hit: number;
+  /** Server participation floor (config/boss.php): a round with this many real bonks counts at least this much. */
+  readonly participation_floor?: number; readonly participation_min_bonks?: number;
+}
+export const DEFAULT_WEIGHTS: Weights = { per_hit: 4, per_weak_hit: 40, participation_floor: 432, participation_min_bonks: 10 };
 
 function next(r: number): number {
   // xorshift32, kept positive.
@@ -180,7 +184,11 @@ export function finsNeeded(state: Pick<BashState, 'headStart'> & Partial<Pick<Ba
 
 /** The server formula, rounded once after the home rate. */
 export function bashDamage(hits: number, weak: number, rate = 1, w: Weights = DEFAULT_WEIGHTS): number {
-  return Math.floor((hits * w.per_hit + weak * w.per_weak_hit) * rate);
+  // Same as the server: the participation floor applies before the home rate (young kids' hits count).
+  let full = hits * w.per_hit + weak * w.per_weak_hit;
+  const floor = w.participation_floor ?? 0;
+  if (floor > 0 && hits - weak >= (w.participation_min_bonks ?? 10)) full = Math.max(full, floor);
+  return Math.floor(full * rate);
 }
 
 /** Advance the clock: sink expired pop-ups, end a missed dizzy, spawn new ones. */

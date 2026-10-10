@@ -48,7 +48,7 @@ test('balance: beginners matter, skill pays, mashing puffers does not', ()=>{
   // A clean player reaches 80%+ of the server ceiling (70 hits, 23 weak = 1,200).
   assert.ok(e>=0.8*1200&&e<=1200,`expert ${e}`);
   assert.ok(m>=0.4*e&&m<=0.65*e,`median ${m} vs expert ${e}`);
-  assert.ok(y>=0.25*e,`young ${y} vs expert ${e}`);
+  assert.ok(y>=0.45*e,`young ${y} vs expert ${e} (participation floor)`);
   assert.ok(x<0.5*e,`masher ${x} should trail expert ${e}`);
 });
 test('the hit cap absorbs bonks visibly and scores 0', ()=>{
@@ -128,4 +128,12 @@ test('gold only appears with a pufferfish up, in the far lane', ()=>{
   let seen=0;for(let seed=1;seed<40;seed++){let s={...b.createBash(seed),smashes:1};for(let ms=0;ms<b.ROUND_MS;ms+=16){const r=b.tick(s,ms);s=r.state;
     for(const e of r.events)if(e.type==='spawn'&&e.popup.kind==='gold'){seen++;const p=s.up.find(q=>q.kind==='puffer');assert.ok(p);assert.equal(Math.abs(p.spot%3-e.popup.spot%3),2);}}}
   assert.ok(seen>0);
+});
+
+test('participation floor matches the server: 10+ real bonks count at least 432, before the home rate', ()=>{
+  assert.equal(b.bashDamage(21,4),432);
+  assert.equal(b.bashDamage(21,4,0.6),259);
+  assert.equal(b.bashDamage(9,0),36,'nine bonks: no floor');
+  assert.equal(b.bashDamage(60,19),1000,'a big round is unchanged');
+  assert.equal(b.bashDamage(21,4,1,{per_hit:4,per_weak_hit:40}),244,'an old server without the floor: raw formula');
 });
