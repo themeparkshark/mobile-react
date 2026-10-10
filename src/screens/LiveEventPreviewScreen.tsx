@@ -28,7 +28,7 @@ const MODES: Mode[] = ['progress', 'ready', 'frenzy', 'upcoming', 'ended', 'shee
 
 function fixtureFor(mode: Mode) {
   if (mode === 'ready') return goldenReefFixture({ mine: 13, claimed: 1 });
-  if (mode === 'frenzy') return goldenReefFixture({ mine: 9, claimed: 2, frenzy: true });
+  if (mode === 'frenzy') return goldenReefFixture({ mine: 9, claimed: 2, total: 20, frenzy: true });
   if (mode === 'upcoming') return goldenReefFixture({ phase: 'upcoming', mine: 0, total: 0 });
   if (mode === 'ended' || mode === 'recap') return goldenReefFixture({ phase: 'ended', mine: 34, total: 290, claimed: 3 });
   if (mode === 'sheet' || mode === 'climb') return goldenReefFixture({ mine: 13, claimed: 1, total: 140 });
