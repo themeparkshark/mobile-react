@@ -698,6 +698,9 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                     </Pressable>
                   ))}
                 </View>
+                <Pressable onPress={() => { queueHaptic('tapLight', 1); setChoosing(false); }} hitSlop={6} accessibilityRole="button" accessibilityLabel="Keep my lanyard as it is">
+                  <Text maxFontSizeMultiplier={1.2} style={styles.offPickKeep}>Keep my lanyard</Text>
+                </Pressable>
               </View>
             )}
             {phase === 'show' && worn.has(pull.item_id) && (
@@ -778,6 +781,7 @@ const styles = StyleSheet.create({
   wearText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.white, paddingTop: 3 },
   offPick: { alignItems: 'center', gap: 6, backgroundColor: 'rgba(3,32,79,0.85)', borderRadius: 16, borderWidth: 2, borderColor: BRAND.gold, padding: 8 },
   offPickTitle: { fontFamily: FONT.display, fontSize: 17, color: BRAND.white, paddingTop: 2 },
+  offPickKeep: { fontFamily: FONT.display, fontSize: 16, color: BRAND.gold, paddingTop: 4, textDecorationLine: 'underline' },
   offPickRow: { flexDirection: 'row', gap: 6 },
   offPickPin: { width: 48, height: 48, borderRadius: 24, backgroundColor: BRAND.cream, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   wornChip: { backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 4 },
