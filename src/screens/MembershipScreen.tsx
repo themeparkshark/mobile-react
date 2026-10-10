@@ -414,7 +414,7 @@ export function recapLines(recap: NonNullable<VipPlanTime['recap']>): string[] {
     recap.tickets > 0 ? `${recap.tickets} ${recap.tickets === 1 ? 'ticket' : 'tickets'}` : null,
     recap.energy > 0 ? `${n(recap.energy)} energy` : null,
   ].filter((x): x is string => !!x);
-  // The most visual line first: this month's members-only pin.
+  // The most visual line first: this month's member pin.
   if (recap.gift_pin) lines.unshift(`Your ${recap.gift_pin}`);
   return lines;
 }
