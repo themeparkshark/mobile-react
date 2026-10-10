@@ -168,7 +168,7 @@ test('info sheets show the server lines verbatim, odds as bars, and drop empty p
   const odds = sheet.pages[2];
   assert.deepEqual(odds.heroData.odds.map(row => row.percent), [55, 28, 12, 4, 1]);
   // Short lines built from the server's numbers, never more than three.
-  assert.deepEqual(odds.points.map(point => point.text), ['Pick a set to focus. Most finds come from it.',
+  assert.deepEqual(odds.points.map(point => point.text), ['Pick a set to focus. Most finds come from that set.',
     'Items you don\'t have yet show up more often.']);
   assert.equal(info.homeHuntInfoSheet(null).pages.length, 0);
   // An older server without the odds block: its own sentences, at most three.

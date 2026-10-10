@@ -28,7 +28,7 @@ export function oddsInfoSheet(info: HomeHuntInfo | null | undefined) {
   const rows = oddsRows(info);
   const odds = info?.odds;
   const local: SheetPoint[] = odds ? [
-    ...(Number(odds.focus) > 0 ? [{ icon: 'star' as const, text: 'Pick a set to focus. Most finds come from it.' }] : []),
+    ...(Number(odds.focus) > 0 ? [{ icon: 'star' as const, text: 'Pick a set to focus. Most finds come from that set.' }] : []),
     ...(Number(odds.missing_multiplier) > 1 ? [{ icon: 'new' as const, text: 'Items you don\'t have yet show up more often.' }] : []),
       ] : points(clean(info?.odds_lines).slice(0, 3), 'sparkle');
   if (odds && local.length === 0) local.push({ icon: 'sparkle', text: 'Rarer finds show up less often.' });
