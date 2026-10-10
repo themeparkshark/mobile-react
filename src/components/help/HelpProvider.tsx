@@ -146,7 +146,7 @@ export default function HelpProvider({ children }: { readonly children: React.Re
 
   // Dev-only capture tour (EXPO_PUBLIC_HELP_TOUR); a no-op otherwise.
   useEffect(() => startHelpTour({
-    open: openHelpSheet, explain: () => setSheet({ key: 'keys', count: 0 }),
+    open: openHelpSheet, explain: () => setSheet({ key: 'coins', count: 120 }),
     close: () => { setHelpId(null); setSheet(null); }, pages: id => helpSheet(id).pages.length,
   }, playerId), [openHelpSheet, playerId]);
 
