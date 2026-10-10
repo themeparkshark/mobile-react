@@ -130,7 +130,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
       { key: 'levels', hero: 'park_levels', headline: 'Level up your coins',
         points: [
           { icon: 'coin', text: 'Tap a coin to level it up.' },
-          { icon: 'parts', text: 'Use Energy and that ride\'s Ride Parts.' },
+          { icon: 'parts', text: 'Spend Energy and Ride Parts from that ride.' },
           { icon: 'queue', text: 'Win the ride or play LinePlay in its line.' },
         ] },
     ],

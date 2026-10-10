@@ -4,6 +4,7 @@
  */
 import { openExternal } from '../../services/external';
 import { useState } from 'react';
+import { askGrownUp } from '../../components/GrownUpGate';
 import HelpSheet from '../../components/help/HelpSheet';
 import * as RootNavigation from '../../RootNavigation';
 import { helpSheet } from '../../services/help/helpSheets';
@@ -19,7 +20,11 @@ export default function SocialHelp() {
   // Grown-up links sit under Got it, like every sheet's quiet links.
   const links = [
     { label: 'Blocked players', onPress: () => { setOpen(false); setTimeout(() => RootNavigation.navigate('BlockedPlayers'), 350); } },
-    { label: 'Grown-ups: email us', onPress: () => void openExternal(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Shark Social (parent)')}`, 'system') }, // clarity-allow: email subject for our support inbox
+    // Leaving the game for the mail app goes through the grown-up gate first.
+    { label: 'Grown-ups: email us', onPress: async () => {
+      if (!(await askGrownUp({ kind: 'leave', where: 'your email app' }))) return;
+      void openExternal(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Shark Social (parent)')}`, 'system'); // clarity-allow: email subject for our support inbox
+    } },
   ];
 
   return (

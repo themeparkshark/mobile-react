@@ -69,6 +69,8 @@ test('Shark Social keeps its safety rules and grown-up links', () => {
   const help = read('src/screens/threads/SocialHelp.tsx');
   assert.match(help, /BlockedPlayers/);
   assert.match(help, /Grown-ups: email us/);
+  // Leaving for the mail app asks a grown-up first.
+  assert.match(help, /askGrownUp\(\{ kind: 'leave', where: 'your email app' \}\)/);
 });
 
 test('every glossary line fits the word sheet: 12 words at most', () => {
