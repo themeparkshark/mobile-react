@@ -20,6 +20,9 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
 import { BOSS_ART } from './bossArt';
 import { usePowerBudget } from '../../power';
+
+/** Hand-drawn house (Codex, Alex style): playing from home. */
+const HOUSE = require('../../assets/games/boss/bash/house.webp');
 import { BossHpBar } from './BossSheetParts';
 import { joinCost, joinLabel, minutesLeft, type RewardPreview } from './joinModel';
 
@@ -106,7 +109,8 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
         </Tile>}
         {remote
           ? <Tile label="FROM HOME" tone="home" a11y={`From home your hits count ${Math.round(raid.remote.damage_rate * 100)} percent, loot is ${Math.round((raid.remote.reward_rate ?? raid.remote.damage_rate) * 100)} percent and you cannot be MVP`}>
-            <Text style={styles.homeWhy} maxFontSizeMultiplier={1.2}>Not at the park</Text>
+            <View style={styles.homeRow}><Image source={HOUSE} style={styles.house} contentFit="contain" />
+              <Text style={styles.homeWhy} maxFontSizeMultiplier={1.2}>Not at the park</Text></View>
             <Text style={styles.bigPct} maxFontSizeMultiplier={1}>{Math.round(raid.remote.damage_rate * 100)}%</Text>
             <View style={styles.mvp}>
               <View><GameIcon name="crown" size={28} /><View style={styles.crossOut} /></View>
@@ -258,6 +262,8 @@ const styles = StyleSheet.create({
   tilePic: { height: 58, alignItems: 'center', justifyContent: 'center' },
   tileLabel: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, marginTop: 2 },
   tileSmall: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navySoft },
+  homeRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  house: { width: 22, height: 22 },
   homeWhy: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
   bigPct: { fontFamily: 'Shark', fontSize: 30, lineHeight: 34, color: BRAND.navy },
   mvp: { flexDirection: 'row', alignItems: 'center', gap: 2 },
