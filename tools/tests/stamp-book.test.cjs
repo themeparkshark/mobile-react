@@ -510,7 +510,7 @@ test('round 6: Claim all from a card with 2+ gifts, claims run 3 at a time, idle
   assert.match(card, /nextCount > 1 && onClaimAll\) action = \{ label: `Claim all \$\{nextCount\}!`/);
   assert.match(read('src/screens/stampbook/ClaimAll.tsx'), /Math\.min\(3, queue\.length\)/);
   assert.match(read('src/screens/stampbook/BookFx.tsx'), /awake \? PULSE_EVERY_MS : PULSE_IDLE_MS/);
-  assert.match(read('src/screens/StampBookScreen.tsx'), /\(allPages \? sections : sections\.slice\(0, 2\)\)/);
+  assert.match(read('src/screens/StampBookScreen.tsx'), /\(allPages \? sections : sections\.slice\(0, 1\)\)/);
   // A secret shows its real art only as a navy silhouette under a gold "?".
   assert.match(card, /tint="#1B2B4A"/);
 });
