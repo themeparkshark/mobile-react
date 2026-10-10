@@ -86,7 +86,7 @@ const LOOP: Readonly<Record<HelpHeroKey, { ms: number; rest: number }>> = {
   basics_map: { ms: 2600, rest: 1 },
   basics_park: { ms: 2400, rest: 1 },
   basics_line: { ms: 2800, rest: 1 },
-  term: { ms: 2800, rest: 0 },
+  term: { ms: 2800, rest: 0.9 },
   odds: { ms: 1600, rest: 1 },
   rules: { ms: 2800, rest: 0 },
 };
@@ -952,8 +952,9 @@ function TreasureScene({ t, w, h, caption }: SceneProps & { readonly caption: st
     const k = seg(t.value, 0.05, 0.3);
     const ease = k * k;
     return {
-      opacity: interpolate(t.value, [0, 0.03, 0.3, 0.33, 0.97, 1], [0, 1, 1, 0, 0, 0], 'clamp'),
-      transform: [{ translateX: -s * 0.6 * (1 - ease) }, { translateY: -h * 0.55 * (1 - ease) + h * 0.12 * ease }, { rotate: '58deg' }, { scale: 1 - 0.25 * ease }],
+      // Lands in the pile and stays there, half buried and happy (rest frame shows the shark).
+      opacity: 1,
+      transform: [{ translateX: -s * 0.6 * (1 - ease) }, { translateY: -h * 0.45 * (1 - ease) }, { rotate: `${58 - 58 * seg(t.value, 0.3, 0.45)}deg` }, { scale: 1 - 0.15 * ease }],
     };
   });
   const pile = useAnimatedStyle(() => ({ transform: [{ scaleY: interpolate(t.value, [0.3, 0.34, 0.42], [1, 0.94, 1], 'clamp') }] }));
@@ -962,7 +963,7 @@ function TreasureScene({ t, w, h, caption }: SceneProps & { readonly caption: st
       <Abs x={px} y={py} w={pw} h={ph} style={pile}><Art source={ART.treasure} w={pw} h={ph} /></Abs>
       <Abs x={w / 2 - s / 2} y={py - s * 0.35} w={s} h={s} style={dive}><Art source={ART.sharks[0]} w={s} h={s} /></Abs>
       {[-1.3, -0.5, 0.4, 1.2].map((dx, i) => (
-        <Burst key={dx} t={t} cx={w / 2} cy={py + ph * 0.25} reach={pw * 0.32} icon="coin" dx={dx} dy={1.1 - Math.abs(dx) * 0.25} at={0.31 + i * 0.03} size={26} />
+        <Burst key={dx} t={t} cx={w / 2} cy={py + ph * 0.3} reach={Math.min(pw * 0.32, py * 0.8)} icon="coin" dx={dx} dy={0.9 - Math.abs(dx) * 0.25} at={0.31 + i * 0.03} size={24} />
       ))}
       {caption ? (
         <Abs x={w / 2 - 110} y={8} w={220} h={32} style={{ alignItems: 'center' }}>
@@ -999,10 +1000,10 @@ function TermScene({ t, w, h, icon, caption }: SceneProps & { readonly icon: Gam
 
 /** Drop odds as a prize jar: the bands are the rarities, the legend gives the server's percents. */
 function OddsScene({ t, w, h, rows }: SceneProps & { readonly rows: readonly { tier: RarityTier; percent: number }[] }) {
-  const jh = h * 0.92;
+  const jh = h * 0.8;
   const jw = jh * (300 / 317);
-  const jx = Math.max(16, w * 0.12);
-  const lx = jx + jw + 18;
+  const jx = Math.max(12, w * 0.06);
+  const lx = jx + jw + 12;
   const rowH = Math.min(26, (h - 16) / Math.max(1, rows.length));
   const top = (h - rows.length * rowH) / 2;
   const wobble = useAnimatedStyle(() => ({ transform: [{ rotate: `${Math.sin(seg(t.value, 0, 0.5) * Math.PI * 3) * 3 * (1 - seg(t.value, 0, 0.5))}deg` }] }));
@@ -1022,7 +1023,7 @@ function OddsBar({ t, i, x, y, w, h, tier, percent }: {
   readonly tier: RarityTier; readonly percent: number; readonly max: number;
 }) {
   const look = RARITY_LOOK[tier];
-  const inStyle = useAnimatedStyle(() => ({ opacity: seg(t.value, 0.05 + i * 0.06, 0.2 + i * 0.06), transform: [{ translateX: (1 - seg(t.value, 0.05 + i * 0.06, 0.2 + i * 0.06)) * 12 }] }));
+  const inStyle = useAnimatedStyle(() => ({ opacity: seg(t.value, 0.03 + i * 0.03, 0.12 + i * 0.03), transform: [{ translateX: (1 - seg(t.value, 0.03 + i * 0.03, 0.12 + i * 0.03)) * 12 }] }));
   return (
     <Abs x={x} y={y} w={w} h={h} style={inStyle}>
       <View style={[styles.oddsLabel, { height: h, backgroundColor: look.chip, borderColor: look.frame, flexDirection: 'row', paddingHorizontal: 8 }]}>
@@ -1117,7 +1118,7 @@ const styles = StyleSheet.create({
   },
   captionText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 2 },
   oddsLabel: { borderRadius: 999, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-  oddsLabelText: { fontFamily: 'Shark', fontSize: 15, marginTop: 2 },
+  oddsLabelText: { fontFamily: 'Shark', fontSize: 13, marginTop: 2 },
   oddsTrack: { borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.6)', overflow: 'hidden', justifyContent: 'center' },
   oddsPct: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, width: 42, textAlign: 'right' },
 });
