@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameIconName } from '../ui/iconNames';
 import RealMoneyMark from './RealMoneyMark';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
 import { useModalLayer } from '../ui/modalLayers';
@@ -260,6 +260,12 @@ export function openServerRoute(screen: string, params?: object): void {
   RootNavigation.navigate(screen, params ?? {});
 }
 
+/** Loaded only when opened: the gate stays light for every other door and for tests. */
+function MoreForGrownUps() {
+  const Info = (require('./money/GrownUpsInfo') as typeof import('./money/GrownUpsInfo')).default;
+  return <Info />;
+}
+
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'] as const;
 const MAX_FONT = 1.3;
 
@@ -269,8 +275,9 @@ export function GrownUpGateHost() {
   const [typed, setTyped] = useState('');
   // After a right answer: the offer card (price, trial, renewal terms) for the grown-up only.
   const [details, setDetails] = useState<{ head: string; lines: string[] } | null>(null);
+  const [more, setMore] = useState(false);
   useEffect(() => {
-    showGate = r => { setTyped(''); setDetails(null); setReq(r); };
+    showGate = r => { setTyped(''); setDetails(null); setMore(false); setReq(r); };
     return () => { showGate = null; };
   }, []);
   // Waits behind any open sheet instead of stacking a second <Modal> (ui/modalLayers.ts).
@@ -301,6 +308,14 @@ export function GrownUpGateHost() {
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.offerHead}>{details.head}</Text>
               {details.lines.map(line => <Text key={line} maxFontSizeMultiplier={MAX_FONT} style={styles.offerLine}>{line}</Text>)}
             </View>
+            {/* One page for grown-ups: VIP, the Shark Pass, gifts, Ask to Buy, odds, cancel. */}
+            {more ? (
+              <ScrollView style={{ maxHeight: 220, alignSelf: 'stretch' }}><MoreForGrownUps /></ScrollView>
+            ) : (
+              <Pressable onPress={() => setMore(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="More for grown-ups">
+                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.cancelText}>More for grown-ups</Text>
+              </Pressable>
+            )}
             <Pressable onPress={() => close(true)} style={({ pressed }) => [styles.key, styles.keyOk, styles.restOk, pressed && { opacity: 0.7 }]}
               accessibilityRole="button" accessibilityLabel="Continue to buy in the App Store">
               <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.keyText, styles.keyOkText]}>Continue to buy</Text>

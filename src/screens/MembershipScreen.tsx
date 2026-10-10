@@ -34,6 +34,7 @@ import { VIP_GIFT_PRODUCT_IDS, buyVipGift, loadVipGiftPrices } from '../services
 import { trackImpression, trackMoney } from '../services/money/track';
 import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../services/money/flags';
 import { scheduleTrialReminder } from '../services/money/trialReminder';
+import GrownUpsInfo from '../components/money/GrownUpsInfo';
 
 // Every line here is backed by live server logic: ride wins pay VIP double
 // (CompleteTaskAction), VIP home maps spawn two extra finds and double their
@@ -385,16 +386,21 @@ const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
 ];
 
 function GrownUpNotes() {
+  // "Show a grown-up": the kid hands the phone over and the whole grown-up page opens right here.
+  const [all, setAll] = useState(false);
   return (
-    <Animated.View entering={FadeInUp.delay(700)} style={s.grownUps} accessible
-      accessibilityLabel={`For grown-ups. ${GROWN_UP_NOTES.map(n => n.text).join(' ')}`}>
+    <Animated.View entering={FadeInUp.delay(700)} style={s.grownUps}>
       <Text style={s.grownUpsHead}>FOR GROWN-UPS</Text>
-      {GROWN_UP_NOTES.map(note => (
-        <View key={note.text} style={s.grownUpRow}>
+      {all ? <GrownUpsInfo /> : GROWN_UP_NOTES.map(note => (
+        <View key={note.text} style={s.grownUpRow} accessible accessibilityLabel={note.text}>
           <GameIcon name={note.icon} size={20} />
           <Text style={s.grownUpText}>{note.text}</Text>
         </View>
       ))}
+      {!all && (
+        <GameButton label="Show a grown-up" size="compact" icon="member" onPress={() => setAll(true)}
+          accessibilityLabel="Show a grown-up everything about paying in the game" style={{ alignSelf: 'center', marginTop: 6 }} />
+      )}
     </Animated.View>
   );
 }

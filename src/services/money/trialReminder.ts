@@ -35,7 +35,7 @@ export async function scheduleTrialReminder(end: Date, billing: string): Promise
     if (old) await Notifications.cancelScheduledNotificationAsync(old).catch(() => undefined);
     const { title, body } = trialReminderText(billing);
     const id = await Notifications.scheduleNotificationAsync({
-      content: { title, body, data: { screen: 'Membership' } },
+      content: { title, body },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: at },
     });
     await AsyncStorage.setItem(KEY, id).catch(() => undefined);
