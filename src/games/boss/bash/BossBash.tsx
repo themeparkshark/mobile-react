@@ -789,14 +789,15 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const wanted: Face = face === 'angry' ? idle : face;
   const shownFace: Face = faces.some(f => f[0] === wanted) ? wanted : 'angry';
   const sharkSrc = BASH_ART.shark[pose];
-  const perfectShowing = fx.some(f => (f.t === 'wm' && f.wm === 'perfect') || (f.t === 'bubble' && f.text.startsWith('PERFECT')));
+  // One message on the boss at a time: while any word or bubble shows, damage numbers are plain (no badge).
+  const perfectShowing = fx.some(f => f.t === 'wm' || f.t === 'bubble');
   const finSize = Math.min(54, L.w * 0.13);
 
   const renderResults = (args: ShellResultsArgs) => (
     <BashResults args={args} bossName={bossName} boss={boss} rideName={rideName ?? null} startHp={hpAtBell.current ?? hpLeft} capLeft={capLeft}
       hpMax={hpMax} damage={args.result.score} rate={damageRate} meta={args.result.meta ?? {}} fighters={fighters}
       endsAt={endsAt} next={next} rewards={rewards} receipt={receipt} receiptNote={receiptNote} bestBefore={best}
-      teamDamage={teamDamage} warmNext={warmNext} portrait={skin.hurt ?? skin.dizzy ?? undefined}
+      teamDamage={teamDamage} warmNext={warmNext} defeated={skin.dizzy ?? undefined} portrait={skin.hurt ?? skin.dizzy ?? undefined}
       onAgain={onAgain && args.result.meta ? () => onAgain(args.result.meta!) : undefined} />
   );
 

@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   where: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, marginTop: 2 },
   hpRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingHorizontal: 2 },
   fighters: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  hpText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
+  hpText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   tiles: { flexDirection: 'row', gap: 8, marginTop: 12 },
   tile: { flex: 1, alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 3, borderColor: BRAND.navy, paddingTop: 6, paddingBottom: 6,
     paddingHorizontal: 4 },

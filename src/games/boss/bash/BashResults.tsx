@@ -50,12 +50,14 @@ export function creditedDamage(damage: number, capLeft: number | undefined): num
   return capLeft === undefined ? damage : Math.max(0, Math.min(damage, capLeft));
 }
 
-export default function BashResults({ args, bossName, boss, startHp, hpMax, damage: rawDamage, capLeft, rate, meta, fighters, endsAt, next, rewards, onAgain, warmNext,
+export default function BashResults({ args, bossName, boss, startHp, hpMax, damage: rawDamage, capLeft, rate, meta, fighters, endsAt, next, rewards, onAgain, warmNext, defeated,
   receipt = null, receiptNote = null, bestBefore = 0, teamDamage = 0, portrait }: {
   args: ShellResultsArgs; bossName: string; boss: BossId; rideName: string | null; startHp: number; hpMax: number; damage: number;
   /** Per-player raid cap left before this round (config boss.max_damage_per_player_per_raid). */
   capLeft?: number;
   warmNext?: boolean;
+  /** The beaten-boss face for a team win. */
+  defeated?: number;
   rate: number; meta: Record<string, unknown>; fighters: number; endsAt?: string; next?: BashNext; rewards?: BashRewards;
   onAgain?: () => void;
   /** The round was sent at the bell: what the server said. */
@@ -115,7 +117,10 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       </View>
       {best && !noHits && <View style={styles.best}><Text style={styles.bestText}>NEW BEST!</Text></View>}
       <View style={styles.head}>
-        <Image source={portrait ?? BOSS_ART[boss]} style={styles.bossPic} contentFit="contain" />
+        <View>
+          <Image source={won ? (defeated ?? portrait ?? BOSS_ART[boss]) : (portrait ?? BOSS_ART[boss])} style={styles.bossPic} contentFit="contain" />
+          {won && <View style={styles.stamp}><Text style={styles.stampText} maxFontSizeMultiplier={1}>BOSS{'\n'}DOWN</Text></View>}
+        </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.kicker}>{noHits ? 'NO HITS THIS TIME' : `YOU HIT ${bossName.toUpperCase()} FOR`}</Text>
           {noHits ? <Text style={styles.zero}>No Energy was spent.</Text>
@@ -135,6 +140,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
 
       <View style={styles.raid}>
         <View style={styles.hpTrack}>
+          {won && <EmptyFlash />}
           <View style={[styles.hpGold, { width: pct(startHp) }]} />
           <Animated.View style={[styles.hpRed, fill]} />
         </View>
@@ -208,6 +214,9 @@ const styles = StyleSheet.create({
   bestText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   bossPic: { width: 76, height: 76 },
+  stamp: { position: 'absolute', left: 4, top: 22, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 3, borderColor: BRAND.red, borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.85)', transform: [{ rotate: '-14deg' }] },
+  stampText: { fontFamily: 'Shark', fontSize: 15, lineHeight: 15, color: BRAND.red, textAlign: 'center' },
   kicker: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, letterSpacing: 0.4 },
   dmg: { alignSelf: 'stretch', textAlign: 'left', fontFamily: 'Shark', fontSize: 48, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0, padding: 0 },
   zero: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 4 },
@@ -260,4 +269,13 @@ function ChestPop() {
   return <Animated.View style={[styles.chest, style]} pointerEvents="none">
     <Image source={CHEST_OPEN} style={StyleSheet.absoluteFill} contentFit="contain" />
   </Animated.View>;
+}
+
+/** Team win: the emptied HP bar flashes white twice once it has drained. */
+function EmptyFlash() {
+  const v = useSharedValue(0);
+  useEffect(() => { v.value = withDelay(1600, withSequence(withTiming(1, { duration: 110 }), withTiming(0, { duration: 160 }),
+    withTiming(1, { duration: 110 }), withTiming(0, { duration: 260 }))); }, [v]);
+  const a = useAnimatedStyle(() => ({ opacity: v.value }));
+  return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: BRAND.white, zIndex: 2 }, a]} />;
 }
