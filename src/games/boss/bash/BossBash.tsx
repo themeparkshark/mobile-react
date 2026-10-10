@@ -546,6 +546,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const koShown = useRef(false);
   const koMine = useRef(false);
   const [victory, setVictory] = useState(false);
+  const koAt = useRef(0);
   const hpNowLive = Math.max(0, hpLeft - (capLeft === undefined ? hud.damage : Math.min(hud.damage, capLeft)));
   const teamHitRef = useRef<number | null>(null); teamHitRef.current = teamHit;
   const hpNowRef = useRef(hpLeft);
@@ -573,17 +574,11 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     haptic('comboHeavy'); later(160, () => haptic('success'));
     // The wait to the bell is a victory lap: the beaten boss bobs, coins rain, the shark cheers, taps make sparkles.
     setPose('cheer');
-    setVictory(true);
+    setVictory(true); koAt.current = played.current;
     later(mine ? 2150 : 1200, () => addFx({ t: 'bubble', text: 'TAP THE BOSS!', x: L.w / 2, y: L.waterY + 70, tone: 'gold' }, 2000));
     if (!reduced) {
       bossRise.value = withDelay(400, withRepeat(withSequence(withTiming(-0.05, { duration: 420, easing: Easing.inOut(Easing.quad) }),
         withTiming(0, { duration: 420, easing: Easing.inOut(Easing.quad) })), -1, false));
-      const rain = () => {
-        if (finished.current || !koShown.current) return;
-        particles.current?.burst({ x: L.w * (0.15 + Math.random() * 0.7), y: L.bossTop, preset: 'burst', count: 8, colors: [BRAND.gold, BRAND.goldLight, BRAND.white], speed: 0.7 });
-        later(380, rain);
-      };
-      later(500, rain);
     }
     // The server needs a 12 s round: a knockout earlier than that ends the round at 12.5 s.
     // Cut to the card about 3 s after the KO (the victory lap); the server's 12.5 s wait runs behind it.
@@ -969,7 +964,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
           {victory && <CoinRain width={L.w} top={L.bossTop} height={L.waterY - L.bossTop + 120} reduced={reduced} />}
           {victory && <TapHand x={L.head.x + 24} y={L.head.y + 10} reduced={reduced} size={72} />}
-          {victory && <VictoryClock clock={clock} />}
+          {victory && <VictoryClock clock={clock} until={koAt.current + (reduced ? 1200 : 3000)} />}
           {/* Effects (one message on the boss at a time: no gold badge while PERFECT shows). */}
           {fx.map(f => f.t === 'num' ? <DamageNumber key={f.id} text={f.text} x={f.x} y={f.y} big={f.big} badge={!perfectShowing} toX={scoreTarget.x} toY={scoreTarget.y} reduced={reduced} />
             : f.t === 'fin' ? <FinFly key={f.id} x={f.x} y={f.y} toX={f.toX} toY={f.toY} delay={f.delay} size={finSize} reduced={reduced} />
@@ -1239,10 +1234,10 @@ function FallingCoin({ x, delay, size, spin, height, reduced }: { x: number; del
     <GameIcon name="coins" size={size} />
   </Animated.View>;
 }
-/** Victory lap: seconds until the result (the server's 12.5 s minimum round). */
-function VictoryClock({ clock }: { clock: SharedValue<number> }) {
+/** Victory lap: seconds until the result card (3 s after the knockout). */
+function VictoryClock({ clock, until }: { clock: SharedValue<number>; until: number }) {
   const [left, setLeft] = useState(3);
-  useAnimatedReaction(() => Math.max(0, Math.ceil((12_500 - clock.value) / 1000)), (n, prev) => { if (n !== prev) runOnJS(setLeft)(n); });
+  useAnimatedReaction(() => Math.max(0, Math.ceil((until - clock.value) / 1000)), (n, prev) => { if (n !== prev) runOnJS(setLeft)(n); });
   if (left <= 0) return null;
   return <View pointerEvents="none" style={styles.victoryClock}><Text style={styles.victoryText} maxFontSizeMultiplier={1.1}>{left}</Text></View>;
 }
