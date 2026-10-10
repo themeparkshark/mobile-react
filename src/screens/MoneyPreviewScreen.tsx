@@ -11,6 +11,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AuthContext } from '../context/AuthProvider';
 import MemberFlex from '../components/money/MemberFlex';
 import ParkDayOffer from '../components/money/ParkDayOffer';
+import SharkPassBanner, { devPretendEarlier, noteSharkPassPoints } from '../components/money/SharkPassBanner';
+import StarterOfferCard from '../components/money/StarterOfferCard';
+import { getSharkPass } from '../api/endpoints/me/shark-pass';
+import { useEffect } from 'react';
 import type { InventoryType } from '../models/inventory-type';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CoinTopUpOffer from '../components/money/CoinTopUpOffer';
@@ -22,6 +26,22 @@ export default function MoneyPreviewScreen({ route }: { route?: { params?: { scr
   const [payoff, setPayoff] = useState(screen === 'payoff' || screen === 'asktobuy');
   const { player } = useContext(AuthContext);
   const look = player?.inventory as InventoryType | undefined;
+  // The post-win sheet's money block on its own (the real sheet's preview does not scroll in captures):
+  // the Shark Pass banner with its "+N pts" tick, then the one offer (Starter Pack, once ever).
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (screen !== 'postwin-money') return;
+    void getSharkPass().then(st => { noteSharkPassPoints(st); devPretendEarlier(120); setReady(true); });
+  }, [screen]);
+  if (screen === 'postwin-money') {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#0a4f96', padding: 14, paddingTop: 80, gap: 10 }}>
+        <Text style={s.label}>Post-win sheet, money block</Text>
+        {ready && <SharkPassBanner style={{ alignSelf: 'stretch' }} />}
+        <StarterOfferCard ready onShown={() => undefined} />
+      </View>
+    );
+  }
   if (screen === 'park') {
     return <View style={{ flex: 1, backgroundColor: BRAND.blue, padding: 14, paddingTop: 80 }}><ParkDayOffer devPreview /></View>;
   }

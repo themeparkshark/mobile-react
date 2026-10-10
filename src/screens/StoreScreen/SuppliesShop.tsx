@@ -46,6 +46,7 @@ import { openMembership } from '../../components/GrownUpGate';
 import { useHelp } from '../../components/help/HelpProvider';
 import SharkPassBanner from '../../components/money/SharkPassBanner';
 import BundleCard from '../../components/money/BundleCard';
+import WishHeart from '../../components/money/WishHeart';
 import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../../services/money/flags';
 import {
   Band, CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, packArtKey, unitWord, type PackArtKey,
@@ -376,6 +377,7 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
           color={best ? 'gold' : 'navy'} size={columns === 3 ? 14 : 16} />
         {gear && <Text maxFontSizeMultiplier={MAX_FONT} style={st.gearLine} numberOfLines={2}>{gear}</Text>}
         <PriceBar price={price} busy={busy} note={note} />
+        <WishHeart id={product.product_id} name={`${n.toLocaleString('en-US')} ${unitWord(main, n)}`} />
         {sticker && <Sticker text={sticker} style={{ top: 6, right: 4 }} />}
       </ShopCard>
       {best && <View style={st.bestPill} pointerEvents="none"><Text maxFontSizeMultiplier={1.1} style={st.bestPillText}>BEST VALUE</Text></View>}

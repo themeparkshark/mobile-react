@@ -665,14 +665,14 @@ export default function SharkPassScreen() {
                   const wearing = state.cosmetics?.equipped_frame === f.key;
                   return (
                     <View key={f.key} style={s.frameRow}>
-                      <Pressable onPress={() => setTryOn({ reward: { type: 'frame', name: f.name, art: f.art, ready: true }, step: f.step, row: f.row === 'paid' ? 'pass' : 'free', owned: f.owned })}
+                      <Pressable onPress={() => setTryOn({ reward: { type: 'frame', name: f.name, art: f.art, ready: true }, step: f.step, row: f.row === 'paid' || f.row === 'shop' ? 'pass' : 'free', owned: f.owned })}
                         accessibilityRole="button" accessibilityLabel={`${f.name}. Tap to try it on.`}>
                         <View style={!f.owned && s.setDim}><RewardPicture reward={{ type: 'frame', name: f.name, art: f.art, ready: true }} size={48} /></View>
                       </Pressable>
                       <View style={{ flex: 1 }}>
                         <Text maxFontSizeMultiplier={MAX_FONT} style={s.frameName}>{f.name}</Text>
                         <Text maxFontSizeMultiplier={MAX_FONT} style={s.frameSub}>
-                          {f.owned ? (wearing ? 'Wearing it' : 'Yours') : f.row === 'set_bonus' ? 'Free: collect all the free pins' : f.row === 'paid' ? `Shark Pass, step ${f.step}` : `Free at step ${f.step}`}
+                          {f.owned ? (wearing ? 'Wearing it' : 'Yours') : f.row === 'shop' ? 'Comes with the Starter Pack' : f.row === 'set_bonus' ? 'Free: collect all the free pins' : f.row === 'paid' ? `Shark Pass, step ${f.step}` : `Free at step ${f.step}`}
                         </Text>
                       </View>
                       {f.owned && (

@@ -6,6 +6,7 @@ export const FRAME_ART: Record<string, number> = {
   'frost-frame': require('../../../assets/images/sharkpass/frost-frame.webp'),
   'aurora-frame': require('../../../assets/images/sharkpass/aurora-frame.webp'),
   'snowbound-frame': require('../../../assets/images/sharkpass/snowbound-frame.webp'),
+  'starter-frame': require('../../../assets/images/sharkpass/starter-frame.webp'),
 };
 
 /** The bundled picture for a frame key, or null for an unknown frame (draw no ring). */

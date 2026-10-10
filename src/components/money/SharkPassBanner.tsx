@@ -45,6 +45,11 @@ function nextBannerPrize(state: SharkPassState, premium: boolean) {
 
 /** The last points this app run saw, so the next banner can say "+120 pass points" after a win. */
 let lastSeen: { season: string; points: number; tier: number } | null = null;
+/** Dev only (captures): pretend the last look was `points` earlier, so the next banner shows its tick. */
+export function devPretendEarlier(points: number): void {
+  if (__DEV__ && lastSeen) lastSeen = { ...lastSeen, points: Math.max(0, lastSeen.points - points), tier: Math.max(0, lastSeen.tier - (points >= 400 ? 1 : 0)) };
+}
+
 /** Any screen that loads the pass notes its points (the Shark Pass screen, the banner). */
 export function noteSharkPassPoints(state: SharkPassState | null): void {
   if (state && state.enabled && state.season && state.progress) lastSeen = { season: state.season.key, points: state.progress.points, tier: state.progress.tier };

@@ -11,6 +11,8 @@ export type ShopProduct = {
   readonly grants: ShopGrants;
   /** Coin packs: how many pieces of Shark Shop gear this buys at the typical (median) gear price. */
   readonly buys?: { readonly gear: number; readonly gear_price: number } | null;
+  /** A pack's own cosmetic (the Starter Pack's Starter Frame). */
+  readonly frame?: { readonly key: string; readonly name: string } | null;
   readonly limit: 'once' | 'daily' | null;
   readonly deal_key: string | null;
   readonly available: boolean;

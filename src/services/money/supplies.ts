@@ -96,7 +96,7 @@ export function grantsText(grants: ShopGrants): string {
 
 /** What the grown-up gate restates before a real-money buy: "$4.99 for 15 tickets". */
 export function gateReasonFor(product: ShopProduct, price: ShopPrice | undefined): GateReason {
-  return { kind: 'money', price: price?.price ?? 'Real money', gets: grantsText(product.grants) };
+  return { kind: 'money', price: price?.price ?? 'Real money', gets: `${grantsText(product.grants)}${product.frame ? ` and the ${product.frame.name}` : ''}` };
 }
 
 let buying = false;

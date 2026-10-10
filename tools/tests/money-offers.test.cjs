@@ -231,3 +231,12 @@ test('the new-gear days come from the store rotation, read-only', () => {
   assert.deepEqual(plain(offers.dropDays(null, 7)), []);
   assert.deepEqual(plain(offers.dropDays('2026-10-13T07:00:00Z', 0)), []);
 });
+
+test('the grown-up page: this account\'s spend this month and the kid\'s wishlist (nothing sent)', () => {
+  const wl = loadTs('src/services/money/wishlist.ts', { '@react-native-async-storage/async-storage': { default: {} }, react: { useEffect() {}, useState: v => [v, () => {}] } });
+  const a = wl.toggled([], { id: 'x', name: 'Starter Pack' });
+  assert.equal(a.length, 1);
+  assert.equal(wl.toggled(a, { id: 'x', name: 'Starter Pack' }).length, 0, 'tap again to remove');
+  assert.doesNotMatch(read('src/services/money/wishlist.ts'), /client\.|fetch\(/, 'never sent anywhere');
+  assert.match(read('src/components/money/GrownUpsInfo.tsx'), /This month on this account: nothing bought yet\./);
+});

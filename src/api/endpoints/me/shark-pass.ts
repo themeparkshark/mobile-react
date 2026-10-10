@@ -11,7 +11,7 @@ export type SharkPassReward =
   /** A profile frame (a ring around the shark on the profile, Standings and share cards). Art is bundled by `art`. */
   | { readonly type: 'frame'; readonly name: string; readonly art: string; readonly ready: boolean };
 
-export type SharkPassFrame = { readonly key: string; readonly name: string; readonly art: string; readonly step: number; readonly row: 'free' | 'paid' | 'set_bonus'; readonly owned: boolean };
+export type SharkPassFrame = { readonly key: string; readonly name: string; readonly art: string; readonly step: number; readonly row: 'free' | 'paid' | 'set_bonus' | 'shop'; readonly owned: boolean };
 export type GoldPiece = { readonly art: string; readonly name: string; readonly owns_base: boolean; readonly owns_gold: boolean; readonly ready: boolean; readonly icon_url: string | null };
 export type SharkPassCosmetics = {
   readonly frames: readonly SharkPassFrame[];

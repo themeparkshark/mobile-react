@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { getMoneySpend } from '../../api/endpoints/me/money-spend';
+import { useWishlist } from '../../services/money/wishlist';
 import { FONT, GameIcon } from '../../ui';
 
 /**
@@ -18,10 +21,30 @@ export const GROWN_UP_LINES: readonly string[] = [
   'Bring back an earlier buy with Restore on the VIP page or the Shark Pass page.',
 ];
 
+/** "This month on this account: $6.98 in 2 buys." Exported for tests. */
+export function spendLine(spend: { usd: number; buys: number } | null): string | null {
+  if (!spend) return null;
+  if (spend.buys === 0) return 'This month on this account: nothing bought yet.';
+  return `This month on this account: $${spend.usd.toFixed(2)} in ${spend.buys} ${spend.buys === 1 ? 'buy' : 'buys'} (Supplies, Shark Pass, gift plans; list prices). VIP renewals show in the Apple ID's history of buys.`;
+}
+
 export default function GrownUpsInfo({ tone = 'onNavy' }: { tone?: 'onNavy' | 'onLight' }) {
   const ink = tone === 'onNavy' ? '#ffffff' : '#0b2a55';
+  const [spend, setSpend] = useState<{ usd: number; buys: number } | null>(null);
+  useEffect(() => { void getMoneySpend().then(setSpend); }, []);
+  const wishes = useWishlist();
+  const extra = [
+    spendLine(spend),
+    wishes.length ? `Your kid’s wishlist (saved on this phone, nothing is bought): ${wishes.map(w => w.name).join(', ')}.` : null,
+  ].filter((x): x is string => !!x);
   return (
-    <View style={st.list} accessible accessibilityLabel={`For grown-ups. ${GROWN_UP_LINES.join(' ')}`}>
+    <View style={st.list} accessible accessibilityLabel={`For grown-ups. ${[...extra, ...GROWN_UP_LINES].join(' ')}`}>
+      {extra.map(line => (
+        <View key={line} style={st.row}>
+          <GameIcon name="info" size={16} />
+          <Text maxFontSizeMultiplier={1.3} style={[st.text, { color: ink, fontFamily: FONT.display }]}>{line}</Text>
+        </View>
+      ))}
       {GROWN_UP_LINES.map(line => (
         <View key={line} style={st.row}>
           <GameIcon name="check" size={16} />

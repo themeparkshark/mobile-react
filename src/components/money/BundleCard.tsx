@@ -7,6 +7,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import type { ShopProduct } from '../../api/endpoints/me/shop';
 import type { BundleWorth } from '../../services/money/offers';
+import { Image } from 'expo-image';
+import { frameArt } from './frames';
+import WishHeart from './WishHeart';
 import { Band, CARD, Contents, MAX_FONT, PackArt, PriceBar, ShopCard, type PackArtKey } from './moneyUi';
 import { FONT } from '../../ui';
 
@@ -30,9 +33,17 @@ export default function BundleCard({ product, price, worth, busy, disabled, onBu
               </Text>
             )}
             <Contents grants={product.grants} size="tight" />
+            {product.frame && frameArt(product.frame.key) && (
+              // Only this pack has it: its own look, a profile frame kept for good.
+              <View style={st.frameRow}>
+                <Image source={frameArt(product.frame.key)!} style={{ width: 30, height: 30 }} contentFit="contain" />
+                <Text maxFontSizeMultiplier={MAX_FONT} style={st.kid} numberOfLines={1}>{`Plus the ${product.frame.name}`}</Text>
+              </View>
+            )}
           </View>
         </View>
         <PriceBar price={price} busy={busy} big={!compact} />
+        <WishHeart id={product.product_id} name={product.title} />
       </ShopCard>
     </Animated.View>
   );
@@ -44,5 +55,6 @@ const st = StyleSheet.create({
   artCompact: { width: 92, height: 88 },
   worth: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   worthCompact: { fontSize: 16 },
+  frameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   kid: { fontFamily: FONT.display, fontSize: 15, color: '#e2f6ff' },
 });
