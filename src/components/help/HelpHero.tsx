@@ -30,7 +30,7 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const ART = {
   water: require('../../../assets/images/help/stage-water.webp'),
   groundShadow: require('../../../assets/images/howto/ground-shadow.webp'),
-  corkTile: require('../../../assets/images/screens/pin-swaps/corkboard.png'),
+  corkTile: require('../../../assets/images/help/cork-tile.webp'),
   sharks: [
     require('../../../assets/images/screens/leaderboard/sharks/shark-0.png'),
     require('../../../assets/images/screens/leaderboard/sharks/shark-1.png'),

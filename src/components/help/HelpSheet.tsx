@@ -46,7 +46,7 @@ export type HelpSheetPage = HelpPage & { readonly heroData?: HeroData };
 export type HelpSheetContent = Omit<HelpSheetSpec, 'pages'> & { readonly pages: readonly HelpSheetPage[] };
 
 /** A small overshoot and settle, like the game's popups. */
-const SPRING_IN = { damping: 14, stiffness: 260, mass: 0.85 } as const;
+const SPRING_IN = { damping: 16, stiffness: 260, mass: 0.85 } as const;
 const OUT_MS = 190;
 const seatTick = () => { void Haptics.selectionAsync().catch(() => undefined); };
 const SIDE = 16;
@@ -238,7 +238,10 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
             <PagerScroll ref={scroll} horizontal pagingEnabled showsHorizontalScrollIndicator={false} bounces={pages.length > 1}
               scrollEnabled={pages.length > 1} onScroll={onScroll} scrollEventThrottle={16} onMomentumScrollEnd={onSettle}
               decelerationRate="fast">
-              {pages.map((p, index) => (
+              {pages.map((p, index) => Math.abs(index - page) > 1 ? (
+                // Pages two or more away mount when they come near (spreads the open cost on long sheets).
+                <View key={p.key} style={{ width: pageW }} />
+              ) : (
                 <PageView key={p.key} page={p} index={index} width={pageW} heroW={heroW} heroH={heroH}
                   running={active && index === page} reduced={reduced} reveal={reveal} scrollX={scrollX}
                   footer={pageFooter?.(p) ?? null} />
