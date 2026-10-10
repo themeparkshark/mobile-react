@@ -56,6 +56,7 @@ import {
   withTiming,
 } from 'react-native-reanimated';
 import { useReduceMotionPreference } from '../hooks/useReducedGameMotion';
+import { useBatterySaver } from '../power/batterySaver';
 import { BURST_AT_MS, REFILL_AT_MS, createCelebrationGate, createPotionDriver, groupDigits, shouldPlay, type PotionState, type PotionTransition } from './xpPotionModel';
 
 const INK = '#05346e';
@@ -80,8 +81,6 @@ const PAD_X = 16;
 const PAD_TOP = 22;
 const PAD_BOTTOM = 10;
 const IDLE_FRAME_MS = 50;
-/** After this long with nothing happening the bar rests: the clock stops until something changes. */
-const SLEEPY_AFTER_S = 15;
 /** The full number shows this long before LEVEL UP! replaces it. */
 const BANNER_LAG_MS = 90;
 /** The stars' whole life: up, hold, gone before the drain (GOLD_HOLD_MS). */
@@ -154,6 +153,7 @@ function XpBarImpl({
   style,
 }: XpBarProps) {
   const reduced = useReduceMotionPreference();
+  const saver = useBatterySaver();
   const target = clamp01(progress);
   // The XP numbers follow the system text size, capped so they still fit on the bar.
   const { fontScale } = useWindowDimensions();
@@ -361,12 +361,8 @@ function XpBarImpl({
     else quiet.value += Math.min(dt, 100) / 1000;
     // The idle shine glides at the display rate.
     const shining = time.value % SHINE_EVERY < SHINE_FOR + 0.1;
-    // Long quiet: the bar rests completely (the clock stops) between shines; any change wakes it.
-    if (!active && !shining && quiet.value > SLEEPY_AFTER_S) {
-      quiet.value = 0;
-      runOnJS(sleep)();
-      return;
-    }
+    // Dustin (Oct 9): the liquid keeps sloshing and bubbling whenever the bar is on screen.
+    // No idle rest: it only stops off screen, in the background, under Reduce Motion or Battery Saver.
     if (!active && !shining && acc.value < IDLE_FRAME_MS) return;
     time.value += acc.value / 1000;
     acc.value = 0;
@@ -376,7 +372,7 @@ function XpBarImpl({
   const appActive = useRef(AppState.currentState === 'active');
   const asleep = useRef(false);
   const applyClock = useRef(() => {});
-  applyClock.current = () => frameRef.current.setActive(!asleep.current && !paused && reduced === false && appActive.current && width > 0);
+  applyClock.current = () => frameRef.current.setActive(!asleep.current && !paused && !saver && reduced === false && appActive.current && width > 0);
   // The UI thread asks to rest one frame before JS hears it: a change in that frame must win.
   const lastWake = useRef(0);
   function sleep() {
@@ -406,7 +402,7 @@ function XpBarImpl({
       sub.remove();
       frameRef.current.setActive(false);
     };
-  }, [paused, reduced, width]);
+  }, [paused, reduced, width, saver]);
 
   const onLayout = (e: LayoutChangeEvent) => {
     const next = Math.round(e.nativeEvent.layout.width);
@@ -486,7 +482,7 @@ function XpBarImpl({
     const k = fizz.value;
     for (let i = 0; i < BUBBLES.length; i++) {
       const b = BUBBLES[i];
-      if (i >= 2 && k < 1.3) continue;
+      if (i >= 3 && k < 1.3) continue;
       const travel = (b.phase * len + t * b.speed * k) % len;
       const rise = ((b.phase * innerH) + t * b.rise * k) % Math.max(1, innerH - 4);
       p.addCircle(x0 + 3 + travel, y0 + innerH - 2 - rise, b.r);

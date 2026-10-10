@@ -56,7 +56,8 @@ test('XP bar is cheap: one canvas, reused paths, a stopped clock that pauses, no
   assert.doesNotMatch(bar, /BlurMask|setInterval/);
   assert.doesNotMatch(read('src/components/Experience.tsx'), /setInterval/, 'no 30 Hz React count-up');
   assert.match(bar, /count\.value = withTiming\(now\.current/, 'the XP counts on the UI thread');
-  assert.match(bar, /if \(!active && !shining && quiet\.value > SLEEPY_AFTER_S\) \{[\s\S]{0,80}runOnJS\(sleep\)\(\);/, 'a quiet bar stops its clock (between shines)');
+  assert.doesNotMatch(bar, /SLEEPY_AFTER_S/, 'Dustin Oct 9: no idle rest, the bar keeps bubbling while on screen');
+  assert.match(bar, /!paused && !saver && reduced === false && appActive\.current/, 'the clock rests only off screen, in Battery Saver, under Reduce Motion or in the background');
   assert.match(bar, /function playKind\(kind: PotionTransition, next: PotionState\) \{\n\s+wake\(\);/, 'any change wakes it');
   assert.match(bar, /if \(!active && !shining && acc\.value < IDLE_FRAME_MS\) return;/, 'calm idle frame rate');
   assert.match(bar, /createPotionDriver/, 'same level-up rules as the potion (tested in profile-v2)');
