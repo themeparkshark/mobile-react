@@ -99,8 +99,8 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
       closing.current = false;
       setMounted(true);
       drag.value = 0;
-      open.value = 0;
-      reveal.value = 0;
+      // Reopened mid-close: spring on from where the card is, no snap.
+      if (!mounted) { open.value = 0; reveal.value = 0; }
       // The slide starts once the sheet has laid out and the button label has been measured
       // (see onReady), so the card never arrives with a blank button or an empty picture box.
       // Reopened while still closing: the sheet is already laid out, so start now.
@@ -118,7 +118,7 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
   }, [visible]);
 
   return (
-    <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+    <Modal visible={mounted && !!sheet} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       {/* Its own safe-area root: the sheet also renders from HelpProvider, above the app's SafeAreaProvider. */}
       <SafeAreaProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
@@ -325,10 +325,12 @@ function PageView({ page, index, width, heroW, heroH, running, reduced, reveal, 
   const pointStyles = [p0, p1, p2];
   const [replay, setReplay] = useState(0);
   // Once per session, a pointer taps the first picture so kids learn it replays.
-  const [hint] = useState(() => index === 0 && !reduced && !tapHintShown && (tapHintShown = true));
+  const [hint] = useState(() => index === 0 && !reduced && !tapHintShown);
   const hintT = useSharedValue(0);
   useEffect(() => {
-    if (hint) hintT.value = withDelay(900, withTiming(1, { duration: 1700 }));
+    if (!hint) return;
+    tapHintShown = true;
+    hintT.value = withDelay(900, withTiming(1, { duration: 1700 }));
   }, [hint, hintT]);
   const hintStyle = useAnimatedStyle(() => {
     if (!hint) return { opacity: 0 };
