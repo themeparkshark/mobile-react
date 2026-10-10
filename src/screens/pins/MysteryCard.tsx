@@ -40,8 +40,10 @@ const HOLD_MS = 650;
  * What can be inside a box and the chance of each, in pictures + numbers.
  * Every pin in the series is listed; the chaser is last, in gold.
  */
-export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compact = false, pity, fresh }: {
+export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compact = false, pity, fresh, gotIt = false }: {
   pins: readonly PinRow[]; size?: number; shine?: SharedValue<number>; compact?: boolean;
+  /** Golden Box: a pin you own (0% here) shows a green "Got it" check instead of 0%. */
+  gotIt?: boolean;
   /** The guarantee box, said next to the chaser's odds. */
   pity?: number;
   /** Pins that just arrived: they pop into their slot with a gold ring. */
@@ -50,7 +52,7 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
   const regular = pins.filter(p => !p.is_chaser);
   const chaser = pins.find(p => p.is_chaser);
   return (
-    <View style={styles.odds} accessible accessibilityLabel={`What can be inside. ${pins.map(p => `${p.owned ? p.name : 'a pin you need'} ${formatChance(p.chance_bp)}`).join(', ')}`}>
+    <View style={styles.odds} accessible accessibilityLabel={`What can be inside. ${pins.map(p => `${p.owned ? p.name : 'a pin you need'} ${gotIt && p.owned && !p.is_chaser && !p.chance_bp ? 'got it' : formatChance(p.chance_bp)}`).join(', ')}`}>
       <View style={styles.oddsRow}>
         {regular.map((p, i) => {
           const isFresh = !!fresh?.has(p.item_id);
@@ -60,7 +62,9 @@ export const OddsTable = memo(function OddsTable({ pins, size = 42, shine, compa
               {isFresh && <View style={[styles.freshRing, { width: size + 8, height: size + 8, borderRadius: (size + 8) / 2 }]} />}
               <PinTile uri={p.icon_url} size={size} owned={p.owned} kind={p.kind} tradable={p.tradable} spares={p.spares}
                 badge={false} tilt={((i * 29) % 9) - 4} flat shine={undefined} plainGhost />
-              <View style={styles.pctRow}><View style={styles.pctDot} /><Text maxFontSizeMultiplier={1.3} style={styles.pct}>{formatChance(p.chance_bp)}</Text></View>
+              {gotIt && p.owned && !p.chance_bp
+                ? <View style={styles.gotIt}><GameIcon name="check" size={13} /><Text maxFontSizeMultiplier={1.2} style={styles.gotItText}>Got it</Text></View>
+                : <View style={styles.pctRow}><View style={styles.pctDot} /><Text maxFontSizeMultiplier={1.3} style={styles.pct}>{formatChance(p.chance_bp)}</Text></View>}
             </Animated.View>
           );
         })}
@@ -238,10 +242,12 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
   useEffect(() => {
     if (!active || still || !ambient) { cancelAnimation(glint); glint.value = 0; return; }
     // A slow gold glint across the panel every few seconds (one shared value, UI thread).
-    glint.value = withRepeat(withSequence(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), withDelay(2600, withTiming(0, { duration: 0 }))), -1, false);
+    // One gold glint when the card comes into view (not a loop).
+    glint.value = 0;
+    glint.value = withDelay(700, withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }));
     return () => cancelAnimation(glint);
   }, [active, still, ambient, glint]);
-  const glintStyle = useAnimatedStyle(() => ({ opacity: glint.value <= 0 || glint.value >= 1 ? 0 : 0.45, transform: [{ translateX: -120 + glint.value * 520 }, { rotate: '20deg' }] }));
+  const glintStyle = useAnimatedStyle(() => ({ opacity: glint.value <= 0 || glint.value >= 1 ? 0 : 0.4, transform: [{ translateX: -120 + glint.value * 520 }, { rotate: '20deg' }] }));
   if (!golden) return null;
   const short = goldenShort(series, coins);
   const pins = goldenPins(series);
@@ -262,12 +268,12 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
         accessibilityLabel={`Golden Box, ${golden.price} coins. Gold chaser ${formatChance(golden.chaser_bp)}${golden.no_duplicates ? '. Only pins you need' : ''}. ${openOdds ? 'Hide' : 'Show'} what can be inside`}>
         <Animated.View pointerEvents="none" style={[styles.goldenGlint, glintStyle]} />
         <Image source={GOLDEN_ICON} style={{ width: 54, height: 54 }} contentFit="contain" />
-        <View style={{ flex: 1, gap: 3 }}>
+        <View style={{ flex: 1, gap: 4 }}>
           <Text maxFontSizeMultiplier={1.2} style={styles.goldenTitle}>Golden Box</Text>
-          <View style={styles.chips}>
+          <View style={styles.goldenChips}>
             <View style={styles.goldenChip}>
               <Image source={PIN_ART.chaser} style={{ width: 18, height: 18 }} contentFit="contain" />
-              <Text maxFontSizeMultiplier={1.1} style={styles.goldenChipText}>{oneIn(golden.chaser_bp)}</Text>
+              <Text maxFontSizeMultiplier={1.1} style={styles.goldenChipText}>{`Gold chaser ${oneIn(golden.chaser_bp)}`}</Text>
             </View>
             {golden.no_duplicates && <View style={[styles.goldenChip, styles.goldenChipNew]}><Text maxFontSizeMultiplier={1.1} style={[styles.goldenChipText, { color: BRAND.white }]}>Only new pins</Text></View>}
           </View>
@@ -277,16 +283,17 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
       </Pressable>
       {openOdds && (
         <Animated.View entering={FadeIn.duration(160)} style={{ gap: SPACE.sm }}>
-          <OddsTable pins={pins} size={38} pity={series.pity} compact />
+          <OddsTable pins={pins} size={38} pity={series.pity} compact gotIt />
           {short > 0 ? (
             <Pressable onPress={go} disabled={busy} hitSlop={4}
-              style={({ pressed }) => [styles.openBtn, styles.openGold, pressed && { transform: [{ scale: 0.96 }] }]}
+              style={({ pressed }) => [styles.openBtn, styles.openShort, pressed && { transform: [{ scale: 0.96 }] }]}
               accessibilityRole="button" accessibilityLabel={`Need ${short} more coins for a Golden Box`}>
-              <Image source={GOLDEN_ICON} style={{ width: 30, height: 30 }} contentFit="contain" />
+              <Image source={GOLDEN_ICON} style={{ width: 30, height: 30, opacity: 0.6 }} contentFit="contain" />
+              <Text maxFontSizeMultiplier={1.1} style={styles.openOneText}>Need</Text>
               <View style={[styles.price, styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{short.toLocaleString('en-US')} more</Text></View>
             </Pressable>
           ) : (
-            <HoldToOpen label={golden.price.toLocaleString('en-US')} saving={0} disabled={busy} tone="gold" word="Open" a11y="Hold to open a Golden Box" onOpen={go} />
+            <HoldToOpen label={golden.price.toLocaleString('en-US')} saving={0} disabled={busy} tone="gold" word="Hold to open" a11y="Hold to open a Golden Box" onOpen={go} />
           )}
           {topUp !== null && topUp > 0 && (
             <Animated.View entering={FadeIn.duration(160)}>
@@ -493,17 +500,21 @@ const styles = StyleSheet.create({
   openFive: { backgroundColor: BRAND.blueBright },
   holdFill: { position: 'absolute', left: 0, bottom: 0, height: 7, backgroundColor: BRAND.gold },
   holdFillGold: { backgroundColor: BRAND.navy },
+  openShort: { backgroundColor: '#e9e2c9', borderColor: BRAND.navy },
+  gotIt: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#dff5e3', borderRadius: 999, paddingHorizontal: 4 },
+  gotItText: { fontFamily: FONT.display, fontSize: 12, color: '#1f7a3a', paddingTop: 2 },
   openGold: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
   openGoldText: { color: BRAND.navy },
   golden: { backgroundColor: '#fff1c2', borderWidth: 3, borderColor: BRAND.goldLip, borderRadius: RADIUS.md, padding: SPACE.sm, gap: SPACE.sm, overflow: 'hidden' },
   goldenHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, minHeight: 58 },
   goldenGlint: { position: 'absolute', top: -40, width: 22, height: 160, backgroundColor: 'rgba(255,255,255,0.75)' },
   goldenTitle: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, paddingTop: 3 },
+  goldenChips: { flexDirection: 'row', gap: 4, alignItems: 'center' },
   goldenChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 999, borderWidth: 2, borderColor: BRAND.goldLip, paddingHorizontal: 7, paddingVertical: 1 },
   goldenChipNew: { backgroundColor: BRAND.green, borderColor: BRAND.white },
   goldenChipText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, paddingTop: 2 },
-  goldenCaret: { width: 28, height: 28, borderRadius: 14, backgroundColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
-  goldenCaretText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.gold, lineHeight: 18 },
+  goldenCaret: { width: 30, height: 30, borderRadius: 15, backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  goldenCaretText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy, lineHeight: 18 },
   holdHint: { position: 'absolute', top: -34, alignSelf: 'center', zIndex: 2, backgroundColor: BRAND.navy, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 3 },
   holdHintText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.white, paddingTop: 3 },
   openOneText: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, paddingTop: 3 },

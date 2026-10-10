@@ -94,8 +94,8 @@ function CrownBurst({ t, size }: { t: SharedValue<number>; size: number }) {
     if (v <= 0 || v >= 1) return { opacity: 0 };
     const up = Math.min(1, v / 0.35);
     return {
-      opacity: v < 0.75 ? 1 : 1 - (v - 0.75) / 0.25,
-      transform: [{ translateY: -size * 0.95 * up - v * 30 }, { scale: 0.4 + up * 0.8 - Math.max(0, v - 0.35) * 0.3 }, { rotate: `${(1 - up) * -25}deg` }],
+      opacity: v < 0.45 ? 1 : Math.max(0, 1 - (v - 0.45) / 0.2),
+      transform: [{ translateY: -size * 1.45 * up - v * 40 }, { scale: 0.4 + up * 0.8 - Math.max(0, v - 0.35) * 0.3 }, { rotate: `${(1 - up) * -25}deg` }],
     };
   });
   return (
@@ -699,7 +699,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             )}
             {pull.is_chaser && pull.by_pity && <View style={styles.guaranteedPill}><Text maxFontSizeMultiplier={1.1} style={styles.guaranteed}>Guaranteed!</Text></View>}
             <Text maxFontSizeMultiplier={1.35} style={styles.name} numberOfLines={2}>{pull.name}</Text>
-            {golden && !isCatch && (
+            {golden && !isCatch && !pull.is_chaser && (
               <View style={styles.goldenTag}>
                 <Image source={BOX_ART.gold.closed} style={{ width: 24, height: 24 }} contentFit="contain" />
                 <Text maxFontSizeMultiplier={1.2} style={styles.goldenTagText}>From a Golden Box</Text>
@@ -750,7 +750,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
           </View>
         )}
 
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, flashStyle]} />
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, golden && styles.flashGold, flashStyle]} />
 
         {(phase === 'show' || phase === 'summary') && (
           <View style={[styles.footer, { paddingBottom: insets.bottom + 18 }]}>
@@ -811,6 +811,8 @@ const styles = StyleSheet.create({
   serialStampText: { fontFamily: FONT.display, fontSize: 26, color: BRAND.gold, paddingTop: 3 },
   confettiOrigin: { position: 'absolute', alignSelf: 'center', width: 1, height: 1 },
   flash: { backgroundColor: '#ffffff' },
+  // Golden Box: a warm gold flash (a white wash read as a dropped frame on the gold stage).
+  flashGold: { backgroundColor: '#ffd75a' },
   dim: { backgroundColor: '#000814' },
   tapHint: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 6 },
   tapText: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, paddingTop: 3 },

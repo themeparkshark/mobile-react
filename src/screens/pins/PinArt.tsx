@@ -43,6 +43,8 @@ export const BOX_ART = {
 
 /** The small Golden Box icon (buttons, badges, the "from a Golden Box" tag). */
 export const GOLDEN_ICON = require('../../../assets/images/pins/box-gold-icon.webp');
+/** The Golden Box mark on a pin: a little crown (a regular chaser has no crown, so the two never look alike). */
+export const GOLDEN_CROWN = require('../../../assets/images/pins/crown-gold.webp');
 
 export type BoxTone = keyof typeof BOX_ART;
 
@@ -138,8 +140,8 @@ function PinTileBase({ uri, size, owned, kind, tradable, chaser, spares = 0, til
         </View>
       )}
       {golden && owned && !serial && (
-        <Image source={GOLDEN_ICON} accessibilityLabel="From a Golden Box"
-          style={[styles.badge, { width: badgeSize * 0.9, height: badgeSize * 0.9, right: -badgeSize * 0.2, top: -badgeSize * 0.22 }]} contentFit="contain" />
+        <Image source={GOLDEN_CROWN} accessibilityLabel="From a Golden Box"
+          style={[styles.badge, { width: badgeSize * 0.9, height: badgeSize * 0.9, right: -badgeSize * 0.42, top: -badgeSize * 0.36 }]} contentFit="contain" />
       )}
       {spares > 0 && owned && (
         <View style={[styles.spares, { left: -4, bottom: -4 }]}>
