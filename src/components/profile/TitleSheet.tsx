@@ -160,12 +160,12 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
             <GameButton label="Change title" tone="onLight" icon="swap" disabled={!!busy}
               onPress={() => setMode('change')} accessibilityHint="Shows the titles you have and where to get more" />
             {!!worn && (
-              // The same quiet white pill as the Stamp Book's Take off: one gold button per sheet.
+              // The same quiet white pill as the Stamp Book's Remove title: one gold button per sheet.
               <Pressable onPress={() => { void remove(); }} disabled={!!busy || earned === null} hitSlop={6}
-                accessibilityRole="button" accessibilityLabel="Take off title" accessibilityHint="Takes the title off your profile"
+                accessibilityRole="button" accessibilityLabel="Remove title" accessibilityHint="Takes the title off your profile"
                 style={({ pressed }) => [styles.takeOff, (busy || earned === null) && styles.removeOff, pressed && styles.rowPressed]}>
                 <GameIcon name="close" size={18} />
-                <Text style={styles.takeOffText} maxFontSizeMultiplier={1.4}>{busy === 'remove' ? 'Saving...' : 'Take off'}</Text>
+                <Text style={styles.takeOffText} maxFontSizeMultiplier={1.4}>{busy === 'remove' ? 'Saving...' : 'Remove title'}</Text>
               </Pressable>
             )}
           </View>

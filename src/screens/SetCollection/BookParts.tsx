@@ -312,10 +312,10 @@ export function BookHeader({ set, onFocus, focusBusy, stamp, onClaim, busyId, ti
       </View>
       )}
       {complete && titleWorn && !!set.reward.title && onTitle && (
-        <SpringPress onPress={onTitle} accessibilityLabel={`Wearing the ${set.reward.title} title. Tap to take it off.`} style={styles.wearingChip}>
+        <SpringPress onPress={onTitle} accessibilityLabel={`Wearing the ${set.reward.title} title. Tap to remove it.`} style={styles.wearingChip}>
           <GameIcon name="crown" size={22} />
           <Text style={styles.wearingChipText} numberOfLines={2} maxFontSizeMultiplier={1.3}>Wearing: {set.reward.title}</Text>
-          <View style={styles.wearingOffBtn}><Text style={styles.wearingOff} maxFontSizeMultiplier={1.3}>Take off</Text></View>
+          <View style={styles.wearingOffBtn}><Text style={styles.wearingOff} maxFontSizeMultiplier={1.3}>Remove title</Text></View>
         </SpringPress>
       )}
       {complete && !stamp && (
@@ -578,7 +578,7 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
       {state.kind === 'pending' && <Text style={styles.prizeNote} maxFontSizeMultiplier={BODY_SCALE}>Your shark item is on the way.</Text>}
       {state.kind === 'done' && onTitle && reward.title && (
         titleWorn ? (
-          <SpringPress onPress={onTitle} disabled={titleBusy} accessibilityLabel={`Wearing the ${reward.title} title. Tap to take it off.`}
+          <SpringPress onPress={onTitle} disabled={titleBusy} accessibilityLabel={`Wearing the ${reward.title} title. Tap to remove it.`}
             style={[styles.wear, titleBusy && { opacity: 0.6 }]}>
             <GameIcon name="check" size={24} />
             <Text style={styles.wearText} maxFontSizeMultiplier={1.3}>Wearing this title</Text>

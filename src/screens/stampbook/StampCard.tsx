@@ -312,7 +312,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
             )}
             {/* Second button, mounted (invisible) as soon as the stamp has a title so its art is measured before it shows:
                 a freshly mounted GameButton otherwise flashes one frame of blank art. Wearing the title first: the claim chain;
-                already wearing it: a quiet Take off. */}
+                already wearing it: a quiet Remove title. */}
             {!!display.rewards.title && display.earned && (!compact || displayClaimed) && (
               <View style={!(displayClaimed && !busy) && styles.hidden} pointerEvents={displayClaimed && !busy && !holding ? 'auto' : 'none'}
                 importantForAccessibility={displayClaimed && !busy ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!(displayClaimed && !busy)}>
@@ -321,7 +321,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
                   nextCount > 1 && onClaimAll ? <QuietButton label={`Claim all ${nextCount}`} icon="gift" onPress={onClaimAll} />
                     : nextCount > 0 ? <QuietButton label={`Next reward (${nextCount} left)`} icon="gift" onPress={onNext} /> : null
                 ) : (
-                  <QuietButton label={equipping ? 'Saving...' : wearingTitle ? 'Take off' : 'Wear title'} icon={wearingTitle ? 'close' : 'crown'} onPress={onToggleTitle} />
+                  <QuietButton label={equipping ? 'Saving...' : wearingTitle ? 'Remove title' : 'Wear title'} icon={wearingTitle ? 'close' : 'crown'} onPress={onToggleTitle} />
                 )}
               </View>
             )}
@@ -341,7 +341,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
 
 const noop = () => undefined;
 
-/** The quiet white pill (same as Take off in the Titles list and profile): a second job that never competes with the gold button. */
+/** The quiet white pill (same as Remove title in the Titles list and profile): a second job that never competes with the gold button. */
 function QuietButton({ label, icon, onPress }: { label: string; icon: GameIconName; onPress: () => void }) {
   return (
     <Pressable onPress={() => { haptic('tapLight'); playSfx('ui.tap', 0.6); onPress(); }} hitSlop={6} accessibilityRole="button" accessibilityLabel={label}

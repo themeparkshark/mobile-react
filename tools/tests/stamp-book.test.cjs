@@ -486,16 +486,16 @@ test('v3 round 2: compact counts, colour fills up but never reads as owned, clai
   const cache = read('src/screens/stampbook/cache.ts');
   assert.match(cache, /memory\.player === player/);
   assert.match(cache, /saved\.player !== player/);
-  // The Titles list only ever says "Take off" (one word for it everywhere).
+  // The Titles list only ever says "Remove title" (one word for it everywhere).
   assert.ok(!/'Remove'/.test(read('src/screens/stampbook/TitlesSheet.tsx')));
-  assert.match(read('src/screens/stampbook/StampCard.tsx'), /wearingTitle \? 'Take off' : 'Wear title'/);
+  assert.match(read('src/screens/stampbook/StampCard.tsx'), /wearingTitle \? 'Remove title' : 'Wear title'/);
   assert.equal(model.secretHint({ metric: 'prep_items_collected', target: 100 }), 'Hint: keep catching finds!');
 });
 
-test('round 5: the unlock sparkle plays only on claim, never on taking a title off; Take off is one real button everywhere', () => {
+test('round 5: the unlock sparkle plays only on claim, never on taking a title off; Remove title is one real button everywhere', () => {
   const card = read('src/screens/stampbook/StampCard.tsx');
   assert.match(card, /if \(state === 'ready' && was !== 'claim'\) return;/);
-  assert.match(card, /<QuietButton label=\{equipping \? 'Saving\.\.\.' : wearingTitle \? 'Take off' : 'Wear title'\}/);
+  assert.match(card, /<QuietButton label=\{equipping \? 'Saving\.\.\.' : wearingTitle \? 'Remove title' : 'Wear title'\}/);
   assert.ok(!/'Remove'/.test(read('src/screens/stampbook/TitlesSheet.tsx')));
   // The header title stops growing at 1.2x so it never outgrows its art at the largest text size.
   assert.match(read('src/components/Topbar/TopbarText.tsx'), /maxFontSizeMultiplier=\{1\.2\}/);

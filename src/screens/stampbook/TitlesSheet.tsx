@@ -54,7 +54,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
               <TitlePillText title={worn as string} owned />
               <Text style={styles.line} numberOfLines={1} maxFontSizeMultiplier={1.4}>On your profile now</Text>
             </View>
-            <SmallButton label={busy === '__remove' ? 'Saving...' : 'Take off'} icon="close" kind="quiet" onPress={onRemove} a11y={`Take off the title ${worn}`} />
+            <SmallButton label={busy === '__remove' ? 'Saving...' : 'Remove title'} icon="close" kind="quiet" onPress={onRemove} a11y={`Remove the title ${worn}`} />
           </View>
         )}
         {entries.map(entry => {
@@ -74,7 +74,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
                 </View>
               </Pressable>
               {entry.state === 'wearing' ? (
-                <SmallButton label={busy === '__remove' ? 'Saving...' : 'Take off'} icon="close" kind="quiet" onPress={onRemove} a11y={`Take off the title ${entry.title}`} />
+                <SmallButton label={busy === '__remove' ? 'Saving...' : 'Remove title'} icon="close" kind="quiet" onPress={onRemove} a11y={`Remove the title ${entry.title}`} />
               ) : entry.state === 'ready' ? (
                 <SmallButton label={busy === entry.title ? 'Saving...' : 'Wear'} icon="crown" kind="gold" onPress={() => onWear(entry)} a11y={`Wear the title ${entry.title}`} />
               ) : entry.state === 'claim' ? (
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
   },
   btnGold: { backgroundColor: GOLD, borderBottomWidth: 4, borderBottomColor: '#C98A00' },
   btnRed: { backgroundColor: '#E3262E', borderBottomWidth: 4, borderBottomColor: '#9E1218' },
-  // Take off: the same real button as on the card and the profile (white face, navy words), never a faint outline.
+  // Remove title: the same real button as on the card and the profile (white face, navy words), never a faint outline.
   btnQuiet: { backgroundColor: '#FFFFFF', borderColor: '#9FB2C9', borderWidth: 2.5, borderBottomWidth: 4 },
   btnText: { fontFamily: 'Shark', fontSize: 15, color: '#FFFFFF' },
   btnTextGold: { color: INK },
