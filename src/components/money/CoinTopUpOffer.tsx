@@ -42,6 +42,11 @@ const FREE_PATH: Record<TopUpCurrency, string> = {
 
 export { topUpHeadline };
 
+/** After the coins land: the button says the next thing it does (opens the box), else "Awesome". Exported for tests. */
+export function topUpDoneLabel(reason: TopUpReason, retries: boolean): string | undefined {
+  return reason === 'mystery-box' && retries ? 'Open your box' : undefined;
+}
+
 export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins', tone = 'onLight', style }: {
   need: number; reason: TopUpReason; onDone?: () => void; currency?: TopUpCurrency;
   /** onBlue on the house blue panels (try-on, Secret Shop), onLight on cream and white cards. */
@@ -114,7 +119,7 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
           <GameIcon name="arrow" size={16} />
         </Pressable>
       )}
-      <GotIt grants={landed?.grants ?? null} art={landed?.art ?? 'gift'} onDone={() => { setLanded(null); onDone?.(); }} />
+      <GotIt grants={landed?.grants ?? null} art={landed?.art ?? 'gift'} doneLabel={topUpDoneLabel(reason, !!onDone)} onDone={() => { setLanded(null); onDone?.(); }} />
     </Animated.View>
   );
 }

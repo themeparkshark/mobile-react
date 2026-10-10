@@ -33,7 +33,7 @@ import { getAdSummary, type AdSummary } from '../../api/endpoints/me/ad-rewards'
 import getVipPerks, { type VipPerk } from '../../api/endpoints/economy/vip-perks';
 import { onShopDelivered, storeAvailable } from '../../services/purchases';
 import { adsAvailable, rewardText, watchForReward } from '../../services/ads';
-import { baseRates, bonusPercent, bundleWorth, dropDays, gearLine } from '../../services/money/offers';
+import { baseRates, bonusPercent, boxesLine, bundleWorth, dropDays, gearLine } from '../../services/money/offers';
 import getStores from '../../api/endpoints/stores/stores';
 import getStoreRotation from '../../api/endpoints/stores/rotation';
 import { buyPack, outcomeMessage, refreshSupplies, useSupplies } from '../../services/money/supplies';
@@ -47,7 +47,7 @@ import { useHelp } from '../../components/help/HelpProvider';
 import SharkPassBanner from '../../components/money/SharkPassBanner';
 import BundleCard from '../../components/money/BundleCard';
 import WishHeart from '../../components/money/WishHeart';
-import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../../services/money/flags';
+import { MYSTERY_BOX_COINS, VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../../services/money/flags';
 import {
   Band, CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, packArtKey, unitWord, type PackArtKey,
 } from '../../components/money/moneyUi';
@@ -295,7 +295,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             )}
             <View style={st.grid}>
               {packs.map((p, i) => (
-                <PackCard key={p.product_id} product={p} tier={i} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 2 : 3}
+                <PackCard key={p.product_id} product={p} tier={i} boxesLive={boxesLive} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 2 : 3}
                   price={prices[p.product_id]?.price} bonus={bonusPercent(p, prices, rates)}
                   note={unavailableText(p, holdCap)} busy={busy === p.product_id} disabled={!!busy}
                   onBuy={() => void buy(p, packArtKey(p, i))} />
@@ -352,15 +352,15 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
   );
 }
 
-function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, onBuy }: {
-  product: ShopProduct; tier: number; columns: 1 | 2 | 3; price?: string; bonus: number | null; note: string | null;
+function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, onBuy, boxesLive = false }: {
+  product: ShopProduct; tier: number; columns: 1 | 2 | 3; price?: string; bonus: number | null; note: string | null; boxesLive?: boolean;
   busy: boolean; disabled: boolean; onBuy: () => void;
 }) {
   const main = (['tickets', 'coins', 'rescue_passes'] as const).find(k => (product.grants[k] ?? 0) > 0) ?? 'tickets';
   const n = product.grants[main] ?? 0;
   const best = product.badge === 'Best value';
   const wide = columns === 1;
-  const gear = main === 'coins' ? gearLine(product.buys, bonus) : null;
+  const gear = main === 'coins' ? [gearLine(product.buys, bonus), boxesLive ? boxesLine(n, MYSTERY_BOX_COINS) : null].filter(Boolean).join(' ') || null : null;
   // No % stickers at all (psychology r6): coin packs say it in the gear line, tickets in the label below.
   const sticker = null as string | null;
   return (

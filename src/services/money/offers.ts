@@ -167,6 +167,12 @@ export function untilText(endsAtIso: string | null | undefined, now: number = Da
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+/** "= 6 boxes": how many Mystery Pin Boxes a coin pack opens (boxes live only). Exported for tests. */
+export function boxesLine(coins: number, boxCoins: number): string | null {
+  const n = Math.floor(coins / boxCoins);
+  return boxCoins > 0 && n >= 1 ? `= ${n} ${n === 1 ? 'box' : 'boxes'}` : null;
+}
+
 /** "Buys about 4 pieces of gear" for a coin pack, from the server's median gear price. Null when unknown. */
 export function gearLine(buys: { gear: number; gear_price: number } | null | undefined, bonus: number | null = null): string | null {
   if (!buys || buys.gear < 1) return null;

@@ -30,6 +30,9 @@ export function useMoneyFlag(name: string): boolean {
   return on;
 }
 
+/** A Mystery Pin Box costs this many coins (pins stream, Dustin's call: 250, or 5 for 1,100). */
+export const MYSTERY_BOX_COINS = 250;
+
 /** VIP's weekly Mystery Pin Box (pins: MysteryBoxService::vipWeekly), listed only while boxes are live. */
 export const VIP_WEEKLY_BOX_PERK = {
   icon: 'gift', title: '1 free Mystery Pin Box every week', body: 'Free every week you’re VIP. Odds are shown on the box.',
