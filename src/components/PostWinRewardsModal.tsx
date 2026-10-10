@@ -1,5 +1,10 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { openMembership } from './GrownUpGate';
+import StarterOfferCard from './money/StarterOfferCard';
+import { storeAvailable } from '../services/purchases';
+import SharkPassBanner from './money/SharkPassBanner';
+import { vipWinLine } from '../services/money/offers';
+import { vipRideMultiplierNow, warmVipPerks } from '../services/money/vipPerks';
 import OneTimeTip from './help/OneTimeTip';
 import PerkChipRow from './coin/PerkChip';
 import type { PerkChipData } from './coin/progressionModel';
@@ -228,6 +233,11 @@ export default function PostWinRewardsModal({
   useEffect(() => () => { afterHide.current = null; }, []);
   const closeTo = (destination: () => void) => { afterHide.current = destination; onClose(); };
   const isVip = !!player?.is_subscribed;
+  // The VIP line quotes the server's own multiplier; loaded once per run.
+  useEffect(() => { if (!isVip) void warmVipPerks(); }, [isVip]);
+  // null until the Starter card has decided; the VIP line waits for it, so it never flashes and vanishes.
+  // No store (old build) or nobody signed in: there is no Starter card to wait for.
+  const [starterShown, setStarterShown] = useState<boolean | null>(() => (storeAvailable() && !!player ? null : false));
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
@@ -504,17 +514,24 @@ export default function PostWinRewardsModal({
                 </>
               )}
 
-              {!isVip && (xpEarned > 0 || coinsEarned > 0) && (
+              {/* One money offer per sheet: the once-ever Starter Pack takes the VIP line's place. */}
+              {!isVip && (starterShown === false || coinsEarned <= 0) && (xpEarned > 0 || coinsEarned > 0) && (
                 <Pressable style={styles.vipChip} accessibilityRole="button"
                   accessibilityLabel="VIP members get extra XP and coins when they win. Tap to learn about VIP."
                   onPress={() => closeTo(() => { void openMembership(); })}>
                   <GameIcon name="member" size={26} />
                   <Text style={styles.vipChipText} numberOfLines={1}>
-                    VIP members get extra XP and coins
+                    {vipWinLine(coinsEarned, xpEarned, vipRideMultiplierNow()) ?? 'VIP members get extra XP and coins'}
                   </Text>
                   <GameIcon name="arrow" size={20} />
                 </Pressable>
               )}
+
+              {/* The Starter Pack, once ever, at the first win: an earned moment, never a pop-up. */}
+              {!isVip && coinsEarned > 0 && <StarterOfferCard ready={visible} onShown={setStarterShown} />}
+
+              {/* The Shark Pass after a win: where the climb stands and a claim dot (hidden when no season runs). */}
+              {(xpEarned > 0 || coinsEarned > 0) && <SharkPassBanner style={{ alignSelf: 'stretch', marginTop: 8 }} open={go => closeTo(go)} />}
 
               {nextUnlock && <Text style={styles.hint}>{nextUnlock}</Text>}
             </Animated.View>

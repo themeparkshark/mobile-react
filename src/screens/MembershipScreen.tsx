@@ -7,15 +7,15 @@
  */
 import { clearGrownUpPass, grownUpForNextStep, type GateReason } from '../components/GrownUpGate';
 import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from '../components/RealMoneyMark';
-import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { useFocusEffect } from '@react-navigation/native';
 import { openExternal, openLegal } from '../services/external';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  Easing, FadeInDown, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming,
+  FadeInDown, FadeInUp,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as RootNavigation from '../RootNavigation';
@@ -23,9 +23,19 @@ import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import getVipPerks, { type VipPerk } from '../api/endpoints/economy/vip-perks';
 import {
-  buyVip, legalText, loadVipPlans, priceText, restoreVip, savingsText, storeAvailable, type VipPlan,
+  buyVip, legalText, loadVipPlans, priceText, restoreVip, savingsText, storeAvailable, trialEndsAt, type VipPlan,
 } from '../services/purchases';
-import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
+import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
+import { perMonthText } from '../services/money/offers';
+import MemberStage from '../components/money/MemberStage';
+import MonthlyGiftCard from '../components/money/MonthlyGiftCard';
+import { askGrownUp } from '../components/GrownUpGate';
+import { VIP_GIFT_PRODUCT_IDS, buyVipGift, loadVipGiftPrices } from '../services/purchases';
+import { trackImpression, trackMoney } from '../services/money/track';
+import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../services/money/flags';
+import { scheduleTrialReminder } from '../services/money/trialReminder';
+import { getVipGift, type VipPlanTime } from '../api/endpoints/me/vip-gift';
+import GrownUpsInfo from '../components/money/GrownUpsInfo';
 
 // Every line here is backed by live server logic: ride wins pay VIP double
 // (CompleteTaskAction), VIP home maps spawn two extra finds and double their
@@ -42,11 +52,28 @@ export const VIP_BENEFITS: { icon: GameIconName; title: string; body: string }[]
 
 const APP_STORE_URL = 'itms-apps://apps.apple.com/app/id6758812566';
 
+const TRIAL_DAYS: Record<string, number> = { day: 1, week: 7, month: 30 };
+const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** "Thursday, October 15": the day the free trial ends. From StoreKit's intro period when known, else its words. */
+export function trialEndText(trial: string | null, now: Date = new Date(), length?: VipPlan['trialLength']): string | null {
+  const exact = length ? trialEndsAt({ trialLength: length }, now) : null;
+  if (exact) return `${WEEKDAY[exact.getDay()]}, ${MONTH[exact.getMonth()]} ${exact.getDate()}`;
+  const m = trial?.toLowerCase().match(/^(\w+) (day|week|month)s? free$/);
+  const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+  const n = m ? words.indexOf(m[1]) : -1;
+  if (!m || n <= 0) return null;
+  const end = new Date(now.getTime() + n * TRIAL_DAYS[m[2]] * 86_400_000);
+  return `${WEEKDAY[end.getDay()]}, ${MONTH[end.getMonth()]} ${end.getDate()}`;
+}
+
 /** "Free for 1 week. Then $4.99 a month." The deal, said once, right above the button. */
-export function dealLine(plan: Pick<VipPlan, 'price' | 'period' | 'trial'>): string {
+export function dealLine(plan: Pick<VipPlan, 'price' | 'period' | 'trial' | 'trialLength'>): string {
   const billing = priceText(plan);
+  const until = trialEndText(plan.trial, new Date(), plan.trialLength);
   return plan.trial
-    ? `${capitalize(plan.trial)}. Then ${billing}.`
+    ? `${capitalize(plan.trial)}${until ? `, until ${until}` : ''}.\nThen ${billing}.`
     : `${billing}.`;
 }
 /** The buy button: the free part first when there is one. */
@@ -64,7 +91,7 @@ function capitalize(text: string): string {
 
 /** What the grown-up gate restates before the App Store sheet. */
 export function vipGateReason(plan: Pick<VipPlan, 'price' | 'period' | 'trial'>): GateReason {
-  return { kind: 'money', price: plan.trial ? `${plan.trial}. Then ${priceText(plan)}` : priceText(plan), gets: 'VIP' };
+  return { kind: 'renews', what: 'VIP', price: plan.price, period: plan.period, trial: plan.trial };
 }
 
 export default function MembershipScreen({ route }: { route: { params?: { intro?: boolean } } }) {
@@ -79,6 +106,12 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const [busy, setBusy] = useState<null | 'buy' | 'restore'>(null);
   const [perks, setPerks] = useState<VipPerk[]>(VIP_BENEFITS);
   const canBuy = storeAvailable();
+  const member = player?.is_subscribed === true;
+  // This month's real VIP totals (the player's own records) and whether VIP ended for them.
+  const [vipTime, setVipTime] = useState<VipPlanTime | null>(null);
+  useEffect(() => { if (player) void getVipGift().then(g => setVipTime(g?.plan ?? null)); }, [player?.id, member]);
+  // Pins: VIP gets a free Mystery Pin Box every week, listed only while boxes are live.
+  const boxesLive = useMoneyFlag('pin_mystery_boxes');
   useEffect(() => {
     let live = true;
     getVipPerks().then(next => { if (live && next) setPerks(next); }).catch(() => undefined);
@@ -86,7 +119,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   }, []);
 
   useEffect(() => {
-    if (!player || !canBuy) { setLoading(false); return; }
+    if (!player || !canBuy || member) { setLoading(false); return; }
     let live = true;
     setLoading(true); setLoadFailed(false);
     loadVipPlans().then((next) => {
@@ -98,9 +131,10 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
       if (live) { setPlans([]); setLoadFailed(true); }
     }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [player?.id, attempt, canBuy]);
+  }, [player?.id, attempt, canBuy, member]);
 
   const plan = plans.find(p => p.productId === selectedId) ?? plans[0] ?? null;
+  useEffect(() => { if (plans.length && !member) trackImpression('vip'); }, [plans.length, member]);
 
   const celebrate = async () => {
     await refreshPlayer().catch(() => undefined);
@@ -125,7 +159,10 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
       if (!(await grownUpForNextStep('vip', Date.now(), vipGateReason(plan)))) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setBusy('buy');
+      trackMoney('gate_passed', 'vip', plan.productId);
+      trackMoney('sheet', 'vip', plan.productId);
       const outcome = await buyVip(plan);
+      trackMoney(outcome === 'success' ? 'bought' : outcome === 'pending' ? 'pending' : outcome === 'cancelled' ? 'cancelled' : 'failed', 'vip', plan.productId);
       setBusy(null);
       await reportBuy(outcome);
     } finally {
@@ -134,7 +171,19 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   };
 
   const reportBuy = async (outcome: Awaited<ReturnType<typeof buyVip>>) => {
-    if (outcome === 'success') await celebrate();
+    if (outcome === 'success') {
+      // A free trial: one quiet reminder to the grown-up the day before it turns into a paid plan.
+      // The real end of the trial period from the server (Apple's signed expiry), else from the intro period.
+      if (plan.trial) {
+        const billing = priceText(plan);
+        void getVipGift().then((g) => {
+          const real = g?.plan?.subscription_expires_at ? new Date(g.plan.subscription_expires_at) : null;
+          const end = real && !Number.isNaN(real.getTime()) ? real : trialEndsAt(plan);
+          if (end) void scheduleTrialReminder(end, billing);
+        });
+      }
+      await celebrate();
+    }
     else if (outcome === 'pending') gameAlert('Waiting for a grown-up', 'A grown-up needs to say yes on their phone. VIP turns on after that.');
     else if (outcome === 'unverified') gameAlert('Almost there', 'It worked! VIP turns on in a minute. If not, it turns on next time you open the game.');
     else if (outcome === 'owned_elsewhere') ownedElsewhere();
@@ -160,7 +209,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   return (
     <View style={s.root}>
       <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
-      <View style={[StyleSheet.absoluteFill, s.tint]} />
+      <LinearGradient pointerEvents="none" colors={['rgba(9,90,170,0.82)', 'rgba(7,72,150,0.9)', 'rgba(5,52,110,0.95)']} style={StyleSheet.absoluteFill} />
       <SafeAreaView style={{ flex: 1 }}>
         {/* The X sits in its own row, so nothing ever scrolls under it. */}
         <View style={s.closeRow}>
@@ -169,23 +218,41 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-          <Hero />
-          <Animated.Text entering={FadeInDown.delay(150)} style={s.title}>GO VIP</Animated.Text>
-          <Animated.Text entering={FadeInDown.delay(220)} style={s.sub}>Get more from every park day and every hunt.</Animated.Text>
+          <MemberStage />
+          <Animated.Text entering={FadeInDown.delay(150)} style={s.title}>{member ? 'YOU’RE VIP' : 'GO VIP'}</Animated.Text>
+          <Animated.Text entering={FadeInDown.delay(220)} style={s.sub}>
+            {member ? 'Here’s everything you get.' : 'Bigger rewards at home and at the park.'}
+          </Animated.Text>
 
           <View style={s.benefits}>
-            {perks.map((b, i) => (
-              <Animated.View key={b.title} entering={FadeInUp.delay(280 + i * 80).springify().damping(15)} style={s.benefit}>
-                <GameIcon name={b.icon} size={34} />
-                <View style={{ flex: 1 }}>
-                  <Text style={s.benefitTitle}>{b.title}</Text>
-                  <Text style={s.benefitBody}>{b.body}</Text>
-                </View>
+            {(boxesLive ? [...perks, VIP_WEEKLY_BOX_PERK as VipPerk] : perks).map((b, i, all) => (
+              <Animated.View key={b.title} entering={FadeInUp.delay(280 + i * 70).springify().damping(15)}
+                style={[s.benefit, all.length % 2 === 1 && i === all.length - 1 && s.benefitWide]}>
+                <View style={s.benefitIcon}><GameIcon name={b.icon} size={36} /></View>
+                <Text maxFontSizeMultiplier={1.25} style={s.benefitTitle}>{b.title}</Text>
+                <Text maxFontSizeMultiplier={1.25} style={s.benefitBody}>{b.body}</Text>
               </Animated.View>
             ))}
           </View>
 
-          {!player ? (
+          {!member && vipTime?.lapsed && (
+            // Lapsed members: what they keep, then the plans as usual (the Buy still asks a grown-up).
+            <Animated.View entering={FadeInUp.delay(300)} style={s.recap}>
+              <Text style={s.recapHead}>WELCOME BACK</Text>
+              <Text style={s.recapLine}>Your closet is kept. Every VIP piece you have stays yours.</Text>
+              <Text style={s.recapLine}>Rejoin anytime with a plan below.</Text>
+            </Animated.View>
+          )}
+          {member ? (
+            <>
+              {vipTime?.recap && <RecapCard recap={vipTime.recap} />}
+              <MonthlyGiftCard />
+              <Animated.View entering={FadeInUp.delay(560)} style={s.memberNote}>
+                <GameIcon name="member" size={30} />
+                <Text style={s.memberNoteText}>Your VIP is on. A grown-up can change it anytime in Apple ID settings.</Text>
+              </Animated.View>
+            </>
+          ) : !player ? (
             // Guests see the perks and a way in, never a dead purchase button.
             <Animated.View entering={FadeInUp.delay(620)} style={s.guest}>
               <Text style={s.guestText}>Sign in first. Then VIP stays with your shark on every phone.</Text>
@@ -213,9 +280,11 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
                       style={[s.planCard, selected && s.planCardSelected]}
                       accessibilityRole="radio" accessibilityState={{ selected }}
                       accessibilityLabel={`${p.period === 'year' ? 'Yearly' : 'Monthly'}, ${priceText(p)}`}>
-                      {p.period === 'year' && savings && <Text style={s.planBadge}>COSTS LESS</Text>}
+                      {p.period === 'year' && savings && <Text style={s.planBadge}>{savings}</Text>}
+                      <View style={[s.radio, selected && s.radioOn]}>{selected && <View style={s.radioDot} />}</View>
                       <Text style={[s.planName, selected && s.planNameSelected]}>{p.period === 'year' ? 'YEARLY' : 'MONTHLY'}</Text>
                       <Text style={[s.planPrice, selected && s.planNameSelected]}>{priceText(p)}</Text>
+                      {perMonthText(p) && <Text style={s.planPer}>{`Just ${perMonthText(p)}`}</Text>}
                       {p.trial && <Text style={s.planTrial}>{p.trial}</Text>}
                     </Pressable>
                   );
@@ -238,6 +307,9 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
               </Pressable>
             </Animated.View>
           )}
+
+          {!member && player && canBuy && plan && <GiftPlans />}
+          {!member && player && canBuy && plan && <GrownUpNotes />}
 
           <View style={s.links}>
             <Pressable onPress={() => void restore()} disabled={!!busy} hitSlop={8}>
@@ -269,26 +341,123 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   );
 }
 
-function Hero() {
-  const still = useUiReducedMotion();
-  const bob = useSharedValue(0);
-  const spin = useSharedValue(0);
-  useEffect(() => {
-    // Reduce Motion: the hero holds still.
-    if (still) return () => undefined;
-    bob.value = withRepeat(withTiming(1, { duration: 1700, easing: Easing.inOut(Easing.sin) }), -1, true);
-    spin.value = withRepeat(withTiming(1, { duration: 20000, easing: Easing.linear }), -1, false);
-    return () => { cancelAnimation(bob); cancelAnimation(spin); };
-  }, [bob, spin, still]);
-  const hero = useAnimatedStyle(() => ({ transform: [{ translateY: -bob.value * 8 }] }));
-  const burst = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
+/**
+ * VIP as a gift (Dustin, Oct 9 2026): 1 month or 12 months that never renew, for a birthday or a
+ * park trip. Shown only while the server sells them and Apple has priced them. Gated on the buy tap.
+ */
+function GiftPlans() {
+  const { refreshPlayer } = useContext(AuthContext);
+  const on = useMoneyFlag('vip_gift_plans');
+  const [prices, setPrices] = useState<Record<string, { price: string; amount: number }>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  useEffect(() => { if (on) void loadVipGiftPrices().then(setPrices).catch(() => undefined); }, [on]);
+  const options = VIP_GIFT_PRODUCT_IDS.filter(id => prices[id]);
+  if (!on || !options.length) return null;
+  const buy = async (id: string) => {
+    if (busy) return;
+    const months = id.endsWith('.12m') ? 12 : 1;
+    trackMoney('tap', 'vip.gift', id);
+    if (!(await askGrownUp({ kind: 'money', price: prices[id].price, gets: `${months === 12 ? '12 months' : '1 month'} of VIP. It doesn’t renew` }))) return;
+    trackMoney('gate_passed', 'vip.gift', id);
+    trackMoney('sheet', 'vip.gift', id);
+    setBusy(id);
+    const outcome = await buyVipGift(id);
+    setBusy(null);
+    trackMoney(outcome.status === 'success' ? 'bought' : outcome.status === 'pending' ? 'pending' : outcome.status === 'cancelled' ? 'cancelled' : 'failed', 'vip.gift', id);
+    if (outcome.status === 'success') {
+      await refreshPlayer().catch(() => undefined);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      gameAlert('Welcome to VIP!', outcome.state.gift_last_day ? `VIP is on until ${outcome.state.gift_last_day}. It won’t renew.` : 'VIP is on. It won’t renew.');
+    } else if (outcome.status === 'pending') gameAlert('Waiting for a grown-up', 'A grown-up needs to say yes on their phone. VIP turns on after that.');
+    else if (outcome.status === 'unverified') gameAlert('Almost there', 'It worked! VIP turns on in a minute.');
+    else if (outcome.status === 'other_account') gameAlert('On another account', 'This VIP gift belongs to a different Theme Park Shark account.');
+    else if (outcome.status === 'failed') gameAlert('That didn’t work', 'You weren’t charged. Check your internet, then try again.');
+  };
   return (
-    <View style={s.heroStage}>
-      <Animated.Image source={require('../../assets/images/screens/explore/starburst.png')} style={[s.burst, burst]} resizeMode="contain" />
-      <Animated.View entering={ZoomIn.springify().damping(11)} style={hero}>
-        <Image source={require('../../assets/images/vip-hero.png')} style={s.hero} contentFit="contain" />
-      </Animated.View>
-    </View>
+    <Animated.View entering={FadeInUp.delay(660)} style={s.giftBox}>
+      <Text style={s.grownUpsHead}>GIVE VIP AS A GIFT</Text>
+      <Text style={s.grownUpText}>Pay once for a set time. It never renews. Great for a birthday or a park trip.</Text>
+      <View style={s.giftRow}>
+        {options.map(id => (
+          <Pressable key={id} onPress={() => void buy(id)} disabled={!!busy} style={({ pressed }) => [s.giftBtn, pressed && { opacity: 0.85 }]}
+            accessibilityRole="button" accessibilityLabel={`VIP for ${id.endsWith('.12m') ? '12 months' : '1 month'}, ${prices[id].price}, one time, real money. A grown-up buys it.`}>
+            <Text style={s.giftName}>{id.endsWith('.12m') ? '12 MONTHS' : '1 MONTH'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <RealMoneyMark size={20} />
+              <Text style={s.giftPrice}>{busy === id ? 'ONE MOMENT' : prices[id].price}</Text>
+            </View>
+            <Text style={s.giftNote}>One time</Text>
+          </Pressable>
+        ))}
+      </View>
+    </Animated.View>
+  );
+}
+
+/**
+ * For the grown-up holding the phone: what VIP is in plain words, and the
+ * promises the game keeps. Every line is true of the shipped game.
+ */
+const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
+  { icon: 'play', text: 'No ads. VIP gets every bonus without watching one.' },
+  { icon: 'lock', text: 'Every real-money buy asks a grown-up first. Ask to Buy works too.' },
+  { icon: 'check', text: 'Everything you earn or buy stays in your closet for good.' },
+  { icon: 'settings', text: 'Turn VIP off anytime in Apple\u00A0ID settings.' },
+];
+
+/** "This month VIP got you": only the player's own real totals, never averages. */
+export function recapLines(recap: NonNullable<VipPlanTime['recap']>): string[] {
+  const n = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const lines = [
+    recap.no_ad_rewards > 0 ? `${recap.no_ad_rewards} ${recap.no_ad_rewards === 1 ? 'reward' : 'rewards'} with no ad to watch` : null,
+    recap.coins > 0 ? `${n(recap.coins)} coins` : null,
+    recap.tickets > 0 ? `${recap.tickets} ${recap.tickets === 1 ? 'ticket' : 'tickets'}` : null,
+    recap.energy > 0 ? `${n(recap.energy)} energy` : null,
+  ].filter((x): x is string => !!x);
+  // The most visual line first: this month's member pin.
+  if (recap.gift_pin) lines.unshift(`Your ${recap.gift_pin}`);
+  return lines;
+}
+
+/** The real item icon for a recap line (coin, ticket, energy, pin, no-ad). */
+function recapIcon(line: string): GameIconName {
+  if (/coins/.test(line)) return 'coins';
+  if (/ticket/.test(line)) return 'ticket';
+  if (/energy/.test(line)) return 'energy';
+  if (/^Your /.test(line)) return 'gift';
+  return 'member';
+}
+
+function RecapCard({ recap }: { recap: NonNullable<VipPlanTime['recap']> }) {
+  const lines = recapLines(recap);
+  if (!lines.length) return null;
+  return (
+    <Animated.View entering={FadeInUp.delay(300)} style={s.recap} accessible accessibilityLabel={`This month VIP got you: ${lines.join(', ')}.`}>
+      <Text style={s.recapHead}>THIS MONTH VIP GOT YOU</Text>
+      {lines.map(l => (
+        <View key={l} style={s.grownUpRow}><GameIcon name={recapIcon(l)} size={22} /><Text style={s.recapLine}>{l}</Text></View>
+      ))}
+    </Animated.View>
+  );
+}
+
+function GrownUpNotes() {
+  // "Show a grown-up": the kid hands the phone over and the whole grown-up page opens right here.
+  const [all, setAll] = useState(false);
+  return (
+    <Animated.View entering={FadeInUp.delay(700)} style={s.grownUps}>
+      <Text style={s.grownUpsHead}>FOR GROWN-UPS</Text>
+      {all ? <GrownUpsInfo /> : GROWN_UP_NOTES.map(note => (
+        <View key={note.text} style={s.grownUpRow} accessible accessibilityLabel={note.text}>
+          <GameIcon name={note.icon} size={20} />
+          <Text style={s.grownUpText}>{note.text}</Text>
+        </View>
+      ))}
+      {!all && (
+        <GameButton label="Show a grown-up" size="compact" icon="member" onPress={() => setAll(true)}
+          accessibilityLabel="Show a grown-up everything about paying in the game" style={{ alignSelf: 'center', marginTop: 6 }} />
+      )}
+    </Animated.View>
   );
 }
 
@@ -298,23 +467,45 @@ const s = StyleSheet.create({
   closeRow: { height: 44, alignItems: 'flex-end', paddingRight: 14 },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   scroll: { alignItems: 'center', paddingHorizontal: 20, paddingBottom: 40 },
-  heroStage: { width: 200, height: 120, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
-  burst: { position: 'absolute', width: 340, height: 340, opacity: 0.18 },
-  hero: { width: 120, height: 120 },
   title: { fontFamily: 'Shark', fontSize: 46, color: '#ffcf3b', textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   sub: { fontFamily: 'Knockout', fontSize: 18, color: '#fff', textAlign: 'center', marginTop: 2 },
-  benefits: { width: '100%', gap: 8, marginTop: 16 },
-  benefit: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16,
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)', padding: 10 },
-  benefitTitle: { fontFamily: 'Shark', fontSize: 18, color: '#fff' },
-  benefitBody: { fontFamily: 'Knockout', fontSize: 14, color: '#dbeafe' },
+  benefits: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14 },
+  benefit: { width: '47.8%', flexGrow: 1, alignItems: 'center', backgroundColor: '#0a4f96', borderRadius: 18,
+    borderWidth: 3, borderColor: '#ffffff', paddingHorizontal: 8, paddingTop: 10, paddingBottom: 10, gap: 3,
+    borderBottomWidth: 6, borderBottomColor: '#05346e' },
+  benefitWide: { width: '100%' },
+  benefitIcon: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#ffcf3b' },
+  benefitTitle: { fontFamily: 'Shark', fontSize: 16, color: '#fff', textAlign: 'center' },
+  benefitBody: { fontFamily: 'Knockout', fontSize: 13, color: '#dbeafe', textAlign: 'center', lineHeight: 16 },
+  radio: { position: 'absolute', top: 10, left: 10, width: 20, height: 20, borderRadius: 10, borderWidth: 3, borderColor: '#9db7d6', backgroundColor: '#fff' },
+  radioOn: { borderColor: '#d99a00' },
+  radioDot: { position: 'absolute', top: 2, left: 2, width: 10, height: 10, borderRadius: 5, backgroundColor: '#d99a00' },
+  planPer: { fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c', marginTop: 1 },
+  memberNote: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, backgroundColor: 'rgba(5,40,90,0.55)',
+    borderRadius: 16, padding: 12, borderWidth: 2, borderColor: '#ffcf3b' },
+  memberNoteText: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: '#fff', lineHeight: 20 },
+  giftBox: { width: '100%', marginTop: 16, backgroundColor: 'rgba(5,40,90,0.55)', borderRadius: 18, padding: 12, gap: 8, borderWidth: 2, borderColor: '#ffcf3b' },
+  giftRow: { flexDirection: 'row', gap: 10 },
+  giftBtn: { flex: 1, alignItems: 'center', gap: 2, backgroundColor: '#ffffff', borderRadius: 16, paddingVertical: 10, borderWidth: 3, borderColor: '#ffcf3b', borderBottomWidth: 6, borderBottomColor: '#d99a00' },
+  giftName: { fontFamily: 'Shark', fontSize: 16, color: '#09268f' },
+  giftPrice: { fontFamily: 'Shark', fontSize: 20, color: '#09268f' },
+  giftNote: { fontFamily: 'Knockout', fontSize: 13, color: '#3d5f8c' },
+  recap: { width: '100%', marginTop: 12, backgroundColor: 'rgba(255,211,77,0.16)', borderRadius: 18, padding: 12, gap: 6, borderWidth: 2, borderColor: BRAND.gold },
+  recapHead: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold },
+  recapLine: { flexShrink: 1, fontFamily: FONT.body, fontSize: 15, color: '#ffffff' },
+  grownUps: { width: '100%', marginTop: 16, backgroundColor: 'rgba(5,40,90,0.55)', borderRadius: 18, padding: 12, gap: 6,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
+  grownUpsHead: { fontFamily: 'Shark', fontSize: 16, color: '#ffffff', letterSpacing: 0.6 },
+  grownUpRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  grownUpText: { flex: 1, fontFamily: 'Knockout', fontSize: 15, color: '#e2f6ff', lineHeight: 19 },
   guest: { width: '100%', marginTop: 18, alignItems: 'center', gap: 12 },
   guestText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.white, textAlign: 'center' },
   plans: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  planCard: { flex: 1, backgroundColor: '#fff', borderRadius: 20, paddingVertical: 12, paddingHorizontal: 8,
+  planCard: { flex: 1, backgroundColor: '#fff', borderRadius: 20, paddingTop: 16, paddingBottom: 12, paddingHorizontal: 8,
     alignItems: 'center', borderWidth: 3, borderColor: 'rgba(255,255,255,0.5)' },
-  planCardSelected: { backgroundColor: '#fff', borderColor: '#ffcf3b' },
-  planBadge: { position: 'absolute', top: -12, backgroundColor: BRAND.greenLip, color: '#fff', fontFamily: 'Shark', fontSize: 12,
+  planCardSelected: { backgroundColor: '#fffbea', borderColor: '#ffcf3b', borderWidth: 4, transform: [{ scale: 1.03 }] },
+  planBadge: { position: 'absolute', top: -13, backgroundColor: '#e8322a', borderWidth: 2, borderColor: '#fff', color: '#fff', fontFamily: 'Shark', fontSize: 12,
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, overflow: 'hidden' },
   planName: { fontFamily: 'Shark', fontSize: 16, color: '#09268f' },
   planNameSelected: { color: '#09268f' },
@@ -323,12 +514,13 @@ const s = StyleSheet.create({
   deal: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, backgroundColor: REAL_MONEY_TINT, borderRadius: 16,
     borderWidth: 3, borderColor: REAL_MONEY_GREEN, paddingHorizontal: 12, paddingVertical: 8 },
   dealHead: { fontFamily: 'Shark', fontSize: 18, color: REAL_MONEY_INK },
-  ctaSub: { fontFamily: 'Shark', fontSize: 18, color: '#6a3b00', marginTop: 2 },
+  // The billed price as loud as the free part (App Store 3.1.2).
+  ctaSub: { fontFamily: 'Shark', fontSize: 24, color: '#6a3b00', marginTop: 2 },
   dealBody: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy, lineHeight: 19 },
   cta: { marginTop: 12, backgroundColor: '#ffcf3b', borderRadius: 20, paddingVertical: 17, alignItems: 'center',
     borderBottomWidth: 5, borderBottomColor: '#d99a00' },
   ctaPressed: { transform: [{ translateY: 3 }], borderBottomWidth: 2 },
-  ctaText: { fontFamily: 'Shark', fontSize: 26, color: '#6a3b00' },
+  ctaText: { fontFamily: 'Shark', fontSize: 24, color: '#6a3b00' },
   links: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
   link: { fontFamily: 'Knockout', fontSize: 15, color: '#fff', textDecorationLine: 'underline' },
   dot: { color: 'rgba(255,255,255,0.6)' },

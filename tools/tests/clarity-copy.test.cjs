@@ -13,6 +13,7 @@
  */
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { plain } = require('./helpers/plain.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const { loadTs } = require('./helpers/ts-module.cjs');
@@ -123,10 +124,19 @@ test('real money: the shop and the VIP page say "real money" before any price, a
   });
   const money = gate.gateReasonLines({ kind: 'money', price: '$0.99', gets: '6 tickets and 60 Energy' });
   assert.equal(money.head, 'This costs real money.');
-  assert.equal(money.line, '$0.99 for 6 tickets and 60 Energy');
+  assert.equal(money.line, 'A grown-up sees the details next.', 'no price or offer before the grown-up answers');
   assert.equal(gate.gateReasonLines({ kind: 'vip' }).head, 'VIP costs real money.');
-  assert.equal(gate.gateReasonLines({ kind: 'vip', prices: 'One week free. Then $39.99 a year or $4.99 a month.' }).line,
-    'One week free. Then $39.99 a year or $4.99 a month.', 'the VIP door shows the App Store prices when they load');
+  // After the answer the grown-up (only) sees the price and what it gets.
+  assert.deepEqual(plain(gate.gateDetails({ kind: 'money', price: '$0.99', gets: '6 tickets and 60 Energy' })),
+    { head: '$0.99', lines: ['For 6 tickets and 60 Energy.', 'Paid with the Apple ID on this device.'] });
+  // A plan that renews: the trial, the renewal and how to cancel (App Store 3.1.2), never shown to the child first.
+  const renews = { kind: 'renews', what: 'VIP', price: '$4.99', period: 'month', trial: 'One week free' };
+  assert.doesNotMatch(JSON.stringify(gate.gateReasonLines(renews)), /free|\$/);
+  const d = gate.gateDetails(renews);
+  assert.equal(d.head, 'One week free, then $4.99 a month');
+  assert.match(d.lines.join(' '), /renews by itself at \$4\.99 a month until you cancel/);
+  assert.match(d.lines.join(' '), /Cancel anytime: Settings, your name, Subscriptions\. Cancel at least 24 hours before it renews\./);
+  assert.equal(gate.gateDetails({ kind: 'leave', where: 'a website' }), null, 'leaving the game needs no offer card');
   assert.equal(gate.gateReasonLines({ kind: 'leave', where: 'a website' }).line, 'It opens a website.');
   assert.equal(gate.gateReasonLines(null), null);
   assert.equal(gate.vipPriceLine([{ price: '$39.99 a year', trial: 'One week free' }, { price: '$4.99 a month', trial: null }]),

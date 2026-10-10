@@ -1,0 +1,73 @@
+import { Image } from 'expo-image';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import Playercard from '../Playercard';
+import type { InventoryType } from '../../models/inventory-type';
+import { BRAND, FONT, GameIcon } from '../../ui';
+import { frameArt } from './frames';
+
+/**
+ * A player's flex, for any surface that shows another kid (Standings rows, share cards, profile):
+ * their shark as they dressed it (worn pin included), their season frame around it, and a small VIP
+ * mark. Subtle by design: no price, no "bought", no "Plus". Members and non-members look equally
+ * proud; the frame and pins are earned or bought, never ranked by money.
+ *
+ * - `size`: the square it fills (the frame ring overlaps the edge a little).
+ * - `variant`: 'row' (compact, Standings) or 'card' (share card: bigger, with a caption line).
+ * - `still`: no idle motion (lists, Reduce Motion, share captures).
+ */
+/** The season ring by free-track step (earned by playing, never bought): 10, 25, 40, 50. Exported for tests. */
+export function seasonRing(step: number | null | undefined): { color: string; label: string } | null {
+  const s = Number(step) || 0;
+  if (s >= 50) return { color: '#7cf5d0', label: 'Season finisher' };
+  if (s >= 40) return { color: '#ffd34d', label: 'Gold climber' };
+  if (s >= 25) return { color: '#dfe8f2', label: 'Silver climber' };
+  if (s >= 10) return { color: '#d08a4a', label: 'Bronze climber' };
+  return null;
+}
+
+export default function MemberFlex({ inventory, frame, vip = false, size = 56, variant = 'row', caption, still = true, style, step }: {
+  inventory: InventoryType | null | undefined;
+  frame?: string | null;
+  /** The player's Shark Pass step on the free track: shows the season ring when no frame is worn. */
+  step?: number | null;
+  vip?: boolean;
+  size?: number;
+  variant?: 'row' | 'card';
+  /** Card variant: a short line under the shark, e.g. "Frosty Fins · Step 25". */
+  caption?: string | null;
+  still?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const ring = frameArt(frame);
+  const earned = !ring ? seasonRing(step) : null;
+  const card = variant === 'card';
+  const inner = ring ? size * 0.72 : size;
+  return (
+    <View style={[{ alignItems: 'center' }, style]}
+      accessible accessibilityLabel={`${vip ? 'VIP member. ' : ''}${ring ? 'Wearing a season frame. ' : earned ? `${earned.label}. ` : ''}${caption ?? ''}`.trim() || 'Player'}>
+      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+        {inventory?.skin_item ? (
+          <View style={{ width: inner, height: inner * 1.1, marginTop: ring ? size * 0.02 : 0 }}>
+            <Playercard inventory={inventory} showBackground={false} pinAnchor="body" still={still} style={StyleSheet.absoluteFill} />
+          </View>
+        ) : (
+          <GameIcon name="shark" size={inner * 0.8} />
+        )}
+        {earned && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: size / 2, borderWidth: Math.max(3, size * 0.07), borderColor: earned.color }]} />}
+        {ring && <Image source={ring} style={[StyleSheet.absoluteFill, { width: size, height: size }]} contentFit="contain" />}
+        {vip && (
+          <View style={[st.vip, { width: card ? 34 : 24, height: card ? 34 : 24, borderRadius: card ? 17 : 12 }]}>
+            <GameIcon name="member" size={card ? 24 : 20} />
+          </View>
+        )}
+      </View>
+      {card && caption ? <Text style={st.caption} numberOfLines={1}>{caption}</Text> : null}
+    </View>
+  );
+}
+
+const st = StyleSheet.create({
+  vip: { position: 'absolute', right: -2, bottom: -2, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: '#ffffff',
+    alignItems: 'center', justifyContent: 'center' },
+  caption: { marginTop: 6, fontFamily: FONT.display, fontSize: 16, color: '#ffffff', textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+});

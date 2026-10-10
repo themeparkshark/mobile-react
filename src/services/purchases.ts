@@ -12,6 +12,7 @@
  */
 import { NativeModules, Platform } from 'react-native';
 import syncVip, { vipSyncErrorCode, type VipSyncResult } from '../api/endpoints/me/vip-sync';
+import type { SharkPassState } from '../api/endpoints/me/shark-pass';
 import { redeemShopPurchase, shopErrorCode, type ShopRedeemResult } from '../api/endpoints/me/shop';
 
 /** App Store Connect: subscription group "VIP" (22421719). Yearly first. */
@@ -41,6 +42,12 @@ function iap(): Iap {
   return require('react-native-iap') as Iap;
 }
 
+/** Dev builds only: simulator price fixtures for captures (tools/capture, never in a store bundle). */
+function devCapture(): typeof import('../../tools/capture/moneyCapture') | null {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  try { return __DEV__ ? require('../../tools/capture/moneyCapture') : null; } catch { return null; }
+}
+
 let connection: Promise<Iap> | null = null;
 let listening = false;
 const delivered = new Map<string, Promise<VipSyncResult>>();
@@ -59,6 +66,8 @@ function connect(): Promise<Iap> {
         store.purchaseUpdatedListener((purchase) => {
           void deliver(store, [purchase]).catch(() => undefined);
           void deliverShop(store, purchase).catch(() => undefined);
+          void deliverPass(store, purchase).catch(() => undefined);
+          void deliverVipGift(store, purchase).catch(() => undefined);
         });
       }
       await store.initConnection();
@@ -119,7 +128,21 @@ export type VipPlan = {
   readonly period: string;
   /** "1 week free" when the player can still get the intro trial. */
   readonly trial: string | null;
+  /** The free trial's length from StoreKit's intro offer (periods x unit), for the end date. Null with no trial. */
+  readonly trialLength?: { readonly count: number; readonly unit: 'day' | 'week' | 'month' | 'year' } | null;
 };
+
+/** The day a free trial bought now ends, from StoreKit's intro period (calendar months, not 30 days). Exported for tests. */
+export function trialEndsAt(plan: Pick<VipPlan, 'trialLength'>, now: Date = new Date()): Date | null {
+  const t = plan.trialLength;
+  if (!t || t.count <= 0) return null;
+  const end = new Date(now.getTime());
+  if (t.unit === 'day') end.setDate(end.getDate() + t.count);
+  else if (t.unit === 'week') end.setDate(end.getDate() + 7 * t.count);
+  else if (t.unit === 'month') end.setMonth(end.getMonth() + t.count);
+  else end.setFullYear(end.getFullYear() + t.count);
+  return end;
+}
 
 function unitWord(unit: string | undefined): string {
   switch ((unit ?? '').toUpperCase()) {
@@ -157,11 +180,15 @@ export function toPlan(product: StoreSubscription, trialEligible: boolean): VipP
     trial: freeTrial
       ? `${trialLength(product.introductoryPriceNumberOfPeriodsIOS, product.introductoryPriceSubscriptionPeriodIOS)} free`
       : null,
+    trialLength: freeTrial
+      ? { count: Number(product.introductoryPriceNumberOfPeriodsIOS) || 1, unit: unitWord(product.introductoryPriceSubscriptionPeriodIOS) as 'day' | 'week' | 'month' | 'year' }
+      : null,
   };
 }
 
 /** The VIP plans from the App Store, yearly first. Empty when none load. */
 export async function loadVipPlans(): Promise<VipPlan[]> {
+  if (__DEV__) { const cap = devCapture(); if (cap?.capturePrices()) return (lastVipPlans = cap.captureVipPlans()); }
   const store = await connect();
   const products = await store.getSubscriptions({ skus: [...VIP_PRODUCT_IDS] });
   const eligible = await store.IapIosSk2.isEligibleForIntroOffer(VIP_SUBSCRIPTION_GROUP_ID).then(Boolean).catch(() => false);
@@ -257,11 +284,23 @@ async function currentVipEntitlements(store: Iap): Promise<StorePurchase[]> {
 
 // ── Supplies shop (consumables) ─────────────────────────────
 
-/** Every Supplies product is ours and not VIP (server config/shop.php owns the list). */
+/** Every Supplies product is ours and not VIP, a VIP gift plan or a Shark Pass (server config/shop.php owns the list). */
 export function isShopProduct(productId: string | undefined | null): boolean {
   return typeof productId === 'string' && productId.startsWith('com.themeparkshark.app.')
-    && !(VIP_PRODUCT_IDS as readonly string[]).includes(productId);
+    && !(VIP_PRODUCT_IDS as readonly string[]).includes(productId) && !isSharkPassProduct(productId) && !isVipGiftProduct(productId);
 }
+
+/** Non-renewing VIP a grown-up buys (1 or 12 months): com.themeparkshark.app.vip.gift.<n>m. */
+export const VIP_GIFT_PRODUCT_IDS = ['com.themeparkshark.app.vip.gift.1m', 'com.themeparkshark.app.vip.gift.12m'] as const;
+export function isVipGiftProduct(productId: string | undefined | null): boolean {
+  return typeof productId === 'string' && productId.startsWith('com.themeparkshark.app.vip.gift.');
+}
+
+/** One App Store Non-Consumable per Shark Pass season: com.themeparkshark.app.sharkpass.<season>. */
+export function isSharkPassProduct(productId: string | undefined | null): boolean {
+  return typeof productId === 'string' && /^com\.themeparkshark\.app\.sharkpass(_plus)?\./.test(productId);
+}
+export const SHARK_PASS_PREFIX = 'com.themeparkshark.app.sharkpass.';
 
 const shopDelivered = new Map<string, Promise<ShopRedeemResult>>();
 /** The shop day the player was looking at when they tapped Buy (Daily Deal grace). */
@@ -310,6 +349,7 @@ export type ShopPrice = {
 export async function loadShopPrices(productIds: readonly string[]): Promise<Record<string, ShopPrice>> {
   const ids = productIds.filter(isShopProduct);
   if (!ids.length) return {};
+  if (__DEV__) { const cap = devCapture(); if (cap?.capturePrices()) return cap.captureShopPrices(ids); }
   const store = await connect();
   const products: StoreProduct[] = await store.getProducts({ skus: [...ids] });
   const prices: Record<string, ShopPrice> = {};
@@ -414,4 +454,163 @@ export function savingsText(plans: readonly Pick<VipPlan, 'period' | 'amount'>[]
 /** "$4.99 a month" (or "every 3 months"): words, not a slash. */
 export function priceText(plan: Pick<VipPlan, 'price' | 'period'>): string {
   return `${plan.price} ${/\s/.test(plan.period) ? 'every' : 'a'} ${plan.period}`;
+}
+
+// ── Shark Pass (one Non-Consumable per season) ─────────────
+
+/** Loaded on first use, so VIP and Supplies never pull the pass client in. */
+function sharkPassApi(): typeof import('../api/endpoints/me/shark-pass') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  return require('../api/endpoints/me/shark-pass');
+}
+
+const passDelivered = new Map<string, Promise<SharkPassState>>();
+type PassListener = (state: SharkPassState) => void;
+const passListeners = new Set<PassListener>();
+
+/** A Shark Pass that lands outside a Buy tap (Ask to Buy approved, last run's unfinished). */
+export function onSharkPassDelivered(listener: PassListener): () => void {
+  passListeners.add(listener);
+  return () => { passListeners.delete(listener); };
+}
+
+/** Sends a Shark Pass transaction to the server, then finishes it. Once per transaction even when reported twice. */
+function deliverPass(store: Iap, purchase: StorePurchase): Promise<SharkPassState | null> {
+  const jws = jwsOf(purchase);
+  if (!isSharkPassProduct(purchase.productId) || !jws) return Promise.resolve(null);
+  const key = keyOf(purchase);
+  const pending = passDelivered.get(key);
+  if (pending) return pending;
+  const promise = (async () => {
+    const state = await sharkPassApi().redeemSharkPass(jws);
+    await store.finishTransaction({ purchase, isConsumable: false }).catch(() => undefined);
+    passListeners.forEach((listener) => { try { listener(state); } catch { /* a screen's problem */ } });
+    return state;
+  })();
+  passDelivered.set(key, promise);
+  promise.catch(() => { if (passDelivered.get(key) === promise) passDelivered.delete(key); });
+  return promise;
+}
+
+/** Apple's localized price for this season's Shark Pass, or null. */
+export async function loadSharkPassPrice(productId: string): Promise<ShopPrice | null> {
+  if (!isSharkPassProduct(productId)) return null;
+  if (__DEV__) { const cap = devCapture(); if (cap?.capturePrices()) return /sharkpass_plus/.test(productId) ? { productId, price: '$9.99', amount: 9.99 } : { productId, price: '$4.99', amount: 4.99 }; }
+  const store = await connect();
+  const [product] = await store.getProducts({ skus: [productId] });
+  return product?.localizedPrice ? { productId, price: product.localizedPrice, amount: Number(product.price) || 0 } : null;
+}
+
+export type PassPurchaseOutcome =
+  | { status: 'success'; state: SharkPassState }
+  | { status: 'cancelled' | 'pending' | 'unverified' | 'other_account' | 'unavailable' | 'failed' };
+
+/** Buys this season's Shark Pass. The caller has already asked a grown-up. */
+export async function buySharkPass(productId: string, accountToken?: string | null): Promise<PassPurchaseOutcome> {
+  if (!storeAvailable()) return { status: 'unavailable' };
+  if (!isSharkPassProduct(productId)) return { status: 'failed' };
+  let store: Iap;
+  let purchase: StorePurchase | null = null;
+  try {
+    store = await connect();
+    const bought = await store.requestPurchase({
+      sku: productId, andDangerouslyFinishTransactionAutomaticallyIOS: false,
+      ...(accountToken ? { appAccountToken: accountToken } : {}),
+    });
+    purchase = (Array.isArray(bought) ? bought[0] : bought) ?? null;
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === 'E_USER_CANCELLED') return { status: 'cancelled' };
+    if (code === 'E_DEFERRED_PAYMENT') return { status: 'pending' };
+    return { status: 'failed' };
+  }
+  if (!purchase) return { status: 'pending' };
+  try {
+    const state = await deliverPass(store, purchase);
+    return state ? { status: 'success', state } : { status: 'unverified' };
+  } catch (error) {
+    return sharkPassApi().sharkPassErrorCode(error) === 'SHARK_PASS_OTHER_PLAYER' ? { status: 'other_account' } : { status: 'unverified' };
+  }
+}
+
+/** Restore: every Shark Pass this Apple ID owns goes to the server again. */
+export async function restoreSharkPass(productId: string): Promise<'restored' | 'nothing' | 'other_account' | 'unavailable' | 'failed'> {
+  if (!storeAvailable()) return 'unavailable';
+  try {
+    const store = await connect();
+    await store.IapIosSk2.sync().catch(() => undefined);
+    await store.getProducts({ skus: [productId] });
+    const owned = (await store.getAvailablePurchases({ onlyIncludeActiveItems: true })).filter(p => isSharkPassProduct(p.productId));
+    if (!owned.length) return 'nothing';
+    passDelivered.clear();
+    let restored = false;
+    for (const purchase of owned) {
+      const state = await deliverPass(store, purchase);
+      if (state && 'progress' in state && state.progress?.premium) restored = true;
+    }
+    return restored ? 'restored' : 'nothing';
+  } catch (error) {
+    return sharkPassApi().sharkPassErrorCode(error) === 'SHARK_PASS_OTHER_PLAYER' ? 'other_account' : 'failed';
+  }
+}
+
+// ── VIP gift plans (non-renewing) ─────────────
+
+const giftDelivered = new Map<string, Promise<VipGiftPlanState>>();
+export type VipGiftPlanState = { readonly vip: boolean; readonly gift_until: string | null; readonly gift_last_day: string | null };
+
+function deliverVipGift(store: Iap, purchase: StorePurchase): Promise<VipGiftPlanState | null> {
+  const jws = jwsOf(purchase);
+  if (!isVipGiftProduct(purchase.productId) || !jws) return Promise.resolve(null);
+  const key = keyOf(purchase);
+  const pending = giftDelivered.get(key);
+  if (pending) return pending;
+  const promise = (async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const api = require('../api/endpoints/me/vip-gift') as typeof import('../api/endpoints/me/vip-gift');
+    const state = await api.redeemVipGiftPlan(jws);
+    await store.finishTransaction({ purchase, isConsumable: false }).catch(() => undefined);
+    return state;
+  })();
+  giftDelivered.set(key, promise);
+  promise.catch(() => { if (giftDelivered.get(key) === promise) giftDelivered.delete(key); });
+  return promise;
+}
+
+/** Apple's prices for the VIP gift plans. Empty when the products don't exist yet. */
+export async function loadVipGiftPrices(): Promise<Record<string, ShopPrice>> {
+  if (__DEV__) { const cap = devCapture(); if (cap?.capturePrices()) return { 'com.themeparkshark.app.vip.gift.1m': { productId: 'com.themeparkshark.app.vip.gift.1m', price: '$4.99', amount: 4.99 }, 'com.themeparkshark.app.vip.gift.12m': { productId: 'com.themeparkshark.app.vip.gift.12m', price: '$39.99', amount: 39.99 } }; }
+  if (!storeAvailable()) return {};
+  const store = await connect();
+  const products: StoreProduct[] = await store.getProducts({ skus: [...VIP_GIFT_PRODUCT_IDS] });
+  const out: Record<string, ShopPrice> = {};
+  for (const p of products) if (p?.productId && p.localizedPrice) out[p.productId] = { productId: p.productId, price: p.localizedPrice, amount: Number(p.price) || 0 };
+  return out;
+}
+
+/** Buys a VIP gift plan. The caller has already asked a grown-up. */
+export async function buyVipGift(productId: string, accountToken?: string | null): Promise<{ status: 'success'; state: VipGiftPlanState } | { status: 'cancelled' | 'pending' | 'unverified' | 'other_account' | 'unavailable' | 'failed' }> {
+  if (!storeAvailable()) return { status: 'unavailable' };
+  if (!isVipGiftProduct(productId)) return { status: 'failed' };
+  let store: Iap;
+  let purchase: StorePurchase | null = null;
+  try {
+    store = await connect();
+    const bought = await store.requestPurchase({ sku: productId, andDangerouslyFinishTransactionAutomaticallyIOS: false,
+      ...(accountToken ? { appAccountToken: accountToken } : {}) });
+    purchase = (Array.isArray(bought) ? bought[0] : bought) ?? null;
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === 'E_USER_CANCELLED') return { status: 'cancelled' };
+    if (code === 'E_DEFERRED_PAYMENT') return { status: 'pending' };
+    return { status: 'failed' };
+  }
+  if (!purchase) return { status: 'pending' };
+  try {
+    const state = await deliverVipGift(store, purchase);
+    return state ? { status: 'success', state } : { status: 'unverified' };
+  } catch (error) {
+    const code = String((error as { response?: { data?: { code?: unknown } } })?.response?.data?.code ?? '');
+    return code === 'VIP_GIFT_OTHER_PLAYER' ? { status: 'other_account' } : { status: 'unverified' };
+  }
 }

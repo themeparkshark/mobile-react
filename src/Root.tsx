@@ -188,6 +188,7 @@ export default function App() {
         <Stack.Screen name="BlockedPlayers" getComponent={() => require('./screens/threads/BlockedPlayersScreen').default} />
         <Stack.Screen name="PinSwaps" getComponent={() => require('./screens/PinSwapsScreen').default} />
         <Stack.Screen name="RedeemCoinCode" getComponent={() => require('./screens/RedeemCoinCodeScreen').default} />
+        <Stack.Screen name="SharkPass" getComponent={() => require('./screens/SharkPassScreen').default} />
         <Stack.Screen
           name="Membership"
           getComponent={() => require('./screens/MembershipScreen').default}

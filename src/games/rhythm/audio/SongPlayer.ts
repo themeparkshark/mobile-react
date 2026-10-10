@@ -52,7 +52,7 @@ export class SongPlayer {
 
   async load(): Promise<void> {
     await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
+      playsInSilentModeIOS: false,
       staysActiveInBackground: false,
       shouldDuckAndroid: true,
     }).catch(() => undefined);

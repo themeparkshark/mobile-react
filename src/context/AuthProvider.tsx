@@ -40,6 +40,10 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   // The paywall's grown-up gate is decided by the signed-in player: a VIP member opens perks, ungated.
   useEffect(() => {
     try { require('../components/GrownUpGate').setGateVipMember(player?.is_subscribed === true); } catch { /* not loaded */ }
+    // VIP stopped: a waiting free-trial reminder is dropped so it never fires for a plan that ended.
+    if (player && player.is_subscribed === false) {
+      try { void require('../services/money/trialReminder').cancelTrialReminder(); } catch { /* not loaded */ }
+    }
   }, [player?.is_subscribed]);
   const [token, setToken] = useState<string>();
   const [isReady, setIsReady] = useState<boolean>(false);
@@ -196,6 +200,8 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     delete client.defaults.headers.common.Authorization;
     setToken(undefined);
     setPlayer(null);
+    // Signed out: a waiting free-trial reminder is dropped (it belonged to that account's plan).
+    try { void require('../services/money/trialReminder').cancelTrialReminder(); } catch { /* not loaded */ }
     clearBook(); // the collection book copy belongs to the signed-out player
     setIsReady(true);
     await clearQueueBackgroundHeartbeat().catch(error =>

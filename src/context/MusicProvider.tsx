@@ -1,5 +1,6 @@
 import { Audio } from 'expo-av';
-import React, { createContext, useCallback, useContext, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { AuthContext } from './AuthProvider';
 
@@ -135,7 +136,8 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (initializedRef.current) return;
     initializedRef.current = true;
 
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    // Ambient: game sound follows the iPhone silent switch (Dustin, Oct 9 2026).
+    await Audio.setAudioModeAsync({ playsInSilentModeIOS: false });
     // Crossfade from login music (if playing) to game rotation
     await withLock(async () => {
       await cleanup(true);
@@ -143,6 +145,24 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
     await playNext();
   }, [playNext, withLock]);
+
+  // Battery (FIXES row 16/32): music never plays on in a pocket. Background pauses it; coming
+  // back resumes the same track only if this pause stopped it and music is still on.
+  const pausedByBackground = useRef(false);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      const s = soundRef.current;
+      if (state === 'background' || state === 'inactive') {
+        if (state === 'inactive' || !s || !isPlayingRef.current) return;
+        pausedByBackground.current = true;
+        void s.pauseAsync().catch(() => undefined);
+      } else if (state === 'active' && pausedByBackground.current) {
+        pausedByBackground.current = false;
+        if (s && (!player || player.enabled_music)) void s.playAsync().catch(() => undefined);
+      }
+    });
+    return () => sub.remove();
+  }, [player]);
 
   // Override: crossfade to a specific track on loop
   const overrideTrack = useCallback((track: any) => withLock(async () => {
@@ -219,8 +239,8 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           try { await s.unloadAsync(); } catch {}
         }
 
-        // Start login music
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+        // Start login music. Ambient: game sound follows the iPhone silent switch (Dustin, Oct 9 2026).
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: false });
         const { sound } = await Audio.Sound.createAsync(LOGIN_TRACK, {
           isLooping: true,
           volume: 0,

@@ -53,6 +53,7 @@ import {
 } from '../services/task-attempt/checkpoint';
 import { recoverTaskAttempt } from '../services/task-attempt/recovery';
 import { CHALLENGE_GAME_COLORS } from '../constants/coinTiers';
+import CoinTopUpOffer from './money/CoinTopUpOffer';
 import { storeAvailable } from '../services/purchases';
 import { adsAvailable, watchForReward } from '../services/ads';
 import { gameAlert } from '../ui';
@@ -757,11 +758,12 @@ export default function RedeemRedeemableModal({
                             <Text style={styles.ticketHelpTitle}>{ticketHelp.title}</Text>
                           </View>
                           <Text style={styles.ticketHelpCopy}>{ticketHelp.body}</Text>
-                          {storeAvailable() && !previewOnly && <Pressable onPress={openSupplies} style={styles.getTickets}
-                            accessibilityRole="button" accessibilityLabel="Get tickets in Supplies. A grown-up buys these with real money.">
-                            <GameIcon name="ticket" size={20} />
-                            <Text style={styles.getTicketsText}>Get Tickets in Supplies (real money)</Text>
-                          </Pressable>}
+                          {/* Out of tickets at the ride: the one pack that covers it, bought right here (grown-up gated),
+                              then the challenge can start at once. The free way stays on the card. */}
+                          {storeAvailable() && !previewOnly && (
+                            <CoinTopUpOffer currency="tickets" reason="ride" need={Math.max(1, ticketCost - playerTickets)}
+                              onDone={() => { void refreshPlayer?.(); }} style={{ marginTop: 8 }} />
+                          )}
                         </View>}
                         {startError && <Text style={styles.ticketError}>{startError}</Text>}
                         <View style={styles.ticketCountRow} accessible accessibilityLabel={`You have ${playerTickets} ticket${playerTickets === 1 ? '' : 's'}`}>

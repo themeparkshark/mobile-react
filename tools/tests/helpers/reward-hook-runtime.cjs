@@ -99,6 +99,9 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)power$/.test(name)) return { usePowerBudget: () => ({ level: 'full', ambient: true, animate: true,
         pollMultiplier: 1, particleScale: 1, gpsRest: false, compass: true, lowPower: false, idle: false }),
         useBudgetedPoll() {}, budgetedInterval: (ms, b) => (Number.isFinite(b.pollMultiplier) && ms > 0 ? ms * Math.max(1, b.pollMultiplier) : null), useBatterySaver: () => false, setBatterySaver() {} };
+      // Money offers on reward sheets (money stream): no server multiplier, so the generic VIP line.
+      if (/(^|\/)services\/money\/offers$/.test(name)) return { vipWinLine: () => null };
+      if (/(^|\/)services\/money\/vipPerks$/.test(name)) return { warmVipPerks: async () => undefined, vipRideMultiplierNow: () => null };
       if (name.includes('assets/')) return name;
       return { default: name };
     },
