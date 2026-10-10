@@ -148,6 +148,13 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
 }) {
   const { width, height } = useWindowDimensions();
   const readyFired = useRef(false);
+  // Safety net: a sheet that never reports its layout still opens after 250 ms.
+  useEffect(() => {
+    const timer = setTimeout(() => { if (!readyFired.current) { readyFired.current = true; onReady(); } }, 250);
+    return () => clearTimeout(timer);
+    // Once per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const insets = useSafeAreaInsets();
   const pages = sheet.pages;
   const [page, setPage] = useState(0);

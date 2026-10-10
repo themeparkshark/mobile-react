@@ -89,6 +89,9 @@ test('every glossary line fits the word sheet: 12 words at most', () => {
   const long = { ...glossary.LOCAL_GLOSSARY.energy, earn: 'Energy powers boss raids and coin upgrades. Earn it from home finds, rides and your daily chest.' };
   assert.equal(help.termSheetContent(long, 3).pages[0].points[1].text, glossary.LOCAL_GLOSSARY.energy.earn);
   assert.equal(help.termSheetContent(long, 3).pages[0].heroData.caption, 'You have 3 Energy');
+  // The Coins sheet never repeats a server line that confuses Coins with ride coins.
+  const coins = { ...glossary.LOCAL_GLOSSARY.coins, earn: 'Catch ride coins, open your daily chest and win raids.' };
+  assert.equal(help.termSheetContent(coins, 0).pages[0].points[1].text, glossary.LOCAL_GLOSSARY.coins.earn);
 });
 
 test('Coins and Tickets sheets link to Supplies only when the store can sell and the player is signed in', () => {
