@@ -154,7 +154,10 @@ export default function Wrapper({
                         contentFit="contain"
                       />
                     </Button>
+                    {/* Capped: past 1.2x the five labels run into each other ("NEWSSTANDINGS") and over the page. */}
                     <Text
+                      maxFontSizeMultiplier={1.2}
+                      numberOfLines={1}
                       style={{
                         fontFamily: 'Shark',
                         color: 'white',

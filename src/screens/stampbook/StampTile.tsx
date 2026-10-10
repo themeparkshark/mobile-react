@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   slotSecret: { borderColor: '#D9A21B' },
   artWrap: { alignItems: 'center', justifyContent: 'center' },
   ghost: { position: 'absolute', left: '9%', top: '9%', right: '9%', bottom: '9%', opacity: 0.55 },
-  ghostFresh: { opacity: 0.3 },
+  ghostFresh: { opacity: 0.42 },
   colorFill: { position: 'absolute', left: '9%', right: '9%', bottom: '9%', overflow: 'hidden' },
   fillArt: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   secret: {
@@ -280,13 +280,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,207,59,0.25)',
   },
   secretMark: { fontFamily: 'Shark', fontSize: 34, color: '#B07A00' },
-  secretHint: { fontFamily: 'Knockout', fontSize: 13, color: MUTED_INK, marginTop: 2 },
+  secretHint: { fontFamily: 'Shark', fontSize: 13, color: MUTED_INK, marginTop: 2 },
   postmark: {
     position: 'absolute', width: 24, height: 24, borderRadius: 12, borderWidth: 1.5,
     borderColor: 'rgba(11,42,85,0.7)', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-8deg' }],
     backgroundColor: 'rgba(255,255,255,0.85)',
   },
-  pmMonth: { fontFamily: 'Knockout', fontSize: 7, lineHeight: 8, color: 'rgba(11,42,85,0.9)', letterSpacing: 0.5 },
+  pmMonth: { fontFamily: 'Shark', fontSize: 7, lineHeight: 8, color: 'rgba(11,42,85,0.9)', letterSpacing: 0.5 },
   pmDay: { fontFamily: 'Shark', fontSize: 10, lineHeight: 11, color: 'rgba(11,42,85,0.9)' },
   lock: {
     position: 'absolute', right: -2, bottom: 0, width: 24, height: 24, borderRadius: 12, backgroundColor: MUTED_INK,

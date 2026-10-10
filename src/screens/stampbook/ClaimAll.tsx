@@ -238,6 +238,6 @@ const styles = StyleSheet.create({
   wearOn: { backgroundColor: '#E2F6FF', borderBottomColor: '#9FB2C9' },
   wearText: { fontFamily: 'Shark', fontSize: 16, color: INK },
   pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
-  message: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF', textAlign: 'center' },
+  message: { fontFamily: 'Shark', fontSize: 15, color: '#E2F6FF', textAlign: 'center' },
   actions: { alignSelf: 'stretch' },
 });

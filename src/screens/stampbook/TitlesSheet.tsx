@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   pillLocked: { backgroundColor: '#E6DDC8', borderBottomColor: '#C7B998' },
   pillText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 14, color: INK },
   pillTextLocked: { color: MUTED_INK },
-  line: { fontFamily: 'Knockout', fontSize: 14, color: MUTED_INK },
+  line: { fontFamily: 'Shark', fontSize: 14, color: MUTED_INK },
   progressDot: { minWidth: 56, maxWidth: 74, minHeight: 34, borderRadius: 12, backgroundColor: 'rgba(91,103,130,0.14)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   progressText: { fontFamily: 'Shark', fontSize: 13, color: MUTED_INK },
   btn: {
@@ -165,5 +165,5 @@ const styles = StyleSheet.create({
   btnText: { fontFamily: 'Shark', fontSize: 15, color: '#FFFFFF' },
   btnTextGold: { color: INK },
   btnTextQuiet: { color: INK, fontSize: 15 },
-  message: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF', textAlign: 'center' },
+  message: { fontFamily: 'Shark', fontSize: 15, color: '#E2F6FF', textAlign: 'center' },
 });

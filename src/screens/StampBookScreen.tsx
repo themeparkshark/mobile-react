@@ -671,7 +671,7 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
             accessibilityRole="button" accessibilityLabel={`Your rarest stamp: ${rarest.name}, ${stampRarity(rarest.rarity).label}`}>
             <View style={[styles.showcaseArt, { borderColor: stampRarity(rarest.rarity).frame }]}><StampArt stamp={rarest} size="thumb" /></View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.showcaseLabel} maxFontSizeMultiplier={1.3}>MY RAREST</Text>
+              <Text style={styles.showcaseLabel} maxFontSizeMultiplier={1.3}>RAREST STAMP</Text>
               <Text style={styles.showcaseName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.3}>{rarest.shortName}</Text>
             </View>
             <View style={[styles.showcasePill, { backgroundColor: stampRarity(rarest.rarity).chip, borderColor: stampRarity(rarest.rarity).frame }]}>
@@ -846,7 +846,7 @@ const styles = StyleSheet.create({
   coverRing: { width: 86, height: 86, alignItems: 'center', justifyContent: 'center' },
   coverCount: { position: 'absolute', alignItems: 'center' },
   coverNum: { fontFamily: 'Shark', fontSize: 28, color: '#FFFFFF', lineHeight: 30 },
-  coverOf: { fontFamily: 'Knockout', fontSize: 14, color: '#E2F6FF' },
+  coverOf: { fontFamily: 'Shark', fontSize: 14, color: '#E2F6FF' },
   coverText: { flex: 1, marginLeft: 10, gap: 2 },
   coverTitle: { fontFamily: 'Shark', fontSize: 24, color: '#FFFFFF', textTransform: 'uppercase', textShadowColor: '#05346e', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   coverPct: { fontFamily: 'Shark', fontSize: 15, color: '#FFCF3B' },
@@ -904,15 +904,16 @@ const styles = StyleSheet.create({
     shadowColor: '#022a55', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.6, shadowRadius: 0,
   },
   tabText: { fontFamily: 'Shark', fontSize: 15, color: '#FFFFFF' },
-  tabCount: { fontFamily: 'Knockout', fontSize: 14, color: '#E2F6FF' },
+  tabCount: { fontFamily: 'Shark', fontSize: 14, color: '#E2F6FF' },
   tabTextActive: { color: INK },
   // Solid red with a dark rim, so the gift dot survives grayscale.
   dot: { position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: 8, backgroundColor: '#E3262E', borderWidth: 2.5, borderColor: '#7A0F14' },
 
   // Paper page
   board: {
-    marginHorizontal: BOARD_INSET, marginTop: 12, paddingBottom: 18, borderRadius: 28, backgroundColor: '#0A6FB8',
-    borderWidth: 3, borderColor: '#0B3E78',
+    // Full bleed: the book board runs edge to edge, so no wallpaper shows beside the pages.
+    marginHorizontal: 0, marginTop: 12, paddingBottom: 18, paddingHorizontal: BOARD_INSET + 3, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#0A6FB8',
+    borderTopWidth: 3, borderColor: '#0B3E78',
   },
   boardStitch: { position: 'absolute', left: 6, right: 6, top: 6, bottom: 6, borderRadius: 22, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,214,102,0.6)' },
   pageWrap: { marginHorizontal: PAGE_SIDE, marginTop: 14 },
@@ -922,7 +923,7 @@ const styles = StyleSheet.create({
   pageHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   sectionBadge: { width: 42, height: 42, borderRadius: 21, borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { fontFamily: 'Shark', fontSize: 21, color: INK, textTransform: 'uppercase' },
-  sectionBlurb: { fontFamily: 'Knockout', fontSize: 14, color: MUTED_INK },
+  sectionBlurb: { fontFamily: 'Shark', fontSize: 14, color: MUTED_INK },
   sectionBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, marginBottom: 16 },
   sectionBar: {
     flex: 1, height: 14, borderRadius: 7, backgroundColor: 'rgba(20,33,61,0.10)', overflow: 'hidden',

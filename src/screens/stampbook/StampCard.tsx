@@ -768,7 +768,7 @@ const styles = StyleSheet.create({
   howBox: { width: '100%', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16, padding: 12, marginTop: 10, borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
   howHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   howCount: { fontFamily: 'Shark', fontSize: 17, color: '#FFFFFF' },
-  howText: { flex: 1, fontFamily: 'Knockout', fontSize: 18, lineHeight: 22, color: '#FFFFFF' },
+  howText: { flex: 1, fontFamily: 'Shark', fontSize: 18, lineHeight: 22, color: '#FFFFFF' },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   bar: { flex: 1, height: 14, borderRadius: 7, backgroundColor: 'rgba(0,20,60,0.55)', overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)' },
   barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 9 },
@@ -799,11 +799,11 @@ const styles = StyleSheet.create({
   levelUpPill: { marginTop: 6, backgroundColor: INK, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 4, borderWidth: 2, borderColor: '#FFFFFF' },
   levelUpTitle: { fontFamily: 'Shark', fontSize: 34, color: '#FFFFFF', textShadowColor: '#8A5A00', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   levelUpLevel: { fontFamily: 'Shark', fontSize: 22, color: '#FFFFFF' },
-  message: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF', textAlign: 'center', marginTop: 8 },
+  message: { fontFamily: 'Shark', fontSize: 15, color: '#E2F6FF', textAlign: 'center', marginTop: 8 },
   where: {
     flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(0,40,90,0.45)', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 3,
   },
-  whereText: { fontFamily: 'Knockout', fontSize: 13, color: '#FFFFFF' },
+  whereText: { fontFamily: 'Shark', fontSize: 13, color: '#FFFFFF' },
   titleBox: {
     width: '100%', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, paddingVertical: 7, paddingHorizontal: 9,
     borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,207,59,0.75)', backgroundColor: 'rgba(0,40,90,0.3)',
@@ -820,7 +820,7 @@ const styles = StyleSheet.create({
   titlePillLocked: { backgroundColor: '#DCE6F2', borderBottomColor: '#9FB2C9' },
   titlePillText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 16, color: INK },
   titlePillTextLocked: { color: '#4A5A78' },
-  titleLine: { flex: 1, fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, color: '#FFFFFF' },
+  titleLine: { flex: 1, fontFamily: 'Shark', fontSize: 15, lineHeight: 18, color: '#FFFFFF' },
 });
 
 /** Level-up moment: the stamp's XP moved the level bar. A gold ribbon pops over the card with a fanfare. */

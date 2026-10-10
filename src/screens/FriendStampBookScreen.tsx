@@ -150,7 +150,7 @@ function Rarest({ stamp }: { stamp: FriendStamp }) {
         <Image source={stamp.icon_thumb_url ? { uri: stamp.icon_thumb_url, cacheKey: stamp.icon_thumb_url } : FALLBACK} style={StyleSheet.absoluteFill} contentFit="contain" />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.showcaseLabel} maxFontSizeMultiplier={1.3}>RAREST</Text>
+        <Text style={styles.showcaseLabel} maxFontSizeMultiplier={1.3}>RAREST STAMP</Text>
         <Text style={styles.showcaseName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.3}>{stamp.short_name}</Text>
       </View>
       <View style={[styles.pill, { backgroundColor: look.chip, borderColor: look.frame }]}>
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   showcaseName: { fontFamily: 'Shark', fontSize: 17, color: '#FFFFFF' },
   pill: { borderRadius: 12, borderWidth: 2, paddingHorizontal: 10, paddingVertical: 3 },
   pillText: { fontFamily: 'Shark', fontSize: 13, color: '#05346e' },
-  board: { marginHorizontal: 6, marginTop: 14, padding: 8, gap: 12, borderRadius: 28, backgroundColor: '#0A6FB8', borderWidth: 3, borderColor: '#0B3E78' },
+  board: { marginHorizontal: 0, marginTop: 14, padding: 8, gap: 12, borderRadius: 28, backgroundColor: '#0A6FB8', borderWidth: 3, borderColor: '#0B3E78' },
   page: { borderRadius: 22, backgroundColor: PAPER, borderWidth: 3, borderColor: '#FFFFFF', padding: 12, gap: 10 },
   pageHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2.5, borderColor: '#FFFFFF' },
