@@ -17,10 +17,10 @@ import { GotIt, MAX_FONT } from './moneyUi';
  * For the map HUD (the coordinator mounts it). Every buy goes through buyPack (the grown-up gate).
  * "Not now" hides it for the day; nothing nags.
  */
-export default function ParkDayOffer({ style }: { style?: StyleProp<ViewStyle> }) {
+export default function ParkDayOffer({ style, devPreview = false }: { style?: StyleProp<ViewStyle>; /** Dev capture only: show as if inside a park. */ devPreview?: boolean }) {
   const { player } = useContext(AuthContext);
   const { park } = useContext(LocationContext);
-  const inPark = !!park && !!player && storeAvailable();
+  const inPark = ((__DEV__ && devPreview) || !!park) && !!player && storeAvailable();
   const { catalog, prices } = useSupplies(inPark);
   const [seen, setSeen] = useState<ParkOfferSeen | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -31,7 +31,7 @@ export default function ParkDayOffer({ style }: { style?: StyleProp<ViewStyle> }
   const pack = catalog?.products.find(p => p.product_id.endsWith('.pack.parkday'));
   const price = pack ? prices[pack.product_id] : undefined;
   const show = seen !== undefined && shouldShowParkOffer({
-    inPark, shopDay: catalog?.day ?? null, seen, packAvailable: !!pack?.available, priced: !!price,
+    inPark, shopDay: catalog?.day ?? null, seen: __DEV__ && devPreview ? null : seen, packAvailable: !!pack?.available, priced: !!price,
   });
   const markSeen = () => {
     if (!catalog) return;
