@@ -48,7 +48,7 @@ const PRESSURE = [
   /\bhurry\b/i, /\blast chance\b/i, /\bdon'?t miss\b/i, /\bmiss out\b/i, /\bbefore it'?s gone\b/i, /\bact now\b/i,
   /\bonly \d+ left\b/i, /\blimited time\b/i, /\byou'?ll lose\b/i, /\bare you sure you want to leave\b/i,
   /\bdon'?t you want\b/i, /\bfriends are waiting\b/i, /\bwhile (supplies|stocks?) last\b/i, /\bselling fast\b/i,
-  /\bbuy now\b/i, /\bgoing fast\b/i, /\bno thanks, I\b/i, /\bI don'?t want\b/i,
+  /\bbuy now\b/i, /\bgoing fast\b/i, /\bno thanks, I\b/i, /\bI don'?t want\b/i, /\bat risk\b/i,
 ];
 
 // Lines that may keep a banned word because a store or the law says so.

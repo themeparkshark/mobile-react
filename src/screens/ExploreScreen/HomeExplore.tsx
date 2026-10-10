@@ -113,6 +113,8 @@ interface Props {
   onIntroOpenChange?: (open: boolean) => void;
   /** The daily chest button, under the recenter button while today's chest is unclaimed. */
   chestButton?: ReactNode;
+  /** Buttons stacked in chestButton (chest and Daily 3), for the map's declutter inset. */
+  chestButtonCount?: number;
   /** The park story, as a small chip in the top HUD row. */
   parkStory?: ParkStoryChip | null;
   /**
@@ -128,7 +130,7 @@ interface Props {
  */
 export default function HomeExplore({ onPrepItemNearby, catching = null, onCatchCollected, onCatchUnavailable,
   onCatchDone, refreshVersion, homeLocationConfirmed,
-  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, highlightNearestFind = null, parkStory = null }: Props) {
+  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -653,7 +655,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       }}>
       {/* Map with prep items - player marker is handled by Map component */}
       <Map controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled} focusCoordinate={findFocus}
-        extraControls={chestButton} ambientFrozen={catchOpen} chromeHidden={catchOpen} onUserPan={onUserPan}>
+        extraControls={chestButton} extraControlsCount={chestButtonCount} ambientFrozen={catchOpen} chromeHidden={catchOpen} onUserPan={onUserPan}>
         {homeLocationConfirmed && allPlaced.map(({ item: prepItem, distance, inRange }) => (
           <HomeFindMarker key={prepItem.pivot_id || prepItem.id} item={prepItem}
             // Rounded so GPS jitter does not re-render every marker.

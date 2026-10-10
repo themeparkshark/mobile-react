@@ -82,6 +82,7 @@ import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
 import useBossAttackRecovery from '../hooks/useBossAttackRecovery';
 import DailyGiftModal from '../components/DailyGiftModal';
 import ChestMapButton from '../components/map/ChestMapButton';
+import useRetention from '../components/retention/useRetention';
 import { chestDismissed, chestShouldShow, markChestDismissed } from './ExploreScreen/dailyChestPresence';
 import HomeHuntResultsHost from '../components/home/HomeHuntResultsHost';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
@@ -911,12 +912,14 @@ function ExploreScreen() {
     suggestionSlots.left === 'dwell' ? queueDwell?.rideId : suggestionSlots.left === 'adventure' ? adventure?.id : tripGoal?.ride_name,
   ].join(':');
   const leftSlotSwapGuard = useSwapTapGuard(leftSlotKey);
+  // The Daily 3 / level chest overlay is up: other map moments wait their turn.
+  const [retentionOccluding, setRetentionOccluding] = useState(false);
   const chestReady = chestMayPresent({
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
     firstCatchDone: hasFirstCatch(player, hasCompleted('home_first_find'), caughtThisSession),
     boss: bossOpen || bossOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
     rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
-    otherModalOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
+    otherModalOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || retentionOccluding,
   });
   // The daily chest presents itself once; "Back to map" puts it away until the
   // next app open or the next day, and the map's chest button reopens it.
@@ -942,6 +945,34 @@ function ExploreScreen() {
   }, [dailyGiftId]);
   const chestButton = chestUnclaimed && !chestShowing
     ? <ChestMapButton onPress={() => setChestRequested(true)} /> : null;
+  // Daily 3, the Weekly Box and level-up chests (server flags daily_three / level_chests, off by default).
+  const openParam = (route.params as { open?: string } | undefined)?.open;
+  const retention = useRetention({
+    enabled: !!player && permissionGranted && isReady && hasCompleted('onboarding'),
+    mapFocused,
+    // A level chest waits for the daily chest, any find, ride, boss or tutorial to finish.
+    screenFree: chestScreenFree && !chestShowing && !dailyGiftOccluded && !redeemFlowOpen
+      && !(chestUnclaimed && !!dailyGift && !chestDismissed(dailyGift.id)),
+    // Real events that can finish a goal (a ride closing is caught by the next map focus, not here).
+    refreshKey: `${dailyGift?.redeemed_at ?? ''}|${homeCollectionVersion}|${collectFlight?.key ?? 0}`,
+    mapCovered: redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded || showPrepItemModal,
+    openRequest: openParam === 'daily3' || openParam === 'chest' ? openParam : null,
+    onOpenRequestHandled: () => navigation.setParams({ open: undefined }),
+    onOpenChest: () => setChestRequested(true),
+    onFind: what => {
+      if (what === 'snack') { setHighlightNearestFind(Date.now()); return; }
+      // The nearest ride coin on this park map, guided like a checklist tap.
+      const here = location;
+      const tasks = (redeemables?.tasks ?? []).filter(t => Number.isFinite(Number(t.latitude)) && Number.isFinite(Number(t.longitude)));
+      if (!here || !tasks.length) return;
+      const nearest = tasks.reduce((best, t) => calculateDistance(here.latitude, here.longitude, Number(t.latitude), Number(t.longitude))
+        < calculateDistance(here.latitude, here.longitude, Number(best.latitude), Number(best.longitude)) ? t : best);
+      guideTo(nearest);
+    },
+  });
+  useEffect(() => { setRetentionOccluding(retention.occluding); }, [retention.occluding]);
+  const mapControls = retention.button ? <>{chestButton}{retention.button}</> : chestButton;
+  const mapControlsCount = (chestButton ? 1 : 0) + (retention.button ? 1 : 0);
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
@@ -1173,6 +1204,7 @@ function ExploreScreen() {
       {/* One overlay at a time: the daily chest comes last, after the first catch and never alongside a find. */}
       {chestShowing && dailyGift &&
         <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} onClosed={onChestClosed} />}
+      {retention.overlay}
       {/* Monday Home Hunt results come through the presentation queue, after the daily chest (2 full-screen moments per app open). */}
       <HomeHuntResultsHost enabled={!!player && !park && mapFocused && permissionGranted && hasCompleted('onboarding') && chestReady
         && !dailyGiftOccluded && !chestShowing && !(chestUnclaimed && !chestDismissed(dailyGift!.id))} />
@@ -1186,7 +1218,7 @@ function ExploreScreen() {
           onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
           introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
-          onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} highlightNearestFind={highlightNearestFind}
+          onIntroOpenChange={setHomeIntroOpen} chestButton={mapControls} chestButtonCount={mapControlsCount} highlightNearestFind={highlightNearestFind}
           parkStory={activeParkProject ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null} />
       )}
@@ -1468,12 +1500,12 @@ function ExploreScreen() {
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
           projector={mapProjector}
           onZoomChange={onMapZoom}
-          ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded}
+          ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded || retentionOccluding}
           fright={frightMap}
           declutter={declutter}
           crowdHaze={parkHaze}
           guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
-          controlsTop={slotTop + (queueRide ? 104 : 76)} extraControls={chestButton} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
+          controlsTop={slotTop + (queueRide ? 104 : 76)} extraControls={mapControls} extraControlsCount={mapControlsCount} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : mapFocusRequest}>
