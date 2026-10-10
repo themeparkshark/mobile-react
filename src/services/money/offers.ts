@@ -179,10 +179,13 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
  * The Shark Shop's next new-gear days, read-only, from the store's own rotation (next restock + interval).
  * "Monday, October 13". Empty when the store doesn't rotate. Exported for tests.
  */
-export function dropDays(nextRotationAt: string | null, intervalDays: number, count = 3, timeZone = 'America/Los_Angeles'): string[] {
+export function dropDays(nextRotationAt: string | null, intervalDays: number, count = 3, timeZone = 'America/Los_Angeles', now: Date = new Date()): string[] {
   if (!nextRotationAt || !(intervalDays > 0)) return [];
   const first = new Date(nextRotationAt);
   if (Number.isNaN(first.getTime())) return [];
+  // A late restock never shows a day already gone: step forward to the next one still ahead.
+  const step = intervalDays * 86_400_000;
+  if (first.getTime() <= now.getTime()) first.setTime(first.getTime() + Math.ceil((now.getTime() - first.getTime() + 1) / step) * step);
   return Array.from({ length: count }, (_, i) => {
     const d = new Date(first.getTime() + i * intervalDays * 86_400_000);
     let parts: { type: string; value: string }[] = [];

@@ -226,7 +226,8 @@ test('the pass worth line is computed from the server row and Supplies prices, r
 });
 
 test('the new-gear days come from the store rotation, read-only', () => {
-  assert.deepEqual(plain(offers.dropDays('2026-10-13T07:00:00Z', 7, 2)), ['Tuesday, October 13', 'Tuesday, October 20']);
+  assert.deepEqual(plain(offers.dropDays('2026-10-13T07:00:00Z', 7, 2, 'America/Los_Angeles', new Date('2026-10-09T12:00:00Z'))), ['Tuesday, October 13', 'Tuesday, October 20']);
+  assert.deepEqual(plain(offers.dropDays('2026-10-03T07:00:00Z', 1, 2, 'America/Los_Angeles', new Date('2026-10-09T20:00:00Z'))), ['Saturday, October 10', 'Sunday, October 11'], 'never a day already gone');
   assert.deepEqual(plain(offers.dropDays(null, 7)), []);
   assert.deepEqual(plain(offers.dropDays('2026-10-13T07:00:00Z', 0)), []);
 });
