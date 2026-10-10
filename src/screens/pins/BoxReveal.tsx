@@ -231,6 +231,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const ring = useSharedValue(0);
   const dim = useSharedValue(0);
   const punch = useSharedValue(1);
+  const foil = useSharedValue(0);
   const lift = useSharedValue(0);
   const rise = useSharedValue(0);
   const flip = useSharedValue(0);
@@ -259,6 +260,9 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (!still) {
       shine.value = 0;
       shine.value = withDelay(450, withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }));
+      // The gold-foil card catches the light once, just after the pin lands on it.
+      foil.value = 0;
+      if (p?.is_chaser) foil.value = withDelay(650, withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }));
       if (p?.is_chaser || isCatch) {
         stamp.value = withDelay(250, withSpring(1, { damping: 9, stiffness: 220 }));
         // The stamp lands with a thud you feel: the number is the flex.
@@ -374,7 +378,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (!pull) return;
     clearTimers();
     popped.current = false;
-    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, lift, plusOne, wearFly].forEach(v => { cancelAnimation(v); v.value = 0; });
+    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, lift, plusOne, wearFly, foil].forEach(v => { cancelAnimation(v); v.value = 0; });
     punch.value = 1;
     setPhase('drop');
     if (noBox) {
@@ -470,6 +474,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   }));
   const stampStyle = useAnimatedStyle(() => ({ opacity: stamp.value > 0 ? 1 : 0, transform: [{ scale: interpolate(stamp.value, [0, 1], [2.4, 1]) }, { rotate: '-8deg' }] }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+  const foilStyle = useAnimatedStyle(() => ({ opacity: foil.value <= 0 || foil.value >= 1 ? 0 : 0.85, transform: [{ translateX: -pinSize * 0.9 + foil.value * pinSize * 2.4 }, { rotate: '20deg' }] }));
   const backerStyle = useAnimatedStyle(() => ({ opacity: settle.value * (1 - wearFly.value), transform: [{ scale: 0.9 + settle.value * 0.1 }] }));
   // rotateY = (1 - flip) * 540: the front faces you when cos(angle) > 0.
   const frontStyle = useAnimatedStyle(() => ({ opacity: Math.cos(((1 - flip.value) * 540 * Math.PI) / 180) >= 0 ? 1 : 0 }));
@@ -550,6 +555,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             <Animated.View style={[styles.backer, pull.is_chaser && styles.backerGold, { width: pinSize * 1.25, height: pinSize * 1.3, top: (boxSize - pinSize) / 2 - boxSize * 0.5 - pinSize * 0.14 }, backerStyle]}>
               <View style={styles.backerHole} />
               {/* The best pin gets the best card: gold foil, limited edition, its number. */}
+              {pull.is_chaser && <Animated.View pointerEvents="none" style={[styles.foilSheen, { height: pinSize * 1.8, top: -pinSize * 0.25 }, foilStyle]} />}
               {pull.is_chaser && <Text maxFontSizeMultiplier={1} style={styles.backerFoilText}>{pull.serial ? `LIMITED \u00b7 #${pull.serial}` : 'LIMITED'}</Text>}
             </Animated.View>
           )}
@@ -715,7 +721,8 @@ const styles = StyleSheet.create({
   },
   ticketText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 3, flexShrink: 1 },
   backer: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center' },
-  backerGold: { backgroundColor: '#f6d77a', borderColor: '#8a5a12', justifyContent: 'space-between', paddingBottom: 8 },
+  backerGold: { backgroundColor: '#f6d77a', borderColor: '#8a5a12', justifyContent: 'space-between', paddingBottom: 8, overflow: 'hidden' },
+  foilSheen: { position: 'absolute', left: 0, width: 26, backgroundColor: 'rgba(255,255,255,0.75)' },
   backerFoilText: { fontFamily: FONT.display, fontSize: 14, color: '#5a3a08', letterSpacing: 1 },
   backerHole: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#021a45', marginTop: 10 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 3, paddingHorizontal: 14, paddingVertical: 4 },

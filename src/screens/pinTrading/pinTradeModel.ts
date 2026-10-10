@@ -132,6 +132,7 @@ export const PIN_TRADE_COPY = {
   backToBoard: 'Back to board',
   notNow: 'Not now',
   confirmMessage: (give: string, get: string) => `Give your ${give} for the ${get}? You can’t undo a trade.`,
+  confirmUpgrade: (mine: number, theirs: number) => `Trade your #${mine} for #${theirs}? Same pin, new number. You can’t undo a trade.`,
   /** Pins v2: say plainly when the trade gives away your last copy or a numbered gold pin. */
   confirmKeeper: (give: string) => `It’s your only ${give}.`,
   confirmSpare: 'You keep one!',
@@ -154,7 +155,7 @@ export const PIN_TRADE_COPY = {
   doneMessage: (got: string) => `You got the ${got}!`,
   upgradeMessage: (got: string, serial: number) => `Your ${got} is now #${serial}!`,
   doneAction: 'Awesome!',
-  doneGave: (_gave: string) => 'Now on the board for another fan.',
+  doneGave: (_gave: string, left?: number) => (left && left > 0 ? `Now on the board for another fan. You still have ${left}.` : 'Now on the board for another fan.'),
   tradeCount: (n: number) => `Trade #${n} this visit!`,
   gaveCaption: 'You gave',
   newStamp: 'New!',

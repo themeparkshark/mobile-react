@@ -106,6 +106,9 @@ function TradeSheet(props: TradeSheetProps) {
   const ended = phase === 'expired' || phase === 'failed' || phase === 'taken';
   const sending = phase === 'sending';
   const confirming = phase === 'confirming' || sending;
+  // A numbered upgrade reads as one: "Trade your #3 for #1?" (same pin, better number).
+  const upgrade = !!selected && selected.id === swap.pin.item.id && !!swap.serial && !!selected.serial;
+  const confirmLine = !selected ? '' : upgrade ? COPY.confirmUpgrade(selected.serial as number, swap.serial as number) : COPY.confirmMessage(pinName(selected), pinName(swap.pin.item));
   useEffect(() => { setHurry(false); }, [deadline]);
 
   // Short phones: the second step hides the picker so both choices fit ("Wait, go back" returns to it).
@@ -208,13 +211,13 @@ function TradeSheet(props: TradeSheetProps) {
             <Animated.View key="confirm" entering={still ? undefined : fade(140)} style={styles.actionSlot}>
               {/* The second step looks different without words: give -> get, in a gold-edged well. */}
               {selected && (
-                <View style={styles.confirmWell} accessible accessibilityLabel={COPY.confirmMessage(pinName(selected), pinName(swap.pin.item))}>
+                <View style={styles.confirmWell} accessible accessibilityLabel={confirmLine}>
                   <EnamelPin uri={selected.icon_url} size={compact ? 34 : 42} surface="none" recyclingKey={`mine-${selected.id}`} />
                   <GameIcon name="arrow" size={26} />
                   <EnamelPin uri={swap.pin.item.icon_url} size={compact ? 34 : 42} surface="none" recyclingKey={`board-${swap.id}`} />
                   <View style={{ flex: 1 }}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.confirmLine, { flex: 0 }]} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.8}>
-                    {COPY.confirmMessage(pinName(selected), pinName(swap.pin.item))}
+                    {confirmLine}
                   </Text>
                   {/* Pins v2, in pictures: x2 -> x1 (you keep one) or LAST ONE; a gold number goes with its pin. */}
                   {selected.spares !== undefined && (
@@ -265,8 +268,8 @@ export default memo(TradeSheet);
 
 const styles = StyleSheet.create({
   confirmChips: { flexDirection: 'row', gap: 6, marginTop: 4 },
-  confirmChip: { borderRadius: 8, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 7, paddingVertical: 1 },
-  confirmChipText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, paddingTop: 2 },
+  confirmChip: { borderRadius: 8, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
+  confirmChipText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy, paddingTop: 2 },
   scrim: { backgroundColor: 'rgba(6,30,74,0.86)' },
   sheet: {
     position: 'absolute', bottom: 0, alignSelf: 'center', backgroundColor: TRADE_SURFACE.panel,

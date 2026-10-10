@@ -350,11 +350,11 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
               {balanceName(upgradeSerial ? COPY.upgradeMessage(name, upgradeSerial) : COPY.doneMessage(name), 26)}
             </Text>
           </View>
-          <View style={styles.gaveRow} accessible accessibilityLabel={`${COPY.gaveCaption} ${pinName(gave)}. ${COPY.doneGave(pinName(gave))}`}>
+          <View style={styles.gaveRow} accessible accessibilityLabel={`${COPY.gaveCaption} ${pinName(gave)}. ${COPY.doneGave(pinName(gave), gave.spares ?? 0)}`}>
             <View style={styles.gaveChip}><EnamelPin uri={gave.icon_url} size={34} surface="none" flat recyclingKey={`mine-${gave.id}`} /></View>
             <View style={{ flexShrink: 1 }}>
               <Text maxFontSizeMultiplier={1.2} style={styles.gaveCaption}>{COPY.gaveCaption}</Text>
-              <Text maxFontSizeMultiplier={1.25} style={styles.gaveLine}>{COPY.doneGave(pinName(gave))}</Text>
+              <Text maxFontSizeMultiplier={1.25} style={styles.gaveLine}>{COPY.doneGave(pinName(gave), gave.spares ?? 0)}</Text>
             </View>
           </View>
           {tradeNumber >= 2 && <Text maxFontSizeMultiplier={1.2} style={styles.countLine}>{COPY.tradeCount(tradeNumber)}</Text>}
