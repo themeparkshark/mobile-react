@@ -246,7 +246,8 @@ test('real fix rates (2.5 s on a map, 7 s in a park): the shark keeps moving thr
   assert.equal(glide.noteFixCadence(c, 'a', 1000), 0);
   assert.equal(glide.noteFixCadence(c, 'b', 3500), 2500);
   assert.equal(glide.noteFixCadence(c, 'b', 3600), 2500, 'the second caller for the same fix sees the same gap');
-  assert.match(map, /noteFixCadence\(cadenceRef\.current, `\$\{location\.latitude\},\$\{location\.longitude\}`, arrived\)/);
+  // The follow camera paces itself from the walk (useFollowCamera, map-motion.test.cjs); the marker keeps the cadence.
+  assert.match(map, /const glideDuration = cam\.onFix\(/);
   assert.match(map, /cadence=\{cadenceRef\.current\}/);
   assert.match(read('src/components/map/PlayerSharkMarker.tsx'), /noteFixCadence\(cadence, `\$\{target\.latitude\},\$\{target\.longitude\}`, now\)/);
 });

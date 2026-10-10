@@ -2,14 +2,11 @@ import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Reanimated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { BRAND, GameIcon } from '../../ui';
-import { useTrail } from '../../services/trail/TrailProvider';
-import { mapTrailOf } from './mapTrail';
 
 /**
  * Trail Boxes (steps stream, claude/fb-steps): the walk-to-open box rides on the map shark's back while
  * it fills, so a kid sees "my walking fills this". The steps stream wires its provider at integration
  * (useTrail: walking box, headlineBox tier and steps, ready count) into this small shape.
- * Release 3 ports only this badge from claude/fb-motion; TrailBoxCue reads useTrail itself.
  */
 export interface MapTrail {
   /** A box is filling with steps right now. */
@@ -58,11 +55,3 @@ const styles = StyleSheet.create({
   track: { marginTop: 2, width: 24, height: 7, borderRadius: 3.5, borderWidth: 1.5, borderColor: BRAND.navy, backgroundColor: BRAND.cream, overflow: 'hidden' },
   fill: { width: 21, height: 4, borderRadius: 2, backgroundColor: BRAND.gold, borderBottomWidth: 1.5, borderBottomColor: BRAND.goldLip, transformOrigin: 'left' },
 });
-
-/** The badge wired to the Trail Boxes state (nothing while the trail_boxes flag is off or no box is walking). */
-export function TrailBoxCue({ live }: { readonly live: boolean }) {
-  const trail = useTrail();
-  const mapTrail = mapTrailOf(trail.state, trail.enabled);
-  if (!mapTrail || (!mapTrail.walking && mapTrail.readyCount === 0)) return null;
-  return <TrailBoxBadge trail={mapTrail} live={live} />;
-}

@@ -109,6 +109,18 @@ export function rideTagKind({ badge, showTimer }: { badge: string | null; showTi
 
 /** The selected ride's info card (TaskMarker tooltip), as a tag the others keep clear of. */
 export const SELECTED_TAG = { w: 200, h: 100 } as const;
+
+/**
+ * Which side of the coin the solver put the selected card on, from its box (relative to the
+ * anchor): above the art (arrow down), below it (arrow up), or beside it (the leader line joins them).
+ * No solver result yet: the fallback, above.
+ */
+export function selectedCardSide(tag: { readonly y: number } | null | undefined, artTop: number, artBottom: number, cardH: number): 'above' | 'below' | 'beside' {
+  if (!tag) return 'above';
+  if (tag.y + cardH <= artTop + 1) return 'above';
+  if (tag.y >= artBottom - 1) return 'below';
+  return 'beside';
+}
 export const URGENT_MS = 5 * 60_000;
 
 /** A ride's chip for the solver, by the same rules TaskMarker draws with. */

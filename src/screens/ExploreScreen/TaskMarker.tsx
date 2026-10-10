@@ -25,7 +25,7 @@ import { markerBadge, markerRingColor, restingLabel } from './mapMarkerPresentat
 import { limitedLabel } from '../../services/collection/limitedCoins';
 import { FoldBadge, Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
 import type { Placement } from '../../components/map/declutter/solver';
-import { RIDE_BODY, RIDE_BOX, rideLayoutId, rideTagKind, rideTagSize } from './parkMapLayout';
+import { RIDE_BODY, RIDE_BOX, SELECTED_TAG, rideLayoutId, rideTagKind, rideTagSize, selectedCardSide } from './parkMapLayout';
 import { findClock } from './FindLife';
 import StarRideBadge from '../../components/liveEvents/StarRideBadge';
 
@@ -273,10 +273,17 @@ function MarkerTimer({ expiresAt, ticking, urgent, badgeStyle }: {
   const done = left <= 0;
   useEffect(() => {
     if (!ticking || done) return;
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [ticking, done]);
+    // Battery: every second only in the last minute (the clock shows seconds); otherwise wake at each minute boundary.
+    let id: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const t = Date.now(); setNow(t);
+      const rest = expiresAt - t;
+      if (rest <= 0) return;
+      id = setTimeout(tick, rest < 60_000 ? 1000 : (rest % 60_000) || 60_000);
+    };
+    tick();
+    return () => clearTimeout(id);
+  }, [ticking, done, expiresAt]);
   const shown = useSharedValue(done ? 0 : 1);
   useEffect(() => { shown.value = withTiming(done ? 0 : 1, { duration: TIMER_FADE_MS }); }, [done, shown]);
   const fade = useAnimatedStyle(() => ({ opacity: shown.value }));
@@ -380,6 +387,8 @@ function TaskMarker({
   // One chip above the art: the badge, else the timer (the timer drops into the art when a badge holds the chip).
   const tagKind = isSelected ? null : rideTagKind({ badge, showTimer });
   const tagSize = rideTagSize(tagKind, limited?.toUpperCase() ?? '');
+  // Which side of the coin the solver put the selected card on (the arrow points from there).
+  const cardSide = selectedCardSide(placement.tag, RIDE_BODY.y, RIDE_BODY.y + RIDE_BODY.h, SELECTED_TAG.h);
   const folded = clusterCount + placement.folded;
   // Scenes stay mounted while the living map pauses; their loops stop inside
   // (RideAmbience reads the map's running state). Mounting or unmounting views
@@ -459,7 +468,36 @@ function TaskMarker({
     >
       {/* One chip at a time keeps the map calm, on the free side the declutter picked (unscaled: the
           solver sized it around the scaled art); the info card replaces it when selected. */}
-      <Placed placement={placement} anchor={RIDE_BOX.anchor} overlay={tagKind && tagSize ? (
+      <Placed placement={placement} anchor={RIDE_BOX.anchor} overlay={isSelected ? (
+          // The info card sits in the box the declutter reserved for it, on the side away from the
+          // player's shark (which is drawn over the map and would cover it). Never faded out.
+          <TagSlot tag={placement.tag ?? undefined} anchor={RIDE_BOX.anchor} width={SELECTED_TAG.w} height={SELECTED_TAG.h}
+            fallback={{ x: -SELECTED_TAG.w / 2, y: RIDE_BODY.y - SELECTED_TAG.h - 3 }}>
+            <View pointerEvents="none" style={[styles.cardSlot, cardSide === 'below' ? styles.cardBelow : cardSide === 'beside' ? styles.cardBeside : null]}>
+              {cardSide === 'below' && <View style={styles.tooltipArrowUp} />}
+            <View style={styles.tooltip}>
+                <View style={styles.tooltipRow}>
+                  <Image source={task.coin_url ? { uri: task.coin_url } : RIDE_COIN} style={styles.tooltipCoin} contentFit="contain" />
+                  <View style={styles.tooltipCopy}>
+                    <Text style={styles.tooltipTitle} numberOfLines={1}>{task.name}</Text>
+                    <View style={styles.tooltipMeta}>
+                      {distanceMeters !== null && <Text style={styles.tooltipDetail}>{formatDistance(distanceMeters)}</Text>}
+                      {restingUntil ? <Text style={styles.tooltipDetail}>{restingLabel(restingUntil)}</Text> : <>
+                        <GameIcon name="ticket" size={14} />
+                        <Text style={styles.tooltipDetail}>{ticketCost} {ticketCost === 1 ? 'Ticket' : 'Tickets'}</Text>
+                      </>}
+                    </View>
+                    {(status || isTripGoal || adventure || limited) && <Text style={styles.tooltipWait} numberOfLines={1}>
+                      {[adventure ? 'Adventure ride' : isTripGoal ? 'My goal' : null, status, limited].filter(Boolean).join(' · ')}
+                    </Text>}
+                  </View>
+                </View>
+                {minsLeft !== null && expiresAt! > Date.now() && <Text style={[styles.tooltipTimer, timerUrgent && styles.timerTextUrgent]}>{minsLeft} min left</Text>}
+              </View>
+              {cardSide === 'above' && <View style={styles.tooltipArrow} />}
+            </View>
+          </TagSlot>
+      ) : tagKind && tagSize ? (
           <TagSlot tag={placement.tag} anchor={RIDE_BOX.anchor} width={tagSize.w} height={tagSize.h}
             fallback={{ x: -tagSize.w / 2, y: RIDE_BODY.y - tagSize.h - 3 }}>
             {tagKind === 'rush' && rush && (
@@ -484,32 +522,6 @@ function TaskMarker({
         {!isSelected && showTimer && tagKind !== 'timer' && (
           <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
             badgeStyle={[styles.timerBadge, styles.timerLow, timerUrgent && styles.timerBadgeUrgent]} />
-        )}
-
-        {/* Selected chip: the coin, how far, and what it costs. */}
-        {isSelected && (
-          <View pointerEvents="none" style={styles.tooltipContainer}>
-            <View style={styles.tooltip}>
-              <View style={styles.tooltipRow}>
-                <Image source={task.coin_url ? { uri: task.coin_url } : RIDE_COIN} style={styles.tooltipCoin} contentFit="contain" />
-                <View style={styles.tooltipCopy}>
-                  <Text style={styles.tooltipTitle} numberOfLines={1}>{task.name}</Text>
-                  <View style={styles.tooltipMeta}>
-                    {distanceMeters !== null && <Text style={styles.tooltipDetail}>{formatDistance(distanceMeters)}</Text>}
-                    {restingUntil ? <Text style={styles.tooltipDetail}>{restingLabel(restingUntil)}</Text> : <>
-                      <GameIcon name="ticket" size={14} />
-                      <Text style={styles.tooltipDetail}>{ticketCost} {ticketCost === 1 ? 'Ticket' : 'Tickets'}</Text>
-                    </>}
-                  </View>
-                  {(status || isTripGoal || adventure || limited) && <Text style={styles.tooltipWait} numberOfLines={1}>
-                    {[adventure ? 'Adventure ride' : isTripGoal ? 'My goal' : null, status, limited].filter(Boolean).join(' · ')}
-                  </Text>}
-                </View>
-              </View>
-              {minsLeft !== null && expiresAt! > Date.now() && <Text style={[styles.tooltipTimer, timerUrgent && styles.timerTextUrgent]}>{minsLeft} min left</Text>}
-            </View>
-            <View style={styles.tooltipArrow} />
-          </View>
         )}
 
         {alive.light.lamps >= 0.05 && <LampGlow id={task.id} level={alive.light.lamps} moving={!calm && withinBudget(aliveRank, alive.caps.pulsingRides)} />}
@@ -580,9 +592,11 @@ const styles = StyleSheet.create({
   timerBadgeUrgent: { borderColor: BRAND.red },
   timerText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, textAlign: 'center' },
   timerTextUrgent: { color: BRAND.red },
-  tooltipContainer: { position: 'absolute', top: -84, left: -74, right: -74, alignItems: 'center', zIndex: 25 },
+  cardSlot: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
+  cardBelow: { justifyContent: 'flex-start' },
+  cardBeside: { justifyContent: 'center' },
   tooltip: { backgroundColor: BRAND.white, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 7,
-    borderWidth: 3, borderColor: BRAND.navy, maxWidth: 220 },
+    borderWidth: 3, borderColor: BRAND.navy, maxWidth: SELECTED_TAG.w, maxHeight: SELECTED_TAG.h - 8 },
   tooltipRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   tooltipCoin: { width: 30, height: 30 },
   tooltipCopy: { flexShrink: 1 },
@@ -593,6 +607,8 @@ const styles = StyleSheet.create({
   tooltipTimer: { fontFamily: 'Shark', fontSize: 11, color: BRAND.navy, textAlign: 'center', marginTop: 2 },
   tooltipArrow: { width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 8,
     borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: BRAND.navy },
+  tooltipArrowUp: { width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderBottomWidth: 8,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: BRAND.navy },
   groundRing: { position: 'absolute', bottom: 10, width: 58, height: 20, borderRadius: 29, borderWidth: 3 },
   playPulse: { position: 'absolute', bottom: 8, width: 62, height: 24, borderRadius: 31, borderWidth: 3 },
   buildingContainer: { zIndex: 5 },

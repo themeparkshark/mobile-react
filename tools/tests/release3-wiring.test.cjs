@@ -120,5 +120,8 @@ test('Trail Box cue on the map shark: off flag or no boxes = nothing; the soones
   const on = t.mapTrailOf({ walking: [box(1, 'gold', 4000, 1000), box(2, 'red', 1000, 500)], ready: [{}] }, true);
   assert.deepEqual(plain(on), { walking: true, tier: 'red', progress: 0.5, readyCount: 1 });
   const map = fs.readFileSync('src/components/Map.tsx', 'utf8');
-  assert.equal((map.match(/<TrailBoxCue /g) ?? []).length, 1, 'one badge, on the centered shark');
+  // Motion trial: motion's own TrailBoxBadge placement, fed by the Trail state; the port's TrailBoxCue is gone.
+  assert.equal((map.match(/<TrailBoxBadge /g) ?? []).length, 1, 'one badge, on the centered shark');
+  assert.equal((map.match(/<TrailBoxCue /g) ?? []).length, 0, 'no duplicate cue');
+  assert.match(map, /mapTrailOf\(trailCtx\.state, trailCtx\.enabled\)/);
 });

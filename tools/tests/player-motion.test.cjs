@@ -114,7 +114,7 @@ test('Map: the location point is the ground ring middle, in both the marker and 
   assert.match(map, /groundRing: \{\s*position: 'absolute',\s*bottom: -2,\s*width: 70,\s*height: 24,/);
   assert.equal(110 + 2 - 24 / 2, 100);
   // The declutter footprint was already measured from the ring (52 x 60 above it).
-  assert.match(map, /body: \{ x: -26, y: -52, w: 52, h: 60 \}/);
+  assert.match(map, /body: PLAYER_BODY/);
   // Park detection reads the location, never the drawn shark.
   assert.doesNotMatch(read('src/context/LocationProvider.tsx'), /SHARK_GROUND|translateY/);
 });
@@ -151,7 +151,7 @@ test('the shark faces where it walks on screen (art flips), with a dead band for
   assert.equal(motion.facingFor(0, 90, 1), 1, 'north on an east-up map heads left');
   const map = read('src/components/Map.tsx');
   assert.match(map, /Math\.max\(0\.35, Math\.abs\(f\)\)/, 'never a paper-thin card flip');
-  assert.match(map, /\{ scaleX: sx \}, \{ scaleY: 1 - 0\.06 \* mid \}/, 'a slight squash mid-turn');
+  assert.match(map, /\{ scaleX: sx \* m\.twirl\.value \* \(1 \+ 0\.12 \* sq\) \}, \{ scaleY: \(1 - 0\.06 \* mid\) \* \(1 - 0\.14 \* sq\) \}/, 'a slight squash mid-turn');
   assert.match(map, /facing\.value = withTiming\(next, \{ duration: 260 \}\)/);
   assert.match(map, /const step = m\.stride\.value \* m\.wake\.value;/, 'the stride bounce only rides on a real walk');
 });

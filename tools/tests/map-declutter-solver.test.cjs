@@ -468,3 +468,21 @@ test('the reef the Fin-ister encounter swims at is drawn with it (fixed), never 
   const plain = L.buildParkLayout({ rides: [], finds: [], haunts: [], reefs: [host], fixed: [], nightMode: true });
   assert.equal(plain.find(i => i.id === 'reef:kelp').fixed, undefined);
 });
+
+test('a selected ride card never lands under the following shark (player 40 pt above the ride, and from each side)', () => {
+  const map = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/Map.tsx'), 'utf8');
+  const m = map.match(/export const PLAYER_BODY = \{ x: (-?\d+), y: (-?\d+), w: (\d+), h: (\d+) \}/);
+  const body = { x: +m[1], y: +m[2], w: +m[3], h: +m[4] };
+  const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  for (const [dx, dy] of [[0, 40], [0, -60], [70, 0], [-70, 0], [30, 50]]) {
+    const player = { id: 'player', ...at(0, 0), priority: 0, tagObstacleOnly: true, body };
+    const ride = rideAt('sel', dx, dy, { tag: L.SELECTED_TAG, priority: 900 });
+    const out = s.solveLayout([player, ride], frame());
+    const pl = out.get('ride:sel');
+    assert.ok(pl.tag, `card placed for ride at ${dx},${dy}`);
+    const p = s.project(ride.latitude, ride.longitude, frame()), c = s.project(player.latitude, player.longitude, frame());
+    const card = { x: p.x + pl.tag.x, y: p.y + pl.tag.y, w: L.SELECTED_TAG.w, h: L.SELECTED_TAG.h };
+    const shark = { x: c.x + body.x, y: c.y + body.y, w: body.w, h: body.h };
+    assert.ok(!hit(card, shark), `ride at ${dx},${dy}: card ${JSON.stringify(card)} under the shark ${JSON.stringify(shark)}`);
+  }
+});
