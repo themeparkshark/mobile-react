@@ -29,10 +29,16 @@ export function lastDayText(ymd: string): string {
   return `${WEEKDAYS[day]}, ${MONTHS[m - 1]} ${d}`;
 }
 
+/** A season wearable: a pin, a scene or a profile frame. */
+export type Wearable = Extract<SharkPassReward, { type: 'item' | 'frame' }>;
+export function isWearable(r: SharkPassReward | null | undefined): r is Wearable {
+  return !!r && (r.type === 'item' || r.type === 'frame');
+}
+
 /** "2 coins" style words for a reward. Exported for tests. */
 export function rewardWords(reward: SharkPassReward): string {
   switch (reward.type) {
-    case 'item': return reward.name;
+    case 'item': case 'frame': return reward.name;
     case 'mystery_box': return reward.boxes === 1 ? '1 Mystery Pin Box' : `${reward.boxes} Mystery Pin Boxes`;
     case 'rescue_passes': return reward.amount === 1 ? '1 Rescue Pass' : `${reward.amount} Rescue Passes`;
     case 'tickets': return `${reward.amount} ${reward.amount === 1 ? 'ticket' : 'tickets'}`;
@@ -46,7 +52,7 @@ export function passSummary(tiers: readonly SharkPassTier[]): string {
   let items = 0; let boxes = 0; let coins = 0;
   for (const t of tiers) {
     const r = t.paid;
-    if (r.type === 'item') items += 1;
+    if (isWearable(r)) items += 1;
     else if (r.type === 'mystery_box') boxes += r.boxes;
     else if (r.type === 'coins') coins += r.amount;
   }
@@ -64,7 +70,7 @@ export function nextBigPrize(tiers: readonly SharkPassTier[], points: number, pe
   { tier: number; reward: SharkPassReward; pass: boolean; pointsAway: number } | null {
   for (const t of tiers) {
     if (t.unlocked) continue;
-    const reward = t.free?.type === 'item' ? t.free : t.paid.type === 'item' ? t.paid : null;
+    const reward = isWearable(t.free) ? t.free : isWearable(t.paid) ? t.paid : null;
     if (!reward) continue;
     return { tier: t.tier, reward, pass: reward === t.paid, pointsAway: Math.max(0, t.tier * perStep - points) };
   }
@@ -75,7 +81,7 @@ export function nextBigPrize(tiers: readonly SharkPassTier[], points: number, pe
 export function readyNowLine(tiers: readonly SharkPassTier[]): string | null {
   const ready = tiers.filter(t => t.unlocked).map(t => t.paid);
   if (!ready.length) return null;
-  const items = ready.filter(r => r.type === 'item').map(r => rewardWords(r));
+  const items = ready.filter(isWearable).map(r => rewardWords(r));
   const coins = ready.reduce((n, r) => n + (r.type === 'coins' ? r.amount : 0), 0);
   const boxes = ready.reduce((n, r) => n + (r.type === 'mystery_box' ? r.boxes : 0), 0);
   const parts = [...items, boxes ? `${boxes} Mystery Pin ${boxes === 1 ? 'Box' : 'Boxes'}` : null, coins ? `${coins.toLocaleString('en-US')} coins` : null]
@@ -86,7 +92,7 @@ export function readyNowLine(tiers: readonly SharkPassTier[]): string | null {
 /** What a "Claim all" landed, in words: the first three, then "and N more". */
 export function claimedLine(rewards: readonly SharkPassReward[]): string {
   // Best first: items, then coins, tickets, Rescue Passes, boxes, energy. Six or fewer are all named.
-  const rank: Record<string, number> = { item: 0, coins: 1, tickets: 2, rescue_passes: 3, mystery_box: 4, energy: 5 };
+  const rank: Record<string, number> = { item: 0, frame: 0, coins: 1, tickets: 2, rescue_passes: 3, mystery_box: 4, energy: 5 };
   const words = [...rewards].sort((a, b) => (rank[a.type] ?? 9) - (rank[b.type] ?? 9)).map(rewardWords);
   if (words.length <= 6) return words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}` : words[0] ?? '';
   return words.length <= 3 ? words.join(', ') : `${words.slice(0, 3).join(', ')} and ${words.length - 3} more`;
@@ -97,8 +103,8 @@ export function passTwinLine(tiers: readonly SharkPassTier[], premium: boolean):
   if (premium) return null;
   const waiting = tiers.filter(t => t.unlocked && !t.paid_claimed).map(t => t.paid);
   if (!waiting.length) return null;
-  const items = waiting.filter(r => r.type === 'item');
-  const lead = [...items, ...waiting.filter(r => r.type !== 'item')].slice(0, 2).map(rewardWords);
+  const items = waiting.filter(isWearable);
+  const lead = [...items, ...waiting.filter(r => !isWearable(r))].slice(0, 2).map(rewardWords);
   return `With the Shark Pass you’d also have ${lead.join(', ')}${waiting.length > lead.length ? ` and ${waiting.length - lead.length} more` : ''}.`;
 }
 
@@ -106,7 +112,7 @@ export function passTwinLine(tiers: readonly SharkPassTier[], premium: boolean):
 export function passGrants(tiers: readonly SharkPassTier[]): { coins: number; tickets: number; rescue_passes: number; pins: number } {
   const out = { coins: 0, tickets: 0, rescue_passes: 0, pins: 0 };
   for (const { paid } of tiers) {
-    if (paid.type === 'item') out.pins += 1;
+    if (isWearable(paid)) out.pins += 1;
     else if (paid.type === 'coins' || paid.type === 'tickets' || paid.type === 'rescue_passes') out[paid.type] += paid.amount;
   }
   return out;
@@ -127,7 +133,7 @@ export function setMixText(pieces: readonly { row: 'free' | 'pass' | 'plus' }[])
 }
 
 export type SetPiece = {
-  readonly reward: Extract<SharkPassReward, { type: 'item' }>;
+  readonly reward: Wearable;
   /** 0 for a Shark Pass Plus extra. */
   readonly step: number;
   readonly row: 'free' | 'pass' | 'plus';
@@ -142,10 +148,10 @@ export function seasonSet(tiers: readonly SharkPassTier[], plusRewards: readonly
   const free: SetPiece[] = [];
   const pass: SetPiece[] = [];
   for (const t of tiers) {
-    if (t.free?.type === 'item') free.push({ reward: t.free, step: t.tier, row: 'free', owned: t.free_claimed });
-    if (t.paid.type === 'item') pass.push({ reward: t.paid, step: t.tier, row: 'pass', owned: t.paid_claimed });
+    if (isWearable(t.free)) free.push({ reward: t.free, step: t.tier, row: 'free', owned: t.free_claimed });
+    if (isWearable(t.paid)) pass.push({ reward: t.paid, step: t.tier, row: 'pass', owned: t.paid_claimed });
   }
-  const extras: SetPiece[] = plusRewards.flatMap(r => (r.type === 'item' ? [{ reward: r, step: 0, row: 'plus' as const, owned: plus }] : []));
+  const extras: SetPiece[] = plusRewards.flatMap(r => (isWearable(r) ? [{ reward: r, step: 0, row: 'plus' as const, owned: plus }] : []));
   const pieces = [...free, ...pass, ...extras];
   return { pieces, owned: pieces.filter(p => p.owned).length };
 }

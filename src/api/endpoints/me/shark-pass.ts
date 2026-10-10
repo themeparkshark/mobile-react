@@ -7,7 +7,18 @@ import client from '../../client';
 export type SharkPassReward =
   | { readonly type: 'coins' | 'tickets' | 'energy' | 'rescue_passes'; readonly amount: number; readonly ready: boolean }
   | { readonly type: 'mystery_box'; readonly boxes: number; readonly ready: boolean }
-  | { readonly type: 'item'; readonly name: string; readonly slot: 'pin' | 'background' | string; readonly art: string; readonly icon_url: string | null; readonly ready: boolean };
+  | { readonly type: 'item'; readonly name: string; readonly slot: 'pin' | 'background' | string; readonly art: string; readonly icon_url: string | null; readonly ready: boolean }
+  /** A profile frame (a ring around the shark on the profile, Standings and share cards). Art is bundled by `art`. */
+  | { readonly type: 'frame'; readonly name: string; readonly art: string; readonly ready: boolean };
+
+export type SharkPassFrame = { readonly key: string; readonly name: string; readonly art: string; readonly step: number; readonly row: 'free' | 'paid' | 'set_bonus'; readonly owned: boolean };
+export type GoldPiece = { readonly art: string; readonly name: string; readonly owns_base: boolean; readonly owns_gold: boolean; readonly ready: boolean; readonly icon_url: string | null };
+export type SharkPassCosmetics = {
+  readonly frames: readonly SharkPassFrame[];
+  readonly equipped_frame: string | null;
+  readonly free_set: { readonly owned: number; readonly total: number };
+  readonly gold: { readonly coins: number; readonly pieces: readonly GoldPiece[] };
+};
 
 export type SharkPassTier = {
   readonly tier: number;
@@ -58,8 +69,11 @@ export type SharkPassState =
       readonly points: number; readonly tier: number; readonly points_into_tier: number; readonly premium: boolean; readonly plus?: boolean;
       readonly vip: boolean; readonly vip_bonus_percent: number; readonly claimable: number; readonly today: readonly SharkPassEvent[];
       readonly catch_up?: boolean; readonly catch_up_percent?: number; readonly top_prize?: SharkPassReward | null;
+      /** The last step the step-up moment played for (any device). Null before the first. */
+      readonly last_seen_tier?: number | null;
     };
     readonly tiers?: readonly SharkPassTier[];
+    readonly cosmetics?: SharkPassCosmetics;
     readonly quests?: { readonly daily: readonly SharkPassQuest[]; readonly weekly: SharkPassQuest | null };
     readonly account_token?: string;
   };
@@ -77,7 +91,7 @@ export async function getSharkPass(): Promise<SharkPassState | null> {
 }
 
 export async function claimSharkPassReward(tier: number, track: 'free' | 'paid'):
-  Promise<{ tier: number; track: string; granted: Record<string, unknown>; pass: SharkPassState }> {
+  Promise<{ tier: number; track: string; granted: Record<string, unknown>; pass: SharkPassState; set_bonus?: { frame: string; name: string; new: boolean } }> {
   const { data } = await client.post('/me/shark-pass/claim', { tier, track }, { timeout: 15000 });
   return data.data;
 }
@@ -89,6 +103,22 @@ export async function claimAllSharkPass(): Promise<{ claimed: { tier: number; tr
 
 export async function redeemSharkPass(signedTransaction: string): Promise<SharkPassState> {
   const { data } = await client.post('/me/shark-pass/redeem', { signed_transaction: signedTransaction }, { timeout: 15000 });
+  return data.data;
+}
+
+/** The step-up moment played for this step (best effort; never blocks). */
+export async function markSharkPassSeen(tier: number): Promise<void> {
+  await client.post('/me/shark-pass/seen', { tier }, { timeout: 8000 }).catch(() => undefined);
+}
+
+/** Wear a frame the player owns, or none. */
+export async function wearFrame(frame: string | null): Promise<void> {
+  await client.post('/me/shark-pass/frame', { frame }, { timeout: 10000 });
+}
+
+/** A gold edition of an owned season pin, for coins (never real money). */
+export async function buyGoldEdition(art: string): Promise<{ granted: { item_id?: number }; spent: number; name: string; pass: SharkPassState }> {
+  const { data } = await client.post('/me/shark-pass/gold', { art }, { timeout: 15000 });
   return data.data;
 }
 

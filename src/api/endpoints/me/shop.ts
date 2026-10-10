@@ -24,6 +24,8 @@ export type ShopCatalog = {
   /** The shop day ('YYYY-MM-DD', parks' time zone); sent back with a Daily Deal purchase. */
   readonly day: string;
   readonly day_ends_at: string;
+  /** The once-ever Starter Pack offer was seen (kept per player, any device). */
+  readonly starter_seen_at?: string | null;
   /** Passed to StoreKit as appAccountToken so a purchase names its buyer. */
   readonly account_token: string;
   readonly wallet: ShopWallet;

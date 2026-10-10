@@ -34,6 +34,7 @@ const USD: Record<string, number> = {
   'com.themeparkshark.app.coins.7000': 9.99,
   'com.themeparkshark.app.rescue.3': 0.99,
   'com.themeparkshark.app.pack.parktrip': 5.99,
+  'com.themeparkshark.app.coins.16000': 19.99,
 };
 
 export function captureShopPrices(ids: readonly string[]): Record<string, ShopPrice> {

@@ -12,7 +12,7 @@ import { getSharkPass, type SharkPassState } from '../../api/endpoints/me/shark-
 import * as RootNavigation from '../../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../../ui';
 import { MAX_FONT } from './moneyUi';
-import { rewardWords } from '../../services/money/sharkPassModel';
+import { isWearable, rewardWords } from '../../services/money/sharkPassModel';
 
 const EMBLEM = require('../../../assets/images/sharkpass/pass-emblem.webp');
 
@@ -35,7 +35,7 @@ function nextBannerPrize(state: SharkPassState, premium: boolean) {
   const per = state.season.points_per_tier;
   for (const t of state.tiers) {
     if (t.unlocked) continue;
-    const reward = premium ? (t.paid.type === 'item' ? t.paid : t.free?.type === 'item' ? t.free : null) : t.free?.type === 'item' ? t.free : null;
+    const reward = premium ? (isWearable(t.paid) ? t.paid : isWearable(t.free) ? t.free : null) : isWearable(t.free) ? t.free : null;
     if (reward) return { reward, pointsAway: Math.max(0, t.tier * per - state.progress.points) };
   }
   return null;
