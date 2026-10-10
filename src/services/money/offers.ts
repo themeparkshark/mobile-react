@@ -172,3 +172,24 @@ export function gearLine(buys: { gear: number; gear_price: number } | null | und
   if (!buys || buys.gear < 1) return null;
   return `Buys about ${buys.gear} ${buys.gear === 1 ? 'piece' : 'pieces'} of gear${bonus ? ` (${bonus}% more)` : ''}`;
 }
+
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+/**
+ * The Shark Shop's next new-gear days, read-only, from the store's own rotation (next restock + interval).
+ * "Monday, October 13". Empty when the store doesn't rotate. Exported for tests.
+ */
+export function dropDays(nextRotationAt: string | null, intervalDays: number, count = 3, timeZone = 'America/Los_Angeles'): string[] {
+  if (!nextRotationAt || !(intervalDays > 0)) return [];
+  const first = new Date(nextRotationAt);
+  if (Number.isNaN(first.getTime())) return [];
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(first.getTime() + i * intervalDays * 86_400_000);
+    let parts: { type: string; value: string }[] = [];
+    try { parts = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'long', month: 'long', day: 'numeric' }).formatToParts(d); } catch { /* no Intl: device time */ }
+    const get = (t: string) => parts.find(p => p.type === t)?.value ?? '';
+    const wd = get('weekday') || DAYS[d.getDay()];
+    const mo = get('month') || MONTHS[d.getMonth()];
+    return `${wd}, ${mo} ${get('day') || d.getDate()}`;
+  });
+}

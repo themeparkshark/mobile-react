@@ -33,7 +33,9 @@ import { getAdSummary, type AdSummary } from '../../api/endpoints/me/ad-rewards'
 import getVipPerks, { type VipPerk } from '../../api/endpoints/economy/vip-perks';
 import { onShopDelivered, storeAvailable } from '../../services/purchases';
 import { adsAvailable, rewardText, watchForReward } from '../../services/ads';
-import { baseRates, bonusPercent, bundleWorth, gearLine } from '../../services/money/offers';
+import { baseRates, bonusPercent, bundleWorth, dropDays, gearLine } from '../../services/money/offers';
+import getStores from '../../api/endpoints/stores/stores';
+import getStoreRotation from '../../api/endpoints/stores/rotation';
 import { buyPack, outcomeMessage, refreshSupplies, useSupplies } from '../../services/money/supplies';
 import { trackImpression } from '../../services/money/track';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../../ui';
@@ -93,6 +95,14 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const scroll = useRef<ScrollView>(null);
   const scrolledTo = useRef(false);
 
+  // Read-only: the Shark Shop's next new-gear days, from its own rotation (nothing to buy here).
+  const [drops, setDrops] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    void getStores().then(list => list.find(x => x.name === 'Shark Shop')?.id).then(id => (id ? getStoreRotation(id) : null))
+      .then(r => { if (live && r) setDrops(dropDays(r.next_rotation_at, r.interval_days)); }).catch(() => undefined);
+    return () => { live = false; };
+  }, []);
   const reloadAds = useCallback(() => getAdSummary().then(setAds).catch(() => null), []);
   useEffect(() => {
     if (!player) return;
@@ -294,6 +304,15 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
         );
       })}
 
+      {drops.length > 0 && (
+        <View style={st.drops} accessible accessibilityLabel={`New gear in the Shark Shop: ${drops.join(', ')}.`}>
+          <GameIcon name="new" size={26} />
+          <View style={{ flex: 1 }}>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.dropsHead}>NEW GEAR IN THE SHARK SHOP</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.dropsText}>{drops.join(' · ')}</Text>
+          </View>
+        </View>
+      )}
       <View style={st.rules}>
         {catalog.rules.map(rule => (
           <View key={rule} style={st.ruleRow}>
@@ -406,6 +425,9 @@ function Notice({ icon, title, body, action }: {
 }
 
 const st = StyleSheet.create({
+  drops: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 16, backgroundColor: 'rgba(5,40,90,0.55)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
+  dropsHead: { fontFamily: FONT.display, fontSize: 14, color: '#ffd34d' },
+  dropsText: { fontFamily: FONT.body, fontSize: 14, color: '#ffffff' },
   center: { flex: 1, justifyContent: 'center' },
   scroll: { padding: 14, paddingBottom: 48, gap: 14 },
   wallet: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 8 },

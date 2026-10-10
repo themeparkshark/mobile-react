@@ -224,3 +224,9 @@ test('the pass worth line is computed from the server row and Supplies prices, r
   assert.match(read('src/screens/SharkPassScreen.tsx'), /regularValue\(\{ coins: g\.coins, tickets: g\.tickets, rescue_passes: g\.rescue_passes \}, baseRates\(supplies\.catalog\.products, supplies\.prices\)\)/);
   assert.match(read('src/screens/SharkPassScreen.tsx'), /if \(!value \|\| value < price\.amount \* 1\.5\) return null;/, 'shown only when clearly worth more');
 });
+
+test('the new-gear days come from the store rotation, read-only', () => {
+  assert.deepEqual(plain(offers.dropDays('2026-10-13T07:00:00Z', 7, 2)), ['Tuesday, October 13', 'Tuesday, October 20']);
+  assert.deepEqual(plain(offers.dropDays(null, 7)), []);
+  assert.deepEqual(plain(offers.dropDays('2026-10-13T07:00:00Z', 0)), []);
+});
