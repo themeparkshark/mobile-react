@@ -264,7 +264,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     if (raf.current !== null) cancelAnimationFrame(raf.current);
     raf.current = null; playing.current = false; finished.current = false; played.current = 0;
     heldRef.current = false; goPending.current = false; perfectChain.current = 0; hpAtBell.current = null;
-    shownStage.current = 0; setHatGone(false); hatOff.value = 0; koShown.current = false; hpNowRef.current = hpLeft;
+    shownStage.current = 0; setHatGone(false); hatOff.value = 0; koShown.current = false; koMine.current = false; hpNowRef.current = hpLeft;
     seedRef.current = (seedRef.current * 7919 + 17) % 1000003;
     engine.current = { ...createBash(seedRef.current), ...(warmStart ? { headStart: 1, power: 1 } : {}) };
     frameStats.current = { n: 0, slow: 0, worst: 0, sum: 0 };
@@ -518,7 +518,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     const spots = [[0.25, 0.62], [0.68, 0.7], [0.45, 0.86]];
     spots.forEach(([fx0, fy0], i) => later(i * 70, () => addFx({ t: 'ink', x: L.w * fx0, y: L.h * fy0, size: L.w * 0.42, rot: (i - 1) * 20 }, INKED_MS)));
     if (!reduced) shake.shake(5, 160);
-    sfx('bo_feint_giggle', 'fx.nope', { volume: 0.9 });
+    sfx('bo_grit_loss', 'fx.nope', { volume: 0.9 });
     haptic('failBuzz');
   };
   const onSplash = (lane: number) => {
@@ -544,6 +544,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
   // --- Live knockout: the moment the raid HP hits 0 in your round is the biggest beat of the fight ---------
   const koShown = useRef(false);
+  const koMine = useRef(false);
   const hpNowLive = Math.max(0, hpLeft - (capLeft === undefined ? hud.damage : Math.min(hud.damage, capLeft)));
   const teamHitRef = useRef<number | null>(null); teamHitRef.current = teamHit;
   const hpNowRef = useRef(hpLeft);
@@ -552,6 +553,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     if (koShown.current || !visible || !playing.current || finished.current || hpNowLive > 0 || before <= 0) return;
     koShown.current = true;
     const mine = teamHitRef.current === null;
+    koMine.current = mine;
     frozenUntil.current = Date.now() + 150;
     endDizzy(); endInkTell(); setHint('none');
     setFx(list => list.filter(f => f.t === 'num'));
@@ -567,6 +569,18 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     }
     sfx('bo_ko_kraken', 'fx.reward', { volume: 1 });
     haptic('comboHeavy'); later(160, () => haptic('success'));
+    // The wait to the bell is a victory lap: the beaten boss bobs, coins rain, the shark cheers, taps make sparkles.
+    setPose('cheer');
+    if (!reduced) {
+      bossRise.value = withDelay(400, withRepeat(withSequence(withTiming(-0.05, { duration: 420, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: 420, easing: Easing.inOut(Easing.quad) })), -1, false));
+      const rain = () => {
+        if (finished.current || !koShown.current) return;
+        particles.current?.burst({ x: L.w * (0.15 + Math.random() * 0.7), y: L.bossTop, preset: 'burst', count: 8, colors: [BRAND.gold, BRAND.goldLight, BRAND.white], speed: 0.7 });
+        later(380, rain);
+      };
+      later(500, rain);
+    }
     // The server needs a 12 s round: a knockout earlier than that ends the round at 12.5 s.
     later(Math.max(reduced ? 600 : 1300, 12_500 - played.current), () => finishRef.current());
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -607,7 +621,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     const total = bashScore(s, damageRate, weights);
     return {
       score: total,
-      stars: bashStars(s, weights),
+      // The player who lands the knockout always gets at least two stars.
+      stars: koShown.current && koMine.current ? Math.max(2, bashStars(s, weights)) : bashStars(s, weights),
       message: total > 0 ? 'NICE HIT!' : 'TRY AGAIN',
       meta: { hits: s.hits, weak_hits: s.weak, duration_ms: Math.round(Math.min(ROUND_MS, Math.max(12000, played.current))),
         stars: bashStars(s, weights), bonks: s.bonks, smashes: s.smashes, perfects: s.perfects, ouches: s.ouches, blocks: s.blocks, inks: s.inks,
@@ -639,8 +654,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       addFx({ t: 'burst', src: BASH_ART.splash, x: L.w / 2, y: L.waterY + 10, size: L.w * 0.5 }, 500);
       sfx('bo_kraken_slam', 'fx.whoosh', { volume: 0.8 });
     });
-    sfx('bo_ko_kraken', 'fx.reward', { volume: 0.9 });
-    haptic('success');
+    // The bell has its own sound; the knockout sound already played at the KO.
+    if (koShown.current) sfx('bo_skill_star', 'ui.complete', { volume: 0.9 }); else { sfx('bo_ko_kraken', 'fx.reward', { volume: 0.9 }); haptic('success'); }
     const built = buildResult(s);
     onActiveChange?.(false);
     if (s.hits > 0) onRoundEnd?.(built.meta ?? {});
@@ -740,7 +755,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
 
   // --- Input ---------------------------------------------------------------------
   const tapLane = (lane: number) => {
-    if (!playing.current || koShown.current) return;
+    if (koShown.current) { victoryTap(); return; }
+    if (!playing.current) return;
     const s = engine.current;
     // Dizzy (flopped on the water): the boss is the target, anywhere you tap. During the ink, only the boss blocks.
     if (s.dizzy) { tapHead(); return; }
@@ -761,8 +777,18 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     engine.current = r.state;
     apply(r.events);
   };
+  /** After a knockout: bonk the beaten boss for sparkles and a pling, never for score. */
+  const victoryTap = () => {
+    if (finished.current) return;
+    const x = L.head.x + (Math.random() - 0.5) * L.bossSize * 0.4, y = L.head.y + (Math.random() - 0.5) * L.bossSize * 0.2;
+    addFx({ t: 'burst', src: BASH_ART.sparkle, x, y, size: 70 }, 420);
+    if (!reduced) particles.current?.burst({ x, y, preset: 'burst', count: 6, colors: [BRAND.gold, BRAND.white], speed: 0.6 });
+    GameAudio.play('fx.coinTick', { volume: 0.7, pitch: Math.floor(Math.random() * 6) });
+    haptic('tapLight');
+  };
   const tapHead = () => {
-    if (!playing.current || koShown.current) return;
+    if (koShown.current) { victoryTap(); return; }
+    if (!playing.current) return;
     const r = tapBoss(engine.current, played.current, cap, weights);
     engine.current = r.state;
     apply(r.events);
