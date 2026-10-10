@@ -141,10 +141,11 @@ test('accent ink stays readable', () => {
 });
 
 test('round 4: one ribbon per tile; a quiet finale banner keeps tiles calm', () => {
-  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true, returning: true, is_new: true } })), { ribbon: 'last_chance' });
+  // Oct 8: no LAST CHANCE / BACK AGAIN chips at all; NEW! is the only non-date ribbon.
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true, returning: true, is_new: true } })), { ribbon: 'new' });
   assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true, is_new: true } }, true)), { ribbon: 'new' }, 'quiet: no red wall');
   assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true } }, true)), { ribbon: null });
-  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { returning: true, is_new: true } })), { ribbon: 'returning' });
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { returning: true, is_new: true } })), { ribbon: 'new' });
   assert.deepEqual(plain(shelves.tileLanes({ id: 1, has_purchased: true, shop: { is_new: true } })), { ribbon: null }, 'owned: no ribbon');
   assert.equal(shelves.newCountLabel(3), '3 new today');
   assert.equal(shelves.newCountLabel(0), null);
@@ -256,6 +257,7 @@ test('round 4: wear failure has its own message and retry, never a buy', () => {
   assert.equal(shelves.tryOnCta({ ...idle, finishes: true }).label, 'Complete the look: 200');
   assert.equal(shelves.tryOnCta({ ...idle, phase: 'confirm' }).action, 'buy');
   assert.equal(shelves.tryOnCta({ ...idle, short: 120 }).label, 'Need 120 more coins');
+  assert.doesNotMatch(shelves.tryOnCta({ ...idle, short: 120 }).note, /ride coins/, 'glossary: ride coins are the collectible');
   assert.equal(shelves.tryOnCta({ ...idle, phase: 'unknown' }).action, 'recheck');
 });
 
@@ -746,8 +748,9 @@ test('pre-launch 2: shelf jump bar highlights the shelf under the bar', () => {
     assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
   }
   for (const icon of ['streak', 'gift', 'sparkle', 'heart', 'ride', 'medal1', 'star', 'dice']) assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
-  // (The Secret Shop's four short shelves have no jump bar; the Shark Shop always does.)
-  assert.match(code, /\{!secret && <JumpBar chips=\{chips\} tops=\{tops\} scrollY=\{shelfY\} maxY=\{maxY\} onJump=\{jump\} \/>\}\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);
+  // (The Secret Shop is one showroom with no jump bar; the Shark Shop always has one.)
+  assert.match(code, /\{secret \? \(\s*<FxPauseContext\.Provider value=\{!!open\}>\s*<SecretShowroom /);
+  assert.match(code, /\) : \(<>\s*<JumpBar chips=\{chips\} tops=\{tops\} scrollY=\{shelfY\} maxY=\{maxY\} onJump=\{jump\} \/>\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);
   assert.match(code, /accessibilityLabel=\{`Jump to \$\{chip\.label\}`\}/);
   for (const key of ['hero', 'featured', 'daily']) assert.match(code, new RegExp(`onLayout=\\{measure\\('${key}'\\)\\}`));
 });
@@ -755,9 +758,8 @@ test('pre-launch 2: shelf jump bar highlights the shelf under the bar', () => {
 test('pre-launch 3 and 4: the hero is house blue, and a fallback day hides the next-week placeholder', () => {
   const code = src('src/screens/StoreScreen/ShopShelves.tsx');
   assert.match(code, /<LinearGradient colors=\{\[\.\.\.NIGHT_SKY\]\} style=\{StyleSheet\.absoluteFill\} \/>/, 'the card is the night stage blue, so the stage has no seam');
-  // The Secret Shop's Vault paints its own night sky on its stage (VaultHero).
-  // No sky box of its own: the vault panel's navy runs behind the stage, so nothing ends on a straight line.
-  assert.match(code, /tone="night" sky=\{false\} rays=\{SECRET_THEME\.inkGold\} still=\{still\}/);
+  // The Secret Shop's showroom paints the vault's night sky on its stage, with soft gold rays (Oct 8 showroom).
+  assert.match(src('src/screens/StoreScreen/SecretShowroom.tsx'), /tone="night" sky=\{false\} rays=\{V\.inkGold\}/);
   const sky = /NIGHT_SKY = \['(#[0-9a-f]{6})', '(#[0-9a-f]{6})'\]/i.exec(src('src/screens/StoreScreen/shopUi.tsx'));
   const lum = hex => { const n = parseInt(hex.slice(1), 16); const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => { const q = v / 255; return q <= 0.03928 ? q / 12.92 : ((q + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
   for (const bg of [sky[1], sky[2]]) for (const ink of ['#ffffff', '#e2f6ff', '#ffe07a']) {
@@ -774,7 +776,7 @@ test('pre-launch 3 and 4: the hero is house blue, and a fallback day hides the n
 test('pre-launch 6: Checking uses the muted face', () => {
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
   assert.match(sheet, /muted=\{cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
-  assert.match(sheet, /disabled=\{hold \|\| wear === 'spinning' \|\| cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
+  assert.match(sheet, /disabled=\{hold \|\| wear === 'spinning' \|\| cta\.look === 'paused' \|\| cta\.look === 'checking'/);
 });
 
 test('pre-launch 5: the buy hand-off bridges into the reveal on navy (no idle shelf)', () => {
@@ -842,7 +844,7 @@ test('polish 3: the hand-off covers the whole screen, the reveal shows at once, 
 
 test('polish 4: the active chip scales in a fixed box (the row never shifts)', () => {
   const code = src('src/screens/StoreScreen/ShopShelves.tsx');
-  assert.match(code, /jumpSlot: \{ width: 50, height: 50/);
+  assert.match(code, /jumpSlot: \{ width: 64, height: 66/, "a fixed box with room for the one-word label");
   const on = /jumpChipOn: \{([^}]*\}[^}]*)\}/.exec(code)[1];
   assert.equal(/width|height/.test(on), false, 'no size change on the active chip');
   assert.match(on, /scale: 1\.14/);

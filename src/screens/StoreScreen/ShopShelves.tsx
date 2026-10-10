@@ -38,16 +38,17 @@ import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
   activeShelf, dailyPill, dropReveal, emptyShelvesCopy, eventChips, fallbackBannerCopy, eventDropPill, eventEndPill, eventKicker, fallbackPollMs, featuredPill, formatCoins, HERO, heroItem, heroLayout,
   heroChips, heroPriceRow, inkOn, newCountLabel, pieceState, queueReveal, readySummary, restockBackoffMs, rewardPendingFor, sectionAccent, setA11y, setProgressText,
-  settleClaims, shortDate, stableOrder, stageCard, startFallbackPoll, wishSavedCopy,
+  settleClaims, shortDate, stableOrder, startFallbackPoll, wishSavedCopy,
 } from '../../helpers/shopShelves';
 import { isItemWorn, itemDisplayName, outfitLayerUrls, wearableBadge } from '../../helpers/wardrobe';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { ShopItem, ShopSection, ShopSetReward, ShopSetSummary, ShopTease, ShopToday } from '../../models/shop-today';
-import { BRAND, FONT, GameButton, GameDialog, GameIcon, SHADOW, type GameIconName } from '../../ui';
+import { BRAND, FONT, GameDialog, GameIcon, SHADOW, type GameIconName } from '../../ui';
 import SetCompleteReveal from './SetCompleteReveal';
+import SecretShowroom from './SecretShowroom';
 import ShopTile, { TileArt } from './ShopTile';
 import TryOnSheet, { asWearable, previewLook } from './TryOnSheet';
-import { MAX_FONT, NIGHT_SKY, PieceChip, REVEAL_NAVY, SHOP_SURFACE, Sheen, ShopCta, ShopStage, ShopToast, TimerPill, useShopNow, useShopToast, WishHeart } from './shopUi';
+import { MAX_FONT, NIGHT_SKY, PieceChip, REVEAL_NAVY, SHOP_SURFACE, Sheen, ShopCta, ShopStage, ShopToast, TimerPill, useShopNow, useShopToast } from './shopUi';
 
 function ShopCtaInline({ label, onPress, busy }: { label: string; onPress: () => void; busy: boolean }) {
   const still = useReducedGameMotion();
@@ -55,13 +56,11 @@ function ShopCtaInline({ label, onPress, busy }: { label: string; onPress: () =>
 }
 import { FxSceneBackdrop } from '../../fx/FxSolo';
 import { SECRET_THEME } from '../../fx/secretTheme';
-import { SecretPreviewBanner, StarMotes } from './SecretShopUi';
-import { VAULT, VaultPanel, VaultRibbon } from './SecretVault';
 import { FxPauseContext } from '../../fx/FxStage';
 import { isSecretItem } from '../../fx/registry';
 import { ShopProfile } from './shopProfile';
-import { leavingIcon, leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
-import { useWishCount, wishStore } from './wishStore';
+import { leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
+import { wishStore } from './wishStore';
 
 const SCREEN_W = Dimensions.get('window').width;
 const GAP = 12;
@@ -69,23 +68,20 @@ const GAP = 12;
 const GRID_PAD = 8;
 const TILE_W = Math.floor((SCREEN_W - 2 * (10 + 3 + GRID_PAD) - GAP * 2) / 3);
 const EVENT_TILE_W = Math.min(124, TILE_W + 8);
-// Secret Shop shelves hold 1 to 3 pieces: two big showcase tiles a row, centred, so an animated piece
-// has room to move and a short shelf never reads as half empty (secret-shop/DESIGN.md 6.3).
-const SECRET_TILE_W = Math.floor((SCREEN_W - 2 * (10 + 3 + GRID_PAD) - GAP) / 2);
 // The hero card (heroLayout is shared with the layout test): kicker row, then text column and stage.
 const HERO_L = heroLayout(SCREEN_W);
 const HERO_H = HERO.kickerH + HERO_L.bodyH;
 const FIRST_OPEN_KEY = 'shop:first-open-day';
 /** The sticky shelf jump bar above the scroll. */
-const JUMP_H = 58;
+const JUMP_H = 72;
 const PENDING_REVEALS_KEY = 'shop:pending-reveals';
 // Hero stage: 62% of the card's inner width, under the kicker row; the tail rests on the plinth.
 const HERO_CARD = HERO_L.card;
 const HERO_CARD_STYLE = { position: 'absolute' as const, ...HERO_CARD.box };
 const MINI_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: 0 };
 
-type Open = { item: ShopItem; fullLook: boolean; bought: boolean; accent: string | null } | null;
-type OpenFn = (item: ShopItem, opts?: { fullLook?: boolean; bought?: boolean; accent?: string | null }) => void;
+type Open = { item: ShopItem; fullLook: boolean; bought: boolean; accent: string | null; confirm?: boolean } | null;
+type OpenFn = (item: ShopItem, opts?: { fullLook?: boolean; bought?: boolean; accent?: string | null; confirm?: boolean }) => void;
 
 const SectionPills = memo(function SectionPills({ section, offset, still, single = false }: { section: ShopSection; offset: number; still: boolean;
   /** One honest pill per shelf (the Secret Shop: no "new drop" next to "ends", kids UX round 1). */
@@ -134,7 +130,7 @@ const Grid = memo(function Grid({ items, vip, balance, still, bought, quiet = fa
     <ShopProfile key={item.id} id={`tile-${item.id}`}>
       <Animated.View entering={flipIn && !still ? FadeInUp.delay(120 + i * 70).springify().damping(14) : undefined}>
         <ShopTile item={item} width={width} still={still} quiet={quiet}
-          vipLocked={!!item.is_member_item && !vip} affordable={balance >= item.cost} justBought={bought.includes(item.id)}
+          vipLocked={!!item.is_member_item && !vip} affordable={balance >= item.cost} balance={balance} justBought={bought.includes(item.id)}
           onOpen={onOpen} onWish={onWish} />
       </Animated.View>
     </ShopProfile>
@@ -228,28 +224,14 @@ const ReadyCard = memo(function ReadyCard({ sets, todayIds, busy, onClaimAll }: 
   );
 });
 
-const EventBanner = memo(function EventBanner({ section, offset, still, vip, balance, bought, flipIn, todayIds, setsBySlug, onOpen, onWish, onTrySet, secret = false }: {
-  section: ShopSection; offset: number; still: boolean; vip: boolean; balance: number; bought: number[]; flipIn: boolean; secret?: boolean;
+const EventBanner = memo(function EventBanner({ section, offset, still, vip, balance, bought, flipIn, todayIds, setsBySlug, onOpen, onWish, onTrySet }: {
+  section: ShopSection; offset: number; still: boolean; vip: boolean; balance: number; bought: number[]; flipIn: boolean;
   todayIds: number[]; setsBySlug: Map<string, ShopSetSummary>;
   onOpen: OpenFn; onWish: (item: ShopItem) => void; onTrySet: (set: ShopSetSummary) => void;
 }) {
   const accent = sectionAccent(section);
   const ink = section.art_url ? '#ffffff' : inkOn(accent);
   const openHere = useCallback((item: ShopItem) => onOpen(item, { accent }), [onOpen, accent]);
-  if (secret) {
-    // The vault's season drop: a vault panel, the drawn season art in the corner, a ribbon title.
-    return (
-      <VaultPanel>
-        {!!section.event_key && SEASON_ART[section.event_key] != null && <Image source={SEASON_ART[section.event_key]} style={styles.vaultSeasonArt} contentFit="contain" />}
-        <View style={styles.vaultSectionHead}>
-          <VaultRibbon title={section.title} width={Math.min(250, SCREEN_W * 0.62)} />
-          <SectionPills section={section} offset={offset} still={still} single />
-        </View>
-        <Grid items={section.items} vip={vip} balance={balance} still={still} bought={bought} quiet={!!section.quiet_tiles} flipIn={flipIn}
-          width={SECRET_TILE_W} centered onOpen={openHere} onWish={onWish} />
-      </VaultPanel>
-    );
-  }
   return (
     <View style={[styles.event, { backgroundColor: accent }]}>
       {section.art_url ? (
@@ -276,7 +258,7 @@ const EventBanner = memo(function EventBanner({ section, offset, still, vip, bal
 });
 
 /** One chip per shelf: icons, not words (a 7-year-old jumps without reading). */
-type ShelfChip = { key: string; icon: GameIconName; label: string; fill?: string | null; ring?: string | null };
+type ShelfChip = { key: string; icon: GameIconName; label: string; short: string; fill?: string | null; ring?: string | null };
 
 /**
  * The jump bar owns the highlight: it follows the scroll on the UI thread and re-renders only
@@ -302,8 +284,10 @@ const JumpBar = memo(function JumpBar({ chips, tops, scrollY, maxY, onJump, floo
             accessibilityState={{ selected: on }} accessibilityLabel={`Jump to ${chip.label}`} style={styles.jumpSlot}>
             <View style={[styles.jumpChip, chip.fill ? { backgroundColor: chip.fill } : null, chip.ring ? { borderColor: chip.ring } : null,
               on && styles.jumpChipOn]}>
-              <GameIcon name={chip.icon} size={24} />
+              <GameIcon name={chip.icon} size={22} />
             </View>
+            {/* One word under each jump button, so it reads without guessing (Oct 8 shop call). */}
+            <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.jumpLabel, on && styles.jumpLabelOn]}>{chip.short}</Text>
           </Pressable>
         );
       })}
@@ -339,7 +323,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
       {/* House blue like the panels: the lit plinth on a night stage is the one bright object. */}
       <LinearGradient colors={[...NIGHT_SKY]} style={StyleSheet.absoluteFill} />
       <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
-        accessibilityLabel={`This week's star: ${itemDisplayName(item)}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}`}>
+        accessibilityLabel={`This week's star: ${itemDisplayName(item)}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} coins. Tap to try it on.`}`}>
         <View style={styles.heroStage}>
           <ShopStage rim={glow} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={false} still={still}
             plinth={stage?.scene ? 'none' : 'house'}
@@ -396,89 +380,19 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
   );
 });
 
-/** The Vault's stage: full width, the piece live on your shark, the one bright thing on the screen. */
-const VAULT_INNER_W = SCREEN_W - 20 - 2 * VAULT.rim;
-const VAULT_STAGE_H = Math.round(Math.min(330, VAULT_INNER_W * 0.86));
-// Room for the jetpack's lift (up to 0.135 of the card) so a floating shark never leaves the stage.
-const VAULT_CARD = stageCard(VAULT_INNER_W, VAULT_STAGE_H, 0.16 * VAULT_STAGE_H);
-const VAULT_CARD_STYLE = { position: 'absolute' as const, ...VAULT_CARD.box };
 // The kicker and timer pill sit right above a hero stage: a lifting rig keeps this much clear of them (art panel, framing round 3).
 const STAGE_TOP_CLEAR = 16;
 
-/**
- * The Members' Vault hero (redesign): ribbon title, the stage with your shark wearing the piece,
- * then one calm plate (name, price, a "moves" chip) and one CTA. One focal point.
- */
 /** The hero cards carry the same calm LEAVING / RETIRING mark as the tiles (members-only pieces: members only). */
 function LeavingChip({ item, member }: { item: ShopItem; member: boolean }) {
   const leaving = visibleLeaving(item.shop, { secret: isSecretItem(item), vipLocked: !!item.is_member_item && !member });
   if (!leaving || (item.shop?.is_owned ?? item.has_purchased)) return null;
   return (
     <View style={styles.leavingChip} accessible accessibilityLabel={leavingSay(leaving)}>
-      <GameIcon name={leavingIcon(leaving)} size={13} />
       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leavingChipText}>{leavingRibbon(leaving)}</Text>
     </View>
   );
 }
-
-const VaultHero = memo(function VaultHero({ item, section, offset, still, onOpen }: {
-  item: ShopItem; section: ShopSection; offset: number; still: boolean; onOpen: OpenFn;
-}) {
-  const { player } = useContext(AuthContext);
-  const owned = !!(item.shop?.is_owned ?? item.has_purchased);
-  const worn = isItemWorn(player?.inventory, item);
-  const member = !!player?.is_subscribed;
-  const stage = useMemo(() => previewLook(player?.inventory, [{ id: item.id, name: item.name, icon_url: item.icon_url,
-    paper_url: item.paper_url, no_eye_url: item.no_eye_url, item_type: item.item_type, fx_key: item.fx_key ?? null }], 'base'),
-    [player?.inventory?.skin_item?.id, item.id]);
-  const name = itemDisplayName(item);
-  return (
-    <VaultPanel padded={false}>
-      <View style={styles.vaultTop}>
-        <VaultRibbon title="THE VAULT" width={Math.min(260, SCREEN_W * 0.66)} />
-        <View style={styles.vaultTimer}><SectionPills section={section} offset={offset} still={still} single /></View>
-      </View>
-      <Pressable onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
-        accessibilityLabel={`The Vault: ${name}, moves on your shark. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.')
-          : `${formatCoins(item.cost)} coins${member ? '' : ', VIP members can buy'}. Tap to try it on.`}`}
-        style={{ height: VAULT_STAGE_H }}>
-        <ShopStage rim={SECRET_THEME.gold} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={false} rays={SECRET_THEME.inkGold} still={still}
-          plinth={stage?.scene ? 'none' : 'secret'}
-          backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} /> : undefined}>
-          {!stage?.scene && <StarMotes still={still} />}
-          {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={VAULT_CARD.shadow} liftRoom={Math.max(0, VAULT_CARD.box.top - STAGE_TOP_CLEAR)} style={VAULT_CARD_STYLE} />
-            : <View style={styles.heroFlat}><TileArt item={item} size={190} thumb={false} /></View>}
-        </ShopStage>
-      </Pressable>
-      <View style={styles.vaultPlate}>
-        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.vaultName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{name}</Text>
-        <View style={styles.vaultMeta}>
-          <LeavingChip item={item} member={member} />
-          {!owned && (
-            <View style={styles.vaultPrice} accessible accessibilityLabel={`${formatCoins(item.cost)} coins${member ? '' : ', VIP members can buy'}`}>
-              <GameIcon name="coins" size={20} />
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.vaultPriceText}>{formatCoins(item.cost)}</Text>
-              {!member && <GameIcon name="lock" size={18} />}
-            </View>
-          )}
-          {!!item.fx_key && (
-            // Kids can't see "animated" in a still: say it with an icon and three words.
-            <View style={styles.vaultMoves} accessible accessibilityLabel="This piece moves on your shark">
-              <GameIcon name="sparkle" size={16} />
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.vaultMovesText}>Moves on your shark</Text>
-            </View>
-          )}
-        </View>
-        {owned ? (
-          worn ? (
-            <View style={[styles.wearingChip, { alignSelf: 'center' }]}><GameIcon name="check" size={18} />
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.wearingText}>WEARING</Text></View>
-          ) : <GameButton label="Wear it" icon="check" onPress={() => onOpen(item, { bought: true })} />
-        ) : <GameButton label="Try it on" onPress={() => onOpen(item)} />}
-      </View>
-    </VaultPanel>
-  );
-});
 
 export default function ShopShelves({ today, setToday, onRefresh, offset, focusRequest, scrollY, onHandoff, onOpenFavorites, secret = false }: {
   readonly today: ShopToday;
@@ -574,7 +488,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   const openItem = useCallback<OpenFn>((item, opts = {}) => {
     playSound(require('../../../assets/sounds/reveal.mp3'), { volume: 0.6 });
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    setOpen({ item, fullLook: !!opts.fullLook, bought: !!opts.bought, accent: opts.accent ?? null });
+    setOpen({ item, fullLook: !!opts.fullLook, bought: !!opts.bought, accent: opts.accent ?? null, confirm: !!opts.confirm });
   }, [playSound]);
   const openTile = useCallback((item: ShopItem) => openItem(item), [openItem]);
 
@@ -792,10 +706,10 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   const chips: ShelfChip[] = useMemo(() => {
     const looks = eventChips(events);
     return [
-      ...(featured && hero ? [{ key: 'hero', icon: 'star' as const, label: secret ? 'the Vault' : "this week's star" }] : []),
-      ...events.map((e, i) => ({ key: e.key, icon: looks[i].icon as GameIconName, label: e.title, fill: looks[i].fill, ring: looks[i].ring })),
-      ...(featured && featuredRest.length ? [{ key: 'featured', icon: 'crown' as const, label: secret ? 'More in the Vault' : 'Featured' }] : []),
-      ...(daily ? [{ key: 'daily', icon: 'timer' as const, label: secret ? "Tonight's Pick" : 'Daily' }] : []),
+      ...(featured && hero ? [{ key: 'hero', icon: 'star' as const, label: secret ? 'the Vault' : "this week's star", short: 'Star' }] : []),
+      ...events.map((e, i) => ({ key: e.key, icon: looks[i].icon as GameIconName, label: e.title, short: e.title.split(' ')[0], fill: looks[i].fill, ring: looks[i].ring })),
+      ...(featured && featuredRest.length ? [{ key: 'featured', icon: 'crown' as const, label: secret ? 'More in the Vault' : 'Featured', short: 'Featured' }] : []),
+      ...(daily ? [{ key: 'daily', icon: 'timer' as const, label: secret ? "Tonight's Pick" : 'Daily', short: 'Daily' }] : []),
     ];
   }, [chipSig]);
   const chipKeys = chips.map(c => c.key).join('|');
@@ -850,15 +764,19 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   return (
     <ShopProfile id="shelves">
       <View style={{ flex: 1 }}>
-        {/* The Secret Shop is four short shelves: no unlabeled icon row to decode (kids UX round 1). */}
-        {!secret && <JumpBar chips={chips} tops={tops} scrollY={shelfY} maxY={maxY} onJump={jump} />}
+        {/* The Secret Shop is one showroom: the stage, the plate and one row of pieces (Dustin, Oct 8). */}
+        {secret ? (
+          <FxPauseContext.Provider value={!!open}>
+            <SecretShowroom sections={sections} heroId={featured?.hero_id} offset={offset} still={still} bought={bought}
+              onOpen={openItem} onWish={wish} onFavorites={() => onOpenFavorites?.()} />
+          </FxPauseContext.Provider>
+        ) : (<>
+        <JumpBar chips={chips} tops={tops} scrollY={shelfY} maxY={maxY} onJump={jump} />
         <View style={{ flex: 1 }}>
         <Animated.ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
           onLayout={e => { viewH.value = e.nativeEvent.layout.height; }} onScrollBeginDrag={wake} onTouchStart={wake}
           onScroll={scrollHandler} scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={BRAND.white} />}>
-          {/* Where hearts go, named on every shop: tap to see them, in the shop today or coming back. */}
-          {onOpenFavorites && <FavoritesChip secret={secret} onPress={onOpenFavorites} />}
           {today.fallback && (
             <View style={styles.fallback}><GameIcon name="timer" size={18} />
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fallbackText}>{fallbackBannerCopy(pollStopped)}</Text></View>
@@ -870,7 +788,6 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.emptyBody}>{empty.body}</Text>
             </View>
           )}
-          {secret && !vip && <SecretPreviewBanner />}
           {readySets.length > 0 && (
             <Animated.View entering={enter(0)} exiting={still ? undefined : FadeOutUp.duration(220)}>
               <ReadyCard sets={readySets} todayIds={todayIds} busy={claiming} onClaimAll={() => void claimAll()} />
@@ -883,9 +800,8 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
               <Animated.View entering={enter(0)} onLayout={measure('hero')}>
                 <FxPauseContext.Provider value={pausedFor('hero')}>
                 <ShopProfile id="hero">
-                  {secret ? <VaultHero item={hero} section={featured} offset={offset} still={still} onOpen={openItem} />
-                    : <Hero item={hero} set={heroSet} section={featured} offset={offset} still={still} todayItems={allItems}
-                      tease={heroTease} onOpen={openItem} />}
+                  <Hero item={hero} set={heroSet} section={featured} offset={offset} still={still} todayItems={allItems}
+                    tease={heroTease} onOpen={openItem} />
                 </ShopProfile>
                 </FxPauseContext.Provider>
               </Animated.View>
@@ -896,26 +812,13 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
                 <FxPauseContext.Provider value={pausedFor(section.key)}>
                 <ShopProfile id={`banner-${section.key}`}>
                   <EventBanner section={section} offset={offset} still={still} vip={vip} balance={balance} bought={bought} flipIn={firstOpenToday}
-                    todayIds={todayIds} setsBySlug={setsBySlug} onOpen={openItem} onWish={wish} onTrySet={trySet} secret={secret} />
+                    todayIds={todayIds} setsBySlug={setsBySlug} onOpen={openItem} onWish={wish} onTrySet={trySet} />
                 </ShopProfile>
                 </FxPauseContext.Provider>
               </Animated.View>
             ))}
 
-            {featured && secret && featuredRest.length > 0 && (
-              <Animated.View entering={enter(events.length + 1)} onLayout={measure('featured')}>
-                <VaultPanel>
-                  <View style={styles.vaultSectionHead}>
-                    <VaultRibbon title="MORE IN THE VAULT" width={Math.min(270, SCREEN_W * 0.7)} />
-                  </View>
-                  <FxPauseContext.Provider value={pausedFor('featured')}>
-                  <Grid items={featuredRest} vip={vip} balance={balance} still={still} bought={bought} flipIn={firstOpenToday} onOpen={openTile} onWish={wish}
-                    width={SECRET_TILE_W} centered />
-                  </FxPauseContext.Provider>
-                </VaultPanel>
-              </Animated.View>
-            )}
-            {featured && !secret && (
+            {featured && (
               <Animated.View entering={enter(events.length + 1)} style={styles.panel} onLayout={measure('featured')}>
                 <View style={styles.header}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>FEATURED</Text>
@@ -931,21 +834,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
               </Animated.View>
             )}
 
-            {daily && secret && (
-              <Animated.View entering={enter(events.length + 2)} onLayout={measure('daily')}>
-                <VaultPanel>
-                  <View style={styles.vaultSectionHead}>
-                    <VaultRibbon title="TONIGHT'S PICK" width={Math.min(250, SCREEN_W * 0.62)} />
-                    <SectionPills section={daily} offset={offset} still={still} />
-                  </View>
-                  <FxPauseContext.Provider value={pausedFor('daily')}>
-                  <Grid items={daily.items} vip={vip} balance={balance} still={still} bought={bought} flipIn={firstOpenToday} onOpen={openTile} onWish={wish}
-                    width={SECRET_TILE_W} centered />
-                  </FxPauseContext.Provider>
-                </VaultPanel>
-              </Animated.View>
-            )}
-            {daily && !secret && (
+            {daily && (
               <Animated.View entering={enter(events.length + 2)} style={styles.panel} onLayout={measure('daily')}>
                 <View style={[styles.header, { overflow: 'hidden', borderTopLeftRadius: 19, borderTopRightRadius: 19 }]}>
                   {firstOpenToday && <Sheen still={still} delay={700} width={SCREEN_W} />}
@@ -964,15 +853,16 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
           </Animated.View>
         </Animated.ScrollView>
         {/* Content fades under the tab row instead of a hard cut. */}
-        <LinearGradient pointerEvents="none" colors={secret ? [SECRET_THEME.floor, 'rgba(10,22,54,0)'] : [BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
+        <LinearGradient pointerEvents="none" colors={[BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
         </View>
+        </>)}
         <ShopToast message={toast} still={still} />
         {handoff && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />}
       </View>
 
       {open && (
         <TryOnSheet item={open.item} set={openSet} todayIds={todayIds} still={still} accent={open.accent}
-          startFullLook={open.fullLook} startBought={open.bought}
+          startFullLook={open.fullLook} startBought={open.bought} startConfirm={!!open.confirm}
           onClose={closeTryOn} onLeaving={leavingTryOn} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
           checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={rewardPendingFor(reveals, open.item.shop?.set?.slug)} secret={secret} />
       )}
@@ -988,33 +878,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   );
 }
 
-/** "Favorites" with its heart and count, at the top of the shelves (Shark Shop and Secret Shop). */
-function FavoritesChip({ secret, onPress }: { secret: boolean; onPress: () => void }) {
-  const count = useWishCount();
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" hitSlop={6}
-      accessibilityLabel={`Favorites, ${count} ${count === 1 ? 'item' : 'items'}. Tap to see them.`}
-      style={({ pressed }) => [styles.favChip, secret && styles.favChipSecret, pressed && { transform: [{ scale: 0.97 }] }]}>
-      <WishHeart on={count > 0} size={22} />
-      <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.favText, secret && { color: SECRET_THEME.inkGold }]}>FAVORITES</Text>
-      {count > 0 && <View style={styles.favCount}><Text maxFontSizeMultiplier={MAX_FONT} style={styles.favCountText}>{count}</Text></View>}
-    </Pressable>
-  );
-}
-
 const S = SHOP_SURFACE;
-const MOON_BATS = require('../../../assets/fx/moonbats.webp');
-/** The vault season drop's drawn corner art, per season (wave 2 adds the non-Halloween seasons). */
-const SEASON_ART: Record<string, number> = {
-  halloween: MOON_BATS,
-  holiday: require('../../../assets/fx/gift-mini.webp'),
-  winter: require('../../../assets/fx/snowflake.webp'),
-  valentines: require('../../../assets/fx/heart-red.webp'),
-  new_year: require('../../../assets/fx/fw-crown.webp'),
-  park_birthday: require('../../../assets/fx/party-hat.webp'),
-  spring: require('../../../assets/fx/blossom-crown.webp'),
-  summer: require('../../../assets/fx/snorkel-mask.webp'),
-};
 /** The season drop's timer icon: never a pumpkin outside Halloween (kids UX, wave 2). */
 function seasonIcon(key: string | null | undefined): GameIconName {
   if (key === 'halloween') return 'pumpkin';
@@ -1025,13 +889,6 @@ function seasonIcon(key: string | null | undefined): GameIconName {
 const styles = StyleSheet.create({
   scroll: { paddingTop: 14, paddingBottom: 40, gap: 14 },
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 24 },
-  favChip: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 12, marginBottom: -4,
-    paddingLeft: 10, paddingRight: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.7)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.85)' },
-  favChipSecret: { backgroundColor: SECRET_THEME.panelDeep, borderColor: SECRET_THEME.gold },
-  favText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white, letterSpacing: 0.5 },
-  favCount: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 5, backgroundColor: '#ff5a7a', alignItems: 'center', justifyContent: 'center' },
-  favCountText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.white },
   fallback: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, padding: 10, borderRadius: 14, backgroundColor: 'rgba(5,52,110,0.6)' },
   fallbackText: { flex: 1, fontFamily: FONT.display, fontSize: 15, color: BRAND.white },
   // Shelf panels in the house blue with white ink (never a white panel).
@@ -1044,7 +901,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6 },
   headerTitle: { fontFamily: FONT.display, fontSize: 22, color: S.ink, letterSpacing: 0.5 },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  moonBats: { position: 'absolute', top: 10, right: 12, width: 96, height: 91 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, paddingHorizontal: GRID_PAD, paddingTop: 14 },
   event: { marginHorizontal: 10, borderRadius: 22, paddingBottom: 14, borderWidth: 3, borderColor: BRAND.white, overflow: 'hidden', ...SHADOW.card },
   eventArt: { position: 'absolute', top: 0, left: 0, right: 0, height: Math.round((SCREEN_W - 20) * 0.4) },
@@ -1063,33 +919,22 @@ const styles = StyleSheet.create({
   teaseQ: { width: 24, textAlign: 'center', fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
   hero: { marginHorizontal: 10, borderRadius: 24, borderWidth: 4, overflow: 'hidden', backgroundColor: S.panel, ...SHADOW.card },
   jumpBar: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, height: JUMP_H, paddingHorizontal: 12, backgroundColor: BRAND.blue },
-  jumpSlot: { width: 50, height: 50, alignItems: 'center', justifyContent: 'center' },
-  jumpChip: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: S.well,
+  jumpSlot: { width: 64, height: 66, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  jumpLabel: { fontFamily: FONT.display, fontSize: 12, color: 'rgba(255,255,255,0.85)' },
+  jumpLabelOn: { color: BRAND.gold },
+  jumpChip: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: S.well,
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
   // Same box as every chip; the active one scales (no layout change, the row never shifts).
   jumpChipOn: { borderWidth: 3, borderColor: BRAND.gold, transform: [{ scale: 1.14 }] },
-  vaultSectionHead: { alignItems: 'center', gap: 6, paddingTop: 10, paddingBottom: 8, paddingHorizontal: 12 },
-  vaultSeasonArt: { position: 'absolute', top: 12, right: 12, width: 50, height: 48 },
-  vaultTop: { alignItems: 'center', paddingTop: 10, paddingBottom: 6, gap: 6 },
-  vaultTimer: { alignItems: 'center' },
-  vaultPlate: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, gap: 10, alignItems: 'stretch' },
-  vaultName: { fontFamily: FONT.display, fontSize: 28, lineHeight: 33, color: SECRET_THEME.ink, textAlign: 'center', letterSpacing: 0.4,
-    textShadowColor: SECRET_THEME.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
-  vaultMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' },
-  vaultPrice: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 36, borderRadius: 18,
-    backgroundColor: SECRET_THEME.well, borderWidth: 2, borderColor: SECRET_THEME.gold },
-  vaultPriceText: { fontFamily: FONT.display, fontSize: 20, color: SECRET_THEME.inkGold },
   // A label, not a button: no border, no fill.
-  vaultMoves: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4, height: 36 },
-  vaultMovesText: { fontFamily: FONT.display, fontSize: 15, color: SECRET_THEME.ink },
   heroStage: { position: 'absolute', left: HERO_L.stage.left, top: HERO_L.stage.top, height: HERO_L.stage.height, width: HERO_L.stage.width },
   heroKickerRow: { position: 'absolute', left: 0, right: 0, top: 0, height: HERO.kickerH, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', gap: HERO.rowGap, paddingHorizontal: HERO.pad, paddingTop: 4 },
   heroFlat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   heroText: { position: 'absolute', left: HERO.pad, top: HERO.kickerH + 4, height: HERO_L.textH, width: HERO_L.textW, gap: HERO.gap },
-  leavingChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.navy, borderRadius: 8, borderWidth: 1.5, borderColor: BRAND.gold,
+  leavingChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.navy, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)',
     paddingHorizontal: 6, paddingVertical: 2, marginLeft: 6 },
-  leavingChipText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.gold, letterSpacing: 0.6 },
+  leavingChipText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white },
   heroKicker: { flexShrink: 1, fontFamily: FONT.display, fontSize: HERO.kickerFont, color: S.inkGold, letterSpacing: HERO.kickerTracking },
   heroName: { fontFamily: FONT.display, fontSize: HERO_L.nameSize, lineHeight: HERO_L.nameLine, color: S.ink },
   heroRarityDot: { marginLeft: 4, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: BRAND.white },
@@ -1100,9 +945,6 @@ const styles = StyleSheet.create({
   heroMore: { width: 36, height: 36, borderRadius: 12, backgroundColor: S.card, borderWidth: 2, borderColor: S.border, alignItems: 'center', justifyContent: 'center' },
   heroMoreText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
   heroPrice: { flexDirection: 'row', alignItems: 'center', gap: 4, height: HERO.priceRow },
-  heroMoves: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 9, paddingVertical: 4,
-    borderRadius: 999, backgroundColor: SECRET_THEME.well, borderWidth: 2, borderColor: SECRET_THEME.accent },
-  heroMovesText: { fontFamily: FONT.display, fontSize: 13, color: SECRET_THEME.inkGold },
   heroPriceText: { fontFamily: FONT.display, fontSize: 18, color: S.ink },
   heroCta: { alignSelf: 'flex-start', minHeight: HERO.cta, justifyContent: 'center', backgroundColor: BRAND.gold, borderRadius: 999, paddingHorizontal: 16,
     borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },

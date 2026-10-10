@@ -367,8 +367,9 @@ function ArcCoin({ i, from, to }: { i: number; from: { x: number; y: number }; t
   const t = useSharedValue(0);
   const trail = useSharedValue(0);
   useEffect(() => {
-    t.value = withDelay(i * 55, withTiming(1, { duration: 480, easing: Easing.in(Easing.quad) }));
-    trail.value = withDelay(i * 55 + 70, withTiming(1, { duration: 480, easing: Easing.in(Easing.quad) }));
+    // One sharp beat (game feel, Oct 8): the first coin lands at 340 ms, the last by about 580 ms.
+    t.value = withDelay(i * 40, withTiming(1, { duration: 340, easing: Easing.in(Easing.quad) }));
+    trail.value = withDelay(i * 40 + 50, withTiming(1, { duration: 340, easing: Easing.in(Easing.quad) }));
   }, []);
   // Bulges sideways (never up), so the pour stays inside the sheet.
   const side = (i % 2 ? 1 : -1) * (30 + (i % 3) * 14);

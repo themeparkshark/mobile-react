@@ -87,9 +87,12 @@ export const KEEP_LINE = 'Every piece you buy is yours forever.';
  * RETIRING pairs with the closet's RETIRED, so kids learn one word in two places.
  */
 export function leavingRibbon(leaving: ShopLeaving): string {
-  // Short: the tile ribbon shares its row with the heart.
-  return leaving.forever ? 'RETIRING' : 'LEAVING';
+  // A neutral fact, never a pressure word (Oct 8 shop call: no LEAVING / RETIRING chips on kid items).
+  // The try-on line still says honestly whether it comes back.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(leaving.on);
+  return m ? `Till ${MONTHS_SHORT[Number(m[2]) - 1]} ${Number(m[3])}` : 'Here for now';
 }
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function leavingIcon(leaving: ShopLeaving): 'star' | 'moon' {
   return leaving.forever ? 'star' : 'moon';

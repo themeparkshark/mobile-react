@@ -335,12 +335,12 @@ test('Reduce Motion is read inside the shark stage and every tile, so no screen 
 test('the try-on says "Unlock with VIP" on Secret pieces, and a members_only 403 flips it', () => {
   const shelves = loadTs('src/helpers/shopShelves.ts');
   const base = { owned: false, worn: false, vipLocked: true, short: 0, phase: 'idle', wear: 'idle', finishes: false, cost: 280 };
-  assert.equal(shelves.tryOnCta({ ...base, secret: true }).label, 'Ask a grown-up');
+  assert.equal(shelves.tryOnCta({ ...base, secret: true }).label, 'See VIP');
   assert.equal(shelves.tryOnCta({ ...base, secret: true }).action, 'vip');
   assert.match(shelves.tryOnCta({ ...base, secret: true }).note, /VIP members can buy/);
   const tryOn = src('src/screens/StoreScreen/TryOnSheet.tsx');
   // DESIGN.md 6.7 with Dustin's member rule: one promise on every Secret piece, members and not.
-  assert.match(tryOn, /const keepLine = MEMBER_PROMISE;/, 'the member promise on every Secret try-on');
+  assert.match(tryOn, /const keepLine = player\?\.is_subscribed \? MEMBER_KEEP : MEMBER_PROMISE;/, 'the member promise on every Secret try-on');
   assert.equal(shelves.MEMBER_PROMISE, 'VIP members can wear this. It stays in your closet forever.');
   assert.match(tryOn, /case 'vip': afterHiddenRef\.current = \(\) => \{ void openMembership\(\); \}; closeAnimated\(\);/, 'the paywall is behind a grown-up, after the sheet hides');
   assert.match(tryOn, /cta\.action === 'vip' && secretItem \? \(\s*\/\/ Not the gold Buy face/, 'the grown-up button is violet, not the Buy face');
@@ -404,9 +404,12 @@ test('the Secret Shop is drawn only while secret_shop_v2 is on (absent or error 
 
 test('non-members window-shop: the Profile tile opens the Secret Shop when the flag is on', () => {
   const profile = src('src/screens/ProfileScreen.tsx');
-  assert.match(profile, /void loadSecretShopFlag\(\)\.then\(on => \(on\s*\? RootNavigation\.navigate\('Store', \{ store: store\.id \}\)\s*: void openMembership\(\)\)\);/);
+  assert.match(profile, /void loadSecretShopFlag\(\)\.then\(on => \(on\s*\? RootNavigation\.navigate\('Store', \{ store: store\.id, secret: true \}\)\s*: void openMembership\(\)\)\);/);
   const shelves = src('src/screens/StoreScreen/ShopShelves.tsx');
-  assert.match(shelves, /\{secret && !vip && <SecretPreviewBanner \/>\}/);
+  // Non-members get one calm note and the grown-up door in the showroom (Oct 8), never a buy button.
+  const showroom = src('src/screens/StoreScreen/SecretShowroom.tsx');
+  assert.match(showroom, /\{!member && <Text maxFontSizeMultiplier=\{MAX_FONT\} numberOfLines=\{1\} style=\{styles\.guestInline\}>\{SECRET_PREVIEW_COPY\.title\}<\/Text>\}/);
+  assert.match(showroom, /<VaultSecondaryButton label="See VIP" icon="member" onPress=\{\(\) => \{ void openMembership\(\); \}\}/);
   const ui = loadSecretUi();
   assert.match(ui.SECRET_PREVIEW_COPY.body, /yours forever/);
   assert.doesNotMatch(ui.SECRET_PREVIEW_COPY.body + ui.SECRET_PREVIEW_COPY.title, /hurry|last chance|only \d|left!/i, 'calm copy, no pressure');

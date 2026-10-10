@@ -82,13 +82,14 @@ test('try-on: an owned member piece while lapsed asks a grown-up instead of fail
   const shelves = loadTs('src/helpers/shopShelves.ts');
   const base = { owned: true, worn: false, vipLocked: true, short: 0, phase: 'idle', wear: 'idle', finishes: false, cost: 140 };
   assert.deepEqual(plain(shelves.tryOnCta({ ...base, wearLocked: true })),
-    { label: 'Ask a grown-up', action: 'vip', note: COPY, look: 'go' });
+    { label: 'See VIP', action: 'vip', note: COPY, look: 'go' });
   assert.equal(shelves.tryOnCta({ ...base, wearLocked: false }).action, 'wear');
   assert.equal(shelves.tryOnCta({ ...base, wearLocked: true, worn: true }).action, 'close', 'taking it off always works');
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
-  assert.match(sheet, /phase === 'confirm' && memberItem \? \{ \.\.\.lapsedCta, note: MEMBER_PROMISE \}/, 'buy confirmation says it');
+  assert.match(sheet, /phase === 'confirm' && memberItem \? \{ \.\.\.lapsedCta, note: fxKey \? keepLine : MEMBER_PROMISE \}/, 'buy confirmation says it, once, right above the buttons');
+  assert.match(sheet, /\{fxKey && !confirming && \(/, 'the Secret card steps aside on confirm, so the promise is never said twice');
   assert.match(sheet, /\{!fxKeyOf\(item\) && memberItem && \(/, 'the item card says it on VIP gear too');
-  assert.match(sheet, /const keepLine = MEMBER_PROMISE;/, 'and on every Secret piece');
+  assert.match(sheet, /const keepLine = player\?\.is_subscribed \? MEMBER_KEEP : MEMBER_PROMISE;/, 'and on every Secret piece');
 });
 
 test('Inventory: lock badge on owned member pieces, a tap explains and offers the gated join', () => {

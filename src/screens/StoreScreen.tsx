@@ -51,10 +51,15 @@ import { SECRET_THEME } from '../fx/secretTheme';
 import { loadSecretShopFlag } from '../services/secretShopFlag';
 import Item from './StoreScreen/Item';
 import SuppliesShop, { type SuppliesFocus } from './StoreScreen/SuppliesShop';
+import GearShelf from './StoreScreen/GearShelf';
+import useBudgetedPoll from './StoreScreen/powerShim';
+import { SecretRoomSkeleton } from './StoreScreen/SecretShowroom';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 
 const SCREEN_W = Dimensions.get('window').width;
+/** Items per catalog page (the server's simplePaginate default). */
+const CATALOG_PAGE = 15;
 
 /** Bobbing + tilting shark shopkeeper — perfect symmetric loops */
 function AnimatedShark({ imageUrl, still }: { imageUrl: string | undefined; still: boolean }) {
@@ -300,7 +305,7 @@ const tabStyles = StyleSheet.create({
   tabOn: { backgroundColor: '#ffcf3b' },
   label: { fontFamily: 'Shark', fontSize: 17, color: '#fff' },
   labelOn: { color: '#6a3b00' },
-  coins: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, backgroundColor: BRAND.blueLip,
+  coins: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minWidth: 92, gap: 4, marginTop: 10, backgroundColor: BRAND.blueLip,
     borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 2, borderColor: BRAND.white },
   coinsText: { fontFamily: 'Shark', fontSize: 16, color: '#fff' },
   wish: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, marginRight: 8, backgroundColor: '#fff0f5',
@@ -319,8 +324,10 @@ export default function StoreScreen(props: NativeStackScreenProps<ParamListBase,
 }
 
 function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
-  const { store, tab: initialTab, focus, focus_item: focusItem } = route.params as {
+  const { store, tab: initialTab, focus, focus_item: focusItem, secret: routeSecret } = route.params as {
     store: number | 'shark-shop'; tab?: 'gear' | 'supplies'; focus?: SuppliesFocus;
+    /** Opened as the Secret Shop (Profile knows): while loading, show its own room, not the generic loader. */
+    secret?: boolean;
     /** Wishlist push deep link: open this item's try-on. */
     focus_item?: number;
   };
@@ -392,18 +399,16 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
 
   // At zero the server restocks on its hourly job: check the timer each minute
   // and reload the shop once a new rotation is live.
-  useEffect(() => {
-    if (!restockPending || !currentStore) return;
-    const interval = setInterval(async () => {
-      const next = await getStoreRotation(currentStore.id).catch(() => null);
-      if (next?.next_rotation_at && new Date(next.next_rotation_at).getTime() > Date.now()) {
-        setRestockPending(false);
-        silentReload.current = true;
-        setAttempt(a => a + 1);
-      }
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [restockPending, currentStore?.id]);
+  // On the app's budgeted poll clock (battery fix 20): pauses in the background, slows when idle.
+  useBudgetedPoll(async () => {
+    if (!currentStore) return;
+    const next = await getStoreRotation(currentStore.id).catch(() => null);
+    if (next?.next_rotation_at && new Date(next.next_rotation_at).getTime() > Date.now()) {
+      setRestockPending(false);
+      silentReload.current = true;
+      setAttempt(a => a + 1);
+    }
+  }, 60_000, { enabled: restockPending && !!currentStore, immediate: false });
 
   // One load path with an end state: the shop never spins forever.
   useEffect(() => {
@@ -439,7 +444,7 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       setCatalog(nextCatalog);
       setItems(firstPage);
       setPage(1);
-      setHasMore(firstPage.length > 0);
+      setHasMore(firstPage.length >= CATALOG_PAGE);
       setStatus('ready');
     // A failed background restock keeps the shelves the player is browsing.
     })().catch((error: unknown) => {
@@ -469,9 +474,11 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
   const sharkShop = store === 'shark-shop' || currentStore?.name === 'Shark Shop';
   // Shop v2 shelves (the title bar folds away as the shelf scrolls).
   const v2 = !!today && sharkShop && tab === 'gear';
+  // The classic catalog on the Shark Shop (live today): the shelf, the try-on and the balance in the tab row.
+  const classicGear = !today && sharkShop && tab === 'gear' && !(currentStore && isEventShop(currentStore));
   // The Secret Shop: the same shelves in midnight, with its own title bar (no tab row to fold into).
   const secretShelves = !!today && secretV2 && !sharkShop;
-  const floor = secretShelves ? SECRET_THEME.floor : BRAND.blue;
+  const floor = secretShelves || (routeSecret && status === 'loading') ? SECRET_THEME.floor : BRAND.blue;
 
   const loadMore = async () => {
     if (!catalog || !hasMore || status !== 'ready' || loadingMore.current) return;
@@ -481,13 +488,28 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       const response = await getItems(catalog.id, next);
       // The page only advances once its items are in, so no page is ever skipped.
       setPage(next);
-      if (response.length === 0) setHasMore(false);
+      // A short page is the last one (Laravel simplePaginate: 15 a page), so no empty fetch is needed to know.
+      if (response.length < CATALOG_PAGE) setHasMore(false);
       setItems(prev => [...prev, ...response.filter(item => !prev.some(p => p.id === item.id))]);
     } catch {
       setHasMore(false);
     } finally {
       loadingMore.current = false;
     }
+  };
+
+  // The try-on's "Check again": a fresh catalog (every page loaded so far) says whether this item is owned now.
+  const recheckOwned = async (itemId: number): Promise<boolean | null> => {
+    if (!catalog) return null;
+    for (let p = 1; p <= page; p++) {
+      const fresh = await getItems(catalog.id, p);
+      const hit = fresh.find(i => i.id === itemId);
+      if (hit) {
+        if (hit.has_purchased) setItems(prev => prev.map(i => (i.id === itemId ? { ...i, has_purchased: true } : i)));
+        return !!hit.has_purchased;
+      }
+    }
+    return false;
   };
 
   return (
@@ -500,12 +522,12 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       <Reanimated.View style={v2 ? titleStyle : undefined}
         onLayout={e => { if (!barH) setBarH(e.nativeEvent.layout.height); }}>
       {/* The vault keeps the house top bar (navy, not the legacy purple one): the shelves carry the midnight. */}
-      <Topbar purple={(currentStore?.is_secret_store ?? false) && !secretShelves}>
+      <Topbar purple={(currentStore?.is_secret_store ?? false) && !secretShelves} night={secretShelves || (!!routeSecret && status === 'loading')}>
         <TopbarColumn stretch={false}>
           {v2 ? <View style={{ width: 35 }} /> : <BackButton />}
         </TopbarColumn>
         <TopbarColumn>
-          <TopbarText>{secretShelves ? 'Secret Shop' : currentStore && isEventShop(currentStore) ? HALLOWEEN_SHOP_NAME
+          <TopbarText>{secretShelves || (routeSecret && status === 'loading') ? 'Secret Shop' : currentStore && isEventShop(currentStore) ? HALLOWEEN_SHOP_NAME
             : status === 'away' ? HALLOWEEN_SHOP_NAME : currentStore?.name ?? (sharkShop ? 'Shark Shop' : '')}</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false}>
@@ -515,7 +537,7 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       </Reanimated.View>
       {sharkShop && (
         <View style={{ backgroundColor: BRAND.blue, marginTop: -8, paddingTop: 8 }}>
-          <ShopTabs tab={tab} onChange={setTab} coins={v2 ? Number(player?.coins ?? 0) : null}
+          <ShopTabs tab={tab} onChange={setTab} coins={v2 || classicGear ? Number(player?.coins ?? 0) : null}
             onWishlist={() => setWishlistOpen(true)} withBack={v2} />
         </View>
       )}
@@ -529,7 +551,8 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
           <SharkLoader tone="onBlue" state="empty" title={AWAY_LINE} message={awayMessage(awayReason)} />
         </View>
       )}
-      {(!sharkShop || tab === 'gear') && status !== 'ready' && status !== 'away' && (
+      {routeSecret && status === 'loading' && <SecretRoomSkeleton still={reducedMotion} />}
+      {(!sharkShop || tab === 'gear') && status !== 'ready' && status !== 'away' && !(routeSecret && status === 'loading') && (
         <View style={{ flex: 1, backgroundColor: BRAND.blue }}>
           <SharkLoader tone="onBlue" state={status === 'error' ? 'error' : 'loading'}
             title={status === 'error' ? 'The Shark Shop couldn’t open' : undefined}
@@ -546,6 +569,13 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
           }}
           source={currentStore?.background_url && !secretShelves ? { uri: currentStore.background_url } : undefined}
         >
+          {/* The classic Shark Shop shelf scrolls edge to edge (it pads for the home indicator itself). */}
+          {classicGear ? (
+            <GearShelf items={items} setItems={setItems} promoUrl={catalog?.promotion_image_url}
+              nextRotationAt={rotation?.next_rotation_at} onRestockElapsed={() => setRestockPending(true)}
+              onEndReached={() => { void loadMore(); }} recheck={recheckOwned} focusRequest={focusRequest} still={reducedMotion}
+              offset={clockSkew} loading={hasMore} />
+          ) : (
           <SafeAreaView
             style={{
               flex: 1,
@@ -665,6 +695,7 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
               </View>
             )}
           </SafeAreaView>
+          )}
         </ImageBackground>
       )}
       </Reanimated.View>

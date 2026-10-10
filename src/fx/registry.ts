@@ -59,7 +59,7 @@ export const FX_SLOT = {
 
 /** What each piece does, in words a 7-year-old reads in one breath (try-on sheet). */
 export const FX_BLURB = {
-  jetpack: 'Rockets fire and your shark floats. Every few seconds: BOOST!',
+  jetpack: 'Rockets fire, your shark floats, then BOOST!',
   plasma_blade: 'Glows, hums and swings with a trail of light.',
   reef_halo: 'Three tiny fish swim circles around your head.',
   saucer: 'Hovers by your fin and beams up sparkles.',

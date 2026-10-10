@@ -2,7 +2,7 @@
  * One Shark Shop v2 tile, in fixed lanes:
  * - rarity chip top-left (hidden when a time ribbon shows: the backplate still says rarity)
  * - heart (or the owned check) top-right
- * - one full-width top ribbon for a time tag: LAST CHANCE, BACK AGAIN or NEW
+ * - one full-width top ribbon for a time tag: LEAVING SOON, BACK AGAIN or NEW
  * - SET chip on the art's bottom-left corner
  * Owned has one look: the check badge plus a dimmed "Owned" line. A tile
  * bought this visit slams an OWNED stamp for a second, then settles into it.
@@ -19,18 +19,39 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState } from 'react';
 import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { formatCoins, tileBand, tileLanes, type TileRibbon } from '../../helpers/shopShelves';
+import { formatCoins, slotFitsBand, slotWord, tileBand, tileLanes, type TileRibbon } from '../../helpers/shopShelves';
 import { itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import { ShopItem } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
 import { MAX_FONT, Sheen, WishHeart, plateFor } from './shopUi';
 import { useWished } from './wishStore';
-import { leavingIcon, leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
+import * as Haptics from 'expo-haptics';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/** Art scale per slot (item_types): faces, held pieces and pins have more empty space in their art. */
+const ART_SCALE: Record<number, number> = { 2: 1.18, 5: 1.15, 8: 1.15, 6: 1.06 };
+
+/** Common pieces get a soft slot tint instead of one pale blue for all (shop critic r7: "identical boxes"). */
+export function slotPlate(typeId: number | null | undefined): [string, string] {
+  switch (typeId) {
+    case 1: return ['#e6f6ee', '#bfe3cf']; // hats: mint
+    case 2: return ['#fdeee4', '#f3cfb8']; // faces: peach
+    case 3: return ['#e9eefc', '#c9d3f2']; // back: periwinkle
+    case 4: return ['#e8f1fb', '#c4d8ef']; // outfits: sky
+    case 5: return ['#fbf3dc', '#efdca3']; // held: butter
+    case 6: return ['#e1f5f6', '#b5e1e4']; // backdrops: teal
+    case 7: return ['#e3eef9', '#bcd3ea']; // skins: the house blue
+    default: return ['#e3eef9', '#bcd3ea'];
+  }
+}
+import { leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 
 const RIBBON: Record<Exclude<TileRibbon, null>, { label: string; color: string; ink: string }> = {
-  last_chance: { label: 'LAST CHANCE', color: BRAND.red, ink: BRAND.white },
+  // Calm like LEAVING, never a red hurry (kids UX round 2).
+  last_chance: { label: 'LEAVING SOON', color: BRAND.navy, ink: BRAND.gold },
   // Calm on purpose: navy and gold, never red. The label comes from the item (LEAVING or RETIRING) with its icon.
-  leaving: { label: 'LEAVING', color: BRAND.navy, ink: BRAND.gold },
+  leaving: { label: 'Till', color: BRAND.navy, ink: BRAND.white },
   returning: { label: 'BACK AGAIN', color: '#7c4dff', ink: BRAND.white },
   new: { label: 'NEW!', color: BRAND.gold, ink: BRAND.navy },
 };
@@ -59,20 +80,24 @@ export function TileArt({ item, size, thumb = true, still = false }: {
     style={{ width: size, height: h }} contentFit="contain" transition={120} />;
 }
 
-function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet = false, onOpen, onWish }: {
+function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet = false, balance, onOpen, onWish }: {
   readonly item: ShopItem;
   readonly width: number;
   readonly vipLocked: boolean;
   readonly affordable: boolean;
+  /** The player's coins, to say how many more a short tile needs. */
+  readonly balance?: number;
   readonly still: boolean;
   /** Bought this visit: a one-second OWNED slam, then the normal owned look. */
   readonly justBought?: boolean;
-  /** The banner already says LAST CHANCE: no red ribbon on this tile. */
+  /** The banner already says it is the last chance: no ribbon on this tile. */
   readonly quiet?: boolean;
   readonly onOpen: (item: ShopItem) => void;
   readonly onWish: (item: ShopItem) => void;
 }) {
   const wished = useWished(item.id);
+  const press = useSharedValue(1);
+  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   const badge = wearableBadge(item);
   const owned = !!(item.shop?.is_owned ?? item.has_purchased);
   // A members-only piece never tells a non-member it is retiring (that would be a VIP nudge).
@@ -81,7 +106,9 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   const ribbonLabel = ribbon === 'leaving' && leaving ? leavingRibbon(leaving) : ribbon ? RIBBON[ribbon].label : '';
   const name = itemDisplayName(item);
   const secret = isSecretItem(item);
-  const plate = secret ? SECRET_THEME.tilePlate : plateFor(item.rarity);
+  const plate = secret ? SECRET_THEME.tilePlate : (item.rarity ?? 1) <= 1 ? slotPlate(item.item_type?.id) : plateFor(item.rarity);
+  // Small art (faces, held pieces, pins) is drawn a little bigger in the same box, so every tile reads full.
+  const artScale = ART_SCALE[item.item_type?.id ?? 0] ?? 1;
   const set = item.shop?.set;
   const artSize = width - 18;
   // The band is decided from the tile's measured width (the prop is the first guess, so the first
@@ -117,13 +144,15 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
     : `${formatCoins(item.cost)} coins${affordable ? '' : ', you need more coins'}`}${ribbon === 'leaving' && leaving ? `, ${leavingSay(leaving)}` : ribbon ? `, ${RIBBON[ribbon].label.toLowerCase()}` : ''}. Tap to try it on.`;
 
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={() => onOpen(item)}
+      // Every tap squishes and clicks (game feel, Oct 8): a spring, not a flat snap.
+      onPressIn={() => { void Haptics.selectionAsync().catch(() => undefined); if (!still) press.value = withTiming(0.94, { duration: 70 }); }}
+      onPressOut={() => { press.value = still ? 1 : withSpring(1, { damping: 12, stiffness: 320 }); }}
       onLayout={e => { const w = Math.round(e.nativeEvent.layout.width); if (Math.abs(w - measured) >= 1) setMeasured(w); }}
       accessibilityRole="button"
       accessibilityLabel={a11y}
-      style={({ pressed }) => [styles.tile, { width, borderColor: secret ? SECRET_THEME.gold : badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border,
-        transform: [{ scale: pressed ? 0.95 : 1 }] },
+      style={[styles.tile, pressStyle, { width, borderColor: secret ? SECRET_THEME.gold : badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border },
         // The vault tile: gold rim with the gold button's darker lip under it (the house 3D edge).
         secret ? { borderBottomWidth: 6, borderBottomColor: SECRET_THEME.goldLip } : null,
         badge.glow ? { shadowColor: badge.glow, shadowOpacity: 0.9, shadowRadius: 10 } : null]}
@@ -137,13 +166,14 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       {/* White keyline: every rarity border reads on every banner colour. */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.keyline, badge.inner ? { borderColor: badge.inner } : null]} />
       {ribbon && (
-        <View style={[styles.ribbon, { backgroundColor: RIBBON[ribbon].color }, ribbon === 'leaving' && styles.ribbonClearOfHeart]}>
-          {ribbon === 'leaving' && leaving && <GameIcon name={leavingIcon(leaving)} size={13} />}
+        <View style={[styles.ribbon, { backgroundColor: RIBBON[ribbon].color }, styles.ribbonClearOfHeart]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.ribbonText, { color: RIBBON[ribbon].ink }]}>{ribbonLabel}</Text>
         </View>
       )}
       <View style={[styles.art, { marginTop: ribbon ? 10 : secret ? 8 : 0 }, owned && { opacity: 0.6 }]}>
-        <TileArt item={item} size={artSize} still={still} />
+        <View style={{ width: artSize, height: artSize * 0.8, alignItems: 'center', justifyContent: 'center' }}>
+          <TileArt item={item} size={artSize * artScale} still={still} />
+        </View>
       </View>
       {/* Secret: a violet-and-gold corner tag (DESIGN.md 6.5), so a Secret tile reads from across a room. */}
       {secret && (
@@ -156,6 +186,10 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       {/* Secret tiles carry their badge in the corner tag, so the chip band shrinks (no dead gap under the art). */}
       <View style={[styles.band, secret && !set && { height: 6 }]}>
         {/* When rarity plus SET would not fit the measured tile, rarity shows as a dot (the label still says it). */}
+        {/* No rarity to show: say what it is in one word (kids UX / shop critic, Oct 8). */}
+        {(!badge.label || (band !== 'dot' && !set && slotFitsBand(measured, slotWord(item.item_type?.id) ?? '', badge.label, PixelRatio.getFontScale()))) && !secret && slotWord(item.item_type?.id) && (
+          <View style={styles.slot}><Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.slotText}>{slotWord(item.item_type?.id)}</Text></View>
+        )}
         {badge.label && !owned && !secret && (band === 'dot' ? (
           <View style={[styles.rarityDot, { backgroundColor: badge.labelColor }]} accessibilityLabel={badge.label} />
         ) : (
@@ -173,7 +207,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       <Text style={[styles.name, secret && styles.secretInk]} numberOfLines={2} ellipsizeMode="tail" maxFontSizeMultiplier={1.15}>{name}</Text>
       <View style={styles.priceRow}>
         {owned ? (
-          slam ? null : <Text maxFontSizeMultiplier={MAX_FONT} style={styles.ownedText}>Owned</Text>
+          slam ? null : <Text maxFontSizeMultiplier={MAX_FONT} style={styles.ownedText}>Yours</Text>
         ) : vipLocked && secret ? (
           // One price marker everywhere: the coin and the price, with a lock for non-members (kids UX round 1).
           <>
@@ -185,8 +219,12 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
           <><GameIcon name="member" size={15} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.price}> VIP</Text></>
         ) : (
           <>
-            {item.currency?.icon_url ? <Image source={{ uri: item.currency.icon_url }} style={[styles.coin, !affordable && { opacity: 0.45 }]} contentFit="contain" /> : null}
-            <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.price, secret && styles.secretInk, !affordable && styles.priceShort]}>{formatCoins(item.cost)}</Text>
+            {item.currency?.icon_url ? <Image source={{ uri: item.currency.icon_url }} style={[styles.coin, !affordable && { opacity: 0.6 }]} contentFit="contain" /> : null}
+            {/* Short of coins: how many more, never just a grey price (monetization round 1). The try-on shows the price. */}
+            {!affordable && balance != null
+              ? <Text maxFontSizeMultiplier={1.1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}
+                  style={[styles.need, secret && styles.secretInk]}>Need {formatCoins(item.cost - balance)} more</Text>
+              : <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.price, secret && styles.secretInk, !affordable && styles.priceShort]}>{formatCoins(item.cost)}</Text>}
           </>
         )}
       </View>
@@ -204,7 +242,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
           </Animated.View>
         </Pressable>
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -219,7 +257,8 @@ const styles = StyleSheet.create({
   ribbon: { position: 'absolute', top: 0, left: 0, right: 0, height: 20, borderTopLeftRadius: 13, borderTopRightRadius: 13,
     alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 3 },
   // The label centres in the space left of the heart (heart 30 pt, sitting 9 pt outside the tile, plus 4).
-  ribbonClearOfHeart: { paddingRight: 25, paddingLeft: 4 },
+  // Every ribbon's label centres clear of the corner heart (the heart never covers ribbon text).
+  ribbonClearOfHeart: { paddingRight: 34, paddingLeft: 6 },
   ribbonText: { fontFamily: FONT.display, fontSize: 12, letterSpacing: 0.6 },
   art: { marginHorizontal: 6 },
   band: { flexDirection: 'row', justifyContent: 'center', gap: 4, height: 22, alignItems: 'center', marginTop: 2, maxWidth: '100%', paddingHorizontal: 4, overflow: 'hidden' },
@@ -232,18 +271,22 @@ const styles = StyleSheet.create({
   secretTagText: { fontFamily: FONT.display, fontSize: 11, letterSpacing: 1, color: '#0b2156' },
   // Secret tiles are midnight, so their ink is white (art panel round 1: animated pieces glow on dark).
   secretInk: { color: '#ffffff' },
-  priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, minHeight: 19 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, minHeight: 19, maxWidth: '100%', paddingHorizontal: 6 },
   coin: { width: 17, height: 17, marginRight: 3 },
   price: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy },
   priceShort: { color: '#8b9bb0' },
-  ownedText: { fontFamily: FONT.display, fontSize: 14, color: '#7c93ab' },
+  ownedText: { fontFamily: FONT.display, fontSize: 15, color: '#1b7f45' },
+  need: { fontFamily: FONT.display, fontSize: 13, color: '#46607e', flexShrink: 1 },
   rarity: { borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 },
   rarityText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, letterSpacing: 0.4 },
   setChip: { flexDirection: 'row', alignItems: 'center', gap: 2,
     borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1.5, borderColor: BRAND.white },
   setChipText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.navy },
-  corner: { position: 'absolute', top: -9, right: -9 },
-  heart: { width: 30, height: 30, borderRadius: 15, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
+  // Inside the tile corner, never straddling the border (art director round 2).
+  corner: { position: 'absolute', top: 4, right: 4 },
+  slot: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1, backgroundColor: 'rgba(10,35,80,0.1)' },
+  slotText: { fontFamily: FONT.display, fontSize: 12, color: '#34506f', letterSpacing: 0.4 },
+  heart: { width: 28, height: 28, borderRadius: 14, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
     borderWidth: 2.5, borderColor: '#ff9bbf' },
   heartOn: { borderColor: '#ff4f8b', backgroundColor: '#fff0f5' },
   stamp: { position: 'absolute', top: '32%', alignSelf: 'center', borderWidth: 3, borderColor: BRAND.greenLip, borderRadius: 8,

@@ -218,11 +218,12 @@ export default function ProfileScreen() {
       if (store.is_secret_store && !player?.is_subscribed) {
         // Secret Shop v2: non-members window-shop (live previews and try-on) and join from there.
         void loadSecretShopFlag().then(on => (on
-          ? RootNavigation.navigate('Store', { store: store.id })
+          ? RootNavigation.navigate('Store', { store: store.id, secret: true })
           : void openMembership()));
         return;
       }
-      RootNavigation.navigate('Store', { store: store.id });
+      // The Secret Shop opens on its own midnight room while it loads, never the generic loader.
+      RootNavigation.navigate('Store', { store: store.id, secret: !!store.is_secret_store });
     };
     // An older server without the Shark Shop keeps its legacy Store badge instead (profileStores).
     const showSharkShop = !!sharkShop || stores.length === 0;

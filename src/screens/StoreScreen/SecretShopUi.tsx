@@ -28,15 +28,15 @@ export const SecretPreviewBanner = memo(function SecretPreviewBanner() {
         </View>
       </View>
       {/* The door to VIP: the vault's navy secondary (gold stays for things a kid can do), behind the grown-up gate. */}
-      <VaultSecondaryButton label="Ask a grown-up" icon="lock" onPress={() => { void openMembership(); }}
-        accessibilityLabel="Ask a grown-up about VIP" />
+      <VaultSecondaryButton label="See VIP" icon="member" onPress={() => { void openMembership(); }}
+        accessibilityLabel="See VIP" />
     </VaultPanel>
   );
 });
 
 export const SECRET_PREVIEW_COPY = {
   title: 'Try anything on!',
-  body: 'VIP members can buy these. Each one is yours forever.',
+  body: 'VIP members buy them, and they’re yours forever.',
 } as const;
 
 const STAR = require('../../../assets/fx/spark.webp');

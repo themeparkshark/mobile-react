@@ -104,6 +104,115 @@ export function featuredPill(section: SectionLike, nowMs: number): Pill {
   return { label: `New on ${day}`, urgent: false, a11y: `New featured items on ${day}` };
 }
 
+/**
+ * The classic Shark Shop's restock (rotation next_rotation_at), as one small calm chip that names
+ * the day (Dustin, Oct 8: "the countdown for new items doesn't need to be that big"). No seconds,
+ * no hours: "New gear on Monday", "New gear tomorrow", "New gear tonight", "New gear soon" at zero.
+ * The day is read in park time (the shop flips at midnight Pacific; 7 h back lands on its date).
+ */
+export function restockPill(nextAt: string | null | undefined, nowMs: number): Pill | null {
+  const at = nextAt ? Date.parse(nextAt) : NaN;
+  if (!Number.isFinite(at)) return null;
+  const left = at - nowMs;
+  if (left <= 0) return { label: 'New gear soon', urgent: false, a11y: 'New gear is on its way' };
+  if (left < 12 * HOUR) return { label: 'New gear tonight', urgent: false, a11y: 'New gear arrives tonight' };
+  if (left < 36 * HOUR) return { label: 'New gear tomorrow', urgent: false, a11y: 'New gear arrives tomorrow' };
+  const days = Math.ceil(left / DAY);
+  if (left > 6 * DAY) return { label: `New gear in ${days} days`, urgent: false, a11y: `New gear in ${days} days` };
+  const day = weekdayOf(new Date(at - 7 * HOUR).toISOString()) ?? 'soon';
+  return { label: `New gear on ${day}`, urgent: false, a11y: `New gear arrives on ${day}` };
+}
+
+/** Owned pieces sink to the end (the shelf is mostly things you can still get); order is otherwise the server's. */
+export function shelfOrder<T extends { id: number; has_purchased?: boolean }>(items: readonly T[], keepFirst: readonly number[] = []): T[] {
+  const sinks = (i: T) => !!i.has_purchased && !keepFirst.includes(i.id);
+  return [...items.filter(i => !sinks(i)), ...items.filter(sinks)];
+}
+
+/** What a piece is, in a kid's words, from its slot (item_types: 1 head ... 8 pin). */
+export function slotLine(itemTypeId: number | null | undefined): string | null {
+  switch (itemTypeId) {
+    case 1: return 'A hat for your shark.';
+    case 2: return 'Goes on your shark’s face.';
+    case 3: return 'Goes on your shark’s back.';
+    case 4: return 'An outfit for your shark.';
+    case 5: return 'Goes on your shark’s fin.';
+    case 6: return 'A new place behind your shark.';
+    case 7: return 'A new color for your whole shark.';
+    case 8: return 'A pin for your shark’s collection.';
+    default: return null;
+  }
+}
+
+const SLOT_WORDS: Record<number, [string, string]> = {
+  1: ['Hat', 'Hats'], 2: ['Face', 'Faces'], 3: ['Back', 'Back'], 4: ['Outfit', 'Outfits'],
+  5: ['In fin', 'In fin'], 6: ['Backdrop', 'Backdrops'], 7: ['Skin', 'Skins'], 8: ['Pin', 'Pins'],
+};
+
+/** One word for a piece's slot ("Hat", "Skin"), for the tile and the filter chips. */
+export function slotWord(itemTypeId: number | null | undefined): string | null {
+  return itemTypeId != null && SLOT_WORDS[itemTypeId] ? SLOT_WORDS[itemTypeId][0] : null;
+}
+
+export type ShelfFilter = { key: string; label: string; count: number };
+
+/**
+ * The classic shelf's filter chips: All, then each slot on the shelf (in slot order), then
+ * "Can buy" (not owned and affordable). Only slots that are there; none when there is one slot.
+ */
+export function shelfFilters(items: readonly { item_type?: { id: number } | null; cost: number; has_purchased?: boolean }[], balance: number): ShelfFilter[] {
+  const counts = new Map<number, number>();
+  for (const i of items) if (i.item_type?.id && SLOT_WORDS[i.item_type.id]) counts.set(i.item_type.id, (counts.get(i.item_type.id) ?? 0) + 1);
+  const slots = [...counts.keys()].sort((a, b) => a - b);
+  const canBuy = items.filter(i => !i.has_purchased && i.cost <= balance).length;
+  if (slots.length < 2 && canBuy === items.length) return [];
+  return [
+    { key: 'all', label: 'All', count: items.length },
+    // "Can buy" second, on screen without scrolling (shop critic round 3).
+    ...(canBuy > 0 ? [{ key: 'can_buy', label: 'Can buy', count: canBuy }] : []),
+    ...slots.map(id => ({ key: `slot:${id}`, label: SLOT_WORDS[id][1], count: counts.get(id) ?? 0 })),
+  ];
+}
+
+/** Whether a piece passes a shelf filter. */
+export function passesFilter(item: { item_type?: { id: number } | null; cost: number; has_purchased?: boolean }, key: string, balance: number): boolean {
+  if (key === 'all') return true;
+  if (key === 'can_buy') return !item.has_purchased && item.cost <= balance;
+  return key === `slot:${item.item_type?.id}`;
+}
+
+/** Whether a slot chip fits beside the rarity chip in a tile band of this width (measured, at this text size). */
+export function slotFitsBand(bandW: number, slot: string, rarityLabel: string, fontScale = 1): boolean {
+  const scale = Math.min(Math.max(fontScale, 1), 1.1);
+  const slotW = (displayTextWidth(slot, 12, 0.4) + 12) * scale;
+  const rarityW = (displayTextWidth(rarityLabel, 12, 0.4) + 10) * scale;
+  return slotW + 4 + rarityW <= bandW - 8;
+}
+
+/**
+ * A cheap coin piece buys in one deliberate tap (kids UX consult, Oct 9: approve with conditions).
+ * Only when ALL hold: coins, <= 80 coins and <= 25% of the balance, not a Secret / members-only piece,
+ * not the kid's first buy ever, and fewer than 3 direct buys in the last 2 minutes. Anything else keeps
+ * the "Yes, buy it!" step. Real money never comes through here.
+ */
+export const DIRECT_BUY_MAX = 80;
+export function directBuyAllowed(s: { cost: number; balance: number; coins: boolean; secret: boolean; member: boolean;
+  firstBuyDone: boolean; recent: readonly number[]; now: number }): boolean {
+  if (!s.coins || s.secret || s.member || !s.firstBuyDone) return false;
+  if (!(s.cost > 0) || s.cost > DIRECT_BUY_MAX || s.cost > s.balance * 0.25) return false;
+  return s.recent.filter(t => s.now - t < 120_000).length < 3;
+}
+
+/** The classic shelf's star: the rarest piece you don't own yet (first on ties); null when you own them all. */
+export function starPick<T extends { id: number; rarity?: number; has_purchased?: boolean; is_member_item?: boolean }>(items: readonly T[], member: boolean): T | null {
+  let best: T | null = null;
+  for (const item of items) {
+    if (item.has_purchased || (item.is_member_item && !member)) continue;
+    if (!best || (item.rarity ?? 1) > (best.rarity ?? 1)) best = item;
+  }
+  return best;
+}
+
 /** Event, timer 1 of 2: when the shelf gets its next drop (null on the final shelf). */
 export function eventDropPill(section: SectionLike, nowMs: number): Pill | null {
   if (section.final_shelf) return null;
@@ -271,6 +380,8 @@ export function lastChanceLine(season: string | null | undefined): string {
  * rule): it stays owned forever, and members can wear it. True whether or not the wear lock is on.
  */
 export const MEMBER_PROMISE = 'VIP members can wear this. It stays in your closet forever.';
+/** The promise to a member, who already is one. */
+export const MEMBER_KEEP = 'It stays in your closet forever.';
 
 /**
  * Honest Favorites copy (one name everywhere for the heart): it says where they went, and
@@ -299,8 +410,10 @@ export function tileLanes(item: ItemLike & { shop?: ItemLike['shop'] & { is_new?
   // quiet: the banner already says LAST CHANCE once, so tiles never repeat it in red.
   // LEAVING / RETIRING is calm navy and says a date in the try-on: it outranks BACK AGAIN and NEW.
   // A dated LEAVING / RETIRING (calm navy) outranks the red event LAST CHANCE, so one piece never says both.
-  const ribbon: TileRibbon = item.shop?.leaving?.on ? 'leaving' : item.shop?.last_chance && !quiet ? 'last_chance'
-    : item.shop?.returning ? 'returning' : item.shop?.is_new ? 'new' : null;
+  // Oct 8 shop call: no pressure chips on kid items. LAST CHANCE and BACK AGAIN are gone; a leaving piece
+  // shows a neutral dated fact ("Till Nov 30"); NEW! stays (it is news, not a deadline).
+  void quiet;
+  const ribbon: TileRibbon = item.shop?.leaving?.on ? 'leaving' : item.shop?.is_new ? 'new' : null;
   return { ribbon };
 }
 
@@ -387,12 +500,12 @@ export type TryOnAction = 'wear' | 'close' | 'vip' | 'recheck' | 'earn' | 'buy' 
  */
 export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; note: string | null; look: 'go' | 'busy' | 'paused' | 'checking' } {
   if (s.owned) {
-    if (s.wearLocked && !s.worn) return { label: 'Ask a grown-up', action: 'vip', note: MEMBER_PROMISE, look: 'go' };
+    if (s.wearLocked && !s.worn) return { label: 'See VIP', action: 'vip', note: MEMBER_PROMISE, look: 'go' };
     if (s.wear === 'failed') return { label: 'Try again', action: 'wear', note: 'Couldn’t put it on. Try again.', look: 'go' };
     if (s.wear === 'spinning' || s.worn) return { label: 'Wearing it', action: 'close', note: null, look: 'go' };
     return { label: 'Wear it now', action: 'wear', note: null, look: s.wear === 'busy' ? 'busy' : 'go' };
   }
-  if (s.vipLocked && s.secret) return { label: 'Ask a grown-up', action: 'vip', note: 'VIP members can buy Secret Shop pieces.', look: 'go' };
+  if (s.vipLocked && s.secret) return { label: 'See VIP', action: 'vip', note: 'VIP members can buy Secret Shop pieces.', look: 'go' };
   if (s.vipLocked) return { label: 'VIP only: see VIP', action: 'vip', note: null, look: 'go' };
   // Its own state: asking the server never shows "Yes, buy it!".
   if (s.phase === 'checking') return { label: 'Checking…', action: 'none', note: 'Asking the shop if it went through.', look: 'checking' };
@@ -401,7 +514,8 @@ export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; n
   // Never a silent re-buy: "Check again" only asks the server what happened.
   if (s.phase === 'unknown') return { label: 'Check again', action: 'recheck', note: 'We couldn’t reach the shop. Let’s check if it went through.', look: 'go' };
   if (s.phase === 'buying' || s.phase === 'landing') return { label: 'Yes, buy it!', action: 'none', note: null, look: 'busy' };
-  if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more coins`, action: 'earn', note: 'Win ride coins at the park or open your daily chest.', look: 'go' };
+  // Short: say how many; the coin top-up offer (money stream) sits under it with the free path. "Ride coins" are the shelf collectible, not money.
+  if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more coins`, action: 'earn', note: 'Win coins at rides or open your daily chest.', look: 'go' };
   if (s.paused) return { label: 'Opening soon', action: 'none', note: 'Today’s shop is opening in a moment. Buying is back right after.', look: 'paused' };
   if (s.phase === 'confirm') return { label: 'Yes, buy it!', action: 'buy', note: null, look: 'go' };
   return { label: s.finishes ? `Complete the look: ${formatCoins(s.cost)}` : `Buy for ${formatCoins(s.cost)}`, action: 'ask', note: null, look: 'go' };

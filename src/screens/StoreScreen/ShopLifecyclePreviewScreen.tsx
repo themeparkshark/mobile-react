@@ -59,6 +59,9 @@ const LEAVING = piece('rope-drop-visor', 'Rope Drop Visor', 1, 1, 50, { leaving:
 const KEEPER = piece('festival-passport-tee', 'Festival Passport Tee', 1, 4, 50, { owned: true, leaving: { on: '2026-11-30', forever: true }, rarity: { tier: 'rare', label: 'Rare find: few sharks have this' } });
 const RARE = piece('triceratops-frill-helmet', 'Triceratops Frill Helmet', 4, 1, 280, { rarity: veryRare, leaving: { on: '2026-11-20', forever: false } });
 
+/** Days until next Monday: the featured shelf flips Monday, like the classic shop's restock. */
+function toMonday(): number { const d = new Date().getDay(); return ((8 - d) % 7) || 7; }
+
 function at(days: number): string {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -71,7 +74,7 @@ function section(s: Partial<ShopSection>): ShopSection {
     time_left_label: null, last_chance: false, hero_id: null, set_slugs: [], items: [], ...s };
 }
 
-function sharkToday(): ShopToday {
+export function sharkToday(): ShopToday {
   return {
     store_id: 18, shop_day: new Date().toISOString().slice(0, 10), timezone: 'America/Los_Angeles', resets_at: at(1),
     server_time: new Date().toISOString(), sets: [], wishlist_ids: [], equipped_title: null, wishlist_alerts: false,
@@ -83,7 +86,7 @@ function sharkToday(): ShopToday {
           piece('pumpkin-spice-tumbler', 'Pumpkin Spice Tumbler', 2, 5, 80, { returning: true }),
           piece('marigold-lantern-sipper', 'Marigold Lantern Sipper', 4, 5, 280, { isNew: true }),
         ] }),
-      section({ key: 'featured', type: 'featured', title: 'Featured', ends_at: at(4), hero_id: RARE.id, items: [
+      section({ key: 'featured', type: 'featured', title: 'Featured', ends_at: at(toMonday()), hero_id: RARE.id, items: [
         RARE,
         piece('spinning-teacup-hat', 'Spinning Teacup Hat', 3, 1, 140, { isNew: true }),
         piece('raptor-snout-cap', 'Raptor Snout Cap', 3, 1, 140, { rarity: rare }),
@@ -122,7 +125,7 @@ function secretToday(): ShopToday {
 
 const SKIN = uri(require('../../../assets/images/screens/inventory/classic-no-eye.png'));
 const BACKDROP = uri(require('../../../assets/images/shark_background.png'));
-function fixturePlayer(member: boolean): PlayerType {
+export function fixturePlayer(member: boolean): PlayerType {
   return { id: 77, name: 'Finn', coins: 1240, is_subscribed: member, enabled_sound_effects: true, enabled_music: false,
     inventory: {
       id: 1,
