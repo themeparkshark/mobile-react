@@ -11,6 +11,12 @@ test('release builds register no dev screens and never start on a preview', () =
   assert.equal(routes.devInitialRoute(), null);
 });
 
+test('a release-mode perf capture (EXPO_PUBLIC_PERF_CAPTURE=1, never set in store builds) exposes only the boss gallery', () => {
+  const routes = load(false, { EXPO_PUBLIC_PERF_CAPTURE: '1' });
+  assert.equal(routes.DEV_SCREENS.map(screen => screen.name).join(','), 'BossMapPreview');
+  assert.equal(routes.devInitialRoute(), 'BossMapPreview');
+});
+
 test('development keeps every preview route and the original flag priority', () => {
   const dev = load(true);
   const names = dev.DEV_SCREENS.map(screen => screen.name);
@@ -36,7 +42,8 @@ test('Root imports no preview or tester screen directly', () => {
 
 test('every dev screen module exists', () => {
   const source = read('src/devRoutes.tsx');
-  const files = [...source.matchAll(/require\('\.\/((?:screens|ui)\/[\w/]+)'\)/g)].map(match => `src/${match[1]}.tsx`);
+  // The release-mode perf-capture branch requires BossMapPreview a second time (its own constant-folded branch): dedupe.
+  const files = [...new Set([...source.matchAll(/require\('\.\/((?:screens|ui)\/[\w/]+)'\)/g)].map(match => `src/${match[1]}.tsx`))];
   assert.ok(files.length >= 20);
   assert.ok(files.includes('src/ui/UiKitGym.tsx'), 'the WS0 kit gym is registered');
   const listed = execFileSync('git', ['ls-files', ...files], { cwd: root, encoding: 'utf8' }).trim().split('\n');

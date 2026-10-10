@@ -56,14 +56,18 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'ShopLifecyclePreview', getComponent: () => require('./screens/StoreScreen/ShopLifecyclePreviewScreen').default },
       { name: 'ShopTabsPreview', getComponent: () => require('./screens/StoreScreen/ShopTabsPreviewScreen').default },
     ]
-  : [];
+  // Release-mode frame-time captures only (EXPO_PUBLIC_PERF_CAPTURE=1 with `expo start --no-dev`); store builds never set it,
+  // so this branch folds away like the dev list.
+  : process.env.EXPO_PUBLIC_PERF_CAPTURE === '1'
+    ? [{ name: 'BossMapPreview', getComponent: () => require('./screens/BossMapPreviewScreen').default }]
+    : [];
 
 /**
  * First matching EXPO_PUBLIC_*_PREVIEW flag wins; order matches the original
  * Root chain. Each flag is a literal process.env access so Expo inlines it.
  */
 export function devInitialRoute(): string | null {
-  if (!__DEV__) return null;
+  if (!__DEV__) return process.env.EXPO_PUBLIC_PERF_CAPTURE === '1' ? 'BossMapPreview' : null;
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
     [!!process.env.EXPO_PUBLIC_SHOP_TABS_PREVIEW, 'ShopTabsPreview'],

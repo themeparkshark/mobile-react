@@ -6,6 +6,7 @@ import type { BossRaid } from '../../api/endpoints/parks/raid';
 import { TEAM_ORDER, TEAMS, teamShortName } from '../../constants/teams';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
+import { CountUpText } from '../../gamekit/fx/CountUpText';
 
 /**
  * The shared HP bar. When HP drops the red fill snaps down and a pale "damage
@@ -56,6 +57,7 @@ export function AttackPips({ raid }: { readonly raid: BossRaid }) {
 
 /** Damage by team: each team's badge on its flag colour, the leader crowned. */
 export function TeamDamage({ raid }: { readonly raid: BossRaid }) {
+  const reduced = useReducedGameMotion();
   const total = Math.max(1, TEAM_ORDER.reduce((sum, team) => sum + raid.teams[team], 0));
   const top = Math.max(...TEAM_ORDER.map(team => raid.teams[team]));
   return <View style={parts.teams}>
@@ -70,7 +72,8 @@ export function TeamDamage({ raid }: { readonly raid: BossRaid }) {
         <View style={parts.teamTrack}>
           <View style={[parts.teamFill, { width: `${(raid.teams[team] / total) * 100}%`, backgroundColor: TEAMS[team].color }]} />
         </View>
-        <Text style={parts.teamDmg}>{raid.teams[team].toLocaleString()}</Text>
+        {/* Live: the total ticks up when a teammate's hit lands while the sheet is open. */}
+        <CountUpText value={raid.teams[team]} durationMs={600} reducedMotion={reduced} style={parts.teamDmg} />
       </View>;
     })}
   </View>;

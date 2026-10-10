@@ -20,6 +20,8 @@ export interface RaidDamageWeights {
   readonly per_hit: number;
   readonly per_weak_hit: number;
   readonly weak_share: number;
+  readonly participation_floor?: number;
+  readonly participation_min_bonks?: number;
 }
 
 export interface BossRaid {
@@ -50,6 +52,8 @@ export interface BossRaid {
   };
   readonly max_attacks?: number;
   readonly energy_cost: number;
+  /** What a win pays before the home rate (newer servers; the app falls back to config defaults). */
+  readonly rewards?: { coins: number; xp: number; energy: number; parts: number } | null;
   readonly reach_meters: number;
   readonly damage?: RaidDamageWeights;
   readonly remote: {

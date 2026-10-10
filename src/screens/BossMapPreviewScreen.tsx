@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BOSS_NAMES, type BossId, type BossRaid } from '../api/endpoints/parks/raid';
@@ -29,7 +30,15 @@ const SESSION = Date.now() % 100000;
 const memory = new globalThis.Map<string, string>();
 const fixtureRecovery = new BossAttackRecovery({
   getItem: async key => memory.get(key) ?? null, setItem: async (key, value) => { memory.set(key, value); }, removeItem: async key => { memory.delete(key); },
-}, async () => ({ ok: false, error: 'network' }), async () => ({ ok: false }));
+}, async (_, body) => {
+  const damage = Math.floor((body.hits * 4 + body.weak_hits * 40) * (body.remote ? 0.6 : 1));
+  const raid = fixtureRaid('kraken');
+  return { ok: true, damage, state: { raid: { ...raid, hp_left: Math.max(0, raid.hp_left - damage), you: { ...raid.you,
+    attacks: raid.you.attacks + 1, attacks_left: raid.you.attacks_left - 1, damage: raid.you.damage + damage } }, next_at: null } };
+}, async () => ({ ok: false }));
+/** Fixture FIGHT: a local round token, never a server call. */
+const fixtureRound = async (_: number, body: { remote?: boolean }) => ({ ok: true as const, round: { token: 'f'.repeat(32),
+  remote: !!body.remote, reason: null, damage_rate: body.remote ? 0.6 : 1, max_ms: 21000, max_hits: 70 } });
 
 function fixtureRaid(boss: BossId, over: Partial<BossRaid> = {}): BossRaid {
   const stamp = new Date().toISOString();
@@ -54,6 +63,18 @@ export default function BossMapPreviewScreen() {
   const [section, setSection] = useState<Section>('map');
   const [boss, setBoss] = useState<BossId>('kraken'), [run, setRun] = useState(0), [selected, setSelected] = useState(false);
   const [held, setHeld] = useState(false);
+  // Teammates' hits while you fight (the fight polls every 6 s).
+  const [teamDrop, setTeamDrop] = useState(0);
+  // Capture knobs (deep link): energy, tickets, attacks used, joined from home already.
+  const [knobs, setKnobs] = useState({ energy: 120, tickets: 2, attacks: 0, joined: false, autoplay: 0, hp: 3480, live: false });
+  // live=1: teammates keep hitting while the join card is open (HP drops, a new fighter joins) to show the live pulse.
+  const [joiners, setJoiners] = useState(0);
+  useEffect(() => {
+    if (!knobs.live) return;
+    let n = 0;
+    const id = setInterval(() => { n++; setTeamDrop(d => d + 120); if (n % 2 === 0) setJoiners(j => j + 1); }, 2500);
+    return () => clearInterval(id);
+  }, [knobs.live]);
   const auth = useContext(AuthContext);
   const place = useContext(LocationContext);
   useEffect(() => {
@@ -65,7 +86,11 @@ export default function BossMapPreviewScreen() {
       const b = query.get('boss') as BossId | null;
       if (b && b in BOSS_NAMES) setBoss(b);
       setHeld(query.get('held') === '1');
+      const num = (k: string, d: number) => (query.get(k) !== null && Number.isFinite(Number(query.get(k))) ? Number(query.get(k)) : d);
+      setKnobs({ energy: num('energy', 120), tickets: num('tickets', 2), attacks: num('attacks', 0), joined: query.get('joined') === '1', autoplay: num('autoplay', 0), hp: num('hp', 3480), live: query.get('live') === '1' });
       if (query.get('play') === '1') setRun(value => value + 1);
+      // First-time Boss Bash lesson again (capture only).
+      if (query.get('fresh') === '1') void AsyncStorage.multiRemove(['boss_bash_seen_v1', 'boss_bash_best_kraken']).catch(() => undefined);
     };
     void Linking.getInitialURL().then(apply).catch(() => undefined);
     const sub = Linking.addEventListener('url', event => apply(event.url));
@@ -91,8 +116,11 @@ export default function BossMapPreviewScreen() {
     refreshControl: async () => fixture.control });
   useEffect(() => { if (section === 'map' && run > 0) void map.enqueue(fixture.defeated); }, [run, section]);
 
-  const fakeAuth = useMemo(() => ({ ...auth, player: { ...(auth?.player ?? {}), id: 900005, energy: 120, tickets: 2 } as never,
-    refreshPlayer: async () => auth?.player as never }), [auth]);
+  const fakeAuth = useMemo(() => ({ ...auth, player: { ...(auth?.player ?? {}), id: 900005, energy: knobs.energy, tickets: knobs.tickets } as never,
+    refreshPlayer: async () => auth?.player as never }), [auth, knobs.energy, knobs.tickets]);
+  const log = [{ damage: 512, remote: section === 'home' }, { damage: 416, remote: section === 'home' }, { damage: 388, remote: section === 'home' },
+    { damage: 604, remote: section === 'home' }].slice(0, knobs.attacks);
+  const youFixture = { attacks: knobs.attacks, attacks_left: 5 - knobs.attacks, damage: log.reduce((a, b) => a + b.damage, 0), reward: null, log };
   const fakePlace = useMemo(() => ({ ...place, location: { latitude: RIDE.latitude + 0.0004, longitude: RIDE.longitude } as never }), [place]);
   const rushes: RushPick[] = [{ task: fixture.task, wait: 10, rush: { ends_at: new Date(Date.now() + 12 * 60000).toISOString(), wait: 10, typical: 55 } as never }];
 
@@ -138,8 +166,14 @@ export default function BossMapPreviewScreen() {
     </View>
     {(section === 'sheet' || section === 'home') && <AuthContext.Provider value={fakeAuth}>
       <LocationContext.Provider value={fakePlace}>
-        <BossRaidFlow parkId={1} open recoveryService={fixtureRecovery} onClose={() => setSection('map')} onState={() => undefined}
-          raid={fixtureRaid(boss, section === 'home' ? { latitude: null, longitude: null } : {})} />
+        <BossRaidFlow parkId={1} open recoveryService={fixtureRecovery} roundService={fixtureRound} devAutoplay={knobs.autoplay} onClose={() => setSection('map')} onState={() => undefined}
+          onLiveRefresh={() => setTeamDrop(d => d + 96 + Math.round(Math.random() * 60))}
+          raid={fixtureRaid(boss, { ...(section === 'home' ? { latitude: null, longitude: null } : {}), you: youFixture,
+            hp_left: knobs.hp - teamDrop, fighters: 6 + joiners,
+            teams: { mouse: 1240 + Math.round(teamDrop * 0.5), globe: 860 + Math.round(teamDrop * 0.3), shark: 520 + Math.round(teamDrop * 0.2) },
+            top: [{ username: 'finnfan22', damage: 1480, you: false, team: 'mouse' }, { username: 'sharkbait_sam', damage: youFixture.damage, you: true, team: 'shark' },
+              { username: 'coasterkid', damage: 640, you: false, team: 'globe' }].filter(t => t.damage > 0).sort((a, b) => b.damage - a.damage),
+            remote: { joined: knobs.joined, ticket_cost: 1, damage_rate: 0.6, reward_rate: 0.6, fighters: 1 } })} />
       </LocationContext.Provider>
     </AuthContext.Provider>}
     <View style={styles.controls}>

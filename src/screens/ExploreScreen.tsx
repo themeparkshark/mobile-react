@@ -480,7 +480,7 @@ function ExploreScreen() {
   // Ride Control: poll the park's team map while at a park, and after wins.
   const { control: rideControl, refresh: refreshRideControl } = useRideControlMap({ playerId: player?.id ?? null, parkId: park?.id ?? null, focused: mapFocused, idle: mapIdle });
   // Boss raids: a co-op boss surfaces at a ride at set times each park day.
-  const { raid, setState: setRaidState, link: raidLink, retryLink: retryRaidLink } = useParkRaid(park?.id, { focused: mapFocused, idle: mapIdle });
+  const { raid, setState: setRaidState, link: raidLink, retryLink: retryRaidLink, refresh: refreshRaid } = useParkRaid(park?.id, { focused: mapFocused, idle: mapIdle });
   const [bossOpen, setBossOpen] = useState(false);
   const [bossOccluded, setBossOccluded] = useState(false);
   const bossMap = useBossMapMoment({ playerId: player?.id ?? null, parkId: park?.id ?? null, control: rideControl,
@@ -1198,7 +1198,7 @@ function ExploreScreen() {
       {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)}
         presentationAvailable={!isActive && !dailyGiftOccluded && !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !activeRedeemable}
         onMapOcclusionChange={setBossOccluded} onCelebrationDismiss={result => { void bossMap.enqueue(result); }}
-        link={raidLink} onRetryLink={retryRaidLink}
+        link={raidLink} onRetryLink={retryRaidLink} onLiveRefresh={refreshRaid}
         onState={state => { setRaidState(state); void refreshRideControl(); }} />}
       {player && permissionChecked && !permissionGranted && <PermissionsNotGranted />}
       {/* One overlay at a time: the daily chest comes last, after the first catch and never alongside a find. */}
