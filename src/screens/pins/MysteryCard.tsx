@@ -268,14 +268,14 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
         accessibilityLabel={`Golden Box, ${golden.price} coins. Gold chaser ${formatChance(golden.chaser_bp)}${golden.no_duplicates ? '. Only pins you need' : ''}. ${openOdds ? 'Hide' : 'Show'} what can be inside`}>
         <Animated.View pointerEvents="none" style={[styles.goldenGlint, glintStyle]} />
         <Image source={GOLDEN_ICON} style={{ width: 54, height: 54 }} contentFit="contain" />
-        <View style={{ flex: 1, gap: 4 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
           <Text maxFontSizeMultiplier={1.2} style={styles.goldenTitle}>Golden Box</Text>
           <View style={styles.goldenChips}>
             <View style={styles.goldenChip}>
               <Image source={PIN_ART.chaser} style={{ width: 18, height: 18 }} contentFit="contain" />
               <Text maxFontSizeMultiplier={1.1} style={styles.goldenChipText}>{golden.chaser_bp >= 10000 ? 'Gold chaser next!' : `Gold chaser ${oneIn(golden.chaser_bp)}`}</Text>
             </View>
-            {golden.no_duplicates && <View style={[styles.goldenChip, styles.goldenChipNew]}><Text maxFontSizeMultiplier={1.1} style={[styles.goldenChipText, { color: BRAND.white }]}>Only new pins</Text></View>}
+            {golden.no_duplicates && golden.chaser_bp < 10000 && <View style={[styles.goldenChip, styles.goldenChipNew]}><Text maxFontSizeMultiplier={1.1} style={[styles.goldenChipText, { color: BRAND.white }]}>Only new pins</Text></View>}
           </View>
         </View>
         <View style={[styles.price, short > 0 && styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{golden.price.toLocaleString('en-US')}</Text></View>
@@ -507,14 +507,14 @@ const styles = StyleSheet.create({
   earnText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 2, flexShrink: 1, textAlign: 'center' },
   openShort: { backgroundColor: '#e9e2c9', borderColor: BRAND.navy },
   gotIt: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#dff5e3', borderRadius: 999, paddingHorizontal: 4 },
-  gotItText: { fontFamily: FONT.display, fontSize: 12, color: '#1f7a3a', paddingTop: 2 },
+  gotItText: { fontFamily: FONT.display, fontSize: 11, color: '#1f7a3a', paddingTop: 2 },
   openGold: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
   openGoldText: { color: BRAND.navy },
   golden: { backgroundColor: '#fff1c2', borderWidth: 3, borderColor: BRAND.goldLip, borderRadius: RADIUS.md, padding: SPACE.sm, gap: SPACE.sm, overflow: 'hidden' },
   goldenHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, minHeight: 58 },
   goldenGlint: { position: 'absolute', top: -40, width: 22, height: 160, backgroundColor: 'rgba(255,255,255,0.75)' },
   goldenTitle: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, paddingTop: 3 },
-  goldenChips: { flexDirection: 'row', gap: 4, alignItems: 'center' },
+  goldenChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, alignItems: 'center' },
   goldenChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 999, borderWidth: 2, borderColor: BRAND.goldLip, paddingHorizontal: 7, paddingVertical: 1 },
   goldenChipNew: { backgroundColor: BRAND.green, borderColor: BRAND.white },
   goldenChipText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, paddingTop: 2 },

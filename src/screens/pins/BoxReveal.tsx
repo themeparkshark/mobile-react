@@ -94,14 +94,14 @@ function CrownBurst({ t, size }: { t: SharedValue<number>; size: number }) {
     if (v <= 0 || v >= 1) return { opacity: 0 };
     const up = Math.min(1, v / 0.35);
     return {
-      opacity: v < 0.45 ? 1 : Math.max(0, 1 - (v - 0.45) / 0.2),
-      transform: [{ translateY: -size * 1.45 * up - v * 40 }, { scale: 0.4 + up * 0.8 - Math.max(0, v - 0.35) * 0.3 }, { rotate: `${(1 - up) * -25}deg` }],
+      opacity: v < 0.35 ? 1 : Math.max(0, 1 - (v - 0.35) / 0.15),
+      transform: [{ translateY: -size * 1.1 * up - v * 20 }, { scale: 0.4 + up * 0.8 - Math.max(0, v - 0.35) * 0.3 }, { rotate: `${(1 - up) * -25}deg` }],
     };
   });
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
       {Array.from({ length: MINI_CROWNS }, (_, i) => <MiniCrown key={i} i={i} t={t} size={size} />)}
-      <Animated.View style={[{ position: 'absolute', width: size * 0.62, height: size * 0.62 }, big]}>
+      <Animated.View style={[{ position: 'absolute', width: size * 0.45, height: size * 0.45 }, big]}>
         <Image source={CROWN} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
       </Animated.View>
     </View>
@@ -116,7 +116,8 @@ function MiniCrown({ i, t, size }: { i: number; t: SharedValue<number>; size: nu
     if (v <= 0.12 || v >= 1) return { opacity: 0 };
     const k = (v - 0.12) / 0.88;
     return {
-      opacity: 1 - k * k,
+      // Gone well before the pin card settles (no ghost crowns over the pin).
+      opacity: Math.max(0, 1 - k * 1.8),
       transform: [
         { translateX: Math.cos(angle) * dist * k },
         { translateY: -size * 0.5 + Math.sin(angle) * dist * k + 160 * k * k },
