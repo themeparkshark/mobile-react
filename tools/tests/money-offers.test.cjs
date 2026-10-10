@@ -173,3 +173,12 @@ test('after a win the pass banner says what was gained, and a step crossed', () 
   assert.deepEqual(plain(pass.passGain({ season: 's1', points: 420, tier: 1 }, st(540, 1))), { gained: 120, stepUp: null });
   assert.equal(pass.passGain({ season: 's0', points: 1, tier: 0 }, st(540, 1)), null, 'another season');
 });
+
+test('the once-ever Starter Pack: seen per player on the server, shown only with a price, one offer per sheet', () => {
+  const card = read('src/components/money/StarterOfferCard.tsx');
+  assert.match(card, /const visible = !!\(show && serverSeen === false && starter && price\);/, 'needs the server says unseen and a real price');
+  assert.match(card, /trackMoney\('starter_seen', 'postwin\.starter', starter\.product_id\)/, 'seen is recorded on the server');
+  assert.match(card, /serverSeen === true \? false/, 'seen on another phone: the sheet gets its VIP line back');
+  const sheet = read('src/components/PostWinRewardsModal.tsx');
+  assert.match(sheet, /\(starterShown === false \|\| coinsEarned <= 0\)/, 'no VIP line while the Starter Pack is still deciding (null)');
+});

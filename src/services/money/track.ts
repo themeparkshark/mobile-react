@@ -7,7 +7,7 @@
  */
 import client from '../../api/client';
 
-export type MoneyEvent = 'impression' | 'tap' | 'gate_shown' | 'gate_passed' | 'gate_declined' | 'sheet' | 'bought' | 'pending' | 'failed' | 'cancelled' | 'claim'
+export type MoneyEvent = 'impression' | 'tap' | 'gate_shown' | 'gate_passed' | 'gate_declined' | 'sheet' | 'bought' | 'pending' | 'failed' | 'cancelled' | 'claim' | 'starter_seen'
   /** Rewarded ads (placement `ad.<where>`): the ad played, was closed early, paid, or had no ad to show. */
   | 'ad_shown' | 'ad_skipped' | 'ad_rewarded' | 'ad_no_fill';
 
