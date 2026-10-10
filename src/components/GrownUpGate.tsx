@@ -14,17 +14,15 @@ import { useModalLayer } from '../ui/modalLayers';
  * - Two steps for the grown-up: read a sum written out in words ("forty-seven
  *   times six"), then work out a two-digit times a one-digit sum (23..89 times
  *   6..9, no round tens), typed on a number pad. No digits to copy, no choices to
- *   guess from: an adult reads and answers at once, a 9 or 10 year old can't.
+ *   guess from: an adult reads and answers at once, a young child rarely can.
  * - The child never sees the offer: before the answer the gate only says "this
  *   costs real money". The price, what it gets, any free trial and, for a plan
  *   that renews, the renewal and cancel terms (App Store 3.1.2) are shown on a
  *   second card only after the grown-up answers, with Continue and Not now.
- * - A pass covers only the door it was asked for, plus the next step of that
- *   same flow (the paywall's entry, then its Buy), once, within 2 minutes.
- *   Every other door asks again, and a wrong answer cancels any pass.
+ * - Every real-money Buy asks fresh (no pass carries over from an earlier answer).
  * - A wrong answer closes kindly and the gate rests for 30 seconds, then 2 and 10 minutes
  *   after repeated misses (a moon,
- *   "Resting", one line, OK). The rest survives a force-quit. Nothing scolds.
+ *   "Resting", one line, OK). The rest and the miss count survive a force-quit. Nothing scolds.
  * - Mounted once at the root (GrownUpGateHost in Root.tsx). With no host,
  *   askGrownUp() answers false: a door never opens ungated.
  *
@@ -66,7 +64,13 @@ let open: Promise<boolean> | null = null;
 /** The 30 s rest survives a force-quit. */
 async function loadRest() {
   try { gateRestUntil = Math.max(gateRestUntil, Number(await AsyncStorage.getItem(REST_KEY)) || 0); } catch { /* storage is best effort */ }
+  // The miss count too, so a force-quit never resets the longer rests.
+  try {
+    const raw = JSON.parse((await AsyncStorage.getItem(MISS_KEY)) ?? 'null') as { count?: unknown; last?: unknown } | null;
+    if (raw && Number(raw.last) > misses.last) misses = { count: Number(raw.count) || 0, last: Number(raw.last) || 0 };
+  } catch { /* storage is best effort */ }
 }
+const MISS_KEY = 'grown-up-gate:misses';
 
 /**
  * What the grown-up is saying yes to, in plain words, shown above the sum so
@@ -159,10 +163,11 @@ export function devShowGateOffer(): Promise<boolean> {
 /** Judges a typed answer; a wrong one rests the gate (longer after repeated misses). Exported for tests. */
 export function judgeGate(typed: string, seed: number, now = Date.now()): boolean {
   const ok = seed >= 0 && typed !== '' && Number(typed) === grownUpQuestion(seed).answer;
-  if (ok) misses = { count: 0, last: 0 };
+  if (ok && misses.count) { misses = { count: 0, last: 0 }; void AsyncStorage.setItem(MISS_KEY, JSON.stringify(misses)).catch(() => undefined); }
   if (!ok) {
     pass = null; // a wrong answer cancels any pass
     misses = { count: now - misses.last < 600_000 ? misses.count + 1 : 1, last: now };
+    void AsyncStorage.setItem(MISS_KEY, JSON.stringify(misses)).catch(() => undefined);
     const rest = restMsFor(misses.count);
     lastRestText = restText(rest);
     gateRestUntil = now + rest;
@@ -420,3 +425,6 @@ const styles = StyleSheet.create({
   cancel: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
   cancelText: { fontFamily: FONT.display, fontSize: 17, color: GATE_COLORS.inkSoft },
 });
+
+// Load the saved rest and miss count as soon as the app starts (best effort).
+void loadRest();

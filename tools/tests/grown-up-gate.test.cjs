@@ -33,7 +33,7 @@ function gateModule(store = {}, navigated = [], dev = true) {
   }, { __DEV__: dev });
 }
 
-test('the grown-up question: 2-digit times 1-digit, too hard for a 9 or 10 year old in their head, typed in', () => {
+test('the grown-up question: a sum written in words, 2-digit times 1-digit, hard to guess, typed in', () => {
   const gate = gateModule();
   const seen = new Set();
   for (let seed = 0; seed < 1000; seed++) {
@@ -251,10 +251,12 @@ test('every real-money App Store call sits behind the grown-up gate in the same 
   assert.match(vip, /grownUpForNextStep\([\s\S]{0,600}buyVip\(/, 'VIP plans');
   const supplies = read('src/services/money/supplies.ts');
   assert.match(supplies, /if \(!state\.prices\[product\.product_id\]\?\.price\) return \{ status: 'declined' \};[\s\S]*askGrownUp\(/, 'no price, no buy');
-  for (const fn of ['buySharkPass(', 'buyVipGift(', 'buyVip(']) {
-    const callers = ['src/screens/SharkPassScreen.tsx', 'src/screens/MembershipScreen.tsx'].filter(f => read(f).includes(fn));
-    assert.ok(callers.length >= 1, fn);
-  }
+  // Exact allowlists: a new caller anywhere else fails the build until it is gated and listed here.
+  const callers = re => where(re).filter(f => f !== 'src/services/purchases.ts');
+  assert.deepEqual(callers(/\bbuySharkPass\(/), ['src/screens/SharkPassScreen.tsx']);
+  assert.deepEqual(callers(/\bbuyVipGift\(/), ['src/screens/MembershipScreen.tsx']);
+  assert.deepEqual(callers(/\bbuyVip\(/), ['src/screens/MembershipScreen.tsx']);
+  assert.deepEqual(callers(/\bbuyShopProduct\(/), ['src/services/money/supplies.ts']);
 });
 
 test('repeated misses rest the gate longer: 30 s, 2 min, 10 min', () => {
@@ -262,4 +264,19 @@ test('repeated misses rest the gate longer: 30 s, 2 min, 10 min', () => {
   assert.equal(gate.restMsFor(1), 30000);
   assert.equal(gate.restMsFor(2), 120000);
   assert.equal(gate.restMsFor(3), 600000);
+});
+
+test('the miss count survives a force-quit, so the longer rests hold', async () => {
+  const store = {};
+  const gate = gateModule(store);
+  gate.judgeGate('0', 5, 1000);
+  gate.judgeGate('0', 5, 2000);
+  await Promise.resolve();
+  assert.equal(JSON.parse(store['grown-up-gate:misses']).count, 2);
+  const relaunched = gateModule(store);
+  // The module loads the saved count when the app starts.
+  await new Promise(r => setTimeout(r, 5));
+  relaunched.judgeGate('0', 5, 4000);
+  await Promise.resolve();
+  assert.equal(Number(store['grown-up-gate:rest-until']), 4000 + 600000, 'third miss in a row: 10 minutes');
 });

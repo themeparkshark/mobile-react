@@ -11,7 +11,9 @@ export const GROWN_UP_LINES: readonly string[] = [
   'VIP is a subscription. A free trial turns into a paid plan unless it is turned off at least 24 hours before. Turn it off in Settings, your name, Subscriptions.',
   'The Shark Pass is one buy per season. It never renews. Steps come only from playing.',
   'Gift plans of VIP (1 or 12 months) never renew.',
-  'Nothing random is sold for real money. Mystery Pin Boxes cost coins, and their odds are shown on the box.',
+  'Nothing random is sold for real money. Coins can be bought with real money; Mystery Pin Boxes cost coins and show their odds on the box.',
+  'Gold editions and frames are looks only. They never change how the game plays, and they stay yours forever.',
+  'If a buy is refunded, the coins, tickets and passes from it that are still unspent are taken back. Pins and frames already given stay.',
   'Supplies packs show exactly what they hold. No surprise prizes.',
   'Bring back an earlier buy with Restore on the VIP page or the Shark Pass page.',
 ];

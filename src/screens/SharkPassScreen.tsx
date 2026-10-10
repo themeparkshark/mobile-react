@@ -138,6 +138,8 @@ function Flake({ x, size, dur, delay, drift, height, running }: { x: number; siz
 }
 
 const CELL_W = 92;
+/** "1,500": thousands commas without relying on the device's Intl. */
+const commas = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 /** A payoff card; `next` plays right after this one closes (e.g. the set bonus after its last pin). */
 type Landed = {
@@ -586,6 +588,13 @@ export default function SharkPassScreen() {
               </Animated.View>
             )}
 
+            {!premium && !season.ended && season.on_sale === false && (
+              // Not for sale right now: an earlier buy can always be brought back.
+              <Pressable onPress={() => void restore()} hitSlop={8} disabled={!!busy} style={{ alignSelf: 'center' }}>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.restore}>{busy === 'restore' ? 'Checking…' : 'Restore purchases'}</Text>
+              </Pressable>
+            )}
+
             {/* Today's Pass quests: 3 a day (the first always doable at home) and one for the week. */}
             {state.enabled && state.quests && !season.ended && (
               <View style={s.quests}>
@@ -681,7 +690,7 @@ export default function SharkPassScreen() {
             {state.cosmetics && state.cosmetics.gold.pieces.some(g => g.owns_base) && (
               <View style={s.earn}>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={s.earnTitle}>GOLD EDITIONS</Text>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>{`Turn a season pin you have into gold for ${state.cosmetics.gold.coins.toLocaleString('en-US')} coins.`}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>{`Turn a season pin you have into gold for ${commas(state.cosmetics.gold.coins)} coins. Gold editions stay yours forever.`}</Text>
                 <View style={s.goldGrid}>
                   {state.cosmetics.gold.pieces.filter(g => g.owns_base).map(g => (
                     <View key={g.art} style={s.goldCell}>
@@ -692,7 +701,7 @@ export default function SharkPassScreen() {
                           accessibilityLabel={`Make it gold for ${state.cosmetics?.gold.coins} coins`}
                           onPress={() => void makeGold(g.art, state.cosmetics?.gold.coins ?? 0)}>
                           <Text maxFontSizeMultiplier={1.1} style={[s.goldBtn, (!!goldBusy || !g.ready) && { opacity: 0.6 }]}>
-                            {goldBusy === g.art ? '…' : `${(state.cosmetics?.gold.coins ?? 0).toLocaleString('en-US')} coins`}
+                            {goldBusy === g.art ? '…' : `${commas(state.cosmetics?.gold.coins ?? 0)} coins`}
                           </Text>
                         </Pressable>
                       )}
@@ -729,7 +738,7 @@ export default function SharkPassScreen() {
             )}
 
             <Text maxFontSizeMultiplier={MAX_FONT} style={s.fine}>
-              {`Everything you claim is yours to keep. Season items never come back after ${lastDayText(season.last_day)}.`}
+              {`Everything you claim, gold editions too, is yours to keep. ${season.title} items are given out until ${lastDayText(season.last_day)}.`}
             </Text>
           </ScrollView>
         )}

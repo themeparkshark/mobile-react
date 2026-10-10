@@ -9,7 +9,16 @@ export type VipGiftState =
     readonly calendar: readonly { readonly month: string; readonly claimed: boolean; readonly pin: string | null }[];
     readonly plan?: VipPlanTime;
   };
-export type VipPlanTime = { readonly vip: boolean; readonly gift_until: string | null; readonly gift_last_day: string | null };
+export type VipRecap = { readonly month: string; readonly no_ad_rewards: number; readonly coins: number; readonly tickets: number; readonly energy: number; readonly gift_pin: string | null };
+export type VipPlanTime = {
+  readonly vip: boolean; readonly gift_until: string | null; readonly gift_last_day: string | null;
+  /** The App Store period the player is in now (a free trial's real end). */
+  readonly subscription_expires_at?: string | null;
+  /** Was VIP and is not now. */
+  readonly lapsed?: boolean;
+  /** What VIP gave this player this month, from their own records. Null with nothing yet. */
+  readonly recap?: VipRecap | null;
+};
 
 /** Null on an older server without the route. */
 export async function getVipGift(): Promise<VipGiftState | null> {

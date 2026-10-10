@@ -4,7 +4,8 @@
  *
  * - Only when notifications are already allowed: this never asks for permission (a kids app does not
  *   prompt for a sale reminder). Best effort; a failure never touches the purchase.
- * - One reminder per trial (an id per end day); a new trial replaces the old one.
+ * - One reminder per trial; a new trial replaces the old one. The end is the server's real App Store
+ *   period end when it has it. When VIP stops (cancelled and run out, refunded), the reminder is dropped.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -22,6 +23,19 @@ export function trialReminderText(billing: string): { title: string; body: strin
 export function trialReminderAt(end: Date, now: Date = new Date()): Date | null {
   const at = new Date(end.getTime() - 24 * 3600_000);
   return at.getTime() > now.getTime() + 60_000 ? at : null;
+}
+
+/** The plan stopped (not VIP any more): drop a waiting reminder so it never fires for a plan that ended. */
+export async function cancelTrialReminder(): Promise<void> {
+  try {
+    const old = await AsyncStorage.getItem(KEY).catch(() => null);
+    if (!old) return;
+    const Notifications = require('expo-notifications') as typeof import('expo-notifications');
+    await Notifications.cancelScheduledNotificationAsync(old).catch(() => undefined);
+    await AsyncStorage.removeItem(KEY).catch(() => undefined);
+  } catch {
+    // best effort
+  }
 }
 
 export async function scheduleTrialReminder(end: Date, billing: string): Promise<void> {

@@ -34,6 +34,7 @@ import { VIP_GIFT_PRODUCT_IDS, buyVipGift, loadVipGiftPrices } from '../services
 import { trackImpression, trackMoney } from '../services/money/track';
 import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../services/money/flags';
 import { scheduleTrialReminder } from '../services/money/trialReminder';
+import { getVipGift } from '../api/endpoints/me/vip-gift';
 import GrownUpsInfo from '../components/money/GrownUpsInfo';
 
 // Every line here is backed by live server logic: ride wins pay VIP double
@@ -169,8 +170,15 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const reportBuy = async (outcome: Awaited<ReturnType<typeof buyVip>>) => {
     if (outcome === 'success') {
       // A free trial: one quiet reminder to the grown-up the day before it turns into a paid plan.
-      const end = plan.trial ? trialEndsAt(plan) : null;
-      if (end) void scheduleTrialReminder(end, `${priceText(plan)}`);
+      // The real end of the trial period from the server (Apple's signed expiry), else from the intro period.
+      if (plan.trial) {
+        const billing = priceText(plan);
+        void getVipGift().then((g) => {
+          const real = g?.plan?.subscription_expires_at ? new Date(g.plan.subscription_expires_at) : null;
+          const end = real && !Number.isNaN(real.getTime()) ? real : trialEndsAt(plan);
+          if (end) void scheduleTrialReminder(end, billing);
+        });
+      }
       await celebrate();
     }
     else if (outcome === 'pending') gameAlert('Waiting for a grown-up', 'A grown-up needs to say yes on their phone. VIP turns on after that.');
