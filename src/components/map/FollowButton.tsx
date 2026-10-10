@@ -116,16 +116,9 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
   }, [hint, reducedMotion, ring]);
   const ringStyle = useAnimatedStyle(() => ({ opacity: ring.value > 0 ? 0.9 * (1 - ring.value) : 0, transform: [{ scale: 1 + 0.45 * ring.value }] }));
 
-  // The pill fades and slides in on the UI thread, and stays mounted while it fades out.
-  const [shownPill, setShownPill] = useState<PillKey | null>(null);
-  const pillOn = useSharedValue(0);
-  useEffect(() => {
-    const on = !!pill || hint;
-    if (pill) setShownPill(pill);
-    pillOn.value = reducedMotion ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: on ? 200 : 180, easing: Easing.out(Easing.quad) });
-    if (!on) { const t = setTimeout(() => setShownPill(null), 200); return () => clearTimeout(t); }
-  }, [pill, hint, reducedMotion, pillOn]);
-  const pillStyle = useAnimatedStyle(() => ({ opacity: pillOn.value, transform: [{ translateX: 10 * (1 - pillOn.value) }, { scale: 0.92 + 0.08 * pillOn.value }] }));
+  // The pill shows while a pill or the hint is up. No shared fade: in the r6 captures the fade left the
+  // hint (and later the pills) at opacity 0, so it is plain mount and unmount.
+  const shownPill = pill;
   // Press: a squash and a pop. Mode change: the badge pops in. Panned away: one nudge so it is noticed.
   const press = useSharedValue(1);
   const badge = useSharedValue(1);
@@ -158,8 +151,7 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
         // A fixed-width lane left of the button: an absolute view with no width would be squeezed to
         // the 54 pt column it hangs from. The pill sizes to its words at the lane's right edge.
         <View pointerEvents="none" style={styles.pillLane}>
-        {/* The hint is static: the shared fade left it at opacity 0 when it mounted with the map (never seen in r3 to r6 frames). */}
-        <Reanimated.View style={[styles.pill, hint && styles.hint, hint ? null : pillStyle]}>
+        <View style={[styles.pill, hint && styles.hint]}>
           {hint ? (
             <>
               <Text style={styles.hintTitle}>{FOLLOW_COPY.hintTitle}</Text>
@@ -169,7 +161,7 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
             <Text style={styles.pillText} numberOfLines={1}>{FOLLOW_COPY[shownPill ?? 'heading']}</Text>
           )}
           <View style={[styles.tail, hint && styles.hintTail]} />
-        </Reanimated.View>
+        </View>
         </View>
       )}
       {hint && <Reanimated.View pointerEvents="none" style={[styles.ring, ringStyle]} />}
