@@ -31,6 +31,7 @@ import { playSfx } from '../../gamekit/SFX';
 import type { HelpPage, HelpSheetSpec } from '../../services/help/helpSheets';
 import { BRAND, GameButton, GameIcon, SharkLoader } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { useModalLayer } from '../../ui/modalLayers';
 import HelpHero, { type HeroData } from './HelpHero';
 import { markUserActivity } from '../../hooks/useUserIdle';
 import { HELP_TOUR_ON, onTourNext } from './helpTour';
@@ -74,6 +75,8 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
   const drag = useSharedValue(0);
   const reveal = useSharedValue(0);
   const closing = useRef(false);
+  // One modal at a time: other dialogs wait while a help sheet is up.
+  useModalLayer(visible, 'show');
 
   const finishClose = useCallback(() => { closing.current = false; setMounted(false); }, []);
 

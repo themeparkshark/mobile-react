@@ -69,7 +69,9 @@ test('Shark Social keeps its safety rules and grown-up links', () => {
   const help = read('src/screens/threads/SocialHelp.tsx');
   assert.match(help, /BlockedPlayers/);
   assert.match(help, /Grown-ups: email us/);
-  // Leaving for the mail app asks a grown-up first.
+  // Leaving for the mail app asks a grown-up, after the sheet has closed (never two modals at once).
+  assert.match(help, /onPress: \(\) => \{ setOpen\(false\); setTimeout\(\(\) => void emailUs\(\), 350\); \}/);
+  assert.match(read('src/components/help/HelpSheet.tsx'), /useModalLayer\(visible, 'show'\)/);
   assert.match(help, /askGrownUp\(\{ kind: 'leave', where: 'your email app' \}\)/);
 });
 

@@ -20,12 +20,15 @@ export default function SocialHelp() {
   // Grown-up links sit under Got it, like every sheet's quiet links.
   const links = [
     { label: 'Blocked players', onPress: () => { setOpen(false); setTimeout(() => RootNavigation.navigate('BlockedPlayers'), 350); } },
-    // Leaving the game for the mail app goes through the grown-up gate first.
-    { label: 'Grown-ups: email us', onPress: async () => {
-      if (!(await askGrownUp({ kind: 'leave', where: 'your email app' }))) return;
-      void openExternal(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Shark Social (parent)')}`, 'system'); // clarity-allow: email subject for our support inbox
-    } },
+    // Leaving for the mail app asks a grown-up. The sheet closes first, so the gate never
+    // stacks a second modal on top of it (iOS freezes on that).
+    { label: 'Grown-ups: email us', onPress: () => { setOpen(false); setTimeout(() => void emailUs(), 350); } },
   ];
+
+  async function emailUs() {
+    if (!(await askGrownUp({ kind: 'leave', where: 'your email app' }))) return;
+    void openExternal(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Shark Social (parent)')}`, 'system'); // clarity-allow: email subject for our support inbox
+  }
 
   return (
     <>
