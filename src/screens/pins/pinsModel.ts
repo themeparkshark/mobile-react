@@ -52,6 +52,8 @@ export interface GoldenBox {
   readonly odds_key?: string;
   /** Golden Boxes per day (kid-spend guardrail). */
   readonly daily_cap?: number;
+  /** You own this series' chaser (the box can still give it at the regular rate). */
+  readonly chaser_owned?: boolean;
 }
 
 export interface PinDay {

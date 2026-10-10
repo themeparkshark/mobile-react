@@ -95,7 +95,7 @@ function CrownBurst({ t, size }: { t: SharedValue<number>; size: number }) {
     const up = Math.min(1, v / 0.35);
     return {
       opacity: v < 0.35 ? 1 : Math.max(0, 1 - (v - 0.35) / 0.15),
-      transform: [{ translateY: -size * 1.1 * up - v * 20 }, { scale: 0.4 + up * 0.8 - Math.max(0, v - 0.35) * 0.3 }, { rotate: `${(1 - up) * -25}deg` }],
+      transform: [{ translateY: -size * 1.1 * up - 20 * up - v * 20 }, { scale: 0.4 + up * 0.8 - Math.max(0, v - 0.35) * 0.3 }, { rotate: `${(1 - up) * -25}deg` }],
     };
   });
   return (

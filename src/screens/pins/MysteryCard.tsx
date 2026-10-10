@@ -277,7 +277,7 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
               <Image source={PIN_ART.chaser} style={{ width: 18, height: 18 }} contentFit="contain" />
               <Text maxFontSizeMultiplier={1.1} style={styles.goldenChipText}>{golden.chaser_bp >= 10000 ? 'Gold chaser next!' : `Gold chaser ${oneIn(golden.chaser_bp)}`}</Text>
             </View>
-            {golden.no_duplicates && golden.chaser_bp < 10000 && <View style={[styles.goldenChip, styles.goldenChipNew]}><Text maxFontSizeMultiplier={1.1} style={[styles.goldenChipText, { color: BRAND.white }]}>{golden.chaser_bp < 2500 ? 'New pin or the chaser' : 'Only new pins'}</Text></View>}
+            {golden.no_duplicates && golden.chaser_bp < 10000 && <View style={[styles.goldenChip, styles.goldenChipNew]}><Text maxFontSizeMultiplier={1.1} style={[styles.goldenChipText, { color: BRAND.white }]}>{(golden.chaser_owned ?? golden.chaser_bp < 2500) ? 'New pin or the chaser' : 'Only new pins'}</Text></View>}
           </View>
         </View>
         <View style={[styles.price, short > 0 && styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{golden.price.toLocaleString('en-US')}</Text></View>
