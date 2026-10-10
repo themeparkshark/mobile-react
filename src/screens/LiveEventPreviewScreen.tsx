@@ -8,6 +8,10 @@ import EventSheet from '../components/liveEvents/EventSheet';
 import EventStatusChip from '../components/liveEvents/EventStatusChip';
 import FrenzyBanner, { resetFrenzyBannerForTests } from '../components/liveEvents/FrenzyBanner';
 import StarRideBadge from '../components/liveEvents/StarRideBadge';
+import FrenzySweep from '../components/liveEvents/FrenzySweep';
+import StarRideStamp from '../components/liveEvents/StarRideStamp';
+import EventRecapCard from '../components/liveEvents/EventRecapCard';
+import { trackFill } from '../services/liveEvents/model';
 import NextUpRail from '../components/nextUp/NextUpRail';
 import ParkPulseChip from '../components/liveEvents/ParkPulseChip';
 import { openableKeys } from '../services/liveEvents/model';
@@ -19,15 +23,15 @@ import { BRAND, GameIcon } from '../ui';
  * fixture data, for captures and grading. EXPO_PUBLIC_LIVE_EVENT_PREVIEW picks
  * the opening state: progress | ready | frenzy | upcoming | ended | sheet | home.
  */
-type Mode = 'progress' | 'ready' | 'frenzy' | 'upcoming' | 'ended' | 'sheet' | 'home';
-const MODES: Mode[] = ['progress', 'ready', 'frenzy', 'upcoming', 'ended', 'sheet', 'home'];
+type Mode = 'progress' | 'ready' | 'frenzy' | 'upcoming' | 'ended' | 'sheet' | 'home' | 'recap' | 'stamp' | 'climb';
+const MODES: Mode[] = ['progress', 'ready', 'frenzy', 'upcoming', 'ended', 'sheet', 'home', 'recap', 'stamp', 'climb'];
 
 function fixtureFor(mode: Mode) {
   if (mode === 'ready') return goldenReefFixture({ mine: 13, claimed: 1 });
   if (mode === 'frenzy') return goldenReefFixture({ mine: 9, claimed: 2, frenzy: true });
   if (mode === 'upcoming') return goldenReefFixture({ phase: 'upcoming', mine: 0, total: 0 });
-  if (mode === 'ended') return goldenReefFixture({ phase: 'ended', mine: 34, total: 290, claimed: 3 });
-  if (mode === 'sheet') return goldenReefFixture({ mine: 13, claimed: 1, total: 140 });
+  if (mode === 'ended' || mode === 'recap') return goldenReefFixture({ phase: 'ended', mine: 34, total: 290, claimed: 3 });
+  if (mode === 'sheet' || mode === 'climb') return goldenReefFixture({ mine: 13, claimed: 1, total: 140 });
   return goldenReefFixture({ mine: 9, claimed: 2 });
 }
 
@@ -45,6 +49,14 @@ export default function LiveEventPreviewScreen() {
   const event = useMemo(() => fixtureFor(mode), [mode]);
   const [live, setLive] = useState(event);
   useEffect(() => { setLive(event); }, [event]);
+  // Climb: the sheet opens with your team 2nd, then a moment later it moves to 1st.
+  useEffect(() => {
+    if (mode !== 'climb') return;
+    const id = setTimeout(() => setLive(e => e.team_race ? { ...e, team_race: { ...e.team_race, scores: { mouse: 21, globe: 34, shark: 38 }, leaders: ['shark'] } } : e), 1500);
+    return () => clearTimeout(id);
+  }, [mode]);
+  const [stampAt, setStampAt] = useState(0);
+  useEffect(() => { if (mode === 'stamp') setStampAt(Date.now()); }, [mode]);
   useEffect(() => { resetFrenzyBannerForTests(); }, [mode]);
   const fakeOpen = async (key: string): Promise<EventReward | null> => {
     await new Promise(r => setTimeout(r, 700));
@@ -84,16 +96,20 @@ export default function LiveEventPreviewScreen() {
         ) : <EventStatusChip inline event={live} onPress={() => setSheet(true)} />}
         {!home && <View style={{ marginTop: 8 }}><ParkPulseChip pulse={{ bucket: '10+', team_leader: 'globe' }} /></View>}
         <View style={styles.toastSlot}>
-          <EventGainToast gained={gain.n} gainedAt={gain.at} artKey={live.art_key} />
+          <EventGainToast gained={gain.n} gainedAt={gain.at} artKey={live.art_key}
+            fillFrom={trackFill(live.me.chests, Math.max(0, live.me.points - gain.n)).fill} fillTo={trackFill(live.me.chests, live.me.points).fill} />
         </View>
         <View style={styles.toastSlot}><FrenzyBanner event={live} /></View>
       </View>
+      <FrenzySweep event={live} />
+      {mode === 'stamp' && <View style={styles.stamp}><StarRideStamp at={stampAt} /></View>}
+      <EventRecapCard event={live} visible={mode === 'recap'} onClose={() => setMode('progress')} onOpenChests={() => { setMode('ended'); setSheet(true); }} />
       <View style={[styles.rail, { bottom: insets.bottom + 120 }]}>
         <NextUpRail item={rail} onAction={a => { if (a.type === 'open_event') setSheet(true); }} />
       </View>
       <ScrollView horizontal style={[styles.controls, { bottom: insets.bottom + 12 }]} contentContainerStyle={{ gap: 6, paddingHorizontal: 10 }}>
         {MODES.map(m => (
-          <Pressable key={m} onPress={() => { setMode(m); setSheet(m === 'sheet'); }} style={[styles.ctl, m === mode && styles.ctlOn]}>
+          <Pressable key={m} onPress={() => { setMode(m); setSheet(m === 'sheet' || m === 'climb'); }} style={[styles.ctl, m === mode && styles.ctlOn]}>
             <Text style={styles.ctlText}>{m}</Text>
           </Pressable>
         ))}
@@ -114,6 +130,7 @@ const styles = StyleSheet.create({
   homeRow: { flexDirection: 'row', gap: 10 },
   fakeChip: { height: 36, paddingHorizontal: 8, borderRadius: 18, backgroundColor: BRAND.blue, borderWidth: 2.5, borderColor: BRAND.white, justifyContent: 'center' },
   toastSlot: { marginTop: 10, alignItems: 'center' },
+  stamp: { position: 'absolute', top: '40%', alignSelf: 'center' },
   rail: { position: 'absolute', left: 12, right: 12 },
   controls: { position: 'absolute', left: 0, right: 0, flexGrow: 0 },
   ctl: { backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 10, paddingVertical: 8 },

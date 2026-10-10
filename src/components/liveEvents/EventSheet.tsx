@@ -1,4 +1,6 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { Image } from 'expo-image';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -65,10 +67,29 @@ function HowTo({ art, steps }: { readonly art: EventArt; readonly steps: readonl
   );
 }
 
+/** Your team's last place seen per event (this app run), so a climb gets its moment once. */
+const lastPlace = new Map<number, number>();
+
+/** "UP TO 1st!": your team's row hops and a tag pops when your place improves. */
+function RankBump({ place }: { readonly place: number }) {
+  const reduced = useReducedGameMotion();
+  const t = useSharedValue(0);
+  useEffect(() => {
+    playSfx('star');
+    haptic('success');
+    t.value = reduced ? 1 : withSequence(withSpring(1, { damping: 7, stiffness: 260 }), withDelay(1800, withTiming(0.0001, { duration: 300 })));
+  }, [place, reduced, t]);
+  const style = useAnimatedStyle(() => ({ opacity: Math.min(1, t.value * 1.5), transform: [{ scale: 0.6 + 0.4 * t.value }, { translateY: (1 - t.value) * 8 }] }));
+  return <Animated.View style={[styles.bump, style]} pointerEvents="none"><Text style={styles.bumpText}>UP TO {ordinal(place).toUpperCase()}!</Text></Animated.View>;
+}
+
 function TeamRace({ event }: { readonly event: LiveEvent }) {
   const race = event.team_race!;
   const max = Math.max(1, ...Object.values(race.scores));
   const place = teamPlace(race.scores, event.me.team);
+  const before = lastPlace.get(event.id);
+  const climbed = place != null && before != null && place < before;
+  useEffect(() => { if (place != null) lastPlace.set(event.id, place); }, [event.id, place]);
   const ended = event.phase === 'ended';
   const winner = race.winners.length === 1 ? race.winners[0] : null;
   const line = ended
@@ -87,6 +108,7 @@ function TeamRace({ event }: { readonly event: LiveEvent }) {
             <View style={styles.teamTrack}>
               <View style={[styles.teamFill, { width: `${Math.max(3, (score / max) * 100)}%`, backgroundColor: TEAMS[team].color }]} />
             </View>
+            {mine && climbed && <RankBump place={place!} />}
             <View style={styles.teamTag}>
               {leads && score > 0 ? <GameIcon name="crown" size={22} /> : mine ? <Text style={styles.you}>YOU</Text> : null}
             </View>
@@ -271,6 +293,8 @@ function showStarsFor(event: LiveEvent, atPark: boolean, live: boolean): boolean
 }
 
 const styles = StyleSheet.create({
+  bump: { position: 'absolute', right: 44, top: -6, backgroundColor: BRAND.green, borderRadius: 10, borderWidth: 2, borderColor: BRAND.white, paddingHorizontal: 8, paddingVertical: 2, zIndex: 2 },
+  bumpText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
   doNow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.sky, borderRadius: 18, borderWidth: 3, borderColor: BRAND.navy,
     paddingVertical: 6, paddingLeft: 10, paddingRight: 6, minHeight: 56 },
   doNowText: { flex: 1, fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },

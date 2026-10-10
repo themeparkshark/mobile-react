@@ -1,4 +1,5 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
+import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, FadeIn, ZoomIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
@@ -7,10 +8,26 @@ import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { rewardChips } from '../../services/liveEvents/model';
-import { BRAND, GameIcon } from '../../ui';
+import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 import type { EventArt } from './eventArt';
 
 const COINS = 8;
+
+const RAYS = 8;
+
+/** The lid burst: gold rays fan out once behind the chest (UI thread, 8 views, runs once). */
+function Rays({ go }: { readonly go: boolean }) {
+  const t = useSharedValue(0);
+  useEffect(() => { if (go) t.value = withSequence(withTiming(1, { duration: 380, easing: Easing.out(Easing.cubic) }), withDelay(500, withTiming(0, { duration: 500 }))); }, [go, t]);
+  const style = useAnimatedStyle(() => ({ opacity: t.value, transform: [{ scale: 0.4 + t.value * 0.9 }, { rotate: `${t.value * 20}deg` }] }));
+  return (
+    <Animated.View style={[styles.rays, style]} pointerEvents="none">
+      {Array.from({ length: RAYS }, (_, i) => (
+        <View key={i} style={[styles.ray, { transform: [{ rotate: `${(360 / RAYS) * i}deg` }, { translateY: -62 }] }]} />
+      ))}
+    </Animated.View>
+  );
+}
 
 /** One coin flying out of the chest (capped at 8, UI thread, runs once). */
 function Burst({ i, go }: { readonly i: number; readonly go: boolean }) {
@@ -47,6 +64,9 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
   const [open, setOpen] = useState(false);
   /** Tap anywhere once it is open: every prize lands now. */
   const [skip, setSkip] = useState(false);
+  const { triggerFly } = useCurrencyFly();
+  const stageRef = useRef<View>(null);
+  const flown = useRef(false);
   const shake = useSharedValue(0);
   const flash = useSharedValue(0);
   useEffect(() => {
@@ -57,7 +77,10 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
   }, [reduced, failed, shake]);
   useEffect(() => {
     if (!rewards) return;
+    // Anticipation: the wobble tightens just before the lid pops.
+    if (!reduced) shake.value = withRepeat(withSequence(withTiming(1, { duration: 40 }), withTiming(-1, { duration: 80 }), withTiming(0, { duration: 40 })), -1, false);
     const id = setTimeout(() => {
+      cancelAnimation(shake);
       shake.value = 0;
       flash.value = withSequence(withTiming(1, { duration: 70 }), withDelay(40, withTiming(0, { duration: 260 })));
       setOpen(true);
@@ -73,6 +96,20 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
     const ids = chips.map((_, i) => setTimeout(() => { playSfx('tick'); haptic('tickSelection'); }, 350 + i * 260));
     return () => ids.forEach(clearTimeout);
   }, [open, skip]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** NICE sends the prizes home: coins and Tickets fly to their counters in the top bar. */
+  const done = () => {
+    if (!flown.current && rewards && stageRef.current) {
+      flown.current = true;
+      stageRef.current.measureInWindow((x, y, w, h) => {
+        if (!Number.isFinite(x)) return;
+        const startX = x + w / 2, startY = y + h / 2;
+        if (rewards.coins > 0) triggerFly({ imageSource: ICON_SOURCES.coin, amount: Math.min(8, Math.max(3, Math.round(rewards.coins / 40))), startX, startY, targetPosition: 'coins' });
+        if (rewards.tickets > 0) triggerFly({ imageSource: ICON_SOURCES.ticket, amount: Math.min(5, rewards.tickets + 1), startX, startY, targetPosition: 'tickets' });
+      });
+      haptic('success');
+    }
+    onDone();
+  };
   const chestStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${shake.value * 7}deg` }, { scale: 1 + Math.abs(shake.value) * 0.04 }] }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
   const empty = already && !!rewards;
@@ -81,7 +118,8 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
     <Pressable style={styles.scrim} accessibilityViewIsModal onPress={() => { if (open) setSkip(true); }} accessible={false}>
       <View style={styles.card}>
         <Text style={styles.title}>{failed === 'network' ? 'No signal' : failed ? 'Not ready yet' : !rewards ? 'Opening...' : title}</Text>
-        <View style={styles.stage}>
+        <View style={styles.stage} ref={stageRef} collapsable={false}>
+          {!reduced && <Rays go={open} />}
           {!reduced && Array.from({ length: COINS }, (_, i) => <Burst key={i} i={i} go={open} />)}
           <Animated.View style={chestStyle}>
             <Image source={open ? art.chestOpen : art.chestClosed} style={styles.chest} contentFit="contain" />
@@ -105,7 +143,7 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
         )}
         {open && (
           <Animated.View entering={FadeIn.delay(reduced || skip ? 0 : 350 + chips.length * 260)}>
-            <Pressable accessibilityRole="button" onPress={onDone} style={({ pressed }) => [styles.button, pressed && { transform: [{ scale: 0.96 }] }]}>
+            <Pressable accessibilityRole="button" onPress={done} style={({ pressed }) => [styles.button, pressed && { transform: [{ scale: 0.96 }] }]}>
               <Text style={styles.buttonText}>NICE!</Text>
             </Pressable>
           </Animated.View>
@@ -124,6 +162,8 @@ const styles = StyleSheet.create({
   stage: { width: 200, height: 160, alignItems: 'center', justifyContent: 'center' },
   chest: { width: 140, height: 140 },
   coin: { position: 'absolute', top: 60, left: 89 },
+  rays: { position: 'absolute', width: 1, height: 1, left: 100, top: 80 },
+  ray: { position: 'absolute', left: -9, top: -34, width: 18, height: 68, borderRadius: 9, backgroundColor: BRAND.goldLight },
   flash: { ...StyleSheet.absoluteFillObject, backgroundColor: BRAND.white, borderRadius: 80 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, minHeight: 44 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 2.5, borderColor: BRAND.navy,
