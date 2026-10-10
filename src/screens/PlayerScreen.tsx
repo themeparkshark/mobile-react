@@ -37,6 +37,7 @@ import { PermissionEnums } from '../models/permission-enums';
 import { PlayerType } from '../models/player-type';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
+import StreakFlame from '../components/retention/StreakFlame';
 
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
 const STAGE_H = Math.round(Math.max(270, Math.min(315, Dimensions.get('window').height * 0.33)));
@@ -243,7 +244,8 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
             >
               <View style={{ marginBottom: 12 }}>
                 <TitlePill title={currentPlayer.title}
-                  trophy={<ProfileEventChip playerId={currentPlayer.id} />} />
+                  trophy={<><ProfileEventChip playerId={currentPlayer.id} />
+                    {currentPlayer.daily3_streak != null && <StreakFlame streak={currentPlayer.daily3_streak} best={currentPlayer.daily3_best ?? 0} size={26} />}</>} />
               </View>
               {!!currentPlayer.featured_ride_coin && (
                 <FeaturedRideCoinCard coin={currentPlayer.featured_ride_coin} />

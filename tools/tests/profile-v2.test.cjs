@@ -168,7 +168,7 @@ test('layout: shortcuts before the coin card, Secret Store locks for non-VIP, fr
   assert.match(profile, /backgroundColor: '#c6e3f5',\n\s+borderRadius: 20,\n\s+paddingBottom: 5,/, 'Ride Tracker uses the nested lip');
   assert.match(profile, /readStampDotCache\(playerId\)/, 'Stamp Book dot fetch is cached per player');
   assert.match(profile, /dot: stampsToClaim > 0/);
-  assert.match(profile, /trophy=\{<ProfileEventChip \/>\}/);
+  assert.match(profile, /trophy=\{<><ProfileEventChip \/>/);
 });
 
 test("another player's page: kind actions first, park history for friends only, numbers never disagree", () => {
@@ -177,7 +177,7 @@ test("another player's page: kind actions first, park history for friends only, 
   assert.ok(order[0] < order[1] && order[1] < order[2], 'Compliment, Gift, then Unfriend');
   assert.match(player, /isFriend && parks\.length > 0/);
   assert.match(player, /loaded\.is_friend \? await getVisitedParks\(player\) : \[\]/);
-  assert.match(player, /trophy=\{<ProfileEventChip playerId=\{currentPlayer\.id\} \/>\}/);
+  assert.match(player, /trophy=\{<><ProfileEventChip playerId=\{currentPlayer\.id\} \/>/);
   const stats = read('src/components/Stats.tsx');
   assert.match(stats, /Math\.max\(Number\(player\.total_experience\) \|\| 0, Number\(player\.experience\) \|\| 0\)/);
 });

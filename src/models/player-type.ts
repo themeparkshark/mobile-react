@@ -63,6 +63,9 @@ export interface PlayerType {
   readonly xp_to_next_level?: number;
   readonly current_xp?: number;
   readonly title?: string | null;
+  /** Daily 3 streak (present only while the server's daily_three flag is on). */
+  readonly daily3_streak?: number | null;
+  readonly daily3_best?: number | null;
   readonly featured_ride_coin?: FeaturedRideCoinType | null;
   readonly active_cosmetics?: PlayerCosmeticType[];
 }

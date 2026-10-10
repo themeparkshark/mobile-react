@@ -13,6 +13,7 @@ import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, textPreset, type GameIconN
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import MemberFlex from '../../components/money/MemberFlex';
 import { memberFlexOf } from '../../services/money/memberFlex';
+import StreakFlame from '../../components/retention/StreakFlame';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 
@@ -74,9 +75,17 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
           <Avatar player={player} size="sm" />
         </View>)}
         <View style={{ flex: 1, marginLeft: 12 }}>
+          {player.daily3_streak != null ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, textTransform: 'uppercase' }}>
+                {player.screen_name}
+              </Text>
+              <StreakFlame streak={player.daily3_streak} best={player.daily3_best ?? 0} size={16} still />
+            </View>
+          ) : (
           <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, textTransform: 'uppercase' }}>
             {player.screen_name}
-          </Text>
+          </Text>)}
           {(isMe || detail) && (
             <Text numberOfLines={1} style={[textPreset('caption'), { color: isMe ? BRAND.goldLip : BRAND.navySoft }]}>
               {isMe ? 'YOU' : detail}

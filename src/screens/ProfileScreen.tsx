@@ -56,6 +56,8 @@ import { ParkType } from '../models/park-type';
 import { PlayerType } from '../models/player-type';
 import { StoreType } from '../models/store-type';
 import SharkPassBanner from '../components/money/SharkPassBanner';
+import StreakFlame from '../components/retention/StreakFlame';
+import useOwnStreak from '../services/retention/useOwnStreak';
 
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
 const STAGE_H = Math.round(Math.max(270, Math.min(315, Dimensions.get('window').height * 0.33)));
@@ -65,6 +67,8 @@ export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
   // Dev captures only (constant-folded out of release): open the title sheet on launch.
+  // Daily 3 streak flame beside the title (nothing while daily_three is off).
+  const ownStreak = useOwnStreak();
   const [titleSheet, setTitleSheet] = useState(() => __DEV__ && !!process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE_SHEET
     && process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE_SHEET !== 'undo');
   /** The title that just came off, while its Undo is offered. */
@@ -517,7 +521,8 @@ export default function ProfileScreen() {
               }}
             >
               <View style={{ marginTop: 12 }}>
-                <TitlePill title={player.title} trophy={<ProfileEventChip />} onPress={() => setTitleSheet(true)}
+                <TitlePill title={player.title} trophy={<><ProfileEventChip />
+                  {ownStreak && <StreakFlame streak={ownStreak.days} best={ownStreak.best} size={28} />}</>} onPress={() => setTitleSheet(true)}
                   art={<TitleArt entry={null} title={player.title} size={28} />} />
                 {!player.title && (
                   <TitleUndoBar previous={undoTitle} onDone={clearUndo}

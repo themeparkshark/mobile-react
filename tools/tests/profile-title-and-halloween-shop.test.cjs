@@ -66,7 +66,7 @@ test('the title sheet: tap your own pill, change or remove through the server, n
   const pill = read('src/components/profile/TitlePill.tsx');
   assert.match(pill, /onPress\?: \(\) => void/);
   const profile = read('src/screens/ProfileScreen.tsx');
-  assert.match(profile, /<TitlePill title=\{player\.title\} trophy=\{<ProfileEventChip \/>\} onPress=\{\(\) => setTitleSheet\(true\)\}/);
+  assert.match(profile, /<TitlePill title=\{player\.title\} trophy=\{<><ProfileEventChip \/>[^}]*\{ownStreak && <StreakFlame [^>]*\/>\}<\/>\} onPress=\{\(\) => setTitleSheet\(true\)\}/);
   assert.match(profile, /<TitleSheet visible=\{titleSheet\}/);
   assert.ok(profile.indexOf('const [titleSheet, setTitleSheet]') < profile.indexOf('if (!player) {'), 'the sheet state is a hook before the guest return');
   const other = read('src/screens/PlayerScreen.tsx');

@@ -95,3 +95,18 @@ test('money on the map and Profile: Park Day Pack in the free suggestion slot on
   const profile = fs.readFileSync('src/screens/ProfileScreen.tsx', 'utf8');
   assert.equal((profile.match(/<SharkPassBanner /g) ?? []).length, 1);
 });
+
+test('StreakFlame: own streak only from an enabled Daily 3 payload; friend rows, Player page and Standings only when the field is present', () => {
+  const s = loadTs('src/services/retention/useOwnStreak.ts', {
+    '@react-navigation/native': { useFocusEffect: () => undefined }, react: { useCallback: f => f, useState: v => [v, () => undefined] },
+    '../../api/endpoints/retention': { getDailyThree: async () => ({ enabled: false }) } });
+  assert.equal(s.ownStreakOf(null), null);
+  assert.equal(s.ownStreakOf({ enabled: false }), null);
+  assert.deepEqual(plain(s.ownStreakOf({ enabled: true, streak: { days: 4, best: 9 } })), { days: 4, best: 9 });
+  for (const [file, re] of [
+    ['src/screens/social/PlayerRow.tsx', /\{player\.daily3_streak != null \? \(/],
+    ['src/screens/LeaderboardsScreen/StandingsRow.tsx', /\{player\.daily3_streak != null \? \(/],
+    ['src/screens/PlayerScreen.tsx', /\{currentPlayer\.daily3_streak != null && <StreakFlame /],
+    ['src/screens/ProfileScreen.tsx', /\{ownStreak && <StreakFlame /],
+  ]) assert.match(fs.readFileSync(file, 'utf8'), re, file);
+});
