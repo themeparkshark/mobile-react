@@ -465,9 +465,12 @@ export default function StampBookScreen() {
 
   const closeClaimAll = useCallback(() => {
     setClaimAllOpen(null);
-    if (!previewMode) refreshPlayer().catch(() => undefined);
-    flushPatches();
-    flushSeen();
+    // Close first; the book update and player refresh run after the fade (no rebuild on the Done tap's frame).
+    InteractionManager.runAfterInteractions(() => {
+      if (!previewMode) refreshPlayer().catch(() => undefined);
+      flushPatches();
+      flushSeen();
+    });
   }, [previewMode, refreshPlayer, flushPatches, flushSeen]);
 
   const openTitles = useCallback(() => {
