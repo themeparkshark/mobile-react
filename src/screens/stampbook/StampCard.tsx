@@ -126,6 +126,8 @@ export default function StampCard(props: Props) {
   return (
     <Modal visible={!!props.stamp} transparent animationType="none" onRequestClose={props.onClose} statusBarTranslucent>
       {props.stamp && <Frame {...props} stamp={props.stamp} />}
+      {/* Dev captures only: the FPS overlay lives in the app root, under native Modals; the card shows its own copy. */}
+      {__DEV__ && process.env.EXPO_PUBLIC_FPS_OVERLAY === '1' && !!props.stamp && <DevFps />}
     </Modal>
   );
 }
@@ -326,6 +328,11 @@ function Frame(props: Props & { stamp: BookStamp }) {
 }
 
 const noop = () => undefined;
+
+function DevFps() {
+  const Overlay = require('../../dev/FpsOverlay').default;
+  return <Overlay />;
+}
 
 type ContentProps = Props & {
   bus: HudBus;

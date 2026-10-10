@@ -19,6 +19,9 @@ import GameIcon from '../ui/GameIcon';
 import { stampRarity } from './stampbook/rarity';
 import { INK, MUTED_INK, PAPER, SLOT, SLOT_EDGE, tiltFor } from './stampbook/StampTile';
 
+/** Last friend books this session: a reopen draws at once and refreshes behind (friends-only data, memory only). */
+const friendBooks = new Map<number, FriendBook>();
+
 const BACKGROUND = require('../../assets/images/screens/leaderboard/standings-bg.png');
 const SHARK = require('../../assets/images/howto/shark-happy.webp');
 const FALLBACK = require('../../assets/images/stamps/stamp-fallback.png');
@@ -27,8 +30,8 @@ export default function FriendStampBookScreen() {
   const { playerId, name } = (useRoute().params ?? {}) as { playerId?: number; name?: string };
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const [book, setBook] = useState<FriendBook | null>(null);
-  const [state, setState] = useState<'loading' | 'ready' | 'closed' | 'error'>('loading');
+  const [book, setBook] = useState<FriendBook | null>(() => (playerId ? friendBooks.get(playerId) ?? null : null));
+  const [state, setState] = useState<'loading' | 'ready' | 'closed' | 'error'>(() => (playerId && friendBooks.has(playerId) ? 'ready' : 'loading'));
 
   useEffect(() => {
     // Dev captures only (constant-folded out of release): a friend's book built from the Stamp Book preview data.
@@ -50,8 +53,12 @@ export default function FriendStampBookScreen() {
     if (!playerId) { setState('error'); return; }
     let live = true;
     getFriendStamps(playerId)
-      .then(data => { if (live) { setBook(data); setState('ready'); } })
-      .catch((e: { response?: { status?: number } }) => { if (live) setState(e?.response?.status === 403 ? 'closed' : 'error'); });
+      .then(data => { friendBooks.set(playerId, data); if (live) { setBook(data); setState('ready'); } })
+      .catch((e: { response?: { status?: number } }) => {
+        // No longer friends: forget the copy too.
+        if (e?.response?.status === 403) friendBooks.delete(playerId);
+        if (live) setState(current => (current === 'ready' && e?.response?.status !== 403 ? current : e?.response?.status === 403 ? 'closed' : 'error'));
+      });
     return () => { live = false; };
   }, [playerId]);
 

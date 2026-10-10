@@ -214,23 +214,31 @@ export default function StampBookScreen() {
   }, [devHooks, status]);
 
 
-  // Section completion moment: once per section per device.
+  // Section completion moment: once per section per device, after the push settles; the book scrolls the
+  // finished page into view first so the seal slam, thunk and haptic happen where the kid is looking.
   useEffect(() => {
-    if (status !== 'ready' || !sections.length) return;
+    if (status !== 'ready' || !sections.length || !allPages) return;
     let active = true;
+    const timers: ReturnType<typeof setTimeout>[] = [];
     loadCelebrated().then(done => {
       if (!active) return;
       const complete = sections.find(s => s.total > 0 && s.earned >= s.total && !done.has(s.key));
       if (!complete) return;
       done.add(complete.key);
       saveCelebrated(done);
-      setCelebrate(complete.key);
-      playSfx('fx.reward');
-      haptic('success');
-      setTimeout(() => setCelebrate(null), 1600);
+      const y = sectionY.current[complete.key];
+      if (typeof y === 'number') scroller.current?.scrollTo({ y: Math.max(0, y - TABS_H - 4), animated: !reducedMotion });
+      timers.push(setTimeout(() => {
+        if (!active) return;
+        setCelebrate(complete.key);
+        playSfx('fx.reward');
+        haptic('success');
+        timers.push(setTimeout(() => active && setCelebrate(null), 1600));
+      }, reducedMotion ? 0 : 450));
     });
-    return () => { active = false; };
-  }, [status, sections]);
+    return () => { active = false; timers.forEach(clearTimeout); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, sections, allPages]);
 
   /** Applies claims made while the card was open, once it closes (keeps the slam frame clean). */
   const flushPatches = useCallback(() => {
@@ -576,7 +584,7 @@ export default function StampBookScreen() {
               {/* One book board behind every page: blue cloth, stitched edge, gold corners (the cover's binding). */}
               <View style={styles.board} onLayout={e => { boardY.current = e.nativeEvent.layout.y; setBoardTopState(e.nativeEvent.layout.y); }}>
                 <View style={styles.boardStitch} pointerEvents="none" />
-              {(allPages ? sections : sections.slice(0, 2)).map(section => (
+              {(allPages ? sections : sections.slice(0, 1)).map(section => (
                 <SectionPage key={section.key} section={section} width={width} boardTop={boardTopState} onTop={y => { sectionY.current[section.key] = boardY.current + y; }}
                   onFirstLayout={__DEV__ ? markOpen : undefined}
                   seenRef={seenRef} seenVersion={seenVersion} celebrating={celebrate === section.key} onOpen={open} />
