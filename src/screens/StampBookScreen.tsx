@@ -222,7 +222,7 @@ export default function StampBookScreen() {
     const timers: ReturnType<typeof setTimeout>[] = [];
     loadCelebrated().then(done => {
       if (!active) return;
-      const complete = sections.find(s => s.total > 0 && s.earned >= s.total && !done.has(s.key));
+      const complete = sections.find(s => s.total > 0 && s.earned >= s.total && !s.stamps.some(x => x.claimable) && !done.has(s.key));
       if (!complete) return;
       done.add(complete.key);
       saveCelebrated(done);
@@ -781,7 +781,8 @@ const SectionPage = memo(function SectionPage({ section, width, boardTop, onTop,
   const tile = Math.floor((width - (BOARD_INSET + 3) * 2 - PAGE_SIDE * 2 - PAGE_PAD * 2 - PAGE_BORDER * 2 - GAP * (cols - 1)) / cols);
   const tileH = Math.round(tile * 1.36);
   const pct = section.total > 0 ? Math.round((section.earned / section.total) * 100) : 0;
-  const complete = section.total > 0 && section.earned >= section.total;
+  // DONE only once every stamp is stamped AND no gift is still waiting on the page (claiming the last gift slams the seal).
+  const complete = section.total > 0 && section.earned >= section.total && !section.stamps.some(s => s.claimable);
   return (
     <View style={styles.pageWrap} onLayout={e => { sectionTop.value = boardTop + e.nativeEvent.layout.y; onTop(e.nativeEvent.layout.y); onFirstLayout?.(); }}>
       <View style={styles.pageLip} />

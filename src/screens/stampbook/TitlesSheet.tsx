@@ -70,7 +70,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
                 </View>
                 <View style={styles.mid}>
                   <TitlePillText title={entry.title} owned={owned} />
-                  <Text style={styles.line} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.4}>{titleLine(entry)}</Text>
+                  {!!titleLine(entry) && <Text style={styles.line} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.4}>{titleLine(entry)}</Text>}
                 </View>
               </Pressable>
               {entry.state === 'wearing' ? (

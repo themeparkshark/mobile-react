@@ -305,8 +305,9 @@ function Frame(props: Props & { stamp: BookStamp }) {
               <View style={!(displayClaimed && !busy) && styles.hidden} pointerEvents={displayClaimed && !busy && !holding ? 'auto' : 'none'}
                 importantForAccessibility={displayClaimed && !busy ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!(displayClaimed && !busy)}>
                 {wearFirst || justWore ? (
-                  nextCount > 1 && onClaimAll ? <GameButton label={`Claim all ${nextCount}`} variant="secondary" size="compact" icon="gift" onPress={onClaimAll} />
-                    : nextCount > 0 ? <GameButton label={`Next reward (${nextCount} left)`} variant="secondary" size="compact" icon="gift" onPress={onNext} /> : null
+                  // Quiet white pill while Wear title is the one gold job on the card.
+                  nextCount > 1 && onClaimAll ? <QuietButton label={`Claim all ${nextCount}`} icon="gift" onPress={onClaimAll} />
+                    : nextCount > 0 ? <QuietButton label={`Next reward (${nextCount} left)`} icon="gift" onPress={onNext} /> : null
                 ) : (
                   <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Take off' : 'Wear title'} variant="secondary" size="compact"
                     tone="onBlue" icon={wearingTitle ? 'close' : 'crown'} loading={equipping} onPress={onToggleTitle} />
@@ -328,6 +329,17 @@ function Frame(props: Props & { stamp: BookStamp }) {
 }
 
 const noop = () => undefined;
+
+/** The quiet white pill (same as Take off in the Titles list and profile): a second job that never competes with the gold button. */
+function QuietButton({ label, icon, onPress }: { label: string; icon: GameIconName; onPress: () => void }) {
+  return (
+    <Pressable onPress={() => { haptic('tapLight'); playSfx('ui.tap', 0.6); onPress(); }} hitSlop={6} accessibilityRole="button" accessibilityLabel={label}
+      style={({ pressed }) => [styles.quiet, pressed && { transform: [{ scale: 0.97 }] }]}>
+      <GameIcon name={icon} size={18} />
+      <Text style={styles.quietText} maxFontSizeMultiplier={1.4}>{label}</Text>
+    </Pressable>
+  );
+}
 
 function DevFps() {
   const Overlay = require('../../dev/FpsOverlay').default;
@@ -358,6 +370,10 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
   const req = requirement(stamp);
   // The big art fills with colour from the bottom like its grid slot (40/100 fills 40%), with the ink line on top.
   const bleed = stamp.earned || stamp.secret ? 0 : Math.max(bleedFraction(stamp), fillFraction(stamp.percent));
+  // The colour rises to the progress when the card opens (about 400 ms), so an almost-done stamp feels close.
+  const rise = useSharedValue(reducedMotion ? bleed : 0);
+  useEffect(() => { if (!reducedMotion && bleed > 0) rise.value = withDelay(250, withTiming(bleed, { duration: 420, easing: Easing.out(Easing.quad) })); }, [bleed, reducedMotion, rise]);
+  const bleedStyle = useAnimatedStyle(() => ({ height: ART * rise.value }));
 
   const flash = useSharedValue(0);
   // A fresh slam starts in its hover pose with the thumb visible, so the hold before the drop is never an empty stage.
@@ -581,10 +597,10 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
             <>
               <StampArt stamp={stamp} size="full" priority="high" onReady={onArtReady} onShown={onShown} transition={0} />
               {bleed > 0 && (
-                <View style={[styles.bleed, { height: `${Math.round(bleed * 100)}%` }]}>
+                <Animated.View style={[styles.bleed, bleedStyle]}>
                   <View style={styles.bleedInner}><StampArt stamp={stamp} size="full" locked={false} /></View>
                   <View style={styles.inkEdge}><InkEdge width={ART * 0.68} color={INK} /></View>
-                </View>
+                </Animated.View>
               )}
             </>
           )}
@@ -674,17 +690,29 @@ function TitleBox({ title, state, reducedMotion, smallShark }: { title: string; 
     if (state !== 'ready' && state !== 'wearing') return;
     // The unlock sparkle belongs to claiming only: taking a title off (wearing -> ready) is quiet here.
     if (state === 'ready' && was !== 'claim') return;
-    if (state === 'ready') { playSfx('fx.reveal', 0.8); haptic('success'); }
-    if (reducedMotion) return;
-    pop.value = withSequence(withTiming(1.22, { duration: 140, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 9, stiffness: 260 }));
+    // Unlock beat: waits for the reward counters, then the shark hops, a gold shine sweeps the box and the sparkle plays.
+    const wait = state === 'ready' ? 700 : 0;
+    const t = setTimeout(() => {
+      if (state === 'ready') { playSfx('fx.reveal', 0.8); haptic('success'); }
+      if (reducedMotion) return;
+      pop.value = withSequence(withTiming(1.22, { duration: 140, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 9, stiffness: 260 }));
+      hop.value = withSequence(withTiming(-12, { duration: 160, easing: Easing.out(Easing.quad) }), withSpring(0, { damping: 8, stiffness: 240 }));
+      if (state === 'ready') { shine.value = 0; shine.value = withTiming(1, { duration: 650, easing: Easing.inOut(Easing.quad) }); }
+    }, wait);
+    return () => clearTimeout(t);
   }, [state, pop, reducedMotion]);
+  const hop = useSharedValue(0);
+  const shine = useSharedValue(1);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const hopStyle = useAnimatedStyle(() => ({ transform: [{ translateY: hop.value }] }));
+  const shineStyle = useAnimatedStyle(() => ({ opacity: shine.value < 1 ? 0.85 : 0, transform: [{ translateX: -120 + 420 * shine.value }, { rotate: '18deg' }] }));
   const line = state === 'wearing' ? 'On your profile!' : state === 'ready' ? 'New title! Wear it' : state === 'claim' ? 'Claim to unlock' : 'Earn to unlock';
   const owned = state === 'ready' || state === 'wearing';
   return (
     <View style={[styles.titleBox, owned && styles.titleBoxOwned]} accessible accessibilityLabel={`Title: ${title}. ${line}`}>
+      <Animated.View pointerEvents="none" style={[styles.titleShine, shineStyle]} />
       <Animated.View style={[styles.titleWear, popStyle]}>
-        <Image source={SHARK} style={[styles.titleShark, smallShark && styles.titleSharkSmall, !owned && styles.titleSharkLocked]} contentFit="contain" />
+        <Animated.View style={hopStyle}><Image source={SHARK} style={[styles.titleShark, smallShark && styles.titleSharkSmall, !owned && styles.titleSharkLocked]} contentFit="contain" /></Animated.View>
         <View style={[styles.titlePill, !owned && styles.titlePillLocked]}>
           <GameIcon name="crown" size={18} />
           <Text style={[styles.titlePillText, !owned && styles.titlePillTextLocked]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}
@@ -723,6 +751,11 @@ const styles = StyleSheet.create({
   bodyLegendary: { borderColor: LEGENDARY_GOLD, borderWidth: 4 },
   rootCompact: { paddingTop: 30, paddingBottom: 6 },
   rarityCol: { alignItems: 'center', zIndex: 3 },
+  quiet: {
+    alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 16, borderRadius: 14,
+    backgroundColor: '#FFFFFF', borderWidth: 2.5, borderColor: '#9FB2C9', borderBottomWidth: 4,
+  },
+  quietText: { fontFamily: 'Shark', fontSize: 15, color: INK },
   secretWrap: { width: ART, height: ART, alignItems: 'center', justifyContent: 'center' },
   secretSil: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, opacity: 0.85 },
   secretQ: {
@@ -812,9 +845,11 @@ const styles = StyleSheet.create({
   },
   whereText: { fontFamily: 'Shark', fontSize: 13, color: '#FFFFFF' },
   titleBox: {
+    overflow: 'hidden',
     width: '100%', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, paddingVertical: 7, paddingHorizontal: 9,
     borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,207,59,0.75)', backgroundColor: 'rgba(0,40,90,0.3)',
   },
+  titleShine: { position: 'absolute', top: -20, bottom: -20, width: 44, backgroundColor: 'rgba(255,236,150,0.75)' },
   titleBoxOwned: { borderStyle: 'solid', borderColor: '#FFCF3B', backgroundColor: 'rgba(255,207,59,0.16)' },
   titleWear: { alignItems: 'center', maxWidth: '58%', flexShrink: 1 },
   titleShark: { width: 46, height: 50, marginBottom: -8 },

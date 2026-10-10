@@ -465,7 +465,7 @@ export function titleLine(entry: TitleEntry): string {
   switch (entry.state) {
     case 'wearing': return 'On your profile now';
     case 'ready': return 'Yours! Tap Wear';
-    case 'claim': return 'Claim the stamp to unlock';
+    case 'claim': return '';
     case 'progress': return `From the ${entry.stamp.shortName} stamp`;
     default: return `From the ${entry.stamp.shortName} stamp`;
   }

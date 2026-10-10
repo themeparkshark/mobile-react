@@ -31,9 +31,9 @@ export function TitleArt({ entry, title, size }: { readonly entry: EarnedTitle |
     return <Image source={setBadge({ slug, badgeUrl: entry?.iconUrl ?? null })} style={{ width: size, height: size }} contentFit="contain" />;
   }
   if (entry?.equip.kind === 'stamp') {
-    // The stamp's own art when the book sent it, else the passport seal.
-    return <Image source={entry.iconUrl ? { uri: entry.iconUrl, cacheKey: entry.iconUrl } : STAMP_SEAL} placeholder={STAMP_SEAL}
-      style={{ width: size, height: size }} contentFit="contain" />;
+    // The stamp's own art when the book sent it; with no art, the crown (never a generic badge).
+    if (!entry.iconUrl) return <GameIcon name="crown" size={size - 4} />;
+    return <Image source={{ uri: entry.iconUrl, cacheKey: entry.iconUrl }} style={{ width: size, height: size }} contentFit="contain" />;
   }
   return <GameIcon name="crown" size={size - 4} />;
 }

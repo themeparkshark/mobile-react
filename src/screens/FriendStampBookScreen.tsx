@@ -6,7 +6,8 @@
  * its rarity frame) and paper pages with their stamps printed on.
  */
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import * as RootNavigation from '../RootNavigation';
 import { Image } from 'expo-image';
 import { useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -76,9 +77,20 @@ export default function FriendStampBookScreen() {
         <Image source={BACKGROUND} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />
         {state !== 'ready' || !book ? (
           <View style={styles.state}>
-            <Text style={styles.stateText} maxFontSizeMultiplier={1.4}>
-              {state === 'loading' ? 'Opening the Stamp Book...' : state === 'closed' ? 'Only friends can open this Stamp Book.' : 'This Stamp Book could not load.'}
-            </Text>
+            {state === 'loading' ? (
+              <Text style={styles.stateText} maxFontSizeMultiplier={1.4}>{who}</Text>
+            ) : (
+              // Closed or failed: a locked book picture, two words and a way back.
+              <View style={styles.closed} accessible accessibilityLabel={state === 'closed' ? 'Friends only' : 'Could not open'}>
+                <View style={styles.closedIcon}><GameIcon name={state === 'closed' ? 'lock' : 'retry'} size={56} /></View>
+                <Text style={styles.stateText} maxFontSizeMultiplier={1.4}>{state === 'closed' ? 'Friends only' : 'Could not open'}</Text>
+              </View>
+            )}
+            {state !== 'loading' && (
+              <Pressable onPress={() => RootNavigation.goBack()} style={styles.back} accessibilityRole="button" accessibilityLabel="Go back">
+                <GameIcon name="back" size={22} /><Text style={styles.backText} maxFontSizeMultiplier={1.4}>Back</Text>
+              </Pressable>
+            )}
           </View>
         ) : (
           <ScrollView contentContainerStyle={{ paddingTop: 12, paddingBottom: 150 + insets.bottom }} showsVerticalScrollIndicator={false}>
@@ -111,7 +123,8 @@ export default function FriendStampBookScreen() {
                 const missing = Math.max(0, section.total - section.earned);
                 return (
                   <View key={section.key} style={styles.page}>
-                    <View style={styles.pageHead}>
+                    <View style={styles.pageHead} accessible accessibilityRole="header"
+                      accessibilityLabel={`${section.label}, ${section.earned} of ${section.total}${section.total > 0 && section.earned >= section.total ? ', page complete' : ''}`}>
                       <View style={[styles.dot, { backgroundColor: section.color }]} />
                       <Text style={styles.pageTitle} maxFontSizeMultiplier={1.3}>{section.label}</Text>
                       <Text style={styles.pageCount} maxFontSizeMultiplier={1.3}>{section.earned} / {section.total}</Text>
@@ -201,6 +214,10 @@ const styles = StyleSheet.create({
   pageTitle: { flex: 1, fontFamily: 'Shark', fontSize: 19, color: INK, textTransform: 'uppercase' },
   pageCount: { fontFamily: 'Shark', fontSize: 16, color: MUTED_INK },
   seal: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFC21A', borderWidth: 2.5, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  closed: { alignItems: 'center', gap: 10 },
+  closedIcon: { width: 96, height: 96, borderRadius: 48, backgroundColor: PAPER, borderWidth: 4, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  back: { marginTop: 18, flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 18, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 2.5, borderColor: '#9FB2C9', borderBottomWidth: 4 },
+  backText: { fontFamily: 'Shark', fontSize: 16, color: INK },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   owned: { borderRadius: 999, borderWidth: 3, padding: 3 },
   ownedName: { fontFamily: 'Shark', fontSize: 12, color: INK, textAlign: 'center', marginTop: 3, textTransform: 'uppercase' },

@@ -441,7 +441,7 @@ test('v3: titles list: wearing, ready, claim, progress, locked; secrets and unhe
     ['Captain', 'wearing'], ['Explorer', 'ready'], ['Wild Legend', 'claim'], ['Hop Star', 'progress'], ['XP Machine', 'locked'],
   ]);
   assert.deepEqual(plain(model.titleCounts(list)), { owned: 2, total: 5 });
-  assert.equal(model.titleLine(list[2]), 'Claim the stamp to unlock');
+  assert.equal(model.titleLine(list[2]), ''); // the red Claim button says it
   assert.equal(model.titleLine(list[3]), 'From the Explorer stamp');
   for (const e of list) assert.ok(!/\u2014/.test(model.titleLine(e)));
 });
@@ -529,7 +529,7 @@ test('round 8: rarest stamp showcase, server riddles for secrets, friends-only f
   assert.equal(model.toBookStamp(stamp({ is_hidden: true, is_earned: true, secret_hint: 'x' })).secretHint, null);
   const friend = read('src/screens/FriendStampBookScreen.tsx');
   assert.match(friend, /getFriendStamps\(playerId\)/);
-  assert.match(friend, /Only friends can open this Stamp Book\./);
+  assert.match(friend, /'Friends only'/);
   assert.match(read('src/screens/PlayerScreen.tsx'), /\.\.\.\(isFriend \? \[\{\s*key: 'stamps'/);
   assert.match(read('src/screens/stampbook/TitlesSheet.tsx'), /<StampSheet visible=\{visible\} title="Titles"/);
   assert.match(read('src/components/profile/TitleSheet.tsx'), /<StampSheet visible=\{visible\}/);
