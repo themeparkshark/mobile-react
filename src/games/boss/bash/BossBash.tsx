@@ -562,8 +562,9 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     engine.current = { ...engine.current, up: [], dizzy: null, ink: null };
     setActors(list => list.map(a => ({ ...a, exit: 'sink' as ActorExit })));
     // The knockout word stays up until the bell.
-    addFx({ t: 'wm', wm: 'knockout' }, Math.max(1300, 12_500 - played.current));
-    if (mine) later(250, () => addFx({ t: 'bubble', text: 'YOU FINISHED IT!', x: L.w / 2, y: L.waterY - 40, tone: 'gold' }, 1100));
+    // One word at a time, in order: KNOCKOUT!, then YOU FINISHED IT! (your hit), then TAP THE BOSS! until the card.
+    addFx({ t: 'wm', wm: 'knockout' }, 1150);
+    if (mine) later(1200, () => addFx({ t: 'bubble', text: 'YOU FINISHED IT!', x: L.w / 2, y: L.waterY - 40, tone: 'gold' }, 900));
     if (!reduced) {
       flash.flash(0.25, 160);
       later(150, () => { shake.shake(12, 280); particles.current?.burst({ x: L.head.x, y: L.head.y + L.dropBy * 0.3, preset: 'burst', count: 28, colors: [BRAND.gold, BRAND.white, BRAND.goldLight], speed: 1.6 }); });
@@ -573,7 +574,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     // The wait to the bell is a victory lap: the beaten boss bobs, coins rain, the shark cheers, taps make sparkles.
     setPose('cheer');
     setVictory(true);
-    later(700, () => addFx({ t: 'bubble', text: 'TAP THE BOSS!', x: L.w / 2, y: L.waterY + 70, tone: 'gold' }, Math.max(1500, 12_000 - played.current)));
+    later(mine ? 2150 : 1200, () => addFx({ t: 'bubble', text: 'TAP THE BOSS!', x: L.w / 2, y: L.waterY + 70, tone: 'gold' }, 2000));
     if (!reduced) {
       bossRise.value = withDelay(400, withRepeat(withSequence(withTiming(-0.05, { duration: 420, easing: Easing.inOut(Easing.quad) }),
         withTiming(0, { duration: 420, easing: Easing.inOut(Easing.quad) })), -1, false));
@@ -585,7 +586,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
       later(500, rain);
     }
     // The server needs a 12 s round: a knockout earlier than that ends the round at 12.5 s.
-    later(Math.max(reduced ? 600 : 1300, 12_500 - played.current), () => finishRef.current());
+    // Cut to the card about 3 s after the KO (the victory lap); the server's 12.5 s wait runs behind it.
+    later(reduced ? 1200 : 3000, () => finishRef.current());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hpNowLive, visible]);
 
@@ -662,7 +664,13 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     if (koShown.current) sfx('bo_skill_star', 'ui.complete', { volume: 0.9 }); else { sfx('bo_ko_kraken', 'fx.reward', { volume: 0.9 }); haptic('success'); }
     const built = buildResult(s);
     onActiveChange?.(false);
-    if (s.hits > 0) onRoundEnd?.(built.meta ?? {});
+    if (s.hits > 0) {
+      // A knockout cuts to the card early; the server still needs a 12.5 s round, so the send waits for real time to
+      // reach it behind the card. Untracked timer: closing the card must not drop the round.
+      const wait = Math.max(0, 12_500 - played.current);
+      const meta = { ...(built.meta ?? {}), duration_ms: Math.max(Number(built.meta?.duration_ms ?? 0), 12_500) };
+      if (wait > 0) setTimeout(() => onRoundEnd?.(meta), wait); else onRoundEnd?.(built.meta ?? {});
+    }
     later(reduced ? 400 : 1000, () => setResult(built));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [damageRate, weights, reduced]);

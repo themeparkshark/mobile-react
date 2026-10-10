@@ -135,7 +135,11 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       </View>
 
       {!noHits && <View style={styles.stars}>
-        {[s0, s1, s2].map((st, i) => <View key={i} style={styles.starSlot}>
+        {[s0, s1, s2].map((st, i) => (ko && i === 2 && stars < 3)
+          // The finisher's card: a gold KO crown where a grey third star would sit.
+          ? <View key={i} style={styles.starSlot} accessible accessibilityLabel="Knockout crown: you finished the boss">
+            <GameIcon name="crown" size={38} /><Text style={styles.koTag} maxFontSizeMultiplier={1}>KO</Text></View>
+          : <View key={i} style={styles.starSlot}>
           <Image source={BASH_ART.star} style={[StyleSheet.absoluteFill, { opacity: 0.18 }]} contentFit="contain" tintColor={BRAND.navy} />
           <Animated.View style={[StyleSheet.absoluteFill, st]}><Image source={BASH_ART.star} style={StyleSheet.absoluteFill} contentFit="contain" /></Animated.View>
         </View>)}
@@ -222,6 +226,8 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   bossPic: { width: 76, height: 76 },
   perf: { marginTop: 4, fontSize: 9, color: '#333', textAlign: 'center' },
+  koTag: { position: 'absolute', bottom: -2, fontFamily: 'Shark', fontSize: 12, color: BRAND.white, backgroundColor: BRAND.red,
+    paddingHorizontal: 5, borderRadius: 6, overflow: 'hidden' },
   stamp: { position: 'absolute', right: -10, top: -6, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 2, borderColor: BRAND.red, borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.85)', transform: [{ rotate: '-14deg' }] },
   stampText: { fontFamily: 'Shark', fontSize: 11, lineHeight: 11, color: BRAND.red, textAlign: 'center' },
