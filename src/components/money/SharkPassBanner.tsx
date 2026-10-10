@@ -82,7 +82,7 @@ export default function SharkPassBanner({ style, open }: {
     fillTo.value = gain.from;
     fillTo.value = withDelay(250, withTiming(target, { duration: 900, easing: Easing.out(Easing.cubic) }));
   }, [target, gain, reduced, fillTo]);
-  const fillStyle = useAnimatedStyle(() => ({ width: `${fillTo.value * 100}%` }));
+  const fillStyle = useAnimatedStyle(() => ({ width: `${Math.max(0.04, fillTo.value) * 100}%` }));
   const line = bannerLine(state);
   if (!line || !state || !state.enabled || !state.season) return null;
   const claim = (state.progress?.claimable ?? 0) > 0;
@@ -118,7 +118,7 @@ const st = StyleSheet.create({
   title: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold },
   line: { fontFamily: FONT.body, fontSize: 15, color: '#ffffff' },
   lineClaim: { fontFamily: FONT.display, color: '#7dffb0' },
-  bar: { height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
+  bar: { height: 9, borderRadius: 5, backgroundColor: '#0b2f63', borderWidth: 1, borderColor: 'rgba(255,255,255,0.6)', overflow: 'hidden' },
   fill: { height: '100%', backgroundColor: BRAND.gold, borderRadius: 4 },
   gain: { fontFamily: FONT.display, fontSize: 13, color: BRAND.navy, backgroundColor: BRAND.gold, borderRadius: 8, paddingHorizontal: 6, overflow: 'hidden' },
   dot: { position: 'absolute', top: -5, right: -5, width: 16, height: 16, borderRadius: 8, backgroundColor: '#e8322a', borderWidth: 2, borderColor: '#fff' },

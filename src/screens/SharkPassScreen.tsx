@@ -450,6 +450,7 @@ export default function SharkPassScreen() {
                   start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
                 <View style={s.heroStage}>
                   <View style={s.heroShadow} />
+                  <View style={s.heroShadowCore} />
                   {heroLook ? (
                     <Playercard inventory={heroLook} showBackground={false} pinAnchor="body" still={reduced} style={StyleSheet.absoluteFill} />
                   ) : (
@@ -705,7 +706,7 @@ export default function SharkPassScreen() {
                             const cost = state.cosmetics?.gold.coins ?? 0;
                             const piece = g.name.replace(/^Gold /, '');
                             gameAlert('Make it gold?', `Your ${piece} turns gold for ${commas(cost)} coins. It stays yours forever.`, [
-                              { text: 'Make it gold', onPress: () => void makeGold(g.art, cost) },
+                              { text: 'Make it gold', image: GOLD_ART[g.art], onPress: () => void makeGold(g.art, cost) },
                               { text: 'Not now', style: 'cancel' },
                             ]);
                           }}>
@@ -916,7 +917,8 @@ const s = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 22, borderWidth: 4, borderColor: '#ffffff', backgroundColor: '#0b2f63', padding: 12, overflow: 'hidden' },
   emblem: { width: 96, height: 96 },
   heroStage: { width: 128, height: 150, alignItems: 'center', justifyContent: 'flex-end' },
-  heroShadow: { position: 'absolute', bottom: 6, width: 96, height: 16, borderRadius: 48, backgroundColor: 'rgba(255,255,255,0.35)' },
+  heroShadow: { position: 'absolute', bottom: 6, alignSelf: 'center', width: 104, height: 18, borderRadius: 52, backgroundColor: 'rgba(5,30,70,0.28)' },
+  heroShadowCore: { position: 'absolute', bottom: 9, alignSelf: 'center', width: 60, height: 10, borderRadius: 30, backgroundColor: 'rgba(5,30,70,0.35)' },
   heroPin: { position: 'absolute', right: -8, bottom: 24, width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: BRAND.gold },
   tryTag: { position: 'absolute', top: 0, right: 0, backgroundColor: BRAND.gold, borderRadius: 8, paddingHorizontal: 6, borderWidth: 2, borderColor: '#ffffff', transform: [{ rotate: '6deg' }] },
@@ -943,7 +945,7 @@ const s = StyleSheet.create({
   nextKicker: { fontFamily: FONT.display, fontSize: 12, color: BRAND.gold, letterSpacing: 0.6 },
   nextPrizeText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   readyNow: { fontFamily: FONT.display, color: '#7dffb0' },
-  vipLine: { fontFamily: FONT.display, fontSize: 14, color: BRAND.gold, textAlign: 'center', marginTop: 6, alignSelf: 'center', borderWidth: 2, borderColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2, overflow: 'hidden' },
+  vipLine: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, backgroundColor: BRAND.gold, textAlign: 'center', marginTop: 6, alignSelf: 'center', borderWidth: 2, borderColor: '#ffffff', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2, overflow: 'hidden' },
   trackHead: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: -6 },
   rowLabelFree: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   rowLabelPass: { fontFamily: FONT.display, fontSize: 15, color: BRAND.gold },
@@ -1006,7 +1008,7 @@ const s = StyleSheet.create({
   grownUpText: { flex: 1, fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff', lineHeight: 18 },
   nextWins: { fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff' },
   topChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginHorizontal: 12, marginTop: 4, paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 999, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.gold },
+    borderRadius: 999, backgroundColor: '#1d5fb0', borderWidth: 2, borderColor: BRAND.gold },
   topChipText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.gold },
   freeSet: { fontFamily: FONT.display, fontSize: 15, color: BRAND.gold },
   topRing: { position: 'absolute', top: -4, left: -4, right: -4, bottom: -4, borderRadius: 18, borderWidth: 3, borderColor: BRAND.gold },
@@ -1020,7 +1022,7 @@ const s = StyleSheet.create({
   goldName: { fontFamily: FONT.body, fontSize: 12, color: '#ffffff', textAlign: 'center' },
   goldBtnBox: { minHeight: 44, minWidth: 84, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.gold, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },
   goldBtnText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy },
-  goldBtnPrice: { fontFamily: FONT.body, fontSize: 12, color: BRAND.navy },
+  goldBtnPrice: { fontFamily: FONT.display, fontSize: 13, color: BRAND.navy },
   goldBtn: { fontFamily: FONT.display, fontSize: 14, minWidth: 64, lineHeight: 28, minHeight: 44, textAlignVertical: 'center', paddingTop: 8, color: BRAND.navy, backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', textAlign: 'center' },
   setHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   setCount: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold },
