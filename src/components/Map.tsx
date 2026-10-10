@@ -660,7 +660,6 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     // Worn Secret pieces show off their moment on a tap (and now and then on their own).
     if ((mood === 'tap' || mood === 'show') && fxWorn.rigs.length > 0) fxKick.value = fxClock.value + 120;
   }, [reducedMotion, fxWorn]); // eslint-disable-line react-hooks/exhaustive-deps
-  const onAwaySharkTap = () => { if (isCatchShown()) return; onSharkTap(); recenterOnPlayer(); };
   const onSharkTap = () => {
     if (isCatchShown()) return;
     haptic('tapLight');
@@ -945,14 +944,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         <PlayerSharkMarker target={location ?? null} visible={!focusedOnPlayer && playerOnScreen} glide={!reducedMotion}
           zoomPpm={zoomPpm} bearingDeg={mapBearing} groundX={SHARK_GROUND.x} groundY={SHARK_GROUND.y}
           activeSlot={slotActive} shown={slotShown} cadence={cadenceRef.current}
-          tappable={!focusedOnPlayer}
-          renderArt={slot => (
-            <>
-              {slot === 0 ? sharkArt(slot0Styles, slot0Live, !focusedOnPlayer) : sharkArt(slot1Styles, slot1Live, !focusedOnPlayer)}
-              {/* Panned away: tap your shark for a trick and the map comes back to it. */}
-              {!focusedOnPlayer && <Pressable style={styles.sharkTap} onPress={onAwaySharkTap} accessibilityRole="button" accessibilityLabel="Your shark. Tap to bring the map back." />}
-            </>
-          )} />
+          renderArt={slot => (slot === 0 ? sharkArt(slot0Styles, slot0Live, !focusedOnPlayer) : sharkArt(slot1Styles, slot1Live, !focusedOnPlayer))} />
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
             unmounts afterwards (MapLibre insertReactSubview crash). */}

@@ -36,7 +36,7 @@ type Pending = { slot: number; e: number; n: number; mode: 'glide' | 'jump' | 'c
  * `renderArt(slot)` draws a copy; the parent freezes the hidden copy's
  * animations with the same `activeSlot` and `shown` values.
  */
-export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg, groundX, groundY, activeSlot, shown, renderArt, cadence, tappable = false }: {
+export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg, groundX, groundY, activeSlot, shown, renderArt, cadence }: {
   /** The filtered location; null parks the shark hidden. */
   readonly target: GlidePoint | null;
   /** Shown (panned away and on screen). */
@@ -57,9 +57,6 @@ export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg,
   readonly renderArt: (slot: number) => ReactNode;
   /** The map's shared fix-cadence estimate, so this glide always matches the camera's. */
   readonly cadence: FixCadence;
-  /** The art holds a touch target (panned away: tap your shark to come back). Map taps go through MapLibre's
-   * marker view, so the target has to live in here, not in the map's onPress. */
-  readonly tappable?: boolean;
 }) {
   // Every hook runs on every render; this component never returns early.
   const origin = useRef<GlidePoint | null>(null);
@@ -156,7 +153,7 @@ export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg,
       {[0, 1].map(slot => (
         <PlayerSlot key={slot} slot={slot} coordinate={anchors[slot] ?? target} active={activeSlot} shown={shown}
           visE={visE} visN={visN} aE={slot === 0 ? a0E : a1E} aN={slot === 0 ? a0N : a1N}
-          zoomPpm={zoomPpm} bearingDeg={bearingDeg} groundX={groundX} groundY={groundY} tappable={tappable}>{renderArt(slot)}</PlayerSlot>
+          zoomPpm={zoomPpm} bearingDeg={bearingDeg} groundX={groundX} groundY={groundY}>{renderArt(slot)}</PlayerSlot>
       ))}
     </>
   );
@@ -165,7 +162,7 @@ export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg,
 /** Where a copy waits before the first fix (never shown: the marker is hidden). */
 const PARKED: GlidePoint = { latitude: 34.1381, longitude: -118.3534 };
 
-function PlayerSlot({ slot, coordinate, active, shown, visE, visN, aE, aN, zoomPpm, bearingDeg, groundX, groundY, children, tappable }: {
+function PlayerSlot({ slot, coordinate, active, shown, visE, visN, aE, aN, zoomPpm, bearingDeg, groundX, groundY, children }: {
   readonly slot: number;
   readonly coordinate: GlidePoint | null;
   readonly active: SharedValue<number>;
@@ -177,7 +174,6 @@ function PlayerSlot({ slot, coordinate, active, shown, visE, visN, aE, aN, zoomP
   readonly groundX: number;
   readonly groundY: number;
   readonly children: ReactNode;
-  readonly tappable: boolean;
 }) {
   const clip = useAnimatedStyle(() => ({ opacity: active.value === slot ? shown.value : 0 }));
   const art = useAnimatedStyle(() => {
@@ -189,8 +185,8 @@ function PlayerSlot({ slot, coordinate, active, shown, visE, visN, aE, aN, zoomP
   return (
     <Marker coordinate={coordinate ?? PARKED} hidden={!coordinate}>
       <View style={styles.point}>
-        <Animated.View pointerEvents={tappable ? 'box-none' : 'none'} style={[styles.clip, { left: 0.5 - PLAYER_MARGIN - groundX, top: 0.5 - PLAYER_MARGIN - groundY }, clip]}>
-          <Animated.View pointerEvents="box-none" style={[styles.art, art]}>{children}</Animated.View>
+        <Animated.View pointerEvents="none" style={[styles.clip, { left: 0.5 - PLAYER_MARGIN - groundX, top: 0.5 - PLAYER_MARGIN - groundY }, clip]}>
+          <Animated.View style={[styles.art, art]}>{children}</Animated.View>
         </Animated.View>
       </View>
     </Marker>
