@@ -475,7 +475,7 @@ export default function SharkPassScreen() {
               </View>
               {nextPrize && nextStep > 0 && (
                 <View style={s.nextPrize}>
-                  <View style={s.nextCircle}><RewardPicture reward={nextPrize.reward} size={74} /></View>
+                  <View style={s.nextCircle}><RewardPicture reward={nextPrize.reward} size={80} /></View>
                   <View style={{ flex: 1 }}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextKicker}>{nextPrize.pass && !premium ? 'NEXT SHARK PASS PRIZE' : 'NEXT PRIZE'}</Text>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
@@ -513,7 +513,7 @@ export default function SharkPassScreen() {
               getItemLayout={(_, i) => ({ length: CELL_W, offset: CELL_W * i + 10, index: i })}
               initialNumToRender={8} windowSize={5}
               renderItem={({ item }) => (
-                <TierColumn tier={item} current={progress.tier} premium={premium} busy={busy} pulse={running}
+                <TierColumn tier={item} current={progress.tier} premium={premium} busy={busy} pulse={running} burst={climbed?.to === item.tier}
                   onClaim={(track) => void claim(item, track)} onLocked={() => {
                     const n = item.tier;
                     if (!item.unlocked) gameAlert(`Step ${n}`, `Keep playing to reach step ${n}.`);
@@ -818,23 +818,31 @@ function ProgressBar({ value, reduced }: { value: number; reduced: boolean }) {
   );
 }
 
-const TierColumn = memo(function TierColumn({ tier, current, premium, busy, pulse, onClaim, onLocked }: {
-  tier: SharkPassTier; current: number; premium: boolean; busy: string | null; pulse: boolean;
+const TierColumn = memo(function TierColumn({ tier, current, premium, busy, pulse, burst = false, onClaim, onLocked }: {
+  tier: SharkPassTier; current: number; premium: boolean; busy: string | null; pulse: boolean; burst?: boolean;
   onClaim: (track: 'free' | 'paid') => void; onLocked: () => void;
 }) {
   const freeReady = tier.unlocked && !!tier.free && !tier.free_claimed;
   const paidReady = tier.unlocked && premium && !tier.paid_claimed;
+  // The step just reached pops once (600 ms); none under Reduce Motion.
+  const reducedMotion = useUiReducedMotion();
+  const pop = useSharedValue(0);
+  useEffect(() => {
+    if (!burst || reducedMotion) return;
+    pop.value = withSequence(withTiming(1, { duration: 250, easing: Easing.out(Easing.back(2)) }), withTiming(0, { duration: 350 }));
+  }, [burst, reducedMotion, pop]);
+  const nodePop = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pop.value * 0.45 }] }));
   return (
-    <View style={s.col}>
+    <View style={[s.col, premium && tier.unlocked && s.colOwned]}>
       <Cell reward={tier.free} claimed={tier.free_claimed} ready={freeReady} locked={!tier.unlocked} pass={false}
         pulse={pulse} busy={busy === `${tier.tier}:free`} onPress={() => (freeReady ? onClaim('free') : onLocked())} />
       {/* The rail runs through every step: gold up to where the player is. */}
       <View style={s.railWrap} pointerEvents="none">
         <View style={[s.rail, tier.unlocked && s.railOn]} />
       </View>
-      <View style={[s.node, tier.unlocked && s.nodeOn, tier.tier === current && s.nodeNow]}>
+      <Animated.View style={[s.node, tier.unlocked && s.nodeOn, tier.tier === current && s.nodeNow, nodePop]}>
         <Text maxFontSizeMultiplier={1.1} style={[s.nodeText, tier.unlocked && s.nodeTextOn]}>{tier.tier}</Text>
-      </View>
+      </Animated.View>
       <Cell reward={tier.paid} claimed={tier.paid_claimed} ready={paidReady} locked={!tier.unlocked || !premium} pass
         pulse={pulse} busy={busy === `${tier.tier}:paid`} onPress={() => (paidReady ? onClaim('paid') : onLocked())} />
     </View>
@@ -904,7 +912,7 @@ const s = StyleSheet.create({
   twinCell: { width: 56, height: 56, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', opacity: 0.85 },
   twinLock: { position: 'absolute', top: -6, right: -6 },
   nextPrize: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: 8 },
-  nextCircle: { width: 62, height: 62, borderRadius: 31, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 3, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center' },
+  nextCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 3, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center' },
   nextKicker: { fontFamily: FONT.display, fontSize: 12, color: BRAND.gold, letterSpacing: 0.6 },
   nextPrizeText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   readyNow: { fontFamily: FONT.display, color: '#7dffb0' },
@@ -913,6 +921,8 @@ const s = StyleSheet.create({
   rowLabelFree: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   rowLabelPass: { fontFamily: FONT.display, fontSize: 15, color: BRAND.gold },
   col: { width: CELL_W, alignItems: 'center', gap: 6, paddingVertical: 6 },
+  // Shark Pass owners: every reached step sits on a warm gold band (the row is theirs).
+  colOwned: { backgroundColor: 'rgba(255,211,77,0.14)', borderRadius: 16 },
   cell: { width: CELL_W - 10, height: 104, borderRadius: 16, borderWidth: 3, borderColor: '#ffffff', backgroundColor: '#2f9ae8',
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, gap: 2, borderBottomWidth: 6, borderBottomColor: BRAND.navy },
   cellEmpty: { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.18)', borderBottomColor: 'rgba(5,52,110,0.4)' },

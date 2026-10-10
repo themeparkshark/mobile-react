@@ -195,3 +195,10 @@ test('free trial: the end date comes from StoreKit, and one calm reminder goes t
   assert.doesNotMatch(src, /requestPermissionsAsync/, 'never asks for permission');
   assert.match(read('src/services/purchases.ts'), /trialLength: freeTrial/);
 });
+
+test('VIP recap says only the player\'s own totals, and nothing when there is nothing', () => {
+  const src = read('src/screens/MembershipScreen.tsx');
+  assert.match(src, /THIS MONTH VIP GOT YOU/);
+  assert.match(src, /Your closet is kept\. Every VIP piece you have stays yours\./);
+  assert.doesNotMatch(src, /members (earn|average) about|on average/i, 'no invented averages');
+});

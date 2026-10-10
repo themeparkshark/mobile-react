@@ -25,7 +25,7 @@ import getVipPerks, { type VipPerk } from '../api/endpoints/economy/vip-perks';
 import {
   buyVip, legalText, loadVipPlans, priceText, restoreVip, savingsText, storeAvailable, trialEndsAt, type VipPlan,
 } from '../services/purchases';
-import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
+import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import { perMonthText } from '../services/money/offers';
 import MemberStage from '../components/money/MemberStage';
 import MonthlyGiftCard from '../components/money/MonthlyGiftCard';
@@ -34,7 +34,7 @@ import { VIP_GIFT_PRODUCT_IDS, buyVipGift, loadVipGiftPrices } from '../services
 import { trackImpression, trackMoney } from '../services/money/track';
 import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../services/money/flags';
 import { scheduleTrialReminder } from '../services/money/trialReminder';
-import { getVipGift } from '../api/endpoints/me/vip-gift';
+import { getVipGift, type VipPlanTime } from '../api/endpoints/me/vip-gift';
 import GrownUpsInfo from '../components/money/GrownUpsInfo';
 
 // Every line here is backed by live server logic: ride wins pay VIP double
@@ -107,6 +107,9 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const [perks, setPerks] = useState<VipPerk[]>(VIP_BENEFITS);
   const canBuy = storeAvailable();
   const member = player?.is_subscribed === true;
+  // This month's real VIP totals (the player's own records) and whether VIP ended for them.
+  const [vipTime, setVipTime] = useState<VipPlanTime | null>(null);
+  useEffect(() => { if (player) void getVipGift().then(g => setVipTime(g?.plan ?? null)); }, [player?.id, member]);
   // Pins: VIP gets a free Mystery Pin Box every week, listed only while boxes are live.
   const boxesLive = useMoneyFlag('pin_mystery_boxes');
   useEffect(() => {
@@ -232,8 +235,17 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
             ))}
           </View>
 
+          {!member && vipTime?.lapsed && (
+            // Lapsed members: what they keep, then the plans as usual (the Buy still asks a grown-up).
+            <Animated.View entering={FadeInUp.delay(300)} style={s.recap}>
+              <Text style={s.recapHead}>WELCOME BACK</Text>
+              <Text style={s.recapLine}>Your closet is kept. Every VIP piece you have stays yours.</Text>
+              <Text style={s.recapLine}>Rejoin anytime with a plan below.</Text>
+            </Animated.View>
+          )}
           {member ? (
             <>
+              {vipTime?.recap && <RecapCard recap={vipTime.recap} />}
               <MonthlyGiftCard />
               <Animated.View entering={FadeInUp.delay(560)} style={s.memberNote}>
                 <GameIcon name="member" size={30} />
@@ -393,6 +405,31 @@ const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
   { icon: 'settings', text: 'Turn VIP off anytime in Apple\u00A0ID settings.' },
 ];
 
+/** "This month VIP got you": only the player's own real totals, never averages. */
+export function recapLines(recap: NonNullable<VipPlanTime['recap']>): string[] {
+  const n = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return [
+    recap.no_ad_rewards > 0 ? `${recap.no_ad_rewards} ${recap.no_ad_rewards === 1 ? 'reward' : 'rewards'} with no ad to watch` : null,
+    recap.coins > 0 ? `${n(recap.coins)} coins` : null,
+    recap.tickets > 0 ? `${recap.tickets} ${recap.tickets === 1 ? 'ticket' : 'tickets'}` : null,
+    recap.energy > 0 ? `${n(recap.energy)} energy` : null,
+    recap.gift_pin ? `the ${recap.gift_pin}` : null,
+  ].filter((x): x is string => !!x);
+}
+
+function RecapCard({ recap }: { recap: NonNullable<VipPlanTime['recap']> }) {
+  const lines = recapLines(recap);
+  if (!lines.length) return null;
+  return (
+    <Animated.View entering={FadeInUp.delay(300)} style={s.recap} accessible accessibilityLabel={`This month VIP got you: ${lines.join(', ')}.`}>
+      <Text style={s.recapHead}>THIS MONTH VIP GOT YOU</Text>
+      {lines.map(l => (
+        <View key={l} style={s.grownUpRow}><GameIcon name="check" size={18} /><Text style={s.recapLine}>{l}</Text></View>
+      ))}
+    </Animated.View>
+  );
+}
+
 function GrownUpNotes() {
   // "Show a grown-up": the kid hands the phone over and the whole grown-up page opens right here.
   const [all, setAll] = useState(false);
@@ -443,6 +480,9 @@ const s = StyleSheet.create({
   giftName: { fontFamily: 'Shark', fontSize: 16, color: '#09268f' },
   giftPrice: { fontFamily: 'Shark', fontSize: 20, color: '#09268f' },
   giftNote: { fontFamily: 'Knockout', fontSize: 13, color: '#3d5f8c' },
+  recap: { width: '100%', marginTop: 12, backgroundColor: 'rgba(255,211,77,0.16)', borderRadius: 18, padding: 12, gap: 6, borderWidth: 2, borderColor: BRAND.gold },
+  recapHead: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold },
+  recapLine: { flexShrink: 1, fontFamily: FONT.body, fontSize: 15, color: '#ffffff' },
   grownUps: { width: '100%', marginTop: 16, backgroundColor: 'rgba(5,40,90,0.55)', borderRadius: 18, padding: 12, gap: 6,
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
   grownUpsHead: { fontFamily: 'Shark', fontSize: 16, color: '#ffffff', letterSpacing: 0.6 },
