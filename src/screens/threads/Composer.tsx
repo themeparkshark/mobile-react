@@ -76,7 +76,8 @@ import {
 } from './socialModel';
 
 const SHARK = require('../../../assets/images/screens/pin-collections/shark.png');
-const SUCCESS = require('../../../assets/sounds/success.mp3');
+// success.mp3 is a broken 111-byte file: a published post whooshes away like a reply.
+const SUCCESS = require('../../../assets/sounds/whoosh.mp3');
 const NOPE = require('../../../assets/sounds/nope.mp3');
 const OPEN = require('../../../assets/sounds/modal_open.mp3');
 

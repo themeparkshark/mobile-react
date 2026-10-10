@@ -16,6 +16,8 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { GameAudio } from '../../gamekit/audio/GameAudio';
+import { playSfx } from '../../gamekit/SFX';
 import * as Haptics from '../../helpers/haptics';
 import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
@@ -45,6 +47,22 @@ export const INK_SOFT = BRAND.navySoft;
 
 // ── Press with a spring ────────────────────────────────────────────────
 
+/** Every Social tap clicks (Chris's tap.mp3 as the preloaded 'ui.tap' cue) unless the action plays its own sound. */
+export const PRESS_CUE = 'ui.tap';
+const SOCIAL_CUES = [PRESS_CUE, 'fx.hit', 'ui.select'];
+
+/** Preload Social's press cues once, so the first click lands with the squash (no file load per tap). */
+export function useSocialSounds() {
+  useEffect(() => {
+    void (async () => {
+      try {
+        if (!GameAudio.backend) await GameAudio.init();
+        await GameAudio.preload(SOCIAL_CUES);
+      } catch { /* sound is decoration */ }
+    })();
+  }, []);
+}
+
 /** The Pressable itself scales, so layout styles (flex, absolute) apply to the touch area. */
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -55,6 +73,7 @@ export function PressScale({
   style,
   scaleTo = 0.95,
   haptic = 'light',
+  sound = 'tap',
   disabled,
   accessibilityLabel,
   accessibilityHint,
@@ -69,6 +88,8 @@ export function PressScale({
   readonly style?: StyleProp<ViewStyle>;
   readonly scaleTo?: number;
   readonly haptic?: 'light' | 'medium' | 'none';
+  /** 'none' when the action plays its own sound (a sheet opening, a reaction, a send). */
+  readonly sound?: 'tap' | 'none';
   readonly disabled?: boolean;
   readonly accessibilityLabel?: string;
   readonly accessibilityHint?: string;
@@ -79,7 +100,9 @@ export function PressScale({
 }) {
   const reduced = useUiReducedMotion();
   const scale = useSharedValue(1);
-  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const dim = useSharedValue(1);
+  // Reduce Motion: no squash, a quick dim instead, so the press still shows.
+  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }], opacity: dim.value }));
 
   return (
     <AnimatedPressable
@@ -92,14 +115,18 @@ export function PressScale({
       accessibilityHint={accessibilityHint}
       accessibilityState={accessibilityState ?? (disabled ? { disabled: true } : undefined)}
       onPressIn={() => {
-        if (!reduced) scale.value = withTiming(scaleTo, { duration: 70 });
+        if (reduced) dim.value = withTiming(0.7, { duration: 60 });
+        else scale.value = withTiming(scaleTo, { duration: 70 });
       }}
       onPressOut={() => {
-        if (!reduced) scale.value = withSpring(1, { damping: 9, stiffness: 320, mass: 0.6 });
+        if (reduced) dim.value = withTiming(1, { duration: 120 });
+        else scale.value = withSpring(1, { damping: 9, stiffness: 320, mass: 0.6 });
       }}
       onPress={() => {
+        if (!onPress) return; // nothing happens: no fake click
         if (haptic !== 'none') void Haptics.impactAsync(haptic === 'medium' ? 'medium' : 'light');
-        onPress?.();
+        if (sound === 'tap') playSfx(PRESS_CUE, 0.5);
+        onPress();
       }}
       onLongPress={onLongPress}
       delayLongPress={350}
@@ -232,6 +259,7 @@ function ReactionFace({
       onPress={onPress}
       onLongPress={() => setNamed(true)}
       disabled={disabled}
+      sound="none"
       scaleTo={0.85}
       accessibilityLabel={`${type.name}${count ? `, ${count}` : ''}`}
       accessibilityHint={mine ? 'Takes your reaction back' : 'Adds your reaction'}
@@ -359,6 +387,7 @@ export function GoldPill({
       onPress={onPress}
       disabled={disabled || loading}
       haptic="medium"
+      sound="none"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: Boolean(disabled || loading) }}
       style={[styles.gold, small && styles.goldSmall, ((disabled || dimmed) && !loading) && styles.goldDisabled]}

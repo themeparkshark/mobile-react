@@ -18,7 +18,7 @@ const FILES = [
   'src/screens/ProfileScreen.tsx',
   'src/screens/PlayerScreen.tsx',
   'src/components/Experience.tsx',
-  'src/components/XpPotion.tsx',
+  'src/components/XpBar.tsx',
   'src/components/xpPotionModel.ts',
   'src/components/profile/useCardOnScreen.ts',
   'src/components/profile/stampDot.ts',
@@ -99,9 +99,9 @@ test('VIP and Verified are solid badges with a meaning line, never a fading puls
   assert.match(badges, /Official shark/);
 });
 
-test('the XP potion pauses off screen, in the background, when covered and under Reduce Motion', () => {
-  const potion = read('src/components/XpPotion.tsx');
-  assert.match(potion, /setActive\(!paused && reduced === false && appActive\.current\)/);
+test('the XP bar pauses off screen, in the background, when covered and under Reduce Motion', () => {
+  const potion = read('src/components/XpBar.tsx');
+  assert.match(potion, /setActive\(!asleep\.current && !paused && reduced === false && appActive\.current && width > 0\)/);
   assert.match(potion, /AppState\.addEventListener/);
   assert.match(potion, /useFrameCallback\([\s\S]*?, false\)/, 'the clock starts stopped');
   assert.equal((potion.match(/<Canvas/g) || []).length, 1, 'one canvas');
@@ -126,14 +126,12 @@ test('level up earned elsewhere plays on return: mount at level 5 data, now leve
   // A quick refetch inside the build-up keeps the celebration; the burst fires once.
   assert.equal(potionTransition({ level: 6, progress: 0.07 }, { level: 6, progress: 0.1 }, false, true), 'defer');
   assert.equal(potionTransition({ level: 6, progress: 0.07 }, { level: 7, progress: 0.1 }, false, true), 'defer');
-  const potion = read('src/components/XpPotion.tsx');
-  assert.match(potion, /useEffect\(\(\) => \(\) => driver\.dispose\(\), \[driver\]\)/, 'timers clear only on unmount');
-  assert.match(potion, /if \(r < 3\) continue;/, 'no navy specks');
-  assert.match(potion, /return FILL_BASE - f \* \(FILL_BASE - FILL_TOP\)/, 'liquid never drops below the label line');
+  const potion = read('src/components/XpBar.tsx');
+  assert.match(potion, /useEffect\(\(\) => \(\) => \{\n\s+driver\.dispose\(\);[\s\S]*?\}, \[driver\]\)/, 'timers clear only on unmount');
+  assert.match(potion, /const base = Math\.min\(0\.5, \(innerH \* 0\.9\) \/ innerW\)/, 'a living blob of liquid stays at the start of a fresh level');
   const card = read('src/components/Experience.tsx');
-  assert.match(card, /Level up!/);
+  assert.match(potion, /'LEVEL UP!'/);
   assert.match(card, /useReduceMotionPreference\(\) === true/);
-  assert.match(card, /ribbonShadow[\s\S]*ribbonLip[\s\S]*ribbonEdge[\s\S]*ribbonFill/, 'nested ribbon');
   assert.match(card, /HapticPatterns\.levelUp\(\)/);
 });
 
@@ -314,7 +312,8 @@ test("a stranger's level card shows the level only, never 0 / N XP", () => {
     '../hooks/useCrumbs': { default: () => ({ labels: {} }) },
     '../hooks/useReducedGameMotion': { useReduceMotionPreference: () => false },
     '../services/progression/progressionFlags': { useProgressionFlags: () => ({ rideBoss: false }) },
-    './XpPotion': { default: 'XpPotion' },
+    './XpBar': { default: 'XpBar', XP_BAR_HEIGHT: 26 },
+    '../ui': { GameIcon: 'GameIcon' },
     'sprintf-js': { vsprintf: (f, a) => f.replace('%s', a[0]) },
   };
   const card = runtime('src/components/Experience.tsx', imports, { player: stranger, own: false });
@@ -324,13 +323,3 @@ test("a stranger's level card shows the level only, never 0 / N XP", () => {
   assert.equal(card.find((n) => n.props?.accessibilityRole === 'summary').props.accessibilityLabel, 'Level 6.');
 });
 
-test('the burst drops launch in groups one potion redraw apart, and stars wait two redraws', () => {
-  const potion = read('src/components/XpPotion.tsx');
-  const lag = Number(/DROP_GROUP_LAG = ([\d.]+)/.exec(potion)[1]);
-  const spark = Number(/SPARK_LAG = ([\d.]+)/.exec(potion)[1]);
-  // Out-quad over 1150 ms: progress after one 33 ms redraw is 1 - (1 - 33/1150)^2.
-  const oneRedraw = 1 - (1 - 33 / 1150) ** 2;
-  assert.ok(lag >= oneRedraw, `group lag ${lag} >= ${oneRedraw.toFixed(3)}`);
-  assert.ok(spark >= 2 * oneRedraw - 0.01);
-  assert.match(potion, /const lag = \(i % 3\) \* DROP_GROUP_LAG;/);
-});

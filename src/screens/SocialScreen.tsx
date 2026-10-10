@@ -12,13 +12,11 @@ import { FlashList } from '@shopify/flash-list';
 import { openMembership } from '../components/GrownUpGate';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchFeed, fetchPinned } from '../api/endpoints/social';
 import Avatar from '../components/Avatar';
-import PlayerButtons from '../components/PlayerButtons';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -26,7 +24,6 @@ import Wrapper from '../components/Wrapper';
 import { isTeam, TEAMS } from '../constants/teams';
 import { outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
 import { AuthContext } from '../context/AuthProvider';
-import { SoundEffectContext } from '../context/SoundEffectProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
@@ -34,6 +31,9 @@ import type { ThreadType } from '../models/thread-type';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import ChestButton from './threads/ChestButton';
+import ShortcutTiles from './threads/ShortcutTiles';
+import SocialSheet from './threads/SocialSheet';
 import Composer from './threads/Composer';
 import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import SocialHelp from './threads/SocialHelp';
@@ -41,20 +41,18 @@ import RulesCard, { hasPromised } from './threads/RulesCard';
 import ThreadCard from './threads/ThreadCard';
 import { applySocialEvent, emitSocial, onSocial } from './threads/socialEvents';
 import CleanScreenBackground, { CLEAN } from '../components/CleanScreenBackground';
-import { COMPOSE_ART, PressScale } from './threads/socialLook';
+import { COMPOSE_ART, PressScale, useSocialSounds } from './threads/socialLook';
 import { DEFAULT_PROMPT, mergePage, type FeedTab } from './threads/socialModel';
-
-const TAB_SOUND = require('../../assets/sounds/tap.mp3');
 
 type Status = 'loading' | 'ready' | 'error';
 
 export default function SocialScreen({ navigation }: { navigation: { navigate: (screen: string, params?: object) => void; addListener?: (event: string, cb: () => void) => () => void } }) {
   const { player } = useContext(AuthContext);
-  const { playSound } = useContext(SoundEffectContext);
   const { checkPermission } = usePermissions();
   const { urls } = useCrumbs();
   const reduced = useUiReducedMotion();
   const insets = useSafeAreaInsets();
+  useSocialSounds();
 
   const playerTeam = (player as { team?: { team?: string } } | null)?.team?.team;
   const team = isTeam(playerTeam) ? TEAMS[playerTeam] : null;
@@ -74,8 +72,10 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   // iOS can't present Safari or push a screen while this sheet is still sliding away,
   // so a shortcut closes the sheet first and runs its action once the sheet is hidden.
   const afterShortcutsHide = useRef<(() => void) | null>(null);
+  const [tileClosed, setTileClosed] = useState(false);
   const runAfterShortcuts = useCallback((action: () => void) => {
     afterShortcutsHide.current = action;
+    setTileClosed(true); // that tile already clicked: the chest shuts quietly
     setShortcuts(false);
   }, []);
   const [rules, setRules] = useState(false);
@@ -143,7 +143,6 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
       listRef.current?.scrollToOffset({ offset: 0, animated: !reduced });
       return;
     }
-    playSound(TAB_SOUND, { volume: 0.45 });
     setFreshId(null);
     setTab(next);
   };
@@ -208,6 +207,11 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     return () => clearTimeout(id);
   }, [freshId]);
 
+  // Stable so a parent render (a tap, the chest, the sheet) never re-renders the feed rows.
+  const renderThread = useCallback(({ item, index }: { item: ThreadType; index: number }) => (
+    <ThreadCard thread={item} index={index} fresh={item.id === glowId} onOpen={openThread} onMenu={openMenu} />
+  ), [glowId, openThread, openMenu]);
+
   const items = useMemo(() => {
     // A post I just made sits on top (above the pin) while it glows, fully in view.
     const fresh = freshId !== null ? threads.find((item) => item.id === freshId) : undefined;
@@ -222,10 +226,13 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     ...(team ? [{ key: 'team' as FeedTab, label: 'Team', badge: team.badge }] : []),
   ];
 
-  const header = (
+  // The header only changes with the player, the tab or the team: a chest tap or the sheet never rebuilds it.
+  const actions = useRef({ openComposer, pickTab });
+  actions.current = { openComposer, pickTab };
+  const header = useMemo(() => (
     <View>
       {player ? (
-        <PressScale onPress={() => void openComposer()} scaleTo={0.97} haptic="medium" style={styles.compose} accessibilityLabel="Write a post" accessibilityHint="Opens the new post screen">
+        <PressScale onPress={() => void actions.current.openComposer()} scaleTo={0.97} haptic="medium" sound="none" style={styles.compose} accessibilityLabel="Write a post" accessibilityHint="Opens the new post screen">
           <Avatar player={player as ThreadType['player']} size="sm" />
           <View style={styles.composeField}>
             <Text style={styles.composeText} numberOfLines={1}>{DEFAULT_PROMPT}</Text>
@@ -240,7 +247,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
           return (
             <PressScale
               key={item.key}
-              onPress={() => pickTab(item.key)}
+              onPress={() => actions.current.pickTab(item.key)}
               accessibilityRole="tab"
               accessibilityState={{ selected: on }}
               accessibilityLabel={item.key === 'team' && team ? `${team.name} posts` : `${item.label} posts`}
@@ -259,7 +266,8 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
       </View>
 
     </View>
-  );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [player, tab, team]);
 
   const empty = status === 'loading' ? (
     <SharkLoader tone="onLight" onRetry={() => void load(1, 'replace')} style={styles.state} />
@@ -289,10 +297,9 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <PressScale onPress={() => setShortcuts(true)} accessibilityLabel="More: VIP, Merch, Pin Trading, Coin Codes" hitSlop={8} style={styles.more}>
-            <GameIcon name="chest" size={36} />
-            <Text style={styles.moreText}>{player && !player.is_subscribed ? 'VIP' : 'More'}</Text>
-          </PressScale>
+          <ChestButton open={shortcuts} onPress={() => { afterShortcutsHide.current = null; setTileClosed(false); setShortcuts(true); }} label="More" accessibilityLabel="More"
+            quietClose={tileClosed}
+            accessibilityHint={!player || !player.is_subscribed ? 'Pin Trading, Coin Codes, Merch, VIP and Watch' : 'Pin Trading, Coin Codes, Merch and Watch'} />
         </TopbarColumn>
         <TopbarColumn><TopbarText>Social</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false}><SocialHelp /></TopbarColumn>
@@ -303,15 +310,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
           ref={listRef}
           data={status === 'ready' ? items : []}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item, index }) => (
-            <ThreadCard
-              thread={item}
-              index={index}
-              fresh={item.id === glowId}
-              onOpen={openThread}
-              onMenu={openMenu}
-            />
-          )}
+          renderItem={renderThread}
           extraData={glowId}
           estimatedItemSize={260}
           ListHeaderComponent={header}
@@ -348,28 +347,25 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         }}
       />
 
-      <Modal
-        isVisible={shortcuts}
-        onBackdropPress={() => setShortcuts(false)}
-        onSwipeComplete={() => setShortcuts(false)}
-        onModalHide={() => {
+      <SocialSheet
+        visible={shortcuts}
+        reduced={reduced}
+        onClose={() => setShortcuts(false)}
+        onHidden={() => {
           const action = afterShortcutsHide.current;
           afterShortcutsHide.current = null;
           action?.();
         }}
-        swipeDirection="down"
-        style={{ margin: 0, justifyContent: 'flex-end' }}
-        backdropColor={BRAND.navy}
-        backdropOpacity={0.35}
-        animationIn={reduced ? 'fadeIn' : 'slideInUp'}
-        animationOut={reduced ? 'fadeOut' : 'slideOutDown'}
-        useNativeDriverForBackdrop
       >
         <View style={[styles.shortcuts, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <View style={styles.handle} />
-          <Text style={styles.shortcutsTitle}>More Shark fun</Text>
-          <PlayerButtons
-            buttons={[
+          {/* The handle doubles as a Close button VoiceOver and Switch Control can reach. */}
+          <Pressable onPress={() => setShortcuts(false)} accessibilityRole="button" accessibilityLabel="Close"
+            hitSlop={{ top: 15, bottom: 15, left: 40, right: 40 }} style={styles.handleHit}>
+            <View style={styles.handle} />
+          </Pressable>
+          <Text style={styles.shortcutsTitle} accessibilityRole="header">More Shark fun</Text>
+          <ShortcutTiles
+            tiles={[
               {
                 image: require('../../assets/images/screens/social/pin_swaps.png'),
                 onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.TradePins)) navigation.navigate('PinSwaps'); }),
@@ -404,7 +400,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
             ]}
           />
         </View>
-      </Modal>
+      </SocialSheet>
     </Wrapper>
   );
 }
@@ -443,8 +439,6 @@ const styles = StyleSheet.create({
   tabOn: { backgroundColor: BRAND.gold, borderWidth: 1.5, borderBottomWidth: 3, borderColor: BRAND.goldLip },
   tabText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navySoft, marginTop: 3 },
   tabTextOn: { color: '#7a3d00' },
-  more: { alignItems: 'center', minWidth: 48 },
-  moreText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.white, marginTop: -2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
   state: { marginTop: 40, paddingHorizontal: 24 },
   shortcuts: {
     backgroundColor: BRAND.cream,
@@ -456,6 +450,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
   },
-  handle: { alignSelf: 'center', width: 48, height: 6, borderRadius: 3, backgroundColor: '#d9c99b', marginBottom: 8 },
+  handleHit: { alignSelf: 'center', minHeight: 14, minWidth: 64, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  handle: { width: 48, height: 6, borderRadius: 3, backgroundColor: '#d9c99b' },
   shortcutsTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, textAlign: 'center', marginBottom: 6 },
 });

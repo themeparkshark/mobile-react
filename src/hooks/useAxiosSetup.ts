@@ -1,4 +1,5 @@
 import { AxiosError, AxiosResponse } from 'axios';
+import { isStandalonePreviewMode } from '../utils/standalonePreview';
 import { useContext, useEffect, useRef } from 'react';
 import client from '../api/client';
 import { QUIET_COIN_BROADCAST, visibleBroadcasts } from '../api/broadcastFilter';
@@ -43,7 +44,8 @@ export const useAxiosSetup = () => {
       },
       (error: AxiosError) => {
         const status = error?.response?.status;
-        if (status === 401) {
+        // Dev previews render fixture players over the live API without a token: keep them on screen.
+        if (status === 401 && !isStandalonePreviewMode()) {
           // Sign-out clears storage; a failure there must not become an
           // unhandled rejection on every 401.
           Promise.resolve(logoutRef.current()).catch(() => undefined);

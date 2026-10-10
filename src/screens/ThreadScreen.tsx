@@ -38,7 +38,7 @@ import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import SafeChatPicker, { useSafeChatPlaces } from './threads/SafeChatPicker';
 import { emitSocial } from './threads/socialEvents';
 import { CLEAN } from '../components/CleanScreenBackground';
-import { CommentChip, GoldPill, OfficialAvatar, OfficialName, PressScale, ReactionBar, card } from './threads/socialLook';
+import { CommentChip, GoldPill, OfficialAvatar, OfficialName, PressScale, ReactionBar, card, useSocialSounds } from './threads/socialLook';
 import { CARE_LINE, DISCLOSURE_LINE, isCareHold, isDisclosure, composeSafeChat, phraseById, phraseLabel, DRAFT_LINES, QUICK_REPLIES, QUICK_REPLY_IDS, REPLY_MAX, type SafeChatPick, checkDraft, errorLine, HINT_DEBOUNCE_MS, isDistress, pauseLine, quickDraftProblem, reviewLine, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
 import useReactions from './threads/useReactions';
 import useKeyboardInset from './threads/useKeyboardInset';
@@ -104,7 +104,7 @@ function Bubble({
             <PressScale onPress={() => onReply(comment)} hitSlop={14} accessibilityLabel={`Reply to ${name}`} style={styles.footAction}>
               <Text style={styles.footReply}>Reply</Text>
             </PressScale>
-            <PressScale onPress={() => onMenu(comment)} hitSlop={14} accessibilityLabel={mine ? 'Delete my reply' : `Report or block ${name}`} style={styles.footAction}>
+            <PressScale onPress={() => onMenu(comment)} sound="none" hitSlop={14} accessibilityLabel={mine ? 'Delete my reply' : `Report or block ${name}`} style={styles.footAction}>
               <View style={styles.dotRow}><View style={styles.dot} /><View style={styles.dot} /><View style={styles.dot} /></View>
             </PressScale>
           </View>
@@ -143,7 +143,7 @@ function PostHeader({ thread, onMenu, onEdit }: { readonly thread: ThreadType; r
           </View>
         </View>
         {player && (
-          <PressScale onPress={onMenu} style={styles.more} hitSlop={8} accessibilityLabel="More" accessibilityHint={onEdit ? 'Edit or delete' : 'Report or block'}>
+          <PressScale onPress={onMenu} sound="none" style={styles.more} hitSlop={8} accessibilityLabel="More" accessibilityHint={onEdit ? 'Edit or delete' : 'Report or block'}>
             <View style={styles.dotRow}><View style={styles.dotBig} /><View style={styles.dotBig} /><View style={styles.dotBig} /></View>
           </PressScale>
         )}
@@ -172,6 +172,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
   const threadId = Number(params.thread);
   const insets = useSafeAreaInsets();
   const reduced = useUiReducedMotion();
+  useSocialSounds();
   const { height: windowHeight } = useWindowDimensions();
   const keyboard = useKeyboardInset(windowHeight, reduced);
   const { player } = useContext(AuthContext);
@@ -485,6 +486,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                       disabled={sending}
                       scaleTo={0.9}
                       haptic="medium"
+                      sound="none"
                       style={styles.quick}
                       accessibilityLabel={`Reply ${phrase}`}
                     >
@@ -511,6 +513,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                   onPress={() => void send()}
                   disabled={sending}
                   haptic="medium"
+                  sound="none"
                   scaleTo={0.88}
                   accessibilityLabel="Send reply"
                   accessibilityState={{ disabled: sendOff }}
