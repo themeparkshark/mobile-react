@@ -108,7 +108,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
       { key: 'daily', hero: 'shop_daily', headline: 'New gear every day',
         points: [
           { icon: 'new', text: 'Fresh pieces land on the Daily shelf.' },
-          { icon: 'timer', text: 'Pieces change, so check back daily.' },
+          { icon: 'timer', text: 'Pieces change daily, so check back.' },
         ] },
       { key: 'supplies', hero: 'shop_supplies', headline: 'Packs for grown-ups',
         points: [
@@ -130,7 +130,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
       { key: 'levels', hero: 'park_levels', headline: 'Level up your coins',
         points: [
           { icon: 'coin', text: 'Tap a coin to level it up.' },
-          { icon: 'parts', text: 'Spend Energy and Ride Parts from that ride.' },
+          { icon: 'parts', text: 'Spend Energy and that ride\'s Ride Parts.' },
           { icon: 'queue', text: 'Win the ride or play LinePlay in its line.' },
         ] },
     ],
@@ -155,7 +155,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
   redeem: {
     id: 'redeem', name: 'Redeem',
     pages: [
-      { key: 'code', hero: 'redeem_chest', headline: 'Redeem a coin code',
+      { key: 'code', hero: 'redeem_chest', headline: 'Redeem a code',
         points: [
           { icon: 'edit', text: 'Type the code and tap Next.' },
           { icon: 'gift', text: 'Get Coins, Tickets, Energy or a prize.' },
