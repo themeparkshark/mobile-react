@@ -640,6 +640,7 @@ export default function SharkPassScreen() {
                       <Pressable key={piece.reward.art + piece.row} onPress={() => setTryOn(piece)}
                         style={({ pressed }) => [s.setCell, piece.owned && s.setCellOwned, piece.row === 'free' && piece.step === steps && s.setCellTop, pressed && { opacity: 0.75 }]}
                         accessibilityRole="button" accessibilityLabel={`${piece.reward.name}. ${piece.owned ? 'Yours.' : pieceSource(piece) + '.'} Tap to try it on.`}>
+                        {piece.row === 'free' && piece.step === steps && <TopRing />}
                         <View style={!piece.owned && s.setDim}><RewardPicture reward={piece.reward} size={52} /></View>
                         {piece.owned
                           ? <View style={s.setBadge}><GameIcon name="check" size={16} /></View>
@@ -818,6 +819,19 @@ export default function SharkPassScreen() {
   );
 }
 
+/** The free Finisher's slow gold ring: the season's top look anyone can earn (still under Reduce Motion / background). */
+function TopRing() {
+  const ambient = useAmbient();
+  const t = useSharedValue(0);
+  useEffect(() => {
+    if (!ambient) { cancelAnimation(t); t.value = 0; return undefined; }
+    t.value = withRepeat(withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.sin) }), -1, true);
+    return () => cancelAnimation(t);
+  }, [ambient, t]);
+  const style = useAnimatedStyle(() => ({ opacity: 0.45 + t.value * 0.55, transform: [{ scale: 1 + t.value * 0.06 }] }));
+  return <Animated.View pointerEvents="none" style={[s.topRing, style]} />;
+}
+
 function ProgressBar({ value, reduced }: { value: number; reduced: boolean }) {
   const w = useSharedValue(0);
   useEffect(() => { w.value = reduced ? value : withTiming(Math.max(0, Math.min(1, value)), { duration: 700, easing: Easing.out(Easing.cubic) }); }, [value, reduced, w]);
@@ -991,6 +1005,7 @@ const s = StyleSheet.create({
     borderRadius: 999, backgroundColor: 'rgba(255,211,77,0.18)', borderWidth: 2, borderColor: BRAND.gold },
   topChipText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.gold },
   freeSet: { fontFamily: FONT.display, fontSize: 15, color: BRAND.gold },
+  topRing: { position: 'absolute', top: -4, left: -4, right: -4, bottom: -4, borderRadius: 18, borderWidth: 3, borderColor: BRAND.gold },
   setCellTop: { borderColor: BRAND.gold, borderWidth: 3, backgroundColor: 'rgba(255,211,77,0.12)' },
   frameRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
   frameName: { flex: 1, fontFamily: FONT.display, fontSize: 16, color: '#ffffff' },

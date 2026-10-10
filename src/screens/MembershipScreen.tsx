@@ -408,13 +408,15 @@ const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
 /** "This month VIP got you": only the player's own real totals, never averages. */
 export function recapLines(recap: NonNullable<VipPlanTime['recap']>): string[] {
   const n = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return [
+  const lines = [
     recap.no_ad_rewards > 0 ? `${recap.no_ad_rewards} ${recap.no_ad_rewards === 1 ? 'reward' : 'rewards'} with no ad to watch` : null,
     recap.coins > 0 ? `${n(recap.coins)} coins` : null,
     recap.tickets > 0 ? `${recap.tickets} ${recap.tickets === 1 ? 'ticket' : 'tickets'}` : null,
     recap.energy > 0 ? `${n(recap.energy)} energy` : null,
-    recap.gift_pin ? `the ${recap.gift_pin}` : null,
   ].filter((x): x is string => !!x);
+  // The most visual line first: this month's members-only pin.
+  if (recap.gift_pin) lines.unshift(`Your ${recap.gift_pin}`);
+  return lines;
 }
 
 function RecapCard({ recap }: { recap: NonNullable<VipPlanTime['recap']> }) {

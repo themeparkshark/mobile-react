@@ -10,6 +10,7 @@ import { claimVipGift, getVipGift, type VipGiftState } from '../../api/endpoints
 import { AuthContext } from '../../context/AuthProvider';
 import { BRAND, FONT, GameButton, GameIcon, gameAlert } from '../../ui';
 import { GotIt, MAX_FONT } from './moneyUi';
+import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../../share';
 
 const PIN_ART: Record<string, number> = {
   'vip-pin-nov': require('../../../assets/images/sharkpass/vip-pin-nov.webp'),
@@ -76,6 +77,14 @@ export default function MonthlyGiftCard() {
         <GotIt grants={{ coins: landed.coins }} art="gift" title="Your VIP gift!"
           picture={landed.art && PIN_ART[landed.art] ? <Image source={PIN_ART[landed.art]} style={{ width: 170, height: 170 }} contentFit="contain" /> : undefined}
           caption={[`${landed.coins.toLocaleString('en-US')} coins`, landed.pin].filter(Boolean).join(' and ')}
+          footer={SHARE_IN_MODALS && landed.pin && landed.art && PIN_ART[landed.art] ? (
+            // Show off the month's members-only pin. No price, no "VIP costs".
+            <View style={{ alignItems: 'center', marginTop: 8 }}>
+              <FlexShareButton kind="find" surface="vip_gift" size="sm" caption
+                payload={{ itemName: landed.pin, artUrl: PIN_ART[landed.art], rarity: 4, setName: `${monthName(gift.month, false)} member pin` }} />
+              <ShareStudioHost portal />
+            </View>
+          ) : undefined}
           onDone={() => setLanded(null)} />
       )}
     </View>

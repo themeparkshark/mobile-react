@@ -363,8 +363,8 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
   const best = product.badge === 'Best value';
   const wide = columns === 1;
   const gear = main === 'coins' ? gearLine(product.buys, bonus) : null;
-  // One sticker per card (kids UX r4): no % sticker on BEST VALUE, and coin packs say it in the gear line.
-  const sticker = bonus && !best && !gear ? `+${bonus}% MORE` : null;
+  // No % stickers at all (psychology r6): coin packs say it in the gear line, tickets in the label below.
+  const sticker = null as string | null;
   return (
     <View style={[columns === 3 ? st.col3 : columns === 2 ? st.col2 : st.col1]}>
       <ShopCard onPress={onBuy} disabled={disabled || !price || !!note} glow={best}
