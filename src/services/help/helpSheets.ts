@@ -68,7 +68,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         ] },
       { key: 'podium', hero: 'standings_podium', headline: 'Top 3 win each week',
         points: [
-          { icon: 'crown', text: '1st Ride Champ, 2nd Ride Ace, 3rd Ride Star.' },
+          { icon: 'crown', text: 'Top 3 earn Champ, Ace and Star titles.' },
           { icon: 'ticket', text: 'Plus bonus Tickets for all three.' },
           { icon: 'star', text: 'Weekly goals add bonus XP.' },
         ] },
