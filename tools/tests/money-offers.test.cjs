@@ -202,3 +202,25 @@ test('VIP recap says only the player\'s own totals, and nothing when there is no
   assert.match(src, /Your closet is kept\. Every VIP piece you have stays yours\./);
   assert.doesNotMatch(src, /members (earn|average) about|on average/i, 'no invented averages');
 });
+
+test('the Park Day Pack shows once per park day, only in a park, only when for sale and priced', () => {
+  const po = loadTs('src/services/money/parkOffer.ts');
+  const base = { inPark: true, shopDay: '2026-11-07', seen: null, packAvailable: true, priced: true };
+  assert.equal(po.shouldShowParkOffer(base), true);
+  assert.equal(po.shouldShowParkOffer({ ...base, inPark: false }), false, 'never at home');
+  assert.equal(po.shouldShowParkOffer({ ...base, seen: { day: '2026-11-07' } }), false, 'once a day');
+  assert.equal(po.shouldShowParkOffer({ ...base, seen: { day: '2026-11-06' } }), true, 'a new park day');
+  assert.equal(po.shouldShowParkOffer({ ...base, packAvailable: false }), false, 'bought today');
+  assert.equal(po.shouldShowParkOffer({ ...base, priced: false }), false, 'no price, no card');
+  assert.match(read('src/components/money/ParkDayOffer.tsx'), /buyPack\(pack, \{ onStart: \(\) => setBusy\(true\), placement: 'park\.arrival' \}\)/, 'gated buy path');
+});
+
+test('the pass worth line is computed from the server row and Supplies prices, rounded down', () => {
+  // The same math SharkPassScreen uses: regularValue of the row's coins, tickets and Rescue Passes.
+  const rates = offers.baseRates(CATALOG, PRICES);
+  const v = offers.regularValue({ coins: 2550, tickets: 25, rescue_passes: 6 }, rates);
+  assert.ok(v > 0);
+  assert.equal(offers.formatLike('$4.99', Math.floor(v * 100) / 100), `$${(Math.floor(v * 100) / 100).toFixed(2)}`);
+  assert.match(read('src/screens/SharkPassScreen.tsx'), /regularValue\(\{ coins: g\.coins, tickets: g\.tickets, rescue_passes: g\.rescue_passes \}, baseRates\(supplies\.catalog\.products, supplies\.prices\)\)/);
+  assert.match(read('src/screens/SharkPassScreen.tsx'), /if \(!value \|\| value < price\.amount \* 1\.5\) return null;/, 'shown only when clearly worth more');
+});
