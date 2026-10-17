@@ -116,6 +116,8 @@ export default function RideDetailScreen() {
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastY = useRef(new Animated.Value(10)).current;
   const [toastText, setToastText] = useState('');
+  const [loadError, setLoadError] = useState(false);
+  const loadedOnce = useRef(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -125,6 +127,7 @@ export default function RideDetailScreen() {
         getCommunityStats(rideId).catch(() => null),
       ]);
       setRide(rideData);
+      loadedOnce.current = true;
       setHistory(historyData.data);
       setTotalRides(historyData.meta.total);
       if (communityData) setCommunity(communityData);
@@ -132,8 +135,10 @@ export default function RideDetailScreen() {
         const wishlist = await getWishlist();
         setWishlisted(wishlist.some(w => w.id === rideId));
       } catch (_) {}
+      setLoadError(false);
     } catch (e) {
-      console.error('Failed to load ride detail:', e);
+      // Never pass a failed load off as a ride you have not ridden.
+      if (!loadedOnce.current) setLoadError(true);
     }
   }, [rideId]);
 
@@ -177,7 +182,7 @@ export default function RideDetailScreen() {
   const maxDistCount = community ? Math.max(...Object.values(community.rating_distribution), 1) : 1;
   const hasImage = ride?.image_url && ride.image_url.startsWith('http') && !imageError;
 
-  if (loading) {
+  if (loading || loadError) {
     return (
       <SafeAreaView style={s.container}>
         <LinearGradient colors={[B.skyMid, B.skyDark, B.navy]} style={s.heroGradient}>
@@ -188,7 +193,9 @@ export default function RideDetailScreen() {
             <View style={{ width: 40 }} />
           </View>
         </LinearGradient>
-        <SharkLoader />
+        {loadError
+          ? <SharkLoader state="error" onRetry={() => { setLoadError(false); setLoading(true); void fetchData().finally(() => setLoading(false)); }} />
+          : <SharkLoader />}
       </SafeAreaView>
     );
   }
