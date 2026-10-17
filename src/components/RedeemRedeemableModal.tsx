@@ -123,6 +123,7 @@ export default function RedeemRedeemableModal({
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [selectedGameData, setSelectedGameData] = useState<typeof GAMES[0] | null>(null);
   const selectedIndexRef = useRef<number | null>(null);
+  const collectingRef = useRef(false);
   const flowStateRef = useRef<FlowState>('preview');
 
   // Keep ref in sync so callbacks always have current flowState
@@ -778,9 +779,12 @@ export default function RedeemRedeemableModal({
                       <YellowButton
                         text="Collect"
                         onPress={async () => {
+                          // One collect per tap: a double tap must not send two redeems or two coin flights.
+                          if (collectingRef.current) return;
+                          collectingRef.current = true;
                           const screenCenterX = SCREEN_WIDTH / 2;
                           const screenCenterY = Dimensions.get('window').height / 2;
-                          
+                          try {
                           if (redeemable.type === 'coin') {
                             await redeemCoin(redeemable.model as CoinType, doubleXP);
                             if (currencies[0]?.icon_url) {
@@ -795,6 +799,12 @@ export default function RedeemRedeemableModal({
                           } else if (redeemable.type === 'item' || redeemable.type === 'pin') {
                             await redeemItem(redeemable.model as ItemType, doubleXP, doubleCoins);
                           }
+                          } catch {
+                            collectingRef.current = false;
+                            gameAlert('That didn’t work', 'Check your internet, then tap Collect again.');
+                            return;
+                          }
+                          collectingRef.current = false;
                           onPress();
                           playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
                           close();

@@ -89,6 +89,7 @@ export default function CoinLevelingModal({
   const [state, setState] = useState<ModalState>('preview');
   const [featured, setFeatured] = useState(false);
   const [featureBusy, setFeatureBusy] = useState(false);
+  const featureBusyRef = useRef(false);
   const [featureError, setFeatureError] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const upgradeBusy = useRef(false);
@@ -602,13 +603,20 @@ export default function CoinLevelingModal({
                     accessibilityRole="button"
                     accessibilityLabel={featured ? 'Remove featured ride coin from profile' : 'Feature ride coin on profile'}
                     onPress={async () => {
-                      if (featureBusy) return;
+                      if (featureBusy || featureBusyRef.current) return;
+                      featureBusyRef.current = true;
                       setFeatureBusy(true);
                       setFeatureError(false);
-                      const success = await onFeature(featured ? null : rideCoin.id);
-                      if (success) setFeatured(!featured);
-                      else setFeatureError(true);
-                      setFeatureBusy(false);
+                      try {
+                        const success = await onFeature(featured ? null : rideCoin.id);
+                        if (success) setFeatured(!featured);
+                        else setFeatureError(true);
+                      } catch {
+                        setFeatureError(true); // never leave the button stuck on Saving
+                      } finally {
+                        featureBusyRef.current = false;
+                        setFeatureBusy(false);
+                      }
                     }}
                     style={{ borderWidth: 2, borderColor: '#D99D24', backgroundColor: '#FFF5D6', borderRadius: 9,
                       paddingVertical: 7, paddingHorizontal: 13, marginBottom: 8 }}>
