@@ -105,11 +105,12 @@ function RideControlBanner({ result, playerId, onPickTeam }: {
   const title = result.flipped
     ? `${team.name.toUpperCase()} TOOK ${result.ride_name.toUpperCase()}`
     : result.controller === result.team ? `${team.name.toUpperCase()} HOLDS IT` : `+${result.points} FOR ${team.name.toUpperCase()}`;
+  // Short sentences a kid reads at a glance: points first, then each bonus on its own.
   const body = [
-    result.flipped || result.controller === result.team ? `+${result.points} points` : 'Keep going to take this ride',
-    result.underdog ? 'extra points because your team is behind' : null,
-    captain ? 'you’re the Captain' : null,
-  ].filter(Boolean).join(', ');
+    result.flipped || result.controller === result.team ? `+${result.points} points!` : 'Keep going to take this ride.',
+    result.underdog ? 'Comeback bonus for the team that’s behind!' : null,
+    captain ? 'You’re the Captain!' : null,
+  ].filter(Boolean).join(' ');
   return (
     <View style={[styles.rcBanner, { borderColor: team.color }]}>
       <Image source={team.badge} style={styles.rcBadge} contentFit="contain" />
@@ -379,7 +380,7 @@ export default function PostWinRewardsModal({
   const coinSource = taskCoinUrl && !coinArtFailed ? taskCoinUrl : null;
   const primaryLabel = hasCoin && onViewCoin
     ? upgradeReady && !isNewCoin ? 'Upgrade Your Coin' : 'See It On Your Shelf'
-    : 'Continue Park';
+    : 'Back to the Park';
 
   return (
     <Modal
@@ -578,7 +579,7 @@ export default function PostWinRewardsModal({
           {hasCoin && onViewCoin && (
             <TouchableOpacity onPress={onClose} accessibilityRole="button"
               accessibilityLabel="Go back to the park map" style={styles.continuePark}>
-              <Text style={styles.continueParkText}>Continue Park</Text>
+              <Text style={styles.continueParkText}>Back to the Park</Text>
             </TouchableOpacity>
           )}
         </View>

@@ -101,7 +101,7 @@ function rewardView(reducedMotion) {
 test('reduced-motion reward summary settles immediately and leaves its primary action visible', () => {
   const rewards = rewardView(true); rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
   assert.equal(rewards.motions.length, 0);
-  assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'Continue Park');
+  assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'Back to the Park');
   assert.equal(rewards.find(node => node.type === './CoinCatchReveal'), undefined);
 });
 test('the win footer sits on a solid plate so the tab bar compass never reads over Continue Park', () => {
@@ -250,7 +250,7 @@ test('a challenge with no confirmed ride coin skips the coin catch and exposes i
   const view=rewardView(true); view.change({coinTimesCollected:null});
   assert.equal(view.find(node=>node.type==='./CoinCatchReveal'),undefined);
   assert.ok(view.find(node=>node.props?.label==='Coins'&&node.props.amount===10));
-  assert.equal(view.find(node=>node.type==='./YellowButton').props.text,'Continue Park');
+  assert.equal(view.find(node=>node.type==='./YellowButton').props.text,'Back to the Park');
 });
 
 
