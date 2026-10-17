@@ -13,7 +13,8 @@
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useContext, useEffect, type ReactNode } from 'react';
+import { useContext, useEffect, useState, type ReactNode } from 'react';
+import { CountUpText } from '../../gamekit/fx/CountUpText';
 import { Modal, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   Easing, FadeIn, FadeInDown, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming,
@@ -197,6 +198,21 @@ const RAYS = require('../../../assets/images/reveal/rays.webp');
  * The payoff after a purchase lands: rays turn behind the pack art, the art
  * pops, confetti bursts, the contents slide in, one cue and one buzz.
  */
+/** "12 rewards!" counts up from 0 as the card lands; any other title shows as written. */
+function TitleCount({ title, still }: { title: string; still: boolean }) {
+  const match = /^(\d+) rewards!$/.exec(title);
+  const target = match ? Number(match[1]) : 0;
+  const [value, setValue] = useState(still ? target : 0);
+  useEffect(() => {
+    if (!match || still) return undefined;
+    const t = setTimeout(() => setValue(target), 300);
+    return () => clearTimeout(t);
+  }, [target, still]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!match) return <Text maxFontSizeMultiplier={MAX_FONT} style={s.gotTitle}>{title}</Text>;
+  return <CountUpText value={value} suffix=" rewards!" durationMs={650} reducedMotion={still}
+    tickEvery={1} onTick={() => haptic('tickSelection')} style={s.gotTitle} />;
+}
+
 export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption, action, footer, doneLabel }: {
   grants: ShopGrants | null; art: PackArtKey; title?: string; onDone: () => void;
   /** The closing button's words when it does the next thing (e.g. "Open your box"). */
@@ -237,7 +253,9 @@ export function GotIt({ grants, art, title = 'You got it!', onDone, picture, cap
           </Animated.View>
           {!still && <RewardBurst progress={burst} x={140} y={110} />}
         </View>
-        <Animated.Text entering={still ? undefined : FadeInDown.delay(250).springify().damping(14)} maxFontSizeMultiplier={MAX_FONT} style={s.gotTitle}>{title}</Animated.Text>
+        <Animated.View entering={still ? undefined : FadeInDown.delay(250).springify().damping(14)}>
+          <TitleCount title={title} still={still} />
+        </Animated.View>
         <Animated.View entering={still ? undefined : FadeInDown.delay(420).springify().damping(14)}>
           {caption ? <Text maxFontSizeMultiplier={MAX_FONT} style={s.gotCaption} numberOfLines={2}>{caption}</Text> : <Contents grants={grants} />}
           {footer}
