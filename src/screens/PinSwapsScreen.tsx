@@ -245,10 +245,12 @@ export default function PinSwapsScreen() {
     item.id === lastGiven ? 'yours' : owned.has(item.id) ? 'owned' : undefined
   ), [owned, lastGiven]);
 
+  const holdingRef = useRef(false);
   /** Hold a board pin (fresh from the board, or "Try again" on the same pin after it expired). */
   const startHold = useCallback(async (swapId: number, again = false) => {
     const now = live.current;
-    if (now.busyId != null || (holdRef.current && !again)) return;
+    // A ref, not render state: two taps in one frame both see busyId null.
+    if (holdingRef.current || now.busyId != null || (holdRef.current && !again)) return;
     const swap = again ? holdRef.current?.swap : now.board.find(s => s.id === swapId);
     if (!swap) return;
     // No server call when the answer is already known: you own it, you just put it up, or you have nothing to give.
@@ -268,6 +270,7 @@ export default function PinSwapsScreen() {
       gameAlert(COPY.noPinsTitle, COPY.noPinsHint, undefined, { icon: 'chest' });
       return;
     }
+    holdingRef.current = true;
     setBusyId(swapId);
     // The held pin appears large in the sheet and in the moment: decode those sizes now.
     void warmPinImages([swap.pin.item.icon_url], Dimensions.get('window').height < 740 ? 150 : 190);
@@ -290,6 +293,7 @@ export default function PinSwapsScreen() {
         if (!again && kind === 'taken') void loadBoard('refresh', [swapId]);
       }
     } finally {
+      holdingRef.current = false;
       setBusyId(null);
     }
   }, [loadBoard, loadPins, sheetFade, showError]);

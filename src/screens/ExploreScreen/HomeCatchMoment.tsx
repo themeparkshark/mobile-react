@@ -476,7 +476,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     setRide(current => (current ? { ...current, closing: true } : current));
     showBackdrop(false);
     // The header, tab bar and map chrome come back only once the iris has closed (onIrisClosed).
-    if (!caught) setTimeout(() => setRide(null), 420);
+    // Only the ride that is closing goes; a ride opened since (RIDE AGAIN) stays.
+    if (!caught) setTimeout(() => setRide(current => (current?.closing ? null : current)), 420);
   };
 
   // "Rides snapped": a ride the player never snapped before gets a "New ride!" beat in the cascade.
@@ -517,7 +518,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
           // frees its open 1000 ms after a close); the next ride opens under the card, then the card fades.
           rideAgainPending.current = true;
           setTimeout(() => { if (aliveRef.current === token) finish(false, true); }, 200);
-          setTimeout(() => { rideAgainPending.current = false; revealHidden.value = false; latest.current.onRideAgain?.(req.item, req.pivotId); }, RIDE_AGAIN_MS);
+          // Backed out meanwhile (the token moved on): the ride stays closed.
+          setTimeout(() => { rideAgainPending.current = false; revealHidden.value = false; if (aliveRef.current === token) latest.current.onRideAgain?.(req.item, req.pivotId); }, RIDE_AGAIN_MS);
           setTimeout(() => { setReveal(current => (current?.key === token ? null : current)); setRevealEscape(null); }, RIDE_AGAIN_MS + 160); // gone before the first pass (its clack)
           // If the next ride did not open (the parent declined), bring the map back rather than strand the kid.
           setTimeout(() => { if (!busyRef.current) { showCatchChrome(false); setCatchOpen(false); } }, RIDE_AGAIN_MS + 600);

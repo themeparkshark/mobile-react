@@ -375,7 +375,7 @@ export function SharkySwim({
       onFreeze: (on) => setFrozen(on),
       onWipeout: () => {
         if (timedMode(cfg.mode)) {
-          setTimeout(() => setReviveOffer(true), 900);
+          setTimeout(() => { if (!endedRef.current) setReviveOffer(true); }, 900);
           if (autoplay) setTimeout(() => engine.ext(EXT_REVIVE, 1), 1800);
         }
       },

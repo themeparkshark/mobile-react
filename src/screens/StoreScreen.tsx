@@ -492,7 +492,7 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       if (response.length < CATALOG_PAGE) setHasMore(false);
       setItems(prev => [...prev, ...response.filter(item => !prev.some(p => p.id === item.id))]);
     } catch {
-      setHasMore(false);
+      // A blip never ends the catalog: the next scroll to the bottom tries this page again.
     } finally {
       loadingMore.current = false;
     }
