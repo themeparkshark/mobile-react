@@ -137,7 +137,7 @@ function pageName(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string }
     case 'crew_relay': return 'Crew Relay';
     case 'signal': return 'Crew Route';
     case 'puzzle': return 'Codebreaker';
-    case 'trivia': return chapter?.navigationPanel && item.id === `${chapter.id}-trivia` ? 'Signal repair' : 'Shark Trivia';
+    case 'trivia': return chapter?.navigationPanel && item.id === `${chapter.id}-trivia` ? 'Navigation panel' : 'Shark Trivia';
     case 'lore': return 'Field Note';
     case 'prediction': return 'Wait Guess';
     case 'minigame': return item.title ?? GAME_NAMES[item.gameId] ?? 'Arcade round';
