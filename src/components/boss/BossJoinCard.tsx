@@ -135,6 +135,14 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
         <GameIcon name="pin" size={20} />
         <Text style={styles.hintText}>Walk closer to {raid.ride_name ?? 'the ride'} for 100%.</Text>
       </View>}
+      {/* First fight from home: say what "from home" means before the kid spends anything. */}
+      {remote && !walkCloser && raid.you.attacks === 0 && <View style={styles.hint}>
+        <Image source={HOUSE} style={{ width: 22, height: 22 }} contentFit="contain" />
+        <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
+          Not at the park? You can still help! Home hits count {Math.round(raid.remote.damage_rate * 100)}% and
+          loot is {Math.round((raid.remote.reward_rate ?? raid.remote.damage_rate) * 100)}%. Your team wins together.
+        </Text>
+      </View>}
       {note && <Text style={styles.note}>{note}</Text>}
     </View>
   );

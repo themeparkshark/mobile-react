@@ -122,6 +122,7 @@ function flow({reduced=false,round,stubs={}}={}){
   './BossWinCard':{default:'BossWinCard'},
   '@react-native-async-storage/async-storage':{default:{getItem:async key=>{reads.push(key);return null;},setItem:async(key,value)=>{writes.push([key,value]);}}},
   '../../constants/teams':{applyTeamNames(){}},
+  '../../gamekit/Haptics':{haptic(){}},
   ...stubs,
  },{raid,parkId:1,open:true,onClose(){},onState:state=>states.push(state)},
  {setInterval(){return 1;},clearInterval(){}});

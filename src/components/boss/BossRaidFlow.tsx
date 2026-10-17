@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { haptic } from '../../gamekit/Haptics';
 import { useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
@@ -96,7 +97,7 @@ function clock(endsAt: string, now: number) {
 
 export const ERRORS: Record<Exclude<AttackResult, { ok: true }>['error'], string> = {
   too_far: 'Get closer to the ride to fight in person.',
-  no_energy: 'Not enough Energy for another attack.',
+  no_energy: 'Out of Energy! Win a ride coin or open your Daily Chest to refuel, then jump back in.',
   no_attacks_left: "You've used all your attacks. Cheer them on!",
   bad_proof: "That brawl didn't count. No Energy was spent. Try again.",
   bad_round: 'That round timed out. No Energy was spent. Tap FIGHT for a new one.',
@@ -289,6 +290,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     const at = validLocation ? { latitude: location!.latitude, longitude: location!.longitude } : {};
     const entryKey = contextKey;
     setNote(null);
+    haptic('hitMedium'); // FIGHT lands in the hand before the server answers
     setStarting(true);
     startingRef.current = true;
     // FIGHT asks the server for this round's token first: it checks Energy, attacks
@@ -302,6 +304,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     }
     if (!currentView.current.open || !currentView.current.focused || currentView.current.contextKey !== entryKey || round.current) return;
     if (!result.ok) {
+      haptic('warning');
       if (result.error === 'too_far') {
         setAwayFor({ raidId: raid.id, reason: result.reason ?? 'far' });
         setNote(PRESENCE[result.reason ?? 'far']);

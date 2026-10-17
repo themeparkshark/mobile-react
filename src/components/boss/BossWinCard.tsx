@@ -173,7 +173,7 @@ export default function BossWinCard({ raid, lastHp, onDone }: {
       </View>
       <Animated.Text style={[styles.kicker, titleStyle]}>{won ? 'BOSS DEFEATED!' : 'IT GOT AWAY'}</Animated.Text>
       <Text style={styles.title}>
-        {won ? `The park beat ${BOSS_NAMES[raid.boss]}!` : `${BOSS_NAMES[raid.boss]} escaped. Thanks for fighting!`}
+        {won ? `The park beat ${BOSS_NAMES[raid.boss]}!` : `${BOSS_NAMES[raid.boss]} got away this time. You helped wear it down. Get it next time!`}
       </Text>
       {raid.mvp_is_you && <Animated.View style={[styles.mvp, crownStyle]}>
         <GameIcon name="crown" size={34} />
