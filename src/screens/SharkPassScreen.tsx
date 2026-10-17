@@ -22,7 +22,7 @@ import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, FlatList, Image as RNImage, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { AppState, FlatList, RefreshControl, Image as RNImage, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Playercard from '../components/Playercard';
 import type { InventoryType } from '../models/inventory-type';
 import Animated, {
@@ -184,6 +184,7 @@ export default function SharkPassScreen() {
   const buying = useRef(false);
   const list = useRef<FlatList<SharkPassTier>>(null);
 
+  const [refreshing, setRefreshing] = useState(false);
   const load = useCallback(async () => {
     try {
       const next = await getSharkPass();
@@ -440,7 +441,9 @@ export default function SharkPassScreen() {
             </Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} tintColor="#ffffff"
+              onRefresh={() => { setRefreshing(true); void load().finally(() => setRefreshing(false)); }} />}>
             {/* Season hero: the emblem, the season, the real last day, the climb. */}
             <Animated.View entering={reduced ? undefined : FadeInDown.springify().damping(15)} style={s.heroLip}>
               <View style={s.hero}>

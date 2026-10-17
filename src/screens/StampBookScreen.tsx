@@ -17,7 +17,7 @@
  * focus refetch is throttled to 30 s, and tile thumbs are prefetched.
  */
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from 'react-native';
+import { InteractionManager, Pressable, RefreshControl, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -564,6 +564,7 @@ export default function StampBookScreen() {
             </View>
           ) : (
             <Animated.ScrollView ref={scroller as never} onScroll={onScroll} scrollEventThrottle={16}
+              refreshControl={previewMode ? undefined : <RefreshControl refreshing={false} tintColor="#ffffff" onRefresh={() => load(true)} />}
               contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} stickyHeaderIndices={[2]}
               onMomentumScrollEnd={onScrollSettled} onScrollEndDrag={onScrollSettled}>
               <Cover earned={totals.earned} total={totals.total} toClaim={totals.toClaim} worn={wornTitle}
