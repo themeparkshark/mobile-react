@@ -182,6 +182,8 @@ export default function SharkPassScreen() {
   const [goldBusy, setGoldBusy] = useState<string | null>(null);
   const [goldShort, setGoldShort] = useState<number>(0);
   const buying = useRef(false);
+  // A ref, not the busy state: two taps in one frame both see busy unset.
+  const claiming = useRef(false);
   const list = useRef<FlatList<SharkPassTier>>(null);
 
   const [refreshing, setRefreshing] = useState(false);
@@ -203,6 +205,8 @@ export default function SharkPassScreen() {
   // An Ask to Buy approval (or a restore) that lands later gets the same payoff as a direct buy, once.
   useEffect(() => onSharkPassDelivered((next) => {
     setState(next);
+    // A direct buy runs its own claim-all and reward card; only a later (Ask to Buy, restore) delivery claims here.
+    if (buying.current) return;
     if (!next.enabled || !next.progress?.premium) return;
     void claimAllSharkPass().then((res) => {
       setState(res.pass);
@@ -237,7 +241,8 @@ export default function SharkPassScreen() {
 
   const claim = async (tier: SharkPassTier, track: 'free' | 'paid') => {
     const reward = track === 'free' ? tier.free : tier.paid;
-    if (!reward || busy) return;
+    if (!reward || busy || claiming.current) return;
+    claiming.current = true;
     haptic('tapLight');
     setBusy(`${tier.tier}:${track}`);
     try {
@@ -261,6 +266,7 @@ export default function SharkPassScreen() {
       else if (code === 'SHARK_PASS_CLAIMED') void load();
       else gameAlert('That didn’t work', 'Check your internet and try again.');
     } finally {
+      claiming.current = false;
       setBusy(null);
     }
   };
@@ -375,7 +381,8 @@ export default function SharkPassScreen() {
     const done = () => { void markSharkPassSeen(progress.tier); void AsyncStorage.setItem(key, String(progress.tier)).catch(() => undefined); };
     if (progress.last_seen_tier !== undefined) {
       const last = progress.last_seen_tier;
-      if (last !== null && progress.tier > last) setClimbed({ from: last, to: progress.tier });
+      // A first look after already playing still gets its "Step N!" moment, climbed from the start.
+      if (progress.tier > (last ?? 0)) setClimbed({ from: last ?? 0, to: progress.tier });
       if (last === null || progress.tier > last) done();
       return;
     }
@@ -550,6 +557,8 @@ export default function SharkPassScreen() {
                     ))}
                   </View>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{`A reward on all ${steps} steps: ${summary}.`}</Text>
+                  {/* What the kid has already climbed to, in real rewards, right above the price. */}
+                  {readyNow && <Text maxFontSizeMultiplier={MAX_FONT} style={[s.buyBody, s.readyNow]}>{readyNow}</Text>}
                   {worthLine && <Text maxFontSizeMultiplier={MAX_FONT} style={s.worthSmall}>{worthLine}</Text>}
                   {storeAvailable() ? (
                     <Pressable onPress={() => void buy(false)} disabled={!price || !!busy} accessibilityRole="button"
@@ -610,7 +619,7 @@ export default function SharkPassScreen() {
                       <View style={s.questBar}><View style={[s.questFill, { width: `${(q.progress / Math.max(1, q.count)) * 100}%` }]} /></View>
                     </View>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.questCount}>{`${Math.min(q.progress, q.count)}/${q.count}`}</Text>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? 'Done!' : `+${q.bonus}`}</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? 'Done!' : `+${q.bonus} pts`}</Text>
                   </View>
                 ))}
                 <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>New quests every day. Skipping a day is fine.</Text>
