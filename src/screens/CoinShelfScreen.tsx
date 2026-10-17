@@ -7,6 +7,7 @@
  * goal) are forwarded to the coin's own park shelf, which scrolls to it and
  * opens its detail.
  */
+import { showToast } from '../utils/toast';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ImageBackground, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StackActions, useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
@@ -65,6 +66,7 @@ export default function CoinShelfScreen({ route }: {
   const [goalSaving, setGoalSaving] = useState(false);
   const focusAssetId = route?.params?.focusCoin?.assetId;
   const forwarded = useRef<number | null>(null);
+  const goalSavingRef = useRef(false);
 
   const loadCatalog = useCallback(async () => {
     if (preview || !player?.id) return;
@@ -96,7 +98,10 @@ export default function CoinShelfScreen({ route }: {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([player?.id ? loadCoinCollection(player.id, { force: true }).catch(() => null) : null, loadCatalog()]);
+    let failed = false;
+    await Promise.all([player?.id ? loadCoinCollection(player.id, { force: true }).catch(() => { failed = true; return null; }) : null, loadCatalog()]);
+    // Offline: the shelf keeps the last coins, but says the refresh didn't land.
+    if (failed) showToast('Couldn’t refresh your coins. Check your internet.', 'warning');
     setRefreshing(false);
   }, [player?.id, loadCatalog]);
 
@@ -126,11 +131,12 @@ export default function CoinShelfScreen({ route }: {
     ? missing.find(ride => ride.asset_id === catalog.goal?.asset_id) ?? missing[0] : missing[0];
 
   const chooseNextCoin = async (ride: TripGoalRide) => {
-    if (goalSaving || preview) return;
+    if (goalSaving || goalSavingRef.current || preview) return;
+    goalSavingRef.current = true;
     setGoalSaving(true);
     try { setCatalog(await setTripGoal(ride.task_id)); setCatalogStale(false); }
-    catch { setCatalogStale(true); }
-    finally { setGoalSaving(false); }
+    catch { setCatalogStale(true); showToast('Couldn’t save your next coin. Try again.', 'warning'); }
+    finally { goalSavingRef.current = false; setGoalSaving(false); }
   };
   const openPark = (parkId: number | null, assetId?: number) => {
     if (!parkId || !player?.id) return;
