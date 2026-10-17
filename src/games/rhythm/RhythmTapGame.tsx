@@ -383,6 +383,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   useEffect(() => {
     if (!visible || !plan) return;
     let alive = true;
+    roundId.current += 1;
     finished.current = false;
     pbBefore.current = progressRef.current.pb[pbKey(plan.stage, plan.difficulty, plan.format === 'ride' ? 'ride' : 'stage')];
     pauseSpans.current = [];
@@ -969,12 +970,17 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     return res;
   }, [plan, running, judge, pocket, offset, grip, gripPrefs]);
 
+  // A late result from a round that was restarted or closed never lands on the next one.
+  const roundId = useRef(0);
+  useEffect(() => () => { roundId.current += 1; }, []);
+
   onEnded.current = () => {
     void (async () => {
       const s = judge.value;
       if (s.stalled) return; // handled by onStall
       const res = await finishRound('end');
-      if (res) setTimeout(() => setResult(res), 600);
+      const id = roundId.current;
+      if (res) setTimeout(() => { if (roundId.current === id) setResult(res); }, 600);
     })();
   };
 
@@ -984,7 +990,8 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     const res = await finishRound('stall');
     await player?.tapeStop(620);
     GameAudio.play('rh_stall', { volume: 0.8 });
-    if (res) setTimeout(() => setResult(res), 500);
+    const id = roundId.current;
+    if (res) setTimeout(() => { if (roundId.current === id) setResult(res); }, 500);
   }, [finishRound]);
 
   // -- Pause / resume (interruptions only; walking never pauses) -----------------------
