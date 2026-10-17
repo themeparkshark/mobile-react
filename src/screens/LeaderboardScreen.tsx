@@ -177,7 +177,7 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
         if (live) setTabReady(true);
       }).catch(() => { if (live) setTabReady(true); });
     }
-    void loadHomeHuntWeek(meId).then(week => { if (live) setHuntOn(homeHuntEnabled(week)); });
+    void loadHomeHuntWeek(meId).then(week => { if (live) setHuntOn(homeHuntEnabled(week)); }).catch(() => undefined);
     // The other boards load in the background so the first switch is instant.
     prefetchBoards(meId, [{ board: 'week' }, { board: 'friends' }, { board: 'all_time' }]);
     return () => { live = false; };
@@ -234,7 +234,7 @@ function LegacyStandings() {
   const resultsWaiting = usePresentationBadges('standings').length > 0;
   useEffect(() => {
     let live = true;
-    void loadHomeHuntWeek(player?.id ?? null).then(week => { if (live) setHuntOn(homeHuntEnabled(week)); });
+    void loadHomeHuntWeek(player?.id ?? null).then(week => { if (live) setHuntOn(homeHuntEnabled(week)); }).catch(() => undefined);
     return () => { live = false; };
   }, [player?.id]);
   // A deep link to the Home Hunt tab lands once the flag answer arrives.
