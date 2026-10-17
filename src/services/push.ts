@@ -31,6 +31,20 @@ async function register(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Sign-out: detach this device from the account so the next player on a
+ * shared iPad never gets the last player's pushes. Best effort, 3 s cap.
+ */
+export async function unregisterPush(): Promise<void> {
+  try {
+    if ((await pushState()) !== 'granted') return;
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
+    const { data: token } = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+    if (!token) return;
+    await client.delete('/me/push-tokens', { data: { token }, timeout: 3000 });
+  } catch { /* offline or already gone: the server prunes dead tokens */ }
+}
+
 /** Ask (after the player tapped "turn on"), then register this device. */
 export async function enablePush(): Promise<PushState> {
   const state = await pushState();

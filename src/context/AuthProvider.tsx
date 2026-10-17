@@ -196,6 +196,10 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     try { require('../services/secretShopFlag').resetSecretShopFlag(); } catch { /* not loaded */ }
     try { require('../services/liveEvents/useLiveEvent').resetLiveEvent(); } catch { /* not loaded */ }
     hasInitialNavigated.current = false; // Allow navigation on next login
+    // Still signed in here, so the token delete is authorised.
+    if (client.defaults.headers.common.Authorization) {
+      try { await require('../services/push').unregisterPush(); } catch { /* not loaded */ }
+    }
     // Standings boards (friends' photos included) never outlive the session.
     endStandingsSession();
     delete client.defaults.headers.common.Authorization;
