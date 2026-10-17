@@ -401,5 +401,5 @@ const styles = StyleSheet.create({
     color: BRAND.textDark, fontSize: 22, 
     marginTop: 16, fontFamily: 'Shark' 
   },
-  emptySubtitle: { color: BRAND.textMid, fontSize: 15, fontFamily: 'Knockout', marginTop: 8, textAlign: 'center' },
+  emptySubtitle: { color: BRAND.textMid, fontSize: 15, fontFamily: 'Knockout', marginTop: 8, marginBottom: 20, textAlign: 'center' },
 });
