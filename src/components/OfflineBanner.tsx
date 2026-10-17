@@ -32,7 +32,8 @@ const MAP_CHIP_TOP = 0.43;
 // park story cards; park: team banner, boss and ride goal cards). There the full
 // card would cover them, so the banner is only the small chip, docked on the
 // right edge of the map under the recenter button like the other map controls.
-export const CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['Explore']);
+// Sign-in too: the full card would sit over the title art.
+export const CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['Explore', 'Login']);
 // The map declutter preview mirrors Explore, so its captures show the real docked chip, in internal
 // Release builds too (the route only exists when the preview is registered; store builds never have it).
 const DEV_CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['MapDeclutterPreview']);
@@ -205,11 +206,13 @@ export default function OfflineBanner() {
   // Below his header bar (Topbar is 70pt under the status bar) so the logo,
   // currency counters and header buttons stay visible and tappable offline.
   const top = (initialWindowMetrics?.insets.top ?? 47) + HEADER_CLEARANCE + (routeName ? ROUTE_EXTRA_TOP[routeName] ?? 0 : 0);
+  // On sign-in the chip tucks under the status bar, clear of the title art and the sign-in card.
+  const dockTop = routeName === 'Login' ? (initialWindowMetrics?.insets.top ?? 47) + 8 : Math.round(windowHeight * MAP_CHIP_TOP);
 
   return (
     <View
       pointerEvents="box-none"
-      style={chipOnly ? [styles.hostDocked, { top: Math.round(windowHeight * MAP_CHIP_TOP) }] : [styles.host, { top }]}
+      style={chipOnly ? [styles.hostDocked, { top: dockTop }] : [styles.host, { top }]}
     >
       <Animated.View
         style={cardStyle}
