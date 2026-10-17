@@ -341,6 +341,13 @@ export default function PostWinRewardsModal({
         playSfx('star', 0.8);
       }, 1400));
     }
+    // A new stamp has a prize waiting in the Stamp Book: give its card a beat so it is not missed.
+    if (earnedStamp && !upgradeReady) {
+      timers.push(setTimeout(() => {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+        playSfx('ui.confirm', 0.7);
+      }, 1100));
+    }
     return () => { timers.forEach(clearTimeout); values.forEach(value => cancelAnimation(value)); };
   }, [visible, caught, reducedMotion]);
 
@@ -512,7 +519,7 @@ export default function PostWinRewardsModal({
                   <Image source={require('../../assets/images/stamps/first-ride-coin-v1.png')}
                     style={styles.stampImage} contentFit="contain" />
                   <View style={styles.stampCopy}>
-                    <Text style={styles.stampEyebrow}>NEW STAMP</Text>
+                    <Text style={styles.stampEyebrow}>NEW STAMP! TAP TO COLLECT</Text>
                     <Text style={styles.stampName}>{earnedStamp.name}</Text>
                     <Text style={styles.stampReward}>
                       {`Get +${earnedStamp.rewards.energy} Energy and +${earnedStamp.rewards.xp} XP in your Stamp Book`}
