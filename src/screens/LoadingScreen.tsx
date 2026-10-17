@@ -172,6 +172,8 @@ export default function LoadingScreen() {
       return;
     }
     RootNavigation.navigate('Explore');
+    // A push that launched the app opens on top of the map, after sign-in.
+    require('../services/push').openColdStartPush();
   };
 
   useEffectOnceWhen(() => {

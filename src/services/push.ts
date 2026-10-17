@@ -62,14 +62,31 @@ export async function refreshPushRegistration(): Promise<void> {
   if ((await pushState()) === 'granted') await register().catch(() => false);
 }
 
+type PushRoute = { screen?: string; params?: object };
+const routeOf = (response: Notifications.NotificationResponse | null) =>
+  response?.notification.request.content.data?.route as PushRoute | undefined;
+
+// A tap that launched the app waits here until sign-in and Loading are done;
+// opened earlier, the Loading hop to Explore would wipe it out.
+let coldStartRoute: PushRoute | null = null;
+
+/** Loading calls this right after it lands on Explore. */
+export function openColdStartPush(): void {
+  const route = coldStartRoute;
+  coldStartRoute = null;
+  if (route?.screen) openServerRoute(route.screen, route.params ?? {});
+}
+
 /** A tapped notification opens the screen it names. */
 export function listenForPushTaps(): () => void {
   const open = (response: Notifications.NotificationResponse | null) => {
-    const route = response?.notification.request.content.data?.route as { screen?: string; params?: object } | undefined;
+    const route = routeOf(response);
     // Server-named screens: the paywall is gated (openServerRoute), never opened directly.
     if (route?.screen) openServerRoute(route.screen, route.params ?? {});
   };
-  Notifications.getLastNotificationResponseAsync().then(open).catch(() => undefined);
+  Notifications.getLastNotificationResponseAsync()
+    .then(response => { const route = routeOf(response); if (route?.screen) coldStartRoute = route; })
+    .catch(() => undefined);
   const sub = Notifications.addNotificationResponseReceivedListener(open);
   return () => sub.remove();
 }
