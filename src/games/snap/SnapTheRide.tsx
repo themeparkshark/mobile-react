@@ -49,10 +49,16 @@ export function SnapTheRide({ visible, seed, taskName, onComplete, onClose, onQu
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  const snappedRef = useRef(false);
+  const pausedMs = useRef(0);
+  const finishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (finishTimer.current) clearTimeout(finishTimer.current); }, []);
+
   const finish = useCallback((uri: string | null, snapped: boolean) => {
     const elapsedMs = Date.now() - startedAt.current;
     const left = Math.max(0, (endsAt.current - Date.now()) / 1000);
-    const stars = !snapped ? 0 : left >= 20 ? 3 : left >= 10 ? 2 : 1;
+    // No saved photo (camera off or failed) still counts, but only for 1 star.
+    const stars = !snapped ? 0 : !uri ? 1 : left >= 20 ? 3 : left >= 10 ? 2 : 1;
     setPlaying(false);
     setResult({
       score: snapped ? Math.round(100 + left * 10) : 0,
@@ -68,16 +74,17 @@ export function SnapTheRide({ visible, seed, taskName, onComplete, onClose, onQu
       const left = Math.ceil(Math.max(0, endsAt.current - Date.now()) / 1000);
       setSecondsLeft(left);
       if (left <= 0) finish(null, false);
-      else if (left <= 5) Haptics.selectionAsync();
+      else if (left <= 5) Haptics.selectionAsync().catch(() => undefined);
     }, 1000);
     return () => clearInterval(id);
   }, [playing, finish]);
 
   const snap = async () => {
-    if (!playing) return;
+    if (!playing || snappedRef.current) return;
+    snappedRef.current = true;
     setPlaying(false);
     flash.value = withSequence(withTiming(1, { duration: 40 }), withTiming(0, { duration: 320 }));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
     playSfx('tick');
     let saved: string | null = null;
     try {
@@ -92,7 +99,7 @@ export function SnapTheRide({ visible, seed, taskName, onComplete, onClose, onQu
     setPhotoUri(saved);
     polaroid.value = withSpring(1, { damping: 10, stiffness: 140 });
     playSfx('coin');
-    setTimeout(() => finish(saved, true), 900);
+    finishTimer.current = setTimeout(() => finish(saved, true), 900);
   };
 
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
@@ -116,10 +123,11 @@ export function SnapTheRide({ visible, seed, taskName, onComplete, onClose, onQu
         startedAt.current = Date.now();
         endsAt.current = Date.now() + ROUND_SECONDS * 1000;
         polaroid.value = 0;
+        snappedRef.current = false;
         setPlaying(true);
       }}
-      onPause={() => setPlaying(false)}
-      onResume={() => { endsAt.current = Date.now() + secondsLeft * 1000; setPlaying(true); }}
+      onPause={() => { pausedMs.current = Math.max(0, endsAt.current - Date.now()); setPlaying(false); }}
+      onResume={() => { endsAt.current = Date.now() + pausedMs.current; if (!snappedRef.current) setPlaying(true); }}
       onComplete={onComplete}
       onClose={onClose}
       onQuit={onQuit}

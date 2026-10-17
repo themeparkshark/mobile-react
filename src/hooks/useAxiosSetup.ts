@@ -8,6 +8,7 @@ import { BroadcastContext } from '../context/BroadcastProvider';
 import { showToast } from '../utils/toast';
 
 /** Consecutive server-error counter: only toast after 3 in a row. */
+let signingOut = false;
 let consecutive500Count = 0;
 
 export const SERVER_TROUBLE_TOAST = 'The Shark servers are busy. Hang tight and try again in a moment.';
@@ -48,7 +49,12 @@ export const useAxiosSetup = () => {
         if (status === 401 && !isStandalonePreviewMode()) {
           // Sign-out clears storage; a failure there must not become an
           // unhandled rejection on every 401.
-          Promise.resolve(logoutRef.current()).catch(() => undefined);
+          // Parallel requests with an expired token sign out once, not once each.
+          if (!signingOut) {
+            signingOut = true;
+            Promise.resolve(logoutRef.current()).catch(() => undefined)
+              .finally(() => { signingOut = false; });
+          }
         }
         if (status && status >= 500) {
           consecutive500Count += 1;

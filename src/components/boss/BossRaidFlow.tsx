@@ -145,6 +145,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   const [fighting, setFighting] = useState(false);
   const [starting, setStarting] = useState(false);
   const round = useRef<Omit<BossAttackCheckpoint, 'savedAt'> | null>(null);
+  const startingRef = useRef(false);
   const [roundRate, setRoundRate] = useState(1);
   const roundLimits = useRef<Pick<RaidRound, 'max_ms' | 'max_hits'> | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -283,16 +284,22 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
 
   const startBrawl = async () => {
     if (!currentView.current.open || !currentView.current.focused || currentView.current.contextKey !== contextKey ||
-      blocked || starting || receiptBlocked || !recovery.canStart() || round.current || !raid || !playerId || !parkId ||
+      blocked || starting || startingRef.current || receiptBlocked || !recovery.canStart() || round.current || !raid || !playerId || !parkId ||
       new Date(raid.ends_at).getTime() <= Date.now()) return;
     const at = validLocation ? { latitude: location!.latitude, longitude: location!.longitude } : {};
     const entryKey = contextKey;
     setNote(null);
     setStarting(true);
+    startingRef.current = true;
     // FIGHT asks the server for this round's token first: it checks Energy, attacks
     // left, the remote Ticket and whether you are really at the ride before you play.
-    const result = await roundService(raid.id, { ...at, ...(remote ? { remote: true } : {}) });
-    setStarting(false);
+    let result: Awaited<ReturnType<typeof roundService>>;
+    try {
+      result = await roundService(raid.id, { ...at, ...(remote ? { remote: true } : {}) });
+    } finally {
+      startingRef.current = false;
+      setStarting(false);
+    }
     if (!currentView.current.open || !currentView.current.focused || currentView.current.contextKey !== entryKey || round.current) return;
     if (!result.ok) {
       if (result.error === 'too_far') {

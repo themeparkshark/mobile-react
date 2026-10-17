@@ -105,7 +105,7 @@ export function useRideDetection(enabled: boolean, parkId?: number | null) {
     if (!enabled) return;
 
     const handleForegroundDetection = (detection: DetectedRide) => {
-      if (appStateRef.current === 'active') {
+      if (AppState.currentState === 'active') {
         rideDetectionEmitter.emit('rideDetected', detection);
       }
     };
@@ -120,6 +120,9 @@ export function useRideDetection(enabled: boolean, parkId?: number | null) {
   // AppState listener — check pending rides when coming back to foreground
   useEffect(() => {
     if (!enabled) return;
+    // The ref only tracks while enabled; resync so a background stint while
+    // disabled is not mistaken for 'active'.
+    appStateRef.current = AppState.currentState;
 
     const handleAppStateChange = (nextState: AppStateStatus) => {
       const wasBackground = appStateRef.current === 'background' || appStateRef.current === 'inactive';

@@ -885,6 +885,7 @@ export default function LinePlayScreen() {
               </Text>
               <Pressable onPress={() => void enableLockedScreenPlay()}
                 disabled={backgroundPermissionBusy}
+                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
                 accessibilityRole="button"
                 accessibilityLabel="Turn on LinePlay while your phone is locked"
                 style={styles.queueTrackingButton}>
@@ -963,7 +964,7 @@ export default function LinePlayScreen() {
           <View style={styles.leftLineCard} accessibilityLiveRegion="polite">
             <Text style={styles.leftLineText}>Looks like you left the line</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Resume, I am back in line"
-              onPress={() => session.resumeAfterLeftLine()} style={styles.leftLineButton}>
+              onPress={() => session.resumeAfterLeftLine()} hitSlop={8} style={styles.leftLineButton}>
               <Text style={styles.leftLineButtonText}>RESUME</Text>
             </Pressable>
           </View>
@@ -1379,7 +1380,7 @@ const styles = StyleSheet.create({
   leftLineCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.lg, marginTop: spacing.sm,
     backgroundColor: '#fff8dc', borderRadius: 14, borderWidth: 2, borderColor: '#fec90e', paddingHorizontal: 12, paddingVertical: 8 },
   leftLineText: { flex: 1, fontFamily: 'Knockout', fontSize: 15, color: '#083f7c' },
-  leftLineButton: { minHeight: 40, paddingHorizontal: 14, borderRadius: 12, backgroundColor: '#fec90e', justifyContent: 'center' },
+  leftLineButton: { minHeight: 44, paddingHorizontal: 14, borderRadius: 12, backgroundColor: '#fec90e', justifyContent: 'center' },
   leftLineButtonText: { fontFamily: 'Shark', fontSize: 15, color: '#075083' },
   queueTrackingHint: { backgroundColor: '#0a548f', borderBottomWidth: 1,
     borderBottomColor: '#55baf5', flexDirection: 'row', alignItems: 'center',

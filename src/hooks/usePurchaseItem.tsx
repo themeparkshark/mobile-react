@@ -1,4 +1,4 @@
-import { useCallback, useContext, useState } from 'react';
+import { useCallback, useContext, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -82,6 +82,7 @@ export default function usePurchaseItem(options: PurchaseOptions = {}) {
   const { player, isReady, refreshPlayer } = useContext(AuthContext);
   const [modal, setModal] = useState<ModalState>({ type: 'none' });
   const [purchasing, setPurchasing] = useState(false);
+  const purchasingRef = useRef(false);
 
   const closeModal = useCallback(() => setModal({ type: 'none' }), []);
 
@@ -110,11 +111,14 @@ export default function usePurchaseItem(options: PurchaseOptions = {}) {
   };
 
   const confirmPurchase = async (item: ItemType) => {
-    if (purchasing) return;
+    // A ref, not state: two fast taps land before the re-render.
+    if (purchasingRef.current) return;
+    purchasingRef.current = true;
     setPurchasing(true);
     try {
       const result = await purchase(item);
-      await refreshPlayer();
+      // The purchase landed; a slow /me refresh must not turn it into "failed".
+      await refreshPlayer().catch(() => undefined);
       const setReward = result?.set_reward ?? null;
       playSound(setReward ? require('../../assets/sounds/reward.mp3') : require('../../assets/sounds/purchase_item_success.mp3'));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
@@ -133,6 +137,7 @@ export default function usePurchaseItem(options: PurchaseOptions = {}) {
         setModal({ type: 'failed', item });
       }
     } finally {
+      purchasingRef.current = false;
       setPurchasing(false);
     }
   };

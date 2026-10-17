@@ -175,7 +175,13 @@ function DoubleCoinsOffer({ attemptId, vip, coins, onGranted }: {
   const press = async () => {
     if (state !== 'offer') return;
     setState('busy');
-    const outcome = await watchForReward('double_coins', attemptId, vip);
+    let outcome: Awaited<ReturnType<typeof watchForReward>>;
+    try {
+      outcome = await watchForReward('double_coins', attemptId, vip);
+    } catch {
+      setState('offer'); // never strand the chip on "One moment..."
+      return;
+    }
     if (outcome.status === 'granted') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setNote(`${rewardText(outcome.reward.reward)} added`);

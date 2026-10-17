@@ -119,9 +119,14 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     if (arrivalSlot && earnedCoin) setInspection({ section: arrivalSlot.section, taskId: arrivalSlot.task.id, key: earnedCoin.attemptId });
     closeArrival();
   };
+  const inspectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (inspectTimer.current) clearTimeout(inspectTimer.current); }, []);
   const landArrival = () => {
     setLandedKey(requestKey);
-    if (openMastery) setTimeout(inspectArrival, reducedMotion ? 0 : 520);
+    if (openMastery) {
+      if (inspectTimer.current) clearTimeout(inspectTimer.current);
+      inspectTimer.current = setTimeout(inspectArrival, reducedMotion ? 0 : 520);
+    }
   };
   useEffect(() => {
     if (wasFocused.current && !isFocused && requestKey) {
