@@ -743,6 +743,8 @@ export default function MemoryGame({
   // ---------------------------------------------------------------------------
   // Start, pause, resume
   // ---------------------------------------------------------------------------
+  // A double tap on Try again would build two tries and burn one of the Ticket's three.
+  const retrying = useRef(false);
   const beginPlay = useCallback(() => {
     const r = runRef.current;
     if (!r) return;
@@ -1225,6 +1227,7 @@ export default function MemoryGame({
         // Short phones: the card covers more board, so veil it a bit more under the ribbon.
         if ((geoRef.current?.H ?? 999) < 600) wash.value = withTiming(0.95, { duration: 220 });
         setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left, out, flipped: r.eng.turns > 0 });
+        retrying.current = false; // a fresh try screen always accepts its Try again
         tryCardIn.value = 0;
         tryCardIn.value = reducedMotion ? 1 : withSpring(1, { damping: 13, stiffness: 190 });
       } else finishRun(false);
@@ -2194,7 +2197,9 @@ export default function MemoryGame({
   // ---------------------------------------------------------------------------
   const tryAgain = useCallback(() => {
     const prev = runRef.current;
+    if (retrying.current) return;
     if (!prev || RIDE_TRIES - 1 - prev.tryIndex <= 0) return;
+    retrying.current = true;
     Haptic.tapLight();
     // Cards matched on this try still go in the album (best effort, on device).
     void collectRewards(prev, false, false, 0).catch(() => undefined);
@@ -2207,6 +2212,7 @@ export default function MemoryGame({
     setScore(0);
     syncHud();
     later(900, () => {
+      retrying.current = false;
       if (runRef.current === r) beginPlay();
     });
   }, [beginPlay, buildRun, clearTimers, collectRewards, later, newBoardView, resetScene, syncHud, wash]);
