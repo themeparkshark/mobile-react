@@ -470,8 +470,10 @@ export default function CommunityCenterScreen() {
     setRevealedSlots(prev => new Set(Array.from(prev).concat(slotIndex)));
   };
   
+  // One claim or give at a time; a ref, because two taps in one frame both see the old state.
+  const busyRef = useRef(false);
   const handleClaim = async (slotIndex: number) => {
-    if (!center || claiming !== null) return;
+    if (!center || claiming !== null || busyRef.current) return;
     
     const gift = center.gifts[slotIndex];
     if (!gift) return;
@@ -486,6 +488,7 @@ export default function CommunityCenterScreen() {
       return;
     }
     
+    busyRef.current = true;
     setClaiming(slotIndex);
     
     try {
@@ -561,6 +564,7 @@ export default function CommunityCenterScreen() {
       }
       console.error('Claim failed:', errorData || error);
     } finally {
+      busyRef.current = false;
       setClaiming(null);
     }
   };
@@ -615,7 +619,8 @@ export default function CommunityCenterScreen() {
   };
   
   const handleConfirmGive = async () => {
-    if (!center || giving) return;
+    if (!center || giving || busyRef.current) return;
+    busyRef.current = true;
     
     setShowConfirmGiveModal(false);
     setGiving(true);
@@ -692,6 +697,7 @@ export default function CommunityCenterScreen() {
       }
       console.error('Give failed:', errorData || error);
     } finally {
+      busyRef.current = false;
       setGiving(false);
     }
   };
