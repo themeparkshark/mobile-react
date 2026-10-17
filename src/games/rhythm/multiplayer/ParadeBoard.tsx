@@ -152,6 +152,7 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
 
   // Start on GO (the room clock), and follow my HOLD.
   useEffect(() => {
+    let startTimer: ReturnType<typeof setTimeout> | null = null;
     const id = setInterval(() => {
       const player = song.current;
       const bt = boardClock();
@@ -173,7 +174,8 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
           running.value = 1;
           void player.play(from);
         };
-        if (bt < 0) setTimeout(go, -bt);
+        // Cleared on HOLD or leave; the HOLD-return branch below starts the song instead.
+        if (bt < 0) startTimer = setTimeout(go, -bt);
         else go();
         return;
       }
@@ -188,7 +190,7 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
         running.value = 1;
       }
     }, 20);
-    return () => clearInterval(id);
+    return () => { clearInterval(id); if (startTimer) clearTimeout(startTimer); };
   }, [boardClock, held, running, clock, anchor, offset]);
 
   // -- JS side of every judge batch --------------------------------------------
