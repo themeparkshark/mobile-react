@@ -152,6 +152,8 @@ const COUNTER_HINT: Record<BossId, string> = {
   robo_shark: 'Tap the sockets in the order they flash',
   ghost_squid: 'Tap the lantern under the real squid',
 };
+/** What glows to pop on each boss (the novice hint used to say "sucker" for all three). */
+const POP_TARGET: Record<BossId, string> = { kraken: 'sucker', robo_shark: 'vent', ghost_squid: 'pearl' };
 const OBJECTIVE: Record<BossId, string> = {
   kraken: 'Tap the buoy under the tentacle as it lands, then pop the glowing suckers. Hold the float for an Easy Slam.',
   robo_shark: 'Tap the sockets in the order they flash, then pop the glowing vents. Hold the float for an Easy Slam.',
@@ -1026,7 +1028,7 @@ export function BossBrawl(props: BossBrawlProps) {
           if (!reduced) camera.shake(0.2, 0, 1);
           for (let i = 0; i < 3; i++) later(30 * i, () => burst('splash', L.laneX[i], L.targetY + 6, { count: 6 }));
         }
-        if (e.a === 0 && round.current.novice && b && b.cfg.bout === 0 && b.attacksDone <= 1) setHint('Tap each glowing sucker on the beat. Or hold the float');
+        if (e.a === 0 && round.current.novice && b && b.cfg.bout === 0 && b.attacksDone <= 1) setHint(`Tap each glowing ${POP_TARGET[boss]} on the beat. Or hold the float`);
         break;
       }
       case E_POP_PERFECT:
