@@ -50,6 +50,9 @@ export function devPretendEarlier(points: number): void {
   if (__DEV__ && lastSeen) lastSeen = { ...lastSeen, points: Math.max(0, lastSeen.points - points), tier: Math.max(0, lastSeen.tier - (points >= 400 ? 1 : 0)) };
 }
 
+/** The last points this run saw (null before any look). */
+export function lastSharkPassSeen(): { season: string; points: number; tier: number } | null { return lastSeen; }
+
 /** Any screen that loads the pass notes its points (the Shark Pass screen, the banner). */
 export function noteSharkPassPoints(state: SharkPassState | null): void {
   if (state && state.enabled && state.season && state.progress) lastSeen = { season: state.season.key, points: state.progress.points, tier: state.progress.tier };

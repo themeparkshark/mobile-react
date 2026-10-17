@@ -36,7 +36,8 @@ import {
 import { askGrownUp } from '../components/GrownUpGate';
 import { GotIt, MAX_FONT, PackArt, artSource, type PackArtKey } from '../components/money/moneyUi';
 import MemberFlex from '../components/money/MemberFlex';
-import { noteSharkPassPoints } from '../components/money/SharkPassBanner';
+import { lastSharkPassSeen, noteSharkPassPoints } from '../components/money/SharkPassBanner';
+import { playSfx } from '../gamekit/SFX';
 import CoinTopUpOffer from '../components/money/CoinTopUpOffer';
 import { FRAME_ART, GOLD_ART } from '../components/money/frames';
 import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../share';
@@ -47,7 +48,7 @@ import * as RootNavigation from '../RootNavigation';
 import { buySharkPass, loadSharkPassPrice, onSharkPassDelivered, restoreSharkPass, storeAvailable, type ShopPrice } from '../services/purchases';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import { EVENT_COPY, isWearable, claimedLine, passGrants, passTwinLine, lastDayText, nextBigPrize, passSummary, pieceSource, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
+import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, passTwinLine, lastDayText, nextBigPrize, passSummary, pieceSource, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
 import { wearItem } from './StoreScreen/inventoryQueue';
 import { trackImpression, trackMoney } from '../services/money/track';
 import { baseRates, formatLike, regularValue } from '../services/money/offers';
@@ -187,9 +188,21 @@ export default function SharkPassScreen() {
   const list = useRef<FlatList<SharkPassTier>>(null);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [sinceLast, setSinceLast] = useState<number | null>(null);
+  const [justDone, setJustDone] = useState<ReadonlySet<string>>(new Set());
+  const doneSeen = useRef<Set<string> | null>(null);
   const load = useCallback(async () => {
     try {
       const next = await getSharkPass();
+      // What this visit brought: points since the last look, and quests that just turned done.
+      const gain = passGain(lastSharkPassSeen(), next);
+      if (gain) setSinceLast(gain.gained);
+      const quests = next && next.enabled ? next.quests : null;
+      const doneNow = quests
+        ? [...quests.daily, ...(quests.weekly ? [quests.weekly] : [])].filter(q => q.done).map(q => `${q.scope}:${q.key}`) : [];
+      const fresh = doneSeen.current ? doneNow.filter(k => !doneSeen.current!.has(k)) : [];
+      doneSeen.current = new Set(doneNow);
+      if (fresh.length) { haptic('success'); playSfx('coin'); setJustDone(new Set(fresh)); }
       setState(next);
       noteSharkPassPoints(next);
       setStatus('ready');
@@ -481,6 +494,7 @@ export default function SharkPassScreen() {
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.points}>
                     {step >= steps ? 'You finished the season!' : into === 0 ? `${perStep} points to step ${step + 1}` : `${into} / ${perStep} points to step ${step + 1}`}
                   </Text>
+                  {sinceLast ? <Text maxFontSizeMultiplier={MAX_FONT} style={[s.points, s.readyNow]}>{`+${sinceLast} points since last time!`}</Text> : null}
                 </View>
               </View>
               {nextPrize && nextStep > 0 && (
@@ -619,7 +633,7 @@ export default function SharkPassScreen() {
                       <View style={s.questBar}><View style={[s.questFill, { width: `${(q.progress / Math.max(1, q.count)) * 100}%` }]} /></View>
                     </View>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.questCount}>{`${Math.min(q.progress, q.count)}/${q.count}`}</Text>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? 'Done!' : `+${q.bonus} pts`}</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? (justDone.has(`${q.scope}:${q.key}`) ? `+${q.bonus} pts!` : 'Done!') : `+${q.bonus} pts`}</Text>
                   </View>
                 ))}
                 <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>New quests every day. Skipping a day is fine.</Text>
