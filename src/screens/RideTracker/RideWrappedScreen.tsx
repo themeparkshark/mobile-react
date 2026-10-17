@@ -108,12 +108,17 @@ export default function RideWrappedScreen() {
   const year = route.params?.year || new Date().getFullYear();
   const month = route.params?.month || new Date().getMonth() + 1;
 
-  useEffect(() => {
+  const [failed, setFailed] = useState(false);
+  const load = useCallback(() => {
+    setLoading(true);
+    setFailed(false);
     getWrapped({ period, year, month })
       .then(setData)
-      .catch(console.error)
+      // A failed load is not "no rides": say so and offer a retry.
+      .catch(() => setFailed(true))
       .finally(() => setLoading(false));
   }, [period, year, month]);
+  useEffect(() => { load(); }, [load]);
 
   const handleNext = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -167,10 +172,10 @@ export default function RideWrappedScreen() {
           </View>
         </LinearGradient>
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>No rides this period!</Text>
-          <Text style={styles.emptySubtitle}>Log some rides to see your Wrapped</Text>
-          <Pressable onPress={() => navigation.goBack()} style={styles.goldBtn}>
-            <Text style={styles.goldBtnText}>Go Log Rides</Text>
+          <Text style={styles.emptyTitle}>{failed ? 'Couldn’t load your Wrapped' : 'No rides this period!'}</Text>
+          <Text style={styles.emptySubtitle}>{failed ? 'Check your internet and try again.' : 'Log some rides to see your Wrapped'}</Text>
+          <Pressable onPress={failed ? load : () => navigation.goBack()} style={styles.goldBtn}>
+            <Text style={styles.goldBtnText}>{failed ? 'Try Again' : 'Go Log Rides'}</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -228,7 +233,7 @@ export default function RideWrappedScreen() {
       <Text style={styles.cardBig}>{data.top_rated?.name || '-'}</Text>
       {data.top_rated && (
         <View style={styles.ratingRow}>
-          {Array.from({ length: Math.round(data.top_rated.avg_rating) }).map((_, i) => (
+          {Array.from({ length: Math.max(1, Math.round(data.top_rated.avg_rating)) }).map((_, i) => (
             <Text key={i} style={styles.ratingShark}>*</Text>
           ))}
         </View>
@@ -251,9 +256,9 @@ export default function RideWrappedScreen() {
     // Card 5: Reactions summary
     <WrappedCard key="reactions" gradient={CARD_GRADIENTS[5]}>
       <Text style={styles.cardLabel}>YOUR REACTIONS</Text>
-      {data.reactions.length > 0 ? (
+      {(data.reactions ?? []).length > 0 ? (
         <View style={styles.reactionsGrid}>
-          {data.reactions.slice(0, 5).map(r => (
+          {(data.reactions ?? []).slice(0, 5).map(r => (
             <View key={r.reaction} style={styles.reactionItem}>
               <SharkReactionIcon reaction={r.reaction} size={48} />
               <Text style={styles.reactionCount}>{r.count}x</Text>
