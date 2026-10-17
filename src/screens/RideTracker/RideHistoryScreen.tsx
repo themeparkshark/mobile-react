@@ -170,6 +170,13 @@ export default function RideHistoryScreen() {
     }
   }, [hasMore, loading, refreshing, loadUnavailable, page, selectedPark, fetchRides]);
 
+  // Favorites filter on device: a short filtered page would hide favorites on later pages
+  // (and never scroll far enough to load them), so keep paging until the list fills.
+  useEffect(() => {
+    if (selectedPark !== FAVORITES_FILTER_ID || loading || rides.length >= 12) return;
+    void onEndReached();
+  }, [selectedPark, loading, rides.length, onEndReached]);
+
   const handleRidePress = useCallback((ride: PlayerRideType) => {
     navigation.navigate('RideDetail', { rideId: ride.ride_id, rideName: ride.ride_name });
   }, [navigation]);
