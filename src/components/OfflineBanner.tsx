@@ -298,7 +298,8 @@ const styles = StyleSheet.create({
   retry: { width: 112 },
   // The compact chip sits centred where the full card was, small enough to
   // fit between the map cards under the header.
-  chipHost: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-start' },
+  // The compact chip rides the right edge, clear of centered titles and stat cards below the header.
+  chipHost: { ...StyleSheet.absoluteFillObject, alignItems: 'flex-end', justifyContent: 'flex-start', paddingRight: 16 },
   chipAlone: { alignItems: 'center' },
   chip: {
     width: CHIP_SIZE,
