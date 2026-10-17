@@ -187,7 +187,9 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
     else if (outcome === 'pending') gameAlert('Waiting for a grown-up', 'A grown-up needs to say yes on their phone. VIP turns on after that.');
     else if (outcome === 'unverified') gameAlert('Almost there', 'It worked! VIP turns on in a minute. If not, it turns on next time you open the game.');
     else if (outcome === 'owned_elsewhere') ownedElsewhere();
-    else if (outcome === 'failed') gameAlert('That didn’t work', `You weren’t charged. Check your internet, then tap ${ctaLabel(plan?.trial ?? null)} again.`);
+    // This Apple ID already has VIP: bring it back instead of a buy-again loop.
+    else if (outcome === 'already_owned') await restore();
+    else if (outcome === 'failed') gameAlert('That didn’t work', `Check your internet, then tap ${ctaLabel(plan?.trial ?? null)} again. If a grown-up already paid, tap Restore at the bottom.`);
   };
 
   const restore = async () => {

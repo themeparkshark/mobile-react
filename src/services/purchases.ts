@@ -221,6 +221,7 @@ export type PurchaseOutcome =
   | 'pending' // Ask to Buy or similar; it lands later through the listener
   | 'unverified' // Apple charged, the server has not confirmed yet; retried on next launch
   | 'owned_elsewhere' // this Apple ID's VIP belongs to another account
+  | 'already_owned' // this Apple ID already has VIP: bring it back with Restore
   | 'unavailable' // old binary without StoreKit
   | 'failed';
 
@@ -240,6 +241,7 @@ export async function buyVip(plan: VipPlan): Promise<PurchaseOutcome> {
     const code = errorCode(error);
     if (code === 'E_USER_CANCELLED') return 'cancelled';
     if (code === 'E_DEFERRED_PAYMENT') return 'pending';
+    if (code === 'E_ALREADY_OWNED') return 'already_owned';
     return 'failed';
   }
   if (!purchase) return 'pending';
