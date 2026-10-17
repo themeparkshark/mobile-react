@@ -249,6 +249,13 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const startWall = useRef(Date.now());
   const ghostRef = useRef<WhackGhost | null>(ghostProp ?? null);
   const finishing = useRef(false);
+  // Each run gets a token; a finish timer from an earlier run (or after unmount) is ignored.
+  const runToken = useRef(0);
+  useEffect(() => () => { runToken.current += 1; }, []);
+  const laterInRun = useCallback((fn: () => void, ms: number) => {
+    const token = runToken.current;
+    setTimeout(() => { if (runToken.current === token) fn(); }, ms);
+  }, []);
   const raidRef = useRef<{ hpNow: number; hpMax: number; defeated: boolean } | null>(null);
   const winRef = useRef<{ at: number; ms: number } | null>(null);
 
@@ -723,18 +730,18 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       if (won) {
         const w = winRef.current;
         const wait = w ? Math.max(600, w.ms - (Date.now() - w.at)) : 1400;
-        setTimeout(() => finishRun(), wait);
+        laterInRun(() => finishRun(), wait);
       } else {
         GameAudio.play(cues.whistle, { volume: 0.8 });
         flash('TIME!', `SO CLOSE! ${Math.max(1, 100 - b.result.coin)}% TO GO`, '#ffffff', 1200);
-        setTimeout(() => finishRun(), 1100);
+        laterInRun(() => finishRun(), 1100);
       }
       return;
     }
     GameAudio.play(cues.whistle, { volume: 0.8 });
     flash('FINISH!', null, GOLD, 900);
     if (bankedEarly) {
-      setTimeout(() => finishRun('banked'), 700);
+      laterInRun(() => finishRun('banked'), 700);
       return;
     }
     // Multiplayer submissions.
@@ -748,7 +755,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         incomingRef.current = v.duel.incoming;
         duelLine = v.duel.winner === 'me' ? `BURST ${t.input.burstIndex + 1}: YOU!` : v.duel.winner === 'rival' ? `BURST ${t.input.burstIndex + 1}: RIVAL` : 'DEAD HEAT';
         if (v.duel.matchOver) {
-          setTimeout(() => finishRun(), 2600);
+          laterInRun(() => finishRun(), 2600);
           return;
         }
       }
@@ -758,7 +765,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const next = t.input.burstIndex + 1;
     if (next >= totalBursts) {
       // The finale's own cam (boss) already played; leave a beat for it.
-      setTimeout(() => finishRun(), t.boss && b.result.bossDown ? 1600 : 900);
+      laterInRun(() => finishRun(), t.boss && b.result.bossDown ? 1600 : 900);
       return;
     }
     // Walk Boost: +2.5%/m, full at 40m, a Golden Start at most once per 3 Bursts, random-seed solo Runs only.
@@ -824,6 +831,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   // Shell lifecycle.
   const handleStart = useCallback(() => {
     finishing.current = false;
+    runToken.current += 1;
     bankedRef.current = [];
     carryRef.current = NO_CARRY;
     boostedRunRef.current = false;
@@ -858,6 +866,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
 
   const handleRematch = useCallback(() => {
     finishing.current = false;
+    runToken.current += 1;
     const nextRun = runIndex + 1;
     setRunIndex(nextRun);
     bankedRef.current = [];

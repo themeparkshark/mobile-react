@@ -183,8 +183,9 @@ function DoubleCoinsOffer({ attemptId, vip, coins, onGranted }: {
       return;
     }
     if (outcome.status === 'granted') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setNote(`${rewardText(outcome.reward.reward)} added`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      playSfx('coin');
+      setNote(`${rewardText(outcome.reward.reward)} added!`);
       setState('done');
       onGranted();
     } else if (outcome.status === 'checking') {
