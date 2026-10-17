@@ -8,6 +8,8 @@ import GameIcon from '../ui/GameIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { limitedDayLabel } from '../services/collection/limitedCoins';
 import { parkCoinParts } from './parkCoinParts';
+import { playSfx } from '../gamekit/SFX';
+import { haptic } from '../gamekit/Haptics';
 
 interface Props {
   readonly parkName: string;
@@ -69,6 +71,8 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   const passportComplete = typeof ridePassportAvailable === 'number' && ridePassportAvailable > 0 &&
     (ridePassportCollected ?? 0) >= ridePassportAvailable;
   const limitedLeaves = limitedDayLabel(limitedEndsOn);
+  // Above 1 the plain label; the last coin and a full shelf get called out.
+  const coinsLeft = available > 0 ? Math.max(0, available - shownCollected) : 99;
 
   // Count tick: a quick pop and a gold flash when a landed coin adds to the shelf.
   const pop = useSharedValue(1);
@@ -78,13 +82,15 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
     if (!tickKey || lastTick.current === tickKey) return undefined;
     lastTick.current = tickKey;
     setFlash(true);
+    // The coin that finishes the park gets its own cheer on top of the landing clink.
+    if (available > 0 && collected >= available) { playSfx('fx.reward', 0.8); haptic('success'); }
     const timer = setTimeout(() => setFlash(false), 700);
     if (!reduced) {
       pop.value = withSequence(withTiming(1.28, { duration: 110, easing: Easing.out(Easing.quad) }),
         withSpring(1, { damping: 7, stiffness: 240 }));
     }
     return () => clearTimeout(timer);
-  }, [tickKey, reduced, pop]);
+  }, [tickKey, reduced, pop, available, collected]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const fill = useSharedValue(rate);
   useEffect(() => {
@@ -120,7 +126,9 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
         <Animated.Text style={[styles.count, flash && styles.countFlash, popStyle]}>
           {available > 0 ? `${shownCollected}/${available}` : 'NEW'}
         </Animated.Text>
-        <Text style={styles.countLabel}>RIDE COINS</Text>
+        <Text style={[styles.countLabel, coinsLeft <= 1 && styles.countLabelHot]}>
+          {coinsLeft === 0 ? 'PARK COMPLETE!' : coinsLeft === 1 ? 'ONE COIN TO GO!' : <>RIDE COINS</>}
+        </Text>
       </View>
       <View style={styles.track}>
         <Animated.View style={[styles.fill, parts?.sights && styles.fillSplit, fillStyle]}>
@@ -199,6 +207,7 @@ const styles = StyleSheet.create({
   countFlash: { color: '#fff3b0' },
   countLabel: { fontFamily: 'Shark', color: '#fff', fontSize: 18, marginBottom: 5,
     textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  countLabelHot: { color: '#ffd23f' },
   track: { height: 12, backgroundColor: '#bfe5ff', borderWidth: 2, borderColor: '#fff',
     borderRadius: 7, overflow: 'hidden', marginTop: 5, marginRight: 70 },
   fill: { height: '100%', backgroundColor: '#ffcf3b', borderRadius: 7 },
