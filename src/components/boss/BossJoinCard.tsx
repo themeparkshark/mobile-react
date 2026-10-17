@@ -98,7 +98,7 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
       <View style={styles.hpRow}>
         <View />
         <Pulse value={raid.fighters} reduced={reduced} style={styles.fighters}><GameIcon name="shark" size={18} />
-          <Text style={styles.hpText} maxFontSizeMultiplier={1.3}>{raid.fighters} fighting</Text></Pulse>
+          <Text style={styles.hpText} maxFontSizeMultiplier={1.3}>{raid.fighters === 0 ? 'Be the first to fight!' : raid.fighters === 1 ? '1 shark fighting. Join in!' : `${raid.fighters} sharks fighting. Join in!`}</Text></Pulse>
       </View>
 
       <View style={styles.tiles}>
