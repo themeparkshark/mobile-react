@@ -217,11 +217,21 @@ export default function RideBatchConfirmScreen() {
   const ratingsRef = useRef(ratings);
   useEffect(() => { ratingsRef.current = ratings; }, [ratings]);
 
+  // A double tap on the last card must not log every ride twice: a ref, set before the first await.
+  const submittingRef = useRef(false);
   const submitAllRides = useCallback(async (finalRatings: Map<string, RatingState>) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
-    const { savedIds, failedIds } = await saveDetectedRideBatch(
-      selectedRides, finalRatings, savedRideIds, logRide, removePendingDetection,
-    );
+    let result: Awaited<ReturnType<typeof saveDetectedRideBatch>>;
+    try {
+      result = await saveDetectedRideBatch(
+        selectedRides, finalRatings, savedRideIds, logRide, removePendingDetection,
+      );
+    } finally {
+      submittingRef.current = false;
+    }
+    const { savedIds, failedIds } = result;
     rideDetectionEmitter.emit('pendingCleared');
 
     setSavedRideIds(savedIds);

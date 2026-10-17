@@ -323,8 +323,14 @@ export default function SettingsScreen() {
                 label="Music"
                 value={enabledMusic}
                 onValueChange={async () => {
-                  setEnabledMusic(!enabledMusic);
-                  await updatePlayer({ enabled_music: !player.enabled_music }).catch(() => undefined);
+                  const next = !enabledMusic;
+                  setEnabledMusic(next);
+                  try {
+                    await updatePlayer({ enabled_music: next });
+                  } catch {
+                    setEnabledMusic(!next); // offline: the switch must not lie
+                    showToast('Couldn’t save Music. Try again.', 'warning');
+                  }
                   await refreshPlayer().catch(() => undefined);
                 }}
               />
@@ -338,8 +344,14 @@ export default function SettingsScreen() {
                 label="Sound effects"
                 value={enabledSoundEffects}
                 onValueChange={async () => {
-                  setEnabledSoundEffects(!enabledSoundEffects);
-                  await updatePlayer({ enabled_sound_effects: !player?.enabled_sound_effects }).catch(() => undefined);
+                  const next = !enabledSoundEffects;
+                  setEnabledSoundEffects(next);
+                  try {
+                    await updatePlayer({ enabled_sound_effects: next });
+                  } catch {
+                    setEnabledSoundEffects(!next);
+                    showToast('Couldn’t save Sound Effects. Try again.', 'warning');
+                  }
                   await refreshPlayer().catch(() => undefined);
                 }}
               />
