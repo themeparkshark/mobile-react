@@ -92,6 +92,12 @@ export default function GroupRecapCard({ group, realMinutes, postedMinutes, part
         <GameIcon name="star" size={22} />
         <Text style={styles.total}>{row.stars}</Text>
       </View>)}
+      {/* A friendly rematch for the next line: the crew has a score to beat. */}
+      {(() => {
+        const top = recap.standings.find(row => row.place === 1 && row.turns > 0 && row.stars > 0);
+        return top && recap.standings.length > 1
+          ? <Text style={styles.rematch}>{`Next line: can anyone beat ${top.player.name}’s ${top.stars} stars?`}</Text> : null;
+      })()}
       <View style={styles.infoRow}>
         <GameIcon name="parts" size={26} />
         <Text style={styles.info}>{coinLine(partsEarned, rewardsConfirmed, coin)}</Text>
@@ -128,6 +134,7 @@ const styles = StyleSheet.create({
   name: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 17 },
   award: { color: BRAND.navySoft, fontFamily: 'Knockout', fontSize: 14 },
   total: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 19, minWidth: 22, textAlign: 'right' },
+  rematch: { fontFamily: 'Shark', fontSize: 15, color: '#a86500', textAlign: 'center', marginVertical: 8 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   info: { flex: 1, color: BRAND.navy, fontFamily: 'Knockout', fontSize: 16, lineHeight: 20 },
   offscreen: { position: 'absolute', left: -2000, top: 0, width: SHARE_CARD_WIDTH, height: SHARE_CARD_HEIGHT },
