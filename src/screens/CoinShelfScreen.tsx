@@ -7,6 +7,7 @@
  * goal) are forwarded to the coin's own park shelf, which scrolls to it and
  * opens its detail.
  */
+import CollectionSwitch from '../components/collection/CollectionSwitch';
 import { showToast } from '../utils/toast';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ImageBackground, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -161,6 +162,7 @@ export default function CoinShelfScreen({ route }: {
         <TopbarColumn stretch={false}><View style={{ width: 40 }} /></TopbarColumn>
       </Topbar>
       <ImageBackground source={require('../../assets/images/water_background.png')} resizeMode="cover" style={{ flex: 1 }}>
+        <CollectionSwitch active="coins" />
         {loading ? <SharkLoader onRetry={() => void collection.reload(true)} />
           : collection.error && coins.length === 0 ? <SharkLoader state="error" onRetry={() => void collection.reload(true)} />
           : <ScrollView contentContainerStyle={styles.content}

@@ -16,6 +16,7 @@
  * open/close or scroll, stamp objects keep identity across refetches, the
  * focus refetch is throttled to 30 s, and tile thumbs are prefetched.
  */
+import CollectionSwitch from '../components/collection/CollectionSwitch';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Pressable, RefreshControl, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from 'react-native';
 import { Image } from 'expo-image';
@@ -552,6 +553,7 @@ export default function StampBookScreen() {
       <BookFxProvider value={fx}>
         <View style={styles.screen} onTouchStart={fx.poke} onLayout={e => { fx.viewportH.value = e.nativeEvent.layout.height; }}>
           <Image source={BACKGROUND} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />
+          <CollectionSwitch active="stamps" />
 
           {status !== 'ready' ? (
             <View style={styles.state}>
