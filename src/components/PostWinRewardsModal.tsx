@@ -27,6 +27,8 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import Ribbon from './Ribbon';
+import RewardBurst from './RewardBurst';
+import { haptic } from '../gamekit/Haptics';
 import CoinCatchReveal, { type CatchHandoff } from './CoinCatchReveal';
 import YellowButton from './YellowButton';
 import ShelfCoin from './collection/ShelfCoin';
@@ -135,6 +137,8 @@ function CountUp({ value, start, reduced, style }: { value: number; start: boole
       const t = step / steps;
       setShown(Math.round(value * (1 - Math.pow(1 - t, 3))));
       if (step < steps) timer = setTimeout(tick, 34);
+      // The number lands with a tick, so each chip is felt, not just seen.
+      else if (value > 0) { haptic('tickSelection'); playSfx('tick', 0.45); }
     };
     timer = setTimeout(tick, 34);
     return () => clearTimeout(timer);
@@ -428,6 +432,10 @@ export default function PostWinRewardsModal({
                   style={{ width: HERO * 2.1, height: HERO * 2.1, opacity: 0.3 }} tintColor="#ffe07a" />
               </Animated.View>
               <Animated.View style={[styles.burstRing, burstStyle]} pointerEvents="none" />
+              {/* Confetti off the same entrance clock as the ring. */}
+              {!reducedMotion && <View pointerEvents="none" style={{ position: 'absolute', width: HERO, height: HERO }}>
+                <RewardBurst progress={burst} x={HERO / 2} y={HERO / 2} />
+              </View>}
               <Animated.View style={heroStyle}>
                 <View ref={heroRef} collapsable={false} onLayout={measureHero} style={{ width: HERO, height: HERO }}>
                   {hasCoin
