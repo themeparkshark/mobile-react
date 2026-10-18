@@ -299,6 +299,156 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
     id: 'gen-48', parkId: 1, question: 'In what year did Universal Studios Hollywood’s Studio Tour formally open?',
     choices: ['1964', '1955', '1977', '1990'], correctIndex: 0,
     difficulty: 'hard', fact: 'Universal dates the formal opening of the Studio Tour to 1964.', source: 'Universal Studios Hollywood',
+  },  // Kid-safe general facts (well-established, no park claims): long waits never run dry.
+  {
+    id: 'kid-1', question: 'How many arms does an octopus have?',
+    choices: ['8', '6', '10', '12'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'An octopus has eight arms.',
+  },
+  {
+    id: 'kid-2', question: 'What do sharks have instead of bones?',
+    choices: ['Cartilage', 'Feathers', 'Shells', 'Wood'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A shark skeleton is made of cartilage, the same bendy stuff in your nose and ears.',
+  },
+  {
+    id: 'kid-3', question: 'What is the biggest fish in the ocean?',
+    choices: ['Whale shark', 'Great white shark', 'Tuna', 'Swordfish'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The whale shark is the largest fish in the world.',
+  },
+  {
+    id: 'kid-4', question: 'What is the largest animal that has ever lived?',
+    choices: ['Blue whale', 'T. rex', 'Elephant', 'Giant squid'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The blue whale is the biggest animal known to have ever lived.',
+  },
+  {
+    id: 'kid-5', question: 'Which planet is known as the Red Planet?',
+    choices: ['Mars', 'Venus', 'Jupiter', 'Neptune'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Mars looks red because of rusty iron dust on its surface.',
+  },
+  {
+    id: 'kid-6', question: 'What is the largest planet in our solar system?',
+    choices: ['Jupiter', 'Saturn', 'Earth', 'Mars'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Jupiter is the biggest planet in our solar system.',
+  },
+  {
+    id: 'kid-7', question: 'Which planet has the most famous rings?',
+    choices: ['Saturn', 'Mercury', 'Mars', 'Venus'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Saturn’s bright rings are made of ice and rock.',
+  },
+  {
+    id: 'kid-8', question: 'What is the closest star to Earth?',
+    choices: ['The Sun', 'The North Star', 'Sirius', 'The Moon'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The Sun is a star, and it is the closest one to Earth.',
+  },
+  {
+    id: 'kid-9', question: 'How many legs does a spider have?',
+    choices: ['8', '6', '4', '10'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Spiders have eight legs. Insects have six.',
+  },
+  {
+    id: 'kid-10', question: 'How many legs does an insect have?',
+    choices: ['6', '8', '4', '10'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Every insect has six legs.',
+  },
+  {
+    id: 'kid-11', question: 'What do bees make?',
+    choices: ['Honey', 'Milk', 'Silk', 'Maple syrup'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Honeybees make honey from flower nectar.',
+  },
+  {
+    id: 'kid-12', question: 'Which animal is known for changing its skin color?',
+    choices: ['Chameleon', 'Giraffe', 'Penguin', 'Rabbit'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Chameleons can change color.',
+  },
+  {
+    id: 'kid-13', question: 'What is a baby kangaroo called?',
+    choices: ['A joey', 'A cub', 'A calf', 'A kit'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A baby kangaroo is called a joey.',
+  },
+  {
+    id: 'kid-14', question: 'What is a group of fish swimming together called?',
+    choices: ['A school', 'A herd', 'A flock', 'A pack'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Fish swimming together in a group are called a school.',
+  },
+  {
+    id: 'kid-15', question: 'Which bird cannot fly but is an amazing swimmer?',
+    choices: ['Penguin', 'Eagle', 'Parrot', 'Owl'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Penguins cannot fly, but they swim very well.',
+  },
+  {
+    id: 'kid-16', question: 'How many days are in a leap year?',
+    choices: ['366', '365', '364', '360'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A leap year has 366 days. The extra day is February 29.',
+  },
+  {
+    id: 'kid-17', question: 'How many continents are there?',
+    choices: ['7', '5', '6', '9'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'There are seven continents.',
+  },
+  {
+    id: 'kid-18', question: 'What is the largest ocean on Earth?',
+    choices: ['Pacific', 'Atlantic', 'Indian', 'Arctic'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The Pacific is the biggest ocean on Earth.',
+  },
+  {
+    id: 'kid-19', question: 'What gas do plants take in from the air?',
+    choices: ['Carbon dioxide', 'Helium', 'Neon', 'Hydrogen'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Plants take in carbon dioxide and give off oxygen.',
+  },
+  {
+    id: 'kid-20', question: 'Which is the fastest land animal?',
+    choices: ['Cheetah', 'Horse', 'Lion', 'Ostrich'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The cheetah is the fastest animal on land.',
+  },
+  {
+    id: 'kid-21', question: 'What do caterpillars turn into?',
+    choices: ['Butterflies or moths', 'Bees', 'Spiders', 'Beetles'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Caterpillars grow into butterflies or moths.',
+  },
+  {
+    id: 'kid-22', question: 'What color do you get when you mix blue and yellow?',
+    choices: ['Green', 'Purple', 'Orange', 'Pink'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Blue and yellow mix to make green.',
+  },
+  {
+    id: 'kid-23', question: 'How many minutes are in one hour?',
+    choices: ['60', '100', '30', '45'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'There are 60 minutes in an hour.',
+  },
+  {
+    id: 'kid-24', question: 'Which way does the Sun rise?',
+    choices: ['East', 'West', 'North', 'South'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The Sun rises in the east and sets in the west.',
+  },
+  {
+    id: 'kid-25', question: 'What is frozen water called?',
+    choices: ['Ice', 'Steam', 'Fog', 'Dew'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Water freezes into ice.',
+  },
+  {
+    id: 'kid-26', question: 'Which sea animal has a hard shell and walks sideways?',
+    choices: ['Crab', 'Dolphin', 'Jellyfish', 'Seal'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Crabs usually walk sideways.',
+  },
+  {
+    id: 'kid-27', question: 'What does a starfish (sea star) have that can grow back?',
+    choices: ['Its arms', 'Its shell', 'Its fins', 'Its wings'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Many sea stars can regrow a lost arm.',
+  },
+  {
+    id: 'kid-28', question: 'Which mammal can truly fly?',
+    choices: ['Bat', 'Flying squirrel', 'Penguin', 'Ostrich'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Bats are the only mammals that can truly fly.',
+  },
+  {
+    id: 'kid-29', question: 'How many sides does a triangle have?',
+    choices: ['3', '4', '5', '6'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A triangle has three sides.',
+  },
+  {
+    id: 'kid-30', question: 'What is the hottest planet in our solar system?',
+    choices: ['Venus', 'Mercury', 'Mars', 'Jupiter'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Venus is the hottest planet, even hotter than Mercury, because its thick air traps heat.',
   },
 ];
 
