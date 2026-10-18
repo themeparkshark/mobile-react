@@ -196,6 +196,7 @@ export default function LinePlayScreen() {
   const [toast, setToast] = useState<QueueToastMessage | null>(null);
   const toastKey = useRef(0);
   const showToastRef = useRef<((message: Omit<QueueToastMessage, 'key'>) => void) | null>(null);
+  const eyesUpShown = useRef(false);
   const showToast = useCallback((message: Omit<QueueToastMessage, 'key'>) => {
     toastKey.current += 1;
     setToast({ ...message, key: toastKey.current });
@@ -473,9 +474,10 @@ export default function LinePlayScreen() {
       setActiveGame({ ...item, seed: item.gameId === 'showdown'
         ? showdownReplaySeed(item.seed, launch.plays) : launch.seed, difficulty: launch.difficulty, tier: launch.tier });
     };
-    // First game this install: a one-time safety line. Walking never pauses play.
-    void AsyncStorage.getItem(EYES_UP_KEY).then(seen => {
+    // First game of every line (not just once per install): the safety line. Walking never pauses play.
+    void Promise.resolve(eyesUpShown.current).then(seen => {
       if (seen) return;
+      eyesUpShown.current = true;
       void AsyncStorage.setItem(EYES_UP_KEY, '1');
       showToastRef.current?.({ icon: 'queue', title: 'Eyes up in line.', body: 'Games never pause for walking.' });
     }).catch(() => undefined);
