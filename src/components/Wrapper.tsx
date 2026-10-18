@@ -61,6 +61,8 @@ export default function Wrapper({
     {
       icon: require('../../assets/images/toolbar/explore.png'),
       screen: 'Explore',
+      // Every tab says what it is; the big compass is the map (kids asked what it did).
+      text: 'Map',
       size: 'large',
       sound: require('../../assets/sounds/explore_button_press.mp3'),
     },
@@ -173,6 +175,8 @@ export default function Wrapper({
                           height: 1,
                         },
                         textShadowRadius: 0,
+                        // The big compass is 100 pt tall from -45: lift its label onto the same line as the others.
+                        marginTop: item.size === 'normal' ? 0 : -5,
                       }}
                     >
                       {item.text}
