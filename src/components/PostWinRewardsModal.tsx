@@ -147,15 +147,17 @@ function CountUp({ value, start, reduced, style }: { value: number; start: boole
 }
 
 /* ─── One reward chip; pops in on the shared entrance clock ─── */
-function RewardChip({ icon, amount, label, index, enter, reduced, started }: {
+function RewardChip({ icon, amount, label, index, enter, reduced, started, half = false }: {
   icon: GameIconName; amount: number; label: string; index: number; enter: SharedValue<number>; reduced: boolean; started: boolean;
+  /** Four rewards sit two by two instead of three plus an orphan. */
+  half?: boolean;
 }) {
   const style = useAnimatedStyle(() => {
     const t = Math.max(0, Math.min(1, (enter.value - 0.35 - index * 0.08) / 0.3));
     return { opacity: t, transform: [{ translateY: (1 - t) * 14 }, { scale: 0.85 + 0.15 * t }] };
   });
   return (
-    <Animated.View style={[styles.chip, style]} accessible accessibilityLabel={`${amount} ${label}`}>
+    <Animated.View style={[styles.chip, half && styles.chipHalf, style]} accessible accessibilityLabel={`${amount} ${label}`}>
       <GameIcon name={icon} size={26} />
       <View>
         <CountUp value={amount} start={started} reduced={reduced} style={styles.chipAmount} />
@@ -475,7 +477,7 @@ export default function PostWinRewardsModal({
 
             {/* ── Confirmed rewards, always visible, counting up ── */}
             {chips.length > 0 && <View style={styles.chips}>
-              {chips.map((chip, index) => <RewardChip key={chip.label} {...chip} index={index} enter={enter}
+              {chips.map((chip, index) => <RewardChip key={chip.label} {...chip} index={index} half={chips.length === 4} enter={enter}
                 reduced={reducedMotion} started={caught} />)}
             </View>}
 
@@ -639,6 +641,7 @@ const styles = StyleSheet.create({
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff8e4', borderRadius: 14,
     borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9ccbe9',
     paddingVertical: 6, paddingLeft: 8, paddingRight: 12, minWidth: 92 },
+  chipHalf: { width: '46%' },
   chipAmount: { fontFamily: 'Shark', fontSize: 20, lineHeight: 22, color: '#05346e', fontVariant: ['tabular-nums'] },
   chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#3d5f8c' },
   rushBonus: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, backgroundColor: '#ffcf3b', borderRadius: 14,
