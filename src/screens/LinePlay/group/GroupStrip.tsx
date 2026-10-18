@@ -24,7 +24,7 @@ export default function GroupStrip({ group, onEdit }: {
     return <Pressable accessibilityRole="button" accessibilityLabel="Add your crew for pass and play"
       onPress={onEdit} hitSlop={6} style={({ pressed }) => [styles.soloChip, pressed && styles.pressed]}>
       <GameIcon name="crown" size={20} />
-      <Text style={styles.soloText}>Playing with others? Add your crew</Text>
+      <Text style={styles.soloText}>Here with friends? Add your crew!</Text>
     </Pressable>;
   }
   return <Pressable accessibilityRole="button" accessibilityLabel={`${stripLine(group)}. Edit crew`}
@@ -46,8 +46,10 @@ const styles = StyleSheet.create({
   badges: { flexDirection: 'row' },
   overlap: { marginLeft: -9 },
   line: { flex: 1, color: BRAND.white, fontFamily: 'Knockout', fontSize: 16 },
-  soloChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: 8,
-    paddingHorizontal: 12, minHeight: 36, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.14)' },
-  soloText: { color: '#e2f5ff', fontFamily: 'Knockout', fontSize: 15 },
+  // Easy to spot (group play is the best way to wait), still lighter than the main play card.
+  soloChip: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'center', marginTop: 8,
+    paddingHorizontal: 16, minHeight: 44, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
+  soloText: { color: '#ffffff', fontFamily: 'Shark', fontSize: 16 },
   pressed: { opacity: 0.8 },
 });

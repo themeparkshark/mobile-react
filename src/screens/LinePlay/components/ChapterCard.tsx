@@ -55,7 +55,8 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
     : relayDone ? 'Crew Prompts' : chapter.relay.title;
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.card}>
+    // The extra bottom room lets the last row scroll clear of the sticky story bar.
+    <ScrollView style={styles.scroll} contentContainerStyle={[styles.card, { marginBottom: 96 }]}>
       <Animated.View entering={rise(0)} style={styles.header}>
         <View style={styles.headerCopy}>
           <Text style={styles.kicker}>{chapterKicker(chapter)}</Text>
