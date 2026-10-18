@@ -686,8 +686,9 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
             <View style={styles.titlesBadge}><Text style={styles.titlesBadgeText} maxFontSizeMultiplier={1.1}>Titles {titlesOwned}/{titlesTotal}</Text></View>
           </Pressable>
         </View>
-        {/* Pride: the rarest stamp you own, in a foil frame of its rarity. */}
-        {!!rarest && (
+        {/* Pride: the rarest stamp you own, in a foil frame of its rarity. With rewards waiting,
+            Claim is the one thing on the cover; the showcase returns once they are collected. */}
+        {!!rarest && toClaim === 0 && (
           <Pressable onPress={() => { playSfx('ui.tap'); haptic('tapLight'); onOpen(rarest); }} style={({ pressed }) => [styles.showcase, pressed && styles.pressed]}
             accessibilityRole="button" accessibilityLabel={`Your rarest stamp: ${rarest.name}, ${stampRarity(rarest.rarity).label}`}>
             <View style={[styles.showcaseArt, { borderColor: stampRarity(rarest.rarity).frame }]}><StampArt stamp={rarest} size="thumb" /></View>
@@ -731,6 +732,8 @@ function AlmostThere({ stamps, accentFor, onOpen }: { stamps: readonly BookStamp
         <GameIcon name="star" size={20} />
         <Text style={styles.almostTitle} maxFontSizeMultiplier={1.4}>Almost there</Text>
       </View>
+      {/* The next step in words, not just rings: "Hop Star: 2 more parks to go!" */}
+      <Text style={styles.almostNext} numberOfLines={2} maxFontSizeMultiplier={1.3}>{`${stamps[0].shortName}: ${remainingLine(stamps[0])}`}</Text>
       <View style={styles.almostRow}>
         {stamps.map(s => (
           <Pressable key={s.id} style={({ pressed }) => [styles.almostItem, pressed && styles.pressed]} onPress={() => { playSfx('ui.tap'); haptic('tapLight'); onOpen(s); }}
@@ -908,6 +911,7 @@ const styles = StyleSheet.create({
     shadowColor: '#022a55', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.45, shadowRadius: 0,
   },
   almostHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  almostNext: { fontFamily: 'Knockout', fontSize: 15, color: '#5a4318', marginTop: 2, marginBottom: 4 },
   almostTitle: { fontFamily: 'Shark', fontSize: 17, color: INK, textTransform: 'uppercase' },
   almostRow: { flexDirection: 'row', gap: 8 },
   almostItem: { flex: 1, alignItems: 'center', borderRadius: 14, paddingVertical: 4, minHeight: 44 },
