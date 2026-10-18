@@ -142,8 +142,9 @@ export default function BossWinCard({ raid, lastHp, onDone }: {
     opacity: 1 - 0.15 * ko.value,
     transform: [{ rotate: `${wobble.value * 12 - 18 * ko.value}deg` }, { translateY: 14 * ko.value }, { scale: 1 - 0.08 * ko.value }],
   } : {
-    opacity: 1 - ko.value,
-    transform: [{ translateX: 190 * ko.value }, { translateY: -20 * Math.sin(ko.value * Math.PI) }, { scale: 1 - 0.4 * ko.value }],
+    // It flees to the edge and stays in sight, smaller: the card never ends on an empty stage.
+    opacity: 1 - 0.45 * ko.value,
+    transform: [{ translateX: 105 * ko.value }, { translateY: -20 * Math.sin(ko.value * Math.PI) }, { scale: 1 - 0.38 * ko.value }],
   });
   const titleStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, title.value * 1.5), transform: [{ scale: 0.6 + 0.4 * title.value }] }));
   const crownStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, crown.value * 2), transform: [{ translateY: -30 * (1 - crown.value) }, { scale: crown.value }] }));
@@ -157,6 +158,8 @@ export default function BossWinCard({ raid, lastHp, onDone }: {
     setTimeout(onDone, 560);
   };
 
+  const hpLeftPct = raid.hp_max > 0 ? Math.max(0, Math.round((raid.hp_left / raid.hp_max) * 100)) : 0;
+  const nearlyWon = !won && hpLeftPct > 0 && hpLeftPct <= 25;
   return (
     <View style={styles.card}>
       <View style={styles.ribbon}><Text style={styles.ribbonText}>{won ? 'BOSS RAID WON' : 'BOSS RAID OVER'}</Text></View>
@@ -171,10 +174,12 @@ export default function BossWinCard({ raid, lastHp, onDone }: {
           <GameIcon name="star" size={20} style={{ transform: [{ rotate: '18deg' }] }} />
         </View>}
       </View>
-      <Animated.Text style={[styles.kicker, titleStyle]}>{won ? 'BOSS DEFEATED!' : 'IT GOT AWAY'}</Animated.Text>
+      <Animated.Text style={[styles.kicker, titleStyle]}>{won ? 'BOSS DEFEATED!' : nearlyWon ? 'SO CLOSE!' : 'IT GOT AWAY'}</Animated.Text>
       <Text style={styles.title}>
         {won ? `The park beat ${BOSS_NAMES[raid.boss]}!` : `${BOSS_NAMES[raid.boss]} got away this time. You helped wear it down. Get it next time!`}
       </Text>
+      {/* What this kid did, win or lose: the loss still reads as progress. */}
+      {raid.you.damage > 0 && <Text style={styles.yourHits}>{`Your hits: ${raid.you.damage.toLocaleString('en-US')} damage${!won && hpLeftPct > 0 ? ` · it had only ${hpLeftPct}% left` : ''}`}</Text>}
       {raid.mvp_is_you && <Animated.View style={[styles.mvp, crownStyle]}>
         <GameIcon name="crown" size={34} />
         <Text style={styles.mvpText}>YOU WERE MVP</Text>
@@ -196,6 +201,7 @@ const styles = StyleSheet.create({
     borderColor: BRAND.white, borderBottomWidth: 5, borderBottomColor: BRAND.goldLip, paddingHorizontal: 16, paddingVertical: 4 },
   ribbonText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
   hpWrap: { width: '82%' },
+  yourHits: { fontFamily: 'Shark', fontSize: 15, color: BRAND.goldLight, marginTop: 6, textAlign: 'center' },
   stage: { height: 160, width: '100%', alignItems: 'center', justifyContent: 'center' },
   art: { width: 150, height: 150 },
   koStars: { position: 'absolute', top: 6, right: 70, flexDirection: 'row', gap: 2 },
