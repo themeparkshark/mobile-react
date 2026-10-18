@@ -97,7 +97,8 @@ import type { CurrentTier } from '../../games/current-quest/v1/logic';
 const EYES_UP_KEY = 'lineplay_eyes_up_seen_v1';
 import { resolveProjectMission } from '../../services/lineplay/projectMission';
 import { crewRelayEpilogue } from '../../services/lineplay/crewRelay';
-import { nextAdaptiveStoryTitle, type LinePlayChapter } from '../../services/lineplay/chapters';
+import { ADAPTIVE_STORY_TOTAL, nextAdaptiveStoryTitle, type LinePlayChapter } from '../../services/lineplay/chapters';
+import { noteFoundAdventure } from '../../services/lineplay/foundAdventures';
 import { linePlayPages, queueArcadeDestinations } from '../../services/lineplay/presentation';
 import { personalizeChapterFinale, resolveChapterClue } from '../../services/lineplay/chapterClue';
 import { useGroupPlay, type GroupTurnLaunch } from './group/useGroupPlay';
@@ -441,6 +442,12 @@ export default function LinePlayScreen() {
   // toward the next activity. Any touch resets it; one nudge per quiet stretch.
   const lastTouch = useRef(Date.now());
   const sheetOpenRef = useRef(false);
+  // Finishing a line files its shark adventure in the player's collection (recap: "Adventures found").
+  const [adventuresFound, setAdventuresFound] = useState(0);
+  useEffect(() => {
+    if (snapshot.state !== 'complete' || !snapshot.chapter?.adaptive || !player?.id) return;
+    void noteFoundAdventure(player.id, snapshot.chapter.title).then(setAdventuresFound);
+  }, [snapshot.state, snapshot.chapter?.adaptive, snapshot.chapter?.title, player?.id]);
   const nudged = useRef(false);
   useEffect(() => {
     if (snapshot.state !== 'active' || activeGame != null) return undefined;
@@ -1009,6 +1016,7 @@ export default function LinePlayScreen() {
           {snapshot.state === 'complete' ? (
             <SessionRecap
               nextAdventure={ride ? nextAdaptiveStoryTitle(snapshot.chapter, ride.rideName) : null}
+              adventuresFound={adventuresFound ? [adventuresFound, ADAPTIVE_STORY_TOTAL] : null}
               snackSlot={snapshot.serverSessionId && snapshot.rewards ? <LineSnackOffer sessionId={snapshot.serverSessionId} /> : null}
               elapsedSeconds={snapshot.elapsedSeconds}
               activityCount={completedActivityIds.size}

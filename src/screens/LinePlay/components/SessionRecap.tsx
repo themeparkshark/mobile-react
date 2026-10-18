@@ -146,6 +146,8 @@ export interface SessionRecapProps {
   snackSlot?: ReactNode;
   /** The next adventure for this ride, teased so the next line has something to look forward to. */
   nextAdventure?: string | null;
+  /** Shark adventures finished across every line: [found, total]. */
+  adventuresFound?: readonly [number, number] | null;
 }
 
 export default function SessionRecap({
@@ -155,7 +157,7 @@ export default function SessionRecap({
   crewRelay, crewRouteNames, crewScoreNoun, coin, coinState, playerEnergy, energyUnavailable = false, rideName,
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
   feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine,
-  doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null, snackSlot = null, nextAdventure = null,
+  doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null, snackSlot = null, nextAdventure = null, adventuresFound = null,
 }: SessionRecapProps) {
   const bonusMode = rewardsConfirmed && bonusRecap != null;
   const rows = bonusMode ? recapRows(bonusRecap) : [];
@@ -400,7 +402,9 @@ export default function SessionRecap({
       {rewardsConfirmed && snackSlot}
       {nextAdventure && <View style={styles.nextAdventure} accessible accessibilityLabel={`Next time in this line: ${nextAdventure}`}>
         <GameIcon name="map" size={22} />
-        <Text style={styles.nextAdventureText} maxFontSizeMultiplier={1.3}>{`Next time in this line: ${nextAdventure}`}</Text>
+        <Text style={styles.nextAdventureText} maxFontSizeMultiplier={1.3}>
+          {`Next time in this line: ${nextAdventure}`}{adventuresFound && adventuresFound[0] > 0 ? `\nAdventures found: ${adventuresFound[0]} of ${adventuresFound[1]}` : ''}
+        </Text>
       </View>}
       <GameButton label={doneLabel} onPress={onDone} fullWidth style={styles.recapBtn} />
     </ScrollView>

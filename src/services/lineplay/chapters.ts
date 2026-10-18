@@ -173,6 +173,9 @@ export function nextAdaptiveStoryTitle(chapter: Pick<LinePlayChapter, 'id' | 'ad
   return stories[((current < 0 ? 0 : current) + 1) % stories.length].title;
 }
 
+/** Every shark adventure across all themes: the "of N" in the recap's found count. */
+export const ADAPTIVE_STORY_TOTAL = Object.values(ADAPTIVE_STORIES).reduce((n, list) => n + list.length, 0);
+
 /** A repeatable, offline shark adventure for rides without an editorial chapter. */
 function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefined, rideName: string,
   episodeSeed?: number): LinePlayChapter {
