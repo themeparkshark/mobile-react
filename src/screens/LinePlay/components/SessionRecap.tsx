@@ -147,7 +147,7 @@ export interface SessionRecapProps {
   /** The next adventure for this ride, teased so the next line has something to look forward to. */
   nextAdventure?: string | null;
   /** Shark adventures finished across every line: [found, total]. */
-  adventuresFound?: readonly [number, number] | null;
+  adventuresFound?: readonly [number, number, boolean] | null;
 }
 
 export default function SessionRecap({
@@ -403,7 +403,7 @@ export default function SessionRecap({
       {nextAdventure && <View style={styles.nextAdventure} accessible accessibilityLabel={`Next time in this line: ${nextAdventure}`}>
         <GameIcon name="map" size={22} />
         <Text style={styles.nextAdventureText} maxFontSizeMultiplier={1.3}>
-          {`Next time in this line: ${nextAdventure}`}{adventuresFound && adventuresFound[0] > 0 ? `\nAdventures found: ${adventuresFound[0]} of ${adventuresFound[1]}` : ''}
+          {`Next time in this line: ${nextAdventure}`}{adventuresFound && adventuresFound[0] > 0 ? `\n${adventuresFound[2] ? 'New adventure found! ' : 'Adventures found: '}${adventuresFound[0]} of ${adventuresFound[1]}` : ''}
         </Text>
       </View>}
       <GameButton label={doneLabel} onPress={onDone} fullWidth style={styles.recapBtn} />

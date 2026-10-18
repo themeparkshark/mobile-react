@@ -443,7 +443,7 @@ export default function LinePlayScreen() {
   const lastTouch = useRef(Date.now());
   const sheetOpenRef = useRef(false);
   // Finishing a line files its shark adventure in the player's collection (recap: "Adventures found").
-  const [adventuresFound, setAdventuresFound] = useState(0);
+  const [adventuresFound, setAdventuresFound] = useState<{ count: number; isNew: boolean } | null>(null);
   useEffect(() => {
     if (snapshot.state !== 'complete' || !snapshot.chapter?.adaptive || !player?.id) return;
     void noteFoundAdventure(player.id, snapshot.chapter.title).then(setAdventuresFound);
@@ -1016,7 +1016,7 @@ export default function LinePlayScreen() {
           {snapshot.state === 'complete' ? (
             <SessionRecap
               nextAdventure={ride ? nextAdaptiveStoryTitle(snapshot.chapter, ride.rideName) : null}
-              adventuresFound={adventuresFound ? [adventuresFound, ADAPTIVE_STORY_TOTAL] : null}
+              adventuresFound={adventuresFound && adventuresFound.count > 0 ? [adventuresFound.count, ADAPTIVE_STORY_TOTAL, adventuresFound.isNew] : null}
               snackSlot={snapshot.serverSessionId && snapshot.rewards ? <LineSnackOffer sessionId={snapshot.serverSessionId} /> : null}
               elapsedSeconds={snapshot.elapsedSeconds}
               activityCount={completedActivityIds.size}

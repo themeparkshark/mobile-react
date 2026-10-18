@@ -48,8 +48,8 @@ const styles = StyleSheet.create({
   line: { flex: 1, color: BRAND.white, fontFamily: 'Knockout', fontSize: 16 },
   // Easy to spot (group play is the best way to wait), still lighter than the main play card.
   soloChip: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'center', marginTop: 8,
-    paddingHorizontal: 16, minHeight: 44, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
+    paddingHorizontal: 16, minHeight: 44, borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.55)',
+    borderWidth: 2, borderColor: '#ffcf3b' },
   soloText: { color: '#ffffff', fontFamily: 'Shark', fontSize: 16 },
   pressed: { opacity: 0.8 },
 });
