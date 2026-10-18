@@ -850,6 +850,306 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
     choices: ['Triceratops', 'T. rex', 'Stegosaurus', 'Velociraptor'], correctIndex: 0,
     difficulty: 'easy', deck: 'kids', fact: 'Triceratops means three-horned face.',
   },
+  {
+    id: 'kid-111', question: 'What do bats use to find their way in the dark?',
+    choices: ['Echoes (echolocation)', 'Flashlights', 'Maps', 'Stars only'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Many bats find their way by listening to echoes.',
+  },
+  {
+    id: 'kid-112', question: 'Which animal is known as the king of the jungle?',
+    choices: ['Lion', 'Elephant', 'Gorilla', 'Tiger'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Lions are often called the king of the jungle, even though they live on grasslands.',
+  },
+  {
+    id: 'kid-113', question: 'What is a baby dog called?',
+    choices: ['A puppy', 'A kitten', 'A calf', 'A kid'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A baby dog is a puppy.',
+  },
+  {
+    id: 'kid-114', question: 'What is a baby cat called?',
+    choices: ['A kitten', 'A puppy', 'A foal', 'A cub'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A baby cat is a kitten.',
+  },
+  {
+    id: 'kid-115', question: 'What is a baby bear called?',
+    choices: ['A cub', 'A pup', 'A kit', 'A calf'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A baby bear is called a cub.',
+  },
+  {
+    id: 'kid-116', question: 'What is a baby duck called?',
+    choices: ['A duckling', 'A gosling', 'A chick-duck', 'A foal'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A baby duck is a duckling.',
+  },
+  {
+    id: 'kid-117', question: 'Which animal has a pouch to carry its baby?',
+    choices: ['Kangaroo', 'Horse', 'Cow', 'Lion'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Mother kangaroos carry their joeys in a pouch.',
+  },
+  {
+    id: 'kid-118', question: 'What do camels store in their humps?',
+    choices: ['Fat', 'Water', 'Sand', 'Food bowls'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A camel’s hump stores fat, not water.',
+  },
+  {
+    id: 'kid-119', question: 'Which animal has the longest neck?',
+    choices: ['Giraffe', 'Ostrich', 'Swan', 'Llama'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Giraffes have the longest necks of any animal.',
+  },
+  {
+    id: 'kid-120', question: 'What does a caterpillar build before becoming a butterfly?',
+    choices: ['A chrysalis', 'A nest', 'A web', 'A hive'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Butterfly caterpillars form a chrysalis before they change.',
+  },
+  {
+    id: 'kid-121', question: 'Which animal is famous for being black and white and eating bamboo?',
+    choices: ['Giant panda', 'Zebra', 'Skunk', 'Orca'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Giant pandas are black and white and eat bamboo.',
+  },
+  {
+    id: 'kid-122', question: 'What is a male chicken called?',
+    choices: ['A rooster', 'A hen', 'A chick', 'A drake'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A grown male chicken is a rooster.',
+  },
+  {
+    id: 'kid-123', question: 'Which ocean animal is also called a killer whale?',
+    choices: ['Orca', 'Blue whale', 'Beluga', 'Narwhal'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The orca is also called a killer whale, but it is actually a large dolphin.',
+  },
+  {
+    id: 'kid-124', question: 'What do whales breathe through?',
+    choices: ['A blowhole', 'Gills', 'Their mouth only', 'Their fins'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Whales breathe air through a blowhole on top of their head.',
+  },
+  {
+    id: 'kid-125', question: 'Which sea creature has no bones and can glow?',
+    choices: ['Some jellyfish', 'Sharks', 'Turtles', 'Crabs'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Some jellyfish can glow in the dark.',
+  },
+  {
+    id: 'kid-126', question: 'What do coral reefs need from the Sun?',
+    choices: ['Light', 'Snow', 'Wind', 'Rain only'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Most reef corals need sunlight to grow.',
+  },
+  {
+    id: 'kid-127', question: 'Which is the smallest planet in our solar system?',
+    choices: ['Mercury', 'Mars', 'Pluto', 'Venus'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Mercury is the smallest of the eight planets.',
+  },
+  {
+    id: 'kid-128', question: 'Which planet do we live on?',
+    choices: ['Earth', 'Mars', 'Venus', 'Jupiter'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'We live on planet Earth.',
+  },
+  {
+    id: 'kid-129', question: 'What is the Moon made mostly of?',
+    choices: ['Rock', 'Cheese', 'Ice cream', 'Metal only'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The Moon is made mostly of rock.',
+  },
+  {
+    id: 'kid-130', question: 'What do we call a person who travels into space?',
+    choices: ['An astronaut', 'A pilot only', 'A sailor', 'A diver'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'People who travel into space are called astronauts.',
+  },
+  {
+    id: 'kid-131', question: 'What is a shooting star really?',
+    choices: ['A space rock burning up in the sky', 'A falling star', 'A plane', 'A firework'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A shooting star is a meteor: a bit of space rock burning up in the air.',
+  },
+  {
+    id: 'kid-132', question: 'Which planet has a giant red storm spot?',
+    choices: ['Jupiter', 'Mars', 'Saturn', 'Neptune'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Jupiter’s Great Red Spot is a huge storm.',
+  },
+  {
+    id: 'kid-133', question: 'What causes day and night on Earth?',
+    choices: ['Earth spinning', 'The Moon moving', 'Clouds', 'The Sun turning off'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Day and night happen because Earth spins.',
+  },
+  {
+    id: 'kid-134', question: 'What do you call frozen rain that falls as ice balls?',
+    choices: ['Hail', 'Snow', 'Fog', 'Dew'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Ice balls falling from storms are called hail.',
+  },
+  {
+    id: 'kid-135', question: 'What is a big, spinning storm over the ocean called?',
+    choices: ['A hurricane', 'A rainbow', 'A breeze', 'A drizzle'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A huge spinning ocean storm is called a hurricane.',
+  },
+  {
+    id: 'kid-136', question: 'What gives us light and warmth during the day?',
+    choices: ['The Sun', 'The Moon', 'Clouds', 'Stars at night'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The Sun gives Earth light and warmth.',
+  },
+  {
+    id: 'kid-137', question: 'What do you call a mountain that can erupt with lava?',
+    choices: ['A volcano', 'A glacier', 'A canyon', 'A valley'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A volcano can erupt with hot lava.',
+  },
+  {
+    id: 'kid-138', question: 'What is the biggest country by land area?',
+    choices: ['Russia', 'Canada', 'USA', 'China'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Russia is the largest country by land area.',
+  },
+  {
+    id: 'kid-139', question: 'Which country is shaped like a boot?',
+    choices: ['Italy', 'France', 'Spain', 'Japan'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Italy is famous for its boot shape.',
+  },
+  {
+    id: 'kid-140', question: 'What is the capital of the United States?',
+    choices: ['Washington, D.C.', 'New York City', 'Los Angeles', 'Orlando'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Washington, D.C. is the capital of the United States.',
+  },
+  {
+    id: 'kid-141', question: 'Which state is home to Orlando?',
+    choices: ['Florida', 'California', 'Texas', 'Ohio'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Orlando is in Florida.',
+  },
+  {
+    id: 'kid-142', question: 'Which state is home to Anaheim?',
+    choices: ['California', 'Florida', 'Nevada', 'Arizona'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Anaheim is in California.',
+  },
+  {
+    id: 'kid-143', question: 'How many stripes are on the U.S. flag?',
+    choices: ['13', '50', '10', '7'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The U.S. flag has 13 stripes.',
+  },
+  {
+    id: 'kid-144', question: 'How many stars are on the U.S. flag?',
+    choices: ['50', '13', '48', '52'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The U.S. flag has 50 stars, one for each state.',
+  },
+  {
+    id: 'kid-145', question: 'What is 8 + 5?',
+    choices: ['13', '12', '14', '11'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: '8 plus 5 equals 13.',
+  },
+  {
+    id: 'kid-146', question: 'What is 20 − 7?',
+    choices: ['13', '12', '14', '27'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: '20 minus 7 equals 13.',
+  },
+  {
+    id: 'kid-147', question: 'What is 4 × 5?',
+    choices: ['20', '9', '25', '15'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: '4 times 5 equals 20.',
+  },
+  {
+    id: 'kid-148', question: 'What is half of 10?',
+    choices: ['5', '2', '20', '4'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Half of 10 is 5.',
+  },
+  {
+    id: 'kid-149', question: 'How many sides does an octagon have?',
+    choices: ['8', '6', '10', '12'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'An octagon has eight sides, like a stop sign.',
+  },
+  {
+    id: 'kid-150', question: 'What shape is a stop sign?',
+    choices: ['Octagon', 'Circle', 'Triangle', 'Square'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A stop sign is an octagon.',
+  },
+  {
+    id: 'kid-151', question: 'How many months are in a year?',
+    choices: ['12', '10', '11', '13'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'There are 12 months in a year.',
+  },
+  {
+    id: 'kid-152', question: 'How many seconds are in a minute?',
+    choices: ['60', '100', '30', '10'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A minute has 60 seconds.',
+  },
+  {
+    id: 'kid-153', question: 'Which color do you get by mixing red and white?',
+    choices: ['Pink', 'Green', 'Blue', 'Brown'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Red and white mix to make pink.',
+  },
+  {
+    id: 'kid-154', question: 'Which color do you get by mixing red and yellow?',
+    choices: ['Orange', 'Purple', 'Green', 'Blue'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Red and yellow mix to make orange.',
+  },
+  {
+    id: 'kid-155', question: 'What is the opposite of up?',
+    choices: ['Down', 'Left', 'Over', 'Fast'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The opposite of up is down.',
+  },
+  {
+    id: 'kid-156', question: 'How many letters are in the English alphabet?',
+    choices: ['26', '24', '30', '20'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The English alphabet has 26 letters.',
+  },
+  {
+    id: 'kid-157', question: 'Which letter comes after M?',
+    choices: ['N', 'L', 'O', 'P'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'N comes after M.',
+  },
+  {
+    id: 'kid-158', question: 'What do bees live in?',
+    choices: ['A hive', 'A den', 'A burrow', 'A nest of sticks'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Honeybees live in a hive.',
+  },
+  {
+    id: 'kid-159', question: 'What do spiders spin?',
+    choices: ['Webs', 'Nests', 'Hives', 'Shells'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Spiders spin silk webs.',
+  },
+  {
+    id: 'kid-160', question: 'What do cows give us to drink?',
+    choices: ['Milk', 'Juice', 'Water', 'Soda'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Dairy cows give milk.',
+  },
+  {
+    id: 'kid-161', question: 'What do chickens lay?',
+    choices: ['Eggs', 'Seeds', 'Shells only', 'Feathers'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Hens lay eggs.',
+  },
+  {
+    id: 'kid-162', question: 'What do you call a group of wolves?',
+    choices: ['A pack', 'A pride', 'A school', 'A flock'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A group of wolves is a pack.',
+  },
+  {
+    id: 'kid-163', question: 'What do you call a group of birds flying together?',
+    choices: ['A flock', 'A school', 'A herd', 'A pod'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Birds flying together are called a flock.',
+  },
+  {
+    id: 'kid-164', question: 'What do you call a group of whales or dolphins?',
+    choices: ['A pod', 'A pack', 'A herd', 'A swarm'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A group of whales or dolphins is called a pod.',
+  },
+  {
+    id: 'kid-165', question: 'Which animal can live both in water and on land and starts life as a tadpole?',
+    choices: ['Frog', 'Fish', 'Snake', 'Turtle'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Frogs start as tadpoles in water and grow to live on land too.',
+  },
+  {
+    id: 'kid-166', question: 'Which is a reptile?',
+    choices: ['Lizard', 'Frog', 'Dolphin', 'Penguin'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Lizards are reptiles.',
+  },
+  {
+    id: 'kid-167', question: 'Which animal is the fastest bird diving through the sky?',
+    choices: ['Peregrine falcon', 'Chicken', 'Penguin', 'Ostrich'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The peregrine falcon is the fastest diving bird.',
+  },
+  {
+    id: 'kid-168', question: 'How do fish move through the water?',
+    choices: ['Using fins and tails', 'Using legs', 'Using wings', 'Using wheels'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Fish swim with their fins and tails.',
+  },
+  {
+    id: 'kid-169', question: 'What protects a turtle’s body?',
+    choices: ['Its shell', 'Its fur', 'Its feathers', 'Its scales only'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A turtle’s shell protects its body.',
+  },
+  {
+    id: 'kid-170', question: 'Which animal is known for saving nuts for winter?',
+    choices: ['Squirrel', 'Lion', 'Shark', 'Penguin'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Squirrels bury and store nuts for winter.',
+  },
 ];
 
 /**
