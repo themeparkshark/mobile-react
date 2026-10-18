@@ -189,6 +189,7 @@ export default function SharkPassScreen() {
   const list = useRef<FlatList<SharkPassTier>>(null);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [sinceLast, setSinceLast] = useState<number | null>(null);
   const [justDone, setJustDone] = useState<ReadonlySet<string>>(new Set());
   const doneSeen = useRef<Set<string> | null>(null);
@@ -683,6 +684,14 @@ export default function SharkPassScreen() {
               );
             })()}
 
+            {/* Focus: frames, gold editions and the points table fold under one toggle, so the
+                track, buy panel, quests and set stay the whole first read. */}
+            <Pressable onPress={() => { haptic('tapLight'); setMoreOpen(o => !o); }} accessibilityRole="button"
+              accessibilityState={{ expanded: moreOpen }} style={s.moreToggle}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={s.moreToggleText}>{moreOpen ? 'Show less' : 'More about the Shark Pass'}</Text>
+              <GameIcon name="arrow" size={20} style={{ transform: [{ rotate: moreOpen ? '-90deg' : '90deg' }] }} />
+            </Pressable>
+            {moreOpen && <>
             {/* Your frames: a ring around your shark on your profile, Standings and share cards. */}
             {state.cosmetics && state.cosmetics.frames.length > 0 && (
               <View style={s.earn}>
@@ -766,6 +775,8 @@ export default function SharkPassScreen() {
                 </View>
               ))}
             </View>
+
+            </>}
 
             {!premium && !season.ended && (
               <View style={s.grownUps} accessible accessibilityLabel={`For grown-ups. ${PASS_GROWN_UP_NOTES.join(' ')}`}>
@@ -972,6 +983,8 @@ const s = StyleSheet.create({
   nextCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#0b2f63', borderWidth: 4, borderColor: '#f5c430', alignItems: 'center', justifyContent: 'center' },
   nextKicker: { fontFamily: FONT.display, fontSize: 12, color: BRAND.gold, letterSpacing: 0.6 },
   nextPrizeText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
+  moreToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, marginTop: 6 },
+  moreToggleText: { fontFamily: FONT.display, fontSize: 16, color: '#ffffff' },
   readyNow: { fontFamily: FONT.display, color: '#7dffb0' },
   vipLine: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, backgroundColor: BRAND.gold, textAlign: 'center', marginTop: 6, alignSelf: 'center', borderWidth: 2, borderColor: '#ffffff', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2, overflow: 'hidden' },
   trackHead: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: -6 },
