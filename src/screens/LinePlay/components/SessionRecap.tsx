@@ -144,6 +144,8 @@ export interface SessionRecapProps {
   groupSlot?: ReactNode;
   /** The opt-in "line snack" offer, shown only once the wait is over. */
   snackSlot?: ReactNode;
+  /** The next adventure for this ride, teased so the next line has something to look forward to. */
+  nextAdventure?: string | null;
 }
 
 export default function SessionRecap({
@@ -153,7 +155,7 @@ export default function SessionRecap({
   crewRelay, crewRouteNames, crewScoreNoun, coin, coinState, playerEnergy, energyUnavailable = false, rideName,
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
   feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine,
-  doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null, snackSlot = null,
+  doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null, snackSlot = null, nextAdventure = null,
 }: SessionRecapProps) {
   const bonusMode = rewardsConfirmed && bonusRecap != null;
   const rows = bonusMode ? recapRows(bonusRecap) : [];
@@ -396,12 +398,18 @@ export default function SessionRecap({
       )}
 
       {rewardsConfirmed && snackSlot}
+      {nextAdventure && <View style={styles.nextAdventure} accessible accessibilityLabel={`Next time in this line: ${nextAdventure}`}>
+        <GameIcon name="map" size={22} />
+        <Text style={styles.nextAdventureText} maxFontSizeMultiplier={1.3}>{`Next time in this line: ${nextAdventure}`}</Text>
+      </View>}
       <GameButton label={doneLabel} onPress={onDone} fullWidth style={styles.recapBtn} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  nextAdventure: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, backgroundColor: '#fff8e4', borderWidth: 2, borderColor: '#ffcf3b' },
+  nextAdventureText: { flex: 1, fontFamily: 'Knockout', fontSize: 15, color: '#073b74' },
   heroCard: { width: 130, height: 180 },
   tickRows: { marginHorizontal: spacing.lg, marginTop: spacing.sm, gap: 6 },
   tickRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 12,

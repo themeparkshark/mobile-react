@@ -160,6 +160,19 @@ const ADAPTIVE_STORIES: Record<RideDeckId, readonly AdaptiveStory[]> = {
   ],
 };
 
+/**
+ * The adventure this ride plays next visit (episodes rotate per ride), for the recap's
+ * "next time" teaser. Null for editorial chapters or a single-story theme.
+ */
+export function nextAdaptiveStoryTitle(chapter: Pick<LinePlayChapter, 'id' | 'adaptive'> | null | undefined, rideName: string): string | null {
+  if (!chapter?.adaptive) return null;
+  const stories = ADAPTIVE_STORIES[deckIdForRideName(rideName.trim().slice(0, 60))];
+  if (stories.length < 2) return null;
+  const match = /-episode-(\d+)$/.exec(chapter.id);
+  const current = match ? Number(match[1]) : stories.findIndex(story => chapter.id.includes(story.artifact));
+  return stories[((current < 0 ? 0 : current) + 1) % stories.length].title;
+}
+
 /** A repeatable, offline shark adventure for rides without an editorial chapter. */
 function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefined, rideName: string,
   episodeSeed?: number): LinePlayChapter {

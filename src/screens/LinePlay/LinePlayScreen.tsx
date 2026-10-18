@@ -97,7 +97,7 @@ import type { CurrentTier } from '../../games/current-quest/v1/logic';
 const EYES_UP_KEY = 'lineplay_eyes_up_seen_v1';
 import { resolveProjectMission } from '../../services/lineplay/projectMission';
 import { crewRelayEpilogue } from '../../services/lineplay/crewRelay';
-import type { LinePlayChapter } from '../../services/lineplay/chapters';
+import { nextAdaptiveStoryTitle, type LinePlayChapter } from '../../services/lineplay/chapters';
 import { linePlayPages, queueArcadeDestinations } from '../../services/lineplay/presentation';
 import { personalizeChapterFinale, resolveChapterClue } from '../../services/lineplay/chapterClue';
 import { useGroupPlay, type GroupTurnLaunch } from './group/useGroupPlay';
@@ -987,6 +987,7 @@ export default function LinePlayScreen() {
         <View style={styles.activityArea}>
           {snapshot.state === 'complete' ? (
             <SessionRecap
+              nextAdventure={ride ? nextAdaptiveStoryTitle(snapshot.chapter, ride.rideName) : null}
               snackSlot={snapshot.serverSessionId && snapshot.rewards ? <LineSnackOffer sessionId={snapshot.serverSessionId} /> : null}
               elapsedSeconds={snapshot.elapsedSeconds}
               activityCount={completedActivityIds.size}
