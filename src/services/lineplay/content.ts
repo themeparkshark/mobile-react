@@ -450,6 +450,206 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
     choices: ['Venus', 'Mercury', 'Mars', 'Jupiter'], correctIndex: 0,
     difficulty: 'easy', deck: 'kids', fact: 'Venus is the hottest planet, even hotter than Mercury, because its thick air traps heat.',
   },
+  {
+    id: 'kid-31', question: 'What do pandas mostly eat?',
+    choices: ['Bamboo', 'Fish', 'Grass seeds', 'Berries'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Giant pandas eat mostly bamboo.',
+  },
+  {
+    id: 'kid-32', question: 'Which animal is the tallest in the world?',
+    choices: ['Giraffe', 'Elephant', 'Camel', 'Moose'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Giraffes are the tallest animals on Earth.',
+  },
+  {
+    id: 'kid-33', question: 'What is a baby frog called?',
+    choices: ['A tadpole', 'A cub', 'A chick', 'A pup'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Frogs start life as tadpoles.',
+  },
+  {
+    id: 'kid-34', question: 'How many hearts does an octopus have?',
+    choices: ['3', '1', '2', '4'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'An octopus has three hearts.',
+  },
+  {
+    id: 'kid-35', question: 'What do you call an animal that eats only plants?',
+    choices: ['Herbivore', 'Carnivore', 'Omnivore', 'Predator'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Animals that eat only plants are called herbivores.',
+  },
+  {
+    id: 'kid-36', question: 'Which ocean animal is known for its long horn-like tusk?',
+    choices: ['Narwhal', 'Seal', 'Manatee', 'Walrus'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The narwhal’s long tusk is actually a tooth.',
+  },
+  {
+    id: 'kid-37', question: 'What is the largest land animal?',
+    choices: ['African elephant', 'Hippo', 'Rhino', 'Giraffe'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The African elephant is the largest land animal.',
+  },
+  {
+    id: 'kid-38', question: 'Where do polar bears live?',
+    choices: ['The Arctic', 'Antarctica', 'The desert', 'The rainforest'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Polar bears live in the Arctic, near the North Pole.',
+  },
+  {
+    id: 'kid-39', question: 'Where do most penguins live?',
+    choices: ['The Southern Hemisphere', 'The North Pole', 'The Sahara', 'Greenland'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Almost all penguins live south of the equator.',
+  },
+  {
+    id: 'kid-40', question: 'What is a shark’s skin covered in?',
+    choices: ['Tiny tooth-like scales', 'Feathers', 'Fur', 'Smooth glass'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Shark skin is covered in tiny tooth-like scales called denticles.',
+  },
+  {
+    id: 'kid-41', question: 'Do sharks lose their teeth?',
+    choices: ['Yes, and they grow new ones', 'No, never', 'Only once', 'Only when they sleep'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Sharks lose teeth all the time and keep growing new ones.',
+  },
+  {
+    id: 'kid-42', question: 'What do baby sharks get called?',
+    choices: ['Pups', 'Kittens', 'Chicks', 'Foals'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A baby shark is called a pup.',
+  },
+  {
+    id: 'kid-43', question: 'Which shark has a head shaped like a hammer?',
+    choices: ['Hammerhead', 'Tiger shark', 'Nurse shark', 'Mako'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Hammerhead sharks are named for their wide, flat heads.',
+  },
+  {
+    id: 'kid-44', question: 'What helps a fish breathe underwater?',
+    choices: ['Gills', 'Lungs', 'Fins', 'Scales'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Fish use gills to take oxygen from the water.',
+  },
+  {
+    id: 'kid-45', question: 'Is a dolphin a fish or a mammal?',
+    choices: ['A mammal', 'A fish', 'A reptile', 'An amphibian'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Dolphins are mammals and breathe air.',
+  },
+  {
+    id: 'kid-46', question: 'What is the name of our galaxy?',
+    choices: ['The Milky Way', 'Andromeda', 'The Big Dipper', 'Orion'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'We live in the Milky Way galaxy.',
+  },
+  {
+    id: 'kid-47', question: 'What does the Moon reflect to shine at night?',
+    choices: ['Sunlight', 'Starlight from Mars', 'Its own fire', 'City lights'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The Moon shines by reflecting sunlight.',
+  },
+  {
+    id: 'kid-48', question: 'How many planets are in our solar system?',
+    choices: ['8', '9', '7', '10'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'There are eight planets in our solar system.',
+  },
+  {
+    id: 'kid-49', question: 'Which planet is closest to the Sun?',
+    choices: ['Mercury', 'Venus', 'Earth', 'Mars'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Mercury is the closest planet to the Sun.',
+  },
+  {
+    id: 'kid-50', question: 'Who were the first people to walk on the Moon?',
+    choices: ['Apollo 11 astronauts', 'Pilots from 1920', 'Knights', 'Pirates'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Apollo 11 astronauts first walked on the Moon in 1969.',
+  },
+  {
+    id: 'kid-51', question: 'What do astronauts wear to stay safe in space?',
+    choices: ['A spacesuit', 'A raincoat', 'A swimsuit', 'Pajamas'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Spacesuits give astronauts air and protect them.',
+  },
+  {
+    id: 'kid-52', question: 'What shape is Earth closest to?',
+    choices: ['A ball (sphere)', 'A cube', 'A flat plate', 'A pyramid'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Earth is shaped almost like a ball.',
+  },
+  {
+    id: 'kid-53', question: 'How long does Earth take to go around the Sun?',
+    choices: ['About a year', 'A day', 'A week', 'A month'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Earth takes about 365 days to travel around the Sun.',
+  },
+  {
+    id: 'kid-54', question: 'What makes a rainbow?',
+    choices: ['Sunlight and raindrops', 'Wind and sand', 'Snow and fire', 'Clouds only'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Sunlight bends through raindrops and splits into colors.',
+  },
+  {
+    id: 'kid-55', question: 'How many colors are usually named in a rainbow?',
+    choices: ['7', '3', '5', '10'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The seven named rainbow colors are red, orange, yellow, green, blue, indigo and violet.',
+  },
+  {
+    id: 'kid-56', question: 'What do you call water falling from clouds?',
+    choices: ['Rain', 'Lava', 'Dew', 'Steam'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Water falling from clouds is rain.',
+  },
+  {
+    id: 'kid-57', question: 'What is the boiling point of water at sea level in Fahrenheit?',
+    choices: ['212°F', '100°F', '32°F', '150°F'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Water boils at 212°F at sea level.',
+  },
+  {
+    id: 'kid-58', question: 'At what temperature does water freeze in Celsius?',
+    choices: ['0°C', '10°C', '32°C', '100°C'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Water freezes at 0°C, which is 32°F.',
+  },
+  {
+    id: 'kid-59', question: 'What is the largest hot desert in the world?',
+    choices: ['The Sahara', 'The Gobi', 'The Mojave', 'Death Valley'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The Sahara is the largest hot desert in the world.',
+  },
+  {
+    id: 'kid-60', question: 'What is the longest river in Africa?',
+    choices: ['The Nile', 'The Amazon', 'The Mississippi', 'The Thames'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The Nile is the longest river in Africa.',
+  },
+  {
+    id: 'kid-61', question: 'How many hours are in a day?',
+    choices: ['24', '12', '20', '30'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A day has 24 hours.',
+  },
+  {
+    id: 'kid-62', question: 'How many days are in a week?',
+    choices: ['7', '5', '6', '10'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'There are seven days in a week.',
+  },
+  {
+    id: 'kid-63', question: 'What is 5 + 7?',
+    choices: ['12', '11', '13', '10'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: '5 plus 7 equals 12.',
+  },
+  {
+    id: 'kid-64', question: 'How many sides does a hexagon have?',
+    choices: ['6', '5', '7', '8'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A hexagon has six sides.',
+  },
+  {
+    id: 'kid-65', question: 'What shape has four equal sides and four right angles?',
+    choices: ['Square', 'Triangle', 'Circle', 'Oval'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A square has four equal sides and four right angles.',
+  },
+  {
+    id: 'kid-66', question: 'Which month has the fewest days?',
+    choices: ['February', 'April', 'June', 'November'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'February has 28 days, or 29 in a leap year.',
+  },
+  {
+    id: 'kid-67', question: 'Which primary color mixes with red to make purple?',
+    choices: ['Blue', 'Yellow', 'Green', 'White'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Red and blue mix to make purple.',
+  },
+  {
+    id: 'kid-68', question: 'What do roller coasters use to slow down safely at the end?',
+    choices: ['Brakes', 'Sails', 'Parachutes', 'Anchors'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Roller coasters use brakes to slow the train at the end of the ride.',
+  },
+  {
+    id: 'kid-69', question: 'What pulls a roller coaster down the big hill?',
+    choices: ['Gravity', 'Magnets only', 'The wind', 'The riders pushing'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Gravity pulls the coaster train down the hill.',
+  },
+  {
+    id: 'kid-70', question: 'What keeps you safely in your seat on a ride?',
+    choices: ['A restraint like a lap bar', 'A pillow', 'A balloon', 'Nothing'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Lap bars and harnesses keep riders safely in their seats.',
+  },
 ];
 
 /**
