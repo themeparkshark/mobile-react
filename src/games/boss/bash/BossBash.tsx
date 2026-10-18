@@ -94,6 +94,8 @@ export interface BossBashProps {
   readonly bossName: string;
   readonly rideName?: string | null;
   readonly hpLeft: number;
+  /** Newest teammate hitter from the raid feed, so the team chip can name them. */
+  readonly lastTeammate?: string | null;
   readonly hpMax: number;
   readonly fighters?: number;
   /** Raid end time (ISO), for the clock on the result. */
@@ -133,7 +135,7 @@ export interface BossBashProps {
   readonly forceIntro?: boolean;
 }
 
-export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fighters = 0, endsAt, damageRate = 1,
+export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, lastTeammate = null, fighters = 0, endsAt, damageRate = 1,
   damage: weightsIn, maxHits, next, rewards, capLeft, teamDamage = 0, onComplete, onClose, onAgain, onQuit, onActiveChange, onRoundEnd, receipt = null, receiptNote = null,
   warmStart = false, warmNext = false, autoplay = 0, forceIntro = false }: BossBashProps) {
   const weights = weightsIn ?? DEFAULT_WEIGHTS;
@@ -999,7 +1001,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           </View>
           <View style={styles.chipRow}>
             {damageRate < 1 ? <View style={styles.homeChip}><Text style={styles.homeText}>From home: {Math.round(damageRate * 100)}% power</Text></View> : <View />}
-            {teamHit !== null && <View style={styles.teamChip}><GameIcon name="sparkle" size={14} /><Text style={styles.teamText}>Team hit it: -{teamHit.toLocaleString()} HP</Text></View>}
+            {teamHit !== null && <View style={styles.teamChip}><GameIcon name="sparkle" size={14} /><Text style={styles.teamText} numberOfLines={1}>{lastTeammate ? `${lastTeammate} hit it` : 'Team hit it'}: -{teamHit.toLocaleString()} HP</Text></View>}
           </View>
         </View>}
         {L.w > 0 && !result && <View pointerEvents="none" style={styles.finDock}>

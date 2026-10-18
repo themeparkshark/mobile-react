@@ -368,6 +368,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             rideName={raid.ride_name}
             hpLeft={raid.hp_left}
             hpMax={raid.hp_max}
+            lastTeammate={(raid.feed ?? []).find(entry => entry.username !== player?.username)?.username ?? null}
             fighters={raid.fighters}
             endsAt={raid.ends_at}
             damageRate={round.current?.body.remote ? roundRate : 1}
