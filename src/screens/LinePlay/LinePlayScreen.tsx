@@ -440,15 +440,17 @@ export default function LinePlayScreen() {
   // Never idle: a quiet 25 s in an active line (no game open, app in front) gets one soft nudge
   // toward the next activity. Any touch resets it; one nudge per quiet stretch.
   const lastTouch = useRef(Date.now());
+  const sheetOpenRef = useRef(false);
   const nudged = useRef(false);
   useEffect(() => {
     if (snapshot.state !== 'active' || activeGame != null) return undefined;
     const id = setInterval(() => {
-      if (nudged.current || AppState.currentState !== 'active' || Date.now() - lastTouch.current < 25_000) return;
+      // A sheet (Who's in line?, a crew turn) is already asking the kid something: no nudge on top.
+      if (nudged.current || sheetOpenRef.current || AppState.currentState !== 'active' || Date.now() - lastTouch.current < 25_000) return;
       nudged.current = true;
       haptic('tapLight');
       showToastRef.current?.({ icon: 'queue', title: 'Next adventure is ready!', body: 'Swipe or tap Play to keep the fun going.' });
-    }, 5_000);
+    }, 1_000);
     return () => clearInterval(id);
   }, [snapshot.state, activeGame]);
   const onAnyTouch = () => { lastTouch.current = Date.now(); nudged.current = false; };
@@ -715,6 +717,7 @@ export default function LinePlayScreen() {
     gameOpen: activeGame != null,
     openTurn: openGroupTurn,
   });
+  sheetOpenRef.current = groupPlay.sheetOpen;
   groupPlayRef.current = groupPlay;
   const lineTipReady = linePlayTipReady({
     screenReady: snapshot.state === 'active', gameOpen: activeGame != null, lineMoving: snapshot.moving,
