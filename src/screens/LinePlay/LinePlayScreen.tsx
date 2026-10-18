@@ -437,6 +437,22 @@ export default function LinePlayScreen() {
 
   // A full-screen game hides every sheet: hold the wrap-up countdown for it.
   useEffect(() => { session.setGameOpen(activeGame != null); }, [activeGame != null, session]);
+  // Never idle: a quiet 25 s in an active line (no game open, app in front) gets one soft nudge
+  // toward the next activity. Any touch resets it; one nudge per quiet stretch.
+  const lastTouch = useRef(Date.now());
+  const nudged = useRef(false);
+  useEffect(() => {
+    if (snapshot.state !== 'active' || activeGame != null) return undefined;
+    const id = setInterval(() => {
+      if (nudged.current || AppState.currentState !== 'active' || Date.now() - lastTouch.current < 25_000) return;
+      nudged.current = true;
+      haptic('tapLight');
+      showToastRef.current?.({ icon: 'queue', title: 'Next adventure is ready!', body: 'Swipe or tap Play to keep the fun going.' });
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [snapshot.state, activeGame]);
+  const onAnyTouch = () => { lastTouch.current = Date.now(); nudged.current = false; };
+
 
   // Leaving the queue area starts a wrap-up; it shows once no game covers it.
   const lineDone = snapshot.state === 'ending' && snapshot.endReason === 'left_queue' && activeGame == null;
@@ -853,7 +869,7 @@ export default function LinePlayScreen() {
   const liveCrew = crewLivePrompt(snapshot.signal, completedActivityIds);
 
   return (
-    <View style={[styles.root, snapshot.chapter?.palette === 'night' && { backgroundColor: '#2B2350' }]}>
+    <View onTouchStart={onAnyTouch} style={[styles.root, snapshot.chapter?.palette === 'night' && { backgroundColor: '#2B2350' }]}>
       {/* Only a Fin-ister Nights haunt-line chapter gets the night palette; every other chapter stays bright. */}
       <LinearGradient colors={snapshot.chapter?.palette === 'night' ? ['#3B2A6B', '#2B2350', '#1E1838'] : ['#0a7dd1', '#07569e', '#073e87']}
         style={StyleSheet.absoluteFill} />
