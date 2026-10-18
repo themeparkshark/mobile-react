@@ -191,11 +191,16 @@ export default function CoinShelfScreen({ route }: {
 
           {ready.length > 0 && <View style={styles.readyCard}>
             <Text style={styles.readyTitle}>READY TO LEVEL UP</Text>
+            <Text style={styles.readyHint}>{ready.length === 1 ? 'You have enough to make it stronger. Tap it!' : `${ready.length} coins can get stronger. Tap one!`}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 6 }}>
               {ready.map((coin, index) => <Pressable key={coin.id} accessibilityRole="button"
                 accessibilityLabel={`${coin.ride_name} is ready to level up. Open it on its park shelf.`}
                 onPress={() => openPark(coin.park_id ?? null, coin.id)} style={{ alignItems: 'center', width: 70 }}>
-                <ShelfCoin coinUrl={coin.coin_url} level={coin.current_level} size={56} phase={index} />
+                <View>
+                  <ShelfCoin coinUrl={coin.coin_url} level={coin.current_level} size={56} phase={index} />
+                  {/* An up-arrow badge says "this one can level up" at a glance. */}
+                  <View style={styles.readyBadge}><GameIcon name="arrow" size={18} style={{ transform: [{ rotate: '-90deg' }] }} /></View>
+                </View>
                 <Text style={styles.readyName} numberOfLines={1}>{coin.ride_name}</Text>
               </Pressable>)}
             </ScrollView>
@@ -254,6 +259,9 @@ export default function CoinShelfScreen({ route }: {
 const GHOST_LIMIT = 10;
 
 const styles = StyleSheet.create({
+  readyHint: { fontFamily: 'Knockout', fontSize: 14, color: '#d6f4ff', marginTop: 2 },
+  readyBadge: { position: 'absolute', right: -6, top: -6, width: 26, height: 26, borderRadius: 13, backgroundColor: '#ffcf3b',
+    borderWidth: 2, borderColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
   ghostNext: { borderRadius: 40, borderWidth: 2, borderColor: '#ffd23f', borderStyle: 'dashed' },
   ghostMore: { fontFamily: 'Shark', fontSize: 18, color: '#ffffff', alignSelf: 'center', marginLeft: 6 },
   content: { padding: 16, paddingBottom: 48, gap: 14 },
