@@ -33,6 +33,7 @@ import { mapStatusLine, peekLine, screenBearing } from './findPresentation';
 import { isStaleHighlight, nearestFind } from './nearestFind';
 import { catchSound } from './ridePhoto/catchAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
+import { playSfx } from '../../gamekit/SFX';
 import type { RedeemPrepItemResponseType } from '../../models/redeem-prep-item-response-type';
 import * as RootNavigation from '../../RootNavigation';
 import { showToast } from '../../utils/toast';
@@ -526,6 +527,14 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed]);
   const fingerRef = useRef<number | null>(null);
   fingerRef.current = fingerPivot;
+  // A find coming into grab range is felt and heard once, so a kid looking up from the phone knows to look down.
+  const rangeCued = useRef(new Set<number>());
+  useEffect(() => {
+    if (fingerPivot == null || rangeCued.current.has(fingerPivot)) return;
+    rangeCued.current.add(fingerPivot);
+    queueHaptic('hitSoft');
+    playSfx('ui.select', 0.6);
+  }, [fingerPivot]);
   const ridePhotoArt = placed.filter(entry => catchStyleFor(entry.item.rarity) === 'ride_photo')
     .map(entry => entry.item.icon_url).filter((url): url is string => !!url).join('|');
   useEffect(() => {
