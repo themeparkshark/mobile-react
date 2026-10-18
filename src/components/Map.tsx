@@ -925,7 +925,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
               // Barely there at the edge, a warm shimmer in the middle: air over a crowd, not a warning.
               heatmapColor: ['interpolate', ['linear'], ['heatmap-density'],
                 0, 'rgba(255,214,120,0)', 0.3, 'rgba(255,214,120,0.06)', 0.6, 'rgba(255,186,96,0.16)',
-                0.85, 'rgba(255,150,84,0.24)', 1, 'rgba(255,124,84,0.3)'],
+                0.85, 'rgba(255,170,70,0.22)', 1, 'rgba(255,158,52,0.28)'], // amber, never coral: it read as a stain
               heatmapOpacity: 0.8,
               heatmapOpacityTransition: { duration: 1200, delay: 0 },
             }} />
