@@ -650,6 +650,206 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
     choices: ['A restraint like a lap bar', 'A pillow', 'A balloon', 'Nothing'], correctIndex: 0,
     difficulty: 'easy', deck: 'kids', fact: 'Lap bars and harnesses keep riders safely in their seats.',
   },
+  {
+    id: 'kid-71', question: 'What do you call a group of lions?',
+    choices: ['A pride', 'A pack', 'A herd', 'A school'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A group of lions is called a pride.',
+  },
+  {
+    id: 'kid-72', question: 'What is a baby cow called?',
+    choices: ['A calf', 'A foal', 'A kid', 'A cub'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A baby cow is called a calf.',
+  },
+  {
+    id: 'kid-73', question: 'What is a baby horse called?',
+    choices: ['A foal', 'A calf', 'A lamb', 'A piglet'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A baby horse is called a foal.',
+  },
+  {
+    id: 'kid-74', question: 'What is a baby sheep called?',
+    choices: ['A lamb', 'A kid', 'A cub', 'A joey'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A baby sheep is called a lamb.',
+  },
+  {
+    id: 'kid-75', question: 'What is a baby goat called?',
+    choices: ['A kid', 'A lamb', 'A foal', 'A chick'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A baby goat is called a kid.',
+  },
+  {
+    id: 'kid-76', question: 'Which animal has black and white stripes?',
+    choices: ['Zebra', 'Giraffe', 'Lion', 'Camel'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Zebras have black and white stripes, and every zebra’s pattern is different.',
+  },
+  {
+    id: 'kid-77', question: 'Which animal carries its house on its back?',
+    choices: ['Snail', 'Rabbit', 'Frog', 'Duck'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A snail carries its shell everywhere.',
+  },
+  {
+    id: 'kid-78', question: 'What do frogs use to catch bugs?',
+    choices: ['Their sticky tongue', 'Their tail', 'Their ears', 'Their toes'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Frogs catch insects with a long, sticky tongue.',
+  },
+  {
+    id: 'kid-79', question: 'Which bird is a symbol of the United States?',
+    choices: ['Bald eagle', 'Robin', 'Parrot', 'Flamingo'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The bald eagle is the national bird of the United States.',
+  },
+  {
+    id: 'kid-80', question: 'What color are flamingos usually?',
+    choices: ['Pink', 'Blue', 'Green', 'Black'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Flamingos are pink because of the food they eat.',
+  },
+  {
+    id: 'kid-81', question: 'Which animal sleeps hanging upside down?',
+    choices: ['Bat', 'Cat', 'Dog', 'Horse'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Bats rest hanging upside down.',
+  },
+  {
+    id: 'kid-82', question: 'What is the slowest-moving mammal often called the slowpoke of the rainforest?',
+    choices: ['Sloth', 'Cheetah', 'Monkey', 'Jaguar'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Sloths move very slowly through the trees.',
+  },
+  {
+    id: 'kid-83', question: 'How many wings does a bee have?',
+    choices: ['4', '2', '6', '8'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Bees have four wings.',
+  },
+  {
+    id: 'kid-84', question: 'What do koalas mostly eat?',
+    choices: ['Eucalyptus leaves', 'Fish', 'Bananas', 'Grass'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Koalas eat mostly eucalyptus leaves.',
+  },
+  {
+    id: 'kid-85', question: 'Which ocean animal has eight arms and can squirt ink?',
+    choices: ['Octopus', 'Starfish', 'Crab', 'Turtle'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Octopuses can squirt ink to escape.',
+  },
+  {
+    id: 'kid-86', question: 'What do sea turtles lay their eggs in?',
+    choices: ['Sand on the beach', 'Trees', 'Seaweed nests', 'Caves underwater'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Sea turtles dig nests in beach sand to lay eggs.',
+  },
+  {
+    id: 'kid-87', question: 'Which shark is known for its stripes?',
+    choices: ['Tiger shark', 'Lemon shark', 'Blue shark', 'Whale shark'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Young tiger sharks have stripes like a tiger.',
+  },
+  {
+    id: 'kid-88', question: 'What is the outer layer of a tree called?',
+    choices: ['Bark', 'Root', 'Leaf', 'Seed'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The protective outside of a tree is called bark.',
+  },
+  {
+    id: 'kid-89', question: 'What part of a plant takes in water from the soil?',
+    choices: ['Roots', 'Petals', 'Leaves', 'Flowers'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Roots soak up water from the soil.',
+  },
+  {
+    id: 'kid-90', question: 'What do plants need from the Sun to grow?',
+    choices: ['Light', 'Snow', 'Wind', 'Sound'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Plants use sunlight to make their food.',
+  },
+  {
+    id: 'kid-91', question: 'What is the color of a ripe banana?',
+    choices: ['Yellow', 'Purple', 'Blue', 'Red'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Ripe bananas are yellow.',
+  },
+  {
+    id: 'kid-92', question: 'Which fruit is famous for keeping the doctor away in an old saying?',
+    choices: ['Apple', 'Lemon', 'Grape', 'Cherry'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The saying goes: an apple a day keeps the doctor away.',
+  },
+  {
+    id: 'kid-93', question: 'What is the center of a peach called?',
+    choices: ['The pit', 'The core', 'The shell', 'The yolk'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A peach has a hard pit in the middle.',
+  },
+  {
+    id: 'kid-94', question: 'How many strings does a typical violin have?',
+    choices: ['4', '6', '2', '8'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A violin has four strings.',
+  },
+  {
+    id: 'kid-95', question: 'How many keys does a standard piano have?',
+    choices: ['88', '52', '100', '64'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A standard piano has 88 keys.',
+  },
+  {
+    id: 'kid-96', question: 'Which instrument do you hit with sticks?',
+    choices: ['Drum', 'Flute', 'Violin', 'Trumpet'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Drums are played by hitting them, often with sticks.',
+  },
+  {
+    id: 'kid-97', question: 'What is 10 + 10?',
+    choices: ['20', '15', '25', '30'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Ten plus ten equals twenty.',
+  },
+  {
+    id: 'kid-98', question: 'What is 3 × 3?',
+    choices: ['9', '6', '12', '8'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Three times three is nine.',
+  },
+  {
+    id: 'kid-99', question: 'How many corners does a square have?',
+    choices: ['4', '3', '5', '6'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A square has four corners.',
+  },
+  {
+    id: 'kid-100', question: 'What comes after Thursday?',
+    choices: ['Friday', 'Wednesday', 'Saturday', 'Monday'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Friday comes after Thursday.',
+  },
+  {
+    id: 'kid-101', question: 'What season comes after winter?',
+    choices: ['Spring', 'Summer', 'Fall', 'Winter again'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Spring comes after winter.',
+  },
+  {
+    id: 'kid-102', question: 'In which season do many trees lose their leaves?',
+    choices: ['Fall', 'Spring', 'Summer', 'Never'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Many trees drop their leaves in fall.',
+  },
+  {
+    id: 'kid-103', question: 'What is the opposite of hot?',
+    choices: ['Cold', 'Warm', 'Bright', 'Loud'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The opposite of hot is cold.',
+  },
+  {
+    id: 'kid-104', question: 'What do you call a shape like a ball?',
+    choices: ['Sphere', 'Square', 'Triangle', 'Rectangle'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A ball shape is called a sphere.',
+  },
+  {
+    id: 'kid-105', question: 'Which star can you see in the daytime sky?',
+    choices: ['The Sun', 'Polaris', 'Sirius', 'Venus'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'The only star you can see in the daytime sky is the Sun.',
+  },
+  {
+    id: 'kid-106', question: 'What does a compass needle point toward?',
+    choices: ['North', 'The Moon', 'The nearest tree', 'Down'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A compass needle points north.',
+  },
+  {
+    id: 'kid-107', question: 'What tool helps you see faraway stars up close?',
+    choices: ['Telescope', 'Microscope', 'Magnifying spoon', 'Periscope'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A telescope makes faraway things look closer.',
+  },
+  {
+    id: 'kid-108', question: 'What tool helps you see tiny things like cells?',
+    choices: ['Microscope', 'Telescope', 'Binoculars', 'Compass'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'A microscope makes tiny things look big.',
+  },
+  {
+    id: 'kid-109', question: 'What do you call a scientist who studies dinosaurs?',
+    choices: ['A paleontologist', 'An astronaut', 'A chef', 'A pilot'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Paleontologists study dinosaurs and fossils.',
+  },
+  {
+    id: 'kid-110', question: 'Which dinosaur had three horns on its face?',
+    choices: ['Triceratops', 'T. rex', 'Stegosaurus', 'Velociraptor'], correctIndex: 0,
+    difficulty: 'easy', deck: 'kids', fact: 'Triceratops means three-horned face.',
+  },
 ];
 
 /**
