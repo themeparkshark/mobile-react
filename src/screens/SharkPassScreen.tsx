@@ -16,6 +16,7 @@
  * in the background, none under Reduce Motion), a pulse on claimable cells,
  * and the GotIt payoff on every claim.
  */
+import { showToast } from '../utils/toast';
 import { useAmbient } from '../services/money/useAmbient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
@@ -540,8 +541,10 @@ export default function SharkPassScreen() {
                 <TierColumn tier={item} current={progress.tier} premium={premium} busy={busy} pulse={running} burst={climbed?.to === item.tier}
                   onClaim={(track) => void claim(item, track)} onLocked={() => {
                     const n = item.tier;
-                    if (!item.unlocked) gameAlert(`Step ${n}`, `Keep playing to reach step ${n}.`);
-                    else if (!premium) gameAlert('Shark Pass reward', `${rewardWords(item.paid)} comes with the Shark Pass.`);
+                    // An info tap is a light toast, never a modal a kid has to dismiss.
+                    const away = n - progress.tier;
+                    if (!item.unlocked) showToast(`Step ${n} is ${away} ${away === 1 ? 'step' : 'steps'} away. Keep playing!`, 'info');
+                    else if (!premium) showToast(`${rewardWords(item.paid)} comes with the Shark Pass.`, 'info');
                   }} />
               )} />
 

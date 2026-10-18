@@ -26,6 +26,15 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon from '../ui/GameIcon';
 import SharkLoader from '../ui/SharkLoader';
 
+/** Dev preview only: the owned fixture coins plus three still to find, so the shelf shows its ghost slots. */
+function previewCatalog(): TripGoalData {
+  const ride = (task: number, name: string, owned: boolean) => ({ task_id: task, asset_id: task, park_id: 1, park_name: 'Sample Park',
+    ride_name: name, coin_url: '', coin_owned: owned, coin_level: owned ? 1 : null });
+  const rides = [...PREVIEW_COINS.map((c, i) => ride(100 + i, c.ride_name, true)),
+    ride(201, 'Jungle Jet', false), ride(202, 'Moon Mine', false), ride(203, 'Splash Falls', false)];
+  return { rides, goal: rides[rides.length - 3] } as unknown as TripGoalData;
+}
+
 const PREVIEW_COINS: CollectedRideCoin[] = [
   { id: 1, ride_id: 1, ride_name: 'Space Coaster', coin_url: '', current_level: 1, max_level: 10, times_collected: 1,
     available_parts: 2, energy_to_next_level: 10, parts_to_next_level: 2, required_parts: [], player_level_required: 1,
@@ -61,7 +70,7 @@ export default function CoinShelfScreen({ route }: {
   const collection = useCoinCollection(preview ? null : player?.id, { autoload: false });
   const coins = preview ? PREVIEW_COINS : collection.coins;
   const [refreshing, setRefreshing] = useState(false);
-  const [catalog, setCatalog] = useState<TripGoalData | null>(null);
+  const [catalog, setCatalog] = useState<TripGoalData | null>(() => (preview ? previewCatalog() : null));
   const [catalogStale, setCatalogStale] = useState(false);
   const [goalSaving, setGoalSaving] = useState(false);
   const focusAssetId = route?.params?.focusCoin?.assetId;
@@ -134,7 +143,7 @@ export default function CoinShelfScreen({ route }: {
     if (goalSaving || goalSavingRef.current || preview) return;
     goalSavingRef.current = true;
     setGoalSaving(true);
-    try { setCatalog(await setTripGoal(ride.task_id)); setCatalogStale(false); }
+    try { setCatalog(await setTripGoal(ride.task_id)); setCatalogStale(false); showToast(`Next coin: ${ride.ride_name}`, 'success'); }
     catch { setCatalogStale(true); showToast('Couldn’t save your next coin. Try again.', 'warning'); }
     finally { goalSavingRef.current = false; setGoalSaving(false); }
   };
@@ -204,15 +213,32 @@ export default function CoinShelfScreen({ route }: {
                 {group.parkId !== null && <GameIcon name="arrow" size={26} />}
               </Pressable>
               <View style={styles.shelf}>
-                {group.coins.length === 0
-                  ? <Text style={styles.emptyShelf}>No coins yet. Your first one is out in the park.</Text>
-                  : <View style={styles.coinRow}>
+                {(() => {
+                  // Album feel: the coins still to find sit in their slots, faded, so the shelf shows the whole set.
+                  const ghosts = group.parkId === null ? [] : missing.filter(ride => ride.park_id === group.parkId);
+                  const shownGhosts = ghosts.slice(0, Math.max(0, GHOST_LIMIT - group.coins.length));
+                  const more = ghosts.length - shownGhosts.length;
+                  if (group.coins.length === 0 && ghosts.length === 0) {
+                    return <Text style={styles.emptyShelf}>No coins yet. Your first one is out in the park.</Text>;
+                  }
+                  return <View style={styles.coinRow}>
                     {group.coins.map((coin, index) => <Pressable key={coin.id} accessibilityRole="button"
                       accessibilityLabel={`${coin.ride_name}, level ${coin.current_level}. Open on its park shelf.`}
                       onPress={() => openPark(group.parkId, coin.id)} style={{ margin: 5 }}>
                       <ShelfCoin coinUrl={coin.coin_url} level={coin.current_level} size={50} phase={index} />
                     </Pressable>)}
-                  </View>}
+                    {shownGhosts.map((ride, index) => {
+                      const isNext = nextCoin?.asset_id === ride.asset_id;
+                      return <Pressable key={`ghost-${ride.asset_id}`} accessibilityRole="button"
+                        accessibilityLabel={`${ride.ride_name}, not found yet.${isNext ? ' Your next coin.' : ' Tap to make it your next coin.'}`}
+                        onPress={() => { if (!isNext) void chooseNextCoin(ride); }}
+                        style={[{ margin: 5 }, isNext && styles.ghostNext]}>
+                        <ShelfCoin coinUrl={ride.coin_url} level={1} size={50} phase={group.coins.length + index} dimmed />
+                      </Pressable>;
+                    })}
+                    {more > 0 && <Text style={styles.ghostMore}>+{more}</Text>}
+                  </View>;
+                })()}
                 <View style={{ height: 30 }}><ParkShelfArtwork variant="normal" height={30} /></View>
               </View>
             </Animated.View>;
@@ -223,7 +249,11 @@ export default function CoinShelfScreen({ route }: {
   );
 }
 
+const GHOST_LIMIT = 10;
+
 const styles = StyleSheet.create({
+  ghostNext: { borderRadius: 40, borderWidth: 2, borderColor: '#ffd23f', borderStyle: 'dashed' },
+  ghostMore: { fontFamily: 'Shark', fontSize: 18, color: '#ffffff', alignSelf: 'center', marginLeft: 6 },
   content: { padding: 16, paddingBottom: 48, gap: 14 },
   summary: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff8e4', borderRadius: 18,
     borderWidth: 3, borderColor: '#ffffff', padding: 12, shadowColor: '#05346e', shadowOpacity: 0.22,
