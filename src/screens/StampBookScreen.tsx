@@ -16,6 +16,7 @@
  * open/close or scroll, stamp objects keep identity across refetches, the
  * focus refetch is throttled to 30 s, and tile thumbs are prefetched.
  */
+import { LinearGradient } from 'expo-linear-gradient';
 import CollectionSwitch from '../components/collection/CollectionSwitch';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Pressable, RefreshControl, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from 'react-native';
@@ -590,6 +591,9 @@ export default function StampBookScreen() {
                       onPress={() => pick(section.key)} />
                   ))}
                 </Animated.ScrollView>
+                {/* A fade on the right edge says "more tabs this way" instead of a clipped word. */}
+                <LinearGradient pointerEvents="none" start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  colors={['rgba(4,72,140,0)', 'rgba(4,72,140,0.94)']} style={styles.tabsFade} />
               </View>
 
               {sections.length === 0 && <Text style={styles.stateText}>No stamps yet. Check back soon.</Text>}
@@ -922,6 +926,7 @@ const styles = StyleSheet.create({
   almostCountText: { fontFamily: 'Shark', fontSize: 13, color: MUTED_INK },
 
   // Bookmark tabs: a solid band so the page never shows through when it sticks.
+  tabsFade: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 36 },
   tabsWrap: { paddingVertical: 9, marginTop: 8, backgroundColor: 'rgba(4,72,140,0.94)', borderBottomWidth: 2, borderBottomColor: 'rgba(255,255,255,0.35)' },
   tabs: { paddingHorizontal: SIDE, gap: 8 },
   tab: {

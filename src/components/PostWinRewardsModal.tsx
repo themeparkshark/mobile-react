@@ -287,7 +287,8 @@ export default function PostWinRewardsModal({
     setGoalNote(note);
     setNoteSettled(false);
     goalNoteOpacity.value = 1;
-    if (note.big) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    // One success buzz per sequence (the ready star owns it); a big goal note gets a firm tap.
+    if (note.big) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     // After its moment the note settles to a dimmed copy in place, so the
     // footer never shows a blank gap where it was.
     const timer = setTimeout(() => {
