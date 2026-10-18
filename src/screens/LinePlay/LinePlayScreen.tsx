@@ -17,6 +17,8 @@
  * Route params: { ride: RideContext }. Wire via Root.tsx Stack.Screen "LinePlay".
  */
 
+import { playSfx } from '../../gamekit/SFX';
+import { haptic } from '../../gamekit/Haptics';
 import { openAppSettings } from '../../services/external';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, FlatList, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -492,8 +494,10 @@ export default function LinePlayScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, []);
 
-  const handleActivityCompleted = useCallback((id: string) => {
+  const handleActivityCompleted = useCallback((id: string, quiet = false) => {
     session.markActivityCompleted(id);
+    // Cards finish with a small cheer; mini-games already celebrated on their own result screen.
+    if (!quiet) { haptic('success'); playSfx('ui.confirm', 0.7); }
   }, [session]);
 
   const renderActiveGame = () => {
@@ -511,7 +515,7 @@ export default function LinePlayScreen() {
       onComplete: groupTurn ? finishTurn : (multiplier: number, meta?: Record<string, unknown>) => {
         if (activeGame.gameId === 'current') session.recordCurrentQuest(meta);
         session.recordGameResult(activeGame.gameId, starsFromMultiplier(multiplier));
-        handleActivityCompleted(activeGame.id);
+        handleActivityCompleted(activeGame.id, true);
         handleGameDone();
       },
     };
