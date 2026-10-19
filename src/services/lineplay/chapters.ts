@@ -204,6 +204,8 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
       : `Guide your shark through a short swim to find the ${story.artifact}. One thumb, about a minute.`;
   const chapter: LinePlayChapter = {
     id, adaptive: true, episodeCount: stories.length, parkLabel: 'YOUR QUEUE',
+    // Every ride shows where this adventure sits in its series, like Space Mountain's flights.
+    ...(episode == null ? {} : { episodeLabel: `ADVENTURE ${episode + 1} OF ${stories.length}` }),
     title: story.title,
     story: `While you wait for ${safeName}, your shark crew needs to recover a ${story.artifact}. Solve a clue, notice something from your place in line, then rebuild it together.`,
     completedTitle: `${story.artifact[0].toUpperCase()}${story.artifact.slice(1)} recovered!`,
