@@ -109,12 +109,16 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
   assert.match(gym, /noTeamOverlay: \{[^}]*zIndex: 10/s);
   const cc = read('src/screens/CommunityCenterScreen.tsx');
-  // The button fills the green slot painted in the background (0.70 to 0.99 of the width).
-  assert.match(cc, /LEAVE_GIFT_W = Math\.round\(SCREEN_WIDTH \* 0\.31\)/);
-  assert.match(cc, /LEAVE_GIFT_LEFT = Math\.round\(SCREEN_WIDTH \* 0\.678\)/);
+  // The button sits centered on the painted kiosk (0.83 of the width), a little narrower than its slot.
+  assert.match(cc, /LEAVE_GIFT_W_RATIO = 0\.26;/);
+  assert.match(cc, /LEAVE_GIFT_CENTER_X_RATIO = 0\.83;/);
+  assert.match(cc, /LEAVE_GIFT_LEFT = Math\.round\(SCREEN_WIDTH \* LEAVE_GIFT_CENTER_X_RATIO - LEAVE_GIFT_W \/ 2\)/);
   assert.match(cc, /LEAVE_GIFT_PULSE = 1\.05/);
   // Scale grows from the center: the right edge at the top of the pulse.
-  assert.ok(0.678 + 0.31 + 0.31 * 0.05 / 2 < 1, 'even mid-pulse the button stays on screen');
+  // Right gap on a 375 pt iPhone SE, at rest and mid-pulse.
+  const se = 375, w = Math.round(se * 0.26), left = Math.round(se * 0.83 - w / 2);
+  assert.ok(se - (left + w) >= 14, 'at least 14 pt from the right edge at rest');
+  assert.ok(se - (left + w + w * 0.05 / 2) >= 12, 'at least 12 pt mid-pulse');
   // Short phones (iPhone SE): GO BACK and the cooldown note sit on the screen, not on the art's hidden bottom.
   assert.match(cc, /bottom: 80 \+ ART_OVERFLOW/);
   assert.match(cc, /145 \+ ART_OVERFLOW/);
@@ -136,17 +140,24 @@ test('counts never use a comma: the display font draws it like a period ("4,881"
   assert.equal(countText(4881), '4881');
   assert.equal(countText(350), '350');
   assert.equal(countText(9999), '9999');
-  assert.equal(countText(10000), '10K');
-  assert.equal(countText(12500), '12.5K');
-  assert.equal(countText(12599), '12.5K', 'rounds down, never shows more than you have');
-  assert.equal(countText(250000), '250K');
+  // Prices and standings keep every digit under 100000: a 12590 price never reads 12.5K
+  // next to a 12540 wallet, and leaders at 12540 and 12510 never both read 12.5K.
+  assert.equal(countText(12590), '12590');
+  assert.notEqual(countText(12540), countText(12510));
+  assert.equal(countText(99999), '99999');
+  assert.equal(countText(100000), '100K');
+  assert.equal(countText(250999), '250K', 'rounds down, never shows more than you have');
   assert.equal(countText(1250000), '1.2M');
-  assert.equal(countText(-12500), '-12.5K');
+  assert.equal(countText(-12500), '-12500');
   assert.equal(countText(-1500), '-1500');
   assert.equal(countText(Number.NaN), '0');
   const shorten = loadTs('src/helpers/shorten-number.ts').default;
   assert.equal(shorten(4881), '4881', 'the header coin pill');
-  assert.equal(shorten(12500), '12.5K');
+  assert.equal(shorten(12500), '12.5K', 'the narrow header pills still go short at 10000');
+  const shelves = loadTs('src/helpers/shopShelves.ts');
+  assert.equal(shelves.formatCoins(12590), '12590', 'shop prices keep every digit');
+  assert.equal(loadTs('src/components/xpPotionModel.ts').groupDigits(12345), '12345');
+  assert.equal(loadTs('src/services/trail/trailModel.ts').formatSteps(12345), '12345');
 });
 
 test('no player-visible text glyphs the game fonts cannot draw on the touched screens', () => {
@@ -190,7 +201,7 @@ test('full-screen routes keep clear of the Dynamic Island with one inset (SafeSc
   assert.match(safe, /useSafeAreaInsets\(\)/);
   for (const file of [
     'src/screens/MembershipScreen.tsx', 'src/screens/BananaBasketScreen.tsx', 'src/screens/GymBattle/TeamSelectionScreen.tsx',
-    'src/screens/RideTracker/RideDetailScreen.tsx', 'src/screens/RideTracker/RideWrappedScreen.tsx',
+    'src/screens/RideTracker/RideWrappedScreen.tsx',
     'src/screens/RideTracker/RideOnboardingScreen.tsx', 'src/screens/LinePlay/LinePlayScreen.tsx', 'src/screens/WelcomeScreen.tsx',
   ]) {
     const src = read(file);
@@ -245,4 +256,61 @@ test('Ride Wrapped loading and empty states use the shared game header and empty
   assert.match(src, /<RideTrackerFrame title="Ride Wrapped"/);
   assert.match(src, /<RideTrackerEmpty/);
   assert.doesNotMatch(src, /Go Log Rides/);
+});
+
+// Round 3 (grader blockers and fixes).
+test('Ride Detail wears the Ride Tracker header: no web gradients, game buttons, the star in the header', () => {
+  const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
+  assert.doesNotMatch(src, /LinearGradient|SafeAreaView|heroGradient/);
+  assert.match(src, /<RideTrackerFrame title=\{headerTitle\} right=\{starButton\}/);
+  assert.match(src, /<RideTrackerFrame title=\{headerTitle\} style=\{s\.container\}>\s*\{loadError/, 'loading uses the same frame');
+  assert.match(src, /<GameButton label="Log this ride"/);
+  assert.match(src, /paddingBottom: FOOTER_CLEARANCE/);
+  assert.match(read('src/screens/RideTracker/RideTrackerFrame.tsx'), /<TopbarColumn stretch=\{false\}>\{right\}<\/TopbarColumn>/);
+});
+
+test('the map loading cover is light sky blue, never the dark underwater scene', () => {
+  const map = read('src/components/Map.tsx');
+  assert.doesNotMatch(map, /water_background/);
+  assert.match(map, /export const MAP_COVER_SKY = '#dcefff'/);
+  assert.match(map, /cover: \{ zIndex: 5, backgroundColor: MAP_COVER_SKY \}/);
+});
+
+test('VIP stage has no empty gray pill under the shark', () => {
+  assert.doesNotMatch(read('src/components/money/MemberStage.tsx'), /castShadow/);
+});
+
+test('Gym Join card has one yellow button; Back is the quiet text action', () => {
+  const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  assert.match(gym, /<GameButton label="Back" variant="ghost" tone="onBlue" onPress=\{handleGoBack\}/);
+  assert.doesNotMatch(gym, /backButtonAbsolute/);
+});
+
+test('Ride Stats with no rides skips the three zero tiles so the empty card and its button come first', () => {
+  const src = read('src/screens/RideTracker/RideStatsScreen.tsx');
+  assert.match(src, /\{stats\.total_rides > 0 && \(\s*<View style=\{styles\.statGrid\}>/);
+});
+
+test('UpperText tells VoiceOver the words as written, not letter-spelled capitals', () => {
+  const { spokenLabel, upper } = loadTs('src/ui/upper.tsx', {
+    react: require(path.join(ROOT, 'node_modules/react')),
+    'react/jsx-runtime': require(path.join(ROOT, 'node_modules/react/jsx-runtime')),
+    'react-native': { Text: 'Text' },
+  });
+  assert.equal(spokenLabel('Rides by park'), 'Rides by park');
+  assert.equal(spokenLabel(['Level ', 3]), 'Level 3');
+  assert.equal(spokenLabel(''), undefined);
+  assert.equal(upper('Rides by park')[0], 'RIDES BY PARK');
+  const src = read('src/ui/upper.tsx');
+  assert.match(src, /<Text accessibilityLabel=\{spokenLabel\(children\)\} \{\.\.\.rest\}/, 'a caller label still wins');
+});
+
+test('the park arrival tip is one short line a 7-year-old reads at a glance', () => {
+  const { TIP_COPY } = loadTs('src/services/help/helpTopics.ts');
+  assert.ok(TIP_COPY.park_hud.body.length <= 40, TIP_COPY.park_hud.body);
+});
+
+test('Finn catches up by the clock, so a slow first frame never leaves one word above the button', () => {
+  const src = read('src/components/Tutorial/TeacherShark.tsx');
+  assert.match(src, /visibleParts\(parts, Date\.now\(\) - startedAt\)/);
 });

@@ -96,8 +96,8 @@ export interface TipCopy { readonly title: string; readonly body: string }
 export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy>> = {
   // The map's shark finder button (FollowButton draws its own bubble from FOLLOW_COPY; this is the record).
   map_compass: { title: 'Map spin', body: 'The map spins with you. Tap to keep it still.' },
-  park_hud: { title: 'You\'re at the park!',
-    body: 'Ride coins wait at the rides. Tap a number up top to learn about it. Tap your shark to see your shelf.' },
+  // One short line: it shows over the map on the first park frame, so a 7-year-old reads it at a glance.
+  park_hud: { title: 'You\'re at the park!', body: 'Walk to a ride to win its coin.' },
   coin_in_range: { title: 'A ride coin is in range',
     body: 'Tap Play Ride! One Ticket gets you one try at a quick game. Win to add the coin to your shelf.' },
   ride_challenge: { title: 'How a ride challenge works',

@@ -25,7 +25,8 @@ export function upper(children: ReactNode): ReactNode {
  */
 export default function UpperLabel({ children, numberOfLines = 2, minimumFontScale = 0.85, ...rest }: TextProps) {
   return (
-    <Text numberOfLines={numberOfLines} adjustsFontSizeToFit minimumFontScale={minimumFontScale} {...rest}>
+    <Text numberOfLines={numberOfLines} adjustsFontSizeToFit minimumFontScale={minimumFontScale}
+      accessibilityLabel={spokenLabel(children)} {...rest}>
       {upper(children)}
     </Text>
   );
@@ -34,9 +35,24 @@ export default function UpperLabel({ children, numberOfLines = 2, minimumFontSca
 const NO_TRANSFORM = { textTransform: 'none' } as const;
 
 /**
+ * What VoiceOver reads: the words as written (mixed case), so it never spells out a short
+ * all-capital word letter by letter. Only for plain text; anything richer keeps its own label.
+ */
+export function spokenLabel(children: ReactNode): string | undefined {
+  const parts: string[] = [];
+  let plain = true;
+  Children.forEach(children, (child) => {
+    if (typeof child === 'string' || typeof child === 'number') parts.push(String(child));
+    else if (child !== null && child !== undefined && typeof child !== 'boolean') plain = false;
+  });
+  const text = parts.join('');
+  return plain && text.trim() ? text : undefined;
+}
+
+/**
  * Drop-in for a Text whose style says textTransform: 'uppercase': same props and line rules,
  * but the words are capitalised in code so iOS measures the real width (no clipped last letters).
  */
 export function UpperText({ children, style, ...rest }: TextProps) {
-  return <Text {...rest} style={[style, NO_TRANSFORM]}>{upper(children)}</Text>;
+  return <Text accessibilityLabel={spokenLabel(children)} {...rest} style={[style, NO_TRANSFORM]}>{upper(children)}</Text>;
 }
