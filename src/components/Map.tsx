@@ -77,6 +77,8 @@ const SHARK_TAP_SOUND = require('../../assets/sounds/inventory_item_tap.mp3');
 
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const FOLLOW_ZOOM = 17.6;
+/** The cover color while park tiles load: the game's light sky blue, never a dark scene. */
+export const MAP_COVER_SKY = '#dcefff';
 
 // Radial falloff texture: soft round shadows and light pools with no hard edge.
 const GROUND_GLOW = require('../../assets/images/map/fx/glow.png');
@@ -348,7 +350,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     }
   }, [location?.latitude, location?.longitude]);
 
-  // A water-and-sparkle cover hides the blank map while tiles stream in, then
+  // A light sky cover hides the blank map while tiles stream in, then
   // lifts away once the map has fully drawn (or after 4 s, whatever happens).
   const cover = useRef(new Animated.Value(1)).current;
   const [covered, setCovered] = useState(true);
@@ -986,8 +988,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       {covered && (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, {
           opacity: cover, transform: [{ scale: cover.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }] }]}>
-          {/* The player's shark (drawn above) swims on the water until the map lands under it. */}
-          <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+          {/* A light sky-blue sheet while the park tiles stream in (the old underwater scene read dark
+              on the first screen). The player's shark (drawn above) waits on it until the map lands. */}
         </Animated.View>
       )}
       {__DEV__ && MOTION_PROBE && <MotionProbeFrames />}
@@ -1077,7 +1079,7 @@ const styles = StyleSheet.create({
   attribution: { position: 'absolute', left: 8, bottom: 6, zIndex: 4, paddingHorizontal: 6, paddingVertical: 2,
     borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.7)' },
   attributionText: { fontFamily: 'Knockout', fontSize: 10, color: BRAND.navySoft },
-  cover: { zIndex: 5, backgroundColor: '#0768b9' },
+  cover: { zIndex: 5, backgroundColor: MAP_COVER_SKY },
   centerOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
