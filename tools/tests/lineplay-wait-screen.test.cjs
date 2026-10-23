@@ -44,19 +44,20 @@ test('posted vs real: a tracking number only when real waits back it, gone once 
   const m = model();
   const est = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: 0.7, elapsedSeconds: 20 * 60 });
   assert.equal(est.title, 'SIGN SAYS 60'); assert.equal(est.tracking, 42); assert.equal(est.detail, "You're tracking ~42");
+  assert.equal(est.kidValue, '~42', 'one wait number for kids: the real-waits guess');
   const none = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: null, elapsedSeconds: 600 });
-  assert.equal(none.tracking, null); assert.equal(none.detail, 'Posted wait');
+  assert.equal(none.tracking, null); assert.equal(none.detail, 'Posted wait'); assert.equal(none.kidValue, '60', 'no guess: the sign');
   const past = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: 0.7, elapsedSeconds: 45 * 60 });
   assert.equal(past.tracking, null, 'never a countdown that lies');
   const noSign = m.waitEstimate({ postedMinutes: 35, waitSource: 'estimate', ratio: 0.7, elapsedSeconds: 0 });
-  assert.equal(noSign.posted, null); assert.equal(noSign.title, 'NO SIGN TIME');
+  assert.equal(noSign.posted, null); assert.equal(noSign.title, 'NO SIGN TIME'); assert.equal(noSign.kidValue, null);
 });
 
 test('sharks in line, time in line and Parts this wait', () => {
   const m = model();
   assert.equal(m.sharksInLine(null), null); assert.equal(m.sharksInLine(0), null);
   assert.equal(m.sharksInLine(1).label, 'FIRST SHARK HERE');
-  assert.deepEqual(plain(m.sharksInLine(14)), { value: '14', label: 'SHARKS IN LINE', accessibilityLabel: '14 sharks in this line now.' });
+  assert.deepEqual(plain(m.sharksInLine(14)), { value: '14', label: 'SHARKS HERE', accessibilityLabel: '14 sharks in this line now.' });
   assert.equal(m.sharksInLine(4000).value, '999+');
   assert.equal(m.inLineLabel(23 * 60 + 40), '23m'); assert.equal(m.inLineLabel(65 * 60), '1h 05m');
   assert.equal(m.partsThisWait(3, 1), 4); assert.equal(m.partsThisWait(null), 0);
@@ -126,5 +127,8 @@ test('no server rewards: the coin space collapses into one stat strip, no empty 
   assert.match(strip, /testID="wait-hero-strip"/);
   assert.doesNotMatch(strip, /WaitCoinStage|coinSize|statSpacer|PARTS THIS WAIT/, 'no coin, no placeholder, no Parts stat');
   assert.doesNotMatch(hero, /<View style=\{\{ width: coinSize \}\} \/>/, 'the old coin-sized placeholder is gone');
-  assert.match(strip, /\{signStat\}/); assert.match(strip, /styles\.trackingStrip/); assert.match(strip, /\{inLineStat\}/);
+  assert.match(strip, /\{signStat\}/); assert.match(strip, /\{inLineStat\}/);
+  // Fewer labels for kids: one short word under each number, no second line of fine print.
+  assert.doesNotMatch(hero, /SIGN SAYS \(MIN\)|tracking|PARTS THIS WAIT/);
+  assert.match(hero, /label="MIN WAIT"/); assert.match(hero, /label="THIS WAIT"/);
 });

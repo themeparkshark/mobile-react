@@ -2,10 +2,12 @@
  * WaitCoinHero: the body of the LinePlay wait screen (stream L2). The ride's
  * own coin sits center stage between two quiet stat columns:
  *
- *   SIGN SAYS 60          (coin, filling)         12
- *   You're tracking ~42                           SHARKS IN LINE
- *   IN LINE 23m                                   +3 PARTS
- *                                                 this wait
+ *   ~42  MIN WAIT         (coin, filling)         12  SHARKS HERE
+ *   23m  IN LINE                                  +3  THIS WAIT
+ *
+ * Picture first for a 7-year-old: one wait number (the real-waits guess, else
+ * the sign), one short word under each number, no second line of fine print.
+ * The sign number and the guess both stay in the spoken label.
  *
  * Everything here works offline: time in line runs on the phone clock, Parts
  * this wait come from the session, and the coin and wait ratio are the last
@@ -54,7 +56,7 @@ function useAppActive(): boolean {
 }
 
 function Stat({ value, label, align, accessibilityLabel, icon }: {
-  value: string; label: string; align: 'left' | 'right'; accessibilityLabel: string; icon?: 'timer' | 'parts' | 'queue';
+  value: string; label: string; align: 'left' | 'right'; accessibilityLabel: string; icon?: 'timer' | 'parts' | 'queue' | 'shark';
 }) {
   return (
     <View style={[styles.stat, align === 'right' && styles.statRight]} accessible accessibilityLabel={accessibilityLabel}>
@@ -101,22 +103,19 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, e
   const minute = Math.floor(elapsedSeconds / 60);
   const stamps = useMemo(() => waitStamps(elapsedSeconds, new Date().getHours()), [minute]);
 
-  const signStat = <Stat align="left" value={estimate.posted != null ? String(estimate.posted) : '--'}
-    label={estimate.posted != null ? 'SIGN SAYS (MIN)' : 'NO SIGN TIME'}
-    accessibilityLabel={estimate.accessibilityLabel} icon="queue" />;
-  const trackingLine = estimate.posted != null
-    ? <Text style={styles.tracking} numberOfLines={2}>{estimate.detail}</Text> : null;
+  // One wait number, or nothing when the ride has no sign time (time in line still shows).
+  const signStat = estimate.kidValue != null ? <Stat align="left" value={estimate.kidValue} label="MIN WAIT"
+    accessibilityLabel={estimate.accessibilityLabel} icon="queue" /> : null;
   const inLineStat = <Stat align="left" value={inLineLabel(elapsedSeconds)} label="IN LINE"
     accessibilityLabel={`In line ${inLineLabel(elapsedSeconds)}.`} icon="timer" />;
   const sharksStat = sharks ? <Stat align="right" value={sharks.value} label={sharks.label}
-    accessibilityLabel={sharks.accessibilityLabel} icon="queue" /> : null;
+    accessibilityLabel={sharks.accessibilityLabel} icon="shark" /> : null;
 
   // No server rewards: no coin, so no hole for one. One short row of stats.
   if (waitHeroLayout(rewardsOn) === 'strip') {
     return (
       <View style={styles.strip} testID="wait-hero-strip">
-        <View style={styles.stripCell}>{signStat}{estimate.posted != null &&
-          <Text style={[styles.tracking, styles.trackingStrip]} numberOfLines={1}>{estimate.detail}</Text>}</View>
+        {signStat && <View style={styles.stripCell}>{signStat}</View>}
         <View style={styles.stripCell}>{inLineStat}</View>
         {sharksStat && <View style={[styles.stripCell, styles.sideRight]}>{sharksStat}</View>}
       </View>
@@ -127,7 +126,6 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, e
     <View style={styles.row}>
       <View style={styles.side}>
         {signStat}
-        {trackingLine}
         {inLineStat}
       </View>
       <WaitCoinStage size={coinSize} coin={wait.coin} owned={owned} progress={progress} partsBanked={wait.partsBanked}
@@ -135,7 +133,7 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, e
         autoLevel={previewAutoLevel} />
       <View style={[styles.side, styles.sideRight]}>
         {sharksStat ?? <View style={styles.statSpacer} />}
-        <Stat align="right" value={`+${earned}`} label={earned === 1 ? 'PART THIS WAIT' : 'PARTS THIS WAIT'}
+        <Stat align="right" value={`+${earned}`} label="THIS WAIT"
           accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned this wait.`} icon="parts" />
       </View>
     </View>
@@ -146,7 +144,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
   strip: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginTop: 6, marginBottom: 2 },
   stripCell: { flexShrink: 1, minWidth: 0 },
-  trackingStrip: { marginTop: 2 },
   side: { flex: 1, minWidth: 0, gap: 6 },
   sideRight: { alignItems: 'flex-end' },
   stat: { minWidth: 0 },
@@ -155,9 +152,8 @@ const styles = StyleSheet.create({
   statValueRowRight: { flexDirection: 'row-reverse' },
   statValue: { fontFamily: 'Shark', fontSize: 22, lineHeight: 26, color: '#ffffff', flexShrink: 1,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  statLabel: { fontFamily: 'Knockout', fontSize: 11, color: '#cdeaff', letterSpacing: 0.4, marginTop: -1 },
+  statLabel: { fontFamily: 'Knockout', fontSize: 13, color: '#cdeaff', letterSpacing: 0.4, marginTop: -1 },
   textRight: { textAlign: 'right' },
-  tracking: { fontFamily: 'Knockout', fontSize: 13, lineHeight: 15, color: '#ffdf75', marginTop: -4 },
   statSpacer: { height: 36 },
 });
 

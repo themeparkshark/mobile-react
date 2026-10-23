@@ -92,6 +92,11 @@ export interface WaitEstimate {
   readonly title: string;
   /** Small line: "You're tracking ~42". */
   readonly detail: string;
+  /**
+   * The one wait number a 7-year-old reads on the card: the real-waits guess
+   * when there is one ("~42"), else the sign ("60"). Null with no sign time.
+   */
+  readonly kidValue: string | null;
   readonly accessibilityLabel: string;
 }
 
@@ -104,7 +109,7 @@ export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
   // Past the estimate it has nothing honest left to say.
   const tracking = raw != null && elapsedMinutes < raw ? raw : null;
   if (posted == null) {
-    return { posted: null, tracking: null, title: 'NO SIGN TIME', detail: 'Your time in line still counts',
+    return { posted: null, tracking: null, title: 'NO SIGN TIME', detail: 'Your time in line still counts', kidValue: null,
       accessibilityLabel: 'No posted wait for this ride right now.' };
   }
   const title = `SIGN SAYS ${posted}`;
@@ -112,7 +117,7 @@ export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
     : tracking != null ? `Tracking ~${tracking} today`
       : 'Posted wait';
   return {
-    posted, tracking, title, detail,
+    posted, tracking, title, detail, kidValue: tracking != null ? `~${tracking}` : String(posted),
     accessibilityLabel: tracking != null
       ? `Posted wait ${posted} minutes. Recent waits here suggest about ${tracking} minutes.`
       : `Posted wait ${posted} minutes.`,
@@ -131,7 +136,7 @@ export function sharksInLine(count: number | null | undefined): SharksInLine | n
   const n = Math.round(count);
   if (n === 1) return { value: '1', label: 'FIRST SHARK HERE', accessibilityLabel: 'You are the first shark in this line right now.' };
   const value = n > 999 ? '999+' : String(n);
-  return { value, label: 'SHARKS IN LINE', accessibilityLabel: `${value} sharks in this line now.` };
+  return { value, label: 'SHARKS HERE', accessibilityLabel: `${value} sharks in this line now.` };
 }
 
 /** "23m", "1h 05m". */
