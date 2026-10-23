@@ -146,6 +146,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   const slam = useSharedValue(1);
   const card = useSharedValue(reducedMotion ? 0 : 60);
   const cheer = !data.wipeout;
+  const short = win.height < 740;
 
   useEffect(() => {
     card.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) });
@@ -202,16 +203,18 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
     <View style={[styles.root, { height: win.height }]} onLayout={onLayout}>
       <LinearGradient colors={['#dff3ff', NEUTRAL]} style={StyleSheet.absoluteFill} />
       <View style={styles.trim} />
-      <Text style={styles.headline}>{data.headline}</Text>
+      <Text style={[styles.headline, short && styles.headlineShort]}>{data.headline}</Text>
 
       {/* The shark on stage */}
-      {/* Tall phones give the title room above the shark; short phones keep the card on screen. */}
-      <View style={[styles.stage, win.height < 740 && styles.stageShort]}>
-        <Animated.View style={[styles.sharkWrap, sharkStyle]}>
-          <Image source={cheer ? SHARKY_ART.cheer : SHARKY_ART.dizzy} style={styles.shark} resizeMode="contain" />
-          {!cheer ? <Image source={SHARKY_ART.dizzyStar} style={styles.dizzyStars} resizeMode="contain" /> : null}
+      {/* Tall phones give the title room above the shark. Short phones (SE) get a
+          smaller stage under a higher title, so the title never sits on the
+          shark's head and more of the card stays on screen. */}
+      <View style={[styles.stage, short && styles.stageShort]}>
+        <Animated.View style={[styles.sharkWrap, short && styles.sharkWrapShort, sharkStyle]}>
+          <Image source={cheer ? SHARKY_ART.cheer : SHARKY_ART.dizzy} style={[styles.shark, short && styles.sharkShort]} resizeMode="contain" />
+          {!cheer ? <Image source={SHARKY_ART.dizzyStar} style={[styles.dizzyStars, short && styles.dizzyStarsShort]} resizeMode="contain" /> : null}
         </Animated.View>
-        <Image source={SHARKY_ART.podium} style={styles.podium} resizeMode="contain" />
+        <Image source={SHARKY_ART.podium} style={[styles.podium, short && styles.podiumShort]} resizeMode="contain" />
       </View>
 
       <Animated.View style={[styles.card, cardStyle]}>
@@ -294,7 +297,12 @@ const styles = StyleSheet.create({
   trim: { position: 'absolute', left: 0, right: 0, top: 0, height: 5, backgroundColor: REWARD },
   headline: { fontFamily: 'Shark', fontSize: 30, color: INK, position: 'absolute', top: 58, zIndex: 2, textShadowColor: NEUTRAL, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6 },
   stage: { width: '100%', height: 210, alignItems: 'center', justifyContent: 'flex-end', marginTop: 118 },
-  stageShort: { marginTop: 90 },
+  stageShort: { height: 176, marginTop: 92 },
+  headlineShort: { top: 30 },
+  sharkWrapShort: { bottom: 56 },
+  sharkShort: { width: 108, height: 132 },
+  dizzyStarsShort: { width: 46, height: 30, top: -4 },
+  podiumShort: { width: 176, height: 92 },
   sharkWrap: { position: 'absolute', bottom: 70, alignItems: 'center' },
   shark: { width: 130, height: 160 },
   dizzyStars: { position: 'absolute', top: -6, width: 56, height: 36 },

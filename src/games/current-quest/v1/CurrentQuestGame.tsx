@@ -125,7 +125,7 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
     const durationSeconds = Math.max(1, Math.round(
       (Date.now() - startedAtRef.current - pausedTotalRef.current) / 1000));
     setResult({ score: nextScore, stars: currentStars(boards, completedRef.current),
-      message: 'Treasure found!', meta: { score: nextScore, duration: durationSeconds,
+      message: 'TREASURE FOUND!', meta: { score: nextScore, duration: durationSeconds,
         seed: roundSeed, tier, moves: completedRef.current.map(item => item.moves),
         paths: completedRef.current.map(item => item.history) } });
   }, [board, boards, result, roundSeed, score, stage, voyages, tier]);

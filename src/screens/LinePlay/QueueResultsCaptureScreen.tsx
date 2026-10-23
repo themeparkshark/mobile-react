@@ -8,6 +8,7 @@
  *   - RIDE UP IN 8 S: the wait ends mid-run, so the run is saved (RUN SAVED).
  *   - GROUP TURN: one try, the card shows only DONE.
  *   - SHARKY IN LINE: Sharky's own results card.
+ *   - RHYTHM / CURRENT QUEST IN LINE: the other queue games' cards.
  * The log line shows what LinePlay would count ("Counted: 0 stars, saved").
  * It is always silent: master game volume is 0 while it is open, so a
  * capture never plays through the speakers, signed in or not.
@@ -23,8 +24,10 @@ import type { WrapUpReason } from '../../gamekit/core/session';
 import { SFX } from '../../gamekit/SFX';
 import { WhackAShark } from '../../games/whack';
 import { SharkySwim } from '../../games/sharky';
+import { RhythmTapGame } from '../../games/rhythm';
+import { CurrentQuestQueueGame } from '../../games/current-quest';
 
-type Run = { game: 'tap' | 'shark'; groupTurn: boolean; rideUpAfterMs: number | null; key: number };
+type Run = { game: 'tap' | 'shark' | 'timing' | 'current'; groupTurn: boolean; rideUpAfterMs: number | null; key: number };
 
 const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'WHACK IN LINE', run: { game: 'tap', groupTurn: false, rideUpAfterMs: null } },
@@ -32,6 +35,8 @@ const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'WHACK GROUP TURN', run: { game: 'tap', groupTurn: true, rideUpAfterMs: null } },
   { label: 'SHARKY IN LINE', run: { game: 'shark', groupTurn: false, rideUpAfterMs: null } },
   { label: 'SHARKY GROUP TURN', run: { game: 'shark', groupTurn: true, rideUpAfterMs: null } },
+  { label: 'RHYTHM IN LINE', run: { game: 'timing', groupTurn: false, rideUpAfterMs: null } },
+  { label: 'CURRENT QUEST IN LINE', run: { game: 'current', groupTurn: false, rideUpAfterMs: null } },
 ];
 
 export default function QueueResultsCaptureScreen() {
@@ -96,6 +101,8 @@ export default function QueueResultsCaptureScreen() {
       <LinePlayMovementContext.Provider value={movement}>
         {run && common && run.game === 'tap' ? <WhackAShark key={run.key} {...common} difficulty={2} taskName="Space Mountain" /> : null}
         {run && common && run.game === 'shark' ? <SharkySwim key={run.key} {...common} difficulty={2} /> : null}
+        {run && common && run.game === 'timing' ? <RhythmTapGame key={run.key} {...common} /> : null}
+        {run && common && run.game === 'current' ? <CurrentQuestQueueGame key={run.key} {...common} taskName="Space Mountain" /> : null}
       </LinePlayMovementContext.Provider>
     </SafeAreaView>
   );

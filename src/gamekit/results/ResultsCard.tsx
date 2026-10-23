@@ -197,16 +197,17 @@ export function ResultsCard({
       <CountUpText value={score} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
         onTick={() => GameAudio.play('fx.coin', { volume: 0.35 })} style={styles.score} />
 
-      <Animated.View style={[styles.bestRow, bestStyle]}>
+      {/* The row keeps its height only when something will land in it (no empty gap on a plain card). */}
+      {best.isNewBest || showBest ? <Animated.View style={[styles.bestRow, bestStyle]}>
         {best.isNewBest ? (
           <View style={styles.newBest}>
             <GameIcon name="crown" size={22} />
             <Text style={styles.newBestText}>NEW BEST!</Text>
           </View>
-        ) : showBest ? (
+        ) : (
           <Text style={styles.bestQuiet}>{`BEST ${formatScore(personalBest!)}`}</Text>
-        ) : null}
-      </Animated.View>
+        )}
+      </Animated.View> : <View style={styles.bestGap} />}
 
       {showNear ? (
         <Animated.View style={[styles.nearLine, feeling.tone === 'gold' && styles.nearWin, bestStyle]}>
@@ -362,6 +363,7 @@ const styles = StyleSheet.create({
   label: { fontFamily: 'Knockout', fontSize: 15, color: '#cdeaff', letterSpacing: 2, marginTop: 4 },
   score: { fontSize: 46, lineHeight: 54, minWidth: 180 },
   bestRow: { height: 34, justifyContent: 'center', alignItems: 'center' },
+  bestGap: { height: 6 },
   newBest: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffcf3b', borderRadius: 999, borderWidth: 3,
     borderColor: '#05346e', paddingHorizontal: 12, paddingVertical: 2 },
   newBestText: { fontFamily: 'Shark', fontSize: 18, color: '#05346e', marginLeft: 6 },

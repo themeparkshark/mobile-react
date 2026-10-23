@@ -303,3 +303,13 @@ test('round 3: one rule everywhere (x3 chains, one RUN SAVED stamp, saved said o
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
   assert.match(screen, /turnOnly: activeGame\?\.groupTurn === true,/);
 });
+
+test('every results title is caps, and Rhythm never asks for a star you already have', () => {
+  const rhythm = read('src/games/rhythm/RhythmTapGame.tsx');
+  const fn = rhythm.slice(rhythm.indexOf('function resultMessage('), rhythm.indexOf('/** The concrete next goal'));
+  for (const [, title] of fn.matchAll(/return '([^']+)';/g)) assert.equal(title, title.toUpperCase(), `"${title}" is caps`);
+  assert.match(rhythm, /tiers\.find\(\(\[at, n\]\) => n > stars && acc < at\)/, 'the goal is always a star above the ones earned');
+  assert.doesNotMatch(rhythm, /for \$\{next\[1\]\} star/, 'no "26 more PERFECTs for 1 star" on a 1-star card');
+  const cq = read('src/games/current-quest/v1/CurrentQuestGame.tsx');
+  assert.match(cq, /message: 'TREASURE FOUND!'/);
+});

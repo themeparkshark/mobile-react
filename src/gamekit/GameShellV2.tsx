@@ -684,7 +684,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         result: {
           ...base,
           stars: credit.stars,
-          message: base.message ?? wrapUpCopy(reason, credit.partial).title,
+          message: base.message ?? wrapUpCopy(reason, credit.partial || (base.score ?? finalScore) <= 0).title,
           meta: { ...(base.meta ?? {}), wrapUp: reason, ...(credit.partial ? { partial: true } : {}) },
         },
       });
@@ -976,7 +976,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                     streakKey={gameId ?? title}
                     runToken={resultsRunRef.current}
                     saved={saved}
-                    note={wrap ? wrapUpCopy(wrap.reason, saved).body || undefined : effectiveResult?.note}
+                    note={wrap ? wrapUpCopy(wrap.reason, saved || (effectiveResult?.score ?? 0) <= 0).body || undefined : effectiveResult?.note}
                     footer={resultCardFooter}
                     reducedMotion={reducedMotion}
                   />

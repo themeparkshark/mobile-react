@@ -309,3 +309,15 @@ test('QUEUE REALITY: a game that hands back its own result after the ride came u
   assert.equal(calls.close, 1);
   view.unmount();
 });
+
+test('QUEUE REALITY: a ride that comes up before the first point never says "Run saved" about nothing', () => {
+  const movement = { moving: false, onResume() {} };
+  const { view, movementContext } = shell(false, false, { score: 0, thresholds: { one: 100, two: 300, three: 600 } }, movement);
+  startPlaying(view);
+  movementContext.value = { ...movement, queueEnded: 'boarding' }; view.render();
+  const card = view.find(node => node.type === 'ResultsCard');
+  assert.equal(card.props.saved, false, 'no stamp for 0 points');
+  assert.equal(card.props.note, 'Enjoy the ride!');
+  assert.equal(card.props.message, "YOUR RIDE'S UP!");
+  view.unmount();
+});

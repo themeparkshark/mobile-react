@@ -1248,15 +1248,16 @@ function countInBeats(chart: Chart): number[] {
 }
 
 function resultMessage(sum: RoundSummary, ftue: boolean, reason: string): string {
-  if (reason === 'stall') return 'The parade needs you!';
-  if (ftue) return 'Parade cleared';
+  // Caps like every other results title (GOOD TRY!, NICE!, YOUR RIDE'S UP!).
+  if (reason === 'stall') return 'THE PARADE NEEDS YOU!';
+  if (ftue) return 'PARADE CLEARED!';
   if (sum.allPerfect) return 'ALL PERFECT!';
   if (sum.fullCombo) return 'FULL COMBO!';
   if (sum.stageAccuracy >= STAR_ACCURACY.three) return 'SHOWSTOPPER!';
-  if (sum.stageAccuracy >= STAR_ACCURACY.two) return 'What a parade!';
-  if (sum.stars > 0) return 'Parade cleared';
+  if (sum.stageAccuracy >= STAR_ACCURACY.two) return 'WHAT A PARADE!';
+  if (sum.stars > 0) return 'PARADE CLEARED!';
   // Never a 0-star failure title (design 6.8).
-  return 'Keep marching!';
+  return 'KEEP MARCHING!';
 }
 
 /** The concrete next goal (design 6.8): never a fixed hit count, always reachable. */
@@ -1266,11 +1267,19 @@ function nextGoal(sum: RoundSummary, judged: number, ride: boolean): string {
     const hr = Math.round(sum.hitRate * 100);
     return hr < 75 ? `Hit 3 of every 4 (${hr}%)` : 'Fewer misstaps';
   }
-  const acc = sum.stageAccuracy;
-  const next = acc < STAR_ACCURACY.one ? [STAR_ACCURACY.one, 1] : acc < STAR_ACCURACY.two ? [STAR_ACCURACY.two, 2] : acc < STAR_ACCURACY.three ? [STAR_ACCURACY.three, 3] : null;
-  if (!next) return !sum.fullCombo ? 'Go for FULL COMBO' : '';
+  return queueNextGoal(sum.stageAccuracy, sum.stars, sum.fullCombo, judged);
+}
+
+/**
+ * The queue run's next goal, always above the stars already earned (a warm-up
+ * can light a star early, so "for 1 star" on a 1-star card never shows).
+ */
+export function queueNextGoal(acc: number, stars: number, fullCombo: boolean, judged: number): string {
+  const tiers: [number, number][] = [[STAR_ACCURACY.one, 1], [STAR_ACCURACY.two, 2], [STAR_ACCURACY.three, 3]];
+  const next = tiers.find(([at, n]) => n > stars && acc < at) ?? null;
+  if (!next) return stars >= 3 && !fullCombo ? 'Go for FULL COMBO' : '';
   const more = Math.max(1, Math.ceil(((next[0] - acc) * judged) / 60));
-  return `${more} more PERFECT${more > 1 ? 's' : ''} for ${next[1]} star${next[1] > 1 ? 's' : ''}`;
+  return `${more} more PERFECT${more > 1 ? 'S' : ''} for ${stars > 0 ? 'the next star' : 'a star'}`;
 }
 
 function gripLabel(grip: number, g: GripPrefs): string {
