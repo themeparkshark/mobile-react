@@ -11,8 +11,10 @@ import Wrapper from '../../components/Wrapper';
  * Replaces the old web-style sky-to-navy gradient headers, so the tracker looks like the
  * rest of the game (Settings, Ride Journal, the Ride Tracker hub).
  */
-export default function RideTrackerFrame({ title, style, children }: {
+export default function RideTrackerFrame({ title, right, style, children }: {
   readonly title: string;
+  /** One small button on the right of the header (for example the Ride Detail favorite star). */
+  readonly right?: ReactNode;
   readonly style?: StyleProp<ViewStyle>;
   readonly children?: ReactNode;
 }) {
@@ -21,7 +23,7 @@ export default function RideTrackerFrame({ title, style, children }: {
       <Topbar>
         <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
         <TopbarColumn><TopbarText>{title}</TopbarText></TopbarColumn>
-        <TopbarColumn stretch={false} />
+        <TopbarColumn stretch={false}>{right}</TopbarColumn>
       </Topbar>
       <View style={[{ flex: 1 }, style]}>{children}</View>
     </Wrapper>

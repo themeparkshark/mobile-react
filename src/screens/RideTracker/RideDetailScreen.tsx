@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet,
-  RefreshControl, Dimensions, Animated,
+  RefreshControl, Animated,
 } from 'react-native';
-import SafeScreen from '../../components/SafeScreen';
+import RideTrackerFrame from './RideTrackerFrame';
+import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides';
@@ -17,9 +17,10 @@ import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
 import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 import { Modal } from 'react-native';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
-import { GameIcon, gameAlert, SharkLoader } from '../../ui';
+import { GameButton, GameIcon, gameAlert, SharkLoader } from '../../ui';
 
-const { width: SCREEN_W } = Dimensions.get('window');
+/** Ride names this long or shorter are the header title; longer ones go big in the ride card. */
+export const HEADER_TITLE_MAX = 16;
 
 const PARK_NAME_MAP: Record<number, string> = Object.fromEntries(
   PARK_DISPLAY_ORDER.map(p => [p.id, p.name])
@@ -30,10 +31,8 @@ const B = {
   pageBg: '#e8f4fd',
   white: '#FFFFFF',
   navy: '#09268f',
-  skyMid: '#38BDF8',
   skyDark: '#0EA5E9',
   gold: '#fec90e',
-  goldDark: '#d4a70a',
   textDark: '#1a1a2e',
   textMid: '#475569',
   textLight: '#94a3b8',
@@ -44,12 +43,7 @@ const RatingBar: React.FC<{ rating: number; count: number; maxCount: number }> =
   <View style={s.ratingBarRow}>
     <Text style={s.ratingBarLabel}>{rating}</Text>
     <View style={s.ratingBarTrack}>
-      <LinearGradient
-        colors={[B.skyMid, B.navy]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={[s.ratingBarFill, { width: maxCount > 0 ? `${(count / maxCount) * 100}%` : '0%' }]}
-      />
+      <View style={[s.ratingBarFill, { width: maxCount > 0 ? `${(count / maxCount) * 100}%` : '0%' }]} />
     </View>
     <Text style={s.ratingBarCount}>{count}</Text>
   </View>
@@ -182,53 +176,54 @@ export default function RideDetailScreen() {
   const maxDistCount = community ? Math.max(...Object.values(community.rating_distribution), 1) : 1;
   const hasImage = ride?.image_url && ride.image_url.startsWith('http') && !imageError;
 
+  const name = rideName || ride?.name || 'Ride';
+  const shortName = name.length <= HEADER_TITLE_MAX;
+  const headerTitle = shortName ? name : 'Ride';
+
   if (loading || loadError) {
     return (
-      <SafeScreen style={s.container}>
-        <LinearGradient colors={[B.skyMid, B.skyDark, B.navy]} style={s.heroGradient}>
-          <View style={s.headerRow}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={s.backBtn}>
-              <GameIcon name="back" size={34} accessibilityLabel="Back" />
-            </Pressable>
-            <View style={{ width: 40 }} />
-          </View>
-        </LinearGradient>
+      <RideTrackerFrame title={headerTitle} style={s.container}>
         {loadError
           ? <SharkLoader state="error" onRetry={() => { setLoadError(false); setLoading(true); void fetchData().finally(() => setLoading(false)); }} />
           : <SharkLoader />}
-      </SafeScreen>
+      </RideTrackerFrame>
     );
   }
 
-  const heroContent = (
-    <>
-      <View style={s.headerRow}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={s.backBtn}>
-          <GameIcon name="back" size={34} accessibilityLabel="Back" />
-        </Pressable>
-        <Pressable onPress={handleWishlistToggle} hitSlop={12} style={s.starBtn}>
-          <GameIcon name="star" size={30} style={wishlisted ? undefined : { opacity: 0.4 }}
-            accessibilityLabel={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'} />
-        </Pressable>
-      </View>
-      <View style={s.heroBody}>
-        <Text style={s.heroTitle} numberOfLines={2}>{rideName || ride?.name}</Text>
-        {(ride?.park_name || ride?.park_id) && (
-          <Text style={s.heroPark}>{ride.park_name || PARK_NAME_MAP[ride!.park_id] || ''}</Text>
-        )}
-        {/* Metadata pills */}
+  const parkName = ride ? (ride.park_name || PARK_NAME_MAP[ride.park_id] || '') : '';
+  const starButton = (
+    <Pressable onPress={handleWishlistToggle} hitSlop={12} style={s.starBtn} accessibilityRole="button"
+      accessibilityLabel={wishlisted ? 'Remove from favorites' : 'Add to favorites'}>
+      <GameIcon name="star" size={34} style={wishlisted ? undefined : { opacity: 0.45 }} />
+    </Pressable>
+  );
+  const meta = ride?.metadata;
+  const hasFacts = !!(meta?.year_opened || meta?.speed || meta?.manufacturer || meta?.inversions);
+  // The ride card: its photo (when there is one), then the name, park and facts on white.
+  // With only the park to say, it is one line under the header instead of a mostly empty card.
+  const rideCard = !hasImage && shortName && !hasFacts ? (
+    !!parkName && <Text style={s.parkLine} maxFontSizeMultiplier={1.3}>{parkName}</Text>
+  ) : (
+    <View style={s.rideCard}>
+      {hasImage && (
+        <Image source={{ uri: ride!.image_url! }} style={s.rideImage} contentFit="cover"
+          onError={() => setImageError(true)} accessible={false} />
+      )}
+      <View style={s.rideBody}>
+        {!shortName && <Text style={s.rideTitle} numberOfLines={2} maxFontSizeMultiplier={1.3}>{name}</Text>}
+        {!!parkName && <Text style={s.ridePark} maxFontSizeMultiplier={1.3}>{parkName}</Text>}
         <View style={s.metaRow}>
-          {ride?.metadata?.year_opened && <MetaPill label={`Est. ${ride.metadata.year_opened}`} />}
+          {ride?.metadata?.year_opened && <MetaPill label={`Opened ${ride.metadata.year_opened}`} />}
           {ride?.metadata?.speed && <MetaPill label={`${ride.metadata.speed} mph`} />}
           {ride?.metadata?.manufacturer && <MetaPill label={ride.metadata.manufacturer} />}
-          {ride?.metadata?.inversions && <MetaPill label={`${ride.metadata.inversions} inversions`} />}
+          {ride?.metadata?.inversions && <MetaPill label={`Upside down ${ride.metadata.inversions} times`} />}
         </View>
       </View>
-    </>
+    </View>
   );
 
   return (
-    <SafeScreen style={s.container}>
+    <RideTrackerFrame title={headerTitle} right={starButton} style={s.container}>
       <FlatList
         data={history}
         keyExtractor={item => item.id.toString()}
@@ -237,27 +232,7 @@ export default function RideDetailScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={B.skyDark} />}
         ListHeaderComponent={
           <View>
-            {/* Hero: image background or gradient */}
-            {hasImage ? (
-              <View style={s.heroImageWrap}>
-                <Image
-                  source={{ uri: ride!.image_url! }}
-                  style={s.heroImage}
-                  contentFit="cover"
-                  onError={() => setImageError(true)}
-                />
-                <LinearGradient
-                  colors={['rgba(9,38,143,0.3)', 'rgba(9,38,143,0.85)']}
-                  style={s.heroImageOverlay}
-                >
-                  {heroContent}
-                </LinearGradient>
-              </View>
-            ) : (
-              <LinearGradient colors={[B.skyMid, B.skyDark, B.navy]} style={s.heroGradient}>
-                {heroContent}
-              </LinearGradient>
-            )}
+            {rideCard}
 
             {/* Stats row */}
             <View style={s.statsRow}>
@@ -280,9 +255,9 @@ export default function RideDetailScreen() {
             {/* Community Rating Distribution */}
             {community && community.total_logs > 0 && (
               <View style={s.card}>
-                <Text style={s.sectionTitle}>COMMUNITY RATINGS</Text>
+                <Text style={[s.sectionTitle, s.cardTitle]}>COMMUNITY RATINGS</Text>
                 <Text style={s.communitySubtitle}>
-                  {community.total_logs} logs from {community.unique_riders} riders
+                  {`${community.total_logs} ${community.total_logs === 1 ? 'log' : 'logs'} from ${community.unique_riders} ${community.unique_riders === 1 ? 'rider' : 'riders'}`}
                 </Text>
                 {[5, 4, 3, 2, 1].map(r => (
                   <RatingBar key={r} rating={r} count={community.rating_distribution[r] || 0} maxCount={maxDistCount} />
@@ -302,14 +277,7 @@ export default function RideDetailScreen() {
             )}
 
             {/* Log a ride CTA */}
-            <Pressable
-              onPress={() => navigation.navigate('RideLog')}
-              style={({ pressed }) => [s.logBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
-            >
-              <LinearGradient colors={[B.gold, B.goldDark]} style={s.logBtnGrad}>
-                <Text style={s.logBtnText}>Log This Ride</Text>
-              </LinearGradient>
-            </Pressable>
+            <GameButton label="Log this ride" icon="ride" onPress={() => navigation.navigate('RideLog')} style={s.logBtn} />
 
             {/* History header */}
             <Text style={s.sectionTitle}>YOUR RIDE HISTORY</Text>
@@ -318,7 +286,7 @@ export default function RideDetailScreen() {
         ListEmptyComponent={
           <View style={s.emptyWrap}>
             <Text style={s.emptyTitle}>You haven't ridden this yet!</Text>
-            <Text style={s.emptySub}>Tap "Log This Ride" above to start</Text>
+            <Text style={s.emptySub}>Tap LOG THIS RIDE above to start.</Text>
           </View>
         }
       />
@@ -330,9 +298,7 @@ export default function RideDetailScreen() {
             {shareEntry && (
               <>
                 <ShareableRideCard ride={shareEntry} rideCount={totalRides} onShare={() => setShareEntry(null)} />
-                <Pressable onPress={() => setShareEntry(null)} style={s.modalClose}>
-                  <Text style={s.modalCloseText}>Close</Text>
-                </Pressable>
+                <GameButton label="Close" variant="secondary" onPress={() => setShareEntry(null)} style={s.modalClose} />
               </>
             )}
           </Pressable>
@@ -346,71 +312,37 @@ export default function RideDetailScreen() {
       >
         <Text style={s.toastText}>{toastText}</Text>
       </Animated.View>
-    </SafeScreen>
+    </RideTrackerFrame>
   );
 }
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: B.pageBg },
 
-  // ─── Hero (gradient fallback) ───
-  heroGradient: {
-    paddingBottom: 24,
-    paddingTop: 4,
+  // ─── Header star ───
+  starBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+
+  // ─── Ride card ───
+  rideCard: {
+    marginHorizontal: 16, marginTop: 16, backgroundColor: B.white, borderRadius: 22,
+    borderWidth: 2, borderColor: '#abd9f1', overflow: 'hidden',
   },
-  heroImageWrap: {
-    width: '100%',
-    minHeight: 260,
-  },
-  heroImage: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  heroImageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    paddingBottom: 24,
-    paddingTop: 4,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  backChevron: { color: '#fff', fontSize: 22, fontFamily: 'Knockout' },
-  starBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  starIcon: { color: B.gold, fontSize: 24, fontFamily: 'Shark' },
-  heroBody: { paddingHorizontal: 20, paddingTop: 8 },
-  heroTitle: {
-    color: '#fff', fontSize: 32, fontFamily: 'Shark',
-    marginBottom: 2,
-  },
-  heroPark: {
-    color: 'rgba(255,255,255,0.7)', fontSize: 15, fontFamily: 'Knockout',
-    marginBottom: 10,
-  },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  rideImage: { width: '100%', height: 170 },
+  parkLine: { color: '#05346e', fontSize: 18, fontFamily: 'Knockout', textAlign: 'center', marginTop: 16 },
+  rideBody: { paddingHorizontal: 16, paddingVertical: 14 },
+  rideTitle: { color: '#05346e', fontSize: 26, fontFamily: 'Shark', marginBottom: 2 },
+  ridePark: { color: '#2c5a85', fontSize: 16, fontFamily: 'Knockout', marginBottom: 8 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   metaPill: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: B.pageBg,
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  metaPillText: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontFamily: 'Knockout' },
+  metaPillText: { color: B.navy, fontSize: 13, fontFamily: 'Knockout' },
 
   // ─── Content ───
-  listContent: { paddingBottom: 60 },
+  listContent: { paddingBottom: FOOTER_CLEARANCE },
 
   // ─── Stats Row ───
   statsRow: {
@@ -438,26 +370,21 @@ const s = StyleSheet.create({
     letterSpacing: 1.5, fontFamily: 'Knockout',
     marginBottom: 10, marginHorizontal: 16,
   },
-  communitySubtitle: { color: B.textLight, fontSize: 12, fontFamily: 'Knockout', marginBottom: 12 },
+  cardTitle: { marginHorizontal: 0 },
+  communitySubtitle: { color: '#2c5a85', fontSize: 13, fontFamily: 'Knockout', marginBottom: 12 },
 
   // ─── Rating bars ───
   ratingBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   ratingBarLabel: { color: B.textMid, fontSize: 13, fontFamily: 'Knockout', width: 16, textAlign: 'center' },
   ratingBarTrack: { flex: 1, height: 8, backgroundColor: B.pageBg, borderRadius: 4, overflow: 'hidden' },
-  ratingBarFill: { height: '100%', borderRadius: 4 },
+  ratingBarFill: { height: '100%', borderRadius: 4, backgroundColor: B.navy },
   ratingBarCount: { color: B.textLight, fontSize: 12, fontFamily: 'Knockout', width: 28, textAlign: 'right' },
   topReactions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
   topReactionsLabel: { color: B.textLight, fontSize: 12, fontFamily: 'Knockout' },
   topReactionItem: { fontSize: 15, fontFamily: 'Knockout' },
 
   // ─── Log CTA ───
-  logBtn: {
-    marginHorizontal: 16, marginBottom: 20, borderRadius: 16,
-    shadowColor: B.gold, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
-  },
-  logBtnGrad: { borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
-  logBtnText: { color: B.textDark, fontSize: 16, fontFamily: 'Shark' },
+  logBtn: { marginHorizontal: 16, marginBottom: 20 },
 
   // ─── History entries ───
   entry: {
@@ -481,24 +408,18 @@ const s = StyleSheet.create({
 
   // ─── Empty ───
   emptyWrap: { alignItems: 'center', paddingVertical: 40 },
-  emptyTitle: { color: B.textMid, fontSize: 16, fontFamily: 'Shark' },
-  emptySub: { color: B.textLight, fontSize: 13, fontFamily: 'Knockout', marginTop: 4 },
+  emptyTitle: { color: '#05346e', fontSize: 18, fontFamily: 'Shark' },
+  emptySub: { color: '#2c5a85', fontSize: 15, fontFamily: 'Knockout', marginTop: 4 },
 
   // ─── Share modal ───
   modalOverlay: { flex: 1, backgroundColor: 'rgba(5,52,110,0.6)', justifyContent: 'center', padding: 20 },
   modalContent: { maxHeight: '80%' },
-  modalClose: {
-    backgroundColor: B.white, borderRadius: 12, paddingVertical: 14,
-    alignItems: 'center', marginTop: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 4, elevation: 3,
-  },
-  modalCloseText: { color: B.textDark, fontSize: 16, fontFamily: 'Knockout' },
+  modalClose: { marginTop: 12 },
 
   // ─── Toast ───
   toast: {
     position: 'absolute',
-    bottom: 100,
+    bottom: FOOTER_CLEARANCE,
     alignSelf: 'center',
     backgroundColor: B.navy,
     borderRadius: 20,
