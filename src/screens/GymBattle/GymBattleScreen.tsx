@@ -816,13 +816,10 @@ export default function GymBattleScreen({ navigation, route }: Props) {
                 <Text style={styles.noTeamText}>Pick a team to enter the arena battle.</Text>
                 <GameButton label="Pick your team" icon="crown"
                   onPress={() => { playButtonSound(); navigation?.navigate('TeamSelection'); }} />
+                {/* One yellow button on this card: Back is the quiet text action under it. */}
+                <GameButton label="Back" variant="ghost" tone="onBlue" onPress={handleGoBack} style={styles.joinBack} />
               </View>
             </BlurView>
-          </View>
-          
-          {/* The game's own button family (was a flat blue bar under the yellow Pick your team). */}
-          <View style={styles.backButtonAbsolute}>
-            <GameButton label="Back" icon="back" variant="secondary" onPress={handleGoBack} />
           </View>
         </ImageBackground>
       </Animated.View>
@@ -1332,13 +1329,13 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     alignItems: 'center',
   },
-  // Below the three pillars and above BACK, drawn on top of everything: the pillars used to
+  // Below the three pillars, drawn on top of everything: the pillars used to
   // cover the card's title, words and button (they have their own zIndex; this card had none).
   noTeamOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingBottom: 112,
+    paddingBottom: 72,
     zIndex: 10,
     elevation: 10,
   },
@@ -1368,11 +1365,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
   },
-  backButtonAbsolute: {
-    position: 'absolute',
-    bottom: 40,
-    left: 20,
-    right: 20,
-    alignItems: 'center',
-  },
+  joinBack: { marginTop: 6 },
 });
