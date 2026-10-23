@@ -236,10 +236,8 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
         <ShareCard daily={daily} />
       </View>
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <StoryShareFrame ref={storyRef} kicker="MY MEMORY MATCH DAILY" cta="Play today's deck with me!" campaign="memory">
-          <View style={{ backgroundColor: '#ffffff', borderRadius: 18 }}>
-            <ShareCard daily={daily} />
-          </View>
+        <StoryShareFrame ref={storyRef} ribbon="MEMORY MATCH!" cta="Play today's deck with me!" campaign="memory">
+          <ShareCard daily={daily} />
         </StoryShareFrame>
       </View>
       <Text style={styles.sheetHint}>The picture shows how you did. It never shows the cards.</Text>

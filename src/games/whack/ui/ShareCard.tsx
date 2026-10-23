@@ -61,7 +61,7 @@ export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; ride
       </TouchableOpacity>
       {/* Off-screen card (captured on demand). */}
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <StoryShareFrame ref={ref} kicker="MY WHACK-A-SHARK RUN" cta="Can you beat my score?" campaign="whack">
+        <StoryShareFrame ref={ref} ribbon="WHACK-A-SHARK!" cta="Can you beat my score?" campaign="whack">
         <View style={styles.card}>
           <Text style={styles.title}>WHACK-A-SHARK</Text>
           <Text style={styles.score}>{score.toLocaleString()}</Text>
@@ -80,7 +80,6 @@ export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; ride
             ))}
           </View>
           <Text style={styles.foot}>{`${quick} QUICK BONKS`}</Text>
-          <Text style={styles.brand}>THEME PARK SHARK</Text>
         </View>
         </StoryShareFrame>
       </View>

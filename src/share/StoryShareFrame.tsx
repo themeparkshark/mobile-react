@@ -1,36 +1,35 @@
 /**
  * The story-size frame (9:16, saved at 1080x1920) for share pictures outside the Share
- * Studio kinds: a ride log card, a mini-game result. TPS blue, a short kicker on top, the
- * card in the middle, and the TPS link with a QR that scans to it at the bottom.
- * Kid safety: callers pass no player names, typed notes, dates or ride names.
+ * Studio kinds: a ride log card, a mini-game result, a Closet look. It is built from the Flex
+ * card's own pieces (StoryChrome background, Alex's gold ribbon, CardFooter with the one logo,
+ * CTA, link and QR), so every share picture looks like the same family.
+ * Kid safety: callers pass no player names, typed notes, dates or crew names.
  */
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { forwardRef, type ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { QR_BY_CAMPAIGN, type ShareCampaign } from './campaignQr';
+import { CardFooter, Ribbon, STORY_SAFE, StoryChrome } from './FlexCard';
 import { FLEX_SIZE } from './formats';
-import { SHARE_LINK_DISPLAY } from './link';
+import { FRAMES } from './frames';
 
 export interface StoryShareFrameProps {
-  readonly kicker: string;
+  /** The gold ribbon headline, short and ALL CAPS ("MY RIDE!"). */
+  readonly ribbon: string;
   readonly cta: string;
   readonly campaign: ShareCampaign;
   readonly children: ReactNode;
 }
 
-export const StoryShareFrame = forwardRef<View, StoryShareFrameProps>(function StoryShareFrame({ kicker, cta, campaign, children }, ref) {
+const FRAME = FRAMES.common;
+
+export const StoryShareFrame = forwardRef<View, StoryShareFrameProps>(function StoryShareFrame({ ribbon, cta, campaign, children }, ref) {
   return (
-    <View ref={ref} collapsable={false} style={styles.frame}>
-      <LinearGradient colors={['#20AAE8', '#0B83C9', '#05346E']} style={StyleSheet.absoluteFill} />
-      <Text style={styles.kicker}>{kicker}</Text>
-      <View style={styles.slot}>{children}</View>
-      <View style={styles.footer}>
-        <View style={styles.footerCopy}>
-          <Text style={styles.cta}>{cta}</Text>
-          <Text style={styles.link}>{SHARE_LINK_DISPLAY}</Text>
-        </View>
-        <Image source={QR_BY_CAMPAIGN[campaign]} style={styles.qr} contentFit="contain" />
+    <View ref={ref} collapsable={false} style={[styles.frame, { backgroundColor: FRAME.bg[1] }]}>
+      <StoryChrome frame={FRAME} />
+      <View style={styles.body}>
+        <Ribbon text={ribbon} width={256} />
+        <View style={styles.slot}>{children}</View>
+        <CardFooter cta={cta} qrArt={QR_BY_CAMPAIGN[campaign]} frame={FRAME} logoWidth={120} qr={56} />
       </View>
     </View>
   );
@@ -40,13 +39,8 @@ export const StoryShareFrame = forwardRef<View, StoryShareFrameProps>(function S
 export const OFFSCREEN = { position: 'absolute', left: -4000, top: 0 } as const;
 
 const styles = StyleSheet.create({
-  frame: { ...FLEX_SIZE.story, overflow: 'hidden', paddingHorizontal: 20, paddingTop: 70, paddingBottom: 56, justifyContent: 'space-between' },
-  kicker: { color: '#FFF0A6', fontSize: 22, fontFamily: 'Shark', textAlign: 'center', letterSpacing: 1,
-    textShadowColor: 'rgba(0,45,100,0.45)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  slot: { width: '100%' },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(3,40,92,0.55)', borderRadius: 16, padding: 12 },
-  footerCopy: { flex: 1 },
-  cta: { color: '#FFCF3B', fontSize: 19, fontFamily: 'Shark' },
-  link: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Knockout', marginTop: 3 },
-  qr: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#FFFFFF' },
+  frame: { ...FLEX_SIZE.story, overflow: 'hidden' },
+  body: { flex: 1, alignItems: 'center', paddingTop: STORY_SAFE.top, paddingBottom: STORY_SAFE.bottom, paddingHorizontal: 20 },
+  // The card sits centered in the space between the ribbon and the footer.
+  slot: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' },
 });

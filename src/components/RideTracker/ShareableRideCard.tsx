@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useContext, useRef, useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,6 +12,10 @@ import SharkReactionIcon, { reactionLabel } from './SharkReactionIcon';
 import { gameAlert } from '../../ui';
 import { captureFlex, openShareSheet } from '../../share/capture';
 import { OFFSCREEN, StoryShareFrame } from '../../share/StoryShareFrame';
+import { LocationStatusContext } from '../../context/LocationProvider';
+
+/** While the player is inside a park, the ride card waits: a shared ride and park would say where a kid is right now. */
+export const RIDE_SHARE_HELD_LABEL = 'Share it after you leave the park';
 
 interface ShareableRideCardProps {
   ride: PlayerRideType;
@@ -21,24 +25,37 @@ interface ShareableRideCardProps {
   beforeShare?: () => Promise<void>;
 }
 
-// The card itself (shown in place, and inside the shared story picture)
-const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = React.memo(({ ride, rideCount }) => {
+/** "Ridden 1 time", "Ridden 12 times". Exported for tests. */
+export function riddenLine(count: number): string {
+  return `Ridden ${count.toLocaleString('en-US')} ${count === 1 ? 'time' : 'times'}`;
+}
+
+/**
+ * The card itself. 'app' is the full log shown in place (date and all). 'share' is the copy on
+ * the shared story picture: no date, no typed note, no player name, and no brand marks of its
+ * own (the story frame carries the one logo, link and QR), sized to its content.
+ */
+const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number; variant?: 'app' | 'share' }> = React.memo(({ ride, rideCount, variant = 'app' }) => {
+  const shared = variant === 'share';
   const date = new Date(ride.rode_at);
   const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const parkName = PARK_DISPLAY_ORDER.find(park => park.id === ride.park_id)?.name ?? 'Theme Park';
   const rating = Math.max(0, Math.min(5, Math.trunc(ride.rating ?? 0)));
+  const count = rideCount != null && rideCount > 0 ? rideCount : null;
 
   return (
     <View style={cardStyles.wrapper}>
-      <LinearGradient colors={['#20AAE8', '#0B83C9', '#07569D']} style={cardStyles.card}
+      <LinearGradient colors={['#20AAE8', '#0B83C9', '#07569D']} style={[cardStyles.card, shared && cardStyles.cardShared]}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <View style={cardStyles.bubbleOne} />
         <View style={cardStyles.bubbleTwo} />
         <View style={cardStyles.bubbleThree} />
-        <View style={cardStyles.topBar}>
-          <Text style={cardStyles.brandText}>THEME PARK SHARK</Text>
-          <View style={cardStyles.memoryBadge}><Text style={cardStyles.memoryBadgeText}>RIDE MEMORY</Text></View>
-        </View>
+        {!shared && (
+          <View style={cardStyles.topBar}>
+            <Text style={cardStyles.brandText}>THEME PARK SHARK</Text>
+            <View style={cardStyles.memoryBadge}><Text style={cardStyles.memoryBadgeText}>RIDE MEMORY</Text></View>
+          </View>
+        )}
 
         <View style={cardStyles.heroRow}>
           <View style={cardStyles.heroCopy}>
@@ -58,37 +75,53 @@ const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = Reac
             style={cardStyles.heroShark} contentFit="contain" />
         </View>
 
-        <View style={cardStyles.detailsPanel}>
-          {ride.reaction && (
-            <View style={cardStyles.reactionRow}>
-              <SharkReactionIcon reaction={ride.reaction} size={28} />
-              <Text style={cardStyles.reactionLabel}>{reactionLabel(ride.reaction) ?? 'My reaction'}</Text>
+        {shared ? (
+          (!!ride.reaction || !!count) && (
+            <View style={cardStyles.detailsPanel}>
+              {ride.reaction && (
+                <View style={[cardStyles.reactionRow, !count && { marginBottom: 0 }]}>
+                  <SharkReactionIcon reaction={ride.reaction} size={28} />
+                  <Text style={cardStyles.reactionLabel}>{reactionLabel(ride.reaction) ?? 'My reaction'}</Text>
+                </View>
+              )}
+              {count && <Text style={cardStyles.riddenLine}>{riddenLine(count)}</Text>}
             </View>
-          )}
-          <View style={cardStyles.statsRow}>
-            <View style={cardStyles.stat}>
-              <Text style={cardStyles.statLabel}>RIDE DATE</Text>
-              <Text style={cardStyles.statValue}>{dateStr}</Text>
-            </View>
-            {rideCount != null && rideCount > 0 && (
-              <View style={cardStyles.stat}>
-                <Text style={cardStyles.statLabel}>TIMES RIDDEN</Text>
-                <Text style={cardStyles.statValue}>{rideCount.toLocaleString()}×</Text>
+          )
+        ) : (
+          <View style={cardStyles.detailsPanel}>
+            {ride.reaction && (
+              <View style={cardStyles.reactionRow}>
+                <SharkReactionIcon reaction={ride.reaction} size={28} />
+                <Text style={cardStyles.reactionLabel}>{reactionLabel(ride.reaction) ?? 'My reaction'}</Text>
               </View>
             )}
-            {ride.wait_time_minutes != null && (
+            <View style={cardStyles.statsRow}>
               <View style={cardStyles.stat}>
-                <Text style={cardStyles.statLabel}>WAITED</Text>
-                <Text style={cardStyles.statValue}>{ride.wait_time_minutes} min</Text>
+                <Text style={cardStyles.statLabel}>RIDE DATE</Text>
+                <Text style={cardStyles.statValue}>{dateStr}</Text>
               </View>
-            )}
+              {count && (
+                <View style={cardStyles.stat}>
+                  <Text style={cardStyles.statLabel}>TIMES RIDDEN</Text>
+                  <Text style={cardStyles.statValue}>{count.toLocaleString('en-US')}</Text>
+                </View>
+              )}
+              {ride.wait_time_minutes != null && (
+                <View style={cardStyles.stat}>
+                  <Text style={cardStyles.statLabel}>WAITED</Text>
+                  <Text style={cardStyles.statValue}>{ride.wait_time_minutes} min</Text>
+                </View>
+              )}
+            </View>
+            {/* The player's typed note never goes on a shared picture (kid safety): it stays in the log. */}
           </View>
-          {/* The player's typed note never goes on a shared picture (kid safety): it stays in the log. */}
-        </View>
-        <View style={cardStyles.watermark}>
-          <Text style={cardStyles.watermarkText}>MY SHARK STORY</Text>
-          <Text style={cardStyles.watermarkUrl}>themeparkshark.com</Text>
-        </View>
+        )}
+        {!shared && (
+          <View style={cardStyles.watermark}>
+            <Text style={cardStyles.watermarkText}>MY SHARK STORY</Text>
+            <Text style={cardStyles.watermarkUrl}>themeparkshark.com</Text>
+          </View>
+        )}
       </LinearGradient>
     </View>
   );
@@ -103,6 +136,8 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
   const [loadingCount, setLoadingCount] = useState(rideCount == null);
   const [confirmedCount, setConfirmedCount] = useState(rideCount);
   const reducedMotion = useReducedGameMotion();
+  const { park } = useContext(LocationStatusContext);
+  const inPark = !!park;
 
   useEffect(() => {
     let current = true;
@@ -117,7 +152,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
   }, [ride.ride_id, rideCount]);
 
   const handleShare = useCallback(async () => {
-    if (busy.current || loadingCount) return;
+    if (busy.current || loadingCount || inPark) return;
     busy.current = true;
     setSharing(true);
     try {
@@ -142,31 +177,33 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
       busy.current = false;
       setSharing(false);
     }
-  }, [ride, onShare, beforeShare, loadingCount]);
+  }, [ride, onShare, beforeShare, loadingCount, inPark]);
 
   return (
     <View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Share Ride Card"
-        accessibilityState={{ disabled: sharing || loadingCount, busy: sharing || loadingCount }}
-        disabled={sharing || loadingCount}
+        accessibilityState={{ disabled: sharing || loadingCount || inPark, busy: sharing || loadingCount }}
+        disabled={sharing || loadingCount || inPark}
         onPress={handleShare}
-        style={({ pressed }) => [cardStyles.shareBtn, pressed && { opacity: 0.85,
+        style={({ pressed }) => [cardStyles.shareBtn, inPark && cardStyles.shareBtnHeld, pressed && { opacity: 0.85,
           transform: [{ scale: reducedMotion ? 1 : 0.97 }] }]}
       >
-        <Text style={cardStyles.shareBtnText}>{sharing ? 'Making your card…'
-          : loadingCount ? 'Loading your ride total…' : 'Share Ride Card'}</Text>
+        <Text style={[cardStyles.shareBtnText, inPark && cardStyles.shareBtnTextHeld]}>{inPark ? RIDE_SHARE_HELD_LABEL
+          : sharing ? 'Making your card…' : loadingCount ? 'Loading your ride total…' : 'Share Ride Card'}</Text>
       </Pressable>
       <View style={cardStyles.shotContainer}>
         <CardContent ride={ride} rideCount={confirmedCount} />
       </View>
       {/* Off screen: the story-size picture that gets shared. */}
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        {/* Story size with the link and QR. Kid safety: no typed note, no player name. */}
-        <StoryShareFrame ref={storyRef} kicker="MY RIDE MEMORY" cta="Track your rides with me!" campaign="ride_log">
-          <CardContent ride={ride} rideCount={confirmedCount} />
-        </StoryShareFrame>
+        {/* Story size with the link and QR. Kid safety: no typed note, no player name, no date. */}
+        {!inPark && (
+          <StoryShareFrame ref={storyRef} ribbon="MY RIDE!" cta="Track your rides with me!" campaign="ride_log">
+            <CardContent ride={ride} rideCount={confirmedCount} variant="share" />
+          </StoryShareFrame>
+        )}
       </View>
     </View>
   );
@@ -182,6 +219,10 @@ const cardStyles = StyleSheet.create({
     borderRadius: 22,
     overflow: 'hidden',
   },
+  cardShared: { minHeight: 0, paddingBottom: 16 },
+  riddenLine: { color: '#0B4B83', fontSize: 18, fontFamily: 'Shark' },
+  shareBtnHeld: { backgroundColor: '#DCEFFB' },
+  shareBtnTextHeld: { color: '#0B4B83', fontSize: 15 },
   card: {
     padding: 18,
     paddingBottom: 14,

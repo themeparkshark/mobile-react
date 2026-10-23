@@ -231,18 +231,33 @@ function BigNumber({ copy, frame, size, width, text, style, labelSide = 'top', i
 const Footer = memo(function Footer({ kind, copy, frame, logoWidth, qr, compact = false }: {
   readonly kind: FlexKind; readonly copy: FlexCopy; readonly frame: FlexFrame; readonly logoWidth: number; readonly qr: number; readonly compact?: boolean;
 }) {
+  return <CardFooter cta={copy.cta} qrArt={QR_BY_KIND[kind]} frame={frame} logoWidth={logoWidth} qr={qr} compact={compact} />;
+});
+
+/**
+ * The one share footer every picture uses (Flex cards and the story frame): the TPS wordmark,
+ * the CTA, the readable link, and a QR that scans to that link.
+ */
+export const CardFooter = memo(function CardFooter({ cta, qrArt, frame, logoWidth, qr, compact = false }: {
+  readonly cta: string; readonly qrArt: number; readonly frame: FlexFrame; readonly logoWidth: number; readonly qr: number; readonly compact?: boolean;
+}) {
   return (
     <View style={[styles.footer, compact && styles.footerCompact]}>
       <View style={{ flex: 1, alignItems: compact ? 'center' : 'flex-start' }}>
         <FlexArtwork art={CARD_CHROME.logo} fallback={CARD_CHROME.logo} style={{ width: logoWidth, height: Math.round(logoWidth / 4) }} />
-        <Outlined text={copy.cta} style={[compact ? styles.ctaSmall : styles.cta, { color: frame.cta }]} outline={frame.outline} lines={1} />
+        <Outlined text={cta} style={[compact ? styles.ctaSmall : styles.cta, { color: frame.cta }]} outline={frame.outline} lines={1} />
         <Text style={[compact ? styles.linkSmall : styles.link, { color: frame.small }]} numberOfLines={1}>{SHARE_LINK_DISPLAY}</Text>
       </View>
       <View style={[styles.qrTile, { width: qr + 8, height: qr + 8 }]}>
-        <FlexArtwork id="qr" art={QR_BY_KIND[kind]} fallback={QR_BY_KIND[kind]} style={{ width: qr, height: qr }} />
+        <FlexArtwork id="qr" art={qrArt} fallback={qrArt} style={{ width: qr, height: qr }} />
       </View>
     </View>
   );
+});
+
+/** The story background every share picture uses: gradient, Alex's shark water, rays, stars and bubbles. */
+export const StoryChrome = memo(function StoryChrome({ frame }: { readonly frame: FlexFrame }) {
+  return <><Backdrop frame={frame} format="story" /><StoryBands frame={frame} /></>;
 });
 
 /** Title size by length, so long names wrap the same way in every outline copy. */
@@ -284,7 +299,7 @@ const Rays = memo(function Rays({ frame, size }: { readonly frame: FlexFrame; re
 });
 
 /** Alex's gold ribbon with a white, navy-outlined headline. */
-const Ribbon = memo(function Ribbon({ text, width }: { readonly text: string; readonly width: number }) {
+export const Ribbon = memo(function Ribbon({ text, width }: { readonly text: string; readonly width: number }) {
   const height = Math.round(width * (222 / 872));
   return (
     <View style={{ width, height, alignItems: 'center', justifyContent: 'center' }}>
