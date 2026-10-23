@@ -18,7 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, FadeIn, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat,
-  withSequence, withSpring, withTiming,
+  withSequence, withTiming,
 } from 'react-native-reanimated';
 import HomeArcade from '../../components/HomeArcade';
 import Map from '../../components/Map';
@@ -106,7 +106,8 @@ function ChurroFind({ reduced, onCaught }: { reduced: boolean; onCaught: () => v
     playSfx('coin', 0.8);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     if (reduced) { pop.value = 1; setTimeout(finish, 900); return; }
-    pop.value = withSequence(withSpring(0.6, { damping: 6, stiffness: 260 }),
+    // A quick squash (a spring would wobble for a second), a beat for "Nice catch!", then up and away.
+    pop.value = withSequence(withTiming(0.6, { duration: 220, easing: Easing.out(Easing.back(3)) }),
       withDelay(450, withTiming(1, { duration: 320, easing: Easing.in(Easing.cubic) }, ok => { if (ok) runOnJS(finish)(); })));
     setTimeout(finish, 1500); // never stuck if the animation is interrupted
   };
@@ -118,11 +119,16 @@ function ChurroFind({ reduced, onCaught }: { reduced: boolean; onCaught: () => v
       { scale: 1 + Math.min(p, 0.6) * 0.75 - lift * 0.5 }, { rotate: `${(1 - bob.value) * -8 + bob.value * 8}deg` }] };
   });
   const ringStyle = useAnimatedStyle(() => ({ opacity: 0.7 * (1 - ring.value), transform: [{ scale: 0.8 + ring.value * 0.7 }] }));
+  // The white disc leaves with the churro, so no empty plate is left behind.
+  const discStyle = useAnimatedStyle(() => {
+    const lift = pop.value > 0.6 ? (pop.value - 0.6) / 0.4 : 0;
+    return { opacity: 1 - lift, transform: [{ scale: 1 - lift * 0.4 }] };
+  });
   return <View style={styles.findWrap} pointerEvents="box-none">
     <Pressable onPress={catchIt} accessibilityRole="button" accessibilityLabel="Catch the churro" hitSlop={30}
       style={styles.findHit}>
       {!caught && <Animated.View style={[styles.findRing, ringStyle]} />}
-      <View style={styles.findDisc} />
+      <Animated.View style={[styles.findDisc, discStyle]} />
       <Animated.View style={churroStyle}><Image source={CHURRO} style={styles.churro} contentFit="contain" /></Animated.View>
     </Pressable>
     {caught && <Animated.Text entering={reduced ? undefined : FadeIn.duration(160)} style={styles.caught}>{COPY.caught}</Animated.Text>}
