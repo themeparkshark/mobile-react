@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -44,7 +44,8 @@ import OneTimeTip from './help/OneTimeTip';
 import CoinTopUpOffer from './money/CoinTopUpOffer';
 import { storeAvailable } from '../services/purchases';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
-import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../share';
+import { FlexShareButton } from '../share';
+import { useModalHandoff } from '../share/handoff';
 import { useDevAutoPress } from '../share/devDrive';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -127,6 +128,9 @@ export default function CoinLevelingModal({
   const [levelXp, setLevelXp] = useState(0);
   const [crowningId, setCrowningId] = useState<string | null>(null);
   const crowningSlot = usePresentationSlot(crowningId, 'crowning', 'coin_shelf');
+  // Share from this sheet: it closes first, then the Share Studio sheet opens from Root (share/handoff.ts).
+  const shareClose = useRef<() => void>(() => undefined);
+  const shareHandoff = useModalHandoff(useCallback(() => shareClose.current(), []));
   const pendingLinePlayRef = useRef(false);
   const pendingExploreRef = useRef(false);
   // Short on Tickets or Energy: the Supplies tab, opened after the sheet hides.
@@ -336,6 +340,11 @@ export default function CoinLevelingModal({
     });
   };
 
+  shareClose.current = () => {
+    if (crowningSlot.visible) { crowningSlot.done(); setCrowningId(null); }
+    handleClose();
+  };
+
   // ── Interpolations ──
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1], outputRange: ['0%', '100%'],
@@ -359,6 +368,7 @@ export default function CoinLevelingModal({
       animationOutTiming={reducedMotion ? 120 : 200}
       onBackButtonPress={state !== 'leveling' ? handleClose : undefined}
       onModalHide={() => {
+        shareHandoff.onDismiss();
         if (pendingLinePlayRef.current) {
           pendingLinePlayRef.current = false;
           onPlayInLine?.();
@@ -472,9 +482,11 @@ export default function CoinLevelingModal({
 
                 {/* Share Studio: a fresh Lv5-9 level-up (the Crowning has its own). A round button pinned
                     over the coin art's top-left corner, so it adds no height (the CTA stays on an SE screen). */}
-                {SHARE_IN_MODALS && state === 'success' && nextLevel >= 5 && nextLevel < 10 && (
+                {state === 'success' && nextLevel >= 5 && nextLevel < 10 && (
                   <FlexShareButton kind="coin_level" surface="coin_sheet" size="sm" caption style={{ position: 'absolute', left: 14, top: 30, zIndex: 5 }}
-                    payload={{ coinUrl: rideCoin.coin_url, level: nextLevel, tierName: coinTierName(nextLevel), tierIndex: nextLevel, timesCollected: rideCoin.times_collected }} />
+                    handoff={shareHandoff.handoff}
+                    payload={{ coinUrl: rideCoin.coin_url, level: nextLevel, tierName: coinTierName(nextLevel), tierIndex: nextLevel,
+                      timesCollected: rideCoin.times_collected, ownedRef: nextLevel }} />
                 )}
 
                 {/* ── Level Badge Row (compact) ── */}
@@ -1062,6 +1074,7 @@ export default function CoinLevelingModal({
       {crowningSlot.visible && (
         <Crowning rideName={rideCoin.ride_name} coinUrl={rideCoin.coin_url} boss={rideCoin.boss ?? null}
           reduced={reducedMotion} playSound={playSound}
+          shareHandoff={shareHandoff.handoff}
           onDone={() => { crowningSlot.done(); setCrowningId(null); }} />
       )}
 
@@ -1071,8 +1084,6 @@ export default function CoinLevelingModal({
         name={rideCoin.ride_name}
         onClose={() => setHoloVisible(false)}
       />
-      {/* Share Studio presents from inside this modal (a root sheet can't present over it on iOS). */}
-      {SHARE_IN_MODALS && visible && <ShareStudioHost portal />}
     </Modal>
   );
 }

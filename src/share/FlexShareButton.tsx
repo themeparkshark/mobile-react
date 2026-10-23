@@ -3,7 +3,7 @@
  * stamp card, coin sheet, event card, standings row). Alex-style round blue
  * button with a white share glyph; 48 pt hit target.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
@@ -11,6 +11,7 @@ import Svg, { Path } from 'react-native-svg';
 import * as Haptics from '../helpers/haptics';
 import { BRAND } from '../ui/tokens';
 import { useDevAutoPress } from './devDrive';
+import { shareFlexAfterHandoff } from './handoff';
 import { shareFlex, warmFlex } from './store';
 import type { FlexKind, FlexPayload } from './types';
 
@@ -23,7 +24,7 @@ export function ShareGlyph({ size = 20, color = '#ffffff' }: { readonly size?: n
   );
 }
 
-export function FlexShareButton<K extends FlexKind>({ kind, payload, surface, size = 'sm', caption = false, style }: {
+export function FlexShareButton<K extends FlexKind>({ kind, payload, surface, size = 'sm', caption = false, style, handoff }: {
   readonly kind: K;
   readonly payload: FlexPayload<K>;
   readonly surface: string;
@@ -32,6 +33,11 @@ export function FlexShareButton<K extends FlexKind>({ kind, payload, surface, si
   /** sm only: a "Share" word under the icon and two attention pulses on arrival, so kids read it. */
   readonly caption?: boolean;
   readonly style?: StyleProp<ViewStyle>;
+  /**
+   * The button sits inside an RN <Modal>: close that modal first (useModalHandoff), then the
+   * Share Studio sheet opens from Root. Without it a share from a modal never shows on iOS.
+   */
+  readonly handoff?: () => Promise<void>;
 }) {
   const reduced = useUiReducedMotion();
   const pulse = useSharedValue(0);
@@ -42,9 +48,13 @@ export function FlexShareButton<K extends FlexKind>({ kind, payload, surface, si
     return () => cancelAnimation(pulse);
   }, [caption, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pulse.value * 0.14 }] }));
+  const leaving = useRef(false);
   const open = () => {
     void Haptics.selectionAsync();
-    shareFlex(kind, payload, { surface });
+    if (!handoff) { shareFlex(kind, payload, { surface }); return; }
+    if (leaving.current) return;
+    leaving.current = true;
+    void shareFlexAfterHandoff(handoff, kind, payload, { surface }).finally(() => { leaving.current = false; });
   };
   useDevAutoPress('flex_button', open);
   return (

@@ -49,6 +49,8 @@ import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
 import EnamelPin from '../pinTrading/EnamelPin';
 import { BOX_ART, PIN_ART, type BoxTone } from './PinArt';
 import { PINS_COPY, revealOrder, serialLabel, type Pull } from './pinsModel';
+import { FlexShareButton } from '../../share/FlexShareButton';
+import { MODAL_HANDOFF_MS } from '../../share/handoff';
 
 type Phase = 'drop' | 'ready' | 'shake' | 'hold' | 'pop' | 'show' | 'summary';
 
@@ -591,6 +593,12 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     });
   };
   const summarySize = Math.min(104, (width - 100) / 3.3);
+  // Show off a gold chaser or a Golden Box pin (never a park pin: its card would say where the kid is).
+  // Only once the last box is shown, so Share never skips a box still waiting to open.
+  const brag = (p: RevealPull | undefined) => !!p && !isCatch && !p.rare && (p.is_chaser || (golden && !p.duplicate));
+  const sharePull = phase === 'summary' ? pulls.find(p => p.is_chaser) ?? null
+    : phase === 'show' && pulls.length === 1 && brag(pull) ? pull : null;
+  const shareHandoff = () => new Promise<void>(resolve => { onDone(pulls); setTimeout(resolve, MODAL_HANDOFF_MS); });
 
   return (
     <Modal transparent visible animationType="fade" statusBarTranslucent onRequestClose={() => (phase === 'show' || phase === 'summary') && next()}>
@@ -792,6 +800,11 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               <View style={styles.wornChip}>
                 <Text maxFontSizeMultiplier={1.2} style={styles.wornText}>On your lanyard!{swappedOut ? ` ${swappedOut} came off.` : ''}</Text>
               </View>
+            )}
+            {sharePull && !choosing && (
+              <FlexShareButton kind="find" surface={golden ? 'golden_box' : 'pin_box'} size="md" handoff={shareHandoff}
+                style={{ alignSelf: 'center' }}
+                payload={{ itemName: sharePull.name, artUrl: sharePull.icon_url ?? PIN_ART.chaser, rarity: sharePull.is_chaser ? 5 : 4 }} />
             )}
             <GameButton label={index < pulls.length - 1 ? 'Next box' : pulls.length > 1 && phase === 'show' ? 'See all' : 'Done'}
               icon={index < pulls.length - 1 ? 'gift' : 'check'} onPress={next} />

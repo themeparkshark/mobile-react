@@ -41,7 +41,8 @@ import { lastSharkPassSeen, noteSharkPassPoints } from '../components/money/Shar
 import { playSfx } from '../gamekit/SFX';
 import CoinTopUpOffer from '../components/money/CoinTopUpOffer';
 import { FRAME_ART, GOLD_ART } from '../components/money/frames';
-import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../share';
+import { FlexShareButton } from '../share';
+import { useModalHandoff } from '../share/handoff';
 import RealMoneyMark from '../components/RealMoneyMark';
 import { AuthContext } from '../context/AuthProvider';
 import { haptic } from '../gamekit/Haptics';
@@ -181,6 +182,8 @@ export default function SharkPassScreen() {
   // The season set's try-on: the kid's own shark wearing a piece (nothing is saved).
   const [tryOn, setTryOn] = useState<SetPiece | null>(null);
   const [landed, setLanded] = useState<Landed | null>(null);
+  // Share from the reward card: it closes first, then the Share Studio sheet opens (share/handoff.ts).
+  const landedShare = useModalHandoff(useCallback(() => setLanded(null), []));
   const [goldBusy, setGoldBusy] = useState<string | null>(null);
   const [goldShort, setGoldShort] = useState<number>(0);
   const buying = useRef(false);
@@ -836,13 +839,13 @@ export default function SharkPassScreen() {
                 ))}
               </View>
             </View>
-          ) : SHARE_IN_MODALS && isWearable(landed.reward) && !landed.emblem ? (
+          ) : isWearable(landed.reward) && !landed.emblem && !landed.next ? (
             // Show it off: the kid's shark wearing the new piece, the season and the step. No price, no "bought".
+            // The last reveal in a chain only, so Share never skips a reward still waiting to show.
             <View style={{ alignItems: 'center', marginTop: 8 }}>
-              <FlexShareButton kind="find" surface="sharkpass" size="sm" caption
+              <FlexShareButton kind="find" surface="sharkpass" size="sm" caption handoff={landedShare.handoff}
                 payload={{ itemName: landed.reward.name, artUrl: (landed.reward.type === 'frame' ? FRAME_ART[landed.reward.art] : SEASON_ART[landed.reward.art]) ?? (landed.reward.type === 'item' ? landed.reward.icon_url : null) ?? EMBLEM,
                   rarity: 4, setName: season ? `${season.title}${step ? ` · Step ${step}` : ''}` : undefined }} />
-              <ShareStudioHost portal />
             </View>
           ) : undefined}
           caption={landed.caption ?? rewardWords(landed.reward)}

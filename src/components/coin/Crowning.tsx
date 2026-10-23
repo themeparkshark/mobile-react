@@ -7,7 +7,7 @@ import YellowButton from '../YellowButton';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { playLimited, SFX_PRIORITY } from '../../audio/sfxLimiter';
 import { CROWNING, crowningCopy, type CoinBossBlock } from './progressionModel';
-import { FlexShareButton, SHARE_IN_MODALS } from '../../share';
+import { FlexShareButton } from '../../share';
 
 /**
  * The Crowning (progression.md 9.5): Level 10, 5.5 s, skippable after 1.5 s.
@@ -33,9 +33,11 @@ export interface CrowningProps {
   readonly onFight?: () => void;
   readonly onDone: () => void;
   readonly playSound?: (source: number) => void;
+  /** Share closes the coin sheet first (share/handoff.ts), then the Share Studio sheet opens. */
+  readonly shareHandoff?: () => Promise<void>;
 }
 
-export default function Crowning({ rideName, coinUrl, boss, reduced, inPerson = false, onFight, onDone, playSound }: CrowningProps) {
+export default function Crowning({ rideName, coinUrl, boss, reduced, inPerson = false, onFight, onDone, playSound, shareHandoff }: CrowningProps) {
   const clock = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const [phase, setPhase] = useState<'playing' | 'card'>(reduced ? 'card' : 'playing');
   const [skippable, setSkippable] = useState(reduced);
@@ -117,7 +119,7 @@ export default function Crowning({ rideName, coinUrl, boss, reduced, inPerson = 
             <View style={{ marginTop: 12, alignSelf: 'stretch' }}>
               <YellowButton text={copy.primary} onPress={() => (onFight && copy.secondary ? onFight() : onDone())} />
             </View>
-            {SHARE_IN_MODALS && !!coinUrl && <FlexShareButton kind="crowned" payload={{ coinUrl }} surface="coin_sheet" size="md" style={{ marginTop: 10 }} />}
+            {!!shareHandoff && !!coinUrl && <FlexShareButton kind="crowned" payload={{ coinUrl, ownedRef: 10 }} surface="coin_sheet" size="md" style={{ marginTop: 10 }} handoff={shareHandoff} />}
             {copy.secondary && (
               <TouchableOpacity accessibilityRole="button" onPress={onDone} style={{ paddingVertical: 10 }}>
                 <Text style={styles.later}>{copy.secondary}</Text>

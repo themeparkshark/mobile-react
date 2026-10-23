@@ -310,11 +310,17 @@ test('event titles carry no year and finds do not say their rarity twice', () =>
   assert.equal(copy.flexCopy('find', { itemName: 'Legendary Golden Churro', artUrl: 'x', rarity: 5 }).title, 'Golden Churro');
 });
 
-test('the coin level-up Share button matches the reveal rule (level 5+), and modal buttons are off in release', () => {
+test('the coin level-up Share button matches the reveal rule (level 5+), and modal buttons hand off instead of nesting', () => {
   const sheet = fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8');
   assert.match(sheet, /nextLevel >= 5 && nextLevel < 10/);
-  assert.match(sheet, /<ShareStudioHost portal \/>/);
-  assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/home/HomeHuntResultsModal.tsx'), 'utf8'), /<ShareStudioHost portal \/>/);
+  // A share inside a modal closes the modal first (useModalHandoff), then the Root sheet and gate open.
+  assert.match(sheet, /handoff=\{shareHandoff\.handoff\}/);
+  assert.match(sheet, /onModalHide=\{\(\) => \{\s*shareHandoff\.onDismiss\(\);/);
+  assert.doesNotMatch(sheet, /<ShareStudioHost portal \/>/, 'no nested share host inside the coin sheet');
+  const hunt = fs.readFileSync(pathMod.join(repo, 'src/components/home/HomeHuntResultsModal.tsx'), 'utf8');
+  assert.match(hunt, /handoff=\{shareHandoff\.handoff\}/);
+  assert.match(hunt, /onDismiss=\{shareHandoff\.onDismiss\}/);
+  assert.doesNotMatch(hunt, /<ShareStudioHost portal \/>/);
   const index = fs.readFileSync(pathMod.join(repo, 'src/share/index.ts'), 'utf8');
   assert.match(index, /SHARE_IN_MODALS: boolean = __DEV__ && process\.env\.EXPO_PUBLIC_SHARE_IN_MODALS === '1'/);
   const { SHARE_IN_MODALS } = loadTs('src/share/index.ts', {

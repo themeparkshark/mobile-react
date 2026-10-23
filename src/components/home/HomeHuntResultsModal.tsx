@@ -6,7 +6,7 @@
  * finished card at once.
  */
 import { Image } from 'expo-image';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Modal, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInDown, SlideInUp, ZoomIn } from 'react-native-reanimated';
 import { claimHomeHuntResult, type HomeHuntResult } from '../../api/endpoints/me/homeHunt';
@@ -18,7 +18,8 @@ import { showToast } from '../../utils/toast';
 import { BRAND, GameButton, GameIcon, ICON_SOURCES, RADIUS, SHADOW } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import Ribbon from '../Ribbon';
-import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost, shouldFlexReveal, type FlexPayload } from '../../share';
+import { FlexShareButton, shouldFlexReveal, type FlexPayload } from '../../share';
+import { useModalHandoff } from '../../share/handoff';
 import {
   HELD_COPY, RANK_COUNTDOWN_MS, canClaim, extraRows, isHeld, rankCountdownValue, rankLabel, revealTimeline, ribbonLabel, rewardRows,
 } from './homeHuntResultsModel';
@@ -53,6 +54,10 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
     rank: rank ?? undefined, percentile: result.percentile ?? undefined, points: result.points ?? undefined,
   } : null;
   const canFlex = !!flex && shouldFlexReveal('standings', flex);
+  // Share closes this card first (claiming the rewards on the way if they are still waiting),
+  // then the Share Studio sheet opens from Root (share/handoff.ts).
+  const shareClose = useRef<() => void>(() => undefined);
+  const shareHandoff = useModalHandoff(useCallback(() => shareClose.current(), []));
 
   // Phase 1 countdown, 2 ribbon, 3 chest opens, 4 rewards, 5 claim.
   useEffect(() => {
@@ -109,8 +114,13 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
     }
   };
 
+  shareClose.current = () => {
+    if (!held && canClaim(result)) void claim(); // the claim closes the card (onClaimed)
+    else onClose();
+  };
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onDismiss={shareHandoff.onDismiss}>
       <View style={{ flex: 1, backgroundColor: BRAND.scrim, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
         <View style={{
           width: '100%', maxWidth: 380, maxHeight: '92%', borderRadius: RADIUS.xl, backgroundColor: BRAND.cream,
@@ -187,14 +197,12 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
                 ) : (
                   <GameButton label={claiming ? HOME_HUNT_COPY.claiming : HOME_HUNT_COPY.claim} loading={claiming} onPress={() => void claim()} />
                 )}
-                {SHARE_IN_MODALS && canFlex && flex && <FlexShareButton kind="standings" payload={flex} surface="standings" size="md" style={{ alignSelf: 'center', marginTop: 10 }} />}
+                {canFlex && flex && <FlexShareButton kind="standings" payload={flex} surface="standings" size="md" style={{ alignSelf: 'center', marginTop: 10 }} handoff={shareHandoff.handoff} />}
               </Animated.View>
             )}
           </ScrollView>
         </View>
       </View>
-      {/* Share Studio presents from inside this modal (a root sheet can't present over it on iOS). */}
-      {SHARE_IN_MODALS && visible && <ShareStudioHost portal />}
     </Modal>
   );
 }

@@ -8,14 +8,11 @@
  * VoiceOver: the backdrop is a separate "Dismiss" control and the card is a
  * modal view, so every control inside is reachable.
  */
-import { shareFileExternal } from '../../services/external';
 import { Image } from 'expo-image';
-import * as Sharing from 'expo-sharing';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, PixelRatio, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ImageSourcePropType } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { captureRef } from 'react-native-view-shot';
-import { parkDayCaptureSize } from '../../components/parkDayShareMetrics';
+import { shareFlexAfterHandoff, useModalHandoff } from '../../share/handoff';
 import { playSfx } from '../../gamekit/SFX';
 import { BRAND, GameButton, GameIcon, gameAlert } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
@@ -23,7 +20,14 @@ import { HuntSwitch, SLOT_COLORS } from './BookParts';
 import { CLOSE_X, itemArt, RIBBON, StarBurst } from './DexParts';
 import { RarityGems, rarityLook } from './dexLook';
 import { caughtLine, spawnIcon, type DexItem, type DexSet } from './dexModel';
-import { Offscreen, RidePhoto, RidePhotoShareCard } from './RidePhoto';
+import { RidePhoto } from './RidePhoto';
+
+/** A bundled image or a { uri } as Share Studio art (a number or a URL). */
+function flexArtOf(source: ImageSourcePropType | { uri?: string } | number | string): number | string {
+  if (typeof source === 'number' || typeof source === 'string') return source;
+  const uri = (source as { uri?: string } | null)?.uri;
+  return uri ?? require('../../../assets/images/screens/park/gold.png');
+}
 
 export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = null }: {
   readonly item: DexItem | null; readonly set: DexSet | null;
@@ -34,10 +38,10 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
 }) {
   const { width, height } = useWindowDimensions();
   const reduced = useUiReducedMotion();
-  const shareRef = useRef<View>(null);
-  const [shareMount, setShareMount] = useState(false);
-  const [shareReady, setShareReady] = useState(false);
-  const [sharing, setSharing] = useState(false);
+  // Share hands off to Share Studio: this card closes, then the Ride Photo flex card (same look,
+  // link and QR as every other share picture) opens from Root with its grown-up gate.
+  const shareHandoff = useModalHandoff(onClose);
+  const sharing = useRef(false);
   const photo = item?.found && item.photoGrade ? item.photoGrade : null;
   const scale = useSharedValue(reduced ? 1 : 0.6);
   const glow = useSharedValue(0);
@@ -46,8 +50,6 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
   const found = item?.found ?? false;
   // Pop in once per item.
   useEffect(() => {
-    setShareMount(false);
-    setShareReady(false);
     if (itemId == null) return;
     scale.value = reduced ? 1 : 0.6;
     if (!reduced) scale.value = withSpring(1, { damping: 11, stiffness: 200 });
@@ -58,35 +60,12 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
     glow.value = withRepeat(withSequence(withTiming(1, { duration: 900 }), withTiming(0, { duration: 900 })), -1, false);
   }, [itemId, found, reduced, glow]);
 
-  // The share card is built only when the player taps Share, then captured once its art is ready.
-  useEffect(() => {
-    if (!shareMount || !shareReady || !sharing) return;
-    let live = true;
-    void (async () => {
-      try {
-        if (!await Sharing.isAvailableAsync()) {
-          gameAlert('Can’t share right now', 'This phone can’t share right now. Try again later.');
-          return;
-        }
-        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-        if (!live || !shareRef.current) return;
-        const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, ...parkDayCaptureSize(Platform.OS, PixelRatio.get()) });
-        await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your Ride Photo' });
-      } catch {
-        gameAlert('Your card didn’t get made', 'Your Ride Photo is still saved. Tap Share to try again.', undefined, { icon: 'retry' });
-      } finally {
-        if (live) { setSharing(false); setShareMount(false); setShareReady(false); }
-      }
-    })();
-    return () => { live = false; };
-  }, [shareMount, shareReady, sharing]);
-
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }], opacity: Math.min(1, scale.value * 1.6 - 0.6) }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: 0.25 + 0.45 * glow.value, transform: [{ scale: 0.9 + 0.12 * glow.value }] }));
   const look = item ? rarityLook(item.rarity) : null;
 
   return (
-    <Modal visible={item != null} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={item != null} transparent animationType="fade" onRequestClose={onClose} onDismiss={shareHandoff.onDismiss} statusBarTranslucent>
       <View style={styles.overlay}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={StyleSheet.absoluteFill} />
         {item && look && (
@@ -154,8 +133,16 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
               )}
 
               {photo && (
-                <GameButton label={sharing ? 'Making your card...' : 'Share my Ride Photo'} icon="camera" loading={sharing}
-                  onPress={() => { playSfx('ui.tap', 0.6); setSharing(true); setShareMount(true); }} fullWidth style={{ marginTop: 10 }} />
+                <GameButton label="Share my Ride Photo" icon="camera"
+                  onPress={() => {
+                    if (sharing.current) return;
+                    sharing.current = true;
+                    playSfx('ui.tap', 0.6);
+                    void shareFlexAfterHandoff(shareHandoff.handoff, 'ride_photo', {
+                      itemName: item.name, artUrl: flexArtOf(itemArt(item)), rarity: item.rarity, grade: photo,
+                      goldenHour: !!item.goldenHour, photoUri: item.photoUrl ?? undefined,
+                    }, { surface: 'ride_photo' }).finally(() => { sharing.current = false; });
+                  }} fullWidth style={{ marginTop: 10 }} />
               )}
               {item.found && onShare && item.spares > 0 && (
                 <GameButton label="Give to a friend" icon="heart" onPress={onShare} fullWidth style={{ marginTop: 10 }} />
@@ -166,12 +153,6 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
             <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={10} style={styles.close}>
               <Image source={CLOSE_X} style={StyleSheet.absoluteFill} contentFit="contain" />
             </Pressable>
-            {photo && shareMount && (
-              <Offscreen>
-                <RidePhotoShareCard ref={shareRef} grade={photo} art={itemArt(item)} photoUrl={item.photoUrl}
-                  itemName={item.name} setName={set?.name ?? ''} rarity={item.rarity} onReadyChange={setShareReady} />
-              </Offscreen>
-            )}
           </Animated.View>
         )}
       </View>

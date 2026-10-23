@@ -40,6 +40,9 @@ import { BRAND, FONT, GameIcon } from '../../ui';
 import { asWearable, previewLook } from './TryOnSheet';
 import { MAX_FONT, REVEAL_NAVY, SHOP_SURFACE, ShopCta, ShopStage } from './shopUi';
 import { wearItem } from './inventoryQueue';
+import { FlexShareButton } from '../../share/FlexShareButton';
+import { HERO_ART } from '../../share/FlexHero';
+import { MODAL_HANDOFF_MS } from '../../share/handoff';
 
 const { width: W, height: H } = Dimensions.get('window');
 const STAGE = Math.min(W - 40, H * 0.4);
@@ -53,6 +56,7 @@ type Busy = 'idle' | 'busy' | 'done' | 'failed';
 
 /** A tap or swipe this soon after the reveal opens is the buy tap carrying over: ignored. */
 export const REVEAL_GUARD_MS = 900;
+
 /** A downward swipe this long (or a fast flick) closes the reveal. */
 export const SWIPE_CLOSE_DY = 140;
 /** A flick this fast (pt/ms) closes too, but only after at least SWIPE_MIN_DY. */
@@ -160,6 +164,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
     leaveAfterSave.current = false;
     setWaiting(false);
   };
+  // Leave like the X does, then give iOS time to let the reveal go before the Share sheet.
+  const shareHandoff = () => new Promise<void>(resolve => { leave(false); setTimeout(resolve, MODAL_HANDOFF_MS); });
   const leaveRef = useRef(leave);
   leaveRef.current = leave;
   const swipe = useRef(PanResponder.create({
@@ -213,6 +219,13 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
           style={[styles.close, { top: insets.top + 10 }]}>
           <GameIcon name="close" size={40} />
         </Pressable>
+        {/* Show it off: the set's name, its pieces and the count. Share closes this reveal first,
+            then the Share Studio sheet (and its grown-up gate) opens from Root. */}
+        <FlexShareButton kind="set_complete" surface="shop_set" size="sm" caption handoff={shareHandoff}
+          style={[styles.share, { top: insets.top + 8 }]}
+          payload={{ setName: reward.name, badgeUrl: pieces[0]?.icon_thumb_url ?? pieces[0]?.icon_url ?? HERO_ART.trophy,
+            artUrls: pieces.map(p => p.icon_thumb_url ?? p.icon_url).filter((u): u is string => !!u).slice(0, 5),
+            found: set?.total ?? pieces.length, total: set?.total ?? pieces.length, title: reward.title ?? undefined, source: 'shop' }} />
         <View style={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 12 }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.kicker}>SET COMPLETE</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setName}>{reward.name}</Text>
@@ -337,6 +350,7 @@ const styles = StyleSheet.create({
   alertText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, textAlign: 'center' },
   buttons: { width: '100%', alignItems: 'center', gap: 4, marginTop: 'auto' },
   close: { position: 'absolute', right: 14, zIndex: 3 },
+  share: { position: 'absolute', left: 14, zIndex: 3 },
   leave: { minHeight: 52, borderRadius: 18, borderWidth: 3, borderColor: 'rgba(255,255,255,0.85)', alignItems: 'center',
     justifyContent: 'center', marginTop: 4 },
   leavePressed: { transform: [{ scale: 0.97 }], backgroundColor: 'rgba(255,255,255,0.08)' },
