@@ -50,7 +50,10 @@ import { HERO_ART } from '../../share/FlexHero';
 import { useModalHandoff } from '../../share/handoff';
 
 const { width: W, height: H } = Dimensions.get('window');
-const STAGE = Math.min(W - 40, H * 0.4);
+// A short phone (iPhone SE) gets a smaller stage and tighter gaps, so WEAR IT ALL, Share and Done
+// all stay on screen.
+const SHORT = H < 740;
+const STAGE = Math.min(W - 40, H * (SHORT ? 0.3 : 0.4));
 // The WEAR IT ALL hop lifts the shark HOP pt (and tilts it): the card leaves room above the
 // tallest hat so the head never clips at the top of the hop.
 const HOP = 24;
@@ -234,7 +237,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
           style={[styles.close, { top: insets.top + 10 }]}>
           <GameIcon name="close" size={40} />
         </Pressable>
-        <View style={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 12 }]}>
+        <View style={[styles.content, { paddingTop: insets.top + (SHORT ? 12 : 20), paddingBottom: insets.bottom + 12 }, SHORT && { gap: 6 }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.kicker}>SET COMPLETE</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setName}>{reward.name}</Text>
           <View style={[styles.stage, { width: STAGE, height: STAGE, borderColor: color }]}>

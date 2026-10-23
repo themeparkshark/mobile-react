@@ -405,7 +405,7 @@ test('every full-screen reveal uses the one share pill, under its main button', 
   assert.match(ride, /<ShareFace size="reveal"/);
   assert.doesNotMatch(ride, /shareBtn/);
   for (const file of ['src/screens/RideTracker/RideHistoryScreen.tsx', 'src/screens/RideTracker/RideDetailScreen.tsx']) {
-    assert.match(src(file), /<GameButton label=\{CLOSE_WORD\} variant="ghost"/, file);
+    assert.match(src(file), /<GameButton label=\{CLOSE_WORD\} variant="ghost" tone="onBlue"/, file);
   }
   assert.match(src('src/share/closeWord.ts'), /export const CLOSE_WORD = 'Nice!';/);
 });
@@ -426,4 +426,16 @@ test('a bare shark has no look to share; the ride story is one hero stat; the he
   assert.match(ride, /alignSelf: 'center', flexDirection: 'row'/, 'sized to its content');
   assert.match(ride, /<GameIcon name="map" size=\{28\} \/>\s*<Text style=\{cardStyles\.heldText\}>\{RIDE_SHARE_HELD_LABEL\}<\/Text>/);
   assert.match(ride, /<CardContent ride=\{ride\} rideCount=\{confirmedCount\} variant="share" \/>\s*<\/View>\s*\{inPark/, 'the preview is the shared card');
+});
+
+test('on a short phone (iPhone SE) the reveals keep Wear, Done and Share on screen', () => {
+  const box = src('src/screens/pins/BoxReveal.tsx');
+  assert.match(box, /const short = height < 740;\s*const centerY = height \* \(short \? 0\.41 : 0\.45\);/);
+  assert.match(box, /paddingBottom: insets\.bottom \+ \(short \? 10 : 18\) \}, short && \{ gap: 6 \}/);
+  const set = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  assert.match(set, /const SHORT = H < 740;\s*const STAGE = Math\.min\(W - 40, H \* \(SHORT \? 0\.3 : 0\.4\)\);/);
+  // The Whack picture leads with the run: the ribbon already names the game.
+  const whack = src('src/games/whack/ui/ShareCard.tsx');
+  assert.match(whack, /<Text style=\{styles\.title\}>MY RUN<\/Text>/);
+  assert.match(whack, /ribbon="WHACK-A-SHARK!"/);
 });

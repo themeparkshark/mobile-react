@@ -63,7 +63,8 @@ export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; ride
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <StoryShareFrame ref={ref} ribbon="WHACK-A-SHARK!" cta="Can you beat my score?" campaign="whack">
         <View style={styles.card}>
-          <Text style={styles.title}>WHACK-A-SHARK</Text>
+          {/* The ribbon already says WHACK-A-SHARK: the card leads with the run itself. */}
+          <Text style={styles.title}>MY RUN</Text>
           <Text style={styles.score}>{score.toLocaleString()}</Text>
           <View style={styles.stars}>
             {[0, 1, 2].map((k) => <View key={k} style={[styles.star, k < stars ? styles.starOn : null]} />)}

@@ -335,7 +335,7 @@ export default function RideDetailScreen() {
               <>
                 <ShareableRideCard ride={shareEntry} rideCount={totalRides} onShare={closeShare} beforeShare={shareHandoff.handoff} />
                 {/* The one close word of every share sheet (Share Studio uses it too). */}
-                <GameButton label={CLOSE_WORD} variant="ghost" onPress={() => setShareEntry(null)} accessibilityLabel="Close" style={{ marginTop: 4 }} />
+                <GameButton label={CLOSE_WORD} variant="ghost" tone="onBlue" onPress={() => setShareEntry(null)} accessibilityLabel="Close" style={{ marginTop: 4 }} />
               </>
             )}
           </Pressable>

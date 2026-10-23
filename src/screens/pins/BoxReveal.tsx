@@ -292,7 +292,10 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const art = BOX_ART[tone];
   const boxSize = Math.min(240, width * 0.58);
   const pinSize = Math.min(210, width * 0.52);
-  const centerY = height * 0.45;
+  // A short phone (iPhone SE) lifts the stage and tightens the footer, so Wear it, Done and Share
+  // fit under the pin's name without covering its tag.
+  const short = height < 740;
+  const centerY = height * (short ? 0.41 : 0.45);
 
   const drop = useSharedValue(0);
   const shake = useSharedValue(0);
@@ -775,7 +778,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, golden && styles.flashGold, flashStyle]} />
 
         {(phase === 'show' || phase === 'summary') && (
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 18 }]}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + (short ? 10 : 18) }, short && { gap: 6 }]}>
             {pulls.length > 1 && phase === 'show' && (
               <View style={styles.pips} accessible accessibilityLabel={`Box ${index + 1} of ${pulls.length}`}>
                 {pulls.map((p, i) => <View key={p.id} style={[styles.pip, i <= index && styles.pipOn, p.is_chaser && i <= index && styles.pipGold]} />)}

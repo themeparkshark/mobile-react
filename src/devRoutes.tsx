@@ -36,6 +36,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'ParkDayRecapPreview', getComponent: () => require('./screens/ParkDayRecapPreviewScreen').default },
       { name: 'ShareStudioPreview', getComponent: () => require('./screens/ShareStudioPreviewScreen').default },
       { name: 'ShareModalEvidence', getComponent: () => require('./screens/ShareModalEvidenceScreen').default },
+      { name: 'SharePicturesPreview', getComponent: () => require('./screens/SharePicturesPreviewScreen').default },
       { name: 'LineGroupPreview', getComponent: () => require('./screens/LinePlay/LineGroupPreviewScreen').default },
       { name: 'CrewGridPreview', getComponent: () => require('./screens/LinePlay/CrewGridPreviewScreen').default },
       { name: 'StreakFlamePreview', getComponent: () => require('./components/retention/StreakFlamePreview').default },
