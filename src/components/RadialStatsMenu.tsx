@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, Text, View, StyleSheet } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
+import { DailyGiftContext } from '../context/DailyGiftProvider';
 import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import Avatar from './Avatar';
 import Button from './Button';
@@ -72,6 +73,7 @@ function StatItem({ icon, label, value, index, visible, onPress }: StatItemProps
 
 export default function RadialStatsMenu() {
   const { player } = useContext(AuthContext);
+  const { dailyGift } = useContext(DailyGiftContext);
   const { explain } = useHelp();
   const [isOpen, setIsOpen] = useState(false);
   // Dev visual QA only.
@@ -122,7 +124,9 @@ export default function RadialStatsMenu() {
 
   const energy = player.energy ?? 0;
   const tickets = player.tickets ?? 0;
-  const streak = player.current_streak ?? 0;
+  // One streak number in the whole game: the Daily Chest's (the same number the chest shows).
+  // Unknown until today's chest has loaded, so the row waits instead of showing a different count.
+  const streak = dailyGift?.streak ?? null;
   
   // Format large numbers with commas (like Stardust in Pokemon GO)
   const formatNumber = (n: number) => n.toLocaleString();
@@ -153,7 +157,8 @@ export default function RadialStatsMenu() {
   const items = [
     { icon: 'energy' as const, label: 'Energy', value: formatNumber(energy), onPress: () => explainStat('energy', energy) },
     { icon: 'ticket' as const, label: 'Tickets', value: formatNumber(tickets), onPress: () => explainStat('tickets', tickets) },
-    { icon: 'streak' as const, label: 'Day streak', value: String(streak), onPress: () => explainStat('day_streak', streak) },
+    ...(streak != null && streak > 0
+      ? [{ icon: 'streak' as const, label: 'Day streak', value: String(streak), onPress: () => explainStat('day_streak', streak) }] : []),
   ];
 
   return (

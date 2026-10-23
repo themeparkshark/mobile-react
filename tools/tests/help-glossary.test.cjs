@@ -148,3 +148,14 @@ test('the Supplies shop and ad offers are explained: optional, what is sold, nev
   assert.match(shopText, /grown-up/);
   assert.match(shopText, /skip it/);
 });
+
+test('one streak number: the stats menu shows the Daily Chest streak, and the help says that rule', () => {
+  const fs2 = require('node:fs');
+  const p2 = require('node:path');
+  const radial = fs2.readFileSync(p2.join(__dirname, '../../src/components/RadialStatsMenu.tsx'), 'utf8');
+  assert.doesNotMatch(radial, /current_streak/, 'not the hidden home-find streak (a second number)');
+  assert.match(radial, /const streak = dailyGift\?\.streak \?\? null;/);
+  const chest = fs2.readFileSync(p2.join(__dirname, '../../src/components/DailyGiftModal.tsx'), 'utf8');
+  assert.match(chest, /displayedGift\.streak/, 'the chest shows the same number');
+  assert.match(glossary.LOCAL_GLOSSARY.day_streak.earn, /Daily Chest/);
+});
