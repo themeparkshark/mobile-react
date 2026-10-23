@@ -74,7 +74,9 @@ test('VIP numbers: per month for yearly, the win line uses the server multiplier
   assert.equal(offers.perMonthText({ price: '$4.99', amount: 4.99, period: 'month' }), null);
   assert.equal(offers.vipRideMultiplier([{ title: '2x XP and coins' }]), 2);
   assert.equal(offers.vipRideMultiplier([{ title: 'VIP badge on your profile' }]), null);
-  assert.equal(offers.vipWinLine(30, 20, 2), 'VIP would make this 60 coins and 40 XP');
+  assert.equal(offers.vipWinLine(30, 20, 2), 'VIP members get 2x coins and XP');
+  assert.equal(offers.vipWinLine(30, 0, 2), 'VIP members get 2x coins');
+  assert.doesNotMatch(offers.vipWinLine(30, 20, 2), /would/, 'no loss framing after a win');
   assert.equal(offers.vipWinLine(30, 20, null), null, 'no multiplier from the server: the generic line');
 });
 
@@ -261,4 +263,52 @@ test('mystery boxes: coin packs say how many boxes they open, and a box top-up e
   const top = read('src/components/money/CoinTopUpOffer.tsx');
   assert.match(top, /return reason === 'mystery-box' && retries \? 'Open your box' : undefined;/);
   assert.match(top, /doneLabel=\{topUpDoneLabel\(reason, !!onDone\)\} onDone=\{\(\) => \{ setLanded\(null\); onDone\?\.\(\); \}\}/, 'the button retries the open');
+});
+
+test('BEST VALUE is true for the whole page, not just its row (Oct 23 honesty pass)', () => {
+  const trip = P('pack.trip', 'featured', { tickets: 60, coins: 1500, energy: 400, rescue_passes: 6 });
+  const catalog = [...CATALOG, trip];
+  const prices = { ...PRICES, [trip.product_id]: { price: '$5.99', amount: 5.99 } };
+  // 25 tickets at about 16 cents each loses to the Park Day Pack (20 for $2.99) and the Park Trip Pack (60 for $5.99).
+  assert.equal(offers.bestValueHolds(byId('tickets.25'), catalog, prices), false);
+  // With both bundles gone (bought today), 25 tickets really is the best ticket price on the page.
+  const gone = catalog.map(p => (p.section === 'featured' ? { ...p, available: false } : p));
+  assert.equal(offers.bestValueHolds(byId('tickets.25'), gone, prices), true);
+  // A Coin Chest deal (1,000 coins for $0.99) beats 7,000 for $9.99 per coin while it is up today...
+  assert.equal(offers.bestValueHolds(byId('coins.7000'), catalog, prices), false);
+  // ...and once the deals are bought, the biggest coin pack is the best coin price again.
+  assert.equal(offers.bestValueHolds(byId('coins.7000'), gone, prices), true);
+  assert.equal(offers.bestValueHolds(byId('coins.500'), catalog, prices), false);
+  assert.equal(offers.bestValueHolds(byId('pack.starter'), catalog, prices), false, 'a bundle never wears the badge');
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  assert.match(shop, /best=\{p\.badge === 'Best value' && bestValueHolds\(/, 'the shelf asks the page-wide rule');
+});
+
+test('the VIP line on a win is rare: never the first 3 wins, then once every 3 days', () => {
+  const nudge = loadTs('src/services/money/vipNudge.ts', {
+    '@react-native-async-storage/async-storage': { default: {} }, react: { useEffect() {}, useState: v => [v, () => {}] },
+  });
+  let state = null;
+  const shown = [];
+  for (const day of ['2026-10-01', '2026-10-01', '2026-10-01', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-04']) {
+    const next = nudge.nextVipNudgeState(state, day);
+    state = next.state;
+    shown.push(next.show);
+  }
+  assert.deepEqual(shown, [false, false, false, true, false, false, true, false]);
+  assert.equal(state.wins, 8);
+  const sheet = read('src/components/PostWinRewardsModal.tsx');
+  assert.match(sheet, /\{!isVip && vipNudge && /, 'the win card asks the rarity rule');
+  assert.doesNotMatch(read('src/services/money/offers.ts'), /VIP would/, 'no "you would have had more"');
+});
+
+test('no "No ads" promise while nobody sees ads', () => {
+  const perks = loadTs('src/api/endpoints/economy/vip-perks.ts', { '../../client': { default: {} } });
+  assert.equal(perks.withoutAdTalk('Claim it in Supplies. No ad to watch.'), 'Claim it in Supplies.');
+  assert.equal(perks.withoutAdTalk('Claim it in Supplies. No ad to watch.', true), 'Claim it in Supplies. No ad to watch.');
+  const parsed = plain(perks.parseVipPerks([{ icon: 'ticket', title: 'A free ticket every day', body: 'Claim it in Supplies. No ad to watch.' }]));
+  assert.equal(parsed[0].body, 'Claim it in Supplies.');
+  for (const file of ['src/screens/StoreScreen/SuppliesShop.tsx', 'src/components/GrownUpGate.tsx', 'src/screens/MembershipScreen.tsx']) {
+    assert.doesNotMatch(read(file), /No ads|no ads|no ad to watch|No ad\. /, `${file} promises no ads`);
+  }
 });

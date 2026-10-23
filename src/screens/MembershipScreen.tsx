@@ -401,7 +401,7 @@ function GiftPlans() {
  * promises the game keeps. Every line is true of the shipped game.
  */
 const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
-  { icon: 'play', text: 'No ads. VIP gets every bonus without watching one.' },
+  { icon: 'gift', text: 'VIP adds bonus rewards. Every game and ride coin is free to play without it.' },
   { icon: 'lock', text: 'Every real-money buy asks a grown-up first. Ask to Buy works too.' },
   { icon: 'check', text: 'Everything you earn or buy stays in your closet for good.' },
   { icon: 'settings', text: 'Turn VIP off anytime in Apple\u00A0ID settings.' },
@@ -411,7 +411,7 @@ const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
 export function recapLines(recap: NonNullable<VipPlanTime['recap']>): string[] {
   const n = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   const lines = [
-    recap.no_ad_rewards > 0 ? `${recap.no_ad_rewards} ${recap.no_ad_rewards === 1 ? 'reward' : 'rewards'} with no ad to watch` : null,
+    recap.no_ad_rewards > 0 ? `${recap.no_ad_rewards} free bonus ${recap.no_ad_rewards === 1 ? 'reward' : 'rewards'}` : null,
     recap.coins > 0 ? `${n(recap.coins)} coins` : null,
     recap.tickets > 0 ? `${recap.tickets} ${recap.tickets === 1 ? 'ticket' : 'tickets'}` : null,
     recap.energy > 0 ? `${n(recap.energy)} energy` : null,

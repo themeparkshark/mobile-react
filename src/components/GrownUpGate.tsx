@@ -129,7 +129,7 @@ export function gateDetails(reason: GateReason | null | undefined): { head: stri
         'Paid with the Apple ID on this device.',
       ],
     };
-    case 'vip': return reason.prices ? { head: reason.prices, lines: ['For bigger rewards every day and no ads.', 'Plans that renew do so by themselves until you cancel.', 'Paid with the Apple ID on this device.'] } : null;
+    case 'vip': return reason.prices ? { head: reason.prices, lines: ['For bigger rewards at home and at the park.', 'Plans that renew do so by themselves until you cancel.', 'Paid with the Apple ID on this device.'] } : null;
     default: return null;
   }
 }

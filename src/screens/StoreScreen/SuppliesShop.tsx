@@ -33,7 +33,7 @@ import { getAdSummary, type AdSummary } from '../../api/endpoints/me/ad-rewards'
 import getVipPerks, { type VipPerk } from '../../api/endpoints/economy/vip-perks';
 import { onShopDelivered, storeAvailable } from '../../services/purchases';
 import { adsAvailable, rewardText, watchForReward } from '../../services/ads';
-import { baseRates, bonusPercent, boxesLine, bundleWorth, dropDays, gearLine } from '../../services/money/offers';
+import { baseRates, bestValueHolds, bonusPercent, boxesLine, bundleWorth, dropDays, gearLine } from '../../services/money/offers';
 import getStores from '../../api/endpoints/stores/stores';
 import getStoreRotation from '../../api/endpoints/stores/rotation';
 import { buyPack, outcomeMessage, refreshSupplies, useSupplies } from '../../services/money/supplies';
@@ -265,7 +265,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeTitle}>FREE DAILY TICKET</Text>
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeBody}>
               {daily.remaining > 0
-                ? vip ? 'Free for VIP members. No ad. Tap Claim.' : 'Watch one short ad for 1 free ticket. You don’t have to.'
+                ? vip ? 'Free for VIP members. Tap Claim.' : 'Watch one short ad for 1 free ticket. You don’t have to.'
                 : 'Claimed. Back tomorrow.'}
             </Text>
           </View>
@@ -295,7 +295,8 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             )}
             <View style={st.grid}>
               {packs.map((p, i) => (
-                <PackCard key={p.product_id} product={p} tier={i} boxesLive={boxesLive} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 2 : 3}
+                <PackCard key={p.product_id} product={p} tier={i} boxesLive={boxesLive}
+                  best={p.badge === 'Best value' && bestValueHolds(p, catalog.products.filter(priced), prices)} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 2 : 3}
                   price={prices[p.product_id]?.price} bonus={bonusPercent(p, prices, rates)}
                   note={unavailableText(p, holdCap)} busy={busy === p.product_id} disabled={!!busy}
                   onBuy={() => void buy(p, packArtKey(p, i))} />
@@ -352,13 +353,14 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
   );
 }
 
-function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, onBuy, boxesLive = false }: {
+function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, onBuy, boxesLive = false, best = false }: {
   product: ShopProduct; tier: number; columns: 1 | 2 | 3; price?: string; bonus: number | null; note: string | null; boxesLive?: boolean;
+  /** The server's badge, kept only when it is true for the whole page (bestValueHolds). */
+  best?: boolean;
   busy: boolean; disabled: boolean; onBuy: () => void;
 }) {
   const main = (['tickets', 'coins', 'rescue_passes'] as const).find(k => (product.grants[k] ?? 0) > 0) ?? 'tickets';
   const n = product.grants[main] ?? 0;
-  const best = product.badge === 'Best value';
   const wide = columns === 1;
   const gear = main === 'coins' ? [gearLine(product.buys, bonus), boxesLive ? boxesLine(n, MYSTERY_BOX_COINS) : null].filter(Boolean).join(' ') || null : null;
   // No % stickers at all (psychology r6): coin packs say it in the gear line, tickets in the label below.
@@ -392,7 +394,7 @@ function VipCard({ perks }: { perks: VipPerk[] | null }) {
           <GameIcon name="member" size={40} />
           <View style={{ flex: 1 }}>
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipTitle}>GO VIP</Text>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipSub}>Bigger rewards every day. No ads.</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipSub}>Bigger rewards at home and at the park.</Text>
           </View>
         </View>
         <View style={st.vipTiles}>

@@ -5,6 +5,7 @@ import { storeAvailable } from '../services/purchases';
 import SharkPassBanner from './money/SharkPassBanner';
 import { vipWinLine } from '../services/money/offers';
 import { vipRideMultiplierNow, warmVipPerks } from '../services/money/vipPerks';
+import { useVipNudge } from '../services/money/vipNudge';
 import OneTimeTip from './help/OneTimeTip';
 import PerkChipRow from './coin/PerkChip';
 import type { PerkChipData } from './coin/progressionModel';
@@ -255,6 +256,10 @@ export default function PostWinRewardsModal({
   const isVip = !!player?.is_subscribed;
   // The VIP line quotes the server's own multiplier; loaded once per run.
   useEffect(() => { if (!isVip) void warmVipPerks(); }, [isVip]);
+  // The VIP line is rare: never on the first wins, then at most once every few days (services/money/vipNudge.ts).
+  // starAt is stamped once per showing, so each win counts once.
+  const won = xpEarned > 0 || coinsEarned > 0;
+  const vipNudge = useVipNudge(visible && !isVip && won ? `${attemptId ?? 'win'}:${starAt}` : null);
   // null until the Starter card has decided; the VIP line waits for it, so it never flashes and vanishes.
   // No store (old build) or nobody signed in: there is no Starter card to wait for.
   const [starterShown, setStarterShown] = useState<boolean | null>(() => (storeAvailable() && !!player ? null : false));
@@ -549,7 +554,7 @@ export default function PostWinRewardsModal({
               )}
 
               {/* One money offer per sheet: the once-ever Starter Pack takes the VIP line's place. */}
-              {!isVip && (starterShown === false || coinsEarned <= 0) && (xpEarned > 0 || coinsEarned > 0) && (
+              {!isVip && vipNudge && (starterShown === false || coinsEarned <= 0) && won && (
                 <Pressable style={styles.vipChip} accessibilityRole="button"
                   accessibilityLabel="VIP members get extra XP and coins when they win. Tap to learn about VIP."
                   onPress={() => closeTo(() => { void openMembership(); })}>
