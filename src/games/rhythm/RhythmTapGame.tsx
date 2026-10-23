@@ -938,16 +938,14 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       message: resultMessage(sum, plan.ftue, reason),
       thresholds: undefined,
       rival: topRival ? { name: topRival.name, score: topRival.finalScore } : null,
+      // Feelings, not data: how the beat felt, the Drum-Off place, March stars.
+      // Accuracy, steadiness numbers and millisecond timing stay off the card.
       stats: [
-        { label: 'Accuracy', value: `${Math.round(sum.stageAccuracy)}%` },
-        ...(plan.format === 'queue' && !plan.ftue ? [{ label: 'March stars', value: `${sum.marchStars} of 3` }] : []),
-        { label: sum.steadinessLabel, value: String(sum.steadiness) },
-        { label: 'Timing', value: sum.timingWords.replace("You're ", '') },
-        ...(sum.feverBars ? [{ label: 'Fever', value: `${Math.round(sum.feverBars / 4)} drop${sum.feverBars > 4 ? 's' : ''}` }] : []),
-        ...(sum.marchBars.length ? [{ label: 'Marching', value: `${sum.marchBars.length / 4 >= 1 ? Math.round(sum.marchBars.length / 4) : 1} sect.` }] : []),
+        { label: 'Your beat', value: sum.steadinessLabel },
         ...(rivals.current.length ? [{ label: 'Drum-Off', value: placeText(sum.accuracy, rivals.current) }] : []),
-        ...(goal ? [{ label: 'Next goal', value: goal }] : []),
+        ...(plan.format === 'queue' && !plan.ftue && sum.marchStars > 0 ? [{ label: 'March stars', value: `${sum.marchStars} of 3` }] : []),
       ],
+      note: goal || undefined,
       meta: {
         // Legacy proof fields (TaskGameProofService today).
         game: 'timing',

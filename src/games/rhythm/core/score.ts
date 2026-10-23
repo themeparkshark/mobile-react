@@ -75,7 +75,7 @@ function sd(a: readonly number[]): number {
 /**
  * osu!'s unstable rate (UR = 10 x sd) in kid words, scaled for a phone
  * touch screen and the rev 6 windows: sd 15 ms -> 93 "Rock steady",
- * 30 ms -> 70 "Steady", 45 ms -> 48 "Wobbly".
+ * 30 ms -> 70 "Steady", 45 ms -> 48 "Warming up" (never a put-down).
  */
 export function steadinessOf(errs: readonly number[]): number {
   const ur = sd(errs) * 10;
@@ -85,7 +85,7 @@ export function steadinessOf(errs: readonly number[]): number {
 export function steadinessLabel(v: number): string {
   if (v >= 85) return 'Rock steady';
   if (v >= 65) return 'Steady';
-  return 'Wobbly';
+  return 'Warming up';
 }
 
 export function timingWords(meanMs: number): string {

@@ -9,8 +9,10 @@
  *   - NEW BEST slams in after the count, or the best is shown quietly.
  *   - NEXT STAR bar: how far to the next star, with points to go, so even a
  *     0-star run has a target (WS4 finding: Whack 500 with 0 stars had none).
- *   - Stat chips (best combo, accuracy, time) and a Wrap-up note when the
- *     ride came up mid-run.
+ *   - Feelings, not data (feelings.ts): one gold or light line under the
+ *     score (beat a ghost, N wins in a row, so close to a star) and at most
+ *     two brag chips. Percentages, milliseconds and zero counts never show.
+ *   - A Wrap-up note when the ride came up mid-run.
  *
  * Bright world: blue card, white outline, gold accents, navy ink. No emoji,
  * no glyph icons (GameIcon art only). Reduced motion: everything appears in
@@ -36,6 +38,7 @@ import GameIcon from '../../ui/GameIcon';
 import { compareBest, formatScore, nextStarGoal, tallySchedule, tallyTickCount, type StarThresholds } from '../core/scoring';
 import { nearMissLine } from '../core/nearMiss';
 import { CountUpText } from '../fx/CountUpText';
+import { feelingChips, feelingLine, feelingTitle, noteRun } from './feelings';
 import { playHaptic } from '../Haptics';
 import { GameAudio } from '../audio/GameAudio';
 
@@ -73,6 +76,10 @@ export interface ResultsCardProps {
    * (Whack: stars on stinger beats; Rhythm: one per half beat).
    */
   starStepMs?: number;
+  /** Game id for the win streak ("3 wins in a row!"). No key, no streak line. */
+  streakKey?: string;
+  /** One token per finished run, so a re-render never counts a run twice. */
+  runToken?: string | number;
 }
 
 const STAR_BASE_DELAY = 260;
@@ -81,22 +88,23 @@ const BUCKET_MS = 520;
 const BUCKET_GAP = 140;
 
 export function defaultMessage(stars: number, near: boolean): string {
-  if (stars >= 3) return 'INCREDIBLE!';
-  if (stars === 2) return near ? 'SO CLOSE!' : 'GREAT!';
-  if (stars === 1) return 'NICE!';
-  return near ? 'SO CLOSE!' : 'TRY AGAIN';
+  return feelingTitle(stars, near);
 }
 
 export function ResultsCard({
-  score, stars, message, thresholds, personalBest, maxCombo, stats = [], note, reducedMotion = false, onRevealed, rival,
-  buckets, bucketValues, starStepMs = STAR_STEP,
+  score, stars, message, thresholds, personalBest, maxCombo, stats, note, reducedMotion = false, onRevealed, rival,
+  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken,
 }: ResultsCardProps) {
   const goal = useMemo(() => (thresholds ? nextStarGoal(score, thresholds) : null), [score, thresholds]);
   const best = useMemo(() => compareBest(score, personalBest), [score, personalBest]);
   const title = message ?? defaultMessage(stars, !!goal?.near);
   // The one line that sells "one more run" (beat a ghost, so close to a star).
   const near = useMemo(() => nearMissLine({ score, thresholds, best: personalBest, rival }), [score, thresholds, personalBest, rival]);
-  const showNear = near.text && near.kind !== 'newBest' && near.kind !== 'nextStar';
+  // Wins in a row for this game (counted once per run, at mount).
+  const [streak] = useState(() => (streakKey ? noteRun(streakKey, runToken ?? `${score}:${stars}`, stars > 0) : 0));
+  const feeling = useMemo(() => feelingLine({ streak, near: best.isNewBest ? null : near }), [streak, near, best.isNewBest]);
+  const showNear = !!feeling.text;
+  const chips = useMemo(() => feelingChips(stats, maxCombo), [stats, maxCombo]);
   const nBuckets = buckets?.length ?? 0;
   const bucketStart = STAR_BASE_DELAY + starStepMs * 3;
   const countDelay = reducedMotion ? 0 : bucketStart + nBuckets * (BUCKET_MS + BUCKET_GAP);
@@ -183,9 +191,9 @@ export function ResultsCard({
       </Animated.View>
 
       {showNear ? (
-        <Animated.View style={[styles.nearLine, near.kind === 'beatRival' && styles.nearWin, bestStyle]}>
-          <Text style={[styles.nearText, near.kind === 'beatRival' && styles.nearWinText]} numberOfLines={1} adjustsFontSizeToFit>
-            {near.text.toUpperCase()}
+        <Animated.View style={[styles.nearLine, feeling.tone === 'gold' && styles.nearWin, bestStyle]}>
+          <Text style={[styles.nearText, feeling.tone === 'gold' && styles.nearWinText]} numberOfLines={1} adjustsFontSizeToFit>
+            {feeling.text.toUpperCase()}
           </Text>
         </Animated.View>
       ) : null}
@@ -206,10 +214,9 @@ export function ResultsCard({
         </View>
       ) : null}
 
-      {(maxCombo && maxCombo > 1) || stats.length ? (
+      {chips.length ? (
         <View style={styles.stats}>
-          {maxCombo && maxCombo > 1 ? <Chip label="BEST COMBO" value={`x${maxCombo}`} /> : null}
-          {stats.map((s) => <Chip key={s.label} label={s.label} value={s.value} />)}
+          {chips.map((s) => <Chip key={s.label} label={s.label} value={s.value} />)}
         </View>
       ) : null}
 

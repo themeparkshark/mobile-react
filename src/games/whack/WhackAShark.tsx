@@ -661,9 +661,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         buckets: ride ? undefined : [{ label: 'HITS', value: `${judged}` }, { label: 'COMBO', value: `+${combo.toLocaleString()}` }, { label: 'BONUS', value: `+${bonus.toLocaleString()}` }],
         bucketValues: ride ? undefined : [base, combo, bonus],
         starStepMs: STAR_STEP_MS,
+        // Feelings first (the shared card keeps two brag chips; BEST COMBO is the streak).
         stats: [
-          { label: 'QUICK', value: `${judged ? Math.round((100 * quick) / judged) : 0}%` },
-          { label: 'BEST STREAK', value: `${maxStreak}` },
           ...(ride ? [{ label: 'COIN', value: `${last?.result.coin ?? 0}%` }]
             : format === 'raid' ? [{ label: 'BOSS DAMAGE', value: `${last?.result.bossDamage ?? 0}` }]
               : [{ label: 'BURSTS', value: `${banked.length}/${totalBursts}` }]),
