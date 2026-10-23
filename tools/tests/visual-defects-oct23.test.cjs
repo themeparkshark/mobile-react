@@ -239,3 +239,10 @@ test('capital-letter labels are uppercased in code so iOS never clips the last l
     assert.match(read(file), /<UpperText/, file);
   }
 });
+
+test('Ride Wrapped loading and empty states use the shared game header and empty card', () => {
+  const src = read('src/screens/RideTracker/RideWrappedScreen.tsx');
+  assert.match(src, /<RideTrackerFrame title="Ride Wrapped"/);
+  assert.match(src, /<RideTrackerEmpty/);
+  assert.doesNotMatch(src, /Go Log Rides/);
+});

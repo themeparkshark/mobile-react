@@ -15,6 +15,8 @@ import { colors } from '../../design-system';
 import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 import { GameIcon, SharkLoader } from '../../ui';
 
+import RideTrackerFrame from './RideTrackerFrame';
+import RideTrackerEmpty from './RideTrackerEmpty';
 const { width, height } = Dimensions.get('window');
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -144,41 +146,22 @@ export default function RideWrappedScreen() {
 
   if (loading) {
     return (
-      <SafeScreen style={styles.container}>
-        <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.heroGradient}>
-          <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-              <GameIcon name="back" size={32} accessibilityLabel="Back" />
-            </Pressable>
-            <Text style={styles.title}>Ride Wrapped</Text>
-            <View style={{ width: 32 }} />
-          </View>
-        </LinearGradient>
+      <RideTrackerFrame title="Ride Wrapped" style={styles.container}>
         <SharkLoader />
-      </SafeScreen>
+      </RideTrackerFrame>
     );
   }
 
   if (!data || data.total_rides === 0) {
     return (
-      <SafeScreen style={styles.container}>
-        <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.heroGradient}>
-          <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-              <GameIcon name="back" size={32} accessibilityLabel="Back" />
-            </Pressable>
-            <Text style={styles.title}>Ride Wrapped</Text>
-            <View style={{ width: 32 }} />
-          </View>
-        </LinearGradient>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>{failed ? 'Couldn’t load your Wrapped' : 'No rides this period!'}</Text>
-          <Text style={styles.emptySubtitle}>{failed ? 'Check your internet and try again.' : 'Log some rides to see your Wrapped'}</Text>
-          <Pressable onPress={failed ? load : () => navigation.goBack()} style={styles.goldBtn}>
-            <Text style={styles.goldBtnText}>{failed ? 'Try Again' : 'Go Log Rides'}</Text>
-          </Pressable>
-        </View>
-      </SafeScreen>
+      <RideTrackerFrame title="Ride Wrapped" style={styles.container}>
+        <RideTrackerEmpty
+          title={failed ? 'Couldn’t load your Wrapped' : 'No rides this period!'}
+          body={failed ? 'Check your internet and try again.' : 'Log some rides to see your Wrapped'}
+          action={failed
+            ? { label: 'Try again', icon: 'retry', onPress: () => { void load(); } }
+            : { label: 'Log a ride', icon: 'ride', onPress: () => navigation.navigate('RideLog') }} />
+      </RideTrackerFrame>
     );
   }
 
