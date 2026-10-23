@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameIconName } from '../ui/iconNames';
 import RealMoneyMark from './RealMoneyMark';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
@@ -279,6 +279,23 @@ function MoreForGrownUps() {
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'] as const;
 const MAX_FONT = 1.3;
+/** How long the gate waits for iOS to show it before it answers "no" and steps aside. */
+export const GATE_SHOW_WATCHDOG_MS = 2500;
+
+/**
+ * Mounted with the gate's Modal. iOS refuses to present the gate while another RN <Modal>
+ * that is not a layer is up ("already presenting"): nothing shows and, before this, every
+ * later ask (a buy, a link, a share) waited on that hidden gate until the app restarted.
+ * Now a gate that never shows answers "no" (never yes) and steps aside.
+ */
+function GateShowWatchdog({ shown, onNeverShown }: { readonly shown: { current: boolean }; readonly onNeverShown: () => void }) {
+  useEffect(() => {
+    shown.current = false;
+    const t = setTimeout(() => { if (!shown.current) onNeverShown(); }, GATE_SHOW_WATCHDOG_MS);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
 
 /** The gate's dialog. Mounted once, at the root. */
 export function GrownUpGateHost() {
@@ -287,6 +304,7 @@ export function GrownUpGateHost() {
   // After a right answer: the offer card (price, trial, renewal terms) for the grown-up only.
   const [details, setDetails] = useState<{ head: string; lines: string[] } | null>(null);
   const [more, setMore] = useState(false);
+  const shownRef = useRef(false);
   useEffect(() => {
     showGate = r => { setTyped(''); setDetails(r?.devOffer ? gateDetails(r.devOffer) : null); setMore(false); setReq(r); };
     return () => { showGate = null; };
@@ -309,7 +327,8 @@ export function GrownUpGateHost() {
     setTyped(t => (t.length < 3 ? t + k : t));
   };
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent>
+    <Modal visible transparent animationType="fade" onShow={() => { shownRef.current = true; }} onRequestClose={() => close(false)} statusBarTranslucent>
+      <GateShowWatchdog shown={shownRef} onNeverShown={() => close(false)} />
       <View style={styles.scrim}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>
