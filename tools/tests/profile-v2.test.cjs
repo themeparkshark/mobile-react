@@ -275,6 +275,7 @@ const statsImports = {
   '../context/SoundEffectProvider': { SoundEffectContext: { value: { playSound: () => {} } } },
   '../hooks/useReducedGameMotion': { default: () => false },
   '../config': { default: { primary: '#09268f' } },
+  '../helpers/countText': loadTs('src/helpers/countText.ts'),
 };
 
 test("a stranger's stats render without null balances: Keys and Shark Coins tiles hide, no tile gets null", () => {

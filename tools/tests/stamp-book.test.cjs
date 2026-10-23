@@ -475,7 +475,7 @@ test('v3: a stamp the app has never heard of still renders: star pictogram, plai
 });
 
 test('v3 round 2: compact counts, colour fills up but never reads as owned, claim-all totals, book cache per player', () => {
-  assert.equal(model.compactCount(9999), '9,999');
+  assert.equal(model.compactCount(9999), '9999');
   assert.equal(model.compactCount(10000), '10K');
   assert.equal(model.compactCount(30000), '30K');
   assert.equal(model.fillFraction(0), 0);

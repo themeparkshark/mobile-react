@@ -28,6 +28,7 @@ import { useAmbient } from '../../services/money/useAmbient';
 import RealMoneyMark from '../RealMoneyMark';
 import RewardBurst from '../RewardBurst';
 import { unitWord } from '../../services/money/copy';
+import countText from '../../helpers/countText';
 
 export { unitWord };
 
@@ -155,7 +156,7 @@ export function Contents({ grants, size = 'big', tone = 'onBlue' }: { grants: Sh
         {ORDER.filter(k => (grants[k] ?? 0) > 0).map(k => (
           <View key={k} style={s.tightChip} accessible accessibilityLabel={`${grants[k]} ${unitWord(k, grants[k] ?? 0)}`}>
             <GameIcon name={CURRENCY_ICON[k]} size={20} />
-            <Text maxFontSizeMultiplier={MAX_FONT} style={s.tightText}>{(grants[k] ?? 0).toLocaleString('en-US')}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={s.tightText}>{countText(grants[k] ?? 0)}</Text>
           </View>
         ))}
       </View>
@@ -167,7 +168,7 @@ export function Contents({ grants, size = 'big', tone = 'onBlue' }: { grants: Sh
         <View key={k} style={[s.chip, tone === 'onLight' && s.chipLight]}>
           <GameIcon name={CURRENCY_ICON[k]} size={size === 'big' ? 22 : 18} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={[s.chipText, size === 'small' && s.chipTextSmall, tone === 'onLight' && s.chipTextLight]}>
-            {(grants[k] ?? 0).toLocaleString('en-US')} {k === 'rescue_passes' ? unitWord(k, grants[k] ?? 0) : unitWord(k, grants[k] ?? 0)}
+            {countText(grants[k] ?? 0)} {k === 'rescue_passes' ? unitWord(k, grants[k] ?? 0) : unitWord(k, grants[k] ?? 0)}
           </Text>
         </View>
       ))}

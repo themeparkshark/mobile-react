@@ -61,8 +61,10 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 
 /** "5,000": the same thousands format on every surface. */
 export function formatCoins(n: number): string {
-  const value = Math.max(0, Math.round(Number(n) || 0));
-  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  // No commas: the display font draws them like periods (the countText rule, kept inline
+  // because this file stays import-free): 5000, then 12 500 from ten thousand.
+  const s = String(Math.max(0, Math.round(Number(n) || 0)));
+  return s.length <= 4 ? s : s.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
 /** Server clock: device time plus the offset measured when the shop loaded. */

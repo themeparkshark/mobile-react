@@ -9,6 +9,7 @@ import {
 } from '../context/SoundEffectProvider';
 import ProfileStatIcon from './ProfileStatIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import countText from '../helpers/countText';
 
 export function AnimatedStat({
   label,
@@ -137,7 +138,7 @@ export function AnimatedStat({
             textAlign: 'center',
           }}
         >
-          {displayNum.toLocaleString()}
+          {countText(displayNum)}
         </Text>
         <Text
           numberOfLines={1}

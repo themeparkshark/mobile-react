@@ -99,10 +99,38 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
   assert.match(gym, /noTeamOverlay: \{[^}]*zIndex: 10/s);
   const cc = read('src/screens/CommunityCenterScreen.tsx');
-  assert.match(cc, /LEAVE_GIFT_LEFT = Math\.min\(SCREEN_WIDTH \* LEAVE_GIFT_X_RATIO, SCREEN_WIDTH - LEAVE_GIFT_W - 12\)/);
+  // The button fills the green slot painted in the background (0.70 to 0.99 of the width).
+  assert.match(cc, /LEAVE_GIFT_W = Math\.round\(SCREEN_WIDTH \* 0\.31\)/);
+  assert.match(cc, /LEAVE_GIFT_LEFT = Math\.round\(SCREEN_WIDTH \* 0\.678\)/);
+  assert.match(cc, /LEAVE_GIFT_PULSE = 1\.05/);
+  // Scale grows from the center: the right edge at the top of the pulse.
+  assert.ok(0.678 + 0.31 + 0.31 * 0.05 / 2 < 1, 'even mid-pulse the button stays on screen');
 });
 
 test('Stamp Book bookmark band is solid so the title never ghosts through', () => {
   const src = read('src/screens/StampBookScreen.tsx');
   assert.match(src, /tabsWrap: \{[^}]*backgroundColor: '#04488c'/);
+});
+
+test('counts never use a comma: the display font draws it like a period ("4,881" read as "4.881")', () => {
+  const countText = loadTs('src/helpers/countText.ts').default;
+  assert.equal(countText(4881), '4881');
+  assert.equal(countText(350), '350');
+  assert.equal(countText(9999), '9999');
+  assert.equal(countText(12500), '12 500');
+  assert.equal(countText(1250000), '1 250 000');
+  assert.equal(countText(-1500), '-1500');
+  assert.equal(countText(Number.NaN), '0');
+  const shorten = loadTs('src/helpers/shorten-number.ts').default;
+  assert.equal(shorten(4881), '4881', 'the header coin pill');
+  assert.equal(shorten(12500), '12.5K');
+});
+
+test('no player-visible text glyphs the game fonts cannot draw on the touched screens', () => {
+  for (const file of [
+    'src/components/StandingsPicker.tsx', 'src/components/map/fright/FrightSprites.tsx',
+    'src/screens/ExploreScreen/PrepItem.tsx', 'src/screens/ExploreScreen/ridePhoto/CatchReveal.tsx',
+    'src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx', 'src/screens/pinTrading/TradeSheet.tsx',
+    'src/components/CelebrationEffects.tsx', 'src/screens/QueueTimesScreen.tsx',
+  ]) assert.doesNotMatch(read(file), /[▼▶◀✓✕♛◆⭐→]|\\u2192/u, file);
 });

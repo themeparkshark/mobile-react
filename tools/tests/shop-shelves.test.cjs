@@ -66,9 +66,11 @@ test('timers use the server clock offset', () => {
 });
 
 test('coins format the same everywhere', () => {
-  assert.equal(shelves.formatCoins(5000), '5,000');
+  // No commas: the display font draws them like periods (src/helpers/countText.ts).
+  assert.equal(shelves.formatCoins(5000), '5000');
   assert.equal(shelves.formatCoins(750), '750');
-  assert.equal(shelves.formatCoins(1234567), '1,234,567');
+  assert.equal(shelves.formatCoins(12500), '12 500');
+  assert.equal(shelves.formatCoins(1234567), '1 234 567');
   assert.equal(shelves.shortfall(630, 750), 120);
   assert.equal(shelves.shortfall(900, 750), 0);
 });

@@ -7,6 +7,7 @@
  * by a client-side fallback and drawn with bundled art.
  */
 import type { StampData, StampRewards, StampSectionInfo, StampsResponse } from '../../api/endpoints/me/stamps';
+import countText from '../../helpers/countText';
 
 export type Rarity = StampData['rarity'];
 
@@ -310,10 +311,10 @@ export function rewardChips(r: StampRewards): { kind: 'energy' | 'tickets' | 'xp
   return chips;
 }
 
-/** 9,999 and under as is; then 10K, 12.5K, 1.2M (one decimal, trailing .0 dropped, rounded down so it never overstates progress). */
+/** 9999 and under as is (no comma, see countText); then 10K, 12.5K, 1.2M (one decimal, trailing .0 dropped, rounded down so it never overstates progress). */
 export function compactCount(n: number): string {
   const v = Math.max(0, Math.floor(n));
-  if (v < 10_000) return v.toLocaleString('en-US');
+  if (v < 10_000) return countText(v);
   const [div, unit] = v >= 1_000_000 ? [1_000_000, 'M'] : [1_000, 'K'];
   const x = Math.floor((v / div) * 10) / 10;
   return `${Number.isInteger(x) ? x.toFixed(0) : x.toFixed(1)}${unit}`;
