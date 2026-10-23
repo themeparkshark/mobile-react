@@ -12,6 +12,9 @@ import type { TaskType } from '../models/task-type';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, GameButton, GameIcon } from '../ui';
 
+/** The bar's title before any team holds a ride (never a ride-status claim). */
+export const NO_LEADER_HEADLINE = 'NO TEAM HAS A RIDE YET';
+
 /** One team's ride count: pops when it goes up, wears the crown while leading. */
 export function TeamChip({ team, count, yours, leading }: {
   readonly team: TeamId; readonly count: number; readonly yours: boolean; readonly leading: boolean;
@@ -76,8 +79,10 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
     .slice(0, 8);
   const unclaimed = tasks.filter(t => !(control?.rides ?? []).some(r => r.asset_id === Number(t.asset_id))).length;
 
+  // Never "every ride is open": kids read that as ride status (Wait Times may say every ride is closed).
+  // With no leader yet, say what it really means: no team has won a ride today.
   const headline = !control ? 'RIDE CONTROL'
-    : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : hideAllOpen ? 'RIDE CONTROL' : 'EVERY RIDE IS OPEN';
+    : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : hideAllOpen ? 'RIDE CONTROL' : NO_LEADER_HEADLINE;
 
   return (
     <>
