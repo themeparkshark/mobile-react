@@ -28,9 +28,12 @@ test('the Friends Invite shares the counted TPS link, never the dead App Store p
   // The "Add my shark" story picture with the text and link; text and link alone if the picture fails.
   assert.match(friends, /const message = inviteMessage\(player\?\.screen_name, INVITE_URL\);/);
   assert.match(friends, /await shareExternal\(picture \? \{ url: picture, message \} : \{ message, url: INVITE_URL \}\);/);
-  assert.match(friends, /<InviteCard ref=\{inviteRef\} name=\{player\?\.screen_name\} inventory=\{player\?\.inventory\} \/>/);
+  // The typed shark name goes only in the private text, never on the public picture.
+  assert.match(friends, /<InviteCard ref=\{inviteRef\} inventory=\{player\?\.inventory\} \/>/);
   const card = src('src/share/InviteCard.tsx');
   assert.match(card, /campaign="invite"/);
+  const art = card.slice(card.indexOf('export const InviteCard'));
+  assert.doesNotMatch(art, /name|screen_name/, 'no name of any kind in the invite picture');
 });
 
 test('a shared ride card never prints the typed note, and is story size with the link and QR', () => {
@@ -168,10 +171,31 @@ test('a grown-up gate iOS never shows answers "no" and steps aside, so later ask
   assert.match(gate, /export const GATE_SHOW_WATCHDOG_MS = 2500;/);
   assert.match(gate, /onShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
   // Never shown means no (never yes), and never silent: a kid-readable toast, plus a dev warning naming the ask.
-  assert.match(gate, /<GateShowWatchdog shown=\{shownRef\} onNeverShown=\{\(\) => \{[\s\S]{0,400}showToast\(GATE_RETRY_TOAST, 'info', 3500\);\s*close\(false\);\s*\}\} \/>/, 'never shown means no, never yes');
+  assert.match(gate, /<GateShowWatchdog key=\{askId\} shown=\{shownRef\} waitMs=\{gateWatchdogMs\(req\.reason\)\} onNeverShown=\{\(\) => \{[\s\S]{0,400}showToast\(GATE_RETRY_TOAST, 'info', 3500\);\s*close\(false\);\s*\}\} \/>/, 'never shown means no, never yes');
   assert.match(gate, /if \(__DEV__\) console\.warn\(`GrownUpGate never showed/);
   assert.match(gate, /export const GATE_RETRY_TOAST = 'That didn’t open\. Try again in a sec\.';/);
-  assert.match(gate, /setTimeout\(\(\) => \{ if \(!shown\.current\) onNeverShown\(\); \}, GATE_SHOW_WATCHDOG_MS\)/);
+  // Two checks (the wait, then a grace beat), so a late onShow never closes a gate on screen.
+  assert.match(gate, /if \(shown\.current\) return;\s*grace = setTimeout\(\(\) => \{ if \(!shown\.current\) onNeverShown\(\); \}, GATE_SHOW_GRACE_MS\);\s*\}, waitMs\);/);
+});
+
+test('the gate watchdog re-arms for every ask and gives real-money gates longer', () => {
+  const gate = src('src/components/GrownUpGate.tsx');
+  // A new key per ask: each ask gets its own watch, even when the host is not remounted.
+  assert.match(gate, /if \(r\) setAskId\(n => n \+ 1\); setReq\(r\);/);
+  // shown stays true while the gate's Modal is up (a second ask on an open gate never trips it), reset when it goes.
+  assert.match(gate, /<PresentedReset shown=\{shownRef\} \/>/);
+  assert.match(gate, /useEffect\(\(\) => \(\) => \{ shown\.current = false; \}, \[shown\]\);/);
+  assert.doesNotMatch(gate.slice(gate.indexOf('function GateShowWatchdog'), gate.indexOf('function PresentedReset')), /shown\.current = false/,
+    'the watchdog itself never clears shown (that would close an open gate)');
+  const body = gate.slice(gate.indexOf('export const GATE_SHOW_WATCHDOG_MS'), gate.indexOf('/** What a kid sees'));
+  const js = body.replace(/export /g, '').replace('(reason: GateReason | null | undefined): number', '(reason)');
+  const ms = new Function(`${js}\nreturn { gateWatchdogMs };`)();
+  assert.equal(ms.gateWatchdogMs({ kind: 'share' }), 2500);
+  assert.equal(ms.gateWatchdogMs({ kind: 'leave', where: 'x' }), 2500);
+  assert.equal(ms.gateWatchdogMs(null), 2500);
+  assert.equal(ms.gateWatchdogMs({ kind: 'money', price: '$1', gets: 'x' }), 6000);
+  assert.equal(ms.gateWatchdogMs({ kind: 'renews', what: 'x', price: '$1', period: 'month', trial: null }), 6000);
+  assert.equal(ms.gateWatchdogMs({ kind: 'vip' }), 6000);
 });
 
 /* ------------------------------------------------------------------ round 2 */
@@ -225,22 +249,66 @@ test('the Flex moment has release callers: park day (held in the park), streak a
   const once = loadTs('src/share/revealOnce.ts', {
     '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async k => store.get(k) ?? null, setItem: async (k, v) => { store.set(k, v); } } },
     './copy': loadTs('src/share/copy.ts', {}),
-    './store': { flexReveal: (kind, payload) => reveals.push(kind) },
+    './store': { flexReveal: (kind, payload, options) => reveals.push([kind, options.onceKey, payload]) },
   });
+  const key = once.revealKey('level_up', '23:10');
   assert.equal(await once.flexRevealOnce('level_up', '23:10', { level: 10 }, { surface: 'profile_level' }), true);
+  assert.equal(store.has(key), false, 'queued is not shown: nothing is saved yet');
+  // A second call before it shows goes to the store with the same key (the store updates the waiting one).
+  assert.equal(await once.flexRevealOnce('level_up', '23:10', { level: 10 }, { surface: 'profile_level' }), true);
+  assert.deepEqual(reveals.map(r => r[1]), [key, key]);
+  // A relaunch before it ever showed keeps the moment.
+  once.__resetRevealOnce();
+  assert.equal(await once.flexRevealOnce('level_up', '23:10', { level: 10 }, { surface: 'profile_level' }), true, 'not lost by a relaunch');
+  once.markRevealShown(key);
+  await new Promise(r => setImmediate(r));
+  assert.equal(store.get(key), '1', 'saved when it is really on screen');
   assert.equal(await once.flexRevealOnce('level_up', '23:10', { level: 10 }, { surface: 'profile_level' }), false, 'once per level');
-  assert.equal(await once.flexRevealOnce('level_up', '23:11', { level: 11 }, { surface: 'profile_level' }), false, 'only every 5th level');
   once.__resetRevealOnce();
   assert.equal(await once.flexRevealOnce('level_up', '23:10', { level: 10 }, { surface: 'profile_level' }), false, 'remembered after a relaunch');
+  assert.equal(await once.flexRevealOnce('level_up', '23:11', { level: 11 }, { surface: 'profile_level' }), false, 'only every 5th level');
   assert.equal(await once.flexRevealOnce('streak', '23:7:2026-10-23', { days: 7 }, { surface: 'profile_streak' }), true);
   assert.equal(await once.flexRevealOnce('park_day', '8:2026-10-23', { coinsCaught: 4, coinUrls: [] }, { surface: 'park_day' }), false, '5+ coins only');
   assert.equal(await once.flexRevealOnce('park_day', '8:2026-10-23', { coinsCaught: 6, coinUrls: [] }, { surface: 'park_day' }), true);
-  assert.deepEqual(reveals, ['level_up', 'streak', 'park_day']);
+  assert.deepEqual(reveals.map(r => r[0]), ['level_up', 'level_up', 'level_up', 'streak', 'park_day']);
   // Park days stay held while the player is in the park (store.ts HOLD_IN_PARK).
   assert.match(src('src/share/store.ts'), /HOLD_IN_PARK: ReadonlySet<string> = new Set\(\['park_day', 'ride_coin'\]\)/);
-  assert.match(src('src/screens/ParkDayRecapCard.tsx'), /flexRevealOnce\('park_day', `\$\{parkId\}:\$\{result\.park_day\}`, parkDayFlexPayload\(result\)/);
+  const recap = src('src/screens/ParkDayRecapCard.tsx');
+  assert.match(recap, /flexRevealOnce\('park_day', `\$\{parkId\}:\$\{day\}`, parkDayFlexPayload\(result\), \{ surface: 'park_day',\s*refresh: \(\) => loadRecap\(parkId, day\)/);
   assert.match(src('src/screens/ProfileScreen.tsx'), /flexRevealOnce\('streak'/);
-  assert.match(src('src/components/Experience.tsx'), /flexRevealOnce\('level_up', `\$\{player\.id\}:\$\{level\}`, \{ level \}/);
+  assert.match(src('src/components/Experience.tsx'), /flexRevealOnce\('level_up', `\$\{player\.id\}:\$\{level\}`, \{ level, xp: Number\(player\.total_experience\) \|\| undefined \}/);
+  // The host saves the key only from the moment's onShow.
+  const host = src('src/share/ShareStudioHost.tsx');
+  assert.match(host, /const onShow = \(\) => \{ onShowWatch\(\); markRevealShown\(request\.options\.onceKey\); \};/);
+  assert.match(host, /request\.options\.refresh\(\)/);
+});
+
+test('a park day held in the park is one moment that keeps the newest count', () => {
+  const store = loadTs('src/share/store.ts', {});
+  store.__resetFlexQueue();
+  const host = store.registerFlexHost();
+  const opts = n => ({ surface: 'park_day', onceKey: 'flex-reveal:park_day:8:2026-10-23', n });
+  store.flexReveal('park_day', { coinsCaught: 5, newCoins: 0, coinUrls: [] }, opts(1));
+  store.holdFlex(store.currentFlex().id); // the player is in the park
+  store.flexReveal('park_day', { coinsCaught: 9, newCoins: 2, coinUrls: [] }, opts(2));
+  assert.equal(store.currentFlex(), null, 'nothing shows in the park');
+  assert.equal(store.__heldFlex().length, 1, 'one moment, not two');
+  assert.equal(store.__heldFlex()[0].payload.coinsCaught, 9, 'the newest count');
+  store.releaseHeldFlex(); // left the park
+  assert.equal(store.currentFlex().payload.coinsCaught, 9);
+  // Without a key (a re-share), a second request still queues behind the first.
+  store.shareFlex('park_day', { coinsCaught: 1, newCoins: 0, coinUrls: [] }, { surface: 'park_day' });
+  store.unregisterFlexHost(host);
+  store.__resetFlexQueue();
+});
+
+test('the level-up moment says something real and sits on house blue', () => {
+  const { flexCopy } = loadTs('src/share/copy.ts', {});
+  assert.equal(flexCopy('level_up', { level: 10, xp: 12400 }).stat, '12,400 XP earned');
+  assert.equal(flexCopy('level_up', { level: 10, unlockName: 'Boss fights' }).stat, 'Unlocked: Boss fights');
+  assert.notEqual(flexCopy('level_up', { level: 10 }).stat, 'Leveled up!', 'never repeats the ribbon');
+  const host = src('src/share/ShareStudioHost.tsx');
+  assert.match(host, /momentScrim: \{ backgroundColor: BRAND\.blue \}/);
 });
 
 test('the shared ride card has no date and waits until the player leaves the park', () => {
@@ -259,8 +327,8 @@ test('the shared ride card has no date and waits until the player leaves the par
     'expo-image': { Image: 'Image' }, 'expo-linear-gradient': { LinearGradient: 'LG' }, 'expo-sharing': {}, 'expo-haptics': {},
     '../../design-system': { colors: {}, shadows: {}, borderRadius: {} }, '../../api/endpoints/player-rides': {},
     '../../hooks/useReducedGameMotion': { default: () => false }, '../../constants/parkWaitTimes': { PARK_DISPLAY_ORDER: [] },
-    './SharkReactionIcon': { default: 'Icon', reactionLabel: () => null }, '../../ui': { gameAlert() {} }, '../../share/capture': {},
-    '../../share/StoryShareFrame': {}, '../../context/LocationProvider': { LocationStatusContext: {} },
+    './SharkReactionIcon': { default: 'Icon', reactionLabel: () => null }, '../../ui': { gameAlert() {}, GameIcon: 'GameIcon' }, '../../share/capture': {},
+    '../../share/StoryShareFrame': {}, '../../context/LocationProvider': { LocationStatusContext: {} }, '../../share/FlexShareButton': { ShareFace: 'ShareFace' },
   });
   assert.equal(riddenLine(1), 'Ridden 1 time');
   assert.equal(riddenLine(12), 'Ridden 12 times');
@@ -270,7 +338,7 @@ test('Invite and Closet look share story pictures with their own QR; no unused Q
   const invite = loadTs('src/share/InviteCard.tsx', {
     react: { forwardRef: f => f }, 'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; }, Fragment: 'Fragment' },
     'react-native': { StyleSheet: { create: s => s }, Text: 'Text', View: 'View' },
-    './FlexShark': {}, './Outlined': {}, './StoryShareFrame': {},
+    './FlexShark': {}, './StoryShareFrame': {},
   });
   assert.equal(invite.inviteMessage(' Finn ', 'https://themeparkshark.com/app?c=flex_invite'),
     'Play Theme Park Shark with me! Add my shark: Finn\nhttps://themeparkshark.com/app?c=flex_invite');
@@ -295,4 +363,67 @@ test('a tall card shrinks to fit between the ribbon and the footer, never grows'
   assert.equal(fitScale(300, 200), 1);
   assert.equal(fitScale(0, 200), 1, 'before layout: no scale');
   assert.match(src('src/share/StoryShareFrame.tsx'), /transform: \[\{ scale \}\]/);
+});
+
+/* ------------------------------------------------------------------ round 3 */
+
+test('Set Complete and the box reveal offer Share only after the wear choice, and wait for iOS to let go', () => {
+  const set = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  // Share is the gold-rimmed pill right under WEAR IT ALL, once it is on, and waits while that save runs.
+  assert.match(set, /accessibilityHint="Puts on the title and every piece of the set" \/>\s*\{\/\*[^*]*\*\/\}\s*\{all === 'done' && \(\s*<FlexShareButton kind="set_complete" surface="shop_set" size="reveal" handoff=\{shareHandoff\} disabled=\{savingNow > 0\}/);
+  // The handoff hides the Modal and resolves on its onDismiss (not a bare timer), then leaves.
+  assert.match(set, /<Modal visible=\{!hidden\}[\s\S]{0,200}onDismiss=\{modal\.onDismiss\}/);
+  assert.match(set, /const modal = useModalHandoff\(useCallback\(\(\) => setHidden\(true\), \[\]\)\);/);
+  assert.match(set, /await modal\.handoff\(\);\s*doneRef\.current\(\);/);
+  assert.doesNotMatch(set, /MODAL_HANDOFF_MS/);
+  const box = src('src/screens/pins/BoxReveal.tsx');
+  assert.match(box, /brag\(pull\) && \(!wearable \|\| kept\.has\(pull\.item_id\)\) \? pull : null;/, 'a wearable pin waits for Wear it or Keep my lanyard');
+  assert.match(box, /setChoosing\(false\); setKept\(k => new Set\(k\)\.add\(pull\.item_id\)\);/);
+  assert.match(box, /<Modal transparent visible=\{!hidden\} animationType="fade" statusBarTranslucent onDismiss=\{modal\.onDismiss\}/);
+  assert.match(box, /const shareHandoff = async \(\) => \{ await modal\.handoff\(\); onDone\(pulls\); \};/);
+  // One placement: directly under the main button.
+  assert.match(box, /icon=\{index < pulls\.length - 1 \? 'gift' : 'check'\} onPress=\{next\} \/>\s*\{sharePull && !choosing && \(\s*<FlexShareButton kind="find"[^>]*size="reveal"/);
+});
+
+test('every full-screen reveal uses the one share pill, under its main button', () => {
+  const button = src('src/share/FlexShareButton.tsx');
+  assert.match(button, /export function ShareFace\(/);
+  assert.match(button, /export type ShareSize = 'sm' \| 'md' \| 'reveal';/);
+  for (const [file, re] of [
+    ['src/components/home/HomeHuntResultsModal.tsx', /kind="standings"[^>]*size="reveal"/],
+    ['src/components/coin/Crowning.tsx', /kind="crowned"[^>]*size="reveal"/],
+    ['src/screens/SharkPassScreen.tsx', /share=\{[\s\S]{0,120}<FlexShareButton kind="find" surface="sharkpass" size="reveal"/],
+    ['src/components/money/MonthlyGiftCard.tsx', /share=\{[\s\S]{0,80}<FlexShareButton kind="find" surface="vip_gift" size="reveal"/],
+  ]) assert.match(src(file), re, file);
+  const gotIt = src('src/components/money/moneyUi.tsx');
+  assert.match(gotIt, /\{action && <GameButton label=\{action\.label\}[^\n]*\n\s*\{action && share && /);
+  assert.match(gotIt, /onPress=\{onDone\} \/>\n\s*\{!action && share && /);
+  // The Closet look and the ride card use the same face, not a copy of its styles.
+  assert.match(src('src/share/LookShareButton.tsx'), /<ShareFace size="sm" caption/);
+  assert.doesNotMatch(src('src/share/LookShareButton.tsx'), /round: \{/);
+  const ride = src('src/components/RideTracker/ShareableRideCard.tsx');
+  assert.match(ride, /<ShareFace size="reveal"/);
+  assert.doesNotMatch(ride, /shareBtn/);
+  for (const file of ['src/screens/RideTracker/RideHistoryScreen.tsx', 'src/screens/RideTracker/RideDetailScreen.tsx']) {
+    assert.match(src(file), /<GameButton label=\{CLOSE_WORD\} variant="ghost"/, file);
+  }
+  assert.match(src('src/share/closeWord.ts'), /export const CLOSE_WORD = 'Nice!';/);
+});
+
+test('a bare shark has no look to share; the ride story is one hero stat; the held ride card shows a park icon', () => {
+  const look = loadTs('src/share/LookShareButton.tsx', {
+    react: { useRef: v => ({ current: v }), useState: v => [v, () => {}] }, 'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; } },
+    'react-native': { StyleSheet: { create: s => s }, Pressable: 'Pressable', View: 'View' }, '../helpers/haptics': {},
+    '../helpers/wardrobe': loadTs('src/helpers/wardrobe.ts', {}), './capture': {}, './FlexShareButton': {}, './FlexShark': {}, './StoryShareFrame': {},
+  });
+  assert.equal(look.hasLookToShare(null), false);
+  assert.equal(look.hasLookToShare({ skin_item: { paper_url: 'skin.png' } }), false, 'nothing worn yet');
+  assert.equal(look.hasLookToShare({ head_item: { paper_url: 'hat.png' } }), true);
+  const ride = src('src/components/RideTracker/ShareableRideCard.tsx');
+  const shareVariant = ride.slice(ride.indexOf('{shared ? ('), ride.indexOf(') : (', ride.indexOf('{shared ? (')));
+  assert.match(shareVariant, /cardStyles\.heroStat\b/);
+  assert.match(shareVariant, /<SharkReactionIcon reaction=\{ride\.reaction\} size=\{46\} \/>/);
+  assert.match(ride, /alignSelf: 'center', flexDirection: 'row'/, 'sized to its content');
+  assert.match(ride, /<GameIcon name="map" size=\{28\} \/>\s*<Text style=\{cardStyles\.heldText\}>\{RIDE_SHARE_HELD_LABEL\}<\/Text>/);
+  assert.match(ride, /<CardContent ride=\{ride\} rideCount=\{confirmedCount\} variant="share" \/>\s*<\/View>\s*\{inPark/, 'the preview is the shared card');
 });

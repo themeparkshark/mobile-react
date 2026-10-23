@@ -282,6 +282,15 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'] as 
 const MAX_FONT = 1.3;
 /** How long the gate waits for iOS to show it before it answers "no" and steps aside. */
 export const GATE_SHOW_WATCHDOG_MS = 2500;
+/** Real money (a buy, a plan, VIP) waits longer: a busy phone must not close a gate a grown-up is reading. */
+export const GATE_SHOW_WATCHDOG_MONEY_MS = 6000;
+/** After the wait, one more beat for an onShow that is already on its way (a stalled JS thread). */
+export const GATE_SHOW_GRACE_MS = 400;
+
+/** The watchdog wait for one ask. Exported for tests. */
+export function gateWatchdogMs(reason: GateReason | null | undefined): number {
+  return reason && (reason.kind === 'money' || reason.kind === 'renews' || reason.kind === 'vip') ? GATE_SHOW_WATCHDOG_MONEY_MS : GATE_SHOW_WATCHDOG_MS;
+}
 /** What a kid sees when the gate could not open (another window was in the way). */
 export const GATE_RETRY_TOAST = 'That didn’t open. Try again in a sec.';
 
@@ -290,13 +299,25 @@ export const GATE_RETRY_TOAST = 'That didn’t open. Try again in a sec.';
  * that is not a layer is up ("already presenting"): nothing shows and, before this, every
  * later ask (a buy, a link, a share) waited on that hidden gate until the app restarted.
  * Now a gate that never shows answers "no" (never yes) and steps aside.
+ * It is mounted once per ask (keyed on it), so every ask gets its own watch, and it checks twice
+ * (the wait, then GATE_SHOW_GRACE_MS) so an onShow that lands late never closes a gate on screen.
+ * `shown` stays true while the gate's Modal is up, so a second ask on an open gate never trips it.
  */
-function GateShowWatchdog({ shown, onNeverShown }: { readonly shown: { current: boolean }; readonly onNeverShown: () => void }) {
+function GateShowWatchdog({ shown, waitMs, onNeverShown }: { readonly shown: { current: boolean }; readonly waitMs: number; readonly onNeverShown: () => void }) {
   useEffect(() => {
-    shown.current = false;
-    const t = setTimeout(() => { if (!shown.current) onNeverShown(); }, GATE_SHOW_WATCHDOG_MS);
-    return () => clearTimeout(t);
+    let grace: ReturnType<typeof setTimeout> | undefined;
+    const t = setTimeout(() => {
+      if (shown.current) return;
+      grace = setTimeout(() => { if (!shown.current) onNeverShown(); }, GATE_SHOW_GRACE_MS);
+    }, waitMs);
+    return () => { clearTimeout(t); if (grace) clearTimeout(grace); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+/** Inside the gate's Modal: when the Modal goes away, the next one has not been shown yet. */
+function PresentedReset({ shown }: { readonly shown: { current: boolean } }) {
+  useEffect(() => () => { shown.current = false; }, [shown]);
   return null;
 }
 
@@ -308,8 +329,10 @@ export function GrownUpGateHost() {
   const [details, setDetails] = useState<{ head: string; lines: string[] } | null>(null);
   const [more, setMore] = useState(false);
   const shownRef = useRef(false);
+  // A new number for every ask: the watchdog is keyed on it, so it re-arms per ask.
+  const [askId, setAskId] = useState(0);
   useEffect(() => {
-    showGate = r => { setTyped(''); setDetails(r?.devOffer ? gateDetails(r.devOffer) : null); setMore(false); setReq(r); };
+    showGate = r => { setTyped(''); setDetails(r?.devOffer ? gateDetails(r.devOffer) : null); setMore(false); if (r) setAskId(n => n + 1); setReq(r); };
     return () => { showGate = null; };
   }, []);
   // Waits behind any open sheet instead of stacking a second <Modal> (ui/modalLayers.ts).
@@ -331,7 +354,8 @@ export function GrownUpGateHost() {
   };
   return (
     <Modal visible transparent animationType="fade" onShow={() => { shownRef.current = true; }} onRequestClose={() => close(false)} statusBarTranslucent>
-      <GateShowWatchdog shown={shownRef} onNeverShown={() => {
+      <PresentedReset shown={shownRef} />
+      <GateShowWatchdog key={askId} shown={shownRef} waitMs={gateWatchdogMs(req.reason)} onNeverShown={() => {
         // Never silent: the kid sees why nothing opened, and a dev build names the ask so its caller can be fixed.
         if (__DEV__) console.warn(`GrownUpGate never showed (${req.reason?.kind ?? 'no reason'}): another modal was up. Close it before asking (share/handoff.ts).`);
         showToast(GATE_RETRY_TOAST, 'info', 3500);
