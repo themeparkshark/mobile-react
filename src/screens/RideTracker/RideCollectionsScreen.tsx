@@ -11,6 +11,8 @@ import { colors, shadows, borderRadius } from '../../design-system';
 import { GameIcon, gameAlert, SharkLoader } from '../../ui';
 import { serverIcon } from '../../components/RideTracker/rideIcons';
 
+import RideTrackerEmpty from './RideTrackerEmpty';
+import { useNavigation } from '@react-navigation/native';
 // ─── Collection Card ───
 interface CollectionCardProps {
   collection: RideCollection;
@@ -76,6 +78,7 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(({ collection, 
 CollectionCard.displayName = 'CollectionCard';
 
 export default function RideCollectionsScreen() {
+  const navigation = useNavigation<any>();
   const [collections, setCollections] = useState<RideCollection[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -115,11 +118,8 @@ export default function RideCollectionsScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
         >
           {collections.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <GameIcon name="trophy" size={72} />
-              <Text style={styles.emptyTitle}>No collections yet!</Text>
-              <Text style={styles.emptySubtitle}>Collections will appear here as they're added</Text>
-            </View>
+            <RideTrackerEmpty title="No collections yet!" body="Ride sets show up here. Log rides to start filling them."
+              action={{ label: 'Log a ride', icon: 'ride', onPress: () => navigation.navigate('RideLog') }} />
           ) : (
             collections.map(c => (
               <CollectionCard key={c.id} collection={c} onPress={() => {

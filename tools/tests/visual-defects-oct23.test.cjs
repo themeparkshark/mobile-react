@@ -117,8 +117,13 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
   assert.ok(0.678 + 0.31 + 0.31 * 0.05 / 2 < 1, 'even mid-pulse the button stays on screen');
   // Short phones (iPhone SE): GO BACK and the cooldown note sit on the screen, not on the art's hidden bottom.
   assert.match(cc, /bottom: 80 \+ ART_OVERFLOW/);
-  assert.match(cc, /bottom: 145 \+ ART_OVERFLOW/);
+  assert.match(cc, /145 \+ ART_OVERFLOW/);
   assert.match(cc, /SCREEN_HEIGHT - LEAVE_GIFT_H - 2\)/);
+  // Short phones (SE): the art slides up so the plinth fits, GO BACK joins LEAVE GIFT in one bottom row.
+  assert.match(cc, /const SHORT_SCREEN = ART_OVERFLOW > 60;/);
+  assert.match(cc, /LEAVE_GIFT_PLINTH_BOTTOM_RATIO - \(SCREEN_HEIGHT - BOTTOM_GAP\)/);
+  assert.match(cc, /marginTop: -ART_SHIFT/);
+  assert.match(cc, /\.\.\.GO_BACK_POSITION/);
 });
 
 test('Stamp Book bookmark band is solid so the title never ghosts through', () => {
@@ -178,4 +183,38 @@ test('one coin for coins you spend: the coin stack on pills, prices and the prof
   assert.doesNotMatch(read('src/components/Notification.tsx'), /<GameIcon name="coin" /);
   assert.match(read('src/services/liveEvents/model.ts'), /if \(r\.coins\) out\.push\(\{ icon: 'coins'/);
   assert.match(read('src/components/Stats.tsx'), /label: 'Coins',[\s\S]{0,120}gameIcon: 'coins'/);
+});
+
+test('full-screen routes keep clear of the Dynamic Island with one inset (SafeScreen, the JS hook)', () => {
+  const safe = read('src/components/SafeScreen.tsx');
+  assert.match(safe, /useSafeAreaInsets\(\)/);
+  for (const file of [
+    'src/screens/MembershipScreen.tsx', 'src/screens/BananaBasketScreen.tsx', 'src/screens/GymBattle/TeamSelectionScreen.tsx',
+    'src/screens/RideTracker/RideDetailScreen.tsx', 'src/screens/RideTracker/RideWrappedScreen.tsx',
+    'src/screens/RideTracker/RideOnboardingScreen.tsx', 'src/screens/LinePlay/LinePlayScreen.tsx', 'src/screens/WelcomeScreen.tsx',
+  ]) {
+    const src = read(file);
+    assert.doesNotMatch(src, /SafeAreaView/, file);
+    assert.match(src, /<SafeScreen/, file);
+  }
+});
+
+test('Wait Times badge numbers use the game font, and a down ride says it in kid words', () => {
+  const src = read('src/screens/QueueTimesScreen.tsx');
+  assert.match(src, /badgeText: \{[\s\S]{0,140}fontFamily: 'Shark'/);
+  assert.doesNotMatch(src, /NO PARTS/);
+  assert.match(src, /'PLAY WHILE YOU WAIT'/);
+});
+
+test('Ride Tracker: gold game chips, a full empty card with a button, readable locked achievements', () => {
+  const history = read('src/screens/RideTracker/RideHistoryScreen.tsx');
+  assert.match(history, /GAME_CHIP\.chipSelected/);
+  assert.doesNotMatch(history, /#0EA5E9', *\n? *borderColor: '#0EA5E9'/);
+  for (const name of ['RideHistory', 'RideStats', 'RideCollections', 'RideWishlist']) {
+    assert.match(read(`src/screens/RideTracker/${name}Screen.tsx`), /<RideTrackerEmpty/, name);
+  }
+  assert.match(read('src/screens/RideTracker/RideTrackerEmpty.tsx'), /<GameButton/);
+  const ach = read('src/screens/RideTracker/RideAchievementsScreen.tsx');
+  assert.doesNotMatch(ach, /cardLocked: \{ opacity/);
+  assert.doesNotMatch(ach, /iconLocked: \{ opacity/);
 });

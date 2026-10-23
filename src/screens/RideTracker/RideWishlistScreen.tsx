@@ -11,6 +11,7 @@ import RideTypeIcon from '../../components/RideTracker/RideTypeIcon';
 import { colors } from '../../design-system';
 import { GameIcon, gameAlert, SharkLoader } from '../../ui';
 
+import RideTrackerEmpty from './RideTrackerEmpty';
 // ─── Wishlist Item ───
 interface WishlistItemProps {
   ride: WishlistRide;
@@ -97,13 +98,8 @@ export default function RideWishlistScreen() {
           contentContainerStyle={styles.content}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <GameIcon name="star" size={72} />
-              <Text style={styles.emptyTitle}>Your wishlist is empty</Text>
-              <Text style={styles.emptySubtitle}>
-                Add rides you want to try from their detail page!
-              </Text>
-            </View>
+            <RideTrackerEmpty title="Your wishlist is empty" body="Tap the star on any ride to save it here."
+              action={{ label: 'Find a ride', icon: 'search', onPress: () => navigation.navigate('RideLog') }} />
           }
         />
       )}

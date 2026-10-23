@@ -175,15 +175,16 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  cardLocked: { opacity: 0.6 },
+  // Locked stays readable: a pale sky card with navy words and a full-color lock, not a 40% fade.
+  cardLocked: { backgroundColor: '#f1f8fe', borderWidth: 2, borderColor: '#abd9f1', borderStyle: 'dashed', shadowOpacity: 0 },
   cardIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  iconLocked: { opacity: 0.5 },
+  iconLocked: { backgroundColor: '#dcefff', borderRadius: 22 },
   cardContent: { flex: 1 },
   cardName: { 
     color: '#1a1a2e', 
     fontSize: 15, fontFamily: 'Shark' },
   cardDesc: { color: '#475569', fontSize: 13, fontFamily: 'Knockout', marginTop: 2 },
-  textLocked: { color: '#94a3b8' },
+  textLocked: { color: '#2c5a85' },
   unlockedDate: { 
     color: '#fec90e', 
     fontSize: 11, fontFamily: 'Knockout',

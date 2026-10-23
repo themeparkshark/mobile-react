@@ -15,6 +15,7 @@ import SharkRating from '../../components/RideTracker/SharkRating';
 import { colors } from '../../design-system';
 import { GameIcon, SharkLoader, type GameIconName } from '../../ui';
 
+import RideTrackerEmpty from './RideTrackerEmpty';
 // ─── Animated Counter ───
 interface AnimatedCounterProps {
   value: number;
@@ -150,10 +151,8 @@ export default function RideStatsScreen() {
         )}
 
         {stats.total_rides === 0 && (
-          <View style={styles.emptyContainer}>
-            <GameIcon name="ride" size={72} />
-            <Text style={styles.emptyText}>Start logging rides to see your stats!</Text>
-          </View>
+          <RideTrackerEmpty title="No stats yet" body="Log your first ride and your stats start here."
+            action={{ label: 'Log a ride', icon: 'ride', onPress: () => navigation.navigate('RideLog') }} />
         )}
       </ScrollView>
     </RideTrackerFrame>

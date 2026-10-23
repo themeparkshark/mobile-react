@@ -22,6 +22,8 @@ import { Image } from 'expo-image';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { GameIcon, SharkLoader } from '../../ui';
 
+import { GAME_CHIP } from '../../ui/gameChip';
+import RideTrackerEmpty from './RideTrackerEmpty';
 // ─── Short park names for filter chips ───
 const SHORT_PARK_NAMES: Record<number, string> = {
   2: 'Magic Kingdom',
@@ -54,8 +56,8 @@ interface TabPillProps {
 }
 const TabPill: React.FC<TabPillProps> = React.memo(({ label, active, onPress }) => (
   <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}
-    style={[styles.tabPill, active && styles.tabPillActive]}>
-    <Text style={[styles.tabPillText, active && styles.tabPillTextActive]}>{label}</Text>
+    style={[GAME_CHIP.chip, styles.tabPill, active && GAME_CHIP.chipSelected]}>
+    <Text style={[GAME_CHIP.text, styles.tabPillText, active && GAME_CHIP.textSelected]}>{label}</Text>
   </Pressable>
 ));
 TabPill.displayName = 'TabPill';
@@ -68,8 +70,8 @@ interface FilterChipProps {
 }
 const FilterChip: React.FC<FilterChipProps> = React.memo(({ label, selected, onPress }) => (
   <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected }}
-    style={[styles.filterChip, selected && styles.filterChipSelected]}>
-    <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>{label}</Text>
+    style={[GAME_CHIP.chip, selected && GAME_CHIP.chipSelected]}>
+    <Text style={[GAME_CHIP.text, selected && GAME_CHIP.textSelected]}>{label}</Text>
   </Pressable>
 ));
 FilterChip.displayName = 'FilterChip';
@@ -228,26 +230,17 @@ export default function RideHistoryScreen() {
             onPress={onRefresh} style={{ marginTop: 24 }} />
         </View>
       ) : rides.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>
-            {selectedPark === FAVORITES_FILTER_ID ? hasMore ? 'Looking for your favorites' : 'No favorite memories here yet'
-              : timeTab === 'today' ? 'No rides today yet!' : 'No rides yet!'}
-          </Text>
-          <Text style={styles.emptySubtitle}>
-            {selectedPark === FAVORITES_FILTER_ID ? hasMore ? 'Check earlier memories for rides you have starred.' : 'Star a ride to add it to favorites'
-              : timeTab === 'today' ? 'Log a ride to see it here' : 'Add a favorite ride to start your journal'}
-          </Text>
-          {/* The game's chunky button, like every other screen (was a flat web-style bar). */}
-          <GameButton
-            label={selectedPark === FAVORITES_FILTER_ID && hasMore
-              ? loadingMore ? 'Loading...' : 'Check earlier memories' : 'Log a ride'}
-            icon={selectedPark === FAVORITES_FILTER_ID && hasMore ? 'search' : 'ride'}
-            disabled={loadingMore}
-            onPress={() => selectedPark === FAVORITES_FILTER_ID && hasMore
-              ? void onEndReached(true) : navigation.navigate('RideLog')}
-            style={{ marginTop: 24 }}
-          />
-        </View>
+        <RideTrackerEmpty
+          title={selectedPark === FAVORITES_FILTER_ID ? hasMore ? 'Looking for your favorites' : 'No favorite memories here yet'
+            : timeTab === 'today' ? 'No rides today yet!' : 'No rides yet!'}
+          body={selectedPark === FAVORITES_FILTER_ID ? hasMore ? 'Check earlier memories for rides you have starred.' : 'Star a ride to add it to favorites'
+            : timeTab === 'today' ? 'Log a ride to see it here' : 'Add a favorite ride to start your journal'}
+          action={{
+            label: selectedPark === FAVORITES_FILTER_ID && hasMore ? loadingMore ? 'Loading...' : 'Check earlier memories' : 'Log a ride',
+            icon: selectedPark === FAVORITES_FILTER_ID && hasMore ? 'search' : 'ride',
+            disabled: loadingMore,
+            onPress: () => selectedPark === FAVORITES_FILTER_ID && hasMore ? void onEndReached(true) : navigation.navigate('RideLog'),
+          }} />
       ) : (
         <FlatList
           data={rides}
@@ -291,29 +284,8 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     gap: 8,
   },
-  tabPill: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  tabPillActive: {
-    backgroundColor: '#0EA5E9',
-    borderColor: '#0EA5E9',
-    shadowColor: '#0EA5E9',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  tabPillText: { color: '#315C7C', fontSize: 14, fontFamily: 'Knockout' },
-  tabPillTextActive: { color: '#FFFFFF' },
+  tabPill: { paddingHorizontal: 20, paddingVertical: 9 },
+  tabPillText: { fontSize: 14 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -341,32 +313,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  filterContainer: { maxHeight: 50, backgroundColor: '#e8f4fd' },
+  filterContainer: { maxHeight: 54, flexGrow: 0, backgroundColor: '#e8f4fd' },
   filterRow: { paddingHorizontal: 16, gap: 8, paddingBottom: 10, paddingTop: 10 },
-  filterChip: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1.5,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  filterChipSelected: { 
-    backgroundColor: '#FFFFFF', 
-    borderColor: '#38BDF8',
-    shadowColor: '#38BDF8',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  filterChipText: { color: '#475569', fontSize: 12, fontFamily: 'Knockout' },
-  filterChipTextSelected: { color: '#0EA5E9' },
   list: { paddingHorizontal: 16, paddingBottom: FOOTER_CLEARANCE },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyEmoji: { fontSize: 60, fontFamily: 'Knockout' },
