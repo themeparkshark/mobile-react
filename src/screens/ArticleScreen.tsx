@@ -31,7 +31,7 @@ import type { ArticleBodyHandlers } from './NewsScreen/ArticleBody';
 import ArticlePage from './NewsScreen/ArticlePage';
 import { RIM } from './NewsScreen/NewsCards';
 import { fetchBySlug, findBySlug, getEntry, markRead, rememberEntries, setLastViewed } from './NewsScreen/newsFeed';
-import { grownUpSlug, isGrownUpStory, plainText, relatedFor, storyLinkTarget, tpsArticleSlug, type NewsEntry } from './NewsScreen/newsModel';
+import { grownUpSlug, isGrownUpStory, kidReaderList, plainText, relatedFor, storyLinkTarget, tpsArticleSlug, type NewsEntry } from './NewsScreen/newsModel';
 import useTapSound from './NewsScreen/useTapSound';
 
 const BOTTOM_BAR = 66;
@@ -64,12 +64,15 @@ export default function ArticleScreen({ route, navigation }: any) {
   const { width } = useWindowDimensions();
 
   // The list this reader swipes through: ids from News, entries from the cache.
-  const [list] = useState<NewsEntry[]>(() => {
-    if (params.entry) rememberEntries([params.entry]);
-    const ids = params.ids?.length ? params.ids : [params.id ?? params.entry?.id].filter((n): n is number => typeof n === 'number');
-    const found = ids.map(id => getEntry(id)).filter((e): e is NewsEntry => !!e);
-    return found.length ? found : params.entry ? [params.entry] : [];
-  });
+  // A grown-up story never renders in the kids reader, however it arrives (ids, the cache or params.entry).
+  const [list] = useState<NewsEntry[]>(() => kidReaderList(params, getEntry, rememberEntries));
+  // A grown-up story handed in directly goes out through the grown-up gate instead; the empty list then closes the reader.
+  const sentOut = useRef(false);
+  useEffect(() => {
+    if (sentOut.current || !params.entry || !isGrownUpStory(params.entry) || list.length) return;
+    sentOut.current = true;
+    void openExternal(params.entry.url);
+  }, [params.entry, list.length]);
   const startIndex = Math.max(0, list.findIndex(e => e.id === (params.id ?? params.entry?.id)));
   const [index, setIndex] = useState(startIndex);
   const pager = useRef<FlatList<NewsEntry>>(null);

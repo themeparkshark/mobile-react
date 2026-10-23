@@ -2,8 +2,8 @@
 /**
  * Standings (WS8, P0-9): every load ends in ready, empty or error (never an
  * endless spinner), 1-2 players still get a podium, the Rides tab opens on the
- * nearest park and shows a real date, and VIP-neutral XP stays behind a flag
- * that defaults to today's behaviour.
+ * nearest park and shows a real date, and the XP board shows the number it is
+ * ranked by.
  */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -59,16 +59,17 @@ test('park days read as a real date, never a raw ISO string', () => {
   assert.match(model.rideMetricCopy('today', '2026-09-29', 0).caption, /Tuesday, September 29/);
 });
 
-test('VIP-neutral XP is off by default and only switches on with the flag and a base value', () => {
-  // Money never buys a higher public number (audit blocker 30): on unless turned off.
-  assert.equal(model.VIP_NEUTRAL_STANDINGS_DEFAULT, true);
-  assert.equal(model.vipNeutralStandingsEnabled({}), true);
-  assert.equal(model.vipNeutralStandingsEnabled({ EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS: '1' }), true);
-  assert.equal(model.vipNeutralStandingsEnabled({ EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS: 'false' }), false);
-  const player = { total_experience: 900, base_total_experience: 600 };
-  assert.equal(model.experienceScore(player, false), 900);
-  assert.equal(model.experienceScore(player, true), 600);
-  assert.equal(model.experienceScore({ total_experience: 900 }, true), 900, 'no base value keeps the total');
+test('the XP board shows the number it is ranked by, never a VIP-free number the server did not rank by', () => {
+  // The server sends its ranking column as total_experience (base XP once ECONOMY_VIP_NEUTRAL_STANDINGS is on).
+  assert.equal(model.experienceScore({ total_experience: 900, base_total_experience: 600 }), 900);
+  assert.equal(model.experienceScore({ total_experience: null }), 0);
+  assert.equal(model.VIP_NEUTRAL_STANDINGS_DEFAULT, undefined, 'no client switch that could disagree with the server order');
+  const board = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/LeaderboardsScreen/Experience.tsx'), 'utf8');
+  assert.doesNotMatch(board, /base_total_experience|VIP_NEUTRAL/);
+  // Shown in rank order: a list in server order stays in non-increasing score order.
+  const list = [{ total_experience: 700 }, { total_experience: 700 }, { total_experience: 600 }];
+  const shown = list.map(p => model.experienceScore(p));
+  assert.deepEqual(shown, [...shown].sort((a, b) => b - a));
 });
 
 test('empty boards invite the player onto the podium in plain copy', () => {

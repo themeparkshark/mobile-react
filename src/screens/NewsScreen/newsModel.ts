@@ -277,6 +277,24 @@ function grownUpStory(entry: NewsEntry): boolean {
   return HORROR_EVENT_WORDS.test(dek(entry, 220).replace(KID_SAFE_PHRASES, ' '));
 }
 
+/**
+ * The stories the in-app reader may page through, from its route params:
+ * the ids from News (looked up in the cache), else the entry handed in.
+ * Grown-up stories are always dropped, the handed-in entry included, so the
+ * reader can never show one; an empty list closes the reader.
+ */
+export function kidReaderList(
+  params: { readonly id?: number; readonly ids?: readonly number[]; readonly entry?: NewsEntry },
+  getEntry: (id: number) => NewsEntry | undefined | null,
+  remember: (entries: NewsEntry[]) => void,
+): NewsEntry[] {
+  const entry = params.entry && !isGrownUpStory(params.entry) ? params.entry : undefined;
+  if (entry) remember([entry]);
+  const ids = params.ids?.length ? params.ids : [params.id ?? params.entry?.id].filter((n): n is number => typeof n === 'number');
+  const found = ids.map(id => getEntry(id)).filter((e): e is NewsEntry => !!e && !isGrownUpStory(e));
+  return found.length ? found : entry ? [entry] : [];
+}
+
 /** A themeparkshark.com link whose slug names a grown-up story ("hhn-35-houses-revealed"). */
 export function grownUpSlug(slug: string): boolean {
   const text = slug.replace(/-/g, ' ').replace(KID_SAFE_PHRASES, ' ');

@@ -22,6 +22,7 @@ import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import getVipPerks, { type VipPerk } from '../api/endpoints/economy/vip-perks';
+import { AD_AUDIENCE_13_PLUS_KNOWN } from '../services/adConfig';
 import {
   buyVip, legalText, loadVipPlans, priceText, restoreVip, savingsText, storeAvailable, trialEndsAt, type VipPlan,
 } from '../services/purchases';
@@ -411,7 +412,10 @@ const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
 export function recapLines(recap: NonNullable<VipPlanTime['recap']>): string[] {
   const n = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   const lines = [
-    recap.no_ad_rewards > 0 ? `${recap.no_ad_rewards} free bonus ${recap.no_ad_rewards === 1 ? 'reward' : 'rewards'}` : null,
+    // "Skipped an ad" only means something once ads exist. While nobody sees ads (adConfig),
+    // this line would name a reward a kid never saw, so it stays off.
+    AD_AUDIENCE_13_PLUS_KNOWN && recap.no_ad_rewards > 0
+      ? `${recap.no_ad_rewards} ${recap.no_ad_rewards === 1 ? 'reward' : 'rewards'} without an ad` : null,
     recap.coins > 0 ? `${n(recap.coins)} coins` : null,
     recap.tickets > 0 ? `${recap.tickets} ${recap.tickets === 1 ? 'ticket' : 'tickets'}` : null,
     recap.energy > 0 ? `${n(recap.energy)} energy` : null,

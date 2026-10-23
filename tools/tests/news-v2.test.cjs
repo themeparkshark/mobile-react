@@ -357,6 +357,28 @@ test('a link inside a story to a grown-up story never opens in the kids reader (
   assert.match(feed, /if \(isGrownUpStory\(entry\)\) continue;/, 'the reader cache never holds one');
 });
 
+test('the reader never shows a grown-up story handed in as params.entry (round 3)', () => {
+  const hhn = { ...entry(7, ''), title: 'HHN 35 houses revealed', categories: [71] };
+  const kid = entry(8, '');
+  const remembered = [];
+  const remember = list => remembered.push(...list);
+  const none = () => undefined;
+  // The fallback list never holds a grown-up entry, and it is never cached.
+  assert.deepEqual([...model.kidReaderList({ entry: hhn }, none, remember)], []);
+  assert.equal(remembered.length, 0);
+  // Cached ids drop grown-up stories too; a kid-safe entry still opens.
+  const cache = { 7: hhn, 8: kid };
+  assert.deepEqual([...model.kidReaderList({ ids: [7, 8] }, id => cache[id], remember)].map(e => e.id), [8]);
+  assert.deepEqual([...model.kidReaderList({ entry: kid }, none, remember)].map(e => e.id), [8]);
+  assert.deepEqual(remembered.map(e => e.id), [8]);
+  // The screen builds its list only through it, and sends a grown-up params.entry out through the gate.
+  const reader = read('src/screens/ArticleScreen.tsx');
+  assert.match(reader, /useState<NewsEntry\[\]>\(\(\) => kidReaderList\(params, getEntry, rememberEntries\)\)/);
+  assert.doesNotMatch(reader, /params\.entry \? \[params\.entry\]/);
+  assert.match(reader, /isGrownUpStory\(params\.entry\) \|\| list\.length\) return;\s*sentOut\.current = true;\s*void openExternal\(params\.entry\.url\);/);
+  assert.match(reader, /if \(!entry\) navigation\.goBack\(\)/, 'an empty list closes the reader');
+});
+
 test('kid filter keeps Disney Channel ZOMBIES stories (round 2)', () => {
   const keep = [
     'Disney’s ZOMBIES 4 Cast Visits Disneyland', 'Disney Channel ZOMBIES Dance Party Comes to Hollywood Studios',

@@ -9,19 +9,18 @@ import { GameButton, SharkLoader } from '../../ui';
 import StandingsPodium from './StandingsPodium';
 import { StandingsInvite, StandingsListCard, StandingsNudge, StandingsRow } from './StandingsRow';
 import {
-  experienceScore, podiumSlots, STANDINGS_EMPTY_COPY, standingsStatus, vipNeutralStandingsEnabled, type StandingsStatus,
+  experienceScore, podiumSlots, STANDINGS_EMPTY_COPY, standingsStatus, type StandingsStatus,
 } from './standingsModel';
 import { standingsGeneration } from './standingsCache';
 
 const PAGE_SIZE_HINT = 15;
-// Read by name so Expo inlines the public env value at build time.
-const VIP_NEUTRAL = vipNeutralStandingsEnabled({ EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS: process.env.EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS });
 
 // Survives tab switches, so returning to this tab shows the last board at once.
 const cache: { players: PlayerType[]; page: number; more: boolean; generation: number } =
   { players: [], page: 1, more: true, generation: standingsGeneration() };
 
-const xpScore = (player: PlayerType) => experienceScore(player as PlayerType & { base_total_experience?: number }, VIP_NEUTRAL);
+/** The number the server ranked this list by (see experienceScore). */
+const xpScore = (player: PlayerType) => experienceScore(player);
 
 export default function Experience() {
   const { player } = useContext(AuthContext);

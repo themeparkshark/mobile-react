@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getDailyThree } from '../../api/endpoints/retention';
 import { loadRetentionFlags, retentionFlagsNow, streakOwner } from './flags';
 import { ownStreakOf } from './useOwnStreak';
@@ -14,12 +14,19 @@ export function flameStreak(owner: 'daily3' | 'chest' | null, chest: number | nu
   return null;
 }
 
-/** Reads the flags (cached per run) and, while Daily 3 is on, its streak each time `active` turns true. */
+/**
+ * Reads the flags (cached per run) and, while Daily 3 is on, its streak: once
+ * when the map mounts, so the menu's Day streak row is decided before the
+ * first open (the menu never grows after it opens), then again each time
+ * `active` turns true. Closing the menu reads nothing.
+ */
 export default function useFlameStreak(chest: number | null | undefined, active: boolean) {
   const [owner, setOwner] = useState(() => streakOwner(retentionFlagsNow()));
   const [daily3, setDaily3] = useState<number | null>(null);
+  const warmed = useRef(false);
   useEffect(() => {
-    if (!active) return undefined;
+    if (!active && warmed.current) return undefined;
+    warmed.current = true;
     let live = true;
     void loadRetentionFlags().then(flags => {
       if (!live || !flags) return;

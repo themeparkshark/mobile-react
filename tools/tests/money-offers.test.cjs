@@ -285,8 +285,10 @@ test('BEST VALUE is true for the whole page, not just its row (Oct 23 honesty pa
 });
 
 test('the VIP line on a win is rare: never the first 3 wins, then once every 3 days', () => {
+  const stored = [];
   const nudge = loadTs('src/services/money/vipNudge.ts', {
-    '@react-native-async-storage/async-storage': { default: {} }, react: { useEffect() {}, useState: v => [v, () => {}] },
+    '@react-native-async-storage/async-storage': { __esModule: true, default: { setItem: async (_, v) => { stored.push(JSON.parse(v)); } } },
+    react: { useEffect() {}, useState: v => [v, () => {}] },
   });
   // Each due line is really shown (stamped); the gap counts from the showing.
   let state = null;
@@ -303,6 +305,19 @@ test('the VIP line on a win is rare: never the first 3 wins, then once every 3 d
   for (let i = 0; i < 4; i++) held = nudge.nextVipNudgeState(held, '2026-10-01').state;
   assert.equal(held.lastDay, null);
   assert.equal(nudge.nextVipNudgeState(held, '2026-10-01').show, true);
+  // Round 3: the render only peeks; the win is counted once per key in an effect, so a second render never counts twice.
+  const store = nudge;
+  for (let i = 0; i < 3; i++) { store.peekVipNudge(`w${i}`); store.peekVipNudge(`w${i}`); }
+  assert.equal(stored.length, 0, 'peeking writes nothing');
+  for (let i = 0; i < 3; i++) { store.countVipNudgeWin(`w${i}`); store.countVipNudgeWin(`w${i}`); }
+  assert.equal(stored.at(-1).wins, 3, 'each win key counts once');
+  assert.equal(store.peekVipNudge('w3'), true, 'the 4th win may show it');
+  store.countVipNudgeWin('w3');
+  assert.equal(store.peekVipNudge('w3'), true, 'after counting, the same win keeps its answer');
+  assert.equal(stored.at(-1).wins, 4);
+  const hook = read('src/services/money/vipNudge.ts');
+  assert.match(hook, /useEffect\(\(\) => \{ if \(key != null\) countVipNudgeWin\(key\); \}, \[key\]\)/);
+  assert.doesNotMatch(hook, /function decide/);
   const sheet = read('src/components/PostWinRewardsModal.tsx');
   assert.match(sheet, /const vipChipOn = !isVip && vipNudge && /, 'the win card asks the rarity rule');
   assert.match(sheet, /if \(vipChipOn\) markVipNudgeShown\(vipWinKey\)/, 'the gap starts only when the chip shows');
@@ -319,4 +334,9 @@ test('no "No ads" promise while nobody sees ads', () => {
   for (const file of ['src/services/help/glossary.ts', 'src/services/help/helpTopics.ts', 'src/services/help/helpSheets.ts', 'src/screens/StoreScreen/SuppliesShop.tsx', 'src/components/GrownUpGate.tsx', 'src/screens/MembershipScreen.tsx']) {
     assert.doesNotMatch(read(file), /No ads|no ads|no ad to watch|No ad\. /, `${file} promises no ads`);
   }
+  // Round 3: the VIP recap never names vague "free bonus rewards"; its ad line waits for ads to exist.
+  const membership = read('src/screens/MembershipScreen.tsx');
+  assert.doesNotMatch(membership, /free bonus/);
+  assert.match(membership, /AD_AUDIENCE_13_PLUS_KNOWN && recap\.no_ad_rewards > 0/);
+  assert.match(read('src/services/adConfig.ts'), /export const AD_AUDIENCE_13_PLUS_KNOWN = false;/);
 });

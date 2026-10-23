@@ -87,15 +87,19 @@ export function warmVipNudge(): Promise<void> {
   return loading;
 }
 
-/** Counts this win once (by key) and says whether the line may show. */
-function decide(key: string): boolean {
+/** Whether this win's line may show. Pure: reads only, so a render (or StrictMode's second render) never counts a win. */
+export function peekVipNudge(key: string): boolean {
   const known = decided.get(key);
-  if (known !== undefined) return known;
+  return known !== undefined ? known : nextVipNudgeState(saved, localDay()).show;
+}
+
+/** Counts this win once (by key) and saves. Called from an effect after the render that showed the answer. */
+export function countVipNudgeWin(key: string): void {
+  if (decided.has(key)) return;
   const next = nextVipNudgeState(saved, localDay());
   saved = next.state;
-  save();
   decided.set(key, next.show);
-  return next.show;
+  save();
 }
 
 /** The chip is on screen for this win: start the 3-day gap. Once per win. */
@@ -119,5 +123,9 @@ export function useVipNudge(winKey: string | number | null): boolean {
     void warmVipNudge().then(() => { if (live) setReady(true); });
     return () => { live = false; };
   }, [ready]);
-  return winKey != null && ready ? decide(String(winKey)) : false;
+  const key = winKey != null && ready ? String(winKey) : null;
+  // Decided in render (ready on the first paint, the store is warmed), counted in an effect.
+  const show = key != null && peekVipNudge(key);
+  useEffect(() => { if (key != null) countVipNudgeWin(key); }, [key]);
+  return show;
 }

@@ -193,6 +193,21 @@ test('one flame number: Daily 3 owns the flame while it is on, and ride days nev
   assert.equal(flame.flameStreak('daily3', 4, 9), 9);
   assert.equal(flame.flameStreak('daily3', 4, null), null, 'waits for the Daily 3 number, never shows the chest one');
   assert.equal(flame.flameStreak(null, 4, 9), null);
+  // Round 3: the flags warm when the map mounts (menu closed), so the row never appears after the menu opens.
+  let reads = 0;
+  const ref = { current: false };
+  const warm = loadTs('src/services/retention/useFlameStreak.ts', {
+    react: { useEffect: fn => { fn(); }, useRef: () => ref, useState: v => [typeof v === 'function' ? v() : v, () => {}] },
+    '../../api/endpoints/retention': { getDailyThree: async () => null },
+    './flags': { ...flags, loadRetentionFlags: async () => { reads += 1; return null; } },
+    './useOwnStreak': { ownStreakOf: () => null },
+  });
+  warm.default(4, false);
+  assert.equal(reads, 1, 'reads once on mount, before the first open');
+  warm.default(4, false);
+  assert.equal(reads, 1, 'closing or re-rendering closed reads nothing more');
+  warm.default(4, true);
+  assert.equal(reads, 2, 'each open refreshes');
   const radial = readSrc('src/components/RadialStatsMenu.tsx');
   assert.match(radial, /useFlameStreak\(dailyGift\?\.streak, isOpen\)/);
   assert.match(radial, /streakFrom === 'daily3' \? 'daily3_streak' : 'day_streak'/);
