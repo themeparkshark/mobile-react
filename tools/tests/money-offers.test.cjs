@@ -288,17 +288,25 @@ test('the VIP line on a win is rare: never the first 3 wins, then once every 3 d
   const nudge = loadTs('src/services/money/vipNudge.ts', {
     '@react-native-async-storage/async-storage': { default: {} }, react: { useEffect() {}, useState: v => [v, () => {}] },
   });
+  // Each due line is really shown (stamped); the gap counts from the showing.
   let state = null;
   const shown = [];
   for (const day of ['2026-10-01', '2026-10-01', '2026-10-01', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-04']) {
     const next = nudge.nextVipNudgeState(state, day);
-    state = next.state;
+    state = next.show ? nudge.stampVipNudge(next.state, day) : next.state;
     shown.push(next.show);
   }
   assert.deepEqual(shown, [false, false, false, true, false, false, true, false]);
   assert.equal(state.wins, 8);
+  // Due but not shown (the Starter card took the slot): the clock has not started, so the next win may show it.
+  let held = null;
+  for (let i = 0; i < 4; i++) held = nudge.nextVipNudgeState(held, '2026-10-01').state;
+  assert.equal(held.lastDay, null);
+  assert.equal(nudge.nextVipNudgeState(held, '2026-10-01').show, true);
   const sheet = read('src/components/PostWinRewardsModal.tsx');
-  assert.match(sheet, /\{!isVip && vipNudge && /, 'the win card asks the rarity rule');
+  assert.match(sheet, /const vipChipOn = !isVip && vipNudge && /, 'the win card asks the rarity rule');
+  assert.match(sheet, /if \(vipChipOn\) markVipNudgeShown\(vipWinKey\)/, 'the gap starts only when the chip shows');
+  assert.match(sheet, /FadeIn\.duration\(220\)/, 'the chip fades in instead of jumping the sheet');
   assert.doesNotMatch(read('src/services/money/offers.ts'), /VIP would/, 'no "you would have had more"');
 });
 
@@ -308,7 +316,7 @@ test('no "No ads" promise while nobody sees ads', () => {
   assert.equal(perks.withoutAdTalk('Claim it in Supplies. No ad to watch.', true), 'Claim it in Supplies. No ad to watch.');
   const parsed = plain(perks.parseVipPerks([{ icon: 'ticket', title: 'A free ticket every day', body: 'Claim it in Supplies. No ad to watch.' }]));
   assert.equal(parsed[0].body, 'Claim it in Supplies.');
-  for (const file of ['src/screens/StoreScreen/SuppliesShop.tsx', 'src/components/GrownUpGate.tsx', 'src/screens/MembershipScreen.tsx']) {
+  for (const file of ['src/services/help/glossary.ts', 'src/services/help/helpTopics.ts', 'src/services/help/helpSheets.ts', 'src/screens/StoreScreen/SuppliesShop.tsx', 'src/components/GrownUpGate.tsx', 'src/screens/MembershipScreen.tsx']) {
     assert.doesNotMatch(read(file), /No ads|no ads|no ad to watch|No ad\. /, `${file} promises no ads`);
   }
 });

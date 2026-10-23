@@ -5,7 +5,7 @@ import { storeAvailable } from '../services/purchases';
 import SharkPassBanner from './money/SharkPassBanner';
 import { vipWinLine } from '../services/money/offers';
 import { vipRideMultiplierNow, warmVipPerks } from '../services/money/vipPerks';
-import { useVipNudge } from '../services/money/vipNudge';
+import { markVipNudgeShown, useVipNudge } from '../services/money/vipNudge';
 import OneTimeTip from './help/OneTimeTip';
 import PerkChipRow from './coin/PerkChip';
 import type { PerkChipData } from './coin/progressionModel';
@@ -24,6 +24,7 @@ import Animated, {
   withSequence,
   withSpring,
   withTiming,
+  FadeIn,
   FadeInDown,
   type SharedValue,
 } from 'react-native-reanimated';
@@ -48,6 +49,7 @@ import { milestoneHeadline, nextUnlockLine, partsProgress, rewardChips } from '.
 import { adsAvailable, rewardText, watchForReward } from '../services/ads';
 import { hasWinNote, holdWinNotes, takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
 import StarRideStamp from './liveEvents/StarRideStamp';
+import TeamBadge from './TeamBadge';
 
 const { width: SW } = Dimensions.get('window');
 const HERO = 150;
@@ -116,7 +118,7 @@ function RideControlBanner({ result, playerId, onPickTeam }: {
   ].filter(Boolean).join(' ');
   return (
     <View style={[styles.rcBanner, { borderColor: team.color }]}>
-      <Image source={team.badge} style={styles.rcBadge} contentFit="contain" />
+      <TeamBadge team={team.id} style={styles.rcBadge} />
       <View style={{ flex: 1 }}>
         <Text style={styles.rcTitle} numberOfLines={2}>{title}</Text>
         <Text style={styles.rcBody}>{body}</Text>
@@ -259,10 +261,15 @@ export default function PostWinRewardsModal({
   // The VIP line is rare: never on the first wins, then at most once every few days (services/money/vipNudge.ts).
   // starAt is stamped once per showing, so each win counts once.
   const won = xpEarned > 0 || coinsEarned > 0;
-  const vipNudge = useVipNudge(visible && !isVip && won ? `${attemptId ?? 'win'}:${starAt}` : null);
+  const vipWinKey = visible && !isVip && won ? `${attemptId ?? 'win'}:${starAt}` : null;
+  const vipNudge = useVipNudge(vipWinKey);
   // null until the Starter card has decided; the VIP line waits for it, so it never flashes and vanishes.
   // No store (old build) or nobody signed in: there is no Starter card to wait for.
   const [starterShown, setStarterShown] = useState<boolean | null>(() => (storeAvailable() && !!player ? null : false));
+  // One money offer per sheet: the once-ever Starter Pack takes the VIP line's place.
+  const vipChipOn = !isVip && vipNudge && (starterShown === false || coinsEarned <= 0) && won;
+  // The 3-day gap starts only when the line is really on screen.
+  useEffect(() => { if (vipChipOn) markVipNudgeShown(vipWinKey); }, [vipChipOn, vipWinKey]);
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
@@ -553,8 +560,9 @@ export default function PostWinRewardsModal({
                 </>
               )}
 
-              {/* One money offer per sheet: the once-ever Starter Pack takes the VIP line's place. */}
-              {!isVip && vipNudge && (starterShown === false || coinsEarned <= 0) && won && (
+              {/* Fades in on the UI thread, so a late Starter decision never jumps the sheet. */}
+              {vipChipOn && (
+                <Animated.View entering={reducedMotion ? undefined : FadeIn.duration(220)} style={{ alignSelf: 'stretch' }}>
                 <Pressable style={styles.vipChip} accessibilityRole="button"
                   accessibilityLabel="VIP members get extra XP and coins when they win. Tap to learn about VIP."
                   onPress={() => closeTo(() => { void openMembership(); })}>
@@ -564,6 +572,7 @@ export default function PostWinRewardsModal({
                   </Text>
                   <GameIcon name="arrow" size={20} />
                 </Pressable>
+                </Animated.View>
               )}
 
               {/* The Starter Pack, once ever, at the first win: an earned moment, never a pop-up. */}

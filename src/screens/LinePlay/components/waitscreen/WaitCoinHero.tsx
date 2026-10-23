@@ -2,8 +2,8 @@
  * WaitCoinHero: the body of the LinePlay wait screen (stream L2). The ride's
  * own coin sits center stage between two quiet stat columns:
  *
- *   ~42  MIN WAIT         (coin, filling)         12  SHARKS HERE
- *   23m  IN LINE                                  +3  THIS WAIT
+ *   42   MIN WAIT         (coin, filling)         12  SHARKS HERE
+ *   23m  IN LINE                                  +3  PARTS
  *
  * Picture first for a 7-year-old: one wait number (the real-waits guess, else
  * the sign), one short word under each number, no second line of fine print.
@@ -133,7 +133,7 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, e
         autoLevel={previewAutoLevel} />
       <View style={[styles.side, styles.sideRight]}>
         {sharksStat ?? <View style={styles.statSpacer} />}
-        <Stat align="right" value={`+${earned}`} label="THIS WAIT"
+        <Stat align="right" value={`+${earned}`} label="PARTS"
           accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned this wait.`} icon="parts" />
       </View>
     </View>

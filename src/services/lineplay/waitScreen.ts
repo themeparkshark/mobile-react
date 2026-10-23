@@ -94,7 +94,8 @@ export interface WaitEstimate {
   readonly detail: string;
   /**
    * The one wait number a 7-year-old reads on the card: the real-waits guess
-   * when there is one ("~42"), else the sign ("60"). Null with no sign time.
+   * when there is one ("42"), else the sign ("60"). Null with no sign time.
+   * No "~": it means nothing to a 7-year-old; the spoken label says "about".
    */
   readonly kidValue: string | null;
   readonly accessibilityLabel: string;
@@ -117,7 +118,7 @@ export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
     : tracking != null ? `Tracking ~${tracking} today`
       : 'Posted wait';
   return {
-    posted, tracking, title, detail, kidValue: tracking != null ? `~${tracking}` : String(posted),
+    posted, tracking, title, detail, kidValue: String(tracking ?? posted),
     accessibilityLabel: tracking != null
       ? `Posted wait ${posted} minutes. Recent waits here suggest about ${tracking} minutes.`
       : `Posted wait ${posted} minutes.`,

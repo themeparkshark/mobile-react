@@ -7,7 +7,12 @@
  * - is only ever mounted on a win (PostWinRewardsModal is the win sheet), never on a loss,
  * - says what members get ("VIP members get 2x coins and XP"), never "you would have had".
  *
- * Pure rules (vipNudgeDue, nextVipNudgeState) are tested in
+ * The 3-day clock starts only when the line really shows (markVipNudgeShown),
+ * not when it was due but the Starter card took its place. The saved count is
+ * read once per app run, so the decision is ready the moment the win sheet
+ * opens and the line never pops in after it.
+ *
+ * Pure rules (vipNudgeDue, nextVipNudgeState, stampVipNudge) are tested in
  * tools/tests/money-offers.test.cjs; the hook keeps the count on the phone.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -40,11 +45,15 @@ export function vipNudgeDue(state: VipNudgeState, today: string): boolean {
   return state.lastDay == null || daysBetween(state.lastDay, today) >= VIP_NUDGE_GAP_DAYS;
 }
 
-/** Count one win, and decide. Returns the state to save and whether the line shows. */
+/** Count one win, and decide. Returns the state to save and whether the line may show. */
 export function nextVipNudgeState(previous: VipNudgeState | null, today: string): { state: VipNudgeState; show: boolean } {
   const counted: VipNudgeState = { wins: Math.max(0, previous?.wins ?? 0) + 1, lastDay: previous?.lastDay ?? null };
-  const show = vipNudgeDue(counted, today);
-  return { state: show ? { ...counted, lastDay: today } : counted, show };
+  return { state: counted, show: vipNudgeDue(counted, today) };
+}
+
+/** The line was really shown today: the 3-day gap starts now. */
+export function stampVipNudge(state: VipNudgeState | null, today: string): VipNudgeState {
+  return { wins: Math.max(0, state?.wins ?? 0), lastDay: today };
 }
 
 function parse(raw: string | null): VipNudgeState | null {
@@ -58,23 +67,57 @@ function parse(raw: string | null): VipNudgeState | null {
   }
 }
 
+/* The phone's copy, read once per run. Storage that fails just means no line. */
+let saved: VipNudgeState | null = null;
+let loaded = false;
+let loading: Promise<void> | null = null;
+const decided = new Map<string, boolean>();
+let stampedKey: string | null = null;
+
+function save(): void {
+  void AsyncStorage.setItem(VIP_NUDGE_KEY, JSON.stringify(saved)).catch(() => undefined);
+}
+
+/** Reads the saved count once per run. Call early (the win sheet's module does) so the first win is ready. */
+export function warmVipNudge(): Promise<void> {
+  loading ??= AsyncStorage.getItem(VIP_NUDGE_KEY)
+    .then(raw => { saved = parse(raw); })
+    .catch(() => undefined)
+    .then(() => { loaded = true; });
+  return loading;
+}
+
+/** Counts this win once (by key) and says whether the line may show. */
+function decide(key: string): boolean {
+  const known = decided.get(key);
+  if (known !== undefined) return known;
+  const next = nextVipNudgeState(saved, localDay());
+  saved = next.state;
+  save();
+  decided.set(key, next.show);
+  return next.show;
+}
+
+/** The chip is on screen for this win: start the 3-day gap. Once per win. */
+export function markVipNudgeShown(winKey: string | number | null): void {
+  if (winKey == null || stampedKey === String(winKey)) return;
+  stampedKey = String(winKey);
+  saved = stampVipNudge(saved, localDay());
+  save();
+}
+
 /**
  * True when this win card may show the VIP line. `winKey` changes once per
  * win shown (null while hidden or for VIP players), so each win counts once.
- * Storage that fails just means no line this time.
+ * The answer is ready on the first render once the saved count has loaded.
  */
 export function useVipNudge(winKey: string | number | null): boolean {
-  const [show, setShow] = useState(false);
+  const [ready, setReady] = useState(loaded);
   useEffect(() => {
-    setShow(false);
-    if (winKey == null) return undefined;
+    if (ready) return undefined;
     let live = true;
-    void AsyncStorage.getItem(VIP_NUDGE_KEY).then(raw => {
-      const next = nextVipNudgeState(parse(raw), localDay());
-      void AsyncStorage.setItem(VIP_NUDGE_KEY, JSON.stringify(next.state)).catch(() => undefined);
-      if (live) setShow(next.show);
-    }).catch(() => undefined);
+    void warmVipNudge().then(() => { if (live) setReady(true); });
     return () => { live = false; };
-  }, [winKey]);
-  return show;
+  }, [ready]);
+  return winKey != null && ready ? decide(String(winKey)) : false;
 }

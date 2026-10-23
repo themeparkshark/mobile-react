@@ -262,7 +262,7 @@ test('receipt navigation waits for native dismissal and fires only once', () => 
     '../RootNavigation':{navigate:(...args)=>navigated.push(args)},
     './GrownUpGate':{openMembership:()=>{navigated.push(['Membership']);return Promise.resolve(true);}},
     // A win on a day the rare VIP line is due (services/money/vipNudge.ts).
-    '../services/money/vipNudge':{useVipNudge:()=>true},
+    '../services/money/vipNudge':{useVipNudge:()=>true,markVipNudgeShown(){}},
     './rewards/postWinModel': postWinModel, '../screens/LeaderboardsScreen/standingsCache': { takeWinNote: () => null, holdWinNotes: () => undefined, hasWinNote: () => false },
   }, {visible:true,rideName:'Space Mountain',coinTimesCollected:1,coinsEarned:10,xpEarned:25,
     ridePartsEarned:1,energyEarned:10,onClose(){closes++;}});

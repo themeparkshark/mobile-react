@@ -44,7 +44,7 @@ test('posted vs real: a tracking number only when real waits back it, gone once 
   const m = model();
   const est = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: 0.7, elapsedSeconds: 20 * 60 });
   assert.equal(est.title, 'SIGN SAYS 60'); assert.equal(est.tracking, 42); assert.equal(est.detail, "You're tracking ~42");
-  assert.equal(est.kidValue, '~42', 'one wait number for kids: the real-waits guess');
+  assert.equal(est.kidValue, '42', 'one wait number for kids: the real-waits guess, no "~"');
   const none = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: null, elapsedSeconds: 600 });
   assert.equal(none.tracking, null); assert.equal(none.detail, 'Posted wait'); assert.equal(none.kidValue, '60', 'no guess: the sign');
   const past = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: 0.7, elapsedSeconds: 45 * 60 });
@@ -130,5 +130,6 @@ test('no server rewards: the coin space collapses into one stat strip, no empty 
   assert.match(strip, /\{signStat\}/); assert.match(strip, /\{inLineStat\}/);
   // Fewer labels for kids: one short word under each number, no second line of fine print.
   assert.doesNotMatch(hero, /SIGN SAYS \(MIN\)|tracking|PARTS THIS WAIT/);
-  assert.match(hero, /label="MIN WAIT"/); assert.match(hero, /label="THIS WAIT"/);
+  assert.match(hero, /label="MIN WAIT"/); assert.match(hero, /label="PARTS"/, 'the label names the thing the number counts');
+  assert.doesNotMatch(strip, /label="PARTS"/);
 });
