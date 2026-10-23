@@ -17,6 +17,7 @@ import { playSfx } from '../gamekit/SFX';
 import type { DailyGiftAmountsType, DailyGiftRewardType, DailyGiftType } from '../models/daily-gift-type';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../ui';
 import { ws7Preview } from '../dev/ws7Preview';
+import { loadRetentionFlags, retentionFlagsNow, streakOwner } from '../services/retention/flags';
 import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
 
@@ -90,6 +91,13 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const width = dims.width;
   const height = dims.height ?? 800;
   const [visible, setVisible] = useState(false);
+  // The flame and "day streak" belong to Daily 3 while it is on: then the chest shows only its day ladder.
+  const [chestOwnsFlame, setChestOwnsFlame] = useState(() => streakOwner(retentionFlagsNow()) === 'chest');
+  useEffect(() => {
+    let live = true;
+    void loadRetentionFlags().then(flags => { if (live && flags) setChestOwnsFlame(streakOwner(flags) === 'chest'); });
+    return () => { live = false; };
+  }, []);
   const [phase, setPhase] = useState<'closed' | 'opening' | 'open'>('closed');
   const [confirmedGift, setConfirmedGift] = useState<DailyGiftType | null>(null);
   const [shown, setShown] = useState(0);
@@ -348,7 +356,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                 stamp={r.day === day ? stamp : undefined} />
             ))}
           </View>
-          {(displayedGift.streak ?? 0) > 1 && (
+          {chestOwnsFlame && (displayedGift.streak ?? 0) > 1 && (
             <View style={styles.streakRow}>
               <GameIcon name="streak" size={18} />
               <Text style={styles.streakText}>{`${displayedGift.streak} day streak`}</Text>

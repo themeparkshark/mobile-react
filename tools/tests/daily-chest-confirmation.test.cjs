@@ -66,6 +66,8 @@ function chest({ reconciled = null, reduced = false } = {}) {
       if (name === '../api/endpoints/daily-gifts/create') return { default: async () => { if (reconciled) return reconciled; throw new Error('Offline'); } };
       if (name.includes('assets/')) return name;
       if (name === 'react-native-modal' || name === './Ribbon') return { default: name };
+      // Daily 3 off: the chest owns the flame and shows its streak.
+      if (name === '../services/retention/flags') return { loadRetentionFlags: async () => null, retentionFlagsNow: () => ({ dailyThree: false }), streakOwner: f => (f ? (f.dailyThree ? 'daily3' : 'chest') : null) };
       throw new Error(`Unexpected import ${name}`);
     },
   }, { filename: file });
