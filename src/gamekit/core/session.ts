@@ -156,6 +156,22 @@ export const WRAP_UP_COPY: Record<WrapUpReason, { title: string; body: string }>
   'session-ended': { title: 'RUN SAVED', body: 'Your score is locked in.' },
 };
 
+/**
+ * Stars for a run a queue event ended. Boarding mid-run never throws the run
+ * away: any points earned count as one star (a partial run), except in a paid
+ * ride challenge, where the goal has to be met for real.
+ */
+export function wrapUpStars(stars: number, score: number, paid: boolean): { stars: number; partial: boolean } {
+  const safe = Number.isFinite(stars) ? Math.max(0, stars) : 0;
+  if (safe > 0 || paid || !(score > 0)) return { stars: safe, partial: false };
+  return { stars: 1, partial: true };
+}
+
+/** True when a game-owned results surface rendered nothing (null, false, true, undefined or ''). */
+export function isEmptyResultsNode(node: unknown): boolean {
+  return node == null || node === false || node === true || node === '';
+}
+
 // =============================================================================
 // Movement: never pause. A gentle heads-up when the line advances a lot.
 // =============================================================================

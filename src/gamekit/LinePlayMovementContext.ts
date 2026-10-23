@@ -35,6 +35,18 @@ export interface LinePlayMovement {
   readonly lastAdvance?: { readonly at: number; readonly metres?: number } | null;
   /** Optional: a real queue event ended the session ("Your ride's up!"). */
   readonly queueEnded?: WrapUpReason | null;
+  /**
+   * Optional: ride detection thinks the guest just boarded. Only a hint (one
+   * GPS fix can fake it): an active round keeps playing, a held round
+   * (pocketed, backgrounded, paused) is saved as "YOUR RIDE'S UP!".
+   */
+  readonly rideUpLikely?: boolean;
+  /**
+   * Optional: a finished run that earned no stars is about to close. The
+   * shell only calls onComplete for a star, so without this a whole run with
+   * no star looked like it never happened ("Not played this wait").
+   */
+  readonly onNoStarRun?: () => void;
 }
 
 export const LinePlayMovementContext = createContext<LinePlayMovement | null>(null);

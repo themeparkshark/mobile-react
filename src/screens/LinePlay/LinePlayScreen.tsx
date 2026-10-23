@@ -37,7 +37,7 @@ import { GameDialog, gameAlert } from '../../ui';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { useLinePlaySession } from '../../services/lineplay/useLinePlaySession';
-import { isRecentQueueSample, MAX_SESSION_ACTIVITY_SLOTS } from '../../services/lineplay/LinePlaySession';
+import { isRecentQueueSample, MAX_SESSION_ACTIVITY_SLOTS, queueEndedReason } from '../../services/lineplay/LinePlaySession';
 import { crewLivePrompt } from '../../services/lineplay/livePrompt';
 import LinePlayLiveRail from './components/LinePlayLiveRail';
 import getWikiTimes from '../../api/endpoints/parks/queue-times/getWikiTimes';
@@ -788,17 +788,31 @@ export default function LinePlayScreen() {
   }, []);
   const secondsToNextBonus = bonus ? nextBonusSeconds(bonus, snapshot.verifiedEligibleSeconds,
     snapshot.verifiedPresenceAt, Date.now()) : null;
+  // A real queue event ends an open round with its score saved ("YOUR RIDE'S UP!"),
+  // so boarding or leaving the line mid-run still counts the run.
+  const queueEnded = queueEndedReason(snapshot.state, snapshot.endReason);
+  const activeGameRef = useRef(activeGame);
+  activeGameRef.current = activeGame;
   const movementContext = useMemo(() => ({
     moving: snapshot.moving,
     onResume: () => undefined,
     lineMovePolicy: 'passive' as const,
+    queueEnded,
+    rideUpLikely: snapshot.boardingSuggested,
+    // A finished run with no star still counts as played this wait.
+    onNoStarRun: () => {
+      const game = activeGameRef.current;
+      if (!game || game.groupTurn === true) return;
+      session.recordGameResult(game.gameId, 0);
+      session.markActivityCompleted(game.id);
+    },
     // Client-scored games never pay Parts; their win card points to the bonus games.
     justForFunNote: bonus && activeGame && activeGame.gameId !== 'current' ? {
       text: 'Play Current Quest or Codebreaker for bonus Parts',
       actionLabel: 'PLAY FOR BONUS',
       onPress: () => { setActiveGame(null); setArcadeOpen(true); },
     } : null,
-  }), [snapshot.moving, bonus != null, activeGame?.gameId]);
+  }), [snapshot.moving, bonus != null, activeGame?.gameId, queueEnded, snapshot.boardingSuggested]);
   useEffect(() => {
     const id = pendingEncoreId.current;
     if (!id) return;
