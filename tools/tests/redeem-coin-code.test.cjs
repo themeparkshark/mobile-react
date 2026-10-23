@@ -70,3 +70,27 @@ test('the screen never draws a bare number outside Text (the old 0-coin crash)',
   assert.doesNotMatch(screen, /\.coins &&/);
   assert.doesNotMatch(screen, /Alert\.alert/);
 });
+
+test('the chest opens on the same frame as the burst, and the prize card never shows empty', () => {
+  const screen = fs.readFileSync(path.join(root, 'src/screens/RedeemCoinCodeScreen.tsx'), 'utf8');
+  // The celebration starts from a layout effect on the open state, not before the open chest renders.
+  assert.match(screen, /useLayoutEffect\(\(\) => \{ if \(opened\) celebrate\(\); \}, \[opened\]\)/);
+  assert.doesNotMatch(screen, /celebrate\(lines\.length\)/);
+  // All three chests stay mounted; only opacity changes, so there is no image load gap.
+  assert.match(screen, /chest_closed\.png'\)\}\s*style=\{\[styles\.chestLayer, \{ opacity: opened \? 0 : 1 \}\]\}/);
+  assert.match(screen, /opacity: opened && gaveCoins \? 1 : 0/);
+  assert.match(screen, /opacity: opened && !gaveCoins \? 1 : 0/);
+  // The card fades and grows in on the native driver, and resets before the next code.
+  assert.match(screen, /<Animated\.View style=\{\[styles\.prizeCard, \{ opacity: cardIn,/);
+  assert.match(screen, /outputRange: \[0\.96, 1\]/);
+  assert.match(screen, /cardIn\.setValue\(0\);\s*setRewards\(null\)/);
+  // A bigger pop: 0.85 up to 1.12, then a spring back to 1, with the reward sound at the start.
+  assert.match(screen, /pop\.setValue\(0\.85\)/);
+  assert.match(screen, /toValue: 1\.12/);
+  assert.match(screen, /const celebrate = useCallback\(\(\) => \{\s*playSound\(require\('..\/..\/assets\/sounds\/reward\.mp3'\)/);
+});
+
+test('the redeem call skips the grey toast: the prize card already lists every grant', () => {
+  const api = fs.readFileSync(path.join(root, 'src/api/endpoints/coin-codes/redeemCoinCode.ts'), 'utf8');
+  assert.match(api, /'\/coin-codes\/redeem', \{ code \},\s*\{ skipBroadcasts: true \} as object\)/);
+});
