@@ -78,10 +78,10 @@ export function boxName(b: { readonly tier: TrailTier }): string {
 /** Draw size grows with rarity, so the tier reads by size and trim as well as colour. */
 export const TIER_SCALE: Record<TrailTier, number> = { blue: 0.86, red: 0.94, gold: 1 };
 
-/** 4600 -> "4600", 12345 -> "12.3K": the one drawn-count rule (see src/helpers/countText.ts). */
+/** 4600 -> "4600", 12345 -> "12345", 123456 -> "123K": the one drawn-count rule (see src/helpers/countText.ts). */
 export function formatSteps(n: number): string {
   const v = Math.max(0, Math.round(Number(n) || 0));
-  if (v < 10000) return String(v);
+  if (v < 100000) return String(v);
   const [size, suffix] = v >= 1e6 ? [1e6, 'M'] : [1e3, 'K'];
   const x = v / size;
   return `${x >= 100 ? Math.floor(x) : Math.floor(x * 10) / 10}${suffix}`;

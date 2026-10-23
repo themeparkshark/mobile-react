@@ -59,11 +59,11 @@ const DAY = 86_400_000;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-/** "5000", "12.5K": the same count format on every surface (no commas, see countText). */
+/** "5000", "12590", "125K": the same count format on every surface (no commas, see countText). */
 export function formatCoins(n: number): string {
   // The countText rule, kept inline because this file stays import-free.
   const v = Math.max(0, Math.round(Number(n) || 0));
-  if (v < 10000) return String(v);
+  if (v < 100000) return String(v);
   const [size, suffix] = v >= 1e9 ? [1e9, 'B'] : v >= 1e6 ? [1e6, 'M'] : [1e3, 'K'];
   const x = v / size;
   return `${x >= 100 ? Math.floor(x) : Math.floor(x * 10) / 10}${suffix}`;

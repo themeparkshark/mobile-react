@@ -107,7 +107,7 @@ export function groupDigits(n: number): string {
   'worklet';
   // Same rule as src/helpers/countText.ts (kept inline: this file stays import-free).
   const v = Math.max(0, Math.round(Number(n) || 0));
-  if (v < 10000) return String(v);
+  if (v < 100000) return String(v);
   const [size, suffix] = v >= 1e9 ? [1e9, 'B'] : v >= 1e6 ? [1e6, 'M'] : [1e3, 'K'];
   const x = v / size;
   return `${x >= 100 ? Math.floor(x) : Math.floor(x * 10) / 10}${suffix}`;

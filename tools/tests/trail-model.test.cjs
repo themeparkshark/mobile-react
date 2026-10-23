@@ -10,7 +10,8 @@ const A = { lat: 34.138, lng: -118.354 };
 function north(p, meters) { return { lat: p.lat + meters / 111320, lng: p.lng }; }
 
 test('steps and distance read the way a kid and a parent expect', () => {
-  assert.equal(m.formatSteps(12345), '12.3K');
+  assert.equal(m.formatSteps(12345), '12345');
+  assert.equal(m.formatSteps(123456), '123K');
   assert.equal(m.formatSteps(4600), '4600');
   assert.equal(m.formatSteps(-4), '0');
   assert.equal(m.shortSteps(950), '950');
