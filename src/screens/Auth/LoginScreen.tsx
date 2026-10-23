@@ -19,6 +19,9 @@ import { gameAlert, GameButton } from '../../ui';
 
 /** The guest door is a real button: play first, sign in to save after the first win. */
 export const GUEST_PLAY_LABEL = 'Play now';
+export const HAVE_SHARK_LABEL = 'I already have a shark';
+/** Both doors share one width, so they read as a pair. */
+const DOOR_WIDTH = 264;
 import config from '../../config';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { ThemeContext } from '../../context/ThemeProvider';
@@ -46,17 +49,23 @@ function FloatingBubble({
   const sway = isLarge ? 25 : isTiny ? 8 : 15;
 
   useEffect(() => {
+    // Each rise restarts itself until the bubble unmounts (Login leaves the top).
+    let alive = true;
+    let current: Animated.CompositeAnimation | null = null;
     const loop = () => {
+      if (!alive) return;
       anim.setValue(0);
-      Animated.timing(anim, {
+      current = Animated.timing(anim, {
         toValue: 1,
         duration,
         delay,
         easing: Easing.linear,
         useNativeDriver: true,
-      }).start(() => loop());
+      });
+      current.start(({ finished }) => { if (finished) loop(); });
     };
     loop();
+    return () => { alive = false; current?.stop(); };
   }, []);
 
   return (
@@ -300,7 +309,8 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
           overflow: 'hidden',
         }}
       >
-        {BUBBLES.map((b, i) => (
+        {/* Only while Login is on top: it stays mounted under the map after sign-in. */}
+        {focused && BUBBLES.map((b, i) => (
           <FloatingBubble key={i} {...b} />
         ))}
       </View>
@@ -332,17 +342,18 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
               transform: [{ translateY: buttonsY }],
             }}
           >
-            <SignInButtons>
-              {/* Play first: a guest gets Finn's treat and a quick game, then signs in to save the shark. */}
-              <View style={{ width: 220, marginTop: 16 }}>
-                <GameButton label={GUEST_PLAY_LABEL} icon="play" size="compact"
+            {/* Play first is the main door: a guest gets Finn's treat and a quick game,
+                then signs in after the first win. Sign in with Apple is for sharks who already have one. */}
+            <SignInButtons width={DOOR_WIDTH} caption={HAVE_SHARK_LABEL} top={
+              <View style={{ width: DOOR_WIDTH }}>
+                <GameButton label={GUEST_PLAY_LABEL} icon="play" fullWidth
                   accessibilityHint="Play a quick game first. You can sign in after."
                   onPress={() => {
                     playSound(whooshSound);
                     navigation.navigate('Explore');
                   }} />
               </View>
-            </SignInButtons>
+            } />
           </Animated.View>
         </View>
 
