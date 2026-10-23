@@ -49,3 +49,26 @@ export function nearbyOpportunityOpen(
   if (timed && !opportunityIsActive(nearby.model as TimedOpportunity, now)) return false;
   return !(nearby.type === 'task' && liveStatus && CLOSED_LIVE.has(liveStatus));
 }
+
+export type NearbyClosedReason =
+  | { readonly kind: 'resting'; readonly at: number }
+  | { readonly kind: 'down' | 'closed' | 'repairs' };
+
+/**
+ * Why the ride the player is standing at cannot be played right now, so the
+ * PLAY RIDE spot can say so instead of showing nothing: resting until a time,
+ * down, closed or closed for repairs. Null when it is open, or not a ride.
+ */
+export function nearbyRideClosedReason(
+  nearby: { readonly type: string; readonly model: unknown } | null | undefined,
+  liveStatus: string | null | undefined,
+  now = Date.now(),
+): NearbyClosedReason | null {
+  if (!nearby || nearby.type !== 'task' || nearbyOpportunityOpen(nearby, liveStatus, now)) return null;
+  if (liveStatus === 'DOWN') return { kind: 'down' };
+  if (liveStatus === 'REFURBISHMENT') return { kind: 'repairs' };
+  if (liveStatus === 'CLOSED') return { kind: 'closed' };
+  const from = gameTimestamp((nearby.model as TimedOpportunity).active_from);
+  if (from !== null && from > now) return { kind: 'resting', at: from };
+  return { kind: 'closed' };
+}

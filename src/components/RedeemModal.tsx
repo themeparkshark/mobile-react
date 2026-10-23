@@ -1,7 +1,9 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import { nearbyOpportunityOpen } from '../screens/ExploreScreen/mapOpportunityTiming';
+import { nearbyOpportunityOpen, nearbyRideClosedReason, type NearbyClosedReason } from '../screens/ExploreScreen/mapOpportunityTiming';
+import { restingLabel } from '../screens/ExploreScreen/mapMarkerPresentation';
+import type { GameIconName } from '../ui/iconNames';
 import {
   SoundEffectContext,
   SoundEffectContextType,
@@ -57,6 +59,10 @@ export default function RedeemModal({
   // A ride resting until "Back 2:00 PM", or one the live feed shows closed, never offers
   // PLAY RIDE, even when the server still counts the player in range.
   const available = !otherSelected && nearbyOpportunityOpen(redeemable, liveStatus);
+  // Standing at a ride that is not open: the same spot says why (and when it is back), never a blank.
+  const closedReason = !otherSelected && !available ? nearbyRideClosedReason(redeemable, liveStatus) : null;
+  const closedLabel = closedReason ? closedRideCopy(closedReason) : null;
+  const shown = available || !!closedLabel;
   const identity = redeemable ? `${redeemable.type}:${redeemable.model.id}` : null;
   useEffect(() => {
     if (available && identity !== lastAnnounced.current) {
@@ -66,11 +72,11 @@ export default function RedeemModal({
       lastAnnounced.current = null;
     }
     animated.stopAnimation();
-    if (reducedMotion) animated.setValue(available ? -120 : 0);
-    else Animated.timing(animated, { toValue: available ? -120 : 0,
+    if (reducedMotion) animated.setValue(shown ? -120 : 0);
+    else Animated.timing(animated, { toValue: shown ? -120 : 0,
       duration: 240, useNativeDriver: true }).start();
     return () => animated.stopAnimation();
-  }, [available, identity, reducedMotion, animated, playSound]);
+  }, [available, shown, identity, reducedMotion, animated, playSound]);
 
   return (
     <>
@@ -100,6 +106,18 @@ export default function RedeemModal({
               <Text style={styles.captionText}>{task.ticket_cost ?? 1}</Text>
             </View>
           </View>}
+        </Animated.View>
+      )}
+      {task && !available && closedLabel && (
+        <Animated.View pointerEvents="none" style={{ transform: [{ translateY: animated }] }} accessible
+          accessibilityLabel={`${task.name}. ${closedLabel.a11y}`}>
+          <View style={styles.closedPill}>
+            <GameIcon name={closedLabel.icon} size={30} />
+            <Text style={styles.closedText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{closedLabel.text}</Text>
+          </View>
+          <View style={styles.caption}>
+            <Text style={styles.captionText} numberOfLines={1}>{task.name}</Text>
+          </View>
         </Animated.View>
       )}
       {openedRedeemable && (
@@ -149,7 +167,25 @@ export default function RedeemModal({
   );
 }
 
-const styles: Record<'caption' | 'cost', ViewStyle> & { captionText: TextStyle } = {
+/** What the PLAY RIDE spot says at a ride that is not open: a picture and a few big words. */
+export function closedRideCopy(reason: NearbyClosedReason): { icon: GameIconName; text: string; a11y: string } {
+  switch (reason.kind) {
+    case 'resting': {
+      const back = restingLabel(reason.at);
+      return { icon: 'timer', text: back, a11y: `Resting now. ${back}.` };
+    }
+    case 'down': return { icon: 'wrench', text: 'Ride is down', a11y: 'This ride is down right now. Try again soon.' };
+    case 'repairs': return { icon: 'wrench', text: 'Closed for repairs', a11y: 'This ride is closed for repairs.' };
+    default: return { icon: 'lock', text: 'Closed now', a11y: 'This ride is closed right now.' };
+  }
+}
+
+const styles: Record<'caption' | 'cost' | 'closedPill', ViewStyle> & { captionText: TextStyle; closedText: TextStyle } = {
+  // A ride that is not open: a soft, untappable cream pill in the PLAY RIDE spot (not a button).
+  closedPill: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: '100%',
+    backgroundColor: '#FFF5D3', borderRadius: 26, borderWidth: 3, borderColor: BRAND.navy,
+    paddingHorizontal: 20, paddingVertical: 10, marginBottom: 8 },
+  closedText: { fontFamily: 'Shark', fontSize: 24, color: BRAND.navy, flexShrink: 1 },
   // Ride name and price under PLAY RIDE, on a white tab with his navy outline.
   caption: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: -4, maxWidth: '100%',
     backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 10, paddingVertical: 3 },

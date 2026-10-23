@@ -38,3 +38,14 @@ test('park map retries back off calmly: 5 s, 10 s, 20 s, then every 30 s', () =>
   });
   assert.deepEqual([0, 1, 2, 3, 8].map(mapRetryDelay), [5000, 10000, 20000, 30000, 30000]);
 });
+
+test('while the rides have not loaded, the status bar never claims every ride is open', () => {
+  const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(screen, /hideAllOpen=\{!redeemables \|\| hideEveryRideOpen\(/);
+});
+
+test('standing at a resting ride, its "Back" chip sits above the art, clear of the player shark', () => {
+  const marker = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/TaskMarker.tsx'), 'utf8');
+  assert.match(marker, /styles\.restingSlot, near && styles\.restingSlotNear/);
+  assert.match(marker, /restingSlotNear: \{ bottom: undefined, top: -?\d+ \}/);
+});

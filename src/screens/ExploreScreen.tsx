@@ -1156,7 +1156,7 @@ function ExploreScreen() {
     // No own "?": the map's one "?" offers the Fin-ister tutorial while the mode is on.
     if (key === 'fright') return { key, label: frightNight.title, tone: TONES.night, node: <FrightPill inline night={frightNight} engine={frightEngine} /> };
     return { key, label: 'Ride Control', tone: TONES.park, node: <RideControlBar inline control={rideControl} tasks={visibleTasks}
-      hideAllOpen={hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
+      hideAllOpen={!redeemables || hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
       onFocusTask={(task) => setSelectedTask(task)} /> };
   }) : [];
 

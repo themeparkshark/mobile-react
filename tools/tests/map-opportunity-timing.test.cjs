@@ -130,3 +130,17 @@ test('foreground map refreshes at expiry, pauses off screen, and resumes with a 
   map.enable(false);
   assert.equal(map.timers, 0);
 });
+
+test('nearbyRideClosedReason says why a ride in range cannot be played', () => {
+  const now = Date.parse('2026-10-23T18:00:00Z');
+  const ride = extra => ({ type: 'task', model: { id: 1, ...extra } });
+  assert.equal(timing.nearbyRideClosedReason(ride({}), 'OPERATING', now), null);
+  assert.deepEqual({ ...timing.nearbyRideClosedReason(ride({ active_from: '2026-10-23 20:00:00' }), null, now) },
+    { kind: 'resting', at: Date.parse('2026-10-23T20:00:00Z') });
+  assert.equal(timing.nearbyRideClosedReason(ride({}), 'DOWN', now).kind, 'down');
+  assert.equal(timing.nearbyRideClosedReason(ride({}), 'REFURBISHMENT', now).kind, 'repairs');
+  assert.equal(timing.nearbyRideClosedReason(ride({}), 'CLOSED', now).kind, 'closed');
+  assert.equal(timing.nearbyRideClosedReason(ride({ active_to: '2026-10-23 17:00:00' }), null, now).kind, 'closed');
+  assert.equal(timing.nearbyRideClosedReason({ type: 'coin', model: { active_from: '2026-10-23 20:00:00' } }, null, now), null);
+  assert.equal(timing.nearbyRideClosedReason(null, null, now), null);
+});
