@@ -52,7 +52,7 @@ import { useMenuCardFade } from './ExploreScreen/menuCardFade';
 import ParkProjectMapBeacon from './ExploreScreen/ParkProjectMapBeacon';
 import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
-import GuestInvite from './ExploreScreen/GuestInvite';
+import GuestTaste from './ExploreScreen/GuestTaste';
 import { chestMayPresent, hasFirstCatch, homeIntroMayPresent, mapSuggestionSlots, suggestionSlotScreenTop, suggestionSlotTop } from './ExploreScreen/mapPresentationQueue';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import RideControlBar from '../components/RideControlBar';
@@ -1272,8 +1272,8 @@ function ExploreScreen() {
           <TrailHost active={mapFocused} inPark={false} openRequest={trailOpenRequest} />
         </View>
       )}
-      {/* Guest: a bright sign-in invitation over the live map */}
-      {!player && <GuestInvite />}
+      {/* Guest: play first (Finn's treat, a quick game, a coin on the shelf), then sign in to save the shark. */}
+      {!player && <GuestTaste />}
       
       {park && redeemables && (
         <>

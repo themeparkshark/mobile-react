@@ -15,6 +15,7 @@ import SpotlightOverlay from './SpotlightOverlay';
 import TeacherShark from './TeacherShark';
 import MemoryGame from '../../games/memory/MemoryGame';
 import { AuthContext } from '../../context/AuthProvider';
+import { guestPlayedWarmup } from '../../services/guestTaste';
 // Sounds disabled temporarily — will re-enable once tutorial flow is stable
 // import { SoundEffectContext } from '../../context/SoundEffectProvider';
 
@@ -87,6 +88,16 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     }).catch(() => setLoaded(true)); // An unreadable store still lets tutorials run.
   }, []);
 
+  // A guest who won Finn's warm-up before signing in keeps it: re-read when the
+  // account changes, since the guest plays after this provider mounts.
+  const [guestPlayed, setGuestPlayed] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void Promise.resolve().then(() => guestPlayedWarmup())
+      .then(played => { if (current) setGuestPlayed(played === true); }).catch(() => undefined);
+    return () => { current = false; };
+  }, [player?.id]);
+
   // Auto-complete all tutorials for existing players (handles a reinstall or cache wipe).
   // Checked once per install load: after "Replay Tutorials" the empty set is on purpose.
   const existingPlayerChecked = useRef(false);
@@ -150,7 +161,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     if (completedSequences.has(sequence)) return;
     
     if (isActive) return;
-    const steps = getStepsForSequence(sequence, options);
+    const steps = getStepsForSequence(sequence, { ...options, guestPlayed });
     if (steps.length === 0) return;
 
     inParkOnboardingRef.current = sequence === 'onboarding' && !!options?.inPark;
@@ -159,7 +170,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     setCurrentIndex(0);
     setIsActive(true);
 
-  }, [loaded, isActive, completedSequences]);
+  }, [loaded, isActive, completedSequences, guestPlayed]);
 
   // Advance to next step
   const nextStep = useCallback(() => {

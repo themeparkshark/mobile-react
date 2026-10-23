@@ -163,9 +163,29 @@ export const TUTORIAL_SEQUENCES: Record<TutorialSequence, TutorialStep[]> = {
 };
 
 /**
+ * A guest who played Finn's taste before signing in (services/guestTaste) is
+ * greeted as a returning shark, and never replays the warm-up they already won.
+ */
+const guestWelcomeBackSteps: TutorialStep[] = [{
+  ...homeOnboardingSteps[0],
+  text: 'You’re back! Your shark is saved.',
+  subtitle: 'Another treat just landed next to you. Let’s grab it!',
+}];
+const withoutWarmup = (steps: TutorialStep[]) => steps.filter(step => step.activity !== 'memory_warmup');
+
+export interface TutorialStepOptions {
+  readonly inPark?: boolean;
+  /** This phone's guest already won Finn's warm-up before signing in. */
+  readonly guestPlayed?: boolean;
+}
+
+/**
  * Get steps for a given sequence
  */
-export function getStepsForSequence(sequence: TutorialSequence, options?: { inPark?: boolean }): TutorialStep[] {
-  if (sequence === 'onboarding' && options?.inPark) return parkOnboardingSteps;
+export function getStepsForSequence(sequence: TutorialSequence, options?: TutorialStepOptions): TutorialStep[] {
+  const played = options?.guestPlayed === true;
+  if (sequence === 'onboarding' && options?.inPark) return played ? withoutWarmup(parkOnboardingSteps) : parkOnboardingSteps;
+  if (sequence === 'onboarding' && played) return guestWelcomeBackSteps;
+  if (sequence === 'park_arrival' && played) return withoutWarmup(parkArrivalSteps);
   return TUTORIAL_SEQUENCES[sequence] || [];
 }

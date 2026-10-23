@@ -168,7 +168,8 @@ export default function TeacherShark({
       case 'bottom-right':
         return { bottom: bottomOffset, right: 16 };
       case 'bottom-center':
-        return { bottom: bottomOffset, left: 0, right: 0, alignItems: 'center' as const };
+        // 16 on both sides: with maxWidth = screen - 32 the bubble sits truly centred.
+        return { bottom: bottomOffset, left: 16, right: 16, alignItems: 'center' as const };
       case 'top-left':
         return { top: 100, left: 16 };
       case 'top-right':

@@ -10,18 +10,18 @@ import {
   Dimensions,
   Easing,
   SafeAreaView,
-  Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import reviewLogin from '../../api/endpoints/auth/review-login';
 import SignInButtons from '../../components/SignInButtons';
 import { AuthContext } from '../../context/AuthProvider';
-import { gameAlert } from '../../ui';
+import { gameAlert, GameButton } from '../../ui';
+
+/** The guest door is a real button: play first, sign in to save after the first win. */
+export const GUEST_PLAY_LABEL = 'Play now';
 import config from '../../config';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { ThemeContext } from '../../context/ThemeProvider';
-import useCrumbs from '../../hooks/useCrumbs';
 import { copyrightLine } from '../../api/platform';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -135,7 +135,6 @@ const BUBBLES = [
 ];
 
 export default function LoginScreen({ navigation }: NativeStackScreenProps<any>) {
-  const { labels } = useCrumbs();
   const { theme } = useContext(ThemeContext);
   const { playSound } = useContext(SoundEffectContext);
   const { adoptSession } = useContext(AuthContext);
@@ -334,24 +333,15 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
             }}
           >
             <SignInButtons>
-              <TouchableOpacity
-                onPress={() => {
-                  playSound(whooshSound);
-                  navigation.navigate('Explore');
-                }}
-              >
-                <Text
-                  style={{
-                    textAlign: 'center',
-                    fontSize: 15,
-                    paddingTop: 24,
-                    fontFamily: 'Knockout',
-                    color: '#05346e',
-                  }}
-                >
-                  {labels.continue_as_guest}
-                </Text>
-              </TouchableOpacity>
+              {/* Play first: a guest gets Finn's treat and a quick game, then signs in to save the shark. */}
+              <View style={{ width: 220, marginTop: 16 }}>
+                <GameButton label={GUEST_PLAY_LABEL} icon="play" size="compact"
+                  accessibilityHint="Play a quick game first. You can sign in after."
+                  onPress={() => {
+                    playSound(whooshSound);
+                    navigation.navigate('Explore');
+                  }} />
+              </View>
             </SignInButtons>
           </Animated.View>
         </View>
