@@ -286,12 +286,17 @@ function CoinHero({ art, level, size, tag, crest = false }: {
   );
 }
 
-/** Podium: Alex's trophy (gold, silver, bronze by rank); the giant "#2" sticker carries the rank. */
+/**
+ * Podium: Alex's trophy (gold, silver, bronze by rank); the giant "#2" sticker carries the rank.
+ * The trophy sits a little right of centre so the sticker (bottom left) never covers the name
+ * plate on the trophy's base.
+ */
+export const PODIUM_TROPHY_SHIFT = 0.12;
 function StandingsHero({ p, size }: { readonly p: FlexPayloads['standings']; readonly size: number }) {
   const rank = Math.floor(Number(p.rank));
   const art = rank === 2 ? HERO_ART.trophySilver : rank === 3 ? HERO_ART.trophyBronze : HERO_ART.trophy;
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-end' }}>
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-end', transform: [{ translateX: size * PODIUM_TROPHY_SHIFT }] }}>
       <View style={{ position: 'absolute', top: size * 0.04, width: size * 0.86, height: size * 0.86, borderRadius: size, backgroundColor: 'rgba(255,255,255,0.18)' }} />
       <FlexArtwork art={art} fallback={HERO_ART.trophy} style={{ width: size * 0.78, height: size * 0.84, marginBottom: size * 0.04 }} />
       <Stars size={size} count={3} />

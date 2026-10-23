@@ -44,6 +44,8 @@ import {
   subscribeFlexHosts, subscribeWarm, topFlexHost, unregisterFlexHost, warmKinds,
 } from './store';
 import { BURST, countSteps, countTarget, revealIntensity } from './reveal';
+import { markRevealShown } from './revealOnce';
+import { CLOSE_WORD } from './closeWord';
 import { useDevAutoPress } from './devDrive';
 import { trackShare } from './track';
 import type { FlexFormat, FlexPayload, FlexRequest } from './types';
@@ -58,8 +60,12 @@ export const SHOW_WATCHDOG_MS = 1500;
  * covers Android (no onDismiss) and an onDismiss that never fires.
  */
 export const HANDOFF_MS = 600;
-/** One close word everywhere. */
-export const CLOSE_WORD = 'Nice!';
+/** How long a held moment waits for its newest numbers before it shows what it has. */
+export const REFRESH_BUDGET_MS = 1500;
+/** Light sky rays on the blue Flex moment. */
+const MOMENT_SKY_RAYS = '#5cc3f7';
+/** One close word everywhere (shared with the ride card sheets). */
+export { CLOSE_WORD };
 
 const FPS_PROBE = __DEV__ && process.env.EXPO_PUBLIC_SHARE_STUDIO_FPS === '1';
 
@@ -92,7 +98,15 @@ function Resolved({ request }: { readonly request: FlexRequest }) {
   const [payload, setPayload] = useState<FlexPayload | null>(null);
   useEffect(() => {
     let live = true;
-    void resolveFlexPayload(request.kind, request.payload).then(next => { if (live) setPayload(next); });
+    // A held moment (a park day) asks for its newest numbers right before it shows.
+    // At most REFRESH_BUDGET_MS: a slow network shows the numbers it already has.
+    const fresh = request.options.refresh
+      ? Promise.race([
+        request.options.refresh().then(next => (next && typeof next === 'object' ? next as FlexPayload : request.payload), () => request.payload),
+        new Promise<FlexPayload>(resolve => setTimeout(() => resolve(request.payload), REFRESH_BUDGET_MS)),
+      ])
+      : Promise.resolve(request.payload);
+    void fresh.then(next => resolveFlexPayload(request.kind, next)).then(next => { if (live) setPayload(next); });
     return () => { live = false; };
   }, [request]);
   if (!payload) return null;
@@ -283,7 +297,9 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
   // The white flash respects iOS "Dim Flashing Lights", like the coin level-up.
   const [dimFlash] = useState(() => isDimFlashingLightsEnabled());
   const { share, busy, offscreen, event, inventory, linkCopied, visible, onDismiss } = useFlexShare(request, 'story');
-  const onShow = useShowWatchdog(request, 'story');
+  const onShowWatch = useShowWatchdog(request, 'story');
+  // A once-only moment counts as shown only now, when it is really on screen (revealOnce.ts).
+  const onShow = () => { onShowWatch(); markRevealShown(request.options.onceKey); };
   const { width, height } = useWindowDimensions();
   const copy = useMemo(() => flexCopy(request.kind, request.payload), [request]);
   const frame = FRAMES[copy.frame];
@@ -402,10 +418,11 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
   return (
     <Modal transparent animationType="fade" visible={visible} onShow={onShow} onDismiss={onDismiss} onRequestClose={() => finishFlex(request.id)} statusBarTranslucent>
       <ModalLayerContext.Provider value>
-      <View style={[styles.scrim, styles.momentScrim]}>
+      <View style={[styles.scrim, styles.momentScrim, copy.frame === 'fright' && styles.momentScrimNight]}>
         {offscreen}
         <Animated.View pointerEvents="none" style={[styles.momentRays, { width: raysSize, height: raysSize, marginLeft: -raysSize / 2, marginTop: -raysSize / 2 }, raysStyle]}>
-          <RaysSvg size={raysSize} color={frame.rays === '#ffffff' ? '#ffcf3b' : frame.rays} />
+          {/* Alex's sky: light blue rays on house blue (white-ray frames), the frame's own rays otherwise. */}
+          <RaysSvg size={raysSize} color={frame.rays === '#ffffff' ? MOMENT_SKY_RAYS : frame.rays} opacity={frame.rays === '#ffffff' ? 0.42 : 0.25} />
         </Animated.View>
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel={CLOSE_WORD} accessibilityRole="button" />
         <View pointerEvents="none">
@@ -507,7 +524,7 @@ function useFpsProbe(mode: string) {
   }, FPS_PROBE);
 }
 
-function RaysSvg({ size, color }: { readonly size: number; readonly color: string }) {
+function RaysSvg({ size, color, opacity = 0.25 }: { readonly size: number; readonly color: string; readonly opacity?: number }) {
   const n = 16;
   const r = size / 2;
   const d = Array.from({ length: n }, (_, i) => {
@@ -515,7 +532,7 @@ function RaysSvg({ size, color }: { readonly size: number; readonly color: strin
     const a1 = a0 + Math.PI / n;
     return `M${r},${r} L${r + r * Math.cos(a0)},${r + r * Math.sin(a0)} L${r + r * Math.cos(a1)},${r + r * Math.sin(a1)} Z`;
   }).join(' ');
-  return <Svg width={size} height={size}><Path d={d} fill={color} opacity={0.25} /></Svg>;
+  return <Svg width={size} height={size}><Path d={d} fill={color} opacity={opacity} /></Svg>;
 }
 
 /**
@@ -579,7 +596,9 @@ const styles = StyleSheet.create({
   warm: { width: 48, height: 48 },
   // Opaque: nothing behind the sheet bleeds through.
   scrim: { flex: 1, backgroundColor: '#05224f', alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
-  momentScrim: { backgroundColor: '#041a3d' },
+  // House blue behind the moment (a navy one read dark and gray); Fright keeps its night sky.
+  momentScrim: { backgroundColor: BRAND.blue },
+  momentScrimNight: { backgroundColor: '#041a3d' },
   momentRays: { position: 'absolute', left: '50%', top: '42%' },
   momentCard: { borderRadius: 20, overflow: 'hidden', borderWidth: 3, borderColor: '#ffffff' },
   previewBox: { borderRadius: 18, overflow: 'hidden', borderWidth: 3, borderColor: '#ffffff' },

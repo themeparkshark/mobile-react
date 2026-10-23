@@ -351,7 +351,9 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
       kicker: 'My Shark',
       title: `Level ${level}`,
       big: null,
-      stat: p.unlockName ? `Unlocked: ${cleanName(p.unlockName, 24)}` : 'Leveled up!',
+      // Something real under the ribbon (never "Leveled up!" again): the unlock, else the XP earned.
+      stat: p.unlockName ? `Unlocked: ${cleanName(p.unlockName, 24)}`
+        : count(p.xp) > 0 ? `${count(p.xp).toLocaleString('en-US')} XP earned` : 'Still climbing!',
       sub: null,
       cta: 'Catch up to me!',
       frame: 'progress',

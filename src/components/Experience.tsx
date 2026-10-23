@@ -123,7 +123,7 @@ export default function Experience({
         announced.current = level;
         AccessibilityInfo.announceForAccessibility(`Level ${level}!`);
         // Every 5th level gets the Flex moment once (shouldFlexReveal), with a Share button.
-        void flexRevealOnce('level_up', `${player.id}:${level}`, { level }, { surface: 'profile_level' });
+        void flexRevealOnce('level_up', `${player.id}:${level}`, { level, xp: Number(player.total_experience) || undefined }, { surface: 'profile_level' });
       }
     }
     if (reduced) return;
@@ -133,7 +133,7 @@ export default function Experience({
       Animated.spring(pop, { toValue: 1, friction: 4, tension: 160, useNativeDriver: true }),
     ]).start();
     shake(true);
-  }, [own, reduced, shake, pop, level, player.id]);
+  }, [own, reduced, shake, pop, level, player.id, player.total_experience]);
 
   const onRefill = useCallback(() => {
     remember(); // the refill shows the latest data, including gains that landed during the celebration
