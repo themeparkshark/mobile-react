@@ -79,9 +79,9 @@ export default function MemberStage() {
   return (
     <View style={st.stage} accessible accessibilityLabel={piece ? `Your shark wearing ${piece.name}, a VIP piece from the Secret Shop.` : 'Your shark as a VIP.'}>
       <Animated.Image source={RAYS} style={[st.rays, rays]} resizeMode="contain" />
-      {/* The member's stage: a painted snow plaza in a rounded card, a soft cast shadow, a VIP medallion. */}
+      {/* The member's stage: a painted snow plaza in a rounded card and a VIP medallion. The shark floats
+          above the plaza, so a ground shadow under the card read as an empty gray name bar. */}
       <View style={st.scene}><Image source={SCENE} style={StyleSheet.absoluteFill} contentFit="cover" /></View>
-      <View style={st.castShadow} />
       <View style={st.medal}><GameIcon name="member" size={30} /></View>
       {look ? (
         <Animated.View entering={still ? undefined : ZoomIn.springify().damping(12)} style={[st.card, bobStyle]}>
@@ -106,7 +106,6 @@ const SCENE = require('../../../assets/images/sharkpass/bd-snow-plaza.webp');
 
 const st = StyleSheet.create({
   scene: { position: 'absolute', bottom: 0, width: 270, height: 190, borderRadius: 26, overflow: 'hidden', borderWidth: 4, borderColor: '#ffffff', backgroundColor: '#0b3a75' },
-  castShadow: { position: 'absolute', bottom: 14, width: 130, height: 22, borderRadius: 65, backgroundColor: 'rgba(5,30,70,0.35)' },
   medal: { position: 'absolute', right: 26, top: 50, width: 52, height: 52, borderRadius: 26, backgroundColor: '#05346e', borderWidth: 4, borderColor: '#ffcf3b', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '10deg' }] },
   stage: { width: 300, height: 232, alignItems: 'center', justifyContent: 'flex-end', marginTop: 2 },
   rays: { position: 'absolute', top: -60, width: 360, height: 360, opacity: 0.35 },
