@@ -144,3 +144,15 @@ test('nearbyRideClosedReason says why a ride in range cannot be played', () => {
   assert.equal(timing.nearbyRideClosedReason({ type: 'coin', model: { active_from: '2026-10-23 20:00:00' } }, null, now), null);
   assert.equal(timing.nearbyRideClosedReason(null, null, now), null);
 });
+
+test('the Ride Control bar only says every ride is open when that is true', () => {
+  const open = input => timing.everyRideTrulyOpen({ loaded: true, restingCount: 0, liveStatuses: [], ...input });
+  assert.equal(open({}), true);
+  assert.equal(open({ liveStatuses: ['OPERATING', null, undefined] }), true);
+  // Rides not loaded yet (the map call failed): never claim it.
+  assert.equal(open({ loaded: false }), false);
+  // A ride resting until "Back 2:15 PM" sits on the map.
+  assert.equal(open({ restingCount: 1 }), false);
+  // A ride the live feed shows down, closed or in refurbishment.
+  for (const status of ['DOWN', 'CLOSED', 'REFURBISHMENT']) assert.equal(open({ liveStatuses: ['OPERATING', status] }), false);
+});

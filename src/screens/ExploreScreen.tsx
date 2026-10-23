@@ -8,7 +8,7 @@ import { Text, View, Pressable, StyleSheet } from 'react-native';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
 import useLivePoll from '../hooks/useLivePoll';
 import useUserIdle, { idlePollInterval, markUserActivity } from '../hooks/useUserIdle';
-import { nearbyOpportunityOpen, opportunityIsActive } from './ExploreScreen/mapOpportunityTiming';
+import { everyRideTrulyOpen, nearbyOpportunityOpen, opportunityIsActive } from './ExploreScreen/mapOpportunityTiming';
 import { TaskType } from '../models/task-type';
 import currencyBalance from '../helpers/currency-balance';
 import * as RootNavigation from '../RootNavigation';
@@ -1156,7 +1156,7 @@ function ExploreScreen() {
     // No own "?": the map's one "?" offers the Fin-ister tutorial while the mode is on.
     if (key === 'fright') return { key, label: frightNight.title, tone: TONES.night, node: <FrightPill inline night={frightNight} engine={frightEngine} /> };
     return { key, label: 'Ride Control', tone: TONES.park, node: <RideControlBar inline control={rideControl} tasks={visibleTasks}
-      hideAllOpen={!redeemables || hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
+      hideAllOpen={!everyRideTrulyOpen({ loaded: !!redeemables, restingCount: restingTasks.length, liveStatuses: visibleTasks.map(task => liveByTask.get(task.id)?.status) }) || hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
       onFocusTask={(task) => setSelectedTask(task)} /> };
   }) : [];
 
