@@ -127,7 +127,7 @@ const RideCard = ({
       <View style={styles.cardRow}>
         <View style={[styles.badge, { backgroundColor: badge.color }]}>
           {badge.icon ? <GameIcon name={badge.icon} size={30} /> : (
-            <Text style={styles.badgeText}>{badge.text}</Text>
+            <Text style={styles.badgeText} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit numberOfLines={1}>{badge.text}</Text>
           )}
           {badge.minutes && <Text style={styles.badgeUnit}>MIN</Text>}
         </View>
@@ -147,7 +147,7 @@ const RideCard = ({
               {/* A drawn play icon: the game font has no play-arrow glyph (it drew a box). */}
               <GameIcon name="play" size={16} />
               <Text style={styles.sessionBtnText}>{entry.status === 'DOWN'
-                ? 'GAMES · NO PARTS' : 'PLAY IN LINE'}</Text>
+                ? 'PLAY WHILE YOU WAIT' : 'PLAY IN LINE'}</Text>
             </Pressable>
           )}
         </View>
@@ -652,9 +652,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badgeText: {
+    // The game's number font, so the wait and its MIN read as one drawn badge.
     color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '700',
+    fontFamily: 'Shark',
+    fontSize: 22,
+    lineHeight: 24,
+    fontVariant: ['tabular-nums'],
   },
   badgeUnit: {
     color: '#FFFFFF',
@@ -719,14 +722,14 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   llText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontFamily: 'Knockout',
+    fontSize: 13,
     color: '#09268f',
   },
   llTime: {
-    fontSize: 10,
+    fontFamily: 'Knockout',
+    fontSize: 12,
     color: '#09268f',
     marginTop: 2,
-    fontWeight: '600',
   },
 });
