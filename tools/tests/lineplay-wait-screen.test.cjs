@@ -44,10 +44,12 @@ test('posted vs real: a tracking number only when real waits back it, gone once 
   const m = model();
   const est = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: 0.7, elapsedSeconds: 20 * 60 });
   assert.equal(est.title, 'SIGN SAYS 60'); assert.equal(est.tracking, 42); assert.equal(est.detail, "You're tracking ~42");
-  assert.equal(est.kidValue, '60', 'one wait number for kids: the sign they can see, never a guess stated as fact');
+  assert.equal(est.kidValue, '1h 00m', 'one wait number for kids: the sign they can see, never a guess stated as fact');
+  assert.equal(m.waitEstimate({ postedMinutes: 90, waitSource: 'posted', ratio: null, elapsedSeconds: 0 }).kidValue, '1h 30m',
+    'the sign is written like IN LINE (1h 30m), one unit style');
   assert.match(est.accessibilityLabel, /about 42 minutes/, 'the guess stays in the spoken label, marked as about');
   const none = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: null, elapsedSeconds: 600 });
-  assert.equal(none.tracking, null); assert.equal(none.detail, 'Posted wait'); assert.equal(none.kidValue, '60', 'no guess: the sign');
+  assert.equal(none.tracking, null); assert.equal(none.detail, 'Posted wait'); assert.equal(none.kidValue, '1h 00m', 'no guess: the sign');
   const past = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: 0.7, elapsedSeconds: 45 * 60 });
   assert.equal(past.tracking, null, 'never a countdown that lies');
   const noSign = m.waitEstimate({ postedMinutes: 35, waitSource: 'estimate', ratio: 0.7, elapsedSeconds: 0 });
@@ -131,7 +133,11 @@ test('no server rewards: the coin space collapses into one stat strip, no empty 
   assert.match(strip, /\{signStat\}/); assert.match(strip, /\{inLineStat\}/);
   // Fewer labels for kids: one short word under each number, no second line of fine print.
   assert.doesNotMatch(hero, /SIGN SAYS \(MIN\)|tracking|PARTS THIS WAIT/);
-  assert.match(hero, /label="MIN WAIT"/);
+  // Round 4: the sign's number sits under the ride car, the kid's own time under the stopwatch.
+  // Never two clocks, never "MIN" (which reads as "minimum").
+  assert.match(hero, /label="SIGN SAYS"\n\s+accessibilityLabel=\{estimate\.accessibilityLabel\} icon="ride"/);
+  assert.match(hero, /label="IN LINE"\n\s+accessibilityLabel=\{`In line \$\{inLineLabel\(elapsedSeconds\)\}\.`\} icon="timer"/);
+  assert.doesNotMatch(hero, /MIN WAIT|icon="queue"/);
   // Round 3: one Parts idea. The ring chip says "2 of 4 Parts"; no second "+4 PARTS" number beside it,
   // and no level number or Marathon/Night chip on the coin.
   assert.doesNotMatch(hero, /label="PARTS"|partsThisWait|waitStamps/);
@@ -143,7 +149,7 @@ test('no server rewards: the coin space collapses into one stat strip, no empty 
   assert.match(card, /\{!hero && <Text style=\{styles\.waitSourceHint\}>/, 'no second copy of IN LINE and the wait under the hero');
 });
 
-test('one wait source of truth: "no sign time" never shows next to a MIN WAIT number', () => {
+test('one wait source of truth: "no sign time" never shows next to a SIGN SAYS number', () => {
   const m = model();
   for (const waitSource of ['posted', 'last_known', 'estimate']) {
     for (const postedMinutes of [null, 0, 35, 60]) {
@@ -152,12 +158,12 @@ test('one wait source of truth: "no sign time" never shows next to a MIN WAIT nu
         const hint = m.waitSourceHint({ postedMinutes, waitSource });
         const noSign = /no sign time/i.test(hint);
         assert.equal(noSign, est.kidValue == null, `${waitSource} ${postedMinutes} ${ratio}: ${hint} / ${est.kidValue}`);
-        if (est.kidValue != null) assert.equal(est.kidValue, String(Math.round(postedMinutes)), 'MIN WAIT is the sign');
+        if (est.kidValue != null) assert.equal(est.kidValue, m.inLineLabel(Math.round(postedMinutes) * 60), 'SIGN SAYS is the sign');
         assert.doesNotMatch(hint, /No posted wait was found/);
       }
     }
   }
-  assert.equal(m.waitSourceHint({ postedMinutes: 60, waitSource: 'last_known' }), 'The wait time is an older one from the ride sign.');
+  assert.equal(m.waitSourceHint({ postedMinutes: 60, waitSource: 'last_known' }), 'That is an older time from the ride sign.');
   // The card and its hero read the same sign time (the dev preview included).
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(card, /waitSourceHint\(\{ postedMinutes: postedWaitMinutes, waitSource \}\)/);
@@ -171,4 +177,60 @@ test('one wait source of truth: "no sign time" never shows next to a MIN WAIT nu
   assert.match(screen, /lineRewardsReady=\{shownRewards\(snapshot, ride\)\.ready\}/);
   assert.match(screen, /rewardsOn=\{shownRewards\(snapshot, ride\)\.tracking && !shownRewards\(snapshot, ride\)\.unavailable\}/);
   assert.doesNotMatch(read(DIR + 'WaitCoinHero.tsx'), /rewardsOn: true/);
+});
+
+test('Details under the coin hero: two short lines at most, one Parts idea, the cap only once reached', () => {
+  const card = loadTs('src/screens/LinePlay/components/WaitCard.tsx', {
+    react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {}, Fragment: 'Fragment' }, 'react-native': { StyleSheet: { create: x => x } }, 'expo-linear-gradient': {}, 'react-native-svg': {},
+    '../../../design-system': { colors: { textPrimary: '#fff' }, spacing: { sm: 8, xs: 4, md: 12 }, borderRadius: { xxl: 24 }, shadows: { lg: {} } },
+    '../../../context/SoundEffectProvider': {}, '../../../helpers/hapticPatterns': {}, '../../../ui': {},
+    '../../../services/lineplay/partCountdown': {}, '../../../services/lineplay/bonusRounds': {},
+    '../../../services/lineplay/waitScreen': model(), './waitscreen/WaitStampBadge': {},
+  });
+  const base = { signLine: 'That is the ride sign’s time when you got in line.', sublineInHeadline: true,
+    subline: 'until your next Ride Part', rewardTrackingAvailable: true, atCap: false, intervalSeconds: 600 };
+  assert.deepEqual(plain(card.heroDetailLines(base)), [base.signLine, '1 Ride Part every 10 min near the ride.']);
+  // The status line could not hold its subline (checking, paused, at the cap): Details shows it instead of a second Parts idea.
+  const capped = card.heroDetailLines({ ...base, sublineInHeadline: false, atCap: true, subline: 'You got the most Parts for one wait. Great job!' });
+  assert.deepEqual(plain(capped), [base.signLine, 'You got the most Parts for one wait. Great job!']);
+  for (const lines of [card.heroDetailLines(base), capped]) {
+    assert.ok(lines.length <= 2, 'two short lines at most');
+    for (const line of lines) {
+      assert.doesNotMatch(line, /per wait|up to \d|Time near the ride/, 'no per-wait cap ahead of time, no 0:00 clock');
+      assert.ok(line.split(/\s+/).length <= 12, `short line: ${line}`);
+    }
+  }
+  assert.equal(card.ticketHint(true, 0, 600), 'Stay near the ride 10:00 more for a ticket.');
+  assert.equal(card.ticketHint(true, 700, 600), 'You get a ticket when this wait ends.');
+  const src = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.match(src, /\{expanded && hero && <HeroDetails/);
+  assert.match(src, /entranceWaitMinutes !== signMinutes\(\{ postedMinutes: postedWaitMinutes, waitSource \}\)/,
+    'the sign number already on the card is never repeated in Details');
+  assert.match(src, /\{expanded && !hero && <>/);
+});
+
+test('the dev preview runs one clock for the card and its hero', () => {
+  const env = { EXPO_PUBLIC_LINEPLAY_WAIT_PREVIEW: '1' };
+  const pv = loadTs(DIR + 'waitScreenPreview.ts', { react: { useEffect() {}, useState: v => [v, () => {}] } },
+    { __DEV__: true, process: { env } });
+  assert.equal(pv.previewElapsedSeconds(0), 20 * 60);
+  assert.equal(pv.previewElapsedSeconds(65), (20 + 6 * 12) * 60 + 5, '1h 32m 05s after 65 s');
+  assert.equal(pv.previewElapsedSeconds(4000), 92 * 60 + 40, 'stops growing at 1h 32m, never 33h');
+  // A saved preview session can be hours old: the clock runs from this app run, not the session.
+  const now = Date.now() + 65_000;
+  const c = pv.shownClock({ elapsedSeconds: 9 * 3600, verifiedEligibleSeconds: 0, verifiedPresenceAt: null, creditedParts: 0 }, now);
+  assert.equal(c.creditedParts, 4, 'the card says "next Part", never "first Part", beside a full preview coin');
+  assert.ok(c.elapsedSeconds >= 92 * 60 && c.elapsedSeconds < 93 * 60, `about 1h 32m, got ${c.elapsedSeconds}`);
+  assert.equal(c.verifiedEligibleSeconds, c.elapsedSeconds, 'never "Time near the ride: 0:00" beside 1h 32m in line');
+  assert.equal(c.verifiedPresenceAt, now, 'checked just now, so no "Checking you are in line" in captures');
+  env.EXPO_PUBLIC_LINEPLAY_WAIT_PREVIEW = '0';
+  const live = pv.shownClock({ elapsedSeconds: 65, verifiedEligibleSeconds: 30, verifiedPresenceAt: 5, creditedParts: 2 }, 1000);
+  assert.deepEqual(plain(live), { elapsedSeconds: 65, verifiedEligibleSeconds: 30, verifiedPresenceAt: 5, creditedParts: 2 },
+    'live sessions are untouched');
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.equal((screen.match(/elapsedSeconds=\{shownClock\(snapshot\)\.elapsedSeconds\}/g) ?? []).length, 2, 'card and hero share one clock');
+  assert.match(screen, /verifiedEligibleSeconds=\{shownClock\(snapshot\)\.verifiedEligibleSeconds\}/);
+  assert.match(screen, /verifiedPresenceAt=\{shownClock\(snapshot\)\.verifiedPresenceAt\}/);
+  assert.equal((screen.match(/creditedParts=\{shownClock\(snapshot\)\.creditedParts\}/g) ?? []).length, 2, 'and one Parts count');
+  assert.doesNotMatch(read(DIR + 'WaitCoinHero.tsx'), /elapsedSeconds: \(20|creditedParts: 1 \+/, 'the hero never runs its own clock');
 });

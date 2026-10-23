@@ -72,7 +72,7 @@ import ResumeCountdown from './components/ResumeCountdown';
 import { LINEPLAY_TOUR_STEP_MS, linePlayTourEnabled, linePlayTourSteps } from './devTour';
 import WaitCard from './components/WaitCard';
 import WaitCoinHero from './components/waitscreen/WaitCoinHero';
-import { shownRewards, shownWait } from './components/waitscreen/waitScreenPreview';
+import { shownClock, shownRewards, shownWait } from './components/waitscreen/waitScreenPreview';
 import NewRoundsBanner from './components/NewRoundsBanner';
 import ActivitySlot from './components/ActivitySlot';
 import ActivityPageRail from './components/ActivityPageRail';
@@ -929,7 +929,7 @@ export default function LinePlayScreen() {
             </View>
           )}
 
-        {/* Wait card (top). One sign time feeds both the card and its hero, so MIN WAIT and the details line agree. */}
+        {/* Wait card (top). One sign time and one clock feed both the card and its hero, so SIGN SAYS, IN LINE and the details agree. */}
         <View style={styles.waitWrap} ref={waitCardRef} onLayout={measureWaitCard} collapsable={false}>
           {snapshot.startedAt == null ? (
             <WaitCardSkeleton rideName={ride.rideName} />
@@ -942,14 +942,14 @@ export default function LinePlayScreen() {
               entranceWaitMinutes={snapshot.entranceWaitMinutes}
               entranceWaitObservedAt={snapshot.entranceWaitObservedAt}
               entranceWaitChangeMinutes={snapshot.entranceWaitChangeMinutes}
-              elapsedSeconds={snapshot.elapsedSeconds}
+              elapsedSeconds={shownClock(snapshot).elapsedSeconds}
               rewardTrackingAvailable={shownRewards(snapshot, ride).tracking}
               rewardUnavailable={shownRewards(snapshot, ride).unavailable}
               rewardConnectionIssue={snapshot.rewardConnectionIssue}
               lineRewardsReady={shownRewards(snapshot, ride).ready}
-              verifiedEligibleSeconds={snapshot.verifiedEligibleSeconds}
-              verifiedPresenceAt={snapshot.verifiedPresenceAt}
-              creditedParts={snapshot.creditedParts}
+              verifiedEligibleSeconds={shownClock(snapshot).verifiedEligibleSeconds}
+              verifiedPresenceAt={shownClock(snapshot).verifiedPresenceAt}
+              creditedParts={shownClock(snapshot).creditedParts}
               partsRemainingToday={snapshot.partsRemainingToday}
               partIntervalSeconds={snapshot.partIntervalSeconds}
               sessionPartCap={snapshot.sessionPartCap}
@@ -974,9 +974,9 @@ export default function LinePlayScreen() {
               hero={snapshot.state !== 'complete' ? <WaitCoinHero
                 rideId={ride.rideId}
                 waitScreen={snapshot.waitScreen}
-                creditedParts={snapshot.creditedParts}
+                creditedParts={shownClock(snapshot).creditedParts}
                 bonusParts={snapshot.bonus?.slots.filter(slot => slot.state === 'claimed').length ?? 0}
-                elapsedSeconds={snapshot.elapsedSeconds}
+                elapsedSeconds={shownClock(snapshot).elapsedSeconds}
                 plannedWaitMinutes={shownWait(snapshot).plannedWaitMinutes}
                 waitSource={shownWait(snapshot).waitSource}
                 playerEnergy={player?.energy ?? null}

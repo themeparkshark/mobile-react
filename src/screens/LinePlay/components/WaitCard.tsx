@@ -17,7 +17,7 @@ import { GameIcon, type GameIconName } from '../../../ui';
 import type { LineBonusSummary } from '../../../api/endpoints/me/inline-timer/types';
 import { bonusDoneToday, nextBonusSeconds, ringInfoCopy, ringPill, visiblePips,
   type PipState } from '../../../services/lineplay/bonusRounds';
-import { waitSourceHint, waitStamps } from '../../../services/lineplay/waitScreen';
+import { signMinutes, waitSourceHint, waitStamps, type WaitStamp } from '../../../services/lineplay/waitScreen';
 import WaitStampBadge from './waitscreen/WaitStampBadge';
 
 /** A detail line with its art, never an emoji. */
@@ -121,6 +121,46 @@ function fmt(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Details under the coin hero: at most two short lines (where the wait number
+ * came from, then one Parts idea), the Marathon and Night marks as badges, and
+ * a ticket line only while a ticket is in play. The per-wait cap is never
+ * listed ahead of time; the status line says so once a kid reaches it.
+ */
+export function heroDetailLines(input: {
+  readonly signLine: string;
+  readonly sublineInHeadline: boolean;
+  readonly subline: string;
+  readonly rewardTrackingAvailable: boolean;
+  readonly atCap: boolean;
+  readonly intervalSeconds: number;
+}): readonly string[] {
+  const minutes = Math.max(1, Math.round(input.intervalSeconds / 60));
+  const partsLine = !input.sublineInHeadline ? input.subline
+    : input.rewardTrackingAvailable && !input.atCap ? `1 Ride Part every ${minutes} min near the ride.` : null;
+  return partsLine ? [input.signLine, partsLine] : [input.signLine];
+}
+
+/** One short ticket line, in kid words. */
+export function ticketHint(available: boolean, verifiedSeconds: number, intervalSeconds: number): string {
+  if (!available) return 'You got today’s ticket for this ride.';
+  return verifiedSeconds >= intervalSeconds ? 'You get a ticket when this wait ends.'
+    : `Stay near the ride ${fmt(Math.max(0, intervalSeconds - verifiedSeconds))} more for a ticket.`;
+}
+
+function HeroDetails({ stamps, lines, ticket }: {
+  stamps: readonly WaitStamp[]; lines: readonly string[]; ticket: string | null;
+}) {
+  return <View style={styles.heroDetails}>
+    {stamps.length > 0 && <View style={styles.stampRow} accessible accessibilityLabel={stamps.map(stamp => stamp.kind === 'marathon'
+      ? 'Marathon wait: an hour or more in line.' : 'Night wait, after 8 PM.').join(' ')}>
+      {stamps.map(stamp => <WaitStampBadge key={stamp.kind} stamp={stamp} />)}
+    </View>}
+    {lines.map(line => <Text key={line} style={styles.waitSourceHint}>{line}</Text>)}
+    {ticket && <HintLine icon="ticket">{ticket}</HintLine>}
+  </View>;
 }
 
 export default function WaitCard({
@@ -249,6 +289,10 @@ export default function WaitCard({
           : countdown.checking ? 'Keep playing. It shows up soon.'
           : earned === 0 ? 'until your first Ride Part' : 'until your next Ride Part';
 
+  // With the coin hero the status line reads "4:12 until your next Ride Part", so Details never repeats it.
+  const sublineInHeadline = Boolean(hero) && rewardTrackingAvailable && !atCap && !countdown.needsCheck
+    && !countdown.checking && !paused;
+
   return (
     <View style={styles.wrap}>
       <View style={styles.artWrap}>
@@ -282,7 +326,7 @@ export default function WaitCard({
           {hero ? null : noPartsHere ? <GameIcon name="queue" size={34} />
             : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
           <View style={styles.compactCopy} accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}`}>
-            <Text style={styles.compactHeadline} numberOfLines={1}>{headline}{hero && rewardTrackingAvailable && !atCap && !countdown.needsCheck && !countdown.checking && !paused
+            <Text style={styles.compactHeadline} numberOfLines={1}>{headline}{sublineInHeadline
               ? ` ${subline}` : !hero && rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}</Text>
             {noPartsHere && <Text style={styles.compactNote} numberOfLines={1}>No Parts at this ride</Text>}
             {bonusOn && <View style={styles.bonusRow}>
@@ -348,13 +392,22 @@ export default function WaitCard({
           onPress={() => setExpanded(value => !value)} style={[styles.detailsButton, compact && styles.compactDetails]} hitSlop={6}>
           <Text style={styles.detailsButtonText}>{expanded ? 'Hide details' : `${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m · details`}</Text>
         </Pressable>}
-        {expanded && <>
+        {expanded && hero && <HeroDetails stamps={stamps} lines={heroDetailLines({
+          // A fresh, different reading at the line beats the start time; the same number is never said twice.
+          signLine: entranceFresh && entranceWaitMinutes != null
+            && entranceWaitMinutes !== signMinutes({ postedMinutes: postedWaitMinutes, waitSource })
+            ? `The ride sign now says ${entranceWaitMinutes}m.`
+            : waitSourceHint({ postedMinutes: postedWaitMinutes, waitSource }),
+          sublineInHeadline, subline, rewardTrackingAvailable, atCap, intervalSeconds: interval,
+        })} ticket={rewardTrackingAvailable && ticketAvailable !== null
+          ? ticketHint(ticketAvailable, verifiedEligibleSeconds, ticketIntervalSeconds) : null} />}
+        {expanded && !hero && <>
           {compact && <>
             <Text style={styles.meterSub}>{subline}</Text>
-            {/* With the coin hero, IN LINE and MIN WAIT are already on the card: no second copy here. */}
+            {/* With the coin hero, IN LINE and SIGN SAYS are already on the card: no second copy here. */}
             {!hero && <Text style={styles.waitSourceHint}>{`${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m`}</Text>}
           </>}
-          {/* One wait source of truth: the same rule (signMinutes) decides MIN WAIT and this line. */}
+          {/* One wait source of truth: the same rule (signMinutes) decides SIGN SAYS and this line. */}
           <Text style={styles.waitSourceHint}>{waitSourceHint({ postedMinutes: postedWaitMinutes, waitSource })}</Text>
           {stamps.map(stamp => <View key={stamp.kind} style={styles.hintLine}>
             <WaitStampBadge stamp={stamp} />
@@ -406,6 +459,8 @@ export default function WaitCard({
 }
 
 const styles = StyleSheet.create({
+  heroDetails: { gap: 4, marginTop: 4 },
+  stampRow: { flexDirection: 'row', gap: 6, paddingVertical: 2 },
   compactNote: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 13, lineHeight: 16, marginTop: 1 },
   compactContent: { paddingTop: 6 },
   compactRideName: { fontSize: 19, lineHeight: 22, marginRight: 7 },

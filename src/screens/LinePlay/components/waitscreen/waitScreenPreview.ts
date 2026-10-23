@@ -14,7 +14,7 @@ export const PREVIEW_WAIT = { plannedWaitMinutes: 60, waitSource: 'posted' } as 
 
 /**
  * The sign time the wait card AND its hero show: the session's, or the
- * preview's in the dev preview. Both read this one value, so the MIN WAIT
+ * preview's in the dev preview. Both read this one value, so the SIGN SAYS
  * number and the details line can never disagree.
  */
 export function shownWait(session: { readonly plannedWaitMinutes: number; readonly waitSource: WaitSource }):
@@ -35,6 +35,54 @@ export const PREVIEW_WAIT_COIN: WaitCoin = {
 };
 
 export const PREVIEW_STEP_MS = 10000;
+
+/** When this app run's preview clock started (a saved preview session can be hours old). */
+const PREVIEW_T0 = Date.now();
+/** The preview's wait stops growing here: 20 + 6 x 12 = 92 minutes, past the Marathon mark. */
+export const PREVIEW_MAX_STEPS = 6;
+
+/**
+ * The preview's time in line, from seconds since the preview started: 20
+ * minutes, then 12 more every PREVIEW_STEP_MS, up to 1h 32m, with the
+ * seconds still ticking.
+ */
+export function previewElapsedSeconds(realSeconds: number): number {
+  const s = Math.max(0, Math.floor(realSeconds));
+  return (20 + Math.min(PREVIEW_MAX_STEPS, Math.floor((s * 1000) / PREVIEW_STEP_MS)) * 12) * 60 + (s % 60);
+}
+
+export interface ShownClock {
+  readonly elapsedSeconds: number;
+  readonly verifiedEligibleSeconds: number;
+  readonly verifiedPresenceAt: number | null;
+  readonly creditedParts: number | null;
+}
+
+/** The preview's Parts so far this wait: 1, then one more every step, up to 4 (a full Level 2 coin). */
+export function previewCreditedParts(realSeconds: number): number {
+  return 1 + Math.min(3, Math.floor((Math.max(0, realSeconds) * 1000) / PREVIEW_STEP_MS));
+}
+
+/**
+ * The one clock the wait card AND its hero read: time in line, the
+ * server-checked time near the ride and the Parts it has earned. In the dev preview both run on the
+ * preview's fast clock and count as checked just now, so a capture shows the
+ * real live state (a running countdown, the Marathon mark past an hour)
+ * instead of "Time near the ride: 0:00" beside 1h 32m in line.
+ */
+export function shownClock(
+  session: { readonly elapsedSeconds: number; readonly verifiedEligibleSeconds: number; readonly verifiedPresenceAt: number | null;
+    readonly creditedParts: number | null },
+  now: number = Date.now(),
+): ShownClock {
+  if (!waitScreenPreviewEnabled()) {
+    return { elapsedSeconds: session.elapsedSeconds, verifiedEligibleSeconds: session.verifiedEligibleSeconds,
+      verifiedPresenceAt: session.verifiedPresenceAt, creditedParts: session.creditedParts };
+  }
+  const real = (now - PREVIEW_T0) / 1000;
+  const elapsed = previewElapsedSeconds(real);
+  return { elapsedSeconds: elapsed, verifiedEligibleSeconds: elapsed, verifiedPresenceAt: now, creditedParts: previewCreditedParts(real) };
+}
 
 /** 0, 1, 2, ... every PREVIEW_STEP_MS while the preview runs. */
 export function usePreviewStep(enabled: boolean): number {

@@ -2,11 +2,13 @@
  * WaitCoinHero: the body of the LinePlay wait screen (stream L2). The ride's
  * own coin sits center stage between two quiet stat columns:
  *
- *   60   MIN WAIT         (coin, filling)         12  SHARKS HERE
+ *   60m  SIGN SAYS        (coin, filling)         12  SHARKS HERE
  *   23m  IN LINE          "2 of 4 Parts"
  *
  * Picture first for a 7-year-old: one wait number (the ride sign's, the one
- * they can see at the line), one short word under each number, one Parts idea
+ * they can see at the line) under the ride car, their own time under the
+ * stopwatch, both written the same way ("60m", "23m"), one short word under
+ * each number, one Parts idea
  * (the ring and its "2 of 4 Parts" chip; a new Part flies in as "+1 RIDE
  * PART!" above), and no fine print until Details is tapped. The real-waits
  * guess stays in the spoken label as "about 42".
@@ -57,7 +59,7 @@ function useAppActive(): boolean {
 }
 
 function Stat({ value, label, align, accessibilityLabel, icon }: {
-  value: string; label: string; align: 'left' | 'right'; accessibilityLabel: string; icon?: 'timer' | 'parts' | 'queue' | 'shark';
+  value: string; label: string; align: 'left' | 'right'; accessibilityLabel: string; icon?: 'timer' | 'parts' | 'ride' | 'shark';
 }) {
   return (
     <View style={[styles.stat, align === 'right' && styles.statRight]} accessible accessibilityLabel={accessibilityLabel}>
@@ -73,10 +75,9 @@ function Stat({ value, label, align, accessibilityLabel, icon }: {
 function WaitCoinHero(props: WaitCoinHeroProps) {
   const preview = waitScreenPreviewEnabled();
   const step = usePreviewStep(preview);
-  // Dev preview: a wait that grows 12 minutes a step, with a filling Level 2 coin. The sign time and
-  // "earns Parts" come from the screen (shownWait, shownRewards), so the card and this body always agree.
-  const p: WaitCoinHeroProps = preview ? { ...props, waitScreen: previewWaitScreen(step), creditedParts: 1 + Math.min(3, step),
-    elapsedSeconds: (20 + step * 12) * 60 + (props.elapsedSeconds % 60), playerEnergy: 120 } : props;
+  // Dev preview: a filling Level 2 coin. The sign time, the clock, the Parts and "earns Parts" come from the
+  // screen (shownWait, shownClock, shownRewards), so the card and this body always agree.
+  const p: WaitCoinHeroProps = preview ? { ...props, waitScreen: previewWaitScreen(step), playerEnergy: 120 } : props;
   return <WaitCoinHeroBody {...p} preview={preview} previewAutoLevel={preview && step >= 5} />;
 }
 
@@ -101,8 +102,8 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, elapsedSeconds, p
   const sharks = sharksInLine(wait.inLineNow);
 
   // One wait number, or nothing when the ride has no sign time (time in line still shows).
-  const signStat = estimate.kidValue != null ? <Stat align="left" value={estimate.kidValue} label="MIN WAIT"
-    accessibilityLabel={estimate.accessibilityLabel} icon="queue" /> : null;
+  const signStat = estimate.kidValue != null ? <Stat align="left" value={estimate.kidValue} label="SIGN SAYS"
+    accessibilityLabel={estimate.accessibilityLabel} icon="ride" /> : null;
   const inLineStat = <Stat align="left" value={inLineLabel(elapsedSeconds)} label="IN LINE"
     accessibilityLabel={`In line ${inLineLabel(elapsedSeconds)}.`} icon="timer" />;
   const sharksStat = sharks ? <Stat align="right" value={sharks.value} label={sharks.label}

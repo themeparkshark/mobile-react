@@ -95,9 +95,10 @@ export interface WaitEstimate {
   readonly detail: string;
   /**
    * The one wait number a 7-year-old reads on the card: the minutes on the
-   * ride's sign ("60"), the same number they can see at the line. Never the
-   * real-waits guess, which would state a guess as a fact; the guess lives in
-   * the spoken label ("about 42"). Null with no sign time.
+   * ride's sign ("60m", "1h 30m"), the same number they can see at the line,
+   * written the same way as their own IN LINE time so the two read alike.
+   * Never the real-waits guess, which would state a guess as a fact; the
+   * guess lives in the spoken label ("about 42"). Null with no sign time.
    */
   readonly kidValue: string | null;
   readonly accessibilityLabel: string;
@@ -111,13 +112,13 @@ export function signMinutes(input: Pick<WaitEstimateInput, 'postedMinutes' | 'wa
 
 /**
  * The details line under the wait card, in kid words. It always agrees with
- * the MIN WAIT number: "no sign time" only when no MIN WAIT shows.
+ * the SIGN SAYS number: "no sign time" only when no SIGN SAYS shows.
  */
 export function waitSourceHint(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'>): string {
-  if (signMinutes(input) == null) return 'This ride had no sign time when you started. Games are planned anyway.';
+  if (signMinutes(input) == null) return 'No sign time when you started. Games still work.';
   return input.waitSource === 'last_known'
-    ? 'The wait time is an older one from the ride sign.'
-    : 'The wait time is from the ride sign when you got in line.';
+    ? 'That is an older time from the ride sign.'
+    : 'That is the ride sign’s time when you got in line.';
 }
 
 export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
@@ -136,7 +137,7 @@ export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
     : tracking != null ? `Tracking ~${tracking} today`
       : 'Posted wait';
   return {
-    posted, tracking, title, detail, kidValue: String(posted),
+    posted, tracking, title, detail, kidValue: inLineLabel(posted * 60),
     accessibilityLabel: tracking != null
       ? `Posted wait ${posted} minutes. Recent waits here suggest about ${tracking} minutes.`
       : `Posted wait ${posted} minutes.`,
