@@ -46,8 +46,29 @@ test('chips are brags, never data: no %, ms, zero counts, sentences; at most two
   assert.deepEqual([...chips.map(c => c.label)], ['BEST COMBO', 'DRUM-OFF']);
   assert.equal(chips[0].value, 'x4');
   assert.equal(chips.length, feelings.MAX_FEELING_CHIPS);
-  // A combo of 1 is not a combo.
+  // A combo of 1 or 2 is not a brag.
   assert.equal(feelings.feelingChips([], 1).length, 0);
+  assert.equal(feelings.feelingChips([], 2).length, 0, 'BEST COMBO x2 is two hits in a row, not a brag');
+  assert.equal(feelings.feelingChips([], 3)[0].value, 'x3');
+});
+
+test('counts a kid cannot read become dots; the next-star read is one word and a bar', () => {
+  const [pips] = feelings.feelingChips([{ label: 'Bursts', value: '3/4', pips: [3, 4] }]);
+  assert.deepEqual([...pips.pips], [3, 4]);
+  assert.equal(feelings.feelingChips([{ label: 'Bursts', value: '0/4', pips: [0, 4] }]).length, 0, 'no dots, no chip');
+  assert.equal(feelings.nextStarWord({ nextStar: 1, progress: 0.12, near: false }), 'KEEP GOING');
+  assert.equal(feelings.nextStarWord({ nextStar: 1, progress: 0.6, near: false }), 'HALFWAY THERE');
+  assert.equal(feelings.nextStarWord({ nextStar: 2, progress: 0.9, near: true }), 'ALMOST!');
+  assert.equal(feelings.nextStarWord({ nextStar: 0, progress: 1, near: false }), 'ALL 3 STARS!');
+  for (const w of ['KEEP GOING', 'HALFWAY THERE', 'ALMOST!']) assert.doesNotMatch(w, /\d/);
+  const bar = read('src/gamekit/results/NextStarBar.tsx');
+  assert.match(bar, /nextStarWord\(goal\)/);
+  assert.match(bar, /accessibilityLabel=\{goal\.nextStar/, 'the numbers live in the accessibility label');
+  const card = read('src/gamekit/results/ResultsCard.tsx');
+  assert.doesNotMatch(card, /NEXT STAR \$\{|TO GO`/, 'no "NEXT STAR 8,000 / 7,050 TO GO" on the card');
+  assert.match(card, /<NextStarBar goal=\{goal\}/);
+  const sharky = read('src/games/sharky/hud/SharkyResults.tsx');
+  assert.match(sharky, /<NextStarBar goal=\{goal\}/, 'Sharky uses the same next-star bar');
 });
 
 test('one feeling line: beat a ghost, then a streak, then so close', () => {
@@ -92,8 +113,8 @@ test('Whack floats at most two words at once; big moments always show', () => {
   assert.match(juice, /BONKS! \+/, 'a flurry with no multiplier never reads "x1 COMBO"');
 });
 
-test('a queue event never throws the run away (partial credit), but a paid challenge must be won', () => {
-  assert.deepEqual({ ...session.wrapUpStars(0, 120, false) }, { stars: 1, partial: true });
+test('a queue event never throws the run away (RUN SAVED, never a fake star), but a paid challenge must be won', () => {
+  assert.deepEqual({ ...session.wrapUpStars(0, 120, false) }, { stars: 0, partial: true }, 'a saved run is not a lit star');
   assert.deepEqual({ ...session.wrapUpStars(2, 900, false) }, { stars: 2, partial: false });
   assert.deepEqual({ ...session.wrapUpStars(0, 0, false) }, { stars: 0, partial: false });
   assert.deepEqual({ ...session.wrapUpStars(0, 500, true) }, { stars: 0, partial: false });
@@ -102,17 +123,62 @@ test('a queue event never throws the run away (partial credit), but a paid chall
   assert.equal(session.isEmptyResultsNode(false), true);
   assert.equal(session.isEmptyResultsNode(''), true);
   assert.equal(session.isEmptyResultsNode({ type: 'View' }), false);
+  const card = read('src/gamekit/results/ResultsCard.tsx');
+  assert.match(card, /\{saved \? \(\n\s+<SavedStamp/, 'RUN SAVED stamps in where the stars would be');
+  assert.match(card, /thresholds && !saved \? nextStarGoal/, 'a saved run has no next-star bar to disagree with');
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /if \(!partial\) session\.recordGameResult\(game\.gameId, stars\);\n\s+session\.markActivityCompleted\(game\.id\);/,
+    'a saved partial run counts as played but never changes the best or difficulty');
 });
 
-test('LinePlay tells an open game when the wait ends under it', () => {
+test('LinePlay tells an open game when the wait really ends, never on the undoable GPS grace', () => {
   assert.equal(lineplay.queueEndedReason('active', null), null);
   assert.equal(lineplay.queueEndedReason('paused', 'boarded'), null);
-  assert.equal(lineplay.queueEndedReason('ending', 'boarded'), 'boarding');
-  assert.equal(lineplay.queueEndedReason('ending', 'left_queue'), 'left-queue');
+  // 'ending' is the 60 s undoable grace (often GPS drift): an open game keeps playing.
+  assert.equal(lineplay.queueEndedReason('ending', 'left_queue'), null);
+  assert.equal(lineplay.queueEndedReason('ending', 'manual'), null);
+  assert.equal(lineplay.queueEndedReason('ending', 'boarded'), null, 'a guess is not a yes');
+  assert.equal(lineplay.queueEndedReason('ending', 'left_queue', true), 'boarding', 'the guest said yes');
+  assert.equal(lineplay.queueEndedReason('complete', 'boarded'), 'boarding');
+  assert.equal(lineplay.queueEndedReason('complete', 'left_queue'), 'left-queue');
   assert.equal(lineplay.queueEndedReason('complete', 'manual'), 'session-ended');
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /queueEndedReason\(snapshot\.state, snapshot\.endReason, snapshot\.boardingConfirmed\)/);
   assert.match(screen, /queueEnded,\n\s+rideUpLikely: snapshot\.boardingSuggested/);
-  assert.match(screen, /onNoStarRun: \(\) =>/);
+  assert.match(screen, /onBoardingAnswer: \(boarded: boolean\) => \{\n\s+if \(!boarded\) \{ session\.dismissBoardingSuggestion\(\); return; \}\n\s+void session\.endNow\(true\)/);
+  assert.match(screen, /onRunDone: \(stars: number, partial: boolean\) =>/);
+  const src = read('src/services/lineplay/LinePlaySession.ts');
+  assert.match(src, /if \(this\.gameOpen\) this\.holdGrace\(\);/, 'the grace still waits for an open game');
+});
+
+test('a ride-detection guess never ends a run: a held round asks inside the game', () => {
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.doesNotMatch(shell, /rideUpLikely && phase === 'paused' && startedRef\.current\) wrapUp/, 'no auto wrap-up on the hint');
+  assert.doesNotMatch(shell, /wrapUpRef\.current\('boarding'\)/, 'coming back from the pocket never wraps up');
+  assert.match(shell, /if \(rideUpLikelyRef\.current && startedRef\.current && askBoardingRef\.current\) return;\n\s+doResumeRef\.current\(\);/);
+  assert.match(shell, /Did your ride start\?/);
+  assert.match(shell, /SAVE MY RUN/);
+  assert.match(shell, /KEEP PLAYING/);
+  assert.match(shell, /linePlayMovement\?\.onBoardingAnswer\?\.\(false\);\n\s+doResume\(\);/);
+  // Boarding is recorded only after the saved run is counted.
+  assert.match(shell, /linePlayMovement\?\.onRunDone\?\.\(0, effectiveResult\?\.meta\?\.partial === true\);\n\s+onClose\(\);\n\s+\}\n[\s\S]{0,120}if \(boardingAnsweredRef\.current\)/);
+});
+
+test('one button rule on every results card: PLAY AGAIN leads, the run is counted first', () => {
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /const playAgainFirst = rematchOffered && \(!won \|\| canBankRun\);/);
+  assert.match(shell, /\{playAgainFirst \? 'PLAY AGAIN' : claimLabel\}/);
+  assert.match(shell, /linePlayMovement\.onRunDone\(effectiveResult\.stars \?\? 0, effectiveResult\.meta\?\.partial === true\);\n\s+\}\n\s+onRematch\(\);/,
+    'PLAY AGAIN in a queue counts the run before replaying');
+  assert.match(shell, /footer=\{resultCardFooter\}/, 'SHARE sits inside the card');
+  assert.doesNotMatch(shell, />Close<|>Play again</, 'one caps font family on every button');
+  const sharky = read('src/games/sharky/hud/SharkyResults.tsx');
+  assert.match(sharky, /const primaryLabel = againFirst \? 'PLAY AGAIN' : claimLabel;/);
+  assert.doesNotMatch(sharky, /textDecorationLine: 'underline'/, 'DONE is a button, not a text link');
+  const cq = read('src/games/current-quest/ResultsCard.tsx');
+  assert.match(cq, />PLAY AGAIN</);
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /resultCardFooter=\{result \? <ShareCardButton chip/);
 });
 
 test('every wait opens with a showpiece (Whack or Sharky); Current Quest v1 is never first or second', () => {
@@ -132,9 +198,11 @@ test('every wait opens with a showpiece (Whack or Sharky); Current Quest v1 is n
 test('the shell never ends on a dark screen: fallback timer, shared card, no-star runs still count', () => {
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.match(shell, /RESULTS_FALLBACK_MS = 600/);
-  assert.match(shell, /showSharedCard = phase === 'results' && \(!renderResults \|\| !effectiveResult \|\| \(gameResults == null && resultsSafe\)\)/);
-  assert.match(shell, /resultsSafe \? styles\.resultsShown : resultsStyle/);
-  assert.match(shell, /linePlayMovement\?\.onNoStarRun\?\.\(\);\n\s+onClose\(\);/);
+  assert.match(shell, /showSharedCard = phase === 'results' && \(!renderResults \|\| !effectiveResult \|\| \(gameResults == null && \(resultsSafe \|\| wrap != null\)\)\)/);
+  // The safety net snaps only the fade; the settle spring keeps its own scale (no pop at 600 ms).
+  assert.match(shell, /resultsSafe \? styles\.resultsShown : resultsFadeStyle/);
+  assert.match(shell, /resultsShown: \{ opacity: 1 \}/);
+  assert.match(shell, /<Animated\.View style=\{resultsScaleStyle\}>/);
   assert.match(shell, /if \(visible && queueEnded\) wrapUp\(queueEnded\)/);
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /feelingChips\(stats, maxCombo\)/);
@@ -148,7 +216,35 @@ test('Sharky Swim results brag and point at a goal instead of listing zeros', ()
   assert.equal(lines.sharkyStarGoalLine(238, 2500), 'Next star at 2,500', 'far away is a target, not "Only 2262"');
   assert.equal(lines.sharkyStarGoalLine(2300, 2500), 'So close! 200 more for a star');
   assert.equal(lines.showSplits([-64, -12]), false, 'a row of red bars never shows');
-  assert.equal(lines.showSplits([-64, 30]), true);
+  assert.equal(lines.showSplits([30, -64]), false, 'one lucky gate in a run that ended behind shows nothing');
+  assert.equal(lines.showSplits([-64, 30]), true, 'finished ahead');
+  assert.deepEqual([...lines.aheadBars([40, -10, 30])], [40, 30], 'only green bars');
+  assert.deepEqual([...lines.aheadBars([-10, 30])], [], 'never a lone square');
+  assert.equal(lines.sharkyNearBestLine(900, 1000), 'So close to your best!');
+  assert.equal(lines.sharkyNearBestLine(100, 1000), '');
   const card = read('src/games/sharky/hud/SharkyResults.tsx');
-  assert.doesNotMatch(card, /Math\.abs\(d\)\}`\}<\/Text>/, 'split bars carry no raw numbers');
+  assert.doesNotMatch(card, /DANGER/, 'no red split bars');
+  const swim = read('src/games/sharky/SharkySwim.tsx');
+  assert.doesNotMatch(swim, /'WIPEOUT!'/, 'a 0-star wipeout gets the shared feeling title');
+  assert.match(swim, /return feelingTitle\(stars, near\);/);
+});
+
+test('Whack: true buckets, no zeros, dropped score words fold into one total, no minus chip in play', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /\{ label: 'POINTS', value: base \}, \{ label: 'COMBO', value: combo \}, \{ label: 'BONUS', value: bonus \}\]\.filter\(\(t\) => t\.value > 0\)/);
+  assert.doesNotMatch(whack, /label: 'QUICK', value: `\$\{b\.result\.quick\}`/, 'the between-bursts card has no counts');
+  assert.doesNotMatch(whack, /BEHIND YOUR BEST/);
+  assert.match(whack, /pips: \[banked\.length, totalBursts\]/);
+  const overlays = read('src/games/whack/ui/Overlays.tsx');
+  assert.match(overlays, /p\.burstScore > 0 \? `\+\$\{count\.toLocaleString\(\)\}` : 'WARMING UP'/, 'never "+0"');
+  assert.match(overlays, /p\.boostReady \|\| p\.walkMeters >= 1/, 'never "+0m walked"');
+  assert.equal(wordGate.droppedPoints('QUICK +80'), 80);
+  assert.equal(wordGate.droppedPoints('KNOCKOUT! +1,200'), 1200);
+  assert.equal(wordGate.droppedPoints('BOLTED!'), 0);
+  const juice = read('src/games/whack/useWhackJuice.ts');
+  assert.match(juice, /words\.current \?\?= createWordGate\(\);/, 'the gate is made once, lazily');
+  assert.match(juice, /foldedPts\.current \+= droppedPoints\(at\.text\);/);
+  assert.match(juice, /stamp: `\+\$\{foldedPts\.current\}`/);
+  const board = read('src/games/whack/render/WhackBoard.tsx');
+  assert.match(board, /const paceOp = useDerivedValue\(\(\) => \(pace\.value >= 1 \? 1 : 0\)\);/, 'VS BEST shows only when ahead');
 });

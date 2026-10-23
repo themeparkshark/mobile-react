@@ -118,16 +118,16 @@ export function Breather(p: BreatherProps) {
       <View style={styles.dim} pointerEvents="none" />
       <Animated.View style={[styles.card, cardStyle]}>
         <Text style={styles.cardKicker}>{`BURST ${p.burstNumber} OF ${p.bursts} BANKED`}</Text>
-        <Text style={styles.cardScore}>{`+${count.toLocaleString()}`}</Text>
+        <Text style={styles.cardScore}>{p.burstScore > 0 ? `+${count.toLocaleString()}` : 'WARMING UP'}</Text>
         <Text style={styles.cardRun}>{`RUN ${p.runScore.toLocaleString()}`}</Text>
-        <View style={styles.chips}>
+        {p.stats.length ? <View style={styles.chips}>
           {p.stats.map((s) => (
             <View key={s.label} style={styles.chip}>
               <Text style={styles.chipValue}>{s.value}</Text>
               <Text style={styles.chipLabel}>{s.label}</Text>
             </View>
           ))}
-        </View>
+        </View> : null}
         {p.duelLine ? <Text style={styles.duelLine}>{p.duelLine}</Text> : null}
         {p.split ? (
           <View style={[styles.splitChip, { backgroundColor: p.split.ahead ? '#dff6e6' : '#ffe4de' }]}>
@@ -135,7 +135,7 @@ export function Breather(p: BreatherProps) {
           </View>
         ) : null}
         {p.goal ? <Text style={styles.goal}>{p.goal}</Text> : null}
-        {p.showWalk !== false ? (
+        {p.showWalk !== false && (p.boostReady || p.walkMeters >= 1) ? (
           <View style={styles.walkRow}>
             <Ring pct={p.walkPct} size={52} />
             <View style={{ flex: 1, marginLeft: 10 }}>

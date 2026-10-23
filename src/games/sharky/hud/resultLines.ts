@@ -26,7 +26,23 @@ export function sharkyStarGoalLine(score: number, nextStarAt: number): string {
   return `Next star at ${Math.round(nextStarAt).toLocaleString()}`;
 }
 
-/** Ghost splits show only when the run was ahead somewhere: a win to point at, never a row of red. */
+/**
+ * Ghost splits show only when the whole run finished ahead of the ghost (the
+ * last shared gate), so "AHEAD OF YOUR BEST" is always true. One lucky gate in
+ * a run that ended behind shows nothing.
+ */
 export function showSplits(splits: readonly number[]): boolean {
-  return splits.some((d) => d > 0);
+  return splits.length > 0 && splits[splits.length - 1] > 0;
+}
+
+/** Only the gates where you were ahead get a bar (green, no numbers); two or more, or none. */
+export function aheadBars(splits: readonly number[]): number[] {
+  const ahead = splits.filter((d) => d > 0);
+  return ahead.length >= 2 ? ahead : [];
+}
+
+/** "Only 120 from your best" without the number a kid has to work out. */
+export function sharkyNearBestLine(score: number, best: number): string {
+  if (!(best > score) || best - score >= 0.12 * best) return '';
+  return 'So close to your best!';
 }

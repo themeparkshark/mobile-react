@@ -47,7 +47,9 @@ import { RALLY_HOUSE_CREW, RALLY_MAX_STEPS, rallyConfig } from './sim/rally';
 import { useRally } from './net/useRally';
 import { RallyCountIn, RallyLobby, RallyPodium } from './hud/RallyOverlays';
 import { SharkyResults, type SharkyResultsData } from './hud/SharkyResults';
-import { sharkyStarGoalLine } from './hud/resultLines';
+import { sharkyNearBestLine } from './hud/resultLines';
+import { feelingTitle } from '../../gamekit/results/feelings';
+import { nextStarGoal } from '../../gamekit/core/scoring';
 import { SharkyCanvas } from './render/SharkyCanvas';
 import { SharkyHud } from './render/SharkyHud';
 import { sharkyLayout, type SharkyLayout } from './render/view';
@@ -111,18 +113,26 @@ function rideStars(s: SimState): number {
   return 1;
 }
 
-/** The closest goal you missed (Geometry Dash / Clash Royale near-miss line). */
-function nearMissLine(s: SimState, mode: number, best: number, stars: number): string {
+/**
+ * The closest goal you missed (Geometry Dash / Clash Royale near-miss line).
+ * Queue runs point at the next star with the shared bar instead, so this
+ * line is only "so close to your best" there.
+ */
+function nearMissLine(s: SimState, mode: number, best: number): string {
   if (mode === MODE_RIDE && s.endReason !== END_GATE) {
     const pct = Math.min(99, Math.floor((100 * ((s.dist >> 8) - 0)) / Math.max(1, s.gateX || 15000)));
     return `${pct}% to the gate`;
   }
-  if (best > s.score && best - s.score < 0.12 * best) return `Only ${best - s.score} from your best`;
-  if (mode !== MODE_RIDE && stars < 3) {
-    const next = stars === 0 ? QUEUE_STARS.one : stars === 1 ? QUEUE_STARS.two : QUEUE_STARS.three;
-    return sharkyStarGoalLine(s.score, next);
-  }
-  return '';
+  return sharkyNearBestLine(s.score, best);
+}
+
+/** One title rule for every results card: a finish word, or the shared feeling title (never WIPEOUT!). */
+function sharkyHeadline(reason: number, mode: number, score: number, stars: number): string {
+  if (reason === END_TIME) return 'TIME!';
+  if (reason === END_GATE) return 'RIDE GATE!';
+  if (reason === END_FINISH) return 'FINISH!';
+  const near = mode !== MODE_RIDE && nextStarGoal(score, QUEUE_STARS).near;
+  return feelingTitle(stars, near);
 }
 
 export function SharkySwim({
@@ -288,18 +298,19 @@ export function SharkySwim({
         newBest: isBest && best > 0,
         bestChainMult: Math.min(4, Math.floor(Math.min(s.maxChain, 9) / 3) + 1),
         closeSkims: s.stCloseSkims,
-        nearMiss: nearMissLine(s, m, best, stars),
+        nearMiss: nearMissLine(s, m, best),
         splits,
         missions: mu,
         newCard: card,
         tokensAtRide: rideId != null ? next.rideTokens[String(rideId)] % 9 || (next.rideTokens[String(rideId)] ? 9 : 0) : null,
         fullClear: s.tokens >= 3,
-        headline: reason === END_TIME ? 'TIME!' : reason === END_GATE ? 'RIDE GATE!' : reason === END_FINISH ? 'FINISH!' : 'WIPEOUT!',
+        headline: sharkyHeadline(reason, m, s.score, stars),
+        thresholds: m === MODE_RIDE ? null : QUEUE_STARS,
       });
       setResult({
         score: s.score,
         stars,
-        message: reason === END_TIME ? 'TIME!' : reason === END_GATE ? 'RIDE GATE!' : reason === END_FINISH ? 'FINISH!' : 'WIPEOUT!',
+        message: sharkyHeadline(reason, m, s.score, stars),
         maxCombo: s.maxChain,
         thresholds: m === MODE_RIDE ? RIDE_STARS : QUEUE_STARS,
         meta: {
@@ -626,10 +637,12 @@ export function SharkySwim({
       <SharkyResults
         data={resultsData}
         playAgain={args.rematch}
+        playAgainFirst={args.playAgainFirst}
+        saved={args.saved}
         claim={args.claim}
-        claimLabel={runMode === 'ride' ? (args.won ? 'COLLECT' : 'CONTINUE') : 'DONE'}
+        claimLabel={runMode === 'ride' ? (args.won ? 'COLLECT' : 'CONTINUE') : args.won ? 'CONTINUE' : 'DONE'}
         challenge={args.challenge}
-        challengeLabel={prog.runs < 3 ? 'Race my ghost' : 'Rally a ghost'}
+        challengeLabel={prog.runs < 3 ? 'RACE MY GHOST' : 'RACE THE GHOSTS'}
         reducedMotion={args.reducedMotion}
       />
     );
@@ -670,7 +683,7 @@ export function SharkySwim({
       onQuit={onQuit}
       onRematch={runMode === 'ride' ? undefined : onRematch}
       onChallenge={runMode === 'ride' || prog.runs < 1 ? undefined : onChallenge}
-      challengeLabel={prog.runs < 3 ? 'Race my ghost' : 'Rally a ghost'}
+      challengeLabel={prog.runs < 3 ? 'Race my ghost' : 'Race the ghosts'}
       renderResults={renderResults}
     >
       <GestureHandlerRootView style={styles.fill}>

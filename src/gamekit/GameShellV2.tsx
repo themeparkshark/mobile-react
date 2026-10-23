@@ -28,6 +28,7 @@ import React, {
   useContext,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -123,6 +124,14 @@ export interface ShellResultsArgs {
   /** Present only when Play again / Challenge are allowed (never on paid rides or wrap-ups). */
   rematch?: () => void;
   challenge?: () => void;
+  /**
+   * PLAY AGAIN is the big button (the shared rule for every results card).
+   * False only when a win's reward is still waiting to be collected and a
+   * replay would skip it: then the claim button leads.
+   */
+  playAgainFirst: boolean;
+  /** A queue event saved a run that had points but no star yet (RUN SAVED stamp). */
+  saved: boolean;
   reducedMotion: boolean;
 }
 
@@ -186,8 +195,10 @@ interface GameShellV2Props {
   onChallenge?: () => void;
   /** Label for the CHALLENGE button (default 'Challenge'). */
   challengeLabel?: string;
-  /** Game-owned row under the results card (share, album, missions, unlock card). */
+  /** Game-owned row under the results card (album, missions, unlock card). */
   resultExtras?: React.ReactNode;
+  /** A small chip inside the shared results card, under the brags (Whack's SHARE). */
+  resultCardFooter?: React.ReactNode;
   /** @deprecated alias of resultExtras (Sharky). */
   resultsExtra?: React.ReactNode;
   /** Replace the whole results surface (card and actions). The shell still owns timing, confetti and the claim contract. */
@@ -261,6 +272,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       challengeLabel = 'Challenge',
       resultExtras,
       resultsExtra,
+      resultCardFooter,
       renderResults,
       pauseExtras,
       hideHeaderScore = false,
@@ -623,14 +635,18 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const doResumeRef = useRef(doResume);
     doResumeRef.current = doResume;
     const rideUpLikelyRef = useRef(false);
-    const wrapUpRef = useRef<(reason?: WrapUpReason) => void>(() => undefined);
+    const askBoardingRef = useRef(false);
+    /** The guest tapped SAVE MY RUN: boarding is recorded once the saved run's card closes. */
+    const boardingAnsweredRef = useRef(false);
     useEffect(() => {
       if (!visible) return;
       const subscription = AppState.addEventListener('change', state => {
         if (state === 'background' || state === 'inactive') doHoldRef.current('background', 'Paused while away');
         else if (state === 'active' && holdRef.current === 'background') {
-          if (rideUpLikelyRef.current && startedRef.current) wrapUpRef.current('boarding');
-          else doResumeRef.current();
+          // Back from the pocket while ride detection thinks the guest boarded:
+          // stay held so the sheet can ask "Did your ride start?". Never guess.
+          if (rideUpLikelyRef.current && startedRef.current && askBoardingRef.current) return;
+          doResumeRef.current();
         }
       });
       return () => subscription.remove();
@@ -661,21 +677,27 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       });
     }, [phase, wrap, clearCountdown, clearResume, onPause, onWrapUp, thresholds, rideChallenge]);
 
-    wrapUpRef.current = wrapUp;
     const queueEnded = linePlayMovement?.queueEnded ?? null;
     useEffect(() => {
       if (visible && queueEnded) wrapUp(queueEnded);
     }, [visible, queueEnded, wrapUp]);
 
-    // Ride detection thinks the guest boarded. A single GPS fix can fake that,
-    // so an active round keeps playing; but a round that is already held
-    // (phone pocketed, app in the background, or paused) is saved right away
-    // with "YOUR RIDE'S UP!" instead of asking to resume.
+    // Ride detection thinks the guest boarded. A single GPS fix can fake that
+    // (indoor queues most of all), so the hint never ends a run by itself.
+    // An active round keeps playing; a held round asks inside the game
+    // ("Did your ride start?") instead of counting down to resume.
     const rideUpLikely = !!linePlayMovement?.rideUpLikely;
+    const askBoarding = rideUpLikely && !!linePlayMovement?.onBoardingAnswer && !rideChallenge;
     rideUpLikelyRef.current = rideUpLikely;
-    useEffect(() => {
-      if (visible && rideUpLikely && phase === 'paused' && startedRef.current) wrapUp('boarding');
-    }, [visible, rideUpLikely, phase, wrapUp]);
+    askBoardingRef.current = askBoarding;
+    const answerSaveRun = useCallback(() => {
+      boardingAnsweredRef.current = true;
+      wrapUp('boarding');
+    }, [wrapUp]);
+    const answerKeepPlaying = useCallback(() => {
+      linePlayMovement?.onBoardingAnswer?.(false);
+      doResume();
+    }, [linePlayMovement, doResume]);
 
     useImperativeHandle(
       ref,
@@ -698,10 +720,26 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         onComplete(mult, effectiveResult?.meta);
       } else {
         // A finished run still counts as played in the queue, even with no star.
-        linePlayMovement?.onNoStarRun?.();
+        linePlayMovement?.onRunDone?.(0, effectiveResult?.meta?.partial === true);
         onClose();
       }
+      // SAVE MY RUN: the run is counted above, now the wait records boarding.
+      if (boardingAnsweredRef.current) {
+        boardingAnsweredRef.current = false;
+        linePlayMovement?.onBoardingAnswer?.(true);
+      }
     }, [effectiveResult, starMultipliers, onComplete, onClose, linePlayMovement]);
+
+    // PLAY AGAIN in a queue: the run just played is counted first, so a
+    // replay never throws a finished run (or its star) away.
+    const canBankRun = !!linePlayMovement?.onRunDone;
+    const rematchRun = useMemo(() => (onRematch ? () => {
+      if (!claimedRef.current && effectiveResult && linePlayMovement?.onRunDone) {
+        claimedRef.current = true;
+        linePlayMovement.onRunDone(effectiveResult.stars ?? 0, effectiveResult.meta?.partial === true);
+      }
+      onRematch();
+    } : undefined), [onRematch, effectiveResult, linePlayMovement]);
 
     const handleClaimRef = useRef(handleClaim);
     handleClaimRef.current = handleClaim;
@@ -746,10 +784,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       return () => back.remove();
     }, [visible, rideChallenge, handleExit]);
 
-    const resultsStyle = useAnimatedStyle(() => ({
-      opacity: resultsOpacity.value,
-      transform: [{ scale: resultsScale.value }],
-    }));
+    const resultsFadeStyle = useAnimatedStyle(() => ({ opacity: resultsOpacity.value }));
+    const resultsScaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: resultsScale.value }] }));
     const countStyle = useAnimatedStyle(() => ({
       transform: [{ scale: countScale.value }],
     }));
@@ -760,6 +796,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
     if (!visible) return null;
 
+    // One button rule for every results card: PLAY AGAIN is the big button,
+    // unless a win's reward is still waiting and a replay would skip it.
+    const rematchOffered = !rideChallenge && !wrap && !!rematchRun;
+    const playAgainFirst = rematchOffered && (!won || canBankRun);
+    const saved = effectiveResult?.meta?.partial === true;
+    const claimLabel = won ? 'CONTINUE' : 'DONE';
+
     // A game-owned results surface, when the game has one and it rendered.
     // Nothing rendered by the time the fallback fires: the shared card shows.
     const ownSurface = phase === 'results' && renderResults && effectiveResult ? renderResults({
@@ -768,12 +811,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       won,
       wrapReason: wrap?.reason ?? null,
       claim: handleClaim,
-      rematch: !rideChallenge && !wrap ? onRematch : undefined,
+      rematch: rematchOffered ? rematchRun : undefined,
       challenge: !rideChallenge && !wrap ? onChallenge : undefined,
+      playAgainFirst,
+      saved,
       reducedMotion,
     }) : null;
     const gameResults = isEmptyResultsNode(ownSurface) ? null : ownSurface;
-    const showSharedCard = phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && resultsSafe));
+    // A wrap-up (ride's up) has no game surface to wait for: the shared card shows at once.
+    const showSharedCard = phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || wrap != null)));
 
     const gameContent = (
         <View style={styles.root}>
@@ -849,8 +895,26 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </View>
           ) : null}
 
-          {/* Hold sheet */}
-          {phase === 'paused' ? (
+          {/* Hold sheet. Ride detection thinks the guest boarded: ask, never guess. */}
+          {phase === 'paused' && askBoarding && startedRef.current ? (
+            <View style={styles.overlay}>
+              <View style={styles.sheet} accessibilityRole="alert">
+                <View style={styles.sheetIcon}><GameIcon name="ride" size={64} /></View>
+                <Text style={styles.sheetTitle}>Did your ride start?</Text>
+                <Text style={styles.sheetBody}>Your run is saved either way.</Text>
+                <TouchableOpacity style={[styles.sheetBtn, styles.primaryBtn, styles.bigBtn]} onPress={answerSaveRun}
+                  accessibilityRole="button" accessibilityLabel="Yes, my ride started. Save my run">
+                  <GameIcon name="ride" size={26} />
+                  <Text style={[styles.primaryBtnTxt, styles.btnGap]}>SAVE MY RUN</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn]} onPress={answerKeepPlaying}
+                  accessibilityRole="button" accessibilityLabel="Still in line. Keep playing">
+                  <GameIcon name="play" size={22} />
+                  <Text style={[styles.secondaryBtnCaps, styles.btnGap]}>KEEP PLAYING</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : phase === 'paused' ? (
             <View style={styles.overlay}>
               <View style={styles.sheet}>
                 <Text style={styles.sheetTitle}>{pauseReason ?? 'Paused'}</Text>
@@ -866,59 +930,72 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </View>
           ) : null}
 
-          {/* Results */}
+          {/* Results. The fade wrapper drops to a plain style after the safety
+              net (opacity only); the settle spring keeps its own scale. */}
           {gameResults != null ? (
             <View style={[styles.overlay, resultsScrim === 'light' ? styles.scrimLight : resultsScrim === 'none' ? styles.scrimNone : null]} pointerEvents="box-none">
-              <Animated.View style={[{ width: '100%', alignItems: 'center' }, resultsSafe ? styles.resultsShown : resultsStyle]}>
-                {gameResults}
+              <Animated.View style={[styles.resultsFill, resultsSafe ? styles.resultsShown : resultsFadeStyle]}>
+                <Animated.View style={[styles.resultsFill, resultsScaleStyle]}>
+                  {gameResults}
+                </Animated.View>
               </Animated.View>
             </View>
           ) : null}
           {showSharedCard ? (
             <View style={styles.overlay} pointerEvents="box-none">
-              <Animated.View style={[{ width: '86%' }, resultsSafe ? styles.resultsShown : resultsStyle]}>
-                <ResultsCard
-                  score={effectiveResult?.score ?? score}
-                  stars={stars}
-                  message={effectiveResult?.message}
-                  thresholds={effectiveResult?.thresholds ?? thresholds}
-                  personalBest={personalBest}
-                  maxCombo={effectiveResult?.maxCombo}
-                  stats={effectiveResult?.stats}
-                  rival={effectiveResult?.rival}
-                  buckets={effectiveResult?.buckets}
-                  bucketValues={effectiveResult?.bucketValues}
-                  starStepMs={effectiveResult?.starStepMs}
-                  streakKey={gameId ?? title}
-                  runToken={resultsRunRef.current}
-                  note={wrap ? WRAP_UP_COPY[wrap.reason].body : effectiveResult?.note}
-                  reducedMotion={reducedMotion}
-                />
-                {resultExtras ?? resultsExtra ?? null}
-                <View style={styles.actions}>
-                  <TouchableOpacity
-                    style={[styles.sheetBtn, styles.primaryBtn, styles.claimBtn]}
-                    onPress={handleClaim}
-                  >
-                    <Text style={styles.primaryBtnTxt}>{won ? 'Continue' : 'Close'}</Text>
-                  </TouchableOpacity>
-                  {!rideChallenge && !wrap && (onRematch || onChallenge) ? (
-                    <View style={styles.row}>
-                      {onRematch ? (
-                        <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.half]} onPress={onRematch}>
-                          <GameIcon name="retry" size={20} />
-                          <Text style={styles.secondaryBtnTxtBold}>Play again</Text>
-                        </TouchableOpacity>
-                      ) : null}
-                      {onChallenge ? (
-                        <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.half]} onPress={onChallenge}>
-                          <GameIcon name="swords" size={20} />
-                          <Text style={styles.secondaryBtnTxtBold}>{challengeLabel}</Text>
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  ) : null}
-                </View>
+              <Animated.View style={[{ width: '86%' }, resultsSafe ? styles.resultsShown : resultsFadeStyle]}>
+                <Animated.View style={resultsScaleStyle}>
+                  <ResultsCard
+                    score={effectiveResult?.score ?? score}
+                    stars={stars}
+                    message={effectiveResult?.message}
+                    thresholds={effectiveResult?.thresholds ?? thresholds}
+                    personalBest={personalBest}
+                    maxCombo={effectiveResult?.maxCombo}
+                    stats={effectiveResult?.stats}
+                    rival={effectiveResult?.rival}
+                    buckets={effectiveResult?.buckets}
+                    bucketValues={effectiveResult?.bucketValues}
+                    starStepMs={effectiveResult?.starStepMs}
+                    streakKey={gameId ?? title}
+                    runToken={resultsRunRef.current}
+                    saved={saved}
+                    note={wrap ? WRAP_UP_COPY[wrap.reason].body : effectiveResult?.note}
+                    footer={resultCardFooter}
+                    reducedMotion={reducedMotion}
+                  />
+                  {resultExtras ?? resultsExtra ?? null}
+                  <View style={styles.actions}>
+                    <TouchableOpacity
+                      style={[styles.sheetBtn, styles.primaryBtn, styles.bigBtn]}
+                      onPress={playAgainFirst ? rematchRun : handleClaim}
+                      accessibilityRole="button"
+                    >
+                      {playAgainFirst ? <GameIcon name="retry" size={26} /> : null}
+                      <Text style={[styles.primaryBtnTxt, playAgainFirst && styles.btnGap]}>{playAgainFirst ? 'PLAY AGAIN' : claimLabel}</Text>
+                    </TouchableOpacity>
+                    {playAgainFirst || (rematchOffered && rematchRun) || (!rideChallenge && !wrap && onChallenge) ? (
+                      <View style={styles.row}>
+                        {playAgainFirst ? (
+                          <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn]} onPress={handleClaim} accessibilityRole="button">
+                            <Text style={styles.secondaryBtnCaps}>{claimLabel}</Text>
+                          </TouchableOpacity>
+                        ) : rematchOffered && rematchRun ? (
+                          <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn]} onPress={rematchRun} accessibilityRole="button">
+                            <GameIcon name="retry" size={20} />
+                            <Text style={[styles.secondaryBtnCaps, styles.btnGap]}>PLAY AGAIN</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {!rideChallenge && !wrap && onChallenge ? (
+                          <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn]} onPress={onChallenge} accessibilityRole="button">
+                            <GameIcon name="swords" size={20} />
+                            <Text style={[styles.secondaryBtnCaps, styles.btnGap]} numberOfLines={1} adjustsFontSizeToFit>{challengeLabel.toUpperCase()}</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </View>
+                </Animated.View>
               </Animated.View>
             </View>
           ) : null}
@@ -972,7 +1049,8 @@ function GoalMeter({ current, target, label, reducedMotion }: { current: number;
 }
 
 const styles = StyleSheet.create({
-  resultsShown: { opacity: 1, transform: [{ scale: 1 }] },
+  resultsShown: { opacity: 1 },
+  resultsFill: { width: '100%', alignItems: 'center' },
   root: {
     flex: 1,
     backgroundColor: '#0879ca',
@@ -1083,14 +1161,17 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   primaryBtn: { backgroundColor: '#ffcf3b', borderBottomWidth: 4, borderBottomColor: '#d99a00' },
-  primaryBtnTxt: { color: '#075083', fontSize: 20, fontFamily: 'Shark' },
+  primaryBtnTxt: { color: '#05346e', fontSize: 22, fontFamily: 'Shark' },
   secondaryBtnTxt: { color: '#e4f7ff', fontSize: 17, fontFamily: 'Knockout' },
   secondaryBtn: { backgroundColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9cc9ec', flexDirection: 'row',
     justifyContent: 'center' },
-  secondaryBtnTxtBold: { color: '#05346e', fontSize: 17, fontFamily: 'Shark', marginLeft: 6 },
+  secondaryBtnCaps: { color: '#05346e', fontSize: 18, fontFamily: 'Shark' },
+  bigBtn: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 16, marginTop: 14,
+    borderWidth: 3, borderColor: '#05346e', borderBottomWidth: 6 },
+  btnGap: { marginLeft: 8 },
+  sheetIcon: { marginTop: -6, marginBottom: 4 },
   actions: { width: '100%', marginTop: 6 },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
-  half: { width: '48.5%' },
-  claimBtn: { marginTop: 12 },
+  row: { flexDirection: 'row', gap: 10 },
+  rowBtn: { flex: 1, borderWidth: 3, borderColor: '#05346e', borderBottomWidth: 5, paddingVertical: 12 },
   confetti: { ...StyleSheet.absoluteFillObject },
 });

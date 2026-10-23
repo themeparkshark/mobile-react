@@ -173,10 +173,11 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           {receipt === 'saved' ? 'Saved! Your hits count for the team.' : receipt === 'saving' ? 'Sending your hits...' : receiptNote ?? 'Not saved yet. We will keep trying.'}</Text>
       </View>}
       <View style={styles.chips}>
-        <Chip label="Bonks" value={Number(meta.bonks ?? 0)} />
-        <Chip label="Smashes" value={Number(meta.smashes ?? 0)} />
-        {Number(meta.blocks ?? 0) > 0 ? <Chip label="Blocks" value={`${Number(meta.blocks ?? 0)}/${Number(meta.inks)}`} />
-          : <Chip label="Perfects" value={Number(meta.perfects ?? 0)} />}
+        {/* Brags only: a zero is not a chip. */}
+        {Number(meta.bonks ?? 0) > 0 ? <Chip label="Bonks" value={Number(meta.bonks)} /> : null}
+        {Number(meta.smashes ?? 0) > 0 ? <Chip label="Smashes" value={Number(meta.smashes)} /> : null}
+        {Number(meta.blocks ?? 0) > 0 ? <Chip label="Blocks" value={Number(meta.blocks)} />
+          : Number(meta.perfects ?? 0) > 0 ? <Chip label="Perfects" value={Number(meta.perfects)} /> : null}
       </View>
 
       {!won && !noHits && n.can && onAgain && warmNext && <View style={styles.warm} accessible accessibilityLabel="Head start earned: your next attack starts with a free fin">
@@ -191,7 +192,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <View style={styles.cost}><GameIcon name="energy" size={22} /><Text style={styles.costText}>{next?.energyCost}</Text></View>
         </Pressable>
         <Text style={styles.wallet}>You have <Text style={styles.walletNum}>{n.energyAfter}</Text> Energy  ·  {n.attacksAfter} {n.attacksAfter === 1 ? 'attack' : 'attacks'} left</Text>
-        <Pressable accessibilityRole="button" onPress={once(claim)} style={styles.done} hitSlop={8}><Text style={styles.doneText}>Done</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={once(claim)} style={styles.done} hitSlop={8}><Text style={styles.doneText}>DONE</Text></Pressable>
       </> : <>
         {!noHits && n.reason && <Text style={styles.wallet}>{n.reason}</Text>}
         <Pressable accessibilityRole="button" onPress={once(claim)} style={[styles.again, styles.doneBig]}>

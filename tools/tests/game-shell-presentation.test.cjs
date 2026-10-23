@@ -41,6 +41,18 @@ function flush(view) {
   }
 }
 
+/** True when a node (or anything under it) is a Text with exactly this label. */
+function hasText(node, label) {
+  if (node == null || typeof node !== 'object') return false;
+  if (Array.isArray(node)) return node.some(child => hasText(child, label));
+  if (node.type === 'Text' && node.props?.children === label) return true;
+  return hasText(node.props?.children, label);
+}
+/** The button whose label is `label` (labels are caps in one font on every results card). */
+function button(view, label) {
+  return view.find(node => node.type === 'TouchableOpacity' && hasText(node, label));
+}
+
 function startPlaying(view) {
   view.find(node => node.type === 'Pressable').props.onPress();
   view.render();
@@ -63,7 +75,7 @@ test('the single paid presentation still starts once and hands off the same conf
   assert.equal(view.timers.size, 0);
   const meta = { game: 'memory-match-plus', score: 400, seed: 123 };
   view.change({ result: { score: 400, stars: 1, meta } });
-  const complete = view.find(node => node.type === 'TouchableOpacity' && node.props.children?.props?.children === 'Continue');
+  const complete = button(view, 'CONTINUE');
   complete.props.onPress(); complete.props.onPress();
   assert.equal(calls.complete, 1);
   assert.equal(calls.mult, 1);
@@ -84,7 +96,9 @@ test('changing motion preference keeps the countdown deadline and settles a resu
   assert.equal(view.tree.props.animationType, 'none');
   const card = view.find(node => node.type === 'ReanimatedView' && node.props.style?.[0]?.width === '86%' && node.props.style?.[1]?.opacity !== undefined);
   assert.equal(card.props.style[1].opacity, 1);
-  assert.deepEqual(Array.from(card.props.style[1].transform, entry => entry.scale), [1]);
+  // The scale lives on its own inner wrapper, so the fade safety net never snaps it.
+  const inner = view.find(node => node.type === 'ReanimatedView' && Array.isArray(node.props.style?.transform));
+  assert.deepEqual(Array.from(inner.props.style.transform, entry => entry.scale), [1]);
   assert.equal(calls.complete, 0);
   view.unmount();
 });
@@ -159,21 +173,92 @@ test('QUEUE REALITY: only a real queue event ends the run, with the result saved
   assert.equal(card.props.message, "YOUR RIDE'S UP!");
   assert.equal(card.props.note, 'Run saved. Enjoy the ride!');
   assert.deepEqual(calls.cleared, ['k']);
-  view.find(node => node.type === 'TouchableOpacity' && node.props.children?.props?.children === 'Continue').props.onPress();
+  button(view, 'CONTINUE').props.onPress();
   assert.equal(calls.complete, 1);
   assert.equal(calls.meta.wrapUp, 'boarding');
   view.unmount();
 });
 
+test('QUEUE REALITY: the undoable GPS grace and a boarding guess never end a run; a held round asks', () => {
+  let listener;
+  const answers = [];
+  const runs = [];
+  const movement = { moving: false, onResume() {}, onBoardingAnswer: b => answers.push(b), onRunDone: (s, p) => runs.push([s, p]) };
+  const thresholds = { one: 100, two: 300, three: 600 };
+  const { view, calls, movementContext } = shell(false, false, { score: 40, thresholds }, movement);
+  view.native.AppState.addEventListener = (_name, fn) => { listener = fn; return { remove() { listener = undefined; } }; };
+  view.change({ visible: false }); view.change({ visible: true });
+  startPlaying(view);
+  // Ride detection guesses "boarded" while playing: play goes on.
+  movementContext.value = { ...movement, rideUpLikely: true }; view.render();
+  assert.equal(view.find(node => node.type === 'ResultsCard'), undefined, 'an active round keeps playing');
+  // Pocketed and back: no auto resume, no auto wrap-up; the game asks.
+  listener('background'); view.render();
+  listener('active'); view.render();
+  assert.equal(view.find(node => node.type === 'ResultsCard'), undefined, 'a guess never ends the run');
+  assert.ok(view.find(node => node.type === 'Text' && node.props.children === 'Did your ride start?'));
+  assert.ok(button(view, 'SAVE MY RUN'));
+  // KEEP PLAYING clears the guess and resumes with the 3-2-1.
+  button(view, 'KEEP PLAYING').props.onPress(); view.render();
+  assert.deepEqual(answers, [false]);
+  flush(view);
+  assert.equal(calls.resume, 1);
+  // Pause again with the guess still up, then SAVE MY RUN: RUN SAVED card, boarding after the run counts.
+  view.find(node => node.type === 'TouchableOpacity' && node.props.accessibilityLabel === 'Pause').props.onPress(); view.render();
+  button(view, 'SAVE MY RUN').props.onPress(); view.render();
+  const card = view.find(node => node.type === 'ResultsCard');
+  assert.equal(card.props.message, "YOUR RIDE'S UP!");
+  assert.equal(card.props.stars, 0, 'a run with points but no star is not a lit star');
+  assert.equal(card.props.saved, true, 'RUN SAVED stamp');
+  assert.deepEqual(answers, [false], 'boarding waits until the saved run is counted');
+  button(view, 'DONE').props.onPress();
+  assert.deepEqual(runs, [[0, true]], 'the saved run counts as played (partial)');
+  assert.deepEqual(answers, [false, true], 'then the wait records boarding');
+  assert.equal(calls.close, 1);
+  view.unmount();
+});
+
 test('results offer PLAY AGAIN and CHALLENGE in queue games, never in a paid ride challenge', () => {
-  const rematch = () => {};
+  let rematches = 0;
+  const rematch = () => { rematches++; };
   const queue = shell(false, false, { onRematch: rematch, onChallenge() {} });
   startPlaying(queue.view);
   queue.view.change({ result: { score: 50, stars: 0 } });
-  assert.ok(queue.view.find(node => node.type === 'TouchableOpacity' && node.props.onPress === rematch));
+  const again = button(queue.view, 'PLAY AGAIN');
+  assert.ok(again);
+  again.props.onPress();
+  assert.equal(rematches, 1);
   const paid = shell(true, false, { onRematch: rematch });
   startPlaying(paid.view);
   paid.view.change({ result: { score: 50, stars: 1 } });
-  assert.equal(paid.view.find(node => node.type === 'TouchableOpacity' && node.props.onPress === rematch), undefined);
+  assert.equal(button(paid.view, 'PLAY AGAIN'), undefined);
   queue.view.unmount(); paid.view.unmount();
+});
+
+test('PLAY AGAIN is the big button; a won reward outside the queue leads with CONTINUE; a queue replay counts the run first', () => {
+  const runs = [];
+  let rematches = 0;
+  const lose = shell(false, false, { onRematch() { rematches++; } });
+  startPlaying(lose.view);
+  lose.view.change({ result: { score: 50, stars: 0 } });
+  const actions = lose.view.find(node => node.type === 'View' && Array.isArray(node.props.children) && hasText(node.props.children[0], 'PLAY AGAIN'));
+  assert.ok(actions, 'PLAY AGAIN is the first (big) button');
+  assert.ok(button(lose.view, 'DONE'), 'DONE is the second button');
+  lose.view.unmount();
+  // A coin-game win outside the queue: a replay would skip the reward, so CONTINUE leads.
+  const coin = shell(false, false, { onRematch() { rematches++; } });
+  startPlaying(coin.view);
+  coin.view.change({ result: { score: 500, stars: 2 } });
+  const coinActions = coin.view.find(node => node.type === 'View' && Array.isArray(node.props.children) && hasText(node.props.children[0], 'CONTINUE'));
+  assert.ok(coinActions);
+  coin.view.unmount();
+  // In the queue the run is counted before the replay, so PLAY AGAIN leads even on a win.
+  const movement = { moving: false, onResume() {}, onRunDone: (s, p) => runs.push([s, p]) };
+  const q = shell(false, false, { onRematch() { rematches++; } }, movement);
+  startPlaying(q.view);
+  q.view.change({ result: { score: 500, stars: 2 } });
+  button(q.view, 'PLAY AGAIN').props.onPress();
+  assert.deepEqual(runs, [[2, false]]);
+  assert.equal(rematches, 1);
+  q.view.unmount();
 });

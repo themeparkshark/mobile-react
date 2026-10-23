@@ -6,13 +6,18 @@
  *           with a confetti cannon from both stage corners (TIME! or a win),
  *           or shark_dizzy with circling stars on a wipeout (no cannon)
  *   400ms   ONE giant Play Again (full width, 72pt, gold, pulsing 1.5Hz);
- *           a tap skips everything (the shell then runs a 600ms GO)
+ *           a tap skips everything (the shell then runs a 600ms GO). The
+ *           shared button rule: PLAY AGAIN leads unless a win's reward is
+ *           still waiting (playAgainFirst false), then the claim leads.
+ *           DONE sits right under it as a white button, never a text link
  *   300ms   hero stat 1: the score counts up over 1100ms (outQuart), the last
  *           digit slams 1.3 to 1.0 with impact Medium; NEW BEST adds a burst
  *   1450ms  stars slam one at a time, 220ms apart, bass hit +0/+3/+7 st,
  *           Medium, Medium, Heavy
- *           hero stat 2: "Best chain x4 · 9 Close Skims"; the near-miss line
- * Below the fold (rises at 2.4s): the ghost split bar, mission slots with a
+ *           hero stat 2: "Best chain x4 · 9 Close Skims"; the shared
+ *           next-star bar (NextStarBar), same as every other game
+ * Below the fold (rises at 2.4s): AHEAD OF YOUR BEST (only when the run
+ * finished ahead, green bars only), mission slots with a
  * slot-machine reel on completion, Tokens at this ride, the Full Clear medal,
  * the NEW! unlock card. The surface is a sky-to-white gradient; no dark slab.
  */
@@ -28,10 +33,12 @@ import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { playHaptic } from '../../../gamekit/Haptics';
 import GameIcon from '../../../ui/GameIcon';
 import { SHARKY_ART } from '../assets';
-import { INK, NEUTRAL, REWARD, REWARD_PALE, DANGER } from '../render/palette';
+import { INK, NEUTRAL, REWARD, REWARD_PALE } from '../render/palette';
 import type { MissionUpdate } from '../meta/missions';
 import { missionTarget, missionText } from '../meta/missions';
-import { sharkyBragLine, showSplits } from './resultLines';
+import { aheadBars, sharkyBragLine, showSplits } from './resultLines';
+import { NextStarBar } from '../../../gamekit/results/NextStarBar';
+import { nextStarGoal, type StarThresholds } from '../../../gamekit/core/scoring';
 
 export interface SharkyResultsData {
   score: number;
@@ -49,11 +56,17 @@ export interface SharkyResultsData {
   tokensAtRide: number | null;
   fullClear: boolean;
   headline: string;
+  /** Queue star thresholds for the shared next-star bar (none on a ride challenge). */
+  thresholds?: StarThresholds | null;
 }
 
 export interface SharkyResultsProps {
   data: SharkyResultsData;
   playAgain?: () => void;
+  /** The shared button rule from the shell (PLAY AGAIN leads unless a won reward is waiting). */
+  playAgainFirst?: boolean;
+  /** A queue event saved this run before its first star (RUN SAVED, no bar). */
+  saved?: boolean;
   claim: () => void;
   claimLabel: string;
   challenge?: () => void;
@@ -107,7 +120,7 @@ function Star({ on, index, delayMs, reduced }: { on: boolean; index: number; del
   );
 }
 
-export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, challengeLabel, reducedMotion }: SharkyResultsProps) {
+export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = false, claim, claimLabel, challenge, challengeLabel, reducedMotion }: SharkyResultsProps) {
   const fx = useRef<FxStageHandle>(null);
   const win = useWindowDimensions();
   const [box, setBox] = useState({ w: 390, h: 700 });
@@ -156,10 +169,13 @@ export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, c
   const btnStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   const scoreStyle = useAnimatedStyle(() => ({ transform: [{ scale: slam.value }] }));
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateY: card.value }] }));
-  const primary = playAgain ?? claim;
-  const primaryLabel = playAgain ? 'PLAY AGAIN' : claimLabel;
+  const againFirst = !!playAgain && playAgainFirst;
+  const primary = againFirst ? playAgain : claim;
+  const primaryLabel = againFirst ? 'PLAY AGAIN' : claimLabel;
   const brag = sharkyBragLine(data.bestChainMult, data.closeSkims);
-  const splitMax = useMemo(() => Math.max(1, ...data.splits.map((d) => Math.abs(d))), [data.splits]);
+  const goal = useMemo(() => (data.thresholds && !saved ? nextStarGoal(data.score, data.thresholds) : null), [data.thresholds, data.score, saved]);
+  const bars = useMemo(() => aheadBars(data.splits), [data.splits]);
+  const splitMax = useMemo(() => Math.max(1, ...bars), [bars]);
 
   return (
     <View style={[styles.root, { height: win.height }]} onLayout={onLayout}>
@@ -179,31 +195,57 @@ export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, c
       <Animated.View style={[styles.card, cardStyle]}>
         <Animated.Text style={[styles.score, scoreStyle]}>{shown.toLocaleString()}</Animated.Text>
         {data.newBest ? <Text style={styles.newBest}>NEW BEST</Text> : null}
-        <View style={styles.stars}>
-          {[0, 1, 2].map((i) => <Star key={i} index={i} on={i < data.stars} delayMs={1450 + i * 220} reduced={reducedMotion} />)}
-        </View>
+        {saved ? <Text style={styles.saved}>RUN SAVED</Text> : (
+          <View style={styles.stars}>
+            {[0, 1, 2].map((i) => <Star key={i} index={i} on={i < data.stars} delayMs={1450 + i * 220} reduced={reducedMotion} />)}
+          </View>
+        )}
         {brag ? <Text style={styles.hero2}>{brag}</Text> : null}
         {data.nearMiss ? <Text style={styles.nearMiss}>{data.nearMiss}</Text> : null}
+        {goal ? <NextStarBar goal={goal} delayMs={1500} reducedMotion={reducedMotion} tone="onWhite" /> : null}
 
         <Animated.View style={[styles.playWrap, btnStyle]}>
           <TouchableOpacity accessibilityRole="button" style={styles.play} disabled={!tapReady} onPress={primary}>
-            <Text style={styles.playText}>{primaryLabel}</Text>
+            {againFirst ? <GameIcon name="retry" size={30} /> : null}
+            <Text style={[styles.playText, againFirst && styles.playGap]}>{primaryLabel}</Text>
           </TouchableOpacity>
         </Animated.View>
+        {againFirst || challenge || playAgain ? (
+          <View style={styles.secondary}>
+            {againFirst ? (
+              <TouchableOpacity accessibilityRole="button" style={styles.secondaryBtn} onPress={claim}>
+                <Text style={styles.secondaryText}>{claimLabel}</Text>
+              </TouchableOpacity>
+            ) : playAgain ? (
+              <TouchableOpacity accessibilityRole="button" style={styles.secondaryBtn} onPress={playAgain}>
+                <GameIcon name="retry" size={20} />
+                <Text style={[styles.secondaryText, styles.playGap]}>PLAY AGAIN</Text>
+              </TouchableOpacity>
+            ) : null}
+            {challenge ? (
+              <TouchableOpacity accessibilityRole="button" style={styles.secondaryBtn} onPress={challenge}>
+                <GameIcon name="swords" size={20} />
+                <Text style={[styles.secondaryText, styles.playGap]} numberOfLines={1} adjustsFontSizeToFit>{(challengeLabel ?? 'RACE MY GHOST').toUpperCase()}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
 
         {below ? (
           <View style={styles.below}>
             {data.newCard ? <Text style={styles.newCard}>{data.newCard}</Text> : null}
             {showSplits(data.splits) ? (
               <>
-                <Text style={styles.splitText}>AHEAD OF YOUR BEST</Text>
-                <View style={styles.splitRow}>
-                  {data.splits.map((d, i) => (
-                    <View key={i} style={styles.splitCell}>
-                      <View style={[styles.splitBar, { height: 6 + (22 * Math.abs(d)) / splitMax, backgroundColor: d >= 0 ? '#3ccf6b' : DANGER }]} />
-                    </View>
-                  ))}
-                </View>
+                <Text style={styles.splitText}>AHEAD OF YOUR BEST!</Text>
+                {bars.length ? (
+                  <View style={styles.splitRow}>
+                    {bars.map((d, i) => (
+                      <View key={i} style={styles.splitCell}>
+                        <View style={[styles.splitBar, { height: 10 + (18 * d) / splitMax }]} />
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
               </>
             ) : null}
             {data.missions && !data.newCard ? data.missions.missions.map((m) => (
@@ -214,18 +256,6 @@ export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, c
             )) : null}
             {data.tokensAtRide !== null ? <Text style={styles.small}>{`Tokens ${data.tokensAtRide}/9 at this ride`}</Text> : null}
             {data.fullClear ? <Image source={SHARKY_ART.fullClear} style={styles.medal} resizeMode="contain" /> : null}
-            <View style={styles.secondary}>
-              {challenge ? (
-                <TouchableOpacity accessibilityRole="button" onPress={challenge}>
-                  <Text style={styles.secondaryText}>{challengeLabel ?? 'Rally a ghost'}</Text>
-                </TouchableOpacity>
-              ) : null}
-              {playAgain ? (
-                <TouchableOpacity accessibilityRole="button" onPress={claim}>
-                  <Text style={styles.secondaryText}>Done</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
           </View>
         ) : null}
       </Animated.View>
@@ -251,14 +281,17 @@ const styles = StyleSheet.create({
   hero2: { fontFamily: 'Shark', fontSize: 19, color: INK, textAlign: 'center' },
   nearMiss: { fontFamily: 'Knockout', fontSize: 15, color: INK, marginTop: 4, textAlign: 'center' },
   playWrap: { width: '100%', marginTop: 12 },
-  play: { height: 72, borderRadius: 36, backgroundColor: REWARD, borderWidth: 5, borderColor: INK, alignItems: 'center', justifyContent: 'center' },
+  play: { height: 72, borderRadius: 36, backgroundColor: REWARD, borderWidth: 5, borderColor: INK, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
   playText: { fontFamily: 'Shark', fontSize: 34, color: INK },
+  playGap: { marginLeft: 8 },
+  saved: { fontFamily: 'Shark', fontSize: 22, color: INK, backgroundColor: REWARD, borderRadius: 12, borderWidth: 3, borderColor: INK,
+    overflow: 'hidden', paddingHorizontal: 14, paddingVertical: 4, marginBottom: 4, transform: [{ rotate: '-4deg' }] },
   below: { width: '100%', alignItems: 'center', marginTop: 10 },
   newCard: { fontFamily: 'Shark', fontSize: 18, color: INK, backgroundColor: REWARD, borderRadius: 12, overflow: 'hidden', paddingHorizontal: 14, paddingVertical: 6, marginBottom: 6 },
   splitRow: { flexDirection: 'row', alignItems: 'flex-end', marginVertical: 4 },
   splitCell: { alignItems: 'center', marginHorizontal: 8 },
-  splitBar: { width: 22, borderRadius: 6, borderWidth: 2, borderColor: INK },
-  splitText: { fontFamily: 'Knockout', fontSize: 12, color: INK, marginTop: 2 },
+  splitBar: { width: 22, borderRadius: 6, borderWidth: 2, borderColor: INK, backgroundColor: '#3ccf6b' },
+  splitText: { fontFamily: 'Shark', fontSize: 16, color: '#11823b', marginTop: 2 },
   mRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginVertical: 2 },
   mText: { flex: 1, fontFamily: 'Knockout', fontSize: 13, color: INK },
   mDone: { color: '#1b8f3a' },
@@ -266,6 +299,8 @@ const styles = StyleSheet.create({
   mFill: { height: '100%', backgroundColor: REWARD },
   small: { fontFamily: 'Knockout', fontSize: 13, color: INK, marginTop: 4 },
   medal: { width: 54, height: 54, marginTop: 4 },
-  secondary: { flexDirection: 'row', justifyContent: 'space-around', width: '100%', marginTop: 8 },
-  secondaryText: { fontFamily: 'Shark', fontSize: 17, color: INK, textDecorationLine: 'underline' },
+  secondary: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 },
+  secondaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 14,
+    backgroundColor: '#ffffff', borderWidth: 3, borderColor: INK, borderBottomWidth: 5 },
+  secondaryText: { fontFamily: 'Shark', fontSize: 18, color: INK },
 });

@@ -130,6 +130,8 @@ const RUN_OF_DAY_KEY = '@whack/run_of_day';
 const CARDS_KEY = '@whack/finn_cards';
 const MASTERY_KEY = '@whack/mastery';
 const PB_KEY = '@whack_a_shark/best';
+/** A between-bursts streak worth a brag chip (fewer is just playing). */
+const BREATHER_STREAK_BRAG = 5;
 const pbKeyFor = (f: WhackFormat) => (f === 'ride' ? '@whack_a_shark/ride_best' : f === 'queue' ? PB_KEY : `@whack_a_shark/best_${f}`);
 const GOLD = '#ffcf3b';
 /** Star slams on the win stinger's beat (129.2 BPM quarter notes). */
@@ -606,6 +608,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const base = sum((r) => r.quick * PTS_FINN[2] + r.good * PTS_FINN[1] + r.late * PTS_FINN[0]);
     const bonus = sum((r) => (r.goldens - r.ripeHits) * PTS_GOLDEN + r.ripePoints + r.doubles * PTS_DOUBLE + r.crits * PTS_CRIT + r.perfects * PTS_PERFECT);
     const combo = Math.max(0, total - base - bonus);
+    const tallies = [{ label: 'POINTS', value: base }, { label: 'COMBO', value: combo }, { label: 'BONUS', value: bonus }].filter((t) => t.value > 0);
     const nextBoss = format === 'queue' && isBossRun('queue', runOfDayRef.current + 1, (lifetime ?? 0) + 8, 5, !!props.bossRuns);
     const goal = ride ? null : nextStarGoal(total, thresholds);
     const rivals = props.lineDay?.rivals ?? [];
@@ -658,14 +661,15 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         thresholds: ride || format === 'raid' || format === 'duel' ? undefined : thresholds,
         rival: format === 'duel' ? { name: duel?.rival.name ?? 'Captain Fin', score: rivalTotalRef.current }
           : target ? { name: target.name.split(' ')[0], score: target.score } : null,
-        buckets: ride ? undefined : [{ label: 'HITS', value: `${judged}` }, { label: 'COMBO', value: `+${combo.toLocaleString()}` }, { label: 'BONUS', value: `+${bonus.toLocaleString()}` }],
-        bucketValues: ride ? undefined : [base, combo, bonus],
+        // Every number true to its label, and no zero buckets ("0 COMBO" is not a brag).
+        buckets: ride ? undefined : tallies.map((t) => ({ label: t.label, value: `+${t.value.toLocaleString()}` })),
+        bucketValues: ride ? undefined : tallies.map((t) => t.value),
         starStepMs: STAR_STEP_MS,
         // Feelings first (the shared card keeps two brag chips; BEST COMBO is the streak).
         stats: [
           ...(ride ? [{ label: 'COIN', value: `${last?.result.coin ?? 0}%` }]
             : format === 'raid' ? [{ label: 'BOSS DAMAGE', value: `${last?.result.bossDamage ?? 0}` }]
-              : [{ label: 'BURSTS', value: `${banked.length}/${totalBursts}` }]),
+              : [{ label: 'BURSTS', value: `${banked.length}/${totalBursts}`, pips: [banked.length, totalBursts] as const }]),
           ...(ghostLine ? [{ label: 'LINE OF THE DAY', value: ghostLine }] : []),
           ...(nextBoss ? [{ label: 'NEXT', value: 'BOSS RUN' }]
             : goal && goal.remaining > 0 && format !== 'raid' && format !== 'duel' ? [{ label: 'NEXT STAR', value: `+${goal.remaining}` }] : []),
@@ -786,15 +790,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       setBreather({
         burstScore: b.score,
         runScore: total,
-        stats: [
-          { label: 'QUICK', value: `${b.result.quick}` },
-          { label: 'STREAK', value: `${b.result.maxStreak}` },
-          ...(b.result.crits ? [{ label: 'CRITS', value: `${b.result.crits}` }] : []),
-          ...(b.result.freezes ? [{ label: 'LOOK-UPS', value: `${b.result.freezes}` }] : []),
-        ],
+        // Feelings, not counts: one brag only when it is worth one.
+        stats: b.result.maxStreak >= BREATHER_STREAK_BRAG ? [{ label: 'IN A ROW', value: `${b.result.maxStreak}` }] : [],
         next: nextTl.boss ? BOSS_NAMES[nextTl.bossKind] : nextTl.banner,
         readyAt: Date.now() + 1200,
-        goal: g.remaining > 0 ? `NEXT STAR AT ${g.target.toLocaleString()}` : 'THREE STARS! GO FOR A BEST',
+        goal: g.remaining <= 0 ? 'THREE STARS! GO FOR A BEST' : g.near ? 'ALMOST A STAR!' : null,
         duelLine,
         incoming: incomingRef.current.length,
         feverReady,
@@ -802,7 +802,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         boost: pendingBoost.current === 'golden',
         split: !ride && format !== 'duel' && splitRef.current.known && splitRef.current.best > 0 ? (() => {
           const d = splitRef.current.mine - splitRef.current.best;
-          return { text: d >= 0 ? `+${d.toLocaleString()} AHEAD OF YOUR BEST` : `${d.toLocaleString()} BEHIND YOUR BEST`, ahead: d >= 0 };
+          // Only a lead is news between bursts; behind shows nothing (no minus numbers).
+          return d > 0 ? { text: 'AHEAD OF YOUR BEST!', ahead: true } : null;
         })() : null,
       });
       setReadyOn(false);
@@ -964,7 +965,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       onResume={handleResume}
       onRematch={!ride && format !== 'duel' ? handleRematch : undefined}
       onComplete={onComplete}
-      resultExtras={result ? <ShareCardButton tiles={tilesRef.current} rideName={taskName ?? null} score={result.score} stars={result.stars ?? 0} /> : undefined}
+      resultCardFooter={result ? <ShareCardButton chip tiles={tilesRef.current} rideName={taskName ?? null} score={result.score} stars={result.stars ?? 0} /> : undefined}
       onClose={onClose}
       onQuit={onQuit}
     >

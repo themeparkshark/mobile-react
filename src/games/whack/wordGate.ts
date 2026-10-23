@@ -30,3 +30,9 @@ export function allowWord(gate: WordGate, now: number, important = false): boole
   gate.shownAt.push(now);
   return true;
 }
+
+/** The points in a dropped score word ("QUICK +80" -> 80), so they fold into the flurry total. */
+export function droppedPoints(text: string): number {
+  const m = /\+(\d[\d,]*)/.exec(text);
+  return m ? Number(m[1].replace(/,/g, '')) || 0 : 0;
+}

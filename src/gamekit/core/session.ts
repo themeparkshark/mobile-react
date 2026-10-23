@@ -158,13 +158,14 @@ export const WRAP_UP_COPY: Record<WrapUpReason, { title: string; body: string }>
 
 /**
  * Stars for a run a queue event ended. Boarding mid-run never throws the run
- * away: any points earned count as one star (a partial run), except in a paid
- * ride challenge, where the goal has to be met for real.
+ * away: a run with points but no star yet is a saved run (partial). It shows a
+ * RUN SAVED stamp instead of a star and counts as played, but it is never
+ * written down as a real star (no best, no difficulty change). A paid ride
+ * challenge has no saved runs: its goal has to be met for real.
  */
 export function wrapUpStars(stars: number, score: number, paid: boolean): { stars: number; partial: boolean } {
   const safe = Number.isFinite(stars) ? Math.max(0, stars) : 0;
-  if (safe > 0 || paid || !(score > 0)) return { stars: safe, partial: false };
-  return { stars: 1, partial: true };
+  return { stars: safe, partial: safe === 0 && !paid && score > 0 };
 }
 
 /** True when a game-owned results surface rendered nothing (null, false, true, undefined or ''). */

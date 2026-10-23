@@ -33,20 +33,33 @@ export interface LinePlayMovement {
   readonly justForFunNote?: JustForFunNote | null;
   /** Optional: the most recent queue advance (drives the heads-up). */
   readonly lastAdvance?: { readonly at: number; readonly metres?: number } | null;
-  /** Optional: a real queue event ended the session ("Your ride's up!"). */
+  /**
+   * Optional: a real queue event ended the session ("Your ride's up!"): the
+   * wait finished, or the guest said they are boarding. The undoable wrap-up
+   * grace (GPS says they left) never sets this while a game is open.
+   */
   readonly queueEnded?: WrapUpReason | null;
   /**
    * Optional: ride detection thinks the guest just boarded. Only a hint (one
-   * GPS fix can fake it): an active round keeps playing, a held round
-   * (pocketed, backgrounded, paused) is saved as "YOUR RIDE'S UP!".
+   * GPS fix can fake it, indoors most of all), so it never ends a run by
+   * itself: an active round keeps playing, and a held round (paused,
+   * backgrounded, pocketed) asks "Did your ride start?" inside the game
+   * instead of counting down to resume.
    */
   readonly rideUpLikely?: boolean;
   /**
-   * Optional: a finished run that earned no stars is about to close. The
-   * shell only calls onComplete for a star, so without this a whole run with
-   * no star looked like it never happened ("Not played this wait").
+   * Optional: the guest answered that in-game question. true = "SAVE MY RUN"
+   * (sent after the saved run's card closes, so the run counts first);
+   * false = "KEEP PLAYING" (the hint is cleared).
    */
-  readonly onNoStarRun?: () => void;
+  readonly onBoardingAnswer?: (boarded: boolean) => void;
+  /**
+   * Optional: a finished run the shell did not hand to onComplete (no star,
+   * a saved partial run, or a run the guest replays with PLAY AGAIN). Without
+   * this, such a run looked like it never happened ("Not played this wait").
+   * A partial run counts as played but is not a real star.
+   */
+  readonly onRunDone?: (stars: number, partial: boolean) => void;
 }
 
 export const LinePlayMovementContext = createContext<LinePlayMovement | null>(null);

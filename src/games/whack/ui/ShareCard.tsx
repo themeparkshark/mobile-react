@@ -10,6 +10,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import GameIcon from '../../../ui/GameIcon';
 
 /** Tile codes: 0 LATE, 1 GOOD, 2 QUICK, 9 decoy hit. */
 export const TILE_LATE = 0;
@@ -37,7 +38,8 @@ export function shareText(rideName: string | null, score: number, stars: number)
   return `I scored ${score.toLocaleString()} in Whack-a-Shark${where}. ${stars} of 3 stars. Can you beat it?`;
 }
 
-export function ShareCardButton({ tiles, rideName, score, stars }: { tiles: number[]; rideName: string | null; score: number; stars: number }) {
+/** `chip`: a small camera chip that sits inside the results card (the shared card's footer). */
+export function ShareCardButton({ tiles, rideName, score, stars, chip = false }: { tiles: number[]; rideName: string | null; score: number; stars: number; chip?: boolean }) {
   const ref = useRef<View>(null);
   const [busy, setBusy] = useState(false);
   const share = useCallback(async () => {
@@ -57,8 +59,9 @@ export function ShareCardButton({ tiles, rideName, score, stars }: { tiles: numb
   const quick = tiles.filter((t) => t === TILE_QUICK).length;
   return (
     <View>
-      <TouchableOpacity style={styles.button} onPress={share} accessibilityRole="button" accessibilityLabel="Share your run">
-        <Text style={styles.buttonText}>{busy ? 'SHARING...' : 'SHARE'}</Text>
+      <TouchableOpacity style={chip ? styles.chip : styles.button} onPress={share} accessibilityRole="button" accessibilityLabel="Share your run" hitSlop={8}>
+        {chip ? <GameIcon name="camera" size={20} /> : null}
+        <Text style={chip ? styles.chipText : styles.buttonText}>{busy ? 'SHARING...' : 'SHARE'}</Text>
       </TouchableOpacity>
       {/* Off-screen card (captured on demand). */}
       <View style={styles.offscreen} pointerEvents="none">
@@ -94,6 +97,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff', borderWidth: 3, borderColor: NAVY, borderBottomWidth: 6,
   },
   buttonText: { fontFamily: 'Shark', fontSize: 20, color: NAVY },
+  chip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 5, borderRadius: 999,
+    backgroundColor: '#ffffff', borderWidth: 3, borderColor: NAVY },
+  chipText: { fontFamily: 'Shark', fontSize: 16, color: NAVY, marginLeft: 6 },
   offscreen: { position: 'absolute', left: -4000, top: 0 },
   card: {
     width: 360, padding: 20, borderRadius: 24, backgroundColor: CREAM, borderWidth: 4, borderColor: NAVY, alignItems: 'center',

@@ -430,12 +430,14 @@ function StagePrompts({ L, rs, tick, fontS, fontM, pace, showPace, paceLabel }: 
     return d >= 0 ? `+${d} ${paceLabel}` : `${d} ${paceLabel}`;
   });
   const paceColor = useDerivedValue(() => (pace.value >= 0 ? '#11823b' : '#c2412f'));
+  // Only a lead shows during play: no minus numbers while a kid is bonking.
+  const paceOp = useDerivedValue(() => (pace.value >= 1 ? 1 : 0));
   const paceW = useDerivedValue(() => (fontS ? fontS.measureText(paceText.value).width + 18 : 120));
   const py = L.hudH + 8;
   return (
     <Group>
       {showPace && fontS ? (
-        <Group>
+        <Group opacity={paceOp}>
           <RoundedRect x={10} y={py} width={paceW} height={22} r={11} color={CREAM} />
           <RoundedRect x={10} y={py} width={paceW} height={22} r={11} color={NAVY} style="stroke" strokeWidth={2} />
           <Text x={19} y={py + 16} text={paceText} font={fontS} color={paceColor} />

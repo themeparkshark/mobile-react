@@ -2091,6 +2091,7 @@ export default function CurrentQuestGame({
       reducedMotion={args.reducedMotion}
       onDone={args.claim}
       onAgain={args.rematch}
+      againFirst={args.playAgainFirst}
       onChallenge={!scored && !summary.failed && context !== 'chart' ? onChallengeFriend : undefined}
       onShare={share ? onShareCard : undefined}
     />

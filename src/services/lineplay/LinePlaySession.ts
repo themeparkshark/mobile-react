@@ -373,11 +373,17 @@ export function queueGameOrder(rotation: number): MiniGameId[] {
 /**
  * What an open mini-game hears when the wait ends under it: boarding, leaving
  * the line, or a wait that ended by hand. Null while the wait is still going.
+ *
+ * The 'ending' state is the undoable 60 s wrap-up grace (often started by GPS
+ * drift indoors), and the session holds that countdown while a game is open,
+ * so it never ends a round. Only a finished wait, or a guest who said "I'm
+ * boarding", ends an open game.
  */
-export function queueEndedReason(state: LinePlayState, endReason: EndReason | null):
+export function queueEndedReason(state: LinePlayState, endReason: EndReason | null, boardingConfirmed = false):
   'boarding' | 'left-queue' | 'session-ended' | null {
-  if (state !== 'ending' && state !== 'complete') return null;
-  if (endReason === 'boarded') return 'boarding';
+  if (state === 'ending') return boardingConfirmed ? 'boarding' : null;
+  if (state !== 'complete') return null;
+  if (endReason === 'boarded' || boardingConfirmed) return 'boarding';
   if (endReason === 'left_queue') return 'left-queue';
   return 'session-ended';
 }

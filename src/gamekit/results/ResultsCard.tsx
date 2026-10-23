@@ -7,8 +7,11 @@
  *     wobbles ("so close") instead of sitting there dead.
  *   - Score counts up in the Shark font with coin ticks.
  *   - NEW BEST slams in after the count, or the best is shown quietly.
- *   - NEXT STAR bar: how far to the next star, with points to go, so even a
- *     0-star run has a target (WS4 finding: Whack 500 with 0 stars had none).
+ *   - Next-star bar: a fill bar ending in a star, with one short word
+ *     (KEEP GOING, HALFWAY THERE, ALMOST!), so even a 0-star run has a target
+ *     a non-reader can see. The big numbers live in the accessibility label.
+ *   - A run a queue event saved before its first star gets a RUN SAVED stamp
+ *     in place of the stars (never a fake lit star) and no next-star bar.
  *   - Feelings, not data (feelings.ts): one gold or light line under the
  *     score (beat a ghost, N wins in a row, so close to a star) and at most
  *     two brag chips. Percentages, milliseconds and zero counts never show.
@@ -39,6 +42,7 @@ import { compareBest, formatScore, nextStarGoal, tallySchedule, tallyTickCount, 
 import { nearMissLine } from '../core/nearMiss';
 import { CountUpText } from '../fx/CountUpText';
 import { feelingChips, feelingLine, feelingTitle, noteRun } from './feelings';
+import { NextStarBar } from './NextStarBar';
 import { playHaptic } from '../Haptics';
 import { GameAudio } from '../audio/GameAudio';
 
@@ -47,6 +51,8 @@ const RIBBON = require('../../../assets/images/ribbon.png');
 export interface ResultStat {
   label: string;
   value: string;
+  /** Draw filled dots instead of the value (BURSTS 3 of 4). */
+  pips?: readonly [number, number];
 }
 
 export interface ResultsCardProps {
@@ -80,6 +86,10 @@ export interface ResultsCardProps {
   streakKey?: string;
   /** One token per finished run, so a re-render never counts a run twice. */
   runToken?: string | number;
+  /** A queue event saved this run before its first star: RUN SAVED stamp, no bar. */
+  saved?: boolean;
+  /** A small chip inside the card under the brags (Whack's SHARE). */
+  footer?: React.ReactNode;
 }
 
 const STAR_BASE_DELAY = 260;
@@ -93,9 +103,9 @@ export function defaultMessage(stars: number, near: boolean): string {
 
 export function ResultsCard({
   score, stars, message, thresholds, personalBest, maxCombo, stats, note, reducedMotion = false, onRevealed, rival,
-  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken,
+  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer,
 }: ResultsCardProps) {
-  const goal = useMemo(() => (thresholds ? nextStarGoal(score, thresholds) : null), [score, thresholds]);
+  const goal = useMemo(() => (thresholds && !saved ? nextStarGoal(score, thresholds) : null), [score, thresholds, saved]);
   const best = useMemo(() => compareBest(score, personalBest), [score, personalBest]);
   const title = message ?? defaultMessage(stars, !!goal?.near);
   // The one line that sells "one more run" (beat a ghost, so close to a star).
@@ -111,20 +121,17 @@ export function ResultsCard({
 
   const ribbon = useSharedValue(reducedMotion ? 1 : 0);
   const bestScale = useSharedValue(reducedMotion ? 1 : 0);
-  const bar = useSharedValue(reducedMotion ? goal?.progress ?? 0 : 0);
 
   useEffect(() => {
     if (reducedMotion) {
       ribbon.value = 1;
       bestScale.value = 1;
-      bar.value = goal?.progress ?? 0;
       return;
     }
     ribbon.value = withSequence(
       withTiming(1.25, { duration: 160, easing: Easing.out(Easing.back(2)) }),
       withSpring(1, { damping: 10, stiffness: 260 }),
     );
-    bar.value = withDelay(countDelay + 300, withTiming(goal?.progress ?? 0, { duration: 700, easing: Easing.out(Easing.cubic) }));
     if (best.isNewBest) {
       bestScale.value = withDelay(countDelay + 900, withSequence(
         withTiming(1.4, { duration: 0 }),
@@ -139,11 +146,10 @@ export function ResultsCard({
     }
     bestScale.value = withDelay(countDelay + 900, withTiming(1, { duration: 200 }));
     return () => cancelAnimation(bestScale);
-  }, [reducedMotion, best.isNewBest, goal?.progress, countDelay, ribbon, bestScale, bar]);
+  }, [reducedMotion, best.isNewBest, countDelay, ribbon, bestScale]);
 
   const ribbonStyle = useAnimatedStyle(() => ({ transform: [{ scale: ribbon.value }], opacity: ribbon.value > 0 ? 1 : 0 }));
   const bestStyle = useAnimatedStyle(() => ({ transform: [{ scale: bestScale.value }], opacity: bestScale.value > 0.05 ? 1 : 0 }));
-  const barStyle = useAnimatedStyle(() => ({ width: `${Math.max(0, Math.min(1, bar.value)) * 100}%` }));
 
   return (
     <View style={styles.card}>
@@ -152,19 +158,23 @@ export function ResultsCard({
         <Text style={styles.ribbonText} numberOfLines={1} adjustsFontSizeToFit>{title}</Text>
       </Animated.View>
 
-      <View style={styles.starRow}>
-        {[1, 2, 3].map((n) => (
-          <StarSlot
-            key={n}
-            index={n}
-            earned={n <= stars}
-            close={!!goal && goal.near && n === stars + 1}
-            reducedMotion={reducedMotion}
-            stepMs={starStepMs}
-            onLanded={n === Math.max(1, stars) ? onRevealed : undefined}
-          />
-        ))}
-      </View>
+      {saved ? (
+        <SavedStamp reducedMotion={reducedMotion} />
+      ) : (
+        <View style={styles.starRow}>
+          {[1, 2, 3].map((n) => (
+            <StarSlot
+              key={n}
+              index={n}
+              earned={n <= stars}
+              close={!!goal && goal.near && n === stars + 1}
+              reducedMotion={reducedMotion}
+              stepMs={starStepMs}
+              onLanded={n === Math.max(1, stars) ? onRevealed : undefined}
+            />
+          ))}
+        </View>
+      )}
 
       {nBuckets ? (
         <View style={styles.buckets}>
@@ -198,39 +208,53 @@ export function ResultsCard({
         </Animated.View>
       ) : null}
 
-      {goal ? (
-        <View style={styles.goal} accessible accessibilityLabel={goal.nextStar
-          ? `${formatScore(goal.remaining)} points to star ${goal.nextStar}` : 'All three stars'}>
-          <View style={styles.goalHead}>
-            <GameIcon name="star" size={18} />
-            <Text style={styles.goalText}>
-              {goal.nextStar ? `NEXT STAR ${formatScore(goal.target)}` : 'PERFECT RUN'}
-            </Text>
-            {goal.nextStar ? <Text style={styles.goalToGo}>{`${formatScore(goal.remaining)} TO GO`}</Text> : null}
-          </View>
-          <View style={styles.goalTrack}>
-            <Animated.View style={[styles.goalFill, barStyle]} />
-          </View>
-        </View>
-      ) : null}
+      {goal ? <NextStarBar goal={goal} delayMs={countDelay + 300} reducedMotion={reducedMotion} /> : null}
 
       {chips.length ? (
         <View style={styles.stats}>
-          {chips.map((s) => <Chip key={s.label} label={s.label} value={s.value} />)}
+          {chips.map((s) => <Chip key={s.label} label={s.label} value={s.value} pips={s.pips} />)}
         </View>
       ) : null}
+
+      {footer ? <View style={styles.footer}>{footer}</View> : null}
 
       {note ? <Text style={styles.note}>{note}</Text> : null}
     </View>
   );
 }
 
-function Chip({ label, value }: ResultStat) {
+function Chip({ label, value, pips }: ResultStat) {
   return (
-    <View style={styles.chip}>
-      <Text style={styles.chipValue}>{value}</Text>
+    <View style={styles.chip} accessible accessibilityLabel={pips ? `${pips[0]} of ${pips[1]} ${label}` : `${value} ${label}`}>
+      {pips ? (
+        <View style={styles.pips}>
+          {Array.from({ length: pips[1] }, (_, i) => <View key={i} style={[styles.pip, i < pips[0] && styles.pipOn]} />)}
+        </View>
+      ) : <Text style={styles.chipValue}>{value}</Text>}
       <Text style={styles.chipLabel}>{label}</Text>
     </View>
+  );
+}
+
+/** RUN SAVED: a gold stamp that thumps in where the stars would be. */
+function SavedStamp({ reducedMotion }: { reducedMotion: boolean }) {
+  const scale = useSharedValue(reducedMotion ? 1 : 0);
+  useEffect(() => {
+    if (reducedMotion) return undefined;
+    scale.value = withDelay(STAR_BASE_DELAY, withSequence(
+      withTiming(1.8, { duration: 0 }),
+      withTiming(0.92, { duration: 130, easing: Easing.in(Easing.quad) }),
+      withSpring(1, { damping: 9, stiffness: 320 }),
+    ));
+    const t = setTimeout(() => playHaptic('starSlam'), STAR_BASE_DELAY + 120);
+    return () => { clearTimeout(t); cancelAnimation(scale); };
+  }, [reducedMotion, scale]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }, { rotate: '-4deg' }], opacity: scale.value > 0.02 ? 1 : 0 }));
+  return (
+    <Animated.View style={[styles.saved, style]} accessible accessibilityLabel="Run saved">
+      <GameIcon name="ride" size={30} />
+      <Text style={styles.savedText}>RUN SAVED</Text>
+    </Animated.View>
   );
 }
 
@@ -356,12 +380,13 @@ const styles = StyleSheet.create({
     borderColor: '#05346e', paddingHorizontal: 12, paddingVertical: 2 },
   newBestText: { fontFamily: 'Shark', fontSize: 18, color: '#05346e', marginLeft: 6 },
   bestQuiet: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', letterSpacing: 1 },
-  goal: { width: '100%', marginTop: 8 },
-  goalHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  goalText: { fontFamily: 'Shark', fontSize: 16, color: '#ffffff', marginLeft: 6, flex: 1 },
-  goalToGo: { fontFamily: 'Knockout', fontSize: 16, color: '#ffe07a' },
-  goalTrack: { height: 16, borderRadius: 8, backgroundColor: '#bfe5ff', borderWidth: 3, borderColor: '#05346e', overflow: 'hidden' },
-  goalFill: { height: '100%', backgroundColor: '#ffcf3b' },
+  footer: { marginTop: 10, alignItems: 'center' },
+  pips: { flexDirection: 'row', height: 24, alignItems: 'center' },
+  pip: { width: 14, height: 14, borderRadius: 7, marginHorizontal: 2, borderWidth: 2, borderColor: '#05346e', backgroundColor: '#ffffff' },
+  pipOn: { backgroundColor: '#ffcf3b' },
+  saved: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffcf3b', borderRadius: 16, borderWidth: 4,
+    borderColor: '#05346e', paddingHorizontal: 16, paddingVertical: 6, marginTop: 10, marginBottom: 10 },
+  savedText: { fontFamily: 'Shark', fontSize: 26, color: '#05346e', marginLeft: 8 },
   buckets: { flexDirection: 'row', justifyContent: 'center', marginBottom: 4 },
   bucket: { backgroundColor: '#3d9be6', borderRadius: 14, borderWidth: 3, borderColor: '#05346e', paddingHorizontal: 10,
     paddingVertical: 3, marginHorizontal: 4, alignItems: 'center', minWidth: 78 },

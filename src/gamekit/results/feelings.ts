@@ -13,10 +13,16 @@
 export interface FeelingStat {
   label: string;
   value: string;
+  /** Show as filled dots instead of a number ("3 of 4 bursts" = 3 of 4 dots). */
+  pips?: readonly [number, number];
 }
 
 /** Most chips a results card shows. */
 export const MAX_FEELING_CHIPS = 2;
+/** A combo shorter than this is not a brag ("BEST COMBO x2" is two hits in a row). */
+export const BEST_COMBO_MIN = 3;
+/** Most dots a pip chip draws (more reads as a number again). */
+const MAX_PIPS = 6;
 /** A chip value longer than this is a sentence, not a brag (tips go in the note line). */
 const MAX_CHIP_VALUE = 14;
 
@@ -28,6 +34,10 @@ export function isDataStat(stat: FeelingStat): boolean {
   const label = String(stat.label ?? '').trim().toUpperCase();
   const value = String(stat.value ?? '').trim();
   if (!label || !value) return true;
+  if (stat.pips) {
+    const [on, of] = stat.pips;
+    return DATA_LABELS.has(label) || !(on > 0) || !(of > 0) || of > MAX_PIPS;
+  }
   if (DATA_LABELS.has(label)) return true;
   if (/%/.test(value)) return true;
   if (/\d\s*ms\b/i.test(value)) return true;
@@ -48,9 +58,9 @@ export function feelingChips(stats: readonly FeelingStat[] | undefined, maxCombo
     const key = stat.label.trim().toUpperCase();
     if (seen.has(key) || out.length >= limit) return;
     seen.add(key);
-    out.push({ label: key, value: stat.value.trim() });
+    out.push({ label: key, value: stat.value.trim(), ...(stat.pips ? { pips: stat.pips } : {}) });
   };
-  if (maxCombo && maxCombo > 1) push({ label: 'BEST COMBO', value: `x${maxCombo}` });
+  if (maxCombo && maxCombo >= BEST_COMBO_MIN) push({ label: 'BEST COMBO', value: `x${maxCombo}` });
   for (const stat of stats ?? []) {
     if (!isDataStat(stat)) push(stat);
   }
@@ -114,4 +124,25 @@ export function feelingTitle(stars: number, near: boolean): string {
   if (stars === 2) return near ? 'SO CLOSE!' : 'GREAT!';
   if (stars === 1) return 'NICE!';
   return near ? 'SO CLOSE!' : 'GOOD TRY!';
+}
+
+/**
+ * The next-star bar's one word, read with the bar and a star at its end, so a
+ * kid who cannot read big numbers still sees how close the star is.
+ */
+export function nextStarWord(goal: { nextStar: number; progress: number; near: boolean } | null | undefined): string {
+  if (!goal) return '';
+  if (!goal.nextStar) return 'ALL 3 STARS!';
+  if (goal.near) return 'ALMOST!';
+  if (goal.progress >= 0.5) return 'HALFWAY THERE';
+  return 'KEEP GOING';
+}
+
+/**
+ * The win line under Sharky's ghost splits: shown only when the whole run
+ * finished ahead of the ghost (the last shared gate), never for one lucky
+ * split in a run that ended behind.
+ */
+export function aheadOfGhost(splits: readonly number[]): boolean {
+  return splits.length > 0 && splits[splits.length - 1] > 0;
 }

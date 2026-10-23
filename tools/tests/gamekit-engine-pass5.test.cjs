@@ -469,7 +469,7 @@ test('shell: header score hide / replace, scrim none, hold-sheet extras, results
   view.change({ result: { score: 900, stars: 2, note: 'Tip: tap on the beat' } });
   const card = view.find((n) => n.type === 'ResultsCard');
   assert.equal(card.props.note, 'Tip: tap on the beat');
-  assert.ok(view.find((n) => n.type === 'Text' && n.props.children === 'Race a friend'));
+  assert.ok(view.find((n) => n.type === 'Text' && n.props.children === 'RACE A FRIEND'), 'buttons share one caps font');
   view.unmount();
   const custom = shell({ headerScore: 'RUN BAR' });
   assert.equal(custom.view.find((n) => n.type === 'ScoreDisplay'), undefined);

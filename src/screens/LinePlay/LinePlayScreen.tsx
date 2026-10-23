@@ -789,8 +789,9 @@ export default function LinePlayScreen() {
   const secondsToNextBonus = bonus ? nextBonusSeconds(bonus, snapshot.verifiedEligibleSeconds,
     snapshot.verifiedPresenceAt, Date.now()) : null;
   // A real queue event ends an open round with its score saved ("YOUR RIDE'S UP!"),
-  // so boarding or leaving the line mid-run still counts the run.
-  const queueEnded = queueEndedReason(snapshot.state, snapshot.endReason);
+  // so boarding mid-run still counts the run. The undoable wrap-up grace (GPS
+  // says the guest left) never ends a round: the session holds it while a game is open.
+  const queueEnded = queueEndedReason(snapshot.state, snapshot.endReason, snapshot.boardingConfirmed);
   const activeGameRef = useRef(activeGame);
   activeGameRef.current = activeGame;
   const movementContext = useMemo(() => ({
@@ -799,11 +800,18 @@ export default function LinePlayScreen() {
     lineMovePolicy: 'passive' as const,
     queueEnded,
     rideUpLikely: snapshot.boardingSuggested,
-    // A finished run with no star still counts as played this wait.
-    onNoStarRun: () => {
+    // The guest answered "Did your ride start?" inside a held game.
+    onBoardingAnswer: (boarded: boolean) => {
+      if (!boarded) { session.dismissBoardingSuggestion(); return; }
+      void session.endNow(true).catch(finishFailed);
+    },
+    // A run the shell did not hand to onComplete (no star, saved partial, or
+    // replayed) still counts as played this wait. A saved partial run is not
+    // a real star, so it never changes the best or the difficulty.
+    onRunDone: (stars: number, partial: boolean) => {
       const game = activeGameRef.current;
       if (!game || game.groupTurn === true) return;
-      session.recordGameResult(game.gameId, 0);
+      if (!partial) session.recordGameResult(game.gameId, stars);
       session.markActivityCompleted(game.id);
     },
     // Client-scored games never pay Parts; their win card points to the bonus games.
@@ -812,7 +820,7 @@ export default function LinePlayScreen() {
       actionLabel: 'PLAY FOR BONUS',
       onPress: () => { setActiveGame(null); setArcadeOpen(true); },
     } : null,
-  }), [snapshot.moving, bonus != null, activeGame?.gameId, queueEnded, snapshot.boardingSuggested]);
+  }), [snapshot.moving, bonus != null, activeGame?.gameId, queueEnded, snapshot.boardingSuggested, finishFailed]);
   useEffect(() => {
     const id = pendingEncoreId.current;
     if (!id) return;
