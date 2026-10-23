@@ -127,6 +127,7 @@ import { LocationStatusContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
+import { warmLaunchArt } from '../helpers/launchArt';
 export default function LoadingScreen() {
   const logoFloat = useRef(new Animated.Value(0)).current;
   // This screen stays mounted under the map for the whole session. Its video,
@@ -196,6 +197,8 @@ export default function LoadingScreen() {
     if (permissionGranted) {
       try { await requestPark(); } catch { /* the map retries on its own */ }
     }
+    // The map's first frame is fully painted: header, footer, coin and ticket art are warm.
+    await warmLaunchArt([theme?.top_bar_url, theme?.bottom_bar_url, theme?.currency?.icon_url]);
     const wait = Math.max(0, MIN_SHOW_MS - (Date.now() - mountedAt.current));
     setTimeout(() => setProgress(100), wait);
   }, [isReady, permissionGranted, hasUsername]);
