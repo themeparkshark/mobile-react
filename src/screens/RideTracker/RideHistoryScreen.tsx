@@ -20,7 +20,8 @@ import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { Modal } from 'react-native';
 import { Image } from 'expo-image';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { GameIcon, SharkLoader } from '../../ui';
+import { GameButton, GameIcon, SharkLoader } from '../../ui';
+import { CLOSE_WORD } from '../../share/closeWord';
 
 // ─── Short park names for filter chips ───
 const SHORT_PARK_NAMES: Record<number, string> = {
@@ -282,9 +283,8 @@ export default function RideHistoryScreen() {
             {shareRide && (
               <>
                 <ShareableRideCard ride={shareRide} onShare={closeShare} beforeShare={shareHandoff.handoff} />
-                <Pressable onPress={() => setShareRide(null)} style={styles.modalClose}>
-                  <Text style={styles.modalCloseText}>Close</Text>
-                </Pressable>
+                {/* The one close word of every share sheet (Share Studio uses it too). */}
+                <GameButton label={CLOSE_WORD} variant="ghost" onPress={() => setShareRide(null)} accessibilityLabel="Close" style={{ marginTop: 4 }} />
               </>
             )}
           </Pressable>

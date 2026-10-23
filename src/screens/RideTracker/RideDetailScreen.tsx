@@ -18,7 +18,8 @@ import { useModalHandoff } from '../../share/handoff';
 import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 import { Modal } from 'react-native';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
-import { GameIcon, gameAlert, SharkLoader } from '../../ui';
+import { GameButton, GameIcon, gameAlert, SharkLoader } from '../../ui';
+import { CLOSE_WORD } from '../../share/closeWord';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -333,9 +334,8 @@ export default function RideDetailScreen() {
             {shareEntry && (
               <>
                 <ShareableRideCard ride={shareEntry} rideCount={totalRides} onShare={closeShare} beforeShare={shareHandoff.handoff} />
-                <Pressable onPress={() => setShareEntry(null)} style={s.modalClose}>
-                  <Text style={s.modalCloseText}>Close</Text>
-                </Pressable>
+                {/* The one close word of every share sheet (Share Studio uses it too). */}
+                <GameButton label={CLOSE_WORD} variant="ghost" onPress={() => setShareEntry(null)} accessibilityLabel="Close" style={{ marginTop: 4 }} />
               </>
             )}
           </Pressable>

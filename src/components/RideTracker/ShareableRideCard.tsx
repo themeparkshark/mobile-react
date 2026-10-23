@@ -4,12 +4,13 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
-import { colors, shadows, borderRadius } from '../../design-system';
+import { shadows } from '../../design-system';
 import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import SharkReactionIcon, { reactionLabel } from './SharkReactionIcon';
-import { gameAlert } from '../../ui';
+import { GameIcon, gameAlert } from '../../ui';
+import { ShareFace } from '../../share/FlexShareButton';
 import { captureFlex, openShareSheet } from '../../share/capture';
 import { OFFSCREEN, StoryShareFrame } from '../../share/StoryShareFrame';
 import { LocationStatusContext } from '../../context/LocationProvider';
@@ -76,15 +77,24 @@ const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number; variant?
         </View>
 
         {shared ? (
+          // One hero stat, sized to its content like a trophy plate: the big ride count and the
+          // shark's reaction side by side (no wide panel with one small line in it).
           (!!ride.reaction || !!count) && (
-            <View style={cardStyles.detailsPanel}>
-              {ride.reaction && (
-                <View style={[cardStyles.reactionRow, !count && { marginBottom: 0 }]}>
-                  <SharkReactionIcon reaction={ride.reaction} size={28} />
-                  <Text style={cardStyles.reactionLabel}>{reactionLabel(ride.reaction) ?? 'My reaction'}</Text>
+            <View style={cardStyles.heroStat} accessible
+              accessibilityLabel={[count ? riddenLine(count) : null, ride.reaction ? reactionLabel(ride.reaction) : null].filter(Boolean).join('. ')}>
+              {count && (
+                <View style={cardStyles.heroStatCount}>
+                  <Text style={cardStyles.heroStatNumber} numberOfLines={1} adjustsFontSizeToFit>{count.toLocaleString('en-US')}</Text>
+                  <Text style={cardStyles.heroStatLabel}>{count === 1 ? 'TIME RIDDEN' : 'TIMES RIDDEN'}</Text>
                 </View>
               )}
-              {count && <Text style={cardStyles.riddenLine}>{riddenLine(count)}</Text>}
+              {count && ride.reaction && <View style={cardStyles.heroStatRule} />}
+              {ride.reaction && (
+                <View style={cardStyles.heroStatReaction}>
+                  <SharkReactionIcon reaction={ride.reaction} size={46} />
+                  <Text style={cardStyles.heroStatLabel} numberOfLines={1}>{(reactionLabel(ride.reaction) ?? 'My reaction').toUpperCase()}</Text>
+                </View>
+              )}
             </View>
           )
         ) : (
@@ -181,21 +191,30 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
 
   return (
     <View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Share Ride Card"
-        accessibilityState={{ disabled: sharing || loadingCount || inPark, busy: sharing || loadingCount }}
-        disabled={sharing || loadingCount || inPark}
-        onPress={handleShare}
-        style={({ pressed }) => [cardStyles.shareBtn, inPark && cardStyles.shareBtnHeld, pressed && { opacity: 0.85,
-          transform: [{ scale: reducedMotion ? 1 : 0.97 }] }]}
-      >
-        <Text style={[cardStyles.shareBtnText, inPark && cardStyles.shareBtnTextHeld]}>{inPark ? RIDE_SHARE_HELD_LABEL
-          : sharing ? 'Making your card…' : loadingCount ? 'Loading your ride total…' : 'Share Ride Card'}</Text>
-      </Pressable>
+      {/* The preview is exactly the card that gets shared (no date, no note, no extra marks). */}
       <View style={cardStyles.shotContainer}>
-        <CardContent ride={ride} rideCount={confirmedCount} />
+        <CardContent ride={ride} rideCount={confirmedCount} variant="share" />
       </View>
+      {inPark ? (
+        // Held in the park: a park icon with the line, so a kid who can't read yet still gets "later".
+        <View style={cardStyles.heldRow} accessible accessibilityLabel={RIDE_SHARE_HELD_LABEL}>
+          <GameIcon name="map" size={28} />
+          <Text style={cardStyles.heldText}>{RIDE_SHARE_HELD_LABEL}</Text>
+        </View>
+      ) : (
+        // The one share button, the same gold-rimmed pill as every reveal.
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Share Ride Card"
+          accessibilityHint={sharing ? 'Making your card' : loadingCount ? 'Loading your ride total' : undefined}
+          accessibilityState={{ disabled: sharing || loadingCount, busy: sharing || loadingCount }}
+          disabled={sharing || loadingCount}
+          onPress={handleShare}
+          style={({ pressed }) => [cardStyles.shareRow, pressed && { transform: [{ scale: reducedMotion ? 1 : 0.96 }] }]}
+        >
+          <ShareFace size="reveal" dim={sharing || loadingCount} />
+        </Pressable>
+      )}
       {/* Off screen: the story-size picture that gets shared. */}
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {/* Story size with the link and QR. Kid safety: no typed note, no player name, no date. */}
@@ -221,9 +240,19 @@ const cardStyles = StyleSheet.create({
   },
   cardShared: { minHeight: 0, paddingBottom: 16 },
   sharedWidth: { width: 320 },
-  riddenLine: { color: '#0B4B83', fontSize: 18, fontFamily: 'Shark' },
-  shareBtnHeld: { backgroundColor: '#DCEFFB' },
-  shareBtnTextHeld: { color: '#0B4B83', fontSize: 15 },
+  // The share variant's hero stat: a white plate with a gold rim, as wide as what is on it.
+  heroStat: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#FFFFFF',
+    borderRadius: 18, paddingVertical: 8, paddingHorizontal: 18, borderWidth: 3, borderBottomWidth: 6,
+    borderColor: '#FFCF3B', borderBottomColor: '#D99A00' },
+  heroStatCount: { alignItems: 'center', minWidth: 70 },
+  heroStatNumber: { color: '#05346E', fontSize: 44, lineHeight: 48, fontFamily: 'Shark' },
+  heroStatLabel: { color: '#39759C', fontSize: 12, fontFamily: 'Knockout', letterSpacing: 0.8 },
+  heroStatRule: { width: 2, alignSelf: 'stretch', backgroundColor: '#D7EEFB', marginVertical: 4 },
+  heroStatReaction: { alignItems: 'center', gap: 2, maxWidth: 120 },
+  shareRow: { alignItems: 'center', marginTop: 12, marginBottom: 4 },
+  heldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12, marginBottom: 4,
+    backgroundColor: '#DCEFFB', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 2, borderColor: '#B8E5F8' },
+  heldText: { color: '#0B4B83', fontSize: 16, fontFamily: 'Knockout', flexShrink: 1 },
   card: {
     padding: 18,
     paddingBottom: 14,
@@ -286,19 +315,6 @@ const cardStyles = StyleSheet.create({
   },
   watermarkText: { color: '#D6F3FF', fontSize: 9, fontFamily: 'Knockout', letterSpacing: 1.4 },
   watermarkUrl: { color: '#FFFFFF', fontSize: 10, fontFamily: 'Knockout' },
-  shareBtn: {
-    backgroundColor: colors.tertiary,
-    borderRadius: borderRadius.lg,
-    paddingVertical: 11,
-    alignItems: 'center',
-    marginBottom: 10,
-    ...shadows.md,
-  },
-  shareBtnText: {
-    color: '#000',
-    fontSize: 16,
-    fontFamily: 'Knockout',
-  },
 });
 
 export default ShareableRideCard;
