@@ -1,5 +1,5 @@
 /**
- * TutorialProvider — Context provider that manages tutorial state
+ * TutorialProvider: Context provider that manages tutorial state
  * 
  * Tracks which tutorials have been completed (persisted to AsyncStorage),
  * manages the current tutorial sequence, and provides methods to
@@ -16,14 +16,14 @@ import TeacherShark from './TeacherShark';
 import MemoryGame from '../../games/memory/MemoryGame';
 import { AuthContext } from '../../context/AuthProvider';
 import { claimGuestWarmup } from '../../services/guestTaste';
-// Sounds disabled temporarily — will re-enable once tutorial flow is stable
+// Sounds disabled temporarily: will re-enable once tutorial flow is stable
 // import { SoundEffectContext } from '../../context/SoundEffectProvider';
 
 const STORAGE_KEY = '@tps_tutorial_completed';
 /** Guides that run over the map, where the footer's compass rises into the screen. */
 const MAP_SEQUENCES = new Set<TutorialSequence>(['onboarding', 'home_first_find', 'park_arrival']);
 
-/** All tutorial sequences — used to auto-complete for existing players */
+/** All tutorial sequences: used to auto-complete for existing players */
 const ALL_SEQUENCES: TutorialSequence[] = [
   'onboarding', 'park_arrival', 'park', 'store', 'gym', 'community_center', 'friends', 'pins',
 ];
@@ -157,14 +157,14 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
         }
       });
     } else {
-      // Ref not found — skip spotlight
+      // Ref not found: skip spotlight
       setSpotlightTarget(null);
     }
   }, []);
 
   // Start a tutorial sequence
   const startTutorial = useCallback((sequence: TutorialSequence, options?: { inPark?: boolean; findReady?: boolean; looking?: boolean }) => {
-    // Don't start until AsyncStorage has loaded — avoids replaying on fresh load
+    // Don't start until AsyncStorage has loaded: avoids replaying on fresh load
     if (!loaded) return;
     if (completedSequences.has(sequence)) return;
     
@@ -329,7 +329,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     <TutorialContext.Provider value={contextValue}>
       {children}
 
-      {/* Tutorial Overlay — renders above everything */}
+      {/* Tutorial Overlay: renders above everything */}
       {isActive && currentStep && !firstPlayOpen && (
         <>
           <SpotlightOverlay

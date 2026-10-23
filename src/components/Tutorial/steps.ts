@@ -4,7 +4,7 @@
 import { TutorialStep, TutorialSequence } from './types';
 
 /**
- * ONBOARDING — First time entering the app after username/team/membership
+ * ONBOARDING: First time entering the app after username/team/membership
  * This is the main tutorial that runs on first ExploreScreen visit
  */
 /**
@@ -63,7 +63,7 @@ const parkArrivalSteps: TutorialStep[] = parkOnboardingSteps.map((step, index) =
 }));
 
 /**
- * PARK — First time entering ParkScreen
+ * PARK: First time entering ParkScreen
  */
 const parkSteps: TutorialStep[] = [
   {
@@ -78,7 +78,7 @@ const parkSteps: TutorialStep[] = [
 ];
 
 /**
- * STORE — First time entering StoreScreen
+ * STORE: First time entering StoreScreen
  */
 const storeSteps: TutorialStep[] = [
   {
@@ -93,7 +93,7 @@ const storeSteps: TutorialStep[] = [
 ];
 
 /**
- * GYM — First time entering GymBattleScreen
+ * GYM: First time entering GymBattleScreen
  */
 const gymSteps: TutorialStep[] = [
   {
@@ -108,7 +108,7 @@ const gymSteps: TutorialStep[] = [
 ];
 
 /**
- * COMMUNITY CENTER — First time entering CommunityCenterScreen
+ * COMMUNITY CENTER: First time entering CommunityCenterScreen
  */
 const communityCenterSteps: TutorialStep[] = [
   {
@@ -123,7 +123,7 @@ const communityCenterSteps: TutorialStep[] = [
 ];
 
 /**
- * FRIENDS — First time entering FriendsScreen
+ * FRIENDS: First time entering FriendsScreen
  */
 const friendsSteps: TutorialStep[] = [
   {
@@ -138,7 +138,7 @@ const friendsSteps: TutorialStep[] = [
 ];
 
 /**
- * PIN COLLECTIONS — First time entering PinCollectionsScreen
+ * PIN COLLECTIONS: First time entering PinCollectionsScreen
  */
 const pinSteps: TutorialStep[] = [
   {

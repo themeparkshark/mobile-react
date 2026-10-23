@@ -1,5 +1,5 @@
 /**
- * Tutorial System — Type Definitions
+ * Tutorial System: Type Definitions
  * 
  * The tutorial is a multi-step interactive walkthrough that guides
  * new users through the app after they complete onboarding.
