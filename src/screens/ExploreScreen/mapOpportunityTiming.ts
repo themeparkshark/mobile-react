@@ -30,3 +30,22 @@ export function nextOpportunityRefresh(items: readonly TimedOpportunity[], now =
   }
   return delay;
 }
+
+const CLOSED_LIVE = new Set(['DOWN', 'CLOSED', 'REFURBISHMENT']);
+
+/**
+ * Can the find or ride the server says is in range be played right now? Timed
+ * coins, keys, treats and rides keep to their window (a ride resting until
+ * "Back 2:00 PM" is not playable yet), and a ride the live feed shows down,
+ * closed or in refurbishment is not playable. A ride with no window is always on.
+ */
+export function nearbyOpportunityOpen(
+  nearby: { readonly type: string; readonly model: unknown } | null | undefined,
+  liveStatus: string | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (!nearby) return false;
+  const timed = nearby.type === 'coin' || nearby.type === 'key' || nearby.type === 'redeemable' || nearby.type === 'task';
+  if (timed && !opportunityIsActive(nearby.model as TimedOpportunity, now)) return false;
+  return !(nearby.type === 'task' && liveStatus && CLOSED_LIVE.has(liveStatus));
+}

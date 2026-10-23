@@ -3,7 +3,9 @@ const { runtime } = require('./helpers/reward-hook-runtime.cjs');
 
 const load = props => runtime('src/components/RedeemModal.tsx', {
   '../hooks/useReducedGameMotion': { default: () => true },
-  '../screens/ExploreScreen/mapOpportunityTiming': { opportunityIsActive: () => true },
+  // The real rules are tested in map-opportunity-timing; here a model marked resting stands in.
+  '../screens/ExploreScreen/mapOpportunityTiming': {
+    nearbyOpportunityOpen: (nearby, live) => !!nearby && !nearby.model.resting && live !== 'CLOSED' },
   '../context/SoundEffectProvider': { SoundEffectContext: { value: { playSound: async () => undefined } } },
   '../ui': { BRAND: new Proxy({}, { get: () => '#fff' }), GameIcon: 'GameIcon' },
 }, { park: { id: 1 }, onPress: () => undefined, ...props });
@@ -19,4 +21,11 @@ test('PLAY RIDE hides while a different ride is selected on the map', () => {
   assert.equal(other.find(n => n.props?.text === 'Play Ride!'), undefined);
   const same = load({ redeemable: ride, selectedTaskId: 11 });
   assert.ok(same.find(n => n.props?.text === 'Play Ride!'));
+});
+
+test('PLAY RIDE never shows on a resting ride or one the live feed shows closed', () => {
+  assert.equal(load({ redeemable: { ...ride, model: { ...ride.model, resting: true } } })
+    .find(n => n.props?.text === 'Play Ride!'), undefined);
+  assert.equal(load({ redeemable: ride, liveStatus: 'CLOSED' }).find(n => n.props?.text === 'Play Ride!'), undefined);
+  assert.ok(load({ redeemable: ride, liveStatus: 'OPERATING' }).find(n => n.props?.text === 'Play Ride!'));
 });

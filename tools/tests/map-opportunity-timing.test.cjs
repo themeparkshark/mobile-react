@@ -37,6 +37,21 @@ test('map refresh targets the earliest boundary without looping on expired or in
   assert.equal(timing.nextOpportunityRefresh([{ active_to: '2026-09-29 21:00:00' }, { active_to: 'invalid' }], now), 60000);
 });
 
+test('a ride in range is playable only inside its window and while the live feed has it open', () => {
+  const ride = (model) => ({ type: 'task', model });
+  assert.equal(timing.nearbyOpportunityOpen(undefined, null, now), false);
+  assert.equal(timing.nearbyOpportunityOpen(ride({}), null, now), true, 'a ride with no window is always on');
+  assert.equal(timing.nearbyOpportunityOpen(ride({ active_from: '2026-09-29 22:30:00' }), null, now), false, 'resting until later');
+  assert.equal(timing.nearbyOpportunityOpen(ride({ active_to: '2026-09-29 21:59:00' }), null, now), false, 'window over');
+  assert.equal(timing.nearbyOpportunityOpen(ride({ active_from: '2026-09-29 21:00:00', active_to: '2026-09-29 23:00:00' }), 'OPERATING', now), true);
+  for (const status of ['DOWN', 'CLOSED', 'REFURBISHMENT']) {
+    assert.equal(timing.nearbyOpportunityOpen(ride({}), status, now), false, status);
+  }
+  assert.equal(timing.nearbyOpportunityOpen({ type: 'coin', model: { active_to: '2026-09-29 21:00:00' } }, null, now), false);
+  assert.equal(timing.nearbyOpportunityOpen({ type: 'secret_task', model: {} }, 'CLOSED', now), true, 'live status is for rides only');
+  assert.equal(timing.nearbyOpportunityOpen({ type: 'item', model: { active_from: '2026-09-29 23:00:00' } }, null, now), true, 'untimed kinds ignore stray fields');
+});
+
 function clock() {
   const slots = []; const timers = new Map(); let index = 0; let effects = []; let dirty = true;
   let time = now; let focused = true; let enabled = true; let listener; let calls = 0; let timerId = 0; let value;

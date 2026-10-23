@@ -1,14 +1,12 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import { opportunityIsActive } from '../screens/ExploreScreen/mapOpportunityTiming';
+import { nearbyOpportunityOpen } from '../screens/ExploreScreen/mapOpportunityTiming';
 import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
-import { CoinType } from '../models/coin-type';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
-import { KeyType } from '../models/key-type';
 import { ParkType } from '../models/park-type';
 import { RedeemableType } from '../models/redeemable-type';
 import RedeemCurrentRedeemableModal from './RedeemCurrentRedeemableModel';
@@ -26,8 +24,11 @@ export default function RedeemModal({
   onTaskFailed,
   onTaskCompleted,
   selectedTaskId = null,
+  liveStatus = null,
   onOpenChange,
 }: {
+  /** The live feed's status for the ride in range (DOWN, CLOSED...): no PLAY RIDE on a closed ride. */
+  readonly liveStatus?: string | null;
   /** The ride selected on the map; PLAY RIDE hides while a different ride is selected. */
   readonly selectedTaskId?: number | null;
   /** The challenge flow opened or closed (for the map's one-overlay-at-a-time queue). */
@@ -53,9 +54,9 @@ export default function RedeemModal({
   const task = redeemable?.type === 'task' ? redeemable.model as TaskType : null;
   // Selecting a different ride on the map means the player is looking elsewhere.
   const otherSelected = !!task && selectedTaskId !== null && selectedTaskId !== task.id;
-  const timed = redeemable?.type === 'coin' || redeemable?.type === 'key' || redeemable?.type === 'redeemable';
-  const available = !!redeemable && !otherSelected && (!timed || opportunityIsActive(
-    redeemable.model as CoinType | KeyType | RedeemableType));
+  // A ride resting until "Back 2:00 PM", or one the live feed shows closed, never offers
+  // PLAY RIDE, even when the server still counts the player in range.
+  const available = !otherSelected && nearbyOpportunityOpen(redeemable, liveStatus);
   const identity = redeemable ? `${redeemable.type}:${redeemable.model.id}` : null;
   useEffect(() => {
     if (available && identity !== lastAnnounced.current) {
