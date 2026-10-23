@@ -72,12 +72,17 @@ const LOCKER_HEIGHT_RATIO = 0.12;
 const Q_BUTTON_Y_RATIO = 0.315;
 const Q_BUTTON_SIZE = 60; // slightly larger tap target
 
-// Leave Gift button position (bottom right area)
-const LEAVE_GIFT_Y_RATIO = 0.74;
-const LEAVE_GIFT_X_RATIO = 0.66;
-/** The Leave Gift button art is 160 wide: keep all of it on screen (it ran 23 pt off a 402 pt phone). */
-const LEAVE_GIFT_W = 160;
-const LEAVE_GIFT_LEFT = Math.min(SCREEN_WIDTH * LEAVE_GIFT_X_RATIO, SCREEN_WIDTH - LEAVE_GIFT_W - 12);
+// Leave Gift button: it sits in the empty green slot painted into the background, under the 350
+// price. The slot spans about 0.70 to 0.99 of the art's width and is centered at 0.77 of its height.
+// The button used to be a fixed 160 pt wide at 0.66, so it ran 23 pt off a 402 pt phone and missed
+// the slot. Now it scales with the art and covers the slot exactly on every phone.
+const LEAVE_GIFT_ART_ASPECT = 842 / 375;
+const LEAVE_GIFT_W = Math.round(SCREEN_WIDTH * 0.31);
+const LEAVE_GIFT_H = Math.round(LEAVE_GIFT_W / LEAVE_GIFT_ART_ASPECT);
+const LEAVE_GIFT_LEFT = Math.round(SCREEN_WIDTH * 0.678);
+/** The gentle pulse stays small so the button never grows past the screen edge. */
+const LEAVE_GIFT_PULSE = 1.05;
+const LEAVE_GIFT_CENTER_Y_RATIO = 0.77;
 
 interface Gift {
   id: number;
@@ -304,7 +309,7 @@ export default function CommunityCenterScreen() {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.08,
+            toValue: LEAVE_GIFT_PULSE,
             duration: 800,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
@@ -419,7 +424,7 @@ export default function CommunityCenterScreen() {
     if (slotIndex === 'give') {
       // From Leave Gift button
       startX = LEAVE_GIFT_LEFT + LEAVE_GIFT_W / 2;
-      startY = SCALED_HEIGHT * LEAVE_GIFT_Y_RATIO;
+      startY = SCALED_HEIGHT * LEAVE_GIFT_CENTER_Y_RATIO;
     } else {
       // From gift slot
       const leftPositions = [0.11, 0.39, 0.67];
@@ -959,7 +964,7 @@ export default function CommunityCenterScreen() {
                 styles.leaveGiftButton,
                 {
                   left: LEAVE_GIFT_LEFT,
-                  top: SCALED_HEIGHT * LEAVE_GIFT_Y_RATIO,
+                  top: SCALED_HEIGHT * LEAVE_GIFT_CENTER_Y_RATIO - LEAVE_GIFT_H / 2,
                   transform: [
                     { scale: Animated.multiply(pulseAnim, leaveGiftScale) },
                   ],
@@ -1424,7 +1429,7 @@ const styles = StyleSheet.create({
   },
   leaveGiftImage: {
     width: LEAVE_GIFT_W,
-    height: 65,
+    height: LEAVE_GIFT_H,
   },
   leaveGiftSpinner: {
     position: 'absolute',
