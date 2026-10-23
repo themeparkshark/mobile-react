@@ -6,6 +6,7 @@ import Animated, {
   Easing, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming,
 } from 'react-native-reanimated';
 import HomeArcade from '../../components/HomeArcade';
+import { BOTTOM_BAR_OVERHANG } from '../../components/Wrapper';
 import YellowButton from '../../components/YellowButton';
 import { LocationStatusContext } from '../../context/LocationProvider';
 
@@ -70,7 +71,7 @@ export default function PermissionsNotGranted() {
   };
   // Short phones (iPhone SE): a smaller Finn and finds, so his cap stays clear of the status bar.
   const compact = useWindowDimensions().height < 700;
-  if (playing) return <NotNowPlay asking={asking} onTurnOn={turnOn} arcadeOpen={arcadeOpen} setArcadeOpen={setArcadeOpen} />;
+  if (playing) return <NotNowPlay asking={asking} onTurnOn={turnOn} arcadeOpen={arcadeOpen} setArcadeOpen={setArcadeOpen} compact={compact} />;
 
   return (
     <View style={styles.wrap}>
@@ -100,26 +101,26 @@ export default function PermissionsNotGranted() {
 }
 
 /** The "Not now" card: two big picture buttons, then location and News as quiet options. */
-function NotNowPlay({ asking, onTurnOn, arcadeOpen, setArcadeOpen }: {
-  asking: boolean; onTurnOn: () => void; arcadeOpen: boolean; setArcadeOpen: (open: boolean) => void;
+function NotNowPlay({ asking, onTurnOn, arcadeOpen, setArcadeOpen, compact }: {
+  asking: boolean; onTurnOn: () => void; arcadeOpen: boolean; setArcadeOpen: (open: boolean) => void; compact: boolean;
 }) {
   return (
     <View style={styles.wrap}>
       <Image source={BACKDROP} style={StyleSheet.absoluteFill} contentFit="cover" />
       <View style={[StyleSheet.absoluteFill, styles.tint]} />
       <Animated.View entering={FadeInUp.duration(380).springify().damping(14)} style={styles.card}>
-        <Image source={FINN} style={styles.shark} contentFit="contain" accessibilityLabel="Finn the shark" />
-        <Text style={styles.title}>{NOT_NOW_COPY.title}</Text>
+        <Image source={FINN} style={[styles.shark, compact && styles.sharkCompact]} contentFit="contain" accessibilityLabel="Finn the shark" />
+        <Text style={[styles.title, compact && styles.titleCompact]}>{NOT_NOW_COPY.title}</Text>
         <View style={styles.tiles}>
           <Pressable onPress={() => setArcadeOpen(true)} accessibilityRole="button" accessibilityLabel={NOT_NOW_COPY.games}
             accessibilityHint="Opens the home arcade" style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}>
-            <Image source={require('../../../assets/images/screens/social/arcade.png')} style={styles.tileIcon} contentFit="contain" />
+            <Image source={require('../../../assets/images/screens/social/arcade.png')} style={[styles.tileIcon, compact && styles.tileIconCompact]} contentFit="contain" />
             <Text style={styles.tileText}>{NOT_NOW_COPY.games}</Text>
             <Text style={styles.tileSub}>{NOT_NOW_COPY.gamesHint}</Text>
           </Pressable>
           <Pressable onPress={() => RootNavigation.navigate('CoinShelf')} accessibilityRole="button" accessibilityLabel={NOT_NOW_COPY.park}
             accessibilityHint="Shows the ride coins you can win at each park" style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}>
-            <Image source={require('../../../assets/images/coingold.png')} style={styles.tileIcon} contentFit="contain" />
+            <Image source={require('../../../assets/images/coingold.png')} style={[styles.tileIcon, compact && styles.tileIconCompact]} contentFit="contain" />
             <Text style={styles.tileText}>{NOT_NOW_COPY.park}</Text>
             <Text style={styles.tileSub}>{NOT_NOW_COPY.parkHint}</Text>
           </Pressable>
@@ -145,9 +146,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 } },
   tilePressed: { backgroundColor: '#ffefb3', transform: [{ scale: 0.97 }] },
   tileIcon: { width: 76, height: 76 },
+  tileIconCompact: { width: 60, height: 60 },
   tileText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e', marginTop: 4, textAlign: 'center' },
   tileSub: { fontFamily: 'Knockout', fontSize: 14, color: '#3d6a96', marginTop: 2, textAlign: 'center' },
-  wrap: { ...StyleSheet.absoluteFillObject, zIndex: 30, justifyContent: 'center', alignItems: 'center', padding: 22 },
+  // Ends where the footer's raised MAP compass begins, so the 5-icon footer shows whole, as on every screen.
+  wrap: { ...StyleSheet.absoluteFillObject, bottom: BOTTOM_BAR_OVERHANG, zIndex: 30, justifyContent: 'center', alignItems: 'center',
+    padding: 22, overflow: 'hidden', borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   tint: { backgroundColor: 'rgba(3, 38, 92, 0.18)' },
   card: { width: '100%', alignItems: 'center', backgroundColor: '#0768b9', borderRadius: 26,
     borderWidth: 4, borderColor: '#fff', paddingVertical: 20, paddingHorizontal: 18,

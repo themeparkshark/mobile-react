@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, FadeIn, FadeOut, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat,
-  withSequence, withSpring, withTiming, type SharedValue,
+  withSequence, withSpring, withTiming
 } from 'react-native-reanimated';
 import HomeArcade from '../../components/HomeArcade';
 import Map from '../../components/Map';
@@ -27,6 +27,8 @@ import MysteryCoinArtwork from '../../components/MysteryCoinArtwork';
 import ParkShelfArtwork from '../../components/ParkShelfArtwork';
 import Ribbon from '../../components/Ribbon';
 import SignInButtons from '../../components/SignInButtons';
+import SparkleBurst from '../../components/SparkleBurst';
+import TapHint from '../../components/TapHint';
 import TeacherShark from '../../components/Tutorial/TeacherShark';
 import { playSfx } from '../../gamekit/SFX';
 import MemoryGame from '../../games/memory/MemoryGame';
@@ -40,8 +42,6 @@ const CHURRO = require('../../../assets/images/prep-items/churros/churro_01.png'
 const COIN = require('../../../assets/images/coingold.png');
 const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
 const UNDERWATER = require('../../../assets/images/screens/park/background-new.png');
-const SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
-const STARBURST = require('../../../assets/images/screens/explore/starburst.png');
 
 /** Steps in Finn's progress dots. */
 const STEP_INDEX = { find: 0, play: 1, coin: 2, save: 3 } as const;
@@ -78,6 +78,8 @@ export default function GuestTaste() {
   }, []);
 
   const step = progress ? guestStep(progress) : null;
+  /** Short phones (iPhone SE): the shelf sits higher and smaller so Finn's line never covers it. */
+  const short = !!size && size.h < 600;
   const current = progress ?? EMPTY_GUEST_TASTE;
   const treats = current.caught || bagged ? 1 : 0;
   // From the churro (centre of the find area) to the badge in the top corner.
@@ -86,24 +88,36 @@ export default function GuestTaste() {
     y: BADGE_INSET + BADGE / 2 - (size.h - findRoom(size.h)) / 2,
   } : null;
 
+  // The live map (under a light blur) is the backdrop only while the churro
+  // sits on it. From the game on, a still underwater scene takes over, so a
+  // guest left on the save card is not re-blurring a live map every frame.
+  const liveMap = step === 'find';
   return <View style={styles.fill} onLayout={onLayout}>
-    <View style={StyleSheet.absoluteFill} pointerEvents="none"><Map>{null}</Map></View>
-    <BlurView intensity={step === 'find' ? 6 : 14} tint="light" style={StyleSheet.absoluteFill} />
+    {liveMap ? <>
+      <View style={StyleSheet.absoluteFill} pointerEvents="none"><Map>{null}</Map></View>
+      <BlurView intensity={6} tint="light" style={StyleSheet.absoluteFill} />
+    </> : step && <Animated.View entering={reduced ? undefined : FadeIn.duration(320)} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Image source={UNDERWATER} style={StyleSheet.absoluteFill} contentFit="cover" />
+    </Animated.View>}
     <View style={[StyleSheet.absoluteFill, styles.tint]} pointerEvents="none" />
 
     {step === 'find' && size && toBadge && <ChurroFind reduced={reduced} toBadge={toBadge} room={findRoom(size.h)}
       onCatch={() => setYum(true)} onBagged={() => setBagged(true)}
       onDone={() => advance({ ...current, caught: true })} />}
-    {step === 'coin' && <ShelfCoinLanding reduced={reduced} onDone={() => advance({ ...current, shelved: true })} />}
+    {step === 'coin' && <ShelfCoinLanding reduced={reduced} compact={short} onDone={() => advance({ ...current, shelved: true })} />}
     {step === 'save' && <SaveCard onPlayMore={() => setArcadeOpen(true)} />}
+
+    {/* Finn walks the whole taste with the same four dots: find, play, coin, save. */}
+    {step === 'coin' && <TeacherShark title={COPY.coin.title} text={COPY.coin.body} mood="celebrating" position="bottom-center"
+      showNext={false} onNext={() => undefined} stepIndex={STEP_INDEX.coin} totalSteps={4} bottomOffset={short ? 26 : 48} />}
 
     {(step === 'find' || step === 'play') && !gameOpen && <TreatBadge count={treats} reduced={reduced} />}
 
     {(step === 'find' || step === 'play') && !gameOpen &&
-      <TeacherShark title={step === 'find' ? (yum ? undefined : COPY.find.title) : COPY.play.title}
-        text={step === 'find' ? (yum ? COPY.yum : COPY.find.body) : COPY.play.body}
+      <TeacherShark title={step === 'find' ? (yum ? COPY.yum.title : COPY.find.title) : COPY.play.title}
+        text={step === 'find' ? (yum ? COPY.yum.body : COPY.find.body) : COPY.play.body}
         mood={step === 'find' ? (yum ? 'celebrating' : 'waving') : 'excited'} position="bottom-center"
-        showNext={step === 'play'} nextText={COPY.play.button}
+        showNext={step === 'play'} nextText={COPY.play.button} pointAtNext={step === 'play'}
         stepIndex={STEP_INDEX[step]} totalSteps={4} bottomOffset={48}
         onNext={() => { setGameRun(run => run + 1); setGameOpen(true); }} />}
 
@@ -112,43 +126,6 @@ export default function GuestTaste() {
       onComplete={() => { setGameOpen(false); advance({ ...current, caught: true, won: true }); }} />}
     <HomeArcade visible={arcadeOpen} onClose={() => setArcadeOpen(false)} />
   </View>;
-}
-
-/** A one-shot gold burst: a ring, a star flash and eight sparkles flying out. UI thread only. */
-function SparkleBurst({ size = 140, delay = 0 }: { size?: number; delay?: number }) {
-  const t = useSharedValue(0);
-  useEffect(() => {
-    t.value = withDelay(delay, withTiming(1, { duration: 700, easing: Easing.out(Easing.quad) }));
-    return () => cancelAnimation(t);
-  }, [t, delay]);
-  const ring = useAnimatedStyle(() => ({
-    opacity: t.value > 0 ? 1 - t.value : 0,
-    transform: [{ scale: 0.3 + t.value * 0.8 }],
-  }));
-  const flash = useAnimatedStyle(() => ({
-    opacity: t.value > 0 ? 0.9 * (1 - t.value) : 0,
-    transform: [{ scale: 0.4 + t.value * 0.7 }, { rotate: `${t.value * 45}deg` }],
-  }));
-  return <View pointerEvents="none" style={[styles.burst, { width: size, height: size, marginLeft: -size / 2, marginTop: -size / 2 }]}>
-    <Animated.View style={[styles.burstRing, { borderRadius: size / 2 }, ring]} />
-    <Animated.View style={[StyleSheet.absoluteFill, flash]}>
-      <Image source={STARBURST} style={StyleSheet.absoluteFill} contentFit="contain" tintColor={BRAND.gold} />
-    </Animated.View>
-    {[0, 1, 2, 3, 4, 5, 6, 7].map(k => <BurstSparkle key={k} k={k} t={t} reach={size * 0.6} />)}
-  </View>;
-}
-
-function BurstSparkle({ k, t, reach }: { k: number; t: SharedValue<number>; reach: number }) {
-  const angle = (k / 8) * Math.PI * 2 - Math.PI / 2;
-  const far = k % 2 ? 0.75 : 1;
-  const style = useAnimatedStyle(() => ({
-    opacity: t.value > 0 && t.value < 1 ? 1 - t.value * t.value : 0,
-    transform: [{ translateX: Math.cos(angle) * reach * far * t.value }, { translateY: Math.sin(angle) * reach * far * t.value },
-      { scale: 0.7 + (1 - t.value) * 0.6 }],
-  }));
-  return <Animated.View style={[styles.sparkle, style]}>
-    <Image source={SPARKLE} style={styles.sparkleImg} contentFit="contain" />
-  </Animated.View>;
 }
 
 /** Where caught treats go: a cream badge with the churro and a count that pops. */
@@ -232,6 +209,8 @@ function ChurroFind({ reduced, toBadge, room, onCatch, onBagged, onDone }: {
         <Animated.View style={[styles.findDisc, discStyle]} />
         <Animated.View style={churroStyle}><Image source={CHURRO} style={styles.churro} contentFit="contain" /></Animated.View>
       </Pressable>
+      {/* After two quiet seconds a hand taps the churro: no reading needed. */}
+      {!caught && <TapHint delay={2000} style={styles.churroHand} />}
     </View>
     {caught && <Animated.View entering={reduced ? undefined : FadeIn.duration(160)} style={styles.caughtPill}>
       <Text style={styles.caught}>{COPY.caught}</Text>
@@ -244,7 +223,7 @@ function ChurroFind({ reduced, toBadge, room, onCatch, onBagged, onDone }: {
  * plank and empty sockets as a real park shelf) and clinks into place with a
  * gold burst. It moves on by itself about a second later, or on a tap.
  */
-function ShelfCoinLanding({ reduced, onDone }: { reduced: boolean; onDone: () => void }) {
+function ShelfCoinLanding({ reduced, compact, onDone }: { reduced: boolean; compact: boolean; onDone: () => void }) {
   const fly = useSharedValue(reduced ? 1 : 0), glow = useSharedValue(0);
   const [landed, setLanded] = useState(reduced);
   const done = useRef(false);
@@ -265,7 +244,8 @@ function ShelfCoinLanding({ reduced, onDone }: { reduced: boolean; onDone: () =>
   useEffect(() => {
     if (!landed) return;
     if (!reduced) glow.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: 600 }));
-    const next = setTimeout(finish, reduced ? 2000 : 1250);
+    // Long enough to see the coin sit in its socket and hear Finn; a tap goes on sooner.
+    const next = setTimeout(finish, reduced ? 2600 : 2000);
     return () => { clearTimeout(next); cancelAnimation(glow); };
   }, [landed, reduced, glow, finish]);
   // The coin drops in big over the ribbon and ends in socket 1.
@@ -276,10 +256,10 @@ function ShelfCoinLanding({ reduced, onDone }: { reduced: boolean; onDone: () =>
       { rotate: `${(1 - t) * -25}deg` }, { scale: 2.1 - 1.1 * t }] };
   });
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scale: 1 + glow.value * 0.5 }] }));
-  return <Pressable style={styles.shelfWrap} onPress={finish} accessibilityRole="button"
-    accessibilityLabel={`${COPY.coin.ribbon}. ${COPY.coin.body}`} accessibilityHint={COPY.coin.tap}>
+  return <Pressable style={[styles.shelfWrap, compact && styles.shelfWrapCompact]} onPress={finish} accessibilityRole="button"
+    accessibilityLabel={`${COPY.coin.ribbon}. ${COPY.coin.title} ${COPY.coin.body}`} accessibilityHint={COPY.coin.tap}>
     <Animated.View entering={reduced ? undefined : FadeIn.duration(200)} exiting={reduced ? undefined : FadeOut.duration(220)}
-      style={styles.shelfCard}>
+      style={[styles.shelfCard, compact && styles.shelfCardCompact]}>
       <Image source={UNDERWATER} style={[StyleSheet.absoluteFill, styles.shelfArt]} contentFit="cover" />
       <View style={styles.ribbonWrap}><Ribbon text={COPY.coin.ribbon} /></View>
       <View style={styles.shelfPanel}>
@@ -299,9 +279,6 @@ function ShelfCoinLanding({ reduced, onDone }: { reduced: boolean; onDone: () =>
           </Animated.View>
         </View>
       </View>
-      <View style={!landed && styles.hidden}>
-        <Text style={styles.shelfBody}>{COPY.coin.body}</Text>
-      </View>
     </Animated.View>
   </Pressable>;
 }
@@ -310,22 +287,34 @@ function ShelfCoinLanding({ reduced, onDone }: { reduced: boolean; onDone: () =>
 function SaveCard({ onPlayMore }: { onPlayMore: () => void }) {
   return <View style={styles.center}>
     <Animated.View entering={FadeIn.duration(260)} style={styles.card}>
+      <ProgressDots index={STEP_INDEX.save} total={4} />
       <View style={styles.finnWrap} accessible accessibilityLabel="Finn holding your churro">
         <Image source={FINN} style={styles.finn} contentFit="contain" />
         <Image source={CHURRO} style={styles.finnChurro} contentFit="contain" />
       </View>
       <Text style={styles.title} accessibilityRole="header">{COPY.save.title}</Text>
       <Text style={styles.body}>{COPY.save.body}</Text>
-      <View style={styles.grownUp}>
-        <GameIcon name="heart" size={22} />
-        <Text style={styles.grownUpText}>{COPY.save.grownUp}</Text>
+      {/* One grouped unit: the cue is a plain label (not a button) right on top of the Apple button it means. */}
+      <View style={styles.grownUpGroup}>
+        <View style={styles.grownUp} accessible accessibilityRole="text">
+          <GameIcon name="heart" size={18} />
+          <Text style={styles.grownUpText}>{COPY.save.grownUp}</Text>
+        </View>
+        <SignInButtons plain width={260} />
       </View>
-      <SignInButtons plain width={260} />
       <View style={styles.more}>
         <GameButton variant="ghost" label={COPY.save.again} icon="play" onPress={onPlayMore}
           accessibilityHint="Opens games you can play without signing in" />
       </View>
     </Animated.View>
+  </View>;
+}
+
+/** Finn's four progress dots (the same look as his speech bubble), for the save card. */
+function ProgressDots({ index, total }: { index: number; total: number }) {
+  return <View style={styles.dots} accessible accessibilityLabel={`Step ${index + 1} of ${total}`}>
+    {Array.from({ length: total }, (_, i) => <View key={i}
+      style={[styles.dot, i === index && styles.dotActive, i < index && styles.dotDone]} />)}
   </View>;
 }
 
@@ -339,10 +328,6 @@ const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: BRAND.sky },
   tint: { backgroundColor: 'rgba(7,104,185,0.12)' },
   hidden: { opacity: 0 },
-  burst: { position: 'absolute', left: '50%', top: '50%', alignItems: 'center', justifyContent: 'center' },
-  burstRing: { ...StyleSheet.absoluteFillObject, borderWidth: 6, borderColor: BRAND.gold },
-  sparkle: { position: 'absolute', width: 44, height: 54 },
-  sparkleImg: { width: 44, height: 54 },
   badgeWrap: { position: 'absolute', top: BADGE_INSET, left: BADGE_INSET, width: BADGE, height: BADGE },
   badgeBurst: { ...StyleSheet.absoluteFillObject },
   badge: { width: BADGE, height: BADGE, borderRadius: BADGE / 2, backgroundColor: BRAND.cream, borderWidth: 4,
@@ -362,7 +347,11 @@ const styles = StyleSheet.create({
   caughtPill: { marginTop: 8, backgroundColor: BRAND.navy, borderRadius: 22, borderWidth: 3, borderColor: BRAND.white,
     paddingHorizontal: 18, paddingVertical: 4, ...SHADOW.card },
   caught: { fontFamily: 'Shark', fontSize: 28, color: BRAND.gold, textAlign: 'center' },
-  shelfWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  // The shelf sits in the upper half; Finn and his line stand under it.
+  shelfWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20,
+    paddingBottom: 250 },
+  shelfWrapCompact: { justifyContent: 'flex-start', paddingTop: 0, paddingBottom: 0 },
+  shelfCardCompact: { transform: [{ scale: 0.86 }], marginTop: -14 },
   // No overflow clip: the coin drops in from above the card. The art carries the rounded corners.
   shelfArt: { borderRadius: 22 },
   shelfCard: { width: '100%', maxWidth: 360, alignItems: 'center', borderRadius: 26,
@@ -382,7 +371,6 @@ const styles = StyleSheet.create({
   ownedCoinImg: { width: SOCKET - 10, height: SOCKET - 10 },
   flyCoin: { position: 'absolute', top: 4, left: '50%', marginLeft: -SOCKET / 2, width: SOCKET, height: SOCKET, zIndex: 3 },
   flyCoinImg: { width: SOCKET, height: SOCKET },
-  shelfBody: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, textAlign: 'center', marginTop: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   card: { width: '100%', maxWidth: 360, alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 26,
     borderWidth: 4, borderColor: BRAND.white, paddingTop: 64, paddingHorizontal: 20, paddingBottom: 14, ...SHADOW.lifted },
@@ -391,8 +379,13 @@ const styles = StyleSheet.create({
   finnChurro: { position: 'absolute', right: -6, bottom: 26, width: 48, height: 48, transform: [{ rotate: '18deg' }] },
   title: { fontFamily: 'Shark', fontSize: 28, color: BRAND.navy, textAlign: 'center' },
   body: { fontFamily: 'Knockout', fontSize: 18, lineHeight: 23, color: BRAND.navySoft, textAlign: 'center', marginTop: 6 },
-  grownUp: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.white, borderRadius: 16,
-    paddingVertical: 8, paddingHorizontal: 14, marginTop: 12, marginBottom: 10, borderWidth: 2, borderColor: BRAND.sky },
-  grownUpText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
+  grownUpGroup: { alignItems: 'center', marginTop: 14 },
+  grownUp: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  grownUpText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft },
+  dots: { position: 'absolute', top: 12, right: 16, flexDirection: 'row', gap: 6 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: BRAND.sky },
+  dotActive: { width: 20, backgroundColor: BRAND.blueBright },
+  dotDone: { backgroundColor: BRAND.gold },
+  churroHand: { top: -6, right: 20 },
   more: { marginTop: 8, alignSelf: 'stretch' },
 });

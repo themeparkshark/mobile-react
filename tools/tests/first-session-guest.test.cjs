@@ -52,7 +52,7 @@ test('a guest who already won the warm-up is greeted back and never replays it',
   const fresh = getStepsForSequence('onboarding');
   const back = getStepsForSequence('onboarding', { guestPlayed: true });
   assert.equal(back.length, 1);
-  assert.match(back[0].text, /back/i);
+  assert.match(back[0].title, /back/i);
   assert.equal(back[0].nextText, fresh[0].nextText, 'same Grab it! step, so the first home find still opens');
   for (const steps of [getStepsForSequence('onboarding', { inPark: true, guestPlayed: true }),
     getStepsForSequence('park_arrival', { guestPlayed: true })]) {
@@ -129,8 +129,12 @@ test('the guest taste is claimed by the first account only: a sibling or a later
   assert.equal(mod.guestStep(await mod.readGuestTaste()), 'find');
   assert.equal(await mod.guestPlayedWarmup(), false);
   await mod.saveGuestTaste({ caught: true, won: true, shelved: false });
+  // Whoever signs in first after a taste claims it, even an earlier owner, so it never drifts to a sibling later.
   assert.equal(await mod.claimGuestWarmup(20), true);
-  assert.equal(await mod.claimGuestWarmup(44), true, 'the new guest’s own account claims the new taste');
+  assert.equal(JSON.parse(store.get(mod.GUEST_TASTE_KEY)).claimedBy, 20);
+  assert.equal(await mod.claimGuestWarmup(44), false, 'a later account on the phone starts fresh');
+  await mod.saveGuestTaste({ caught: true, won: true, shelved: true });
+  assert.equal(await mod.claimGuestWarmup(44), true, 'the next guest’s own account claims the next taste');
   assert.equal(await mod.claimGuestWarmup(31), false);
   const { guestClaimFor } = mod;
   assert.deepEqual({ ...guestClaimFor({ caught: true, won: false, shelved: false }, [], 5) }, { played: false, claim: false });
@@ -149,8 +153,9 @@ test('onboarding waits for the guest check, so a new account never starts the wr
 test('the save ask promises only what is kept: no saved shark, no kept coin', () => {
   const { GUEST_TASTE_COPY } = guestTasteModule();
   const { getStepsForSequence } = loadTs('src/components/Tutorial/steps.ts');
-  const back = getStepsForSequence('onboarding', { guestPlayed: true })[0];
-  const promises = [GUEST_TASTE_COPY.save.title, GUEST_TASTE_COPY.save.body, GUEST_TASTE_COPY.coin.body, back.text, back.subtitle];
+  const backs = [true, false].map(findReady => getStepsForSequence('onboarding', { guestPlayed: true, findReady })[0]);
+  const promises = [GUEST_TASTE_COPY.save.title, GUEST_TASTE_COPY.save.body, GUEST_TASTE_COPY.coin.title, GUEST_TASTE_COPY.coin.body,
+    ...backs.flatMap(back => [back.title, back.text, back.subtitle])].filter(Boolean);
   for (const line of promises) assert.doesNotMatch(line, /saved|stays yours|your coin/i, line);
   assert.match(GUEST_TASTE_COPY.save.grownUp, /grown-up/);
   const card = read('src/screens/ExploreScreen/GuestTaste.tsx');
@@ -158,7 +163,7 @@ test('the save ask promises only what is kept: no saved shark, no kept coin', ()
   assert.match(card, /<TreatBadge /, 'the churro has somewhere to go');
   assert.match(card, /COPY\.yum/, 'Finn reacts the instant the churro is caught');
   assert.match(card, /<ParkShelfArtwork /, 'the coin lands on the real park shelf art');
-  assert.match(card, /setTimeout\(finish, reduced \? 2000 : 1250\)/, 'the shelf moves on in about a second');
+  assert.match(card, /setTimeout\(finish, reduced \? 2600 : 2000\)/, 'the shelf holds about 2 s (a tap goes on sooner)');
 });
 
 test('guests hear the game (silent switch still wins); players follow their setting; dev captures stay quiet', () => {
@@ -201,4 +206,81 @@ test('one Finn and a clean underwater scene on the location cards', () => {
   assert.match(source, /tutorial\/teacher-shark\.png/);
   assert.match(source, /park: 'Ride coins'/);
   assert.match(source, /parkHint: 'Win these at the park'/);
+});
+
+// Round 3 (Oct 23): Finn never promises a treat that is not there, the first win is a real
+// celebration, the first minute needs no reading, and the footer always shows.
+
+test('welcome back (and a new player hello) only says "it landed right next to you" when a find is really there', () => {
+  const { getStepsForSequence, GUEST_WELCOME_BACK } = loadTs('src/components/Tutorial/steps.ts');
+  const ready = getStepsForSequence('onboarding', { guestPlayed: true, findReady: true })[0];
+  const waiting = getStepsForSequence('onboarding', { guestPlayed: true, findReady: false })[0];
+  assert.equal(ready.title, GUEST_WELCOME_BACK.title);
+  assert.match(ready.text, /right next to you/);
+  assert.equal(ready.nextText, 'Grab it!');
+  assert.doesNotMatch(`${waiting.text} ${waiting.subtitle}`, /landed|right next to you|here/i);
+  assert.match(waiting.subtitle, /Walk around/);
+  assert.notEqual(waiting.nextText, 'Grab it!');
+  const newPlayer = getStepsForSequence('onboarding', { findReady: false })[0];
+  assert.doesNotMatch(`${newPlayer.text} ${newPlayer.subtitle}`, /landed|right next to you/i);
+  // Never a park step at home: home onboarding has no park lines.
+  for (const step of [ready, waiting, newPlayer]) assert.doesNotMatch(`${step.title ?? ''} ${step.text}`, /ride coin|collection/i);
+});
+
+test('the map waits to know where the player is, holds the first find for Finn, and opens it on Grab it!', () => {
+  const source = read('src/screens/ExploreScreen.tsx');
+  assert.match(source, /if \(!park && !homeLocationConfirmed\) return;/, 'no hello until home or park is known');
+  assert.match(source, /startTutorial\('onboarding', \{ inPark: !!park, findReady: !park && homeFindReady \}\)/);
+  assert.match(source, /source === 'auto' && isReady && !hasCompleted\('onboarding'\)/, 'the first find waits for Finn');
+  assert.match(source, /onFindInRange=\{onFindInRange\}/, 'a loaded find in range counts at once');
+  assert.match(source, /findLanded\?\.\(\)/, 'a find that lands late upgrades his line');
+  // The pending find is cleared inside the timer (clearing it first cancelled the timer and the find never opened).
+  const open = source.slice(source.indexOf('When Finn is done talking'), source.indexOf('Home Hunt v3'));
+  assert.ok(open.indexOf('setTimeout(') < open.indexOf('setPendingFind(null);\n      handlePrepItemNearby'), open);
+  assert.match(source, /tutorialActive: isActive \|\| firstLineGap/, 'the chest waits for the Nice catch line');
+  const provider = read('src/components/Tutorial/TutorialProvider.tsx');
+  assert.match(provider, /MAP_SEQUENCES\.has\(currentSequence as TutorialSequence\) \? 120 : 20/, 'Finn stands above the MAP compass');
+});
+
+test('Finn’s warm-up win is its own card: Finn cheering, a burst, what is next, one CONTINUE, fanfare', () => {
+  const source = read('src/games/memory/MemoryResults.tsx');
+  assert.match(source, /if \(firstWin\) return <FirstWinCard /);
+  const card = source.slice(source.indexOf('function FirstWinCard'), source.indexOf('/** Fades a section in'));
+  assert.ok(source.includes("FINN_GRAD = require('../../../assets/images/tutorial/teacher-shark.png')"), 'the same graduate Finn as the rest of the first minute');
+  assert.ok(card.includes('source={FINN_GRAD}'));
+  assert.match(card, /<SparkleBurst /);
+  assert.match(card, /playLadder\('mm_sharp_twinkle'/, 'the twinkle ladder, not a lone hit');
+  assert.match(card, /FIRST_WIN_COPY\.next/);
+  assert.match(card, /colors=\{\['#0a5a9e', '#04305f'\]\}/, 'an opaque scrim: no empty board or booth shark behind');
+  assert.match(read('src/games/memory/MemoryGame.tsx'), /mode === 'warmup' \? 'Finn’s Warm-up'/);
+});
+
+test('no animated SVG node in the memory HUD (a burst of SVG layout events crashed the warm-up once)', () => {
+  const hud = read('src/games/memory/Hud.tsx');
+  assert.doesNotMatch(hud, /createAnimatedComponent\(Circle\)|useAnimatedProps/);
+  assert.match(hud, /styles\.quickRing/);
+});
+
+test('zero-reading cues and one story: a tapping hand, four dots on every step, the coin step says what happened', () => {
+  const taste = read('src/screens/ExploreScreen/GuestTaste.tsx');
+  assert.match(taste, /<TapHint delay=\{2000\} style=\{styles\.churroHand\} \/>/);
+  assert.match(taste, /pointAtNext=\{step === 'play'\}/);
+  assert.match(taste, /stepIndex=\{STEP_INDEX\.coin\} totalSteps=\{4\}/);
+  assert.match(taste, /<ProgressDots index=\{STEP_INDEX\.save\} total=\{4\} \/>/);
+  assert.match(taste, /const liveMap = step === 'find';/, 'the live map is not blurred behind an idle save card');
+  const { GUEST_TASTE_COPY } = guestTasteModule();
+  assert.equal(GUEST_TASTE_COPY.coin.title, 'You won!');
+  assert.equal(GUEST_TASTE_COPY.yum.title, 'Yum!');
+  // The grown-up cue is a label, not a look-alike button.
+  const grown = taste.slice(taste.indexOf('grownUp: {'), taste.indexOf('grownUpText'));
+  assert.doesNotMatch(grown, /backgroundColor|borderWidth/);
+  assert.match(read('src/components/Tutorial/TeacherShark.tsx'), /showNext && pointAtNext && <TapHint/);
+});
+
+test('the location cards end above the footer, and the guest sign-in ask never promises coins', () => {
+  const source = read('src/screens/ExploreScreen/PermissionsNotGranted.tsx');
+  assert.match(source, /bottom: BOTTOM_BAR_OVERHANG/);
+  const perms = read('src/hooks/usePermissions.tsx');
+  assert.doesNotMatch(perms, /coins safe/);
+  assert.match(perms, /Sign in to make your own shark\./);
 });
