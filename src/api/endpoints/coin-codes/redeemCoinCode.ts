@@ -1,27 +1,14 @@
-import { Alert } from 'react-native';
-import { ApiResponseType } from '../../../models/api-response-type';
-import { CoinCodeType } from '../../../models/coin-code-type';
+import type { CodeReply } from '../../../screens/RedeemCoinCode/redeemCodeModel';
 import client from '../../client';
 
-export default async function redeemCoinCode(
-  code: string
-): Promise<CoinCodeType | null> {
-  try {
-    const response = await client.post<ApiResponseType<CoinCodeType>>(
-      '/coin-codes/redeem',
-      {
-        code,
-      }
-    );
-
-    return response.data.data;
-  } catch (error: unknown) {
-    const axiosError = error as { response?: { data?: { message?: string } } };
-    Alert.alert(axiosError.response?.data?.message ?? 'Error redeeming code', '', [
-      {
-        text: 'Ok',
-      },
-    ]);
-    return null;
-  }
+/**
+ * Redeems a coin or Shark Drop code. Resolves with the code's values plus
+ * `granted` (what the server really added). Rejects on any error; the screen
+ * shows the message inline.
+ */
+export default async function redeemCoinCode(code: string): Promise<CodeReply> {
+  const response = await client.post<{ data: CodeReply; granted?: CodeReply['granted'] }>('/coin-codes/redeem', { code });
+  const body = response.data;
+  if (!body?.data || typeof body.data !== 'object') throw new Error('Unexpected redeem reply');
+  return { ...body.data, granted: body.granted ?? null };
 }
