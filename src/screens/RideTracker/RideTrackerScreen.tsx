@@ -15,6 +15,7 @@ import Topbar, { BackButton } from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { drainRideLogs, onRideLogOutboxChange, pendingRideLogCount } from '../../services/rideLogOutbox';
 import { GameIcon } from '../../ui';
 
 // ─── Rider Levels (based on rides logged) ───
@@ -161,8 +162,19 @@ export default function RideTrackerScreen() {
     }
   }, [preview]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); setRefreshing(false); }, [load]);
+  // Rides kept on the phone in a dead zone: show how many wait, send them, then reload.
+  const [waitingRides, setWaitingRides] = useState(0);
+  useEffect(() => onRideLogOutboxChange(setWaitingRides), []);
+  const sendWaiting = useCallback(async () => {
+    if (preview) return;
+    setWaitingRides(await pendingRideLogCount());
+    const sent = await drainRideLogs().catch(() => 0);
+    if (sent > 0) await load();
+  }, [preview, load]);
+  useFocusEffect(useCallback(() => { load(); void sendWaiting(); }, [load, sendWaiting]));
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true); await sendWaiting(); await load(); setRefreshing(false);
+  }, [load, sendWaiting]);
 
   const has = stats && stats.total_rides > 0;
   const lvl = stats ? getRiderLevel(stats.total_rides) : RIDER_LEVELS[0];
@@ -226,6 +238,18 @@ export default function RideTrackerScreen() {
               textAlign: 'center', marginBottom: 14 }}>
               Could not load your rides. Check your internet, then pull down to try again.
             </Text>
+          )}
+
+          {waitingRides > 0 && (
+            <View style={s.waitingNote} accessible accessibilityLiveRegion="polite"
+              accessibilityLabel={`${waitingRides} ${waitingRides === 1 ? 'ride is' : 'rides are'} saved on your phone and will join your journal when you have signal`}>
+              <GameIcon name="retry" size={24} />
+              <Text style={s.waitingText}>
+                {waitingRides === 1
+                  ? '1 ride is saved on your phone. It joins your journal when you have signal.'
+                  : `${waitingRides} rides are saved on your phone. They join your journal when you have signal.`}
+              </Text>
+            </View>
           )}
 
           {/* ── Log a Ride ── */}
@@ -458,6 +482,12 @@ const s = StyleSheet.create({
   menuRowBadge: { borderRadius: 10, minWidth: 22, height: 22, paddingHorizontal: 7,
     backgroundColor: '#0877CA', alignItems: 'center', justifyContent: 'center' },
   menuRowBadgeText: { color: '#fff', fontSize: 11, fontFamily: 'Knockout' },
+
+  waitingNote: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFF5D3', borderRadius: 14,
+    borderWidth: 2, borderColor: '#E3AE3E', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 14,
+  },
+  waitingText: { flex: 1, fontSize: 15, fontFamily: 'Knockout', color: '#103F75' },
 
   // Cards
   card: {

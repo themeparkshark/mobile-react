@@ -90,6 +90,7 @@ export function redeemErrorMessage(error: unknown): string {
   const response = (error as { response?: { status?: number; data?: { message?: unknown } } } | null)?.response;
   const message = response?.data?.message;
   if (typeof message === 'string' && message.trim()) return message.trim();
-  if (!response) return REDEEM_COPY.offline;
+  // No reply at all (React Native reports a dropped connection as status 0).
+  if (!response || !(Number(response.status) > 0)) return REDEEM_COPY.offline;
   return REDEEM_COPY.wrong;
 }

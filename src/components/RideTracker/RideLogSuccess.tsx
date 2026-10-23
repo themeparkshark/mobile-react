@@ -32,10 +32,12 @@ interface RideLogSuccessProps {
   newAchievements: Array<{ id: number; name: string; icon: string }>;
   onDone: () => void;
   onLogAnother?: () => void;
+  /** No signal: the ride is kept on the phone and sent later. */
+  queued?: boolean;
 }
 
 const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
-  ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, onLogAnother,
+  ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, onLogAnother, queued = false,
 }) => {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -123,8 +125,10 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
         <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
           <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
             style={styles.heroShark} contentFit="contain" />
-          <Text style={styles.successTitle}>Ride Logged!</Text>
-          {xpEarned > 0 ? (
+          <Text style={styles.successTitle}>{queued ? 'Ride Saved!' : 'Ride Logged!'}</Text>
+          {queued ? (
+            <Text style={styles.journalText}>Kept on your phone. It joins your journal when you have signal.</Text>
+          ) : xpEarned > 0 ? (
             <Text style={styles.xpText}>+{xpEarned} XP</Text>
           ) : (
             <Text style={styles.journalText}>Saved to your ride journal</Text>
@@ -179,7 +183,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   xpText: { color: '#7E5100', fontSize: 22, fontFamily: 'Shark', marginTop: 4 },
-  journalText: { color: '#315C7C', fontSize: 17, fontFamily: 'Knockout', marginTop: 5 },
+  journalText: { color: '#315C7C', fontSize: 17, fontFamily: 'Knockout', marginTop: 5, textAlign: 'center' },
   // Milestone
   milestoneCard: {
     backgroundColor: '#FFF5D3', borderRadius: 16, padding: 20, marginBottom: 20,

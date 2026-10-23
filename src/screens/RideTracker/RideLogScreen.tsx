@@ -25,6 +25,8 @@ import Topbar from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import { removePendingDetection } from '../../services/RideDetectionService';
+import { drainRideLogs, manualRideLogId, queueRideLog, shouldQueueRideLog } from '../../services/rideLogOutbox';
+import { journalRides } from './rideJournalModel';
 import ProfileStatIcon from '../../components/ProfileStatIcon';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { GameIcon, gameAlert, SharkLoader } from '../../ui';
@@ -100,7 +102,13 @@ export default function RideLogScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [successData, setSuccessData] = useState<{
     ride: any; xpEarned: number; newAchievements: any[]; rideCount?: number; totalRideCount?: number;
+    queued?: boolean;
   } | null>(null);
+  // One phone-made id per ride memory, kept across retries so the server saves it once.
+  const logId = useRef<string | null>(null);
+
+  // Rides kept on the phone from an earlier dead zone get another try.
+  useEffect(() => { void drainRideLogs().catch(() => undefined); }, []);
 
   const filteredRides = useMemo(() => {
     if (!searchQuery) return rides;
@@ -163,7 +171,7 @@ export default function RideLogScreen() {
             metadata: null, radius: 50, ride_duration_minutes: null, min_dwell_minutes: null,
           }]
         : await getRides(parkId);
-      if (sequence === rideLoadSequence.current) setRides(data);
+      if (sequence === rideLoadSequence.current) setRides(journalRides(data));
     } catch (e) {
       if (sequence === rideLoadSequence.current) {
         setRides([]);
@@ -194,28 +202,31 @@ export default function RideLogScreen() {
     }
     saving.current = true;
     setSubmitting(true);
+    logId.current ??= detectionId || manualRideLogId();
+    const payload: LogRidePayload & { source_detection_id: string } = {
+      ride_id: selectedRide.id,
+      source_detection_id: logId.current,
+      rating: rating || undefined,
+      reaction: reaction || undefined,
+      note: note.trim() || undefined,
+      wait_time_minutes: waitTime ? parseInt(waitTime, 10) : undefined,
+      rode_at: autoRodeAt || new Date().toISOString(),
+    };
+    const savedRide = {
+      ride_name: selectedRide.name,
+      ride_type: selectedRide.type,
+      park_id: selectedRide.park_id,
+    };
 
     try {
-      const payload: LogRidePayload = {
-        ride_id: selectedRide.id,
-        source_detection_id: detectionId,
-        rating: rating || undefined,
-        reaction: reaction || undefined,
-        note: note.trim() || undefined,
-        wait_time_minutes: waitTime ? parseInt(waitTime, 10) : undefined,
-        rode_at: autoRodeAt || new Date().toISOString(),
-      };
-
       const result = await logRide(payload);
       if (detectionId) void removePendingDetection(detectionId).catch(() => undefined);
+      logId.current = null;
+      // A save that works is a good moment to send any rides still waiting.
+      void drainRideLogs().catch(() => undefined);
 
       setSuccessData({
-        ride: {
-          ...result.data,
-          ride_name: selectedRide.name,
-          ride_type: selectedRide.type,
-          park_id: selectedRide.park_id,
-        },
+        ride: { ...result.data, ...savedRide },
         xpEarned: result.xp_earned ?? 0,
         newAchievements: result.new_achievements || [],
         rideCount: result.ride_count,
@@ -223,7 +234,31 @@ export default function RideLogScreen() {
       });
       setShowSuccess(true);
     } catch (e: any) {
-      gameAlert("Couldn't save your ride", e?.response?.data?.message || 'Check your connection and try again.');
+      if (!shouldQueueRideLog(e)) {
+        gameAlert("Couldn't save your ride", e?.response?.data?.message || 'Check your ride and try again.');
+        return;
+      }
+      // Weak signal: keep the ride on the phone and send it later. Never throw it away.
+      try {
+        await queueRideLog({ payload, ride_name: selectedRide.name, park_id: selectedRide.park_id ?? null });
+      } catch {
+        gameAlert("Couldn't save your ride", 'Check your connection and try again.');
+        return;
+      }
+      if (detectionId) void removePendingDetection(detectionId).catch(() => undefined);
+      logId.current = null;
+      setSuccessData({
+        ride: {
+          id: 0, ride_id: selectedRide.id, ride_slug: selectedRide.slug, ride_image_url: selectedRide.image_url,
+          rating: payload.rating ?? null, reaction: payload.reaction ?? null,
+          wait_time_minutes: payload.wait_time_minutes ?? null, note: payload.note ?? null,
+          photo_url: null, rode_at: payload.rode_at, weather: null, ...savedRide,
+        },
+        xpEarned: 0,
+        newAchievements: [],
+        queued: true,
+      });
+      setShowSuccess(true);
     } finally {
       saving.current = false;
       setSubmitting(false);
@@ -233,6 +268,7 @@ export default function RideLogScreen() {
   const handleBack = useCallback(() => {
     if (step === 'details') {
       setStep('ride');
+      logId.current = null;
       setSelectedRide(null);
       setRating(0);
       setReaction(null);
@@ -256,6 +292,7 @@ export default function RideLogScreen() {
         totalRideCount={successData.totalRideCount}
         xpEarned={successData.xpEarned}
         newAchievements={successData.newAchievements}
+        queued={successData.queued}
         onDone={() => navigation.goBack()}
         onLogAnother={() => {
           setShowSuccess(false);

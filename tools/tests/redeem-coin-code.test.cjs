@@ -36,6 +36,7 @@ test('errors read in plain words, the server message first', () => {
   assert.equal(model.redeemErrorMessage({ response: { status: 422, data: { message: 'You already used this coin code.' } } }),
     'You already used this coin code.');
   assert.equal(model.redeemErrorMessage(new Error('Network Error')), model.REDEEM_COPY.offline);
+  assert.equal(model.redeemErrorMessage({ message: 'Network Error', response: { status: 0 } }), model.REDEEM_COPY.offline);
   assert.equal(model.redeemErrorMessage({ response: { status: 500, data: {} } }), model.REDEEM_COPY.wrong);
 });
 
