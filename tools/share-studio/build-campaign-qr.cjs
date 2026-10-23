@@ -15,7 +15,7 @@ const QRCode = require('qrcode-terminal/vendor/QRCode');
 const Level = require('qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel');
 
 const root = path.resolve(__dirname, '../..');
-const CAMPAIGNS = ['invite', 'crew', 'ride_log', 'whack', 'memory', 'look', 'game'];
+const CAMPAIGNS = ['invite', 'crew', 'ride_log', 'whack', 'memory', 'look'];
 const out = path.join(root, 'assets/images/share/qr');
 const NAVY = [5, 52, 110];
 const WHITE = [255, 255, 255];

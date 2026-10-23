@@ -25,19 +25,29 @@ test('the Friends Invite shares the counted TPS link, never the dead App Store p
   const friends = src('src/screens/FriendsScreen.tsx');
   assert.doesNotMatch(friends, /apps\.apple\.com/, 'no App Store link until 1.7.3 is live');
   assert.match(friends, /import \{ INVITE_URL \} from '\.\.\/share\/link';/);
-  assert.match(friends, /shareExternal\(\{ message: `Play Theme Park Shark with me!\$\{name \? ` Add my shark: \$\{name\}` : ''\}\\n\$\{INVITE_URL\}` \}\)/);
+  // The "Add my shark" story picture with the text and link; text and link alone if the picture fails.
+  assert.match(friends, /const message = inviteMessage\(player\?\.screen_name, INVITE_URL\);/);
+  assert.match(friends, /await shareExternal\(picture \? \{ url: picture, message \} : \{ message, url: INVITE_URL \}\);/);
+  assert.match(friends, /<InviteCard ref=\{inviteRef\} name=\{player\?\.screen_name\} inventory=\{player\?\.inventory\} \/>/);
+  const card = src('src/share/InviteCard.tsx');
+  assert.match(card, /campaign="invite"/);
 });
 
 test('a shared ride card never prints the typed note, and is story size with the link and QR', () => {
   const card = src('src/components/RideTracker/ShareableRideCard.tsx');
   assert.doesNotMatch(card, /ride\.note/, 'the typed note stays in the log');
   assert.match(card, /captureFlex\(storyRef, 'story'\)/, 'captured at story size (1080x1920)');
-  assert.match(card, /<StoryShareFrame ref=\{storyRef\} kicker="MY RIDE MEMORY" cta="Track your rides with me!" campaign="ride_log">/);
+  assert.match(card, /<StoryShareFrame ref=\{storyRef\} ribbon="MY RIDE!" cta="Track your rides with me!" campaign="ride_log">\s*<CardContent ride=\{ride\} rideCount=\{confirmedCount\} variant="share" \/>/);
   assert.doesNotMatch(card, /react-native-view-shot/);
   const frame = src('src/share/StoryShareFrame.tsx');
   assert.match(frame, /\.\.\.FLEX_SIZE\.story/, '9:16');
-  assert.match(frame, /source=\{QR_BY_CAMPAIGN\[campaign\]\}/);
-  assert.match(frame, /\{SHARE_LINK_DISPLAY\}/);
+  // One share family: the Flex card's background, ribbon and footer (logo, CTA, link, QR).
+  assert.match(frame, /<StoryChrome frame=\{FRAME\} \/>/);
+  assert.match(frame, /<Ribbon text=\{ribbon\} width=\{256\} \/>/);
+  assert.match(frame, /<CardFooter cta=\{cta\} qrArt=\{QR_BY_CAMPAIGN\[campaign\]\}/);
+  const flexCard = src('src/share/FlexCard.tsx');
+  assert.match(flexCard, /\{SHARE_LINK_DISPLAY\}/);
+  assert.match(flexCard, /return <CardFooter cta=\{copy\.cta\} qrArt=\{QR_BY_KIND\[kind\]\}/, 'Flex cards use the same footer');
 });
 
 test('Whack and Memory results share a story-size picture with the link and QR, and no ride name', () => {
@@ -98,7 +108,7 @@ test('every campaign QR encodes its own counted link', () => {
   const Level = require('qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel');
   const qr = src('src/share/campaignQr.ts');
   const campaigns = [...qr.matchAll(/^ {2}(\w+): require\('\.\.\/\.\.\/assets\/images\/share\/qr\/campaign-(\w+)\.png'\),$/gm)];
-  assert.ok(campaigns.length >= 7);
+  assert.ok(campaigns.length >= 6);
   for (const [, key, fileKey] of campaigns) {
     assert.equal(key, fileKey);
     const expected = new QRCode(-1, Level.M);
@@ -157,6 +167,120 @@ test('a grown-up gate iOS never shows answers "no" and steps aside, so later ask
   const gate = src('src/components/GrownUpGate.tsx');
   assert.match(gate, /export const GATE_SHOW_WATCHDOG_MS = 2500;/);
   assert.match(gate, /onShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
-  assert.match(gate, /<GateShowWatchdog shown=\{shownRef\} onNeverShown=\{\(\) => close\(false\)\} \/>/, 'never shown means no, never yes');
+  // Never shown means no (never yes), and never silent: a kid-readable toast, plus a dev warning naming the ask.
+  assert.match(gate, /<GateShowWatchdog shown=\{shownRef\} onNeverShown=\{\(\) => \{[\s\S]{0,400}showToast\(GATE_RETRY_TOAST, 'info', 3500\);\s*close\(false\);\s*\}\} \/>/, 'never shown means no, never yes');
+  assert.match(gate, /if \(__DEV__\) console\.warn\(`GrownUpGate never showed/);
+  assert.match(gate, /export const GATE_RETRY_TOAST = 'That didn’t open\. Try again in a sec\.';/);
   assert.match(gate, /setTimeout\(\(\) => \{ if \(!shown\.current\) onNeverShown\(\); \}, GATE_SHOW_WATCHDOG_MS\)/);
+});
+
+/* ------------------------------------------------------------------ round 2 */
+
+test('every brag inside a modal has a Share that closes the modal first, then opens Share Studio from Root', () => {
+  const cases = [
+    ['src/components/CoinLevelingModal.tsx', /kind="coin_level"[\s\S]{0,200}handoff=\{shareHandoff\.handoff\}/],
+    ['src/components/coin/Crowning.tsx', /kind="crowned" payload=\{\{ coinUrl, ownedRef: 10 \}\}[^>]*handoff=\{shareHandoff\}/],
+    ['src/components/home/HomeHuntResultsModal.tsx', /kind="standings"[^>]*handoff=\{shareHandoff\.handoff\}/],
+    ['src/screens/SharkPassScreen.tsx', /kind="find" surface="sharkpass"[^>]*handoff=\{landedShare\.handoff\}/],
+    ['src/components/money/MonthlyGiftCard.tsx', /kind="find" surface="vip_gift"[^>]*handoff=\{landedShare\.handoff\}/],
+    ['src/screens/StoreScreen/SetCompleteReveal.tsx', /kind="set_complete" surface="shop_set"[^>]*handoff=\{shareHandoff\}/],
+    ['src/screens/pins/BoxReveal.tsx', /kind="find" surface=\{golden \? 'golden_box' : 'pin_box'\}[^>]*handoff=\{shareHandoff\}/],
+    ['src/screens/SetCollection/DexItemCard.tsx', /shareFlexAfterHandoff\(shareHandoff\.handoff, 'ride_photo'/],
+  ];
+  for (const [file, re] of cases) {
+    const code = src(file);
+    assert.match(code, re, file);
+    assert.doesNotMatch(code, /SHARE_IN_MODALS|<ShareStudioHost portal/, `${file}: no hidden flag, no nested host`);
+  }
+  // The coin level-up line asks the server for "Only N% of players" (coin levels have server data).
+  assert.match(src('src/components/CoinLevelingModal.tsx'), /ownedRef: nextLevel/);
+  // A chain of rewards: Share only on the last one, so it never skips a reward still waiting to show.
+  assert.match(src('src/screens/SharkPassScreen.tsx'), /isWearable\(landed\.reward\) && !landed\.emblem && !landed\.next \?/);
+  const box = src('src/screens/pins/BoxReveal.tsx');
+  assert.match(box, /const brag = \(p: RevealPull \| undefined\) => !!p && !isCatch && !p\.rare && \(p\.is_chaser \|\| \(golden && !p\.duplicate\)\);/, 'never a park pin (it says where the kid is)');
+  assert.match(box, /phase === 'show' && pulls\.length === 1 && brag\(pull\)/);
+});
+
+test('shareFlexAfterHandoff closes the modal, waits for iOS, then queues the Share Studio sheet', async () => {
+  const queued = [];
+  const timers = [];
+  const handoffMod = loadTs('src/share/handoff.ts', {
+    react: { useCallback: f => f, useRef: v => ({ current: v }) },
+    './store': { shareFlex: (kind, payload, options) => queued.push({ kind, payload, options }) },
+  }, { setTimeout: (fn, ms) => { timers.push(ms); fn(); return 0; } });
+  let closed = false;
+  await handoffMod.shareFlexAfterHandoff(async () => { closed = true; }, 'coin_level', { coinUrl: 'x', level: 6 }, { surface: 'coin_sheet' });
+  assert.ok(closed);
+  assert.deepEqual(timers, [handoffMod.MODAL_SETTLE_MS]);
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].kind, 'coin_level');
+  const button = src('src/share/FlexShareButton.tsx');
+  assert.match(button, /if \(!handoff\) \{ shareFlex\(kind, payload, \{ surface \}\); return; \}/);
+  assert.match(button, /if \(leaving\.current\) return;/, 'a second tap while leaving does nothing');
+});
+
+test('the Flex moment has release callers: park day (held in the park), streak and level up, once each', async () => {
+  const store = new Map();
+  const reveals = [];
+  const once = loadTs('src/share/revealOnce.ts', {
+    '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async k => store.get(k) ?? null, setItem: async (k, v) => { store.set(k, v); } } },
+    './copy': loadTs('src/share/copy.ts', {}),
+    './store': { flexReveal: (kind, payload) => reveals.push(kind) },
+  });
+  assert.equal(await once.flexRevealOnce('level_up', '23:10', { level: 10 }, { surface: 'profile_level' }), true);
+  assert.equal(await once.flexRevealOnce('level_up', '23:10', { level: 10 }, { surface: 'profile_level' }), false, 'once per level');
+  assert.equal(await once.flexRevealOnce('level_up', '23:11', { level: 11 }, { surface: 'profile_level' }), false, 'only every 5th level');
+  once.__resetRevealOnce();
+  assert.equal(await once.flexRevealOnce('level_up', '23:10', { level: 10 }, { surface: 'profile_level' }), false, 'remembered after a relaunch');
+  assert.equal(await once.flexRevealOnce('streak', '23:7:2026-10-23', { days: 7 }, { surface: 'profile_streak' }), true);
+  assert.equal(await once.flexRevealOnce('park_day', '8:2026-10-23', { coinsCaught: 4, coinUrls: [] }, { surface: 'park_day' }), false, '5+ coins only');
+  assert.equal(await once.flexRevealOnce('park_day', '8:2026-10-23', { coinsCaught: 6, coinUrls: [] }, { surface: 'park_day' }), true);
+  assert.deepEqual(reveals, ['level_up', 'streak', 'park_day']);
+  // Park days stay held while the player is in the park (store.ts HOLD_IN_PARK).
+  assert.match(src('src/share/store.ts'), /HOLD_IN_PARK: ReadonlySet<string> = new Set\(\['park_day', 'ride_coin'\]\)/);
+  assert.match(src('src/screens/ParkDayRecapCard.tsx'), /flexRevealOnce\('park_day', `\$\{parkId\}:\$\{result\.park_day\}`, parkDayFlexPayload\(result\)/);
+  assert.match(src('src/screens/ProfileScreen.tsx'), /flexRevealOnce\('streak'/);
+  assert.match(src('src/components/Experience.tsx'), /flexRevealOnce\('level_up', `\$\{player\.id\}:\$\{level\}`, \{ level \}/);
+});
+
+test('the shared ride card has no date and waits until the player leaves the park', () => {
+  const card = src('src/components/RideTracker/ShareableRideCard.tsx');
+  const shareVariant = card.slice(card.indexOf('{shared ? ('), card.indexOf(') : (', card.indexOf('{shared ? (')));
+  assert.doesNotMatch(shareVariant, /dateStr|wait_time_minutes/, 'no ride date or wait on the shared copy');
+  assert.match(card, /\{!shared && \(\s*<View style=\{cardStyles\.topBar\}>/, 'no second brand line on the shared copy');
+  assert.match(card, /\{!shared && \(\s*<View style=\{cardStyles\.watermark\}>/, 'one link only (the frame footer)');
+  assert.match(card, /export const RIDE_SHARE_HELD_LABEL = 'Share it after you leave the park';/);
+  assert.match(card, /if \(busy\.current \|\| loadingCount \|\| inPark\) return;/);
+  assert.match(card, /\{!inPark && \(\s*<StoryShareFrame/);
+  const { riddenLine } = loadTs('src/components/RideTracker/ShareableRideCard.tsx', {
+    react: { default: { memo: f => f, useRef: v => ({ current: v }), useCallback: f => f, useEffect() {}, useState: v => [v, () => {}], useContext: () => ({}) }, memo: f => f },
+    'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; }, Fragment: 'Fragment' },
+    'react-native': { StyleSheet: { create: s => s }, View: 'View', Text: 'Text', Pressable: 'Pressable' },
+    'expo-image': { Image: 'Image' }, 'expo-linear-gradient': { LinearGradient: 'LG' }, 'expo-sharing': {}, 'expo-haptics': {},
+    '../../design-system': { colors: {}, shadows: {}, borderRadius: {} }, '../../api/endpoints/player-rides': {},
+    '../../hooks/useReducedGameMotion': { default: () => false }, '../../constants/parkWaitTimes': { PARK_DISPLAY_ORDER: [] },
+    './SharkReactionIcon': { default: 'Icon', reactionLabel: () => null }, '../../ui': { gameAlert() {} }, '../../share/capture': {},
+    '../../share/StoryShareFrame': {}, '../../context/LocationProvider': { LocationStatusContext: {} },
+  });
+  assert.equal(riddenLine(1), 'Ridden 1 time');
+  assert.equal(riddenLine(12), 'Ridden 12 times');
+});
+
+test('Invite and Closet look share story pictures with their own QR; no unused QR ships', () => {
+  const invite = loadTs('src/share/InviteCard.tsx', {
+    react: { forwardRef: f => f }, 'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; }, Fragment: 'Fragment' },
+    'react-native': { StyleSheet: { create: s => s }, Text: 'Text', View: 'View' },
+    './FlexShark': {}, './Outlined': {}, './StoryShareFrame': {},
+  });
+  assert.equal(invite.inviteMessage(' Finn ', 'https://themeparkshark.com/app?c=flex_invite'),
+    'Play Theme Park Shark with me! Add my shark: Finn\nhttps://themeparkshark.com/app?c=flex_invite');
+  assert.equal(invite.inviteMessage('', 'u'), 'Play Theme Park Shark with me!\nu');
+  const look = src('src/share/LookShareButton.tsx');
+  assert.match(look, /campaign="look"/);
+  assert.match(look, /await captureFlex\(ref, 'story'\);\s*await openShareSheet\(uri\);/);
+  assert.match(src('src/screens/InventoryScreen.tsx'), /<LookShareButton inventory=\{worn\}/);
+  const qr = src('src/share/campaignQr.ts');
+  for (const used of ['invite', 'crew', 'ride_log', 'whack', 'memory', 'look']) assert.match(qr, new RegExp(`  ${used}: require`));
+  assert.doesNotMatch(qr, /game:/);
+  assert.ok(!fs.existsSync(path.join(root, 'assets/images/share/qr/campaign-game.png')));
 });

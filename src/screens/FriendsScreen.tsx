@@ -9,6 +9,9 @@
  */
 import { shareExternal } from '../services/external';
 import { INVITE_URL } from '../share/link';
+import { captureFlex } from '../share/capture';
+import { InviteCard, inviteMessage } from '../share/InviteCard';
+import { OFFSCREEN } from '../share/StoryShareFrame';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -65,13 +68,22 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
   const [listReady, setListReady] = useState(false);
   useTutorialWhenReady('friends', listReady);
 
+  const inviteRef = useRef<View>(null);
+  const inviting = useRef(false);
   const invite = useCallback(async () => {
+    if (inviting.current) return;
+    inviting.current = true;
     playSfx('tap');
+    // The shark name is the friend code; the link opens the app's download page (never the dead store page).
+    const message = inviteMessage(player?.screen_name, INVITE_URL);
     try {
-      // The shark name is the friend code; the link opens the app's download page (never the dead store page).
-      const name = player?.screen_name?.trim();
-      await shareExternal({ message: `Play Theme Park Shark with me!${name ? ` Add my shark: ${name}` : ''}\n${INVITE_URL}` });
-    } catch { /* closed */ }
+      // The "Add my shark" picture (story size, invite QR) with the text and link beside it.
+      let picture: string | null = null;
+      try { picture = await captureFlex(inviteRef, 'story'); } catch { picture = null; }
+      await shareExternal(picture ? { url: picture, message } : { message, url: INVITE_URL });
+    } catch { /* closed */ } finally {
+      inviting.current = false;
+    }
   }, [player?.screen_name]);
 
   return (
@@ -82,6 +94,9 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
         <TopbarColumn stretch={false}><View style={{ width: 44 }} /></TopbarColumn>
       </Topbar>
       <CleanScreenBackground underTopbar>
+        <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <InviteCard ref={inviteRef} name={player?.screen_name} inventory={player?.inventory} />
+        </View>
         <Hero count={player?.friends_count ?? 0} onInvite={invite} />
         <Tabs tab={tab} pending={pending} onChange={next => { if (next !== tab) { playSfx('whoosh'); haptic('tickSelection'); setTab(next); } }} />
         {/* All three tabs stay mounted: switching keeps scroll and search text and never shows a spinner again. */}

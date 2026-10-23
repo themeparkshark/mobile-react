@@ -1,5 +1,5 @@
 /** QR codes for share pictures outside the Share Studio kinds (tools/share-studio/build-campaign-qr.cjs). Do not edit by hand. */
-export type ShareCampaign = 'invite' | 'crew' | 'ride_log' | 'whack' | 'memory' | 'look' | 'game';
+export type ShareCampaign = 'invite' | 'crew' | 'ride_log' | 'whack' | 'memory' | 'look';
 
 export const QR_BY_CAMPAIGN: Readonly<Record<ShareCampaign, number>> = {
   invite: require('../../assets/images/share/qr/campaign-invite.png'),
@@ -8,5 +8,4 @@ export const QR_BY_CAMPAIGN: Readonly<Record<ShareCampaign, number>> = {
   whack: require('../../assets/images/share/qr/campaign-whack.png'),
   memory: require('../../assets/images/share/qr/campaign-memory.png'),
   look: require('../../assets/images/share/qr/campaign-look.png'),
-  game: require('../../assets/images/share/qr/campaign-game.png'),
 };

@@ -6,6 +6,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
 import { useModalLayer } from '../ui/modalLayers';
+import { showToast } from '../utils/toast';
 
 /**
  * The grown-up gate in front of every paywall and real-money purchase
@@ -281,6 +282,8 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'] as 
 const MAX_FONT = 1.3;
 /** How long the gate waits for iOS to show it before it answers "no" and steps aside. */
 export const GATE_SHOW_WATCHDOG_MS = 2500;
+/** What a kid sees when the gate could not open (another window was in the way). */
+export const GATE_RETRY_TOAST = 'That didn’t open. Try again in a sec.';
 
 /**
  * Mounted with the gate's Modal. iOS refuses to present the gate while another RN <Modal>
@@ -328,7 +331,12 @@ export function GrownUpGateHost() {
   };
   return (
     <Modal visible transparent animationType="fade" onShow={() => { shownRef.current = true; }} onRequestClose={() => close(false)} statusBarTranslucent>
-      <GateShowWatchdog shown={shownRef} onNeverShown={() => close(false)} />
+      <GateShowWatchdog shown={shownRef} onNeverShown={() => {
+        // Never silent: the kid sees why nothing opened, and a dev build names the ask so its caller can be fixed.
+        if (__DEV__) console.warn(`GrownUpGate never showed (${req.reason?.kind ?? 'no reason'}): another modal was up. Close it before asking (share/handoff.ts).`);
+        showToast(GATE_RETRY_TOAST, 'info', 3500);
+        close(false);
+      }} />
       <View style={styles.scrim}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>
