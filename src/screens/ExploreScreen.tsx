@@ -280,7 +280,7 @@ function ExploreScreen() {
   }, [homeLocationConfirmed]);
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
-  const { startTutorial, hasCompleted, isReady, isActive } = useTutorial();
+  const { startTutorial, hasCompleted, isReady, isActive, findLanded } = useTutorial();
   const { explain, openHelpSheet } = useHelp();
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
@@ -328,15 +328,26 @@ function ExploreScreen() {
 
   // On an event night the Fin-ister intro owns the first open; Finn's onboarding waits for it.
   const [frightIntroOwns, setFrightIntroOwns] = useState(false);
-  // Trigger onboarding tutorial on first visit
+  // One overlay at a time: a find that shows up during a tutorial waits for it.
+  const [pendingFind, setPendingFind] = useState<{ item: PrepItemType; pivotId: number } | null>(null);
+  const homeFindReady = !!pendingFind;
+  // Trigger onboarding tutorial on first visit. Finn only starts once the app
+  // knows where the player is (in a park, or confirmed at home), so a park
+  // that settles late never swaps his lines. At home he waits a few seconds
+  // for the first find to land next to the player, and only says "it landed
+  // right next to you" when it really did.
   useEffect(() => {
-    if (mapFocused && player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding') && !frightIntroOwns) {
-      const timer = setTimeout(() => {
-        startTutorial('onboarding', { inPark: !!park });
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
+    if (!(mapFocused && player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding') && !frightIntroOwns)) return;
+    if (!park && !homeLocationConfirmed) return;
+    const wait = park ? 1500 : homeFindReady ? 600 : 4500;
+    const timer = setTimeout(() => {
+      startTutorial('onboarding', { inPark: !!park, findReady: !park && homeFindReady });
+    }, wait);
+    return () => clearTimeout(timer);
+  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns,
+    homeLocationConfirmed, homeFindReady]);
+  // A find that lands while Finn already said "walk around" upgrades his line to "Grab it!".
+  useEffect(() => { if (homeFindReady && isActive) findLanded?.(); }, [homeFindReady, isActive, findLanded]);
 
   // A player who learned the home hunt should meet the park loop when they
   // actually arrive. Park-first players already saw these steps in onboarding.
@@ -347,10 +358,9 @@ function ExploreScreen() {
     return () => clearTimeout(timer);
   }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
   
-  // One overlay at a time: a find that shows up during a tutorial waits for it.
-  const [pendingFind, setPendingFind] = useState<{ item: PrepItemType; pivotId: number } | null>(null);
   const collectedOnce = useRef(false);
   const [caughtThisSession, setCaughtThisSession] = useState(false);
+  const [firstLineGap, setFirstLineGap] = useState(false);
   const [homeIntroOpen, setHomeIntroOpen] = useState(false);
   // The generic park tip is on screen: the Fin-ister intro waits for it (never two first-run cards at once).
   const [parkTipShowing, setParkTipShowing] = useState(false);
@@ -393,7 +403,11 @@ function ExploreScreen() {
   // A tap catches; the server's nearby check (`auto`) only feeds Finn's first find.
   const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number, source: 'tap' | 'auto' = 'tap') => {
     if (!homeLocationConfirmed || !parkLoaded) return;
-    if (isActive) { setPendingFind({ item: prepItem, pivotId }); return; }
+    // Finn's first find waits for him: it is held while he talks, and before
+    // he starts, so his welcome can point at it and Grab it! opens it.
+    if (isActive || (source === 'auto' && isReady && !hasCompleted('onboarding'))) {
+      setPendingFind({ item: prepItem, pivotId }); return;
+    }
     if (source === 'auto') return;
     setTooFarRequiredMeters(HOME_PREP_PICKUP_RADIUS_METERS);
     setTooFarIsHomeItem(true);
@@ -422,18 +436,29 @@ function ExploreScreen() {
     setActivePrepItem(prepItem);
     setActivePrepItemPivotId(pivotId);
     setShowPrepItemModal(true);
-  }, [location, homeLocationConfirmed, parkLoaded, isActive]);
+  }, [location, homeLocationConfirmed, parkLoaded, isActive, isReady, hasCompleted]);
+
+  // A find already loaded in grab range counts as Finn's first find, without waiting for a GPS update.
+  const onFindInRange = useCallback((item: PrepItemType | null) => {
+    if (!item?.pivot_id || !isReady || hasCompleted('onboarding')) return;
+    handlePrepItemNearby(item, item.pivot_id, 'auto');
+  }, [isReady, hasCompleted, handlePrepItemNearby]);
 
   // When Finn is done talking, the waiting find opens (the first catch of the game).
   useEffect(() => {
     if (isActive || !pendingFind) return;
+    if (isReady && !hasCompleted('onboarding')) return; // Finn has not said hi yet
+    if (!homeLocationConfirmed) { setPendingFind(null); return; } // left home: that find is not here any more
+    // The find stays pending until it opens: clearing it first re-ran this
+    // effect, whose cleanup cancelled the timer (the find never opened), and
+    // left a gap where the home intro cards jumped in ahead of it.
     const find = pendingFind;
-    setPendingFind(null);
     const timer = setTimeout(() => {
+      setPendingFind(null);
       handlePrepItemNearby(find.item, find.pivotId);
     }, 350);
     return () => clearTimeout(timer);
-  }, [isActive, pendingFind, handlePrepItemNearby, hasCompleted]);
+  }, [isActive, pendingFind, handlePrepItemNearby, hasCompleted, isReady, homeLocationConfirmed]);
 
   // Home Hunt v3: the catch plays on the map itself (HomeCatchMoment), never in a modal.
   const homeCatch = useMemo(() => (showPrepItemModal && homeLocationConfirmed && !isActive && activePrepItem &&
@@ -451,7 +476,8 @@ function ExploreScreen() {
     setActivePrepItemPivotId(null);
     // After the very first catch, Finn says why it matters (once).
     if (collectedOnce.current && hasCompleted('onboarding') && !hasCompleted('home_first_find')) {
-      setTimeout(() => startTutorial('home_first_find'), 500);
+      setFirstLineGap(true);
+      setTimeout(() => { startTutorial('home_first_find'); setFirstLineGap(false); }, 500);
     }
   }, [hasCompleted, startTutorial]);
 
@@ -928,7 +954,8 @@ function ExploreScreen() {
   // The Daily 3 / level chest overlay is up: other map moments wait their turn.
   const [retentionOccluding, setRetentionOccluding] = useState(false);
   const chestReady = chestMayPresent({
-    tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
+    // In the half second between the first catch and Finn's "Nice catch!" line, the chest waits too (no flash).
+    tutorialActive: isActive || firstLineGap, findOpen: showPrepItemModal, findPending: !!pendingFind,
     firstCatchDone: hasFirstCatch(player, hasCompleted('home_first_find'), caughtThisSession),
     boss: bossOpen || bossOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
     rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
@@ -1256,7 +1283,7 @@ function ExploreScreen() {
           Gating it on parkLoaded left a blank grey screen whenever park state
           was cleared without a finished lookup. */}
       {player && !park && permissionGranted && (
-        <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
+        <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby} onFindInRange={onFindInRange}
           catching={homeCatch} onCatchCollected={onHomeCatchCollected} onCatchDone={onHomeCatchDone}
           onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}

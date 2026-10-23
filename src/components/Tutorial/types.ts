@@ -97,8 +97,10 @@ export interface TutorialContextType {
   currentIndex: number;
   /** Total steps in the active sequence */
   totalSteps: number;
-  /** Start a tutorial sequence */
-  startTutorial: (sequence: TutorialSequence, options?: { inPark?: boolean }) => void;
+  /** Start a tutorial sequence. findReady: at home, the first find has already landed next to the player. */
+  startTutorial: (sequence: TutorialSequence, options?: { inPark?: boolean; findReady?: boolean }) => void;
+  /** The first home find landed while Finn is still saying hi: his line switches to "Grab it!". */
+  findLanded?: () => void;
   /** Advance to next step */
   nextStep: () => void;
   /** Skip the current tutorial sequence */

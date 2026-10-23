@@ -35,6 +35,7 @@ import { SharkMood, SharkPosition } from './types';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { BRAND, GameButton } from '../../ui';
 import { REVEAL_START_MS, revealSchedule, splitWords } from './teacherReveal';
+import TapHint from '../TapHint';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -55,6 +56,8 @@ interface TeacherSharkProps {
   onSkip?: () => void;
   /** Keep Finn clear of persistent bottom navigation, or park him above a spotlit card. */
   bottomOffset?: number;
+  /** A pointing hand on the button after a short wait (first-session steps a kid cannot read yet). */
+  pointAtNext?: boolean;
 }
 
 export default function TeacherShark({
@@ -71,6 +74,7 @@ export default function TeacherShark({
   onNext,
   onSkip,
   bottomOffset = 20,
+  pointAtNext = false,
 }: TeacherSharkProps) {
   const reducedMotion = useUiReducedMotion();
   const bobValue = useSharedValue(0);
@@ -230,6 +234,7 @@ export default function TeacherShark({
           {showNext && (
             <GameButton label={nextText} onPress={onNext} accessibilityHint="Continues the guide" />
           )}
+          {showNext && pointAtNext && <TapHint delay={2200} style={styles.nextHand} />}
           {showSkip && onSkip && (
             <GameButton variant="ghost" label="Skip" onPress={onSkip} accessibilityLabel="Skip this guide" />
           )}
@@ -317,6 +322,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 6,
   },
+  // The fingertip lands on the right half of the button, clear of its label.
+  nextHand: { right: '14%', top: -26 },
   buttonRow: {
     alignItems: 'center',
     marginTop: 12,

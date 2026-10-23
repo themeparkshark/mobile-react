@@ -20,6 +20,8 @@ import { claimGuestWarmup } from '../../services/guestTaste';
 // import { SoundEffectContext } from '../../context/SoundEffectProvider';
 
 const STORAGE_KEY = '@tps_tutorial_completed';
+/** Guides that run over the map, where the footer's compass rises into the screen. */
+const MAP_SEQUENCES = new Set<TutorialSequence>(['onboarding', 'home_first_find', 'park_arrival']);
 
 /** All tutorial sequences — used to auto-complete for existing players */
 const ALL_SEQUENCES: TutorialSequence[] = [
@@ -161,7 +163,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
   }, []);
 
   // Start a tutorial sequence
-  const startTutorial = useCallback((sequence: TutorialSequence, options?: { inPark?: boolean }) => {
+  const startTutorial = useCallback((sequence: TutorialSequence, options?: { inPark?: boolean; findReady?: boolean }) => {
     // Don't start until AsyncStorage has loaded — avoids replaying on fresh load
     if (!loaded) return;
     if (completedSequences.has(sequence)) return;
@@ -172,12 +174,23 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     if (steps.length === 0) return;
 
     inParkOnboardingRef.current = sequence === 'onboarding' && !!options?.inPark;
+    homeHelloRef.current = sequence === 'onboarding' && !options?.inPark && options?.findReady === false;
     setCurrentSequence(sequence);
     setCurrentSteps(steps);
     setCurrentIndex(0);
     setIsActive(true);
 
   }, [loaded, isActive, completedSequences, guestPlayed, guestChecked]);
+
+  // At home Finn may start before the first find has landed (a slow
+  // connection). When it lands while he is still on his hello, his line
+  // switches from "walk around" to "it landed right next to you".
+  const homeHelloRef = useRef(false);
+  const findLanded = useCallback(() => {
+    if (!isActive || currentSequence !== 'onboarding' || !homeHelloRef.current || currentIndex !== 0) return;
+    homeHelloRef.current = false;
+    setCurrentSteps(getStepsForSequence('onboarding', { findReady: true, guestPlayed }));
+  }, [isActive, currentSequence, currentIndex, guestPlayed]);
 
   // Advance to next step
   const nextStep = useCallback(() => {
@@ -293,6 +306,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     currentIndex,
     totalSteps: currentSteps.length,
     startTutorial,
+    findLanded,
     nextStep,
     skipTutorial,
     hasCompleted,
@@ -328,7 +342,8 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
             onNext={currentStep.activity ? startFirstPlay : nextStep}
             onSkip={skipTutorial}
             bottomOffset={teacherBottomOffset(currentStep, spotlightTarget, Dimensions.get('window').height,
-              currentSequence === 'park_arrival' || inParkOnboardingRef.current ? 120 : 20)}
+              // Map guides stand Finn above the MAP compass, never on it.
+              MAP_SEQUENCES.has(currentSequence as TutorialSequence) ? 120 : 20)}
           />
         </>
       )}

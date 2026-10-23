@@ -163,18 +163,39 @@ export const TUTORIAL_SEQUENCES: Record<TutorialSequence, TutorialStep[]> = {
 };
 
 /**
+ * Finn never promises a treat that is not there. At home the screen waits a
+ * few seconds for the first find; when none has landed yet he says how finds
+ * work instead, and Grab it! becomes Let's hunt!.
+ */
+const homeNoFindSteps: TutorialStep[] = [{
+  ...homeOnboardingSteps[0],
+  text: "Hey, new shark! I'm Finn. Treats pop up around you, even at home.",
+  subtitle: 'Walk around to find one!',
+  nextText: 'Let’s hunt!',
+}];
+
+/**
  * A guest who played Finn's taste before signing in (services/guestTaste) is
  * greeted as a returning shark, and never replays the warm-up they already won.
  */
-const guestWelcomeBackSteps: TutorialStep[] = [{
+export const GUEST_WELCOME_BACK = {
+  title: 'You’re back!',
+  ready: { text: 'Your first real treat landed right next to you.', button: 'Grab it!' },
+  waiting: { text: 'Real treats pop up near you.', subtitle: 'Walk around to find one!', button: 'Let’s hunt!' },
+} as const;
+const guestWelcomeBackSteps = (findReady: boolean): TutorialStep[] => [{
   ...homeOnboardingSteps[0],
-  text: 'You’re back! Now your first real treat is here.',
-  subtitle: 'It landed right next to you. Let’s grab it!',
+  title: GUEST_WELCOME_BACK.title,
+  text: findReady ? GUEST_WELCOME_BACK.ready.text : GUEST_WELCOME_BACK.waiting.text,
+  subtitle: findReady ? undefined : GUEST_WELCOME_BACK.waiting.subtitle,
+  nextText: findReady ? GUEST_WELCOME_BACK.ready.button : GUEST_WELCOME_BACK.waiting.button,
 }];
 const withoutWarmup = (steps: TutorialStep[]) => steps.filter(step => step.activity !== 'memory_warmup');
 
 export interface TutorialStepOptions {
   readonly inPark?: boolean;
+  /** At home, the first find has landed next to the player (Grab it! opens it). */
+  readonly findReady?: boolean;
   /** This phone's guest already won Finn's warm-up before signing in. */
   readonly guestPlayed?: boolean;
 }
@@ -185,7 +206,11 @@ export interface TutorialStepOptions {
 export function getStepsForSequence(sequence: TutorialSequence, options?: TutorialStepOptions): TutorialStep[] {
   const played = options?.guestPlayed === true;
   if (sequence === 'onboarding' && options?.inPark) return played ? withoutWarmup(parkOnboardingSteps) : parkOnboardingSteps;
-  if (sequence === 'onboarding' && played) return guestWelcomeBackSteps;
+  // Home: the copy follows whether a find is really there. Callers that do not
+  // say (older paths) keep the original lines.
+  const findReady = options?.findReady !== false;
+  if (sequence === 'onboarding' && played) return guestWelcomeBackSteps(findReady);
+  if (sequence === 'onboarding' && !findReady) return homeNoFindSteps;
   if (sequence === 'park_arrival' && played) return withoutWarmup(parkArrivalSteps);
   return TUTORIAL_SEQUENCES[sequence] || [];
 }

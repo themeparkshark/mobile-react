@@ -95,6 +95,8 @@ interface Props {
    * until the guest taps it.
    */
   onPrepItemNearby: (prepItem: PrepItemType, pivotId: number, source?: 'tap' | 'auto') => void;
+  /** The nearest find in grab range changed (null when none). Lets Finn's hello point at a find that is really there. */
+  onFindInRange?: (prepItem: PrepItemType | null) => void;
   /** The find the parent cleared for a catch (in range, no tutorial). Plays the catch moment. */
   catching?: { readonly item: PrepItemType; readonly pivotId: number } | null;
   onCatchCollected?: (data: RedeemPrepItemResponseType['data']) => void;
@@ -133,7 +135,7 @@ interface Props {
  * Home exploration view - shows prep items on map when not at a park.
  * This is the at-home gameplay experience.
  */
-export default function HomeExplore({ onPrepItemNearby, catching = null, onCatchCollected, onCatchUnavailable,
+export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching = null, onCatchCollected, onCatchUnavailable,
   onCatchDone, refreshVersion, homeLocationConfirmed,
   introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null, eventChip = null,
   compassHintReady = false }: Props) {
@@ -527,6 +529,9 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed]);
   const fingerRef = useRef<number | null>(null);
   fingerRef.current = fingerPivot;
+  // Finn's first hello reads the loaded finds directly (no wait for the next GPS update).
+  const fingerItem = fingerPivot != null ? placed.find(entry => entry.item.pivot_id === fingerPivot)?.item ?? null : null;
+  useEffect(() => { onFindInRange?.(fingerItem); }, [fingerItem, onFindInRange]);
   // A find coming into grab range is felt and heard once, so a kid looking up from the phone knows to look down.
   const rangeCued = useRef(new Set<number>());
   useEffect(() => {

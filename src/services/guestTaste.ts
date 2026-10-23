@@ -46,8 +46,10 @@ export const EMPTY_GUEST_TASTE: GuestTasteProgress = { caught: false, won: false
 export function guestClaimFor(progress: GuestTasteProgress, claims: readonly number[], playerId: number | null | undefined):
   { readonly played: boolean; readonly claim: boolean } {
   if (playerId == null) return { played: false, claim: false };
-  if (claims.includes(playerId) || progress.claimedBy === playerId) return { played: true, claim: false };
+  // A won taste nobody holds yet goes to this account, even one that claimed an
+  // earlier taste, so it can never pass on to a sibling's account later.
   if (progress.won && progress.claimedBy == null) return { played: true, claim: true };
+  if (claims.includes(playerId) || progress.claimedBy === playerId) return { played: true, claim: false };
   return { played: false, claim: false };
 }
 
@@ -63,9 +65,9 @@ export function guestStep(progress: GuestTasteProgress): GuestStep {
 export const GUEST_TASTE_COPY = {
   find: { title: 'Hi! I’m Finn.', body: 'A churro landed right next to you. Tap it!' },
   caught: 'Nice catch!',
-  yum: 'Yum!',
+  yum: { title: 'Yum!', body: 'Churros are my favorite!' },
   play: { title: 'Now a quick game!', body: 'Match 4 pairs with me.', button: 'Play' },
-  coin: { ribbon: 'Ride Coins', body: 'Win at rides to fill your shelf!', tap: 'Tap to go on' },
+  coin: { ribbon: 'Ride Coins', title: 'You won!', body: 'Wins put coins on your shelf.', tap: 'Tap to go on' },
   save: { title: 'Make your own shark!', body: 'Real treats and ride coins are waiting for you.',
     grownUp: 'Ask a grown-up to sign in', have: 'I already have a shark', again: 'Play more games' },
 } as const;

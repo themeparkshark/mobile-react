@@ -39,7 +39,7 @@ export default function usePermissions() {
       // A friendly ask in the game's own dialog: sign in is the big button, "Not now" keeps playing.
       gameAlert(
         prompts.permissions[permission as keyof typeof permissions] ?? 'Sign in to save your shark.',
-        'Signing in keeps your shark and coins safe.',
+        'Sign in to make your own shark.',
         [
           { text: 'Sign in', onPress: () => { RootNavigation.navigate('Login'); } },
           { text: 'Not now', style: 'cancel' },
