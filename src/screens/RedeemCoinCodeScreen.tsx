@@ -1,10 +1,11 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
   ImageBackground,
+  Keyboard,
   ScrollView,
   StyleSheet,
   Text,
@@ -42,7 +43,6 @@ export default function RedeemCoinCodeScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<RedeemErrorView | null>(null);
   const [rewards, setRewards] = useState<RewardLine[] | null>(null);
-  const [gaveCoins, setGaveCoins] = useState(false);
   const { refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
   const reducedMotion = useReducedGameMotion();
@@ -63,12 +63,15 @@ export default function RedeemCoinCodeScreen() {
   const spin = rotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   // The chest pops open with a short gold burst; prizes then slide in one by one.
-  // It all starts in the same frame the open chest first draws (a layout effect
-  // on `rewards`), so the burst never flashes behind a closed chest. The prize
-  // card fades and grows in with the chest, so it never shows empty. All on the
-  // native driver; with Reduce Motion everything just appears.
+  // The chest never moves: the code box fades up and away in its own slot, and
+  // the prize card takes that same slot just above the chest. The chest swap,
+  // the pop and the first burst ray all start in one native-driver batch, so
+  // they land on the same frame. With Reduce Motion everything just appears.
   const pop = useRef(new Animated.Value(1)).current;
   const burst = useRef(new Animated.Value(0)).current;
+  const openCoins = useRef(new Animated.Value(0)).current;
+  const openEmpty = useRef(new Animated.Value(0)).current;
+  const formIn = useRef(new Animated.Value(1)).current;
   const cardIn = useRef(new Animated.Value(0)).current;
   const rowsIn = useRef<Animated.Value[]>([]).current;
   const shake = useRef(new Animated.Value(0)).current;
@@ -76,28 +79,37 @@ export default function RedeemCoinCodeScreen() {
     rowsIn.length = 0;
     for (let i = 0; i < count; i++) rowsIn.push(new Animated.Value(reducedMotion ? 1 : 0));
   }, [reducedMotion, rowsIn]);
-  const celebrate = useCallback(() => {
+  const celebrate = useCallback((coins: boolean) => {
     playSound(require('../../assets/sounds/reward.mp3'), { volume: 0.7 });
-    if (reducedMotion) { pop.setValue(1); burst.setValue(0); cardIn.setValue(1); return; }
-    pop.setValue(0.85);
-    burst.setValue(0);
-    cardIn.setValue(0);
+    const chest = coins ? openCoins : openEmpty;
+    if (reducedMotion) {
+      chest.setValue(1); formIn.setValue(0); pop.setValue(1); burst.setValue(0); cardIn.setValue(1);
+      return;
+    }
+    const now = (value: Animated.Value, toValue: number) =>
+      Animated.timing(value, { toValue, duration: 0, useNativeDriver: true });
     Animated.parallel([
+      now(chest, 1),
+      Animated.timing(formIn, { toValue: 0, duration: 150, easing: Easing.out(Easing.quad), useNativeDriver: true }),
       Animated.sequence([
-        Animated.timing(pop, { toValue: 1.12, duration: 170, easing: Easing.out(Easing.back(2)), useNativeDriver: true }),
+        now(pop, 0.9),
+        Animated.timing(pop, { toValue: 1.12, duration: 160, easing: Easing.out(Easing.back(2)), useNativeDriver: true }),
         Animated.spring(pop, { toValue: 1, friction: 4, tension: 140, useNativeDriver: true }),
       ]),
       Animated.sequence([
-        Animated.timing(burst, { toValue: 1, duration: 170, useNativeDriver: true }),
+        now(burst, 0.5),
+        Animated.timing(burst, { toValue: 1, duration: 140, useNativeDriver: true }),
         Animated.timing(burst, { toValue: 0, duration: 520, useNativeDriver: true }),
       ]),
-      Animated.timing(cardIn, { toValue: 1, duration: 220, delay: 90, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.sequence([
+        now(cardIn, 0),
+        Animated.timing(cardIn, { toValue: 1, duration: 220, delay: 120, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      ]),
       Animated.stagger(110, rowsIn.map(row => Animated.timing(row, {
-        toValue: 1, duration: 200, delay: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }))),
+        toValue: 1, duration: 200, delay: 240, easing: Easing.out(Easing.quad), useNativeDriver: true }))),
     ]).start();
-  }, [reducedMotion, pop, burst, cardIn, rowsIn, playSound]);
+  }, [reducedMotion, pop, burst, openCoins, openEmpty, formIn, cardIn, rowsIn, playSound]);
   const opened = rewards !== null;
-  useLayoutEffect(() => { if (opened) celebrate(); }, [opened]); // eslint-disable-line react-hooks/exhaustive-deps
   const nudge = useCallback(() => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
     if (reducedMotion) return;
@@ -115,24 +127,29 @@ export default function RedeemCoinCodeScreen() {
       const reply = await redeemCoinCode(code);
       if (!mounted.current) return;
       const lines = codeRewardLines(reply);
+      const coins = lines.some(line => line.key === 'coins');
       prepareRows(lines.length);
+      Keyboard.dismiss();
+      // Chest, pop and burst start now, in one batch; the prize card mounts with this render.
+      celebrate(coins);
       setRewards(lines);
-      setGaveCoins(lines.some(line => line.key === 'coins'));
       void refreshPlayer?.();
     } catch (failure) {
       if (mounted.current) { setError(redeemError(failure)); nudge(); }
     } finally {
       if (mounted.current) setBusy(false);
     }
-  }, [busy, code, refreshPlayer, prepareRows, nudge]);
+  }, [busy, code, refreshPlayer, prepareRows, nudge, celebrate]);
 
   const again = useCallback(() => {
     cardIn.setValue(0);
+    openCoins.setValue(0);
+    openEmpty.setValue(0);
+    formIn.setValue(1);
     setRewards(null);
-    setGaveCoins(false);
     setCode('');
     setError(null);
-  }, [cardIn]);
+  }, [cardIn, openCoins, openEmpty, formIn]);
 
 
   return (
@@ -158,8 +175,13 @@ export default function RedeemCoinCodeScreen() {
           keyboardShouldPersistTaps="handled"
           bounces={false}
         >
-          {!opened && (
-            <View style={styles.form}>
+          {/* One slot above the chest: the code box, then the prize card in the same
+              place. It keeps its height, so the chest never jumps. */}
+          <View style={styles.slot}>
+            <Animated.View style={[styles.form, { opacity: formIn,
+              transform: [{ translateY: formIn.interpolate({ inputRange: [0, 1], outputRange: [-14, 0] }) }] }]}
+              pointerEvents={opened ? 'none' : 'auto'}
+              accessibilityElementsHidden={opened} importantForAccessibility={opened ? 'no-hide-descendants' : 'auto'}>
               <Text style={styles.prompt}>{REDEEM_COPY.prompt}</Text>
               <TextInput
                 style={styles.input}
@@ -189,8 +211,28 @@ export default function RedeemCoinCodeScreen() {
                   <Text style={styles.errorText}>{error.message}</Text>
                 </Animated.View>
               )}
-            </View>
-          )}
+            </Animated.View>
+            {opened && (
+              <Animated.View style={[styles.prizeCard, { opacity: cardIn,
+                transform: [{ scale: cardIn.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }]}
+                accessibilityLiveRegion="polite">
+                <Text style={styles.prizeTitle}>{rewards.length ? REDEEM_COPY.done : REDEEM_COPY.nothing}</Text>
+                {rewards.map((line, i) => (
+                  <Animated.View key={line.key} style={[styles.prizeRow, rowsIn[i] && { opacity: rowsIn[i],
+                    transform: [{ translateY: rowsIn[i].interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }]}
+                    accessible accessibilityLabel={line.text}>
+                    {line.imageUrl
+                      ? <Image source={{ uri: line.imageUrl }} style={styles.prizeImage} contentFit="contain" />
+                      : <GameIcon name={line.icon} size={30} />}
+                    <Text style={styles.prizeText} numberOfLines={2}>{line.text}</Text>
+                  </Animated.View>
+                ))}
+                <View style={styles.button}>
+                  <GameButton label={REDEEM_COPY.again} variant="secondary" onPress={again} />
+                </View>
+              </Animated.View>
+            )}
+          </View>
           <View style={styles.stage}>
             <Animated.Image
               source={require('../../assets/images/screens/explore/starburst.png')}
@@ -202,38 +244,25 @@ export default function RedeemCoinCodeScreen() {
               <Image source={require('../../assets/images/screens/explore/starburst.png')} style={styles.burstImage}
                 contentFit="contain" tintColor={BRAND.gold} />
             </Animated.View>
-            {/* All three chests stay loaded and only one shows, so the swap to the
-                open chest lands on the very frame the burst starts. A code that gave
-                no coins opens the empty chest, never a pile of gold. */}
+            {/* All three chests stay loaded and only one shows. The swap is a native
+                opacity change in the same batch as the pop and the burst, so all three
+                land on one frame. A code that gave no coins opens the empty chest,
+                never a pile of gold. */}
             <Animated.View style={[styles.chest, { transform: [{ scale: pop }] }]}>
-              <Image source={require('../../assets/images/screens/redeem/chest_closed.png')}
-                style={[styles.chestLayer, { opacity: opened ? 0 : 1 }]} contentFit="contain" />
-              <Image source={require('../../assets/images/screens/redeem/chest_opened.png')}
-                style={[styles.chestLayer, { opacity: opened && gaveCoins ? 1 : 0 }]} contentFit="contain" />
-              <Image source={require('../../assets/images/social/chest_open_empty.png')}
-                style={[styles.chestLayer, { opacity: opened && !gaveCoins ? 1 : 0 }]} contentFit="contain" />
+              <Animated.View style={[styles.chestLayer, { opacity: Animated.subtract(1, Animated.add(openCoins, openEmpty)) }]}>
+                <Image source={require('../../assets/images/screens/redeem/chest_closed.png')}
+                  style={styles.chestLayer} contentFit="contain" />
+              </Animated.View>
+              <Animated.View style={[styles.chestLayer, { opacity: openCoins }]}>
+                <Image source={require('../../assets/images/screens/redeem/chest_opened.png')}
+                  style={styles.chestLayer} contentFit="contain" />
+              </Animated.View>
+              <Animated.View style={[styles.chestLayer, { opacity: openEmpty }]}>
+                <Image source={require('../../assets/images/social/chest_open_empty.png')}
+                  style={styles.chestLayer} contentFit="contain" />
+              </Animated.View>
             </Animated.View>
           </View>
-          {opened && (
-            <Animated.View style={[styles.prizeCard, { opacity: cardIn,
-              transform: [{ scale: cardIn.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }]}
-              accessibilityLiveRegion="polite">
-              <Text style={styles.prizeTitle}>{rewards.length ? REDEEM_COPY.done : REDEEM_COPY.nothing}</Text>
-              {rewards.map((line, i) => (
-                <Animated.View key={line.key} style={[styles.prizeRow, rowsIn[i] && { opacity: rowsIn[i],
-                  transform: [{ translateY: rowsIn[i].interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }]}
-                  accessible accessibilityLabel={line.text}>
-                  {line.imageUrl
-                    ? <Image source={{ uri: line.imageUrl }} style={styles.prizeImage} contentFit="contain" />
-                    : <GameIcon name={line.icon} size={30} />}
-                  <Text style={styles.prizeText} numberOfLines={2}>{line.text}</Text>
-                </Animated.View>
-              ))}
-              <View style={styles.button}>
-                <GameButton label={REDEEM_COPY.again} variant="secondary" onPress={again} />
-              </View>
-            </Animated.View>
-          )}
         </ScrollView>
       </ImageBackground>
     </>
@@ -243,7 +272,8 @@ export default function RedeemCoinCodeScreen() {
 const styles = StyleSheet.create({
   background: { flex: 1, marginTop: -8 },
   content: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingTop: 24 },
-  form: { width: '100%', maxWidth: 340, alignItems: 'center' },
+  slot: { width: '100%', maxWidth: 340, alignItems: 'center', justifyContent: 'flex-end', minHeight: 176 },
+  form: { width: '100%', alignItems: 'center' },
   prompt: {
     fontFamily: FONT.display, fontSize: 22, color: BRAND.white, textAlign: 'center', marginBottom: 12,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
@@ -265,8 +295,9 @@ const styles = StyleSheet.create({
   starburst: { position: 'absolute', width: '100%', height: 300, opacity: 0.08 },
   chest: { height: 240, aspectRatio: 1 },
   chestLayer: { ...StyleSheet.absoluteFillObject },
+  // Sits on the bottom of the slot, right above the chest, and grows upward if a code gives a lot.
   prizeCard: {
-    width: '100%', maxWidth: 340, backgroundColor: BRAND.cream, borderColor: BRAND.navy, borderWidth: OUTLINE.thick,
+    position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: BRAND.cream, borderColor: BRAND.navy, borderWidth: OUTLINE.thick,
     borderRadius: RADIUS.lg, paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center', ...SHADOW.card,
   },
   prizeTitle: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, marginBottom: 6, textAlign: 'center' },

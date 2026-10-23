@@ -73,21 +73,37 @@ test('the screen never draws a bare number outside Text (the old 0-coin crash)',
 
 test('the chest opens on the same frame as the burst, and the prize card never shows empty', () => {
   const screen = fs.readFileSync(path.join(root, 'src/screens/RedeemCoinCodeScreen.tsx'), 'utf8');
-  // The celebration starts from a layout effect on the open state, not before the open chest renders.
-  assert.match(screen, /useLayoutEffect\(\(\) => \{ if \(opened\) celebrate\(\); \}, \[opened\]\)/);
-  assert.doesNotMatch(screen, /celebrate\(lines\.length\)/);
-  // All three chests stay mounted; only opacity changes, so there is no image load gap.
-  assert.match(screen, /chest_closed\.png'\)\}\s*style=\{\[styles\.chestLayer, \{ opacity: opened \? 0 : 1 \}\]\}/);
-  assert.match(screen, /opacity: opened && gaveCoins \? 1 : 0/);
-  assert.match(screen, /opacity: opened && !gaveCoins \? 1 : 0/);
+  // The chest swap is a native opacity change, not React state, so it rides in the same batch as the pop and burst.
+  assert.doesNotMatch(screen, /useLayoutEffect/);
+  assert.match(screen, /opacity: Animated\.subtract\(1, Animated\.add\(openCoins, openEmpty\)\)/);
+  assert.match(screen, /\{ opacity: openCoins \}/);
+  assert.match(screen, /\{ opacity: openEmpty \}/);
+  const party = screen.slice(screen.indexOf('const celebrate'), screen.indexOf('const opened'));
+  assert.match(party, /Animated\.parallel\(\[\s*now\(chest, 1\),/);
+  assert.match(party, /now\(pop, 0\.9\)/, 'the pop starts moving on the first frame');
+  assert.match(party, /now\(burst, 0\.5\)/, 'the first burst ray shows on the first frame');
+  assert.match(party, /toValue: 1\.12/);
+  // It starts before the prize card renders, in the same tick as the reply.
+  assert.match(screen, /celebrate\(coins\);\s*setRewards\(lines\);/);
   // The card fades and grows in on the native driver, and resets before the next code.
   assert.match(screen, /<Animated\.View style=\{\[styles\.prizeCard, \{ opacity: cardIn,/);
   assert.match(screen, /outputRange: \[0\.96, 1\]/);
-  assert.match(screen, /cardIn\.setValue\(0\);\s*setRewards\(null\)/);
-  // A bigger pop: 0.85 up to 1.12, then a spring back to 1, with the reward sound at the start.
-  assert.match(screen, /pop\.setValue\(0\.85\)/);
-  assert.match(screen, /toValue: 1\.12/);
-  assert.match(screen, /const celebrate = useCallback\(\(\) => \{\s*playSound\(require\('..\/..\/assets\/sounds\/reward\.mp3'\)/);
+  assert.match(screen, /cardIn\.setValue\(0\);\s*openCoins\.setValue\(0\);\s*openEmpty\.setValue\(0\);\s*formIn\.setValue\(1\);/);
+  assert.match(screen, /const celebrate = useCallback\(\(coins: boolean\) => \{\s*playSound\(require\('..\/..\/assets\/sounds\/reward\.mp3'\)/);
+});
+
+test('the chest never jumps: the code box and the prize card share one slot above it', () => {
+  const screen = fs.readFileSync(path.join(root, 'src/screens/RedeemCoinCodeScreen.tsx'), 'utf8');
+  // The form stays mounted (it fades up and away), so the slot keeps its height.
+  assert.doesNotMatch(screen, /\{!opened && \(/);
+  assert.match(screen, /<View style=\{styles\.slot\}>\s*<Animated\.View style=\{\[styles\.form, \{ opacity: formIn,/);
+  assert.match(screen, /pointerEvents=\{opened \? 'none' : 'auto'\}/);
+  assert.match(screen, /Animated\.timing\(formIn, \{ toValue: 0, duration: 150,[^}]*useNativeDriver: true \}\)/);
+  // The prize card is laid over the slot, so its size never moves the chest.
+  assert.match(screen, /prizeCard: \{\s*position: 'absolute', left: 0, right: 0, bottom: 0,/);
+  const slot = screen.indexOf('<View style={styles.slot}>'), stage = screen.indexOf('<View style={styles.stage}>');
+  const card = screen.indexOf('styles.prizeCard, {');
+  assert.ok(slot < card && card < stage, 'the prize card lives in the slot, above the chest');
 });
 
 test('the redeem call skips the grey toast: the prize card already lists every grant', () => {
