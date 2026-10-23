@@ -72,7 +72,7 @@ import ResumeCountdown from './components/ResumeCountdown';
 import { LINEPLAY_TOUR_STEP_MS, linePlayTourEnabled, linePlayTourSteps } from './devTour';
 import WaitCard from './components/WaitCard';
 import WaitCoinHero from './components/waitscreen/WaitCoinHero';
-import { shownWait } from './components/waitscreen/waitScreenPreview';
+import { shownRewards, shownWait } from './components/waitscreen/waitScreenPreview';
 import NewRoundsBanner from './components/NewRoundsBanner';
 import ActivitySlot from './components/ActivitySlot';
 import ActivityPageRail from './components/ActivityPageRail';
@@ -943,10 +943,10 @@ export default function LinePlayScreen() {
               entranceWaitObservedAt={snapshot.entranceWaitObservedAt}
               entranceWaitChangeMinutes={snapshot.entranceWaitChangeMinutes}
               elapsedSeconds={snapshot.elapsedSeconds}
-              rewardTrackingAvailable={snapshot.serverSessionId != null}
-              rewardUnavailable={snapshot.rewardUnavailable}
+              rewardTrackingAvailable={shownRewards(snapshot, ride).tracking}
+              rewardUnavailable={shownRewards(snapshot, ride).unavailable}
               rewardConnectionIssue={snapshot.rewardConnectionIssue}
-              lineRewardsReady={ride.lineRewardsReady}
+              lineRewardsReady={shownRewards(snapshot, ride).ready}
               verifiedEligibleSeconds={snapshot.verifiedEligibleSeconds}
               verifiedPresenceAt={snapshot.verifiedPresenceAt}
               creditedParts={snapshot.creditedParts}
@@ -981,7 +981,7 @@ export default function LinePlayScreen() {
                 waitSource={shownWait(snapshot).waitSource}
                 playerEnergy={player?.energy ?? null}
                 covered={activeGame != null || arcadeOpen || projectOpen}
-                rewardsOn={snapshot.serverSessionId != null && !snapshot.rewardUnavailable}
+                rewardsOn={shownRewards(snapshot, ride).tracking && !shownRewards(snapshot, ride).unavailable}
                 onLeveled={() => void refreshPlayer().catch(() => undefined)}
               /> : null}
             />

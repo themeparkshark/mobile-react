@@ -73,10 +73,10 @@ function Stat({ value, label, align, accessibilityLabel, icon }: {
 function WaitCoinHero(props: WaitCoinHeroProps) {
   const preview = waitScreenPreviewEnabled();
   const step = usePreviewStep(preview);
-  // Dev preview: a wait that grows 12 minutes a step, with a filling Level 2 coin. The sign time
-  // comes from the screen (PREVIEW_WAIT there), so this number and the card's details always agree.
+  // Dev preview: a wait that grows 12 minutes a step, with a filling Level 2 coin. The sign time and
+  // "earns Parts" come from the screen (shownWait, shownRewards), so the card and this body always agree.
   const p: WaitCoinHeroProps = preview ? { ...props, waitScreen: previewWaitScreen(step), creditedParts: 1 + Math.min(3, step),
-    elapsedSeconds: (20 + step * 12) * 60 + (props.elapsedSeconds % 60), playerEnergy: 120, rewardsOn: true } : props;
+    elapsedSeconds: (20 + step * 12) * 60 + (props.elapsedSeconds % 60), playerEnergy: 120 } : props;
   return <WaitCoinHeroBody {...p} preview={preview} previewAutoLevel={preview && step >= 5} />;
 }
 

@@ -9,7 +9,7 @@ import type { LineWaitScreenSummary } from '../../../../api/endpoints/me/inline-
 import type { WaitCoin } from './useWaitScreenCoin';
 import type { WaitSource } from '../../../../services/lineplay/LinePlaySession';
 
-/** The preview's sign time: a posted 60. */
+/** The preview's sign time when the session has none: a posted 60. */
 export const PREVIEW_WAIT = { plannedWaitMinutes: 60, waitSource: 'posted' } as const;
 
 /**
@@ -19,7 +19,8 @@ export const PREVIEW_WAIT = { plannedWaitMinutes: 60, waitSource: 'posted' } as 
  */
 export function shownWait(session: { readonly plannedWaitMinutes: number; readonly waitSource: WaitSource }):
   { readonly plannedWaitMinutes: number; readonly waitSource: WaitSource } {
-  return waitScreenPreviewEnabled() ? PREVIEW_WAIT
+  // The preview keeps a real sign time (so it matches "The sign at the line says ..."); it only fills in a missing one.
+  return waitScreenPreviewEnabled() && session.waitSource === 'estimate' ? PREVIEW_WAIT
     : { plannedWaitMinutes: session.plannedWaitMinutes, waitSource: session.waitSource };
 }
 
@@ -44,6 +45,19 @@ export function usePreviewStep(enabled: boolean): number {
     return () => clearInterval(id);
   }, [enabled]);
   return step;
+}
+
+/**
+ * Whether this wait earns Ride Parts, for the wait card and its hero alike:
+ * the session's answer, or "yes" in the dev preview (which fills a coin), so
+ * the card never says "No Parts at this ride" beside a filling Parts ring.
+ */
+export function shownRewards(
+  session: { readonly serverSessionId: unknown; readonly rewardUnavailable: boolean },
+  ride: { readonly lineRewardsReady?: boolean },
+): { readonly tracking: boolean; readonly unavailable: boolean; readonly ready: boolean | undefined } {
+  return waitScreenPreviewEnabled() ? { tracking: true, unavailable: false, ready: true }
+    : { tracking: session.serverSessionId != null, unavailable: session.rewardUnavailable, ready: ride.lineRewardsReady };
 }
 
 export function previewWaitScreen(step: number): LineWaitScreenSummary {

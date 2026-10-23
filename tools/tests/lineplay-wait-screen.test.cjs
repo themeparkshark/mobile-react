@@ -166,4 +166,9 @@ test('one wait source of truth: "no sign time" never shows next to a MIN WAIT nu
   assert.equal((screen.match(/waitSource=\{shownWait\(snapshot\)\.waitSource\}/g) ?? []).length, 2);
   assert.equal((screen.match(/=\{shownWait\(snapshot\)\.plannedWaitMinutes\}/g) ?? []).length, 2);
   assert.doesNotMatch(read(DIR + 'WaitCoinHero.tsx'), /waitSource: 'posted'/, 'the hero preview never invents its own sign time');
+  // Same for "earns Parts": the card never says "No Parts at this ride" beside a filling Parts ring.
+  assert.match(screen, /rewardTrackingAvailable=\{shownRewards\(snapshot, ride\)\.tracking\}/);
+  assert.match(screen, /lineRewardsReady=\{shownRewards\(snapshot, ride\)\.ready\}/);
+  assert.match(screen, /rewardsOn=\{shownRewards\(snapshot, ride\)\.tracking && !shownRewards\(snapshot, ride\)\.unavailable\}/);
+  assert.doesNotMatch(read(DIR + 'WaitCoinHero.tsx'), /rewardsOn: true/);
 });
