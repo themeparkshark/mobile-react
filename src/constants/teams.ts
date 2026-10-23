@@ -19,6 +19,16 @@ export const TEAMS: Record<TeamId, { id: TeamId; name: string; color: string; ba
   shark: { id: 'shark', name: 'Team Shark', color: '#3B82F6', badge: require('../../assets/images/teams/shark-small.png') },
 };
 
+/**
+ * The fill behind a team badge on a small chip (map status row, Live bar).
+ * Team Green's chip is one step deeper than its shield's green, so the
+ * shield and its compass do not melt into a green-on-green blob at 22pt.
+ */
+const CHIP_COLORS: Partial<Record<TeamId, string>> = { globe: '#16A34A' };
+export function teamChipColor(team: TeamId): string {
+  return CHIP_COLORS[team] ?? TEAMS[team].color;
+}
+
 export const TEAM_ORDER: readonly TeamId[] = ['mouse', 'globe', 'shark'];
 
 export function isTeam(value: unknown): value is TeamId {

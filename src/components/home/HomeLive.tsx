@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { cheerRide, getLiveParks, type HomeCheerTarget, type LiveParks, type LiveParkSummary } from '../../api/endpoints/me/livePark';
 import { BOSS_NAMES } from '../../api/endpoints/parks/raid';
-import { applyTeamNames, TEAM_ORDER, TEAMS, teamName, teamShortName } from '../../constants/teams';
+import { applyTeamNames, TEAM_ORDER, TEAMS, teamChipColor, teamName, teamShortName } from '../../constants/teams';
 import { AuthContext } from '../../context/AuthProvider';
 import { WhackAShark } from '../../games/whack';
 import * as RootNavigation from '../../RootNavigation';
@@ -124,7 +124,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
             </Text>
             <View style={styles.chips}>
               {ORDER.map(team => (
-                <View key={team} style={[styles.chip, { backgroundColor: TEAMS[team].color }, yours === team && styles.chipYours]}>
+                <View key={team} style={[styles.chip, { backgroundColor: teamChipColor(team) }, yours === team && styles.chipYours]}>
                   <TeamBadge team={team} style={styles.chipBadge} />
                   <Text style={styles.chipCount}>{live.totals[team]}</Text>
                 </View>

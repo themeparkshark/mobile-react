@@ -51,6 +51,8 @@ const RIM = '#F5C842';
 const RIM_LIGHT = '#FFE9A3';
 const RIM_DEEP = '#B7861A';
 const FACE = '#FFF7E0';
+/** Below this disc size (points) the emblem drops its team ring and the glyph fills the face. */
+export const SMALL_EMBLEM = 16;
 
 /**
  * The emblem layers, sized from the cover disc (exported for tests):
@@ -59,10 +61,13 @@ const FACE = '#FFF7E0';
  * a soft shadow at the top of the face and one highlight, like Alex's bevels.
  */
 export function emblemLayers(size: number) {
-  const rim = Math.max(1, Math.round(size * 0.06));
-  const ring = Math.max(1, Math.round(size * 0.1));
+  // Chip size (a 22pt badge has a 9pt disc): one thin rim, no team ring, and the glyph fills the face,
+  // so the star and compass still read as shapes instead of a dot.
+  const small = size < SMALL_EMBLEM;
+  const rim = small ? 1 : Math.max(1, Math.round(size * 0.06));
+  const ring = small ? 0 : Math.max(1, Math.round(size * 0.1));
   const face = Math.max(2, size - 2 * (rim + ring));
-  return { rim, ring, face, glyph: Math.max(4, Math.round(face * 0.82)), shade: Math.max(1, Math.round(face * 0.06)) };
+  return { rim, ring, face, glyph: Math.max(4, Math.round(face * (small ? 0.92 : 0.82))), shade: small ? 0 : Math.max(1, Math.round(face * 0.06)) };
 }
 
 function Emblem({ icon, fill, size, left, top }: { icon: GameIconName; fill: string; size: number; left: number; top: number }) {

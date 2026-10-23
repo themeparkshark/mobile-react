@@ -87,6 +87,20 @@ test('team badges never show the old mouse face or Earth globe (IP safety, round
     assert.ok(l.face >= 2 && l.glyph >= 4 && l.glyph <= Math.max(4, l.face), `glyph fits the face at ${size}`);
     assert.ok(l.glyph / size >= (size >= 24 ? 0.55 : 0.3), `glyph is big enough at ${size}`);
   }
+  // Round 4: at chip size (a 22pt badge has a ~9pt disc) the team ring goes and the glyph fills about 0.9 of the face.
+  for (const size of [8, 9, 12, 15]) {
+    const l = badge.emblemLayers(size);
+    assert.equal(l.ring, 0, `no team ring at ${size}`); assert.equal(l.rim, 1);
+    assert.ok(l.glyph / l.face >= 0.85, `glyph fills the face at ${size}`);
+  }
+  assert.ok(badge.emblemLayers(24).ring > 0, 'big badges keep the team ring');
+  // The Green chip sits one step deeper than the shield's green, so the shield and compass stand out on it.
+  const teamsMod = loadTs('src/constants/teams.ts');
+  assert.notEqual(teamsMod.teamChipColor('globe'), teamsMod.TEAMS.globe.color);
+  assert.equal(teamsMod.teamChipColor('mouse'), teamsMod.TEAMS.mouse.color);
+  for (const file of ['src/components/RideControlBar.tsx', 'src/components/home/HomeLive.tsx']) {
+    assert.match(fs2.readFileSync(p2.join(__dirname, '../..', file), 'utf8'), /styles\.chip, \{ backgroundColor: teamChipColor\(team\) \}/, file);
+  }
   const team = fs2.readFileSync(p2.join(__dirname, '../../src/components/TeamBadge.tsx'), 'utf8');
   assert.match(team, /backgroundColor: FACE/, 'the glyph sits on a cream face, not on the team color');
   assert.match(team, /borderTopColor: RIM_LIGHT, borderBottomColor: RIM_DEEP/, 'the rim is beveled like Alex\'s shields');
@@ -121,4 +135,11 @@ test('the team-pick screen shows no globe or castle skyline, and its copy is kid
   // GymBattle's arena-bg.png is a stone plaza with plain towers: no globe, castle or wizard hat.
   const gym = fs2.readFileSync(p2.join(__dirname, '../../src/screens/GymBattle/GymBattleScreen.tsx'), 'utf8');
   assert.doesNotMatch(gym, /water_background/);
+  // Round 4: the close X hangs from the safe-area top, never a fixed 54pt that crowds the title on iPhone SE.
+  assert.match(screen, /style=\{\[s\.close, \{ top: insets\.top \+ CLOSE_GAP \}\]\}/);
+  assert.doesNotMatch(screen, /close: \{ position: 'absolute', top: \d+/);
+  const gap = Number(/const CLOSE_GAP = (\d+);/.exec(screen)[1]);
+  // iPhone SE (r4 capture, idb frames): the X is 24..60pt tall at x 321, the title box starts at y 67 and ends at x 307.5.
+  // So the X sits fully above the title line and 13.5pt to its right: never on top of the title.
+  assert.ok(20 + gap + 36 < 67, 'the X ends above PICK YOUR TEAM on iPhone SE');
 });

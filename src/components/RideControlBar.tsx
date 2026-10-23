@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { RideControlPark } from '../api/endpoints/parks/rideControl';
-import { applyTeamNames, TEAM_ORDER, TEAMS, teamName, teamShortName, type TeamId } from '../constants/teams';
+import { applyTeamNames, TEAM_ORDER, TEAMS, teamChipColor, teamName, teamShortName, type TeamId } from '../constants/teams';
 import { haptic } from '../gamekit/Haptics';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import type { TaskType } from '../models/task-type';
@@ -37,7 +37,7 @@ export function TeamChip({ team, count, yours, leading }: {
   const chipStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const crownStyle = useAnimatedStyle(() => ({ opacity: crown.value, transform: [{ translateY: (1 - crown.value) * 6 }, { rotate: '-14deg' }, { scale: 0.6 + crown.value * 0.4 }] }));
   return (
-    <Animated.View style={[styles.chip, { backgroundColor: TEAMS[team].color }, yours && styles.chipYours, chipStyle]}>
+    <Animated.View style={[styles.chip, { backgroundColor: teamChipColor(team) }, yours && styles.chipYours, chipStyle]}>
       <TeamBadge team={team} style={styles.chipBadge} />
       <Text style={styles.chipCount}>{count}</Text>
       <Animated.View style={[styles.crown, crownStyle]} pointerEvents="none">

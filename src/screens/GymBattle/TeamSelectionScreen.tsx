@@ -12,7 +12,7 @@ import Animated, {
   Easing, FadeIn, FadeInDown, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue,
   withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getLiveParks } from '../../api/endpoints/me/livePark';
 import { joinTeam } from '../../api/endpoints/gym-battle';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
@@ -42,6 +42,7 @@ function drawQuestions() {
 }
 
 export default function TeamSelectionScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   const [stage, setStage] = useState<Stage>('pick');
   const [team, setTeam] = useState<TeamId | null>(null);
   const [suggested, setSuggested] = useState<TeamId | null>(null);
@@ -114,7 +115,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
       <View style={[StyleSheet.absoluteFill, s.tint]} />
       <SafeAreaView style={s.safe}>
         {stage !== 'done' && (
-          <Pressable style={s.close} onPress={() => navigation?.goBack()} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
+          <Pressable style={[s.close, { top: insets.top + CLOSE_GAP }]} onPress={() => navigation?.goBack()} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
             <GameIcon name="close" size={36} />
           </Pressable>
         )}
@@ -251,12 +252,19 @@ function Welcome({ team, onGo }: { team: TeamId; onGo: () => void }) {
   );
 }
 
+/**
+ * The close X sits just under the status bar (safe-area top + 4), so on a
+ * small phone (iPhone SE, 20pt inset) it clears PICK YOUR TEAM by 12pt or
+ * more instead of crowding the end of the title.
+ */
+const CLOSE_GAP = 4;
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0768b9' },
   tint: { backgroundColor: 'rgba(3, 38, 92, 0.45)' },
   bg: { position: 'absolute', left: 0, right: 0, bottom: 0, height: BG_TALL },
   safe: { flex: 1 },
-  close: { position: 'absolute', top: 54, right: 18, zIndex: 5, width: 36, height: 36, borderRadius: 18,
+  close: { position: 'absolute', right: 18, zIndex: 5, width: 36, height: 36, borderRadius: 18,
     backgroundColor: 'rgba(5,52,110,0.3)', alignItems: 'center', justifyContent: 'center' },
   closeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
   page: { flex: 1, paddingHorizontal: 18, paddingTop: 28, alignItems: 'center', justifyContent: 'center' },
