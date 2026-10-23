@@ -21,6 +21,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useSharedValue,
@@ -30,6 +31,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import SparkleBurst from '../../components/SparkleBurst';
 import { GameAudio, Haptic } from '../../gamekit';
 import GameIcon from '../../ui/GameIcon';
 import type { CoinEdition, Grade } from './engine';
@@ -132,7 +134,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
 
   useEffect(() => {
     if (reducedMotion) return undefined;
-    if (firstWin) { Haptic.hitMedium(); GameAudio.play('fx.hit', { volume: 0.5 }); return undefined; }
+    if (firstWin) return undefined; // FirstWinCard plays its own fanfare
     const at = (ms: number, fn: () => void) => timers.current.push(setTimeout(fn, ms));
     const marks = [sched.banner, sched.headline, sched.numbers, sched.grades, sched.rewards, sched.actions];
     marks.forEach((ms, i) => at(ms, () => setStep((s) => Math.max(s, i + 1))));
@@ -155,6 +157,8 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
   const canStats = !firstWin && (data.numbers.length > 0 || !!data.grades);
   const canShare = !!data.daily;
   const canChallenge = !!data.daily?.ranked;
+
+  if (firstWin) return <FirstWinCard banner={data.banner} claim={claim} reducedMotion={reducedMotion} />;
 
   return (
     <View style={[styles.wrap, { width: win.width, height: win.height }]} pointerEvents="box-none">
@@ -231,6 +235,63 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
           {flipped ? <ShareBack daily={data.daily} onBack={() => doFlip(false)} /> : null}
         </Animated.View>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * Finn's warm-up win: the very first win of a new player. One centred card
+ * over a full scrim (no empty board or booth shark behind it): Finn cheering
+ * in a gold burst, the ribbon fully inside the card, what comes next, and one
+ * big CONTINUE. The fanfare is the twinkle ladder plus a hit, like any win.
+ */
+export const FIRST_WIN_COPY = { next: 'Up next: ride coins!' } as const;
+const FINN_GRAD = require('../../../assets/images/tutorial/teacher-shark.png');
+const FIRST_WIN_COIN = require('../../../assets/images/coingold.png');
+function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim: () => void; reducedMotion: boolean }) {
+  const win = useWindowDimensions();
+  const cheer = useSharedValue(0);
+  const ring = useSharedValue(0);
+  useEffect(() => {
+    Haptic.hitMedium();
+    GameAudio.play('fx.hit', { volume: 0.5 });
+    const timers = [0, 1, 2].map((i) => setTimeout(() => {
+      Haptic.hitRigid();
+      GameAudio.playLadder('mm_sharp_twinkle', 4 + i, { volume: 0.8 });
+    }, 260 + i * 150));
+    if (!reducedMotion) {
+      // Two happy hops, then still: no endless loop on a card a kid may leave open.
+      cheer.value = withSequence(withTiming(1, { duration: 180 }), withTiming(0, { duration: 220 }),
+        withTiming(1, { duration: 180 }), withTiming(0, { duration: 240 }));
+      ring.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) });
+    }
+    return () => { timers.forEach(clearTimeout); cancelAnimation(cheer); cancelAnimation(ring); };
+  }, [reducedMotion, cheer, ring]);
+  const finnSt = useAnimatedStyle(() => ({ transform: [{ translateY: -cheer.value * 14 }, { rotate: `${cheer.value * -6}deg` }] }));
+  const ringSt = useAnimatedStyle(() => ({ opacity: ring.value > 0 ? 0.9 * (1 - ring.value) : 0, transform: [{ scale: 0.5 + ring.value * 0.9 }] }));
+  const finn = Math.min(170, win.height * 0.2);
+  return (
+    <View style={[styles.wrap, { width: win.width, height: win.height }]}>
+      <LinearGradient pointerEvents="none" style={StyleSheet.absoluteFill}
+        colors={['#0a5a9e', '#04305f']} />
+      <View style={styles.firstWinCard}>
+        <View style={[styles.firstWinFinn, { width: finn, height: finn, marginTop: -finn * 0.62 }]} pointerEvents="none">
+          {reducedMotion ? null : <Animated.View style={[styles.firstWinRing, { borderRadius: finn / 2 }, ringSt]} />}
+          {reducedMotion ? null : <SparkleBurst size={finn * 1.25} />}
+          <Animated.Image source={FINN_GRAD} style={[{ width: finn, height: finn }, finnSt]} resizeMode="contain" />
+        </View>
+        <View accessible accessibilityRole="header" accessibilityLabel={`${banner} ${FIRST_WIN_COPY.next}`} style={styles.firstWinHead}>
+          <Banner text={banner} show reducedMotion={reducedMotion} />
+        </View>
+        <View style={styles.firstWinNext} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+          <Image source={FIRST_WIN_COIN} style={styles.firstWinCoin} resizeMode="contain" />
+          <Text style={styles.firstWinNextText}>{FIRST_WIN_COPY.next}</Text>
+        </View>
+        <Pressable onPress={() => { Haptic.tapLight(); claim(); }} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]}
+          accessibilityRole="button">
+          <Text style={styles.bigBtnText}>CONTINUE</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -462,6 +523,15 @@ const styles = StyleSheet.create({
   reveal: { alignSelf: 'stretch', alignItems: 'center' },
   burst: { position: 'absolute', left: 0, right: 0, top: -10, height: 50, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
   burstCoin: { position: 'absolute', width: 38, height: 38 },
+  // The first win: the ribbon sits fully inside the card (no negative margin), Finn rises above it.
+  firstWinCard: { width: '86%', maxWidth: 360, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
+    alignItems: 'center', paddingHorizontal: 16, paddingBottom: 18, paddingTop: 6 },
+  firstWinFinn: { alignItems: 'center', justifyContent: 'center' },
+  firstWinHead: { alignSelf: 'stretch', alignItems: 'center' },
+  firstWinRing: { ...StyleSheet.absoluteFillObject, borderWidth: 6, borderColor: MM.gold },
+  firstWinNext: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 14 },
+  firstWinCoin: { width: 48, height: 48 },
+  firstWinNextText: { fontFamily: 'Shark', fontSize: 22, color: MM.navyText },
   card: {
     width: '90%', maxWidth: 400, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
     backfaceVisibility: 'hidden',

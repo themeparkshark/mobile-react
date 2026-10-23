@@ -2308,12 +2308,13 @@ export default function MemoryGame({
   const ids = useMemo(() => Array.from({ length: n }, (_, i) => i), [n]);
   const r = runRef.current;
   const g = geo;
-  const title = mode === 'ride' ? 'Memory Match' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : mode === 'warmup' ? 'Memory Warm-up' : 'Memory Match';
+  const title = mode === 'ride' ? 'Memory Match' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : mode === 'warmup' ? 'Finn’s Warm-up' : 'Memory Match';
   const subtitle = mode === 'ride'
     ? `${r && r.tryIndex > 0 ? `Try ${r.tryIndex + 1} of ${RIDE_TRIES} · ` : ''}${taskName || deck.label}${r?.signal ? ' · Low signal' : ''}`
     : mode === 'timeAttack' ? `${deck.label} · Board ${hud.board}`
     : mode === 'daily' ? `${deck.label} · ${daily?.ranked && runIndex === 0 ? 'Ranked' : 'Practice'}`
-    : mode === 'race' ? `${deck.label} · Practice race` : deck.label;
+    : mode === 'race' ? `${deck.label} · Practice race`
+    : mode === 'warmup' ? 'Match 4 pairs with Finn' : deck.label;
   const notchFrac = mode === 'ride' && !(r?.signal) ? 15000 / 45000 : -1;
   const raceSharks = SHARKS;
   void raceSharks;

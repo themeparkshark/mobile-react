@@ -16,7 +16,6 @@ import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   cancelAnimation,
-  useAnimatedProps,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -30,7 +29,14 @@ import { MM } from './theme';
 
 const STREAK = require('../../assets/games/memory/studio/streak.png');
 
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+/**
+ * The QUICK ring is a plain View (border plus scale), never an animated SVG node.
+ * An animated SVG radius re-measures the SVG node every frame, and each
+ * re-measure sends a native layout event. A burst of those during Finn's
+ * warm-up crashed the app once (reanimated read an event that was not an
+ * object). A View ring looks the same and costs less.
+ */
+const RING_MAX_R = 38;
 
 // -----------------------------------------------------------------------------
 // Chain plate + Showtime gauge + QUICK ring
@@ -92,10 +98,9 @@ export const ChainPlate = forwardRef<ChainPlateHandle, {
   const st = useAnimatedStyle(() => ({
     transform: [{ translateX: shake.value }, { scale: scale.value * (1 + fuse.value * 0.06) }],
   }));
-  const ringProps = useAnimatedProps(() => ({
-    r: 16 + ring.value * 22,
-    strokeOpacity: ring.value > 0.001 ? 0.35 + (1 - ring.value) * 0.65 : ringHit.value,
-    strokeWidth: 2 + ringHit.value * 3,
+  const ringSt = useAnimatedStyle(() => ({
+    opacity: ring.value > 0.001 ? 0.35 + (1 - ring.value) * 0.65 : ringHit.value,
+    transform: [{ scale: (16 + ring.value * 22) / RING_MAX_R }],
   }));
   const pips = [];
   if (showtime) {
@@ -108,9 +113,7 @@ export const ChainPlate = forwardRef<ChainPlateHandle, {
     <Animated.View style={[styles.chainPlate, !pips.length && strikes == null && styles.chainCompact, showtime && styles.chainShow, st]}
       accessible accessibilityLabel={`Chain ${chain}${showtime ? ', Showtime' : ''}`}>
       <View style={styles.ringWrap} pointerEvents="none">
-        <Svg width={84} height={84} viewBox="-42 -42 84 84">
-          <AnimatedCircle cx={0} cy={0} fill="none" stroke={MM.gold} animatedProps={ringProps} />
-        </Svg>
+        <Animated.View style={[styles.quickRing, ringSt]} />
       </View>
       <View style={styles.chainRow}>
         <Image source={STREAK} style={[styles.streakIcon, chain === 0 && !showtime && styles.streakIdle]} resizeMode="contain" />
@@ -267,7 +270,8 @@ const styles = StyleSheet.create({
   chainShow: { backgroundColor: '#fff4c2', borderColor: MM.goldDeep },
   chainCompact: { width: undefined, minWidth: 58, paddingHorizontal: 10 },
   streakIdle: { opacity: 0.45 },
-  ringWrap: { position: 'absolute', left: 4, top: -20 },
+  ringWrap: { position: 'absolute', left: 4, top: -20, width: 84, height: 84, alignItems: 'center', justifyContent: 'center' },
+  quickRing: { width: RING_MAX_R * 2, height: RING_MAX_R * 2, borderRadius: RING_MAX_R, borderWidth: 3, borderColor: MM.gold },
   chainRow: { flexDirection: 'row', alignItems: 'center' },
   streakIcon: { width: 20, height: 22 },
   chainText: { fontFamily: 'Shark', fontSize: 20, color: MM.navyText, marginLeft: 3 },
