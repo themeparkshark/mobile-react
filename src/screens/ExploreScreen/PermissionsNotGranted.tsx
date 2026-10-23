@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useContext, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import * as RootNavigation from '../../RootNavigation';
 import Animated, {
   Easing, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming,
@@ -9,14 +9,20 @@ import HomeArcade from '../../components/HomeArcade';
 import YellowButton from '../../components/YellowButton';
 import { LocationStatusContext } from '../../context/LocationProvider';
 
-/** "Not now" is a real choice: games and a park pick, with location one tap away. */
+/** "Not now" is a real choice: games and the ride coins to win, with location one tap away. */
 export const NOT_NOW_COPY = {
   title: 'Play while you decide!',
   games: 'Games',
-  park: 'Pick a park',
+  gamesHint: 'Play at home',
+  park: 'Ride coins',
+  parkHint: 'Win these at the park',
   hint: 'Turn on location any time to find treasures near you.',
   news: 'Read park news',
 } as const;
+
+/** One Finn and one underwater scene in the first minute (no castle or globe shapes behind him). */
+const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
+const BACKDROP = require('../../../assets/images/screens/park/background-new.png');
 
 // Once a player picks "Not now", the card stays in play mode for this app session.
 let choseNotNow = false;
@@ -62,17 +68,18 @@ export default function PermissionsNotGranted() {
     setAsking(true);
     try { await requestPermission(); } finally { setAsking(false); }
   };
+  // Short phones (iPhone SE): a smaller Finn and finds, so his cap stays clear of the status bar.
+  const compact = useWindowDimensions().height < 700;
   if (playing) return <NotNowPlay asking={asking} onTurnOn={turnOn} arcadeOpen={arcadeOpen} setArcadeOpen={setArcadeOpen} />;
 
   return (
     <View style={styles.wrap}>
-      <Image source={require('../../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <Image source={BACKDROP} style={StyleSheet.absoluteFill} contentFit="cover" />
       <View style={[StyleSheet.absoluteFill, styles.tint]} />
       <Animated.View entering={FadeInUp.duration(450).springify().damping(14)} style={styles.card}>
-        <Image source={require('../../../assets/images/screens/welcome/shark.png')}
-          style={styles.shark} contentFit="contain" />
-        <Text style={styles.title}>Let’s find your first treasures!</Text>
-        <View style={styles.finds}>
+        <Image source={FINN} style={[styles.shark, compact && styles.sharkCompact]} contentFit="contain" accessibilityLabel="Finn the shark" />
+        <Text style={[styles.title, compact && styles.titleCompact]}>Let’s find your first treasures!</Text>
+        <View style={[styles.finds, compact && styles.findsCompact]}>
           {FINDS.map((source, i) => <Find key={i} source={source} i={i} />)}
         </View>
         <Text style={styles.body}>
@@ -98,21 +105,23 @@ function NotNowPlay({ asking, onTurnOn, arcadeOpen, setArcadeOpen }: {
 }) {
   return (
     <View style={styles.wrap}>
-      <Image source={require('../../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <Image source={BACKDROP} style={StyleSheet.absoluteFill} contentFit="cover" />
       <View style={[StyleSheet.absoluteFill, styles.tint]} />
       <Animated.View entering={FadeInUp.duration(380).springify().damping(14)} style={styles.card}>
-        <Image source={require('../../../assets/images/screens/welcome/shark.png')} style={styles.shark} contentFit="contain" />
+        <Image source={FINN} style={styles.shark} contentFit="contain" accessibilityLabel="Finn the shark" />
         <Text style={styles.title}>{NOT_NOW_COPY.title}</Text>
         <View style={styles.tiles}>
           <Pressable onPress={() => setArcadeOpen(true)} accessibilityRole="button" accessibilityLabel={NOT_NOW_COPY.games}
             accessibilityHint="Opens the home arcade" style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}>
             <Image source={require('../../../assets/images/screens/social/arcade.png')} style={styles.tileIcon} contentFit="contain" />
             <Text style={styles.tileText}>{NOT_NOW_COPY.games}</Text>
+            <Text style={styles.tileSub}>{NOT_NOW_COPY.gamesHint}</Text>
           </Pressable>
           <Pressable onPress={() => RootNavigation.navigate('CoinShelf')} accessibilityRole="button" accessibilityLabel={NOT_NOW_COPY.park}
-            accessibilityHint="Opens every park and its ride coins" style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}>
-            <Image source={require('../../../assets/images/share/props/gold-fin-coin.webp')} style={styles.tileIcon} contentFit="contain" />
+            accessibilityHint="Shows the ride coins you can win at each park" style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}>
+            <Image source={require('../../../assets/images/coingold.png')} style={styles.tileIcon} contentFit="contain" />
             <Text style={styles.tileText}>{NOT_NOW_COPY.park}</Text>
+            <Text style={styles.tileSub}>{NOT_NOW_COPY.parkHint}</Text>
           </Pressable>
         </View>
         <Text style={styles.small}>{NOT_NOW_COPY.hint}</Text>
@@ -137,12 +146,16 @@ const styles = StyleSheet.create({
   tilePressed: { backgroundColor: '#ffefb3', transform: [{ scale: 0.97 }] },
   tileIcon: { width: 76, height: 76 },
   tileText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e', marginTop: 4, textAlign: 'center' },
+  tileSub: { fontFamily: 'Knockout', fontSize: 14, color: '#3d6a96', marginTop: 2, textAlign: 'center' },
   wrap: { ...StyleSheet.absoluteFillObject, zIndex: 30, justifyContent: 'center', alignItems: 'center', padding: 22 },
-  tint: { backgroundColor: 'rgba(3, 38, 92, 0.35)' },
+  tint: { backgroundColor: 'rgba(3, 38, 92, 0.18)' },
   card: { width: '100%', alignItems: 'center', backgroundColor: '#0768b9', borderRadius: 26,
     borderWidth: 4, borderColor: '#fff', paddingVertical: 20, paddingHorizontal: 18,
     shadowColor: '#021e45', shadowOpacity: 0.45, shadowRadius: 16, shadowOffset: { width: 0, height: 10 } },
-  shark: { width: 170, height: 150, marginTop: -78 },
+  shark: { width: 150, height: 150, marginTop: -84 },
+  sharkCompact: { width: 112, height: 112, marginTop: -64 },
+  titleCompact: { fontSize: 24 },
+  findsCompact: { marginTop: 6, transform: [{ scale: 0.85 }] },
   title: { fontFamily: 'Shark', fontSize: 28, color: '#ffcf3b', textAlign: 'center',
     textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   finds: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 12 },

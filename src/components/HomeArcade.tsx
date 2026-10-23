@@ -5,7 +5,7 @@
  * and by guests after Finn's first taste.
  */
 import { useRef, useState } from 'react';
-import MiniGameSelector from './MiniGameSelector';
+import MiniGameSelector, { HOME_ARCADE_TASK_NAME } from './MiniGameSelector';
 import QueueArcadeSheet, { type QueueArcadeChoice } from '../screens/LinePlay/components/QueueArcadeSheet';
 
 export type HomeArcadeGame = 'tap' | 'memory' | 'trivia' | 'shark' | 'banana' | 'timing';
@@ -55,7 +55,7 @@ export default function HomeArcade({ visible, onClose }: {
       kicker={HOME_ARCADE_COPY.kicker} title={HOME_ARCADE_COPY.title} intro={HOME_ARCADE_COPY.intro}
       note={HOME_ARCADE_COPY.note} showNew={false}
       onChoose={choose} onClose={onClose} onHidden={hidden} />
-    {game != null && <MiniGameSelector visible taskId={0} taskName="Home Arcade" preferredGame={game}
+    {game != null && <MiniGameSelector visible taskId={0} taskName={HOME_ARCADE_TASK_NAME} preferredGame={game}
       isPractice rewardMode="legacy" onClose={finish} onComplete={finish} />}
   </>;
 }
