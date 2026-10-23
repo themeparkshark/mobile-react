@@ -16,7 +16,8 @@ const QUEUE_TIMES_REFRESH_MS = 60_000;
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper from '../components/Wrapper';
+import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
+import GameIcon, { type GameIconName } from '../ui/GameIcon';
 import getWikiTimes, { WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
 import {
   CLOSED_COLOR,
@@ -42,13 +43,14 @@ function getWaitColor(minutes: number) {
   return WAIT_COLOR_TIERS[WAIT_COLOR_TIERS.length - 1];
 }
 
-function getBadgeInfo(entry: WikiLiveEntry) {
+function getBadgeInfo(entry: WikiLiveEntry): { text: string; color: string; statusText: string; icon?: GameIconName; minutes?: boolean } {
   const waitTime = postedStandbyWait(entry);
   if (entry.status === 'DOWN') {
     return { text: '!', color: DOWN_COLOR, statusText: 'Temporarily Down' };
   }
   if (entry.status === 'REFURBISHMENT') {
-    return { text: '\u{1F527}', color: REFURB_COLOR, statusText: 'Refurbishment' };
+    // A drawn wrench, never the emoji (the game fonts have no emoji and Dustin's rule is no emoji in UI).
+    return { text: '', icon: 'wrench', color: REFURB_COLOR, statusText: 'Being fixed up' };
   }
   if (entry.status === 'CLOSED') {
     return { text: '-', color: CLOSED_COLOR, statusText: 'Closed' };
@@ -59,7 +61,7 @@ function getBadgeInfo(entry: WikiLiveEntry) {
   }
   const mins = waitTime;
   const tier = getWaitColor(mins);
-  return { text: String(mins), color: tier.color, statusText: 'Operating' };
+  return { text: String(mins), color: tier.color, statusText: 'Operating', minutes: true };
 }
 
 function formatReturnTime(iso: string | null | undefined): string | null {
@@ -96,10 +98,10 @@ const SkeletonCard = () => {
 
   return (
     <Animated.View style={[styles.card, { opacity }]}>
-      <View style={[styles.badge, { backgroundColor: '#E5E7EB' }]} />
+      <View style={[styles.badge, { backgroundColor: '#d6ecfb' }]} />
       <View style={{ flex: 1, marginLeft: 12 }}>
-        <View style={{ width: '70%', height: 16, backgroundColor: '#E5E7EB', borderRadius: 4 }} />
-        <View style={{ width: '40%', height: 12, backgroundColor: '#F3F4F6', borderRadius: 4, marginTop: 6 }} />
+        <View style={{ width: '70%', height: 16, backgroundColor: '#d6ecfb', borderRadius: 4 }} />
+        <View style={{ width: '40%', height: 12, backgroundColor: '#e7f4fd', borderRadius: 4, marginTop: 6 }} />
       </View>
     </Animated.View>
   );
@@ -124,7 +126,10 @@ const RideCard = ({
     <View style={[styles.card, { borderLeftColor: badge.color, borderLeftWidth: 3, flexWrap: 'wrap' }]}>
       <View style={styles.cardRow}>
         <View style={[styles.badge, { backgroundColor: badge.color }]}>
-          <Text style={styles.badgeText}>{badge.text}</Text>
+          {badge.icon ? <GameIcon name={badge.icon} size={30} /> : (
+            <Text style={styles.badgeText}>{badge.text}</Text>
+          )}
+          {badge.minutes && <Text style={styles.badgeUnit}>MIN</Text>}
         </View>
         <View style={styles.cardCenter}>
           <Text style={styles.rideName} numberOfLines={2}>{entry.name}</Text>
@@ -139,8 +144,10 @@ const RideCard = ({
               style={({ pressed }) => [styles.sessionBtn, pressed && styles.sessionBtnPressed]}
               hitSlop={6}
             >
+              {/* A drawn play icon: the game font has no play-arrow glyph (it drew a box). */}
+              <GameIcon name="play" size={16} />
               <Text style={styles.sessionBtnText}>{entry.status === 'DOWN'
-                ? '▶  GAMES · NO PARTS' : '▶  PLAY IN LINE'}</Text>
+                ? 'GAMES · NO PARTS' : 'PLAY IN LINE'}</Text>
             </Pressable>
           )}
         </View>
@@ -618,6 +625,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
+    paddingBottom: FOOTER_CLEARANCE,
   },
   card: {
     flexDirection: 'row',
@@ -648,6 +656,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
+  badgeUnit: {
+    color: '#FFFFFF',
+    fontFamily: 'Knockout',
+    fontSize: 11,
+    lineHeight: 12,
+    marginTop: -2,
+  },
   cardRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -666,7 +681,9 @@ const styles = StyleSheet.create({
     borderColor: '#ffcc3a',
     paddingHorizontal: 14,
     paddingVertical: 6,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     minHeight: 36,
   },
   sessionBtnPressed: {
