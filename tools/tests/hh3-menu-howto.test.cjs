@@ -21,7 +21,7 @@ test('Shark Park is gone: no menu entry, no route, no screen or idle-game code',
   }
   const glossary = loadTs('src/services/help/glossary.ts');
   assert.equal(glossary.LOCAL_GLOSSARY.shark_park, undefined);
-  const topics = loadTs('src/services/help/helpTopics.ts');
+  const topics = loadTs('src/services/help/helpTopics.ts', { '../adConfig': { AD_AUDIENCE_13_PLUS_KNOWN: false } });
   const all = topics.HELP_TOPICS.map(topic => topic.lines.join(' ') + topic.terms.join(' ')).join(' ');
   assert.doesNotMatch(all, /Shark Park|shark_park/);
   // The menu still opens everything else.
@@ -30,7 +30,7 @@ test('Shark Park is gone: no menu entry, no route, no screen or idle-game code',
 
 test('help copy no longer mentions the removed grab zone', () => {
   const glossary = loadTs('src/services/help/glossary.ts');
-  const topics = loadTs('src/services/help/helpTopics.ts');
+  const topics = loadTs('src/services/help/helpTopics.ts', { '../adConfig': { AD_AUDIENCE_13_PLUS_KNOWN: false } });
   const words = [
     ...glossary.GLOSSARY_KEYS.map(key => `${glossary.LOCAL_GLOSSARY[key].what} ${glossary.LOCAL_GLOSSARY[key].earn}`),
     ...topics.HELP_TOPICS.flatMap(topic => topic.lines),
@@ -40,7 +40,7 @@ test('help copy no longer mentions the removed grab zone', () => {
 
 test('How to Play is 4 to 6 big cards: 7 words or fewer, no ride-coin clash, a voice clip each, demo art is small WebP', () => {
   const { HOW_TO_CARDS, MAX_LINE_WORDS, wordCount } = loadTs('src/services/help/howToCards.ts');
-  const topics = loadTs('src/services/help/helpTopics.ts');
+  const topics = loadTs('src/services/help/helpTopics.ts', { '../adConfig': { AD_AUDIENCE_13_PLUS_KNOWN: false } });
   assert.ok(HOW_TO_CARDS.length >= 4 && HOW_TO_CARDS.length <= 6);
   assert.equal(MAX_LINE_WORDS, 7);
   for (const card of HOW_TO_CARDS) {

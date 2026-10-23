@@ -401,7 +401,7 @@ function GiftPlans() {
  * promises the game keeps. Every line is true of the shipped game.
  */
 const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
-  { icon: 'gift', text: 'VIP adds bonus rewards. Every game and ride coin is free to play without it.' },
+  { icon: 'gift', text: 'VIP adds bonus rewards. Every game and ride coin can be won without it.' },
   { icon: 'lock', text: 'Every real-money buy asks a grown-up first. Ask to Buy works too.' },
   { icon: 'check', text: 'Everything you earn or buy stays in your closet for good.' },
   { icon: 'settings', text: 'Turn VIP off anytime in Apple\u00A0ID settings.' },

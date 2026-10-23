@@ -73,12 +73,13 @@ export function formatParkDay(parkDay: string | null | undefined): string {
 }
 
 /**
- * VIP-neutral Experience standings (Dustin decides; see WS7). Off by default,
- * which keeps today's behaviour: rank by total_experience. When the flag is on
- * and the server sends base_total_experience (XP before the VIP multiplier),
- * that is the number shown.
+ * VIP-neutral Experience standings: money never buys a higher public number
+ * (Oct 23 2026 audit, blocker 30). On by default: when the server sends
+ * base_total_experience (XP before the VIP multiplier), that is the number
+ * shown. The ranking itself is the server's (ECONOMY_VIP_NEUTRAL_STANDINGS,
+ * PlayerController@index); EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS=0 turns this off.
  */
-export const VIP_NEUTRAL_STANDINGS_DEFAULT = false;
+export const VIP_NEUTRAL_STANDINGS_DEFAULT = true;
 
 export function vipNeutralStandingsEnabled(env: Record<string, string | undefined> | undefined): boolean {
   const value = env?.EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS;

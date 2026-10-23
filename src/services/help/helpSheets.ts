@@ -11,6 +11,7 @@
  * odds) is described without a number unless the number comes from the server.
  */
 import type { GameIconName } from '../../ui/iconNames';
+import { AD_AUDIENCE_13_PLUS_KNOWN } from '../adConfig';
 
 export type HelpHeroKey =
   | 'standings_climb' | 'standings_podium' | 'standings_boards'
@@ -115,7 +116,10 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         points: [
           { icon: 'ticket', text: 'Packs of Tickets, Energy and more.' },
           { icon: 'lock', text: 'A grown-up buys them with real money.' },
-          { icon: 'play', text: 'Bonus ads are free. Watch one or skip it.' },
+          // No ad talk while no player can see an ad (adConfig.ts).
+          AD_AUDIENCE_13_PLUS_KNOWN
+            ? { icon: 'play', text: 'Bonus ads are free. Watch one or skip it.' }
+            : { icon: 'check', text: 'You never need them to win a ride coin.' },
         ] },
     ],
   },

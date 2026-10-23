@@ -60,8 +60,9 @@ test('park days read as a real date, never a raw ISO string', () => {
 });
 
 test('VIP-neutral XP is off by default and only switches on with the flag and a base value', () => {
-  assert.equal(model.VIP_NEUTRAL_STANDINGS_DEFAULT, false);
-  assert.equal(model.vipNeutralStandingsEnabled({}), false);
+  // Money never buys a higher public number (audit blocker 30): on unless turned off.
+  assert.equal(model.VIP_NEUTRAL_STANDINGS_DEFAULT, true);
+  assert.equal(model.vipNeutralStandingsEnabled({}), true);
   assert.equal(model.vipNeutralStandingsEnabled({ EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS: '1' }), true);
   assert.equal(model.vipNeutralStandingsEnabled({ EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS: 'false' }), false);
   const player = { total_experience: 900, base_total_experience: 600 };
