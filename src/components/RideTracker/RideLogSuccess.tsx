@@ -127,7 +127,11 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
             style={styles.heroShark} contentFit="contain" />
           <Text style={styles.successTitle}>{queued ? 'Ride Saved!' : 'Ride Logged!'}</Text>
           {queued ? (
-            <Text style={styles.journalText}>Kept on your phone. It joins your journal when you have signal.</Text>
+            <View style={styles.queuedPill} accessible
+              accessibilityLabel="Kept on your phone. It joins your journal when you have signal.">
+              <Text style={styles.queuedTitle}>Kept on your phone</Text>
+              <Text style={styles.queuedText}>It joins your journal when you have signal.</Text>
+            </View>
           ) : xpEarned > 0 ? (
             <Text style={styles.xpText}>+{xpEarned} XP</Text>
           ) : (
@@ -184,6 +188,11 @@ const styles = StyleSheet.create({
   },
   xpText: { color: '#7E5100', fontSize: 22, fontFamily: 'Shark', marginTop: 4 },
   journalText: { color: '#315C7C', fontSize: 17, fontFamily: 'Knockout', marginTop: 5, textAlign: 'center' },
+  // No signal: a soft cream pill under the title, centered so it reads at a glance.
+  queuedPill: { marginTop: 8, alignSelf: 'center', alignItems: 'center', maxWidth: 300, backgroundColor: '#FFF5D3',
+    borderRadius: 16, borderWidth: 2, borderColor: '#E3AE3E', paddingVertical: 8, paddingHorizontal: 16 },
+  queuedTitle: { color: '#103F75', fontSize: 17, fontFamily: 'Shark', textAlign: 'center' },
+  queuedText: { color: '#315C7C', fontSize: 15, fontFamily: 'Knockout', textAlign: 'center', marginTop: 2 },
   // Milestone
   milestoneCard: {
     backgroundColor: '#FFF5D3', borderRadius: 16, padding: 20, marginBottom: 20,

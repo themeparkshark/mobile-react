@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -27,6 +27,7 @@ import TopbarText from '../../components/Topbar/TopbarText';
 import { removePendingDetection } from '../../services/RideDetectionService';
 import { drainRideLogs, manualRideLogId, queueRideLog, shouldQueueRideLog } from '../../services/rideLogOutbox';
 import { journalRides } from './rideJournalModel';
+import { AuthContext } from '../../context/AuthProvider';
 import ProfileStatIcon from '../../components/ProfileStatIcon';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { GameIcon, gameAlert, SharkLoader } from '../../ui';
@@ -95,6 +96,7 @@ export default function RideLogScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const { player } = useContext(AuthContext);
   const rideLoadSequence = useRef(0);
   const saving = useRef(false);
   const reducedMotion = useReducedGameMotion();
@@ -235,14 +237,16 @@ export default function RideLogScreen() {
       setShowSuccess(true);
     } catch (e: any) {
       if (!shouldQueueRideLog(e)) {
-        gameAlert("Couldn't save your ride", e?.response?.data?.message || 'Check your ride and try again.');
+        gameAlert('Ride not saved', e?.response?.data?.message || 'Check your ride and try again.');
         return;
       }
       // Weak signal: keep the ride on the phone and send it later. Never throw it away.
       try {
-        await queueRideLog({ payload, ride_name: selectedRide.name, park_id: selectedRide.park_id ?? null });
+        if (player?.id == null) throw new Error('signed out');
+        await queueRideLog({ payload, ride_name: selectedRide.name, park_id: selectedRide.park_id ?? null,
+          player_id: player.id, queued_at: Date.now() });
       } catch {
-        gameAlert("Couldn't save your ride", 'Check your connection and try again.');
+        gameAlert('Ride not saved', "We couldn't save it. Check your signal and try again.");
         return;
       }
       if (detectionId) void removePendingDetection(detectionId).catch(() => undefined);
@@ -263,7 +267,7 @@ export default function RideLogScreen() {
       saving.current = false;
       setSubmitting(false);
     }
-  }, [selectedRide, rating, reaction, note, waitTime, autoRodeAt, detectionId]);
+  }, [selectedRide, rating, reaction, note, waitTime, autoRodeAt, detectionId, player?.id]);
 
   const handleBack = useCallback(() => {
     if (step === 'details') {

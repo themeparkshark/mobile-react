@@ -15,7 +15,7 @@ import Topbar, { BackButton } from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { drainRideLogs, onRideLogOutboxChange, pendingRideLogCount } from '../../services/rideLogOutbox';
+import { drainRideLogs, onRideLogOutboxChange, pendingRideLogs, rideCountWords, type QueuedRideLog } from '../../services/rideLogOutbox';
 import { GameIcon } from '../../ui';
 
 // ─── Rider Levels (based on rides logged) ───
@@ -163,11 +163,12 @@ export default function RideTrackerScreen() {
   }, [preview]);
 
   // Rides kept on the phone in a dead zone: show how many wait, send them, then reload.
-  const [waitingRides, setWaitingRides] = useState(0);
-  useEffect(() => onRideLogOutboxChange(setWaitingRides), []);
+  const [waitingList, setWaitingList] = useState<QueuedRideLog[]>([]);
+  const waitingRides = waitingList.length;
+  useEffect(() => onRideLogOutboxChange(() => { void pendingRideLogs().then(setWaitingList); }), []);
   const sendWaiting = useCallback(async () => {
     if (preview) return;
-    setWaitingRides(await pendingRideLogCount());
+    setWaitingList(await pendingRideLogs());
     const sent = await drainRideLogs().catch(() => 0);
     if (sent > 0) await load();
   }, [preview, load]);
@@ -207,7 +208,12 @@ export default function RideTrackerScreen() {
               <Text style={s.heroEyebrow}>YOUR RIDE JOURNAL</Text>
               {has ? <CountUp to={stats.total_rides} style={s.heroNum} />
                 : <Text style={s.heroNum}>{loadUnavailable ? '-' : '0'}</Text>}
-              <Text style={s.heroLabel}>{loadUnavailable && !stats ? 'JOURNAL OFFLINE' : 'RIDES LOGGED'}</Text>
+              <Text style={s.heroLabel}>{loadUnavailable && !stats ? 'JOURNAL OFFLINE' : stats?.total_rides === 1 ? 'RIDE LOGGED' : 'RIDES LOGGED'}</Text>
+              {waitingRides > 0 && (
+                <View style={s.heroWaiting} accessibilityLabel={`${rideCountWords(waitingRides)} waiting on your phone`}>
+                  <Text style={s.heroWaitingText}>+{waitingRides} WAITING</Text>
+                </View>
+              )}
             </View>
             <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
               style={s.heroShark} contentFit="contain" accessibilityLabel="Theme Park Shark with a park ticket and coin" />
@@ -242,13 +248,21 @@ export default function RideTrackerScreen() {
 
           {waitingRides > 0 && (
             <View style={s.waitingNote} accessible accessibilityLiveRegion="polite"
-              accessibilityLabel={`${waitingRides} ${waitingRides === 1 ? 'ride is' : 'rides are'} saved on your phone and will join your journal when you have signal`}>
-              <GameIcon name="retry" size={24} />
-              <Text style={s.waitingText}>
-                {waitingRides === 1
-                  ? '1 ride is saved on your phone. It joins your journal when you have signal.'
-                  : `${waitingRides} rides are saved on your phone. They join your journal when you have signal.`}
-              </Text>
+              accessibilityLabel={`${rideCountWords(waitingRides)} saved on your phone: ${waitingList.map(r => r.ride_name).join(', ')}. ${waitingRides === 1 ? 'It joins' : 'They join'} your journal when you have signal.`}>
+              <View style={s.waitingHead}>
+                <GameIcon name="retry" size={24} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.waitingTitle}>{rideCountWords(waitingRides)} saved on your phone</Text>
+                  <Text style={s.waitingText}>{waitingRides === 1 ? 'It joins' : 'They join'} your journal when you have signal.</Text>
+                </View>
+              </View>
+              {waitingList.slice(0, 3).map(ride => (
+                <View key={ride.payload.source_detection_id} style={s.waitingRow}>
+                  <Text style={s.waitingRide} numberOfLines={1}>{ride.ride_name}</Text>
+                  <View style={s.waitingTag}><Text style={s.waitingTagText}>SAVING</Text></View>
+                </View>
+              ))}
+              {waitingRides > 3 && <Text style={s.waitingText}>and {rideCountWords(waitingRides - 3).toLowerCase()} more</Text>}
             </View>
           )}
 
@@ -370,7 +384,7 @@ export default function RideTrackerScreen() {
           )}
 
           {/* ── Empty State ── */}
-          {!has && !loadUnavailable && (
+          {!has && !loadUnavailable && waitingRides === 0 && (
             <FadeIn delay={200}>
               <View style={s.card}>
                 <View style={{ alignItems: 'center', paddingVertical: 24 }}>
@@ -484,10 +498,20 @@ const s = StyleSheet.create({
   menuRowBadgeText: { color: '#fff', fontSize: 11, fontFamily: 'Knockout' },
 
   waitingNote: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFF5D3', borderRadius: 14,
+    gap: 8, backgroundColor: '#FFF5D3', borderRadius: 14,
     borderWidth: 2, borderColor: '#E3AE3E', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 14,
   },
-  waitingText: { flex: 1, fontSize: 15, fontFamily: 'Knockout', color: '#103F75' },
+  waitingHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  waitingTitle: { fontSize: 17, fontFamily: 'Shark', color: '#103F75' },
+  waitingText: { fontSize: 15, fontFamily: 'Knockout', color: '#315C7C' },
+  waitingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 10,
+    paddingVertical: 7, paddingHorizontal: 10, borderWidth: 1.5, borderColor: '#F0D58C' },
+  waitingRide: { flex: 1, fontSize: 15, fontFamily: 'Knockout', color: '#103F75' },
+  waitingTag: { backgroundColor: '#FFCF3B', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1.5, borderColor: '#103F75' },
+  waitingTagText: { fontSize: 11, fontFamily: 'Shark', color: '#103F75' },
+  heroWaiting: { alignSelf: 'flex-start', marginTop: 6, backgroundColor: '#FFCF3B', borderRadius: 10, borderWidth: 2,
+    borderColor: '#103F75', paddingHorizontal: 8, paddingVertical: 2 },
+  heroWaitingText: { fontSize: 13, fontFamily: 'Shark', color: '#103F75' },
 
   // Cards
   card: {
