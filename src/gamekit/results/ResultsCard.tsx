@@ -23,7 +23,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing,
   cancelAnimation,
@@ -109,6 +109,8 @@ export interface ResultsCardProps {
   onNewBestLanded?: () => void;
 }
 
+/** Below this window height (points) the card goes compact (iPhone SE is 667). */
+export const SHORT_PHONE_PT = 740;
 const STAR_BASE_DELAY = 260;
 const STAR_STEP = 220;
 const BUCKET_MS = 520;
@@ -131,7 +133,8 @@ export function ResultsCard({
     }
     return thresholds ? nextStarGoal(score, thresholds) : null;
   }, [score, thresholds, saved, wrapUp, starGoal]);
-  const best = useMemo(() => compareBest(score, personalBest), [score, personalBest]);
+  // A saved run is never written down as a best, so it never shows NEW BEST.
+  const best = useMemo(() => (saved ? compareBest(0, personalBest) : compareBest(score, personalBest)), [score, personalBest, saved]);
   // A personal best is a win, even with 0 stars: never GOOD TRY! next to NEW BEST!.
   const title = bestAwareTitle(message, stars, best.isNewBest) ?? defaultMessage(stars, !!goal?.near, best.isNewBest);
   // The one line that sells "one more run" (beat a ghost, so close to a star).
@@ -147,8 +150,12 @@ export function ResultsCard({
   const plain = stars === 0 && !best.isNewBest;
   const showBest = !!personalBest && (!plain || nearBest(score, personalBest));
   const chips = useMemo(() => feelingChips(stats, maxCombo, plain ? 1 : undefined), [stats, maxCombo, plain]);
+  // Short phones (iPhone SE) get a tighter card so the ribbon and the buttons
+  // both stay on screen: no tally buckets (the score already says it all) and
+  // slightly smaller stars.
+  const short = useWindowDimensions().height < SHORT_PHONE_PT;
   // The score tally buckets are for runs worth replaying in detail (a star or a new best).
-  const nBuckets = plain ? 0 : buckets?.length ?? 0;
+  const nBuckets = plain || short ? 0 : buckets?.length ?? 0;
   const bucketStart = STAR_BASE_DELAY + starStepMs * 3;
   const countDelay = reducedMotion ? 0 : bucketStart + nBuckets * (BUCKET_MS + BUCKET_GAP);
 
@@ -182,7 +189,7 @@ export function ResultsCard({
   const bestStyle = useAnimatedStyle(() => ({ transform: [{ scale: bestScale.value }], opacity: bestScale.value > 0.05 ? 1 : 0 }));
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, short && styles.cardShort]}>
       <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} />
 
       {saved ? (
@@ -197,6 +204,7 @@ export function ResultsCard({
               close={!!goal && goal.near && n === stars + 1}
               reducedMotion={reducedMotion}
               stepMs={starStepMs}
+              small={short}
               onLanded={n === Math.max(1, stars) ? onRevealed : undefined}
             />
           ))}
@@ -214,7 +222,7 @@ export function ResultsCard({
 
       <Text style={styles.label}>SCORE</Text>
       <CountUpText value={score} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
-        onTick={() => GameAudio.play('fx.coin', { volume: 0.35 })} style={styles.score} />
+        onTick={() => GameAudio.play('fx.coin', { volume: 0.35 })} style={[styles.score, short && styles.scoreShort]} />
 
       {/* The row keeps its height only when something will land in it (no empty gap on a plain card). */}
       {best.isNewBest || showBest ? <Animated.View style={[styles.bestRow, bestStyle]}>
@@ -307,8 +315,9 @@ function BucketTally({ label, text, value, delayMs, reducedMotion }: {
   );
 }
 
-function StarSlot({ index, earned, close, reducedMotion, stepMs, onLanded }: {
+function StarSlot({ index, earned, close, reducedMotion, stepMs, small = false, onLanded }: {
   index: number;
+  small?: boolean;
   earned: boolean;
   close: boolean;
   reducedMotion: boolean;
@@ -353,7 +362,7 @@ function StarSlot({ index, earned, close, reducedMotion, stepMs, onLanded }: {
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }, { rotate: `${tilt.value}deg` }] }));
   return (
     <Animated.View style={[styles.star, index === 2 && styles.starMiddle, style]}>
-      <GameIcon name="star" size={index === 2 ? 64 : 52} mono={earned ? undefined : '#9cc9ec'} />
+      <GameIcon name="star" size={small ? (index === 2 ? 54 : 44) : index === 2 ? 64 : 52} mono={earned ? undefined : '#9cc9ec'} />
     </Animated.View>
   );
 }
@@ -374,6 +383,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 18,
   },
+  cardShort: { paddingTop: 38, paddingBottom: 12 },
+  scoreShort: { fontSize: 40, lineHeight: 46 },
   ribbonWrap: { position: 'absolute', top: -34, left: -14, right: -14 },
   starRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4, marginBottom: 6 },
   star: { marginHorizontal: 6 },

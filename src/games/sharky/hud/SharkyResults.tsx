@@ -154,7 +154,9 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   const card = useSharedValue(reducedMotion ? 0 : 60);
   // The podium and the cheer are for a real win (a star or a new best). A
   // wipeout is dizzy; any other 0-star run swims calmly, off the podium.
-  const cheer = data.stars > 0 || data.newBest;
+  // A saved run is never written down as a best, so it never claims one.
+  const newBest = data.newBest && !saved;
+  const cheer = data.stars > 0 || newBest;
   const pose = cheer ? 'cheer' : data.wipeout ? 'dizzy' : 'swim';
   const short = win.height < 740;
 
@@ -168,7 +170,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
     const t2 = setTimeout(() => {
       slam.value = withSequence(withTiming(1.3, { duration: 1 }), withSpring(1, { damping: 10, stiffness: 300 }));
       playHaptic([{ at: 0, p: 'medium' }]);
-      if (data.newBest) {
+      if (newBest) {
         GameAudio.play(GameAudio.hasCue('sting_new_record') ? 'sting_new_record' : 'fx.reward');
         fx.current?.burst('confetti', box.w / 2, box.h * 0.42, { count: 24 });
       }
@@ -205,12 +207,12 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
     ...(data.bestChainMult >= 3 ? [{ label: 'BEST CHAIN', value: `x${data.bestChainMult}` }] : []),
     ...(data.closeSkims > 0 ? [{ label: data.closeSkims === 1 ? 'CLOSE SKIM' : 'CLOSE SKIMS', value: String(data.closeSkims) }] : []),
   ], [data.bestChainMult, data.closeSkims]);
-  const title = bestAwareTitle(wrapTitle ?? data.headline, data.stars, data.newBest) ?? data.headline;
+  const title = bestAwareTitle(wrapTitle ?? data.headline, data.stars, newBest) ?? data.headline;
   const goal = useMemo(() => (data.thresholds && !saved && !wrapTitle ? nextStarGoal(data.score, data.thresholds) : null), [data.thresholds, data.score, saved, wrapTitle]);
   const bars = useMemo(() => aheadBars(data.splits), [data.splits]);
   // One feeling line under the score, the same slot the shared card uses:
   // gold when the run beat your best ghost, light for "so close to your best".
-  const ahead = !data.newBest && showSplits(data.splits, data.ghostGates ?? 0);
+  const ahead = !newBest && showSplits(data.splits, data.ghostGates ?? 0);
   const feeling = ahead ? 'AHEAD OF YOUR BEST!' : data.nearMiss ? data.nearMiss.toUpperCase() : '';
   const gate = data.gateProgress != null && !saved && !wrapTitle ? data.gateProgress : null;
   const splitMax = useMemo(() => Math.max(1, ...bars), [bars]);
@@ -235,7 +237,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
 
       <Animated.View style={[styles.card, cardStyle]}>
         <Animated.Text style={[styles.score, scoreStyle]}>{shown.toLocaleString()}</Animated.Text>
-        {data.newBest ? (
+        {newBest ? (
           <View style={styles.newBest}>
             <GameIcon name="crown" size={22} />
             <Text style={styles.newBestText}>NEW BEST!</Text>
@@ -324,7 +326,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
 const styles = StyleSheet.create({
   root: { width: '100%', alignItems: 'center', overflow: 'hidden' },
   trim: { position: 'absolute', left: 0, right: 0, top: 0, height: 5, backgroundColor: REWARD },
-  headline: { position: 'absolute', top: 42, left: 12, right: 12, zIndex: 2 },
+  headline: { position: 'absolute', top: 50, left: 12, right: 12, zIndex: 2 },
   stage: { width: '100%', height: 210, alignItems: 'center', justifyContent: 'flex-end', marginTop: 118 },
   stageShort: { height: 176, marginTop: 92 },
   headlineShort: { top: 16 },

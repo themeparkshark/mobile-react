@@ -261,7 +261,7 @@ test('round 3: one rule everywhere (x3 chains, one RUN SAVED stamp, saved said o
   assert.equal(lines.sharkyGateProgress(7500, 15000), 0.5);
   assert.equal(lines.showSplits([40], 3), false, 'ahead at gate 1, then crashed before the ghost\'s gate 3: not ahead of your best');
   assert.equal(lines.showSplits([40, -5, 20], 3), true, 'went as far as the ghost and led at the last gate');
-  assert.match(read('src/games/sharky/hud/SharkyResults.tsx'), /const ahead = !data\.newBest && showSplits\(data\.splits, data\.ghostGates \?\? 0\);/);
+  assert.match(read('src/games/sharky/hud/SharkyResults.tsx'), /const ahead = !newBest && showSplits\(data\.splits, data\.ghostGates \?\? 0\);/);
   const swim = read('src/games/sharky/SharkySwim.tsx');
   assert.doesNotMatch(swim, /% to the gate/, 'no percent on the ride card');
   assert.doesNotMatch(swim, /RACE THE GHOSTS/, 'the label fits its half-width button');
@@ -288,7 +288,8 @@ test('round 3: one rule everywhere (x3 chains, one RUN SAVED stamp, saved said o
   const rc = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(rc, /const plain = stars === 0 && !best\.isNewBest;/);
   assert.match(rc, /\{footer && !plain \?/, 'no share chip on a plain 0-star run');
-  assert.match(rc, /const nBuckets = plain \? 0 : buckets\?\.length \?\? 0;/, 'no tally buckets on a plain 0-star run');
+  assert.match(rc, /const nBuckets = plain \|\| short \? 0 : buckets\?\.length \?\? 0;/, 'no tally buckets on a plain 0-star run or a short phone');
+  assert.match(rc, /export const SHORT_PHONE_PT = 740;/, 'an iPhone SE gets the compact card');
   // The bar grows with a transform, not a width relayout.
   const bar = read('src/gamekit/results/NextStarBar.tsx');
   assert.match(bar, /scaleX: Math\.max\(0, Math\.min\(1, bar\.value\)\)/);
@@ -329,6 +330,7 @@ test('a personal best always feels like a win, even with 0 stars', () => {
   assert.equal(feelings.endFeel({ stars: 0, isNewBest: true, saved: false }), 'best');
   assert.equal(feelings.endFeel({ stars: 2, isNewBest: false, saved: false }), 'win');
   assert.equal(feelings.endFeel({ stars: 0, isNewBest: false, saved: true }), 'saved', 'a saved run is calm, never a fail buzz');
+  assert.equal(feelings.endFeel({ stars: 0, isNewBest: true, saved: true }), 'saved', 'a saved run never sets a best, so it never claims one');
   assert.equal(feelings.endFeel({ stars: 0, isNewBest: false, saved: false }), 'try');
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.match(shell, /if \(feel === 'win' \|\| feel === 'best'\) \{\n\s+Haptic\.success\(\);\n\s+playSfx\('win'\);/);
@@ -337,6 +339,7 @@ test('a personal best always feels like a win, even with 0 stars', () => {
   assert.match(shell, /onNewBestLanded=\{stars === 0 \? burstBest : undefined\}/, 'one small confetti burst when the badge lands');
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /bestAwareTitle\(message, stars, best\.isNewBest\)/);
+  assert.match(card, /saved \? compareBest\(0, personalBest\) : compareBest\(score, personalBest\)/, 'no NEW BEST on a saved run');
 });
 
 test('the line ended the run: title, stamp and note come from the same saved flag; no bar after the ride', () => {
@@ -394,7 +397,7 @@ test('Sharky results use the shared ribbon, buttons and chips; podium only for a
   assert.match(sharky, /<ResultPrimaryButton label=\{primaryLabel\}/);
   assert.match(sharky, /<ResultSecondaryButton label=\{claimLabel\}/);
   assert.match(sharky, /<ResultChip key=\{c\.label\}/);
-  assert.match(sharky, /const cheer = data\.stars > 0 \|\| data\.newBest;/);
+  assert.match(sharky, /const newBest = data\.newBest && !saved;\n\s+const cheer = data\.stars > 0 \|\| newBest;/);
   assert.match(sharky, /\{cheer \? <Image source=\{SHARKY_ART\.podium\}/, 'no podium on a 0-star run');
   assert.match(sharky, /data\.newCard\.toUpperCase\(\)/);
   assert.doesNotMatch(sharky, /missionText\(m\.id\)\}<\/Text>/, 'mission words are spoken only');
@@ -415,7 +418,8 @@ test('one button voice on try cards, a calm CQ board under its card, no endless 
   assert.match(card, /const primary = capsAction\(primaryIn\);/);
   assert.match(card, /const quiet = capsAction\(quietIn\);/);
   const cq = read('src/games/current-quest/v1/CurrentQuestGame.tsx');
-  assert.match(cq, /\{result \? null : <Text style=\{styles\.hint\}/, 'no "Pearl found!" text around the card');
+  assert.match(cq, /\{resting \? null : <Text style=\{styles\.hint\}/, 'no "Pearl found!" text around the card');
+  assert.match(cq, /onWrapUp=\{\(\) => \{ setWrapped\(true\); return null; \}\}/, 'a ride-up card gets the calm board too');
   assert.match(cq, /playResting: \{ opacity: 0\.12 \}/);
   const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
   assert.doesNotMatch(duel, /withTiming\(0, \{ duration: beatMs \}\)\), -1\)/);

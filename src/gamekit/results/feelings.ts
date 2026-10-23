@@ -154,12 +154,15 @@ export type EndFeel = 'win' | 'best' | 'saved' | 'try';
 /**
  * How the end of a run sounds and buzzes. Stars or a personal best are a win
  * (success haptic, win sound, confetti). A run the line saved is calm (no
- * fail buzz, no lose sound). Only a plain 0-star run gets the soft try sound.
+ * fail buzz, no lose sound, and no best: saved runs never set one). Only a
+ * plain 0-star run gets the soft try sound.
  */
 export function endFeel(input: { stars: number; isNewBest: boolean; saved: boolean }): EndFeel {
   if (input.stars > 0) return 'win';
-  if (input.isNewBest) return 'best';
+  // A saved run never writes a best (it is not a real finished run), so it
+  // never claims one either.
   if (input.saved) return 'saved';
+  if (input.isNewBest) return 'best';
   return 'try';
 }
 

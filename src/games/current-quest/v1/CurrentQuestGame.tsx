@@ -44,6 +44,9 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
   const [stageClear, setStageClear] = useState(false);
   const [hint, setHint] = useState('Collect every pearl, then reach the treasure.');
   const [result, setResult] = useState<GameResult | null>(null);
+  // The line ended the run (ride's up): the shell shows its card, the board steps back.
+  const [wrapped, setWrapped] = useState(false);
+  const resting = !!result || wrapped;
   const progressRef = useRef(progress);
   const completedRef = useRef<CurrentProgress[]>([]);
   const playingRef = useRef(false);
@@ -63,6 +66,7 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
     setStageClear(false);
     setHint('Collect every pearl, then reach the treasure.');
     setResult(null);
+    setWrapped(false);
     completedRef.current = [];
     playingRef.current = false;
     lockedRef.current = false;
@@ -152,14 +156,15 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
     score={score + (stageClear || result ? 0 : progress.collected.length * 35)}
     objective="Collect pearls and reach the treasure"
     result={result} onStart={handleStart} onPause={handlePause} onResume={handleResume}
-    onClose={onClose} onQuit={onQuit} onComplete={onComplete}>
+    onClose={onClose} onQuit={onQuit} onComplete={onComplete}
+    onWrapUp={() => { setWrapped(true); return null; }}>
     <View style={styles.field}>
       <LinearGradient colors={['#07548f', '#0c8bc9', '#9cdef4']} style={StyleSheet.absoluteFill} />
       <View pointerEvents="none" style={styles.bubbleOne} />
       <View pointerEvents="none" style={styles.bubbleTwo} />
       {/* Once the results card is up the board steps back (no tiles or hint
           text around the card), so the card reads on a calm backdrop. */}
-      <View style={[styles.play, result ? styles.playResting : null]} pointerEvents={result ? 'none' : 'auto'}>
+      <View style={[styles.play, resting ? styles.playResting : null]} pointerEvents={resting ? 'none' : 'auto'}>
       <View style={styles.hero}>
         <View style={styles.heroCopy}>
           <Text style={styles.eyebrow}>THE SHARK ARCADE · QUEUE QUEST</Text>
@@ -207,8 +212,8 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
           </Pressable>;
         })}
       </View>
-      {result ? null : <Text style={styles.hint} accessibilityLiveRegion="polite">{hint}</Text>}
-      {result ? null : stageClear ? <Pressable accessibilityRole="button" accessibilityLabel="Start next voyage"
+      {resting ? null : <Text style={styles.hint} accessibilityLiveRegion="polite">{hint}</Text>}
+      {resting ? null : stageClear ? <Pressable accessibilityRole="button" accessibilityLabel="Start next voyage"
         onPress={nextStage} style={styles.nextButton}>
         <Text style={styles.nextButtonText}>NEXT VOYAGE  →</Text>
       </Pressable> : <Text style={styles.instruction}>Tap a neighboring tile · tap back to change course</Text>}
