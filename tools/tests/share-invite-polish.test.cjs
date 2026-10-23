@@ -284,3 +284,15 @@ test('Invite and Closet look share story pictures with their own QR; no unused Q
   assert.doesNotMatch(qr, /game:/);
   assert.ok(!fs.existsSync(path.join(root, 'assets/images/share/qr/campaign-game.png')));
 });
+
+test('a tall card shrinks to fit between the ribbon and the footer, never grows', () => {
+  const { fitScale } = loadTs('src/share/StoryShareFrame.tsx', {
+    react: { forwardRef: f => f, useState: v => [v, () => {}] }, 'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; } },
+    'react-native': { StyleSheet: { create: s => s }, View: 'View' }, './campaignQr': { QR_BY_CAMPAIGN: {} },
+    './FlexCard': { STORY_SAFE: { top: 84, bottom: 114 } }, './formats': { FLEX_SIZE: { story: { width: 360, height: 640 } } }, './frames': { FRAMES: { common: { bg: ['#1aa3f0', '#0768b9'] } } },
+  });
+  assert.equal(fitScale(300, 350), 300 / 350);
+  assert.equal(fitScale(300, 200), 1);
+  assert.equal(fitScale(0, 200), 1, 'before layout: no scale');
+  assert.match(src('src/share/StoryShareFrame.tsx'), /transform: \[\{ scale \}\]/);
+});

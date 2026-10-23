@@ -46,7 +46,7 @@ export function LookShareButton({ inventory, style }: { readonly inventory: Inve
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <StoryShareFrame ref={ref} ribbon="MY LOOK!" cta="Dress up a shark with me!" campaign="look">
           <View style={styles.stage}>
-            <FlexShark inventory={inventory} height={330} />
+            <FlexShark inventory={inventory} height={250} />
           </View>
         </StoryShareFrame>
       </View>
@@ -59,6 +59,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   gloss: { position: 'absolute', left: 6, right: 6, top: 3, height: 12, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.3)' },
   caption: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, marginTop: 1, textShadowColor: '#ffffff', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
-  stage: { width: 300, height: 360, alignItems: 'center', justifyContent: 'flex-end', borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.18)',
+  stage: { width: 300, height: 290, alignItems: 'center', justifyContent: 'flex-end', borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.18)',
     borderWidth: 4, borderColor: '#ffffff', paddingBottom: 12 },
 });

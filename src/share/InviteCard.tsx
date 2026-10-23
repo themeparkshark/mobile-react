@@ -22,7 +22,7 @@ export const InviteCard = forwardRef<View, { readonly name: string | null | unde
     return (
       <StoryShareFrame ref={ref} ribbon="ADD MY SHARK!" cta="Play with me!" campaign="invite">
         <View style={styles.panel}>
-          <FlexShark inventory={inventory} height={230} />
+          <FlexShark inventory={inventory} height={170} />
           {shark ? <>
             <Text style={styles.label}>MY SHARK NAME</Text>
             <Outlined text={shark} outline="#05346e" lines={1} style={styles.name} />
@@ -35,7 +35,7 @@ export const InviteCard = forwardRef<View, { readonly name: string | null | unde
 );
 
 const styles = StyleSheet.create({
-  panel: { width: 300, alignItems: 'center', paddingVertical: 18, paddingHorizontal: 14, borderRadius: 24, backgroundColor: '#f3fbff',
+  panel: { width: 300, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 14, borderRadius: 24, backgroundColor: '#f3fbff',
     borderWidth: 4, borderBottomWidth: 8, borderColor: '#05346e' },
   label: { fontFamily: 'Knockout', fontSize: 15, letterSpacing: 1.2, color: '#39759c', marginTop: 10 },
   name: { fontFamily: 'Shark', fontSize: 30, lineHeight: 34, color: '#ffcf3b', textAlign: 'center' },
