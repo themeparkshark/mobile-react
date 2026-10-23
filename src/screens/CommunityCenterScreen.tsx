@@ -90,8 +90,29 @@ const LEAVE_GIFT_CENTER_Y_RATIO = 0.77;
  * below the bottom edge.
  */
 const ART_OVERFLOW = Math.max(0, SCALED_HEIGHT - SCREEN_HEIGHT);
-const LEAVE_GIFT_TOP = Math.min(SCALED_HEIGHT * LEAVE_GIFT_CENTER_Y_RATIO - LEAVE_GIFT_H / 2,
-  SCREEN_HEIGHT - LEAVE_GIFT_H - 2);
+/**
+ * Short phones (iPhone SE: 167 pt of art below the screen). The art slides up just enough that the
+ * painted LEAVE GIFT plinth sits fully on screen with 16 pt to spare, and GO BACK joins it in one
+ * bottom row on the open floor, left of the plinth, instead of landing on the glowing portal.
+ * The wallet and the gift badge stay where they were on screen. Taller phones are unchanged.
+ */
+const SHORT_SCREEN = ART_OVERFLOW > 60;
+const BOTTOM_GAP = 16;
+/** The painted plinth under LEAVE GIFT ends at about 0.815 of the art's height. */
+const LEAVE_GIFT_PLINTH_BOTTOM_RATIO = 0.815;
+const ART_SHIFT = SHORT_SCREEN
+  ? Math.round(Math.min(ART_OVERFLOW, Math.max(0, SCALED_HEIGHT * LEAVE_GIFT_PLINTH_BOTTOM_RATIO - (SCREEN_HEIGHT - BOTTOM_GAP))))
+  : 0;
+/** LEAVE GIFT's top in the art's frame (the art moves up by ART_SHIFT on short phones). */
+const LEAVE_GIFT_TOP = SHORT_SCREEN
+  ? SCALED_HEIGHT * LEAVE_GIFT_CENTER_Y_RATIO - LEAVE_GIFT_H / 2
+  : Math.min(SCALED_HEIGHT * LEAVE_GIFT_CENTER_Y_RATIO - LEAVE_GIFT_H / 2, SCREEN_HEIGHT - LEAVE_GIFT_H - 2);
+const GO_BACK_W = 180;
+const GO_BACK_H = 55;
+/** GO BACK: the bottom row beside LEAVE GIFT on short phones, else its old spot above the screen bottom. */
+const GO_BACK_POSITION = SHORT_SCREEN
+  ? { left: Math.max(BOTTOM_GAP, Math.round((LEAVE_GIFT_LEFT - GO_BACK_W) / 2)), top: LEAVE_GIFT_TOP + LEAVE_GIFT_H / 2 - GO_BACK_H / 2, alignSelf: 'auto' as const }
+  : { bottom: 80 + ART_OVERFLOW };
 
 interface Gift {
   id: number;
@@ -433,12 +454,12 @@ export default function CommunityCenterScreen() {
     if (slotIndex === 'give') {
       // From Leave Gift button
       startX = LEAVE_GIFT_LEFT + LEAVE_GIFT_W / 2;
-      startY = LEAVE_GIFT_TOP + LEAVE_GIFT_H / 2;
+      startY = LEAVE_GIFT_TOP + LEAVE_GIFT_H / 2 - ART_SHIFT;
     } else {
       // From gift slot
       const leftPositions = [0.11, 0.39, 0.67];
       startX = SCREEN_WIDTH * leftPositions[slotIndex] + (SCREEN_WIDTH * LOCKER_WIDTH_RATIO) / 2;
-      startY = SCALED_HEIGHT * LOCKER_Y_RATIO;
+      startY = SCALED_HEIGHT * LOCKER_Y_RATIO - ART_SHIFT;
     }
     
     setFlyingTicket({ startX, startY, count: ticketCount });
@@ -869,7 +890,7 @@ export default function CommunityCenterScreen() {
   
   return (
     <View style={styles.container}>
-      <View style={[styles.background, { height: SCALED_HEIGHT }]}>
+      <View style={[styles.background, { height: SCALED_HEIGHT, marginTop: -ART_SHIFT }]}>
         {/* Video Background */}
         <Video
           source={require('../../assets/videos/community-center-bg.mp4')}
@@ -885,7 +906,7 @@ export default function CommunityCenterScreen() {
           style={[
             styles.goBackContainer,
             {
-              bottom: 80 + ART_OVERFLOW,
+              ...GO_BACK_POSITION,
               transform: [{ scale: goBackScale }],
             },
           ]}
@@ -921,7 +942,7 @@ export default function CommunityCenterScreen() {
         </Animated.View>
         
         {/* Currency display */}
-        <View style={styles.currencyDisplay}>
+        <View style={[styles.currencyDisplay, ART_SHIFT > 0 && { top: 60 + ART_SHIFT }]}>
           <Image
             source={require('../../assets/icons/game/coins.png')}
             style={styles.coinIcon}
@@ -1001,7 +1022,7 @@ export default function CommunityCenterScreen() {
             
             {/* Cooldown message - live countdown */}
             {liveCooldown > 0 && (
-              <View style={[styles.cooldownBadge, { bottom: 145 + ART_OVERFLOW }]}>
+              <View style={[styles.cooldownBadge, { bottom: SHORT_SCREEN ? ART_OVERFLOW - ART_SHIFT + BOTTOM_GAP + LEAVE_GIFT_H + 70 : 145 + ART_OVERFLOW }]}>
                 <GameIcon name="timer" size={20} />
                 <Text style={styles.cooldownText}>
                   {Math.floor(liveCooldown / 60)}:{(liveCooldown % 60).toString().padStart(2, '0')} until you can give again
@@ -1288,8 +1309,8 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   goBackImage: {
-    width: 180,
-    height: 55,
+    width: GO_BACK_W,
+    height: GO_BACK_H,
   },
   currencyDisplay: {
     position: 'absolute',
