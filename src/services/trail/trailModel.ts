@@ -78,10 +78,13 @@ export function boxName(b: { readonly tier: TrailTier }): string {
 /** Draw size grows with rarity, so the tier reads by size and trim as well as colour. */
 export const TIER_SCALE: Record<TrailTier, number> = { blue: 0.86, red: 0.94, gold: 1 };
 
-/** 12345 -> "12,345". Locale-free so tests and every device agree. */
+/** 4600 -> "4600", 12345 -> "12.3K": the one drawn-count rule (see src/helpers/countText.ts). */
 export function formatSteps(n: number): string {
-  const v = Math.max(0, Math.round(n));
-  return v.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const v = Math.max(0, Math.round(Number(n) || 0));
+  if (v < 10000) return String(v);
+  const [size, suffix] = v >= 1e6 ? [1e6, 'M'] : [1e3, 'K'];
+  const x = v / size;
+  return `${x >= 100 ? Math.floor(x) : Math.floor(x * 10) / 10}${suffix}`;
 }
 
 /** Short form for tight pills: 950, 1.2k, 12k. */

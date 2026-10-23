@@ -150,7 +150,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
             <View style={styles.slots}>
               {slots.map((b, i) => (
                 <View key={b ? b.id : `empty-${i}`} style={[styles.slot, !b && styles.slotEmpty]} accessible
-                  accessibilityLabel={b ? `${boxName(b)}: ${formatSteps(stepsToGo(b))} steps to go` : 'Empty spot. Win rides to earn boxes'}>
+                  accessibilityLabel={b ? `${boxName(b)}: ${stepsToGo(b).toLocaleString('en-US')} steps to go` : 'Empty spot. Win rides to earn boxes'}>
                   {b ? (
                     <>
                       <TrailBoxArt tier={b.tier} size={74} fraction={boxFraction(b)} active={visible} />
@@ -176,7 +176,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
                   <View style={styles.rackGrid}>
                     {state.waiting.map((b, i) => (
                       <Pressable key={b.id} accessibilityRole="button"
-                        accessibilityLabel={`${boxName(b)}, ${formatSteps(b.goal_steps)} steps.${i > 0 ? ' Tap to walk it next' : ' Walks next'}`}
+                        accessibilityLabel={`${boxName(b)}, ${b.goal_steps.toLocaleString('en-US')} steps.${i > 0 ? ' Tap to walk it next' : ' Walks next'}`}
                         onPress={() => { playSfx('ui.select'); setPicked(picked === b.id ? null : b.id); }}
                         style={[styles.waitBox, picked === b.id && styles.waitPicked]}>
                         <TrailBoxArt tier={b.tier} size={36} active={false} />
@@ -224,7 +224,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
                 <Text style={styles.body}>Pick a goal if you like. Reach it in a week for a Blue Box.</Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                   {state.week.goal_options.map(g => (
-                    <Pressable key={g} accessibilityRole="button" accessibilityLabel={`${formatSteps(g)} steps a week`}
+                    <Pressable key={g} accessibilityRole="button" accessibilityLabel={`${g.toLocaleString('en-US')} steps a week`}
                       onPress={() => { playSfx('ui.select'); onGoal(g); }} style={styles.goalChip}>
                       <Text style={styles.goalChipText}>{g >= 1000 ? `${g / 1000}k` : g}</Text>
                     </Pressable>

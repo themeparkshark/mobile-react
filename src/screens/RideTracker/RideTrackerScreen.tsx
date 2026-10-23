@@ -16,6 +16,7 @@ import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { GameIcon } from '../../ui';
+import countText from '../../helpers/countText';
 
 // ─── Rider Levels (based on rides logged) ───
 const RIDER_LEVELS = [
@@ -93,7 +94,7 @@ function CountUp({ to, style, duration = 800 }: { to: number; style?: any; durat
     animation.start();
     return () => { animation.stop(); a.removeListener(id); };
   }, [to, duration, reducedMotion, a]);
-  return <Text style={style}>{v.toLocaleString()}</Text>;
+  return <Text style={style}>{countText(v)}</Text>;
 }
 
 // ─── Menu Row ───

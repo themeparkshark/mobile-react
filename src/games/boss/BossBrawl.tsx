@@ -73,6 +73,7 @@ import {
 } from './multiplayer/crew';
 import { mergeTeamStrike, TEAM_STRIKE_ATTACK, type StrikeWhisper } from './multiplayer/teamStrike';
 import { loadGhost, saveGhostIfBest } from './multiplayer/ghostStore';
+import countText from '../../helpers/countText';
 
 export const BOSS_ART: Record<BossId, number> = {
   kraken: require('../../../assets/images/boss/kraken.png'),
@@ -1263,7 +1264,7 @@ export function BossBrawl(props: BossBrawlProps) {
         const theirs = ghostAt(g, b.cfg.bout, t);
         const mine = round.current.bouts.reduce((sum, x) => sum + scoreBout(x), 0) + scoreBout(b);
         const d = mine - theirs;
-        setGhostLine(d >= 0 ? `Beating ${g.name}: +${d}` : `Beat ${g.name}: ${(-d).toLocaleString()} to go`);
+        setGhostLine(d >= 0 ? `Beating ${g.name}: +${d}` : `Beat ${g.name}: ${countText(-d)} to go`);
         const lunges = g.bouts[b.cfg.bout]?.lunges ?? [];
         while (ghostHop.current < lunges.length && lunges[ghostHop.current] <= t) {
           ghostHop.current += 1;
@@ -1599,7 +1600,7 @@ export function BossBrawl(props: BossBrawlProps) {
         <View style={styles.hud} pointerEvents="none">
           <View style={styles.hpRow}>
             <Text style={styles.hpLabel}>{bossName.toUpperCase()}</Text>
-            <Text style={styles.hpText}>{`${preview.toLocaleString()} HP`}</Text>
+            <Text style={styles.hpText}>{`${countText(preview)} HP`}</Text>
           </View>
           <View style={styles.hpTrack}>
             <View style={[styles.hpChunk, { width: `${hpStart * 100}%` }]} />
@@ -1727,7 +1728,7 @@ export function BossBrawl(props: BossBrawlProps) {
         {stage === 'inter' && (
           <View style={[styles.inter, { top: L.thumbTop - 120 }]}>
             <Text style={styles.interKicker}>{`ROUND ${inter.bout} DAMAGE`}</Text>
-            <Text style={styles.interDmg}>{`+${Math.floor(inter.dmg * damageRate).toLocaleString()}`}</Text>
+            <Text style={styles.interDmg}>{`+${countText(Math.floor(inter.dmg * damageRate))}`}</Text>
             {mats.length > 0 && (
               <View style={styles.interMats}>
                 {mats.map((m, i) => <Image key={i} source={MATERIALS[Math.min(2, m)].art} style={styles.interMat} />)}

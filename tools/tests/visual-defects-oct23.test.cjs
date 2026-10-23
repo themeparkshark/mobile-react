@@ -121,8 +121,12 @@ test('counts never use a comma: the display font draws it like a period ("4,881"
   assert.equal(countText(4881), '4881');
   assert.equal(countText(350), '350');
   assert.equal(countText(9999), '9999');
-  assert.equal(countText(12500), '12 500');
-  assert.equal(countText(1250000), '1 250 000');
+  assert.equal(countText(10000), '10K');
+  assert.equal(countText(12500), '12.5K');
+  assert.equal(countText(12599), '12.5K', 'rounds down, never shows more than you have');
+  assert.equal(countText(250000), '250K');
+  assert.equal(countText(1250000), '1.2M');
+  assert.equal(countText(-12500), '-12.5K');
   assert.equal(countText(-1500), '-1500');
   assert.equal(countText(Number.NaN), '0');
   const shorten = loadTs('src/helpers/shorten-number.ts').default;
@@ -137,4 +141,22 @@ test('no player-visible text glyphs the game fonts cannot draw on the touched sc
     'src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx', 'src/screens/pinTrading/TradeSheet.tsx',
     'src/components/CelebrationEffects.tsx', 'src/screens/QueueTimesScreen.tsx',
   ]) assert.doesNotMatch(read(file), /[▼▶◀✓✕♛◆⭐→]|\\u2192/u, file);
+});
+
+test('no drawn number uses toLocaleString (commas look like periods in the Shark font)', () => {
+  // Allowed: VoiceOver text, dates, decimals, and the one outgoing share message.
+  const allowed = /accessibilityLabel|accessibilityValue|new Date|Date\(|month:|weekday:|day:|Fraction|I scored |Level \$\{level\}/;
+  const offenders = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.isDirectory()) { walk(rel); continue; }
+      if (!/\.(ts|tsx)$/.test(e.name) || /\.test\./.test(e.name) || rel === 'src/helpers/countText.ts') continue;
+      read(rel).split('\n').forEach((line, i) => {
+        if (line.includes('toLocaleString') && !allowed.test(line)) offenders.push(`${rel}:${i + 1}`);
+      });
+    }
+  };
+  walk('src');
+  assert.deepEqual(offenders, [], 'use countText for drawn counts');
 });

@@ -14,6 +14,7 @@ import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import MemberFlex from '../../components/money/MemberFlex';
 import { memberFlexOf } from '../../services/money/memberFlex';
 import StreakFlame from '../../components/retention/StreakFlame';
+import countText from '../../helpers/countText';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 
@@ -95,7 +96,7 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <GameIcon name={scoreIcon} size={22} />
           <Text style={{ fontFamily: 'Shark', fontSize: 22, color: BRAND.blue, fontVariant: ['tabular-nums'] }}>
-            {(Number(score) || 0).toLocaleString()}
+            {countText(Number(score) || 0)}
           </Text>
         </View>
       </Pressable>

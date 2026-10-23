@@ -11,6 +11,7 @@ import LottieView from 'lottie-react-native';
 import * as Haptics from '../helpers/haptics';
 import config from '../config';
 import { GameIcon } from '../ui';
+import countText from '../helpers/countText';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -466,7 +467,7 @@ export function AnimatedCounter({
 
   return (
     <Animated.Text style={[style, { transform: [{ scale }] }]}>
-      {prefix}{displayValue.toLocaleString()}{suffix}
+      {prefix}{countText(displayValue)}{suffix}
     </Animated.Text>
   );
 }

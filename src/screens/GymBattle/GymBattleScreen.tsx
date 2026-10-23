@@ -27,6 +27,7 @@ import { GameButton, GameIcon } from '../../ui';
 import useMatchLink from '../../hooks/useMatchLink';
 import MatchLinkBanner from '../../components/match/MatchLinkBanner';
 import { friendlyActionError, isLinkFailure } from '../../services/match/matchLink';
+import countText from '../../helpers/countText';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -260,7 +261,7 @@ const AnimatedPillar = ({
 
         {/* Score badge */}
         <View style={[styles.scoreBadge, { backgroundColor: teamColor }]}>
-          <Text style={styles.scoreText}>{(score ?? 0).toLocaleString()}</Text>
+          <Text style={styles.scoreText}>{countText(score ?? 0)}</Text>
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -802,7 +803,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
               onTap={(t) => {
                 const teamName = TEAM_NAMES[t as keyof typeof TEAM_NAMES];
                 const pts = gymData?.scores?.[t as keyof typeof gymData.scores] ?? 0;
-                setPillarToast(`${teamName}: ${pts.toLocaleString()} pts`);
+                setPillarToast(`${teamName}: ${countText(pts)} pts`);
                 setTimeout(() => setPillarToast(null), 2000);
               }}
             />
@@ -913,7 +914,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             onTap={(t) => {
               const teamName = TEAM_NAMES[t as keyof typeof TEAM_NAMES];
               const pts = gymData.scores?.[t as keyof typeof gymData.scores] ?? 0;
-              setPillarToast(`${teamName}: ${pts.toLocaleString()} pts`);
+              setPillarToast(`${teamName}: ${countText(pts)} pts`);
               setTimeout(() => setPillarToast(null), 2000);
             }}
           />

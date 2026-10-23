@@ -14,6 +14,7 @@
  * strangers).
  */
 import { E_GOOD, E_HIT, E_PERFECT, E_POP, E_POP_PERFECT, E_SLAM, E_TELL, UNIT_POINTS, type Bout } from '../sim/encounter';
+import countText from '../../../helpers/countText';
 
 /** Attack index (0-based) of the Team Strike in a bout. */
 export const TEAM_STRIKE_ATTACK = 1;
@@ -113,7 +114,7 @@ export function crewTickerLine(bossName: string, bouts: readonly SettledBout[], 
   const today = bouts.filter((b) => b.crewmate && b.at >= dayStart);
   if (today.length === 0) return null;
   const total = today.reduce((s, b) => s + b.damage, 0);
-  const lead = `Your crew hit ${bossName} for ${total.toLocaleString('en-US')} today.`;
+  const lead = `Your crew hit ${bossName} for ${countText(total)} today.`;
   const breaker = [...today].sort((a, b) => b.at - a.at).find((b) => b.breaks.length > 0);
   if (breaker) return `${lead} ${displayName(breaker)} broke ${PART[breaker.breaks[0]] ?? 'a part'}.`;
   const star = today.find((b) => b.skillStar);

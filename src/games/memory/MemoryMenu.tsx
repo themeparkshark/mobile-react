@@ -31,6 +31,7 @@ import { emptyAlbum, type Album } from './modes/album';
 import { loadAlbum, loadDaily, loadHeat, loadMastery, loadPersonalBest, loadPlayerKey, loadRankHistory, loadStreak, saveHeat, type DailyRecord } from './storage';
 import { heatUnlocked } from './modes/mastery';
 import { NO_HEAT, type HeatToggles } from './modes/unlocks';
+import countText from '../../helpers/countText';
 
 const BARKER_WAVE = require('../../assets/games/memory/studio/barker_wave.png');
 const BOOTH = require('../../assets/games/memory/studio/booth_frame.png');
@@ -195,7 +196,7 @@ function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; d
                   <HeatChip label="TIDE" on={heat.tide} onPress={() => toggleHeat('tide')} />
                 </View>
               </View>
-            ) : best > 0 || rank !== 'none' ? <Stat label={RANK_LABEL[rank]} value={best > 0 ? best.toLocaleString() : '-'} /> : null} />
+            ) : best > 0 || rank !== 'none' ? <Stat label={RANK_LABEL[rank]} value={best > 0 ? countText(best) : '-'} /> : null} />
           <BoothCard index={1} reducedMotion={reducedMotion} onPress={() => go({ kind: 'steal' })}
             title="Steal Duel" body={lobbyOnline ? lobbyLine(tick, sharks) : 'One shared board. Steal pairs your rival reveals. Practice vs the house shark.'}
             icon={SHARK_TOKEN}

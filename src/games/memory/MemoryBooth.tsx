@@ -38,6 +38,7 @@ import type { BoothGeo, Rect, TileStrip } from './layout';
 import { MM } from './theme';
 import type { CardFace } from './MemoryCard';
 import { FaceThumb } from './MemoryExtras';
+import countText from '../../helpers/countText';
 
 const KIT = {
   awningCapL: require('../../assets/games/memory/v8/booth/awning_capL.png'),
@@ -318,7 +319,7 @@ function Pot({ geo, pot, reducedMotion }: { geo: BoothGeo; pot: { faces: CardFac
         ))}
       </View>
       <View style={styles.potTag}>
-        <Text style={styles.potText}>{pot.value.toLocaleString('en-US')}</Text>
+        <Text style={styles.potText}>{countText(pot.value)}</Text>
       </View>
     </Animated.View>
   );

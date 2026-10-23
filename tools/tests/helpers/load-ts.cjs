@@ -38,6 +38,8 @@ function loadTs(file, mocks = {}, globals = {}) {
         const jsx = (type, props) => ({ type, props });
         return { jsx, jsxs: jsx, Fragment: 'Fragment' };
       }
+      // The one drawn-count rule is pure and import-free, so it loads for real.
+      if (/(^|\/)helpers\/countText$/.test(name)) return loadTs('src/helpers/countText.ts');
       throw new Error(`Unexpected dependency: ${name}`);
     },
   }, { filename: file });

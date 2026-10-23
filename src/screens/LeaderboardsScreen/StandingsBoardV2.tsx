@@ -53,6 +53,7 @@ import {
   podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, shouldPrefetch, weekLeft, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
+import countText from '../../helpers/countText';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 const rewardSound = require('../../../assets/sounds/reward.mp3');
@@ -170,7 +171,7 @@ export function RankBadge({ rank, me = false }: { readonly rank: number; readonl
     <View style={{ minWidth: 32, height: 32, paddingHorizontal: digits > 4 ? 8 : digits > 2 ? 7 : 4, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
       backgroundColor: me ? BRAND.navy : BRAND.blueBright, borderBottomWidth: 3, borderBottomColor: me ? '#021c3d' : BRAND.blueLip }}>
       <Text maxFontSizeMultiplier={1.1} numberOfLines={1}
-        style={{ fontFamily: 'Shark', fontSize: digits <= 2 ? 16 : digits === 3 ? 14 : digits === 4 ? 13 : 12, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{rank >= 10000 ? rank.toLocaleString('en-US') : rank}</Text>
+        style={{ fontFamily: 'Shark', fontSize: digits <= 2 ? 16 : digits === 3 ? 14 : digits === 4 ? 13 : 12, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{rank >= 10000 ? countText(rank) : rank}</Text>
     </View>
   );
 }

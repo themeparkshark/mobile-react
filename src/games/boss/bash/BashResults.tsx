@@ -15,6 +15,7 @@ import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { BRAND } from '../../../ui/tokens';
 import GameIcon from '../../../ui/GameIcon';
 import { BASH_ART } from './art';
+import countText from '../../../helpers/countText';
 
 const CHEST_OPEN = require('../../../../assets/images/daily/chest-open.png');
 
@@ -129,7 +130,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           {noHits ? <Text style={styles.zero}>No Energy was spent.</Text>
             : <CountUpText value={damage} delayMs={reduced ? 0 : 200} durationMs={reduced ? 1 : 700} style={styles.dmg} />}
           {rate < 1 && !noHits && <Text style={styles.rate}>From home, {Math.round(rate * 100)}% power</Text>}
-          {!noHits && teamDamage > 0 && <Text style={styles.rate}>You {damage.toLocaleString()}  ·  Team {(teamDamage + damage).toLocaleString()}</Text>}
+          {!noHits && teamDamage > 0 && <Text style={styles.rate}>You {countText(damage)}  ·  Team {countText(teamDamage + damage)}</Text>}
           {capped && <Text style={styles.rate}>That hits the most one shark can do to this boss.</Text>}
         </View>
       </View>
@@ -152,7 +153,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <Animated.View style={[styles.hpRed, fill]} />
         </View>}
         <Text style={styles.raidLine} numberOfLines={1}>
-          {won ? 'Boss down!' : `${hpAfter.toLocaleString()} HP left`}{left && !won ? `  ·  ${left}` : ''}{fighters > 0 && !won ? `  ·  ${fighters} fighting` : ''}
+          {won ? 'Boss down!' : `${countText(hpAfter)} HP left`}{left && !won ? `  ·  ${left}` : ''}{fighters > 0 && !won ? `  ·  ${fighters} fighting` : ''}
         </Text>
       </View>
 

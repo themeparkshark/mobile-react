@@ -32,6 +32,7 @@ import LevelUpBurst from './coin/LevelUpBurst';
 import PerkTrack from './coin/PerkTrack';
 import { LEVEL_UP_ACTS, levelRibbon, levelUpFx, revealCard, type LevelUpFx, type LevelUpUnlocks } from './coin/progressionModel';
 import type { CollectedRideCoin } from '../api/endpoints/me/ride-coins/show';
+import countText from '../helpers/countText';
 
 const SHORT_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 /** "SEP 27" from an ISO time, read as a calendar day. */
@@ -745,7 +746,7 @@ export default function CoinLevelingModal({
                             fontSize: 18,
                             color: hasEnergy ? '#168052' : '#B43D42',
                           }}>
-                            {playerEnergy.toLocaleString()}
+                            {countText(playerEnergy)}
                           </Text>
                           {hasEnergy && <GameIcon name="check" size={16} />}
                         </View>
@@ -758,7 +759,7 @@ export default function CoinLevelingModal({
                             fontSize: 18,
                             color: hasParts ? '#168052' : '#B43D42',
                           }}>
-                            {playerParts.toLocaleString()}
+                            {countText(playerParts)}
                           </Text>
                           {hasParts && <GameIcon name="check" size={16} />}
                         </View>

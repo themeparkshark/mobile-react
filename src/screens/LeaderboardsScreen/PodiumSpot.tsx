@@ -19,6 +19,7 @@ import Avatar from '../../components/Avatar';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { PlayerType } from '../../models/player-type';
 import { BRAND, GameIcon, type GameIconName } from '../../ui';
+import countText from '../../helpers/countText';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 const STARBURST = require('../../../assets/images/screens/explore/starburst.png');
@@ -185,7 +186,7 @@ export default function PodiumSpot({ rank, player, score, scoreIcon, progress, l
       }}>
         <GameIcon name={scoreIcon} size={first ? 22 : 18} />
         <Text style={{ fontFamily: 'Shark', fontSize: first ? 22 : 18, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>
-          {shown.toLocaleString()}
+          {countText(shown)}
         </Text>
       </View>
     </Animated.View>

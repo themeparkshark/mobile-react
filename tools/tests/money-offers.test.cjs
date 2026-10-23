@@ -88,7 +88,7 @@ test('top-up headlines say what is missing in plain words', () => {
 test('Shark Pass words: the real last day, reward names and the pass row summed from the server', () => {
   assert.equal(pass.lastDayText('2026-12-27'), 'Sunday, December 27');
   assert.equal(pass.rewardWords({ type: 'mystery_box', boxes: 1, ready: true }), '1 Mystery Pin Box');
-  assert.equal(pass.rewardWords({ type: 'coins', amount: 1500, ready: true }), '1,500 coins');
+  assert.equal(pass.rewardWords({ type: 'coins', amount: 1500, ready: true }), '1500 coins');
   const tiers = [
     { paid: { type: 'item', name: 'Frosty Scarf' } }, { paid: { type: 'mystery_box', boxes: 2 } },
     { paid: { type: 'coins', amount: 100 } }, { paid: { type: 'coins', amount: 150 } }, { paid: { type: 'energy', amount: 60 } },

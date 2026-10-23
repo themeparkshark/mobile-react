@@ -375,7 +375,7 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
           color={best ? 'gold' : 'navy'} size={columns === 3 ? 14 : 16} />
         {gear && <Text maxFontSizeMultiplier={MAX_FONT} style={st.gearLine} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.85}>{gear}</Text>}
         <PriceBar price={price} busy={busy} note={note} />
-        <WishHeart id={product.product_id} name={`${n.toLocaleString('en-US')} ${unitWord(main, n)}`} />
+        <WishHeart id={product.product_id} name={`${countText(n)} ${unitWord(main, n)}`} />
         {sticker && <Sticker text={sticker} style={{ top: 6, right: 4 }} />}
       </ShopCard>
       {best && <View style={st.bestPill} pointerEvents="none"><Text maxFontSizeMultiplier={1.1} style={st.bestPillText}>BEST VALUE</Text></View>}

@@ -36,6 +36,7 @@ import type { EmoteId } from '../net/partyTypes';
 import BonkBoard from './BonkBoard';
 import WhackLiveBoard from '../../games/whack/party/WhackLiveBoard';
 import type { Timeline } from '../../games/whack/timeline';
+import countText from '../../helpers/countText';
 
 /** Bot score curves sample every 250 ms of board time. */
 const CURVE_STEP_MS = 250;
@@ -268,7 +269,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
       <SeriesPill round={round} roundsTotal={state.room?.series?.rounds_total ?? 3} />
       <RaceStrip lines={lines} />
       <View style={styles.hud}>
-        <Text style={styles.myScore}>{(myScore + (bonusNow.me ?? 0)).toLocaleString('en-US')}</Text>
+        <Text style={styles.myScore}>{countText(myScore + (bonusNow.me ?? 0))}</Text>
         <View style={styles.hudRight}>
           <Pressable
             accessibilityRole="button"
@@ -440,7 +441,7 @@ function ParadeRace({ client, autoplay, onEmote }: { client: PartyClient; autopl
       <SeriesPill round={round} />
       <RaceStrip lines={lines} />
       <View style={styles.hud}>
-        <Text style={styles.myScore}>{myScore.toLocaleString('en-US')}</Text>
+        <Text style={styles.myScore}>{countText(myScore)}</Text>
         <View style={styles.hudRight}>
           <Pressable
             accessibilityRole="button"

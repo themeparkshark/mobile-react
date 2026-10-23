@@ -115,7 +115,7 @@ test('XP numbers format on the UI thread', () => {
   assert.equal(groupDigits(760), '760');
   // No commas: the display font draws them like periods (src/helpers/countText.ts).
   assert.equal(groupDigits(4600), '4600');
-  assert.equal(groupDigits(1234567.4), '1 234 567');
+  assert.equal(groupDigits(1234567.4), '1.2M');
 });
 
 test('Social chest: squash on press, lid pop, wiggle, stars, haptic, Chris sounds, then the sheet', () => {

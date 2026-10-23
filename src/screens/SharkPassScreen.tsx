@@ -54,6 +54,7 @@ import { wearItem } from './StoreScreen/inventoryQueue';
 import { trackImpression, trackMoney } from '../services/money/track';
 import { baseRates, formatLike, regularValue } from '../services/money/offers';
 import { useSupplies } from '../services/money/supplies';
+import countText from '../helpers/countText';
 
 const SEASON_ART: Record<string, number> = {
   'frosty-scarf': require('../../assets/images/sharkpass/frosty-scarf.webp'),
@@ -140,8 +141,8 @@ function Flake({ x, size, dur, delay, drift, height, running }: { x: number; siz
 }
 
 const CELL_W = 92;
-/** "1,500": thousands commas without relying on the device's Intl. */
-const commas = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/** Drawn counts use the one countText rule (1500, 12.5K), never commas. */
+const commas = (n: number) => countText(n);
 
 /** A payoff card; `next` plays right after this one closes (e.g. the set bonus after its last pin). */
 type Landed = {
@@ -363,7 +364,7 @@ export default function SharkPassScreen() {
       setState(res.pass);
       haptic('success');
       setLanded({ reward: { type: 'item', name: res.name, slot: 'pin', art, icon_url: null, ready: true }, title: 'Gold!',
-        gold: true, caption: `${res.name}. ${res.spent.toLocaleString('en-US')} coins.`, itemId: Number(res.granted.item_id) || undefined });
+        gold: true, caption: `${res.name}. ${countText(res.spent)} coins.`, itemId: Number(res.granted.item_id) || undefined });
       void refreshPlayer?.().catch(() => undefined);
     } catch (error) {
       const code = sharkPassErrorCode(error);
@@ -508,7 +509,7 @@ export default function SharkPassScreen() {
                   <View style={{ flex: 1 }}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextKicker}>{nextPrize.pass && !premium ? 'NEXT SHARK PASS PRIZE' : 'NEXT PRIZE'}</Text>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
-                      {`${rewardWords(nextPrize.reward)} · ${nextPrize.pointsAway.toLocaleString('en-US')} points away`}
+                      {`${rewardWords(nextPrize.reward)} · ${countText(nextPrize.pointsAway)} points away`}
                     </Text>
                     {winsAwayText(nextPrize.pointsAway, progress.today) && (
                       <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextWins}>{winsAwayText(nextPrize.pointsAway, progress.today)}</Text>

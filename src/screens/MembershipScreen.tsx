@@ -37,6 +37,7 @@ import { scheduleTrialReminder } from '../services/money/trialReminder';
 import { getVipGift, type VipPlanTime } from '../api/endpoints/me/vip-gift';
 import GrownUpsInfo from '../components/money/GrownUpsInfo';
 
+import countText from '../helpers/countText';
 // Every line here is backed by live server logic: ride wins pay VIP double
 // (CompleteTaskAction), VIP home maps spawn two extra finds and double their
 // rewards (PrepItemSpawner, PrepItemController). VIP gear is left
@@ -409,7 +410,7 @@ const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
 
 /** "This month VIP got you": only the player's own real totals, never averages. */
 export function recapLines(recap: NonNullable<VipPlanTime['recap']>): string[] {
-  const n = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const n = (v: number) => countText(v);
   const lines = [
     recap.no_ad_rewards > 0 ? `${recap.no_ad_rewards} ${recap.no_ad_rewards === 1 ? 'reward' : 'rewards'} with no ad to watch` : null,
     recap.coins > 0 ? `${n(recap.coins)} coins` : null,

@@ -20,6 +20,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
 import { BOSS_ART } from './bossArt';
 import { usePowerBudget } from '../../power';
+import countText from '../../helpers/countText';
 
 /** Hand-drawn house (Codex, Alex style): playing from home. */
 const HOUSE = require('../../assets/games/boss/bash/house.webp');
@@ -31,10 +32,10 @@ export function Wallet({ energy, tickets, showTickets, short }: {
 }) {
   return <View style={styles.wallet} accessible accessibilityLabel={`You have ${energy} Energy${showTickets ? ` and ${tickets} Tickets` : ''}`}>
     <View style={[styles.walletItem, short === 'energy' && styles.walletShort]}><GameIcon name="energy" size={22} />
-      <Text style={styles.walletNum} maxFontSizeMultiplier={1.3}>{energy.toLocaleString()}</Text>
+      <Text style={styles.walletNum} maxFontSizeMultiplier={1.3}>{countText(energy)}</Text>
       {short === 'energy' && <View style={styles.bang}><Text style={styles.bangText}>!</Text></View>}</View>
     {showTickets && <View style={[styles.walletItem, short === 'ticket' && styles.walletShort]}><GameIcon name="ticket" size={22} />
-      <Text style={styles.walletNum} maxFontSizeMultiplier={1.3}>{tickets.toLocaleString()}</Text>
+      <Text style={styles.walletNum} maxFontSizeMultiplier={1.3}>{countText(tickets)}</Text>
       {short === 'ticket' && <View style={styles.bang}><Text style={styles.bangText}>!</Text></View>}</View>}
   </View>;
 }

@@ -29,6 +29,7 @@ import {
   bundleSaving, chaserMeter, coinsShort, endsLabel, formatChance, goldenPins, goldenShort, nextFreeBox, nextFreeLabel, oneIn, pointsView, seriesProgress, showGolden, splitSeries,
   type MysterySeries, type PinRow,
 } from './pinsModel';
+import countText from '../../helpers/countText';
 
 const FREE_REASON = { first: 'Starter box free', weekly: 'Free this week', banked: 'Free box' } as const;
 let bankedFromLabel: string | null = null;
@@ -280,7 +281,7 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
             {golden.no_duplicates && golden.chaser_bp < 10000 && <View style={[styles.goldenChip, styles.goldenChipNew]}><Text maxFontSizeMultiplier={1.1} style={[styles.goldenChipText, { color: BRAND.white }]}>{(golden.chaser_owned ?? golden.chaser_bp < 2500) ? 'New pin or the chaser' : 'Only new pins'}</Text></View>}
           </View>
         </View>
-        <View style={[styles.price, short > 0 && styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{golden.price.toLocaleString('en-US')}</Text></View>
+        <View style={[styles.price, short > 0 && styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{countText(golden.price)}</Text></View>
         <View style={[styles.goldenCaret, openOdds && { transform: [{ rotate: '180deg' }] }]}><Text maxFontSizeMultiplier={1} style={styles.goldenCaretText}>{'\u25BE'}</Text></View>
       </Pressable>
       {openOdds && (
@@ -293,10 +294,10 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
               accessibilityRole="button" accessibilityLabel={`Need ${short} more coins for a Golden Box`}>
               <Image source={GOLDEN_ICON} style={{ width: 30, height: 30, opacity: 0.6 }} contentFit="contain" />
               <Text maxFontSizeMultiplier={1.1} style={styles.openOneText}>Need</Text>
-              <View style={[styles.price, styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{short.toLocaleString('en-US')} more</Text></View>
+              <View style={[styles.price, styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{countText(short)} more</Text></View>
             </Pressable>
           ) : (
-            <HoldToOpen label={golden.price.toLocaleString('en-US')} saving={0} disabled={busy} tone="gold" word="Hold to open" a11y="Hold to open a Golden Box" onOpen={go} />
+            <HoldToOpen label={countText(golden.price)} saving={0} disabled={busy} tone="gold" word="Hold to open" a11y="Hold to open a Golden Box" onOpen={go} />
           )}
           {/* Short on coins: no price card next to a premium random box, just how to earn more (compliance review). */}
           {topUp !== null && topUp > 0 && (
@@ -420,10 +421,10 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
                     accessibilityRole="button" accessibilityLabel={`Need ${shortFive} more coins for five boxes`}>
                     <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
                     <Text maxFontSizeMultiplier={1.1} style={styles.openFiveText}>x5</Text>
-                    <View style={[styles.price, styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{shortFive.toLocaleString('en-US')} more</Text></View>
+                    <View style={[styles.price, styles.priceShort]}><GameIcon name="coin" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{countText(shortFive)} more</Text></View>
                   </Pressable>
                 ) : (
-                  <HoldToOpen label={series.bundle.price.toLocaleString('en-US')} saving={bundleSaving(series)} disabled={busy} tone={tone}
+                  <HoldToOpen label={countText(series.bundle.price)} saving={bundleSaving(series)} disabled={busy} tone={tone}
                     onOpen={() => tryOpen(series.bundle.count)} />
                 )}
               </View>

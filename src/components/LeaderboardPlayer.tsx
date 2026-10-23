@@ -6,6 +6,7 @@ import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { PlayerType } from '../models/player-type';
 import Avatar from './Avatar';
 import Button from './Button';
+import countText from '../helpers/countText';
 
 const tapSound = require('../../assets/sounds/tap.mp3');
 const revealSound = require('../../assets/sounds/reveal.mp3');
@@ -55,7 +56,7 @@ function AnimatedScore({ value, color, fontSize }: { value: number; color: strin
         textAlign: 'center',
       }}
     >
-      {display.toLocaleString()}
+      {countText(display)}
     </Text>
   );
 }

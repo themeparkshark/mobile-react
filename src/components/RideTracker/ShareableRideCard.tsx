@@ -12,6 +12,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import SharkReactionIcon, { reactionLabel } from './SharkReactionIcon';
 import { gameAlert } from '../../ui';
+import countText from '../../helpers/countText';
 
 interface ShareableRideCardProps {
   ride: PlayerRideType;
@@ -71,7 +72,7 @@ const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = Reac
             {rideCount != null && rideCount > 0 && (
               <View style={cardStyles.stat}>
                 <Text style={cardStyles.statLabel}>TIMES RIDDEN</Text>
-                <Text style={cardStyles.statValue}>{rideCount.toLocaleString()}×</Text>
+                <Text style={cardStyles.statValue}>{countText(rideCount)}×</Text>
               </View>
             )}
             {ride.wait_time_minutes != null && (

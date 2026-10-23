@@ -104,7 +104,7 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
               </Text>
               {pack.section === 'featured' && (
                 <Text maxFontSizeMultiplier={MAX_FONT} style={st.packSub} numberOfLines={2}>
-                  {`${amount.toLocaleString('en-US')} ${unitWord(kind, amount)} and more`}
+                  {`${countText(amount)} ${unitWord(kind, amount)} and more`}
                 </Text>
               )}
               <Text maxFontSizeMultiplier={MAX_FONT} style={st.packSub}>A grown-up buys it</Text>

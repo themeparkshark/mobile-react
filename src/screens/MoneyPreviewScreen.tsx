@@ -19,6 +19,7 @@ import type { InventoryType } from '../models/inventory-type';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CoinTopUpOffer from '../components/money/CoinTopUpOffer';
 import { BRAND, FONT } from '../ui';
+import countText from '../helpers/countText';
 
 export default function MoneyPreviewScreen({ route }: { route?: { params?: { screen?: string } } }) {
   const screen = route?.params?.screen;
@@ -61,7 +62,7 @@ export default function MoneyPreviewScreen({ route }: { route?: { params?: { scr
               <Text style={s.rank}>{r.rank}</Text>
               <MemberFlex inventory={look} frame={r.frame} vip={r.vip} size={56} step={'step' in r ? (r as { step: number }).step : null} />
               <Text style={s.name}>{r.name}</Text>
-              <Text style={s.pts}>{r.pts.toLocaleString('en-US')}</Text>
+              <Text style={s.pts}>{countText(r.pts)}</Text>
             </View>
           ))}
           <Text style={s.label}>Share card</Text>

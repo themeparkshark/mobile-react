@@ -34,6 +34,7 @@ import {
 } from './homeHuntModel';
 import StandingsPodium from './StandingsPodium';
 import { StandingsInvite, StandingsListCard, StandingsRow } from './StandingsRow';
+import countText from '../../helpers/countText';
 
 const rewardSound = require('../../../assets/sounds/reward.mp3');
 const STALE_MS = 60_000;
@@ -94,7 +95,7 @@ function HeaderCard({ week, label, now, onInfo }: {
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 2 }}>
         <View style={{ flex: 1 }}>
           <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: BRAND.navySoft, letterSpacing: 0.6 }}>YOUR POINTS</Text>
-          <Text style={{ fontFamily: 'Shark', fontSize: 34, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>{(week?.points ?? 0).toLocaleString()}</Text>
+          <Text style={{ fontFamily: 'Shark', fontSize: 34, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>{countText(week?.points ?? 0)}</Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <RankOdometer rank={week?.rank ?? null} unranked={unranked} />

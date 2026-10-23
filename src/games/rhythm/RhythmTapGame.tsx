@@ -110,6 +110,7 @@ import {
 import { RIDE_STAGES, STAGES, type StageId } from './stages';
 import { crewForRound, dareBarsFor, drumOffPlace, type Rival } from './multiplayer/drumline';
 
+import countText from '../../helpers/countText';
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const HEADER_H = 113;
 const DEFAULT_OFFSET_MS = 25; // built-in speaker placeholder (design 4.5)
@@ -1231,7 +1232,7 @@ function DeltaChip({ bar, myScore, ghost }: { bar: number; myScore: number; ghos
   const ahead = d >= 0;
   return (
     <View pointerEvents="none" style={[styles.delta, { borderColor: ahead ? '#2f9be8' : '#ff7a59' }]}>
-      <Text style={[styles.deltaTxt, { color: ahead ? '#1f6fc0' : '#d9502f' }]}>{`${ahead ? '+' : '-'}${Math.abs(d).toLocaleString()}`}</Text>
+      <Text style={[styles.deltaTxt, { color: ahead ? '#1f6fc0' : '#d9502f' }]}>{`${ahead ? '+' : '-'}${countText(Math.abs(d))}`}</Text>
       <Text style={styles.deltaLbl}>{ghost.name}</Text>
     </View>
   );

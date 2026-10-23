@@ -276,7 +276,7 @@ export function remainingLine(s: Pick<BookStamp, 'metric' | 'target' | 'progress
   if (req.unit[0] === 'percent') return left > 0 ? `${left}% to go!` : 'Almost there!';
   if (isMeters(s.metric)) return left > 0 ? `${km(left)} km to go!` : 'Almost there!';
   if (s.target <= 1 || left <= 0) return s.progress > 0 ? 'Almost there!' : "Let's go!";
-  const fmt = left.toLocaleString('en-US');
+  const fmt = countText(left);
   if (!req.unit[0]) return `${fmt} to go!`;
   return `${fmt} more ${left === 1 ? req.unit[0] : req.unit[1]}!`;
 }
@@ -305,8 +305,8 @@ export function rewardChips(r: StampRewards): { kind: 'energy' | 'tickets' | 'xp
   const chips: { kind: 'energy' | 'tickets' | 'xp' | 'coins' | 'title'; label: string }[] = [];
   if (r.energy > 0) chips.push({ kind: 'energy', label: `+${r.energy} Energy` });
   if (r.tickets > 0) chips.push({ kind: 'tickets', label: `+${r.tickets} Ticket${r.tickets === 1 ? '' : 's'}` });
-  if (r.xp > 0) chips.push({ kind: 'xp', label: `+${r.xp.toLocaleString('en-US')} XP` });
-  if (r.coins > 0) chips.push({ kind: 'coins', label: `+${r.coins.toLocaleString('en-US')} Coins` });
+  if (r.xp > 0) chips.push({ kind: 'xp', label: `+${countText(r.xp)} XP` });
+  if (r.coins > 0) chips.push({ kind: 'coins', label: `+${countText(r.coins)} Coins` });
   if (r.title) chips.push({ kind: 'title', label: `"${r.title}" title` });
   return chips;
 }
