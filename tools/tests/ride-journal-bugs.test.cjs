@@ -309,6 +309,7 @@ test('the hub shows a kept ride that could not join, with one tap to log it agai
   assert.match(hub, /could not join your journal\. Log it again\?/);
   assert.match(hub, /<Text style=\{s\.letGoButtonText\}>Log it again<\/Text>/);
   assert.match(hub, /again: \{ id: ride\.id, payload: ride\.payload \}/);
+  assert.match(hub, /nav\.push\('RideLog', \{\s*rideId: ride\.payload\.ride_id/);
   const log = read('src/screens/RideTracker/RideLogScreen.tsx');
   assert.match(log, /logId\.current = again\.id;/);
   assert.equal((log.match(/clearLetGoRideLog\(again\.id\)/g) || []).length, 2, 'cleared once it saves or is kept again');

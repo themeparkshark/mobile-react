@@ -270,7 +270,8 @@ export default function RideTrackerScreen() {
                 <Pressable accessibilityRole="button" accessibilityLabel={`Log ${ride.ride_name} again`}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    nav.navigate('RideLog', {
+                    // push: always a fresh Ride Journal with this memory, never an old one left in the stack.
+                    nav.push('RideLog', {
                       rideId: ride.payload.ride_id, rideName: ride.ride_name, parkId: ride.park_id ?? undefined,
                       autoDetected: true, rodeAt: ride.payload.rode_at, again: { id: ride.id, payload: ride.payload },
                     });
