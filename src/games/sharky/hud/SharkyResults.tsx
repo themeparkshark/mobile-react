@@ -184,7 +184,8 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
       <Text style={styles.headline}>{data.headline}</Text>
 
       {/* The shark on stage */}
-      <View style={styles.stage}>
+      {/* Tall phones give the title room above the shark; short phones keep the card on screen. */}
+      <View style={[styles.stage, win.height < 740 && styles.stageShort]}>
         <Animated.View style={[styles.sharkWrap, sharkStyle]}>
           <Image source={cheer ? SHARKY_ART.cheer : SHARKY_ART.dizzy} style={styles.shark} resizeMode="contain" />
           {!cheer ? <Image source={SHARKY_ART.dizzyStar} style={styles.dizzyStars} resizeMode="contain" /> : null}
@@ -268,7 +269,8 @@ const styles = StyleSheet.create({
   root: { width: '100%', alignItems: 'center', overflow: 'hidden' },
   trim: { position: 'absolute', left: 0, right: 0, top: 0, height: 5, backgroundColor: REWARD },
   headline: { fontFamily: 'Shark', fontSize: 30, color: INK, position: 'absolute', top: 58, zIndex: 2, textShadowColor: NEUTRAL, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6 },
-  stage: { width: '100%', height: 210, alignItems: 'center', justifyContent: 'flex-end', marginTop: 96 },
+  stage: { width: '100%', height: 210, alignItems: 'center', justifyContent: 'flex-end', marginTop: 118 },
+  stageShort: { marginTop: 90 },
   sharkWrap: { position: 'absolute', bottom: 70, alignItems: 'center' },
   shark: { width: 130, height: 160 },
   dizzyStars: { position: 'absolute', top: -6, width: 56, height: 36 },

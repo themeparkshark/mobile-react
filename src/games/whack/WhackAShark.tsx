@@ -608,7 +608,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const base = sum((r) => r.quick * PTS_FINN[2] + r.good * PTS_FINN[1] + r.late * PTS_FINN[0]);
     const bonus = sum((r) => (r.goldens - r.ripeHits) * PTS_GOLDEN + r.ripePoints + r.doubles * PTS_DOUBLE + r.crits * PTS_CRIT + r.perfects * PTS_PERFECT);
     const combo = Math.max(0, total - base - bonus);
-    const tallies = [{ label: 'POINTS', value: base }, { label: 'COMBO', value: combo }, { label: 'BONUS', value: bonus }].filter((t) => t.value > 0);
+    // One bucket would only repeat the score: buckets show when there are two or more to add up.
+    const filled = [{ label: 'POINTS', value: base }, { label: 'COMBO', value: combo }, { label: 'BONUS', value: bonus }].filter((t) => t.value > 0);
+    const tallies = filled.length >= 2 ? filled : [];
     const nextBoss = format === 'queue' && isBossRun('queue', runOfDayRef.current + 1, (lifetime ?? 0) + 8, 5, !!props.bossRuns);
     const goal = ride ? null : nextStarGoal(total, thresholds);
     const rivals = props.lineDay?.rivals ?? [];
@@ -662,8 +664,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         rival: format === 'duel' ? { name: duel?.rival.name ?? 'Captain Fin', score: rivalTotalRef.current }
           : target ? { name: target.name.split(' ')[0], score: target.score } : null,
         // Every number true to its label, and no zero buckets ("0 COMBO" is not a brag).
-        buckets: ride ? undefined : tallies.map((t) => ({ label: t.label, value: `+${t.value.toLocaleString()}` })),
-        bucketValues: ride ? undefined : tallies.map((t) => t.value),
+        buckets: ride || !tallies.length ? undefined : tallies.map((t) => ({ label: t.label, value: `+${t.value.toLocaleString()}` })),
+        bucketValues: ride || !tallies.length ? undefined : tallies.map((t) => t.value),
         starStepMs: STAR_STEP_MS,
         // Feelings first (the shared card keeps two brag chips; BEST COMBO is the streak).
         stats: [

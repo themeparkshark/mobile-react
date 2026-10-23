@@ -232,6 +232,7 @@ test('Sharky Swim results brag and point at a goal instead of listing zeros', ()
 test('Whack: true buckets, no zeros, dropped score words fold into one total, no minus chip in play', () => {
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.match(whack, /\{ label: 'POINTS', value: base \}, \{ label: 'COMBO', value: combo \}, \{ label: 'BONUS', value: bonus \}\]\.filter\(\(t\) => t\.value > 0\)/);
+  assert.match(whack, /const tallies = filled\.length >= 2 \? filled : \[\];/, 'one bucket would just repeat the score');
   assert.doesNotMatch(whack, /label: 'QUICK', value: `\$\{b\.result\.quick\}`/, 'the between-bursts card has no counts');
   assert.doesNotMatch(whack, /BEHIND YOUR BEST/);
   assert.match(whack, /pips: \[banked\.length, totalBursts\]/);

@@ -251,9 +251,11 @@ function SavedStamp({ reducedMotion }: { reducedMotion: boolean }) {
   }, [reducedMotion, scale]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }, { rotate: '-4deg' }], opacity: scale.value > 0.02 ? 1 : 0 }));
   return (
-    <Animated.View style={[styles.saved, style]} accessible accessibilityLabel="Run saved">
-      <GameIcon name="ride" size={30} />
-      <Text style={styles.savedText}>RUN SAVED</Text>
+    <Animated.View style={[styles.savedWrap, style]} accessible accessibilityLabel="Run saved">
+      <View style={styles.saved}>
+        <GameIcon name="ride" size={30} />
+        <Text style={styles.savedText}>RUN SAVED</Text>
+      </View>
     </Animated.View>
   );
 }
@@ -384,8 +386,9 @@ const styles = StyleSheet.create({
   pips: { flexDirection: 'row', height: 24, alignItems: 'center' },
   pip: { width: 14, height: 14, borderRadius: 7, marginHorizontal: 2, borderWidth: 2, borderColor: '#05346e', backgroundColor: '#ffffff' },
   pipOn: { backgroundColor: '#ffcf3b' },
+  savedWrap: { marginTop: 10, marginBottom: 10 },
   saved: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffcf3b', borderRadius: 16, borderWidth: 4,
-    borderColor: '#05346e', paddingHorizontal: 16, paddingVertical: 6, marginTop: 10, marginBottom: 10 },
+    borderColor: '#05346e', paddingHorizontal: 16, paddingVertical: 6 },
   savedText: { fontFamily: 'Shark', fontSize: 26, color: '#05346e', marginLeft: 8 },
   buckets: { flexDirection: 'row', justifyContent: 'center', marginBottom: 4 },
   bucket: { backgroundColor: '#3d9be6', borderRadius: 14, borderWidth: 3, borderColor: '#05346e', paddingHorizontal: 10,
