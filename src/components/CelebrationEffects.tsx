@@ -10,6 +10,7 @@ import {
 import LottieView from 'lottie-react-native';
 import * as Haptics from '../helpers/haptics';
 import config from '../config';
+import { GameIcon } from '../ui';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -216,21 +217,21 @@ function StarParticle({ angle, color, delay }: { angle: number; color: string; d
     outputRange: ['0deg', '360deg'],
   });
 
+  // A drawn star from the icon kit, tinted glow behind it (never the star emoji).
   return (
-    <Animated.Text
+    <Animated.View
       style={{
         position: 'absolute',
-        fontSize: 24,
-        color,
         transform: [{ translateX }, { translateY }, { rotate: spin }, { scale }],
         opacity,
-        textShadowColor: color,
-        textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 10,
+        shadowColor: color,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 8,
       }}
     >
-      ⭐
-    </Animated.Text>
+      <GameIcon name="star" size={26} />
+    </Animated.View>
   );
 }
 

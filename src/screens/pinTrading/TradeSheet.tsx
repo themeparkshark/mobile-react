@@ -228,7 +228,7 @@ function TradeSheet(props: TradeSheetProps) {
                       {selected.id === swap.pin.item.id && !!swap.serial
                         ? null /* an upgrade: you keep the pin, only the number changes (#3 -> #1 below) */
                         : (selected.spares ?? 0) > 0
-                        ? <View style={[styles.confirmChip, { backgroundColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={styles.confirmChipText}>x{(selected.spares ?? 0) + 1} {'\u2192'} x{selected.spares}</Text></View>
+                        ? <View style={[styles.confirmChip, styles.confirmChipRow, { backgroundColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={styles.confirmChipText}>x{(selected.spares ?? 0) + 1}</Text><GameIcon name="arrow" size={16} /><Text maxFontSizeMultiplier={1} style={styles.confirmChipText}>x{selected.spares}</Text></View>
                         : <View style={[styles.confirmChip, { backgroundColor: BRAND.red }]}><Text maxFontSizeMultiplier={1} style={[styles.confirmChipText, { color: BRAND.white }]}>LAST ONE</Text></View>}
                       {!!swap.serial && (
                         <View style={[styles.confirmChip, { backgroundColor: '#3b2a05', borderColor: BRAND.gold }]}><Text maxFontSizeMultiplier={1} style={[styles.confirmChipText, { color: BRAND.gold }]}>get #{swap.serial}</Text></View>
@@ -273,6 +273,8 @@ const styles = StyleSheet.create({
   confirmChips: { flexDirection: 'row', gap: 6, marginTop: 4 },
   upgradeRibbon: { position: 'absolute', top: -30, width: 92, alignItems: 'center', backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 2, borderRadius: 8, zIndex: 3, transform: [{ rotate: '-6deg' }] },
   upgradeText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, paddingTop: 2 },
+  // The arrow is a drawn icon: the display font has no arrow glyph.
+  confirmChipRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   confirmChip: { borderRadius: 8, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
   confirmChipText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy, paddingTop: 2 },
   scrim: { backgroundColor: 'rgba(6,30,74,0.86)' },

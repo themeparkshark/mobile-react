@@ -2,6 +2,7 @@ import React, { useContext, useState } from 'react';
 import { SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
 import Modal from 'react-native-modal';
 import config from '../config';
+import { GameIcon } from '../ui';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 
 const modalOpenSound = require('../../assets/sounds/modal_open.mp3');
@@ -64,7 +65,7 @@ export default function StandingsPicker({
         >
           {selectedLabel}
         </Text>
-        <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 10, marginLeft: 6 }}>▼</Text>
+        <GameIcon name="arrow" size={16} style={{ marginLeft: 6, transform: [{ rotate: '90deg' }] }} />
       </TouchableOpacity>
 
       <Modal
@@ -158,20 +159,7 @@ export default function StandingsPicker({
                   >
                     {item.label}
                   </Text>
-                  {isSelected && (
-                    <View
-                      style={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: 11,
-                        backgroundColor: 'white',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Text style={{ color: config.secondary, fontSize: 14, fontWeight: 'bold' }}>✓</Text>
-                    </View>
-                  )}
+                  {isSelected && <GameIcon name="check" size={24} />}
                 </TouchableOpacity>
               );
             })}
