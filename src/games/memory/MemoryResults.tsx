@@ -115,8 +115,11 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
 }) {
   const win = useWindowDimensions();
   const sched = useMemo(() => revealSchedule(data.stars), [data.stars]);
+  // Finn's warm-up is a first win: one banner and one big CONTINUE, all there
+  // from the first frame. No mastery %, crowns or STATS that mean nothing yet.
+  const firstWin = data.mode === 'warmup' && data.won;
   // Step 1 (the ribbon) from the first frame: never an empty card.
-  const [step, setStep] = useState(reducedMotion ? 99 : 1);
+  const [step, setStep] = useState(reducedMotion || firstWin ? 99 : 1);
   const rise = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
     if (!reducedMotion) rise.value = withSpring(1, { damping: 11, stiffness: 210 });
@@ -129,6 +132,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
 
   useEffect(() => {
     if (reducedMotion) return undefined;
+    if (firstWin) { Haptic.hitMedium(); GameAudio.play('fx.hit', { volume: 0.5 }); return undefined; }
     const at = (ms: number, fn: () => void) => timers.current.push(setTimeout(fn, ms));
     const marks = [sched.banner, sched.headline, sched.numbers, sched.grades, sched.rewards, sched.actions];
     marks.forEach((ms, i) => at(ms, () => setStep((s) => Math.max(s, i + 1))));
@@ -138,7 +142,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
       GameAudio.playLadder('mm_sharp_twinkle', 4 + i, { volume: 0.8 });
     }));
     return () => timers.current.forEach(clearTimeout);
-  }, [sched, reducedMotion]);
+  }, [sched, reducedMotion, firstWin]);
 
   const doFlip = (on: boolean) => {
     setFlipped(on);
@@ -148,7 +152,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
   const backSt = useAnimatedStyle(() => ({ opacity: flip.value >= 0.5 ? 1 : 0, transform: [{ perspective: 900 }, { rotateY: `${flip.value * 180 - 180}deg` }] }));
 
   const canAlbum = !!data.rewards;
-  const canStats = data.numbers.length > 0 || !!data.grades;
+  const canStats = !firstWin && (data.numbers.length > 0 || !!data.grades);
   const canShare = !!data.daily;
   const canChallenge = !!data.daily?.ranked;
 
@@ -165,12 +169,14 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
               Front: banner, one big number, crowns, new cards, one button.
               The stat chips and grades live behind STATS. */}
           <Banner text={data.banner} show={step >= 1} reducedMotion={reducedMotion} />
-          <Headline data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.headline} />
-          <View style={styles.crownRow}>
-            {[0, 1, 2].map((i) => (
-              <Crown key={i} on={i < data.stars} delay={reducedMotion ? 0 : (sched.crowns[i] ?? 0)} hang={i === 2} reducedMotion={reducedMotion} />
-            ))}
-          </View>
+          {firstWin ? null : <>
+            <Headline data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.headline} />
+            <View style={styles.crownRow}>
+              {[0, 1, 2].map((i) => (
+                <Crown key={i} on={i < data.stars} delay={reducedMotion ? 0 : (sched.crowns[i] ?? 0)} hang={i === 2} reducedMotion={reducedMotion} />
+              ))}
+            </View>
+          </>}
           {data.crownHint ? <Reveal show={step >= 3}><Text style={styles.crownHint}>{data.crownHint}</Text></Reveal> : null}
           {data.newBest ? <Reveal show={step >= 3}><Text style={styles.newBest}>NEW BEST</Text></Reveal> : null}
           {data.tally ? <Reveal show={step >= 3}>{step >= 3 ? <Numbers data={data} reducedMotion={reducedMotion} tallyOnly /> : <Numbers data={data} reducedMotion tallyOnly />}</Reveal> : null}

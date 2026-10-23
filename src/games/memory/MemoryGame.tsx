@@ -988,7 +988,7 @@ export default function MemoryGame({
         numbers.push({ label: 'PAR', value: `${par}` });
         numbers.push({ label: 'STRIKES', value: `${e.strikes}/2` });
       } else if (r.mode === 'warmup') {
-        banner = 'CLEARED!';
+        banner = won ? 'YOU DID IT!' : 'CLEARED!';
         numbers.push({ label: 'TURNS', value: `${e.turns}` });
       }
       const extra: string[] = [];

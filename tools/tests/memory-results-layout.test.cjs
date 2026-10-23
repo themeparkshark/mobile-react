@@ -59,7 +59,10 @@ test('combo callouts are paced and always match the flame', () => {
 });
 
 test('results: ribbon on the first frame, card rises, visible PERFECT burst, kid words', () => {
-  assert.match(src, /useState\(reducedMotion \? 99 : 1\)/);
+  assert.match(src, /useState\(reducedMotion \|\| firstWin \? 99 : 1\)/);
+  // Finn's warm-up is a first win: no mastery %, crowns or STATS (Oct 23 first session).
+  assert.match(src, /const firstWin = data\.mode === 'warmup' && data\.won;/);
+  assert.match(src, /canStats = !firstWin &&/);
   assert.match(src, /riseSt, frontSt/);
   assert.match(src, /data\.banner === 'PERFECT!' && !reducedMotion \? <CoinBurst fire \/>/);
   assert.match(src, /'MEMORY'\}/);
