@@ -39,7 +39,10 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
       // A big park day (5+ ride coins) gets the Flex moment once. The host holds it until the
       // player has left the park, so the picture never says where a kid is right now.
       if (current && result && !selectedDay) {
-        void flexRevealOnce('park_day', `${parkId}:${result.park_day}`, parkDayFlexPayload(result), { surface: 'park_day' });
+        // Each load updates the waiting moment, and it asks for that day's final count right before it shows.
+        const day = result.park_day;
+        void flexRevealOnce('park_day', `${parkId}:${day}`, parkDayFlexPayload(result), { surface: 'park_day',
+          refresh: () => loadRecap(parkId, day).then(fresh => (fresh ? parkDayFlexPayload(fresh) : null)) });
       }
     }).catch(() => {
       if (current) setError(true);
