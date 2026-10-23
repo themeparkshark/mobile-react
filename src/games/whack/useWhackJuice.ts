@@ -38,9 +38,12 @@ import {
 import { E_HAT_BOUNCE } from './useWhackRuntime';
 import { G_CRIT, G_GOOD, G_QUICK, K_ANGLER, K_BRUISER, K_FINN, K_GOLDEN, K_HELMET, K_PUFFER, K_TENTACLE, K_TWIN, MULT_CAP, SIXTEENTH_MS, TIER_AT, TIER_MULT } from './waves';
 import type { BoardLayout } from './render/layout';
+import { allowWord, createWordGate } from './wordGate';
 import type { WhackRuntime } from './useWhackRuntime';
 
 const GOLD = '#ffcf3b';
+/** Words that always float, even in a busy flurry. */
+const BIG_WORDS = new Set(['fever', 'feverReady', 'tierUp', 'bossDown']);
 const CORAL = '#ff6b5c';
 
 export function pickCue(...names: string[]): string {
@@ -216,7 +219,15 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
   layersRef.current = opts.layers;
   const feverOn = useRef(false);
   const syncLayers = () => layersRef.current?.setLevel(whackLayerLevel(TIER_MULT[tier.current] ?? 1, feverOn.current));
-  const feel = useFeel(table, { fx, camera, clock: null, width, calm: reducedMotion || walking, governor, stamps });
+  const feelRaw = useFeel(table, { fx, camera, clock: null, width, calm: reducedMotion || walking, governor, stamps });
+  // At most two floating words at once (wordGate.ts); big moments always show.
+  const words = useRef(createWordGate());
+  const feel = useCallback(((name: string, at?: Record<string, unknown>) => {
+    if (at && typeof at.text === 'string' && at.text && !allowWord(words.current, Date.now(), BIG_WORDS.has(name))) {
+      return feelRaw(name as never, { ...at, text: undefined } as never);
+    }
+    return feelRaw(name as never, at as never);
+  }) as typeof feelRaw, [feelRaw]);
   const liveScore = useRef(0);
   const streak = useRef(0);
   const tier = useRef(0);
@@ -471,7 +482,8 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         const at = lastHit.current;
         const m = at.mult;
         const label = `${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}`;
-        feel('combo', { x: at.x, y: at.y - 20, stamp: `x${label} COMBO +${pts}` });
+        // A flurry with no multiplier yet reads as plain bonks, never "x1 COMBO".
+        feel('combo', { x: at.x, y: at.y - 20, stamp: m > 1 ? `x${label} COMBO +${pts}` : `${hits} BONKS! +${pts}` });
       }
     }, 100);
     return () => clearInterval(iv);
