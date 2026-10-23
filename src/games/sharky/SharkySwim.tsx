@@ -305,6 +305,7 @@ export function SharkySwim({
         nearMiss: nearMissLine(s, m, best),
         gateProgress: gateProgress(s, m),
         splits,
+        ghostGates: ghostSp.length,
         missions: mu,
         newCard: card,
         tokensAtRide: rideId != null ? next.rideTokens[String(rideId)] % 9 || (next.rideTokens[String(rideId)] ? 9 : 0) : null,

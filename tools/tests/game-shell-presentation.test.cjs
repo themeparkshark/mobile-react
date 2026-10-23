@@ -289,3 +289,23 @@ test('a pass-and-play group turn is one try: DONE is the only button and it fini
   assert.equal(win.calls.complete, 1);
   win.view.unmount();
 });
+
+test('QUEUE REALITY: a game that hands back its own result after the ride came up still shows RUN SAVED (Whack banks its burst)', () => {
+  const runs = [];
+  const movement = { moving: false, onResume() {}, onRunDone: (s, p) => runs.push([s, p]) };
+  const thresholds = { one: 8000, two: 12000, three: 16000 };
+  const { view, calls, movementContext } = shell(false, false, { score: 1200, thresholds }, movement);
+  startPlaying(view);
+  movementContext.value = { ...movement, queueEnded: 'boarding' }; view.render();
+  // Whack's bank finishes the run with its own result a moment later.
+  view.change({ result: { score: 1200, stars: 0, message: 'GOOD TRY!', thresholds, meta: { game: 'tap' } } });
+  const card = view.find(node => node.type === 'ResultsCard');
+  assert.equal(card.props.saved, true, 'the RUN SAVED stamp, not three grey stars');
+  assert.equal(card.props.message, "YOUR RIDE'S UP!");
+  assert.equal(card.props.note, 'Enjoy the ride!', 'saved is said once, by the stamp');
+  assert.equal(button(view, 'PLAY AGAIN'), undefined, 'the ride is up: no replay');
+  button(view, 'DONE').props.onPress();
+  assert.deepEqual(runs, [[0, true]], 'counted as played, flagged as a saved run');
+  assert.equal(calls.close, 1);
+  view.unmount();
+});

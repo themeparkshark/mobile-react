@@ -17,6 +17,15 @@ test('a release-mode perf capture (EXPO_PUBLIC_PERF_CAPTURE=1, never set in stor
   assert.equal(routes.devInitialRoute(), 'BossMapPreview');
 });
 
+test('a release-JS results capture can open only the queue results check, and only with both capture flags', () => {
+  const routes = load(false, { EXPO_PUBLIC_PERF_CAPTURE: '1', EXPO_PUBLIC_PERF_CAPTURE_ROUTE: 'QueueResultsCapture' });
+  assert.equal(routes.DEV_SCREENS.map(screen => screen.name).join(','), 'QueueResultsCapture');
+  assert.equal(routes.devInitialRoute(), 'QueueResultsCapture');
+  const plain = load(false, { EXPO_PUBLIC_PERF_CAPTURE_ROUTE: 'QueueResultsCapture' });
+  assert.equal(plain.DEV_SCREENS.length, 0, 'the route name alone opens nothing');
+  assert.equal(plain.devInitialRoute(), null);
+});
+
 test('development keeps every preview route and the original flag priority', () => {
   const dev = load(true);
   const names = dev.DEV_SCREENS.map(screen => screen.name);

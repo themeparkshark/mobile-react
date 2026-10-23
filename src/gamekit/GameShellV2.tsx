@@ -318,7 +318,20 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const scoreRef = useRef(score);
     scoreRef.current = score;
 
-    const effectiveResult = result ?? wrap?.result ?? null;
+    // A queue event wrapped the run up. A game that hands back its own result
+    // after the wrap (Whack banks the burst it was in) still gets the wrap-up
+    // credit, title and RUN SAVED flag, so its card never looks like a plain loss.
+    const effectiveResult = useMemo((): GameResult | null => {
+      if (!wrap) return result ?? null;
+      if (!result) return wrap.result;
+      const credit = wrapUpStars(result.stars ?? 0, result.score ?? 0, !!rideChallenge);
+      return {
+        ...result,
+        stars: credit.stars,
+        message: wrap.result.message,
+        meta: { ...(result.meta ?? {}), wrapUp: wrap.reason, ...(credit.partial ? { partial: true } : {}) },
+      };
+    }, [result, wrap, rideChallenge]);
 
     // Results animation values.
     const resultsScale = useSharedValue(0.7);

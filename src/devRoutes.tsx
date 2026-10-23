@@ -29,6 +29,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'ParkChecklistPreview', getComponent: () => require('./screens/ParkChecklistPreviewScreen').default },
       { name: 'ParkArrivalPreview', getComponent: () => require('./screens/ParkArrivalPreviewScreen').default },
       { name: 'CrewRelayPreview', getComponent: () => require('./screens/LinePlay/CrewRelayPreviewScreen').default },
+      { name: 'QueueResultsCapture', getComponent: () => require('./screens/LinePlay/QueueResultsCaptureScreen').default },
       { name: 'ParkProjectPreview', getComponent: () => require('./screens/ExploreScreen/ParkProjectPreviewScreen').default },
       { name: 'TripGoalPreview', getComponent: () => require('./screens/ExploreScreen/TripGoalPreviewScreen').default },
       { name: 'MapAlivePreview', getComponent: () => require('./screens/ExploreScreen/MapAlivePreviewScreen').default },
@@ -59,7 +60,9 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
   // Release-mode frame-time captures only (EXPO_PUBLIC_PERF_CAPTURE=1 with `expo start --no-dev`); store builds never set it,
   // so this branch folds away like the dev list.
   : process.env.EXPO_PUBLIC_PERF_CAPTURE === '1'
-    ? [{ name: 'BossMapPreview', getComponent: () => require('./screens/BossMapPreviewScreen').default }]
+    ? process.env.EXPO_PUBLIC_PERF_CAPTURE_ROUTE === 'QueueResultsCapture'
+      ? [{ name: 'QueueResultsCapture', getComponent: () => require('./screens/LinePlay/QueueResultsCaptureScreen').default }]
+      : [{ name: 'BossMapPreview', getComponent: () => require('./screens/BossMapPreviewScreen').default }]
     : [];
 
 /**
@@ -67,7 +70,10 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
  * Root chain. Each flag is a literal process.env access so Expo inlines it.
  */
 export function devInitialRoute(): string | null {
-  if (!__DEV__) return process.env.EXPO_PUBLIC_PERF_CAPTURE === '1' ? 'BossMapPreview' : null;
+  if (!__DEV__) {
+    if (process.env.EXPO_PUBLIC_PERF_CAPTURE !== '1') return null;
+    return process.env.EXPO_PUBLIC_PERF_CAPTURE_ROUTE === 'QueueResultsCapture' ? 'QueueResultsCapture' : 'BossMapPreview';
+  }
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
     [!!process.env.EXPO_PUBLIC_SHOP_TABS_PREVIEW, 'ShopTabsPreview'],

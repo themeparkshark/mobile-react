@@ -115,13 +115,15 @@ export function ResultsCard({
   const [streak] = useState(() => (streakKey ? noteRun(streakKey, runToken ?? `${score}:${stars}`, stars > 0) : 0));
   const feeling = useMemo(() => feelingLine({ streak, near: best.isNewBest ? null : near }), [streak, near, best.isNewBest]);
   const showNear = !!feeling.text;
-  // A 0-star run reads in one glance: stars, score, the bar and PLAY AGAIN.
-  // The quiet BEST shows only when the run came near it, one brag chip at
-  // most, and no share chip (a NEW BEST still gets the full card).
-  const plain = stars === 0 && !saved && !best.isNewBest;
+  // A 0-star run (or a saved one) reads in one glance: stars or the stamp,
+  // the score, the bar and the big button. The quiet BEST shows only when the
+  // run came near it, one brag chip at most, and no share chip (a NEW BEST
+  // still gets the full card).
+  const plain = stars === 0 && !best.isNewBest;
   const showBest = !!personalBest && (!plain || nearBest(score, personalBest));
   const chips = useMemo(() => feelingChips(stats, maxCombo, plain ? 1 : undefined), [stats, maxCombo, plain]);
-  const nBuckets = buckets?.length ?? 0;
+  // The score tally buckets are for runs worth replaying in detail (a star or a new best).
+  const nBuckets = plain ? 0 : buckets?.length ?? 0;
   const bucketStart = STAR_BASE_DELAY + starStepMs * 3;
   const countDelay = reducedMotion ? 0 : bucketStart + nBuckets * (BUCKET_MS + BUCKET_GAP);
 

@@ -259,6 +259,9 @@ test('round 3: one rule everywhere (x3 chains, one RUN SAVED stamp, saved said o
   assert.equal(lines.sharkyGateWord(0.1), 'KEEP SWIMMING!');
   assert.equal(lines.sharkyGateProgress(30000, 15000), 0.99, 'a miss never shows a full bar');
   assert.equal(lines.sharkyGateProgress(7500, 15000), 0.5);
+  assert.equal(lines.showSplits([40], 3), false, 'ahead at gate 1, then crashed before the ghost\'s gate 3: not ahead of your best');
+  assert.equal(lines.showSplits([40, -5, 20], 3), true, 'went as far as the ghost and led at the last gate');
+  assert.match(read('src/games/sharky/hud/SharkyResults.tsx'), /const ahead = !data\.newBest && showSplits\(data\.splits, data\.ghostGates \?\? 0\);/);
   const swim = read('src/games/sharky/SharkySwim.tsx');
   assert.doesNotMatch(swim, /% to the gate/, 'no percent on the ride card');
   assert.doesNotMatch(swim, /RACE THE GHOSTS/, 'the label fits its half-width button');
@@ -283,8 +286,9 @@ test('round 3: one rule everywhere (x3 chains, one RUN SAVED stamp, saved said o
   assert.equal(feel.nearBest(800, 1000), true);
   assert.equal(feel.nearBest(260, 1410), false, 'a 260 run under a 1,410 best drops the BEST line');
   const rc = read('src/gamekit/results/ResultsCard.tsx');
-  assert.match(rc, /const plain = stars === 0 && !saved && !best\.isNewBest;/);
+  assert.match(rc, /const plain = stars === 0 && !best\.isNewBest;/);
   assert.match(rc, /\{footer && !plain \?/, 'no share chip on a plain 0-star run');
+  assert.match(rc, /const nBuckets = plain \? 0 : buckets\?\.length \?\? 0;/, 'no tally buckets on a plain 0-star run');
   // The bar grows with a transform, not a width relayout.
   const bar = read('src/gamekit/results/NextStarBar.tsx');
   assert.match(bar, /scaleX: Math\.max\(0, Math\.min\(1, bar\.value\)\)/);

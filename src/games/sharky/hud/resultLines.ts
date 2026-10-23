@@ -32,12 +32,13 @@ export function sharkyStarGoalLine(score: number, nextStarAt: number): string {
 }
 
 /**
- * Ghost splits show only when the whole run finished ahead of the ghost (the
- * last shared gate), so "AHEAD OF YOUR BEST" is always true. One lucky gate in
- * a run that ended behind shows nothing.
+ * Ghost splits show only when the run went as far as the ghost (every gate the
+ * ghost passed) and was ahead at the last one, so "AHEAD OF YOUR BEST" is
+ * always true. One lucky early gate in a run that then crashed shows nothing.
+ * ghostGates: how many gates the ghost passed (omit when unknown).
  */
-export function showSplits(splits: readonly number[]): boolean {
-  return splits.length > 0 && splits[splits.length - 1] > 0;
+export function showSplits(splits: readonly number[], ghostGates = 0): boolean {
+  return splits.length > 0 && splits.length >= ghostGates && splits[splits.length - 1] > 0;
 }
 
 /** Only the gates where you were ahead get a bar (green, no numbers); two or more, or none. */

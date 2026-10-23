@@ -58,6 +58,8 @@ export interface SharkyResultsData {
   gateProgress?: number | null;
   /** Ghost split deltas per gate (score at the gate vs your best/ghost). */
   splits: number[];
+  /** How many gates the ghost passed (the run must go as far to be "ahead"). */
+  ghostGates?: number;
   missions: MissionUpdate | null;
   newCard: string | null;
   tokensAtRide: number | null;
@@ -191,7 +193,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   const bars = useMemo(() => aheadBars(data.splits), [data.splits]);
   // One feeling line under the score, the same slot the shared card uses:
   // gold when the run beat your best ghost, light for "so close to your best".
-  const ahead = showSplits(data.splits);
+  const ahead = !data.newBest && showSplits(data.splits, data.ghostGates ?? 0);
   const feeling = ahead ? 'AHEAD OF YOUR BEST!' : data.nearMiss ? data.nearMiss.toUpperCase() : '';
   const gate = data.gateProgress != null && !saved ? data.gateProgress : null;
   const splitMax = useMemo(() => Math.max(1, ...bars), [bars]);
