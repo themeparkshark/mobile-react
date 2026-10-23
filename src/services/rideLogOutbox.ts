@@ -122,18 +122,41 @@ export interface LetGoRideLog {
 
 let letGoChain: Promise<unknown> = Promise.resolve();
 
-/** Serialized read and write of the let-go list. A failed read throws, so nothing is overwritten. */
+/** Each player keeps up to 20 notes, so one kid's list never pushes out a sibling's. */
+export const RIDE_LOG_LET_GO_PER_PLAYER = 20;
+
+/** Keep only the newest notes for each player, in the same order. */
+function capPerPlayer(items: LetGoRideLog[]): LetGoRideLog[] {
+  const seen = new Map<number, number>();
+  const kept: LetGoRideLog[] = [];
+  for (let i = items.length - 1; i >= 0; i--) {
+    const count = seen.get(items[i].player_id) ?? 0;
+    if (count >= RIDE_LOG_LET_GO_PER_PLAYER) continue;
+    seen.set(items[i].player_id, count + 1);
+    kept.unshift(items[i]);
+  }
+  return kept;
+}
+
+/**
+ * Serialized read and write of the let-go list. A failed read throws, so
+ * nothing is overwritten. Unreadable data is copied to <key>.corrupt first,
+ * the same way the outbox sets it aside, so it is never lost in silence.
+ */
 function changeLetGo(fn: (items: LetGoRideLog[]) => LetGoRideLog[]): Promise<void> {
   const next = letGoChain.then(async () => {
     const raw = await AsyncStorage.getItem(RIDE_LOG_LET_GO_KEY);
     let items: LetGoRideLog[] = [];
+    let readable = true;
     try {
       const parsed: unknown = raw ? JSON.parse(raw) : [];
       if (Array.isArray(parsed)) items = parsed as LetGoRideLog[];
+      else readable = false;
     } catch {
-      items = [];
+      readable = false;
     }
-    await AsyncStorage.setItem(RIDE_LOG_LET_GO_KEY, JSON.stringify(fn(items)));
+    if (!readable && raw) await AsyncStorage.setItem(`${RIDE_LOG_LET_GO_KEY}.corrupt`, raw);
+    await AsyncStorage.setItem(RIDE_LOG_LET_GO_KEY, JSON.stringify(capPerPlayer(fn(items))));
   });
   letGoChain = next.catch(() => undefined);
   return next;
@@ -142,18 +165,30 @@ function changeLetGo(fn: (items: LetGoRideLog[]) => LetGoRideLog[]): Promise<voi
 /**
  * Keep a note of a ride leaving the outbox. Returns true once the note is
  * stored (the ride may leave), false if storage failed (the ride stays put).
+ * A newer note for the same ride replaces the old one, with the newest memory.
  */
 async function letGo(item: QueuedRideLog, reason: LetGoRideLog['reason'], now: number): Promise<boolean> {
   try {
     const id = item.payload.source_detection_id;
-    await changeLetGo(items => items.some(it => it.id === id) ? items : [...items, {
+    await changeLetGo(items => [...items.filter(it => it.id !== id), {
       id, player_id: item.player_id, ride_name: item.ride_name, park_id: item.park_id,
       payload: item.payload, reason, at: now,
-    }].slice(-20));
+    }]);
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * The kid chose "Try later" after the server said no: keep the ride and its
+ * memory on the Ride Tracker so it can be logged again, never a dead end.
+ * Returns false if it could not be stored.
+ */
+export async function keepRideLogForLater(item: QueuedRideLog): Promise<boolean> {
+  const kept = await letGo(item, 'rejected', Date.now());
+  await announce().catch(() => undefined);
+  return kept;
 }
 
 /** The signed-in player's rides that could not join the journal, newest first. */

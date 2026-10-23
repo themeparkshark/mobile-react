@@ -168,7 +168,7 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
         {/* Shareable Card */}
         {showCard && (
           <Animated.View style={[styles.cardContainer, { transform: [{ translateY: cardSlide }] }]}>
-            <ShareableRideCard ride={ride} rideCount={rideCount} />
+            <ShareableRideCard ride={ride} rideCount={rideCount} queued={queued} />
           </Animated.View>
         )}
 

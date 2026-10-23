@@ -12,8 +12,12 @@ export function journalRides(rides: readonly RideType[]): RideType[] {
 export type RideLogErrorView = {
   readonly title: string;
   readonly message: string;
-  /** 'pick-ride' sends the kid back to the ride list; 'edit' keeps the memory open to fix. */
-  readonly action: 'pick-ride' | 'edit';
+  /**
+   * 'pick-ride' sends the kid back to the ride list; 'edit' keeps the memory
+   * open to fix; 'plain' offers "Save just the ride" or "Try later", so a no
+   * the app cannot explain is never a dead end.
+   */
+  readonly action: 'pick-ride' | 'edit' | 'plain';
 };
 
 /**
@@ -33,5 +37,5 @@ export function rideLogError(error: unknown): RideLogErrorView {
   if (field('note')) return { title: 'Note too long', message: 'Make your note a little shorter, then save.', action: 'edit' };
   if (field('wait_time_minutes')) return { title: 'Check the wait', message: 'Type the wait in minutes, like 30. Or leave it blank.', action: 'edit' };
   if (field('rating') || field('reaction')) return { title: 'Pick again', message: 'Tap your stars and your face again, then save.', action: 'edit' };
-  return { title: 'Ride not saved', message: 'Something did not fit. Check your ride memory and save again.', action: 'edit' };
+  return { title: 'Ride not saved', message: 'Save just the ride now. Or tap Try later to keep your stars and note for later.', action: 'plain' };
 }

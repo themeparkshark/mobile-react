@@ -25,7 +25,7 @@ import Topbar from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import { removePendingDetection } from '../../services/RideDetectionService';
-import { clearLetGoRideLog, drainRideLogs, manualRideLogId, queueRideLog, rideLogWaitReason, shouldQueueRideLog, type RideLogWaitReason } from '../../services/rideLogOutbox';
+import { clearLetGoRideLog, drainRideLogs, keepRideLogForLater, manualRideLogId, queueRideLog, rideLogWaitReason, shouldQueueRideLog, type RideLogWaitReason } from '../../services/rideLogOutbox';
 import { journalRides, rideLogError } from './rideJournalModel';
 import { AuthContext } from '../../context/AuthProvider';
 import ProfileStatIcon from '../../components/ProfileStatIcon';
@@ -223,7 +223,24 @@ export default function RideLogScreen() {
     }
   }, [selectedRide?.park_id, selectedPark, loadParkRides]);
 
-  const handleSubmit = useCallback(async () => {
+  // "Try later": the ride and its whole memory wait on the Ride Tracker under
+  // "did not save", with Log it again. Same phone-made id, so it saves once.
+  const tryLater = useCallback(async (memory: LogRidePayload & { source_detection_id: string },
+    ride: { name: string; parkId: number | null }) => {
+    const kept = player?.id != null && await keepRideLogForLater({ payload: memory, ride_name: ride.name,
+      park_id: ride.parkId, player_id: player.id, queued_at: Date.now() }).catch(() => false);
+    if (!kept) {
+      gameAlert('Ride not saved', "We couldn't keep it. Try again in a minute.");
+      return;
+    }
+    if (detectionId) void removePendingDetection(detectionId).catch(() => undefined);
+    logId.current = null;
+    navigation.goBack();
+  }, [player?.id, detectionId, navigation]);
+
+  // "Save just the ride" after a no the app cannot explain: the same ride and
+  // date with no stars, face, note or wait, so the optional parts cannot block it.
+  const save = useCallback(async (plain: boolean) => {
     if (!selectedRide || saving.current) return;
     if (waitTime && !/^\d+$/.test(waitTime)) {
       gameAlert('Check your wait time', 'Enter a whole number of minutes, or leave it blank.');
@@ -232,7 +249,11 @@ export default function RideLogScreen() {
     saving.current = true;
     setSubmitting(true);
     logId.current ??= detectionId || manualRideLogId();
-    const payload: LogRidePayload & { source_detection_id: string } = {
+    const payload: LogRidePayload & { source_detection_id: string } = plain ? {
+      ride_id: selectedRide.id,
+      source_detection_id: logId.current,
+      rode_at: autoRodeAt || new Date().toISOString(),
+    } : {
       ride_id: selectedRide.id,
       source_detection_id: logId.current,
       rating: rating || undefined,
@@ -267,9 +288,21 @@ export default function RideLogScreen() {
       if (!shouldQueueRideLog(e)) {
         // The server read the ride and said no: kid words and a next step, never server text.
         const problem = rideLogError(e);
+        // The full memory, kept for "Try later" even after a plain retry.
+        const memory: LogRidePayload & { source_detection_id: string } = {
+          ride_id: selectedRide.id, source_detection_id: payload.source_detection_id, rode_at: payload.rode_at,
+          rating: rating || undefined, reaction: reaction || undefined, note: note.trim() || undefined,
+          wait_time_minutes: waitTime ? parseInt(waitTime, 10) : undefined,
+        };
+        const ride = { name: selectedRide.name, parkId: selectedRide.park_id ?? null };
         gameAlert(problem.title, problem.message, problem.action === 'pick-ride'
           ? [{ text: 'Pick ride', onPress: backToRideList }]
-          : [{ text: 'Fix it' }]);
+          : problem.action === 'plain'
+            ? [
+              { text: 'Try later', style: 'cancel', onPress: () => { void tryLater(memory, ride); } },
+              { text: 'Save just the ride', onPress: () => { void save(true); } },
+            ]
+            : [{ text: 'Fix it' }]);
         return;
       }
       // Weak signal: keep the ride on the phone and send it later. Never throw it away.
@@ -301,7 +334,8 @@ export default function RideLogScreen() {
       saving.current = false;
       setSubmitting(false);
     }
-  }, [selectedRide, rating, reaction, note, waitTime, autoRodeAt, detectionId, player?.id, backToRideList, again]);
+  }, [selectedRide, rating, reaction, note, waitTime, autoRodeAt, detectionId, player?.id, backToRideList, again, tryLater]);
+  const handleSubmit = useCallback(() => save(false), [save]);
 
   const handleBack = useCallback(() => {
     if (step === 'details') {

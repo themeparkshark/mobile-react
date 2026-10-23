@@ -17,7 +17,7 @@ import TopbarText from '../../components/Topbar/TopbarText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { clearLetGoRideLog, drainRideLogs, letGoRideLogs, onRideLogOutboxChange, pendingRideLogs, rideCountWords,
   type LetGoRideLog, type QueuedRideLog } from '../../services/rideLogOutbox';
-import { GameIcon } from '../../ui';
+import { GameIcon, showGameDialog } from '../../ui';
 
 // ─── Rider Levels (based on rides logged) ───
 const RIDER_LEVELS = [
@@ -168,6 +168,21 @@ export default function RideTrackerScreen() {
   const waitingRides = waitingList.length;
   // Kept rides that could not join (the server said no, or 30 days passed): shown, never silent.
   const [letGoList, setLetGoList] = useState<LetGoRideLog[]>([]);
+  // "Not now" hides a row for this visit only; it comes back next time.
+  const [notNow, setNotNow] = useState<ReadonlySet<string>>(new Set());
+  const [showAllLetGo, setShowAllLetGo] = useState(false);
+  useFocusEffect(useCallback(() => () => { setNotNow(new Set()); setShowAllLetGo(false); }, []));
+  const shownLetGo = letGoList.filter(ride => !notNow.has(ride.id));
+  // Forgetting a ride for good always asks first, so one tap never erases a memory.
+  const forgetLetGo = useCallback(async (ride: LetGoRideLog) => {
+    // "Keep it" is the big yellow button; "Forget it" is the quiet one, so a fast tap keeps the ride.
+    const choice = await showGameDialog({
+      title: 'Forget this ride?', message: `${ride.ride_name} and its stars and note will be gone.`,
+      icon: 'ride', haptic: 'warning',
+      buttons: [{ text: 'Forget it', style: 'destructive', variant: 'ghost' }, { text: 'Keep it' }],
+    });
+    if (choice === 0) await clearLetGoRideLog(ride.id).catch(() => undefined);
+  }, []);
   useEffect(() => onRideLogOutboxChange(() => {
     void pendingRideLogs().then(setWaitingList);
     void letGoRideLogs().then(setLetGoList);
@@ -253,19 +268,26 @@ export default function RideTrackerScreen() {
             </Text>
           )}
 
-          {letGoList.slice(0, 2).map(ride => (
+          {(showAllLetGo ? shownLetGo : shownLetGo.slice(0, 2)).map(ride => (
             <View key={ride.id} style={s.waitingNote} accessible={false}>
               <View style={s.waitingHead}>
                 <GameIcon name="ride" size={24} />
-                <Text style={[s.waitingTitle, { flex: 1 }]} accessibilityRole="text">
-                  {ride.ride_name} could not join your journal. Log it again?
-                </Text>
+                {/* Ride name on one line, then the status: the same two lines on every phone size. */}
+                <View style={{ flex: 1 }} accessible accessibilityRole="text" accessibilityLabel={`${ride.ride_name} did not save.`}>
+                  <Text style={s.waitingTitle} numberOfLines={1}>{ride.ride_name}</Text>
+                  <Text style={s.waitingText}>Did not save.</Text>
+                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Forget ${ride.ride_name}`} hitSlop={10}
+                  onPress={() => { void forgetLetGo(ride); }}
+                  style={({ pressed }) => [s.letGoClose, pressed && { opacity: 0.6 }]}>
+                  <GameIcon name="close" size={22} />
+                </Pressable>
               </View>
               <View style={s.letGoActions}>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Okay, forget ${ride.ride_name}`} hitSlop={8}
-                  onPress={() => { void clearLetGoRideLog(ride.id).catch(() => undefined); }}
-                  style={({ pressed }) => [s.letGoQuiet, pressed && { opacity: 0.6 }]}>
-                  <Text style={s.letGoQuietText}>Okay</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Not now. Keep ${ride.ride_name} for later`}
+                  onPress={() => setNotNow(prev => new Set(prev).add(ride.id))}
+                  style={({ pressed }) => [s.letGoQuiet, pressed && { opacity: 0.7 }]}>
+                  <Text style={s.letGoQuietText}>Not now</Text>
                 </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Log ${ride.ride_name} again`}
                   onPress={() => {
@@ -282,6 +304,13 @@ export default function RideTrackerScreen() {
               </View>
             </View>
           ))}
+          {!showAllLetGo && shownLetGo.length > 2 && (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Show ${shownLetGo.length - 2} more rides that did not save`}
+              onPress={() => setShowAllLetGo(true)}
+              style={({ pressed }) => [s.letGoMore, pressed && { opacity: 0.7 }]}>
+              <Text style={s.letGoMoreText}>+{shownLetGo.length - 2} more</Text>
+            </Pressable>
+          )}
 
           {waitingRides > 0 && (
             <View style={s.waitingNote} accessible accessibilityLiveRegion="polite"
@@ -547,8 +576,12 @@ const s = StyleSheet.create({
   waitingTag: { backgroundColor: '#FFCF3B', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1.5, borderColor: '#103F75' },
   waitingTagText: { fontSize: 11, fontFamily: 'Shark', color: '#103F75' },
   letGoActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 14 },
-  letGoQuiet: { paddingVertical: 8, paddingHorizontal: 6 },
+  letGoQuiet: { minHeight: 44, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 12, borderWidth: 2,
+    borderColor: '#315C7C', backgroundColor: '#FFFFFF', justifyContent: 'center' },
   letGoQuietText: { fontSize: 15, fontFamily: 'Knockout', color: '#315C7C' },
+  letGoClose: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
+  letGoMore: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: 16, marginTop: -6, marginBottom: 10 },
+  letGoMoreText: { fontSize: 16, fontFamily: 'Shark', color: '#103F75' },
   letGoButton: { backgroundColor: '#FFCF3B', borderRadius: 12, borderWidth: 2, borderColor: '#103F75',
     paddingVertical: 8, paddingHorizontal: 16, minHeight: 44, justifyContent: 'center' },
   letGoButtonText: { fontSize: 16, fontFamily: 'Shark', color: '#103F75' },

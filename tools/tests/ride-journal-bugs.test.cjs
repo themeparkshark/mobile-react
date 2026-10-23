@@ -306,13 +306,98 @@ test('a ride the server says no to gets kid words and a next step, never server 
 
 test('the hub shows a kept ride that could not join, with one tap to log it again', () => {
   const hub = read('src/screens/RideTracker/RideTrackerScreen.tsx');
-  assert.match(hub, /could not join your journal\. Log it again\?/);
+  assert.match(hub, /<Text style=\{s\.waitingTitle\} numberOfLines=\{1\}>\{ride\.ride_name\}<\/Text>\s*<Text style=\{s\.waitingText\}>Did not save\.<\/Text>/);
   assert.match(hub, /<Text style=\{s\.letGoButtonText\}>Log it again<\/Text>/);
   assert.match(hub, /again: \{ id: ride\.id, payload: ride\.payload \}/);
   assert.match(hub, /nav\.push\('RideLog', \{\s*rideId: ride\.payload\.ride_id/);
   const log = read('src/screens/RideTracker/RideLogScreen.tsx');
   assert.match(log, /logId\.current = again\.id;/);
   assert.equal((log.match(/clearLetGoRideLog\(again\.id\)/g) || []).length, 2, 'cleared once it saves or is kept again');
+});
+
+test('the could-not-join row never erases a memory with one tap', () => {
+  const hub = read('src/screens/RideTracker/RideTrackerScreen.tsx');
+  // No "Okay" that answers the question as yes but deletes.
+  assert.doesNotMatch(hub, />Okay</);
+  assert.doesNotMatch(hub, /Log it again\?/);
+  // "Not now" only hides the row for this visit; nothing is cleared.
+  assert.match(hub, /<Text style=\{s\.letGoQuietText\}>Not now<\/Text>/);
+  assert.match(hub, /onPress=\{\(\) => setNotNow\(prev => new Set\(prev\)\.add\(ride\.id\)\)\}/);
+  assert.match(hub, /useFocusEffect\(useCallback\(\(\) => \(\) => \{ setNotNow\(new Set\(\)\)/, 'rows come back on the next visit');
+  // Forgetting for good sits behind a confirm with Keep it / Forget it.
+  const forget = hub.slice(hub.indexOf('const forgetLetGo'), hub.indexOf('const forgetLetGo') + 800);
+  assert.match(forget, /showGameDialog\(\{\s*title: 'Forget this ride\?'/);
+  // Keep it is the big primary button; Forget it is the quiet one.
+  assert.match(forget, /buttons: \[\{ text: 'Forget it', style: 'destructive', variant: 'ghost' \}, \{ text: 'Keep it' \}\]/);
+  assert.match(forget, /if \(choice === 0\) await clearLetGoRideLog\(ride\.id\)/);
+  assert.equal((hub.match(/clearLetGoRideLog\(/g) || []).length, 1, 'the only clear is after the confirm');
+  // The quiet button has a real button shape, and a long list says "+N more".
+  assert.match(hub, /letGoQuiet: \{ minHeight: 44,[^}]*borderWidth: 2,\s*borderColor: '#315C7C'/);
+  assert.match(hub, /\+\{shownLetGo\.length - 2\} more/);
+  // Ride name on one line, status on the next: no orphaned words or tiny text on iPhone SE.
+  assert.doesNotMatch(hub, /adjustsFontSizeToFit minimumFontScale=\{0\.85\}/);
+  for (const text of ['Did not save.', 'Not now', 'Forget this ride?', 'Keep it', 'Forget it']) assert.ok(hub.includes(text));
+  assert.doesNotMatch(hub, /\u2014/);
+});
+
+test('let-go notes: unreadable data is set aside, and each player keeps their own 20', async () => {
+  const { mod, store } = outboxRealm({ post: async () => { throw { response: { status: 422, data: { errors: { ride_id: ['x'] } } } }; } });
+  store.set(mod.RIDE_LOG_LET_GO_KEY, '{broken');
+  mod.setRideLogOutboxPlayer(31);
+  await mod.queueRideLog({ payload: { ride_id: 1, source_detection_id: 'manual-sib', note: 'sibling' }, ride_name: 'Dumbo',
+    park_id: 8, player_id: 31, queued_at: Date.now() });
+  await mod.drainRideLogs();
+  assert.equal(store.get(`${mod.RIDE_LOG_LET_GO_KEY}.corrupt`), '{broken', 'never overwritten in silence');
+  assert.equal((await mod.letGoRideLogs()).length, 1);
+  // Kid 25 gets 25 rides rejected: the sibling's note stays, and 25 keeps the newest 20.
+  mod.setRideLogOutboxPlayer(25);
+  for (let i = 0; i < 25; i++) {
+    await mod.queueRideLog({ payload: { ride_id: 1, source_detection_id: `manual-${i}` }, ride_name: `Ride ${i}`,
+      park_id: 8, player_id: 25, queued_at: Date.now() });
+  }
+  await mod.drainRideLogs();
+  const mine = await mod.letGoRideLogs();
+  assert.equal(mine.length, mod.RIDE_LOG_LET_GO_PER_PLAYER);
+  assert.equal(mine[0].ride_name, 'Ride 24', 'newest first');
+  mod.setRideLogOutboxPlayer(31);
+  assert.deepEqual(plain((await mod.letGoRideLogs()).map(r => r.payload.note)), ['sibling']);
+});
+
+test('"Try later" keeps the ride and its whole memory on the Ride Tracker, once per ride', async () => {
+  const { mod } = outboxRealm({ post: async () => ({}) });
+  mod.setRideLogOutboxPlayer(25);
+  const item = (note) => ({ payload: { ride_id: 7, source_detection_id: 'manual-later', rating: 5, note }, ride_name: 'Peter Pan',
+    park_id: 8, player_id: 25, queued_at: Date.now() });
+  assert.equal(await mod.keepRideLogForLater(item('first')), true);
+  assert.equal(await mod.keepRideLogForLater(item('newer')), true);
+  const kept = await mod.letGoRideLogs();
+  assert.equal(kept.length, 1, 'same phone-made id, one row');
+  assert.equal(kept[0].payload.note, 'newer', 'the newest memory wins');
+  assert.equal(kept[0].payload.rating, 5);
+});
+
+test('a no the app cannot explain offers Save just the ride or Try later, never a loop', () => {
+  const { rideLogError } = loadTs('src/screens/RideTracker/rideJournalModel.ts');
+  const other = rideLogError({ response: { status: 422, data: { errors: { rode_at: ['The rode at field must be a valid date.'] } } } });
+  assert.equal(other.action, 'plain');
+  assert.equal(other.title, 'Ride not saved');
+  assert.doesNotMatch(other.message, /Something did not fit/);
+  const log = read('src/screens/RideTracker/RideLogScreen.tsx');
+  assert.match(log, /\{ text: 'Try later', style: 'cancel', onPress: \(\) => \{ void tryLater\(memory, ride\); \} \}/);
+  assert.match(log, /\{ text: 'Save just the ride', onPress: \(\) => \{ void save\(true\); \} \}/);
+  // A plain save sends only the ride and its date.
+  assert.match(log, /plain \? \{\s*ride_id: selectedRide\.id,\s*source_detection_id: logId\.current,\s*rode_at: autoRodeAt \|\| new Date\(\)\.toISOString\(\),\s*\} :/);
+  assert.match(log, /keepRideLogForLater\(\{ payload: memory/);
+  assert.match(log, /if \(!kept\) \{\s*gameAlert\('Ride not saved'/, 'if it cannot be kept, the kid stays on the memory');
+});
+
+test('a kept ride shows a calm share line, not a loading bar', () => {
+  const card = read('src/components/RideTracker/ShareableRideCard.tsx');
+  assert.doesNotMatch(card, /Loading your ride total/);
+  assert.match(card, /Share once it joins your journal/);
+  assert.match(card, /if \(rideCount == null && !queued\)/, 'no count fetch for a ride the server does not have yet');
+  assert.match(card, /\{loadingCount && <ButtonSpinner still=\{reducedMotion\} \/>\}/, 'a small spinner inside the normal button');
+  assert.match(read('src/components/RideTracker/RideLogSuccess.tsx'), /<ShareableRideCard ride=\{ride\} rideCount=\{rideCount\} queued=\{queued\} \/>/);
 });
 
 test('the hero says "1 RIDE LOGGED" even if the server sends the count as text', () => {
