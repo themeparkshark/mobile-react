@@ -30,3 +30,62 @@ export function nextOpportunityRefresh(items: readonly TimedOpportunity[], now =
   }
   return delay;
 }
+
+const CLOSED_LIVE = new Set(['DOWN', 'CLOSED', 'REFURBISHMENT']);
+
+/**
+ * Can the find or ride the server says is in range be played right now? Timed
+ * coins, keys, treats and rides keep to their window (a ride resting until
+ * "Back 2:00 PM" is not playable yet), and a ride the live feed shows down,
+ * closed or in refurbishment is not playable. A ride with no window is always on.
+ */
+export function nearbyOpportunityOpen(
+  nearby: { readonly type: string; readonly model: unknown } | null | undefined,
+  liveStatus: string | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (!nearby) return false;
+  const timed = nearby.type === 'coin' || nearby.type === 'key' || nearby.type === 'redeemable' || nearby.type === 'task';
+  if (timed && !opportunityIsActive(nearby.model as TimedOpportunity, now)) return false;
+  return !(nearby.type === 'task' && liveStatus && CLOSED_LIVE.has(liveStatus));
+}
+
+export type NearbyClosedReason =
+  | { readonly kind: 'resting'; readonly at: number }
+  | { readonly kind: 'down' | 'closed' | 'repairs' };
+
+/**
+ * Why the ride the player is standing at cannot be played right now, so the
+ * PLAY RIDE spot can say so instead of showing nothing: resting until a time,
+ * down, closed or closed for repairs. Null when it is open, or not a ride.
+ */
+export function nearbyRideClosedReason(
+  nearby: { readonly type: string; readonly model: unknown } | null | undefined,
+  liveStatus: string | null | undefined,
+  now = Date.now(),
+): NearbyClosedReason | null {
+  if (!nearby || nearby.type !== 'task' || nearbyOpportunityOpen(nearby, liveStatus, now)) return null;
+  if (liveStatus === 'DOWN') return { kind: 'down' };
+  if (liveStatus === 'REFURBISHMENT') return { kind: 'repairs' };
+  if (liveStatus === 'CLOSED') return { kind: 'closed' };
+  const from = gameTimestamp((nearby.model as TimedOpportunity).active_from);
+  if (from !== null && from > now) return { kind: 'resting', at: from };
+  return { kind: 'closed' };
+}
+
+/**
+ * Is it true to tell the player "every ride is open"? Only once the rides have
+ * loaded, no ride is resting until later today, and the live feed shows none
+ * of the rides on the map as down, closed or in refurbishment. The Ride Control
+ * bar falls back to a neutral headline otherwise, so it never contradicts a
+ * "Back 2:15 PM" or "Ride is down" note right below it.
+ */
+export function everyRideTrulyOpen(input: {
+  readonly loaded: boolean;
+  readonly restingCount: number;
+  readonly liveStatuses: Iterable<string | null | undefined>;
+}): boolean {
+  if (!input.loaded || input.restingCount > 0) return false;
+  for (const status of input.liveStatuses) if (status && CLOSED_LIVE.has(status)) return false;
+  return true;
+}
