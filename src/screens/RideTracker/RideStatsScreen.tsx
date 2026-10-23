@@ -78,12 +78,15 @@ export default function RideStatsScreen() {
     <RideTrackerFrame title="Ride Stats" style={styles.container}>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Big Stats */}
-        <View style={styles.statGrid}>
-          <StatCard label="Total Rides" value={stats.total_rides} icon="shark" />
-          <StatCard label="Unique Rides" value={stats.unique_rides} icon="star" />
-          <StatCard label="Day Streak" value={stats.current_streak} icon="streak" />
-        </View>
+        {/* Big Stats. With no rides yet, three zero tiles are noise: the empty card goes first,
+            so its LOG A RIDE button sits above the footer even on an iPhone SE. */}
+        {stats.total_rides > 0 && (
+          <View style={styles.statGrid}>
+            <StatCard label="Total Rides" value={stats.total_rides} icon="shark" />
+            <StatCard label="Unique Rides" value={stats.unique_rides} icon="star" />
+            <StatCard label="Day Streak" value={stats.current_streak} icon="streak" />
+          </View>
+        )}
 
         {/* Per Park */}
         {stats.per_park.length > 0 && (
