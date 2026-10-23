@@ -18,7 +18,7 @@ import { openFeedbackReport } from '../components/Feedback/FeedbackHost';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper from '../components/Wrapper';
+import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationStatusContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -491,6 +491,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     paddingTop: 12,
+    paddingBottom: FOOTER_CLEARANCE,
   },
   sectionHeader: {
     fontFamily: 'Shark',

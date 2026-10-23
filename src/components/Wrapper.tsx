@@ -20,6 +20,12 @@ import { emitTabReselect } from '../utils/tabReselect';
  */
 export const BOTTOM_BAR_OVERHANG = 56;
 
+/**
+ * Bottom padding for any scroll list on a screen with the 5-icon footer, so the
+ * last row can scroll fully clear of the MAP compass. One value for every screen.
+ */
+export const FOOTER_CLEARANCE = BOTTOM_BAR_OVERHANG + 36;
+
 export default function Wrapper({
   children,
   previewMode = false,

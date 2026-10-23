@@ -20,7 +20,7 @@ import ReactionPicker from '../../components/RideTracker/ReactionPicker';
 import RideTypeIcon from '../../components/RideTracker/RideTypeIcon';
 import RideLogSuccess from '../../components/RideTracker/RideLogSuccess';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
-import Wrapper from '../../components/Wrapper';
+import Wrapper, { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import Topbar from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
@@ -465,7 +465,7 @@ const s = StyleSheet.create({
   retryText: { color: '#174064', fontFamily: 'Shark', fontSize: 17 },
 
   // Park selection
-  parkList: { padding: 16, paddingBottom: 40 },
+  parkList: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
   parkGroup: { marginBottom: 20 },
   parkGroupLabel: {
     fontSize: 13, fontFamily: 'Knockout', color: '#1a1a2e',
@@ -492,7 +492,7 @@ const s = StyleSheet.create({
     color: '#174D76', fontSize: 15, fontFamily: 'Knockout', borderWidth: 1, borderColor: '#B9DFF3',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3,
   },
-  rideList: { paddingHorizontal: 16, paddingBottom: 40 },
+  rideList: { paddingHorizontal: 16, paddingBottom: FOOTER_CLEARANCE },
   rideItem: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#fff', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 14,
@@ -505,7 +505,7 @@ const s = StyleSheet.create({
   emptyText: { color: '#64748b', textAlign: 'center', marginTop: 40, fontSize: 15, fontFamily: 'Knockout' },
 
   // Details
-  detailsContainer: { padding: 20, paddingBottom: 80 },
+  detailsContainer: { padding: 20, paddingBottom: FOOTER_CLEARANCE + 24 },
   selectedRideCard: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 20,
