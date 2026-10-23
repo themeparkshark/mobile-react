@@ -10,17 +10,21 @@ import {
 import ProfileStatIcon from './ProfileStatIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import countText from '../helpers/countText';
+import GameIcon, { type GameIconName } from '../ui/GameIcon';
 
 export function AnimatedStat({
   label,
   value,
   iconIndex,
   delay,
+  gameIcon,
 }: {
   label: string;
   value: number;
   iconIndex: number;
   delay: number;
+  /** A drawn GameIcon in place of the stat atlas cell (coins you spend wear the coin stack app-wide). */
+  gameIcon?: GameIconName;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const animValue = useRef(new Animated.Value(0)).current;
@@ -128,7 +132,7 @@ export function AnimatedStat({
         <Animated.View style={{ alignItems: 'center', opacity: animValue,
           transform: [{ scale: cardScale }] }}>
         <Animated.View style={{ marginBottom: 6, transform: [{ translateY: iconBounce }] }}>
-          <ProfileStatIcon index={iconIndex} />
+          {gameIcon ? <GameIcon name={gameIcon} size={36} /> : <ProfileStatIcon index={iconIndex} />}
         </Animated.View>
         <Text
           style={{
@@ -198,6 +202,7 @@ export default function Stats({ player, hideBalances = false, rideCoins = null, 
       label: 'Coins',
       value: hideBalances ? null : visibleCount(player.coins),
       iconIndex: 3,
+      gameIcon: 'coins' as GameIconName,
     },
     {
       label: 'Ride Wins',

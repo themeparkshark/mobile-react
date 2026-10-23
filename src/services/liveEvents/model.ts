@@ -153,10 +153,10 @@ export function pointsGained(prev: LiveEvent | null, next: LiveEvent | null): nu
 }
 
 /** A reward as short chips: "+50 coins", "+1 Ticket". Gear first. */
-export function rewardChips(r: LiveEvent['me']['chests'][number]['reward']): { icon: 'coin' | 'ticket' | 'energy' | 'xp' | 'gift'; text: string }[] {
-  const out: { icon: 'coin' | 'ticket' | 'energy' | 'xp' | 'gift'; text: string }[] = [];
+export function rewardChips(r: LiveEvent['me']['chests'][number]['reward']): { icon: 'coins' | 'ticket' | 'energy' | 'xp' | 'gift'; text: string }[] {
+  const out: { icon: 'coins' | 'ticket' | 'energy' | 'xp' | 'gift'; text: string }[] = [];
   if (r.item) out.push({ icon: 'gift', text: r.item.name });
-  if (r.coins) out.push({ icon: 'coin', text: `${r.coins}` });
+  if (r.coins) out.push({ icon: 'coins', text: `${r.coins}` });
   if (r.tickets) out.push({ icon: 'ticket', text: `${r.tickets}` });
   if (r.energy) out.push({ icon: 'energy', text: `${r.energy}` });
   if (r.xp) out.push({ icon: 'xp', text: `${r.xp}` });

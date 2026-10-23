@@ -40,7 +40,7 @@ LogBox.ignoreAllLogs();
 
 const uri = (asset: number) => RNImage.resolveAssetSource(asset).uri;
 const type = (id: number, name: string) => ({ id, name, image_url: '' });
-const COIN = { id: 1, name: 'Coins', icon_url: uri(require('../../../assets/images/coingold.png')) };
+const COIN = { id: 1, name: 'Coins', icon_url: uri(require('../../../assets/icons/game/coins.png')) };
 
 const HEROES: { id: number; name: string; fx: FxKey; slot: number; rarity: number; cost: number; art: number; season?: string }[] = [
   // Alex's Jetpack 3000 (items.id 436), upgraded with the jetpack rig.

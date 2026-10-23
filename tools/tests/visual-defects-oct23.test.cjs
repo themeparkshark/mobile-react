@@ -170,3 +170,12 @@ test('no drawn number uses toLocaleString (commas look like periods in the Shark
   walk('src');
   assert.deepEqual(offenders, [], 'use countText for drawn counts');
 });
+
+test('one coin for coins you spend: the coin stack on pills, prices and the profile tile', () => {
+  assert.match(read('src/screens/pins/PinsScreen.tsx'), /<Currency image=\{COINS_ICON\} count=\{coins\} name="Coins" \/>/);
+  assert.doesNotMatch(read('src/screens/CommunityCenterScreen.tsx'), /community-center-coin\.png/);
+  assert.doesNotMatch(read('src/screens/pins/MysteryCard.tsx'), /<GameIcon name="coin" /);
+  assert.doesNotMatch(read('src/components/Notification.tsx'), /<GameIcon name="coin" /);
+  assert.match(read('src/services/liveEvents/model.ts'), /if \(r\.coins\) out\.push\(\{ icon: 'coins'/);
+  assert.match(read('src/components/Stats.tsx'), /label: 'Coins',[\s\S]{0,120}gameIcon: 'coins'/);
+});

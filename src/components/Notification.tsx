@@ -130,7 +130,7 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
                 {coins > 0 && (
                   // What they got, without reading: the coin and the number.
                   <View style={styles.reward} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-                    <GameIcon name="coin" size={20} />
+                    <GameIcon name="coins" size={20} />
                     <Text style={styles.rewardText} maxFontSizeMultiplier={1.2}>+{coins}</Text>
                   </View>
                 )}

@@ -923,7 +923,7 @@ export default function CommunityCenterScreen() {
         {/* Currency display */}
         <View style={styles.currencyDisplay}>
           <Image
-            source={require('../../assets/images/screens/community-center-coin.png')}
+            source={require('../../assets/icons/game/coins.png')}
             style={styles.coinIcon}
             contentFit="contain"
           />
@@ -1110,7 +1110,7 @@ export default function CommunityCenterScreen() {
             <View style={styles.exchangeContainer}>
               <View style={styles.exchangeItem}>
                 <Image
-                  source={require('../../assets/images/screens/community-center-coin.png')}
+                  source={require('../../assets/icons/game/coins.png')}
                   style={styles.exchangeIcon}
                   contentFit="contain"
                 />
@@ -1206,7 +1206,7 @@ export default function CommunityCenterScreen() {
                 <Text style={styles.coinCompareLabel}>You have</Text>
                 <View style={styles.coinCompareRow}>
                   <Image
-                    source={require('../../assets/images/screens/community-center-coin.png')}
+                    source={require('../../assets/icons/game/coins.png')}
                     style={styles.coinCompareIcon}
                     contentFit="contain"
                   />
@@ -1218,7 +1218,7 @@ export default function CommunityCenterScreen() {
                 <Text style={styles.coinCompareLabel}>Required</Text>
                 <View style={styles.coinCompareRow}>
                   <Image
-                    source={require('../../assets/images/screens/community-center-coin.png')}
+                    source={require('../../assets/icons/game/coins.png')}
                     style={styles.coinCompareIcon}
                     contentFit="contain"
                   />

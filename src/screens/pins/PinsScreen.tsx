@@ -43,6 +43,9 @@ import {
   type MysterySeries, type ParkSet, type PinHome, type PinRow, type Pull,
 } from './pinsModel';
 
+/** Coins you spend wear the coin stack everywhere in the app (the single fin coin is a ride coin). */
+const COINS_ICON = require('../../../assets/icons/game/coins.png');
+
 type Tab = 'mystery' | 'sets' | 'mine';
 let devHuntOpened = false;
 
@@ -359,7 +362,7 @@ export default function PinsScreen() {
         <TopbarColumn><TopbarText>{PINS_COPY.title}</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Currency count={coins} name="Coins" />
+            <Currency image={COINS_ICON} count={coins} name="Coins" />
             <Pressable onPress={() => setHelp(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="How pins work"
               style={styles.helpBtn}><GameIcon name="info" size={26} /></Pressable>
           </View>
