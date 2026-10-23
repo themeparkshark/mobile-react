@@ -242,11 +242,17 @@ function labelOf(entry: NewsEntry): string | null {
  */
 const GROWN_UP_CATEGORIES: ReadonlySet<number> = new Set([71, 74]);
 const words = (list: readonly string[]) => new RegExp(`\\b(?:${list.join('|')})(?![a-z])`, 'i');
-/** After-dark horror events: hidden when the title or the opening lines name one. */
-const HORROR_WORDS = words([
+/** After-dark horror events by name: hidden when the title or the opening lines name one. */
+const HORROR_EVENT_WORDS = words([
   'halloween horror nights', 'horror nights', 'hhn', 'howl-o-scream', 'scary farm', 'fright ?fest', 'halloween haunt',
-  'haunted houses?', 'scare zones?', 'scareactors?', 'horror', 'slasher', 'chainsaw', 'terror tram', 'art the clown',
-  'killcea[ñn]era', 'dark nights',
+  'scare zones?', 'scareactors?', 'terror tram', 'art the clown', 'killcea[ñn]era', 'dark nights',
+]);
+/**
+ * Scary words that only count in a title: an opening line that says "classic horror films"
+ * about a family land (Dark Universe) keeps its story.
+ */
+const HORROR_WORDS = words([
+  'haunted houses?', 'horror', 'slasher', 'chainsaw', 'the conjuring', 'violent', 'r-rated', 'r-18', 'zombies?', 'gore',
 ]);
 /** Bars, drinks and scary headlines: hidden when the title says so (a menu line with one drink is fine). */
 const GROWN_UP_TITLE_WORDS = words([
@@ -267,14 +273,14 @@ export function isGrownUpStory(entry: NewsEntry): boolean {
 function grownUpStory(entry: NewsEntry): boolean {
   if (entry.categories && entry.categories.some(id => GROWN_UP_CATEGORIES.has(id))) return true;
   const title = plainText(entry.title).replace(KID_SAFE_PHRASES, ' ');
-  if (GROWN_UP_TITLE_WORDS.test(title) || HORROR_WORDS.test(title)) return true;
-  return HORROR_WORDS.test(dek(entry, 220).replace(KID_SAFE_PHRASES, ' '));
+  if (GROWN_UP_TITLE_WORDS.test(title) || HORROR_WORDS.test(title) || HORROR_EVENT_WORDS.test(title)) return true;
+  return HORROR_EVENT_WORDS.test(dek(entry, 220).replace(KID_SAFE_PHRASES, ' '));
 }
 
 /** A themeparkshark.com link whose slug names a grown-up story ("hhn-35-houses-revealed"). */
 export function grownUpSlug(slug: string): boolean {
   const text = slug.replace(/-/g, ' ').replace(KID_SAFE_PHRASES, ' ');
-  return GROWN_UP_TITLE_WORDS.test(text) || HORROR_WORDS.test(text);
+  return GROWN_UP_TITLE_WORDS.test(text) || HORROR_WORDS.test(text) || HORROR_EVENT_WORDS.test(text);
 }
 
 /** Only the stories every player may see. */

@@ -286,6 +286,7 @@ test('kid filter: horror nights, bars and drinks never reach the News tab (Oct 2
     'Universal Orlando Refreshes Its Guide to the Best Cocktails', 'Universal CityWalk Adds Wicked Fan Event and Traitors Bar',
     'Disney’s Lakeshore Lodge Reveals Branch & Brush Lounge', '600 Block Speakeasy Returns to Universal CityWalk',
     'Terror Tram Starring Art the Clown Announced', 'HHN 2026 Scare Zones Have Guest Triggers',
+    'Cedar Point Casting The Conjuring: Beyond Fear', 'Violent Night 2 Trailer: In Theaters December 4',
   ];
   for (const title of hide) assert.equal(model.isGrownUpStory({ ...entry(1, ''), title }), true, title);
   const keep = [
@@ -301,6 +302,8 @@ test('kid filter: horror nights, bars and drinks never reach the News tab (Oct 2
   assert.equal(model.isGrownUpStory({ ...entry(4, ''), title: 'Tickets on sale', categories: [59, 74] }), true);
   // The opening lines count for horror events (a title that hides the event name).
   assert.equal(model.isGrownUpStory({ ...entry(5, ''), title: 'Dead, Deader, Deadest 2026', content: '<p>Halloween Horror Nights at Universal Studios Hollywood adds a new house this fall.</p>' }), true);
+  // A family land whose opening line says "horror" keeps its story; only event names count there.
+  assert.equal(model.isGrownUpStory({ ...entry(12, ''), title: 'Monsters Unchained Adds a New Scene', content: '<p>Dark Universe brings classic horror films to life at Epic Universe.</p>' }), false);
   // Every list path drops them.
   assert.equal(model.matchesFilter({ ...entry(6, ''), title: 'Halloween Horror Nights adds a house' }, 'all'), false);
   assert.equal(model.matchesFilter({ ...entry(6, ''), title: 'Halloween Horror Nights adds a house', categories: [56, 71] }, 'universal'), false);
