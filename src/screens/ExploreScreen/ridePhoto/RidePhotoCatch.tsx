@@ -1308,9 +1308,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
           {/* Miss: a car and a big arrow toward where the car should have been (no words) */}
           {missNote && <View pointerEvents="none" accessibilityLabel={missNote.dir === 'early' ? 'Too soon' : 'Too late'}
             style={[styles.missChip, { left: Math.max(16, Math.min(sceneW - 130, box.x + box.w / 2 - 57)), top: box.y - 64 }]}>
-            {missDirLeft && <Text style={styles.arrow}>◀</Text>}
+            {missDirLeft && <GameIcon name="arrow" size={30} style={{ transform: [{ scaleX: -1 }] }} />}
             <Image source={VEHICLE_ICON[stage.kind] ?? VEHICLE_ICON.coaster} style={styles.missCar} contentFit="contain" transition={0} />
-            {!missDirLeft && <Text style={styles.arrow}>▶</Text>}
+            {!missDirLeft && <GameIcon name="arrow" size={30} />}
           </View>}
           {/* No tap this pass: a camera and a pulsing finger (no words) */}
           {nudge && <Animated.View pointerEvents="none" accessibilityLabel="Tap the shutter"

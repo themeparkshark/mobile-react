@@ -23,7 +23,7 @@ import PlaceCoinModal from '../../components/GymBattle/PlaceCoinModal';
 import DefendMiniGameModal from '../../components/GymBattle/DefendMiniGameModal';
 import { battleHUDEvents } from '../../components/GymBattle/battleHUDEvents';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
-import { GameIcon } from '../../ui';
+import { GameButton, GameIcon } from '../../ui';
 import useMatchLink from '../../hooks/useMatchLink';
 import MatchLinkBanner from '../../components/match/MatchLinkBanner';
 import { friendlyActionError, isLinkFailure } from '../../services/match/matchLink';
@@ -813,12 +813,8 @@ export default function GymBattleScreen({ navigation, route }: Props) {
               <View style={styles.noTeamBox}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><GameIcon name="swords" size={26} /><Text style={styles.noTeamTitle}>Join a Team!</Text></View>
                 <Text style={styles.noTeamText}>Pick a team to enter the arena battle.</Text>
-                <TouchableOpacity
-                  style={[styles.pickTeamButton, styles.pickTeamGradient]}
-                  onPress={() => { playButtonSound(); navigation?.navigate('TeamSelection'); }}
-                >
-                  <Text style={styles.pickTeamText}>PICK YOUR TEAM</Text>
-                </TouchableOpacity>
+                <GameButton label="Pick your team" icon="crown"
+                  onPress={() => { playButtonSound(); navigation?.navigate('TeamSelection'); }} />
               </View>
             </BlurView>
           </View>
@@ -1341,10 +1337,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  // Below the three pillars and above BACK, drawn on top of everything: the pillars used to
+  // cover the card's title, words and button (they have their own zIndex; this card had none).
   noTeamOverlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
+    paddingBottom: 112,
+    zIndex: 10,
+    elevation: 10,
   },
   noTeamBlur: {
     borderRadius: 24,
@@ -1352,23 +1353,25 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
   },
   noTeamBox: {
-    backgroundColor: 'rgba(7, 104, 185, 0.85)',
-    padding: 32,
+    backgroundColor: 'rgba(7, 104, 185, 0.92)',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(251, 191, 36, 0.5)',
   },
   noTeamTitle: {
+    fontFamily: 'Shark',
     fontSize: 28,
-    fontWeight: '900',
     color: '#FBBF24',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   noTeamText: {
-    fontSize: 16,
-    color: '#CBD5E1',
+    fontFamily: 'Knockout',
+    fontSize: 17,
+    color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 28,
+    marginBottom: 16,
   },
   pickTeamButton: {
     borderRadius: 16,

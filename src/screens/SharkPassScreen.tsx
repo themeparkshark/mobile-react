@@ -29,7 +29,7 @@ import type { InventoryType } from '../models/inventory-type';
 import Animated, {
   Easing, FadeInDown, FadeInUp, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   buyGoldEdition, claimAllSharkPass, claimSharkPassReward, getSharkPass, markSharkPassSeen, sharkPassErrorCode, wearFrame,
   type SharkPassReward, type SharkPassState, type SharkPassTier,
@@ -173,6 +173,7 @@ export default function SharkPassScreen() {
   const focused = useIsFocused();
   const [active, setActive] = useState(AppState.currentState === 'active');
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [state, setState] = useState<SharkPassState | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [price, setPrice] = useState<ShopPrice | null>(null);
@@ -441,7 +442,9 @@ export default function SharkPassScreen() {
     <View style={s.root}>
       <LinearGradient colors={['#0d73c9', '#0a4f96', '#083d7a']} style={StyleSheet.absoluteFill} />
       <Snow width={width} height={height} running={running} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+      {/* The top inset from the JS hook, not a native SafeAreaView: on Dynamic Island phones the
+          native view sometimes kept a 0 inset on this route, so the title sat under the island. */}
+      <View style={{ flex: 1, paddingTop: insets.top }}>
         <View style={s.top}>
           <Pressable onPress={() => RootNavigation.goBack()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" style={s.back}>
             <GameIcon name="back" size={40} />
@@ -795,7 +798,7 @@ export default function SharkPassScreen() {
             </Text>
           </ScrollView>
         )}
-      </SafeAreaView>
+      </View>
       {climbed && !landed && (
         <GotIt grants={{}} art="gift" title={`Step ${climbed.to}!`} onDone={() => setClimbed(null)}
           picture={heroLook ? (

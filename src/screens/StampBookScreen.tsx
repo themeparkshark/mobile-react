@@ -593,7 +593,7 @@ export default function StampBookScreen() {
                 </Animated.ScrollView>
                 {/* A fade on the right edge says "more tabs this way" instead of a clipped word. */}
                 <LinearGradient pointerEvents="none" start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  colors={['rgba(4,72,140,0)', 'rgba(4,72,140,0.94)']} style={styles.tabsFade} />
+                  colors={['rgba(4,72,140,0)', '#04488c']} style={styles.tabsFade} />
               </View>
 
               {sections.length === 0 && <Text style={styles.stateText}>No stamps yet. Check back soon.</Text>}
@@ -927,7 +927,8 @@ const styles = StyleSheet.create({
 
   // Bookmark tabs: a solid band so the page never shows through when it sticks.
   tabsFade: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 36 },
-  tabsWrap: { paddingVertical: 9, marginTop: 8, backgroundColor: 'rgba(4,72,140,0.94)', borderBottomWidth: 2, borderBottomColor: 'rgba(255,255,255,0.35)' },
+  // Solid, never see-through: the page title behind used to show as ghost letters between the chips.
+  tabsWrap: { paddingVertical: 9, marginTop: 8, backgroundColor: '#04488c', borderBottomWidth: 2, borderBottomColor: 'rgba(255,255,255,0.35)' },
   tabs: { paddingHorizontal: SIDE, gap: 8 },
   tab: {
     flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 12, borderRadius: 22,

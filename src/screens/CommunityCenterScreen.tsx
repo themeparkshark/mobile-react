@@ -75,6 +75,9 @@ const Q_BUTTON_SIZE = 60; // slightly larger tap target
 // Leave Gift button position (bottom right area)
 const LEAVE_GIFT_Y_RATIO = 0.74;
 const LEAVE_GIFT_X_RATIO = 0.66;
+/** The Leave Gift button art is 160 wide: keep all of it on screen (it ran 23 pt off a 402 pt phone). */
+const LEAVE_GIFT_W = 160;
+const LEAVE_GIFT_LEFT = Math.min(SCREEN_WIDTH * LEAVE_GIFT_X_RATIO, SCREEN_WIDTH - LEAVE_GIFT_W - 12);
 
 interface Gift {
   id: number;
@@ -415,7 +418,7 @@ export default function CommunityCenterScreen() {
     
     if (slotIndex === 'give') {
       // From Leave Gift button
-      startX = SCREEN_WIDTH * LEAVE_GIFT_X_RATIO + 80;
+      startX = LEAVE_GIFT_LEFT + LEAVE_GIFT_W / 2;
       startY = SCALED_HEIGHT * LEAVE_GIFT_Y_RATIO;
     } else {
       // From gift slot
@@ -955,7 +958,7 @@ export default function CommunityCenterScreen() {
               style={[
                 styles.leaveGiftButton,
                 {
-                  left: SCREEN_WIDTH * LEAVE_GIFT_X_RATIO,
+                  left: LEAVE_GIFT_LEFT,
                   top: SCALED_HEIGHT * LEAVE_GIFT_Y_RATIO,
                   transform: [
                     { scale: Animated.multiply(pulseAnim, leaveGiftScale) },
@@ -1420,7 +1423,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   leaveGiftImage: {
-    width: 160,
+    width: LEAVE_GIFT_W,
     height: 65,
   },
   leaveGiftSpinner: {
