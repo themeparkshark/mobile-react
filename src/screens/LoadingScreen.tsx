@@ -16,6 +16,10 @@ import {
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SPLASH_VIDEO = require('../../assets/videos/splash-loop.mp4');
+/** The loop's first frame (a still of the same video, no new art). */
+const SPLASH_POSTER = require('../../assets/images/screens/login/splash-loop-poster.jpg');
+/** Same blue as the native splash (app.config.js splash.backgroundColor). */
+const SPLASH_BLUE = '#0768B9';
 const SPLASH_LOGO = require('../../assets/images/splash-logo.png');
 
 // Bubble that rises from bottom to top
@@ -223,10 +227,14 @@ export default function LoadingScreen() {
   );
 
   return (
-    <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: '#09268f' }}>
-      {/* Looping video background — exact screen dimensions */}
+    // Splash blue plus the video's first frame as its poster: no dark navy flash at launch.
+    <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: SPLASH_BLUE }}>
+      {/* Looping video background, exact screen dimensions */}
       <Video
         source={SPLASH_VIDEO}
+        usePoster
+        posterSource={SPLASH_POSTER}
+        posterStyle={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, resizeMode: 'cover' }}
         resizeMode={ResizeMode.COVER}
         shouldPlay={focused}
         isLooping
