@@ -76,14 +76,12 @@ const Q_BUTTON_SIZE = 60; // slightly larger tap target
 // price. The slot spans about 0.70 to 0.99 of the art's width and is centered at 0.77 of its height.
 // The button used to be a fixed 160 pt wide at 0.66, so it ran 23 pt off a 402 pt phone and missed
 // the slot. Now it scales with the art and covers the slot exactly on every phone.
+// It must cover the whole slot: a narrower button (tried for a wider right margin) leaves a second,
+// painted green button showing beside it. A bigger margin needs the art's slot moved in (art change).
 const LEAVE_GIFT_ART_ASPECT = 842 / 375;
-// It is a little narrower than the slot and centered on the painted kiosk (0.83 of the width), so
-// it keeps 15 pt from the right edge on a 375 pt iPhone SE and about 12 pt even mid-pulse.
-const LEAVE_GIFT_W_RATIO = 0.26;
-const LEAVE_GIFT_CENTER_X_RATIO = 0.83;
-const LEAVE_GIFT_W = Math.round(SCREEN_WIDTH * LEAVE_GIFT_W_RATIO);
+const LEAVE_GIFT_W = Math.round(SCREEN_WIDTH * 0.31);
 const LEAVE_GIFT_H = Math.round(LEAVE_GIFT_W / LEAVE_GIFT_ART_ASPECT);
-const LEAVE_GIFT_LEFT = Math.round(SCREEN_WIDTH * LEAVE_GIFT_CENTER_X_RATIO - LEAVE_GIFT_W / 2);
+const LEAVE_GIFT_LEFT = Math.round(SCREEN_WIDTH * 0.678);
 /** The gentle pulse stays small so the button never grows past the screen edge. */
 const LEAVE_GIFT_PULSE = 1.05;
 const LEAVE_GIFT_CENTER_Y_RATIO = 0.77;

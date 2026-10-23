@@ -109,16 +109,13 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
   assert.match(gym, /noTeamOverlay: \{[^}]*zIndex: 10/s);
   const cc = read('src/screens/CommunityCenterScreen.tsx');
-  // The button sits centered on the painted kiosk (0.83 of the width), a little narrower than its slot.
-  assert.match(cc, /LEAVE_GIFT_W_RATIO = 0\.26;/);
-  assert.match(cc, /LEAVE_GIFT_CENTER_X_RATIO = 0\.83;/);
-  assert.match(cc, /LEAVE_GIFT_LEFT = Math\.round\(SCREEN_WIDTH \* LEAVE_GIFT_CENTER_X_RATIO - LEAVE_GIFT_W \/ 2\)/);
+  // The button fills the green slot painted in the background (0.70 to 0.99 of the width).
+  // A narrower button leaves a painted twin showing beside it, so it covers the slot exactly.
+  assert.match(cc, /LEAVE_GIFT_W = Math\.round\(SCREEN_WIDTH \* 0\.31\)/);
+  assert.match(cc, /LEAVE_GIFT_LEFT = Math\.round\(SCREEN_WIDTH \* 0\.678\)/);
   assert.match(cc, /LEAVE_GIFT_PULSE = 1\.05/);
   // Scale grows from the center: the right edge at the top of the pulse.
-  // Right gap on a 375 pt iPhone SE, at rest and mid-pulse.
-  const se = 375, w = Math.round(se * 0.26), left = Math.round(se * 0.83 - w / 2);
-  assert.ok(se - (left + w) >= 14, 'at least 14 pt from the right edge at rest');
-  assert.ok(se - (left + w + w * 0.05 / 2) >= 12, 'at least 12 pt mid-pulse');
+  assert.ok(0.678 + 0.31 + 0.31 * 0.05 / 2 < 1, 'even mid-pulse the button stays on screen');
   // Short phones (iPhone SE): GO BACK and the cooldown note sit on the screen, not on the art's hidden bottom.
   assert.match(cc, /bottom: 80 \+ ART_OVERFLOW/);
   assert.match(cc, /145 \+ ART_OVERFLOW/);
