@@ -262,7 +262,7 @@ const GROWN_UP_TITLE_WORDS = words([
   'dies', 'died', 'killed', 'arrested', 'lawsuit', 'sued', 'shooting', 'stabbing', 'drowned', 'drowning', 'overdose',
 ]);
 /** Kid-friendly names that hold a grown-up word: a Mickey ice cream bar, a lap bar, EPCOT Food & Wine. */
-const KID_SAFE_PHRASES = /\b(?:(?:mickey|minnie|ice[- ]cream|premium|candy|granola|chocolate|cookie|snack|salad|taco|nacho|waffle|cereal|dessert|sundae|grab|toddler|monkey|lap|safety|handle|restraint|over-the-shoulder) bars?|food (?:&|and|&amp;) wine|wine (?:&|and) dine|root beer|butterbeer|ginger beer|rum raisin|lounge chairs?|monsters,? inc\.?)/gi;
+const KID_SAFE_PHRASES = /\b(?:(?:mickey|minnie|ice[- ]cream|premium|candy|granola|chocolate|cookie|snack|salad|taco|nacho|waffle|cereal|dessert|sundae|grab|toddler|monkey|lap|safety|handle|restraint|over-the-shoulder) bars?|food (?:&|and|&amp;) wine|wine (?:&|and) dine|root beer|butterbeer|ginger beer|rum raisin|lounge chairs?|monsters,? inc\.?|(?:disney(?:'s| channel)?|disney\+) zombies|zombies:? the (?:re-?animated|movie)|zombies (?:[2-9]|the movie|the series|the musical|on ice)\b)/gi;
 
 const grownUpMemo = new WeakMap<NewsEntry, boolean>();
 export function isGrownUpStory(entry: NewsEntry): boolean {
@@ -447,6 +447,32 @@ export function tpsArticleSlug(url: string | null | undefined): string | null {
   if (!url) return null;
   const m = /^https?:\/\/(?:www\.)?themeparkshark\.com\/\d{4}\/\d{2}\/\d{2}\/([a-z0-9-]+)\/?(?:[?#].*)?$/i.exec(url.trim());
   return m ? m[1].toLowerCase() : null;
+}
+
+/** Where a link inside a story goes: our reader, or out through the grown-up gate. */
+export type StoryLink = { readonly kind: 'story'; readonly entry: NewsEntry } | { readonly kind: 'outside' };
+const OUTSIDE: StoryLink = { kind: 'outside' };
+
+/**
+ * Decides a tap on a link inside a story. A grown-up story never opens in the
+ * kids reader, whether the slug says so, the saved copy says so, or the
+ * fetched copy's categories say so: those go out through the grown-up gate.
+ */
+export async function storyLinkTarget(
+  href: string,
+  find: (slug: string) => NewsEntry | undefined,
+  fetch: (slug: string) => Promise<NewsEntry | null>,
+): Promise<StoryLink> {
+  const slug = tpsArticleSlug(href);
+  if (!slug || grownUpSlug(slug)) return OUTSIDE;
+  const known = find(slug);
+  if (known) return isGrownUpStory(known) ? OUTSIDE : { kind: 'story', entry: known };
+  try {
+    const found = await fetch(slug);
+    return found && !isGrownUpStory(found) ? { kind: 'story', entry: found } : OUTSIDE;
+  } catch {
+    return OUTSIDE;
+  }
 }
 
 export function isTpsUrl(url: string | null | undefined): boolean {

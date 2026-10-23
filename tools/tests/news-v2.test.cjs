@@ -325,3 +325,44 @@ test('the Next pill shows our shark, never a round crop of the next story photo'
   assert.doesNotMatch(reader, /next\.featured_image/);
   assert.match(reader, /<GameIcon name="shark" size=\{30\} \/>/);
 });
+
+test('a link inside a story to a grown-up story never opens in the kids reader (round 2)', async () => {
+  const hhn = 'https://themeparkshark.com/2026/09/01/hhn-35-houses-revealed/';
+  const plain = 'https://themeparkshark.com/2026/09/02/new-lineup-revealed/';
+  const fine = 'https://themeparkshark.com/2026/09/03/space-mountain-news/';
+  let fetched = 0;
+  const none = () => undefined;
+  // The slug names a horror event: no fetch, straight to the grown-up gate.
+  const a = await model.storyLinkTarget(hhn, none, async () => { fetched += 1; return entry(1, ''); });
+  assert.equal(a.kind, 'outside');
+  assert.equal(fetched, 0);
+  // A harmless slug whose fetched copy is filed under Horror Nights (71).
+  const b = await model.storyLinkTarget(plain, none, async () => ({ ...entry(2, ''), title: 'New lineup revealed', categories: [47, 56, 71] }));
+  assert.equal(b.kind, 'outside');
+  // The saved copy says grown-up.
+  const c = await model.storyLinkTarget(plain, () => ({ ...entry(3, ''), title: 'Howl-O-Scream tickets', categories: [59] }), async () => null);
+  assert.equal(c.kind, 'outside');
+  // A failed fetch goes outside; a kid-safe story opens in the reader.
+  assert.equal((await model.storyLinkTarget(fine, none, async () => { throw new Error('offline'); })).kind, 'outside');
+  const d = await model.storyLinkTarget(fine, none, async () => entry(4, ''));
+  assert.equal(d.kind, 'story');
+  assert.equal(d.entry.id, 4);
+  // The reader's own paths use it, and every way into the reader refuses grown-up stories.
+  const reader = read('src/screens/ArticleScreen.tsx');
+  assert.match(reader, /storyLinkTarget\(href, findBySlug, fetchBySlug\)/);
+  assert.match(reader, /if \(isGrownUpStory\(target\)\) \{ tap\(\); void openExternal\(target\.url\); return; \}/);
+  assert.doesNotMatch(reader, /fetchBySlug\(slug\)\s*\.then/);
+  const feed = read('src/screens/NewsScreen/newsFeed.ts');
+  assert.match(feed, /return entry && !isGrownUpStory\(entry\) \? entry : null;/, 'a fetched grown-up story never comes back');
+  assert.match(feed, /if \(isGrownUpStory\(entry\)\) continue;/, 'the reader cache never holds one');
+});
+
+test('kid filter keeps Disney Channel ZOMBIES stories (round 2)', () => {
+  const keep = [
+    'Disney’s ZOMBIES 4 Cast Visits Disneyland', 'Disney Channel ZOMBIES Dance Party Comes to Hollywood Studios',
+    'ZOMBIES: The Re-Animated Series Premieres on Disney+', 'Disney+ ZOMBIES Meet and Greet Announced',
+  ];
+  for (const title of keep) assert.equal(model.isGrownUpStory({ ...entry(1, ''), title }), false, title);
+  assert.equal(model.isGrownUpStory({ ...entry(2, ''), title: 'Zombies Take Over the New Scare Zone' }), true);
+  assert.equal(model.isGrownUpStory({ ...entry(3, ''), title: 'The Walking Dead Zombies Return' }), true);
+});

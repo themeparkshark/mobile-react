@@ -31,7 +31,7 @@ import type { ArticleBodyHandlers } from './NewsScreen/ArticleBody';
 import ArticlePage from './NewsScreen/ArticlePage';
 import { RIM } from './NewsScreen/NewsCards';
 import { fetchBySlug, findBySlug, getEntry, markRead, rememberEntries, setLastViewed } from './NewsScreen/newsFeed';
-import { plainText, relatedFor, tpsArticleSlug, type NewsEntry } from './NewsScreen/newsModel';
+import { grownUpSlug, isGrownUpStory, plainText, relatedFor, storyLinkTarget, tpsArticleSlug, type NewsEntry } from './NewsScreen/newsModel';
 import useTapSound from './NewsScreen/useTapSound';
 
 const BOTTOM_BAR = 66;
@@ -180,6 +180,8 @@ export default function ArticleScreen({ route, navigation }: any) {
 
   /** A story that is not in this list opens as its own reader on top. */
   const openStory = useCallback((target: NewsEntry) => {
+    // A grown-up story never opens in the kids reader: it goes out through the grown-up gate.
+    if (isGrownUpStory(target)) { tap(); void openExternal(target.url); return; }
     const at = list.findIndex(e => e.id === target.id);
     if (at >= 0) { goTo(at); return; }
     tap();
@@ -190,14 +192,15 @@ export default function ArticleScreen({ route, navigation }: any) {
   const handlers: ArticleBodyHandlers = useMemo(() => ({
     onLink: (href: string) => {
       const slug = tpsArticleSlug(href);
-      if (!slug) { tap(); void openExternal(href); return; }
-      const known = findBySlug(slug);
-      if (known) { openStory(known); return; }
-      setOpening(true);
-      fetchBySlug(slug)
-        .then(found => { if (found) openStory(found); else void openExternal(href); })
-        .catch(() => { void openExternal(href); })
-        .finally(() => setOpening(false));
+      // Only a fetch shows the spinner; outside links and saved stories answer at once.
+      const slow = !!slug && !grownUpSlug(slug) && !findBySlug(slug);
+      if (slow) setOpening(true);
+      storyLinkTarget(href, findBySlug, fetchBySlug)
+        .then(target => {
+          if (target.kind === 'story') openStory(target.entry);
+          else { tap(); void openExternal(href); }
+        })
+        .finally(() => { if (slow) setOpening(false); });
     },
     onImage: (uri: string, aspect: number) => { tap(); setZoom({ uri, aspect }); },
     onVideo: (id: string, title: string, short: boolean) => {
