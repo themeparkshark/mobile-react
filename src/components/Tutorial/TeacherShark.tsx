@@ -40,6 +40,24 @@ import TapHint from '../TapHint';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const TEACHER_SHARK_IMAGE = require('../../../assets/images/tutorial/teacher-shark.png');
+const WALK_FEET = require('../../../assets/images/trail/steps.png');
+
+/** Two blue feet that take a few small steps, then stand still (no endless loop). */
+function WalkPicture({ reducedMotion }: { reducedMotion: boolean }) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    if (reducedMotion) return undefined;
+    t.value = withDelay(500, withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(-1, { duration: 260 })), 4, false,
+      () => { t.value = withTiming(0, { duration: 160 }); }));
+    return () => cancelAnimation(t);
+  }, [reducedMotion, t]);
+  const st = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.abs(t.value) * 4 }, { rotate: `${t.value * 8}deg` }] }));
+  return (
+    <Animated.View style={[styles.walkPicture, st]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Image source={WALK_FEET} style={styles.walkFeet} resizeMode="contain" />
+    </Animated.View>
+  );
+}
 
 interface TeacherSharkProps {
   title?: string;
@@ -58,6 +76,8 @@ interface TeacherSharkProps {
   bottomOffset?: number;
   /** A pointing hand on the button after a short wait (first-session steps a kid cannot read yet). */
   pointAtNext?: boolean;
+  /** A small picture under the line: 'walk' shows two stepping feet. */
+  picture?: 'walk';
 }
 
 export default function TeacherShark({
@@ -75,11 +95,13 @@ export default function TeacherShark({
   onSkip,
   bottomOffset = 20,
   pointAtNext = false,
+  picture,
 }: TeacherSharkProps) {
   const reducedMotion = useUiReducedMotion();
   const bobValue = useSharedValue(0);
   const tiltValue = useSharedValue(0);
   const greetingValue = useSharedValue(0);
+  const scanValue = useSharedValue(0);
   const enterValue = useSharedValue(reducedMotion ? 1 : 0);
   const bubbleValue = useSharedValue(reducedMotion ? 1 : 0);
 
@@ -97,9 +119,15 @@ export default function TeacherShark({
       ), -1, false);
       if (mood === 'celebrating' || mood === 'waving') greetingValue.value = withDelay(REVEAL_START_MS, withSequence(
         withTiming(1, { duration: 180 }), withTiming(0, { duration: 220 })));
+      // Thinking: Finn sniffs left and right a few times (looking for a treat), then holds still.
+      if (mood === 'thinking') scanValue.value = withDelay(300, withRepeat(withSequence(
+        withTiming(1, { duration: 380, easing: Easing.inOut(Easing.sin) }),
+        withTiming(-1, { duration: 380, easing: Easing.inOut(Easing.sin) })), 5, false,
+        () => { scanValue.value = withTiming(0, { duration: 200 }); }));
+      else scanValue.value = withTiming(0, { duration: 160 });
     }
-    return () => [bobValue, tiltValue, greetingValue].forEach(value => cancelAnimation(value));
-  }, [reducedMotion, mood, bobValue, tiltValue, greetingValue]);
+    return () => [bobValue, tiltValue, greetingValue, scanValue].forEach(value => cancelAnimation(value));
+  }, [reducedMotion, mood, bobValue, tiltValue, greetingValue, scanValue]);
 
   // Entrance on mount: Finn rises past his mark and settles, then the bubble pops.
   useEffect(() => {
@@ -153,7 +181,8 @@ export default function TeacherShark({
 
   const sharkAnimStyle = useAnimatedStyle(() => ({ transform: [
     { translateY: interpolate(enterValue.value, [0, 1], [110, 0]) + (reducedMotion ? 0 : bobValue.value * -3) },
-    { rotate: `${reducedMotion ? 0 : tiltValue.value}deg` },
+    { translateX: reducedMotion ? 0 : scanValue.value * 6 },
+    { rotate: `${reducedMotion ? 0 : tiltValue.value + scanValue.value * 7}deg` },
     { scale: reducedMotion ? 1 : 1 + greetingValue.value * 0.025 },
   ] }));
   const bubbleStyle = useAnimatedStyle(() => ({
@@ -227,6 +256,7 @@ export default function TeacherShark({
           {subtitle && (
             <Text style={[styles.subtitleText, talking && styles.hiddenWord]}>{subtitle}</Text>
           )}
+          {picture === 'walk' && <WalkPicture reducedMotion={reducedMotion} />}
         </Pressable>
 
         {/* Buttons */}
@@ -259,6 +289,8 @@ export default function TeacherShark({
 }
 
 const styles = StyleSheet.create({
+  walkPicture: { alignSelf: 'center', marginTop: 6 },
+  walkFeet: { width: 54, height: 54 },
   title: { fontFamily: 'Shark', fontSize: 23, lineHeight: 28, textAlign: 'center', color: BRAND.navy, marginBottom: 8 },
   container: {
     position: 'absolute',

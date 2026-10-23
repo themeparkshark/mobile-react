@@ -162,6 +162,9 @@ const PARKED_TIME = '2000-01-01T00:00:00Z';
 // Friends drawn as ghost sharks at most (the closest).
 const GHOST_CAP = 5;
 
+/** A player whose home never confirms (weak GPS indoors) still meets Finn after this long. */
+export const ONBOARDING_FALLBACK_MS = 8000;
+
 function ExploreScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const mapFocused = useIsFocused();
@@ -337,11 +340,18 @@ function ExploreScreen() {
   // for the first find to land next to the player, and only says "it landed
   // right next to you" when it really did.
   useEffect(() => {
-    if (!(mapFocused && player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding') && !frightIntroOwns)) return;
-    if (!park && !homeLocationConfirmed) return;
-    const wait = park ? 1500 : homeFindReady ? 600 : 4500;
+    if (!(mapFocused && player && isReady && permissionGranted && !isActive && !hasCompleted('onboarding') && !frightIntroOwns)) return;
+    if (!parkLoaded || (!park && !homeLocationConfirmed)) {
+      // Weak GPS indoors: home never confirms. Finn still comes, with the
+      // honest "walk around" line (no find is promised), instead of a silent map.
+      if (park) return;
+      const fallback = setTimeout(() => startTutorial('onboarding', { inPark: false, findReady: false }), ONBOARDING_FALLBACK_MS);
+      return () => clearTimeout(fallback);
+    }
+    // At home Finn says hi within a second, sniffing for the first find while it loads.
+    const wait = park ? 1500 : homeFindReady ? 600 : 1000;
     const timer = setTimeout(() => {
-      startTutorial('onboarding', { inPark: !!park, findReady: !park && homeFindReady });
+      startTutorial('onboarding', { inPark: !!park, findReady: !park && homeFindReady, looking: !park && !homeFindReady });
     }, wait);
     return () => clearTimeout(timer);
   }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns,
@@ -361,6 +371,10 @@ function ExploreScreen() {
   const collectedOnce = useRef(false);
   const [caughtThisSession, setCaughtThisSession] = useState(false);
   const [firstLineGap, setFirstLineGap] = useState(false);
+  // Minute one: while Finn is talking, waiting to start, or holding the first
+  // find, he is the only voice. Event chips, the park story chip and the event
+  // recap wait (the daily chest already waits through chestMayPresent).
+  const finnOwnsMap = isActive || firstLineGap || !!pendingFind || (isReady && !hasCompleted('onboarding'));
   const [homeIntroOpen, setHomeIntroOpen] = useState(false);
   // The generic park tip is on screen: the Fin-ister intro waits for it (never two first-run cards at once).
   const [parkTipShowing, setParkTipShowing] = useState(false);
@@ -1273,7 +1287,7 @@ function ExploreScreen() {
       {retention.overlay}
       {player && liveEvt.event && <EventSheet event={liveEvt.event} visible={eventOpen} onClose={() => setEventOpen(false)} atPark={!!park}
         onShowRide={id => { const t = visibleTasks.find(task => task.id === id); if (t) { setEventOpen(false); setSelectedTask(t); } }} />}
-      {player && liveEvt.event && <EventRecapCard event={liveEvt.event} visible={recapDue && mapFocused && !eventOpen} onClose={recapSeen}
+      {player && liveEvt.event && <EventRecapCard event={liveEvt.event} visible={recapDue && mapFocused && !eventOpen && !finnOwnsMap} onClose={recapSeen}
         onOpenChests={() => { recapSeen(); setEventOpen(true); }} />}
       {/* Monday Home Hunt results come through the presentation queue, after the daily chest (2 full-screen moments per app open). */}
       <HomeHuntResultsHost enabled={!!player && !park && mapFocused && permissionGranted && hasCompleted('onboarding') && chestReady
@@ -1289,9 +1303,10 @@ function ExploreScreen() {
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
           introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
           onIntroOpenChange={setHomeIntroOpen} chestButton={mapControls} chestButtonCount={mapControlsCount} compassHintReady={parkTipReady} highlightNearestFind={highlightNearestFind}
-          parkStory={activeParkProject ? { title: activeParkProject.title, points: activeParkProject.total_points,
+          parkStory={activeParkProject && !finnOwnsMap ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null}
-          eventChip={liveEvt.event?.include_home ? <EventHomeChip event={liveEvt.event} onPress={() => setEventOpen(true)} /> : null} />
+          eventChip={liveEvt.event?.include_home && !finnOwnsMap ? <EventHomeChip event={liveEvt.event} onPress={() => setEventOpen(true)} /> : null}
+          quiet={finnOwnsMap} />
       )}
       {/* Trail Boxes at home: your boxes wait for the next park day (pill above the avatar menu; only when you have boxes). */}
       {player && !park && permissionGranted && (

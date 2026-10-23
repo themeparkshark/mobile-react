@@ -69,7 +69,7 @@ export const GUEST_TASTE_COPY = {
   play: { title: 'Now a quick game!', body: 'Match 4 pairs with me.', button: 'Play' },
   coin: { ribbon: 'Ride Coins', title: 'You won!', body: 'Wins put coins on your shelf.', tap: 'Tap to go on' },
   save: { title: 'Make your own shark!', body: 'Real treats and ride coins are waiting for you.',
-    grownUp: 'Ask a grown-up to sign in', have: 'I already have a shark', again: 'Play more games' },
+    grownUp: 'Ask a grown-up to sign in', have: 'Already have a shark? This button brings it back.', again: 'Play more games' },
 } as const;
 
 function parse(raw: string | null): GuestTasteProgress {

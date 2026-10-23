@@ -8,7 +8,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TutorialContextType, TutorialSequence, TutorialStep, SpotlightTarget } from './types';
-import { getStepsForSequence } from './steps';
+import { getStepsForSequence, HOME_LOOKING_MS } from './steps';
 import { teacherBottomOffset } from './tutorialLayout';
 import { Dimensions } from 'react-native';
 import SpotlightOverlay from './SpotlightOverlay';
@@ -163,7 +163,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
   }, []);
 
   // Start a tutorial sequence
-  const startTutorial = useCallback((sequence: TutorialSequence, options?: { inPark?: boolean; findReady?: boolean }) => {
+  const startTutorial = useCallback((sequence: TutorialSequence, options?: { inPark?: boolean; findReady?: boolean; looking?: boolean }) => {
     // Don't start until AsyncStorage has loaded — avoids replaying on fresh load
     if (!loaded) return;
     if (completedSequences.has(sequence)) return;
@@ -191,6 +191,17 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     homeHelloRef.current = false;
     setCurrentSteps(getStepsForSequence('onboarding', { findReady: true, guestPlayed }));
   }, [isActive, currentSequence, currentIndex, guestPlayed]);
+
+  // Finn sniffing for the first find: if none lands in HOME_LOOKING_MS, he
+  // says how finds work instead ("walk around"), with Let's hunt!.
+  const lookingStep = isActive && !!currentSteps[currentIndex]?.waitsForFind;
+  useEffect(() => {
+    if (!lookingStep) return undefined;
+    const timer = setTimeout(() => {
+      setCurrentSteps(getStepsForSequence('onboarding', { findReady: false, guestPlayed }));
+    }, HOME_LOOKING_MS);
+    return () => clearTimeout(timer);
+  }, [lookingStep, guestPlayed]);
 
   // Advance to next step
   const nextStep = useCallback(() => {
@@ -324,7 +335,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
           <SpotlightOverlay
             target={spotlightTarget}
             opacity={0.55}
-            onPress={currentStep.activity ? undefined : nextStep}
+            onPress={currentStep.activity || currentStep.waitsForFind ? undefined : nextStep}
             onSpotlightPress={currentStep.interactive ? nextStep : undefined}
             spotlightTappable={currentStep.interactive}
           />
@@ -332,11 +343,12 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
             title={currentStep.title}
             text={currentStep.text}
             subtitle={currentStep.subtitle}
+            picture={currentStep.picture}
             mood={currentStep.sharkMood}
             position={currentStep.sharkPosition}
             nextText={currentStep.nextText}
             showSkip={currentStep.showSkip}
-            showNext={!currentStep.interactive}
+            showNext={!currentStep.interactive && !currentStep.waitsForFind}
             stepIndex={currentIndex}
             totalSteps={currentSteps.length}
             onNext={currentStep.activity ? startFirstPlay : nextStep}

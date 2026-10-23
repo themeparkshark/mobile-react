@@ -287,11 +287,12 @@ function ShelfCoinLanding({ reduced, compact, onDone }: { reduced: boolean; comp
 function SaveCard({ onPlayMore }: { onPlayMore: () => void }) {
   return <View style={styles.center}>
     <Animated.View entering={FadeIn.duration(260)} style={styles.card}>
-      <ProgressDots index={STEP_INDEX.save} total={4} />
       <View style={styles.finnWrap} accessible accessibilityLabel="Finn holding your churro">
         <Image source={FINN} style={styles.finn} contentFit="contain" />
         <Image source={CHURRO} style={styles.finnChurro} contentFit="contain" />
       </View>
+      {/* Centred above the title, like the dots in Finn's bubble. */}
+      <ProgressDots index={STEP_INDEX.save} total={4} />
       <Text style={styles.title} accessibilityRole="header">{COPY.save.title}</Text>
       <Text style={styles.body}>{COPY.save.body}</Text>
       {/* One grouped unit: the cue is a plain label (not a button) right on top of the Apple button it means. */}
@@ -301,6 +302,8 @@ function SaveCard({ onPlayMore }: { onPlayMore: () => void }) {
           <Text style={styles.grownUpText}>{COPY.save.grownUp}</Text>
         </View>
         <SignInButtons plain width={260} />
+        {/* A family on a new phone: the same button brings back the shark they already have. */}
+        <Text style={styles.have}>{COPY.save.have}</Text>
       </View>
       <View style={styles.more}>
         <GameButton variant="ghost" label={COPY.save.again} icon="play" onPress={onPlayMore}
@@ -373,7 +376,7 @@ const styles = StyleSheet.create({
   flyCoinImg: { width: SOCKET, height: SOCKET },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   card: { width: '100%', maxWidth: 360, alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 26,
-    borderWidth: 4, borderColor: BRAND.white, paddingTop: 64, paddingHorizontal: 20, paddingBottom: 14, ...SHADOW.lifted },
+    borderWidth: 4, borderColor: BRAND.white, paddingTop: 58, paddingHorizontal: 20, paddingBottom: 14, ...SHADOW.lifted },
   finnWrap: { position: 'absolute', top: -78, width: 132, height: 132 },
   finn: { width: 132, height: 132 },
   finnChurro: { position: 'absolute', right: -6, bottom: 26, width: 48, height: 48, transform: [{ rotate: '18deg' }] },
@@ -382,7 +385,8 @@ const styles = StyleSheet.create({
   grownUpGroup: { alignItems: 'center', marginTop: 14 },
   grownUp: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
   grownUpText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft },
-  dots: { position: 'absolute', top: 12, right: 16, flexDirection: 'row', gap: 6 },
+  dots: { flexDirection: 'row', gap: 6, marginBottom: 8 },
+  have: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft, textAlign: 'center', marginTop: 6 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: BRAND.sky },
   dotActive: { width: 20, backgroundColor: BRAND.blueBright },
   dotDone: { backgroundColor: BRAND.gold },

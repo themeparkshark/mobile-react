@@ -234,6 +234,14 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   const pulseArt = useAnimatedStyle(() => ({ transform: [{ scale: reduced ? 1 : 1 + 0.35 * pulseV.value }] }), [reduced]);
   const pulseRing = useAnimatedStyle(() => ({ opacity: pulseV.value, transform: [{ scale: 0.8 + 0.6 * pulseV.value }] }));
   const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${moving ? (clock.value * 24) % 360 : 0}deg` }] }), [moving]);
+  // The pointed-at find breathes a soft ring on the map's clock, so a kid who cannot read sees which one to tap.
+  const pointed = inRange && showFinger;
+  const softRing = useAnimatedStyle(() => {
+    if (!pointed) return { opacity: 0 };
+    if (!moving) return { opacity: 0.5, transform: [{ scale: 1 }] };
+    const t = (clock.value * 0.7) % 1;
+    return { opacity: 0.6 * (1 - t), transform: [{ scale: 0.75 + 0.55 * t }] };
+  }, [pointed, moving]);
 
   return (
     <View style={[styles.box, hidden && styles.hidden]} pointerEvents="box-none">
@@ -247,6 +255,7 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         </Animated.View>}
         {look.aura && <Animated.Image source={GLOW} style={[styles.aura, { tintColor: color }, pulse]} />}
         <Animated.View style={[styles.pulseRing, { borderColor: color }, pulseRing]} pointerEvents="none" />
+        {pointed && <Animated.View style={[styles.softRing, softRing]} pointerEvents="none" />}
         <Animated.View style={pulseArt}>
         <Animated.View style={[styles.art, bob]}>
           {imageSource ? (
@@ -318,12 +327,15 @@ const styles = StyleSheet.create({
   countBadge: { position: 'absolute', top: B / 2 - A / 2 - 12, left: B / 2 - A / 2 - 14, backgroundColor: BRAND.navy,
     borderWidth: 2, borderColor: BRAND.white, borderRadius: 10, paddingHorizontal: 6 },
   countText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 15 },
-  // Hovers 6 pt off the art with the fingertip toward the find, on the side away from the player.
-  finger: { position: 'absolute', top: B / 2 - A / 2 - 30, width: 30, height: 38 },
-  fingerRight: { left: B / 2 + A / 2 - 4 },
-  fingerLeft: { left: B / 2 - A / 2 - 26 },
-  // Under the find's lower-left corner: clear of the camera badge (bottom right) and the timer pill.
-  fingerBelow: { top: B / 2 + A / 2 - 20, left: B / 2 - A / 2 - 30 },
+  // The fingertip (bottom centre of the 34 x 43 art, turned 28 degrees) lands on the find itself, 6 pt
+  // from its centre on the side away from the player, never on the NEW tag or the badges.
+  finger: { position: 'absolute', top: B / 2 - 46, width: 34, height: 43 },
+  fingerRight: { left: B / 2 - 1 },
+  fingerLeft: { left: B / 2 - 33 },
+  // Below the find the finger points up (turned 210 degrees) at its lower half: clear of the timer pill.
+  fingerBelow: { top: B / 2 + 5, left: B / 2 - 34 },
+  softRing: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: BRAND.goldLight,
+    backgroundColor: 'rgba(255,214,90,0.18)' },
   footsteps: { position: 'absolute', bottom: 18, width: 18, height: 22, opacity: 0.9 },
   // Far art is drawn at 0.6x, so its tag sits higher; near, the tag clears the camera badge.
   tagFar: { top: B / 2 + A * 0.3 + 4 },

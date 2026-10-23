@@ -229,8 +229,9 @@ test('welcome back (and a new player hello) only says "it landed right next to y
 
 test('the map waits to know where the player is, holds the first find for Finn, and opens it on Grab it!', () => {
   const source = read('src/screens/ExploreScreen.tsx');
-  assert.match(source, /if \(!park && !homeLocationConfirmed\) return;/, 'no hello until home or park is known');
-  assert.match(source, /startTutorial\('onboarding', \{ inPark: !!park, findReady: !park && homeFindReady \}\)/);
+  // Home or park must be known for the real hello; weak GPS gets the honest fallback (round 4).
+  assert.match(source, /if \(!parkLoaded \|\| \(!park && !homeLocationConfirmed\)\) \{/, 'no real hello until home or park is known');
+  assert.match(source, /startTutorial\('onboarding', \{ inPark: !!park, findReady: !park && homeFindReady, looking: !park && !homeFindReady \}\)/);
   assert.match(source, /source === 'auto' && isReady && !hasCompleted\('onboarding'\)/, 'the first find waits for Finn');
   assert.match(source, /onFindInRange=\{onFindInRange\}/, 'a loaded find in range counts at once');
   assert.match(source, /findLanded\?\.\(\)/, 'a find that lands late upgrades his line');
@@ -283,4 +284,124 @@ test('the location cards end above the footer, and the guest sign-in ask never p
   const perms = read('src/hooks/usePermissions.tsx');
   assert.doesNotMatch(perms, /coins safe/);
   assert.match(perms, /Sign in to make your own shark\./);
+});
+
+// Round 4 (Oct 23): the first win is the biggest beat, one idea per bubble, Finn in a second
+// (sniffing, then honest), a fallback for weak GPS, Finn is the only voice in minute one,
+// the finger lands on the find, the full-bleed location scene, a pre-rolled name.
+
+test('the first win is a staged celebration: squash pop, ribbon unfurl, one-shot shower, coin flies off to the shelf, pulse and hand', () => {
+  const source = read('src/games/memory/MemoryResults.tsx');
+  const card = source.slice(source.indexOf('function FirstWinCard'), source.indexOf('/** Fades a section in'));
+  assert.match(source, /FIRST_WIN_BACKDROP = require\('..\/..\/..\/assets\/images\/screens\/park\/background-new.png'\)/, 'the underwater scene, not an empty gradient');
+  assert.match(card, /source=\{FIRST_WIN_BACKDROP\}/);
+  assert.match(card, /squash\.value = withDelay/, 'Finn pops with a squash and stretch');
+  assert.match(card, /scaleX: pop\.value \* \(1 - squash\.value/);
+  assert.match(card, /ribbon\.value = withDelay\(B\.ribbon/, 'the ribbon unfurls');
+  assert.match(card, /<ShowerBit /, 'a shower falls from the top');
+  assert.match(card, /shower\.value = withDelay\(B\.shower, withTiming\(1/, 'the shower plays once (no repeat)');
+  assert.doesNotMatch(card, /withRepeat/, 'nothing loops forever on a card a kid may leave open');
+  assert.match(card, /fly\.value = withTiming\(1/, 'the coin lifts off the card');
+  assert.match(card, /setTimeout\(claim, FIRST_WIN_BEATS\.coinFly\)/, 'the coin step follows the coin');
+  assert.match(card, /if \(reducedMotion\) \{ claim\(\); return; \}/, 'reduced motion goes on at once');
+  assert.match(card, /<TapHint delay=\{0\} style=\{styles\.firstWinHand\} \/>/, 'a tapping hand on CONTINUE after 3 s');
+  const { FIRST_WIN_BEATS } = { FIRST_WIN_BEATS: { pulse: 1500, hand: 3000 } };
+  assert.match(source, new RegExp(`pulse: ${FIRST_WIN_BEATS.pulse}, hand: ${FIRST_WIN_BEATS.hand}`));
+  assert.ok(card.includes('accessibilityRole="header"'), 'the header stays accessible');
+});
+
+test('after the first home catch Finn says one idea with a walking picture (no three currencies)', () => {
+  const { getStepsForSequence, HOME_FIRST_FIND_COPY } = loadTs('src/components/Tutorial/steps.ts');
+  const [step] = getStepsForSequence('home_first_find');
+  assert.equal(step.title, HOME_FIRST_FIND_COPY.title);
+  assert.equal(step.text, 'Walk around to find more!');
+  assert.equal(step.picture, 'walk');
+  assert.equal(step.subtitle, undefined);
+  assert.doesNotMatch(`${step.title} ${step.text}`, /Energy|Ticket|boss|power/i);
+  const teacher = read('src/components/Tutorial/TeacherShark.tsx');
+  assert.match(teacher, /WALK_FEET = require\('..\/..\/..\/assets\/images\/trail\/steps.png'\)/, 'existing blue feet art');
+  assert.match(read('src/components/Tutorial/TutorialProvider.tsx'), /picture=\{currentStep\.picture\}/);
+});
+
+test('at home Finn says hi in about a second, sniffing, then switches on his own (find or walk around)', () => {
+  const { getStepsForSequence, HOME_LOOKING, HOME_LOOKING_MS } = loadTs('src/components/Tutorial/steps.ts');
+  const looking = getStepsForSequence('onboarding', { findReady: false, looking: true })[0];
+  assert.equal(looking.text, HOME_LOOKING.text);
+  assert.equal(looking.sharkMood, 'thinking');
+  assert.equal(looking.waitsForFind, true);
+  assert.doesNotMatch(looking.text, /landed|right next to you/i, 'no promise while sniffing');
+  const guest = getStepsForSequence('onboarding', { findReady: false, looking: true, guestPlayed: true })[0];
+  assert.equal(guest.title, 'You’re back!');
+  assert.ok(HOME_LOOKING_MS >= 3000 && HOME_LOOKING_MS <= 4000);
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const wait = park \? 1500 : homeFindReady \? 600 : 1000;/, 'no 4.5 s of silent map');
+  const provider = read('src/components/Tutorial/TutorialProvider.tsx');
+  assert.match(provider, /lookingStep = isActive && !!currentSteps\[currentIndex\]\?\.waitsForFind/);
+  assert.match(provider, /getStepsForSequence\('onboarding', \{ findReady: false, guestPlayed \}\)/, 'after the sniff: the honest walk-around line');
+  assert.match(provider, /onPress=\{currentStep\.activity \|\| currentStep\.waitsForFind \? undefined : nextStep\}/, 'a stray tap does not skip the sniff');
+  assert.match(provider, /showNext=\{!currentStep\.interactive && !currentStep\.waitsForFind\}/);
+  assert.match(read('src/components/Tutorial/TeacherShark.tsx'), /if \(mood === 'thinking'\) scanValue\.value = withDelay\(300, withRepeat\([\s\S]*?, 5, false/, 'a few sniffs, then still');
+});
+
+test('weak GPS: a player whose home never confirms still meets Finn after about 8 s, with the honest line', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /export const ONBOARDING_FALLBACK_MS = 8000;/);
+  assert.match(explore, /setTimeout\(\(\) => startTutorial\('onboarding', \{ inPark: false, findReady: false \}\), ONBOARDING_FALLBACK_MS\)/);
+  assert.match(explore, /if \(park\) return;\n      const fallback/, 'never the home hello while a park is still loading');
+});
+
+test('Finn is the only voice in minute one: event chips, park story, live parks bar and recap wait', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const finnOwnsMap = isActive \|\| firstLineGap \|\| !!pendingFind \|\| \(isReady && !hasCompleted\('onboarding'\)\);/);
+  assert.match(explore, /parkStory=\{activeParkProject && !finnOwnsMap \?/);
+  assert.match(explore, /eventChip=\{liveEvt\.event\?\.include_home && !finnOwnsMap \?/);
+  assert.match(explore, /quiet=\{finnOwnsMap\}/);
+  assert.match(explore, /visible=\{recapDue && mapFocused && !eventOpen && !finnOwnsMap\}/);
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /\{quiet \? null : <HomeLive /);
+  assert.match(home, /useEffect\(\(\) => \{ if \(quiet\) setLiveBar\(null\); \}, \[quiet\]\);/, 'the controls move back up while the bar is away');
+});
+
+test('the map finger lands on the find, which breathes a soft ring', () => {
+  const src = read('src/screens/ExploreScreen/PrepItem.tsx');
+  assert.match(src, /const pointed = inRange && showFinger;/);
+  assert.match(src, /\{pointed && <Animated\.View style=\{\[styles\.softRing, softRing\]\}/);
+  // Fingertip = box centre + the turned half-height; it must land within 12 pt of the art centre.
+  const B = 112, w = 34, h = 43;
+  const tip = (left, top, deg) => { const r = deg * Math.PI / 180; return [left + w / 2 - (h / 2) * Math.sin(r), top + h / 2 + (h / 2) * Math.cos(r)]; };
+  for (const [left, top, deg] of [[B / 2 - 1, B / 2 - 46, 28], [B / 2 - 33, B / 2 - 46, -28], [B / 2 - 34, B / 2 + 5, 210]]) {
+    const [x, y] = tip(left, top, deg);
+    assert.ok(Math.hypot(x - B / 2, y - B / 2) <= 12, `fingertip ${x.toFixed(1)},${y.toFixed(1)} is on the find`);
+  }
+  assert.match(src, /fingerRight: \{ left: B \/ 2 - 1 \}/);
+  assert.match(src, /fingerLeft: \{ left: B \/ 2 - 33 \}/);
+  assert.match(src, /fingerBelow: \{ top: B \/ 2 \+ 5, left: B \/ 2 - 34 \}/);
+});
+
+test('location cards: the scene runs full-bleed behind the footer, Finn stays under the status bar', () => {
+  const src = read('src/screens/ExploreScreen/PermissionsNotGranted.tsx');
+  assert.doesNotMatch(src, /borderBottomLeftRadius/, 'no rounded seam above the footer');
+  assert.match(src, /<Backdrop \/>/);
+  assert.match(src, /<FullBackdrop \/>/);
+  assert.match(src, /height: h \+ BOTTOM_BAR_OVERHANG/, 'the raised layer draws the same full-height picture');
+  assert.match(src, /paddingTop: top \+ 8 \+ \(compact \? FINN_OVERHANG_COMPACT : FINN_OVERHANG\)/, 'Finn clears the status bar');
+  assert.match(src, /useSafeAreaInsets\(\)\.top/);
+});
+
+test('save card: the dots sit centred above the title and a returning family sees the same button brings their shark back', () => {
+  const taste = read('src/screens/ExploreScreen/GuestTaste.tsx');
+  const card = taste.slice(taste.indexOf('function SaveCard'), taste.indexOf('function ProgressDots'));
+  assert.ok(card.indexOf('<ProgressDots') > card.indexOf('styles.finnWrap') && card.indexOf('<ProgressDots') < card.indexOf('styles.title'));
+  assert.ok(card.indexOf('COPY.save.have') > card.indexOf('<SignInButtons'), 'under the Apple button');
+  assert.doesNotMatch(taste, /dots: \{ position: 'absolute'/);
+  const { GUEST_TASTE_COPY } = guestTasteModule();
+  assert.match(GUEST_TASTE_COPY.save.have, /already have a shark/i);
+  assert.doesNotMatch(GUEST_TASTE_COPY.save.have, /saved|stays yours|your coin/i);
+});
+
+test('the name step starts with a rolled kid-safe name, so a kid can just tap the button', () => {
+  const src = read('src/screens/WelcomeScreen.tsx');
+  assert.match(src, /useState\(rollName\)/);
+  assert.doesNotMatch(src, /'Dole'/, 'no brand names in rolled names');
+  assert.match(src, /selectTextOnFocus/, 'typing your own name replaces the rolled one');
 });

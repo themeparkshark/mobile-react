@@ -32,6 +32,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import SparkleBurst from '../../components/SparkleBurst';
+import TapHint from '../../components/TapHint';
 import { GameAudio, Haptic } from '../../gamekit';
 import GameIcon from '../../ui/GameIcon';
 import type { CoinEdition, Grade } from './engine';
@@ -240,18 +241,38 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
 }
 
 /**
- * Finn's warm-up win: the very first win of a new player. One centred card
- * over a full scrim (no empty board or booth shark behind it): Finn cheering
- * in a gold burst, the ribbon fully inside the card, what comes next, and one
- * big CONTINUE. The fanfare is the twinkle ladder plus a hit, like any win.
+ * Finn's warm-up win: the very first win of a new player, and the biggest beat
+ * of the first minute. A staged celebration of about 1.8 s on the underwater
+ * scene: Finn pops in with a squash and stretch, the ribbon unfurls, a one-shot
+ * shower of bubbles, sparkles and coins falls from the top, then what comes
+ * next and one big CONTINUE (one pulse at 1.5 s, a tapping hand at 3 s).
+ * Finn keeps a small cheer for a few seconds, then stands still. On CONTINUE
+ * the gold coin lifts off the card and arcs up off screen, so the coin that
+ * drops onto the shelf next is the same coin. Transforms and opacity only.
  */
 export const FIRST_WIN_COPY = { next: 'Up next: ride coins!' } as const;
 const FINN_GRAD = require('../../../assets/images/tutorial/teacher-shark.png');
 const FIRST_WIN_COIN = require('../../../assets/images/coingold.png');
+const FIRST_WIN_BACKDROP = require('../../../assets/images/screens/park/background-new.png');
+const SHOWER_BUBBLE = require('../../../assets/images/map/fx/bubble.png');
+const SHOWER_SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
+/** When each beat lands, in ms from the card's first frame. */
+export const FIRST_WIN_BEATS = { finn: 0, ribbon: 150, shower: 120, next: 900, button: 1200, pulse: 1500, hand: 3000, coinFly: 420 } as const;
+const SHOWER = 20;
 function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim: () => void; reducedMotion: boolean }) {
   const win = useWindowDimensions();
+  const pop = useSharedValue(reducedMotion ? 1 : 0);
+  const squash = useSharedValue(0);
   const cheer = useSharedValue(0);
   const ring = useSharedValue(0);
+  const ribbon = useSharedValue(reducedMotion ? 1 : 0);
+  const shower = useSharedValue(0);
+  const next = useSharedValue(reducedMotion ? 1 : 0);
+  const btn = useSharedValue(reducedMotion ? 1 : 0);
+  const pulse = useSharedValue(0);
+  const fly = useSharedValue(0);
+  const [hand, setHand] = useState(false);
+  const leaving = useRef(false);
   useEffect(() => {
     Haptic.hitMedium();
     GameAudio.play('fx.hit', { volume: 0.5 });
@@ -259,41 +280,108 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
       Haptic.hitRigid();
       GameAudio.playLadder('mm_sharp_twinkle', 4 + i, { volume: 0.8 });
     }, 260 + i * 150));
+    timers.push(setTimeout(() => setHand(true), FIRST_WIN_BEATS.hand));
     if (!reducedMotion) {
-      // Two happy hops, then still: no endless loop on a card a kid may leave open.
-      cheer.value = withSequence(withTiming(1, { duration: 180 }), withTiming(0, { duration: 220 }),
-        withTiming(1, { duration: 180 }), withTiming(0, { duration: 240 }));
-      ring.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) });
+      const B = FIRST_WIN_BEATS;
+      // Squash and stretch: 0 -> overshoot tall -> squash wide -> settle.
+      pop.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.back(1.8)) });
+      squash.value = withDelay(140, withSequence(withTiming(1, { duration: 100 }), withTiming(-1, { duration: 120 }), withTiming(0, { duration: 160 })));
+      ring.value = withDelay(120, withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) }));
+      ribbon.value = withDelay(B.ribbon, withTiming(1, { duration: 320, easing: Easing.out(Easing.back(1.6)) }));
+      shower.value = withDelay(B.shower, withTiming(1, { duration: 2000, easing: Easing.linear }));
+      next.value = withDelay(B.next, withTiming(1, { duration: 220 }));
+      btn.value = withDelay(B.button, withTiming(1, { duration: 220 }));
+      pulse.value = withDelay(B.pulse, withSequence(withTiming(1, { duration: 160 }), withTiming(0, { duration: 220 })));
+      // A happy cheer for about 3 s (hops, then little wiggles), then still: no endless loop.
+      cheer.value = withDelay(520, withSequence(
+        withTiming(1, { duration: 180 }), withTiming(0, { duration: 220 }),
+        withTiming(1, { duration: 180 }), withTiming(0, { duration: 240 }),
+        withTiming(0.45, { duration: 260 }), withTiming(0, { duration: 260 }),
+        withTiming(0.45, { duration: 260 }), withTiming(0, { duration: 260 }),
+        withTiming(0.3, { duration: 280 }), withTiming(0, { duration: 300 })));
     }
-    return () => { timers.forEach(clearTimeout); cancelAnimation(cheer); cancelAnimation(ring); };
-  }, [reducedMotion, cheer, ring]);
-  const finnSt = useAnimatedStyle(() => ({ transform: [{ translateY: -cheer.value * 14 }, { rotate: `${cheer.value * -6}deg` }] }));
+    return () => {
+      timers.forEach(clearTimeout);
+      [pop, squash, cheer, ring, ribbon, shower, next, btn, pulse, fly].forEach((v) => cancelAnimation(v));
+    };
+  }, [reducedMotion, pop, squash, cheer, ring, ribbon, shower, next, btn, pulse, fly]);
+  const onContinue = () => {
+    if (leaving.current) return;
+    leaving.current = true;
+    Haptic.tapLight();
+    if (reducedMotion) { claim(); return; }
+    GameAudio.playLadder('mm_sharp_twinkle', 8, { volume: 0.7 });
+    fly.value = withTiming(1, { duration: FIRST_WIN_BEATS.coinFly, easing: Easing.in(Easing.quad) });
+    setTimeout(claim, FIRST_WIN_BEATS.coinFly);
+  };
+  const finnSt = useAnimatedStyle(() => ({
+    opacity: pop.value > 0 ? 1 : 0,
+    transform: [{ translateY: -cheer.value * 16 }, { rotate: `${cheer.value * -7}deg` },
+      // Stretch tall on the way up, squash wide on the landing.
+      { scaleX: pop.value * (1 - squash.value * 0.12) }, { scaleY: pop.value * (1 + squash.value * 0.15) }],
+  }));
   const ringSt = useAnimatedStyle(() => ({ opacity: ring.value > 0 ? 0.9 * (1 - ring.value) : 0, transform: [{ scale: 0.5 + ring.value * 0.9 }] }));
-  const finn = Math.min(170, win.height * 0.2);
+  // The card pops in with Finn, so it is never an empty frame waiting for its ribbon.
+  const cardSt = useAnimatedStyle(() => ({ opacity: Math.min(1, pop.value * 1.6), transform: [{ scale: 0.9 + 0.1 * Math.min(1, pop.value) }] }));
+  const ribbonSt = useAnimatedStyle(() => ({ opacity: ribbon.value > 0 ? 1 : 0, transform: [{ scaleX: Math.max(0.05, ribbon.value) }] }));
+  const nextSt = useAnimatedStyle(() => ({ opacity: next.value, transform: [{ translateY: (1 - next.value) * 8 }] }));
+  const btnSt = useAnimatedStyle(() => ({ opacity: btn.value, transform: [{ scale: (0.9 + btn.value * 0.1) * (1 + pulse.value * 0.08) }] }));
+  // The coin lifts and arcs up and off the top: the shelf coin drops in from there.
+  const coinSt = useAnimatedStyle(() => ({
+    transform: [{ translateX: fly.value * win.width * 0.18 }, { translateY: -fly.value * (win.height * 0.75) + Math.sin(fly.value * Math.PI) * -30 },
+      { scale: 1 + fly.value * 0.6 }, { rotateZ: `${fly.value * 200}deg` }],
+  }));
+  const finn = Math.min(210, win.height * 0.24);
   return (
     <View style={[styles.wrap, { width: win.width, height: win.height }]}>
       <LinearGradient pointerEvents="none" style={StyleSheet.absoluteFill}
         colors={['#0a5a9e', '#04305f']} />
-      <View style={styles.firstWinCard}>
+      <Image source={FIRST_WIN_BACKDROP} style={[StyleSheet.absoluteFill, { width: win.width, height: win.height }]} resizeMode="cover" />
+      {reducedMotion ? null : <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        {Array.from({ length: SHOWER }, (_, k) => <ShowerBit key={k} k={k} t={shower} w={win.width} h={win.height} />)}
+      </View>}
+      <Animated.View style={[styles.firstWinCard, cardSt]}>
         <View style={[styles.firstWinFinn, { width: finn, height: finn, marginTop: -finn * 0.62 }]} pointerEvents="none">
           {reducedMotion ? null : <Animated.View style={[styles.firstWinRing, { borderRadius: finn / 2 }, ringSt]} />}
-          {reducedMotion ? null : <SparkleBurst size={finn * 1.25} />}
+          {reducedMotion ? null : <SparkleBurst size={finn * 1.3} delay={120} />}
           <Animated.Image source={FINN_GRAD} style={[{ width: finn, height: finn }, finnSt]} resizeMode="contain" />
         </View>
-        <View accessible accessibilityRole="header" accessibilityLabel={`${banner} ${FIRST_WIN_COPY.next}`} style={styles.firstWinHead}>
+        <Animated.View accessible accessibilityRole="header" accessibilityLabel={`${banner} ${FIRST_WIN_COPY.next}`} style={[styles.firstWinHead, ribbonSt]}>
           <Banner text={banner} show reducedMotion={reducedMotion} />
-        </View>
-        <View style={styles.firstWinNext} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-          <Image source={FIRST_WIN_COIN} style={styles.firstWinCoin} resizeMode="contain" />
+        </Animated.View>
+        <Animated.View style={[styles.firstWinNext, nextSt]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+          <Animated.Image source={FIRST_WIN_COIN} style={[styles.firstWinCoin, coinSt]} resizeMode="contain" />
           <Text style={styles.firstWinNextText}>{FIRST_WIN_COPY.next}</Text>
-        </View>
-        <Pressable onPress={() => { Haptic.tapLight(); claim(); }} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]}
-          accessibilityRole="button">
-          <Text style={styles.bigBtnText}>CONTINUE</Text>
-        </Pressable>
-      </View>
+        </Animated.View>
+        <Animated.View style={[styles.firstWinBtnWrap, btnSt]}>
+          <Pressable onPress={onContinue} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]}
+            accessibilityRole="button">
+            <Text style={styles.bigBtnText}>CONTINUE</Text>
+          </Pressable>
+          {hand ? <TapHint delay={0} style={styles.firstWinHand} /> : null}
+        </Animated.View>
+      </Animated.View>
     </View>
   );
+}
+
+/** One piece of the one-shot shower: bubbles, sparkles and coins drift down once. */
+function ShowerBit({ k, t, w, h }: { k: number; t: import('react-native-reanimated').SharedValue<number>; w: number; h: number }) {
+  const kind = k % 3;
+  const src = kind === 0 ? SHOWER_BUBBLE : kind === 1 ? SHOWER_SPARKLE : COIN;
+  const size = kind === 0 ? 34 + (k % 4) * 6 : kind === 1 ? 42 : 40;
+  const x = ((k * 37) % 100) / 100 * (w - size);
+  const start = (k % 5) * 0.08;
+  const sway = (k % 2 ? 1 : -1) * (14 + (k % 3) * 8);
+  const st = useAnimatedStyle(() => {
+    const p = t.value <= start ? 0 : Math.min(1, (t.value - start) / (1 - start));
+    return {
+      opacity: p > 0 && p < 1 ? (p > 0.75 ? (1 - p) * 4 : 1) : 0,
+      transform: [{ translateX: x + Math.sin(p * Math.PI * 2) * sway }, { translateY: -size + p * h * 0.9 },
+        { rotateZ: `${p * (kind === 2 ? 360 : 90) * (k % 2 ? 1 : -1)}deg` }],
+    };
+  });
+  return <Animated.Image source={src} style={[{ position: 'absolute', left: 0, top: 0, width: size, height: size }, st]} resizeMode="contain" />;
 }
 
 /** Fades a section in on its beat. It is always laid out, so nothing reflows. */
@@ -524,14 +612,17 @@ const styles = StyleSheet.create({
   burst: { position: 'absolute', left: 0, right: 0, top: -10, height: 50, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
   burstCoin: { position: 'absolute', width: 38, height: 38 },
   // The first win: the ribbon sits fully inside the card (no negative margin), Finn rises above it.
-  firstWinCard: { width: '86%', maxWidth: 360, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
+  firstWinCard: { width: '90%', maxWidth: 380, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
     alignItems: 'center', paddingHorizontal: 16, paddingBottom: 18, paddingTop: 6 },
   firstWinFinn: { alignItems: 'center', justifyContent: 'center' },
   firstWinHead: { alignSelf: 'stretch', alignItems: 'center' },
   firstWinRing: { ...StyleSheet.absoluteFillObject, borderWidth: 6, borderColor: MM.gold },
   firstWinNext: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 14 },
-  firstWinCoin: { width: 48, height: 48 },
-  firstWinNextText: { fontFamily: 'Shark', fontSize: 22, color: MM.navyText },
+  firstWinCoin: { width: 54, height: 54 },
+  firstWinBtnWrap: { alignSelf: 'stretch', alignItems: 'center' },
+  // The fingertip (bottom of the hand) lands on the lower right of CONTINUE.
+  firstWinHand: { right: 26, bottom: 6 },
+  firstWinNextText: { fontFamily: 'Shark', fontSize: 25, color: MM.navyText },
   card: {
     width: '90%', maxWidth: 400, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
     backfaceVisibility: 'hidden',

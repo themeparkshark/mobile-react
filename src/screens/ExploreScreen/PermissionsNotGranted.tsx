@@ -9,6 +9,7 @@ import HomeArcade from '../../components/HomeArcade';
 import { BOTTOM_BAR_OVERHANG } from '../../components/Wrapper';
 import YellowButton from '../../components/YellowButton';
 import { LocationStatusContext } from '../../context/LocationProvider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** "Not now" is a real choice: games and the ride coins to win, with location one tap away. */
 export const NOT_NOW_COPY = {
@@ -24,6 +25,9 @@ export const NOT_NOW_COPY = {
 /** One Finn and one underwater scene in the first minute (no castle or globe shapes behind him). */
 const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
 const BACKDROP = require('../../../assets/images/screens/park/background-new.png');
+/** How far Finn's cap rises above the card (his negative top margin). */
+const FINN_OVERHANG = 84;
+const FINN_OVERHANG_COMPACT = 64;
 
 // Once a player picks "Not now", the card stays in play mode for this app session.
 let choseNotNow = false;
@@ -71,12 +75,15 @@ export default function PermissionsNotGranted() {
   };
   // Short phones (iPhone SE): a smaller Finn and finds, so his cap stays clear of the status bar.
   const compact = useWindowDimensions().height < 700;
-  if (playing) return <NotNowPlay asking={asking} onTurnOn={turnOn} arcadeOpen={arcadeOpen} setArcadeOpen={setArcadeOpen} compact={compact} />;
+  // Finn's cap rises above the card: the card layer starts below the status bar, plus his overhang.
+  const top = useSafeAreaInsets().top;
+  if (playing) return <NotNowPlay asking={asking} onTurnOn={turnOn} arcadeOpen={arcadeOpen} setArcadeOpen={setArcadeOpen} compact={compact} top={top} />;
 
   return (
-    <View style={styles.wrap}>
-      <Image source={BACKDROP} style={StyleSheet.absoluteFill} contentFit="cover" />
-      <View style={[StyleSheet.absoluteFill, styles.tint]} />
+    <>
+    <Backdrop />
+    <View style={[styles.wrap, { paddingTop: top + 8 + (compact ? FINN_OVERHANG_COMPACT : FINN_OVERHANG) }]}>
+      <FullBackdrop />
       <Animated.View entering={FadeInUp.duration(450).springify().damping(14)} style={styles.card}>
         <Image source={FINN} style={[styles.shark, compact && styles.sharkCompact]} contentFit="contain" accessibilityLabel="Finn the shark" />
         <Text style={[styles.title, compact && styles.titleCompact]}>Let’s find your first treasures!</Text>
@@ -97,17 +104,19 @@ export default function PermissionsNotGranted() {
         </Pressable>
       </Animated.View>
     </View>
+    </>
   );
 }
 
 /** The "Not now" card: two big picture buttons, then location and News as quiet options. */
-function NotNowPlay({ asking, onTurnOn, arcadeOpen, setArcadeOpen, compact }: {
-  asking: boolean; onTurnOn: () => void; arcadeOpen: boolean; setArcadeOpen: (open: boolean) => void; compact: boolean;
+function NotNowPlay({ asking, onTurnOn, arcadeOpen, setArcadeOpen, compact, top }: {
+  asking: boolean; onTurnOn: () => void; arcadeOpen: boolean; setArcadeOpen: (open: boolean) => void; compact: boolean; top: number;
 }) {
   return (
-    <View style={styles.wrap}>
-      <Image source={BACKDROP} style={StyleSheet.absoluteFill} contentFit="cover" />
-      <View style={[StyleSheet.absoluteFill, styles.tint]} />
+    <>
+    <Backdrop />
+    <View style={[styles.wrap, { paddingTop: top + 8 + (compact ? FINN_OVERHANG_COMPACT : FINN_OVERHANG) }]}>
+      <FullBackdrop />
       <Animated.View entering={FadeInUp.duration(380).springify().damping(14)} style={styles.card}>
         <Image source={FINN} style={[styles.shark, compact && styles.sharkCompact]} contentFit="contain" accessibilityLabel="Finn the shark" />
         <Text style={[styles.title, compact && styles.titleCompact]}>{NOT_NOW_COPY.title}</Text>
@@ -136,6 +145,36 @@ function NotNowPlay({ asking, onTurnOn, arcadeOpen, setArcadeOpen, compact }: {
       </Animated.View>
       <HomeArcade visible={arcadeOpen} onClose={() => setArcadeOpen(false)} />
     </View>
+    </>
+  );
+}
+
+/**
+ * The underwater scene runs full-bleed down behind the footer. It is drawn in
+ * two layers with the same geometry, so they meet with no seam:
+ * - Backdrop: the whole screen with no zIndex, so the footer and its raised
+ *   MAP compass (later in the tree) paint over it and stay whole.
+ * - FullBackdrop: the same picture inside the raised card layer (zIndex 30,
+ *   above the top bar), sized to the whole screen and clipped where that layer
+ *   ends, just above the compass.
+ */
+function Backdrop() {
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Image source={BACKDROP} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <View style={[StyleSheet.absoluteFill, styles.tint]} />
+    </View>
+  );
+}
+function FullBackdrop() {
+  const [h, setH] = useState(0);
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill} onLayout={(e) => setH(e.nativeEvent.layout.height)}>
+      {h > 0 ? <View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: h + BOTTOM_BAR_OVERHANG }}>
+        <Image source={BACKDROP} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <View style={[StyleSheet.absoluteFill, styles.tint]} />
+      </View> : null}
+    </View>
   );
 }
 
@@ -149,15 +188,16 @@ const styles = StyleSheet.create({
   tileIconCompact: { width: 60, height: 60 },
   tileText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e', marginTop: 4, textAlign: 'center' },
   tileSub: { fontFamily: 'Knockout', fontSize: 14, color: '#3d6a96', marginTop: 2, textAlign: 'center' },
-  // Ends where the footer's raised MAP compass begins, so the 5-icon footer shows whole, as on every screen.
+  // The raised card layer ends where the footer's MAP compass begins, so the 5-icon footer shows whole.
+  // Its picture continues below it in Backdrop with no seam or rounded edge.
   wrap: { ...StyleSheet.absoluteFillObject, bottom: BOTTOM_BAR_OVERHANG, zIndex: 30, justifyContent: 'center', alignItems: 'center',
-    padding: 22, overflow: 'hidden', borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+    paddingHorizontal: 22, paddingBottom: 12, overflow: 'hidden' },
   tint: { backgroundColor: 'rgba(3, 38, 92, 0.18)' },
   card: { width: '100%', alignItems: 'center', backgroundColor: '#0768b9', borderRadius: 26,
     borderWidth: 4, borderColor: '#fff', paddingVertical: 20, paddingHorizontal: 18,
     shadowColor: '#021e45', shadowOpacity: 0.45, shadowRadius: 16, shadowOffset: { width: 0, height: 10 } },
-  shark: { width: 150, height: 150, marginTop: -84 },
-  sharkCompact: { width: 112, height: 112, marginTop: -64 },
+  shark: { width: 150, height: 150, marginTop: -FINN_OVERHANG },
+  sharkCompact: { width: 112, height: 112, marginTop: -FINN_OVERHANG_COMPACT },
   titleCompact: { fontSize: 24 },
   findsCompact: { marginTop: 6, transform: [{ scale: 0.85 }] },
   title: { fontFamily: 'Shark', fontSize: 28, color: '#ffcf3b', textAlign: 'center',

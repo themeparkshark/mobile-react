@@ -54,6 +54,10 @@ export interface TutorialStep {
   sequence: TutorialSequence;
   /** Optional illustrated guide heading. */
   title?: string;
+  /** Finn is sniffing out the first find: no button and no tap-to-skip; the line changes on its own. */
+  waitsForFind?: boolean;
+  /** A small picture under Finn's line so a kid who cannot read yet still gets it. */
+  picture?: 'walk';
   /** A free hands-on round; never grants collection or currency rewards. */
   activity?: 'memory_warmup';
   /** Teacher shark's speech text */
@@ -98,7 +102,7 @@ export interface TutorialContextType {
   /** Total steps in the active sequence */
   totalSteps: number;
   /** Start a tutorial sequence. findReady: at home, the first find has already landed next to the player. */
-  startTutorial: (sequence: TutorialSequence, options?: { inPark?: boolean; findReady?: boolean }) => void;
+  startTutorial: (sequence: TutorialSequence, options?: { inPark?: boolean; findReady?: boolean; looking?: boolean }) => void;
   /** The first home find landed while Finn is still saying hi: his line switches to "Grab it!". */
   findLanded?: () => void;
   /** Advance to next step */

@@ -129,6 +129,8 @@ interface Props {
    * Explore: each new value glides the camera to the nearest find once.
    */
   highlightNearestFind?: number | null;
+  /** Minute one: Finn is the only voice, so the live parks bar waits until he is done. */
+  quiet?: boolean;
 }
 
 /**
@@ -138,7 +140,7 @@ interface Props {
 export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching = null, onCatchCollected, onCatchUnavailable,
   onCatchDone, refreshVersion, homeLocationConfirmed,
   introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null, eventChip = null,
-  compassHintReady = false }: Props) {
+  compassHintReady = false, quiet = false }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -159,6 +161,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const screenFocused = useRef(false);
   const [rankLine, setRankLine] = useState<string | null>(getHomeHuntRankLine());
   const [liveBar, setLiveBar] = useState<'raid' | 'teams' | null>(null);
+  useEffect(() => { if (quiet) setLiveBar(null); }, [quiet]);
   const [introSeen, markIntroSeen] = useHomeIntroSeen(player?.id);
   const projector = useRef<MapProjector | null>(null);
   // The map has rendered and settled once: only then may a native map view be
@@ -697,7 +700,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       {bottom && <Animated.View style={[styles.bottomSlot, { bottom: slotBottom }, cardFade.style]} pointerEvents={cardFade.pointerEvents}>{bottom}</Animated.View>}
 
       {/* Live bosses from home; the team race only when the Home Hunt board is on. */}
-      <HomeLive top={TOP} onBarChange={setLiveBar} />
+      {quiet ? null : <HomeLive top={TOP} onBarChange={setLiveBar} />}
 
       {homeLocationConfirmed && (
         <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
