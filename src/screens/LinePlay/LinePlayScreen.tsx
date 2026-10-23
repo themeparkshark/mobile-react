@@ -800,6 +800,8 @@ export default function LinePlayScreen() {
     lineMovePolicy: 'passive' as const,
     queueEnded,
     rideUpLikely: snapshot.boardingSuggested,
+    // A pass-and-play turn is one try per kid: its card shows only DONE.
+    turnOnly: activeGame?.groupTurn === true,
     // The guest answered "Did your ride start?" inside a held game.
     onBoardingAnswer: (boarded: boolean) => {
       if (!boarded) { session.dismissBoardingSuggestion(); return; }
@@ -820,7 +822,7 @@ export default function LinePlayScreen() {
       actionLabel: 'PLAY FOR BONUS',
       onPress: () => { setActiveGame(null); setArcadeOpen(true); },
     } : null,
-  }), [snapshot.moving, bonus != null, activeGame?.gameId, queueEnded, snapshot.boardingSuggested, finishFailed]);
+  }), [snapshot.moving, bonus != null, activeGame?.gameId, activeGame?.groupTurn, queueEnded, snapshot.boardingSuggested, finishFailed]);
   useEffect(() => {
     const id = pendingEncoreId.current;
     if (!id) return;

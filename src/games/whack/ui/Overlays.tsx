@@ -108,7 +108,8 @@ export function Breather(p: BreatherProps) {
     enter.value = withSpring(1, { damping: 14, stiffness: 180 });
   }, [enter]);
   useEffect(() => {
-    if (p.readyEnabled) pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: 420 }), withTiming(1, { duration: 420 })), -1);
+    // A few beats to say "tap me", then rest: a card left open costs no frames.
+    if (p.readyEnabled) pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: 420 }), withTiming(1, { duration: 420 })), 4);
     else pulse.value = 1;
   }, [p.readyEnabled, pulse]);
   const padStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));

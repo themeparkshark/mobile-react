@@ -51,6 +51,11 @@ export function isDataStat(stat: FeelingStat): boolean {
  * The chips the card shows: best combo first (when it is a real chain), then
  * the game's own brags, minus data, without repeats, at most two.
  */
+/** A 0-star run shows the quiet BEST only within a quarter of it. */
+export function nearBest(score: number, best: number): boolean {
+  return best > 0 && score >= 0.75 * best;
+}
+
 export function feelingChips(stats: readonly FeelingStat[] | undefined, maxCombo?: number, limit = MAX_FEELING_CHIPS): FeelingStat[] {
   const out: FeelingStat[] = [];
   const seen = new Set<string>();

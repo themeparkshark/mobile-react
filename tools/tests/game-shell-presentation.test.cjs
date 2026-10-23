@@ -262,3 +262,30 @@ test('PLAY AGAIN is the big button; a won reward outside the queue leads with CO
   assert.equal(rematches, 1);
   q.view.unmount();
 });
+
+test('a pass-and-play group turn is one try: DONE is the only button and it finishes the turn', () => {
+  let rematches = 0;
+  let challenges = 0;
+  const runs = [];
+  const movement = { moving: false, onResume() {}, turnOnly: true, onRunDone: (s, p) => runs.push([s, p]) };
+  const turn = shell(false, false, { onRematch() { rematches++; }, onChallenge() { challenges++; } }, movement);
+  startPlaying(turn.view);
+  turn.view.change({ result: { score: 50, stars: 0 } });
+  assert.equal(button(turn.view, 'PLAY AGAIN'), undefined, 'no replay inside a group turn');
+  assert.equal(button(turn.view, 'CHALLENGE'), undefined, 'no challenge inside a group turn');
+  const done = button(turn.view, 'DONE');
+  assert.ok(done, 'DONE hands the turn on');
+  done.props.onPress();
+  assert.equal(turn.calls.close, 1, 'the turn finishes (LinePlay runs finishTurn from onClose)');
+  assert.equal(rematches, 0);
+  assert.equal(challenges, 0);
+  turn.view.unmount();
+  // A won group turn: CONTINUE alone, and it hands the stars to onComplete.
+  const win = shell(false, false, { onRematch() { rematches++; } }, movement);
+  startPlaying(win.view);
+  win.view.change({ result: { score: 900, stars: 2 } });
+  assert.equal(button(win.view, 'PLAY AGAIN'), undefined);
+  button(win.view, 'CONTINUE').props.onPress();
+  assert.equal(win.calls.complete, 1);
+  win.view.unmount();
+});

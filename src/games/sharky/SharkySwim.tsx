@@ -47,7 +47,7 @@ import { RALLY_HOUSE_CREW, RALLY_MAX_STEPS, rallyConfig } from './sim/rally';
 import { useRally } from './net/useRally';
 import { RallyCountIn, RallyLobby, RallyPodium } from './hud/RallyOverlays';
 import { SharkyResults, type SharkyResultsData } from './hud/SharkyResults';
-import { sharkyNearBestLine } from './hud/resultLines';
+import { sharkyGateProgress, sharkyNearBestLine } from './hud/resultLines';
 import { feelingTitle } from '../../gamekit/results/feelings';
 import { nextStarGoal } from '../../gamekit/core/scoring';
 import { SharkyCanvas } from './render/SharkyCanvas';
@@ -119,11 +119,15 @@ function rideStars(s: SimState): number {
  * line is only "so close to your best" there.
  */
 function nearMissLine(s: SimState, mode: number, best: number): string {
-  if (mode === MODE_RIDE && s.endReason !== END_GATE) {
-    const pct = Math.min(99, Math.floor((100 * ((s.dist >> 8) - 0)) / Math.max(1, s.gateX || 15000)));
-    return `${pct}% to the gate`;
-  }
+  // A ride run that missed the gate shows the gate bar instead (no percent).
+  if (mode === MODE_RIDE) return '';
   return sharkyNearBestLine(s.score, best);
+}
+
+/** A ride run that missed the gate: how far it got (drives the shared bar), else null. */
+function gateProgress(s: SimState, mode: number): number | null {
+  if (mode !== MODE_RIDE || s.endReason === END_GATE) return null;
+  return sharkyGateProgress(s.dist >> 8, s.gateX);
 }
 
 /** One title rule for every results card: a finish word, or the shared feeling title (never WIPEOUT!). */
@@ -299,6 +303,7 @@ export function SharkySwim({
         bestChainMult: Math.min(4, Math.floor(Math.min(s.maxChain, 9) / 3) + 1),
         closeSkims: s.stCloseSkims,
         nearMiss: nearMissLine(s, m, best),
+        gateProgress: gateProgress(s, m),
         splits,
         missions: mu,
         newCard: card,
@@ -642,7 +647,7 @@ export function SharkySwim({
         claim={args.claim}
         claimLabel={runMode === 'ride' ? (args.won ? 'COLLECT' : 'CONTINUE') : args.won ? 'CONTINUE' : 'DONE'}
         challenge={args.challenge}
-        challengeLabel={prog.runs < 3 ? 'RACE MY GHOST' : 'RACE THE GHOSTS'}
+        challengeLabel={prog.runs < 3 ? 'RACE MY GHOST' : 'RACE GHOSTS'}
         reducedMotion={args.reducedMotion}
       />
     );
@@ -683,7 +688,7 @@ export function SharkySwim({
       onQuit={onQuit}
       onRematch={runMode === 'ride' ? undefined : onRematch}
       onChallenge={runMode === 'ride' || prog.runs < 1 ? undefined : onChallenge}
-      challengeLabel={prog.runs < 3 ? 'Race my ghost' : 'Race the ghosts'}
+      challengeLabel={prog.runs < 3 ? 'Race my ghost' : 'Race ghosts'}
       renderResults={renderResults}
     >
       <GestureHandlerRootView style={styles.fill}>

@@ -150,11 +150,22 @@ export function wrapGate(g: ResumeGate, reason: WrapUpReason, now: number): bool
   return true;
 }
 
-export const WRAP_UP_COPY: Record<WrapUpReason, { title: string; body: string }> = {
-  boarding: { title: "YOUR RIDE'S UP!", body: 'Run saved. Enjoy the ride!' },
-  'left-queue': { title: 'RUN SAVED', body: 'You left the line, so we saved your score.' },
-  'session-ended': { title: 'RUN SAVED', body: 'Your score is locked in.' },
+/**
+ * The wrap-up card's words. A run saved before its first star shows the gold
+ * RUN SAVED stamp, so its title and note never say "saved" again (savedTitle,
+ * savedBody): the stamp says it once.
+ */
+export const WRAP_UP_COPY: Record<WrapUpReason, { title: string; body: string; savedTitle: string; savedBody: string }> = {
+  boarding: { title: "YOUR RIDE'S UP!", body: 'Run saved. Enjoy the ride!', savedTitle: "YOUR RIDE'S UP!", savedBody: 'Enjoy the ride!' },
+  'left-queue': { title: 'RUN SAVED', body: 'You left the line, so we saved your score.', savedTitle: 'ALL DONE!', savedBody: 'You left the line.' },
+  'session-ended': { title: 'RUN SAVED', body: 'Your score is locked in.', savedTitle: 'ALL DONE!', savedBody: '' },
 };
+
+/** The wrap-up title and note, with "saved" said once (by the stamp) on a saved run. */
+export function wrapUpCopy(reason: WrapUpReason, saved: boolean): { title: string; body: string } {
+  const c = WRAP_UP_COPY[reason];
+  return saved ? { title: c.savedTitle, body: c.savedBody } : { title: c.title, body: c.body };
+}
 
 /**
  * Stars for a run a queue event ended. Boarding mid-run never throws the run

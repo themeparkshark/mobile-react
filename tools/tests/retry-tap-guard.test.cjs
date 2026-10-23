@@ -54,3 +54,14 @@ test('every lost or expired card with a retry turns the guard on', () => {
   const ms = Number(guard.match(/RETRY_TAP_GUARD_MS = (\d+)/)[1]);
   assert.ok(ms >= 500 && ms <= 1200, 'long enough for a double tap, short enough not to feel stuck');
 });
+
+test('the safe action next to a paid retry is a full white button, not a small text link', () => {
+  const { app } = card({ guardRetry: true, quiet: { label: 'DONE', onPress() {} } });
+  const safe = app.find(node => node.type === 'Pressable' && typeof node.props.style === 'function');
+  assert.ok(safe, 'DONE is a real button');
+  const style = Object.assign({}, ...[].concat(safe.props.style({ pressed: false })).filter(Boolean));
+  assert.ok(style.minHeight >= 44, 'a 44 pt tap target or bigger');
+  assert.equal(style.alignSelf, 'stretch', 'full width, like every other results button');
+  const src = fs.readFileSync(path.join(__dirname, '../../src/components/RedeemRedeemableModal.tsx'), 'utf8');
+  assert.match(src, /'Your Ticket came back\. Try again!'/, 'one short line, not two');
+});

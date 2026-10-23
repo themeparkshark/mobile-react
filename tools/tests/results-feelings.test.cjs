@@ -63,7 +63,7 @@ test('counts a kid cannot read become dots; the next-star read is one word and a
   for (const w of ['KEEP GOING', 'HALFWAY THERE', 'ALMOST!']) assert.doesNotMatch(w, /\d/);
   const bar = read('src/gamekit/results/NextStarBar.tsx');
   assert.match(bar, /nextStarWord\(goal\)/);
-  assert.match(bar, /accessibilityLabel=\{goal\.nextStar/, 'the numbers live in the accessibility label');
+  assert.match(bar, /accessibilityLabel=\{a11yLabel \?\? \(goal\.nextStar/, 'the numbers live in the accessibility label');
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.doesNotMatch(card, /NEXT STAR \$\{|TO GO`/, 'no "NEXT STAR 8,000 / 7,050 TO GO" on the card');
   assert.match(card, /<NextStarBar goal=\{goal\}/);
@@ -205,11 +205,11 @@ test('the shell never ends on a dark screen: fallback timer, shared card, no-sta
   assert.match(shell, /<Animated\.View style=\{resultsScaleStyle\}>/);
   assert.match(shell, /if \(visible && queueEnded\) wrapUp\(queueEnded\)/);
   const card = read('src/gamekit/results/ResultsCard.tsx');
-  assert.match(card, /feelingChips\(stats, maxCombo\)/);
+  assert.match(card, /feelingChips\(stats, maxCombo, plain \? 1 : undefined\)/);
 });
 
 test('Sharky Swim results brag and point at a goal instead of listing zeros', () => {
-  const lines = load('src/games/sharky/hud/resultLines.ts');
+  const lines = load('src/games/sharky/hud/resultLines.ts', { '../../../gamekit/results/feelings': load('src/gamekit/results/feelings.ts') });
   assert.equal(lines.sharkyBragLine(1, 0), '', 'x1 chain and 0 Close Skims is nothing to show');
   assert.equal(lines.sharkyBragLine(4, 9), 'Best chain x4  ·  9 Close Skims');
   assert.equal(lines.sharkyBragLine(1, 1), '1 Close Skim');
@@ -248,4 +248,54 @@ test('Whack: true buckets, no zeros, dropped score words fold into one total, no
   assert.match(juice, /stamp: `\+\$\{foldedPts\.current\}`/);
   const board = read('src/games/whack/render/WhackBoard.tsx');
   assert.match(board, /const paceOp = useDerivedValue\(\(\) => \(pace\.value >= 1 \? 1 : 0\)\);/, 'VS BEST shows only when ahead');
+});
+
+test('round 3: one rule everywhere (x3 chains, one RUN SAVED stamp, saved said once, no percents, short buttons)', () => {
+  const lines = load('src/games/sharky/hud/resultLines.ts', { '../../../gamekit/results/feelings': load('src/gamekit/results/feelings.ts') });
+  assert.equal(lines.sharkyBragLine(2, 0), '', 'a x2 chain is not a brag (the shared rule is x3)');
+  assert.equal(lines.sharkyBragLine(3, 0), 'Best chain x3');
+  assert.equal(lines.sharkyGateWord(0.9), 'ALMOST AT THE GATE!');
+  assert.equal(lines.sharkyGateWord(0.6), 'HALFWAY TO THE GATE!');
+  assert.equal(lines.sharkyGateWord(0.1), 'KEEP SWIMMING!');
+  assert.equal(lines.sharkyGateProgress(30000, 15000), 0.99, 'a miss never shows a full bar');
+  assert.equal(lines.sharkyGateProgress(7500, 15000), 0.5);
+  const swim = read('src/games/sharky/SharkySwim.tsx');
+  assert.doesNotMatch(swim, /% to the gate/, 'no percent on the ride card');
+  assert.doesNotMatch(swim, /RACE THE GHOSTS/, 'the label fits its half-width button');
+  const card = read('src/games/sharky/hud/SharkyResults.tsx');
+  assert.match(card, /<SavedStamp reducedMotion=\{reducedMotion\}/, 'Sharky uses the shared gold stamp');
+  assert.doesNotMatch(card, />RUN SAVED</, 'no plain-text RUN SAVED');
+  assert.match(card, /const feeling = ahead \? 'AHEAD OF YOUR BEST!'/, 'the best news sits in the feeling slot under the score');
+  assert.match(card, /word=\{sharkyGateWord\(gate\)\}/);
+  assert.doesNotMatch(card, /GameIcon name="swords"/, 'a race button never shows swords');
+  assert.match(card, /PLAY_PULSES = 3/);
+  assert.doesNotMatch(card, /\), -1\)/, 'nothing on the Sharky card loops forever');
+  // Saved is said once: the stamp. Title and note never repeat it.
+  const session = load('src/gamekit/core/session.ts');
+  for (const reason of ['boarding', 'left-queue', 'session-ended']) {
+    const c = session.wrapUpCopy(reason, true);
+    assert.doesNotMatch(`${c.title} ${c.body}`, /saved/i, `${reason}: the stamp already says saved`);
+  }
+  assert.equal(session.wrapUpCopy('boarding', true).body, 'Enjoy the ride!');
+  assert.equal(session.wrapUpCopy('boarding', false).body, 'Run saved. Enjoy the ride!', 'a starred wrap-up still says it was saved');
+  // A 0-star card reads in one glance.
+  const feel = load('src/gamekit/results/feelings.ts');
+  assert.equal(feel.nearBest(800, 1000), true);
+  assert.equal(feel.nearBest(260, 1410), false, 'a 260 run under a 1,410 best drops the BEST line');
+  const rc = read('src/gamekit/results/ResultsCard.tsx');
+  assert.match(rc, /const plain = stars === 0 && !saved && !best\.isNewBest;/);
+  assert.match(rc, /\{footer && !plain \?/, 'no share chip on a plain 0-star run');
+  // The bar grows with a transform, not a width relayout.
+  const bar = read('src/gamekit/results/NextStarBar.tsx');
+  assert.match(bar, /scaleX: Math\.max\(0, Math\.min\(1, bar\.value\)\)/);
+  assert.match(bar, /transformOrigin: 'left'/);
+  assert.doesNotMatch(bar, /width: `\$\{/);
+  // Boss Bash no-hit card speaks like the rest.
+  const bash = read('src/games/boss/bash/BashResults.tsx');
+  assert.doesNotMatch(bash, /'MISSED IT'|'BACK'/);
+  // Group turns: one try, DONE only.
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /const rematchOffered = !rideChallenge && !wrap && !turnOnly && !!rematchRun;/);
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /turnOnly: activeGame\?\.groupTurn === true,/);
 });

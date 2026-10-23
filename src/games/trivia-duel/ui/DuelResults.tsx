@@ -63,7 +63,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
     if (!model.won && !reducedMotion) {
       gap.value = withRepeat(withSequence(withTiming(1, { duration: beatMs }), withTiming(0, { duration: beatMs })), -1);
     }
-    if (!reducedMotion && onRematch) pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: beatMs * 0.25 }), withTiming(1, { duration: beatMs * 0.75 })), -1);
+    if (!reducedMotion && onRematch) pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: beatMs * 0.25 }), withTiming(1, { duration: beatMs * 0.75 })), 3);
     if (model.best && !reducedMotion) {
       polY.value = withDelay(beatMs * 2, withSequence(
         withSpring(0, { damping: 10, stiffness: 220 }),

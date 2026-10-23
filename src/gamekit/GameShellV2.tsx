@@ -64,7 +64,7 @@ import GameIcon from '../ui/GameIcon';
 import { ResultsCard, type ResultStat } from './results/ResultsCard';
 import { starsFor, type StarThresholds } from './core/scoring';
 import {
-  WRAP_UP_COPY,
+  wrapUpCopy,
   createHeadsUp,
   isEmptyResultsNode,
   makeSnapshot,
@@ -671,7 +671,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         result: {
           ...base,
           stars: credit.stars,
-          message: base.message ?? WRAP_UP_COPY[reason].title,
+          message: base.message ?? wrapUpCopy(reason, credit.partial).title,
           meta: { ...(base.meta ?? {}), wrapUp: reason, ...(credit.partial ? { partial: true } : {}) },
         },
       });
@@ -798,7 +798,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
     // One button rule for every results card: PLAY AGAIN is the big button,
     // unless a win's reward is still waiting and a replay would skip it.
-    const rematchOffered = !rideChallenge && !wrap && !!rematchRun;
+    // A pass-and-play group turn is one try per kid: DONE is the only button.
+    const turnOnly = linePlayMovement?.turnOnly === true;
+    const rematchOffered = !rideChallenge && !wrap && !turnOnly && !!rematchRun;
+    const challengeOffered = !rideChallenge && !wrap && !turnOnly ? onChallenge : undefined;
     const playAgainFirst = rematchOffered && (!won || canBankRun);
     const saved = effectiveResult?.meta?.partial === true;
     const claimLabel = won ? 'CONTINUE' : 'DONE';
@@ -812,7 +815,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       wrapReason: wrap?.reason ?? null,
       claim: handleClaim,
       rematch: rematchOffered ? rematchRun : undefined,
-      challenge: !rideChallenge && !wrap ? onChallenge : undefined,
+      challenge: challengeOffered,
       playAgainFirst,
       saved,
       reducedMotion,
@@ -960,7 +963,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                     streakKey={gameId ?? title}
                     runToken={resultsRunRef.current}
                     saved={saved}
-                    note={wrap ? WRAP_UP_COPY[wrap.reason].body : effectiveResult?.note}
+                    note={wrap ? wrapUpCopy(wrap.reason, saved).body || undefined : effectiveResult?.note}
                     footer={resultCardFooter}
                     reducedMotion={reducedMotion}
                   />
@@ -974,7 +977,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                       {playAgainFirst ? <GameIcon name="retry" size={26} /> : null}
                       <Text style={[styles.primaryBtnTxt, playAgainFirst && styles.btnGap]}>{playAgainFirst ? 'PLAY AGAIN' : claimLabel}</Text>
                     </TouchableOpacity>
-                    {playAgainFirst || (rematchOffered && rematchRun) || (!rideChallenge && !wrap && onChallenge) ? (
+                    {playAgainFirst || (rematchOffered && rematchRun) || challengeOffered ? (
                       <View style={styles.row}>
                         {playAgainFirst ? (
                           <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn]} onPress={handleClaim} accessibilityRole="button">
@@ -986,9 +989,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                             <Text style={[styles.secondaryBtnCaps, styles.btnGap]}>PLAY AGAIN</Text>
                           </TouchableOpacity>
                         ) : null}
-                        {!rideChallenge && !wrap && onChallenge ? (
-                          <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn]} onPress={onChallenge} accessibilityRole="button">
-                            <GameIcon name="swords" size={20} />
+                        {challengeOffered ? (
+                          <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn]} onPress={challengeOffered} accessibilityRole="button">
+                            <GameIcon name={/^race/i.test(challengeLabel) ? 'rush' : 'swords'} size={20} />
                             <Text style={[styles.secondaryBtnCaps, styles.btnGap]} numberOfLines={1} adjustsFontSizeToFit>{challengeLabel.toUpperCase()}</Text>
                           </TouchableOpacity>
                         ) : null}

@@ -116,7 +116,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   return (
     <View style={styles.card} accessibilityViewIsModal>
       <View style={[styles.banner, won && styles.bannerWin]} accessibilityRole="header">
-        <Text style={styles.bannerText}>{won ? (ko && !noHits ? 'YOU FINISHED IT!' : 'TEAM WON!') : noHits ? 'MISSED IT' : 'STILL FIGHTING'}</Text>
+        <Text style={styles.bannerText}>{won ? (ko && !noHits ? 'YOU FINISHED IT!' : 'TEAM WON!') : noHits ? 'GOOD TRY!' : 'STILL FIGHTING'}</Text>
       </View>
       {best && !noHits && <View style={styles.best}><Text style={styles.bestText}>NEW BEST!</Text></View>}
       <View style={styles.head}>
@@ -196,7 +196,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       </> : <>
         {!noHits && n.reason && <Text style={styles.wallet}>{n.reason}</Text>}
         <Pressable accessibilityRole="button" onPress={once(claim)} style={[styles.again, styles.doneBig]}>
-          <Text style={[styles.againText, { color: BRAND.navy }]}>{noHits ? 'BACK' : 'DONE'}</Text>
+          <Text style={[styles.againText, { color: BRAND.navy }]}>DONE</Text>
         </Pressable>
       </>}
       {perfLine ? <Text style={styles.perf}>{perfLine}</Text> : null}

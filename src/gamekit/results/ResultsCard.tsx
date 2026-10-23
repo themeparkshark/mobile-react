@@ -41,8 +41,9 @@ import GameIcon from '../../ui/GameIcon';
 import { compareBest, formatScore, nextStarGoal, tallySchedule, tallyTickCount, type StarThresholds } from '../core/scoring';
 import { nearMissLine } from '../core/nearMiss';
 import { CountUpText } from '../fx/CountUpText';
-import { feelingChips, feelingLine, feelingTitle, noteRun } from './feelings';
+import { feelingChips, feelingLine, feelingTitle, nearBest, noteRun } from './feelings';
 import { NextStarBar } from './NextStarBar';
+import { SavedStamp } from './SavedStamp';
 import { playHaptic } from '../Haptics';
 import { GameAudio } from '../audio/GameAudio';
 
@@ -114,7 +115,12 @@ export function ResultsCard({
   const [streak] = useState(() => (streakKey ? noteRun(streakKey, runToken ?? `${score}:${stars}`, stars > 0) : 0));
   const feeling = useMemo(() => feelingLine({ streak, near: best.isNewBest ? null : near }), [streak, near, best.isNewBest]);
   const showNear = !!feeling.text;
-  const chips = useMemo(() => feelingChips(stats, maxCombo), [stats, maxCombo]);
+  // A 0-star run reads in one glance: stars, score, the bar and PLAY AGAIN.
+  // The quiet BEST shows only when the run came near it, one brag chip at
+  // most, and no share chip (a NEW BEST still gets the full card).
+  const plain = stars === 0 && !saved && !best.isNewBest;
+  const showBest = !!personalBest && (!plain || nearBest(score, personalBest));
+  const chips = useMemo(() => feelingChips(stats, maxCombo, plain ? 1 : undefined), [stats, maxCombo, plain]);
   const nBuckets = buckets?.length ?? 0;
   const bucketStart = STAR_BASE_DELAY + starStepMs * 3;
   const countDelay = reducedMotion ? 0 : bucketStart + nBuckets * (BUCKET_MS + BUCKET_GAP);
@@ -159,7 +165,7 @@ export function ResultsCard({
       </Animated.View>
 
       {saved ? (
-        <SavedStamp reducedMotion={reducedMotion} />
+        <SavedStamp reducedMotion={reducedMotion} delayMs={STAR_BASE_DELAY} />
       ) : (
         <View style={styles.starRow}>
           {[1, 2, 3].map((n) => (
@@ -195,8 +201,8 @@ export function ResultsCard({
             <GameIcon name="crown" size={22} />
             <Text style={styles.newBestText}>NEW BEST!</Text>
           </View>
-        ) : personalBest ? (
-          <Text style={styles.bestQuiet}>{`BEST ${formatScore(personalBest)}`}</Text>
+        ) : showBest ? (
+          <Text style={styles.bestQuiet}>{`BEST ${formatScore(personalBest!)}`}</Text>
         ) : null}
       </Animated.View>
 
@@ -216,7 +222,7 @@ export function ResultsCard({
         </View>
       ) : null}
 
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
+      {footer && !plain ? <View style={styles.footer}>{footer}</View> : null}
 
       {note ? <Text style={styles.note}>{note}</Text> : null}
     </View>
@@ -233,30 +239,6 @@ function Chip({ label, value, pips }: ResultStat) {
       ) : <Text style={styles.chipValue}>{value}</Text>}
       <Text style={styles.chipLabel}>{label}</Text>
     </View>
-  );
-}
-
-/** RUN SAVED: a gold stamp that thumps in where the stars would be. */
-function SavedStamp({ reducedMotion }: { reducedMotion: boolean }) {
-  const scale = useSharedValue(reducedMotion ? 1 : 0);
-  useEffect(() => {
-    if (reducedMotion) return undefined;
-    scale.value = withDelay(STAR_BASE_DELAY, withSequence(
-      withTiming(1.8, { duration: 0 }),
-      withTiming(0.92, { duration: 130, easing: Easing.in(Easing.quad) }),
-      withSpring(1, { damping: 9, stiffness: 320 }),
-    ));
-    const t = setTimeout(() => playHaptic('starSlam'), STAR_BASE_DELAY + 120);
-    return () => { clearTimeout(t); cancelAnimation(scale); };
-  }, [reducedMotion, scale]);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }, { rotate: '-4deg' }], opacity: scale.value > 0.02 ? 1 : 0 }));
-  return (
-    <Animated.View style={[styles.savedWrap, style]} accessible accessibilityLabel="Run saved">
-      <View style={styles.saved}>
-        <GameIcon name="ride" size={30} />
-        <Text style={styles.savedText}>RUN SAVED</Text>
-      </View>
-    </Animated.View>
   );
 }
 
@@ -386,10 +368,6 @@ const styles = StyleSheet.create({
   pips: { flexDirection: 'row', height: 24, alignItems: 'center' },
   pip: { width: 14, height: 14, borderRadius: 7, marginHorizontal: 2, borderWidth: 2, borderColor: '#05346e', backgroundColor: '#ffffff' },
   pipOn: { backgroundColor: '#ffcf3b' },
-  savedWrap: { marginTop: 10, marginBottom: 10 },
-  saved: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffcf3b', borderRadius: 16, borderWidth: 4,
-    borderColor: '#05346e', paddingHorizontal: 16, paddingVertical: 6 },
-  savedText: { fontFamily: 'Shark', fontSize: 26, color: '#05346e', marginLeft: 8 },
   buckets: { flexDirection: 'row', justifyContent: 'center', marginBottom: 4 },
   bucket: { backgroundColor: '#3d9be6', borderRadius: 14, borderWidth: 3, borderColor: '#05346e', paddingHorizontal: 10,
     paddingVertical: 3, marginHorizontal: 4, alignItems: 'center', minWidth: 78 },

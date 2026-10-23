@@ -8,10 +8,15 @@
  * Pure, no React, so tools/tests can load it.
  */
 
-/** The brag line under the stars. Empty when there is nothing to brag about. */
+import { BEST_COMBO_MIN } from '../../../gamekit/results/feelings';
+
+/**
+ * The brag line under the stars. Empty when there is nothing to brag about.
+ * A chain counts as a brag at the same x3 every other results card uses.
+ */
 export function sharkyBragLine(bestChainMult: number, closeSkims: number): string {
   const parts: string[] = [];
-  if (bestChainMult > 1) parts.push(`Best chain x${bestChainMult}`);
+  if (bestChainMult >= BEST_COMBO_MIN) parts.push(`Best chain x${bestChainMult}`);
   if (closeSkims > 0) parts.push(`${closeSkims} Close Skim${closeSkims === 1 ? '' : 's'}`);
   return parts.join('  ·  ');
 }
@@ -45,4 +50,20 @@ export function aheadBars(splits: readonly number[]): number[] {
 export function sharkyNearBestLine(score: number, best: number): string {
   if (!(best > score) || best - score >= 0.12 * best) return '';
   return 'So close to your best!';
+}
+
+/**
+ * A ride-challenge run that missed the gate: a word over the shared bar, never
+ * a percent. The bar shows how far the shark got.
+ */
+export function sharkyGateWord(progress: number): string {
+  if (progress >= 0.85) return 'ALMOST AT THE GATE!';
+  if (progress >= 0.5) return 'HALFWAY TO THE GATE!';
+  return 'KEEP SWIMMING!';
+}
+
+/** How far a ride-challenge run got toward the gate, 0 to 0.99 (never a full bar on a miss). */
+export function sharkyGateProgress(distance: number, gateX: number): number {
+  const p = Math.max(0, distance) / Math.max(1, gateX || 15000);
+  return Math.min(0.99, Math.max(0, p));
 }

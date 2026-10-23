@@ -53,10 +53,14 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
     const timer = setTimeout(() => setArmed(true), RETRY_TAP_GUARD_MS);
     return () => clearTimeout(timer);
   }, [guardRetry]);
-  const quietAction = quiet && <Pressable accessibilityRole="button" onPress={quiet.onPress}
-    style={guardRetry ? styles.quietAbove : styles.quiet} hitSlop={8}>
+  // With a paid retry the safe action is a full white button (DONE), not a
+  // small text link, and it holds the old Close spot above the retry.
+  const quietAction = quiet && (guardRetry ? <Pressable accessibilityRole="button" onPress={quiet.onPress}
+    style={({ pressed }) => [styles.secondary, styles.safeAbove, pressed && styles.pressed]}>
+    <Text style={styles.secondaryText}>{quiet.label}</Text>
+  </Pressable> : <Pressable accessibilityRole="button" onPress={quiet.onPress} style={styles.quiet} hitSlop={8}>
     <Text style={styles.quietText}>{quiet.label}</Text>
-  </Pressable>;
+  </Pressable>);
   return (
     <Animated.View entering={reduced ? FadeIn.duration(120) : ZoomIn.springify().damping(14).stiffness(220)}
       style={styles.wrap} accessibilityRole="alert">
@@ -95,6 +99,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 4, borderBottomColor: '#9ccbe9', borderRadius: 14, paddingVertical: 11, marginTop: 8 },
   secondaryText: { fontFamily: 'Shark', fontSize: 17, color: '#05346e' },
   quiet: { minHeight: 44, justifyContent: 'center', alignItems: 'center', marginTop: 4 },
-  quietAbove: { minHeight: 56, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  safeAbove: { minHeight: 52, justifyContent: 'center', marginTop: 0, marginBottom: 12 },
+  pressed: { transform: [{ translateY: 2 }] },
   quietText: { fontFamily: 'Shark', fontSize: 16, color: '#dff4ff' },
 });

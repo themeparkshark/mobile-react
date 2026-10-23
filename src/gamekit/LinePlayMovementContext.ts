@@ -60,6 +60,12 @@ export interface LinePlayMovement {
    * A partial run counts as played but is not a real star.
    */
   readonly onRunDone?: (stars: number, partial: boolean) => void;
+  /**
+   * Optional: this is one kid's pass-and-play group turn. Each kid gets one
+   * try, so the results card shows only DONE (it hands the turn on). No PLAY
+   * AGAIN and no challenge: a replay here would never finish the turn.
+   */
+  readonly turnOnly?: boolean;
 }
 
 export const LinePlayMovementContext = createContext<LinePlayMovement | null>(null);

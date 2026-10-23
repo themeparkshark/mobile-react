@@ -849,7 +849,7 @@ export default function RedeemRedeemableModal({
                 : 'This Rescue Pass try timed out. No Ticket was spent.'
               : 'This challenge was not finished, so your Ticket came back to you.'}
             primary={rescueRetryAvailable ? { label: 'Try Again', onPress: handleProtectedRetry } : { label: 'Return to Map', onPress: handleLostClose }}
-            quiet={rescueRetryAvailable ? { label: 'Return to map', onPress: handleLostClose } : undefined}
+            quiet={rescueRetryAvailable ? { label: 'DONE', onPress: handleLostClose } : undefined}
             guardRetry={rescueRetryAvailable} />}
           {flowState === 'claim-error' && <ChallengeStatusCard title={proofRejected ? 'Replay This Game' : 'Checking Your Score'}
             art={proofRejected ? 'none' : 'loading'}
@@ -869,10 +869,10 @@ export default function RedeemRedeemableModal({
           {flowState === 'lost' && <ChallengeStatusCard title="So Close!" art="soClose"
             message={usedRescuePass
               ? rescueRetryAvailable
-                ? 'No Ticket spent. Your Rescue Pass gives you one more try at this ride today.'
+                ? 'No Ticket spent. One more try today!'
                 : 'Your Rescue Pass tries are used up. No Ticket was spent.'
               : firstCoinTicketReturned
-              ? 'This coin is still out there, and your Ticket came back. Give it another go.'
+              ? 'Your Ticket came back. Try again!'
               : lostTicketCost > 0 ? `This one got away. ${lostTicketCost} Ticket${lostTicketCost === 1 ? '' : 's'} spent.`
               : 'This one got away. No Ticket was spent.'}
             primary={firstCoinTicketReturned || rescueRetryAvailable
@@ -881,7 +881,7 @@ export default function RedeemRedeemableModal({
               ? { label: adBusy ? 'One Moment' : vip ? 'One More Try (VIP)' : 'Watch Ad: One More Try',
                 onPress: () => { void handleAdRetry(); }, disabled: adBusy || !location }
               : { label: 'Continue', onPress: handleLostClose }}
-            quiet={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry ? { label: canOfferRetry ? 'No thanks' : 'Return to map', onPress: handleLostClose } : undefined}
+            quiet={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry ? { label: canOfferRetry ? 'No thanks' : 'DONE', onPress: handleLostClose } : undefined}
             guardRetry={firstCoinTicketReturned || rescueRetryAvailable} />}
 
           {/* MINIGAME STATE - rendered inside the same modal */}
