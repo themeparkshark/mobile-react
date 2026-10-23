@@ -43,11 +43,21 @@ test('pins tilt a little, the same way every render', () => {
 });
 
 test('your pins page in without repeats, and the board pin is never offered back', () => {
-  const merged = model.mergePins([item(1), item(2)], [item(2), item(3)]);
-  assert.deepEqual(plain(merged.map(p => p.id)), [1, 2, 3]);
-  assert.deepEqual(plain(model.givablePins(merged, 2).map(p => p.id)), [1, 3]);
+  const merged = model.mergePins([item(11), item(12)], [item(12), item(13)]);
+  assert.deepEqual(plain(merged.map(p => p.id)), [11, 12, 13]);
+  assert.deepEqual(plain(model.givablePins(merged, 12).map(p => p.id)), [11, 13]);
   assert.equal(model.pinName({ name: 'Honey Pin', display_name: null }), 'Honey Pin');
   assert.equal(model.pinName({ name: 'Honey Pin', display_name: 'Hunny Pin' }), 'Hunny Pin');
+});
+
+test('look-alike pins: plain names, never offered to the board (IP safety, Oct 23 2026)', () => {
+  assert.equal(model.pinName({ name: '50 Castle Pin', display_name: null }), 'Golden 50 Pin');
+  assert.equal(model.pinName({ name: 'Sorcerer Hat Pin', display_name: null }), 'Starry Hat Pin');
+  assert.equal(model.pinName({ name: 'Sorcerer Hat Pin', display_name: 'Wizard Hat Pin' }), 'Wizard Hat Pin', 'a reviewed server name wins');
+  // Ids 3, 5, 267 and 329 (castle 50, wizard hat, castle 100, famous-bottle soda) stay off the board.
+  assert.deepEqual(plain(model.givablePins([item(3), item(5), item(11), item(267), item(329)], 99).map(p => p.id)), [11]);
+  const api = fs.readFileSync(path.join(__dirname, '../../src/api/endpoints/pin-swaps/all.ts'), 'utf8');
+  assert.match(api, /filter\(swap => !ipHeld\(swap\.pin\?\.item\)\)/, 'the board drops look-alike pins');
 });
 
 test('the board never keeps who posted a pin', () => {

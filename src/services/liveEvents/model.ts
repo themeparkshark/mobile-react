@@ -96,7 +96,8 @@ export function ordinal(n: number): string {
   return n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`;
 }
 
-export const TEAM_LABEL: Record<TeamKey, string> = { mouse: 'Team Mouse', globe: 'Team Globe', shark: 'Team Shark' };
+/** Same names as constants/teams.ts (IP safety: never "Team Mouse" or "Team Globe"). */
+export const TEAM_LABEL: Record<TeamKey, string> = { mouse: 'Team Gold', globe: 'Team Green', shark: 'Team Shark' };
 
 /** Frenzy in words: "x2 until 1 PM". Null when off. */
 export function frenzyLine(event: LiveEvent): string | null {

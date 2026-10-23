@@ -38,3 +38,18 @@ test('Profile and player pages wire the chip and the card crest; the nudge opens
   assert.match(read('src/components/profile/TitlePill.tsx'), /flexWrap: 'wrap'/);
   assert.match(read('src/components/Playercard.tsx'), /TEAMS\[team\]\.badge/);
 });
+
+test('team names are plain: never Team Mouse or Team Globe (IP safety, Oct 23 2026)', () => {
+  const fs2 = require('node:fs');
+  const p2 = require('node:path');
+  const { loadTs: load } = require('./helpers/ts-module.cjs');
+  const teams = load('src/constants/teams.ts');
+  assert.equal(teams.teamName('mouse'), 'Team Gold');
+  assert.equal(teams.teamName('globe'), 'Team Green');
+  assert.equal(teams.teamName('mouse', { mouse: 'Team Mouse' }), 'Team Gold', 'the old server default is ignored');
+  assert.equal(teams.teamName('globe', { globe: 'Globe' }), 'Team Green');
+  assert.equal(teams.teamName('mouse', { mouse: 'Team Sunrise' }), 'Team Sunrise', 'a real server rename still wins');
+  assert.equal(teams.teamShortName('globe'), 'Green');
+  const label = fs2.readFileSync(p2.join(__dirname, '../../src/services/liveEvents/model.ts'), 'utf8');
+  assert.doesNotMatch(label, /'Team Mouse'|'Team Globe'/);
+});
