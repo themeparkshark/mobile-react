@@ -12,6 +12,7 @@ import { PlayerType } from '../models/player-type';
 import { useProgressionFlags } from '../services/progression/progressionFlags';
 import { GameIcon } from '../ui';
 import XpBar, { XP_BAR_HEIGHT, XP_BAR_LIP } from './XpBar';
+import { flexRevealOnce } from '../share/revealOnce';
 import type { PotionTransition } from './xpPotionModel';
 
 /**
@@ -121,6 +122,8 @@ export default function Experience({
       if (announced.current !== level) {
         announced.current = level;
         AccessibilityInfo.announceForAccessibility(`Level ${level}!`);
+        // Every 5th level gets the Flex moment once (shouldFlexReveal), with a Share button.
+        void flexRevealOnce('level_up', `${player.id}:${level}`, { level }, { surface: 'profile_level' });
       }
     }
     if (reduced) return;
@@ -130,7 +133,7 @@ export default function Experience({
       Animated.spring(pop, { toValue: 1, friction: 4, tension: 160, useNativeDriver: true }),
     ]).start();
     shake(true);
-  }, [own, reduced, shake, pop, level]);
+  }, [own, reduced, shake, pop, level, player.id]);
 
   const onRefill = useCallback(() => {
     remember(); // the refill shows the latest data, including gains that landed during the celebration

@@ -7,6 +7,7 @@ import GameRichText from '../ui/GameRichText';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import { shareFlex } from '../share';
 import { parkDayFlexPayload } from '../share/parkDay';
+import { flexRevealOnce } from '../share/revealOnce';
 import * as RootNavigation from '../RootNavigation';
 
 interface Props {
@@ -35,6 +36,11 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
     setError(false);
     void loadRecap(parkId, selectedDay ?? undefined).then(result => {
       if (current) setRecap(result);
+      // A big park day (5+ ride coins) gets the Flex moment once. The host holds it until the
+      // player has left the park, so the picture never says where a kid is right now.
+      if (current && result && !selectedDay) {
+        void flexRevealOnce('park_day', `${parkId}:${result.park_day}`, parkDayFlexPayload(result), { surface: 'park_day' });
+      }
     }).catch(() => {
       if (current) setError(true);
     });
