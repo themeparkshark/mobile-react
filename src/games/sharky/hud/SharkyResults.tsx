@@ -31,6 +31,7 @@ import { SHARKY_ART } from '../assets';
 import { INK, NEUTRAL, REWARD, REWARD_PALE, DANGER } from '../render/palette';
 import type { MissionUpdate } from '../meta/missions';
 import { missionTarget, missionText } from '../meta/missions';
+import { sharkyBragLine, showSplits } from './resultLines';
 
 export interface SharkyResultsData {
   score: number;
@@ -157,6 +158,7 @@ export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, c
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateY: card.value }] }));
   const primary = playAgain ?? claim;
   const primaryLabel = playAgain ? 'PLAY AGAIN' : claimLabel;
+  const brag = sharkyBragLine(data.bestChainMult, data.closeSkims);
   const splitMax = useMemo(() => Math.max(1, ...data.splits.map((d) => Math.abs(d))), [data.splits]);
 
   return (
@@ -180,7 +182,7 @@ export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, c
         <View style={styles.stars}>
           {[0, 1, 2].map((i) => <Star key={i} index={i} on={i < data.stars} delayMs={1450 + i * 220} reduced={reducedMotion} />)}
         </View>
-        <Text style={styles.hero2}>{`Best chain x${data.bestChainMult}  ·  ${data.closeSkims} Close Skim${data.closeSkims === 1 ? '' : 's'}`}</Text>
+        {brag ? <Text style={styles.hero2}>{brag}</Text> : null}
         {data.nearMiss ? <Text style={styles.nearMiss}>{data.nearMiss}</Text> : null}
 
         <Animated.View style={[styles.playWrap, btnStyle]}>
@@ -192,15 +194,17 @@ export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, c
         {below ? (
           <View style={styles.below}>
             {data.newCard ? <Text style={styles.newCard}>{data.newCard}</Text> : null}
-            {data.splits.length ? (
-              <View style={styles.splitRow}>
-                {data.splits.map((d, i) => (
-                  <View key={i} style={styles.splitCell}>
-                    <View style={[styles.splitBar, { height: 6 + (22 * Math.abs(d)) / splitMax, backgroundColor: d >= 0 ? '#3ccf6b' : DANGER }]} />
-                    <Text style={styles.splitText}>{`${d >= 0 ? '+' : '-'}${Math.abs(d)}`}</Text>
-                  </View>
-                ))}
-              </View>
+            {showSplits(data.splits) ? (
+              <>
+                <Text style={styles.splitText}>AHEAD OF YOUR BEST</Text>
+                <View style={styles.splitRow}>
+                  {data.splits.map((d, i) => (
+                    <View key={i} style={styles.splitCell}>
+                      <View style={[styles.splitBar, { height: 6 + (22 * Math.abs(d)) / splitMax, backgroundColor: d >= 0 ? '#3ccf6b' : DANGER }]} />
+                    </View>
+                  ))}
+                </View>
+              </>
             ) : null}
             {data.missions && !data.newCard ? data.missions.missions.map((m) => (
               <View key={m.id} style={styles.mRow}>

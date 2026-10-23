@@ -47,6 +47,7 @@ import { RALLY_HOUSE_CREW, RALLY_MAX_STEPS, rallyConfig } from './sim/rally';
 import { useRally } from './net/useRally';
 import { RallyCountIn, RallyLobby, RallyPodium } from './hud/RallyOverlays';
 import { SharkyResults, type SharkyResultsData } from './hud/SharkyResults';
+import { sharkyStarGoalLine } from './hud/resultLines';
 import { SharkyCanvas } from './render/SharkyCanvas';
 import { SharkyHud } from './render/SharkyHud';
 import { sharkyLayout, type SharkyLayout } from './render/view';
@@ -119,7 +120,7 @@ function nearMissLine(s: SimState, mode: number, best: number, stars: number): s
   if (best > s.score && best - s.score < 0.12 * best) return `Only ${best - s.score} from your best`;
   if (mode !== MODE_RIDE && stars < 3) {
     const next = stars === 0 ? QUEUE_STARS.one : stars === 1 ? QUEUE_STARS.two : QUEUE_STARS.three;
-    return `Only ${Math.max(1, next - s.score)} from ${stars + 1} star${stars === 0 ? '' : 's'}`;
+    return sharkyStarGoalLine(s.score, next);
   }
   return '';
 }

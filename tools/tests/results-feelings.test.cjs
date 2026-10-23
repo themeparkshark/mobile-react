@@ -139,3 +139,16 @@ test('the shell never ends on a dark screen: fallback timer, shared card, no-sta
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /feelingChips\(stats, maxCombo\)/);
 });
+
+test('Sharky Swim results brag and point at a goal instead of listing zeros', () => {
+  const lines = load('src/games/sharky/hud/resultLines.ts');
+  assert.equal(lines.sharkyBragLine(1, 0), '', 'x1 chain and 0 Close Skims is nothing to show');
+  assert.equal(lines.sharkyBragLine(4, 9), 'Best chain x4  ·  9 Close Skims');
+  assert.equal(lines.sharkyBragLine(1, 1), '1 Close Skim');
+  assert.equal(lines.sharkyStarGoalLine(238, 2500), 'Next star at 2,500', 'far away is a target, not "Only 2262"');
+  assert.equal(lines.sharkyStarGoalLine(2300, 2500), 'So close! 200 more for a star');
+  assert.equal(lines.showSplits([-64, -12]), false, 'a row of red bars never shows');
+  assert.equal(lines.showSplits([-64, 30]), true);
+  const card = read('src/games/sharky/hud/SharkyResults.tsx');
+  assert.doesNotMatch(card, /Math\.abs\(d\)\}`\}<\/Text>/, 'split bars carry no raw numbers');
+});
