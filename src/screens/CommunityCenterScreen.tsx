@@ -82,8 +82,11 @@ const LEAVE_GIFT_ART_ASPECT = 842 / 375;
 const LEAVE_GIFT_W = Math.round(SCREEN_WIDTH * 0.31);
 const LEAVE_GIFT_H = Math.round(LEAVE_GIFT_W / LEAVE_GIFT_ART_ASPECT);
 const LEAVE_GIFT_LEFT = Math.round(SCREEN_WIDTH * 0.678);
-/** The gentle pulse stays small so the button never grows past the screen edge. */
-const LEAVE_GIFT_PULSE = 1.05;
+/**
+ * The button never grows: it pulses with a soft white shine instead of a scale, so it never
+ * moves toward the screen edge. The press squish also never goes past full size.
+ */
+export const LEAVE_GIFT_SHINE = 0.3;
 const LEAVE_GIFT_CENTER_Y_RATIO = 0.77;
 /**
  * The art is sized to the screen width, so it is taller than every phone (20 pt on a 17 Pro,
@@ -204,8 +207,8 @@ export default function CommunityCenterScreen() {
   const bounceAnim3 = useRef(new Animated.Value(0)).current;
   const bounceAnims = [bounceAnim1, bounceAnim2, bounceAnim3];
   
-  // Pulse animation for Leave Gift button
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  // Shine pulse for the Leave Gift button (opacity of a white copy on top, 0 to LEAVE_GIFT_SHINE)
+  const pulseAnim = useRef(new Animated.Value(0)).current;
   
   // Wiggle animation for question marks
   const wiggleAnim = useRef(new Animated.Value(0)).current;
@@ -341,13 +344,13 @@ export default function CommunityCenterScreen() {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: LEAVE_GIFT_PULSE,
+            toValue: LEAVE_GIFT_SHINE,
             duration: 800,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
-            toValue: 1,
+            toValue: 0,
             duration: 800,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
@@ -357,7 +360,7 @@ export default function CommunityCenterScreen() {
       pulse.start();
       return () => pulse.stop();
     } else {
-      pulseAnim.setValue(1);
+      pulseAnim.setValue(0);
     }
   }, [center?.can_give, player?.coins, reduced]);
   
@@ -999,7 +1002,7 @@ export default function CommunityCenterScreen() {
                   left: LEAVE_GIFT_LEFT,
                   top: LEAVE_GIFT_TOP,
                   transform: [
-                    { scale: Animated.multiply(pulseAnim, leaveGiftScale) },
+                    { scale: leaveGiftScale.interpolate({ inputRange: [0, 1, 2], outputRange: [0, 1, 1] }) },
                   ],
                 },
               ]}
@@ -1014,6 +1017,14 @@ export default function CommunityCenterScreen() {
                   style={styles.leaveGiftImage}
                   contentFit="contain"
                 />
+                <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: pulseAnim }]}>
+                  <Image
+                    source={require('../../assets/images/screens/community-center-leave-gift.png')}
+                    style={styles.leaveGiftImage}
+                    contentFit="contain"
+                    tintColor="#ffffff"
+                  />
+                </Animated.View>
                 {giving && (
                   <View style={styles.leaveGiftSpinner}>
                     <SharkLoaderDot />

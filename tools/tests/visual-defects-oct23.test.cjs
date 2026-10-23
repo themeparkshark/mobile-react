@@ -113,9 +113,10 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
   // A narrower button leaves a painted twin showing beside it, so it covers the slot exactly.
   assert.match(cc, /LEAVE_GIFT_W = Math\.round\(SCREEN_WIDTH \* 0\.31\)/);
   assert.match(cc, /LEAVE_GIFT_LEFT = Math\.round\(SCREEN_WIDTH \* 0\.678\)/);
-  assert.match(cc, /LEAVE_GIFT_PULSE = 1\.05/);
-  // Scale grows from the center: the right edge at the top of the pulse.
-  assert.ok(0.678 + 0.31 + 0.31 * 0.05 / 2 < 1, 'even mid-pulse the button stays on screen');
+  // It pulses with a white shine, never a scale, and the press squish never passes full size.
+  assert.doesNotMatch(cc, /LEAVE_GIFT_PULSE|Animated\.multiply\(pulseAnim/);
+  assert.match(cc, /export const LEAVE_GIFT_SHINE = 0\.3;/);
+  assert.match(cc, /leaveGiftScale\.interpolate\(\{ inputRange: \[0, 1, 2\], outputRange: \[0, 1, 1\] \}\)/);
   // Short phones (iPhone SE): GO BACK and the cooldown note sit on the screen, not on the art's hidden bottom.
   assert.match(cc, /bottom: 80 \+ ART_OVERFLOW/);
   assert.match(cc, /145 \+ ART_OVERFLOW/);
@@ -260,7 +261,7 @@ test('Ride Detail wears the Ride Tracker header: no web gradients, game buttons,
   const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
   assert.doesNotMatch(src, /LinearGradient|SafeAreaView|heroGradient/);
   assert.match(src, /<RideTrackerFrame title=\{headerTitle\} right=\{starButton\}/);
-  assert.match(src, /<RideTrackerFrame title=\{headerTitle\} style=\{s\.container\}>\s*\{loadError/, 'loading uses the same frame');
+  assert.match(src, /<RideTrackerFrame title=\{headerTitle\} style=\{s\.container\}>\s*\{titleProbe\}\s*\{loadError/, 'loading uses the same frame');
   assert.match(src, /<GameButton label="Log this ride"/);
   assert.match(src, /paddingBottom: FOOTER_CLEARANCE/);
   assert.match(read('src/screens/RideTracker/RideTrackerFrame.tsx'), /<TopbarColumn stretch=\{false\}>\{right\}<\/TopbarColumn>/);
@@ -310,4 +311,98 @@ test('the park arrival tip is one short line a 7-year-old reads at a glance', ()
 test('Finn catches up by the clock, so a slow first frame never leaves one word above the button', () => {
   const src = read('src/components/Tutorial/TeacherShark.tsx');
   assert.match(src, /visibleParts\(parts, Date\.now\(\) - startedAt\)/);
+});
+
+// Round 4 (grader blockers and fixes).
+test('Ride Detail star: a drawn white-rim star when off, the full gold star when on, never a faded olive star', () => {
+  const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
+  assert.doesNotMatch(src, /opacity: 0\.45/);
+  assert.match(src, /<FavoriteStar on=\{wishlisted\} size=\{34\} \/>/);
+  assert.match(src, /<GameIcon name="star" size=\{size\} mono=\{B\.white\} \/>/);
+  assert.match(src, /Animated\.spring\(pop/, 'saving pops the star');
+});
+
+test('Ride Detail title fits by measured width; scores read as numbers with a shark, not a count', () => {
+  const m = loadTs('src/screens/RideTracker/rideDetailModel.ts');
+  // iPhone SE (375 pt) leaves 256 pt for the title; 17 Pro (402 pt) leaves 283 pt.
+  assert.equal(m.titleFitsHeader(290, 375), true, 'a name that shrinks a little stays in the header');
+  assert.equal(m.titleFitsHeader(320, 375), false, 'a wide name moves into the card on an SE');
+  assert.equal(m.titleFitsHeader(320, 402), true);
+  assert.equal(m.scoreText(4.666), '4.7');
+  assert.equal(m.scoreText(5), '5');
+  assert.equal(m.scoreText(0), '--');
+  assert.equal(m.scoreText(null), '--');
+  const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
+  assert.match(src, /onTextLayout=\{e => \{ const w = e\.nativeEvent\.lines\[0\]\?\.width; if \(w\) setTitleWidth\(w\); \}\}/);
+  assert.doesNotMatch(src, />Community</);
+  assert.match(src, />Rider sharks</);
+  // Every number on the screen is in the number face (Knockout draws 1 like I).
+  for (const key of ['statVal', 'ratingBarLabel', 'ratingBarCount', 'topReactionItem']) {
+    assert.match(src, new RegExp(`${key}: \\{[^}]*fontFamily: NUMBER_FONT`), key);
+  }
+  assert.match(src, /withNumberFont\(`\$\{community\.total_logs\}/);
+  assert.match(src, /withNumberFont\(date\.toLocaleDateString/);
+});
+
+test('withNumberFont draws digit runs in the number face and leaves words alone', () => {
+  const React = require(path.join(ROOT, 'node_modules/react'));
+  const { withNumberFont, NUMBER_FONT } = loadTs('src/ui/numberText.tsx', {
+    react: React,
+    'react/jsx-runtime': require(path.join(ROOT, 'node_modules/react/jsx-runtime')),
+    'react-native': { Text: 'Text' },
+  });
+  const parts = withNumberFont('1 log from 12 riders');
+  assert.equal(parts.length, 4);
+  assert.equal(parts[1], '\u2005log from\u2005');
+  assert.equal(parts[0].props.children, '1');
+  assert.equal(parts[0].props.style[0].fontFamily, NUMBER_FONT);
+  assert.equal(parts[2].props.children, '12');
+  assert.equal(withNumberFont('no numbers').length, 1);
+  assert.equal(withNumberFont('no numbers')[0], 'no numbers');
+});
+
+test('Ride Detail on an SE: a small community count is one row and the empty line sits close under the button', () => {
+  const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
+  assert.match(src, /community\.total_logs >= COMPACT_COMMUNITY_LOGS && \[5, 4, 3, 2, 1\]\.map/);
+  assert.match(src, /emptyWrap: \{ alignItems: 'center', paddingTop: 4, paddingBottom: 12 \}/);
+  assert.match(src, /\{history\.length > 0 && <Text style=\{s\.sectionTitle\}>YOUR RIDE HISTORY<\/Text>\}/);
+  assert.match(src, /community\.total_logs >= COMPACT_COMMUNITY_LOGS && community\.top_reactions\.length > 0/);
+  assert.equal(loadTs('src/screens/RideTracker/rideDetailModel.ts').COMPACT_COMMUNITY_LOGS, 3);
+  // The ride card matches the stat tiles: no light-blue border.
+  assert.doesNotMatch(src, /#abd9f1/);
+});
+
+test('the map loading cover shows Alex clouds and a bobbing shark, not a blank sheet', () => {
+  assert.match(read('src/components/Map.tsx'), /<MapCoverSky \/>/);
+  const cover = read('src/components/map/MapCoverSky.tsx');
+  assert.match(cover, /explore\/cloud\.png/);
+  assert.match(cover, /icons\/game\/shark\.png/);
+  assert.match(cover, /useNativeDriver: true/);
+  assert.match(cover, /if \(reduced\)/);
+});
+
+test('VIP plaza art fills its white frame edge to edge (its baked frame is cropped off)', () => {
+  const src = read('src/components/money/MemberStage.tsx');
+  assert.match(src, /style=\{st\.sceneArt\}/);
+  assert.match(src, /SCENE_ART_INNER = 228 \/ 256/);
+  assert.doesNotMatch(src, /scene: \{[^}]*backgroundColor: '#0b3a75'/);
+});
+
+test('Gym Join card uses the brand gold at full strength', () => {
+  const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  assert.match(gym, /noTeamBox: \{[^}]*borderColor: '#fec90e'/s);
+  assert.match(gym, /noTeamTitle: \{[^}]*color: '#fec90e'/s);
+  assert.doesNotMatch(gym, /rgba\(251, 191, 36, 0\.5\)/);
+});
+
+test('Settings and How to Play row titles are UpperText, and Ride Stats headings are written in mixed case', () => {
+  assert.match(read('src/screens/SettingsScreen.tsx'), /<UpperText style=\{\[styles\.rowTitle/);
+  assert.match(read('src/screens/HowToPlay/HowToPlayMore.tsx'), /<UpperText style=\{styles\.rowTitle\}>/);
+  assert.match(read('src/screens/RideTracker/RideStatsScreen.tsx'), />Rides by park<\/UpperText>/);
+});
+
+test('the Splash route keeps the launch art and framing (no server splash fading in with the title cut off)', () => {
+  const src = read('src/screens/SplashScreen.tsx');
+  assert.doesNotMatch(src, /splash_screen_url/);
+  assert.match(src, /source=\{SPLASH_ART\}/);
 });

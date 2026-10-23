@@ -109,7 +109,7 @@ export default function HowToPlayMore({ focus }: { readonly focus: HelpTopicId |
               style={({ pressed }) => [styles.row, index < GLOSSARY_KEYS.length - 1 && styles.rowBorder, pressed && styles.chipPressed]}>
               <GameIcon name={term.icon} size={26} />
               <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={styles.rowTitle}>{term.label}</Text>
+                <UpperText style={styles.rowTitle}>{term.label}</UpperText>
                 <Text style={styles.rowBody} numberOfLines={2}>{term.what}</Text>
               </View>
               <GameIcon name="arrow" size={20} />

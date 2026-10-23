@@ -86,7 +86,7 @@ function SettingsRow({
     <View style={[styles.row, !isLast && styles.rowBorder, pressed && styles.rowPressed]}>
       <View style={styles.iconWell}><RowIcon art={art} /></View>
       <View style={styles.rowContent}>
-        <Text style={[styles.rowTitle, destructive && { color: BRAND.redLip }]}>{title}</Text>
+        <UpperText style={[styles.rowTitle, destructive && { color: BRAND.redLip }]}>{title}</UpperText>
         {!!detail && <Text style={styles.rowDetail} numberOfLines={2}>{detail}</Text>}
       </View>
       {accessory ?? (onPress ? <GameIcon name="arrow" size={22} /> : null)}

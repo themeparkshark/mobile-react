@@ -1349,13 +1349,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 20,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(251, 191, 36, 0.5)',
+    borderRadius: 24,
+    borderWidth: 3,
+    // Brand gold at full strength, the same gold as the GameButton (a half-alpha gold read olive on blue).
+    borderColor: '#fec90e',
   },
   noTeamTitle: {
     fontFamily: 'Shark',
     fontSize: 28,
-    color: '#FBBF24',
+    color: '#fec90e',
     marginBottom: 8,
   },
   noTeamText: {

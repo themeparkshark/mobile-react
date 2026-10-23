@@ -1,4 +1,5 @@
 import { openExternal } from '../services/external';
+import MapCoverSky from './map/MapCoverSky';
 import { Image } from 'expo-image';
 import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
@@ -988,8 +989,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       {covered && (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, {
           opacity: cover, transform: [{ scale: cover.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }] }]}>
-          {/* A light sky-blue sheet while the park tiles stream in (the old underwater scene read dark
-              on the first screen). The player's shark (drawn above) waits on it until the map lands. */}
+          {/* The light sky with Alex's drawn clouds and a bobbing shark while the park tiles stream in
+              (the old underwater scene read dark, and a flat sheet read blank). */}
+          <MapCoverSky />
         </Animated.View>
       )}
       {__DEV__ && MOTION_PROBE && <MotionProbeFrames />}

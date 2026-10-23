@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet,
-  RefreshControl, Animated,
+  RefreshControl, Animated, useWindowDimensions,
 } from 'react-native';
 import RideTrackerFrame from './RideTrackerFrame';
 import { FOOTER_CLEARANCE } from '../../components/Wrapper';
@@ -18,9 +18,11 @@ import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 import { Modal } from 'react-native';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { GameButton, GameIcon, gameAlert, SharkLoader } from '../../ui';
+import { withNumberFont, NUMBER_FONT } from '../../ui/numberText';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { HEADER_TITLE_MAX, titleFitsHeader, scoreText, COMPACT_COMMUNITY_LOGS } from './rideDetailModel';
 
-/** Ride names this long or shorter are the header title; longer ones go big in the ride card. */
-export const HEADER_TITLE_MAX = 16;
+export { HEADER_TITLE_MAX, titleFitsHeader, scoreText, COMPACT_COMMUNITY_LOGS } from './rideDetailModel';
 
 const PARK_NAME_MAP: Record<number, string> = Object.fromEntries(
   PARK_DISPLAY_ORDER.map(p => [p.id, p.name])
@@ -33,6 +35,7 @@ const B = {
   navy: '#09268f',
   skyDark: '#0EA5E9',
   gold: '#fec90e',
+  starSlot: '#0d6fc6',
   textDark: '#1a1a2e',
   textMid: '#475569',
   textLight: '#94a3b8',
@@ -40,8 +43,11 @@ const B = {
 
 // ─── Rating Distribution Bar ───
 const RatingBar: React.FC<{ rating: number; count: number; maxCount: number }> = React.memo(({ rating, count, maxCount }) => (
-  <View style={s.ratingBarRow}>
-    <Text style={s.ratingBarLabel}>{rating}</Text>
+  <View style={s.ratingBarRow} accessible accessibilityLabel={`${rating} sharks: ${count}`}>
+    <View style={s.ratingBarLabelWrap}>
+      <Text style={s.ratingBarLabel}>{rating}</Text>
+      <GameIcon name="shark" size={14} />
+    </View>
     <View style={s.ratingBarTrack}>
       <View style={[s.ratingBarFill, { width: maxCount > 0 ? `${(count / maxCount) * 100}%` : '0%' }]} />
     </View>
@@ -57,11 +63,11 @@ const HistoryEntry: React.FC<{ entry: PlayerRideType; onShare?: (e: PlayerRideTy
     <View style={s.entry}>
       <View style={s.entryLeft}>
         <Text style={s.entryDate}>
-          {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          {withNumberFont(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}
         </Text>
         <Text style={s.entryTime}>
-          {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-          {entry.wait_time_minutes != null ? `  ·  ${entry.wait_time_minutes} min wait` : ''}
+          {withNumberFont(date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+            + (entry.wait_time_minutes != null ? `  ·  ${entry.wait_time_minutes} min wait` : ''))}
         </Text>
         {entry.rating != null && entry.rating > 0 && (
           <View style={{ marginTop: 4 }}>
@@ -87,10 +93,40 @@ HistoryEntry.displayName = 'HistoryEntry';
 // ─── Metadata Pill ───
 const MetaPill: React.FC<{ label: string }> = React.memo(({ label }) => (
   <View style={s.metaPill}>
-    <Text style={s.metaPillText}>{label}</Text>
+    <Text style={s.metaPillText}>{withNumberFont(label)}</Text>
   </View>
 ));
 MetaPill.displayName = 'MetaPill';
+
+// ─── Favorite star ───
+// Off: Alex's star drawn as a white rim around a darker blue middle (an empty slot to fill).
+// On: the full gold star. It pops with a spring when you save the ride.
+const FavoriteStar: React.FC<{ on: boolean; size: number }> = React.memo(({ on, size }) => {
+  const pop = useRef(new Animated.Value(1)).current;
+  const reducedMotion = useReducedGameMotion();
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    if (!on || reducedMotion) return;
+    pop.setValue(0.7);
+    const anim = Animated.spring(pop, { toValue: 1, friction: 3, tension: 160, useNativeDriver: true });
+    anim.start();
+    return () => anim.stop();
+  }, [on, reducedMotion, pop]);
+  const inner = Math.round(size * 0.56);
+  return (
+    <Animated.View style={{ width: size, height: size, transform: [{ scale: pop }] }}>
+      {on ? <GameIcon name="star" size={size} /> : (
+        <>
+          <GameIcon name="star" size={size} mono={B.white} />
+          <GameIcon name="star" size={inner} mono={B.starSlot}
+            style={{ position: 'absolute', left: (size - inner) / 2, top: (size - inner) / 2 + size * 0.03 }} />
+        </>
+      )}
+    </Animated.View>
+  );
+});
+FavoriteStar.displayName = 'FavoriteStar';
 
 // ─── Main ───
 export default function RideDetailScreen() {
@@ -177,12 +213,23 @@ export default function RideDetailScreen() {
   const hasImage = ride?.image_url && ride.image_url.startsWith('http') && !imageError;
 
   const name = rideName || ride?.name || 'Ride';
-  const shortName = name.length <= HEADER_TITLE_MAX;
+  const { width: screenWidth } = useWindowDimensions();
+  // Measured in the header's own font: wide letters (WEB SLINGERS) move to the card instead of shrinking tiny.
+  const [titleWidth, setTitleWidth] = useState<number | null>(null);
+  const shortName = titleWidth == null ? name.length <= HEADER_TITLE_MAX : titleFitsHeader(titleWidth, screenWidth);
+  const titleProbe = (
+    <Text style={s.titleProbe} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+      maxFontSizeMultiplier={1.2}
+      onTextLayout={e => { const w = e.nativeEvent.lines[0]?.width; if (w) setTitleWidth(w); }}>
+      {name.toUpperCase()}
+    </Text>
+  );
   const headerTitle = shortName ? name : 'Ride';
 
   if (loading || loadError) {
     return (
       <RideTrackerFrame title={headerTitle} style={s.container}>
+        {titleProbe}
         {loadError
           ? <SharkLoader state="error" onRetry={() => { setLoadError(false); setLoading(true); void fetchData().finally(() => setLoading(false)); }} />
           : <SharkLoader />}
@@ -194,7 +241,7 @@ export default function RideDetailScreen() {
   const starButton = (
     <Pressable onPress={handleWishlistToggle} hitSlop={12} style={s.starBtn} accessibilityRole="button"
       accessibilityLabel={wishlisted ? 'Remove from favorites' : 'Add to favorites'}>
-      <GameIcon name="star" size={34} style={wishlisted ? undefined : { opacity: 0.45 }} />
+      <FavoriteStar on={wishlisted} size={34} />
     </Pressable>
   );
   const meta = ride?.metadata;
@@ -204,7 +251,7 @@ export default function RideDetailScreen() {
   const rideCard = !hasImage && shortName && !hasFacts ? (
     !!parkName && <Text style={s.parkLine} maxFontSizeMultiplier={1.3}>{parkName}</Text>
   ) : (
-    <View style={s.rideCard}>
+    <View style={s.rideCard}><View style={s.rideCardClip}>
       {hasImage && (
         <Image source={{ uri: ride!.image_url! }} style={s.rideImage} contentFit="cover"
           onError={() => setImageError(true)} accessible={false} />
@@ -219,11 +266,12 @@ export default function RideDetailScreen() {
           {ride?.metadata?.inversions && <MetaPill label={`Upside down ${ride.metadata.inversions} times`} />}
         </View>
       </View>
-    </View>
+    </View></View>
   );
 
   return (
     <RideTrackerFrame title={headerTitle} right={starButton} style={s.container}>
+      {titleProbe}
       <FlatList
         data={history}
         keyExtractor={item => item.id.toString()}
@@ -236,33 +284,42 @@ export default function RideDetailScreen() {
 
             {/* Stats row */}
             <View style={s.statsRow}>
-              <View style={s.statCard}>
-                <Text style={s.statVal}>{totalRides}</Text>
-                <Text style={s.statLabel}>Rides</Text>
+              <View style={s.statCard} accessible accessibilityLabel={`Your rides: ${totalRides}`}>
+                <View style={s.statValRow}>
+                  <GameIcon name="ride" size={22} />
+                  <Text style={s.statVal}>{totalRides}</Text>
+                </View>
+                <Text style={s.statLabel}>Your rides</Text>
               </View>
-              <View style={s.statCard}>
-                <Text style={s.statVal}>{avgRating ? avgRating.toFixed(1) : '--'}</Text>
-                <Text style={s.statLabel}>Your Avg</Text>
+              <View style={s.statCard} accessible accessibilityLabel={`Your sharks: ${scoreText(avgRating)}`}>
+                <View style={s.statValRow}>
+                  <GameIcon name="shark" size={22} />
+                  <Text style={s.statVal}>{scoreText(avgRating)}</Text>
+                </View>
+                <Text style={s.statLabel}>Your sharks</Text>
               </View>
               {community?.avg_rating != null && (
-                <View style={s.statCard}>
-                  <Text style={s.statVal}>{community.avg_rating}</Text>
-                  <Text style={s.statLabel}>Community</Text>
+                <View style={s.statCard} accessible accessibilityLabel={`Rider sharks: ${scoreText(community.avg_rating)}`}>
+                  <View style={s.statValRow}>
+                    <GameIcon name="shark" size={22} />
+                    <Text style={s.statVal}>{scoreText(community.avg_rating)}</Text>
+                  </View>
+                  <Text style={s.statLabel}>Rider sharks</Text>
                 </View>
               )}
             </View>
 
-            {/* Community Rating Distribution */}
+            {/* Community ratings: one row for a few logs, the five-bar chart once there are enough */}
             {community && community.total_logs > 0 && (
               <View style={s.card}>
-                <Text style={[s.sectionTitle, s.cardTitle]}>COMMUNITY RATINGS</Text>
-                <Text style={s.communitySubtitle}>
-                  {`${community.total_logs} ${community.total_logs === 1 ? 'log' : 'logs'} from ${community.unique_riders} ${community.unique_riders === 1 ? 'rider' : 'riders'}`}
+                <Text style={[s.sectionTitle, s.cardTitle]}>WHAT RIDERS SAY</Text>
+                <Text style={[s.communitySubtitle, community.total_logs < COMPACT_COMMUNITY_LOGS && s.communitySubtitleCompact]}>
+                  {withNumberFont(`${community.total_logs} ${community.total_logs === 1 ? 'log' : 'logs'} from ${community.unique_riders} ${community.unique_riders === 1 ? 'rider' : 'riders'}`)}
                 </Text>
-                {[5, 4, 3, 2, 1].map(r => (
+                {community.total_logs >= COMPACT_COMMUNITY_LOGS && [5, 4, 3, 2, 1].map(r => (
                   <RatingBar key={r} rating={r} count={community.rating_distribution[r] || 0} maxCount={maxDistCount} />
                 ))}
-                {community.top_reactions.length > 0 && (
+                {community.total_logs >= COMPACT_COMMUNITY_LOGS && community.top_reactions.length > 0 && (
                   <View style={s.topReactions}>
                     <Text style={s.topReactionsLabel}>Top reactions:</Text>
                     {community.top_reactions.slice(0, 3).map(r => (
@@ -279,14 +336,13 @@ export default function RideDetailScreen() {
             {/* Log a ride CTA */}
             <GameButton label="Log this ride" icon="ride" onPress={() => navigation.navigate('RideLog')} style={s.logBtn} />
 
-            {/* History header */}
-            <Text style={s.sectionTitle}>YOUR RIDE HISTORY</Text>
+            {/* History header (only once there is history: an empty list is one line under the button) */}
+            {history.length > 0 && <Text style={s.sectionTitle}>YOUR RIDE HISTORY</Text>}
           </View>
         }
         ListEmptyComponent={
           <View style={s.emptyWrap}>
             <Text style={s.emptyTitle}>You haven't ridden this yet!</Text>
-            <Text style={s.emptySub}>Tap LOG THIS RIDE above to start.</Text>
           </View>
         }
       />
@@ -323,9 +379,17 @@ const s = StyleSheet.create({
   starBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
 
   // ─── Ride card ───
+  // Same white card as the stat tiles: no border, the same soft shadow.
   rideCard: {
     marginHorizontal: 16, marginTop: 16, backgroundColor: B.white, borderRadius: 22,
-    borderWidth: 2, borderColor: '#abd9f1', overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
+  },
+  rideCardClip: { borderRadius: 22, overflow: 'hidden' },
+  // Off-screen copy of the header title, to measure its natural width in the header font.
+  titleProbe: {
+    position: 'absolute', left: -5000, top: 0, width: 4000, opacity: 0, textAlign: 'left',
+    fontSize: 32, fontFamily: 'Shark', letterSpacing: 1.5,
   },
   rideImage: { width: '100%', height: 170 },
   parkLine: { color: '#05346e', fontSize: 18, fontFamily: 'Knockout', textAlign: 'center', marginTop: 16 },
@@ -347,7 +411,7 @@ const s = StyleSheet.create({
   // ─── Stats Row ───
   statsRow: {
     flexDirection: 'row', gap: 10,
-    paddingHorizontal: 16, paddingVertical: 16,
+    paddingHorizontal: 16, paddingVertical: 12,
   },
   statCard: {
     flex: 1, backgroundColor: B.white, borderRadius: 16,
@@ -355,7 +419,8 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
   },
-  statVal: { color: B.navy, fontSize: 26, fontFamily: 'Shark' },
+  statValRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statVal: { color: B.navy, fontSize: 26, fontFamily: NUMBER_FONT },
   statLabel: { color: B.textMid, fontSize: 11, fontFamily: 'Knockout', marginTop: 2 },
 
   // ─── Card ───
@@ -372,19 +437,21 @@ const s = StyleSheet.create({
   },
   cardTitle: { marginHorizontal: 0 },
   communitySubtitle: { color: '#2c5a85', fontSize: 13, fontFamily: 'Knockout', marginBottom: 12 },
+  communitySubtitleCompact: { marginBottom: 0 },
 
   // ─── Rating bars ───
   ratingBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  ratingBarLabel: { color: B.textMid, fontSize: 13, fontFamily: 'Knockout', width: 16, textAlign: 'center' },
+  ratingBarLabelWrap: { flexDirection: 'row', alignItems: 'center', gap: 3, width: 30 },
+  ratingBarLabel: { color: B.navy, fontSize: 13, fontFamily: NUMBER_FONT, width: 10, textAlign: 'center' },
   ratingBarTrack: { flex: 1, height: 8, backgroundColor: B.pageBg, borderRadius: 4, overflow: 'hidden' },
   ratingBarFill: { height: '100%', borderRadius: 4, backgroundColor: B.navy },
-  ratingBarCount: { color: B.textLight, fontSize: 12, fontFamily: 'Knockout', width: 28, textAlign: 'right' },
+  ratingBarCount: { color: B.textMid, fontSize: 12, fontFamily: NUMBER_FONT, width: 28, textAlign: 'right' },
   topReactions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
   topReactionsLabel: { color: B.textLight, fontSize: 12, fontFamily: 'Knockout' },
-  topReactionItem: { fontSize: 15, fontFamily: 'Knockout' },
+  topReactionItem: { color: B.navy, fontSize: 15, fontFamily: NUMBER_FONT },
 
   // ─── Log CTA ───
-  logBtn: { marginHorizontal: 16, marginBottom: 20 },
+  logBtn: { marginHorizontal: 16, marginBottom: 14 },
 
   // ─── History entries ───
   entry: {
@@ -407,9 +474,8 @@ const s = StyleSheet.create({
   entryShareIcon: { color: B.skyDark, fontSize: 11, fontFamily: 'Knockout' },
 
   // ─── Empty ───
-  emptyWrap: { alignItems: 'center', paddingVertical: 40 },
+  emptyWrap: { alignItems: 'center', paddingTop: 4, paddingBottom: 12 },
   emptyTitle: { color: '#05346e', fontSize: 18, fontFamily: 'Shark' },
-  emptySub: { color: '#2c5a85', fontSize: 15, fontFamily: 'Knockout', marginTop: 4 },
 
   // ─── Share modal ───
   modalOverlay: { flex: 1, backgroundColor: 'rgba(5,52,110,0.6)', justifyContent: 'center', padding: 20 },
