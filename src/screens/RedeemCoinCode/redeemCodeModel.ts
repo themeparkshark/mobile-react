@@ -81,16 +81,44 @@ export const REDEEM_COPY = {
   tooShort: `Codes have at least ${CODE_MIN} letters or numbers.`,
   offline: "Couldn't reach the chest. Check your signal and try again.",
   wrong: "That code didn't work. Check the letters and try again.",
+  used: 'You already used this code. Each code works once.',
+  usedUp: 'This code ran out. Watch for a new one!',
+  dropEnded: 'This Shark Drop is over. Watch for the next one!',
+  slowDown: 'Too many tries. Wait a minute, then try again.',
   done: 'Added to your shark!',
   nothing: 'Code used!',
 } as const;
 
-/** A kid-readable message for a failed redeem. The server's own message wins when it sent one. */
-export function redeemErrorMessage(error: unknown): string {
-  const response = (error as { response?: { status?: number; data?: { message?: unknown } } } | null)?.response;
-  const message = response?.data?.message;
-  if (typeof message === 'string' && message.trim()) return message.trim();
+export interface RedeemErrorView {
+  readonly message: string;
+  /** A small picture for the error card. */
+  readonly icon: 'retry' | 'lock' | 'timer' | 'search';
+}
+
+/**
+ * A kid-readable error for a failed redeem. The server's known replies (wrong
+ * code, already used, used up, Shark Drop over, too short) map to short kid
+ * words. The server's own text is only used for a reply we have never seen.
+ */
+export function redeemError(error: unknown): RedeemErrorView {
+  const response = (error as { response?: { status?: number; data?: { message?: unknown; errors?: unknown } } } | null)?.response;
+  const status = Number(response?.status);
   // No reply at all (React Native reports a dropped connection as status 0).
-  if (!response || !(Number(response.status) > 0)) return REDEEM_COPY.offline;
-  return REDEEM_COPY.wrong;
+  if (!response || !(status > 0)) return { message: REDEEM_COPY.offline, icon: 'retry' };
+  const raw = typeof response.data?.message === 'string' ? response.data.message.trim() : '';
+  const said = raw.toLowerCase();
+  if (status === 429) return { message: REDEEM_COPY.slowDown, icon: 'timer' };
+  if (status === 404 || said.includes('incorrect')) return { message: REDEEM_COPY.wrong, icon: 'search' };
+  if (said.includes('already used') || said.includes('already redeemed')) return { message: REDEEM_COPY.used, icon: 'lock' };
+  if (said.includes('used up')) return { message: REDEEM_COPY.usedUp, icon: 'lock' };
+  if (status === 410 || said.includes('has ended')) return { message: REDEEM_COPY.dropEnded, icon: 'timer' };
+  // Laravel validation (too short, too long, not letters and numbers).
+  if (status === 422 && response.data?.errors) return { message: REDEEM_COPY.wrong, icon: 'search' };
+  if (status >= 500) return { message: REDEEM_COPY.offline, icon: 'retry' };
+  return { message: raw || REDEEM_COPY.wrong, icon: 'search' };
+}
+
+/** The message alone (see redeemError). */
+export function redeemErrorMessage(error: unknown): string {
+  return redeemError(error).message;
 }
