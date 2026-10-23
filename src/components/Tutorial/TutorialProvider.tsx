@@ -15,7 +15,7 @@ import SpotlightOverlay from './SpotlightOverlay';
 import TeacherShark from './TeacherShark';
 import MemoryGame from '../../games/memory/MemoryGame';
 import { AuthContext } from '../../context/AuthProvider';
-import { guestPlayedWarmup } from '../../services/guestTaste';
+import { claimGuestWarmup } from '../../services/guestTaste';
 // Sounds disabled temporarily — will re-enable once tutorial flow is stable
 // import { SoundEffectContext } from '../../context/SoundEffectProvider';
 
@@ -88,15 +88,21 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     }).catch(() => setLoaded(true)); // An unreadable store still lets tutorials run.
   }, []);
 
-  // A guest who won Finn's warm-up before signing in keeps it: re-read when the
-  // account changes, since the guest plays after this provider mounts.
-  const [guestPlayed, setGuestPlayed] = useState(false);
+  // A guest who won Finn's warm-up before signing in keeps it, but only the
+  // first account after the taste claims it (a sibling's new account does not).
+  // Re-read when the account changes, since the guest plays after this provider mounts.
+  // Onboarding waits for this check, so a new account never starts the wrong steps.
+  const [guestCheck, setGuestCheck] = useState<{ id: number | null; played: boolean }>({ id: null, played: false });
+  const playerId = player?.id ?? null;
   useEffect(() => {
     let current = true;
-    void Promise.resolve().then(() => guestPlayedWarmup())
-      .then(played => { if (current) setGuestPlayed(played === true); }).catch(() => undefined);
+    void Promise.resolve().then(() => claimGuestWarmup(playerId))
+      .then(played => { if (current) setGuestCheck({ id: playerId, played: played === true }); })
+      .catch(() => { if (current) setGuestCheck({ id: playerId, played: false }); });
     return () => { current = false; };
-  }, [player?.id]);
+  }, [playerId]);
+  const guestChecked = guestCheck.id === playerId;
+  const guestPlayed = guestChecked && guestCheck.played;
 
   // Auto-complete all tutorials for existing players (handles a reinstall or cache wipe).
   // Checked once per install load: after "Replay Tutorials" the empty set is on purpose.
@@ -161,6 +167,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     if (completedSequences.has(sequence)) return;
     
     if (isActive) return;
+    if ((sequence === 'onboarding' || sequence === 'park_arrival') && !guestChecked) return;
     const steps = getStepsForSequence(sequence, { ...options, guestPlayed });
     if (steps.length === 0) return;
 
@@ -170,7 +177,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     setCurrentIndex(0);
     setIsActive(true);
 
-  }, [loaded, isActive, completedSequences, guestPlayed]);
+  }, [loaded, isActive, completedSequences, guestPlayed, guestChecked]);
 
   // Advance to next step
   const nextStep = useCallback(() => {

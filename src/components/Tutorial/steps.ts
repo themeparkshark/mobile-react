@@ -168,8 +168,8 @@ export const TUTORIAL_SEQUENCES: Record<TutorialSequence, TutorialStep[]> = {
  */
 const guestWelcomeBackSteps: TutorialStep[] = [{
   ...homeOnboardingSteps[0],
-  text: 'You’re back! Your shark is saved.',
-  subtitle: 'Another treat just landed next to you. Let’s grab it!',
+  text: 'You’re back! Now your first real treat is here.',
+  subtitle: 'It landed right next to you. Let’s grab it!',
 }];
 const withoutWarmup = (steps: TutorialStep[]) => steps.filter(step => step.activity !== 'memory_warmup');
 
