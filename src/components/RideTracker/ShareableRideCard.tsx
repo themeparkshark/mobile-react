@@ -201,7 +201,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
         {/* Story size with the link and QR. Kid safety: no typed note, no player name, no date. */}
         {!inPark && (
           <StoryShareFrame ref={storyRef} ribbon="MY RIDE!" cta="Track your rides with me!" campaign="ride_log">
-            <CardContent ride={ride} rideCount={confirmedCount} variant="share" />
+            <View style={cardStyles.sharedWidth}><CardContent ride={ride} rideCount={confirmedCount} variant="share" /></View>
           </StoryShareFrame>
         )}
       </View>
@@ -220,6 +220,7 @@ const cardStyles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardShared: { minHeight: 0, paddingBottom: 16 },
+  sharedWidth: { width: 320 },
   riddenLine: { color: '#0B4B83', fontSize: 18, fontFamily: 'Shark' },
   shareBtnHeld: { backgroundColor: '#DCEFFB' },
   shareBtnTextHeld: { color: '#0B4B83', fontSize: 15 },

@@ -24,7 +24,7 @@ export function ShareGlyph({ size = 20, color = '#ffffff' }: { readonly size?: n
   );
 }
 
-export function FlexShareButton<K extends FlexKind>({ kind, payload, surface, size = 'sm', caption = false, style, handoff }: {
+export function FlexShareButton<K extends FlexKind>({ kind, payload, surface, size = 'sm', caption = false, onDark = false, style, handoff }: {
   readonly kind: K;
   readonly payload: FlexPayload<K>;
   readonly surface: string;
@@ -32,6 +32,8 @@ export function FlexShareButton<K extends FlexKind>({ kind, payload, surface, si
   readonly size?: 'sm' | 'md';
   /** sm only: a "Share" word under the icon and two attention pulses on arrival, so kids read it. */
   readonly caption?: boolean;
+  /** The caption sits on a dark (navy) screen: white words with a navy edge. */
+  readonly onDark?: boolean;
   readonly style?: StyleProp<ViewStyle>;
   /**
    * The button sits inside an RN <Modal>: close that modal first (useModalHandoff), then the
@@ -66,7 +68,7 @@ export function FlexShareButton<K extends FlexKind>({ kind, payload, surface, si
           <ShareGlyph size={size === 'sm' ? 20 : 18} />
           {size === 'md' && <Text style={styles.label}>Share</Text>}
         </Animated.View>
-        {size === 'sm' && caption && <Text style={styles.caption}>Share</Text>}
+        {size === 'sm' && caption && <Text style={[styles.caption, onDark && styles.captionOnDark]}>Share</Text>}
       </View>
     </Pressable>
   );
@@ -78,5 +80,6 @@ const styles = StyleSheet.create({
   pill: { height: 44, borderRadius: 22, flexDirection: 'row', gap: 8, paddingHorizontal: 18 },
   gloss: { position: 'absolute', left: 6, right: 6, top: 3, height: 12, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.3)' },
   label: { fontFamily: 'Shark', fontSize: 18, color: '#ffffff' },
+  captionOnDark: { color: '#ffffff', textShadowColor: BRAND.navy },
   caption: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, marginTop: 1, textShadowColor: '#ffffff', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
 });

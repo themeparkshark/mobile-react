@@ -221,7 +221,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
         </Pressable>
         {/* Show it off: the set's name, its pieces and the count. Share closes this reveal first,
             then the Share Studio sheet (and its grown-up gate) opens from Root. */}
-        <FlexShareButton kind="set_complete" surface="shop_set" size="sm" caption handoff={shareHandoff}
+        <FlexShareButton kind="set_complete" surface="shop_set" size="sm" caption onDark handoff={shareHandoff}
           style={[styles.share, { top: insets.top + 8 }]}
           payload={{ setName: reward.name, badgeUrl: pieces[0]?.icon_thumb_url ?? pieces[0]?.icon_url ?? HERO_ART.trophy,
             artUrls: pieces.map(p => p.icon_thumb_url ?? p.icon_url).filter((u): u is string => !!u).slice(0, 5),

@@ -37,7 +37,7 @@ test('a shared ride card never prints the typed note, and is story size with the
   const card = src('src/components/RideTracker/ShareableRideCard.tsx');
   assert.doesNotMatch(card, /ride\.note/, 'the typed note stays in the log');
   assert.match(card, /captureFlex\(storyRef, 'story'\)/, 'captured at story size (1080x1920)');
-  assert.match(card, /<StoryShareFrame ref=\{storyRef\} ribbon="MY RIDE!" cta="Track your rides with me!" campaign="ride_log">\s*<CardContent ride=\{ride\} rideCount=\{confirmedCount\} variant="share" \/>/);
+  assert.match(card, /<StoryShareFrame ref=\{storyRef\} ribbon="MY RIDE!" cta="Track your rides with me!" campaign="ride_log">\s*<View style=\{cardStyles\.sharedWidth\}><CardContent ride=\{ride\} rideCount=\{confirmedCount\} variant="share" \/><\/View>/);
   assert.doesNotMatch(card, /react-native-view-shot/);
   const frame = src('src/share/StoryShareFrame.tsx');
   assert.match(frame, /\.\.\.FLEX_SIZE\.story/, '9:16');
