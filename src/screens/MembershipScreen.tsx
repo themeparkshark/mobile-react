@@ -17,7 +17,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeInDown, FadeInUp,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import SafeScreen from '../components/SafeScreen';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -213,7 +213,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
     <View style={s.root}>
       <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <LinearGradient pointerEvents="none" colors={['rgba(9,90,170,0.82)', 'rgba(7,72,150,0.9)', 'rgba(5,52,110,0.95)']} style={StyleSheet.absoluteFill} />
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeScreen style={{ flex: 1 }}>
         {/* The X sits in its own row, so nothing ever scrolls under it. */}
         <View style={s.closeRow}>
           <Pressable style={s.close} onPress={close} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
@@ -332,7 +332,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
             <Pressable onPress={close} hitSlop={8}><Text style={s.skip}>{labels?.skip_for_now ?? 'Skip for now'}</Text></Pressable>
           )}
         </ScrollView>
-      </SafeAreaView>
+      </SafeScreen>
 
       {busy && (
         <View style={s.overlay}>

@@ -12,7 +12,7 @@ import Animated, {
   Easing, FadeIn, FadeInDown, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue,
   withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import SafeScreen from '../../components/SafeScreen';
 import { getLiveParks } from '../../api/endpoints/me/livePark';
 import { joinTeam } from '../../api/endpoints/gym-battle';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
@@ -110,7 +110,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
     <View style={s.root}>
       <Image source={require('../../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <View style={[StyleSheet.absoluteFill, s.tint]} />
-      <SafeAreaView style={s.safe}>
+      <SafeScreen style={s.safe}>
         {stage !== 'done' && (
           <Pressable style={s.close} onPress={() => navigation?.goBack()} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
             <GameIcon name="close" size={36} />
@@ -188,7 +188,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
         )}
 
         {stage === 'done' && team && <Welcome team={team} onGo={finish} />}
-      </SafeAreaView>
+      </SafeScreen>
     </View>
   );
 }

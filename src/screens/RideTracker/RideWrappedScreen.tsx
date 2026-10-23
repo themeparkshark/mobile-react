@@ -4,7 +4,7 @@ import {
   View, Text, StyleSheet, Pressable, Animated, Dimensions,
   ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import SafeScreen from '../../components/SafeScreen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
@@ -144,7 +144,7 @@ export default function RideWrappedScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeScreen style={styles.container}>
         <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.heroGradient}>
           <View style={styles.header}>
             <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
@@ -155,13 +155,13 @@ export default function RideWrappedScreen() {
           </View>
         </LinearGradient>
         <SharkLoader />
-      </SafeAreaView>
+      </SafeScreen>
     );
   }
 
   if (!data || data.total_rides === 0) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeScreen style={styles.container}>
         <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.heroGradient}>
           <View style={styles.header}>
             <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
@@ -178,7 +178,7 @@ export default function RideWrappedScreen() {
             <Text style={styles.goldBtnText}>{failed ? 'Try Again' : 'Go Log Rides'}</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </SafeScreen>
     );
   }
 
@@ -276,7 +276,7 @@ export default function RideWrappedScreen() {
   ];
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeScreen style={styles.container}>
       {/* Hero header */}
       <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.heroGradient}>
         <View style={styles.header}>
@@ -324,7 +324,7 @@ export default function RideWrappedScreen() {
           </Pressable>
         )}
       </View>
-    </SafeAreaView>
+    </SafeScreen>
   );
 }
 

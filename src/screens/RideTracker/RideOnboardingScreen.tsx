@@ -11,7 +11,7 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import SafeScreen from '../../components/SafeScreen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
@@ -408,13 +408,13 @@ export default function RideOnboardingScreen() {
   return (
     <View style={styles.container}>
       {/* Skip button */}
-      <SafeAreaView edges={['top']} style={styles.skipContainer}>
+      <SafeScreen edges={['top']} style={styles.skipContainer}>
         {!isLastSlide && (
           <Pressable onPress={handleSkip} hitSlop={16} style={styles.skipPressable}>
             <Text style={styles.skipText}>Skip</Text>
           </Pressable>
         )}
-      </SafeAreaView>
+      </SafeScreen>
 
       {/* Slides */}
       <FlatList
@@ -436,7 +436,7 @@ export default function RideOnboardingScreen() {
       />
 
       {/* Bottom controls */}
-      <SafeAreaView edges={['bottom']} style={styles.bottomContainer}>
+      <SafeScreen edges={['bottom']} style={styles.bottomContainer}>
         <PaginationDots count={SLIDES.length} scrollX={scrollX} />
 
         {isLastSlide ? (
@@ -475,7 +475,7 @@ export default function RideOnboardingScreen() {
             </View>
           </Pressable>
         )}
-      </SafeAreaView>
+      </SafeScreen>
     </View>
   );
 }

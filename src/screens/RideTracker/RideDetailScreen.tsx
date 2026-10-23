@@ -3,7 +3,7 @@ import {
   View, Text, FlatList, Pressable, StyleSheet,
   RefreshControl, Dimensions, Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import SafeScreen from '../../components/SafeScreen';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -184,7 +184,7 @@ export default function RideDetailScreen() {
 
   if (loading || loadError) {
     return (
-      <SafeAreaView style={s.container}>
+      <SafeScreen style={s.container}>
         <LinearGradient colors={[B.skyMid, B.skyDark, B.navy]} style={s.heroGradient}>
           <View style={s.headerRow}>
             <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={s.backBtn}>
@@ -196,7 +196,7 @@ export default function RideDetailScreen() {
         {loadError
           ? <SharkLoader state="error" onRetry={() => { setLoadError(false); setLoading(true); void fetchData().finally(() => setLoading(false)); }} />
           : <SharkLoader />}
-      </SafeAreaView>
+      </SafeScreen>
     );
   }
 
@@ -228,7 +228,7 @@ export default function RideDetailScreen() {
   );
 
   return (
-    <SafeAreaView style={s.container}>
+    <SafeScreen style={s.container}>
       <FlatList
         data={history}
         keyExtractor={item => item.id.toString()}
@@ -346,7 +346,7 @@ export default function RideDetailScreen() {
       >
         <Text style={s.toastText}>{toastText}</Text>
       </Animated.View>
-    </SafeAreaView>
+    </SafeScreen>
   );
 }
 
