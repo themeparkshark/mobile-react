@@ -218,19 +218,19 @@ function StarParticle({ angle, color, delay }: { angle: number; color: string; d
     outputRange: ['0deg', '360deg'],
   });
 
-  // A drawn star from the icon kit, tinted glow behind it (never the star emoji).
+  // A drawn star from the icon kit on a soft tinted disc (never the star emoji). The disc is a
+  // plain rounded view, not an iOS shadow: a shadow on a moving view renders offscreen every frame.
   return (
     <Animated.View
       style={{
         position: 'absolute',
         transform: [{ translateX }, { translateY }, { rotate: spin }, { scale }],
         opacity,
-        shadowColor: color,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.9,
-        shadowRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
+      <View style={{ position: 'absolute', width: 32, height: 32, borderRadius: 16, backgroundColor: color, opacity: 0.3 }} />
       <GameIcon name="star" size={26} />
     </Animated.View>
   );
