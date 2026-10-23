@@ -135,6 +135,7 @@ import { SLOTS, useMarkerSlots } from '../components/map/markerSlots';
 import { PARKED } from '../components/map/Marker';
 import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, parkMapInsets, rideLayoutId, rideTagFor,
   type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
+import { UpperText } from '../ui/upper';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -1190,7 +1191,7 @@ function ExploreScreen() {
                 <TopbarColumn>
                   <Pressable accessibilityRole="button" accessibilityLabel="Home Hunt" accessibilityHint="Explains Home Hunt"
                     hitSlop={8} onPress={() => explain('travel_mode')}>
-                    <Text style={{
+                    <UpperText style={{
                       fontSize: 16,
                       color: 'white',
                       fontFamily: 'Shark',
@@ -1200,7 +1201,7 @@ function ExploreScreen() {
                       textShadowOffset: { width: 2, height: 2 },
                       textShadowRadius: 0,
                       textAlign: 'center',
-                    }}>Home Hunt</Text>
+                    }}>Home Hunt</UpperText>
                   </Pressable>
                 </TopbarColumn>
                 <TopbarColumn>
@@ -1211,7 +1212,7 @@ function ExploreScreen() {
           </>
         ) : (
           <TopbarColumn>
-            <Text style={{
+            <UpperText style={{
               fontSize: 16,
               color: 'white',
               fontFamily: 'Shark',
@@ -1221,7 +1222,7 @@ function ExploreScreen() {
               textShadowOffset: { width: 2, height: 2 },
               textShadowRadius: 0,
               textAlign: 'center',
-            }}>Guest Mode</Text>
+            }}>Guest Mode</UpperText>
           </TopbarColumn>
         )}
       </Topbar>

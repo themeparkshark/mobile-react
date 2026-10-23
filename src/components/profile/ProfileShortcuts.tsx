@@ -18,6 +18,7 @@ import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimen
 import { SoundEffectContext, SoundEffectContextType } from '../../context/SoundEffectProvider';
 import HapticPatterns from '../../helpers/hapticPatterns';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { UpperText } from '../../ui/upper';
 
 export type ProfileShortcut = {
   readonly key: string;
@@ -74,10 +75,10 @@ const Badge = memo(function Badge({ item, width, reduced }: {
         )}
         {item.dot && !item.locked && <View style={styles.dot} />}
       </Animated.View>
-      <Text style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}
+      <UpperText style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}
         maxFontSizeMultiplier={1.3}>
         {item.label}
-      </Text>
+      </UpperText>
     </Pressable>
   );
 });

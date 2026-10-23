@@ -53,6 +53,7 @@ import {
   almostThereList, rarestOwned, bookTotals, buildBook, claimQueue, hasShine, progressLabel, remainingLine, requirement, ring, stampIndex, titleCounts, titleEntries,
   type BookSection, type BookStamp, type GoTarget, type TitleEntry,
 } from './stampbook/model';
+import { UpperText } from '../ui/upper';
 
 const GAP = 9;
 const SIDE = 12;
@@ -674,7 +675,7 @@ function Cover({ earned, total, toClaim, worn, titlesOwned, titlesTotal, onClaim
             </View>
           </View>
           <View style={styles.coverText}>
-            <Text style={styles.coverTitle} maxFontSizeMultiplier={1.4}>My Stamps</Text>
+            <UpperText style={styles.coverTitle} maxFontSizeMultiplier={1.4}>My Stamps</UpperText>
             <Text style={styles.coverPct} maxFontSizeMultiplier={1.4}>{pct}% stamped</Text>
           </View>
           <Pressable onPress={onTitles} style={({ pressed }) => [styles.sharkTitle, pressed && styles.pressed]} hitSlop={4}
@@ -734,7 +735,7 @@ function AlmostThere({ stamps, accentFor, onOpen }: { stamps: readonly BookStamp
     <View style={styles.almost}>
       <View style={styles.almostHead}>
         <GameIcon name="star" size={20} />
-        <Text style={styles.almostTitle} maxFontSizeMultiplier={1.4}>Almost there</Text>
+        <UpperText style={styles.almostTitle} maxFontSizeMultiplier={1.4}>Almost there</UpperText>
       </View>
       {/* The next step in words, not just rings: "Hop Star: 2 more parks to go!" */}
       <Text style={styles.almostNext} numberOfLines={2} maxFontSizeMultiplier={1.3}>{`${stamps[0].shortName}: ${remainingLine(stamps[0])}`}</Text>
@@ -746,7 +747,7 @@ function AlmostThere({ stamps, accentFor, onOpen }: { stamps: readonly BookStamp
               <View style={styles.almostGhost}><StampArt stamp={s} size="thumb" fallbackIcon={requirement(s).icon} /></View>
               <MiniRing fraction={s.percent / 100} color={accentFor(s.section)} />
             </View>
-            <Text style={styles.almostName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.4}>{s.shortName}</Text>
+            <UpperText style={styles.almostName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.4}>{s.shortName}</UpperText>
             <View style={styles.almostCount}>
               <GameIcon name={requirement(s).icon} size={14} />
               <Text style={styles.almostCountText} maxFontSizeMultiplier={1.4}>{progressLabel(s)}</Text>
@@ -811,7 +812,7 @@ const SectionPage = memo(function SectionPage({ section, width, boardTop, onTop,
         <View style={styles.pageHead}>
           <View style={[styles.sectionBadge, { backgroundColor: section.color }]}><GameIcon name={SECTION_ICON[section.key] ?? 'star'} size={24} /></View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.4}>{section.label}</Text>
+            <UpperText style={styles.sectionTitle} maxFontSizeMultiplier={1.4}>{section.label}</UpperText>
             <Text style={styles.sectionBlurb} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.4}>{section.blurb}</Text>
           </View>
           {complete ? (

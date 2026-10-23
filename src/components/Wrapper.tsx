@@ -12,6 +12,7 @@ import Button from './Button';
 import { AuthContext } from '../context/AuthProvider';
 import { warmStandings } from '../screens/LeaderboardsScreen/standingsV2Store';
 import { emitTabReselect } from '../utils/tabReselect';
+import { UpperText } from '../ui/upper';
 
 /**
  * How far the center compass button rises above the bottom bar into the
@@ -167,7 +168,7 @@ export default function Wrapper({
                       />
                     </Button>
                     {/* Capped: past 1.2x the five labels run into each other ("NEWSSTANDINGS") and over the page. */}
-                    <Text
+                    <UpperText
                       maxFontSizeMultiplier={1.2}
                       numberOfLines={1}
                       style={{
@@ -186,7 +187,7 @@ export default function Wrapper({
                       }}
                     >
                       {item.text}
-                    </Text>
+                    </UpperText>
                   </View>
                 </View>
               );

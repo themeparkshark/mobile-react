@@ -61,6 +61,7 @@ import { StoreType } from '../models/store-type';
 import SharkPassBanner from '../components/money/SharkPassBanner';
 import StreakFlame from '../components/retention/StreakFlame';
 import useOwnStreak from '../services/retention/useOwnStreak';
+import { UpperText } from '../ui/upper';
 
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
 // Short phones (iPhone SE, 667 pt) get a 230 pt stage so the Shop / Stamp Book / Pins labels sit clear of the center compass at rest.
@@ -501,7 +502,7 @@ export default function ProfileScreen() {
                         marginRight: 8,
                       }}
                     />
-                    <Text
+                    <UpperText
                       style={{
                         fontFamily: 'Shark',
                         textTransform: 'uppercase',
@@ -517,7 +518,7 @@ export default function ProfileScreen() {
                       }}
                     >
                       {labels.edit || 'Edit'}
-                    </Text>
+                    </UpperText>
                   </Animated.View>
                 </View>
               </Pressable>

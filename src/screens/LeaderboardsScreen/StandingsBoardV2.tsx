@@ -54,6 +54,7 @@ import {
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
 import countText from '../../helpers/countText';
+import { UpperText } from '../../ui/upper';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 const rewardSound = require('../../../assets/sounds/reward.mp3');
@@ -217,7 +218,7 @@ const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPre
           <View style={{ flex: 1, marginLeft: 10, justifyContent: 'center', gap: 2 }}>
             {/* Same 18 pt name as everyone, with your YOU chip (r5). */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, lineHeight: 20, color: BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
+              <UpperText maxFontSizeMultiplier={1.1} numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, lineHeight: 20, color: BRAND.navy, textTransform: 'uppercase' }}>{row.name}</UpperText>
               <View style={{ paddingHorizontal: 6, height: 18, borderRadius: 9, justifyContent: 'center', backgroundColor: BRAND.navy }}>
                 <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 11, color: BRAND.white }}>YOU</Text>
               </View>
@@ -226,7 +227,7 @@ const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPre
           </View>
         ) : (
         <View style={{ flex: 1, marginLeft: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text maxFontSizeMultiplier={FONT_CAP} numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, color: muted ? BRAND.navySoft : BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
+          <UpperText maxFontSizeMultiplier={FONT_CAP} numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, color: muted ? BRAND.navySoft : BRAND.navy, textTransform: 'uppercase' }}>{row.name}</UpperText>
           {row.isMe && (
             <View style={{ paddingHorizontal: 7, height: 20, borderRadius: 10, justifyContent: 'center', backgroundColor: BRAND.navy }}>
               <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white }}>YOU</Text>
@@ -285,7 +286,7 @@ function Divider({ label }: { readonly label: string }) {
     <View style={{ height: DIVIDER_HEIGHT, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, gap: 10 }}>
       <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
       {/* The board's own face, like the Monday kicker (r7 art: the label preset was off-family). */}
-      <Text maxFontSizeMultiplier={FONT_CAP} accessibilityRole="header" style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
+      <UpperText maxFontSizeMultiplier={FONT_CAP} accessibilityRole="header" style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</UpperText>
       <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
     </View>
   );
@@ -501,7 +502,7 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 26 }}>
                 <GameIcon name="arrow" size={16} style={{ transform: [{ rotate: '-90deg' }] }} />
                 <StandingsShark avatar={passing.avatar} size={22} />
-                <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, flexShrink: 1, textTransform: 'uppercase' }}>{`Passed ${passing.name}!`}</Text>
+                <UpperText maxFontSizeMultiplier={1.15} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, flexShrink: 1, textTransform: 'uppercase' }}>{`Passed ${passing.name}!`}</UpperText>
               </Animated.View>
             ) : revealing ? (
               <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.greenLip }}>CLIMBING!</Text>
@@ -1011,7 +1012,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
               </View>
             </View>
           )}
-          <Text maxFontSizeMultiplier={1.25} accessibilityRole="header" style={[textPreset('title'), { textAlign: 'center', textTransform: 'uppercase', marginTop: 10 }]}>{copy.title}</Text>
+          <UpperText maxFontSizeMultiplier={1.25} accessibilityRole="header" style={[textPreset('title'), { textAlign: 'center', textTransform: 'uppercase', marginTop: 10 }]}>{copy.title}</UpperText>
           <Text maxFontSizeMultiplier={1.25} style={[textPreset('body'), { textAlign: 'center', color: BRAND.navySoft, marginTop: 6, marginBottom: 18 }]}>{copy.message}</Text>
           <GameButton label={copy.action} icon={copy.target === 'Friends' ? 'heart' : 'ride'}
             onPress={() => { playSound(tapSound); RootNavigation.navigate(copy.target); }} />

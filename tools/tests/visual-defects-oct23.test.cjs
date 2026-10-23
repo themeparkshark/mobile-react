@@ -218,3 +218,24 @@ test('Ride Tracker: gold game chips, a full empty card with a button, readable l
   assert.doesNotMatch(ach, /cardLocked: \{ opacity/);
   assert.doesNotMatch(ach, /iconLocked: \{ opacity/);
 });
+
+test('capital-letter labels are uppercased in code so iOS never clips the last letters', () => {
+  const React = { createElement: (type, props, ...children) => ({ type, props: { ...props, children: children.length > 1 ? children : children[0] } }) };
+  const mod = loadTs('src/ui/upper.tsx', {
+    react: {
+      Children: { map: (c, fn) => (Array.isArray(c) ? c.map(fn) : c == null ? c : fn(c)) },
+      isValidElement: (x) => !!x && typeof x === 'object' && 'type' in x,
+      cloneElement: (el, _p, children) => ({ ...el, props: { ...el.props, children } }),
+    },
+    'react-native': { Text: 'Text' },
+    'react/jsx-runtime': { jsx: React.createElement, jsxs: React.createElement },
+  });
+  assert.equal(mod.upper('Universal Studios Hollywood'), 'UNIVERSAL STUDIOS HOLLYWOOD');
+  assert.deepEqual(mod.upper(['Ride ', 3]), ['RIDE ', 3]);
+  const nested = mod.upper({ type: 'Text', props: { children: 'gold' } });
+  assert.equal(nested.props.children, 'GOLD');
+  for (const file of ['src/components/Stats.tsx', 'src/components/Wrapper.tsx', 'src/components/Heading.tsx',
+    'src/screens/LeaderboardsScreen/StandingsRow.tsx', 'src/components/profile/ProfileShortcuts.tsx', 'src/screens/stampbook/StampTile.tsx']) {
+    assert.match(read(file), /<UpperText/, file);
+  }
+});

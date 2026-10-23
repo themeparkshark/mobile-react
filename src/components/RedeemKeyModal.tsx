@@ -22,6 +22,7 @@ import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { KeyType } from '../models/key-type';
 import YellowButton from './YellowButton';
 import { BRAND, gameAlert } from '../ui';
+import { UpperText } from '../ui/upper';
 
 export default function RedeemKeyModal({
   open,
@@ -170,7 +171,7 @@ export default function RedeemKeyModal({
               width: '80%',
             }}
           >
-            <Text
+            <UpperText
               style={{
                 fontFamily: 'Shark',
                 textTransform: 'uppercase',
@@ -187,7 +188,7 @@ export default function RedeemKeyModal({
               }}
             >
               {`1 ${currency.singular_name}`}
-            </Text>
+            </UpperText>
             <Image
               source={{
                 uri: currency.icon_url,

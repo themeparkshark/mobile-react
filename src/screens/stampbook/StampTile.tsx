@@ -30,6 +30,7 @@ import { useBookFx, useTileClock } from './BookFx';
 import Foil from './Foil';
 import StampArt from './StampArt';
 import { almostThere, hasShine, postmark, progressLabel, rarityRank, requirement, ring as ringGeo, fillFraction, secretHint, stampState, tileLabel, type BookStamp, type Corner } from './model';
+import { UpperText } from '../../ui/upper';
 
 export const INK = '#14213D';
 export const LIP = '#B98F45';
@@ -111,8 +112,8 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
                   </View>
                 )}
               </View>
-              <Text style={styles.name} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}
-                maxFontSizeMultiplier={1.1}>{stamp.shortName}</Text>
+              <UpperText style={styles.name} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}
+                maxFontSizeMultiplier={1.1}>{stamp.shortName}</UpperText>
             </View>
           </>
         ) : (
@@ -135,8 +136,8 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
                 </>
               )}
             </View>
-            <Text style={[styles.name, styles.nameSlot]} numberOfLines={state === 'secret' ? 1 : 2} adjustsFontSizeToFit minimumFontScale={0.8}
-              maxFontSizeMultiplier={1.1}>{state === 'secret' ? 'Secret' : stamp.shortName}</Text>
+            <UpperText style={[styles.name, styles.nameSlot]} numberOfLines={state === 'secret' ? 1 : 2} adjustsFontSizeToFit minimumFontScale={0.8}
+              maxFontSizeMultiplier={1.1}>{state === 'secret' ? 'Secret' : stamp.shortName}</UpperText>
             {state !== 'secret' && (req.pips ? (
               <View style={styles.reqCol}>
                 <View style={styles.reqRow}>

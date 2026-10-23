@@ -4,6 +4,7 @@ import { useContext, useEffect, useRef } from 'react';
 import { Animated, Easing, Text, View } from 'react-native';
 import config from '../../config';
 import { AuthContext } from '../../context/AuthProvider';
+import { UpperText } from '../../ui/upper';
 
 export default function UsernameBanner() {
   const { player } = useContext(AuthContext);
@@ -62,7 +63,7 @@ export default function UsernameBanner() {
       >
         {/* Username - centered */}
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text
+          <UpperText
             style={{
               fontFamily: 'Shark',
               fontSize: 20,
@@ -78,7 +79,7 @@ export default function UsernameBanner() {
             minimumFontScale={0.6}
           >
             {player.screen_name}
-          </Text>
+          </UpperText>
         </View>
       </LinearGradient>
     </Animated.View>

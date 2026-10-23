@@ -27,6 +27,7 @@ import { GameIcon } from '../../ui';
 import ArtImage from './ArtImage';
 import { CASE_FILE_ART, caseFilePlate } from './CaseFileReveal';
 import { MarqueeBody } from './MarqueeRecap';
+import { UpperText } from '../../ui/upper';
 
 export interface FrightCardParams {
   readonly eventSlug: string;
@@ -193,12 +194,12 @@ export default function FrightCardScreen() {
           {ended && card.haunts_done < card.haunts_total && <Text style={styles.sub}>{COPY.backNextFall}</Text>}
         </View>
 
-        <Text style={styles.section}>Lantern</Text>
+        <UpperText style={styles.section}>Lantern</UpperText>
         <View style={styles.bar}><View style={[styles.barFill, { width: `${Math.round(lanternProgress * 100)}%` }]} /></View>
         <Text style={styles.meta}>{card.lantern.next_at ? `${card.lantern.parts} of ${card.lantern.next_at} Parts to Lv${card.lantern.level + 1}` : 'Fully lit!'}</Text>
 
         {tallyOn && <>
-          <Text style={styles.section}>Team Chaos vs Team Control</Text>
+          <UpperText style={styles.section}>Team Chaos vs Team Control</UpperText>
           <View style={styles.tally} accessibilityLabel={`Chaos ${card.tally.chaos}, Control ${card.tally.control}`}>
             {fill && <>
               <View style={[styles.tallyChaos, { flex: fill.chaos }]} />
@@ -208,7 +209,7 @@ export default function FrightCardScreen() {
           <Text style={styles.meta}>{`Chaos ${card.tally.chaos} · Control ${card.tally.control}${card.tally.my_side ? ` · You: Team ${card.tally.my_side === 'chaos' ? 'Chaos' : 'Control'}` : ''}`}</Text>
         </>}
 
-        <Text style={styles.section}>Haunts</Text>
+        <UpperText style={styles.section}>Haunts</UpperText>
         {haunts.map(slot => (
           <View key={slot.key} style={[styles.slotRow, !slot.earned && { opacity: 0.55 }]}>
             <GameIcon name={slot.earned ? 'check' : 'lock'} size={18} />
@@ -229,7 +230,7 @@ export default function FrightCardScreen() {
           </View>
         ))}
 
-        {others.length > 0 && <Text style={styles.section}>Fright Reefs</Text>}
+        {others.length > 0 && <UpperText style={styles.section}>Fright Reefs</UpperText>}
         {others.map(slot => (
           <View key={slot.key} style={[styles.slotRow, !slot.earned && { opacity: 0.55 }]}>
             <GameIcon name={slot.earned ? 'check' : 'lock'} size={18} />
@@ -238,7 +239,7 @@ export default function FrightCardScreen() {
         ))}
 
         {pins.length > 0 && (
-          <Text style={styles.section} onLayout={event => setPinsY(event.nativeEvent.layout.y)}>{`Pins ${pinCount.earned} of ${pinCount.total}`}</Text>
+          <UpperText style={styles.section} onLayout={event => setPinsY(event.nativeEvent.layout.y)}>{`Pins ${pinCount.earned} of ${pinCount.total}`}</UpperText>
         )}
         <View style={styles.pins}>
           {pins.map(slot => (
@@ -255,7 +256,7 @@ export default function FrightCardScreen() {
           ))}
         </View>
 
-        <Text style={styles.section} onLayout={event => setFilesY(event.nativeEvent.layout.y)}>{`Case Files ${card.case_files_found} of ${card.case_files_total}`}</Text>
+        <UpperText style={styles.section} onLayout={event => setFilesY(event.nativeEvent.layout.y)}>{`Case Files ${card.case_files_found} of ${card.case_files_total}`}</UpperText>
         {files.found.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
             {files.found.map(file => (
@@ -293,7 +294,7 @@ export default function FrightCardScreen() {
           </View>
         )}
 
-        {card.recaps.length > 0 && <Text style={styles.section}>Your nights</Text>}
+        {card.recaps.length > 0 && <UpperText style={styles.section}>Your nights</UpperText>}
         {card.recaps.slice().sort((a, b) => b.night_on.localeCompare(a.night_on)).map((item, index, list) => (
           <Pressable key={item.night_on} accessibilityRole="button" onPress={() => setRecapNight(item.night_on)} style={styles.recapRow}
             accessibilityLabel={`${nightDateLabel(item.night_on)}. ${hauntsWord(item.haunts)}. Open the Marquee.`}>

@@ -25,6 +25,7 @@ import Playercard from '../../../components/Playercard';
 import type { InventoryType } from '../../../models/inventory-type';
 import { coinTierName } from '../../../constants/coinTiers';
 import { parkDayLine, recapRows, type RecapRewardsInput } from '../../../services/lineplay/bonusRounds';
+import { UpperText } from '../../../ui/upper';
 
 const QUEUE_STAMP_IMAGE = require('../../../../assets/images/stamps/stamp-09.png');
 const QUEUE_RECAP_SHARK = require('../../../../assets/images/screens/lineplay/queue-recap-shark.png');
@@ -66,7 +67,7 @@ function RecapStat({ icon, value, prefix = '', label, index, reducedMotion }: {
     style={styles.recapStat} accessible accessibilityLabel={`${prefix}${value} ${label}`}>
     <GameIcon name={icon} size={30} />
     <Text style={styles.recapStatValue}>{prefix}{shown}</Text>
-    <Text style={styles.recapStatLabel}>{label}</Text>
+    <UpperText style={styles.recapStatLabel}>{label}</UpperText>
   </Animated.View>;
 }
 

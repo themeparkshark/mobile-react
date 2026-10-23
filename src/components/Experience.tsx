@@ -13,6 +13,7 @@ import { useProgressionFlags } from '../services/progression/progressionFlags';
 import { GameIcon } from '../ui';
 import XpBar, { XP_BAR_HEIGHT, XP_BAR_LIP } from './XpBar';
 import type { PotionTransition } from './xpPotionModel';
+import { UpperText } from '../ui/upper';
 
 /**
  * Player level on a profile, in one slim row (Dustin, Oct 8 2026: the potion
@@ -171,7 +172,7 @@ export default function Experience({
         </View>
       </Animated.View>
       {hideXp ? (
-        <Text style={styles.levelOnly} numberOfLines={1}>{vsprintf(labels.experience_level || 'Level %s', [shownLevel])}</Text>
+        <UpperText style={styles.levelOnly} numberOfLines={1}>{vsprintf(labels.experience_level || 'Level %s', [shownLevel])}</UpperText>
       ) : (
         <View style={styles.column}>
           <View style={styles.barRow}>

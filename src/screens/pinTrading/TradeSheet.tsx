@@ -22,6 +22,7 @@ import { BRAND, FONT, GameButton, GameIcon, OUTLINE, RADIUS, SharkLoader, SPACE 
 import EnamelPin from './EnamelPin';
 import { PickPin, type SlotRect, StatusChipView, TRADE_SURFACE, TradeSlot, TradeTimer, MAX_FONT } from './PinTradeParts';
 import { PIN_TRADE_COPY as COPY, pinName, pinTilt, statusChip, type TradePhase } from './pinTradeModel';
+import { UpperText } from '../../ui/upper';
 
 export type TradeSheetProps = {
   readonly swap: PinSwapType;
@@ -171,7 +172,7 @@ function TradeSheet(props: TradeSheetProps) {
 
         {showPicker && (
           <View style={styles.picker}>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.pickerLabel}>{COPY.pickPrompt}</Text>
+            <UpperText maxFontSizeMultiplier={MAX_FONT} style={styles.pickerLabel}>{COPY.pickPrompt}</UpperText>
             {pinsLoading && pins.length === 0 && <SharkLoader compact tone="onBlue" />}
             {pinsError && pins.length === 0 && <SharkLoader compact tone="onBlue" state="error" onRetry={props.onRetryPins} />}
             {noPins && (

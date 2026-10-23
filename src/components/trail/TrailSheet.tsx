@@ -17,6 +17,7 @@ import { CountUpText } from '../../gamekit/fx/CountUpText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import TrailBoxArt, { STEPS_ART, WHEELS_ART } from './TrailBoxArt';
 import TrailPath from './TrailPath';
+import { UpperText } from '../../ui/upper';
 
 const KIND_ICON: Record<string, GameIconName> = { coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star' };
 const RANK: Record<TrailTier, number> = { blue: 0, red: 1, gold: 2 };
@@ -83,7 +84,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
         <View style={styles.header}>
           <View style={styles.badge}><Image source={STEPS_ART} style={{ width: 34, height: 34 }} contentFit="contain" /></View>
           <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text accessibilityRole="header" style={styles.title}>{view === 'inside' ? 'What\'s inside' : 'Trail Boxes'}</Text>
+            <UpperText accessibilityRole="header" style={styles.title}>{view === 'inside' ? 'What\'s inside' : 'Trail Boxes'}</UpperText>
             {view === 'inside' ? <Text style={styles.subtitle}>Every box, every chance</Text> : (
               <View style={styles.parkOnly} accessible accessibilityLabel="Only steps in the park count">
                 <Image source={PARK_ART} style={{ width: 24, height: 24 }} contentFit="contain" />
@@ -107,7 +108,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
               <View style={[styles.card, styles.askCard]}>
                 <Image source={STEPS_ART} style={{ width: 44, height: 44 }} contentFit="contain" />
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.cardTitle}>Grown-ups: count pocket steps?</Text>
+                  <UpperText style={styles.cardTitle}>Grown-ups: count pocket steps?</UpperText>
                   <Text style={styles.body}>Boxes keep opening with the app closed.</Text>
                   <GameButton label="Count my steps" size="compact" onPress={onAskMotion} style={{ marginTop: 8, alignSelf: 'flex-start' }} />
                 </View>
@@ -139,14 +140,14 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
                   ))}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.readyTitle} numberOfLines={1} adjustsFontSizeToFit>{state.ready.length === 1 ? 'Ready!' : `${state.ready.length} ready!`}</Text>
+                  <UpperText style={styles.readyTitle} numberOfLines={1} adjustsFontSizeToFit>{state.ready.length === 1 ? 'Ready!' : `${state.ready.length} ready!`}</UpperText>
                   <Text style={[styles.body, { color: BRAND.navy }]}>You walked {state.ready.length === 1 ? 'it' : 'them'} open.</Text>
                 </View>
                 <View style={styles.openChip}><Text style={styles.openChipText}>OPEN</Text></View>
               </Pressable>
             )}
 
-            <Text style={styles.section}>{inPark ? 'Walking now' : 'Ready to walk'}</Text>
+            <UpperText style={styles.section}>{inPark ? 'Walking now' : 'Ready to walk'}</UpperText>
             <View style={styles.slots}>
               {slots.map((b, i) => (
                 <View key={b ? b.id : `empty-${i}`} style={[styles.slot, !b && styles.slotEmpty]} accessible
@@ -171,7 +172,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
 
             {state.waiting.length > 0 && (
               <>
-                <Text style={styles.section}>Next up ({state.waiting.length} of {state.rack})</Text>
+                <UpperText style={styles.section}>Next up ({state.waiting.length} of {state.rack})</UpperText>
                 <View style={[styles.card, { paddingVertical: 6 }]}>
                   <View style={styles.rackGrid}>
                     {state.waiting.map((b, i) => (
@@ -199,7 +200,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
               </>
             )}
 
-            <Text style={styles.section}>{inPark ? 'Today at the park' : 'Your walking'}</Text>
+            <UpperText style={styles.section}>{inPark ? 'Today at the park' : 'Your walking'}</UpperText>
             <View style={[styles.card, styles.todayCard]}>
               <View style={{ flex: 1 }}>
                 {inPark && <Text style={styles.dayLine} numberOfLines={1}>{dayLabel(state.today.park_day)}{parkName ? ` · ${parkName.toUpperCase()}` : ''}</Text>}
@@ -209,14 +210,14 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
                   : `park steps in all, about ${formatDistance(state.lifetime.meters, miles)}`}</Text>
               </View>
               {inPark && todayBest ? (
-                <View style={styles.bestBadge}><GameIcon name="trophy" size={30} /><Text style={styles.bestText}>New best!</Text></View>
+                <View style={styles.bestBadge}><GameIcon name="trophy" size={30} /><UpperText style={styles.bestText}>New best!</UpperText></View>
               ) : state.best_day ? (
                 <View style={styles.bestQuiet}><Text style={styles.bestLabel}>Best day</Text><Text style={styles.bestNum}>{formatSteps(state.best_day.steps)}</Text></View>
               ) : null}
             </View>
-            {inPark && state.today.steps >= 5000 && <Text style={styles.cheer}>{cheer(state.today.steps)}</Text>}
+            {inPark && state.today.steps >= 5000 && <UpperText style={styles.cheer}>{cheer(state.today.steps)}</UpperText>}
 
-            <Text style={styles.section}>Weekly goal</Text>
+            <UpperText style={styles.section}>Weekly goal</UpperText>
             {state.week.goal_steps ? (
               <GoalCard state={state} visible={visible} onChange={() => void changeGoal()} />
             ) : (
@@ -233,7 +234,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
               </View>
             )}
 
-            <Text style={styles.section}>Get more boxes</Text>
+            <UpperText style={styles.section}>Get more boxes</UpperText>
             <View style={styles.card}>
               <EarnRow icon="map" text="Arrive at a park" sub="A Blue Box each park day" />
               <EarnRow icon="ride" text="Win 2 ride challenges" sub={state.next_ride_box != null && inPark
@@ -248,7 +249,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
               style={[styles.card, styles.rowCard]}>
               <Image source={WHEELS_ART} style={{ width: 34, height: 34 }} contentFit="contain" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Rolling</Text>
+                <UpperText style={styles.cardTitle}>Rolling</UpperText>
                 <Text style={styles.body}>Wheelchair, scooter or stroller? Your map path counts.</Text>
               </View>
               <View style={[styles.toggle, state.wheels && styles.toggleOn]}>
@@ -328,7 +329,7 @@ function GoalCard({ state, visible, onChange }: { readonly state: TrailState; re
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
           {state.week.goal_hit && <GameIcon name="star" size={26} />}
-          <Text style={styles.cardTitle}>{state.week.goal_hit ? 'Goal reached!' : `${formatSteps(state.week.steps)} of ${formatSteps(goal)}`}</Text>
+          <UpperText style={styles.cardTitle}>{state.week.goal_hit ? 'Goal reached!' : `${formatSteps(state.week.steps)} of ${formatSteps(goal)}`}</UpperText>
         </View>
         <Pressable onPress={onChange} accessibilityRole="button" accessibilityLabel="Change your weekly goal" style={styles.smallChip}>
           <Text style={styles.smallChipText}>CHANGE</Text>
@@ -351,7 +352,7 @@ function EarnRow({ icon, text, sub, last }: { readonly icon: GameIconName; reado
     <View style={[styles.earnRow, !last && styles.earnDivider]} accessible accessibilityLabel={`${text}. ${sub}`}>
       <View style={styles.earnIcon}><GameIcon name={icon} size={28} /></View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.earnText}>{text}</Text>
+        <UpperText style={styles.earnText}>{text}</UpperText>
         <Text style={styles.earnSub}>{sub}</Text>
       </View>
     </View>
@@ -362,7 +363,7 @@ function Exclusives({ items }: { readonly items: NonNullable<TrailState['exclusi
   const have = items.filter(i => i.owned).length;
   return (
     <>
-      <Text style={styles.section}>Trail Exclusives ({have} of {items.length})</Text>
+      <UpperText style={styles.section}>Trail Exclusives ({have} of {items.length})</UpperText>
       <View style={[styles.card, { flexDirection: 'row', justifyContent: 'space-around' }]}>
         {items.map(i => (
           <View key={i.item_id} style={{ alignItems: 'center', width: 72 }} accessible accessibilityLabel={`${i.name}${i.owned ? ', you have it' : ', not found yet'}`}>
@@ -383,7 +384,7 @@ function Inside({ state }: { readonly state: TrailState }) {
   const tiers = state.odds.tiers;
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
-      <Text style={styles.section}>Which box you get</Text>
+      <UpperText style={styles.section}>Which box you get</UpperText>
       <View style={[styles.card, { flexDirection: 'row', justifyContent: 'space-around' }]}>
         {tiers.map(t => (
           <View key={t.tier} style={{ alignItems: 'center' }} accessible accessibilityLabel={`${boxName(t)}: ${percent(t.chance_bp)}`}>
@@ -404,7 +405,7 @@ function TierCard({ tier, t }: { readonly tier: TrailTier; readonly t: TrailStat
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <TrailBoxArt tier={tier} size={56} active={false} />
         <View style={{ flex: 1, marginLeft: 8 }}>
-          <Text style={styles.cardTitle}>{BOX_NAME[tier]}</Text>
+          <UpperText style={styles.cardTitle}>{BOX_NAME[tier]}</UpperText>
           <Text style={styles.body}>Opens after {formatSteps(t.goal_steps)} steps</Text>
         </View>
       </View>

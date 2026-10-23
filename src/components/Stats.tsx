@@ -11,6 +11,7 @@ import ProfileStatIcon from './ProfileStatIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import countText from '../helpers/countText';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
+import { UpperText } from '../ui/upper';
 
 export function AnimatedStat({
   label,
@@ -144,7 +145,7 @@ export function AnimatedStat({
         >
           {countText(displayNum)}
         </Text>
-        <Text
+        <UpperText
           numberOfLines={1}
           adjustsFontSizeToFit
           style={{
@@ -157,7 +158,7 @@ export function AnimatedStat({
           }}
         >
           {label}
-        </Text>
+        </UpperText>
         </Animated.View>
       </View>
     </Pressable>

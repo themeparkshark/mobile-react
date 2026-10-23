@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, View, Text, StyleSheet, Animated, Easing, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { COIN_TIERS } from '../constants/coinTiers';
+import { UpperText } from '../ui/upper';
 
 interface Props {
   level: number;
@@ -549,7 +550,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
       {/* ── Label ── */}
       {showLabel && <View style={s.labelWrap}>
         <Text style={[s.label, { color: labelColor ?? cfg.labelColor }]}>{'Lv.' + level}</Text>
-        <Text style={[s.labelName, { color: labelColor ?? cfg.labelColor }]}>{cfg.label}</Text>
+        <UpperText style={[s.labelName, { color: labelColor ?? cfg.labelColor }]}>{cfg.label}</UpperText>
       </View>}
     </View>
   );

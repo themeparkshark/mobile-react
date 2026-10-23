@@ -30,6 +30,7 @@ import { LocationContext } from '../context/LocationProvider';
 import { resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
 import { queuePlayPolicy } from '../services/lineplay/queuePlayPolicy';
 import { compareQueueWaits, postedStandbyWait } from '../services/lineplay/queueWaitPresentation';
+import { UpperText } from '../ui/upper';
 
 // --- Types ---
 type SortMode = 'wait-desc' | 'wait-asc' | 'name';
@@ -388,7 +389,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
         >
           {groupedParks.map((group) => (
             <View key={group.group} style={styles.parkGroup}>
-              <Text style={styles.groupLabel}>{group.group}</Text>
+              <UpperText style={styles.groupLabel}>{group.group}</UpperText>
               <View style={styles.groupPills}>
                 {group.parks.map((park) => (
                   <ParkPill

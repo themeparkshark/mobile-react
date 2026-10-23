@@ -20,6 +20,7 @@ import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { PlayerType } from '../../models/player-type';
 import { BRAND, GameIcon, type GameIconName } from '../../ui';
 import countText from '../../helpers/countText';
+import { UpperText } from '../../ui/upper';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 const STARBURST = require('../../../assets/images/screens/explore/starburst.png');
@@ -176,9 +177,9 @@ export default function PodiumSpot({ rank, player, score, scoreIcon, progress, l
         marginTop: 6, maxWidth: first ? 130 : 110, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10,
         backgroundColor: BRAND.navy, borderWidth: 2, borderColor: isMe ? BRAND.gold : BRAND.white,
       }}>
-        <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: first ? 16 : 13, color: BRAND.white, textTransform: 'uppercase', textAlign: 'center' }}>
+        <UpperText numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: first ? 16 : 13, color: BRAND.white, textTransform: 'uppercase', textAlign: 'center' }}>
           {player.screen_name}
-        </Text>
+        </UpperText>
       </View>
       <View style={{
         marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 2,

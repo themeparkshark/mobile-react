@@ -4,6 +4,7 @@ import Modal from 'react-native-modal';
 import config from '../config';
 import { GameIcon } from '../ui';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
+import { UpperText } from '../ui/upper';
 
 const modalOpenSound = require('../../assets/sounds/modal_open.mp3');
 const tapSound = require('../../assets/sounds/tap.mp3');
@@ -103,7 +104,7 @@ export default function StandingsPicker({
           </View>
 
           {/* Title */}
-          <Text
+          <UpperText
             style={{
               color: 'white',
               fontSize: 18,
@@ -118,7 +119,7 @@ export default function StandingsPicker({
             }}
           >
             {title}
-          </Text>
+          </UpperText>
 
           {/* Options */}
           <View style={{ paddingHorizontal: 14, paddingBottom: 24 }}>

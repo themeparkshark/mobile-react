@@ -34,6 +34,7 @@ import {
 } from './Settings/accountDeletion';
 import { copyrightLine } from '../api/platform';
 import { setBatterySaver, useBatterySaver } from '../power';
+import { UpperText } from '../ui/upper';
 
 /** Settings-only art (GPT Image 2.5 from Alex's references, see tps-prime-time-audit/art-ws8). */
 const SETTINGS_ART = {
@@ -58,7 +59,7 @@ function Section({ title, index, children }: { readonly title: string; readonly 
   const reduced = useUiReducedMotion();
   return (
     <Animated.View entering={reduced ? undefined : FadeInDown.delay(60 + index * 55).springify().damping(16).stiffness(180)}>
-      <Text style={styles.sectionHeader}>{title}</Text>
+      <UpperText style={styles.sectionHeader}>{title}</UpperText>
       <View style={styles.card}>{children}</View>
     </Animated.View>
   );

@@ -8,6 +8,7 @@ import { BRAND, GameIcon } from '../../ui';
 import useCrumbs from '../../hooks/useCrumbs';
 import { ItemType } from '../../models/item-type';
 import { currencyLabel } from '../../hooks/usePurchaseItem';
+import { UpperText } from '../../ui/upper';
 
 export default function Item({
   item,
@@ -75,7 +76,7 @@ export default function Item({
             shadowRadius: 4,
           }}
         >
-          <Text
+          <UpperText
             style={{
               color: 'white',
               fontFamily: 'Shark',
@@ -84,7 +85,7 @@ export default function Item({
             }}
           >
             {labels.clearance}
-          </Text>
+          </UpperText>
         </View>
       )}
       {item.has_purchased && (

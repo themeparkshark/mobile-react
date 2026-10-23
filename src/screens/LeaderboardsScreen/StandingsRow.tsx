@@ -15,6 +15,7 @@ import MemberFlex from '../../components/money/MemberFlex';
 import { memberFlexOf } from '../../services/money/memberFlex';
 import StreakFlame from '../../components/retention/StreakFlame';
 import countText from '../../helpers/countText';
+import { UpperText } from '../../ui/upper';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 
@@ -78,15 +79,15 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
         <View style={{ flex: 1, marginLeft: 12 }}>
           {player.daily3_streak != null ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, textTransform: 'uppercase' }}>
+              <UpperText numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, textTransform: 'uppercase' }}>
                 {player.screen_name}
-              </Text>
+              </UpperText>
               <StreakFlame streak={player.daily3_streak} best={player.daily3_best ?? 0} size={16} still />
             </View>
           ) : (
-          <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, textTransform: 'uppercase' }}>
+          <UpperText numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, textTransform: 'uppercase' }}>
             {player.screen_name}
-          </Text>)}
+          </UpperText>)}
           {(isMe || detail) && (
             <Text numberOfLines={1} style={[textPreset('caption'), { color: isMe ? BRAND.goldLip : BRAND.navySoft }]}>
               {isMe ? 'YOU' : detail}
@@ -129,7 +130,7 @@ export function StandingsInvite({ title, message, actionLabel, onAction, icon = 
     <Animated.View entering={reduced ? undefined : FadeInDown.delay(700).springify().damping(14)}
       style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 8 }}>
       <GameIcon name={icon} size={56} />
-      <Text style={[textPreset('title'), { textAlign: 'center', textTransform: 'uppercase', marginTop: 6 }]}>{title}</Text>
+      <UpperText style={[textPreset('title'), { textAlign: 'center', textTransform: 'uppercase', marginTop: 6 }]}>{title}</UpperText>
       <Text style={[textPreset('body'), { textAlign: 'center', color: BRAND.navySoft, marginTop: 4, marginBottom: 14 }]}>{message}</Text>
       {actionLabel && onAction && <GameButton label={actionLabel} icon="ride" onPress={onAction} size="compact" />}
     </Animated.View>

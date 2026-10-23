@@ -16,6 +16,7 @@ import { BRAND, GameButton, GameIcon, type GameIconName } from '../../ui';
 import RewardBurst from '../RewardBurst';
 import { CountUpText } from '../../gamekit/fx/CountUpText';
 import { BOX_ART, BOX_OPEN_ART } from './TrailBoxArt';
+import { UpperText } from '../../ui/upper';
 
 const ICON: Record<TrailReward['kind'], GameIconName> = {
   coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star',
@@ -201,8 +202,8 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
       <Pressable style={[styles.scrim, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
         onPress={phase === 'ready' ? start : skipAhead} accessibilityRole="button"
         accessibilityLabel={phase === 'ready' ? `Open your ${boxName(box)}` : BOX_NAME[box.tier]}>
-        <Text style={styles.kicker}>{BOX_NAME[box.tier]}{boxes.length > 1 ? ` · ${index + 1} of ${boxes.length}` : ''}</Text>
-        <Text style={styles.title}>{phase === 'ready' ? 'Tap to open!' : showRewards ? 'You got' : opened ? 'Here it comes!' : ' '}</Text>
+        <UpperText style={styles.kicker}>{BOX_NAME[box.tier]}{boxes.length > 1 ? ` · ${index + 1} of ${boxes.length}` : ''}</UpperText>
+        <UpperText style={styles.title}>{phase === 'ready' ? 'Tap to open!' : showRewards ? 'You got' : opened ? 'Here it comes!' : ' '}</UpperText>
         <View style={{ width: '100%', height: size * 1.05, alignItems: 'center', justifyContent: 'center' }}>
           <Animated.View pointerEvents="none" style={[styles.center, { width: g, height: g, top: (size * 1.05 - g) / 2 }, glowStyle]}>
             <Canvas style={{ width: g, height: g }}>
@@ -299,7 +300,7 @@ function RewardCard({ reward, tier, order, delay, hero, reduced }: {
         {reward.kind === 'coins'
           ? <View accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden><CountUpText value={coinValue} durationMs={650} prefix="+" suffix=" COINS" punch={1.08} reducedMotion={reduced}
               style={styles.coinText} /></View>
-          : <Text style={styles.cardText} numberOfLines={2} adjustsFontSizeToFit maxFontSizeMultiplier={1.3}>{rewardLabel(reward)}</Text>}
+          : <UpperText style={styles.cardText} numberOfLines={2} adjustsFontSizeToFit maxFontSizeMultiplier={1.3}>{rewardLabel(reward)}</UpperText>}
         {hero && <Text style={styles.badge}>TRAIL ONLY</Text>}
       </View>
     </Animated.View>

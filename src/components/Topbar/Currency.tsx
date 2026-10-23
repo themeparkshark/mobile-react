@@ -6,6 +6,7 @@ import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { useHelp } from '../help/HelpProvider';
 import { glossaryKeyForName } from '../../services/help/glossary';
 import countText from '../../helpers/countText';
+import { UpperText } from '../../ui/upper';
 
 interface CurrencyProps {
   /** Remote icon URL or a bundled require(); falls back to the gold coin. */
@@ -208,9 +209,9 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
               contentFit="contain"
             />
           </Animated.View>
-          <Text style={styles.countText} numberOfLines={1} adjustsFontSizeToFit>
+          <UpperText style={styles.countText} numberOfLines={1} adjustsFontSizeToFit>
             {shortenNumber(displayCount)}
-          </Text>
+          </UpperText>
         </View>
       </TouchableOpacity>
       
@@ -233,7 +234,7 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
       >
         <View style={styles.tooltipArrow} />
         <View style={styles.tooltipContent}>
-          <Text style={styles.tooltipName}>{name || 'Your stuff'}</Text>
+          <UpperText style={styles.tooltipName}>{name || 'Your stuff'}</UpperText>
           <Text style={styles.tooltipCount}>{countText(count)}</Text>
         </View>
       </Animated.View>

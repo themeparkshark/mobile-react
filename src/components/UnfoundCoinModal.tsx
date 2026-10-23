@@ -21,6 +21,7 @@ import CoinSocket from './collection/CoinSocket';
 import GameIcon from '../ui/GameIcon';
 import GameRichText from '../ui/GameRichText';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { UpperText } from '../ui/upper';
 
 interface Props {
   task: TaskType | SecretTaskType;
@@ -162,7 +163,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
               />
 
               {/* Task name (revealed!) */}
-              <Text
+              <UpperText
                 style={{
                   fontFamily: 'Shark',
                   fontSize: 18,
@@ -173,7 +174,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                 }}
               >
                 {task.name}
-              </Text>
+              </UpperText>
 
               {/* Hint text */}
               <Text

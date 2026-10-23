@@ -19,6 +19,7 @@ import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { CROWN_ART, RANK_RING } from './PodiumSpot';
 import StandingsShark from './StandingsShark';
 import { rowLabel, type StandingsMetric, type StandingsRowModel } from './standingsV2Model';
+import { UpperText } from '../../ui/upper';
 
 // Alex's barrels, flipped and re-lit from the top left (ART_QA round 4), so silver stands on the taller barrel.
 const BARREL = require('../../../assets/images/screens/leaderboard/barrel-flipped.png');
@@ -133,10 +134,10 @@ function Spot({ rank, row, metric, progress, pop, loading, onPress }: {
           }}>
             {/* One award language: the crown says the place (r2 art: no medal in the pill too). */}
             {/* The full name, shrunk to fit (r6: names were cut at 12 letters). */}
-            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}
+            <UpperText maxFontSizeMultiplier={1.2} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}
               style={{ fontFamily: 'Shark', fontSize: 13, color: row.isMe ? BRAND.navy : BRAND.white, textTransform: 'uppercase', flexShrink: 1 }}>
               {row.isMe ? 'You' : row.name}
-            </Text>
+            </UpperText>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3, paddingHorizontal: 8, height: 24,
             borderRadius: RADIUS.pill, backgroundColor: BRAND.cream, borderWidth: 2, borderColor: BRAND.gold }}>

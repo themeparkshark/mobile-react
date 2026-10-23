@@ -22,6 +22,7 @@ import useCrumbs from '../hooks/useCrumbs';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { VaultType } from '../models/vault-type';
 import YellowButton from './YellowButton';
+import { UpperText } from '../ui/upper';
 
 export default function RedeemVaultModal({
   open,
@@ -185,7 +186,7 @@ export default function RedeemVaultModal({
               width: '80%',
             }}
           >
-            <Text
+            <UpperText
               style={{
                 fontFamily: 'Shark',
                 textTransform: 'uppercase',
@@ -204,7 +205,7 @@ export default function RedeemVaultModal({
               {vsprintf(labels.vault_cost, [
                 (redeemable.model as VaultType).item.cost,
               ])}
-            </Text>
+            </UpperText>
             {isOpen ? (
               <ImageBackground
                 source={require('../../assets/images/screens/explore/vault_opened.png')}

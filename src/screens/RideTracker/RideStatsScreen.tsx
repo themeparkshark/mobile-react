@@ -16,6 +16,7 @@ import { colors } from '../../design-system';
 import { GameIcon, SharkLoader, type GameIconName } from '../../ui';
 
 import RideTrackerEmpty from './RideTrackerEmpty';
+import { UpperText } from '../../ui/upper';
 // ─── Animated Counter ───
 interface AnimatedCounterProps {
   value: number;
@@ -87,7 +88,7 @@ export default function RideStatsScreen() {
         {/* Per Park */}
         {stats.per_park.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>RIDES BY PARK</Text>
+            <UpperText style={styles.sectionTitle}>RIDES BY PARK</UpperText>
             {stats.per_park.map(p => (
               <View key={p.park_id} style={styles.parkRow}>
                 <Text style={styles.parkName}>{p.park_name}</Text>
@@ -103,7 +104,7 @@ export default function RideStatsScreen() {
         {/* Top Rated */}
         {stats.top_rated.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>TOP RATED RIDES</Text>
+            <UpperText style={styles.sectionTitle}>TOP RATED RIDES</UpperText>
             {stats.top_rated.slice(0, 5).map((r, i) => (
               <View key={r.id} style={styles.rankRow}>
                 <Text style={styles.rankNum}>#{i + 1}</Text>
@@ -120,7 +121,7 @@ export default function RideStatsScreen() {
         {/* Most Ridden */}
         {stats.most_ridden.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>MOST RIDDEN</Text>
+            <UpperText style={styles.sectionTitle}>MOST RIDDEN</UpperText>
             {stats.most_ridden.slice(0, 5).map((r, i) => (
               <View key={r.id} style={styles.rankRow}>
                 <Text style={styles.rankNum}>#{i + 1}</Text>

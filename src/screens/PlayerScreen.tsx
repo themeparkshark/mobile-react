@@ -41,6 +41,7 @@ import { PlayerType } from '../models/player-type';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 import StreakFlame from '../components/retention/StreakFlame';
+import { UpperText } from '../ui/upper';
 
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
 const STAGE_H = Math.round(Math.max(270, Math.min(315, Dimensions.get('window').height * 0.33)));
@@ -278,7 +279,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                   accessible accessibilityLabel={`Friends only. Become friends with ${currentPlayer.screen_name} to see their stats and parks.`}>
                   <View><GameIcon name="trophy" size={52} /><View style={{ position: 'absolute', right: -6, bottom: -6 }}><GameIcon name="lock" size={26} /></View></View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: 'Shark', fontSize: 20, color: '#05346e', textTransform: 'uppercase' }} maxFontSizeMultiplier={1.2}>Friends only</Text>
+                    <UpperText style={{ fontFamily: 'Shark', fontSize: 20, color: '#05346e', textTransform: 'uppercase' }} maxFontSizeMultiplier={1.2}>Friends only</UpperText>
                     <Text style={{ fontFamily: 'Knockout', fontSize: 17, color: BRAND.navySoft }} maxFontSizeMultiplier={1.3}>Become friends to see their stats and parks.</Text>
                   </View>
                 </View>
@@ -351,8 +352,8 @@ function FriendPanel({ name, status, onAdd, onYes, onNo, onUndo }: {
       {burst && <Burst style={{ left: '50%', top: 30 }} onDone={() => setBurst(false)} />}
       {status === 'incoming' && (
         <>
-          <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#05346e', textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}
-            maxFontSizeMultiplier={1.2}>{name} wants to be friends!</Text>
+          <UpperText style={{ fontFamily: 'Shark', fontSize: 18, color: '#05346e', textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}
+            maxFontSizeMultiplier={1.2}>{name} wants to be friends!</UpperText>
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <Pill tone="grey" icon="close" label="No" onPress={onNo} accessibilityLabel={`Say no to ${name}`} />
             <Pill tone="green" icon="check" label="Yes!" onPress={onYes} accessibilityLabel={`Say yes to ${name}`} />
@@ -375,7 +376,7 @@ function FriendMoment({ status, name, onBurst }: { readonly status: string; read
     if (status === 'friends' && id && takeJustFriended(id, surface)) onBurst(true);
   }, [status, id, onBurst, surface]);
   return status === 'friends' ? (
-    <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#237A3B', textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}
-      maxFontSizeMultiplier={1.2}>You and {name} are friends!</Text>
+    <UpperText style={{ fontFamily: 'Shark', fontSize: 18, color: '#237A3B', textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}
+      maxFontSizeMultiplier={1.2}>You and {name} are friends!</UpperText>
   ) : null;
 }
