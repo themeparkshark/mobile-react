@@ -8,6 +8,7 @@
  * the bell and profiles through the social store) and undone on failure.
  */
 import { shareExternal } from '../services/external';
+import { INVITE_URL } from '../share/link';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -46,7 +47,6 @@ const CREST = require('../../assets/images/screens/friends/noti.png');
 const REQUEST_ART = require('../../assets/images/screens/notifications/badges/friend_request.png');
 const ADD_ART = require('../../assets/images/screens/friends/add_friend.png');
 const NOOP = () => undefined;
-const APP_LINK = 'https://apps.apple.com/app/theme-park-shark/id6758812566';
 
 type Row =
   | { readonly type: 'header'; readonly key: string; readonly label: string; readonly icon?: GameIconName; readonly count?: number }
@@ -68,7 +68,9 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
   const invite = useCallback(async () => {
     playSfx('tap');
     try {
-      await shareExternal({ message: `Play Theme Park Shark with me! Add me as a friend: ${player?.screen_name ?? ''}\n${APP_LINK}`, url: APP_LINK });
+      // The shark name is the friend code; the link opens the app's download page (never the dead store page).
+      const name = player?.screen_name?.trim();
+      await shareExternal({ message: `Play Theme Park Shark with me!${name ? ` Add my shark: ${name}` : ''}\n${INVITE_URL}` });
     } catch { /* closed */ }
   }, [player?.screen_name]);
 
