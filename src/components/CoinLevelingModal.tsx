@@ -187,7 +187,8 @@ export default function CoinLevelingModal({
   // `!rideCoin` return: TaskCoinModal mounts this sheet with no coin, so a hook after the
   // return ran only once a coin loaded ("Rendered more hooks", a fatal crash on coin tap).
   const levelUpPress = useRef<() => void>(() => undefined);
-  useDevAutoPress(visible ? 'level_up' : 'level_up_off', () => levelUpPress.current(), 2500);
+  // Bound to a real spend, so it only ever runs on the dev evidence screen (EXPO_PUBLIC_SHARE_EVIDENCE).
+  useDevAutoPress(visible && __DEV__ && !!process.env.EXPO_PUBLIC_SHARE_EVIDENCE ? 'level_up' : 'level_up_off', () => levelUpPress.current(), 2500);
 
   if (!rideCoin) return null;
 

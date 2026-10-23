@@ -27,7 +27,9 @@ import { LocationStatusContext } from '../context/LocationProvider';
 import { playSfx } from '../gamekit/SFX';
 import * as Haptics from '../helpers/haptics';
 import { BRAND, GameButton, gameAlert } from '../ui';
+import { ModalLayerContext, useModalLayer } from '../ui/modalLayers';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 import { captureFlex, openShareSheet } from './capture';
 import { flexCopy } from './copy';
 import { CARD_CHROME, FLEX_SIZE, FlexCard } from './FlexCard';
@@ -49,20 +51,28 @@ import type { FlexFormat, FlexPayload, FlexRequest } from './types';
 export const REVEAL_TAP_GUARD_MS = 900;
 /** A sheet that hasn't appeared by now never will (e.g. presented over a modal): drop it. */
 export const SHOW_WATCHDOG_MS = 1500;
+/**
+ * Share hands off to the grown-up gate: the sheet fades out first, then the gate (mounted in
+ * Root) presents. iOS can't present a second root modal over an open sheet, so a gate asked
+ * while the sheet was up never showed, and every later gate ask waited on it. This guard
+ * covers Android (no onDismiss) and an onDismiss that never fires.
+ */
+export const HANDOFF_MS = 600;
 /** One close word everywhere. */
 export const CLOSE_WORD = 'Nice!';
 
 const FPS_PROBE = __DEV__ && process.env.EXPO_PUBLIC_SHARE_STUDIO_FPS === '1';
 
 export function ShareStudioHost({ portal = false }: { readonly portal?: boolean }) {
-  const [hostId] = useState(() => registerFlexHost(portal));
-  const [top, setTop] = useState(() => topFlexHost() === hostId);
+  // Registered after mount, never during render (that set another host's state mid-render).
+  const [top, setTop] = useState(false);
   useEffect(() => {
+    const hostId = registerFlexHost(portal);
     const update = () => setTop(topFlexHost() === hostId);
     const off = subscribeFlexHosts(update);
     update();
     return () => { off(); unregisterFlexHost(hostId); };
-  }, [hostId]);
+  }, [portal]);
   const [request, setRequest] = useState<FlexRequest | null>(currentFlex);
   useEffect(() => subscribeFlex(() => setRequest(currentFlex())), []);
   // Park-identifying reveals (park day, ride coin) wait until the player has left the park.
@@ -143,6 +153,16 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  // 'shown' -> 'leaving' (fading out for the grown-up gate) -> 'gone' (the gate may present).
+  const [stage, setStage] = useState<'shown' | 'leaving' | 'gone'>('shown');
+  const dismissed = useRef<(() => void) | null>(null);
+  const onDismiss = useCallback(() => {
+    const done = dismissed.current;
+    dismissed.current = null;
+    if (!done) return;
+    setStage('gone');
+    done();
+  }, []);
   const busyRef = useRef(false);
   const readyRef = useRef(false);
   readyRef.current = ready;
@@ -161,6 +181,12 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
       void Clipboard.setStringAsync(shareUrl(request.kind)).then(() => setLinkCopied(true)).catch(() => undefined);
       for (let i = 0; i < 30 && !readyRef.current; i++) await new Promise(r => setTimeout(r, 100));
       const uri = await captureFlex(cardRef, format);
+      // The picture is made: fade the sheet out so the grown-up gate can present (HANDOFF_MS).
+      await new Promise<void>(resolve => {
+        dismissed.current = resolve;
+        setStage('leaving');
+        setTimeout(onDismiss, HANDOFF_MS);
+      });
       const outcome = await openShareSheet(uri);
       if (outcome.shared === false) event('dismissed');
       else {
@@ -173,8 +199,10 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
     } finally {
       busyRef.current = false;
       setBusy(false);
+      // Done or failed, the sheet closes, so a waiting dialog (the retry note) can show.
+      finishFlex(request.id);
     }
-  }, [event, format, request.kind]);
+  }, [event, format, request.id, request.kind, onDismiss]);
 
   const offscreen = (
     <View style={[styles.offscreen, FLEX_SIZE[format]]} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -182,7 +210,9 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
         inventory={player?.inventory} onReadyChange={setReady} />
     </View>
   );
-  return { share, busy, ready, offscreen, event, linkCopied, inventory: player?.inventory };
+  // A layer while it is up, so Root's dialogs and the grown-up gate wait for it (ui/modalLayers.ts).
+  useModalLayer(stage !== 'gone', 'show');
+  return { share, busy, ready, offscreen, event, linkCopied, inventory: player?.inventory, visible: stage === 'shown', onDismiss };
 }
 
 function LinkHint({ show }: { readonly show: boolean }) {
@@ -194,7 +224,7 @@ function LinkHint({ show }: { readonly show: boolean }) {
 
 function FlexSheet({ request }: { readonly request: FlexRequest }) {
   const [format, setFormat] = useState<FlexFormat>(request.options.format ?? 'story');
-  const { share, busy, offscreen, event, inventory, linkCopied } = useFlexShare(request, format);
+  const { share, busy, offscreen, event, inventory, linkCopied, visible, onDismiss } = useFlexShare(request, format);
   const onShow = useShowWatchdog(request, format);
   const { width, height } = useWindowDimensions();
   useEffect(() => { event('opened'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -206,7 +236,8 @@ function FlexSheet({ request }: { readonly request: FlexRequest }) {
   const scale = Math.min((width - 48) / size.width, (height - 300) / size.height, 1);
 
   return (
-    <Modal transparent animationType="fade" visible onShow={onShow} onRequestClose={close} statusBarTranslucent>
+    <Modal transparent animationType="fade" visible={visible} onShow={onShow} onDismiss={onDismiss} onRequestClose={close} statusBarTranslucent>
+      <ModalLayerContext.Provider value>
       <View style={styles.scrim}>
         {offscreen}
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel={CLOSE_WORD} accessibilityRole="button" />
@@ -230,6 +261,7 @@ function FlexSheet({ request }: { readonly request: FlexRequest }) {
           <GameButton label={CLOSE_WORD} variant="ghost" tone="onBlue" onPress={close} />
         </View>
       </View>
+      </ModalLayerContext.Provider>
     </Modal>
   );
 }
@@ -248,7 +280,9 @@ function FlexSheet({ request }: { readonly request: FlexRequest }) {
  */
 function FlexMoment({ request }: { readonly request: FlexRequest }) {
   const reduced = useUiReducedMotion();
-  const { share, busy, offscreen, event, inventory, linkCopied } = useFlexShare(request, 'story');
+  // The white flash respects iOS "Dim Flashing Lights", like the coin level-up.
+  const [dimFlash] = useState(() => isDimFlashingLightsEnabled());
+  const { share, busy, offscreen, event, inventory, linkCopied, visible, onDismiss } = useFlexShare(request, 'story');
   const onShow = useShowWatchdog(request, 'story');
   const { width, height } = useWindowDimensions();
   const copy = useMemo(() => flexCopy(request.kind, request.payload), [request]);
@@ -309,7 +343,7 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
       playSfx('fx.reveal', 0.9);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle?.Heavy).catch(() => undefined);
       burst.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
-      flash.value = withSequence(withTiming(0.75, { duration: 60 }), withTiming(0, { duration: 260 }));
+      if (!dimFlash) flash.value = withSequence(withTiming(0.75, { duration: 60 }), withTiming(0, { duration: 260 }));
       shine.value = withDelay(260, withTiming(1, { duration: 650, easing: Easing.inOut(Easing.quad) }));
       if (intensity === 'big') shake.value = withSequence(...[8, -7, 5, -3, 0].map(v => withTiming(v, { duration: 45 })));
     });
@@ -366,7 +400,8 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
   const bigText = tick != null && copy.big ? copy.big.replace(/\d+/, String(tick)) : undefined;
 
   return (
-    <Modal transparent animationType="fade" visible onShow={onShow} onRequestClose={() => finishFlex(request.id)} statusBarTranslucent>
+    <Modal transparent animationType="fade" visible={visible} onShow={onShow} onDismiss={onDismiss} onRequestClose={() => finishFlex(request.id)} statusBarTranslucent>
+      <ModalLayerContext.Provider value>
       <View style={[styles.scrim, styles.momentScrim]}>
         {offscreen}
         <Animated.View pointerEvents="none" style={[styles.momentRays, { width: raysSize, height: raysSize, marginLeft: -raysSize / 2, marginTop: -raysSize / 2 }, raysStyle]}>
@@ -391,6 +426,7 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
           <GameButton label={CLOSE_WORD} variant="ghost" tone="onBlue" onPress={() => finishFlex(request.id)} />
         </Animated.View>
       </View>
+      </ModalLayerContext.Provider>
     </Modal>
   );
 }
