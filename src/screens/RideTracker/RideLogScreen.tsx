@@ -25,8 +25,8 @@ import Topbar from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import { removePendingDetection } from '../../services/RideDetectionService';
-import { drainRideLogs, manualRideLogId, queueRideLog, shouldQueueRideLog } from '../../services/rideLogOutbox';
-import { journalRides } from './rideJournalModel';
+import { clearLetGoRideLog, drainRideLogs, manualRideLogId, queueRideLog, rideLogWaitReason, shouldQueueRideLog, type RideLogWaitReason } from '../../services/rideLogOutbox';
+import { journalRides, rideLogError } from './rideJournalModel';
 import { AuthContext } from '../../context/AuthProvider';
 import ProfileStatIcon from '../../components/ProfileStatIcon';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
@@ -82,6 +82,8 @@ export default function RideLogScreen() {
   const autoDetected = route.params?.autoDetected as boolean | undefined;
   const autoRodeAt = route.params?.rodeAt as string | undefined;
   const detectionId = route.params?.detectionId as string | undefined;
+  // "Log it again" from the Ride Tracker: a kept ride that could not join. Its memory comes back.
+  const again = route.params?.again as { id: string; payload: LogRidePayload } | undefined;
 
   const [step, setStep] = useState<'park' | 'ride' | 'details'>('park');
   const [selectedPark, setSelectedPark] = useState<number | null>(null);
@@ -104,10 +106,20 @@ export default function RideLogScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [successData, setSuccessData] = useState<{
     ride: any; xpEarned: number; newAchievements: any[]; rideCount?: number; totalRideCount?: number;
-    queued?: boolean;
+    queued?: boolean; queuedReason?: RideLogWaitReason;
   } | null>(null);
   // One phone-made id per ride memory, kept across retries so the server saves it once.
   const logId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!again) return;
+    // Same phone-made id, so a ride that did reach the server is never saved twice.
+    logId.current = again.id;
+    setRating(again.payload.rating ?? 0);
+    setReaction((again.payload.reaction as string | undefined) ?? null);
+    setNote(again.payload.note ?? '');
+    setWaitTime(again.payload.wait_time_minutes != null ? String(again.payload.wait_time_minutes) : '');
+  }, [again?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Rides kept on the phone from an earlier dead zone get another try.
   useEffect(() => { void drainRideLogs().catch(() => undefined); }, []);
@@ -196,6 +208,21 @@ export default function RideLogScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
+  // The server no longer knows the ride: back to a fresh ride list for its park.
+  // The stars, face and note stay, so the kid only picks the ride again.
+  const backToRideList = useCallback(() => {
+    logId.current = null;
+    const parkId = selectedRide?.park_id ?? selectedPark;
+    setSelectedRide(null);
+    if (parkId) {
+      setSelectedPark(parkId);
+      setStep('ride');
+      void loadParkRides(parkId);
+    } else {
+      setStep('park');
+    }
+  }, [selectedRide?.park_id, selectedPark, loadParkRides]);
+
   const handleSubmit = useCallback(async () => {
     if (!selectedRide || saving.current) return;
     if (waitTime && !/^\d+$/.test(waitTime)) {
@@ -223,6 +250,7 @@ export default function RideLogScreen() {
     try {
       const result = await logRide(payload);
       if (detectionId) void removePendingDetection(detectionId).catch(() => undefined);
+      if (again) void clearLetGoRideLog(again.id).catch(() => undefined);
       logId.current = null;
       // A save that works is a good moment to send any rides still waiting.
       void drainRideLogs().catch(() => undefined);
@@ -237,7 +265,11 @@ export default function RideLogScreen() {
       setShowSuccess(true);
     } catch (e: any) {
       if (!shouldQueueRideLog(e)) {
-        gameAlert('Ride not saved', e?.response?.data?.message || 'Check your ride and try again.');
+        // The server read the ride and said no: kid words and a next step, never server text.
+        const problem = rideLogError(e);
+        gameAlert(problem.title, problem.message, problem.action === 'pick-ride'
+          ? [{ text: 'Pick ride', onPress: backToRideList }]
+          : [{ text: 'Fix it' }]);
         return;
       }
       // Weak signal: keep the ride on the phone and send it later. Never throw it away.
@@ -250,6 +282,7 @@ export default function RideLogScreen() {
         return;
       }
       if (detectionId) void removePendingDetection(detectionId).catch(() => undefined);
+      if (again) void clearLetGoRideLog(again.id).catch(() => undefined);
       logId.current = null;
       setSuccessData({
         ride: {
@@ -261,13 +294,14 @@ export default function RideLogScreen() {
         xpEarned: 0,
         newAchievements: [],
         queued: true,
+        queuedReason: rideLogWaitReason(e),
       });
       setShowSuccess(true);
     } finally {
       saving.current = false;
       setSubmitting(false);
     }
-  }, [selectedRide, rating, reaction, note, waitTime, autoRodeAt, detectionId, player?.id]);
+  }, [selectedRide, rating, reaction, note, waitTime, autoRodeAt, detectionId, player?.id, backToRideList, again]);
 
   const handleBack = useCallback(() => {
     if (step === 'details') {
@@ -297,6 +331,7 @@ export default function RideLogScreen() {
         xpEarned={successData.xpEarned}
         newAchievements={successData.newAchievements}
         queued={successData.queued}
+        queuedReason={successData.queuedReason}
         onDone={() => navigation.goBack()}
         onLogAnother={() => {
           setShowSuccess(false);

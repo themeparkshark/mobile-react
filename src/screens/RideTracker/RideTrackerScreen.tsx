@@ -15,7 +15,8 @@ import Topbar, { BackButton } from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { drainRideLogs, onRideLogOutboxChange, pendingRideLogs, rideCountWords, type QueuedRideLog } from '../../services/rideLogOutbox';
+import { clearLetGoRideLog, drainRideLogs, letGoRideLogs, onRideLogOutboxChange, pendingRideLogs, rideCountWords,
+  type LetGoRideLog, type QueuedRideLog } from '../../services/rideLogOutbox';
 import { GameIcon } from '../../ui';
 
 // ─── Rider Levels (based on rides logged) ───
@@ -165,10 +166,16 @@ export default function RideTrackerScreen() {
   // Rides kept on the phone in a dead zone: show how many wait, send them, then reload.
   const [waitingList, setWaitingList] = useState<QueuedRideLog[]>([]);
   const waitingRides = waitingList.length;
-  useEffect(() => onRideLogOutboxChange(() => { void pendingRideLogs().then(setWaitingList); }), []);
+  // Kept rides that could not join (the server said no, or 30 days passed): shown, never silent.
+  const [letGoList, setLetGoList] = useState<LetGoRideLog[]>([]);
+  useEffect(() => onRideLogOutboxChange(() => {
+    void pendingRideLogs().then(setWaitingList);
+    void letGoRideLogs().then(setLetGoList);
+  }), []);
   const sendWaiting = useCallback(async () => {
     if (preview) return;
     setWaitingList(await pendingRideLogs());
+    setLetGoList(await letGoRideLogs());
     const sent = await drainRideLogs().catch(() => 0);
     if (sent > 0) await load();
   }, [preview, load]);
@@ -208,7 +215,7 @@ export default function RideTrackerScreen() {
               <Text style={s.heroEyebrow}>YOUR RIDE JOURNAL</Text>
               {has ? <CountUp to={stats.total_rides} style={s.heroNum} />
                 : <Text style={s.heroNum}>{loadUnavailable ? '-' : '0'}</Text>}
-              <Text style={s.heroLabel}>{loadUnavailable && !stats ? 'JOURNAL OFFLINE' : stats?.total_rides === 1 ? 'RIDE LOGGED' : 'RIDES LOGGED'}</Text>
+              <Text style={s.heroLabel}>{loadUnavailable && !stats ? 'JOURNAL OFFLINE' : Number(stats?.total_rides) === 1 ? 'RIDE LOGGED' : 'RIDES LOGGED'}</Text>
               {waitingRides > 0 && (
                 <View style={s.heroWaiting} accessibilityLabel={`${rideCountWords(waitingRides)} waiting on your phone`}>
                   <Text style={s.heroWaitingText}>+{waitingRides} WAITING</Text>
@@ -245,6 +252,35 @@ export default function RideTrackerScreen() {
               Could not load your rides. Check your internet, then pull down to try again.
             </Text>
           )}
+
+          {letGoList.slice(0, 2).map(ride => (
+            <View key={ride.id} style={s.waitingNote} accessible={false}>
+              <View style={s.waitingHead}>
+                <GameIcon name="ride" size={24} />
+                <Text style={[s.waitingTitle, { flex: 1 }]} accessibilityRole="text">
+                  {ride.ride_name} could not join your journal. Log it again?
+                </Text>
+              </View>
+              <View style={s.letGoActions}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Okay, forget ${ride.ride_name}`} hitSlop={8}
+                  onPress={() => { void clearLetGoRideLog(ride.id).catch(() => undefined); }}
+                  style={({ pressed }) => [s.letGoQuiet, pressed && { opacity: 0.6 }]}>
+                  <Text style={s.letGoQuietText}>Okay</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Log ${ride.ride_name} again`}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    nav.navigate('RideLog', {
+                      rideId: ride.payload.ride_id, rideName: ride.ride_name, parkId: ride.park_id ?? undefined,
+                      autoDetected: true, rodeAt: ride.payload.rode_at, again: { id: ride.id, payload: ride.payload },
+                    });
+                  }}
+                  style={({ pressed }) => [s.letGoButton, pressed && { transform: [{ scale: reducedMotion ? 1 : 0.97 }] }]}>
+                  <Text style={s.letGoButtonText}>Log it again</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
 
           {waitingRides > 0 && (
             <View style={s.waitingNote} accessible accessibilityLiveRegion="polite"
@@ -509,6 +545,12 @@ const s = StyleSheet.create({
   waitingRide: { flex: 1, fontSize: 15, fontFamily: 'Knockout', color: '#103F75' },
   waitingTag: { backgroundColor: '#FFCF3B', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1.5, borderColor: '#103F75' },
   waitingTagText: { fontSize: 11, fontFamily: 'Shark', color: '#103F75' },
+  letGoActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 14 },
+  letGoQuiet: { paddingVertical: 8, paddingHorizontal: 6 },
+  letGoQuietText: { fontSize: 15, fontFamily: 'Knockout', color: '#315C7C' },
+  letGoButton: { backgroundColor: '#FFCF3B', borderRadius: 12, borderWidth: 2, borderColor: '#103F75',
+    paddingVertical: 8, paddingHorizontal: 16, minHeight: 44, justifyContent: 'center' },
+  letGoButtonText: { fontSize: 16, fontFamily: 'Shark', color: '#103F75' },
   heroWaiting: { alignSelf: 'flex-start', marginTop: 6, backgroundColor: '#FFCF3B', borderRadius: 10, borderWidth: 2,
     borderColor: '#103F75', paddingHorizontal: 8, paddingVertical: 2 },
   heroWaitingText: { fontSize: 13, fontFamily: 'Shark', color: '#103F75' },

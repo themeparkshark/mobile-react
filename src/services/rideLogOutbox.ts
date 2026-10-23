@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logRide, type LogRidePayload } from '../api/endpoints/player-rides';
 import { RedeemRetryQueue } from './lineplay/RedeemRetryQueue';
 
@@ -51,6 +52,25 @@ export function shouldQueueRideLog(error: unknown): boolean {
   return status === 401 || status === 403 || status === 408 || status === 429 || status >= 500;
 }
 
+export type RideLogWaitReason = 'signal' | 'signin';
+
+/**
+ * Why a kept ride is waiting, so the kid hears the real fix: an expired
+ * sign-in (401, 403) waits for signing in again, everything else for signal.
+ */
+export function rideLogWaitReason(error: unknown): RideLogWaitReason {
+  const status = (error as { response?: { status?: unknown } } | null)?.response?.status;
+  return status === 401 || status === 403 ? 'signin' : 'signal';
+}
+
+/** The line under "Kept on your phone". */
+export function rideLogWaitLine(reason: RideLogWaitReason, count = 1): string {
+  const subject = count === 1 ? 'It joins' : 'They join';
+  return reason === 'signin'
+    ? `${subject} your journal when you sign in again.`
+    : `${subject} your journal when you have signal.`;
+}
+
 let signedInPlayerId: number | null = null;
 let queue: RedeemRetryQueue<QueuedRideLog> | null = null;
 const listeners = new Set<(count: number) => void>();
@@ -67,17 +87,92 @@ function outbox(): RedeemRetryQueue<QueuedRideLog> {
     executor: async item => {
       const now = Date.now();
       // Someone else's ride (or nobody signed in): it waits for its own player.
-      if (signedInPlayerId === null || item.player_id !== signedInPlayerId) return tooOld(item, now);
+      if (signedInPlayerId === null || item.player_id !== signedInPlayerId) {
+        return tooOld(item, now) && letGo(item, 'expired', now);
+      }
       try {
         await logRide(item.payload);
         return true;
       } catch (error) {
-        // A real "no" from the server drops the ride; anything else waits for signal.
-        return !shouldQueueRideLog(error) || tooOld(item, now);
+        // A real "no" from the server lets the ride go; anything else waits for signal.
+        if (!shouldQueueRideLog(error)) return letGo(item, 'rejected', now);
+        return tooOld(item, now) && letGo(item, 'expired', now);
       }
     },
   });
   return queue;
+}
+
+export const RIDE_LOG_LET_GO_KEY = 'tps.rideLogOutbox.letGo.v1';
+
+/**
+ * A kept ride that could not join the journal: the server said no to it, or it
+ * waited 30 days. The kid was told it was kept, so it never vanishes in
+ * silence: the Ride Tracker shows it with a one-tap "Log it again".
+ */
+export interface LetGoRideLog {
+  readonly id: string;
+  readonly player_id: number;
+  readonly ride_name: string;
+  readonly park_id: number | null;
+  readonly payload: QueuedRideLog['payload'];
+  readonly reason: 'rejected' | 'expired';
+  readonly at: number;
+}
+
+let letGoChain: Promise<unknown> = Promise.resolve();
+
+/** Serialized read and write of the let-go list. A failed read throws, so nothing is overwritten. */
+function changeLetGo(fn: (items: LetGoRideLog[]) => LetGoRideLog[]): Promise<void> {
+  const next = letGoChain.then(async () => {
+    const raw = await AsyncStorage.getItem(RIDE_LOG_LET_GO_KEY);
+    let items: LetGoRideLog[] = [];
+    try {
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) items = parsed as LetGoRideLog[];
+    } catch {
+      items = [];
+    }
+    await AsyncStorage.setItem(RIDE_LOG_LET_GO_KEY, JSON.stringify(fn(items)));
+  });
+  letGoChain = next.catch(() => undefined);
+  return next;
+}
+
+/**
+ * Keep a note of a ride leaving the outbox. Returns true once the note is
+ * stored (the ride may leave), false if storage failed (the ride stays put).
+ */
+async function letGo(item: QueuedRideLog, reason: LetGoRideLog['reason'], now: number): Promise<boolean> {
+  try {
+    const id = item.payload.source_detection_id;
+    await changeLetGo(items => items.some(it => it.id === id) ? items : [...items, {
+      id, player_id: item.player_id, ride_name: item.ride_name, park_id: item.park_id,
+      payload: item.payload, reason, at: now,
+    }].slice(-20));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The signed-in player's rides that could not join the journal, newest first. */
+export async function letGoRideLogs(): Promise<LetGoRideLog[]> {
+  if (signedInPlayerId === null) return [];
+  try {
+    const raw = await AsyncStorage.getItem(RIDE_LOG_LET_GO_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as LetGoRideLog[]).filter(item => item.player_id === signedInPlayerId).reverse();
+  } catch {
+    return [];
+  }
+}
+
+/** The kid logged it again or said okay: clear the note. */
+export async function clearLetGoRideLog(id: string): Promise<void> {
+  await changeLetGo(items => items.filter(item => item.id !== id));
+  await announce();
 }
 
 async function announce(): Promise<number> {

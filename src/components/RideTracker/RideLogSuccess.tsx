@@ -12,6 +12,7 @@ import TopbarColumn from '../Topbar/TopbarColumn';
 import TopbarText from '../Topbar/TopbarText';
 import { SoundEffectContext, SoundEffectContextType } from '../../context/SoundEffectProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { rideLogWaitLine, type RideLogWaitReason } from '../../services/rideLogOutbox';
 
 const MILESTONES = [10, 25, 50, 100, 200, 500, 1000];
 const MILESTONE_MESSAGES: Record<number, string> = {
@@ -34,10 +35,12 @@ interface RideLogSuccessProps {
   onLogAnother?: () => void;
   /** No signal: the ride is kept on the phone and sent later. */
   queued?: boolean;
+  /** Why the kept ride waits: signal (default) or signing in again. */
+  queuedReason?: RideLogWaitReason;
 }
 
 const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
-  ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, onLogAnother, queued = false,
+  ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, onLogAnother, queued = false, queuedReason = 'signal',
 }) => {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -128,9 +131,9 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
           <Text style={styles.successTitle}>{queued ? 'Ride Saved!' : 'Ride Logged!'}</Text>
           {queued ? (
             <View style={styles.queuedPill} accessible
-              accessibilityLabel="Kept on your phone. It joins your journal when you have signal.">
+              accessibilityLabel={`Kept on your phone. ${rideLogWaitLine(queuedReason)}`}>
               <Text style={styles.queuedTitle}>Kept on your phone</Text>
-              <Text style={styles.queuedText}>It joins your journal when you have signal.</Text>
+              <Text style={styles.queuedText}>{rideLogWaitLine(queuedReason)}</Text>
             </View>
           ) : xpEarned > 0 ? (
             <Text style={styles.xpText}>+{xpEarned} XP</Text>
