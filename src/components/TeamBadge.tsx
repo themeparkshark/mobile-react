@@ -4,9 +4,9 @@
  * The Gold and Green shields were drawn with a round-eared mouse face and an
  * Earth globe in their center circle, which read as two famous park brands.
  * Until Dustin's new emblems arrive (his GPT Image pipeline from Alex's
- * references), the center circle is covered with a team-color disc, a gold
- * rim and one of Alex's icons: a star for Team Gold, the compass for Team
- * Green. The shield frame stays Alex's art. Team Shark is unchanged.
+ * references), the center circle is covered with a beveled gold rim, a
+ * team-color ring, a cream face and one of Alex's icons: a star for Team
+ * Gold, the compass for Team Green. The shield frame stays Alex's art. Team Shark is unchanged.
  *
  * Geometry is measured on each PNG (center and size as fractions of the
  * art's own width and height), so the cover sits on the circle at any size.
@@ -48,6 +48,44 @@ export const TEAM_EMBLEM: Partial<Record<TeamId, { readonly icon: GameIconName; 
   globe: { icon: 'map', fill: TEAMS.globe.color },
 };
 const RIM = '#F5C842';
+const RIM_LIGHT = '#FFE9A3';
+const RIM_DEEP = '#B7861A';
+const FACE = '#FFF7E0';
+
+/**
+ * The emblem layers, sized from the cover disc (exported for tests):
+ * a gold rim lit from the top, a team-color ring, a cream face so the glyph
+ * reads on any chip color (the compass was a blue-on-green blob at chip size),
+ * a soft shadow at the top of the face and one highlight, like Alex's bevels.
+ */
+export function emblemLayers(size: number) {
+  const rim = Math.max(1, Math.round(size * 0.06));
+  const ring = Math.max(1, Math.round(size * 0.1));
+  const face = Math.max(2, size - 2 * (rim + ring));
+  return { rim, ring, face, glyph: Math.max(4, Math.round(face * 0.82)), shade: Math.max(1, Math.round(face * 0.06)) };
+}
+
+function Emblem({ icon, fill, size, left, top }: { icon: GameIconName; fill: string; size: number; left: number; top: number }) {
+  const l = emblemLayers(size);
+  return (
+    <View style={{
+      position: 'absolute', left, top, width: size, height: size, borderRadius: size / 2, backgroundColor: fill,
+      borderWidth: l.rim, borderColor: RIM, borderTopColor: RIM_LIGHT, borderBottomColor: RIM_DEEP,
+      alignItems: 'center', justifyContent: 'center',
+    }}>
+      <View style={{
+        width: l.face, height: l.face, borderRadius: l.face / 2, backgroundColor: FACE,
+        borderTopWidth: l.shade, borderColor: 'rgba(5, 52, 110, 0.22)', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <GameIcon name={icon} size={l.glyph} />
+      </View>
+      <View style={{
+        position: 'absolute', top: l.rim * 0.6, left: size * 0.2, width: size * 0.28, height: size * 0.12,
+        borderRadius: size, backgroundColor: 'rgba(255, 255, 255, 0.45)', transform: [{ rotate: '-20deg' }],
+      }} />
+    </View>
+  );
+}
 
 /** Where the cover disc sits inside a box of this size (the art is drawn "contain", centered). Exported for tests. */
 export function coverFrame(art: Art, boxW: number, boxH: number): { left: number; top: number; size: number } | null {
@@ -95,15 +133,7 @@ export default function TeamBadge({ team, kind = 'small', size, style, accessibl
     <View style={[size ? { width: size, height: size } : null, style]} onLayout={onLayout}
       accessible={accessible} accessibilityLabel={accessibilityLabel} pointerEvents="none">
       <Image source={art.source} style={{ width: '100%', height: '100%', opacity: hidden ? 0 : 1 }} contentFit="contain" />
-      {emblem && frame && (
-        <View style={{
-          position: 'absolute', left: frame.left, top: frame.top, width: frame.size, height: frame.size,
-          borderRadius: frame.size / 2, backgroundColor: emblem.fill, borderColor: RIM,
-          borderWidth: Math.max(1, Math.round(frame.size * 0.07)), alignItems: 'center', justifyContent: 'center',
-        }}>
-          <GameIcon name={emblem.icon} size={Math.max(4, Math.round(frame.size * 0.62))} />
-        </View>
-      )}
+      {emblem && frame && <Emblem icon={emblem.icon} fill={emblem.fill} size={frame.size} left={frame.left} top={frame.top} />}
     </View>
   );
 }

@@ -80,6 +80,16 @@ test('team badges never show the old mouse face or Earth globe (IP safety, round
   assert.ok(Math.abs(f.left - ((96 - 85) / 2 + 0.482 * 85 - f.size / 2)) < 0.01);
   assert.ok(Math.abs(f.top - (0.3125 * 96 - f.size / 2)) < 0.01);
   assert.equal(badge.coverFrame({ w: 1, h: 1 }, 10, 10), null);
+  // Round 3: a cream face under the glyph, so the compass reads on a green chip, at every size.
+  for (const size of [8, 12, 24, 60, 120]) {
+    const l = badge.emblemLayers(size);
+    assert.equal(l.face + 2 * (l.rim + l.ring), Math.max(size, l.face + 2 * (l.rim + l.ring)), `layers fit at ${size}`);
+    assert.ok(l.face >= 2 && l.glyph >= 4 && l.glyph <= Math.max(4, l.face), `glyph fits the face at ${size}`);
+    assert.ok(l.glyph / size >= (size >= 24 ? 0.55 : 0.3), `glyph is big enough at ${size}`);
+  }
+  const team = fs2.readFileSync(p2.join(__dirname, '../../src/components/TeamBadge.tsx'), 'utf8');
+  assert.match(team, /backgroundColor: FACE/, 'the glyph sits on a cream face, not on the team color');
+  assert.match(team, /borderTopColor: RIM_LIGHT, borderBottomColor: RIM_DEEP/, 'the rim is beveled like Alex\'s shields');
   // Nothing else draws the old art directly.
   const src = p2.join(__dirname, '../../src');
   const walk = d => fs2.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(p2.join(d, e.name))
@@ -90,4 +100,25 @@ test('team badges never show the old mouse face or Earth globe (IP safety, round
     assert.doesNotMatch(text, /team-(?:mouse|globe)-badge|pillar-(?:mouse|globe)|teams\/(?:mouse|globe)-small/, file);
     assert.doesNotMatch(text, /source=\{(?:team|TEAMS\[[^\]]+\])\.badge\}/, file);
   }
+});
+
+test('the team-pick screen shows no globe or castle skyline, and its copy is kid words (round 3)', () => {
+  const fs2 = require('node:fs');
+  const p2 = require('node:path');
+  const screen = fs2.readFileSync(p2.join(__dirname, '../../src/screens/GymBattle/TeamSelectionScreen.tsx'), 'utf8');
+  // water_background has a globe and castle in its top band: drawn 145% tall and pinned to the bottom, so that
+  // band (the top ~31%) is above the screen. A cover fit keeps the cut a share of the art at every phone size.
+  assert.match(screen, /source=\{require\('\.\.\/\.\.\/\.\.\/assets\/images\/water_background\.png'\)\} style=\{s\.bg\} contentFit="cover" contentPosition="bottom"/);
+  assert.match(screen, /bg: \{ position: 'absolute', left: 0, right: 0, bottom: 0, height: BG_TALL \}/);
+  const tall = Number(/const BG_TALL = '(\d+)%'/.exec(screen)[1]) / 100;
+  assert.ok(1 - 1 / tall >= 0.3, 'at least the top 30% of the art is off screen');
+  for (const [w, h] of [[375, 667], [402, 874], [440, 956]]) {
+    // Art 1290 x 2790 (aspect 0.462) in a box w x tall*h: cover scales by height when the box is narrower than the art.
+    assert.ok(w / (tall * h) < 1290 / 2790, `cover fits by height at ${w}x${h}, so the cut is the same share`);
+  }
+  assert.doesNotMatch(screen, /water_background\.png'\)\} style=\{StyleSheet\.absoluteFill\}/);
+  assert.doesNotMatch(screen, /Rope drop|perfect routes/, 'no grown-up park words on the team cards');
+  // GymBattle's arena-bg.png is a stone plaza with plain towers: no globe, castle or wizard hat.
+  const gym = fs2.readFileSync(p2.join(__dirname, '../../src/screens/GymBattle/GymBattleScreen.tsx'), 'utf8');
+  assert.doesNotMatch(gym, /water_background/);
 });

@@ -22,11 +22,13 @@ import { QUESTION_BANK } from './teamQuiz';
 
 const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
 const VIBE: Record<TeamId, { tag: string; line: string }> = {
-  mouse: { tag: 'THE PLANNERS', line: 'Rope drop, perfect routes, every ride in order.' },
+  mouse: { tag: 'THE PLANNERS', line: 'First in line, with a plan for every ride.' },
   globe: { tag: 'THE EXPLORERS', line: 'Every land, every snack, every hidden detail.' },
   shark: { tag: 'THE THRILL CREW', line: 'Biggest drops first. Go all in, all day.' },
 };
 const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
+/** Background height as a share of the screen; the extra sits off the top. */
+const BG_TALL = '145%';
 
 type Stage = 'pick' | 'quiz' | 'confirm' | 'joining' | 'done' | 'error';
 
@@ -104,7 +106,11 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
 
   return (
     <View style={s.root}>
-      <Image source={require('../../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      {/* IP safety: the top of water_background has a globe and castle skyline.
+          The art is drawn 145% tall and pinned to the bottom, so that top band
+          (about the first 31% of the picture) sits above the screen at every
+          phone size. Swap for Dustin's new team-pick art when it lands. */}
+      <Image source={require('../../../assets/images/water_background.png')} style={s.bg} contentFit="cover" contentPosition="bottom" />
       <View style={[StyleSheet.absoluteFill, s.tint]} />
       <SafeAreaView style={s.safe}>
         {stage !== 'done' && (
@@ -248,6 +254,7 @@ function Welcome({ team, onGo }: { team: TeamId; onGo: () => void }) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0768b9' },
   tint: { backgroundColor: 'rgba(3, 38, 92, 0.45)' },
+  bg: { position: 'absolute', left: 0, right: 0, bottom: 0, height: BG_TALL },
   safe: { flex: 1 },
   close: { position: 'absolute', top: 54, right: 18, zIndex: 5, width: 36, height: 36, borderRadius: 18,
     backgroundColor: 'rgba(5,52,110,0.3)', alignItems: 'center', justifyContent: 'center' },
