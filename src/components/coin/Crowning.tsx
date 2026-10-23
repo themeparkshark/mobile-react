@@ -119,7 +119,7 @@ export default function Crowning({ rideName, coinUrl, boss, reduced, inPerson = 
             <View style={{ marginTop: 12, alignSelf: 'stretch' }}>
               <YellowButton text={copy.primary} onPress={() => (onFight && copy.secondary ? onFight() : onDone())} />
             </View>
-            {!!shareHandoff && !!coinUrl && <FlexShareButton kind="crowned" payload={{ coinUrl, ownedRef: 10 }} surface="coin_sheet" size="md" style={{ marginTop: 10 }} handoff={shareHandoff} />}
+            {!!shareHandoff && !!coinUrl && <FlexShareButton kind="crowned" payload={{ coinUrl, ownedRef: 10 }} surface="coin_sheet" size="reveal" style={{ marginTop: 10, alignSelf: 'center' }} handoff={shareHandoff} />}
             {copy.secondary && (
               <TouchableOpacity accessibilityRole="button" onPress={onDone} style={{ paddingVertical: 10 }}>
                 <Text style={styles.later}>{copy.secondary}</Text>

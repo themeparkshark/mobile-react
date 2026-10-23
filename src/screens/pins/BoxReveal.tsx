@@ -32,6 +32,11 @@
  * own completion on the UI thread, confetti is capped at 22 pieces on one
  * shared value, rays only for gold moments. Reduce Motion: no shake, flip or
  * confetti; the pin fades in with the same sounds.
+ *
+ * Share (a gold chaser or a Golden Box pin) is the gold-rimmed pill under Done, and it shows
+ * only after the wear choice ("Wear it", or "Keep my lanyard"), so bragging never costs the
+ * kid that choice. Share hides the reveal, waits for iOS to finish dismissing it (onDismiss),
+ * then finishes, so the Share sheet and its grown-up gate can open from Root.
  */
 import { useAmbient } from '../../services/money/useAmbient';
 import { Image } from 'expo-image';
@@ -50,7 +55,7 @@ import EnamelPin from '../pinTrading/EnamelPin';
 import { BOX_ART, PIN_ART, type BoxTone } from './PinArt';
 import { PINS_COPY, revealOrder, serialLabel, type Pull } from './pinsModel';
 import { FlexShareButton } from '../../share/FlexShareButton';
-import { MODAL_HANDOFF_MS } from '../../share/handoff';
+import { useModalHandoff } from '../../share/handoff';
 
 type Phase = 'drop' | 'ready' | 'shake' | 'hold' | 'pop' | 'show' | 'summary';
 
@@ -269,6 +274,10 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const phaseRef = useRef<Phase>('drop');
   const setPhase = (p: Phase) => { phaseRef.current = p; setPhaseState(p); };
   const [worn, setWorn] = useState<Set<number>>(new Set());
+  /** Pins the kid chose to keep off the lanyard ("Keep my lanyard"): the wear choice is made. */
+  const [kept, setKept] = useState<Set<number>>(new Set());
+  const [hidden, setHidden] = useState(false);
+  const modal = useModalHandoff(useCallback(() => setHidden(true), []));
   const ambient = useAmbient();
   const [swappedOut, setSwappedOut] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
@@ -596,12 +605,14 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   // Show off a gold chaser or a Golden Box pin (never a park pin: its card would say where the kid is).
   // Only once the last box is shown, so Share never skips a box still waiting to open.
   const brag = (p: RevealPull | undefined) => !!p && !isCatch && !p.rare && (p.is_chaser || (golden && !p.duplicate));
+  // A wearable pin waits for the wear choice first (see the header).
   const sharePull = phase === 'summary' ? pulls.find(p => p.is_chaser) ?? null
-    : phase === 'show' && pulls.length === 1 && brag(pull) ? pull : null;
-  const shareHandoff = () => new Promise<void>(resolve => { onDone(pulls); setTimeout(resolve, MODAL_HANDOFF_MS); });
+    : phase === 'show' && pulls.length === 1 && brag(pull) && (!wearable || kept.has(pull.item_id)) ? pull : null;
+  const shareHandoff = async () => { await modal.handoff(); onDone(pulls); };
 
   return (
-    <Modal transparent visible animationType="fade" statusBarTranslucent onRequestClose={() => (phase === 'show' || phase === 'summary') && next()}>
+    <Modal transparent visible={!hidden} animationType="fade" statusBarTranslucent onDismiss={modal.onDismiss}
+      onRequestClose={() => (phase === 'show' || phase === 'summary') && next()}>
       <Pressable style={styles.scrim} onPress={onBackdrop} accessibilityRole="button"
         accessibilityLabel={phase === 'ready' ? 'Open the box' : 'Mystery box'}>
         {/* A soft spotlight: the stage reads as a stage, not the page behind. */}
@@ -791,7 +802,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                     </Pressable>
                   ))}
                 </View>
-                <Pressable onPress={() => { queueHaptic('tapLight', 1); setChoosing(false); }} hitSlop={6} accessibilityRole="button" accessibilityLabel="Keep my lanyard as it is">
+                <Pressable onPress={() => { queueHaptic('tapLight', 1); setChoosing(false); setKept(k => new Set(k).add(pull.item_id)); }} hitSlop={6} accessibilityRole="button" accessibilityLabel="Keep my lanyard as it is">
                   <Text maxFontSizeMultiplier={1.2} style={styles.offPickKeep}>Keep my lanyard</Text>
                 </Pressable>
               </View>
@@ -801,13 +812,13 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                 <Text maxFontSizeMultiplier={1.2} style={styles.wornText}>On your lanyard!{swappedOut ? ` ${swappedOut} came off.` : ''}</Text>
               </View>
             )}
+            <GameButton label={index < pulls.length - 1 ? 'Next box' : pulls.length > 1 && phase === 'show' ? 'See all' : 'Done'}
+              icon={index < pulls.length - 1 ? 'gift' : 'check'} onPress={next} />
             {sharePull && !choosing && (
-              <FlexShareButton kind="find" surface={golden ? 'golden_box' : 'pin_box'} size="md" handoff={shareHandoff}
+              <FlexShareButton kind="find" surface={golden ? 'golden_box' : 'pin_box'} size="reveal" handoff={shareHandoff}
                 style={{ alignSelf: 'center' }}
                 payload={{ itemName: sharePull.name, artUrl: sharePull.icon_url ?? PIN_ART.chaser, rarity: sharePull.is_chaser ? 5 : 4 }} />
             )}
-            <GameButton label={index < pulls.length - 1 ? 'Next box' : pulls.length > 1 && phase === 'show' ? 'See all' : 'Done'}
-              icon={index < pulls.length - 1 ? 'gift' : 'check'} onPress={next} />
           </View>
         )}
       </Pressable>

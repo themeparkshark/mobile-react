@@ -80,12 +80,10 @@ export default function MonthlyGiftCard() {
         <GotIt grants={{ coins: landed.coins }} art="gift" title="Your VIP gift!"
           picture={landed.art && PIN_ART[landed.art] ? <Image source={PIN_ART[landed.art]} style={{ width: 170, height: 170 }} contentFit="contain" /> : undefined}
           caption={[`${landed.coins.toLocaleString('en-US')} coins`, landed.pin].filter(Boolean).join(' and ')}
-          footer={landed.pin && landed.art && PIN_ART[landed.art] ? (
-            // Show off the month's members-only pin. No price, no "VIP costs".
-            <View style={{ alignItems: 'center', marginTop: 8 }}>
-              <FlexShareButton kind="find" surface="vip_gift" size="sm" caption handoff={landedShare.handoff}
-                payload={{ itemName: landed.pin, artUrl: PIN_ART[landed.art], rarity: 4, setName: `${monthName(gift.month, false)} member pin` }} />
-            </View>
+          // Show off the month's members-only pin. No price, no "VIP costs".
+          share={landed.pin && landed.art && PIN_ART[landed.art] ? (
+            <FlexShareButton kind="find" surface="vip_gift" size="reveal" handoff={landedShare.handoff}
+              payload={{ itemName: landed.pin, artUrl: PIN_ART[landed.art], rarity: 4, setName: `${monthName(gift.month, false)} member pin` }} />
           ) : undefined}
           onDone={() => setLanded(null)} />
       )}

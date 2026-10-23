@@ -18,11 +18,16 @@
  * the buy tap carrying over never skips the reveal. Leaving while a wear is
  * saving waits for the save: it closes on success and stays open on a failure,
  * so "Try again" is seen.
+ * Share (the set's Flex card) shows once WEAR IT ALL is done, as the gold-rimmed pill right
+ * under it, and waits while that save is still going. Share hides this reveal, waits for iOS to
+ * finish dismissing it (onDismiss), and only then leaves, so the Share sheet and its grown-up
+ * gate can open from Root. Offering it only after the wear choice means bragging never costs
+ * the kid WEAR IT ALL.
  * Reduce Motion: no rays, stamp or confetti, a plain fade.
  */
 import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
 import * as Haptics from 'expo-haptics';
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
@@ -42,7 +47,7 @@ import { MAX_FONT, REVEAL_NAVY, SHOP_SURFACE, ShopCta, ShopStage } from './shopU
 import { wearItem } from './inventoryQueue';
 import { FlexShareButton } from '../../share/FlexShareButton';
 import { HERO_ART } from '../../share/FlexHero';
-import { MODAL_HANDOFF_MS } from '../../share/handoff';
+import { useModalHandoff } from '../../share/handoff';
 
 const { width: W, height: H } = Dimensions.get('window');
 const STAGE = Math.min(W - 40, H * 0.4);
@@ -149,6 +154,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   doneRef.current = onDone;
   // Saves in flight (WEAR IT ALL, Just the title). Leaving waits for them (see the header).
   const saving = useRef(0);
+  // The same count as state, so Share can wait for the save (the ref alone never re-renders).
+  const [savingNow, setSavingNow] = useState(0);
   const leaveAfterSave = useRef(false);
   const [waiting, setWaiting] = useState(false);
   const leave = (guarded: boolean) => {
@@ -157,15 +164,22 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
     if (saving.current > 0) { leaveAfterSave.current = true; setWaiting(true); return; }
     doneRef.current();
   };
+  const startSave = () => { saving.current += 1; setSavingNow(saving.current); };
   const settle = (ok: boolean) => {
     saving.current = Math.max(0, saving.current - 1);
+    setSavingNow(saving.current);
     if (saving.current > 0) return;
     if (ok && leaveAfterSave.current) { doneRef.current(); return; }
     leaveAfterSave.current = false;
     setWaiting(false);
   };
-  // Leave like the X does, then give iOS time to let the reveal go before the Share sheet.
-  const shareHandoff = () => new Promise<void>(resolve => { leave(false); setTimeout(resolve, MODAL_HANDOFF_MS); });
+  // Share: hide the reveal, wait for iOS to let it go (onDismiss, or the handoff timer), then leave.
+  const [hidden, setHidden] = useState(false);
+  const modal = useModalHandoff(useCallback(() => setHidden(true), []));
+  const shareHandoff = useCallback(async () => {
+    await modal.handoff();
+    doneRef.current();
+  }, [modal.handoff]);
   const leaveRef = useRef(leave);
   leaveRef.current = leave;
   const swipe = useRef(PanResponder.create({
@@ -183,7 +197,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
     playSound(require('../../../assets/sounds/whoosh.mp3'));
     if (!still) { hop.value = 0; hop.value = withTiming(1, { duration: 640, easing: Easing.out(Easing.quad) }); }
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    saving.current += 1;
+    startSave();
     try {
       const slots = wearAllSlots(pieces.map(p => ({ id: p.id, worn: isItemWorn(player?.inventory, p),
         slot: slotForItem({ item_type: { id: p.item_type_id } } as never) })));
@@ -204,13 +218,14 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   const justTitle = async () => {
     if (titleOnly === 'busy' || !reward.title) return;
     setTitleOnly('busy');
-    saving.current += 1;
+    startSave();
     try { await equipShopTitle(reward.slug); await refreshPlayer(); setTitleOnly('done'); settle(true); }
     catch { setTitleOnly('failed'); settle(false); }
   };
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={() => leave(false)} onShow={onShown} statusBarTranslucent>
+    <Modal visible={!hidden} transparent animationType="none" onRequestClose={() => leave(false)} onShow={onShown}
+      onDismiss={modal.onDismiss} statusBarTranslucent>
       <ModalLayerContext.Provider value>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
       <Animated.View entering={still || bridged ? undefined : FadeIn.duration(260)} style={styles.fill} {...swipe.panHandlers}>
@@ -219,13 +234,6 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
           style={[styles.close, { top: insets.top + 10 }]}>
           <GameIcon name="close" size={40} />
         </Pressable>
-        {/* Show it off: the set's name, its pieces and the count. Share closes this reveal first,
-            then the Share Studio sheet (and its grown-up gate) opens from Root. */}
-        <FlexShareButton kind="set_complete" surface="shop_set" size="sm" caption onDark handoff={shareHandoff}
-          style={[styles.share, { top: insets.top + 8 }]}
-          payload={{ setName: reward.name, badgeUrl: pieces[0]?.icon_thumb_url ?? pieces[0]?.icon_url ?? HERO_ART.trophy,
-            artUrls: pieces.map(p => p.icon_thumb_url ?? p.icon_url).filter((u): u is string => !!u).slice(0, 5),
-            found: set?.total ?? pieces.length, total: set?.total ?? pieces.length, title: reward.title ?? undefined, source: 'shop' }} />
         <View style={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 12 }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.kicker}>SET COMPLETE</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setName}>{reward.name}</Text>
@@ -273,6 +281,14 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
             <ShopCta label={allCopy.label} icon="crown" width={Math.min(320, W - 48)}
               onPress={() => void wearAll()} done={all === 'done'} still={still}
               accessibilityHint="Puts on the title and every piece of the set" />
+            {/* Show it off once it is on: the set's name, its pieces and the count (see the header). */}
+            {all === 'done' && (
+              <FlexShareButton kind="set_complete" surface="shop_set" size="reveal" handoff={shareHandoff} disabled={savingNow > 0}
+                style={{ marginTop: 6 }}
+                payload={{ setName: reward.name, badgeUrl: pieces[0]?.icon_thumb_url ?? pieces[0]?.icon_url ?? HERO_ART.trophy,
+                  artUrls: pieces.map(p => p.icon_thumb_url ?? p.icon_url).filter((u): u is string => !!u).slice(0, 5),
+                  found: set?.total ?? pieces.length, total: set?.total ?? pieces.length, title: reward.title ?? undefined, source: 'shop' }} />
+            )}
             {reward.title && all !== 'done' && (
               <Pressable onPress={() => void justTitle()} accessibilityRole="button" style={styles.textButton}>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={styles.link}>
@@ -350,7 +366,6 @@ const styles = StyleSheet.create({
   alertText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, textAlign: 'center' },
   buttons: { width: '100%', alignItems: 'center', gap: 4, marginTop: 'auto' },
   close: { position: 'absolute', right: 14, zIndex: 3 },
-  share: { position: 'absolute', left: 14, zIndex: 3 },
   leave: { minHeight: 52, borderRadius: 18, borderWidth: 3, borderColor: 'rgba(255,255,255,0.85)', alignItems: 'center',
     justifyContent: 'center', marginTop: 4 },
   leavePressed: { transform: [{ scale: 0.97 }], backgroundColor: 'rgba(255,255,255,0.08)' },

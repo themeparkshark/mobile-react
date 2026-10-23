@@ -197,7 +197,7 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
                 ) : (
                   <GameButton label={claiming ? HOME_HUNT_COPY.claiming : HOME_HUNT_COPY.claim} loading={claiming} onPress={() => void claim()} />
                 )}
-                {canFlex && flex && <FlexShareButton kind="standings" payload={flex} surface="standings" size="md" style={{ alignSelf: 'center', marginTop: 10 }} handoff={shareHandoff.handoff} />}
+                {canFlex && flex && <FlexShareButton kind="standings" payload={flex} surface="standings" size="reveal" style={{ alignSelf: 'center', marginTop: 10 }} handoff={shareHandoff.handoff} />}
               </Animated.View>
             )}
           </ScrollView>

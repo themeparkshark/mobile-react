@@ -839,14 +839,13 @@ export default function SharkPassScreen() {
                 ))}
               </View>
             </View>
-          ) : isWearable(landed.reward) && !landed.emblem && !landed.next ? (
-            // Show it off: the kid's shark wearing the new piece, the season and the step. No price, no "bought".
-            // The last reveal in a chain only, so Share never skips a reward still waiting to show.
-            <View style={{ alignItems: 'center', marginTop: 8 }}>
-              <FlexShareButton kind="find" surface="sharkpass" size="sm" caption handoff={landedShare.handoff}
-                payload={{ itemName: landed.reward.name, artUrl: (landed.reward.type === 'frame' ? FRAME_ART[landed.reward.art] : SEASON_ART[landed.reward.art]) ?? (landed.reward.type === 'item' ? landed.reward.icon_url : null) ?? EMBLEM,
-                  rarity: 4, setName: season ? `${season.title}${step ? ` · Step ${step}` : ''}` : undefined }} />
-            </View>
+          ) : undefined}
+          // Show it off: the kid's shark wearing the new piece, the season and the step. No price, no "bought".
+          // The last reveal in a chain only, so Share never skips a reward still waiting to show.
+          share={!landed.twin && isWearable(landed.reward) && !landed.emblem && !landed.next ? (
+            <FlexShareButton kind="find" surface="sharkpass" size="reveal" handoff={landedShare.handoff}
+              payload={{ itemName: landed.reward.name, artUrl: (landed.reward.type === 'frame' ? FRAME_ART[landed.reward.art] : SEASON_ART[landed.reward.art]) ?? (landed.reward.type === 'item' ? landed.reward.icon_url : null) ?? EMBLEM,
+                rarity: 4, setName: season ? `${season.title}${step ? ` · Step ${step}` : ''}` : undefined }} />
           ) : undefined}
           caption={landed.caption ?? rewardWords(landed.reward)}
           action={landed.frameKey ? { label: 'Wear it now', onPress: () => {

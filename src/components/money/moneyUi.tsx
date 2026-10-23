@@ -213,7 +213,7 @@ function TitleCount({ title, still }: { title: string; still: boolean }) {
     tickEvery={1} onTick={() => haptic('tickSelection')} style={s.gotTitle} />;
 }
 
-export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption, action, footer, doneLabel }: {
+export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption, action, footer, share, doneLabel }: {
   grants: ShopGrants | null; art: PackArtKey; title?: string; onDone: () => void;
   /** The closing button's words when it does the next thing (e.g. "Open your box"). */
   doneLabel?: string;
@@ -223,6 +223,8 @@ export function GotIt({ grants, art, title = 'You got it!', onDone, picture, cap
   action?: { label: string; onPress: () => void };
   /** Shown under the caption (e.g. the locked Shark Pass rewards). */
   footer?: ReactNode;
+  /** A Share button (FlexShareButton size "reveal"): always directly under the main button, like every reveal. */
+  share?: ReactNode;
 }) {
   const still = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
@@ -262,7 +264,9 @@ export function GotIt({ grants, art, title = 'You got it!', onDone, picture, cap
         </Animated.View>
         <Animated.View entering={still ? undefined : FadeIn.delay(700)} style={{ marginTop: 18, width: 240, gap: 8 }}>
           {action && <GameButton label={action.label} icon="pin" onPress={action.onPress} />}
+          {action && share && <View style={{ alignItems: 'center' }}>{share}</View>}
           <GameButton label={doneLabel ?? (action ? 'Later' : 'Awesome')} variant={action && !doneLabel ? 'ghost' : 'primary'} tone="onBlue" onPress={onDone} />
+          {!action && share && <View style={{ alignItems: 'center' }}>{share}</View>}
         </Animated.View>
       </Pressable>
     </Modal>
