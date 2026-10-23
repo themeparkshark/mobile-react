@@ -95,7 +95,7 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
       </Topbar>
       <CleanScreenBackground underTopbar>
         <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <InviteCard ref={inviteRef} name={player?.screen_name} inventory={player?.inventory} />
+          <InviteCard ref={inviteRef} inventory={player?.inventory} />
         </View>
         <Hero count={player?.friends_count ?? 0} onInvite={invite} />
         <Tabs tab={tab} pending={pending} onChange={next => { if (next !== tab) { playSfx('whoosh'); haptic('tickSelection'); setTab(next); } }} />
