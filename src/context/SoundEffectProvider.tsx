@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { AuthContext } from './AuthProvider';
 import { SFX } from '../gamekit/SFX';
+import { QUIET_CAPTURE, sfxAllowed } from './sfxPolicy';
 
 export interface SoundEffectContextType {
   readonly playSound: (pendingSound: any, options?: { volume?: number; rate?: number }) => void;
@@ -24,10 +25,12 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
   const activeSounds = useRef<Set<Audio.Sound>>(new Set());
   const mounted = useRef(true);
   const { player, isReady } = useContext(AuthContext);
+  // Guests hear the game too; signed-in players follow their setting (sfxPolicy).
+  const allowed = sfxAllowed({ isReady, signedIn: !!player, playerSetting: player?.enabled_sound_effects, quietCapture: QUIET_CAPTURE });
 
   useEffect(() => {
-    SFX.setEnabled(!(isReady && !player?.enabled_sound_effects));
-  }, [isReady, player?.enabled_sound_effects]);
+    SFX.setEnabled(allowed);
+  }, [allowed]);
 
   useEffect(() => {
     mounted.current = true;
@@ -51,7 +54,7 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
     <SoundEffectContext.Provider
       value={{
         playSound: async (pendingSound: any, options?: { volume?: number; rate?: number }) => {
-          if (isReady && !player?.enabled_sound_effects) {
+          if (!allowed) {
             return;
           }
           let sound: Audio.Sound | undefined;

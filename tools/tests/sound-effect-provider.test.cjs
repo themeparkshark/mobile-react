@@ -52,6 +52,7 @@ function soundHarness(enabled = true) {
         },
       } } };
       if (name === './AuthProvider') return { AuthContext: {} };
+      if (name === './sfxPolicy') return { ...require('./helpers/ts-module.cjs').loadTs('src/context/sfxPolicy.ts'), QUIET_CAPTURE: false };
       if (name === '../gamekit/SFX') return { SFX: { setEnabled() {} } };
       throw new Error(`Unexpected dependency: ${name}`);
     },
