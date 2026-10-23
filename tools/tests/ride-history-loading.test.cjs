@@ -71,6 +71,7 @@ function journal() {
       if (name === 'expo-linear-gradient') return { LinearGradient: 'LinearGradient' };
       if (name === 'expo-image') return { Image: 'Image' };
       if (name === '../../ui') return { GameIcon: 'GameIcon', SharkLoader: 'SharkLoader' };
+      if (name === '../../share/handoff') return { useModalHandoff: () => ({ handoff: async () => {}, onDismiss() {} }) };
       if (name.includes('assets/')) return 1;
       if (name.includes('RideCard') || name.includes('ShareableRideCard')) return name;
       throw new Error(`Unexpected import ${name}`);

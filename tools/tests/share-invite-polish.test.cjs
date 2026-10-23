@@ -102,3 +102,41 @@ test('a Share Studio sheet fades out before the grown-up gate, and is a layer wh
   assert.match(host, /if \(!dimFlash\) flash\.value/, 'the reveal flash respects Dim Flashing Lights');
   assert.doesNotMatch(host, /useState\(\(\) => registerFlexHost/, 'no host registers during render');
 });
+
+test('a ride card shared from inside a modal steps out of the modal before the grown-up gate', async () => {
+  const card = src('src/components/RideTracker/ShareableRideCard.tsx');
+  assert.match(card, /const uri = await captureFlex\(storyRef, 'story'\);[\s\S]{0,200}await beforeShare\?\.\(\);[\s\S]{0,200}await openShareSheet\(uri\);/);
+  assert.doesNotMatch(card, /shareFileExternal/, 'one share path for every card (gate, then the iOS share sheet)');
+  for (const file of ['src/screens/RideTracker/RideHistoryScreen.tsx', 'src/screens/RideTracker/RideDetailScreen.tsx']) {
+    const screen = src(file);
+    assert.match(screen, /onDismiss=\{shareHandoff\.onDismiss\}/, `${file}: the modal reports when iOS is done dismissing it`);
+    assert.match(screen, /beforeShare=\{shareHandoff\.handoff\}/, `${file}: the card hands off`);
+  }
+  // The hook: closes the modal, resolves on onDismiss, or after MODAL_HANDOFF_MS at the latest.
+  let closed = 0;
+  const timers = [];
+  const { useModalHandoff, MODAL_HANDOFF_MS } = loadTs('src/share/handoff.ts', { react: { useCallback: f => f, useRef: v => ({ current: v }) } },
+    { setTimeout: (fn, ms) => { timers.push({ fn, ms }); return 0; } });
+  {
+    const { handoff, onDismiss } = useModalHandoff(() => { closed++; });
+    let done = false;
+    const p = handoff().then(() => { done = true; });
+    assert.equal(closed, 1);
+    assert.equal(timers[0].ms, MODAL_HANDOFF_MS);
+    onDismiss();
+    await p;
+    assert.ok(done, 'resolves once iOS has dismissed the modal');
+    timers[0].fn(); // the guard firing later is harmless
+    const q = handoff();
+    timers[1].fn(); // Android: no onDismiss, the guard resolves it
+    await q;
+  }
+});
+
+test('a grown-up gate iOS never shows answers "no" and steps aside, so later asks are not stuck', () => {
+  const gate = src('src/components/GrownUpGate.tsx');
+  assert.match(gate, /export const GATE_SHOW_WATCHDOG_MS = 2500;/);
+  assert.match(gate, /onShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
+  assert.match(gate, /<GateShowWatchdog shown=\{shownRef\} onNeverShown=\{\(\) => close\(false\)\} \/>/, 'never shown means no, never yes');
+  assert.match(gate, /setTimeout\(\(\) => \{ if \(!shown\.current\) onNeverShown\(\); \}, GATE_SHOW_WATCHDOG_MS\)/);
+});

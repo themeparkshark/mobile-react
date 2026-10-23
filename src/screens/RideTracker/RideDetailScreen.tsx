@@ -14,6 +14,7 @@ import { getCommunityStats, CommunityStats } from '../../api/endpoints/rides/com
 import { toggleWishlist, getWishlist } from '../../api/endpoints/rides/wishlist';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
+import { useModalHandoff } from '../../share/handoff';
 import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 import { Modal } from 'react-native';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
@@ -112,6 +113,8 @@ export default function RideDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [shareEntry, setShareEntry] = useState<PlayerRideType | null>(null);
+  const closeShare = useCallback(() => setShareEntry(null), []);
+  const shareHandoff = useModalHandoff(closeShare);
   const [imageError, setImageError] = useState(false);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastY = useRef(new Animated.Value(10)).current;
@@ -324,12 +327,12 @@ export default function RideDetailScreen() {
       />
 
       {/* Share Modal */}
-      <Modal visible={!!shareEntry} animationType="slide" transparent>
+      <Modal visible={!!shareEntry} animationType="slide" transparent onRequestClose={closeShare} onDismiss={shareHandoff.onDismiss}>
         <Pressable style={s.modalOverlay} onPress={() => setShareEntry(null)}>
           <Pressable style={s.modalContent} onPress={() => {}}>
             {shareEntry && (
               <>
-                <ShareableRideCard ride={shareEntry} rideCount={totalRides} onShare={() => setShareEntry(null)} />
+                <ShareableRideCard ride={shareEntry} rideCount={totalRides} onShare={closeShare} beforeShare={shareHandoff.handoff} />
                 <Pressable onPress={() => setShareEntry(null)} style={s.modalClose}>
                   <Text style={s.modalCloseText}>Close</Text>
                 </Pressable>

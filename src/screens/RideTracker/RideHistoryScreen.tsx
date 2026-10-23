@@ -14,6 +14,7 @@ import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides
 import { getWishlist, WishlistRide } from '../../api/endpoints/rides/wishlist';
 import RideCard from '../../components/RideTracker/RideCard';
 import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
+import { useModalHandoff } from '../../share/handoff';
 import { colors } from '../../design-system';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { Modal } from 'react-native';
@@ -184,6 +185,8 @@ export default function RideHistoryScreen() {
   const handleShare = useCallback((ride: PlayerRideType) => {
     setShareRide(ride);
   }, []);
+  const closeShare = useCallback(() => setShareRide(null), []);
+  const shareHandoff = useModalHandoff(closeShare);
 
   const renderItem = useCallback(({ item }: { item: PlayerRideType }) => (
     <RideCard ride={item} onPress={() => handleRidePress(item)} onShare={handleShare} />
@@ -273,12 +276,12 @@ export default function RideHistoryScreen() {
       )}
       {/* Share Modal */}
       <Modal visible={!!shareRide} animationType={reducedMotion ? 'fade' : 'slide'} transparent
-        onRequestClose={() => setShareRide(null)}>
+        onRequestClose={closeShare} onDismiss={shareHandoff.onDismiss}>
         <Pressable style={styles.modalOverlay} onPress={() => setShareRide(null)}>
           <Pressable style={styles.modalContent} onPress={() => {}}>
             {shareRide && (
               <>
-                <ShareableRideCard ride={shareRide} onShare={() => setShareRide(null)} />
+                <ShareableRideCard ride={shareRide} onShare={closeShare} beforeShare={shareHandoff.handoff} />
                 <Pressable onPress={() => setShareRide(null)} style={styles.modalClose}>
                   <Text style={styles.modalCloseText}>Close</Text>
                 </Pressable>

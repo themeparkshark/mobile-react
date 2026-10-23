@@ -1,4 +1,3 @@
-import { shareFileExternal } from '../../services/external';
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
@@ -11,7 +10,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import SharkReactionIcon, { reactionLabel } from './SharkReactionIcon';
 import { gameAlert } from '../../ui';
-import { captureFlex } from '../../share/capture';
+import { captureFlex, openShareSheet } from '../../share/capture';
 import { FLEX_SIZE } from '../../share/formats';
 import { SHARE_LINK_DISPLAY } from '../../share/link';
 import { QR_BY_CAMPAIGN } from '../../share/campaignQr';
@@ -20,6 +19,8 @@ interface ShareableRideCardProps {
   ride: PlayerRideType;
   rideCount?: number;
   onShare?: () => void;
+  /** The card sits in an RN <Modal>: close it (useModalHandoff) before the grown-up gate. */
+  beforeShare?: () => Promise<void>;
 }
 
 // The card itself (shown in place, and inside the shared story picture)
@@ -117,7 +118,7 @@ const StoryFrame = React.memo(React.forwardRef<View, { ride: PlayerRideType; rid
 )));
 StoryFrame.displayName = 'StoryFrame';
 
-const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, onShare }) => {
+const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, onShare, beforeShare }) => {
   const storyRef = useRef<View>(null);
   const busy = useRef(false);
   const [sharing, setSharing] = useState(false);
@@ -151,11 +152,11 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
       }
 
       const uri = await captureFlex(storyRef, 'story');
+      // The picture is made: step out of the modal so the grown-up gate can show.
+      await beforeShare?.();
 
-      await shareFileExternal(uri, {
-        mimeType: 'image/jpeg',
-        dialogTitle: `My ${ride.ride_name} experience on Theme Park Shark!`,
-      });
+      // The same share path as the Share Studio cards (grown-up gate first, then the iOS share sheet).
+      await openShareSheet(uri);
       onShare?.();
     } catch {
       gameAlert('Could not make your card', 'Your ride is saved. Try sharing it again.');
@@ -163,7 +164,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
       busy.current = false;
       setSharing(false);
     }
-  }, [ride, onShare, loadingCount]);
+  }, [ride, onShare, beforeShare, loadingCount]);
 
   return (
     <View>
