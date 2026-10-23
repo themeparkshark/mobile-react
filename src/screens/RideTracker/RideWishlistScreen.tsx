@@ -2,9 +2,9 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet, RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import RideTrackerFrame from './RideTrackerFrame';
+import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { getWishlist, toggleWishlist, WishlistRide } from '../../api/endpoints/rides/wishlist';
 import RideTypeIcon from '../../components/RideTracker/RideTypeIcon';
@@ -79,14 +79,7 @@ export default function RideWishlistScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
-          <GameIcon name="back" size={36} accessibilityLabel="Back" />
-        </Pressable>
-        <Text style={styles.title}>WISHLIST</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
+    <RideTrackerFrame title="Wishlist" style={styles.container}>
 
       {loading || (failed && !rides.length) ? (
         <SharkLoader state={loading ? 'loading' : 'error'} title={loading ? undefined : "Wishlist didn't load"} onRetry={firstLoad} />
@@ -114,7 +107,7 @@ export default function RideWishlistScreen() {
           }
         />
       )}
-    </SafeAreaView>
+    </RideTrackerFrame>
   );
 }
 
@@ -146,7 +139,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  content: { padding: 16, paddingBottom: 60 },
+  content: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
   item: {
     flexDirection: 'row', 
     alignItems: 'center', 

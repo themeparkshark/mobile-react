@@ -7,9 +7,9 @@ import {
   StyleSheet,
   Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import RideTrackerFrame from './RideTrackerFrame';
+import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { getRideStats, RideStatsType } from '../../api/endpoints/player-rides';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import { colors } from '../../design-system';
@@ -66,21 +66,14 @@ export default function RideStatsScreen() {
 
   if (loading || !stats) {
     return (
-      <SafeAreaView style={styles.container}>
+      <RideTrackerFrame title="Ride Stats" style={styles.container}>
         <SharkLoader state={loading ? 'loading' : 'error'} title={loading ? undefined : "Ride stats didn't load"} onRetry={load} />
-      </SafeAreaView>
+      </RideTrackerFrame>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
-          <GameIcon name="back" size={36} accessibilityLabel="Back" />
-        </Pressable>
-        <Text style={styles.title}>RIDE STATS</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
+    <RideTrackerFrame title="Ride Stats" style={styles.container}>
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* Big Stats */}
@@ -163,7 +156,7 @@ export default function RideStatsScreen() {
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </RideTrackerFrame>
   );
 }
 
@@ -195,7 +188,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  content: { padding: 16, paddingBottom: 60 },
+  content: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
   statGrid: { flexDirection: 'row', gap: 10, marginBottom: 24 },
   statCard: {
     flex: 1, 

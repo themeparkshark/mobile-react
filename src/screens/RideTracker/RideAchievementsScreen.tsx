@@ -6,9 +6,8 @@ import {
   Pressable,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
+import RideTrackerFrame from './RideTrackerFrame';
+import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { getRideAchievements, RideAchievementType } from '../../api/endpoints/player-rides';
 import { colors } from '../../design-system';
 import { GameIcon, SharkLoader } from '../../ui';
@@ -41,7 +40,6 @@ const AchievementCard: React.FC<AchievementCardProps> = React.memo(({ achievemen
 AchievementCard.displayName = 'AchievementCard';
 
 export default function RideAchievementsScreen() {
-  const navigation = useNavigation<any>();
   const [achievements, setAchievements] = useState<RideAchievementType[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -60,14 +58,7 @@ export default function RideAchievementsScreen() {
   const locked = achievements.filter(a => !a.unlocked);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
-          <GameIcon name="back" size={36} accessibilityLabel="Back" />
-        </Pressable>
-        <Text style={styles.title}>ACHIEVEMENTS</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
+    <RideTrackerFrame title="Achievements" style={styles.container}>
 
       {loading || failed ? (
         <SharkLoader state={failed ? 'error' : 'loading'} title={failed ? "Achievements didn't load" : undefined} onRetry={load} />
@@ -99,7 +90,7 @@ export default function RideAchievementsScreen() {
           )}
         </ScrollView>
       )}
-    </SafeAreaView>
+    </RideTrackerFrame>
   );
 }
 
@@ -131,7 +122,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  content: { padding: 16, paddingBottom: 60 },
+  content: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
   progressCard: {
     backgroundColor: '#FFFFFF', 
     borderRadius: 20, 

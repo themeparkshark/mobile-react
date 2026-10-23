@@ -7,9 +7,10 @@ import {
   StyleSheet,
   RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import RideTrackerFrame from './RideTrackerFrame';
+import { GameButton } from '../../ui';
+import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides';
 import { getWishlist, WishlistRide } from '../../api/endpoints/rides/wishlist';
 import RideCard from '../../components/RideTracker/RideCard';
@@ -190,15 +191,7 @@ export default function RideHistoryScreen() {
   ), [handleRidePress, handleShare]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}
-          accessibilityRole="button" accessibilityLabel="Return to Ride Tracker">
-          <GameIcon name="back" size={36} accessibilityLabel="Back" />
-        </Pressable>
-        <Text style={styles.title}>RIDE HISTORY</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
+    <RideTrackerFrame title="Ride History" style={styles.container}>
 
       {/* Time tabs */}
       <View style={styles.tabRow}>
@@ -231,10 +224,8 @@ export default function RideHistoryScreen() {
             style={{ width: 110, height: 110 }} contentFit="contain" />
           <Text style={styles.emptyTitle}>Your journal is taking a break</Text>
           <Text style={styles.emptySubtitle}>Your saved memories are safe. Try loading them again.</Text>
-          <Pressable onPress={onRefresh} disabled={refreshing} style={styles.logBtn}
-            accessibilityRole="button" accessibilityState={{ disabled: refreshing, busy: refreshing }}>
-            <Text style={styles.logBtnText}>{refreshing ? 'Loading…' : 'Try Again'}</Text>
-          </Pressable>
+          <GameButton label={refreshing ? 'Loading...' : 'Try again'} icon="retry" disabled={refreshing}
+            onPress={onRefresh} style={{ marginTop: 24 }} />
         </View>
       ) : rides.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -246,16 +237,16 @@ export default function RideHistoryScreen() {
             {selectedPark === FAVORITES_FILTER_ID ? hasMore ? 'Check earlier memories for rides you have starred.' : 'Star a ride to add it to favorites'
               : timeTab === 'today' ? 'Log a ride to see it here' : 'Add a favorite ride to start your journal'}
           </Text>
-          <Pressable
+          {/* The game's chunky button, like every other screen (was a flat web-style bar). */}
+          <GameButton
+            label={selectedPark === FAVORITES_FILTER_ID && hasMore
+              ? loadingMore ? 'Loading...' : 'Check earlier memories' : 'Log a ride'}
+            icon={selectedPark === FAVORITES_FILTER_ID && hasMore ? 'search' : 'ride'}
+            disabled={loadingMore}
             onPress={() => selectedPark === FAVORITES_FILTER_ID && hasMore
               ? void onEndReached(true) : navigation.navigate('RideLog')}
-            style={styles.logBtn}
-            disabled={loadingMore}
-            accessibilityRole="button"
-          >
-            <Text style={styles.logBtnText}>{selectedPark === FAVORITES_FILTER_ID && hasMore
-              ? loadingMore ? 'Loading…' : 'Check Earlier Memories' : 'Log a Ride'}</Text>
-          </Pressable>
+            style={{ marginTop: 24 }}
+          />
         </View>
       ) : (
         <FlatList
@@ -287,7 +278,7 @@ export default function RideHistoryScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </RideTrackerFrame>
   );
 }
 
@@ -376,7 +367,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: { color: '#475569', fontSize: 12, fontFamily: 'Knockout' },
   filterChipTextSelected: { color: '#0EA5E9' },
-  list: { paddingHorizontal: 16, paddingBottom: 40 },
+  list: { paddingHorizontal: 16, paddingBottom: FOOTER_CLEARANCE },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyEmoji: { fontSize: 60, fontFamily: 'Knockout' },
   emptyTitle: { 

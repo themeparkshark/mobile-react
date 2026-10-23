@@ -70,7 +70,9 @@ function journal() {
       if (name === 'react-native-safe-area-context') return { SafeAreaView: 'SafeAreaView' };
       if (name === 'expo-linear-gradient') return { LinearGradient: 'LinearGradient' };
       if (name === 'expo-image') return { Image: 'Image' };
-      if (name === '../../ui') return { GameIcon: 'GameIcon', SharkLoader: 'SharkLoader' };
+      if (name === '../../ui') return { GameIcon: 'GameIcon', GameButton: 'GameButton', SharkLoader: 'SharkLoader' };
+      if (name === './RideTrackerFrame') return { default: 'RideTrackerFrame', __esModule: true };
+      if (name === '../../components/Wrapper') return { default: 'Wrapper', FOOTER_CLEARANCE: 92, __esModule: true };
       if (name.includes('assets/')) return 1;
       if (name.includes('RideCard') || name.includes('ShareableRideCard')) return name;
       throw new Error(`Unexpected import ${name}`);

@@ -2,9 +2,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
+import RideTrackerFrame from './RideTrackerFrame';
+import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import * as Haptics from 'expo-haptics';
 import { getRideCollections, RideCollection } from '../../api/endpoints/rides/collections';
 import RideTypeIcon from '../../components/RideTracker/RideTypeIcon';
@@ -77,7 +76,6 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(({ collection, 
 CollectionCard.displayName = 'CollectionCard';
 
 export default function RideCollectionsScreen() {
-  const navigation = useNavigation<any>();
   const [collections, setCollections] = useState<RideCollection[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -107,14 +105,7 @@ export default function RideCollectionsScreen() {
   }, [fetchData]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
-          <GameIcon name="back" size={36} accessibilityLabel="Back" />
-        </Pressable>
-        <Text style={styles.title}>COLLECTIONS</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
+    <RideTrackerFrame title="Collections" style={styles.container}>
 
       {loading || (failed && !collections.length) ? (
         <SharkLoader state={loading ? 'loading' : 'error'} title={loading ? undefined : "Collections didn't load"} onRetry={firstLoad} />
@@ -142,7 +133,7 @@ export default function RideCollectionsScreen() {
           )}
         </ScrollView>
       )}
-    </SafeAreaView>
+    </RideTrackerFrame>
   );
 }
 
@@ -174,7 +165,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  content: { padding: 16, paddingBottom: 60 },
+  content: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
   // Collection card
   collCard: {
     backgroundColor: '#FFFFFF', 
