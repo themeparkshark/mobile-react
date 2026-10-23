@@ -18,6 +18,7 @@ function shell(paid, reduced = false, extra = {}, movement = null) {
     '../hooks/useReducedGameMotion': { default: () => preference.reduced },
     '../ui/GameIcon': { default: 'GameIcon' },
     './results/ResultsCard': { ResultsCard: 'ResultsCard' },
+    './results/feelings': loadTs('src/gamekit/results/feelings.ts'),
     './core/session': session,
     './core/scoring': scoring,
     './session/snapshotStore': { saveSnapshot: async snap => { calls.snapshots.push(snap); }, clearSnapshot: async key => { calls.cleared.push(key); } },

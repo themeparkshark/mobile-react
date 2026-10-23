@@ -436,6 +436,7 @@ function shell(extra = {}) {
     '../hooks/useReducedGameMotion': { default: () => false },
     '../ui/GameIcon': { default: 'GameIcon' },
     './results/ResultsCard': { ResultsCard: 'ResultsCard' },
+    './results/feelings': loadTs('src/gamekit/results/feelings.ts'),
     './core/session': session, './core/scoring': scoring,
     './session/snapshotStore': { saveSnapshot: async () => {}, clearSnapshot: async () => {} },
     './audio/GameAudio': { GameAudio: { music: { pause: async () => {}, resume: async () => {}, setTrimDb() {} } } },

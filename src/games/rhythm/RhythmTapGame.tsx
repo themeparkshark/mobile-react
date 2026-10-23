@@ -86,6 +86,7 @@ import {
 } from './core/judge';
 import { buildProof } from './core/proof';
 import { autoTuneOffset, summarize, type RoundSummary } from './core/score';
+import { rhythmStarGoal } from './core/starGoal';
 import { J_GOOD, J_GREAT, J_PERFECT, J_SHARP, K_BIG, K_CYMBAL, K_FREEZE, K_POPPER, K_RIM, K_ROLL, L_MARCH, STAR_ACCURACY, type Chart, type Difficulty, type RoundFormat } from './core/types';
 import { DEFAULT_GRIP, GRIP_ONE, GRIP_TWO, detectHand, gripFor, zoneOf, type GripPrefs } from './core/grip';
 import { createDrawList, layoutFrame, beatAt } from './field/layout';
@@ -930,22 +931,27 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       if (newPb && sum.score > 0) setTimeout(() => GameAudio.play('fx.purchase', { volume: 0.8 }), 900);
     }
     const topRival = rivals.current.slice().sort((x, y) => y.finalScore - x.finalScore)[0];
-    const goal = nextGoal(sum, s.accN, plan.format === 'ride' && !plan.ftue);
     const res: GameResult = {
       score: sum.score,
       stars: win ? stars : 0,
       maxCombo: sum.maxCombo,
       message: resultMessage(sum, plan.ftue, reason),
       thresholds: undefined,
+      // The shared bar, filled by timing (stars are not points here). The
+      // "N more PERFECTS" goal is spoken only, never a line of text.
+      starGoal: plan.ftue ? undefined : rhythmStarGoal(sum.stageAccuracy, win ? stars : 0, s.accN,
+        plan.format === 'ride' ? { hitRate: sum.hitRate, win: sum.rideWin } : undefined),
       rival: topRival ? { name: topRival.name, score: topRival.finalScore } : null,
-      // Feelings, not data: how the beat felt, the Drum-Off place, March stars.
-      // Accuracy, steadiness numbers and millisecond timing stay off the card.
+      // Feelings, not data: a steady beat, the Drum-Off place, March stars.
+      // Accuracy, steadiness numbers and millisecond timing stay off the card,
+      // and a warming-up beat is no brag, so it is not a chip.
       stats: [
-        { label: 'Your beat', value: sum.steadinessLabel },
-        ...(rivals.current.length ? [{ label: 'Drum-Off', value: placeText(sum.accuracy, rivals.current) }] : []),
-        ...(plan.format === 'queue' && !plan.ftue && sum.marchStars > 0 ? [{ label: 'March stars', value: `${sum.marchStars} of 3` }] : []),
+        ...(sum.steadinessLabel !== 'Warming up' ? [{ label: 'YOUR BEAT', value: sum.steadinessLabel.toUpperCase() }] : []),
+        ...(rivals.current.length ? [{ label: 'DRUM-OFF', value: placeText(sum.accuracy, rivals.current) }] : []),
+        ...(plan.format === 'queue' && !plan.ftue && sum.marchStars > 0 ? [{ label: 'MARCH STARS', value: `${sum.marchStars} of 3`, pips: [sum.marchStars, 3] as const }] : []),
       ],
-      note: goal || undefined,
+      // The goal is in the bar's spoken label now (no text-only goals on a card).
+      note: undefined,
       meta: {
         // Legacy proof fields (TaskGameProofService today).
         game: 'timing',
@@ -1051,7 +1057,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     setProgress({ ...progressRef.current });
     setRunIndex((n) => n + 1);
   }, [easyNext]);
-  // "Try with Easy Beat" on a rough results card: switch it on and go again.
+  // EASY BEAT on a rough results card: switch it on and go again.
   const rematchEasy = useCallback(() => {
     progressRef.current = { ...progressRef.current, easyBeat: true };
     void saveProgress(progressRef.current);
@@ -1111,34 +1117,32 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
           ) : null}
         </View>
       ) : undefined}
-      resultExtras={plan && !plan.ftue && result && (offerTwo || (!plan.easy && result.stars < 2)) ? (
-        offerTwo ? (
-          <View style={styles.twoCard}>
-            <Text style={styles.twoTitle}>Try Two Thumbs?</Text>
-            <Text style={styles.twoBody}>Blue on the left thumb, coral on the right.</Text>
-            <View style={styles.twoRow}>
-              <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
-                progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
-                saveGrip({ ...gripPrefs, grip: GRIP_TWO, swap: 0 });
-                setOfferTwo(false);
-              }}>
-                <Text style={styles.easyBtnTxt}>Yes</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
-                progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
-                void saveProgress(progressRef.current);
-                setOfferTwo(false);
-              }}>
-                <Text style={styles.easyBtnTxt}>No thanks</Text>
-              </Pressable>
-            </View>
+      resultExtras={plan && !plan.ftue && result && offerTwo ? (
+        <View style={styles.twoCard}>
+          <Text style={styles.twoTitle}>TRY TWO THUMBS?</Text>
+          <Text style={styles.twoBody}>Blue on the left thumb, coral on the right.</Text>
+          <View style={styles.twoRow}>
+            <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
+              progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
+              saveGrip({ ...gripPrefs, grip: GRIP_TWO, swap: 0 });
+              setOfferTwo(false);
+            }}>
+              <Text style={styles.easyBtnTxt}>YES</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
+              progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
+              void saveProgress(progressRef.current);
+              setOfferTwo(false);
+            }}>
+              <Text style={styles.easyBtnTxt}>NO THANKS</Text>
+            </Pressable>
           </View>
-        ) : (
-          <Pressable accessibilityRole="button" onPress={rematchEasy} style={styles.easyBtn} hitSlop={6}>
-            <Text style={styles.easyBtnTxt}>Try with Easy Beat</Text>
-          </Pressable>
-        )
+        </View>
       ) : undefined}
+      // A rough run offers Easy Beat as one more caps button in the card's stack.
+      resultAction={plan && !plan.ftue && result && !offerTwo && !plan.easy && result.stars < 2
+        ? { label: 'EASY BEAT', icon: 'play', onPress: rematchEasy, a11yLabel: 'Play again with Easy Beat: wider timing, slower notes' }
+        : undefined}
       onChallenge={props.onChallengeCrew && result && lastRun.current ? () => lastRun.current && props.onChallengeCrew?.(lastRun.current) : undefined}
       onComplete={onComplete}
       onClose={onClose}
@@ -1258,28 +1262,6 @@ function resultMessage(sum: RoundSummary, ftue: boolean, reason: string): string
   if (sum.stars > 0) return 'PARADE CLEARED!';
   // Never a 0-star failure title (design 6.8).
   return 'KEEP MARCHING!';
-}
-
-/** The concrete next goal (design 6.8): never a fixed hit count, always reachable. */
-function nextGoal(sum: RoundSummary, judged: number, ride: boolean): string {
-  if (ride) {
-    if (sum.rideWin) return '';
-    const hr = Math.round(sum.hitRate * 100);
-    return hr < 75 ? `Hit 3 of every 4 (${hr}%)` : 'Fewer misstaps';
-  }
-  return queueNextGoal(sum.stageAccuracy, sum.stars, sum.fullCombo, judged);
-}
-
-/**
- * The queue run's next goal, always above the stars already earned (a warm-up
- * can light a star early, so "for 1 star" on a 1-star card never shows).
- */
-export function queueNextGoal(acc: number, stars: number, fullCombo: boolean, judged: number): string {
-  const tiers: [number, number][] = [[STAR_ACCURACY.one, 1], [STAR_ACCURACY.two, 2], [STAR_ACCURACY.three, 3]];
-  const next = tiers.find(([at, n]) => n > stars && acc < at) ?? null;
-  if (!next) return stars >= 3 && !fullCombo ? 'Go for FULL COMBO' : '';
-  const more = Math.max(1, Math.ceil(((next[0] - acc) * judged) / 60));
-  return `${more} more PERFECT${more > 1 ? 'S' : ''} for ${stars > 0 ? 'the next star' : 'a star'}`;
 }
 
 function gripLabel(grip: number, g: GripPrefs): string {

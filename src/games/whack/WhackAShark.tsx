@@ -584,7 +584,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     let message: string | undefined;
     if (ride) {
       stars = last?.result.stars ?? 0;
-      message = last?.result.win ? 'COIN CAUGHT!' : `SO CLOSE! ${Math.max(1, 100 - (last?.result.coin ?? 0))}% TO GO`;
+      // Words, not a percent: the coin bar on the board already shows how far.
+      message = last?.result.win ? 'COIN CAUGHT!' : (last?.result.coin ?? 0) >= 75 ? 'SO CLOSE!' : 'GOOD TRY!';
     } else if (format === 'raid') {
       const r = raidRef.current;
       const dmg = last?.result.bossDamage ?? 0;
@@ -738,7 +739,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         laterInRun(() => finishRun(), wait);
       } else {
         GameAudio.play(cues.whistle, { volume: 0.8 });
-        flash('TIME!', `SO CLOSE! ${Math.max(1, 100 - b.result.coin)}% TO GO`, '#ffffff', 1200);
+        flash('TIME!', b.result.coin >= 75 ? 'SO CLOSE!' : 'GOOD TRY!', '#ffffff', 1200);
         laterInRun(() => finishRun(), 1100);
       }
       return;

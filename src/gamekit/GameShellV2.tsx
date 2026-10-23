@@ -60,16 +60,17 @@ import { playSfx } from './SFX';
 import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovementContext';
 import { RideChallengeContext } from './RideChallengeContext';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import GameIcon from '../ui/GameIcon';
-import { ResultsCard, type ResultStat } from './results/ResultsCard';
-import { starsFor, type StarThresholds } from './core/scoring';
+import GameIcon, { type GameIconName } from '../ui/GameIcon';
+import { ResultsCard, type ResultStat, type ResultStarGoal } from './results/ResultsCard';
+import { endFeel } from './results/feelings';
+import { compareBest, starsFor, type StarThresholds } from './core/scoring';
 import {
   wrapUpCopy,
   createHeadsUp,
   isEmptyResultsNode,
   makeSnapshot,
   reportAdvance,
-  wrapUpStars,
+  creditWrapResult,
   type HoldReason,
   type MovementPolicy,
   type WrapUpReason,
@@ -82,6 +83,8 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 export type ShellPhase = 'countdown' | 'playing' | 'paused' | 'resuming' | 'results';
 
 /** Result a game hands to the shell when the round ends. */
+export type { ResultStarGoal };
+
 export interface GameResult {
   /** Final score. */
   score: number;
@@ -110,6 +113,12 @@ export interface GameResult {
   meta?: Record<string, unknown>;
   /** One line under the card (a coaching tip). A wrap-up note wins over it. */
   note?: string;
+  /**
+   * The next-star bar for a game whose stars are not points (Rhythm stars by
+   * timing). progress is 0..1 toward the next star; the words for it live in
+   * a11y (spoken only, never on the card).
+   */
+  starGoal?: ResultStarGoal;
 }
 
 /** What a game-owned results surface receives (`renderResults`). */
@@ -199,6 +208,12 @@ interface GameShellV2Props {
   resultExtras?: React.ReactNode;
   /** A small chip inside the shared results card, under the brags (Whack's SHARE). */
   resultCardFooter?: React.ReactNode;
+  /**
+   * One extra caps button in the results button stack (Rhythm's EASY BEAT
+   * replay), drawn like every other secondary. Hidden on group turns, in a
+   * ride challenge and once the line ended the run, the same as PLAY AGAIN.
+   */
+  resultAction?: { label: string; icon?: GameIconName; onPress: () => void; a11yLabel?: string };
   /** @deprecated alias of resultExtras (Sharky). */
   resultsExtra?: React.ReactNode;
   /** Replace the whole results surface (card and actions). The shell still owns timing, confetti and the claim contract. */
@@ -273,6 +288,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       resultExtras,
       resultsExtra,
       resultCardFooter,
+      resultAction,
       renderResults,
       pauseExtras,
       hideHeaderScore = false,
@@ -301,7 +317,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const [countText, setCountText] = useState(firstCount);
     const [pauseReason, setPauseReason] = useState<string | undefined>();
     const [holdReason, setHoldReason] = useState<HoldReason | null>(null);
-    const [wrap, setWrap] = useState<{ reason: WrapUpReason; result: GameResult } | null>(null);
+    const [wrap, setWrap] = useState<{ reason: WrapUpReason; result: GameResult; gameMessage?: string } | null>(null);
     const [headsUp, setHeadsUp] = useState(false);
     // Safety net: once the results have had RESULTS_FALLBACK_MS to appear, show them with no fade.
     const [resultsSafe, setResultsSafe] = useState(false);
@@ -317,6 +333,16 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const headsUpState = useRef(createHeadsUp());
     const scoreRef = useRef(score);
     scoreRef.current = score;
+    const personalBestRef = useRef(personalBest);
+    personalBestRef.current = personalBest;
+    // The shared results card is on screen (it fires its own NEW BEST burst).
+    const sharedCardShownRef = useRef(false);
+    const bestBurstRunRef = useRef(-1);
+    const burstBest = useCallback(() => {
+      if (bestBurstRunRef.current === resultsRunRef.current || reducedMotionRef.current) return;
+      bestBurstRunRef.current = resultsRunRef.current;
+      confettiRef.current?.burst({ x: SCREEN_W * 0.5, y: SCREEN_H * 0.4, preset: 'confetti', count: 28 });
+    }, []);
 
     // A queue event wrapped the run up. A game that hands back its own result
     // after the wrap (Whack banks the burst it was in) still gets the wrap-up
@@ -324,13 +350,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const effectiveResult = useMemo((): GameResult | null => {
       if (!wrap) return result ?? null;
       if (!result) return wrap.result;
-      const credit = wrapUpStars(result.stars ?? 0, result.score ?? 0, !!rideChallenge);
-      return {
-        ...result,
-        stars: credit.stars,
-        message: wrap.result.message,
-        meta: { ...(result.meta ?? {}), wrapUp: wrap.reason, ...(credit.partial ? { partial: true } : {}) },
-      };
+      // Title from this result's own saved flag, so title, stamp and note agree.
+      return creditWrapResult(result, wrap.reason, !!rideChallenge, wrap.gameMessage);
     }, [result, wrap, rideChallenge]);
 
     // Results animation values.
@@ -456,10 +477,30 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       setPhase('results');
       setHeadsUp(false);
       if (sessionKey) void clearSnapshot(sessionKey);
-      Haptic[effectiveResult.stars > 0 ? 'success' : 'failBuzz']();
-      playSfx(effectiveResult.stars > 0 ? 'win' : 'lose');
+      // A personal best feels like a win even with 0 stars; a saved run is calm.
+      const feel = endFeel({
+        stars: effectiveResult.stars,
+        isNewBest: compareBest(effectiveResult.score ?? 0, personalBestRef.current).isNewBest,
+        saved: effectiveResult.meta?.partial === true,
+      });
+      if (feel === 'win' || feel === 'best') {
+        Haptic.success();
+        playSfx('win');
+      } else if (feel === 'try') {
+        Haptic.failBuzz();
+        playSfx('lose');
+      } else {
+        Haptic.hitSoft();
+      }
       clearCelebration();
       // The fade starts in the effect below, once the results view is on screen.
+      if (feel === 'best' && !reducedMotionRef.current) {
+        // One small burst for a 0-star personal best. The shared card fires it
+        // when its NEW BEST badge lands; a game's own card gets it here.
+        celebrationTimers.current.push(setTimeout(() => {
+          if (!sharedCardShownRef.current) burstBest();
+        }, 1200));
+      }
       if (effectiveResult.stars > 0 && !reducedMotionRef.current) {
         // Confetti bursts timed to the star stamps.
         celebrationTimers.current.push(setTimeout(() => {
@@ -678,15 +719,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         stars: thresholds ? starsFor(finalScore, thresholds) : 0,
         thresholds,
       };
-      const credit = wrapUpStars(base.stars, base.score ?? finalScore, !!rideChallenge);
       setWrap({
         reason,
-        result: {
-          ...base,
-          stars: credit.stars,
-          message: base.message ?? wrapUpCopy(reason, credit.partial || (base.score ?? finalScore) <= 0).title,
-          meta: { ...(base.meta ?? {}), wrapUp: reason, ...(credit.partial ? { partial: true } : {}) },
-        },
+        gameMessage: base.message,
+        result: creditWrapResult({ ...base, score: base.score ?? finalScore }, reason, !!rideChallenge, base.message),
       });
     }, [phase, wrap, clearCountdown, clearResume, onPause, onWrapUp, thresholds, rideChallenge]);
 
@@ -753,6 +789,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }
       onRematch();
     } : undefined), [onRematch, effectiveResult, linePlayMovement]);
+
+    // The extra replay button banks the finished run first, like PLAY AGAIN.
+    const resultActionPress = useCallback(() => {
+      if (!claimedRef.current && effectiveResult && linePlayMovement?.onRunDone) {
+        claimedRef.current = true;
+        linePlayMovement.onRunDone(effectiveResult.stars ?? 0, effectiveResult.meta?.partial === true);
+      }
+      resultAction?.onPress();
+    }, [effectiveResult, linePlayMovement, resultAction]);
 
     const handleClaimRef = useRef(handleClaim);
     handleClaimRef.current = handleClaim;
@@ -836,6 +881,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const gameResults = isEmptyResultsNode(ownSurface) ? null : ownSurface;
     // A wrap-up (ride's up) has no game surface to wait for: the shared card shows at once.
     const showSharedCard = phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || wrap != null)));
+    sharedCardShownRef.current = showSharedCard;
 
     const gameContent = (
         <View style={styles.root}>
@@ -973,11 +1019,14 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                     buckets={effectiveResult?.buckets}
                     bucketValues={effectiveResult?.bucketValues}
                     starStepMs={effectiveResult?.starStepMs}
+                    starGoal={effectiveResult?.starGoal}
                     streakKey={gameId ?? title}
                     runToken={resultsRunRef.current}
                     saved={saved}
                     note={wrap ? wrapUpCopy(wrap.reason, saved || (effectiveResult?.score ?? 0) <= 0).body || undefined : effectiveResult?.note}
                     footer={resultCardFooter}
+                    onNewBestLanded={stars === 0 ? burstBest : undefined}
+                    wrapUp={wrap != null}
                     reducedMotion={reducedMotion}
                   />
                   {resultExtras ?? resultsExtra ?? null}
@@ -1009,6 +1058,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                           </TouchableOpacity>
                         ) : null}
                       </View>
+                    ) : null}
+                    {resultAction && !rideChallenge && !wrap && !turnOnly && (!won || canBankRun) ? (
+                      <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn, styles.extraBtn]} onPress={resultActionPress}
+                        accessibilityRole="button" accessibilityLabel={resultAction.a11yLabel ?? resultAction.label}>
+                        {resultAction.icon ? <GameIcon name={resultAction.icon} size={20} /> : null}
+                        <Text style={[styles.secondaryBtnCaps, resultAction.icon && styles.btnGap]} numberOfLines={1} adjustsFontSizeToFit>
+                          {resultAction.label.toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
                     ) : null}
                   </View>
                 </Animated.View>
@@ -1189,5 +1247,6 @@ const styles = StyleSheet.create({
   actions: { width: '100%', marginTop: 6 },
   row: { flexDirection: 'row', gap: 10 },
   rowBtn: { flex: 1, borderWidth: 3, borderColor: '#05346e', borderBottomWidth: 5, paddingVertical: 12 },
+  extraBtn: { flex: 0, alignSelf: 'stretch', marginTop: 10 },
   confetti: { ...StyleSheet.absoluteFillObject },
 });

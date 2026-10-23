@@ -645,14 +645,15 @@ export function SharkySwim({
         playAgain={args.rematch}
         playAgainFirst={args.playAgainFirst}
         saved={args.saved}
+        wrapTitle={args.wrapReason ? args.result.message ?? null : null}
         claim={args.claim}
         claimLabel={runMode === 'ride' ? (args.won ? 'COLLECT' : 'CONTINUE') : args.won ? 'CONTINUE' : 'DONE'}
         challenge={args.challenge}
-        challengeLabel={prog.runs < 3 ? 'RACE MY GHOST' : 'RACE GHOSTS'}
+        challengeLabel="RACE GHOSTS"
         reducedMotion={args.reducedMotion}
       />
     );
-  }, [resultsData, runMode, prog.runs]);
+  }, [resultsData, runMode]);
 
   const title = runMode === 'ride' ? 'Ride Challenge' : runMode === 'rally' ? 'Rally' : runMode === 'ghost' ? 'Ghost Rally' : 'Sharky Swim';
   const objective = runMode === 'ride'
@@ -689,7 +690,7 @@ export function SharkySwim({
       onQuit={onQuit}
       onRematch={runMode === 'ride' ? undefined : onRematch}
       onChallenge={runMode === 'ride' || prog.runs < 1 ? undefined : onChallenge}
-      challengeLabel={prog.runs < 3 ? 'Race my ghost' : 'Race ghosts'}
+      challengeLabel="RACE GHOSTS"
       renderResults={renderResults}
     >
       <GestureHandlerRootView style={styles.fill}>

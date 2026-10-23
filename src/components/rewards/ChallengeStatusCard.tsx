@@ -31,7 +31,12 @@ export const RETRY_TAP_GUARD_MS = 800;
 
 export const SO_CLOSE_SHARK = require('../../../assets/images/screens/redeem/so-close-shark.png');
 
-export default function ChallengeStatusCard({ title, message, art = 'none', primary, secondary, quiet, guardRetry = false }: {
+/** One button voice on every result and try card: caps labels (TRY AGAIN, DONE), like the results cards. */
+export function capsAction<T extends ChallengeStatusAction | undefined>(action: T): T {
+  return (action ? { ...action, label: action.label.toUpperCase() } : action) as T;
+}
+
+export default function ChallengeStatusCard({ title, message, art = 'none', primary: primaryIn, secondary: secondaryIn, quiet: quietIn, guardRetry = false }: {
   readonly title: string;
   readonly message: string;
   readonly art?: ChallengeStatusArt;
@@ -45,6 +50,9 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
    */
   readonly guardRetry?: boolean;
 }) {
+  const primary = capsAction(primaryIn);
+  const secondary = capsAction(secondaryIn);
+  const quiet = capsAction(quietIn);
   const reduced = useReducedGameMotion();
   const [armed, setArmed] = useState(!guardRetry);
   useEffect(() => {

@@ -125,7 +125,7 @@ test('a queue event never throws the run away (RUN SAVED, never a fake star), bu
   assert.equal(session.isEmptyResultsNode({ type: 'View' }), false);
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /\{saved \? \(\n\s+<SavedStamp/, 'RUN SAVED stamps in where the stars would be');
-  assert.match(card, /thresholds && !saved \? nextStarGoal/, 'a saved run has no next-star bar to disagree with');
+  assert.match(card, /if \(saved \|\| wrapUp\) return null;/, 'a saved run has no next-star bar to disagree with');
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
   assert.match(screen, /if \(!partial\) session\.recordGameResult\(game\.gameId, stars\);\n\s+session\.markActivityCompleted\(game\.id\);/,
     'a saved partial run counts as played but never changes the best or difficulty');
@@ -306,10 +306,120 @@ test('round 3: one rule everywhere (x3 chains, one RUN SAVED stamp, saved said o
 
 test('every results title is caps, and Rhythm never asks for a star you already have', () => {
   const rhythm = read('src/games/rhythm/RhythmTapGame.tsx');
-  const fn = rhythm.slice(rhythm.indexOf('function resultMessage('), rhythm.indexOf('/** The concrete next goal'));
+  const fn = rhythm.slice(rhythm.indexOf('function resultMessage('), rhythm.indexOf('function gripLabel('));
   for (const [, title] of fn.matchAll(/return '([^']+)';/g)) assert.equal(title, title.toUpperCase(), `"${title}" is caps`);
-  assert.match(rhythm, /tiers\.find\(\(\[at, n\]\) => n > stars && acc < at\)/, 'the goal is always a star above the ones earned');
-  assert.doesNotMatch(rhythm, /for \$\{next\[1\]\} star/, 'no "26 more PERFECTs for 1 star" on a 1-star card');
+  const starGoal = read('src/games/rhythm/core/starGoal.ts');
+  assert.match(starGoal, /tiers\.find\(\(\[at, n\]\) => n > stars && acc < at\)/, 'the goal is always a star above the ones earned');
+  assert.doesNotMatch(starGoal, /for \$\{next\[1\]\} star/, 'no "26 more PERFECTs for 1 star" on a 1-star card');
   const cq = read('src/games/current-quest/v1/CurrentQuestGame.tsx');
   assert.match(cq, /message: 'TREASURE FOUND!'/);
+});
+
+// -- Round 4 -----------------------------------------------------------------
+
+test('a personal best always feels like a win, even with 0 stars', () => {
+  assert.equal(feelings.bestAwareTitle('GOOD TRY!', 0, true), 'YOUR BEST YET!');
+  assert.equal(feelings.bestAwareTitle(undefined, 0, true), 'YOUR BEST YET!');
+  assert.equal(feelings.bestAwareTitle('KEEP MARCHING!', 0, true), 'YOUR BEST YET!');
+  assert.equal(feelings.bestAwareTitle("YOUR RIDE'S UP!", 0, true), "YOUR RIDE'S UP!", 'real info titles stay');
+  assert.equal(feelings.bestAwareTitle('TIME!', 0, true), 'TIME!');
+  assert.equal(feelings.bestAwareTitle('GOOD TRY!', 0, false), 'GOOD TRY!');
+  assert.equal(feelings.bestAwareTitle('NICE!', 1, true), 'NICE!');
+  assert.equal(feelings.feelingTitle(0, false, true), 'YOUR BEST YET!');
+  assert.equal(feelings.endFeel({ stars: 0, isNewBest: true, saved: false }), 'best');
+  assert.equal(feelings.endFeel({ stars: 2, isNewBest: false, saved: false }), 'win');
+  assert.equal(feelings.endFeel({ stars: 0, isNewBest: false, saved: true }), 'saved', 'a saved run is calm, never a fail buzz');
+  assert.equal(feelings.endFeel({ stars: 0, isNewBest: false, saved: false }), 'try');
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /if \(feel === 'win' \|\| feel === 'best'\) \{\n\s+Haptic\.success\(\);\n\s+playSfx\('win'\);/);
+  assert.match(shell, /\} else if \(feel === 'try'\) \{\n\s+Haptic\.failBuzz\(\);\n\s+playSfx\('lose'\);/);
+  assert.doesNotMatch(shell, /Haptic\[effectiveResult\.stars > 0 \? 'success' : 'failBuzz'\]/, 'sound and haptic no longer key on stars alone');
+  assert.match(shell, /onNewBestLanded=\{stars === 0 \? burstBest : undefined\}/, 'one small confetti burst when the badge lands');
+  const card = read('src/gamekit/results/ResultsCard.tsx');
+  assert.match(card, /bestAwareTitle\(message, stars, best\.isNewBest\)/);
+});
+
+test('the line ended the run: title, stamp and note come from the same saved flag; no bar after the ride', () => {
+  const left = session.creditWrapResult({ score: 900, stars: 1 }, 'left-queue', false);
+  assert.equal(left.stars, 1);
+  assert.equal(left.meta.partial, undefined);
+  assert.equal(left.message, session.wrapUpCopy('left-queue', false).title, 'a starred left-queue run is not ALL DONE!');
+  const saved = session.creditWrapResult({ score: 400, stars: 0 }, 'left-queue', false);
+  assert.equal(saved.meta.partial, true);
+  assert.equal(saved.message, 'ALL DONE!');
+  const zero = session.creditWrapResult({ score: 0, stars: 0 }, 'boarding', false);
+  assert.equal(zero.meta.partial, undefined);
+  assert.equal(zero.message, "YOUR RIDE'S UP!");
+  assert.equal(session.creditWrapResult({ score: 400, stars: 0 }, 'boarding', false, 'RAID BOSS DOWN!').message, 'RAID BOSS DOWN!', "a game's own wrap title is kept");
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /return creditWrapResult\(result, wrap\.reason, !!rideChallenge, wrap\.gameMessage\);/);
+  assert.doesNotMatch(shell, /message: wrap\.result\.message/, 'never the older snapshot title');
+  assert.match(shell, /wrapUp=\{wrap != null\}/);
+  const card = read('src/gamekit/results/ResultsCard.tsx');
+  assert.match(card, /if \(saved \|\| wrapUp\) return null;/, 'no KEEP GOING bar once the line ended the run');
+  const sharky = read('src/games/sharky/hud/SharkyResults.tsx');
+  assert.match(sharky, /!saved && !wrapTitle \? nextStarGoal/);
+});
+
+test('Rhythm gets the shared bar: timing fills it, the goal is spoken only, Easy Beat is a caps button in the stack', () => {
+  const goal = load('src/games/rhythm/core/starGoal.ts', { './types': load('src/games/rhythm/core/types.ts') });
+  const a = goal.rhythmStarGoal(30, 0, 40);
+  assert.equal(a.nextStar, 1);
+  assert.equal(a.progress, 0.5);
+  assert.match(a.a11y, /more PERFECTS? for a star/);
+  const b = goal.rhythmStarGoal(70, 1, 40);
+  assert.equal(b.nextStar, 2);
+  assert.equal(b.progress, 0.5);
+  assert.equal(goal.rhythmStarGoal(95, 3, 40).nextStar, 0);
+  const ride = goal.rhythmStarGoal(50, 0, 40, { hitRate: 0.6, win: false });
+  assert.equal(ride.nextStar, 1);
+  assert.ok(Math.abs(ride.progress - 0.8) < 1e-9);
+  assert.doesNotMatch(ride.a11y, /%/);
+  const rhythm = read('src/games/rhythm/RhythmTapGame.tsx');
+  assert.match(rhythm, /starGoal: plan\.ftue \? undefined : rhythmStarGoal\(/);
+  assert.match(rhythm, /note: undefined,/, 'no text-only goal on the card');
+  assert.doesNotMatch(rhythm, /Try with Easy Beat/);
+  assert.match(rhythm, /resultAction=\{/);
+  assert.match(rhythm, /label: 'YOUR BEAT', value: sum\.steadinessLabel\.toUpperCase\(\)/);
+  assert.match(rhythm, />TRY TWO THUMBS\?</);
+  assert.doesNotMatch(rhythm, /Hit 3 of every 4 \(\$\{hr\}%\)/, 'no percent goal');
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /resultAction && !rideChallenge && !wrap && !turnOnly && \(!won \|\| canBankRun\)/, 'the extra replay follows the PLAY AGAIN rules');
+  assert.match(shell, /const resultActionPress = useCallback\(\(\) => \{\n\s+if \(!claimedRef\.current && effectiveResult && linePlayMovement\?\.onRunDone\)/, 'banks the finished run first');
+});
+
+test('Sharky results use the shared ribbon, buttons and chips; podium only for a win; one race label', () => {
+  const sharky = read('src/games/sharky/hud/SharkyResults.tsx');
+  assert.match(sharky, /<ResultsRibbon title=\{title\}/);
+  assert.match(sharky, /<ResultPrimaryButton label=\{primaryLabel\}/);
+  assert.match(sharky, /<ResultSecondaryButton label=\{claimLabel\}/);
+  assert.match(sharky, /<ResultChip key=\{c\.label\}/);
+  assert.match(sharky, /const cheer = data\.stars > 0 \|\| data\.newBest;/);
+  assert.match(sharky, /\{cheer \? <Image source=\{SHARKY_ART\.podium\}/, 'no podium on a 0-star run');
+  assert.match(sharky, /data\.newCard\.toUpperCase\(\)/);
+  assert.doesNotMatch(sharky, /missionText\(m\.id\)\}<\/Text>/, 'mission words are spoken only');
+  assert.doesNotMatch(sharky, /borderRadius: 36/, 'no pill PLAY AGAIN');
+  const swim = read('src/games/sharky/SharkySwim.tsx');
+  assert.doesNotMatch(swim, /RACE MY GHOST|Race my ghost/);
+  assert.equal((swim.match(/challengeLabel="RACE GHOSTS"/g) ?? []).length, 2);
+  const icons = load('src/games/sharky/hud/missionIcons.ts', { '../assets': { SHARKY_ART: { coin: 1, jelly: 2, puffer: 3, ring: 4, finBadge: 5, tokenGold: 6, prizeBox: 7, tideGate: 8 } } });
+  const missions = read('src/games/sharky/meta/missions.ts');
+  for (const [, id] of missions.matchAll(/\{ id: '([a-z0-9]+)', text:/g)) {
+    const icon = icons.missionIcon(id);
+    assert.ok(icon.art || icon.name, `mission ${id} has a picture`);
+  }
+});
+
+test('one button voice on try cards, a calm CQ board under its card, no endless loss pulse', () => {
+  const card = read('src/components/rewards/ChallengeStatusCard.tsx');
+  assert.match(card, /const primary = capsAction\(primaryIn\);/);
+  assert.match(card, /const quiet = capsAction\(quietIn\);/);
+  const cq = read('src/games/current-quest/v1/CurrentQuestGame.tsx');
+  assert.match(cq, /\{result \? null : <Text style=\{styles\.hint\}/, 'no "Pearl found!" text around the card');
+  assert.match(cq, /playResting: \{ opacity: 0\.12 \}/);
+  const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
+  assert.doesNotMatch(duel, /withTiming\(0, \{ duration: beatMs \}\)\), -1\)/);
+  assert.match(duel, /GAP_BEATS = 4/);
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.doesNotMatch(whack, /% TO GO/, 'no percent in a Whack title');
 });

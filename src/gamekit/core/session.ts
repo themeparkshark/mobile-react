@@ -179,6 +179,37 @@ export function wrapUpStars(stars: number, score: number, paid: boolean): { star
   return { stars: safe, partial: safe === 0 && !paid && score > 0 };
 }
 
+/** The bits of a run result the wrap-up credit touches. */
+export interface WrapResultLike {
+  score?: number;
+  stars?: number;
+  message?: string;
+  meta?: Record<string, unknown>;
+}
+
+/**
+ * Apply the wrap-up credit to a run result, so the title, the RUN SAVED stamp
+ * and the note always agree. `gameMessage` is a title the game picked itself
+ * (kept as is); otherwise the title comes from this result's own saved flag,
+ * never from an older snapshot's.
+ */
+export function creditWrapResult<T extends WrapResultLike>(
+  result: T,
+  reason: WrapUpReason,
+  paid: boolean,
+  gameMessage?: string,
+): T & { stars: number; message: string; meta: Record<string, unknown> } {
+  const score = result.score ?? 0;
+  const credit = wrapUpStars(result.stars ?? 0, score, paid);
+  const saved = credit.partial || score <= 0;
+  return {
+    ...result,
+    stars: credit.stars,
+    message: gameMessage ?? wrapUpCopy(reason, saved).title,
+    meta: { ...(result.meta ?? {}), wrapUp: reason, ...(credit.partial ? { partial: true } : {}) },
+  };
+}
+
 /** True when a game-owned results surface rendered nothing (null, false, true, undefined or ''). */
 export function isEmptyResultsNode(node: unknown): boolean {
   return node == null || node === false || node === true || node === '';

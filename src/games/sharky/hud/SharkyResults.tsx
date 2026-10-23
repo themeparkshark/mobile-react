@@ -27,7 +27,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { Image, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
@@ -44,6 +44,11 @@ import { aheadBars, sharkyBragLine, sharkyGateWord, showSplits } from './resultL
 import { NextStarBar } from '../../../gamekit/results/NextStarBar';
 import { SavedStamp } from '../../../gamekit/results/SavedStamp';
 import { nextStarGoal, type StarThresholds } from '../../../gamekit/core/scoring';
+import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
+import { ResultButtonRow, ResultPrimaryButton, ResultSecondaryButton } from '../../../gamekit/results/ResultButtons';
+import { ResultChip } from '../../../gamekit/results/ResultsCard';
+import { bestAwareTitle } from '../../../gamekit/results/feelings';
+import { missionIcon } from './missionIcons';
 
 export interface SharkyResultsData {
   score: number;
@@ -76,6 +81,8 @@ export interface SharkyResultsProps {
   playAgainFirst?: boolean;
   /** A queue event saved this run before its first star (RUN SAVED, no bar). */
   saved?: boolean;
+  /** The line ended the run (ride's up): its title wins, and no next-star bar. */
+  wrapTitle?: string | null;
   claim: () => void;
   claimLabel: string;
   challenge?: () => void;
@@ -134,7 +141,7 @@ function Star({ on, index, delayMs, reduced }: { on: boolean; index: number; del
   );
 }
 
-export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = false, claim, claimLabel, challenge, challengeLabel, reducedMotion }: SharkyResultsProps) {
+export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = false, wrapTitle = null, claim, claimLabel, challenge, challengeLabel, reducedMotion }: SharkyResultsProps) {
   const fx = useRef<FxStageHandle>(null);
   const win = useWindowDimensions();
   const [box, setBox] = useState({ w: 390, h: 700 });
@@ -145,7 +152,10 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   const pulse = useSharedValue(1);
   const slam = useSharedValue(1);
   const card = useSharedValue(reducedMotion ? 0 : 60);
-  const cheer = !data.wipeout;
+  // The podium and the cheer are for a real win (a star or a new best). A
+  // wipeout is dizzy; any other 0-star run swims calmly, off the podium.
+  const cheer = data.stars > 0 || data.newBest;
+  const pose = cheer ? 'cheer' : data.wipeout ? 'dizzy' : 'swim';
   const short = win.height < 740;
 
   useEffect(() => {
@@ -189,37 +199,48 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   const againFirst = !!playAgain && playAgainFirst;
   const primary = againFirst ? playAgain : claim;
   const primaryLabel = againFirst ? 'PLAY AGAIN' : claimLabel;
+  // The same brag chips as the shared card (the words are in sharkyBragLine for a11y).
   const brag = sharkyBragLine(data.bestChainMult, data.closeSkims);
-  const goal = useMemo(() => (data.thresholds && !saved ? nextStarGoal(data.score, data.thresholds) : null), [data.thresholds, data.score, saved]);
+  const chips = useMemo(() => [
+    ...(data.bestChainMult >= 3 ? [{ label: 'BEST CHAIN', value: `x${data.bestChainMult}` }] : []),
+    ...(data.closeSkims > 0 ? [{ label: data.closeSkims === 1 ? 'CLOSE SKIM' : 'CLOSE SKIMS', value: String(data.closeSkims) }] : []),
+  ], [data.bestChainMult, data.closeSkims]);
+  const title = bestAwareTitle(wrapTitle ?? data.headline, data.stars, data.newBest) ?? data.headline;
+  const goal = useMemo(() => (data.thresholds && !saved && !wrapTitle ? nextStarGoal(data.score, data.thresholds) : null), [data.thresholds, data.score, saved, wrapTitle]);
   const bars = useMemo(() => aheadBars(data.splits), [data.splits]);
   // One feeling line under the score, the same slot the shared card uses:
   // gold when the run beat your best ghost, light for "so close to your best".
   const ahead = !data.newBest && showSplits(data.splits, data.ghostGates ?? 0);
   const feeling = ahead ? 'AHEAD OF YOUR BEST!' : data.nearMiss ? data.nearMiss.toUpperCase() : '';
-  const gate = data.gateProgress != null && !saved ? data.gateProgress : null;
+  const gate = data.gateProgress != null && !saved && !wrapTitle ? data.gateProgress : null;
   const splitMax = useMemo(() => Math.max(1, ...bars), [bars]);
 
   return (
     <View style={[styles.root, { height: win.height }]} onLayout={onLayout}>
       <LinearGradient colors={['#dff3ff', NEUTRAL]} style={StyleSheet.absoluteFill} />
       <View style={styles.trim} />
-      <Text style={[styles.headline, short && styles.headlineShort]}>{data.headline}</Text>
+      <ResultsRibbon title={title} reducedMotion={reducedMotion} style={[styles.headline, short && styles.headlineShort]} />
 
       {/* The shark on stage */}
       {/* Tall phones give the title room above the shark. Short phones (SE) get a
           smaller stage under a higher title, so the title never sits on the
           shark's head and more of the card stays on screen. */}
       <View style={[styles.stage, short && styles.stageShort]}>
-        <Animated.View style={[styles.sharkWrap, short && styles.sharkWrapShort, sharkStyle]}>
-          <Image source={cheer ? SHARKY_ART.cheer : SHARKY_ART.dizzy} style={[styles.shark, short && styles.sharkShort]} resizeMode="contain" />
-          {!cheer ? <Image source={SHARKY_ART.dizzyStar} style={[styles.dizzyStars, short && styles.dizzyStarsShort]} resizeMode="contain" /> : null}
+        <Animated.View style={[styles.sharkWrap, short && styles.sharkWrapShort, !cheer && styles.sharkWrapGround, sharkStyle]}>
+          <Image source={SHARKY_ART[pose]} style={[pose === 'swim' ? styles.sharkSwim : styles.shark, short && (pose === 'swim' ? styles.sharkSwimShort : styles.sharkShort)]} resizeMode="contain" />
+          {pose === 'dizzy' ? <Image source={SHARKY_ART.dizzyStar} style={[styles.dizzyStars, short && styles.dizzyStarsShort]} resizeMode="contain" /> : null}
         </Animated.View>
-        <Image source={SHARKY_ART.podium} style={[styles.podium, short && styles.podiumShort]} resizeMode="contain" />
+        {cheer ? <Image source={SHARKY_ART.podium} style={[styles.podium, short && styles.podiumShort]} resizeMode="contain" /> : null}
       </View>
 
       <Animated.View style={[styles.card, cardStyle]}>
         <Animated.Text style={[styles.score, scoreStyle]}>{shown.toLocaleString()}</Animated.Text>
-        {data.newBest ? <Text style={styles.newBest}>NEW BEST</Text> : null}
+        {data.newBest ? (
+          <View style={styles.newBest}>
+            <GameIcon name="crown" size={22} />
+            <Text style={styles.newBestText}>NEW BEST!</Text>
+          </View>
+        ) : null}
         {saved ? <SavedStamp reducedMotion={reducedMotion} delayMs={1450} /> : (
           <View style={styles.stars}>
             {[0, 1, 2].map((i) => <Star key={i} index={i} on={i < data.stars} delayMs={1450 + i * 220} reduced={reducedMotion} />)}
@@ -230,7 +251,11 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
             <Text style={styles.feelingText} numberOfLines={1} adjustsFontSizeToFit>{feeling}</Text>
           </View>
         ) : null}
-        {brag ? <Text style={styles.hero2}>{brag}</Text> : null}
+        {chips.length ? (
+          <View style={styles.chips} accessible accessibilityLabel={brag}>
+            {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} />)}
+          </View>
+        ) : null}
         {goal ? <NextStarBar goal={goal} delayMs={1500} reducedMotion={reducedMotion} tone="onWhite" /> : null}
         {gate !== null ? (
           <NextStarBar goal={{ nextStar: 1, progress: gate, near: gate >= 0.85, remaining: 0 }} word={sharkyGateWord(gate)}
@@ -238,35 +263,22 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
         ) : null}
 
         <Animated.View style={[styles.playWrap, btnStyle]}>
-          <TouchableOpacity accessibilityRole="button" style={styles.play} disabled={!tapReady} onPress={primary}>
-            {againFirst ? <GameIcon name="retry" size={30} /> : null}
-            <Text style={[styles.playText, againFirst && styles.playGap]}>{primaryLabel}</Text>
-          </TouchableOpacity>
+          <ResultPrimaryButton label={primaryLabel} icon={againFirst ? 'retry' : undefined} disabled={!tapReady} onPress={primary} style={styles.playBtn} />
         </Animated.View>
         {againFirst || challenge || playAgain ? (
-          <View style={styles.secondary}>
+          <ResultButtonRow>
             {againFirst ? (
-              <TouchableOpacity accessibilityRole="button" style={styles.secondaryBtn} onPress={claim}>
-                <Text style={styles.secondaryText}>{claimLabel}</Text>
-              </TouchableOpacity>
+              <ResultSecondaryButton label={claimLabel} onPress={claim} />
             ) : playAgain ? (
-              <TouchableOpacity accessibilityRole="button" style={styles.secondaryBtn} onPress={playAgain}>
-                <GameIcon name="retry" size={20} />
-                <Text style={[styles.secondaryText, styles.playGap]}>PLAY AGAIN</Text>
-              </TouchableOpacity>
+              <ResultSecondaryButton label="PLAY AGAIN" icon="retry" onPress={playAgain} />
             ) : null}
-            {challenge ? (
-              <TouchableOpacity accessibilityRole="button" style={styles.secondaryBtn} onPress={challenge}>
-                <GameIcon name="rush" size={20} />
-                <Text style={[styles.secondaryText, styles.playGap]} numberOfLines={1} adjustsFontSizeToFit>{(challengeLabel ?? 'RACE MY GHOST').toUpperCase()}</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
+            {challenge ? <ResultSecondaryButton label={challengeLabel ?? 'RACE GHOSTS'} icon="rush" onPress={challenge} /> : null}
+          </ResultButtonRow>
         ) : null}
 
         {below ? (
           <View style={styles.below}>
-            {data.newCard ? <Text style={styles.newCard}>{data.newCard}</Text> : null}
+            {data.newCard ? <Text style={styles.newCard}>{data.newCard.toUpperCase()}</Text> : null}
             {ahead && bars.length ? (
               <View style={styles.splitRow} accessible accessibilityLabel={`Ahead of your best at ${bars.length} gates`}>
                 {bars.map((d, i) => (
@@ -276,13 +288,30 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
                 ))}
               </View>
             ) : null}
-            {data.missions && !data.newCard ? data.missions.missions.map((m) => (
-              <View key={m.id} style={styles.mRow}>
-                <Text style={[styles.mText, m.done && styles.mDone]} numberOfLines={1}>{missionText(m.id)}</Text>
-                <View style={styles.mTrack}><View style={[styles.mFill, { width: `${Math.round((100 * m.progress) / missionTarget(m.id))}%` }]} /></View>
+            {/* Missions as picture plus bar: a kid who cannot read still sees each
+                goal and how full it is. The words are spoken only. */}
+            {data.missions && !data.newCard ? (
+              <View style={styles.mRow}>
+                {data.missions.missions.map((m) => {
+                  const icon = missionIcon(m.id);
+                  const fill = Math.max(0, Math.min(1, m.progress / missionTarget(m.id)));
+                  return (
+                    <View key={m.id} style={[styles.mCell, m.done && styles.mCellDone]} accessible
+                      accessibilityLabel={`${missionText(m.id)}${m.done ? ', done' : `, ${m.progress} of ${missionTarget(m.id)}`}`}>
+                      {icon.art ? <Image source={icon.art} style={styles.mArt} resizeMode="contain" /> : <GameIcon name={icon.name ?? 'star'} size={26} />}
+                      {m.done ? <View style={styles.mCheck}><GameIcon name="check" size={16} /></View> : null}
+                      <View style={styles.mTrack}><View style={[styles.mFill, { width: `${Math.round(fill * 100)}%` }]} /></View>
+                    </View>
+                  );
+                })}
               </View>
-            )) : null}
-            {data.tokensAtRide !== null ? <Text style={styles.small}>{`Tokens ${data.tokensAtRide}/9 at this ride`}</Text> : null}
+            ) : null}
+            {data.tokensAtRide !== null ? (
+              <View style={styles.tokens} accessible accessibilityLabel={`${data.tokensAtRide} of 9 Ride Tokens at this ride`}>
+                <Image source={SHARKY_ART.tokenGold} style={styles.tokenArt} resizeMode="contain" />
+                <Text style={styles.small}>{`${data.tokensAtRide}/9`}</Text>
+              </View>
+            ) : null}
             {data.fullClear ? <Image source={SHARKY_ART.fullClear} style={styles.medal} resizeMode="contain" /> : null}
           </View>
         ) : null}
@@ -295,46 +324,48 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
 const styles = StyleSheet.create({
   root: { width: '100%', alignItems: 'center', overflow: 'hidden' },
   trim: { position: 'absolute', left: 0, right: 0, top: 0, height: 5, backgroundColor: REWARD },
-  headline: { fontFamily: 'Shark', fontSize: 30, color: INK, position: 'absolute', top: 58, zIndex: 2, textShadowColor: NEUTRAL, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6 },
+  headline: { position: 'absolute', top: 42, left: 12, right: 12, zIndex: 2 },
   stage: { width: '100%', height: 210, alignItems: 'center', justifyContent: 'flex-end', marginTop: 118 },
   stageShort: { height: 176, marginTop: 92 },
-  headlineShort: { top: 30 },
+  headlineShort: { top: 16 },
   sharkWrapShort: { bottom: 56 },
   sharkShort: { width: 108, height: 132 },
   dizzyStarsShort: { width: 46, height: 30, top: -4 },
   podiumShort: { width: 176, height: 92 },
   sharkWrap: { position: 'absolute', bottom: 70, alignItems: 'center' },
+  sharkWrapGround: { bottom: 18 },
+  sharkSwim: { width: 190, height: 130 },
+  sharkSwimShort: { width: 160, height: 108 },
   shark: { width: 130, height: 160 },
   dizzyStars: { position: 'absolute', top: -6, width: 56, height: 36 },
   podium: { width: 210, height: 110 },
   card: { width: '92%', backgroundColor: NEUTRAL, borderRadius: 26, borderWidth: 4, borderColor: INK, padding: 14, alignItems: 'center', marginTop: -6 },
   score: { fontFamily: 'Shark', fontSize: 54, color: REWARD, textShadowColor: INK, textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 0 },
-  newBest: { fontFamily: 'Shark', fontSize: 18, color: INK, backgroundColor: REWARD_PALE, borderRadius: 10, overflow: 'hidden', paddingHorizontal: 10, marginTop: 2 },
+  newBest: { flexDirection: 'row', alignItems: 'center', backgroundColor: REWARD, borderRadius: 999, borderWidth: 3, borderColor: INK, paddingHorizontal: 12, paddingVertical: 2, marginTop: 2 },
+  newBestText: { fontFamily: 'Shark', fontSize: 18, color: INK, marginLeft: 6 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 },
   stars: { flexDirection: 'row', marginVertical: 6 },
   star: { marginHorizontal: 6 },
-  hero2: { fontFamily: 'Shark', fontSize: 19, color: INK, textAlign: 'center' },
   feeling: { borderRadius: 999, borderWidth: 3, borderColor: INK, backgroundColor: '#e4f7ff', paddingHorizontal: 14,
     paddingVertical: 3, marginBottom: 4, maxWidth: '100%' },
   feelingGold: { backgroundColor: REWARD },
   feelingText: { fontFamily: 'Knockout', fontSize: 16, color: INK, letterSpacing: 1 },
   playWrap: { width: '100%', marginTop: 12 },
-  play: { height: 72, borderRadius: 36, backgroundColor: REWARD, borderWidth: 5, borderColor: INK, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
-  playText: { fontFamily: 'Shark', fontSize: 34, color: INK },
-  playGap: { marginLeft: 8 },
+  playBtn: { marginTop: 0 },
   below: { width: '100%', alignItems: 'center', marginTop: 10 },
   newCard: { fontFamily: 'Shark', fontSize: 18, color: INK, backgroundColor: REWARD, borderRadius: 12, overflow: 'hidden', paddingHorizontal: 14, paddingVertical: 6, marginBottom: 6 },
   splitRow: { flexDirection: 'row', alignItems: 'flex-end', marginVertical: 4 },
   splitCell: { alignItems: 'center', marginHorizontal: 8 },
   splitBar: { width: 22, borderRadius: 6, borderWidth: 2, borderColor: INK, backgroundColor: '#3ccf6b' },
-  mRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginVertical: 2 },
-  mText: { flex: 1, fontFamily: 'Knockout', fontSize: 13, color: INK },
-  mDone: { color: '#1b8f3a' },
-  mTrack: { width: 70, height: 8, borderRadius: 4, backgroundColor: '#cfe6fb', borderWidth: 2, borderColor: INK, overflow: 'hidden' },
+  mRow: { flexDirection: 'row', justifyContent: 'center', width: '100%', marginVertical: 4, gap: 10 },
+  mCell: { alignItems: 'center', backgroundColor: '#e4f7ff', borderRadius: 14, borderWidth: 3, borderColor: INK, paddingHorizontal: 8, paddingTop: 4, paddingBottom: 6, minWidth: 74 },
+  mCellDone: { backgroundColor: REWARD_PALE },
+  mArt: { width: 30, height: 30 },
+  mCheck: { position: 'absolute', top: -8, right: -8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: INK, padding: 1 },
+  mTrack: { width: 56, height: 10, marginTop: 4, borderRadius: 5, backgroundColor: '#cfe6fb', borderWidth: 2, borderColor: INK, overflow: 'hidden' },
   mFill: { height: '100%', backgroundColor: REWARD },
-  small: { fontFamily: 'Knockout', fontSize: 13, color: INK, marginTop: 4 },
+  small: { fontFamily: 'Shark', fontSize: 16, color: INK, marginLeft: 4 },
+  tokens: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  tokenArt: { width: 24, height: 24 },
   medal: { width: 54, height: 54, marginTop: 4 },
-  secondary: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 },
-  secondaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 14,
-    backgroundColor: '#ffffff', borderWidth: 3, borderColor: INK, borderBottomWidth: 5 },
-  secondaryText: { fontFamily: 'Shark', fontSize: 18, color: INK },
 });

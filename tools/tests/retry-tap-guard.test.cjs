@@ -21,7 +21,8 @@ function order(tree) {
     if (!node || typeof node !== 'object') return;
     if (Array.isArray(node)) return node.forEach(walk);
     if (node.type === '../YellowButton') labels.push(node.props.text);
-    if (node.type === 'Text' && typeof node.props.children === 'string' && node.props.children === 'Return to map') labels.push('Return to map');
+    // Every try card button is caps (one button voice with the results cards).
+    if (node.type === 'Text' && typeof node.props.children === 'string' && node.props.children === 'RETURN TO MAP') labels.push('RETURN TO MAP');
     walk(node.props?.children);
   })(tree);
   return labels;
@@ -29,7 +30,7 @@ function order(tree) {
 
 test('a paid retry sits below the safe action and ignores taps for the guard window', () => {
   const { app, calls } = card({ guardRetry: true });
-  assert.deepEqual(order(app.tree), ['Return to map', 'Try Again'], 'the old Close spot holds the safe action');
+  assert.deepEqual(order(app.tree), ['RETURN TO MAP', 'TRY AGAIN'], 'the old Close spot holds the safe action');
   const retry = () => app.find(node => node.type === '../YellowButton');
   assert.equal(retry().props.disabled, true, 'Try Again is not live yet');
   assert.equal(app.timers.size, 1);
@@ -41,7 +42,7 @@ test('a paid retry sits below the safe action and ignores taps for the guard win
 
 test('cards without a paid retry keep their layout and a live primary', () => {
   const { app } = card({});
-  assert.deepEqual(order(app.tree), ['Try Again', 'Return to map']);
+  assert.deepEqual(order(app.tree), ['TRY AGAIN', 'RETURN TO MAP']);
   assert.equal(app.find(node => node.type === '../YellowButton').props.disabled, false);
   assert.equal(app.timers.size, 0);
 });

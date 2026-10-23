@@ -36,24 +36,34 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Image } from 'expo-image';
 import GameIcon from '../../ui/GameIcon';
 import { compareBest, formatScore, nextStarGoal, tallySchedule, tallyTickCount, type StarThresholds } from '../core/scoring';
 import { nearMissLine } from '../core/nearMiss';
 import { CountUpText } from '../fx/CountUpText';
-import { feelingChips, feelingLine, feelingTitle, nearBest, noteRun } from './feelings';
+import { bestAwareTitle, feelingChips, feelingLine, feelingTitle, nearBest, noteRun } from './feelings';
 import { NextStarBar } from './NextStarBar';
 import { SavedStamp } from './SavedStamp';
+import { ResultsRibbon } from './ResultsRibbon';
 import { playHaptic } from '../Haptics';
 import { GameAudio } from '../audio/GameAudio';
 
-const RIBBON = require('../../../assets/images/ribbon.png');
 
 export interface ResultStat {
   label: string;
   value: string;
   /** Draw filled dots instead of the value (BURSTS 3 of 4). */
   pips?: readonly [number, number];
+}
+
+/** A next-star bar a game works out itself (stars that are not points). */
+export interface ResultStarGoal {
+  /** 0..1 toward the next star. */
+  progress: number;
+  /** The star the bar points at (1-3), or 0 when all three are lit. */
+  nextStar: number;
+  near: boolean;
+  /** Spoken label with the exact goal ("12 more PERFECTS for a star"). */
+  a11y?: string;
 }
 
 export interface ResultsCardProps {
@@ -91,6 +101,12 @@ export interface ResultsCardProps {
   saved?: boolean;
   /** A small chip inside the card under the brags (Whack's SHARE). */
   footer?: React.ReactNode;
+  /** The game's own next-star bar (Rhythm); wins over thresholds. */
+  starGoal?: ResultStarGoal;
+  /** The line ended the run (ride's up, left the line): no more play, so no next-star bar. */
+  wrapUp?: boolean;
+  /** Fired once when the NEW BEST badge slams in (the shell bursts confetti). */
+  onNewBestLanded?: () => void;
 }
 
 const STAR_BASE_DELAY = 260;
@@ -98,17 +114,26 @@ const STAR_STEP = 220;
 const BUCKET_MS = 520;
 const BUCKET_GAP = 140;
 
-export function defaultMessage(stars: number, near: boolean): string {
-  return feelingTitle(stars, near);
+export function defaultMessage(stars: number, near: boolean, newBest = false): string {
+  return feelingTitle(stars, near, newBest);
 }
 
 export function ResultsCard({
   score, stars, message, thresholds, personalBest, maxCombo, stats, note, reducedMotion = false, onRevealed, rival,
-  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer,
+  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer, onNewBestLanded, wrapUp = false, starGoal,
 }: ResultsCardProps) {
-  const goal = useMemo(() => (thresholds && !saved ? nextStarGoal(score, thresholds) : null), [score, thresholds, saved]);
+  // A finished wait has nothing left to keep going on: no bar after the line ends the run.
+  const goal = useMemo(() => {
+    if (saved || wrapUp) return null;
+    if (starGoal) {
+      const progress = Math.max(0, Math.min(1, Number.isFinite(starGoal.progress) ? starGoal.progress : 0));
+      return { nextStar: starGoal.nextStar, progress: starGoal.nextStar ? progress : 1, near: starGoal.near, remaining: 0 };
+    }
+    return thresholds ? nextStarGoal(score, thresholds) : null;
+  }, [score, thresholds, saved, wrapUp, starGoal]);
   const best = useMemo(() => compareBest(score, personalBest), [score, personalBest]);
-  const title = message ?? defaultMessage(stars, !!goal?.near);
+  // A personal best is a win, even with 0 stars: never GOOD TRY! next to NEW BEST!.
+  const title = bestAwareTitle(message, stars, best.isNewBest) ?? defaultMessage(stars, !!goal?.near, best.isNewBest);
   // The one line that sells "one more run" (beat a ghost, so close to a star).
   const near = useMemo(() => nearMissLine({ score, thresholds, best: personalBest, rival }), [score, thresholds, personalBest, rival]);
   // Wins in a row for this game (counted once per run, at mount).
@@ -127,19 +152,16 @@ export function ResultsCard({
   const bucketStart = STAR_BASE_DELAY + starStepMs * 3;
   const countDelay = reducedMotion ? 0 : bucketStart + nBuckets * (BUCKET_MS + BUCKET_GAP);
 
-  const ribbon = useSharedValue(reducedMotion ? 1 : 0);
+  const onBestRef = React.useRef(onNewBestLanded);
+  onBestRef.current = onNewBestLanded;
+
   const bestScale = useSharedValue(reducedMotion ? 1 : 0);
 
   useEffect(() => {
     if (reducedMotion) {
-      ribbon.value = 1;
       bestScale.value = 1;
       return;
     }
-    ribbon.value = withSequence(
-      withTiming(1.25, { duration: 160, easing: Easing.out(Easing.back(2)) }),
-      withSpring(1, { damping: 10, stiffness: 260 }),
-    );
     if (best.isNewBest) {
       bestScale.value = withDelay(countDelay + 900, withSequence(
         withTiming(1.4, { duration: 0 }),
@@ -149,22 +171,19 @@ export function ResultsCard({
       const t = setTimeout(() => {
         GameAudio.play('fx.purchase');
         playHaptic('winRoll');
+        onBestRef.current?.();
       }, countDelay + 900);
       return () => { clearTimeout(t); cancelAnimation(bestScale); };
     }
     bestScale.value = withDelay(countDelay + 900, withTiming(1, { duration: 200 }));
     return () => cancelAnimation(bestScale);
-  }, [reducedMotion, best.isNewBest, countDelay, ribbon, bestScale]);
+  }, [reducedMotion, best.isNewBest, countDelay, bestScale]);
 
-  const ribbonStyle = useAnimatedStyle(() => ({ transform: [{ scale: ribbon.value }], opacity: ribbon.value > 0 ? 1 : 0 }));
   const bestStyle = useAnimatedStyle(() => ({ transform: [{ scale: bestScale.value }], opacity: bestScale.value > 0.05 ? 1 : 0 }));
 
   return (
     <View style={styles.card}>
-      <Animated.View style={[styles.ribbonWrap, ribbonStyle]}>
-        <Image source={RIBBON} style={styles.ribbon} contentFit="contain" />
-        <Text style={styles.ribbonText} numberOfLines={1} adjustsFontSizeToFit>{title}</Text>
-      </Animated.View>
+      <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} />
 
       {saved ? (
         <SavedStamp reducedMotion={reducedMotion} delayMs={STAR_BASE_DELAY} />
@@ -217,11 +236,12 @@ export function ResultsCard({
         </Animated.View>
       ) : null}
 
-      {goal ? <NextStarBar goal={goal} delayMs={countDelay + 300} reducedMotion={reducedMotion} /> : null}
+      {goal ? <NextStarBar goal={goal} delayMs={countDelay + 300} reducedMotion={reducedMotion}
+        a11yLabel={starGoal ? starGoal.a11y ?? (goal.nextStar ? `Star ${goal.nextStar} is next` : 'All three stars') : undefined} /> : null}
 
       {chips.length ? (
         <View style={styles.stats}>
-          {chips.map((s) => <Chip key={s.label} label={s.label} value={s.value} pips={s.pips} />)}
+          {chips.map((s) => <ResultChip key={s.label} label={s.label} value={s.value} pips={s.pips} />)}
         </View>
       ) : null}
 
@@ -232,7 +252,8 @@ export function ResultsCard({
   );
 }
 
-function Chip({ label, value, pips }: ResultStat) {
+/** One brag chip (cream, navy ink), shared by every results card. */
+export function ResultChip({ label, value, pips }: ResultStat) {
   return (
     <View style={styles.chip} accessible accessibilityLabel={pips ? `${pips[0]} of ${pips[1]} ${label}` : `${value} ${label}`}>
       {pips ? (
@@ -353,10 +374,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 18,
   },
-  ribbonWrap: { position: 'absolute', top: -34, left: -14, right: -14, height: 74, alignItems: 'center', justifyContent: 'center' },
-  ribbon: { position: 'absolute', width: '100%', height: '100%' },
-  ribbonText: { fontFamily: 'Shark', fontSize: 28, color: '#ffffff', marginTop: -8, paddingHorizontal: 60,
-    textShadowColor: '#7a2a12', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  ribbonWrap: { position: 'absolute', top: -34, left: -14, right: -14 },
   starRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4, marginBottom: 6 },
   star: { marginHorizontal: 6 },
   starMiddle: { marginBottom: 10 },

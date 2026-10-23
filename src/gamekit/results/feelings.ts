@@ -124,11 +124,43 @@ export function feelingLine(input: {
 }
 
 /** The big title when a game did not pick one. Never "you lost". */
-export function feelingTitle(stars: number, near: boolean): string {
+export function feelingTitle(stars: number, near: boolean, newBest = false): string {
   if (stars >= 3) return 'INCREDIBLE!';
   if (stars === 2) return near ? 'SO CLOSE!' : 'GREAT!';
   if (stars === 1) return 'NICE!';
+  if (newBest) return BEST_YET_TITLE;
   return near ? 'SO CLOSE!' : 'GOOD TRY!';
+}
+
+/** The ribbon on a 0-star run that still beat the kid's own best. */
+export const BEST_YET_TITLE = 'YOUR BEST YET!';
+
+/** 0-star "try again" titles a personal best replaces (finish words like TIME! stay). */
+const SOFT_TRY_TITLES = new Set(['GOOD TRY!', 'SO CLOSE!', 'KEEP MARCHING!', 'THE PARADE NEEDS YOU!', 'KEEP SWIMMING!', 'NICE TRY!']);
+
+/**
+ * A personal best always reads as a win, even with 0 stars: a soft "try
+ * again" title becomes YOUR BEST YET!. Real info titles (YOUR RIDE'S UP!,
+ * TIME!, NEW FINN) are kept.
+ */
+export function bestAwareTitle(title: string | undefined, stars: number, isNewBest: boolean): string | undefined {
+  if (stars > 0 || !isNewBest) return title;
+  if (!title || SOFT_TRY_TITLES.has(title.trim().toUpperCase())) return BEST_YET_TITLE;
+  return title;
+}
+
+export type EndFeel = 'win' | 'best' | 'saved' | 'try';
+
+/**
+ * How the end of a run sounds and buzzes. Stars or a personal best are a win
+ * (success haptic, win sound, confetti). A run the line saved is calm (no
+ * fail buzz, no lose sound). Only a plain 0-star run gets the soft try sound.
+ */
+export function endFeel(input: { stars: number; isNewBest: boolean; saved: boolean }): EndFeel {
+  if (input.stars > 0) return 'win';
+  if (input.isNewBest) return 'best';
+  if (input.saved) return 'saved';
+  return 'try';
 }
 
 /**

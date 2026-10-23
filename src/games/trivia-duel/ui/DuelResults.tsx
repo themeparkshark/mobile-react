@@ -18,6 +18,9 @@ import type { FactCard } from '../store';
 import { OutlinedText } from './Overlays';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 
+/** The loss gap pulse plays this many beats, then rests. */
+export const GAP_BEATS = 4;
+
 export interface ResultsModel {
   won: boolean;
   tie: boolean;
@@ -61,7 +64,8 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
     if (reducedMotion) cardO.value = withTiming(1, { duration: 300 });
     else cardY.value = withDelay(beatMs, withSpring(0, { damping: 14, stiffness: 180 }));
     if (!model.won && !reducedMotion) {
-      gap.value = withRepeat(withSequence(withTiming(1, { duration: beatMs }), withTiming(0, { duration: beatMs })), -1);
+      // A few beats, then rest: a card left open costs no frames.
+      gap.value = withRepeat(withSequence(withTiming(1, { duration: beatMs }), withTiming(0, { duration: beatMs })), GAP_BEATS);
     }
     if (!reducedMotion && onRematch) pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: beatMs * 0.25 }), withTiming(1, { duration: beatMs * 0.75 })), 3);
     if (model.best && !reducedMotion) {
