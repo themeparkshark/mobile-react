@@ -1,15 +1,16 @@
 /**
  * ShareCard (design v5 6.11, Wordle steal): a QUICK / GOOD / LATE tile grid of
- * the Run on the cream plate, with the ride's in-app name, the score and the
- * stars. No emoji. It is captured off-screen and handed to the system share
- * sheet only when the player taps SHARE; nothing is ever posted for them.
+ * the Run on the cream plate, with the score and the stars. No emoji. It is
+ * captured off-screen in a story-size frame (1080x1920) with the TPS link and a
+ * QR, and handed to the share sheet only when the player taps SHARE; nothing is
+ * ever posted for them. Kid safety: no ride name on the picture or in the text
+ * (it would say where the player is standing right now).
  */
 
-import { shareFileExternal } from '../../../services/external';
 import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { captureRef } from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
+import { captureFlex, openShareSheet } from '../../../share/capture';
+import { OFFSCREEN, StoryShareFrame } from '../../../share/StoryShareFrame';
 
 /** Tile codes: 0 LATE, 1 GOOD, 2 QUICK, 9 decoy hit. */
 export const TILE_LATE = 0;
@@ -31,29 +32,27 @@ export function shareRows(tiles: number[], cols = COLS, max = MAX_TILES): number
   return rows;
 }
 
-/** The share text that goes with the image (no emoji). */
-export function shareText(rideName: string | null, score: number, stars: number): string {
-  const where = rideName ? ` in line for ${rideName}` : '';
-  return `I scored ${score.toLocaleString()} in Whack-a-Shark${where}. ${stars} of 3 stars. Can you beat it?`;
+/** The share text (no emoji, no ride name: it would say where the player is right now). */
+export function shareText(_rideName: string | null, score: number, stars: number): string {
+  return `I scored ${score.toLocaleString()} in Whack-a-Shark. ${stars} of 3 stars. Can you beat it?`;
 }
 
-export function ShareCardButton({ tiles, rideName, score, stars }: { tiles: number[]; rideName: string | null; score: number; stars: number }) {
+/** `rideName` is kept for callers; it never goes on the picture. */
+export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; rideName: string | null; score: number; stars: number }) {
   const ref = useRef<View>(null);
   const [busy, setBusy] = useState(false);
   const share = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     try {
-      const uri = await captureRef(ref, { format: 'png', quality: 1, result: 'tmpfile' });
-      if (await Sharing.isAvailableAsync()) {
-        await shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: shareText(rideName, score, stars), UTI: 'public.png' });
-      }
+      const uri = await captureFlex(ref, 'story');
+      await openShareSheet(uri);
     } catch {
       // The share sheet is optional; a failure never blocks the results.
     } finally {
       setBusy(false);
     }
-  }, [busy, rideName, score, stars]);
+  }, [busy]);
   const quick = tiles.filter((t) => t === TILE_QUICK).length;
   return (
     <View>
@@ -61,10 +60,10 @@ export function ShareCardButton({ tiles, rideName, score, stars }: { tiles: numb
         <Text style={styles.buttonText}>{busy ? 'SHARING...' : 'SHARE'}</Text>
       </TouchableOpacity>
       {/* Off-screen card (captured on demand). */}
-      <View style={styles.offscreen} pointerEvents="none">
-        <View ref={ref} collapsable={false} style={styles.card}>
+      <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <StoryShareFrame ref={ref} kicker="MY WHACK-A-SHARK RUN" cta="Can you beat my score?" campaign="whack">
+        <View style={styles.card}>
           <Text style={styles.title}>WHACK-A-SHARK</Text>
-          {rideName ? <Text style={styles.ride}>{rideName.toUpperCase()}</Text> : null}
           <Text style={styles.score}>{score.toLocaleString()}</Text>
           <View style={styles.stars}>
             {[0, 1, 2].map((k) => <View key={k} style={[styles.star, k < stars ? styles.starOn : null]} />)}
@@ -83,6 +82,7 @@ export function ShareCardButton({ tiles, rideName, score, stars }: { tiles: numb
           <Text style={styles.foot}>{`${quick} QUICK BONKS`}</Text>
           <Text style={styles.brand}>THEME PARK SHARK</Text>
         </View>
+        </StoryShareFrame>
       </View>
     </View>
   );
@@ -94,12 +94,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff', borderWidth: 3, borderColor: NAVY, borderBottomWidth: 6,
   },
   buttonText: { fontFamily: 'Shark', fontSize: 20, color: NAVY },
-  offscreen: { position: 'absolute', left: -4000, top: 0 },
   card: {
-    width: 360, padding: 20, borderRadius: 24, backgroundColor: CREAM, borderWidth: 4, borderColor: NAVY, alignItems: 'center',
+    width: 320, padding: 20, borderRadius: 24, backgroundColor: CREAM, borderWidth: 4, borderColor: NAVY, alignItems: 'center',
   },
   title: { fontFamily: 'Shark', fontSize: 30, color: NAVY },
-  ride: { fontFamily: 'Knockout', fontSize: 16, color: '#0768b9', marginTop: 2 },
   score: { fontFamily: 'Shark', fontSize: 44, color: NAVY, marginTop: 6 },
   stars: { flexDirection: 'row', marginTop: 4, marginBottom: 10 },
   star: { width: 22, height: 22, borderRadius: 11, marginHorizontal: 4, borderWidth: 3, borderColor: NAVY, backgroundColor: '#ffffff' },

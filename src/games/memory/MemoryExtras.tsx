@@ -11,13 +11,12 @@
  *
  * Bright surfaces only: cream and white sheets, blue ink, gold actions. No emoji.
  */
-import { shareFileExternal } from '../../services/external';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
-import { captureRef } from 'react-native-view-shot';
 import Svg, { Path } from 'react-native-svg';
-import * as Sharing from 'expo-sharing';
+import { captureFlex, openShareSheet } from '../../share/capture';
+import { OFFSCREEN, StoryShareFrame } from '../../share/StoryShareFrame';
 import { GameAudio, Haptic } from '../../gamekit';
 import apiClient from '../../api/client';
 import getFriends from '../../api/endpoints/me/friends';
@@ -216,14 +215,15 @@ export function ShareCard({ daily }: { daily: DailySummary }) {
 
 /** The back of the results card: the share grid, SHARE NOW and BACK (6.10). Shared only on the tap. */
 export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () => void }) {
-  const ref = useRef<View>(null);
+  const storyRef = useRef<View>(null);
   const [busy, setBusy] = useState(false);
   const share = async () => {
     if (busy) return;
     setBusy(true);
     try {
-      const uri = await captureRef(ref, { format: 'png', quality: 1, result: 'tmpfile' });
-      if (await Sharing.isAvailableAsync()) await shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: 'Share your Daily' });
+      // Story size (1080x1920) with the TPS link and a QR; the grid never shows the cards.
+      const uri = await captureFlex(storyRef, 'story');
+      await openShareSheet(uri);
     } catch {
       // The share sheet was dismissed or view-shot failed: nothing is sent.
     } finally {
@@ -232,8 +232,15 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
   };
   return (
     <View style={{ alignItems: 'center', alignSelf: 'stretch' }}>
-      <View ref={ref} collapsable={false} style={{ backgroundColor: '#ffffff', borderRadius: 18 }}>
+      <View style={{ backgroundColor: '#ffffff', borderRadius: 18 }}>
         <ShareCard daily={daily} />
+      </View>
+      <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <StoryShareFrame ref={storyRef} kicker="MY MEMORY MATCH DAILY" cta="Play today's deck with me!" campaign="memory">
+          <View style={{ backgroundColor: '#ffffff', borderRadius: 18 }}>
+            <ShareCard daily={daily} />
+          </View>
+        </StoryShareFrame>
       </View>
       <Text style={styles.sheetHint}>The picture shows how you did. It never shows the cards.</Text>
       <Pressable style={styles.bigBtn} onPress={share} accessibilityRole="button">

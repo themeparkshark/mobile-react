@@ -11,9 +11,7 @@ import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import SharkReactionIcon, { reactionLabel } from './SharkReactionIcon';
 import { gameAlert } from '../../ui';
 import { captureFlex, openShareSheet } from '../../share/capture';
-import { FLEX_SIZE } from '../../share/formats';
-import { SHARE_LINK_DISPLAY } from '../../share/link';
-import { QR_BY_CAMPAIGN } from '../../share/campaignQr';
+import { OFFSCREEN, StoryShareFrame } from '../../share/StoryShareFrame';
 
 interface ShareableRideCardProps {
   ride: PlayerRideType;
@@ -97,26 +95,6 @@ const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = Reac
 });
 CardContent.displayName = 'CardContent';
 
-/**
- * The picture that gets shared: story size (9:16, saved at 1080x1920), the same card,
- * and the TPS link with a QR that opens the app's download page. Kid safety: no typed
- * note and no player name, only the ride, the stars and the shark's reaction.
- */
-const StoryFrame = React.memo(React.forwardRef<View, { ride: PlayerRideType; rideCount?: number }>(({ ride, rideCount }, ref) => (
-  <View ref={ref} collapsable={false} style={storyStyles.frame}>
-    <LinearGradient colors={['#20AAE8', '#0B83C9', '#05346E']} style={StyleSheet.absoluteFill} />
-    <Text style={storyStyles.kicker}>MY RIDE MEMORY</Text>
-    <View style={storyStyles.cardSlot}><CardContent ride={ride} rideCount={rideCount} /></View>
-    <View style={storyStyles.footer}>
-      <View style={storyStyles.footerCopy}>
-        <Text style={storyStyles.cta}>Track your rides with me!</Text>
-        <Text style={storyStyles.link}>{SHARE_LINK_DISPLAY}</Text>
-      </View>
-      <Image source={QR_BY_CAMPAIGN.ride_log} style={storyStyles.qr} contentFit="contain" />
-    </View>
-  </View>
-)));
-StoryFrame.displayName = 'StoryFrame';
 
 const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, onShare, beforeShare }) => {
   const storyRef = useRef<View>(null);
@@ -184,8 +162,11 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
         <CardContent ride={ride} rideCount={confirmedCount} />
       </View>
       {/* Off screen: the story-size picture that gets shared. */}
-      <View style={storyStyles.offscreen} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <StoryFrame ref={storyRef} ride={ride} rideCount={confirmedCount} />
+      <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        {/* Story size with the link and QR. Kid safety: no typed note, no player name. */}
+        <StoryShareFrame ref={storyRef} kicker="MY RIDE MEMORY" cta="Track your rides with me!" campaign="ride_log">
+          <CardContent ride={ride} rideCount={confirmedCount} />
+        </StoryShareFrame>
       </View>
     </View>
   );
@@ -276,19 +257,6 @@ const cardStyles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Knockout',
   },
-});
-
-const storyStyles = StyleSheet.create({
-  offscreen: { position: 'absolute', left: -4000, top: 0 },
-  frame: { ...FLEX_SIZE.story, overflow: 'hidden', paddingHorizontal: 20, paddingTop: 70, paddingBottom: 56, justifyContent: 'space-between' },
-  kicker: { color: '#FFF0A6', fontSize: 22, fontFamily: 'Shark', textAlign: 'center', letterSpacing: 1,
-    textShadowColor: 'rgba(0,45,100,0.45)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  cardSlot: { width: '100%' },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(3,40,92,0.55)', borderRadius: 16, padding: 12 },
-  footerCopy: { flex: 1 },
-  cta: { color: '#FFCF3B', fontSize: 19, fontFamily: 'Shark' },
-  link: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Knockout', marginTop: 3 },
-  qr: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#FFFFFF' },
 });
 
 export default ShareableRideCard;

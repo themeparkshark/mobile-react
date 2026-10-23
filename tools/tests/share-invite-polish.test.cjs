@@ -32,10 +32,30 @@ test('a shared ride card never prints the typed note, and is story size with the
   const card = src('src/components/RideTracker/ShareableRideCard.tsx');
   assert.doesNotMatch(card, /ride\.note/, 'the typed note stays in the log');
   assert.match(card, /captureFlex\(storyRef, 'story'\)/, 'captured at story size (1080x1920)');
-  assert.match(card, /\.\.\.FLEX_SIZE\.story/);
-  assert.match(card, /QR_BY_CAMPAIGN\.ride_log/);
-  assert.match(card, /\{SHARE_LINK_DISPLAY\}/);
+  assert.match(card, /<StoryShareFrame ref=\{storyRef\} kicker="MY RIDE MEMORY" cta="Track your rides with me!" campaign="ride_log">/);
   assert.doesNotMatch(card, /react-native-view-shot/);
+  const frame = src('src/share/StoryShareFrame.tsx');
+  assert.match(frame, /\.\.\.FLEX_SIZE\.story/, '9:16');
+  assert.match(frame, /source=\{QR_BY_CAMPAIGN\[campaign\]\}/);
+  assert.match(frame, /\{SHARE_LINK_DISPLAY\}/);
+});
+
+test('Whack and Memory results share a story-size picture with the link and QR, and no ride name', () => {
+  const whack = src('src/games/whack/ui/ShareCard.tsx');
+  assert.match(whack, /captureFlex\(ref, 'story'\);\s*await openShareSheet\(uri\);/);
+  assert.match(whack, /campaign="whack"/);
+  assert.doesNotMatch(whack, /\{rideName/, 'the ride name never goes on the picture');
+  const { shareText } = loadTs('src/games/whack/ui/ShareCard.tsx', {
+    react: { useCallback: f => f, useRef: v => ({ current: v }), useState: v => [v, () => {}] },
+    'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; } },
+    'react-native': { StyleSheet: { create: s => s }, Text: 'Text', TouchableOpacity: 'TouchableOpacity', View: 'View' },
+    '../../../share/capture': {}, '../../../share/StoryShareFrame': {},
+  });
+  assert.equal(shareText('Space Mountain', 1200, 2), 'I scored 1,200 in Whack-a-Shark. 2 of 3 stars. Can you beat it?');
+  const memory = src('src/games/memory/MemoryExtras.tsx');
+  assert.match(memory, /captureFlex\(storyRef, 'story'\);\s*await openShareSheet\(uri\);/);
+  assert.match(memory, /campaign="memory"/);
+  for (const code of [whack, memory]) assert.doesNotMatch(code, /shareFileExternal|captureRef/, 'one share path: gate, then the share sheet');
 });
 
 test('the crew card names sharks by seat, prints no date, and carries the link and QR', () => {
