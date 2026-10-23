@@ -12,7 +12,6 @@
 import type { ParamListBase } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FlashList } from '@shopify/flash-list';
-import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
@@ -25,6 +24,7 @@ import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import { isTeam, TEAMS } from '../constants/teams';
+import TeamBadge from '../components/TeamBadge';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import * as Haptics from '../helpers/haptics';
@@ -136,7 +136,7 @@ function PostHeader({ thread, onMenu, onEdit }: { readonly thread: ThreadType; r
             <Text style={styles.postTime}>{timeAgo(thread.created_at)}</Text>
             {team && (
               <View style={[styles.teamFlag, { borderColor: team.color, backgroundColor: `${team.color}22` }]}>
-                <Image source={team.badge} style={{ width: 16, height: 16 }} contentFit="contain" />
+                <TeamBadge team={team.id} size={16} />
                 <Text style={styles.teamFlagText}>{team.name}</Text>
               </View>
             )}

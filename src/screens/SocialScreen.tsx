@@ -21,7 +21,8 @@ import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
-import { isTeam, TEAMS } from '../constants/teams';
+import { isTeam, TEAMS, type TeamId } from '../constants/teams';
+import TeamBadge from '../components/TeamBadge';
 import { outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -219,11 +220,11 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     return [...(fresh ? [fresh] : []), ...pinned, ...threads.filter((item) => !seen.has(item.id))];
   }, [pinned, threads, freshId]);
 
-  const tabs: { key: FeedTab; label: string; icon?: 'streak' | 'sparkle' | 'shark'; badge?: number }[] = [
+  const tabs: { key: FeedTab; label: string; icon?: 'streak' | 'sparkle' | 'shark'; badge?: TeamId }[] = [
     { key: 'hottest', label: 'Hot', icon: 'streak' },
     { key: 'latest', label: 'New', icon: 'sparkle' },
     { key: 'friends', label: 'Friends', icon: 'shark' },
-    ...(team ? [{ key: 'team' as FeedTab, label: 'Team', badge: team.badge }] : []),
+    ...(team ? [{ key: 'team' as FeedTab, label: 'Team', badge: team.id }] : []),
   ];
 
   // The header only changes with the player, the tab or the team: a chest tap or the sheet never rebuilds it.
@@ -255,7 +256,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
               haptic="light"
             >
               {item.badge ? (
-                <Image source={item.badge} style={{ width: 22, height: 22 }} contentFit="contain" />
+                <TeamBadge team={item.badge} size={22} />
               ) : item.icon ? (
                 <GameIcon name={item.icon} size={22} />
               ) : null}

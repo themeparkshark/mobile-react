@@ -11,6 +11,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { goalWord, openableKeys, ordinal, teamPlace } from '../../services/liveEvents/model';
 import { BRAND, GameIcon } from '../../ui';
 import { eventArt } from './eventArt';
+import TeamBadge from '../TeamBadge';
 
 const KEY = (id: number) => `liveEvent.recap.${id}`;
 
@@ -64,7 +65,7 @@ function EventRecapCard({ event, visible, onClose, onOpenChests }: {
             )}
           </View>
           {teamLine && event.me.team && (
-            <View style={styles.team}><Image source={TEAMS[event.me.team].badge} style={styles.crest} contentFit="contain" /><Text style={styles.teamText}>{teamLine}</Text></View>
+            <View style={styles.team}><TeamBadge team={event.me.team} style={styles.crest} /><Text style={styles.teamText}>{teamLine}</Text></View>
           )}
           <Pressable accessibilityRole="button" onPress={waiting ? onOpenChests : onClose} style={({ pressed }) => [styles.button, pressed && { transform: [{ scale: 0.96 }] }]}>
             <Text style={styles.buttonText}>{waiting ? (waiting === 1 ? 'OPEN MY CHEST' : `OPEN ${waiting} CHESTS`) : 'NICE!'}</Text>

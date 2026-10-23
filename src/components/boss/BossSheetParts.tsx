@@ -7,6 +7,7 @@ import { TEAM_ORDER, TEAMS, teamShortName } from '../../constants/teams';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
 import { CountUpText } from '../../gamekit/fx/CountUpText';
+import TeamBadge from '../TeamBadge';
 
 /**
  * The shared HP bar. When HP drops the red fill snaps down and a pale "damage
@@ -65,7 +66,7 @@ export function TeamDamage({ raid }: { readonly raid: BossRaid }) {
       const leads = top > 0 && raid.teams[team] === top;
       return <View key={team} style={parts.teamRow}>
         <View style={[parts.teamFlag, { backgroundColor: TEAMS[team].color }]}>
-          <Image source={TEAMS[team].badge} style={parts.teamBadge} contentFit="contain" />
+          <TeamBadge team={team} style={parts.teamBadge} />
           {leads && <View style={parts.teamCrown}><GameIcon name="crown" size={16} /></View>}
         </View>
         <Text style={parts.teamName} numberOfLines={1}>{teamShortName(team, raid.team_names)}</Text>

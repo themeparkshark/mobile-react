@@ -16,15 +16,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { getLiveParks } from '../../api/endpoints/me/livePark';
 import { joinTeam } from '../../api/endpoints/gym-battle';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
+import TeamBadge from '../../components/TeamBadge';
 import { GameIcon } from '../../ui';
 import { QUESTION_BANK } from './teamQuiz';
 
 const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
-const BIG_BADGE: Record<TeamId, number> = {
-  mouse: require('../../../assets/images/team-mouse-badge.png'),
-  globe: require('../../../assets/images/team-globe-badge.png'),
-  shark: require('../../../assets/images/team-shark-badge.png'),
-};
 const VIBE: Record<TeamId, { tag: string; line: string }> = {
   mouse: { tag: 'THE PLANNERS', line: 'Rope drop, perfect routes, every ride in order.' },
   globe: { tag: 'THE EXPLORERS', line: 'Every land, every snack, every hidden detail.' },
@@ -167,7 +163,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
           <View style={s.page}>
             {suggested === team && <Animated.Text entering={FadeInDown} style={s.finnSays}>Finn thinks you’re a…</Animated.Text>}
             <Animated.View entering={ZoomIn.springify().damping(11)}>
-              <Image source={BIG_BADGE[team]} style={s.bigBadge} contentFit="contain" />
+              <TeamBadge team={team} kind="big" size={190} />
             </Animated.View>
             <Text style={[s.teamName, { color: TEAMS[team].color }]}>{teamName(team).toUpperCase()}</Text>
             <Text style={s.tag}>{VIBE[team].tag}</Text>
@@ -199,7 +195,7 @@ function TeamCard({ team, held, leader, underdog, onPress }: {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${teamName(team)}. ${VIBE[team].line}`}
       style={({ pressed }) => [s.card, { borderColor: TEAMS[team].color }, pressed && s.cardPressed]}>
-      <Image source={BIG_BADGE[team]} style={s.cardBadge} contentFit="contain" />
+      <TeamBadge team={team} kind="big" size={76} />
       <View style={{ flex: 1 }}>
         <Text style={[s.cardName, { color: TEAMS[team].color }]}>{teamName(team)}</Text>
         <Text style={s.cardTag}>{VIBE[team].tag}</Text>
@@ -231,7 +227,7 @@ function Welcome({ team, onGo }: { team: TeamId; onGo: () => void }) {
       <View style={s.welcomeStage}>
         <Animated.View style={[s.ring, { backgroundColor: TEAMS[team].color }, ring]} />
         <Animated.View style={badge}>
-          <Image source={BIG_BADGE[team]} style={s.welcomeBadge} contentFit="contain" />
+          <TeamBadge team={team} kind="big" size={220} />
         </Animated.View>
       </View>
       <Animated.Text entering={FadeInUp.delay(300)} style={[s.welcomeName, { color: TEAMS[team].color }]}>
@@ -264,7 +260,6 @@ const s = StyleSheet.create({
   card: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 22, borderWidth: 4,
     padding: 12, shadowColor: '#021e45', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
   cardPressed: { transform: [{ scale: 0.97 }] },
-  cardBadge: { width: 76, height: 76 },
   cardName: { fontFamily: 'Shark', fontSize: 24 },
   cardTag: { fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1.2, color: '#64748b' },
   cardLine: { fontFamily: 'Knockout', fontSize: 15, color: '#1e3a5f', marginTop: 2 },
@@ -284,7 +279,6 @@ const s = StyleSheet.create({
   answerText: { fontFamily: 'Knockout', fontSize: 18, color: '#09268f', textAlign: 'center' },
   back: { fontFamily: 'Knockout', fontSize: 15, color: '#cdeaff', marginTop: 16 },
   finnSays: { fontFamily: 'Shark', fontSize: 20, color: '#ffcf3b', marginBottom: 4 },
-  bigBadge: { width: 190, height: 190 },
   teamName: { fontFamily: 'Shark', fontSize: 40, marginTop: 4, textShadowColor: '#021e45', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   tag: { fontFamily: 'Knockout', fontSize: 14, letterSpacing: 2, color: '#cdeaff' },
   line: { fontFamily: 'Knockout', fontSize: 18, color: '#fff', textAlign: 'center', marginTop: 8, lineHeight: 23, paddingHorizontal: 8 },
@@ -296,6 +290,5 @@ const s = StyleSheet.create({
   welcomeKicker: { fontFamily: 'Shark', fontSize: 22, color: '#fff' },
   welcomeStage: { width: 260, height: 260, alignItems: 'center', justifyContent: 'center' },
   ring: { position: 'absolute', width: 240, height: 240, borderRadius: 120 },
-  welcomeBadge: { width: 220, height: 220 },
   welcomeName: { fontFamily: 'Shark', fontSize: 42, textShadowColor: '#021e45', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
 });

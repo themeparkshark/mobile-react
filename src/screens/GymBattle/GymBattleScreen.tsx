@@ -23,6 +23,7 @@ import PlaceCoinModal from '../../components/GymBattle/PlaceCoinModal';
 import DefendMiniGameModal from '../../components/GymBattle/DefendMiniGameModal';
 import { battleHUDEvents } from '../../components/GymBattle/battleHUDEvents';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
+import TeamBadge from '../../components/TeamBadge';
 import { GameIcon } from '../../ui';
 import useMatchLink from '../../hooks/useMatchLink';
 import MatchLinkBanner from '../../components/match/MatchLinkBanner';
@@ -30,12 +31,6 @@ import { friendlyActionError, isLinkFailure } from '../../services/match/matchLi
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-// Pillar images
-const PILLAR_IMAGES = {
-  mouse: require('../../../assets/images/pillar-mouse.png'),
-  globe: require('../../../assets/images/pillar-globe.png'),
-  shark: require('../../../assets/images/pillar-shark.png'),
-};
 
 // Team colours and names come from the one team table (constants/teams).
 const TEAM_COLORS: Record<TeamId, string> = { mouse: TEAMS.mouse.color, globe: TEAMS.globe.color, shark: TEAMS.shark.color };
@@ -245,11 +240,7 @@ const AnimatedPillar = ({
         )}
         
         {/* Pillar image */}
-        <Image
-          source={PILLAR_IMAGES[team]}
-          style={styles.pillarImage}
-          contentFit="contain"
-        />
+        <TeamBadge team={team} kind="pillar" style={styles.pillarImage} />
 
         {/* Winner crown/sparkles */}
         {isWinner && (

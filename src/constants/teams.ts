@@ -10,12 +10,13 @@ export type TeamId = 'mouse' | 'globe' | 'shark';
  * park brands, so players see the shield colors instead: Team Gold and Team
  * Green. The ids stay 'mouse' and 'globe' (the server and saved data use them).
  * New badge art for both is Dustin's call (his GPT Image pipeline from Alex's
- * references); until then the shields keep their colors, which match the names.
+ * references); until then components/TeamBadge covers the old center with a
+ * plain star (Gold) or compass (Green). Draw `badge` only through TeamBadge.
  */
-export const TEAMS: Record<TeamId, { name: string; color: string; badge: number }> = {
-  mouse: { name: 'Team Gold', color: '#F59E0B', badge: require('../../assets/images/teams/mouse-small.png') },
-  globe: { name: 'Team Green', color: '#22C55E', badge: require('../../assets/images/teams/globe-small.png') },
-  shark: { name: 'Team Shark', color: '#3B82F6', badge: require('../../assets/images/teams/shark-small.png') },
+export const TEAMS: Record<TeamId, { id: TeamId; name: string; color: string; badge: number }> = {
+  mouse: { id: 'mouse', name: 'Team Gold', color: '#F59E0B', badge: require('../../assets/images/teams/mouse-small.png') },
+  globe: { id: 'globe', name: 'Team Green', color: '#22C55E', badge: require('../../assets/images/teams/globe-small.png') },
+  shark: { id: 'shark', name: 'Team Shark', color: '#3B82F6', badge: require('../../assets/images/teams/shark-small.png') },
 };
 
 export const TEAM_ORDER: readonly TeamId[] = ['mouse', 'globe', 'shark'];

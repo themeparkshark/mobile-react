@@ -5,6 +5,7 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { GameIcon } from '../../ui';
+import TeamBadge from '../TeamBadge';
 
 /**
  * A held ride always wears a flag. Only an exact confirmed flip gets a finite
@@ -53,7 +54,7 @@ export default function RideTeamFlag({ team, contested = false, raiseKey, held =
     <View style={[styles.foot, { width: k(9), height: k(4), borderRadius: k(2) }]} />
     <Animated.View style={[styles.cloth, { top: k(5), left: k(5), width: k(25), height: k(22), borderTopRightRadius: k(7),
       borderBottomRightRadius: k(7), borderWidth: Math.max(1.5, k(1.2)), backgroundColor: TEAMS[team].color }, cloth]}>
-      <Image source={TEAMS[team].badge} style={{ width: k(21), height: k(19) }} contentFit="contain" />
+      <TeamBadge team={team} style={{ width: k(21), height: k(19) }} />
     </Animated.View>
     {contested && <View style={styles.contested}><GameIcon name="swords" size={k(15)} /></View>}
     {held && raiseKey && <View style={styles.held}><Text style={styles.heldText}>HELD!</Text></View>}
