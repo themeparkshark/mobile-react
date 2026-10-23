@@ -296,7 +296,7 @@ test("a stranger's stats render without null balances: Keys and Shark Coins tile
   const zl = []; (function walk(x) { if (!x || typeof x !== 'object') return; if (Array.isArray(x)) return x.forEach(walk);
     if (typeof x.type === 'function') zl.push(x.props.label); walk(x.props?.children); })(zeroed.tree);
   assert.deepEqual(zl, ['Ride Coins', 'Ride Wins', 'Total XP'], 'no balances or park count for strangers');
-  assert.match(read('src/screens/PlayerScreen.tsx'), /<Stats player=\{currentPlayer\} hideBalances=\{!isFriend\} \/>/);
+  assert.match(read('src/screens/PlayerScreen.tsx'), /<Stats player=\{currentPlayer\} hideBalances=\{!isFriend\} rideCoins=\{rideCoinTotal\(parks\)\} \/>/);
   // The signed-in player still sees all six.
   const own = runtime('src/components/Stats.tsx', statsImports, { player: { ...stranger, keys: 0, coins: 1840, experience: 2405 } });
   let n = 0; (function walk(x) { if (!x || typeof x !== 'object') return; if (Array.isArray(x)) return x.forEach(walk);

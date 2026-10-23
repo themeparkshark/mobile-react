@@ -37,6 +37,7 @@ import { Lanyard } from './Lanyard';
 import { MysteryCard, setBankedFrom } from './MysteryCard';
 import { BOX_ART, boxTone, PIN_ART, PinTile, type BoxTone } from './PinArt';
 import { ParkSetCard } from './ParkSetCard';
+import { lanyardCountLabel, lanyardEmptyHint } from '../../components/profile/profileCounts';
 import {
   coinsShort, goldenShort, deviceRegion, freeFromLabel, initialTab, myPins, mysteryShelf, newRequestId, PINS_COPY, toggleLanyard,
   type MysterySeries, type ParkSet, type PinHome, type PinRow, type Pull,
@@ -376,7 +377,7 @@ export default function PinsScreen() {
               onRefresh={async () => { setRefreshing(true); await load(true); setRefreshing(false); }} />}>
             <Animated.View entering={still ? undefined : FadeIn.duration(220)} style={styles.hero}>
               <View style={styles.heroTop}>
-                <Text maxFontSizeMultiplier={1.3} style={styles.heroTitle}>{PINS_COPY.lanyard} <Text style={styles.heroCount}>{home.counts.pins} pins</Text></Text>
+                <Text maxFontSizeMultiplier={1.3} style={styles.heroTitle}>{PINS_COPY.lanyard} <Text style={styles.heroCount}>{lanyardCountLabel(lanyardPins.length, home.counts.pins)}</Text></Text>
                 <Pressable onPress={() => { queueHaptic('tapLight', 1); RootNavigation.navigate('PinSwaps'); }} style={({ pressed }) => [styles.tradePill, pressed && { transform: [{ scale: 0.96 }] }]}
                   accessibilityRole="button" accessibilityLabel="Trade pins on the board" hitSlop={8}>
                   <Image source={PIN_ART.trade} style={{ width: 26, height: 26 }} contentFit="contain" />
@@ -396,6 +397,9 @@ export default function PinsScreen() {
                   setLanyardIds(ids);
                   void saveLanyard(ids).then(l => setHome(h => h && ({ ...h, lanyard: l }))).catch(() => undefined);
                 }} />
+              {lanyardPins.length === 0 && (
+                <Text maxFontSizeMultiplier={1.3} style={styles.emptyHint}>{lanyardEmptyHint(home.counts.pins)}</Text>
+              )}
               <View style={styles.counts}>
                 <View style={styles.countChip} accessible accessibilityLabel={`${home.counts.sets_done} of ${home.counts.sets} park sets done`}>
                   <Image source={PIN_ART.seal} style={{ width: 22, height: 22 }} contentFit="contain" />
@@ -558,6 +562,7 @@ const styles = StyleSheet.create({
   helpBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.blue, alignItems: 'center', justifyContent: 'center' },
   wearHint: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy, textAlign: 'center', paddingTop: 2 },
   scroll: { paddingHorizontal: SPACE.lg, paddingTop: SPACE.md, paddingBottom: 48, gap: SPACE.md },
+  emptyHint: { fontFamily: FONT.body, fontSize: 16, color: BRAND.white, textAlign: 'center', marginTop: -6, marginBottom: 4 },
   hero: { backgroundColor: 'rgba(5,52,110,0.32)', borderRadius: RADIUS.lg, borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)', paddingTop: SPACE.sm, paddingBottom: SPACE.md, overflow: 'hidden' },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACE.md },
   heroCount: { fontFamily: FONT.body, fontSize: 17, color: '#e2f6ff', textShadowRadius: 0 },

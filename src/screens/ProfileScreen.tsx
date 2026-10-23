@@ -27,6 +27,7 @@ import FriendPlayer from '../components/FriendPlayer';
 import Heading from '../components/Heading';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
+import { rideCoinTotal } from '../components/profile/profileCounts';
 import ProfileShortcuts, { type ProfileShortcut } from '../components/profile/ProfileShortcuts';
 import { profileStores } from '../components/profile/profileStores';
 import { loadSecretShopFlag, secretShopFlagNow } from '../services/secretShopFlag';
@@ -609,7 +610,7 @@ export default function ProfileScreen() {
                 </Text>
               )}
               <Heading text={labels.your_statistics || 'Your statistics'} />
-              <Stats player={player} />
+              <Stats player={player} rideCoins={rideCoinTotal(parks)} />
               <Heading text={`${labels.your_friends || 'Your friends'} (${player.friends_count})`} />
               {/* Friends card */}
               <View

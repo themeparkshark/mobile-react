@@ -78,30 +78,32 @@ export default function VisitedParks({
                     paddingLeft: 16,
                   }}
                 >
+                  {/* Uppercase in code, not with textTransform: iOS measures the custom font's
+                      lowercase width and then cut "UNIVERSAL STUDIOS HOLLYWOOD" short. Two lines max. */}
                   <Text
+                    numberOfLines={2}
                     style={{
                       paddingBottom: 8,
                       fontFamily: 'Knockout',
-                      textTransform: 'uppercase',
                       fontSize: 16,
+                      lineHeight: 19,
                       color: '#174D76',
                     }}
                   >
-                    {park.name}
+                    {String(park.name ?? '').toUpperCase()}
                   </Text>
                   <Progress progress={progress} />
                   <Text
                     style={{
                       paddingTop: 8,
                       fontFamily: 'Knockout',
-                      textTransform: 'uppercase',
                       fontSize: 16,
                       color: '#46617A',
                     }}
                   >
-                    {rideCoinProgress
+                    {(rideCoinProgress
                       ? `${park.ride_coins_collected ?? 0}/${park.ride_coins_available} RIDE COINS`
-                      : vsprintf(labels.park_completion_rate || '%s%% complete', [park.completion_rate])}
+                      : vsprintf(labels.park_completion_rate || '%s%% complete', [park.completion_rate])).toUpperCase()}
                   </Text>
                 </View>
                 <View style={{ marginLeft: 8 }}><GameIcon name="arrow" size={28} /></View>
