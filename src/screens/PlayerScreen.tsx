@@ -12,7 +12,7 @@ import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
-import { rideCoinTotal } from '../components/profile/profileCounts';
+import { rideCoinTotal, visitedParkCount } from '../components/profile/profileCounts';
 import ProfileShortcuts, { type ProfileShortcut } from '../components/profile/ProfileShortcuts';
 import StatusBadges from '../components/profile/StatusBadges';
 import TitlePill from '../components/profile/TitlePill';
@@ -285,7 +285,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
               ) : (
                 <>
                   <Heading text="Statistics" />
-                  <Stats player={currentPlayer} hideBalances={!isFriend} rideCoins={rideCoinTotal(parks)} />
+                  <Stats player={currentPlayer} hideBalances={!isFriend} rideCoins={rideCoinTotal(parks)} parks={visitedParkCount(parks)} />
                 </>
               )}
               {/* Park history is for friends only; strangers see the shark, title, level and stats. */}

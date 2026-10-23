@@ -15,7 +15,17 @@ test('profile ride coins come from the same park rows the profile lists', () => 
   assert.equal(rideCoinTotal([]), null, 'no parks keeps the old count');
   assert.equal(rideCoinTotal([{ ride_coins_collected: null }]), null);
   assert.equal(rideCoinTotal([{ ride_coins_collected: 2.7 }, { ride_coins_collected: -4 }]), 2);
-  assert.match(read('src/screens/ProfileScreen.tsx'), /<Stats player=\{player\} rideCoins=\{rideCoinTotal\(parks\)\} \/>/);
+  assert.match(read('src/screens/ProfileScreen.tsx'), /<Stats player=\{player\} rideCoins=\{rideCoinTotal\(parks\)\}/);
+});
+
+test('the Parks tile counts the same rows as Your Parks, on Profile and on a friend', () => {
+  const { visitedParkCount } = loadTs('src/components/profile/profileCounts.ts');
+  const rows = [{ id: 8 }, { id: 7 }, { id: 13 }, { id: 1 }];
+  assert.equal(visitedParkCount(rows), rows.length);
+  assert.equal(visitedParkCount([]), null, 'not loaded yet keeps the player count');
+  assert.match(read('src/screens/ProfileScreen.tsx'), /<Stats player=\{player\} rideCoins=\{rideCoinTotal\(parks\)\} parks=\{visitedParkCount\(parks\)\} \/>/);
+  assert.match(read('src/screens/PlayerScreen.tsx'), /parks=\{visitedParkCount\(parks\)\}/);
+  assert.match(read('src/components/Stats.tsx'), /parks \?\? visibleCount\(player\.visited_parks_count\)/);
 });
 
 test('the lanyard count says how many pins are hanging, and an empty strap says what to do', () => {

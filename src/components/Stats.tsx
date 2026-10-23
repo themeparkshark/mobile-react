@@ -167,8 +167,10 @@ export function visibleCount(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export default function Stats({ player, hideBalances = false, rideCoins = null }: {
+export default function Stats({ player, hideBalances = false, rideCoins = null, parks = null }: {
   readonly player: PlayerType;
+  /** Parks counted from the Your Parks rows (one source with the park list); null keeps the player count. */
+  readonly parks?: number | null;
   /** Ride coins summed from the Your Parks rows (one source with the park list); null keeps the player count. */
   readonly rideCoins?: number | null;
   /** Another player who is not your friend: balances and park history are private (the kid-safety backend sends 0 or null). */
@@ -189,7 +191,7 @@ export default function Stats({ player, hideBalances = false, rideCoins = null }
     },
     {
       label: 'Parks',
-      value: hideBalances || limited ? null : visibleCount(player.visited_parks_count),
+      value: hideBalances || limited ? null : parks ?? visibleCount(player.visited_parks_count),
       iconIndex: 2,
     },
     {

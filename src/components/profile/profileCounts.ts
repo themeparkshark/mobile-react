@@ -23,6 +23,14 @@ export function rideCoinTotal(parks: readonly ParkRideCoins[] | null | undefined
   return any ? total : null;
 }
 
+/**
+ * The Parks tile counts the same Your Parks rows the profile lists under it, so the tile and
+ * the list always agree. Null while no rows are loaded (keep the player's own count).
+ */
+export function visitedParkCount(parks: readonly unknown[] | null | undefined): number | null {
+  return parks?.length ? parks.length : null;
+}
+
 /** "1 pin", "2 pins": kid-readable counts with the right plural. */
 export function countLabel(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
