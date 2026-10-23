@@ -149,7 +149,7 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
           </View>
           <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? [styles.done, compact && styles.doneCompact] : styles.btn, pressed && styles.down]}
             accessibilityRole="button" accessibilityLabel="Done">
-            <Text style={canRetry ? styles.doneText : styles.btnText}>{canRetry ? 'Done' : 'DONE'}</Text>
+            <Text style={canRetry ? styles.doneText : styles.btnText}>DONE</Text>
           </Pressable>
         </Animated.View>
       </Pressable>

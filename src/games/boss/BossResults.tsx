@@ -232,7 +232,7 @@ export function BossResults({ result, extras, reducedMotion, claim, rematch }: P
           </Pressable>
         ) : null}
         <Pressable accessibilityRole="button" onPress={claim} style={[styles.btn, styles.contBtn]}>
-          <Text style={styles.contText}>{rematch ? 'Done' : 'Continue'}</Text>
+          <Text style={styles.contText}>{rematch ? 'DONE' : 'CONTINUE'}</Text>
         </Pressable>
       </View>
     </Animated.View>
