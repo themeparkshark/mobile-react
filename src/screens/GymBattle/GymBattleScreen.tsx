@@ -820,9 +820,10 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             </BlurView>
           </View>
           
-          <TouchableOpacity style={styles.backButtonAbsolute} onPress={handleGoBack}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><GameIcon name="back" size={20} /><Text style={styles.backButtonText}>BACK</Text></View>
-          </TouchableOpacity>
+          {/* The game's own button family (was a flat blue bar under the yellow Pick your team). */}
+          <View style={styles.backButtonAbsolute}>
+            <GameButton label="Back" icon="back" variant="secondary" onPress={handleGoBack} />
+          </View>
         </ImageBackground>
       </Animated.View>
     );
@@ -839,9 +840,9 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             <View style={styles.linkSlot}>
               <MatchLinkBanner phase={gymLink.phase} onRetry={gymLink.retryNow} onLeave={handleGoBack} leaveLabel="Leave arena" />
             </View>
-            {gymLink.phase !== 'lost' && <TouchableOpacity style={styles.goBackBtn} onPress={handleGoBack} accessibilityRole="button">
-              <Text style={styles.goBackText}>GO BACK</Text>
-            </TouchableOpacity>}
+            {gymLink.phase !== 'lost' && <View style={styles.goBackBtn}>
+              <GameButton label="Go back" icon="back" variant="secondary" onPress={handleGoBack} />
+            </View>}
           </View>
         </ImageBackground>
       </Animated.View>
@@ -1328,15 +1329,8 @@ const styles = StyleSheet.create({
   },
   goBackBtn: {
     marginTop: 24,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 12,
-    backgroundColor: 'rgba(5, 70, 143, 0.9)',
-  },
-  goBackText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
+    alignSelf: 'stretch',
+    alignItems: 'center',
   },
   // Below the three pillars and above BACK, drawn on top of everything: the pillars used to
   // cover the card's title, words and button (they have their own zIndex; this card had none).
@@ -1374,33 +1368,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
   },
-  pickTeamButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  pickTeamGradient: {
-    paddingHorizontal: 36,
-    paddingVertical: 18,
-    backgroundColor: '#FBBF24',
-  },
-  pickTeamText: {
-    color: '#0768b9',
-    fontWeight: '900',
-    fontSize: 18,
-  },
   backButtonAbsolute: {
     position: 'absolute',
     bottom: 40,
     left: 20,
     right: 20,
-    backgroundColor: 'rgba(5, 70, 143, 0.9)',
-    paddingVertical: 14,
-    borderRadius: 12,
     alignItems: 'center',
-  },
-  backButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
   },
 });
