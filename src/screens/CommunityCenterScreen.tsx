@@ -83,6 +83,15 @@ const LEAVE_GIFT_LEFT = Math.round(SCREEN_WIDTH * 0.678);
 /** The gentle pulse stays small so the button never grows past the screen edge. */
 const LEAVE_GIFT_PULSE = 1.05;
 const LEAVE_GIFT_CENTER_Y_RATIO = 0.77;
+/**
+ * The art is sized to the screen width, so it is taller than every phone (20 pt on a 17 Pro,
+ * 167 pt on an iPhone SE). Buttons that must always be reachable sit on the screen, not on the
+ * art's hidden bottom: GO BACK keeps its spot above the screen bottom, LEAVE GIFT never drops
+ * below the bottom edge.
+ */
+const ART_OVERFLOW = Math.max(0, SCALED_HEIGHT - SCREEN_HEIGHT);
+const LEAVE_GIFT_TOP = Math.min(SCALED_HEIGHT * LEAVE_GIFT_CENTER_Y_RATIO - LEAVE_GIFT_H / 2,
+  SCREEN_HEIGHT - LEAVE_GIFT_H - 2);
 
 interface Gift {
   id: number;
@@ -424,7 +433,7 @@ export default function CommunityCenterScreen() {
     if (slotIndex === 'give') {
       // From Leave Gift button
       startX = LEAVE_GIFT_LEFT + LEAVE_GIFT_W / 2;
-      startY = SCALED_HEIGHT * LEAVE_GIFT_CENTER_Y_RATIO;
+      startY = LEAVE_GIFT_TOP + LEAVE_GIFT_H / 2;
     } else {
       // From gift slot
       const leftPositions = [0.11, 0.39, 0.67];
@@ -876,6 +885,7 @@ export default function CommunityCenterScreen() {
           style={[
             styles.goBackContainer,
             {
+              bottom: 80 + ART_OVERFLOW,
               transform: [{ scale: goBackScale }],
             },
           ]}
@@ -964,7 +974,7 @@ export default function CommunityCenterScreen() {
                 styles.leaveGiftButton,
                 {
                   left: LEAVE_GIFT_LEFT,
-                  top: SCALED_HEIGHT * LEAVE_GIFT_CENTER_Y_RATIO - LEAVE_GIFT_H / 2,
+                  top: LEAVE_GIFT_TOP,
                   transform: [
                     { scale: Animated.multiply(pulseAnim, leaveGiftScale) },
                   ],
@@ -991,7 +1001,7 @@ export default function CommunityCenterScreen() {
             
             {/* Cooldown message - live countdown */}
             {liveCooldown > 0 && (
-              <View style={styles.cooldownBadge}>
+              <View style={[styles.cooldownBadge, { bottom: 145 + ART_OVERFLOW }]}>
                 <GameIcon name="timer" size={20} />
                 <Text style={styles.cooldownText}>
                   {Math.floor(liveCooldown / 60)}:{(liveCooldown % 60).toString().padStart(2, '0')} until you can give again

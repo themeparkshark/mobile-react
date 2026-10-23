@@ -105,6 +105,10 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
   assert.match(cc, /LEAVE_GIFT_PULSE = 1\.05/);
   // Scale grows from the center: the right edge at the top of the pulse.
   assert.ok(0.678 + 0.31 + 0.31 * 0.05 / 2 < 1, 'even mid-pulse the button stays on screen');
+  // Short phones (iPhone SE): GO BACK and the cooldown note sit on the screen, not on the art's hidden bottom.
+  assert.match(cc, /bottom: 80 \+ ART_OVERFLOW/);
+  assert.match(cc, /bottom: 145 \+ ART_OVERFLOW/);
+  assert.match(cc, /SCREEN_HEIGHT - LEAVE_GIFT_H - 2\)/);
 });
 
 test('Stamp Book bookmark band is solid so the title never ghosts through', () => {
