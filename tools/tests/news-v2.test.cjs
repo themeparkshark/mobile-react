@@ -375,8 +375,10 @@ test('the reader never shows a grown-up story handed in as params.entry (round 3
   const reader = read('src/screens/ArticleScreen.tsx');
   assert.match(reader, /useState<NewsEntry\[\]>\(\(\) => kidReaderList\(params, getEntry, rememberEntries\)\)/);
   assert.doesNotMatch(reader, /params\.entry \? \[params\.entry\]/);
-  assert.match(reader, /isGrownUpStory\(params\.entry\) \|\| list\.length\) return;\s*sentOut\.current = true;\s*void openExternal\(params\.entry\.url\);/);
-  assert.match(reader, /if \(!entry\) navigation\.goBack\(\)/, 'an empty list closes the reader');
+  // Round 4: one effect, in order: close the reader, then open the gate after the transition (over News).
+  assert.match(reader, /if \(entry \|\| sentOut\.current\) return;\s*sentOut\.current = true;\s*const grownUpUrl = params\.entry && isGrownUpStory\(params\.entry\) \? params\.entry\.url : null;\s*navigation\.goBack\(\);\s*if \(grownUpUrl\) InteractionManager\.runAfterInteractions\(\(\) => \{ void openExternal\(grownUpUrl\); \}\);/,
+    'an empty list closes the reader, then the gate opens on top of News');
+  assert.equal((reader.match(/navigation\.goBack\(\)/g) ?? []).length, 2, 'the Back button and the empty-list close, nothing else');
 });
 
 test('kid filter keeps Disney Channel ZOMBIES stories (round 2)', () => {

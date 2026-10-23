@@ -66,13 +66,9 @@ export default function ArticleScreen({ route, navigation }: any) {
   // The list this reader swipes through: ids from News, entries from the cache.
   // A grown-up story never renders in the kids reader, however it arrives (ids, the cache or params.entry).
   const [list] = useState<NewsEntry[]>(() => kidReaderList(params, getEntry, rememberEntries));
-  // A grown-up story handed in directly goes out through the grown-up gate instead; the empty list then closes the reader.
+  // A grown-up story handed in directly leaves an empty list: the reader closes first, and only once
+  // the slide back to News is done does the grown-up gate open, on top of News (see the effect below).
   const sentOut = useRef(false);
-  useEffect(() => {
-    if (sentOut.current || !params.entry || !isGrownUpStory(params.entry) || list.length) return;
-    sentOut.current = true;
-    void openExternal(params.entry.url);
-  }, [params.entry, list.length]);
   const startIndex = Math.max(0, list.findIndex(e => e.id === (params.id ?? params.entry?.id)));
   const [index, setIndex] = useState(startIndex);
   const pager = useRef<FlatList<NewsEntry>>(null);
@@ -219,8 +215,16 @@ export default function ArticleScreen({ route, navigation }: any) {
       onWebsite={openSite} handlers={handlers} />
   ), [width, index, settled, list, relatedAt, openStory, goTo, openSite, handlers]);
 
-  // Nothing to show (a stale link): straight back to News.
-  useEffect(() => { if (!entry) navigation.goBack(); }, [entry, navigation]);
+  // Nothing to show (a stale link or a grown-up story): straight back to News. A grown-up story then goes
+  // out through the grown-up gate after the transition, so the gate is never lost behind a closing screen
+  // and "No" leaves the kid on News.
+  useEffect(() => {
+    if (entry || sentOut.current) return;
+    sentOut.current = true;
+    const grownUpUrl = params.entry && isGrownUpStory(params.entry) ? params.entry.url : null;
+    navigation.goBack();
+    if (grownUpUrl) InteractionManager.runAfterInteractions(() => { void openExternal(grownUpUrl); });
+  }, [entry, navigation, params.entry]);
   if (!entry) return <View style={{ flex: 1, backgroundColor: BRAND.white }} />;
 
   const next = list[index + 1] ?? null;
