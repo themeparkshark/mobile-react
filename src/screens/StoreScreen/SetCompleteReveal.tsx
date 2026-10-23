@@ -108,6 +108,9 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   const pieces = useMemo(() => (set?.pieces ?? []).filter(p => pieceIds.includes(p.id)), [set, pieceIds.join(',')]);
   // Only this set's pieces, on the shark's own skin; the set's backdrop becomes the stage.
   const stage = useMemo(() => previewLook(player?.inventory, pieces.map(asWearable), 'base'), [player?.inventory?.skin_item?.id, pieces]);
+  // The share picture's shark: the kid's own look with this set put on (what WEAR IT ALL saves),
+  // so the card never shows yesterday's outfit under "My Complete Look".
+  const shareLook = useMemo(() => previewLook(player?.inventory, pieces.map(asWearable), 'player')?.look ?? null, [player?.inventory, pieces]);
 
   const stamp = useSharedValue(still ? 1 : 1.7);
   const stampOpacity = useSharedValue(still ? 1 : 0);
@@ -213,7 +216,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
         })
         : Promise.resolve();
       await Promise.all([reward.title ? equipShopTitle(reward.slug) : Promise.resolve(null), look]);
-      void refreshPlayer();
+      // Share stays off until the fresh look is back (savingNow), so the picture is the set as worn.
+      await Promise.resolve(refreshPlayer()).catch(() => undefined);
       settle(true);
     } catch { setAll(s => wearAllNext(s, 'fail')); settle(false); }
   };
@@ -264,7 +268,13 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
               </Animated.View>
             )}
           </View>
-          {reward.xp > 0 && (
+          {/* No level numbers from the server (older servers): just the XP, never an empty "LV" ring. */}
+          {reward.xp > 0 && !xp && (
+            <View style={styles.xpChip} accessible accessibilityLabel={`Plus ${reward.xp} XP`}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.xpCaption}>{`+${reward.xp} XP`}</Text>
+            </View>
+          )}
+          {reward.xp > 0 && !!xp && (
             <View style={styles.xpBlock} accessible accessibilityLabel={xp ? (xp.levelUp ? `Level up! Level ${xp.level}. Plus ${reward.xp} XP` : `Plus ${reward.xp} XP, level ${xp.level}`) : `Plus ${reward.xp} XP`}>
               <Animated.View style={[styles.levelBadge, levelStyle, xp?.levelUp && shownLevel === xp.level && styles.levelBadgeUp]}>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={styles.levelText}>{shownLevel ? `LV ${shownLevel}` : 'LV'}</Text>
@@ -290,7 +300,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
                 style={{ marginTop: 6 }}
                 payload={{ setName: reward.name, badgeUrl: pieces[0]?.icon_thumb_url ?? pieces[0]?.icon_url ?? HERO_ART.trophy,
                   artUrls: pieces.map(p => p.icon_thumb_url ?? p.icon_url).filter((u): u is string => !!u).slice(0, 5),
-                  found: set?.total ?? pieces.length, total: set?.total ?? pieces.length, title: reward.title ?? undefined, source: 'shop' }} />
+                  found: set?.total ?? pieces.length, total: set?.total ?? pieces.length, title: reward.title ?? undefined, source: 'shop',
+                  inventory: shareLook ?? undefined }} />
             )}
             {reward.title && all !== 'done' && (
               <Pressable onPress={() => void justTitle()} accessibilityRole="button" style={styles.textButton}>
@@ -358,6 +369,7 @@ const styles = StyleSheet.create({
     shadowColor: BRAND.goldLip, shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 4 } },
   plateText: { fontFamily: FONT.display, fontSize: 24, color: BRAND.navy },
   xpBlock: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '86%' },
+  xpChip: { alignSelf: 'center', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 4 },
   levelBadge: { width: 52, height: 52, borderRadius: 26, backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center' },
   levelBadgeUp: { backgroundColor: BRAND.gold },

@@ -148,6 +148,8 @@ const commas = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d)
 type Landed = {
   reward: SharkPassReward; title: string; caption?: string; itemId?: number; frameKey?: string; emblem?: boolean;
   group?: SharkPassReward[]; twin?: string; locked?: SharkPassReward[]; next?: Landed; gold?: boolean;
+  /** The wear choice on a shareable card: Share shows only after it, so bragging never skips "Wear it now". */
+  chosen?: 'saving' | 'worn' | 'kept' | 'failed';
 };
 /** The "with the Shark Pass you'd also have" row shows once per app visit, never on every claim. */
 let twinShown = false;
@@ -438,7 +440,15 @@ export default function SharkPassScreen() {
     return (ahead.length ? ahead : items).slice(0, 5);
   }, [tiers, premium]);
   const readyCount = tiers.filter(t => t.unlocked && !t.paid_claimed).length;
-  
+
+  // The reward card's wear button and Share: Share is the last reveal's, and a wearable piece asks to wear it first.
+  const landedCanShare = !!landed && !landed.twin && isWearable(landed.reward) && !landed.emblem && !landed.next;
+  const landedWear: { label: string; run: () => Promise<unknown> } | undefined = !landed ? undefined
+    : landed.frameKey ? { label: 'Wear it now', run: () => { const key = landed.frameKey!; return wearFrame(key).then(() => load()); } }
+    : landed.itemId ? { label: landed.reward.type === 'item' && landed.reward.slot === 'background' ? 'Set as my scene' : 'Wear it now',
+      run: () => { const id = landed.itemId!; return wearItem({ id }).then(() => refreshPlayer?.()); } }
+    : undefined;
+  const landedChoice = landedCanShare && !!landedWear;
 
   return (
     <View style={s.root}>
@@ -823,7 +833,8 @@ export default function SharkPassScreen() {
         </Pressable>
       )}
       {landed && (
-        <GotIt grants={{}} art="gift" title={landed.title} onDone={() => setLanded(landed.next ?? null)} picture={landed.emblem ? <Image source={EMBLEM} style={{ width: 180, height: 180 }} contentFit="contain" />
+        <GotIt grants={{}} art="gift" title={landed.title} onDone={landedChoice && !landed.chosen ? () => setLanded({ ...landed, chosen: 'kept', caption: 'It’s in your closet whenever you want it.' }) : () => setLanded(landed.next ?? null)}
+          doneLabel={landedChoice && !landed.chosen ? 'Keep my look' : landedChoice ? 'Done' : undefined} picture={landed.emblem ? <Image source={EMBLEM} style={{ width: 180, height: 180 }} contentFit="contain" />
             : landed.gold && landed.reward.type === 'item' && GOLD_ART[landed.reward.art] ? <Image source={GOLD_ART[landed.reward.art]} style={{ width: 180, height: 180 }} contentFit="contain" />
             : landed.group && landed.group.length > 1 ? (
               <View style={s.trio}>
@@ -842,22 +853,24 @@ export default function SharkPassScreen() {
           ) : undefined}
           // Show it off: the kid's shark wearing the new piece, the season and the step. No price, no "bought".
           // The last reveal in a chain only, so Share never skips a reward still waiting to show.
-          share={!landed.twin && isWearable(landed.reward) && !landed.emblem && !landed.next ? (
+          // A wearable piece asks first ("Wear it now" or "Keep my look"); Share shows only after that choice.
+          share={landedCanShare && isWearable(landed.reward) && (!landedWear || landed.chosen === 'worn' || landed.chosen === 'kept') ? (
             <FlexShareButton kind="find" surface="sharkpass" size="reveal" handoff={landedShare.handoff}
               payload={{ itemName: landed.reward.name, artUrl: (landed.reward.type === 'frame' ? FRAME_ART[landed.reward.art] : SEASON_ART[landed.reward.art]) ?? (landed.reward.type === 'item' ? landed.reward.icon_url : null) ?? EMBLEM,
                 rarity: 4, setName: season ? `${season.title}${step ? ` · Step ${step}` : ''}` : undefined }} />
           ) : undefined}
           caption={landed.caption ?? rewardWords(landed.reward)}
-          action={landed.frameKey ? { label: 'Wear it now', onPress: () => {
-            const key = landed.frameKey!;
+          action={landedChoice ? (landed.chosen ? undefined : { label: landedWear!.label, onPress: () => {
+            const l = landed;
+            setLanded({ ...l, chosen: 'saving', caption: 'Putting it on...' });
+            const same = (cur: Landed | null) => !!cur && cur.reward === l.reward;
+            // Wait for the fresh look, so the share picture shows the shark wearing it.
+            void landedWear!.run().then(() => setLanded(cur => same(cur) ? { ...cur!, chosen: 'worn', caption: l.reward.type === 'frame' ? 'Your frame shows on your profile now.' : 'Your shark is wearing it now!' } : cur))
+              .catch(() => setLanded(cur => same(cur) ? { ...cur!, chosen: 'failed', caption: 'That didn’t work. Put it on from your closet.' } : cur));
+          } }) : landedWear ? { label: landedWear.label, onPress: () => {
             setLanded(landed.next ?? null);
-            void wearFrame(key).then(() => load()).then(() => gameAlert('Looking sharp!', 'Your frame shows on your profile now.'))
-              .catch(() => gameAlert('That didn’t work', 'Try again from Your Frames on this screen.'));
-          } } : landed.itemId ? { label: landed.reward.type === 'item' && landed.reward.slot === 'background' ? 'Set as my scene' : 'Wear it now', onPress: () => {
-            const id = landed.itemId!;
-            setLanded(landed.next ?? null);
-            void wearItem({ id }).then(() => refreshPlayer?.()).then(() => gameAlert('Looking sharp!', 'Your shark is wearing it now. Everyone can see it.'))
-              .catch(() => gameAlert('That didn’t work', 'Find it in your closet and put it on there.'));
+            void landedWear.run().then(() => gameAlert('Looking sharp!', landed.frameKey ? 'Your frame shows on your profile now.' : 'Your shark is wearing it now. Everyone can see it.'))
+              .catch(() => gameAlert('That didn’t work', landed.frameKey ? 'Try again from Your Frames on this screen.' : 'Find it in your closet and put it on there.'));
           } } : undefined} />
       )}
     </View>
