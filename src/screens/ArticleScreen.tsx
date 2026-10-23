@@ -261,7 +261,7 @@ export default function ArticleScreen({ route, navigation }: any) {
         <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 18 }} />
       </Animated.View>
 
-      {/* Bottom bar: round Previous, and a Next card with the next story's photo and headline. */}
+      {/* Bottom bar: round Previous, and a Next card with the next story's headline. */}
       <View style={{ minHeight: BOTTOM_BAR + insets.bottom, paddingBottom: Math.max(insets.bottom, 8), paddingTop: 8, backgroundColor: BRAND.cream,
         borderTopWidth: 3, borderTopColor: 'rgba(5,52,110,0.14)', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 }}>
         {/* First story: no Previous at all (a greyed button looks broken). */}
@@ -275,8 +275,11 @@ export default function ArticleScreen({ route, navigation }: any) {
             lip={5} grow
         style={{ height: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 5, paddingRight: 8,
               backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold }}>
-            <Image source={next.featured_image_small || next.featured_image ? { uri: (next.featured_image_small || next.featured_image) as string } : undefined} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.sky }}
-              contentFit="cover" transition={120} />
+            {/* Our own shark, never a round crop of the next story's photo: a park photo cut into a circle
+                reads like an app character (a famous mouse face once sat here). */}
+            <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.sky, alignItems: 'center', justifyContent: 'center' }}>
+              <GameIcon name="shark" size={30} />
+            </View>
             <View style={{ flex: 1 }}>
               <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.goldLip }}>NEXT</Text>
               <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy }}>{plainText(next.title)}</Text>

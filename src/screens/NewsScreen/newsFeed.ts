@@ -16,6 +16,7 @@ import {
   entriesFromServer,
   entryFromWordPress,
   filterByKey,
+  kidSafe,
   mergeEntries,
   type NewsEntry,
   type NewsFilterKey,
@@ -46,6 +47,8 @@ export type NewsPage = {
   readonly entries: NewsEntry[];
   readonly hasMore: boolean;
   readonly source: 'server' | 'wordpress';
+  /** Stories the page held before the kid filter, so a page of only grown-up stories still pages on. */
+  readonly fetched?: number;
 };
 
 /** Dev only: EXPO_PUBLIC_NEWS_OFFLINE=1 makes every news request fail, to record the offline states. */
@@ -68,7 +71,7 @@ export async function loadSaved(): Promise<NewsEntry[]> {
   try {
     const raw = await AsyncStorage.getItem(FEED_KEY);
     const list = raw ? JSON.parse(raw) : null;
-    return Array.isArray(list) ? mergeEntries(list) : [];
+    return Array.isArray(list) ? kidSafe(mergeEntries(list)) : [];
   } catch {
     return [];
   }
@@ -158,6 +161,12 @@ async function fromServer(query: NewsQuery): Promise<NewsPage> {
  * WordPress otherwise (or when the server fails).
  */
 export async function fetchNewsPage(query: NewsQuery): Promise<NewsPage> {
+  const page = await fetchAnyPage(query);
+  // Every player sees News: grown-up stories (horror nights, bars) never reach the app's lists.
+  return { ...page, entries: kidSafe(page.entries), fetched: page.entries.length };
+}
+
+async function fetchAnyPage(query: NewsQuery): Promise<NewsPage> {
   if (DEV_SLOW && query.page === 1) await new Promise(resolve => setTimeout(resolve, 90000));
   const plain = query.filter === 'all' && !query.search && query.page === 1;
   if (plain || serverV2) {

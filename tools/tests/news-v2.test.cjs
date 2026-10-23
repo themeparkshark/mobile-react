@@ -278,3 +278,47 @@ test('game press never changes its footprint: the face gives up the visible lip,
   assert.match(src, /useAnimatedStyle\(\(\) => \(\{ transform: \[\{ translateY: down\.value \* drop \}\] \}\)\)/);
   assert.doesNotMatch(src, /marginBottom: down/);
 });
+
+test('kid filter: horror nights, bars and drinks never reach the News tab (Oct 23 2026)', () => {
+  const hide = [
+    'Halloween Horror Nights 2026 Opens at Universal Orlando', 'Howl-O-Scream San Diego Reveals Six Haunted Houses for 2026',
+    'Knott’s Scary Farm 2026 Tickets Now on Sale', 'Six Flags Magic Mountain Reveals 2026 Fright Fest',
+    'Universal Orlando Refreshes Its Guide to the Best Cocktails', 'Universal CityWalk Adds Wicked Fan Event and Traitors Bar',
+    'Disney’s Lakeshore Lodge Reveals Branch & Brush Lounge', '600 Block Speakeasy Returns to Universal CityWalk',
+    'Terror Tram Starring Art the Clown Announced', 'HHN 2026 Scare Zones Have Guest Triggers',
+  ];
+  for (const title of hide) assert.equal(model.isGrownUpStory({ ...entry(1, ''), title }), true, title);
+  const keep = [
+    'Mickey’s Not-So-Scary Halloween Party 2026 Merch Guide', 'Disney Wine & Dine Half Marathon Weekend 2026: What’s New',
+    'EPCOT International Food & Wine Festival Booths Revealed', 'New Mickey Premium Bar Flavor at Magic Kingdom',
+    'Twilight Zone Tower of Terror Gets a New Drop Sequence', 'Haunted Mansion Holiday Returns to Disneyland',
+    'Butterbeer Season Returns to Universal Orlando', 'Pixar Place Hotel Debuts Monsters, Inc. Halloween Wallpapers',
+    'Big Thunder Mountain Adds New Lap Bars',
+  ];
+  for (const title of keep) assert.equal(model.isGrownUpStory({ ...entry(2, ''), title }), false, title);
+  // Exact WordPress categories: Halloween Horror Nights (71) and Howl-O-Scream (74).
+  assert.equal(model.isGrownUpStory({ ...entry(3, ''), title: 'New lineup revealed', categories: [47, 56, 71] }), true);
+  assert.equal(model.isGrownUpStory({ ...entry(4, ''), title: 'Tickets on sale', categories: [59, 74] }), true);
+  // The opening lines count for horror events (a title that hides the event name).
+  assert.equal(model.isGrownUpStory({ ...entry(5, ''), title: 'Dead, Deader, Deadest 2026', content: '<p>Halloween Horror Nights at Universal Studios Hollywood adds a new house this fall.</p>' }), true);
+  // Every list path drops them.
+  assert.equal(model.matchesFilter({ ...entry(6, ''), title: 'Halloween Horror Nights adds a house' }, 'all'), false);
+  assert.equal(model.matchesFilter({ ...entry(6, ''), title: 'Halloween Horror Nights adds a house', categories: [56, 71] }, 'universal'), false);
+  assert.deepEqual([...model.kidSafe([{ ...entry(7, ''), title: 'HHN merch' }, entry(8, '')]).map(e => e.id)], [8]);
+  const related = model.relatedFor(entry(9, ''), [{ ...entry(10, ''), title: 'Universal Horror Unleashed adds a maze' }, entry(11, '')], 3);
+  assert.deepEqual([...related.map(e => e.id)], [11]);
+  assert.equal(model.NEWS_FILTERS.find(f => f.key === 'universal').parks.some(p => p.key === 'hhn'), false, 'no Horror Nights chip');
+  // A link inside a story to a grown-up story never opens in the kids reader.
+  const html = model.prepareArticleHtml('<p><a href="https://themeparkshark.com/2026/09/01/hhn-35-houses-revealed/">x</a> <a href="https://themeparkshark.com/2026/09/01/space-mountain-news/">y</a></p>');
+  assert.match(html, /class="out-link" href="https:\/\/themeparkshark\.com\/2026\/09\/01\/hhn-35/);
+  assert.match(html, /class="tps-link" href="https:\/\/themeparkshark\.com\/2026\/09\/01\/space-mountain/);
+  const feed = read('src/screens/NewsScreen/newsFeed.ts');
+  assert.match(feed, /entries: kidSafe\(page\.entries\)/, 'every fetched page is filtered');
+  assert.match(feed, /kidSafe\(mergeEntries\(list\)\)/, 'the saved copy is filtered too');
+});
+
+test('the Next pill shows our shark, never a round crop of the next story photo', () => {
+  const reader = read('src/screens/ArticleScreen.tsx');
+  assert.doesNotMatch(reader, /next\.featured_image/);
+  assert.match(reader, /<GameIcon name="shark" size=\{30\} \/>/);
+});

@@ -124,7 +124,6 @@ export const NEWS_FILTERS: readonly NewsFilter[] = [
       { key: 'uor', label: 'Orlando', ids: [56] },
       { key: 'ush', label: 'Hollywood', ids: [57] },
       { key: 'usj', label: 'Japan', ids: [58] },
-      { key: 'hhn', label: 'Halloween Horror Nights', ids: [71] },
       { key: 'ukr', label: 'Kids Resort', ids: [932] },
     ],
     words: /\b(universal|epic universe|citywalk|halloween horror nights|hhn|nintendo|minions?|illumination|islands of adventure|volcano bay|wizarding world|hogwarts)\b/i,
@@ -231,7 +230,60 @@ function labelOf(entry: NewsEntry): string | null {
   return key ? filterByKey(key).label : null;
 }
 
+/* ------------------------------------------------------- kid filter */
+
+/**
+ * Stories that are not for a 7-year-old's News tab: after-dark horror events
+ * (Halloween Horror Nights, Howl-O-Scream, Scary Farm, Fright Fest), bars and
+ * drinks, and scary headlines. Every player sees News, so these never reach
+ * the feed, search, Up next or More news. The website still has them.
+ * Categories are exact (WordPress ids, Oct 23 2026); words catch stories that
+ * arrive before their categories do.
+ */
+const GROWN_UP_CATEGORIES: ReadonlySet<number> = new Set([71, 74]);
+const words = (list: readonly string[]) => new RegExp(`\\b(?:${list.join('|')})(?![a-z])`, 'i');
+/** After-dark horror events: hidden when the title or the opening lines name one. */
+const HORROR_WORDS = words([
+  'halloween horror nights', 'horror nights', 'hhn', 'howl-o-scream', 'scary farm', 'fright ?fest', 'halloween haunt',
+  'haunted houses?', 'scare zones?', 'scareactors?', 'horror', 'slasher', 'chainsaw', 'terror tram', 'art the clown',
+  'killcea[ñn]era', 'dark nights',
+]);
+/** Bars, drinks and scary headlines: hidden when the title says so (a menu line with one drink is fine). */
+const GROWN_UP_TITLE_WORDS = words([
+  'bars?', 'pubs?', 'taverns?', 'lounges?', 'speakeasy', 'brewery', 'breweries', 'brewing', 'beers?', 'wines?', 'cocktails?',
+  'margaritas?', 'sangria', 'mimosas?', 'alcohol(?:ic)?', 'booze', 'boozy', 'tequila', 'vodka', 'whiske?y', 'bourbon', 'rum',
+  'happy hour', 'pub crawl', 'drink(?:ing)? around the world', '21\\+', 'adults? only',
+  'dies', 'died', 'killed', 'arrested', 'lawsuit', 'sued', 'shooting', 'stabbing', 'drowned', 'drowning', 'overdose',
+]);
+/** Kid-friendly names that hold a grown-up word: a Mickey ice cream bar, a lap bar, EPCOT Food & Wine. */
+const KID_SAFE_PHRASES = /\b(?:(?:mickey|minnie|ice[- ]cream|premium|candy|granola|chocolate|cookie|snack|salad|taco|nacho|waffle|cereal|dessert|sundae|grab|toddler|monkey|lap|safety|handle|restraint|over-the-shoulder) bars?|food (?:&|and|&amp;) wine|wine (?:&|and) dine|root beer|butterbeer|ginger beer|rum raisin|lounge chairs?|monsters,? inc\.?)/gi;
+
+const grownUpMemo = new WeakMap<NewsEntry, boolean>();
+export function isGrownUpStory(entry: NewsEntry): boolean {
+  let hit = grownUpMemo.get(entry);
+  if (hit === undefined) grownUpMemo.set(entry, (hit = grownUpStory(entry)));
+  return hit;
+}
+function grownUpStory(entry: NewsEntry): boolean {
+  if (entry.categories && entry.categories.some(id => GROWN_UP_CATEGORIES.has(id))) return true;
+  const title = plainText(entry.title).replace(KID_SAFE_PHRASES, ' ');
+  if (GROWN_UP_TITLE_WORDS.test(title) || HORROR_WORDS.test(title)) return true;
+  return HORROR_WORDS.test(dek(entry, 220).replace(KID_SAFE_PHRASES, ' '));
+}
+
+/** A themeparkshark.com link whose slug names a grown-up story ("hhn-35-houses-revealed"). */
+export function grownUpSlug(slug: string): boolean {
+  const text = slug.replace(/-/g, ' ').replace(KID_SAFE_PHRASES, ' ');
+  return GROWN_UP_TITLE_WORDS.test(text) || HORROR_WORDS.test(text);
+}
+
+/** Only the stories every player may see. */
+export function kidSafe(list: readonly NewsEntry[]): NewsEntry[] {
+  return list.filter(entry => !isGrownUpStory(entry));
+}
+
 export function matchesFilter(entry: NewsEntry, filter: NewsFilterKey, park: string | null = null): boolean {
+  if (isGrownUpStory(entry)) return false;
   // Top Stories is the park feed: screen stories live under Movies & TV.
   if (filter === 'all') return !isScreenStory(entry);
   const f = filterByKey(filter);
@@ -371,7 +423,9 @@ export function prepareArticleHtml(html: string | null | undefined): string {
   // Links say where they go before the tap: TPS stories open in the reader, the rest ask a grown-up.
   out = out.replace(/<a\b([^>]*)>/gi, (_m, attrs: string) => {
     const href = /href="([^"]*)"/i.exec(attrs)?.[1] ?? '';
-    const cls = tpsArticleSlug(href) ? 'tps-link' : 'out-link';
+    // A link to a grown-up story never opens in the kids reader: it is an outside link (a grown-up opens it).
+    const slug = tpsArticleSlug(href);
+    const cls = slug && !grownUpSlug(slug) ? 'tps-link' : 'out-link';
     return `<a class="${cls}"${attrs.replace(/\sclass="[^"]*"/gi, '')}>`;
   });
   // Empty embed shells left behind.
@@ -431,7 +485,7 @@ function stripEmpty(entry: NewsEntry): NewsEntry {
 /** Up to `n` other stories from the same park family, newest first, then any others. */
 export function relatedFor(entry: NewsEntry, list: readonly NewsEntry[], n = 3): NewsEntry[] {
   const key = filterOf(entry);
-  const others = list.filter(e => e.id !== entry.id);
+  const others = list.filter(e => e.id !== entry.id && !isGrownUpStory(e));
   const tag = parkLabel(entry);
   // Same park first (EPCOT with EPCOT), then the same family (Disney with Disney).
   const same = key ? others.filter(e => filterOf(e) === key).sort((a, b) => Number(parkLabel(b) === tag) - Number(parkLabel(a) === tag)) : [];
