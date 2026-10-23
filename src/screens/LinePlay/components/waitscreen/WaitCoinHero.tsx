@@ -2,12 +2,14 @@
  * WaitCoinHero: the body of the LinePlay wait screen (stream L2). The ride's
  * own coin sits center stage between two quiet stat columns:
  *
- *   42   MIN WAIT         (coin, filling)         12  SHARKS HERE
- *   23m  IN LINE                                  +3  PARTS
+ *   60   MIN WAIT         (coin, filling)         12  SHARKS HERE
+ *   23m  IN LINE          "2 of 4 Parts"
  *
- * Picture first for a 7-year-old: one wait number (the real-waits guess, else
- * the sign), one short word under each number, no second line of fine print.
- * The sign number and the guess both stay in the spoken label.
+ * Picture first for a 7-year-old: one wait number (the ride sign's, the one
+ * they can see at the line), one short word under each number, one Parts idea
+ * (the ring and its "2 of 4 Parts" chip; a new Part flies in as "+1 RIDE
+ * PART!" above), and no fine print until Details is tapped. The real-waits
+ * guess stays in the spoken label as "about 42".
  *
  * Everything here works offline: time in line runs on the phone clock, Parts
  * this wait come from the session, and the coin and wait ratio are the last
@@ -22,8 +24,7 @@ import { GameIcon } from '../../../../ui';
 import useReducedGameMotion from '../../../../hooks/useReducedGameMotion';
 import type { LineWaitScreenSummary } from '../../../../api/endpoints/me/inline-timer/types';
 import type { WaitSource } from '../../../../services/lineplay/LinePlaySession';
-import { inLineLabel, partsThisWait, sharksInLine, waitCoinProgress, waitEstimate, waitHeroLayout,
-  waitStamps } from '../../../../services/lineplay/waitScreen';
+import { inLineLabel, sharksInLine, waitCoinProgress, waitEstimate, waitHeroLayout } from '../../../../services/lineplay/waitScreen';
 import useWaitScreenCoin from './useWaitScreenCoin';
 import WaitCoinStage from './WaitCoinStage';
 import { previewWaitScreen, usePreviewStep, waitScreenPreviewEnabled } from './waitScreenPreview';
@@ -72,14 +73,14 @@ function Stat({ value, label, align, accessibilityLabel, icon }: {
 function WaitCoinHero(props: WaitCoinHeroProps) {
   const preview = waitScreenPreviewEnabled();
   const step = usePreviewStep(preview);
-  // Dev preview: a wait at a posted 60 that grows 10 minutes a step, with a filling Level 2 coin.
+  // Dev preview: a wait that grows 12 minutes a step, with a filling Level 2 coin. The sign time
+  // comes from the screen (PREVIEW_WAIT there), so this number and the card's details always agree.
   const p: WaitCoinHeroProps = preview ? { ...props, waitScreen: previewWaitScreen(step), creditedParts: 1 + Math.min(3, step),
-    elapsedSeconds: (20 + step * 12) * 60 + (props.elapsedSeconds % 60), plannedWaitMinutes: 60, waitSource: 'posted', playerEnergy: 120,
-    rewardsOn: true } : props;
+    elapsedSeconds: (20 + step * 12) * 60 + (props.elapsedSeconds % 60), playerEnergy: 120, rewardsOn: true } : props;
   return <WaitCoinHeroBody {...p} preview={preview} previewAutoLevel={preview && step >= 5} />;
 }
 
-function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, elapsedSeconds, plannedWaitMinutes, waitSource,
+function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, elapsedSeconds, plannedWaitMinutes, waitSource,
   playerEnergy, covered, rewardsOn, onLeveled, coinSize = 120, preview = false, previewAutoLevel = false }:
   WaitCoinHeroProps & { preview?: boolean; previewAutoLevel?: boolean }) {
   const appActive = useAppActive();
@@ -98,10 +99,6 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, e
   }), [wait.coin, wait.partsBanked, playerEnergy]);
   const estimate = waitEstimate({ postedMinutes: plannedWaitMinutes, waitSource, ratio: wait.waitRatio, elapsedSeconds });
   const sharks = sharksInLine(wait.inLineNow);
-  const earned = partsThisWait(creditedParts, bonusParts);
-  // The hour only changes the Night mark; read it once a minute, not per frame.
-  const minute = Math.floor(elapsedSeconds / 60);
-  const stamps = useMemo(() => waitStamps(elapsedSeconds, new Date().getHours()), [minute]);
 
   // One wait number, or nothing when the ride has no sign time (time in line still shows).
   const signStat = estimate.kidValue != null ? <Stat align="left" value={estimate.kidValue} label="MIN WAIT"
@@ -129,12 +126,10 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, e
         {inLineStat}
       </View>
       <WaitCoinStage size={coinSize} coin={wait.coin} owned={owned} progress={progress} partsBanked={wait.partsBanked}
-        stamps={stamps} active={active} reducedMotion={reducedMotion} onLevelUp={wait.levelUp} onLeveled={onLeveled}
+        active={active} reducedMotion={reducedMotion} onLevelUp={wait.levelUp} onLeveled={onLeveled}
         autoLevel={previewAutoLevel} />
       <View style={[styles.side, styles.sideRight]}>
-        {sharksStat ?? <View style={styles.statSpacer} />}
-        <Stat align="right" value={`+${earned}`} label="PARTS"
-          accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned this wait.`} icon="parts" />
+        {sharksStat}
       </View>
     </View>
   );
@@ -154,7 +149,6 @@ const styles = StyleSheet.create({
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   statLabel: { fontFamily: 'Knockout', fontSize: 13, color: '#cdeaff', letterSpacing: 0.4, marginTop: -1 },
   textRight: { textAlign: 'right' },
-  statSpacer: { height: 36 },
 });
 
 export default memo(WaitCoinHero);

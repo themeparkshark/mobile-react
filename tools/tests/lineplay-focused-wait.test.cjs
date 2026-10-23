@@ -1,6 +1,8 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { runtime } = require('./helpers/reward-hook-runtime.cjs');
+const { loadTs } = require('./helpers/ts-module.cjs');
+const waitScreen = loadTs('src/services/lineplay/waitScreen.ts');
 function wait(initial = {}) {
   let pauses = 0, arcades = 0;
   const app = runtime('src/screens/LinePlay/components/WaitCard.tsx', {
@@ -9,6 +11,8 @@ function wait(initial = {}) {
     '../../../helpers/hapticPatterns': { default: { collect() {} } },
     '../../../services/lineplay/partCountdown': { partCountdown: () => ({ remainingSeconds: 90, progressSeconds: 30, needsCheck: false, checking: false }) },
     'react-native-svg': { default: 'Svg', Circle: 'Circle' },
+    '../../../services/lineplay/waitScreen': waitScreen,
+    './waitscreen/WaitStampBadge': { default: 'WaitStampBadge' },
   }, { compact: true, rideName: 'Space Mountain', elapsedSeconds: 90, postedWaitMinutes: 35,
     waitSource: 'posted', entranceWaitMinutes: null, entranceWaitObservedAt: null, entranceWaitChangeMinutes: 0,
     paused: false, pauseReason: null, rewardTrackingAvailable: false, rewardUnavailable: false, lineRewardsReady: false,
@@ -25,6 +29,8 @@ test('focused queue status preserves pause, arcade and honest games-only details
   c.control('Show wait and reward details').props.onPress(); c.app.render();
   assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Ride Parts aren’t available at this ride right now.'));
   assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Playing 1:30 · posted wait 35m'));
+  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'The wait time is from the ride sign when you got in line.'));
+  assert.ok(!c.app.find(node => node.type === 'Text' && /No posted wait|no sign time/.test(String(node.props.children))));
   c.app.change({ paused: true, pauseReason: 'manual' });
   assert.ok(c.control('Resume queue games')); assert.equal(c.control('Open queue games').props.disabled, true);
 });

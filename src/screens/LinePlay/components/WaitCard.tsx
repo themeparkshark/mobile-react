@@ -17,6 +17,8 @@ import { GameIcon, type GameIconName } from '../../../ui';
 import type { LineBonusSummary } from '../../../api/endpoints/me/inline-timer/types';
 import { bonusDoneToday, nextBonusSeconds, ringInfoCopy, ringPill, visiblePips,
   type PipState } from '../../../services/lineplay/bonusRounds';
+import { waitSourceHint, waitStamps } from '../../../services/lineplay/waitScreen';
+import WaitStampBadge from './waitscreen/WaitStampBadge';
 
 /** A detail line with its art, never an emoji. */
 function HintLine({ icon, children }: { icon: GameIconName; children: string }) {
@@ -207,6 +209,8 @@ export default function WaitCard({
   const ringProgress = !rewardTrackingAvailable ? 0
     : atCap ? 1 : Math.max(0, Math.min(1, countdown.progressSeconds / interval));
   const earned = creditedParts ?? 0;
+  // Marathon and Night marks live in Details, not on the coin. Only worked out while Details is open.
+  const stamps = expanded && !completed ? waitStamps(elapsedSeconds, new Date().getHours()) : [];
   const bonusOn = Boolean(bonus?.enabled) && rewardTrackingAvailable && !completed;
   const pips = bonusOn ? visiblePips(bonus) : [];
   const bonusDone = bonusOn && bonusDoneToday(bonus);
@@ -347,13 +351,17 @@ export default function WaitCard({
         {expanded && <>
           {compact && <>
             <Text style={styles.meterSub}>{subline}</Text>
-            <Text style={styles.waitSourceHint}>{`${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m`}</Text>
+            {/* With the coin hero, IN LINE and MIN WAIT are already on the card: no second copy here. */}
+            {!hero && <Text style={styles.waitSourceHint}>{`${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m`}</Text>}
           </>}
-          <Text style={styles.waitSourceHint}>
-            {waitSource === 'posted' ? 'Games are planned from the posted wait when you started.' :
-              waitSource === 'last_known' ? 'Games are planned from an older posted wait.' :
-                'No posted wait was found. Games are planned anyway.'}
-          </Text>
+          {/* One wait source of truth: the same rule (signMinutes) decides MIN WAIT and this line. */}
+          <Text style={styles.waitSourceHint}>{waitSourceHint({ postedMinutes: postedWaitMinutes, waitSource })}</Text>
+          {stamps.map(stamp => <View key={stamp.kind} style={styles.hintLine}>
+            <WaitStampBadge stamp={stamp} />
+            <Text style={[styles.waitSourceHint, styles.hintLineText]}>
+              {stamp.kind === 'marathon' ? 'An hour or more in line. That is a marathon wait!' : 'A night wait, after 8 PM.'}
+            </Text>
+          </View>)}
           {entranceWaitMinutes != null && entranceWaitObservedAt != null && (
             <Text style={styles.entranceHint}>
               {entranceFresh ? `The sign at the line says ${entranceWaitMinutes}m` :

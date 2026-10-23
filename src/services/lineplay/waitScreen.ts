@@ -66,10 +66,11 @@ export function waitCoinProgress(input: WaitCoinInput): WaitCoinProgress {
   const energyKnown = input.playerEnergy != null;
   const energyShort = energyKnown ? Math.max(0, Math.round(input.energyToNext) - Math.round(input.playerEnergy!)) : 0;
   const ready = partsReady && energyKnown && energyShort === 0;
-  const next = input.nextTierName ? ` to ${input.nextTierName}` : ` to Level ${level + 1}`;
+  // One Parts idea on the wait card: the ring and "2 of 4 Parts". The next look's
+  // name stays in the spoken label of the coin, not on the chip.
   const label = ready ? 'Ready to level up'
     : partsReady ? energyKnown ? `Parts ready · ${energyShort} more Energy` : 'Parts ready'
-      : `${banked} of ${need} Parts${next}`;
+      : `${banked} of ${need} Parts`;
   return {
     fill, notches: need <= MAX_RING_NOTCHES ? need : 0, lit: Math.min(banked, need),
     maxed: false, partsReady, ready, energyShort, label,
@@ -93,17 +94,34 @@ export interface WaitEstimate {
   /** Small line: "You're tracking ~42". */
   readonly detail: string;
   /**
-   * The one wait number a 7-year-old reads on the card: the real-waits guess
-   * when there is one ("42"), else the sign ("60"). Null with no sign time.
-   * No "~": it means nothing to a 7-year-old; the spoken label says "about".
+   * The one wait number a 7-year-old reads on the card: the minutes on the
+   * ride's sign ("60"), the same number they can see at the line. Never the
+   * real-waits guess, which would state a guess as a fact; the guess lives in
+   * the spoken label ("about 42"). Null with no sign time.
    */
   readonly kidValue: string | null;
   readonly accessibilityLabel: string;
 }
 
-export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
-  const posted = input.waitSource !== 'estimate' && input.postedMinutes != null && input.postedMinutes > 0
+/** The sign's minutes this session started from, or null (no sign time). One rule for the number and its hint. */
+export function signMinutes(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'>): number | null {
+  return input.waitSource !== 'estimate' && input.postedMinutes != null && input.postedMinutes > 0
     ? Math.round(input.postedMinutes) : null;
+}
+
+/**
+ * The details line under the wait card, in kid words. It always agrees with
+ * the MIN WAIT number: "no sign time" only when no MIN WAIT shows.
+ */
+export function waitSourceHint(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'>): string {
+  if (signMinutes(input) == null) return 'This ride had no sign time when you started. Games are planned anyway.';
+  return input.waitSource === 'last_known'
+    ? 'The wait time is an older one from the ride sign.'
+    : 'The wait time is from the ride sign when you got in line.';
+}
+
+export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
+  const posted = signMinutes(input);
   const elapsedMinutes = Math.max(0, input.elapsedSeconds) / 60;
   const ratio = input.ratio != null && Number.isFinite(input.ratio) && input.ratio > 0 ? input.ratio : null;
   const raw = posted != null && ratio != null ? Math.max(1, Math.round(posted * ratio)) : null;
@@ -118,7 +136,7 @@ export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
     : tracking != null ? `Tracking ~${tracking} today`
       : 'Posted wait';
   return {
-    posted, tracking, title, detail, kidValue: String(tracking ?? posted),
+    posted, tracking, title, detail, kidValue: String(posted),
     accessibilityLabel: tracking != null
       ? `Posted wait ${posted} minutes. Recent waits here suggest about ${tracking} minutes.`
       : `Posted wait ${posted} minutes.`,

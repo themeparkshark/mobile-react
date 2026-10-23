@@ -24,10 +24,9 @@ import { usePresentationSlot } from '../../../../hooks/usePresentationQueue';
 import { SoundEffectContext } from '../../../../context/SoundEffectProvider';
 import { GameIcon } from '../../../../ui';
 import { BRAND } from '../../../../ui/tokens';
-import type { WaitCoinProgress, WaitStamp } from '../../../../services/lineplay/waitScreen';
+import type { WaitCoinProgress } from '../../../../services/lineplay/waitScreen';
 import type { WaitCoin } from './useWaitScreenCoin';
 import CoinFillRing from './CoinFillRing';
-import WaitStampBadge from './WaitStampBadge';
 import { isDimFlashingLightsEnabled } from '../../../../../modules/flash-safety';
 
 export interface WaitCoinStageProps {
@@ -37,7 +36,6 @@ export interface WaitCoinStageProps {
   readonly owned: boolean;
   readonly progress: WaitCoinProgress;
   readonly partsBanked: number;
-  readonly stamps: readonly WaitStamp[];
   readonly active: boolean;
   readonly reducedMotion: boolean;
   readonly onLevelUp: () => Promise<{ success: boolean; unlocks?: unknown; xp?: number }>;
@@ -49,7 +47,7 @@ export interface WaitCoinStageProps {
 
 const LEVEL_SOUND = require('../../../../../assets/sounds/reward.mp3');
 
-function WaitCoinStage({ size, coin, owned, progress, partsBanked, stamps, active, reducedMotion, onLevelUp,
+function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reducedMotion, onLevelUp,
   onLeveled, autoLevel = false }: WaitCoinStageProps) {
   const { playSound } = useContext(SoundEffectContext);
   const level = coin?.level ?? 1;
@@ -160,14 +158,11 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, stamps, activ
           )}
           {burst && <LevelUpBurst fx={burst.fx} size={coinSize} playKey={burst.key} />}
         </Animated.View>
-        {owned && (
+        {/* No level number or Marathon/Night chip on the coin: the only number near it is
+            the "2 of 4 Parts" chip. The level is in the spoken label, and the marks are in Details. */}
+        {owned && level >= 10 && (
           <View style={[styles.levelPip, { borderColor: tier.ringDeep }]} pointerEvents="none">
-            {level >= 10 ? <GameIcon name="crown" size={16} /> : <Text style={styles.levelPipText}>{level}</Text>}
-          </View>
-        )}
-        {stamps.length > 0 && (
-          <View style={styles.stamps} pointerEvents="none">
-            {stamps.map(stamp => <WaitStampBadge key={stamp.kind} stamp={stamp} />)}
+            <GameIcon name="crown" size={16} />
           </View>
         )}
       </Pressable>
@@ -196,8 +191,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(5,52,110,0.25)' },
   levelPip: { position: 'absolute', right: '12%', bottom: '12%', minWidth: 26, height: 26, borderRadius: 13,
     paddingHorizontal: 5, backgroundColor: BRAND.white, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
-  levelPipText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 1 },
-  stamps: { position: 'absolute', left: -14, top: 2, gap: 3, alignItems: 'flex-start' },
   labelChip: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: -6, paddingHorizontal: 10, paddingVertical: 3,
     borderRadius: 12, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)', maxWidth: 190 },
   labelChipReady: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },

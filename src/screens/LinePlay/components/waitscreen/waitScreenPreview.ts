@@ -7,6 +7,21 @@
 import { useEffect, useState } from 'react';
 import type { LineWaitScreenSummary } from '../../../../api/endpoints/me/inline-timer/types';
 import type { WaitCoin } from './useWaitScreenCoin';
+import type { WaitSource } from '../../../../services/lineplay/LinePlaySession';
+
+/** The preview's sign time: a posted 60. */
+export const PREVIEW_WAIT = { plannedWaitMinutes: 60, waitSource: 'posted' } as const;
+
+/**
+ * The sign time the wait card AND its hero show: the session's, or the
+ * preview's in the dev preview. Both read this one value, so the MIN WAIT
+ * number and the details line can never disagree.
+ */
+export function shownWait(session: { readonly plannedWaitMinutes: number; readonly waitSource: WaitSource }):
+  { readonly plannedWaitMinutes: number; readonly waitSource: WaitSource } {
+  return waitScreenPreviewEnabled() ? PREVIEW_WAIT
+    : { plannedWaitMinutes: session.plannedWaitMinutes, waitSource: session.waitSource };
+}
 
 export const waitScreenPreviewEnabled = (): boolean =>
   __DEV__ && process.env.EXPO_PUBLIC_LINEPLAY_WAIT_PREVIEW === '1';

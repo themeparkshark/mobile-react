@@ -19,7 +19,7 @@ test('the ring has one notch per Part and lights as Parts land', () => {
   const p = m.waitCoinProgress({ level: 2, maxLevel: 10, partsBanked: 3, partsToNext: 4, energyToNext: 20, playerEnergy: 50,
     nextTierName: 'Gold' });
   assert.equal(p.notches, 4); assert.equal(p.lit, 3); assert.equal(p.fill, 0.75);
-  assert.equal(p.ready, false); assert.equal(p.label, '3 of 4 Parts to Gold');
+  assert.equal(p.ready, false); assert.equal(p.label, '3 of 4 Parts', 'one Parts idea: no tier name on the chip');
   const long = m.waitCoinProgress({ level: 9, maxLevel: 10, partsBanked: 10, partsToNext: 40, energyToNext: 260, playerEnergy: 0 });
   assert.equal(long.notches, 0, 'a 40 Part step draws a smooth arc'); assert.equal(long.fill, 0.25);
 });
@@ -44,7 +44,8 @@ test('posted vs real: a tracking number only when real waits back it, gone once 
   const m = model();
   const est = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: 0.7, elapsedSeconds: 20 * 60 });
   assert.equal(est.title, 'SIGN SAYS 60'); assert.equal(est.tracking, 42); assert.equal(est.detail, "You're tracking ~42");
-  assert.equal(est.kidValue, '42', 'one wait number for kids: the real-waits guess, no "~"');
+  assert.equal(est.kidValue, '60', 'one wait number for kids: the sign they can see, never a guess stated as fact');
+  assert.match(est.accessibilityLabel, /about 42 minutes/, 'the guess stays in the spoken label, marked as about');
   const none = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: null, elapsedSeconds: 600 });
   assert.equal(none.tracking, null); assert.equal(none.detail, 'Posted wait'); assert.equal(none.kidValue, '60', 'no guess: the sign');
   const past = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: 0.7, elapsedSeconds: 45 * 60 });
@@ -130,6 +131,39 @@ test('no server rewards: the coin space collapses into one stat strip, no empty 
   assert.match(strip, /\{signStat\}/); assert.match(strip, /\{inLineStat\}/);
   // Fewer labels for kids: one short word under each number, no second line of fine print.
   assert.doesNotMatch(hero, /SIGN SAYS \(MIN\)|tracking|PARTS THIS WAIT/);
-  assert.match(hero, /label="MIN WAIT"/); assert.match(hero, /label="PARTS"/, 'the label names the thing the number counts');
-  assert.doesNotMatch(strip, /label="PARTS"/);
+  assert.match(hero, /label="MIN WAIT"/);
+  // Round 3: one Parts idea. The ring chip says "2 of 4 Parts"; no second "+4 PARTS" number beside it,
+  // and no level number or Marathon/Night chip on the coin.
+  assert.doesNotMatch(hero, /label="PARTS"|partsThisWait|waitStamps/);
+  const stage = read(DIR + 'WaitCoinStage.tsx');
+  assert.doesNotMatch(stage, /WaitStampBadge|levelPipText/);
+  const card = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.match(card, /waitStamps\(elapsedSeconds/, 'the marks moved into Details');
+  assert.match(card, /const \[expanded, setExpanded\] = useState\(false\)/, 'fine print is hidden until Details is tapped');
+  assert.match(card, /\{!hero && <Text style=\{styles\.waitSourceHint\}>/, 'no second copy of IN LINE and the wait under the hero');
+});
+
+test('one wait source of truth: "no sign time" never shows next to a MIN WAIT number', () => {
+  const m = model();
+  for (const waitSource of ['posted', 'last_known', 'estimate']) {
+    for (const postedMinutes of [null, 0, 35, 60]) {
+      for (const ratio of [null, 0.7]) {
+        const est = m.waitEstimate({ postedMinutes, waitSource, ratio, elapsedSeconds: 600 });
+        const hint = m.waitSourceHint({ postedMinutes, waitSource });
+        const noSign = /no sign time/i.test(hint);
+        assert.equal(noSign, est.kidValue == null, `${waitSource} ${postedMinutes} ${ratio}: ${hint} / ${est.kidValue}`);
+        if (est.kidValue != null) assert.equal(est.kidValue, String(Math.round(postedMinutes)), 'MIN WAIT is the sign');
+        assert.doesNotMatch(hint, /No posted wait was found/);
+      }
+    }
+  }
+  assert.equal(m.waitSourceHint({ postedMinutes: 60, waitSource: 'last_known' }), 'The wait time is an older one from the ride sign.');
+  // The card and its hero read the same sign time (the dev preview included).
+  const card = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.match(card, /waitSourceHint\(\{ postedMinutes: postedWaitMinutes, waitSource \}\)/);
+  assert.doesNotMatch(card, /No posted wait was found/);
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.equal((screen.match(/waitSource=\{shownWait\(snapshot\)\.waitSource\}/g) ?? []).length, 2);
+  assert.equal((screen.match(/=\{shownWait\(snapshot\)\.plannedWaitMinutes\}/g) ?? []).length, 2);
+  assert.doesNotMatch(read(DIR + 'WaitCoinHero.tsx'), /waitSource: 'posted'/, 'the hero preview never invents its own sign time');
 });
