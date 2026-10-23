@@ -40,7 +40,7 @@ test('a shared ride card never prints the typed note, and is story size with the
   const card = src('src/components/RideTracker/ShareableRideCard.tsx');
   assert.doesNotMatch(card, /ride\.note/, 'the typed note stays in the log');
   assert.match(card, /captureFlex\(storyRef, 'story'\)/, 'captured at story size (1080x1920)');
-  assert.match(card, /<StoryShareFrame ref=\{storyRef\} ribbon="MY RIDE!" cta="Track your rides with me!" campaign="ride_log">\s*<View style=\{cardStyles\.sharedWidth\}><CardContent ride=\{ride\} rideCount=\{confirmedCount\} variant="share" \/><\/View>/);
+  assert.match(card, /<StoryShareFrame ref=\{storyRef\} ribbon="MY RIDE!" cta="Track your rides with me!" campaign="ride_log">\s*<View style=\{cardStyles\.sharedWidth\}><CardContent ride=\{ride\} rideCount=\{confirmedCount\} \/><\/View>/);
   assert.doesNotMatch(card, /react-native-view-shot/);
   const frame = src('src/share/StoryShareFrame.tsx');
   assert.match(frame, /\.\.\.FLEX_SIZE\.story/, '9:16');
@@ -219,7 +219,7 @@ test('every brag inside a modal has a Share that closes the modal first, then op
   // The coin level-up line asks the server for "Only N% of players" (coin levels have server data).
   assert.match(src('src/components/CoinLevelingModal.tsx'), /ownedRef: nextLevel/);
   // A chain of rewards: Share only on the last one, so it never skips a reward still waiting to show.
-  assert.match(src('src/screens/SharkPassScreen.tsx'), /isWearable\(landed\.reward\) && !landed\.emblem && !landed\.next \?/);
+  assert.match(src('src/screens/SharkPassScreen.tsx'), /const landedCanShare = !!landed && !landed\.twin && isWearable\(landed\.reward\) && !landed\.emblem && !landed\.next;/);
   const box = src('src/screens/pins/BoxReveal.tsx');
   assert.match(box, /const brag = \(p: RevealPull \| undefined\) => !!p && !isCatch && !p\.rare && \(p\.is_chaser \|\| \(golden && !p\.duplicate\)\);/, 'never a park pin (it says where the kid is)');
   assert.match(box, /phase === 'show' && pulls\.length === 1 && brag\(pull\)/);
@@ -313,10 +313,9 @@ test('the level-up moment says something real and sits on house blue', () => {
 
 test('the shared ride card has no date and waits until the player leaves the park', () => {
   const card = src('src/components/RideTracker/ShareableRideCard.tsx');
-  const shareVariant = card.slice(card.indexOf('{shared ? ('), card.indexOf(') : (', card.indexOf('{shared ? (')));
-  assert.doesNotMatch(shareVariant, /dateStr|wait_time_minutes/, 'no ride date or wait on the shared copy');
-  assert.match(card, /\{!shared && \(\s*<View style=\{cardStyles\.topBar\}>/, 'no second brand line on the shared copy');
-  assert.match(card, /\{!shared && \(\s*<View style=\{cardStyles\.watermark\}>/, 'one link only (the frame footer)');
+  // One card only (the shared one): no 'app' variant left that could carry a date, a wait or a typed note.
+  assert.doesNotMatch(card, /variant[=?:]|'app'|rode_at|dateStr|wait_time_minutes|ride\.note/, 'no date, wait or note anywhere in the card');
+  assert.doesNotMatch(card, /THEME PARK SHARK|RIDE MEMORY|themeparkshark\.com/, 'one brand line and link only (the frame footer)');
   assert.match(card, /export const RIDE_SHARE_HELD_LABEL = 'Share it after you leave the park';/);
   assert.match(card, /if \(busy\.current \|\| loadingCount \|\| inPark\) return;/);
   assert.match(card, /\{!inPark && \(\s*<StoryShareFrame/);
@@ -392,7 +391,7 @@ test('every full-screen reveal uses the one share pill, under its main button', 
   for (const [file, re] of [
     ['src/components/home/HomeHuntResultsModal.tsx', /kind="standings"[^>]*size="reveal"/],
     ['src/components/coin/Crowning.tsx', /kind="crowned"[^>]*size="reveal"/],
-    ['src/screens/SharkPassScreen.tsx', /share=\{[\s\S]{0,120}<FlexShareButton kind="find" surface="sharkpass" size="reveal"/],
+    ['src/screens/SharkPassScreen.tsx', /share=\{[\s\S]{0,200}<FlexShareButton kind="find" surface="sharkpass" size="reveal"/],
     ['src/components/money/MonthlyGiftCard.tsx', /share=\{[\s\S]{0,80}<FlexShareButton kind="find" surface="vip_gift" size="reveal"/],
   ]) assert.match(src(file), re, file);
   const gotIt = src('src/components/money/moneyUi.tsx');
@@ -420,12 +419,11 @@ test('a bare shark has no look to share; the ride story is one hero stat; the he
   assert.equal(look.hasLookToShare({ skin_item: { paper_url: 'skin.png' } }), false, 'nothing worn yet');
   assert.equal(look.hasLookToShare({ head_item: { paper_url: 'hat.png' } }), true);
   const ride = src('src/components/RideTracker/ShareableRideCard.tsx');
-  const shareVariant = ride.slice(ride.indexOf('{shared ? ('), ride.indexOf(') : (', ride.indexOf('{shared ? (')));
-  assert.match(shareVariant, /cardStyles\.heroStat\b/);
-  assert.match(shareVariant, /<SharkReactionIcon reaction=\{ride\.reaction\} size=\{46\} \/>/);
+  assert.match(ride, /cardStyles\.heroStat\b/);
+  assert.match(ride, /<SharkReactionIcon reaction=\{ride\.reaction\} size=\{46\} \/>/);
   assert.match(ride, /alignSelf: 'center', flexDirection: 'row'/, 'sized to its content');
   assert.match(ride, /<GameIcon name="map" size=\{28\} \/>\s*<Text style=\{cardStyles\.heldText\}>\{RIDE_SHARE_HELD_LABEL\}<\/Text>/);
-  assert.match(ride, /<CardContent ride=\{ride\} rideCount=\{confirmedCount\} variant="share" \/>\s*<\/View>\s*\{inPark/, 'the preview is the shared card');
+  assert.match(ride, /<CardContent ride=\{ride\} rideCount=\{confirmedCount\} \/>\s*<\/View>\s*\{inPark/, 'the preview is the shared card');
 });
 
 test('on a short phone (iPhone SE) the reveals keep Wear, Done and Share on screen', () => {
@@ -438,4 +436,73 @@ test('on a short phone (iPhone SE) the reveals keep Wear, Done and Share on scre
   const whack = src('src/games/whack/ui/ShareCard.tsx');
   assert.match(whack, /<Text style=\{styles\.title\}>MY RUN<\/Text>/);
   assert.match(whack, /ribbon="WHACK-A-SHARK!"/);
+});
+
+/* ------------------------------------------------------------------ round 4 */
+
+test('Shark Pass: Share shows only after the wear choice, and wearing waits for the fresh look', () => {
+  const pass = src('src/screens/SharkPassScreen.tsx');
+  assert.match(pass, /chosen\?: 'saving' \| 'worn' \| 'kept' \| 'failed';/);
+  assert.match(pass, /const landedChoice = landedCanShare && !!landedWear;/);
+  // The pill is gated on the choice when there is a wear button.
+  assert.match(pass, /share=\{landedCanShare && isWearable\(landed\.reward\) && \(!landedWear \|\| landed\.chosen === 'worn' \|\| landed\.chosen === 'kept'\) \?/);
+  // "Wear it now" keeps the card open (no setLanded(next) on the shareable path) and waits for the save and refresh.
+  const choice = pass.slice(pass.indexOf('action={landedChoice ?'), pass.indexOf('} }) : landedWear ?'));
+  assert.doesNotMatch(choice, /setLanded\(landed\.next/);
+  assert.match(choice, /chosen: 'saving'/);
+  assert.match(choice, /landedWear!\.run\(\)\.then\(\(\) => setLanded\(cur => same\(cur\) \? \{ \.\.\.cur!, chosen: 'worn'/);
+  assert.match(pass, /run: \(\) => \{ const id = landed\.itemId!; return wearItem\(\{ id \}\)\.then\(\(\) => refreshPlayer\?\.\(\)\); \}/);
+  // The skip is a real choice, not a close: "Keep my look" turns the card into the share step.
+  assert.match(pass, /onDone=\{landedChoice && !landed\.chosen \? \(\) => setLanded\(\{ \.\.\.landed, chosen: 'kept'/);
+  assert.match(pass, /doneLabel=\{landedChoice && !landed\.chosen \? 'Keep my look' : landedChoice \? 'Done' : undefined\}/);
+});
+
+test('Set Complete shares the shark wearing the set, after the fresh look is back', () => {
+  const set = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  assert.match(set, /const shareLook = useMemo\(\(\) => previewLook\(player\?\.inventory, pieces\.map\(asWearable\), 'player'\)\?\.look \?\? null/);
+  assert.match(set, /inventory: shareLook \?\? undefined \}\} \/>/);
+  assert.match(set, /await Promise\.resolve\(refreshPlayer\(\)\)\.catch\(\(\) => undefined\);\s*settle\(true\);/);
+  // No level numbers from the server: the XP only, never an empty "LV" ring.
+  assert.match(set, /\{reward\.xp > 0 && !xp && \(/);
+  assert.match(set, /\{reward\.xp > 0 && !!xp && \(/);
+});
+
+test('a find card says its rarity once on the ribbon and pill; the kicker and stat say something new', () => {
+  const copySrc = src('src/share/copy.ts');
+  const find = copySrc.slice(copySrc.indexOf('  find: (p, owned) => {'), copySrc.indexOf('  ride_photo: p => {'));
+  assert.match(find, /kicker: rarity >= 3 \|\| p\.goldenHour \? 'My New Find' : `My \$\{label\} Find`/);
+  assert.doesNotMatch(find, /`A \$\{label\} find`/, 'no "A Legendary find" stat');
+  assert.match(find, /serial \? `Limited edition #\$\{serial\}`/);
+  assert.match(find, /stat: special \?\? setLine \?\? 'Added to my collection'/);
+  assert.match(src('src/screens/pins/BoxReveal.tsx'), /serial: sharePull\.is_chaser \? sharePull\.serial : null/);
+  const { flexCopy } = loadTs('src/share/copy.ts', {});
+  const chaser = flexCopy('find', { itemName: 'Magic Hat Pin', artUrl: 'x', rarity: 5, serial: 12 });
+  assert.equal(chaser.ribbon, 'LEGENDARY FIND!');
+  assert.equal(chaser.kicker, 'My New Find');
+  assert.equal(chaser.stat, 'Limited edition #12');
+  assert.doesNotMatch([chaser.kicker, chaser.stat, chaser.sub].filter(Boolean).join(' '), /Legendary/);
+  const plain = flexCopy('find', { itemName: 'Banana Pin', artUrl: 'x', rarity: 4 });
+  assert.equal(plain.stat, 'Added to my collection');
+  const inSet = flexCopy('find', { itemName: 'Banana Pin', artUrl: 'x', rarity: 4, setName: 'Snacks', setFound: 3, setTotal: 6 });
+  assert.equal(inSet.big, '3/6');
+  assert.equal(inSet.stat, 'Snacks set');
+});
+
+test('the ride story leads a first ride with FIRST RIDE!, and the Memory story has no date and big type', () => {
+  const ride = src('src/components/RideTracker/ShareableRideCard.tsx');
+  assert.match(ride, /\{count === 1 \? 'FIRST RIDE!' : count\.toLocaleString\('en-US'\)\}/);
+  assert.match(ride, /\{count > 1 && <Text style=\{cardStyles\.heroStatLabel\}>TIMES RIDDEN<\/Text>\}/);
+  const mem = src('src/games/memory/MemoryExtras.tsx');
+  const cards = mem.slice(mem.indexOf('export function ShareCard('), mem.indexOf('export function ShareBack('));
+  assert.doesNotMatch(cards, /daily\.day/, 'no date on any Memory share card');
+  assert.match(mem, /<StoryShareFrame ref=\{storyRef\} ribbon="MEMORY MATCH!"[^>]*>\s*<ShareStoryCard daily=\{daily\} \/>/);
+  assert.match(mem, /storyBig: \{ fontFamily: 'Shark', fontSize: 64/);
+});
+
+test('the coin level-up uses the same labeled Share pill, under its main button', () => {
+  const coin = src('src/components/CoinLevelingModal.tsx');
+  assert.match(coin, /<YellowButton text="Awesome!" onPress=\{handleClose\} \/>\s*\{\/\*[\s\S]*?\*\/\}\s*\{nextLevel >= 5 && nextLevel < 10 && \(\s*<FlexShareButton kind="coin_level" surface="coin_sheet" size="md"/);
+  assert.doesNotMatch(coin, /size="sm" caption style=\{\{ position: 'absolute'/);
+  // On a short phone (iPhone SE) the sheet slides down after the level-up so Awesome and Share both show.
+  assert.match(coin, /onContentSizeChange=\{\(\) => \{ if \(state === 'success' && SCREEN_H < 740\) sheetScroll\.current\?\.scrollToEnd\(/);
 });

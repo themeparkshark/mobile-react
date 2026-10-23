@@ -71,7 +71,8 @@ test('the percent-of-players line only shows when it is a real brag', () => {
   assert.equal(copy.ownedLine(Number.NaN), null);
   assert.equal(copy.ownedLine(-1), null);
   const common = copy.flexCopy('find', { itemName: 'Pretzel', artUrl: 'x', rarity: 1, ownedPct: 0.9 });
-  assert.equal(common.stat, 'A Common find');
+  // The rarity word is on the kicker already ("My Common Find"): the stat says something new.
+  assert.equal(common.stat, 'Added to my collection');
 });
 
 test('rarity accepts numbers and names; Frame It! reads as a brag line', () => {
@@ -422,7 +423,8 @@ test('art is warmed per kind when a share-eligible screen or a share asks, never
   assert.doesNotMatch(host, /setTimeout\(\(\) => setPhase\('warm'\), 3000\)/);
 });
 
-test('the coin sheet Share icon carries a word and the stamp payload must say whether its art has a shark', () => {
-  assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8'), /size="sm" caption/);
+test('the coin sheet Share carries a word (the md pill says Share) and the stamp payload must say whether its art has a shark', () => {
+  // The coin sheet uses the same labeled pill as every reveal, under its main button.
+  assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8'), /kind="coin_level" surface="coin_sheet" size="md"/);
   assert.match(fs.readFileSync(pathMod.join(repo, 'src/share/types.ts'), 'utf8'), /readonly artHasShark: boolean;/);
 });

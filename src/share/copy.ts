@@ -132,14 +132,18 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
     const total = count(p.setTotal);
     const setName = p.setName ? cleanName(p.setName, 22) : '';
     const progress = total && found ? `${Math.min(found, total)} of ${total}${setName ? ` ${setName}` : ''}` : setName ? `${setName} set` : null;
+    const serial = count(p.serial);
+    // The rarity word lives on the ribbon and the pill only: the kicker and stat say something new.
+    const special = p.goldenHour ? 'Caught in the Golden Hour' : p.dailyRare ? 'The Daily Rare' : serial ? `Limited edition #${serial}` : null;
+    const setLine = pct ? progress : total && found ? (setName ? `${setName} set` : null) : progress;
     return {
       ribbon: p.goldenHour ? 'GOLDEN HOUR!' : rarity >= 3 ? `${label.toUpperCase()} FIND!` : 'NEW FIND!',
-      kicker: `My ${label} Find`,
+      kicker: rarity >= 3 || p.goldenHour ? 'My New Find' : `My ${label} Find`,
       title: noRarityWord(cleanName(p.itemName), label),
       big: pct ?? (total && found ? `${Math.min(found, total)}/${total}` : null),
       bigLabel: pct ? 'OF PLAYERS HAVE ONE' : total && found ? 'IN THE SET' : null,
-      stat: p.goldenHour ? 'Caught in the Golden Hour' : p.dailyRare ? 'The Daily Rare' : `A ${label} find`,
-      sub: pct ? progress : (total && found ? (setName ? `${setName} set` : null) : progress),
+      stat: special ?? setLine ?? 'Added to my collection',
+      sub: special ? setLine : null,
       cta: 'Can you find one?',
       frame: p.goldenHour ? 'golden' : RARITY_FRAME[rarity],
       prop: 'magnifier',

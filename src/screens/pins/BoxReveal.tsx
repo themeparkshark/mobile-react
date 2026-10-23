@@ -820,7 +820,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             {sharePull && !choosing && (
               <FlexShareButton kind="find" surface={golden ? 'golden_box' : 'pin_box'} size="reveal" handoff={shareHandoff}
                 style={{ alignSelf: 'center' }}
-                payload={{ itemName: sharePull.name, artUrl: sharePull.icon_url ?? PIN_ART.chaser, rarity: sharePull.is_chaser ? 5 : 4 }} />
+                payload={{ itemName: sharePull.name, artUrl: sharePull.icon_url ?? PIN_ART.chaser, rarity: sharePull.is_chaser ? 5 : 4,
+                  serial: sharePull.is_chaser ? sharePull.serial : null }} />
             )}
           </View>
         )}

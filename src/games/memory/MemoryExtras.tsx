@@ -183,7 +183,8 @@ export function ShareCard({ daily }: { daily: DailySummary }) {
         </View>
         <View style={{ flex: 1, marginLeft: 10 }}>
           <Text style={styles.shareTitle}>Memory Match Daily</Text>
-          <Text style={styles.shareSub}>{`${deck.label} · ${daily.day} · RECALL ${daily.recall}%`}</Text>
+          {/* No date on the card: the picture says what the kid did, not when. */}
+          <Text style={styles.shareSub}>{`${deck.label} · RECALL ${daily.recall}%`}</Text>
         </View>
       </View>
       <View style={styles.gridWrap}>
@@ -213,6 +214,47 @@ export function ShareCard({ daily }: { daily: DailySummary }) {
   );
 }
 
+/**
+ * The story picture's card: the same run, sized to fill the 9:16 stage like the Whack card.
+ * Big recall number first, then the grid, crowns and turns. No date, no name.
+ */
+export function ShareStoryCard({ daily }: { daily: DailySummary }) {
+  const deck = deckById(daily.deckId) ?? DECKS[0];
+  const rows = shareRows(daily.verdicts, 8);
+  const perfect = fairPerfectFor(daily.pairs);
+  return (
+    <View style={[styles.shareCard, styles.storyCard]} collapsable={false}>
+      <View style={styles.storyFaces}>
+        {[0, 1, 2].map((f) => <View key={f} style={{ marginLeft: f ? -14 : 0, transform: [{ rotateZ: `${(f - 1) * 8}deg` }] }}><FaceThumb face={faceFor(deck, f)} w={52} h={64} /></View>)}
+      </View>
+      <Text style={styles.storyDeck}>{`${deck.label} deck`}</Text>
+      <Text style={styles.storyBig}>{`${daily.recall}%`}</Text>
+      <Text style={styles.storyBigLabel}>RECALL</Text>
+      <View style={styles.gridWrap}>
+        {rows.map((row, i) => (
+          <View key={i} style={styles.gridRow}>
+            {row.map((c, j) => (
+              <View key={j} style={[styles.cell, { backgroundColor: CELL_STYLE[c].bg }]}>
+                <Glyph kind={CELL_STYLE[c].glyph} size={24} />
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+      <View style={styles.storyCrowns}>
+        {[0, 1, 2].map((i) => <Image key={i} source={CROWN} style={[styles.storyCrown, i >= daily.stars && { opacity: 0.25 }]} resizeMode="contain" />)}
+      </View>
+      <Text style={styles.storyStat}>{daily.cleared ? `${daily.turns} TURNS · PERFECT ${perfect}` : `OUT AT ${daily.turns} TURNS`}</Text>
+      {daily.streak > 0 ? (
+        <View style={styles.shareStreak}>
+          <Image source={STREAK} style={{ width: 26, height: 26 }} resizeMode="contain" />
+          <Text style={styles.storyStat}>{`${daily.streak} DAY STREAK`}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 /** The back of the results card: the share grid, SHARE NOW and BACK (6.10). Shared only on the tap. */
 export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () => void }) {
   const storyRef = useRef<View>(null);
@@ -237,7 +279,7 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
       </View>
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <StoryShareFrame ref={storyRef} ribbon="MEMORY MATCH!" cta="Play today's deck with me!" campaign="memory">
-          <ShareCard daily={daily} />
+          <ShareStoryCard daily={daily} />
         </StoryShareFrame>
       </View>
       <Text style={styles.sheetHint}>The picture shows how you did. It never shows the cards.</Text>
@@ -414,6 +456,14 @@ const styles = StyleSheet.create({
   shareStars: { flexDirection: 'row', gap: 2 },
   shareCrown: { width: 22, height: 20 },
   shareStreak: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  storyCard: { alignItems: 'center', paddingVertical: 20, gap: 4 },
+  storyFaces: { flexDirection: 'row', marginBottom: 4 },
+  storyDeck: { fontFamily: 'Shark', fontSize: 24, color: MM.navyText },
+  storyBig: { fontFamily: 'Shark', fontSize: 64, lineHeight: 70, color: MM.navyText, marginTop: 2 },
+  storyBigLabel: { fontFamily: 'Knockout', fontSize: 18, letterSpacing: 1, color: MM.ink, marginBottom: 10 },
+  storyCrowns: { flexDirection: 'row', gap: 6, marginTop: 12 },
+  storyCrown: { width: 40, height: 36 },
+  storyStat: { fontFamily: 'Knockout', fontSize: 20, color: MM.navyText, marginTop: 4 },
   tabs: { gap: 6, paddingVertical: 4 },
   tab: { backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: MM.ink, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center' },
   tabOn: { backgroundColor: MM.blue },

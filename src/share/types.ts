@@ -31,6 +31,8 @@ export interface FlexPayloads {
   readonly find: FlexBase & {
     readonly itemName: string; readonly artUrl: FlexArt; readonly rarity: RarityInput; readonly setName?: string;
     readonly goldenHour?: boolean; readonly dailyRare?: boolean; readonly caughtCount?: number;
+    /** A gold chaser's own number ("Limited edition #12"). */
+    readonly serial?: number | null;
     /** Set progress after this find ("4 of 6"). */
     readonly setFound?: number; readonly setTotal?: number;
   };
