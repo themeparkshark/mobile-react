@@ -153,16 +153,26 @@ const ENERGY_GAP = energyGap(WINDOW_WIDTH);
  */
 const SHORT_MAP = Dimensions.get('window').height < 740;
 const COIN_TIP_WIDTH = Math.min(300, WINDOW_WIDTH - 124);
+/** Below this much room beside the right column, the card's title takes two lines and OK steps aside. */
+const COIN_TIP_ROOMY = 236;
+/** Below this much room, the card moves up a row, above the right column, instead of squeezing. */
+const COIN_TIP_MIN = 180;
 /**
- * The card ends 8 pt before the right column (Energy, and the Trail Boxes pill above it when there
- * is one, which is wider), measured live; the pointer aims at PLAY RIDE (the middle of the screen).
+ * The card is as wide as its content (so OK sits close) and ends at least 8 pt before the right
+ * column (Energy, and the Trail Boxes pill above it when there is one, which is wider), measured
+ * live. With little room it gets narrow (two-line title, no OK word); with too little it moves up a
+ * row, above the column. The pointer aims at PLAY RIDE (the middle of the screen).
  */
-function coinTipStyle(stores: number, rightColumnWidth: number) {
-  const width = Math.max(200, Math.min(COIN_TIP_WIDTH, WINDOW_WIDTH - 12 - 16 - rightColumnWidth - 8));
-  return { position: 'absolute', left: 12, width, bottom: bottomLeftColumnHeight(stores) + 6, zIndex: 40 } as const;
-}
-function coinTipPointer(stores: number, rightColumnWidth: number) {
-  return Math.round(Math.min(coinTipStyle(stores, rightColumnWidth).width - 36, WINDOW_WIDTH * 0.42 - 12));
+function coinTipLayout(stores: number, column: { readonly width: number; readonly height: number }) {
+  const room = WINDOW_WIDTH - 12 - 16 - column.width - 8;
+  const above = room < COIN_TIP_MIN;
+  const maxWidth = above ? COIN_TIP_WIDTH : Math.min(COIN_TIP_WIDTH, room);
+  const bottom = above ? Math.max(bottomLeftColumnHeight(stores), 32 + column.height) + 8 : bottomLeftColumnHeight(stores) + 6;
+  return {
+    style: { position: 'absolute', left: 12, maxWidth, bottom, zIndex: 40 } as const,
+    narrow: maxWidth < COIN_TIP_ROOMY,
+    pointer: Math.round(Math.min(maxWidth - 36, WINDOW_WIDTH * 0.42 - 12)),
+  };
 }
 /** Finn's park welcome: under the adventure card, ending before the right-hand button column (VIP, chest). */
 const PARK_WELCOME_TIP_STYLE = { position: 'absolute', left: 12, right: 78, top: 132, zIndex: 40 } as const;
@@ -412,8 +422,10 @@ function ExploreScreen() {
   const [homeIntroOpen, setHomeIntroOpen] = useState(false);
   // The generic park tip is on screen: the Fin-ister intro waits for it (never two first-run cards at once).
   const [parkTipShowing, setParkTipShowing] = useState(false);
-  // The right column's widest pill (Energy, or Trail Boxes above it): Finn's coin card ends before it.
+  // The right column's widest pill (Energy, or Trail Boxes above it) and the column's height: Finn's
+  // coin card ends before it (or sits above it when the pills leave too little room).
   const [rightColumnWidth, setRightColumnWidth] = useState(92);
+  const [rightColumnHeight, setRightColumnHeight] = useState(0);
   const [redeemFlowOpen, setRedeemFlowOpen] = useState(false);
 
   // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
@@ -1493,6 +1505,7 @@ function ExploreScreen() {
               zIndex: 10,
               alignItems: 'center',
             }}
+            onLayout={event => setRightColumnHeight(Math.round(event.nativeEvent.layout.height))}
           >
             {/* Energy and Swords: bright pills in the header's Currency language. */}
             <View style={{ marginBottom: ENERGY_GAP, gap: 6, alignItems: 'flex-end' }}
@@ -1528,13 +1541,15 @@ function ExploreScreen() {
         }}
       >
         {/* One-time Finn tips: the park welcome, then the first ride coin in range. Never over a game or dialog. */}
-        {player && parkTip && (
-          <OneTimeTip key={parkTip} id={parkTip} ready={parkTipReady}
-            small={parkTip === 'coin_in_range' && SHORT_MAP}
-            art={parkTip === 'coin_in_range' ? <CoinTipPicture /> : undefined}
-            pointerLeft={parkTip === 'coin_in_range' ? coinTipPointer(park.stores.length, rightColumnWidth) : undefined}
-            style={parkTip === 'coin_in_range' ? coinTipStyle(park.stores.length, rightColumnWidth) : PARK_WELCOME_TIP_STYLE} />
-        )}
+        {player && parkTip && (() => {
+          const coin = parkTip === 'coin_in_range'
+            ? coinTipLayout(park.stores.length, { width: rightColumnWidth, height: rightColumnHeight }) : null;
+          return <OneTimeTip key={parkTip} id={parkTip} ready={parkTipReady}
+            small={!!coin && (SHORT_MAP || coin.narrow)} fit={!!coin} narrow={coin?.narrow}
+            art={coin ? <CoinTipPicture /> : undefined}
+            pointerLeft={coin?.pointer}
+            style={coin?.style ?? PARK_WELCOME_TIP_STYLE} />;
+        })()}
         {/* One HUD row floats over the map (the map runs right up to the header). */}
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
         {/* The "what now" rail: one row in the suggestion slot, only while no suggestion card holds it. */}

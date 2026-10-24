@@ -1326,6 +1326,18 @@ export default function CommunityCenterScreen() {
   );
 }
 
+/**
+ * The two top cards glow warm, like lit signs in the painted room (lamp light on warm white), so
+ * they belong to the scene instead of reading as stickers on it. iOS draws the halo from the shadow.
+ */
+const SIGN_GLOW = {
+  shadowColor: '#ffc95c',
+  shadowOpacity: 0.75,
+  shadowRadius: 14,
+  shadowOffset: { width: 0, height: 0 },
+  elevation: 6,
+} as const;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1364,6 +1376,7 @@ const styles = StyleSheet.create({
     zIndex: 100,
     flexDirection: 'row',
     alignItems: 'center',
+    ...SIGN_GLOW,
   },
   currencyDivider: {
     width: 1,
@@ -1429,7 +1442,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 8,
     zIndex: 50,
-    ...SHADOW.card,
+    ...SIGN_GLOW,
   },
   giftCountBadgeShort: {
     left: 12,

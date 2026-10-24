@@ -15,9 +15,14 @@ import { BRAND, GameButton, GameIcon } from '../ui';
 /** The bar's title before any team holds a ride (never a ride-status claim). */
 export const NO_LEADER_HEADLINE = 'NO TEAM HAS A RIDE YET';
 
-/** One team's ride count: pops when it goes up, wears the crown while leading. */
-export function TeamChip({ team, count, yours, leading }: {
+/**
+ * One team's ride count: pops when it goes up, wears the crown while leading. Before today's
+ * standings answer (or offline), the chip is just the team's shield: no number it cannot know.
+ * The number fades in when the standings arrive, in a slot that keeps its width (no jump).
+ */
+export function TeamChip({ team, count, yours, leading, known = true }: {
   readonly team: TeamId; readonly count: number; readonly yours: boolean; readonly leading: boolean;
+  readonly known?: boolean;
 }) {
   const reduced = useReducedGameMotion();
   const pop = useSharedValue(1);
@@ -36,12 +41,17 @@ export function TeamChip({ team, count, yours, leading }: {
   useEffect(() => {
     crown.value = reduced ? (leading ? 1 : 0) : withSpring(leading ? 1 : 0, { damping: 10, stiffness: 240 });
   }, [leading, reduced, crown]);
+  const countIn = useSharedValue(known ? 1 : 0);
+  useEffect(() => {
+    countIn.value = !known ? 0 : reduced ? 1 : withTiming(1, { duration: 220 });
+  }, [known, reduced, countIn]);
+  const countStyle = useAnimatedStyle(() => ({ opacity: countIn.value }));
   const chipStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const crownStyle = useAnimatedStyle(() => ({ opacity: crown.value, transform: [{ translateY: (1 - crown.value) * 6 }, { rotate: '-14deg' }, { scale: 0.6 + crown.value * 0.4 }] }));
   return (
     <Animated.View style={[styles.chip, { backgroundColor: TEAMS[team].color }, yours && styles.chipYours, chipStyle]}>
       <Image source={TEAMS[team].badge} style={styles.chipBadge} contentFit="contain" />
-      <Text style={styles.chipCount}>{count}</Text>
+      <Animated.Text style={[styles.chipCount, countStyle]}>{known ? count : 0}</Animated.Text>
       <Animated.View style={[styles.crown, crownStyle]} pointerEvents="none">
         <GameIcon name="crown" size={18} />
       </Animated.View>
@@ -81,12 +91,14 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
 
   // Never "every ride is open": kids read that as ride status (Wait Times may say every ride is closed).
   // With no leader yet, say what it really means: no team has won a ride today.
-  // Before today's standings answer, the bar already says the plain no-leader line with three zero
-  // shields (so the HUD row is whole from the first map frame). If the standings then name a leader,
-  // the new title swaps in on the same render and fades up from 0.2 on the UI thread: never a blank
-  // strip, never a hard swap, even while the JS thread is busy at launch.
+  // Before today's standings answer (and for good while offline), the bar is the plain RIDE CONTROL
+  // title with the three team shields and no numbers: whole from the first map frame, and it claims
+  // nothing it does not know. When the standings arrive, the new title swaps in on the same render
+  // and fades up from 0.2 on the UI thread (never a blank strip or a hard swap, even while the JS
+  // thread is busy at launch), and the numbers fade into their slots.
+  const known = control !== null;
   const headline = hideAllOpen ? 'RIDE CONTROL'
-    : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : NO_LEADER_HEADLINE;
+    : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : !known ? 'RIDE CONTROL' : NO_LEADER_HEADLINE;
   const reduced = useReducedGameMotion();
   const titleIn = useSharedValue(1);
   const lastHeadline = useRef(headline);
@@ -102,13 +114,16 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
   return (
     <>
       <Pressable accessibilityRole="button"
-        accessibilityLabel={`${headline}. ${TEAM_ORDER.map(team => `${teamShortName(team, names)} ${held[team]}`).join(', ')} rides. Show rides to take.`}
+        accessibilityLabel={known
+          ? `${headline}. ${TEAM_ORDER.map(team => `${teamShortName(team, names)} ${held[team]}`).join(', ')} rides. Show rides to take.`
+          : `${headline}. Show rides to take.`}
         onPress={() => setOpen(true)} style={[styles.barWrap, compact && styles.barWrapCompact, inline && styles.inline]}>
         <LinearGradient colors={[BRAND.blueBright, BRAND.blue, BRAND.blueLip]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
           style={[styles.bar, compact && styles.barCompact]}>
           {!compact && <Animated.Text style={[styles.kicker, titleStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{headline}</Animated.Text>}
           <View style={styles.chips}>
-            {TEAM_ORDER.map(team => <TeamChip key={team} team={team} count={held[team]} yours={yours === team} leading={leader === team} />)}
+            {TEAM_ORDER.map(team => <TeamChip key={team} team={team} count={held[team]} yours={yours === team}
+              leading={leader === team} known={known} />)}
           </View>
         </LinearGradient>
       </Pressable>
@@ -132,14 +147,14 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
                   <Image source={TEAMS[team].badge} style={styles.standingBadge} contentFit="contain" />
                   {leader === team && <View style={styles.standingCrown}><GameIcon name="crown" size={26} /></View>}
                 </View>
-                <Text style={[styles.standingCount, { color: TEAMS[team].color }]}>{held[team]}</Text>
+                <Text style={[styles.standingCount, { color: TEAMS[team].color }]}>{known ? held[team] : ' '}</Text>
                 <Text style={styles.standingLabel}>{teamShortName(team, names)}{yours === team ? ' (you)' : ''}</Text>
               </View>
             ))}
           </View>
           {!yours && <GameButton label="Pick your team" onPress={() => { setOpen(false); RootNavigation.navigate('TeamSelection', {}); }}
             style={{ marginBottom: 10 }} />}
-          <Text style={styles.section}>{targets.length ? 'UP FOR GRABS' : unclaimed ? `${unclaimed} RIDES STILL UNCLAIMED` : 'NO FIGHTS YET TODAY'}</Text>
+          <Text style={styles.section}>{!known ? 'TODAY\'S STANDINGS ARE ON THE WAY' : targets.length ? 'UP FOR GRABS' : unclaimed ? `${unclaimed} RIDES STILL UNCLAIMED` : 'NO FIGHTS YET TODAY'}</Text>
           <ScrollView style={{ maxHeight: 300 }}>
             {targets.map(r => {
               const task = taskFor(r.asset_id)!;

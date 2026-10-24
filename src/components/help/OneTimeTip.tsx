@@ -9,7 +9,7 @@ import { useOneTimeTip } from './HelpProvider';
  * Drop-in one-time tip. `ready` is the caller's "the player is free" signal:
  * false during a mini-game, a moving line, a dialog or a Finn lesson.
  */
-export default function OneTimeTip({ id, ready, style, compact, small, art, pointerLeft }: {
+export default function OneTimeTip({ id, ready, style, compact, small, art, pointerLeft, fit, narrow }: {
   readonly id: Exclude<TipId, `game:${string}`>;
   readonly ready: boolean;
   readonly style?: StyleProp<ViewStyle>;
@@ -17,10 +17,12 @@ export default function OneTimeTip({ id, ready, style, compact, small, art, poin
   readonly small?: boolean;
   readonly art?: ReactNode;
   readonly pointerLeft?: number;
+  readonly fit?: boolean;
+  readonly narrow?: boolean;
 }) {
   const { visible, dismiss } = useOneTimeTip(id, ready);
   if (!visible) return null;
   const copy = TIP_COPY[id];
   return <CoachTip title={copy.title} body={copy.body} onDismiss={dismiss} style={style} compact={compact}
-    small={small} art={art} pointerLeft={pointerLeft} />;
+    small={small} art={art} pointerLeft={pointerLeft} fit={fit} narrow={narrow} />;
 }

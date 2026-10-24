@@ -1,9 +1,13 @@
 import { memo, useLayoutEffect, useState } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { Easing, cancelAnimation, runOnJS, runOnUI, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, {
+  Easing, cancelAnimation, runOnJS, runOnUI, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withSequence, withTiming,
+} from 'react-native-reanimated';
 import MapCoverSky, { MAP_COVER_SKY } from './MapCoverSky';
 import { armMapCover, coverLifted, useCoverPlan, type CoverPlan } from './mapCover';
-import { COVER_FADE_MS, COVER_FINISH_MS, LAUNCH_HANDOFF_SHARE } from '../../constants/launchHandoff';
+import {
+  COVER_FADE_MS, COVER_FINISH_MS, COVER_SMOOTH_FRAMES, COVER_SMOOTH_WAIT_MS, LAUNCH_HANDOFF_SHARE,
+} from '../../constants/launchHandoff';
 import LaunchScene, { LAUNCH_BLUE, launchFill } from '../launch/LaunchScene';
 
 /**
@@ -48,28 +52,55 @@ function CoverSky({ plan, style, blockTouches, launch }: {
   const ownFill = useSharedValue(plan.share ?? LAUNCH_HANDOFF_SHARE);
   // The launch cover fills the one launch bar the Splash route and Loading screen were filling.
   const fill = launch ? launchFill : ownFill;
+  // The lift, once the map has drawn: it starts on the first run of smooth frames (the map's first
+  // tiles and pins can hold the UI thread for a moment), so the 0.24 s fade never stutters into a
+  // half-faded double picture. -1: no lift asked for. Runs only while a lift is waiting.
+  const liftAskedAt = useSharedValue(-1);
+  const smoothFrames = useSharedValue(0);
+  const liftToken = useSharedValue(plan.token);
+  const liftGate = useFrameCallback((info) => {
+    'worklet';
+    if (liftAskedAt.value < 0) return;
+    if (liftAskedAt.value === 0) liftAskedAt.value = info.timestamp;
+    const gap = info.timeSincePreviousFrame ?? 0;
+    smoothFrames.value = gap > 0 && gap < 34 ? smoothFrames.value + 1 : 0;
+    if (smoothFrames.value < COVER_SMOOTH_FRAMES && info.timestamp - liftAskedAt.value < COVER_SMOOTH_WAIT_MS) return;
+    liftAskedAt.value = -1;
+    const tok = liftToken.value;
+    cancelAnimation(fill);
+    // The last stretch of the bar fills only now, as the map arrives, then the cover fades.
+    fill.value = withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) });
+    opacity.value = withDelay(COVER_FINISH_MS, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) },
+      (finished) => { 'worklet'; if (finished) runOnJS(coverLifted)(tok); }));
+  }, false);
   // A layout effect: the plan reaches the UI thread in the same commit that mounts the cover. The
   // UI thread works out the time left itself (from the plan's wall-clock deadline), so a busy UI
   // thread (the map screen's first mount) that runs this late never pushes the lift past its deadline.
   useLayoutEffect(() => {
     const tok = plan.token;
     const done = (finished?: boolean) => { 'worklet'; if (finished) runOnJS(coverLifted)(tok); };
+    if (plan.lifting) liftGate.setActive(true);
     runOnUI((deadline: number, share: number | null, ceiling: number, lifting: boolean) => {
       'worklet';
       cancelAnimation(opacity);
-      cancelAnimation(fill);
       if (lifting) {
-        fill.value = withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) });
-        opacity.value = withDelay(COVER_FINISH_MS, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) }, done));
+        // The bar keeps creeping; the frame gate above finishes it and fades the cover.
+        liftToken.value = tok;
+        smoothFrames.value = 0;
+        liftAskedAt.value = 0;
         return;
       }
-      // Honest progress: the bar creeps toward this plan's ceiling (the next real step) and only
-      // fills the rest when the cover lifts. It never moves back.
+      cancelAnimation(fill);
+      liftAskedAt.value = -1;
+      // Honest progress: the bar creeps at a steady pace toward this plan's ceiling (the next real
+      // step, in the 70s) right up to the deadline, so it is always moving and never parks near
+      // full. It fills the rest only as the cover lifts. It never moves back.
       const remaining = Math.max(0, deadline - Date.now());
       if (share !== null) fill.value = share;
       opacity.value = 1;
+      const creep = Math.max(0, remaining - COVER_FINISH_MS);
       fill.value = withSequence(
-        withTiming(Math.max(fill.value, ceiling), { duration: Math.max(250, remaining), easing: Easing.out(Easing.cubic) }),
+        withTiming(Math.max(fill.value, ceiling), { duration: Math.max(250, creep), easing: Easing.linear }),
         withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) }));
       opacity.value = withDelay(remaining, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) }, done));
     })(plan.deadline, plan.share, plan.ceiling, plan.lifting);

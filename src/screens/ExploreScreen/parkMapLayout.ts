@@ -323,12 +323,27 @@ const AVATAR_LG = 70;
 const ENERGY_ROW_INSET = 3;
 /** Clear map between the Energy pill and the PLAY RIDE pill's top, on every phone. */
 export const ENERGY_PLAY_RIDE_CLEARANCE = 8;
+/** The Energy pill (MapResourcePill: 14 pt icon overhang + 76 pt minimum capsule), flush right in the column. */
+export const ENERGY_PILL_WIDTH = 90;
+const RIGHT_COLUMN_RIGHT = 16;
+/** Clear map, side to side, between the PLAY RIDE pill's right end and the Energy pill. */
+export const ENERGY_SIDE_CLEARANCE = 4;
+/** PLAY RIDE spans the middle half of the screen (25% to 75%), so its right end sits here. */
+export function playRideRight(screenWidth: number): number {
+  return screenWidth * 0.75;
+}
+/** Does the PLAY RIDE pill reach under the Energy pill's column (side to side) on this phone? */
+export function playRideUnderEnergy(screenWidth: number): boolean {
+  return playRideRight(screenWidth) + ENERGY_SIDE_CLEARANCE > screenWidth - RIGHT_COLUMN_RIGHT - ENERGY_PILL_WIDTH;
+}
 /**
- * The gap between the avatar and the Energy pill above it: Energy sits high enough that its battery
- * clears the top of the PLAY RIDE pill by 8 pt (the pill is half the screen wide, so on an iPhone SE
- * and a 17 Pro its right end reaches under the Energy pill's column).
+ * The gap between the avatar and the Energy pill above it. Only on a phone where the PLAY RIDE
+ * pill really reaches under the Energy column (the iPhone SE and the 17 Pro) does Energy sit high
+ * enough that its battery clears the pill's top by 8 pt. On a wide phone (Pro Max) the pill ends
+ * before the column, so Energy keeps its normal 12 pt gap and stays with the avatar.
  */
 export function energyGap(screenWidth: number): number {
+  if (!playRideUnderEnergy(screenWidth)) return 12;
   return Math.max(12, Math.ceil(playRideTop(screenWidth) + ENERGY_PLAY_RIDE_CLEARANCE - ENERGY_ROW_INSET
     - RIGHT_COLUMN_BOTTOM - AVATAR_LG));
 }

@@ -103,6 +103,7 @@ function LaunchScene({ active = true, fact: givenFact }: {
   // the bubbles wait for the picture, so a slow decode can never show an empty bar on a flat screen.
   // The bar keeps filling underneath, so it appears already moving.
   const [artIn, setArtIn] = useState(launchArtDrawn);
+  const [barWidth, setBarWidth] = useState(0);
   const onArt = () => {
     launchArtDrawn = true;
     setArtIn(true);
@@ -121,8 +122,9 @@ function LaunchScene({ active = true, fact: givenFact }: {
             <Text style={styles.fact} numberOfLines={3}>{fact ?? ' '}</Text>
           </Animated.View>
           <View style={styles.rim} accessible accessibilityRole="progressbar" accessibilityLabel="Loading">
-            <View style={styles.bar}>
+            <View style={styles.bar} onLayout={event => setBarWidth(event.nativeEvent.layout.width)}>
               <Animated.View style={[styles.barFill, fillStyle]} />
+              {artIn && !still && barWidth > 0 && <BarShine width={barWidth} />}
             </View>
           </View>
         </View>
@@ -130,6 +132,29 @@ function LaunchScene({ active = true, fact: givenFact }: {
     </View>
   );
 }
+
+/**
+ * A soft white shine that sweeps along the filled part of the bar every second and a half, so even
+ * a slow stretch of loading always looks alive. It never runs past the fill. UI thread only; off
+ * with Reduce Motion and while the screen is under another one.
+ */
+function BarShine({ width }: { readonly width: number }) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    t.value = withRepeat(withSequence(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }),
+      withTiming(1, { duration: 400 }), withTiming(0, { duration: 0 })), -1);
+    return () => cancelAnimation(t);
+  }, [t]);
+  const style = useAnimatedStyle(() => {
+    const filled = Math.max(0, Math.min(1, launchFill.value)) * width;
+    return {
+      opacity: filled > SHINE_WIDTH ? 1 : 0,
+      transform: [{ translateX: -SHINE_WIDTH + t.value * filled }, { skewX: '-20deg' }],
+    };
+  });
+  return <Animated.View pointerEvents="none" style={[styles.shine, style]} />;
+}
+const SHINE_WIDTH = 26;
 
 /**
  * One bubble on the scene's clock: where it is in its rise comes from the time since launch, so the
@@ -179,6 +204,7 @@ const styles = StyleSheet.create({
   rim: { borderRadius: 50, borderColor: 'white', borderWidth: 3 },
   bar: { width: '100%', height: 23, borderRadius: 10, borderWidth: 3, borderColor: config.primary, backgroundColor: 'white', overflow: 'hidden' },
   barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%', transformOrigin: 'left', backgroundColor: config.primary },
+  shine: { position: 'absolute', left: 0, top: 0, bottom: 0, width: SHINE_WIDTH, backgroundColor: 'rgba(255,255,255,0.38)' },
   bubbleSlot: { position: 'absolute', bottom: 20 },
   bubble: {
     flex: 1,

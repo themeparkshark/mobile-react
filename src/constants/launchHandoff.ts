@@ -21,8 +21,16 @@ export const LATER_COVER_SHARE = 0.2;
 export const COVER_MAX_MS = 1500;
 /** How long the bar takes to finish once the map has drawn, before the cover fades. */
 export const COVER_FINISH_MS = 200;
-/** The cover's fade (the map and its buttons arrive together under it). */
-export const COVER_FADE_MS = 380;
+/** The cover's fade (the map and its buttons arrive together under it): one quick, clean lift. */
+export const COVER_FADE_MS = 240;
+/**
+ * Once the map has drawn, the lift waits for the phone to draw a few smooth frames in a row (the
+ * map's first tiles and pins can keep the UI thread busy for a moment), so the fade itself never
+ * stutters into a half-faded double picture. Never longer than this.
+ */
+export const COVER_SMOOTH_WAIT_MS = 600;
+/** Smooth frames in a row (each under 34 ms) before the lift starts. */
+export const COVER_SMOOTH_FRAMES = 3;
 /**
  * Never longer than this from the cover's first frame, even if the map never reports its tiles
  * drawn (a phone too busy, or no network): a kid is never stuck on a loading screen.
@@ -50,10 +58,11 @@ export function coverLiftAt(state: {
 
 /**
  * Honest progress: how far the bar may get before the next real step. The screen is up (the
- * splash's share and a bit), a map has mounted, the screen has picked its map; the last part
- * only fills when the tiles have drawn.
+ * splash's share and a bit), a map has mounted, the screen has picked its map. The bar stays in
+ * the 70s while the tiles load, always creeping (linear, never parked near full), and the last
+ * fifth fills only as the map arrives, so a full bar always means the game is here.
  */
-export const COVER_STEPS = { armed: 0.8, mapMounted: 0.86, mapChosen: 0.93 } as const;
+export const COVER_STEPS = { armed: 0.74, mapMounted: 0.77, mapChosen: 0.8 } as const;
 export function coverCeiling(mapMounted: boolean, held: boolean): number {
   if (!mapMounted) return COVER_STEPS.armed;
   return held ? COVER_STEPS.mapMounted : COVER_STEPS.mapChosen;

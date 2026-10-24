@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useState } from 'react';
 import {
-  COVER_FADE_MS, COVER_FINISH_MS, LATER_COVER_SHARE, coverCeiling, coverLiftAt,
+  COVER_FADE_MS, COVER_FINISH_MS, COVER_SMOOTH_WAIT_MS, LATER_COVER_SHARE, coverCeiling, coverLiftAt,
 } from '../../constants/launchHandoff';
 import { openAudioStartAfterLaunch } from '../../gamekit/audio/startGate';
 
@@ -61,7 +61,8 @@ function publish(next: Omit<CoverPlan, 'version'>, notify = true) {
   safety = null;
   if (plan.up) {
     const tok = plan.token;
-    const wait = (plan.lifting ? COVER_FINISH_MS : Math.max(0, plan.deadline - Date.now())) + COVER_FADE_MS + 600;
+    const wait = (plan.lifting ? COVER_SMOOTH_WAIT_MS + COVER_FINISH_MS : Math.max(0, plan.deadline - Date.now()) + COVER_FINISH_MS)
+      + COVER_FADE_MS + 600;
     safety = setTimeout(() => coverLifted(tok), wait);
   }
   if (notify) listeners.forEach(listener => listener(plan));

@@ -512,7 +512,8 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   // plan into a UI-thread withDelay fade with the bar on the same clock.
   assert.match(cover, /const opacity = useSharedValue\(1\);/);
   assert.match(cover, /opacity\.value = withDelay\(remaining, withTiming\(0/);
-  assert.match(cover, /withTiming\(Math\.max\(fill\.value, ceiling\), \{ duration: Math\.max\(250, remaining\)/, 'the bar creeps only to the next real step');
+  assert.match(cover, /withTiming\(Math\.max\(fill\.value, ceiling\), \{ duration: Math\.max\(250, creep\), easing: Easing\.linear \}\)/,
+    'the bar creeps at a steady pace, only to the next real step');
   assert.match(cover, /\{launch \? <LaunchScene \/> : <MapCoverSky fill=\{fill\} \/>\}/);
   assert.match(cover, /const fill = launch \? launchFill : ownFill;/, 'the launch cover fills the one launch bar');
   assert.match(cover, /\}, \[plan\.version\]\);/);
@@ -821,10 +822,11 @@ test('a slow map shows the living sky (clouds and the bobbing shark), never a fl
 test('SE fits: the coin-in-range card sits left above the help button and ends before Energy; the gifts bubble shares the wallet row', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /const COIN_TIP_WIDTH = Math\.min\(300, WINDOW_WIDTH - 124\);/);
-  assert.match(explore, /WINDOW_WIDTH - 12 - 16 - rightColumnWidth - 8/);
-  assert.match(explore, /left: 12, width, bottom: bottomLeftColumnHeight\(stores\) \+ 6/);
+  assert.match(explore, /WINDOW_WIDTH - 12 - 16 - column\.width - 8/);
+  assert.match(explore, /: bottomLeftColumnHeight\(stores\) \+ 6;/);
+  assert.match(explore, /style: \{ position: 'absolute', left: 12, maxWidth, bottom, zIndex: 40 \} as const,/);
   assert.match(explore, /onLayout=\{event => setRightColumnWidth\(Math\.round\(event\.nativeEvent\.layout\.width\)\)\}/);
-  assert.match(explore, /small=\{parkTip === 'coin_in_range' && SHORT_MAP\}/);
+  assert.match(explore, /small=\{!!coin && \(SHORT_MAP \|\| coin\.narrow\)\}/);
   const cc = read('src/screens/CommunityCenterScreen.tsx');
   assert.match(cc, /SHORT_SCREEN && styles\.giftCountBadgeShort,\s*SHORT_SCREEN && \{ top: 60 \+ ART_SHIFT \},/);
   assert.match(cc, /SHORT_SCREEN \? 'No gifts yet!' : 'No gifts yet\. Leave the first one!'/);
@@ -884,7 +886,10 @@ test('Energy sits high enough that its battery clears the PLAY RIDE pill by 8 pt
     const gap = layout.energyGap(width);
     // Energy row bottom = 32 (column margin) + 70 (avatar) + gap; the pill inside the 36 pt row starts 3 pt up.
     const energyPillBottom = 32 + 70 + gap + 3;
-    assert.ok(energyPillBottom - layout.playRideTop(width) >= 8, `${width}: ${energyPillBottom} vs ${layout.playRideTop(width)}`);
+    // Only where the pill reaches under the Energy column (side to side) does Energy need to clear its top.
+    if (layout.playRideUnderEnergy(width)) {
+      assert.ok(energyPillBottom - layout.playRideTop(width) >= 8, `${width}: ${energyPillBottom} vs ${layout.playRideTop(width)}`);
+    }
     assert.ok(gap <= 60, `${width}: Energy stays near the avatar (${gap})`);
   }
   assert.equal(layout.bottomRightColumnHeight(true), 32 + 88 + 96, 'default gap keeps the old height');
@@ -909,8 +914,8 @@ test('ride pins drop in when their slot first gets a ride (slots mount empty), 4
 test('Finn tips at the park: the welcome stops short of the right buttons, the coin tip is one line with a picture and a pointer', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /const PARK_WELCOME_TIP_STYLE = \{ position: 'absolute', left: 12, right: 78, top: 132, zIndex: 40 \} as const;/);
-  assert.match(explore, /art=\{parkTip === 'coin_in_range' \? <CoinTipPicture \/> : undefined\}/);
-  assert.match(explore, /pointerLeft=\{parkTip === 'coin_in_range' \? coinTipPointer\(park\.stores\.length, rightColumnWidth\) : undefined\}/);
+  assert.match(explore, /art=\{coin \? <CoinTipPicture \/> : undefined\}/);
+  assert.match(explore, /pointerLeft=\{coin\?\.pointer\}/);
   // The retry note waits while Finn's park tip is on screen (one card at a time).
   assert.match(explore, /mapLoadFailed && !\(parkTip && activeTip === parkTip\) && \(/);
   const { TIP_COPY } = loadTs('src/services/help/helpTopics.ts');
@@ -952,4 +957,65 @@ test('audio: once a cue moves to the graph, its expo-av copy is freed after any 
   const backends = read('src/gamekit/audio/backends.ts');
   assert.match(backends, /this\.routes\.set\(key, this\.api\);\s*\/\/[^\n]*\n\s*this\.av\.unload\(key\);/);
   assert.match(backends, /unload\(key: string\): void \{[^]*?const wait = Math\.max\(0, \.\.\.pool\.map\(\(v\) => v\.busyUntil - Date\.now\(\)\)\);/);
+});
+
+// Wave 4 round 1: launch bar always moving, clean lift, neutral team bar, coin card fits, Energy rhythm.
+test('launch bar stays in the 70s while tiles load, always creeps, and fills only as the map arrives', () => {
+  const k = loadTs('src/constants/launchHandoff.ts');
+  assert.ok(k.coverCeiling(true, false) <= 0.8, 'never parked near full before the map draws');
+  assert.ok(k.coverCeiling(false, false) >= 0.72);
+  assert.ok(k.COVER_FADE_MS <= 250, 'one quick lift');
+  assert.ok(k.COVER_SMOOTH_WAIT_MS <= 600 && k.COVER_SMOOTH_FRAMES >= 2);
+  const cover = read('src/components/map/MapLaunchCover.tsx');
+  // The lift waits for a run of smooth frames (capped), so the fade never stutters into a double picture.
+  assert.match(cover, /useFrameCallback\(\(info\) => \{\s*'worklet';\s*if \(liftAskedAt\.value < 0\) return;/);
+  assert.match(cover, /smoothFrames\.value < COVER_SMOOTH_FRAMES && info\.timestamp - liftAskedAt\.value < COVER_SMOOTH_WAIT_MS/);
+  assert.match(cover, /if \(plan\.lifting\) liftGate\.setActive\(true\);/);
+  assert.doesNotMatch(cover, /Easing\.out\(Easing\.cubic\)/, 'no ease-out creep that parks the bar near its ceiling');
+  const scene = read('src/components/launch/LaunchScene.tsx');
+  assert.match(scene, /\{artIn && !still && barWidth > 0 && <BarShine width=\{barWidth\} \/>\}/);
+  assert.match(scene, /translateX: -SHINE_WIDTH \+ t\.value \* filled/, 'the shine never runs past the fill');
+  const store = read('src/components/map/mapCover.ts');
+  assert.match(store, /plan\.lifting \? COVER_SMOOTH_WAIT_MS \+ COVER_FINISH_MS/);
+});
+
+test('team bar: before standings answer it says RIDE CONTROL with plain shields, never a no-leader claim', () => {
+  const bar = read('src/components/RideControlBar.tsx');
+  assert.match(bar, /const known = control !== null;/);
+  assert.match(bar, /: leader \? `\$\{teamName\(leader, names\)\.toUpperCase\(\)\} LEADS` : !known \? 'RIDE CONTROL' : NO_LEADER_HEADLINE;/);
+  assert.match(bar, /<Animated\.Text style=\{\[styles\.chipCount, countStyle\]\}>\{known \? count : 0\}<\/Animated\.Text>/);
+  assert.match(bar, /leading=\{leader === team\} known=\{known\} \/>/);
+  assert.match(bar, /\{known \? held\[team\] : ' '\}/);
+});
+
+test('Energy keeps its 12 pt gap on the Pro Max, and lifts only where PLAY RIDE reaches under it', () => {
+  const layout = loadTs('src/screens/ExploreScreen/parkMapLayout.ts');
+  assert.equal(layout.playRideUnderEnergy(440), false);
+  assert.equal(layout.energyGap(440), 12, 'Pro Max: Energy stays with the avatar');
+  assert.equal(layout.playRideUnderEnergy(375), true);
+  assert.equal(layout.playRideUnderEnergy(402), true);
+  assert.ok(layout.energyGap(375) > 12 && layout.energyGap(402) > 12);
+  // Where Energy is not lifted, the pill ends at least 4 pt before the Energy column.
+  assert.ok(440 - 16 - layout.ENERGY_PILL_WIDTH - layout.playRideRight(440) >= 4);
+});
+
+test('coin card: no 200 pt floor, sized to its content, narrow or a row up when the right column is wide', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.doesNotMatch(explore, /Math\.max\(200,/);
+  assert.match(explore, /const room = WINDOW_WIDTH - 12 - 16 - column\.width - 8;/);
+  assert.match(explore, /const above = room < COIN_TIP_MIN;/);
+  assert.match(explore, /small=\{!!coin && \(SHORT_MAP \|\| coin\.narrow\)\} fit=\{!!coin\} narrow=\{coin\?\.narrow\}/);
+  const tip = read('src/components/help/CoachTip.tsx');
+  assert.match(tip, /\{!narrow && <Text style=\{styles\.ok\}>OK<\/Text>\}/);
+  assert.match(tip, /fitCopy: \{ flexShrink: 1 \}/);
+  const picture = read('src/components/help/CoinTipPicture.tsx');
+  assert.match(picture, /<GameIcon name="ticket" size=\{36\} \/>/);
+  assert.match(picture, /coin: \{ width: 38, height: 38 \}/);
+  assert.doesNotMatch(picture, /GameIcon name="arrow"/, 'the arrow is drawn gold, not a blue circle');
+});
+
+test('Community Center top cards glow warm like lit signs', () => {
+  const cc = read('src/screens/CommunityCenterScreen.tsx');
+  assert.match(cc, /const SIGN_GLOW = \{\s*shadowColor: '#ffc95c',/);
+  assert.equal((cc.match(/\.\.\.SIGN_GLOW,/g) || []).length, 2);
 });
