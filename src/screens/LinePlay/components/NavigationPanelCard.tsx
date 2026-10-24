@@ -232,7 +232,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   const size = panel.size;
   // No count here: the STORY rail under the page owns "CLUE 1/3", so a kid sees each count once.
   const kickerText = `${look.place} · SIGNAL REPAIR`;
-  const status = paused ? 'Paused. Your circuit is saved right where you left it.'
+  const status = paused ? 'Paused. Your circuit is saved.'
     : trace.solved ? `3 / 3 ${look.relayNoun} linked · exit online`
       : hint != null ? 'Turn the gold-edged tile to reconnect the route.'
         : trace.signals === 3 ? `All ${look.relayNoun} linked! Now reach the exit.`

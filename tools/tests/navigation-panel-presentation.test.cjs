@@ -33,7 +33,7 @@ test('a manual pause keeps a visible board but blocks tile edits and shows saved
   assert.deepEqual(c.turns, [0]); c.app.change({ paused: true });
   const paused = c.tile(1, 1); assert.equal(paused.props.disabled, true);
   paused.props.onPress(); assert.deepEqual(c.turns, [0]);
-  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Paused. Your circuit is saved right where you left it.'));
+  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Paused. Your circuit is saved.'));
 });
 test('every tile of a 4x4 replay board is a big labelled target and the relays are drawn art, not glyphs', () => {
   const c = card({ progress: logic.createNavigationPanelProgress(0, 1) });
