@@ -113,13 +113,16 @@ function Heart({ index, t }: { readonly index: number; readonly t: SharedValue<n
       transform: [{ translateX: (index - 1) * 7 + 5 * Math.sin(k * Math.PI * 2 + index) }, { translateY: -34 * k }, { scale: 0.6 + 0.4 * k }],
     };
   });
-  return <Animated.View style={[styles.heart, style]}><GameIcon name="heart" size={13} /></Animated.View>;
+  return <Animated.View style={[styles.heart, style]}><GameIcon name="heart" size={16} mono={HEART_GOLD} /></Animated.View>;
 }
+
+/** Gold, never red (red reads as a miss). */
+const HEART_GOLD = '#ffc928';
 
 const styles = StyleSheet.create({
   float: { position: 'absolute', left: 0, right: 0, top: -4, alignItems: 'center' },
   plus: { position: 'absolute', top: -14, backgroundColor: BRAND.gold, borderRadius: 9, borderWidth: 2, borderColor: BRAND.white,
     paddingHorizontal: 4 },
-  plusText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.navy },
+  plusText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
   heart: { position: 'absolute', top: 0 },
 });
