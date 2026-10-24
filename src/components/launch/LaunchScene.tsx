@@ -1,3 +1,4 @@
+import { nativeSplashArtDrawn } from '../../nativeSplash';
 import { memo, useEffect } from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import { initialWindowMetrics } from 'react-native-safe-area-context';
@@ -86,7 +87,7 @@ function LaunchScene({ active = true, fact: givenFact }: {
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.blue]}>
       <Image source={LAUNCH_ART} transition={0} contentFit="cover" accessible={false} cachePolicy="memory-disk" priority="high"
-        style={{ width, height }} />
+        onLoad={nativeSplashArtDrawn} style={{ width, height }} />
       {!still && LAUNCH_BUBBLES.map((b, i) => <Bubble key={i} bubble={b} rise={height * 0.6} />)}
       {/* The phone's own bottom inset (one fixed number), so the fact and bar sit in exactly the same
           spot on the Splash route, the Loading screen and the map's cover (no jump at a hand-off). */}

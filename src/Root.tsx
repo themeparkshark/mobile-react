@@ -74,8 +74,9 @@ export default function App() {
   // A font failure falls back to system fonts instead of a blank app.
   const fontsLoaded = fontsReady || !!fontError;
   useEffect(() => {
-    if (fontsLoaded) releaseNativeSplash();
-  }, [fontsLoaded]);
+    // Opening on the launch scene: the native art hands off only once the JS art has drawn.
+    if (fontsLoaded) releaseNativeSplash({ waitForArt: initialRouteName === 'Splash' });
+  }, [fontsLoaded, initialRouteName]);
   useAxiosSetup();
 
 
