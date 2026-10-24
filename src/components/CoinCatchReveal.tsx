@@ -326,7 +326,9 @@ export default function CoinCatchReveal({
       {/* A clean deep-water stage lit softly where the coin lands. Alex's water world still shows through,
           blurred and faint (its props turn to soft shapes), so the money shot stays in the TPS world. */}
       <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
-        <Image source={require('../../assets/images/water_background.png')} blurRadius={WORLD_BLUR} transition={0}
+        {/* Pre-softened once at build time (a small, blurred copy of water_background.png): no runtime blur of a
+            1290 x 2790 image on the frame the reveal starts, which stalled the money shot on a busy device. */}
+        <Image source={require('../../assets/images/reveal/water-soft.webp')} transition={0}
           contentFit="cover" style={StyleSheet.absoluteFill} />
         <LinearGradient colors={BACKDROP} locations={[0, 0.42, 1]} style={[StyleSheet.absoluteFill, { opacity: WORLD_VEIL }]} />
         <Image source={require('../../assets/images/reveal/soft-spot.webp')} tintColor="#5fb4ff" transition={0} contentFit="fill"
@@ -379,9 +381,8 @@ const styles = StyleSheet.create({
 });
 
 const BACKDROP = ['#0d5bb0', '#08408c', '#042a62'] as const;
-/** How much of the deep-water gradient covers the blurred world art (the rest of the world shows through). */
-const WORLD_VEIL = 0.82;
-const WORLD_BLUR = 36;
+/** How much of the deep-water gradient covers the blurred world art: the water tint shows through, its props (a window grid, the chest, a laurel) no longer read as shapes. */
+const WORLD_VEIL = 0.9;
 
 const CONFETTI_COLORS = ['#ffcf3b', '#ffffff', '#38bdf8', '#fb923c', '#ffe27a'];
 const PIECES = Array.from({ length: 28 }, (_, i) => {
