@@ -27,10 +27,12 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
   const { player, isReady } = useContext(AuthContext);
 
   useEffect(() => {
-    SFX.setEnabled(!(isReady && !player?.enabled_sound_effects));
+    // Sound waits for the player's setting: nothing plays (and the audio hardware stays asleep) until it
+    // is known, and a player with sound off never hears a blip at launch.
+    SFX.setEnabled(isReady && !!player?.enabled_sound_effects);
     // The studio engine follows the music setting too (games still set their own), so a player with
     // both off never starts the audio hardware at all.
-    GameAudio.setMusicEnabled(!(isReady && !player?.enabled_music));
+    GameAudio.setMusicEnabled(isReady && !!player?.enabled_music);
   }, [isReady, player?.enabled_sound_effects, player?.enabled_music]);
 
   useEffect(() => {

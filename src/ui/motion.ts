@@ -212,6 +212,8 @@ export interface LevelUpPayoff {
   readonly fanPeak: number;
   /** How much of that fan stays lit behind the card while the kid reads it. */
   readonly fanHold: number;
+  /** The fan's size in screen widths: a bigger tier throws rays further past the card's edges. */
+  readonly fanScale: number;
   /** How far the tier ring pulses out (1 + this, times its 132 pt start). */
   readonly ringReach: number;
   /** The tier ring's band width (pt). */
@@ -233,6 +235,7 @@ export function levelUpPayoff(level: number): LevelUpPayoff {
   return {
     fanPeak: top ? 1 : 0.7 + 0.075 * (lv - 1),
     fanHold: top ? 0.85 : 0.3 + 0.1 * (lv - 2),
+    fanScale: top ? 2.4 : 1.5 + 0.2 * (lv - 2),
     ringReach: 0.6 + 0.15 * Math.min(lv, 6),
     ringWidth: 4 + Math.min(lv, 7),
     sparkleWaves: top ? 2 : 1,

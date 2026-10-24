@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet } from 'react-native';
 import PostWinRewardsModal from '../components/PostWinRewardsModal';
@@ -25,7 +25,15 @@ export default function PostWinRewardsPreviewScreen() {
     }
     return null;
   });
-  const [showWin, setShowWin] = useState(true);
+  // Release-like capture (EXPO_PUBLIC_MOTION_CAPTURE, never set in store builds): open the reward a few seconds
+  // after launch, once start-up work is done, so the clip shows the reveal and not the app booting under it.
+  const capture = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'PostWinRewardsPreview';
+  const [showWin, setShowWin] = useState(!capture);
+  useEffect(() => {
+    if (!capture) return undefined;
+    const t = setTimeout(() => setShowWin(true), 6000);
+    return () => clearTimeout(t);
+  }, [capture]);
   const [showCoin, setShowCoin] = useState(false);
   const [openCoinAfterHide, setOpenCoinAfterHide] = useState(false);
   return (

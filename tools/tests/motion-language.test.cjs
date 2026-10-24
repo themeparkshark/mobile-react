@@ -180,7 +180,8 @@ test('the chaser escalates past the Golden Box', () => {
   assert.ok(/pinBackGold/.test(src) && /pinBack: \{[^}]*borderColor: BRAND\.navy/.test(src), 'the pin back is outlined metal, never a grey disc');
   const pin = read('src/screens/pinTrading/EnamelPin.tsx');
   assert.ok(!/blendMode="color"/.test(pin), 'no flat colour swap that turns the chaser into a plain gold disc');
-  assert.ok(/blendMode="overlay" opacity=\{TINT_OVERLAY\}/.test(pin) && /TINT_EDGE/.test(pin), 'a warm overlay plus a metal edge keep the art readable');
+  assert.ok(/<ColorMatrix matrix=\{metalMatrix\(tint\)\} \/>/.test(pin) && /TINT_EDGE/.test(pin), 'a gold duotone of the art plus a metal edge: reads gold, keeps the art');
+  assert.ok(!/blendMode="overlay"/.test(pin), 'no faint overlay that leaves the chaser looking blue');
   assert.ok(!/LIMITED \\u00b7 #/.test(src), 'the serial shows twice (stamp and badge), not three times');
   // The serial stamp slams from oversize and never dips below its own size (no underdamped spring through an open interpolate).
   assert.ok(!/stamp\.value = withDelay\(250, withSpring/.test(src), 'no spring on the stamp slam');
@@ -236,7 +237,7 @@ test('the coin art runs on one UI-thread clock, so a level change restarts nothi
 });
 
 test('the level-up payoff grows with every tier, Legendary clearly the biggest', () => {
-  const fields = ['fanPeak', 'fanHold', 'ringReach', 'ringWidth', 'sparkleWaves', 'sparkles'];
+  const fields = ['fanPeak', 'fanHold', 'fanScale', 'ringReach', 'ringWidth', 'sparkleWaves', 'sparkles'];
   let prev = null;
   for (let level = 2; level <= 10; level += 1) {
     const p = motion.levelUpPayoff(level);
@@ -247,6 +248,7 @@ test('the level-up payoff grows with every tier, Legendary clearly the biggest',
   const legendary = motion.levelUpPayoff(5);
   assert.equal(legendary.fanPeak, 1, 'Legendary fan at full strength');
   assert.ok(legendary.fanHold >= 0.8, 'the fan stays lit behind the Legendary card');
+  assert.ok(legendary.fanScale >= 2.2 && silver.fanScale <= 1.6, 'Legendary rays reach well past the card, Silver stays close');
   assert.equal(legendary.sparkleWaves, 2, 'a second sparkle wave from Legendary');
   assert.ok(legendary.ringReach > silver.ringReach + 0.3 && legendary.ringWidth > silver.ringWidth, 'a clearly bigger ring than Silver');
   const modal = read('src/components/CoinLevelingModal.tsx');
@@ -270,4 +272,28 @@ test('the daily chest wallet counts up from the balance before the claim', () =>
   const src = read('src/components/DailyGiftModal.tsx');
   assert.ok(src.includes('walletBefore.current = player?.coins ?? null;'), 'captured at the chest tap');
   assert.ok(src.includes('start: Math.max(0, walletBefore.current ?? (player?.coins ?? 0))'), 'the chip starts from it');
+});
+
+test('the gold chaser is a contrast-stretched gold duotone: dark outlines stay dark, faces turn bright gold', () => {
+  const { metalMatrix } = loadTs('src/screens/pinTrading/EnamelPin.tsx', {
+    '@shopify/react-native-skia': {}, 'expo-image': {}, react: { memo: (c) => c }, 'react-native': { StyleSheet: { absoluteFill: {} } },
+    'react-native-reanimated': {}, './pinImageCache': {}, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'f' },
+  });
+  const m = metalMatrix('#f2b72c');
+  const apply = (r, g, b) => [0, 1, 2].map(row => Math.max(0, Math.min(1, m[row * 5] * r + m[row * 5 + 1] * g + m[row * 5 + 2] * b + m[row * 5 + 4])));
+  const face = apply(0.66, 0.85, 0.94);   // the pale blue planet face
+  const outline = apply(0.1, 0.15, 0.3);  // a navy outline
+  assert.ok(face[0] > 0.85 && face[1] > 0.7 && face[2] < face[1] - 0.15, `the face reads bright gold (${face.map(v => v.toFixed(2))})`);
+  assert.ok(face[0] > face[2] + 0.25, 'warm, not blue');
+  assert.ok(outline.every((v, i) => v < face[i] - 0.4), 'outlines stay dark, so every line of the art survives');
+  assert.equal(m.slice(15).join(','), '0,0,0,1,0', 'alpha untouched: the die-cut shape stays');
+});
+
+test('coin reveal backdrop: a pre-softened small copy of the water world under a strong veil, no runtime blur', () => {
+  const src = read('src/components/CoinCatchReveal.tsx');
+  assert.ok(src.includes("reveal/water-soft.webp"), 'the softened world copy');
+  assert.ok(!/blurRadius=/.test(src), 'no runtime blur of a full-size image on the reveal frame');
+  const veil = Number((src.match(/const WORLD_VEIL = ([0-9.]+);/) || [])[1]);
+  assert.ok(veil >= 0.88 && veil < 1, `props stop reading as shapes, the water tint stays (${veil})`);
+  assert.ok(fs.statSync(path.join(root, 'assets/images/reveal/water-soft.webp')).size < 8000, 'tiny asset');
 });

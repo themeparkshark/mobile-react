@@ -6,7 +6,11 @@
  */
 import { useEffect, useRef } from 'react';
 
-const DRIVE: readonly string[] = __DEV__ ? (process.env.EXPO_PUBLIC_SHARE_AUTODRIVE ?? '').split(',').filter(Boolean) : [];
+// A release-like level-up capture (EXPO_PUBLIC_MOTION_CAPTURE=CoinLevelingPreview, never set in store builds)
+// presses Level Up on its own, so every tier can be recorded with no taps. Folds to [] like the dev list.
+const DRIVE: readonly string[] = __DEV__
+  ? (process.env.EXPO_PUBLIC_SHARE_AUTODRIVE ?? '').split(',').filter(Boolean)
+  : process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'CoinLevelingPreview' ? ['level_up'] : [];
 
 /** `step` may list alternatives, e.g. ['sheet_share', 'sheet_share@park_day']. */
 export function useDevAutoPress(step: string | readonly string[], press: () => void, delayMs = 1600): void {
