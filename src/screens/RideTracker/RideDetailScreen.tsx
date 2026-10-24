@@ -356,8 +356,9 @@ export default function RideDetailScreen() {
             <LogPointer />
             <Text style={s.emptyTitle}>You haven't ridden this yet!</Text>
             <Text style={s.emptyHint}>Rode it? Tap Log this ride.</Text>
-            {/* The shark waits by the ride, so the empty page is not a blank sheet. */}
-            <View style={s.emptyArt} accessible={false}><GameIcon name="shark" size={130} /></View>
+            {/* The shark waits by the ride, so the empty page is not a blank sheet (the riders' chart fills it otherwise). */}
+            {!(community && community.total_logs >= COMPACT_COMMUNITY_LOGS) &&
+              <View style={s.emptyArt} accessible={false}><GameIcon name="shark" size={130} /></View>}
           </View>
         }
       />

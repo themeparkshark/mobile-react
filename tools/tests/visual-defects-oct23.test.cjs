@@ -121,6 +121,8 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
   // Only the green pill shows: the art's stone foot and gem are cropped off.
   assert.match(cc, /leaveGiftCrop: \{[^}]*overflow: 'hidden'/s);
   assert.ok(LEAVE_GIFT_PILL_SHARE < 0.7);
+  // The plaque also covers the painted pedestal gem (about 0.813 of the art) under the slot.
+  assert.ok(loadTs('src/screens/CommunityCenter/leaveGiftLayout.ts').KIOSK_FACE.bottom >= 0.816);
   for (const [phone, w] of [['SE', 375], ['17 Pro', 402], ['Pro Max', 440]]) {
     const artH = w * 2144 / 964;
     const k = kioskLayout(w, artH);

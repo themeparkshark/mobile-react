@@ -15,10 +15,11 @@ export const PAINTED_PRICE = { left: 0.745, right: 0.94, top: 0.713, bottom: 0.7
 
 /**
  * The kiosk plaque: the game's own white price card with a navy rim (like the HUD cards and the
- * favorites toast), laid over the painted price and slot. It reads as the game's UI on Alex's
- * pedestal, never as code-drawn stone. It ends 2 pt from the edge, past the painted slot.
+ * favorites toast), laid over the painted price, the slot and the pedestal gem under them. It
+ * reads as the game's UI on Alex's pedestal, never as code-drawn stone. It ends 2 pt from the
+ * edge, past the painted slot.
  */
-export const KIOSK_FACE = { left: 0.69, top: 0.706, bottom: 0.802 } as const;
+export const KIOSK_FACE = { left: 0.69, top: 0.706, bottom: 0.818 } as const;
 
 /** The plaque's colors: white card, navy rim and price, the soft navy shadow. Never dark slate. */
 export const KIOSK_COLORS = { face: '#ffffff', edge: '#05346e', ink: '#05346e' } as const;

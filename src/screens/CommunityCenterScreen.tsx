@@ -102,8 +102,8 @@ const ART_OVERFLOW = Math.max(0, SCALED_HEIGHT - SCREEN_HEIGHT);
  */
 const SHORT_SCREEN = ART_OVERFLOW > 60;
 const BOTTOM_GAP = 16;
-/** The painted plinth under LEAVE GIFT ends at about 0.815 of the art's height. */
-const LEAVE_GIFT_PLINTH_BOTTOM_RATIO = 0.815;
+/** The white price plaque (over the painted plinth and its gem) ends at about 0.82 of the art's height. */
+const LEAVE_GIFT_PLINTH_BOTTOM_RATIO = 0.82;
 /** The LEAVE GIFT art is taller than the pill we show (its stone foot and gem are cropped off). */
 const LEAVE_GIFT_ART_H = KIOSK.button.artHeight;
 const ART_SHIFT = SHORT_SCREEN
