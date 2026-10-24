@@ -272,7 +272,10 @@ export default function RideDetailScreen() {
   const name = plainRideName(rideName || ride?.name || 'Ride');
   // A short phone (iPhone SE, 667 pt) gets a smaller waiting shark, so it never slides under the footer.
   const { height: screenHeight } = useWindowDimensions();
-  const emptySharkSize = screenHeight < 740 ? 84 : 130;
+  // The waiting shark fills a tall empty page. On a 667 pt phone (iPhone SE) there is no room for it
+  // between LOG THIS RIDE and the footer compass (even at 84 pt it slid under the compass), so the
+  // arrow and the two lines carry the page there.
+  const emptySharkSize = screenHeight < 700 ? 0 : screenHeight < 740 ? 84 : 130;
   // One layout for every ride: the header always says RIDE TRACKER and the ride's name always
   // leads the white ride card (two lines for long names), so short and long names open the same way.
   const headerTitle = RIDE_DETAIL_HEADER;
@@ -404,7 +407,7 @@ export default function RideDetailScreen() {
             <Text style={s.emptyTitle}>You haven't ridden this yet!</Text>
             <Text style={s.emptyHint}>Rode it? Tap LOG THIS RIDE.</Text>
             {/* The shark waits by the ride, so the empty page is not a blank sheet (the riders' chart fills it otherwise). */}
-            {!(community && ratingCount(community.rating_distribution) >= COMPACT_COMMUNITY_LOGS) &&
+            {emptySharkSize > 0 && !(community && ratingCount(community.rating_distribution) >= COMPACT_COMMUNITY_LOGS) &&
               <View style={s.emptyArt} accessible={false}><GameIcon name="shark" size={emptySharkSize} /></View>}
           </View>
         }

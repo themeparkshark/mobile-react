@@ -715,7 +715,8 @@ test('buttons and the map on small and busy screens: GameButton art waits for it
   const button = read('src/ui/GameButton.tsx');
   assert.match(button, /style=\{\{ width: '100%', aspectRatio: BUTTON\.aspectRatio, opacity: labelAreaHeight > 0 \? 1 : 0 \}\}>/);
   const detail = read('src/screens/RideTracker/RideDetailScreen.tsx');
-  assert.match(detail, /const emptySharkSize = screenHeight < 740 \? 84 : 130;/);
+  assert.match(detail, /const emptySharkSize = screenHeight < 700 \? 0 : screenHeight < 740 \? 84 : 130;/);
+  assert.match(detail, /\{emptySharkSize > 0 && !\(community/);
   assert.match(detail, /<GameIcon name="shark" size=\{emptySharkSize\} \/>/);
   const map = read('src/components/Map.tsx');
   assert.match(map, /findWater: async \(latitude: number, longitude: number, margin\?: number\) => \{\s*if \(!mapAlive\.current\) return null;/);
