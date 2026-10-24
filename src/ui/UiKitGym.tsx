@@ -19,7 +19,7 @@ import GameIcon from './GameIcon';
 import GameRichText from './GameRichText';
 import GameText from './GameText';
 import SharkLoader from './SharkLoader';
-import RollingNumber from './RollingNumber';
+import WalletChange from './WalletChange';
 import { GENERATED_ICON_NAMES, ORIGINAL_ICON_NAMES, type GameIconName } from './iconNames';
 import { TEXT_PRESET_NAMES } from './TextPresets';
 import { BRAND, OUTLINE, RADIUS, SPACE } from './tokens';
@@ -186,10 +186,11 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
 
       {section === 'text' && <>
         <Panel title="Rolling numbers" blue>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'center',
-            backgroundColor: BRAND.blueLip, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 8, borderWidth: 2, borderColor: BRAND.white }}>
-            <GameIcon name="coins" size={34} />
-            <RollingNumber value={wallet} style={{ fontFamily: 'Shark', fontSize: 34, color: BRAND.white }} />
+          {/* The full wallet beat: coins fly in (or tumble out), the chip bumps, the number rolls and flashes. */}
+          <View style={{ alignSelf: 'center', paddingVertical: 24 }}>
+            <WalletChange value={wallet} iconSize={34} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+              backgroundColor: BRAND.blueLip, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 8, borderWidth: 2, borderColor: BRAND.white }}
+              textStyle={{ fontFamily: 'Shark', fontSize: 34, color: BRAND.white }} />
           </View>
           <View style={{ flexDirection: 'row', gap: 6 }}>
             <View style={{ flex: 1 }}><GameButton label="+25" size="compact" onPress={() => setWallet(v => v + 25)} /></View>

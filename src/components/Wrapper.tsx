@@ -318,7 +318,7 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
         </View>}
       </Animated.View>
       {compass && <SparkleBurst progress={footerMotion.burst} count={F.compassSparkles} x={size / 2} y={44}
-        spread={[-170, -10]} dist={[34, 50]} size={[11, 16]} gravity={14} seed={2} />}
+        spread={[-175, -5]} dist={[42, 62]} size={[15, 21]} gravity={16} seed={2} />}
     </View>
   );
 }

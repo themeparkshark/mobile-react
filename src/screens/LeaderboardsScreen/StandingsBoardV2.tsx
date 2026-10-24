@@ -26,8 +26,9 @@ import {
 } from 'react-native';
 import Animated, {
   Easing, FadeIn, FadeInRight, FadeOut, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat, withSequence,
-  withSpring, withTiming, ZoomIn, Extrapolation, runOnJS, useAnimatedReaction,
+  withSpring, withTiming, ZoomIn, Extrapolation, runOnJS, useAnimatedReaction, withDelay,
 } from 'react-native-reanimated';
+import { EASE, GOLD_FX } from '../../ui/motionEasing';
 import * as RootNavigation from '../../RootNavigation';
 import type { InventoryType } from '../../models/inventory-type';
 import { markLastWeekSeen, type StandingsBoardKey } from '../../api/endpoints/me/standings';
@@ -175,6 +176,23 @@ export function RankBadge({ rank, me = false }: { readonly rank: number; readonl
   );
 }
 
+/** The one-time gold glow on your own row (first paint only). */
+export const MY_ROW_GLOW = { atMs: 500, inMs: 160, outMs: 520, peak: 0.9, grow: 1.03 } as const;
+
+function MyRowGlow({ delay }: { readonly delay: number }) {
+  const reduced = useUiReducedMotion();
+  const g = useSharedValue(0);
+  useEffect(() => {
+    if (reduced) return;
+    g.value = withDelay(delay, withSequence(withTiming(1, { duration: MY_ROW_GLOW.inMs, easing: EASE.out }),
+      withTiming(0, { duration: MY_ROW_GLOW.outMs, easing: EASE.in })));
+  }, [delay, reduced, g]);
+  const style = useAnimatedStyle(() => ({ opacity: g.value * MY_ROW_GLOW.peak,
+    transform: [{ scaleX: 1 + (MY_ROW_GLOW.grow - 1) * g.value }, { scaleY: 1 + (MY_ROW_GLOW.grow - 1) * 2 * g.value }] }));
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 8, right: 8, top: 0, bottom: 0,
+    borderRadius: RADIUS.md + 4, borderWidth: 4, borderColor: GOLD_FX.glow, backgroundColor: 'rgba(255, 241, 184, 0.55)' }, style]} />;
+}
+
 /** A 64 pt row: rank, shark, name, number. Muted rows (friends with no rides yet) show the shark greyed and no number. */
 const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPress, waiting = false }: {
   /** During the climb hold, a player who also stands on the dimmed old podium keeps an empty slot (r6: no duplicate). */
@@ -199,6 +217,8 @@ const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPre
   return (
     <Animated.View entering={enter != null ? FadeInRight.delay(enter).springify().damping(16).stiffness(180) : undefined}
       style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, paddingHorizontal: 12, justifyContent: 'center' }}>
+      {/* Your own row glows gold once, half a second after the board lands, so the eye finds you. */}
+      {row.isMe && enter != null && <MyRowGlow delay={enter + MY_ROW_GLOW.atMs} />}
       <Pressable accessibilityRole="button" accessibilityLabel={rowLabel(row, metric) + (row.isMe && step && 'plus' in step ? `. ${step.text}` : '')}
         onPress={() => onPress(row)}
         style={({ pressed }) => ({

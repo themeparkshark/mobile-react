@@ -37,6 +37,7 @@ import { LeavingRow, Pill, SectionHeader, SocialError } from './social/SocialKit
 import CleanScreenBackground, { CLEAN_SCREEN_ACCENT, CLEAN_SCREEN_INK, CLEAN_SCREEN_INK_SOFT } from '../components/CleanScreenBackground';
 import { SurfaceContext, useFriendOverrides } from './social/socialStore';
 import { staggerIn } from '../ui/stagger';
+import { SharkRefreshOverlay, useSharkRefresh } from '../ui/SharkRefresh';
 import useAmbientLoop from '../power/useAmbientLoop';
 
 /** Mark-all-read only makes sense when something is unread. */
@@ -50,6 +51,9 @@ const HEADER_HEIGHT = 58;
 const HEADER_WITH_PILL_HEIGHT = 70;
 
 /** "All caught up": his bell rings twice every few seconds; reduced motion keeps it still. */
+/** FlashList on the UI thread's scroll handler, so the pull-to-refresh shark follows the finger. */
+const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList) as unknown as typeof FlashList;
+
 function CaughtUp() {
   const reduced = useUiReducedMotion();
   const ring = useSharedValue(0);
@@ -87,6 +91,7 @@ export default function NotificationsScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [paging, setPaging] = useState<'idle' | 'busy' | 'error'>('idle');
   const [refreshing, setRefreshing] = useState(false);
+  const shark = useSharkRefresh(refreshing);
   const [markingAll, setMarkingAll] = useState(false);
   const lastFetch = useRef(0);
   const firstPaint = useRef(true);
@@ -248,7 +253,9 @@ export default function NotificationsScreen() {
         )}
         {load === 'ready' && (
           <>
-            <FlashList
+            <AnimatedFlashList
+              onScroll={shark.onScroll as never}
+              scrollEventThrottle={16}
               data={rows}
               extraData={extraData}
               keyExtractor={row => row.key}
@@ -260,13 +267,15 @@ export default function NotificationsScreen() {
               contentContainerStyle={{ paddingTop: 8, paddingBottom: 120 }}
               onEndReachedThreshold={0.6}
               onEndReached={more}
-              refreshControl={<RefreshControl refreshing={refreshing} tintColor={CLEAN_SCREEN_ACCENT}
+              // The shark is the refresh show; the system spinner still does the work underneath, unseen.
+              refreshControl={<RefreshControl refreshing={refreshing} tintColor="transparent"
                 onRefresh={() => { setRefreshing(true); loadFirst().catch(() => undefined).finally(() => setRefreshing(false)); }} />}
               ListEmptyComponent={<CaughtUp />}
               ListFooterComponent={paging === 'error'
                 ? <View style={styles.footer}><Pill compact tone="white" icon="retry" label="Try again" onPress={more} /></View>
                 : paging === 'busy' ? <SharkLoader state="loading" compact /> : null}
             />
+            <SharkRefreshOverlay shark={shark} />
           </>
         )}
       </CleanScreenBackground>

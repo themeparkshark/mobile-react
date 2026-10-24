@@ -42,6 +42,7 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
+import { diveNavigate } from '../fx/DiveIris';
 
 export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBase, 'Park'>) {
   const { width, height } = useWindowDimensions();
@@ -179,13 +180,13 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   }, [park, canChooseGoal, inThisPark]);
   const openRideLinePlay = useCallback((task: TaskType) => {
     void resolveRideContextOrOffline(Number(park), task.name).then(ride => {
-      RootNavigation.navigate('LinePlay', { ride });
+      diveNavigate('LinePlay', { ride });
     });
   }, [park]);
   // A cataloged ride with no coin still plays in line (Coin Guide, Coin Map 2.0).
   const openCatalogRideLinePlay = useCallback((catalogRide: RideType) => {
     void resolveRideContextOrOffline(Number(park), catalogRide.name).then(ride => {
-      RootNavigation.navigate('LinePlay', { ride });
+      diveNavigate('LinePlay', { ride });
     });
   }, [park]);
   useEffect(() => {

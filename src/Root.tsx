@@ -5,7 +5,7 @@ import AppErrorBoundary from './components/AppErrorBoundary';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
 import { useContext, useCallback, useEffect, useState } from 'react';
-import { LogBox, View, StyleSheet as RNStyleSheet } from 'react-native';
+import { LogBox, View, StyleSheet as RNStyleSheet, type GestureResponderEvent } from 'react-native';
 import { DevJoystick } from './components/DevJoystick';
 import { LocationContext, LocationStatusContext } from './context/LocationProvider';
 import { useAsyncEffect } from 'rooks';
@@ -31,6 +31,8 @@ import SharkDropHandler from './components/SharkDropHandler';
 import OfflineBanner from './components/OfflineBanner';
 import FeedbackHost from './components/Feedback/FeedbackHost';
 import { GameDialogHost } from './ui';
+import { DIVE, DiveIrisHost, recordTouch } from './fx/DiveIris';
+import { DURATION } from './ui/motion';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
 import { ShareStudioHost } from './share';
 import { DEV_SCREENS, devInitialRoute } from './devRoutes';
@@ -170,7 +172,8 @@ export default function App() {
             parkId: linePlayPreviewBigThunder ? 8 : 2,
             postedWaitMinutes: 35, postedWaitObservedAt: Date.now(), lineRewardsReady: false,
           } } : undefined}
-          options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
+          // The way in is the water dive (DiveIris covers the push); the way out is a soft fade.
+          options={{ animation: 'fade', animationDuration: DIVE.screenFadeMs, gestureEnabled: false }}
         />
         {/* Fin-ister Nights: the Deep Lantern card, a night's Marquee, and the tutorial replay. */}
         <Stack.Screen name="FrightCard" getComponent={() => require('./components/fright/FrightCardScreen').default} />
@@ -282,6 +285,8 @@ export default function App() {
           getComponent={() => require('./screens/GymBattle').GymBattleScreen}
           options={{
             animation: 'slide_from_bottom',
+            // Short, so the rise finishes under the dive's water before the iris opens.
+            animationDuration: DURATION.enter,
             gestureEnabled: true,
           }}
         />
@@ -319,6 +324,8 @@ export default function App() {
       <RideDetectionOverlay />
       <SharkDropHandler />
     </NavigationContainer>
+    {/* The game dive: a water iris from the tapped button into a game (src/fx/DiveIris.tsx). */}
+    <DiveIrisHost />
     <OfflineBanner />
     {/* Share Studio: Flex moments and share sheets (share-studio/CONTRACT.md). */}
     <ShareStudioHost />
@@ -338,7 +345,8 @@ export default function App() {
 }
 
 /** Any touch in the app counts as activity for idle-aware polls (useUserIdle). */
-const onAnyTouch = () => markUserTouch();
+/** It also remembers where the finger is, so a game dive grows out of the tapped button. */
+const onAnyTouch = (e: GestureResponderEvent) => { markUserTouch(); recordTouch(e.nativeEvent.pageX, e.nativeEvent.pageY); };
 
 /** Runs ride detection. Its own component, so a GPS step re-renders only this. */
 function RideDetectionDriver({ enabled, parkId }: { readonly enabled: boolean; readonly parkId: number | null }) {

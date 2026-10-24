@@ -136,6 +136,7 @@ import { SLOTS, useMarkerSlots } from '../components/map/markerSlots';
 import { PARKED } from '../components/map/Marker';
 import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, parkMapInsets, rideLayoutId, rideTagFor,
   type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
+import { diveNavigate } from '../fx/DiveIris';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -887,7 +888,7 @@ function ExploreScreen() {
     }
     
     if (park?.id) {
-      RootNavigation.navigate('GymBattle', { parkId: park.id, coinUrl: park.coin_url });
+      diveNavigate('GymBattle', { parkId: park.id, coinUrl: park.coin_url });
     }
   }, [playerTeam, park?.id, gymData, location]);
 
@@ -1496,7 +1497,7 @@ function ExploreScreen() {
             const ride = await resolveRideContextById(park.id, queueDwell.rideId)
               ?? await resolveMapQueueContext(park.id, queueDwell.rideName);
             if (!ride) throw new Error('This line could not load.');
-            navigation.navigate('LinePlay', { ride });
+            diveNavigate('LinePlay', { ride });
           }} />}
         {adventure && suggestionSlots.left === 'adventure' && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
           ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
@@ -1510,7 +1511,7 @@ function ExploreScreen() {
             const ride = await resolveMapQueueContext(adventure.park_id, adventure.ride.ride_name);
             if (adventureScope.current !== adventureOwner) return;
             if (!ride) throw new Error('This queue adventure could not load.');
-            navigation.navigate('LinePlay', { ride });
+            diveNavigate('LinePlay', { ride });
           }}
           onShelf={() => {
             // Hand off to the Park screen's measured shelf arrival (Profile -> park -> shelf).
@@ -1560,7 +1561,7 @@ function ExploreScreen() {
           accessibilityRole="button"
           accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
             ? 'Ride Parts are not set up here yet.' : 'Wait in line near the ride to get Ride Parts.'}`}
-          onPress={() => navigation.navigate('LinePlay', { ride: queueRide })}
+          onPress={() => diveNavigate('LinePlay', { ride: queueRide })}
           style={{ position: 'absolute', top: player ? slotTop : 12, right: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#fff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
