@@ -61,8 +61,13 @@ type Props = {
   readonly tint?: string;
 };
 
-/** The foil rim around a gold pin (fraction of its size, each side). */
-const FOIL_EDGE = 0.06;
+/** The foil rim around a gold pin (fraction of its size, each side): thick enough to read as gold at card size. */
+const FOIL_EDGE = 0.09;
+/** The rim's bevel: a bright edge up-left and a deep edge down-right, offset by this (fraction of its size). */
+const FOIL_BEVEL = 0.014;
+/** The bevel's catch-light and its shadow. */
+const BEVEL_LIGHT = '#fff6d2';
+const BEVEL_DEEP = '#8a5a00';
 /** The pale inner lip of the foil rim, just outside the art (fraction of its size, each side). */
 const FOIL_LIP = 0.022;
 /** The pale shine of the foil lip. */
@@ -144,6 +149,20 @@ function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surfac
             </Group>
           )}
           <Group layer>
+            {tint && (
+              // The bevel: the rim's silhouette drawn twice behind it, nudged up-left in a bright catch-light and
+              // down-right in deep gold, so the foil edge reads as raised polished metal, not a flat outline.
+              <>
+                <SkiaImage image={image} x={pad - size * (FOIL_EDGE + FOIL_BEVEL)} y={pad - size * (FOIL_EDGE + FOIL_BEVEL)}
+                  width={size * (1 + FOIL_EDGE * 2)} height={size * (1 + FOIL_EDGE * 2)} fit="contain">
+                  <BlendColor color={BEVEL_LIGHT} mode="srcIn" />
+                </SkiaImage>
+                <SkiaImage image={image} x={pad - size * (FOIL_EDGE - FOIL_BEVEL)} y={pad - size * (FOIL_EDGE - FOIL_BEVEL)}
+                  width={size * (1 + FOIL_EDGE * 2)} height={size * (1 + FOIL_EDGE * 2)} fit="contain">
+                  <BlendColor color={BEVEL_DEEP} mode="srcIn" />
+                </SkiaImage>
+              </>
+            )}
             {tint && (
               // The foil rim: the pin's own silhouette a little larger, filled with polished metal, behind the art.
               <Group layer>

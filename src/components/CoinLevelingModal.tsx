@@ -30,10 +30,10 @@ import CoinStand from './coin/CoinStand';
 import Crowning from './coin/Crowning';
 import LevelUpBurst from './coin/LevelUpBurst';
 import PerkTrack from './coin/PerkTrack';
-import Reanimated, { cancelAnimation as cancelUi, useAnimatedStyle, useSharedValue, withDelay as uiDelay,
+import Reanimated, { Easing as UiEasing, cancelAnimation as cancelUi, useAnimatedStyle, useSharedValue, withDelay as uiDelay,
   withRepeat as uiRepeat, withSequence as uiSequence, withSpring as uiSpring, withTiming as uiTiming } from 'react-native-reanimated';
-import { GoldBurst, ShineSweep, SparkleBurst } from '../ui/GoldBurst';
-import { DURATION, EASE, SLOW_SERVER_LABEL_MS, SPRING, levelUpPayoff, momentParticles } from '../ui/motionEasing';
+import { GatherRings, GoldBurst, ShineSweep, SparkleBurst } from '../ui/GoldBurst';
+import { CHARGE_REACH, DURATION, EASE, SLOW_SERVER_LABEL_MS, SPRING, levelUpPayoff, momentParticles, windupWobble } from '../ui/motionEasing';
 import { usePowerBudget } from '../power';
 import { LEVEL_UP_ACTS, levelRibbon, levelUpFx, perkChip, revealBadges, revealCard, type LevelUpFx, type LevelUpUnlocks } from './coin/progressionModel';
 import type { CollectedRideCoin } from '../api/endpoints/me/ride-coins/show';
@@ -55,6 +55,10 @@ import { useDevAutoPress } from '../share/devDrive';
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 /** The success CTA's width: the card is 95% of (screen - 48), with 14 pt padding each side. */
 const SUCCESS_CTA_WIDTH = (SCREEN_W - 48) * 0.95 - 28;
+/** The Level Up button's height (its art is 3.8 : 1): the charge bar takes exactly its place, so the card never moves. */
+const CTA_HEIGHT = SUCCESS_CTA_WIDTH / 3.8;
+/** How long the coin charges before the burst (the burst waits for the server too). */
+const CHARGE_MS = LEVEL_UP_ACTS.charge.end;
 
 interface Props {
   visible: boolean;
@@ -128,11 +132,17 @@ export default function CoinLevelingModal({
   // The whole level-up runs on the UI thread on one engine (Reanimated, ui/motion.ts springs):
   // the coin's charge shake and punch, and the success card springing in.
   const coinPop = useSharedValue(1);
-  const coinShake = useSharedValue(0);
+  // 0 to 1 through the charge (linear): the coin's wobble grows bigger and faster from it (windupWobble).
+  const windup = useSharedValue(0);
   const successIn = useSharedValue(0);
-  const coinStyle = useAnimatedStyle(() => ({ transform: [{ scale: coinPop.value }, { translateX: coinShake.value }] }));
+  const coinStyle = useAnimatedStyle(() => {
+    const x = windupWobble(windup.value, CHARGE_MS, 1.5, 6);
+    return { transform: [{ scale: coinPop.value }, { translateX: x }, { rotate: `${x * 0.9}deg` }] };
+  });
+  // The success content is on screen from its very first frame (never a blank card while a spring starts
+  // from zero): it stamps in from a little small and a little tilted, overshoots and settles.
   const successStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: Math.max(0, successIn.value) }, { rotate: `${-15 * (1 - Math.min(1, successIn.value))}deg` }],
+    transform: [{ scale: 0.84 + 0.16 * successIn.value }, { rotate: `${-4 * (1 - Math.min(1, successIn.value))}deg` }],
   }));
   // Progression v2 level-up: three acts, the burst, the reveal and the Crowning.
   const [fx, setFx] = useState<LevelUpFx | null>(null);
@@ -146,6 +156,10 @@ export default function CoinLevelingModal({
   // Short on Tickets or Energy: the Supplies tab, opened after the sheet hides.
   const pendingSuppliesRef = useRef<null | 'tickets' | 'featured'>(null);
   const [showPartsHelp, setShowPartsHelp] = useState(false);
+  // The card keeps its height from the tap through the success card (no collapse into a short card): the
+  // content's height is tracked while the preview shows and held as a minimum once the charge starts.
+  const contentHeight = useRef(0);
+  const [lockedHeight, setLockedHeight] = useState(0);
 
   // The level-up show, on the UI thread: the charge bar, the gold gathering behind the coin,
   // the burst bloom, sparkles and one shine across the new coin (ui/motion.ts language).
@@ -161,7 +175,9 @@ export default function CoinLevelingModal({
   const [fanScale, setFanScale] = useState(1.5);
   const budget = usePowerBudget();
   const [slowServer, setSlowServer] = useState(false);
-  const stopUiShow = () => { [charge, gold, bloom, sparkle, sparkle2, shine, ringPulse, bloomOut, slow, coinShake].forEach(value => cancelUi(value)); };
+  // Gold rings tightening onto the coin while it charges, and one every 0.65 s while a slow server answers.
+  const gatherRing = useSharedValue(0);
+  const stopUiShow = () => { [charge, gold, bloom, sparkle, sparkle2, shine, ringPulse, bloomOut, slow, windup, gatherRing, coinPop].forEach(value => cancelUi(value)); };
   const chargeStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.001, charge.value) }] }));
   // 0 while charging, 1 once the server is slow (scheduled on the UI thread with the charge).
   const slow = useSharedValue(0);
@@ -200,7 +216,8 @@ export default function CoinLevelingModal({
       setFeatureError(false);
       setUpgradeError(null);
       setFx(null); setUnlocks(null); setLevelXp(0); setSlowServer(false);
-      stopUiShow(); charge.value = 0; gold.value = 0; bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0; bloomOut.value = 0; ringPulse.value = 0; setAnchor(null);
+      stopUiShow(); charge.value = 0; gold.value = 0; bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0; bloomOut.value = 0; ringPulse.value = 0;
+      windup.value = 0; gatherRing.value = 0; setAnchor(null); setLockedHeight(0);
       const isMax = rideCoin.current_level >= rideCoin.max_level;
       setState(isMax ? 'maxed' : 'preview');
     }
@@ -247,7 +264,7 @@ export default function CoinLevelingModal({
     if (!reducedMotion) return;
     stopUpgradeEffects();
     cancelUi(coinPop); cancelUi(successIn);
-    coinShake.value = 0; coinPop.value = 1; successIn.value = 1;
+    windup.value = 0; gatherRing.value = 0; coinPop.value = 1; successIn.value = 1;
   }, [reducedMotion]);
 
   // Dev-only evidence driver (no-op in release builds). Every hook runs before the
@@ -292,21 +309,26 @@ export default function CoinLevelingModal({
     setFx(plan);
     setFanScale(payoff.fanScale);
 
-    // Phase 1: Coin shakes and charges up. The shake lasts exactly as long as the charge
-    // (it used to run 20 loops, 1.6 s, and held the burst back behind it).
-    const shakeLoops = Math.ceil(LEVEL_UP_ACTS.charge.end / 80);
-    // The bar and the gold glow fill on the UI thread: a dark track with a bright gold fill that
-    // eases to 85 percent over the charge, then creeps (never stuck) while a slow server answers.
+    // Phase 1: the coin charges up, and every frame looks further along than the last: the wobble grows
+    // bigger and faster (windupWobble), the coin swells faster and faster, the bar fills at a steady pace,
+    // the gold gathers behind it and gold rings tighten onto it, coming in quicker toward the burst.
+    // Then, if the server is slow, it hums (a breathing coin, a pulsing glow, a ring every 0.65 s), never a still bar.
+    setLockedHeight(contentHeight.current);
     setSlowServer(false);
     stopUiShow(); bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0;
     charge.value = 0;
     gold.value = 0;
+    windup.value = 0; gatherRing.value = 0;
     if (!reducedMotion) {
-      charge.value = uiSequence(uiTiming(0.85, { duration: LEVEL_UP_ACTS.charge.end, easing: EASE.out }),
+      charge.value = uiSequence(uiTiming(CHARGE_REACH, { duration: CHARGE_MS, easing: UiEasing.linear }),
         uiTiming(0.97, { duration: 5000, easing: EASE.out }));
-      gold.value = uiTiming(0.45, { duration: LEVEL_UP_ACTS.charge.end, easing: EASE.charge });
+      gold.value = uiSequence(uiTiming(0.62, { duration: CHARGE_MS, easing: EASE.charge }),
+        uiRepeat(uiSequence(uiTiming(0.82, { duration: 420, easing: EASE.inOut }), uiTiming(0.6, { duration: 420, easing: EASE.inOut })), -1, false));
+      windup.value = uiTiming(1, { duration: CHARGE_MS, easing: UiEasing.linear });
+      gatherRing.value = uiSequence(uiTiming(3, { duration: CHARGE_MS, easing: UiEasing.in(UiEasing.quad) }),
+        uiRepeat(uiSequence(uiTiming(3, { duration: 0 }), uiTiming(4, { duration: 650, easing: UiEasing.linear })), -1, false));
     } else {
-      charge.value = 0.85;
+      charge.value = CHARGE_REACH;
     }
     cancelUi(slow); slow.value = 0;
     slow.value = uiDelay(SLOW_SERVER_LABEL_MS, uiTiming(1, { duration: DURATION.quick }));
@@ -316,14 +338,13 @@ export default function CoinLevelingModal({
     // when the server answers instantly. Haptics climb with the charge.
     cancelUi(coinPop); cancelUi(successIn); successIn.value = 0;
     if (!reducedMotion) {
-      coinShake.value = uiSequence(uiRepeat(uiSequence(uiTiming(4, { duration: 40 }), uiTiming(-4, { duration: 40 })), shakeLoops, false),
-        uiTiming(0, { duration: 40 }));
-      coinPop.value = uiTiming(1.12, { duration: LEVEL_UP_ACTS.charge.end, easing: EASE.inOut });
+      coinPop.value = uiSequence(uiTiming(1.2, { duration: CHARGE_MS, easing: EASE.charge }),
+        uiRepeat(uiSequence(uiTiming(1.25, { duration: 260, easing: EASE.inOut }), uiTiming(1.18, { duration: 260, easing: EASE.inOut })), -1, false));
     }
     // The burst lands on the clock, not on the JS-driven shake finishing (a busy JS thread used
     // to stretch a 0.9 s charge to about 2 s). Not in upgradeTimers: it must always resolve.
     const charged = reducedMotion ? Promise.resolve() : new Promise<void>((resolve) => {
-      setTimeout(resolve, LEVEL_UP_ACTS.charge.end);
+      setTimeout(resolve, CHARGE_MS);
     });
     // Light 300, Medium 600, Heavy 900 through the app-wide haptic gate.
     const chargeTicks = plan.haptics.filter(tick => tick.intent !== 'success')
@@ -348,15 +369,16 @@ export default function CoinLevelingModal({
         // Level 10: the Crowning takes the screen when the PresentationQueue allows it.
         if (plan.crowning) setCrowningId(`crowning:${rideCoin.id}:${Date.now()}`);
 
-        // Stop shake, big pop: the new coin punches to 1.35x, then springs home.
-        cancelUi(coinShake); coinShake.value = 0;
-        // The punch starts from wherever the charge left the coin (about 1.12x), never from a shrunken coin:
+        // Stop the wobble and the rings, big pop: the new coin punches to 1.35x, then springs home.
+        cancelUi(windup); windup.value = 0; cancelUi(gatherRing); gatherRing.value = 0;
+        // The punch starts from wherever the charge left the coin (about 1.2x), never from a shrunken coin:
         // if a busy device holds a frame here, the kid still sees a big coin, not a half-size one.
         cancelUi(coinPop);
         setSlowServer(false);
         // Burst: the bar snaps full, the gold blooms and settles to a warm glow behind the new
         // coin, sparkles fly, and one shine sweeps the coin.
-        charge.value = uiTiming(1, { duration: 120 });
+        cancelUi(charge); charge.value = uiTiming(1, { duration: 120 });
+        cancelUi(gold);
         if (reducedMotionRef.current) {
           gold.value = 0.8;
           bloomOut.value = 0.5;
@@ -397,7 +419,7 @@ export default function CoinLevelingModal({
         ? 'This coin changed. Close its detail and reopen it to refresh your level.'
         : 'Your upgrade could not be confirmed. Check your connection and try again.');
       setState('preview');
-      cancelUi(coinPop); coinShake.value = 0; coinPop.value = 1;
+      cancelUi(coinPop); windup.value = 0; gatherRing.value = 0; coinPop.value = 1; setLockedHeight(0);
       progressAnim.setValue(0);
       charge.value = 0; gold.value = 0; bloomOut.value = 0; setSlowServer(false);
       queueHaptic('failBuzz');
@@ -421,7 +443,7 @@ export default function CoinLevelingModal({
       setState('preview');
       cancelUi(coinPop); cancelUi(successIn); coinPop.value = 1; successIn.value = 0;
       progressAnim.setValue(0);
-      charge.value = 0; gold.value = 0; bloomOut.value = 0;
+      charge.value = 0; gold.value = 0; bloomOut.value = 0; setLockedHeight(0);
       onClose();
     });
   };
@@ -537,7 +559,10 @@ export default function CoinLevelingModal({
               borderRadius: 11, borderWidth: 2, borderColor: '#FFFFFF88' }} />
             <View style={{ position: 'absolute', top: 132, left: 40, width: 8, height: 8,
               borderRadius: 4, backgroundColor: '#FFFFFF88' }} />
-              <View style={{ paddingTop: 6, paddingHorizontal: 14, paddingBottom: 4, alignItems: 'center' }}>
+              <View pointerEvents={state === 'leveling' ? 'none' : 'auto'}
+                onLayout={event => { if (state === 'preview' || state === 'confirm') contentHeight.current = event.nativeEvent.layout.height; }}
+                style={{ paddingTop: 6, paddingHorizontal: 14, paddingBottom: 4, alignItems: 'center',
+                  minHeight: (state === 'leveling' || state === 'success') && lockedHeight > 0 ? lockedHeight : undefined }}>
 
                 {/* ── Coin Display with CoinUpgradeDemo ── */}
                 <Reanimated.View style={[{ marginBottom: 0 }, coinStyle]}>
@@ -553,12 +578,29 @@ export default function CoinLevelingModal({
                         </View>
                       )}
                       <CoinStand level={state === 'success' ? nextLevel : currentLevel} size={120} layer="stand" />
-                      <CoinUpgradeDemo
-                        level={state === 'success' ? nextLevel : currentLevel}
-                        coinUrl={rideCoin.coin_url}
-                        size={120}
-                        showLabel={false}
-                      />
+                      {/* The coin at its current tier, and the next tier already mounted under it (still and hidden) from
+                          the moment the card opens: the success frame only swaps which one shows, so the Legendary and
+                          Prismatic layers (bolts, rays, stars) never mount on the burst frame. */}
+                      <View style={{ opacity: state === 'success' ? 0 : 1 }}>
+                        <CoinUpgradeDemo
+                          level={currentLevel}
+                          coinUrl={rideCoin.coin_url}
+                          size={120}
+                          showLabel={false}
+                          animate={state !== 'success'}
+                        />
+                      </View>
+                      {!isMaxLevel && (
+                        <View pointerEvents="none" style={{ position: 'absolute', opacity: state === 'success' ? 1 : 0 }}>
+                          <CoinUpgradeDemo
+                            level={nextLevel}
+                            coinUrl={rideCoin.coin_url}
+                            size={120}
+                            showLabel={false}
+                            animate={state === 'success'}
+                          />
+                        </View>
+                      )}
                       {/* The tier is unmistakable: a thick two-tone rim in the tier's own colour (silver, gold, water blue). */}
                       <TierRim level={state === 'success' ? nextLevel : currentLevel} size={120} />
                       <CoinStand level={state === 'success' ? nextLevel : currentLevel} size={120} layer="crown" />
@@ -568,6 +610,7 @@ export default function CoinLevelingModal({
                           <View pointerEvents="none" style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>
                             <ShineSweep progress={shine} size={104} />
                           </View>
+                          <GatherRings progress={gatherRing} size={128} count={2} color={coinTier(nextLevel).ring} width={5} />
                           <SparkleBurst progress={sparkle} radius={110} count={momentParticles(nextPayoff.sparkles, budget, reducedMotion)} />
                         </>
                       )}
@@ -590,9 +633,12 @@ export default function CoinLevelingModal({
 
                 {/* Share Studio: a fresh Lv5-9 level-up (the Crowning has its own). A round button pinned
                     over the coin art's top-left corner, so it adds no height (the CTA stays on an SE screen). */}
-                {SHARE_IN_MODALS && state === 'success' && nextLevel >= 5 && nextLevel < 10 && (
-                  <FlexShareButton kind="coin_level" surface="coin_sheet" size="sm" caption style={{ position: 'absolute', left: 14, top: 30, zIndex: 5 }}
-                    payload={{ coinUrl: rideCoin.coin_url, level: nextLevel, tierName: coinTierName(nextLevel), tierIndex: nextLevel, timesCollected: rideCoin.times_collected }} />
+                {SHARE_IN_MODALS && (state === 'leveling' || state === 'success') && nextLevel >= 5 && nextLevel < 10 && (
+                  <View pointerEvents={state === 'success' ? 'box-none' : 'none'}
+                    style={{ position: 'absolute', left: 14, top: 30, zIndex: 5, opacity: state === 'success' ? 1 : 0 }}>
+                    <FlexShareButton kind="coin_level" surface="coin_sheet" size="sm" caption
+                      payload={{ coinUrl: rideCoin.coin_url, level: nextLevel, tierName: coinTierName(nextLevel), tierIndex: nextLevel, timesCollected: rideCoin.times_collected }} />
+                  </View>
                 )}
 
                 {/* ── Level Badge Row (compact) ── the success card skips it: the ribbon and the big tier chip already say it. */}
@@ -629,7 +675,7 @@ export default function CoinLevelingModal({
                   )}
                 </View>}
 
-                {!!rideCoin.editions?.length && (state === 'preview' || state === 'maxed') && (
+                {!!rideCoin.editions?.length && (state === 'preview' || state === 'maxed' || state === 'leveling') && (
                   <TouchableOpacity accessibilityRole="button"
                     accessibilityLabel={`View ${rideCoin.editions.length} ride coin editions`}
                     onPress={() => setShowEditions(!showEditions)}
@@ -643,7 +689,7 @@ export default function CoinLevelingModal({
                   </TouchableOpacity>
                 )}
 
-                {!!rideCoin.perk_track?.length && !showEditions && (state === 'preview' || state === 'maxed') && (
+                {!!rideCoin.perk_track?.length && !showEditions && (state === 'preview' || state === 'maxed' || state === 'leveling') && (
                   <PerkTrack track={rideCoin.perk_track} currentLevel={currentLevel} reduced={reducedMotion} />
                 )}
 
@@ -678,7 +724,7 @@ export default function CoinLevelingModal({
                 </View>}
 
                 {/* ── Your rides: the ride journal behind this coin ── */}
-                {yourRides && yourRides.count > 0 && (state === 'preview' || state === 'maxed') && !showEditions && (
+                {yourRides && yourRides.count > 0 && (state === 'preview' || state === 'maxed' || state === 'leveling') && !showEditions && (
                   <View style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#ffffff',
                     borderWidth: 2, borderColor: '#bfe5ff', borderRadius: 12, paddingVertical: 7, paddingHorizontal: 10, marginBottom: 8 }}
                     accessible accessibilityLabel={`You rode this ${yourRides.count} times.`}>
@@ -698,7 +744,7 @@ export default function CoinLevelingModal({
                   </View>
                 )}
 
-                {showEditions && (state === 'preview' || state === 'maxed') && (
+                {showEditions && (state === 'preview' || state === 'maxed' || state === 'leveling') && (
                   <ScrollView style={{ maxHeight: 180, width: '100%', marginBottom: 10 }}
                     contentContainerStyle={{ gap: 7 }}>
                     {rideCoin.editions?.map(edition => <View key={edition.id} style={{
@@ -716,9 +762,9 @@ export default function CoinLevelingModal({
                   </ScrollView>
                 )}
 
-                {!showEditions && (state === 'preview' || state === 'maxed') && (
+                {!showEditions && (state === 'preview' || state === 'maxed' || state === 'leveling') && (
                   <TouchableOpacity
-                    disabled={featureBusy}
+                    disabled={featureBusy || state === 'leveling'}
                     accessibilityRole="button"
                     accessibilityLabel={featured ? 'Remove featured ride coin from profile' : 'Feature ride coin on profile'}
                     onPress={async () => {
@@ -752,7 +798,7 @@ export default function CoinLevelingModal({
                 {/* ══════════════════════════════════════ */}
                 {/* ── PREVIEW / CONFIRM STATE ── */}
                 {/* ══════════════════════════════════════ */}
-                {!showEditions && (state === 'preview' || state === 'confirm') && !isMaxLevel && (
+                {!showEditions && (state === 'preview' || state === 'confirm' || state === 'leveling') && !isMaxLevel && (
                   <>
                     {/* ── Upgrade Cost Section ── */}
                     <View style={{
@@ -921,8 +967,32 @@ export default function CoinLevelingModal({
                     {/* First look at a coin card: what leveling costs and does, once. */}
                     <OneTimeTip id="coin_card" ready={visible && state === 'preview'} compact
                       style={{ alignSelf: 'stretch', marginBottom: 8 }} />
-                    {/* ── Level Up Button ── */}
-                    {canLevelUp || !missingAction ? <YellowButton
+                    {/* ── Level Up Button ── it turns into the charge bar in its own spot (same height), so nothing moves. */}
+                    {state === 'leveling' ? (
+                      <View style={{ alignSelf: 'stretch', height: CTA_HEIGHT, alignItems: 'center', justifyContent: 'center' }}
+                        accessible accessibilityLiveRegion="polite"
+                        accessibilityLabel={slowServer ? 'Almost there' : 'Powering up your coin'}>
+                        {/* A dark track with a bright gold fill: easy to see on the pale card. */}
+                        <View style={{
+                          width: '86%', height: 24, borderRadius: 12,
+                          backgroundColor: '#0b3a66', borderWidth: 3, borderColor: '#ffffff',
+                          overflow: 'hidden', marginBottom: 8,
+                        }}>
+                          <Reanimated.View style={[{
+                            position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%',
+                            backgroundColor: '#ffcf3b', transformOrigin: 'left',
+                          }, chargeStyle]}>
+                            <View style={{ position: 'absolute', left: 0, right: 0, top: 2, height: 5, borderRadius: 3,
+                              backgroundColor: '#fff2b0' }} />
+                          </Reanimated.View>
+                        </View>
+                        {/* The label swaps on the UI thread (a starved JS thread can't hold it on Powering up!). */}
+                        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                          <Reanimated.Text style={[LABEL_STYLE, poweringStyle]}>Powering up!</Reanimated.Text>
+                          <Reanimated.Text style={[LABEL_STYLE, { position: 'absolute' }, almostStyle]}>Almost there!</Reanimated.Text>
+                        </View>
+                      </View>
+                    ) : canLevelUp || !missingAction ? <YellowButton
                       text="Level Up!"
                       disabled={!canLevelUp}
                       onPress={handleLevelUp}
@@ -940,7 +1010,7 @@ export default function CoinLevelingModal({
                     />}
 
                     {/* Helper text for what you're missing */}
-                    {!canLevelUp && (
+                    {!canLevelUp && state !== 'leveling' && (
                       <Text style={{
                         fontFamily: 'Knockout', fontSize: 11,
                         color: '#315D7B',
@@ -975,39 +1045,12 @@ export default function CoinLevelingModal({
                 )}
 
                 {/* ══════════════════════════════════════ */}
-                {/* ── LEVELING STATE ── */}
-                {/* ══════════════════════════════════════ */}
-                {state === 'leveling' && (
-                  <View style={{ alignSelf: 'stretch', alignItems: 'center', paddingVertical: 18 }}
-                    accessible accessibilityLiveRegion="polite"
-                    accessibilityLabel={slowServer ? 'Almost there' : 'Powering up your coin'}>
-                    {/* A dark track with a bright gold fill: easy to see on the pale card. */}
-                    <View style={{
-                      width: '82%', height: 22, borderRadius: 11,
-                      backgroundColor: '#0b3a66', borderWidth: 3, borderColor: '#ffffff',
-                      overflow: 'hidden', marginBottom: 12,
-                    }}>
-                      <Reanimated.View style={[{
-                        position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%',
-                        backgroundColor: '#ffcf3b', transformOrigin: 'left',
-                      }, chargeStyle]}>
-                        <View style={{ position: 'absolute', left: 0, right: 0, top: 2, height: 5, borderRadius: 3,
-                          backgroundColor: '#fff2b0' }} />
-                      </Reanimated.View>
-                    </View>
-                    {/* The label swaps on the UI thread (a starved JS thread can't hold it on Powering up!). */}
-                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                      <Reanimated.Text style={[LABEL_STYLE, poweringStyle]}>Powering up!</Reanimated.Text>
-                      <Reanimated.Text style={[LABEL_STYLE, { position: 'absolute' }, almostStyle]}>Almost there!</Reanimated.Text>
-                    </View>
-                  </View>
-                )}
-
-                {/* ══════════════════════════════════════ */}
                 {/* ── SUCCESS STATE ── */}
                 {/* ══════════════════════════════════════ */}
+                {/* Mounted with its content on the very first success frame (successStyle never scales it to nothing),
+                    centred in the height the card already had, so the card neither empties nor jumps. */}
                 {state === 'success' && (
-                  <Reanimated.View style={[{ alignItems: 'center', paddingVertical: 10 }, successStyle]}>
+                  <Reanimated.View style={[{ alignItems: 'center', justifyContent: 'center', paddingVertical: 10, flexGrow: 1, alignSelf: 'stretch' }, successStyle]}>
                     {/* New tier announcement */}
                     <View style={{
                       backgroundColor: '#FFF5D6',
@@ -1150,7 +1193,7 @@ export default function CoinLevelingModal({
                   </View>
                 )}
 
-                {onPlayInLine && !showEditions && (state === 'preview' || state === 'maxed') &&
+                {onPlayInLine && !showEditions && (state === 'preview' || state === 'maxed' || state === 'leveling') &&
                   <TouchableOpacity accessibilityRole="button"
                     accessibilityLabel={`Play LinePlay for ${rideCoin.ride_name}`}
                     onPress={() => { pendingLinePlayRef.current = true; handleClose(); }}
