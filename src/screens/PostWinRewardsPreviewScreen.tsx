@@ -8,9 +8,13 @@ import type { RideCoinLevelType } from '../models/ride-coin-level-type';
 
 const repeatPreview = __DEV__ && process.env.EXPO_PUBLIC_POST_WIN_REPEAT_PREVIEW === '1';
 const firstWinPreview = __DEV__ && process.env.EXPO_PUBLIC_POST_WIN_FIRST_PREVIEW === '1';
+// Capture only (never set in store builds): a coin URL that no cache has seen, served slowly by a scratch server,
+// to prove the reveal starts on time with the house coin and swaps the real art in when it arrives.
+const coldCoinUrl = process.env.EXPO_PUBLIC_MOTION_CAPTURE_COIN_URL;
 const previewCoin: RideCoinLevelType = {
   id: 53, ride_id: 1, ride_name: 'Space Mountain',
-  coin_url: 'https://assets.themeparkshark.com/mobile/production/assets/r6pPIyzacnukCvbqkMqjqEB8BczIujFYwhc4YDYB.png',
+  coin_url: coldCoinUrl ? `${coldCoinUrl}${coldCoinUrl.includes('?') ? '&' : '?'}r=${Date.now()}`
+    : 'https://assets.themeparkshark.com/mobile/production/assets/r6pPIyzacnukCvbqkMqjqEB8BczIujFYwhc4YDYB.png',
   current_level: 1, max_level: 5, times_collected: repeatPreview ? 9 : 1,
   available_parts: firstWinPreview ? 1 : 2, energy_to_next_level: 10, parts_to_next_level: 2,
   required_parts: [], player_level_required: 1, is_unlocked: true,
