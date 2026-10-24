@@ -109,6 +109,9 @@ test('the Watch reward shows once: the server coin banner is suppressed for the 
   const list = ['You earned 25 Shark Coins!', 'Level up! You reached level 4!'];
   assert.deepEqual([...filter.visibleBroadcasts(list, true)], ['Level up! You reached level 4!']);
   assert.deepEqual([...filter.visibleBroadcasts(list, false)], list);
+  // The live server copy is lowercase "coins" (HasCurrency); the daily chest also quiets its ticket banner.
+  assert.deepEqual([...filter.visibleBroadcasts(['You earned 25 coins!', 'You earned 1 Ticket!', 'You earned 12 XP!'], true)], ['You earned 12 XP!']);
+  assert.match(read('src/api/endpoints/daily-gifts/update.ts'), /\[QUIET_COIN_BROADCAST\]: true/);
   assert.match(read('src/api/endpoints/social-posts/view.ts'), /\[QUIET_COIN_BROADCAST\]: true/);
   assert.match(read('src/hooks/useAxiosSetup.ts'), /visibleBroadcasts<string>\(/);
 });

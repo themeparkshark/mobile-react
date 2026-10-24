@@ -29,7 +29,7 @@
  */
 import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
 import * as Haptics from 'expo-haptics';
-import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Dimensions, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
@@ -87,7 +87,7 @@ export function leaveLabel(wornAll: boolean, titleOn: boolean): string {
 }
 
 
-export default function SetCompleteReveal({ reward, set, still, onDone, onShown, bridged = false }: {
+export default function SetCompleteReveal({ reward, set, still, onDone, onShown, bridged = false, inline = false }: {
   readonly reward: ShopSetReward | null;
   readonly set: ShopSetSummary | null;
   readonly still: boolean;
@@ -96,6 +96,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   readonly onShown?: () => void;
   /** Coming straight from the buy over a navy cover: show at once, no fade. */
   readonly bridged?: boolean;
+  /** Drawn inside the try-on's own modal (TryOnSheet handOff), not a modal of its own: no modal swap. */
+  readonly inline?: boolean;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
@@ -257,8 +259,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   };
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={() => leave(false)} onShow={onShown} statusBarTranslucent>
-      <ModalLayerContext.Provider value>
+    <RevealLayer inline={inline} onClose={() => leave(false)} onShown={onShown}>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
       <Animated.View entering={still || bridged ? undefined : FadeIn.duration(260)} style={styles.fill} {...swipe.panHandlers}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
@@ -348,7 +349,21 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
           </View>
         </View>
       </Animated.View>
-      </ModalLayerContext.Provider>
+    </RevealLayer>
+  );
+}
+
+/** Its own modal, or (inline) a full-screen layer inside the modal it was handed off from. */
+function RevealLayer({ inline, onClose, onShown, children }: {
+  readonly inline: boolean; readonly onClose: () => void; readonly onShown?: () => void; readonly children: ReactNode;
+}) {
+  const shown = useRef(onShown);
+  shown.current = onShown;
+  useEffect(() => { if (inline) shown.current?.(); }, [inline]);
+  if (inline) return <View style={StyleSheet.absoluteFill}>{children}</View>;
+  return (
+    <Modal visible transparent animationType="none" onRequestClose={onClose} onShow={onShown} statusBarTranslucent>
+      <ModalLayerContext.Provider value>{children}</ModalLayerContext.Provider>
     </Modal>
   );
 }

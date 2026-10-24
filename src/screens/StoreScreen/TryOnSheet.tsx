@@ -27,7 +27,7 @@ import { UnlockBeat } from './SecretShopUi';
 import { Image } from 'expo-image';
 import { PEARLS, leavingIcon, lifeLines, pearlFor, retiringWishHint, sentence } from '../../helpers/shopLifecycle';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
@@ -161,7 +161,8 @@ function LookSwitch({ on, still, onPress }: { on: boolean; still: boolean; onPre
 }
 
 export default function TryOnSheet({ item, set, todayIds, still, accent, startFullLook = false, startBought = false, startConfirm = false,
-  onClose, onLeaving, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false, secret = false }: {
+  onClose, onLeaving, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false, secret = false,
+  onHandOff, handOff = null }: {
   readonly item: ShopItem | null;
   readonly set: ShopSetSummary | null;
   readonly todayIds: number[];
@@ -195,6 +196,14 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   readonly rewardPending?: boolean;
   /** Opened from the Secret Shop: midnight sheet, "Unlock with VIP" for non-members. */
   readonly secret?: boolean;
+  /**
+   * With a set reward waiting, the sheet slides away over the navy dusk and, instead of hiding its
+   * modal, asks the shelf for the reveal (onHandOff) and shows it (handOff) inside this same modal.
+   * No modal swap, so no navy frames between the buy and the Set Complete stage. The shelf closes
+   * the try-on when the reveal is done.
+   */
+  readonly onHandOff?: () => void;
+  readonly handOff?: ReactNode;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   // A sheet layer: dialogs and the grown-up gate wait until it is gone (ui/modalLayers.ts).
@@ -309,11 +318,22 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   // away, so the kid goes from the landing straight into the payoff (no idle shelf).
   const dusk = useSharedValue(0);
   const duskStyle = useAnimatedStyle(() => ({ opacity: dusk.value }));
+  const onHandOffRef = useRef(onHandOff);
+  onHandOffRef.current = onHandOff;
+  const handedOff = useRef(false);
+  const handOffNow = useCallback(() => {
+    if (handedOff.current) return;
+    handedOff.current = true;
+    onHandOffRef.current?.();
+  }, []);
   const closeAnimated = useCallback(() => {
+    if (handedOff.current) return;
+    const toReveal = rewardPendingRef.current && !!onHandOffRef.current;
+    const after = toReveal ? handOffNow : leave;
     if (rewardPendingRef.current) dusk.value = withTiming(1, { duration: still ? 0 : 200 });
-    if (still) { leave(); return; }
-    drag.value = withTiming(SHEET_H, { duration: DURATION.exit, easing: EASE.in }, done => { if (done) runOnJS(leave)(); });
-  }, [still, leave]);
+    if (still) { after(); return; }
+    drag.value = withTiming(SHEET_H, { duration: DURATION.exit, easing: EASE.in }, done => { if (done) runOnJS(after)(); });
+  }, [still, leave, handOffNow]);
   const closeRef = useRef(closeAnimated);
   closeRef.current = closeAnimated;
   const pan = Gesture.Pan().activeOffsetY(8)
@@ -713,6 +733,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
             <CoinArc from={{ x: 60, y: 44 }} to={{ x: (SCREEN_W - 28) / 2 + 14, y: STAGE_TOP + stageH * 0.5 }} still={still} trigger={coins} />
           </Animated.View>
         </Animated.View>
+        {handOff}
       </GestureHandlerRootView>
       </ModalLayerContext.Provider>
     </Modal>

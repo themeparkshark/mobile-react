@@ -323,9 +323,12 @@ export default function CoinCatchReveal({
       accessibilityRole="button"
       accessibilityLabel={`${isNewCoin ? 'New ride coin' : 'Ride coin'} collected: ${rideName}. Tap to continue.`}
     >
-      {/* A clean deep-water stage (no props behind the money shot), lit softly where the coin lands. */}
+      {/* A clean deep-water stage lit softly where the coin lands. Alex's water world still shows through,
+          blurred and faint (its props turn to soft shapes), so the money shot stays in the TPS world. */}
       <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
-        <LinearGradient colors={BACKDROP} locations={[0, 0.42, 1]} style={StyleSheet.absoluteFill} />
+        <Image source={require('../../assets/images/water_background.png')} blurRadius={WORLD_BLUR} transition={0}
+          contentFit="cover" style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={BACKDROP} locations={[0, 0.42, 1]} style={[StyleSheet.absoluteFill, { opacity: WORLD_VEIL }]} />
         <Image source={require('../../assets/images/reveal/soft-spot.webp')} tintColor="#5fb4ff" transition={0} contentFit="fill"
           style={{ position: 'absolute', opacity: 0.45, width: width * 1.5, height: width * 1.5,
             left: -width * 0.25, top: height * 0.42 - width * 0.75 }} />
@@ -376,6 +379,9 @@ const styles = StyleSheet.create({
 });
 
 const BACKDROP = ['#0d5bb0', '#08408c', '#042a62'] as const;
+/** How much of the deep-water gradient covers the blurred world art (the rest of the world shows through). */
+const WORLD_VEIL = 0.8;
+const WORLD_BLUR = 18;
 
 const CONFETTI_COLORS = ['#ffcf3b', '#ffffff', '#38bdf8', '#fb923c', '#ffe27a'];
 const PIECES = Array.from({ length: 28 }, (_, i) => {

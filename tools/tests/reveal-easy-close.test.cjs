@@ -24,7 +24,8 @@ test('every reward reveal closes easily without wearing anything (Dustin: "tap o
   assert.match(reveal, /catch \{ setAll\(s => wearAllNext\(s, 'fail'\)\); settle\(false\); \}/);
   assert.match(reveal, /catch \{ setTitleOnly\('failed'\); settle\(false\); \}/);
   assert.match(reveal, /PanResponder\.create/, 'swipe down');
-  assert.match(reveal, /onRequestClose=\{\(\) => leave\(false\)\}/, 'Android back');
+  assert.match(reveal, /onClose=\{\(\) => leave\(false\)\}/, 'Android back');
+  assert.match(reveal, /onRequestClose=\{onClose\}/, 'Android back reaches the reveal modal');
   assert.doesNotMatch(reveal, />Awesome!</, 'no ambiguous "Awesome!" link');
   const ts = require(path.join(root, 'node_modules/typescript'));
   const fnSrc = reveal.slice(reveal.indexOf('export function leaveLabel'), reveal.indexOf('}', reveal.indexOf('export function leaveLabel')) + 1);

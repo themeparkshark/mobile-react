@@ -43,8 +43,8 @@ export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, s
 }) {
   const budget = usePowerBudget();
   const turn = useSharedValue(0);
-  const allowed = useSharedValue(spin && raysMayTurn(budget, reduced));
-  allowed.value = spin && raysMayTurn(budget, reduced);
+  const mayTurn = spin && raysMayTurn(budget, reduced);
+  const allowed = useSharedValue(mayTurn);
   // The turn starts only once the gold shows and stops when it fades or turning is not allowed,
   // all on the UI thread (no JS timers, nothing spinning behind a closed chest).
   useAnimatedReaction(
@@ -56,6 +56,8 @@ export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, s
     },
   );
   useEffect(() => () => cancelAnimation(turn), [turn]);
+  // Never write a shared value during render (Reanimated strict mode flags it and it queues a UI write per render).
+  useEffect(() => { allowed.value = mayTurn; }, [allowed, mayTurn]);
 
   const glowStyle = useAnimatedStyle(() => {
     const a = amount.value;

@@ -3,19 +3,30 @@ import { useEffect, useRef, useState } from 'react';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { artButtonFontSize } from '../ui/artButtonText';
 
+/** The label area's width / height inside the button art. */
+const LABEL_AREA_ASPECT = 4.4;
+
 export default function YellowButton({
   disabled = false,
   text,
   onPress,
+  estimatedWidth,
 }: {
   readonly disabled?: boolean;
   readonly text: string;
   readonly onPress?: () => void;
+  /**
+   * The button's width when the caller knows it up front. The label then shows on the very first
+   * frame (sized from width / 4.4) instead of waiting for a layout pass, which a busy JS thread can
+   * hold back for a second (a blank yellow slab on the level-up success card). Layout still refines it.
+   */
+  readonly estimatedWidth?: number;
 }) {
   const animated = useRef(new Animated.Value(1)).current;
   const reducedMotion = useReducedGameMotion();
   // Label size follows the button's height so every label on this button matches (was a fixed 72pt shrink-to-fit).
-  const [labelAreaHeight, setLabelAreaHeight] = useState(0);
+  const [labelAreaHeight, setLabelAreaHeight] = useState(() =>
+    estimatedWidth && estimatedWidth > 0 ? estimatedWidth / LABEL_AREA_ASPECT : 0);
   useEffect(() => {
     if (disabled || reducedMotion) { animated.stopAnimation(); animated.setValue(1); }
     return () => animated.stopAnimation();

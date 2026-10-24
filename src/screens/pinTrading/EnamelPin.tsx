@@ -53,6 +53,11 @@ type Props = {
   readonly style?: StyleProp<ViewStyle>;
   /** Always a plain image (static tiles that gain nothing from light). */
   readonly flat?: boolean;
+  /**
+   * Re-colours the enamel in this hue while keeping the art's own light and shade (Skia "color" blend
+   * of the pin with itself): the gold chaser edition reads gold, from the same art. Lit pins only.
+   */
+  readonly tint?: string;
 };
 
 /** Under this size the light and shadow are too small to see: a plain image (and no Skia canvas). */
@@ -70,7 +75,7 @@ function EnamelPin(props: Props) {
   return <LitPin {...props} />;
 }
 
-function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surface = 'board', recyclingKey, style }: Props) {
+function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surface = 'board', recyclingKey, style, tint }: Props) {
   const image = usePinImage(uri, size);
   const pad = Math.round(size * PAD);
   const box = size + pad * 2;
@@ -121,6 +126,12 @@ function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surfac
           )}
           <Group layer>
             <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" />
+            {tint && (
+              // The art again, painted in the tint and blended by colour: hue from the tint, light and shade from the art.
+              <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" blendMode="color">
+                <BlendColor color={tint} mode="srcIn" />
+              </SkiaImage>
+            )}
             {/* Resting gloss: a long soft falloff from the upper-left face. */}
             <Rect x={0} y={0} width={box} height={box} blendMode="srcATop">
               <LinearGradient start={vec(pad, pad)} end={vec(pad + size * 0.62, pad + size * 0.62)}

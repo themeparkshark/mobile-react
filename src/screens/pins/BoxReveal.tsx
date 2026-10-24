@@ -149,6 +149,8 @@ function play(cue: typeof REVEAL_CUES[number], opts: { volume?: number; pitch?: 
 const CONFETTI = 22;
 const CONFETTI_COLORS = ['#ffcf3b', '#ffffff', '#7cc6f5', '#ffe07a', '#ef4a3c', '#3cb85c'];
 const GOLD_COLORS = ['#ffcf3b', '#ffe07a', '#ffffff', '#f2a900'];
+/** The chaser's enamel colour (EnamelPin tint): a warm coin gold. */
+const CHASER_GOLD = '#f2b72c';
 
 /** Seeded so a reveal looks the same frame to frame (no Math.random in worklets). */
 function pieces(seed: number, gold: boolean) {
@@ -565,8 +567,9 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     opacity: still ? settle.value : Math.min(1, rise.value * 3),
     transform: [
       { translateY: interpolate(rise.value, [0, 1], [boxSize * 0.15, -boxSize * 0.5]) + settle.value * -8 },
-      { perspective: 600 },
-      { rotateY: `${(1 - flip.value) * 540}deg` },
+      // The flip is a flat turn (scaleX by the cosine), not a 3D turn: on iOS the 3D turn cut the pin in
+      // half against the card behind it (the split frame), and a flat turn costs less too.
+      { scaleX: Math.max(0.04, Math.abs(Math.cos(((1 - flip.value) * 540 * Math.PI) / 180))) },
       { scale: (still ? 1 : interpolate(rise.value, [0, 1], [0.35, 1])) * (1 - wearFly.value * 0.75) },
       { translateY: -wearFly.value * height * 0.9 },
     ],
@@ -574,7 +577,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const stampStyle = useAnimatedStyle(() => ({ opacity: stamp.value > 0 ? 1 : 0, transform: [{ scale: interpolate(stamp.value, [0, 1], [2.4, 1]) }, { rotate: '-8deg' }] }));
   const foilStyle = useAnimatedStyle(() => ({ opacity: foil.value <= 0 || foil.value >= 1 ? 0 : 0.85, transform: [{ translateX: -pinSize * 0.9 + foil.value * pinSize * 2.4 }, { rotate: '20deg' }] }));
   const backerStyle = useAnimatedStyle(() => ({ opacity: settle.value * (1 - wearFly.value), transform: [{ scale: 0.9 + settle.value * 0.1 }] }));
-  // rotateY = (1 - flip) * 540: the front faces you when cos(angle) > 0.
+  // The turn angle is (1 - flip) * 540: the front faces you when cos(angle) > 0.
   const frontStyle = useAnimatedStyle(() => ({ opacity: Math.cos(((1 - flip.value) * 540 * Math.PI) / 180) >= 0 ? 1 : 0 }));
   const backStyle = useAnimatedStyle(() => ({ opacity: Math.cos(((1 - flip.value) * 540 * Math.PI) / 180) < 0 ? 1 : 0 }));
   const ghostStyle = useAnimatedStyle(() => ({ opacity: 1 - rise.value, transform: [{ rotate: `${shake.value}deg` }, { scale: 0.85 + glow.value * 0.1 }] }));
@@ -685,19 +688,17 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
           {/* The pin is mounted (and its art decoding) from the start, hidden until it rises. */}
           <Animated.View style={[styles.pin, { width: pinSize, height: pinSize, top: (boxSize - pinSize) / 2 }, pinStyle]}>
             <Animated.View style={[StyleSheet.absoluteFill, frontStyle]}>
-              {pull.icon_url && <EnamelPin uri={pull.icon_url} size={pinSize} shine={still ? undefined : shine} lag={0} lagSpan={0} surface="panel" />}
+              {/* The chaser is the gold edition: the same art re-coloured gold, so "Gold" is what a kid sees. */}
+              {pull.icon_url && <EnamelPin uri={pull.icon_url} size={pinSize} shine={still ? undefined : shine} lag={0} lagSpan={0} surface="panel"
+                tint={pull.is_chaser ? CHASER_GOLD : undefined} />}
             </Animated.View>
-            {/* The back of the pin (a silver back stamp) shows while it turns, never a mirrored front. */}
-            <Animated.View style={[styles.pinBack, { width: pinSize * 0.7, height: pinSize * 0.7, borderRadius: pinSize * 0.35, left: pinSize * 0.15, top: pinSize * 0.15 }, backStyle]}>
-              <View style={[styles.pinBackPost, { width: pinSize * 0.16, height: pinSize * 0.16, borderRadius: pinSize * 0.08 }]} />
+            {/* The back of the pin shows while it turns, never a mirrored front: a metal back (gold for the
+                chaser, silver for the rest) with a navy outline, a pressed ring and the pin post. */}
+            <Animated.View style={[styles.pinBack, pull.is_chaser && styles.pinBackGold,
+              { width: pinSize * 0.86, height: pinSize * 0.86, borderRadius: pinSize * 0.43, left: pinSize * 0.07, top: pinSize * 0.07 }, backStyle]}>
+              <View style={[styles.pinBackRing, pull.is_chaser && styles.pinBackRingGold, { width: pinSize * 0.62, height: pinSize * 0.62, borderRadius: pinSize * 0.31 }]} />
+              <View style={[styles.pinBackPost, pull.is_chaser && styles.pinBackPostGold, { width: pinSize * 0.18, height: pinSize * 0.18, borderRadius: pinSize * 0.09 }]} />
             </Animated.View>
-            {pull.is_chaser && (
-              // The chaser is the gold edition: a thick gold rim around the pin, unmistakable at a glance.
-              <View pointerEvents="none" style={[styles.chaserRim, { width: pinSize * 0.92, height: pinSize * 0.92, borderRadius: pinSize * 0.46,
-                left: pinSize * 0.04, top: pinSize * 0.04 }]}>
-                <View style={[styles.chaserRimInner, { borderRadius: pinSize * 0.46 }]} />
-              </View>
-            )}
             {pull.is_chaser && !still && (
               <View pointerEvents="none" style={[styles.stamp, { right: -30, bottom: -26, width: 120, height: 90, alignItems: 'center', justifyContent: 'center' }]}>
                 <RadialFlash flash={stampFlash} size={120} />
@@ -854,8 +855,12 @@ const styles = StyleSheet.create({
   stage: { position: 'absolute', left: 0, alignItems: 'center', justifyContent: 'center' },
   pin: { position: 'absolute', alignSelf: 'center' },
   stamp: { position: 'absolute', right: -6, bottom: 4 },
-  pinBack: { position: 'absolute', backgroundColor: '#c9d3df', borderWidth: 5, borderColor: '#8b98a8', alignItems: 'center', justifyContent: 'center' },
-  pinBackPost: { backgroundColor: '#e8edf3', borderWidth: 3, borderColor: '#8b98a8' },
+  pinBack: { position: 'absolute', backgroundColor: '#dfe6ee', borderWidth: 5, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  pinBackGold: { backgroundColor: '#ffd75e' },
+  pinBackRing: { position: 'absolute', borderWidth: 4, borderColor: '#a9b8c8' },
+  pinBackRingGold: { borderColor: '#d99a00' },
+  pinBackPost: { backgroundColor: '#ffffff', borderWidth: 4, borderColor: BRAND.navy },
+  pinBackPostGold: { backgroundColor: '#fff3c4' },
   serialStamp: { backgroundColor: '#3b2a05', borderColor: BRAND.gold, borderWidth: 3, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2 },
   serialStampText: { fontFamily: FONT.display, fontSize: 26, color: BRAND.gold, paddingTop: 3 },
   confettiOrigin: { position: 'absolute', alignSelf: 'center', width: 1, height: 1 },
@@ -882,8 +887,6 @@ const styles = StyleSheet.create({
   backerGold: { backgroundColor: BRAND.gold, borderColor: BRAND.white, borderWidth: 5, justifyContent: 'space-between', paddingBottom: 8, overflow: 'hidden' },
   // A Golden Box pin sits on a cream card with a gold edge (the chaser's card is all gold).
   backerGolden: { borderColor: BRAND.gold, borderWidth: 5 },
-  chaserRim: { position: 'absolute', borderWidth: 4, borderColor: '#d99a00', alignItems: 'center', justifyContent: 'center' },
-  chaserRimInner: { ...StyleSheet.absoluteFillObject, borderWidth: 5, borderColor: '#ffe27a' },
   foilSheen: { position: 'absolute', left: 0, width: 26, backgroundColor: 'rgba(255,255,255,0.75)' },
   backerFoilText: { fontFamily: FONT.display, fontSize: 14, color: '#5a3a08', letterSpacing: 1 },
   backerHole: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#021a45', marginTop: 10 },

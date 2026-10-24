@@ -168,7 +168,11 @@ test('the chaser escalates past the Golden Box', () => {
   const src = read('src/screens/pins/BoxReveal.tsx');
   assert.ok(src.includes('sparkle2'), 'a second sparkle wave');
   assert.ok(src.includes('stampFlash'), 'the serial gets its own hit-stop flash');
-  assert.ok(src.includes('chaserRim'), 'a gold rim marks the gold edition');
+  assert.ok(/tint=\{pull\.is_chaser \? CHASER_GOLD/.test(src), 'the chaser pin itself is gold (its art re-coloured), so "Gold" matches what you see');
+  assert.ok(!src.includes('chaserRim'), 'no separate rim to sit off-centre on the art');
+  assert.ok(!/rotateY|perspective/.test(src), 'a flat flip: no 3D turn to split the pin against the card');
+  assert.ok(/pinBackGold/.test(src) && /pinBack: \{[^}]*borderColor: BRAND\.navy/.test(src), 'the pin back is outlined metal, never a grey disc');
+  assert.match(read('src/screens/pinTrading/EnamelPin.tsx'), /blendMode="color"/);
   assert.ok(src.includes('<RadialFlash flash={flash}'), 'the box flash pops on the box');
   assert.ok(!/StyleSheet\.absoluteFill, styles\.flash/.test(src), 'no full-screen white wash');
 });
@@ -188,7 +192,10 @@ test('the level-up payoff is bigger than the card and the tier is unmistakable',
   const src = read('src/components/CoinLevelingModal.tsx');
   assert.ok(src.includes('measureAnchor()'), 'the burst is anchored on the coin');
   assert.ok(src.includes('zIndex: 30') && src.includes('<SparkleBurst progress={sparkle} radius={SCREEN_W * 0.46}'), 'sparkles fly over the card edges');
-  assert.ok(src.includes("toValue: 1.35"), 'the new coin pops to 1.35x');
+  assert.ok(src.includes('uiTiming(1.35'), 'the new coin pops to 1.35x');
+  assert.ok(!/Animated\.(loop|spring|timing)\((shakeAnim|coinScale|successScale)/.test(src), 'the level-up runs on one engine (Reanimated)');
+  assert.ok(src.includes('spin={false}'), 'the full-screen fan never keeps turning behind an open card');
+  assert.ok(src.includes('estimatedWidth={SUCCESS_CTA_WIDTH}'), 'the Awesome! label is there on the first success frame');
   assert.ok(src.includes('<TierRim'), 'a tier-coloured rim');
   assert.ok(src.includes('SLOW_SERVER_LABEL_MS'), 'Almost there! comes in time for a slow server');
   assert.ok(src.includes('slow.value = uiDelay(SLOW_SERVER_LABEL_MS'), 'the label swaps on the UI thread, even with a busy JS thread');
