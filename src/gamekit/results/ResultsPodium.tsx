@@ -10,7 +10,8 @@
  *
  * The shark and podium scale with the room the card leaves (like Sharky).
  * A tall card (a big Whack win) leaves no room for the podium, so the
- * cheering shark peeks up from behind the ribbon's left end instead: the
+ * cheering shark peeks up from behind the ribbon's right end instead (clear of
+ * the close button on the left): the
  * best runs never lose their moment. A run with no star and no room shows
  * nothing. All motion is Reanimated on the UI thread; Reduce Motion shows the
  * pose with no hop.
@@ -72,7 +73,7 @@ export function ResultsPodium({ cheer, reducedMotion = false, delayMs = 120 }: {
   return (
     <View style={styles.zone} onLayout={onLayout} pointerEvents="none" importantForAccessibility="no-hide-descendants">
       {mode === 'peek' ? (
-        // Peeks up from behind the ribbon's left end (the card draws over its feet).
+        // Peeks up from behind the ribbon's right end (the card draws over its feet; the X stays clear).
         <Animated.View style={[styles.peek, sceneSt]}>
           <Animated.View style={sharkSt}>
             <Image source={ART.cheer} style={{ width: 130 * k, height: 160 * k }} resizeMode="contain" />
@@ -95,5 +96,5 @@ const styles = StyleSheet.create({
   zone: { flex: 1, width: '100%', justifyContent: 'flex-end', alignItems: 'center', minHeight: 0, marginBottom: 22 },
   scene: { alignItems: 'center', justifyContent: 'flex-end' },
   shark: { position: 'absolute', alignSelf: 'center' },
-  peek: { position: 'absolute', left: '7%', bottom: -10 },
+  peek: { position: 'absolute', right: '7%', bottom: -10 },
 });
