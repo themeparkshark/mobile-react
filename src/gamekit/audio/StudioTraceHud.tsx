@@ -56,7 +56,8 @@ export default function StudioTraceHud() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: 'absolute', left: 6, bottom: 118, width: 150, zIndex: 99999, elevation: 99999 },
+  // Top left, under the header chips: clear of the map buttons and the footer.
+  wrap: { position: 'absolute', left: 6, top: 250, width: 150, zIndex: 99999, elevation: 99999 },
   lights: { flexDirection: 'row', gap: 4, marginBottom: 3 },
   light: { width: 40, height: 22, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#0b2a4a' },
   lightText: { color: '#0b2a4a', fontSize: 10, fontWeight: '800' },
