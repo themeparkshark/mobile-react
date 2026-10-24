@@ -177,7 +177,8 @@ export default function GameButton({
       <Animated.View style={[{ opacity: disabled ? 0.5 : 1 }, pressStyle]}>
         {look.art
           ? <ImageBackground source={BUTTON_ART[look.art]} resizeMode="contain"
-            style={{ width: '100%', aspectRatio: BUTTON.aspectRatio }}>
+            // The art and its words are one piece: neither draws until the label has its size.
+            style={{ width: '100%', aspectRatio: BUTTON.aspectRatio, opacity: labelAreaHeight > 0 ? 1 : 0 }}>
             <View onLayout={event => setLabelAreaHeight(event.nativeEvent.layout.height)}
               style={{ aspectRatio: BUTTON.labelAspectRatio, justifyContent: 'center', paddingHorizontal: 24,
                 opacity: labelAreaHeight > 0 ? 1 : 0 }}>

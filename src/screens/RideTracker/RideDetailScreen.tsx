@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet,
-  RefreshControl, Animated, Easing, AccessibilityInfo,
+  RefreshControl, Animated, Easing, AccessibilityInfo, useWindowDimensions,
 } from 'react-native';
 import RideTrackerFrame from './RideTrackerFrame';
 import { FOOTER_CLEARANCE } from '../../components/Wrapper';
@@ -243,6 +243,9 @@ export default function RideDetailScreen() {
   const hasImage = ride?.image_url && ride.image_url.startsWith('http') && !imageError;
 
   const name = plainRideName(rideName || ride?.name || 'Ride');
+  // A short phone (iPhone SE, 667 pt) gets a smaller waiting shark, so it never slides under the footer.
+  const { height: screenHeight } = useWindowDimensions();
+  const emptySharkSize = screenHeight < 740 ? 84 : 130;
   // One layout for every ride: the header always says RIDE TRACKER and the ride's name always
   // leads the white ride card (two lines for long names), so short and long names open the same way.
   const headerTitle = RIDE_DETAIL_HEADER;
@@ -375,7 +378,7 @@ export default function RideDetailScreen() {
             <Text style={s.emptyHint}>Rode it? Tap LOG THIS RIDE.</Text>
             {/* The shark waits by the ride, so the empty page is not a blank sheet (the riders' chart fills it otherwise). */}
             {!(community && ratingCount(community.rating_distribution) >= COMPACT_COMMUNITY_LOGS) &&
-              <View style={s.emptyArt} accessible={false}><GameIcon name="shark" size={130} /></View>}
+              <View style={s.emptyArt} accessible={false}><GameIcon name="shark" size={emptySharkSize} /></View>}
           </View>
         }
       />

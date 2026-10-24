@@ -419,7 +419,7 @@ test('Ride Detail on an SE: a small community count is one row and the empty lin
   const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
   // A log or two: no community card (the Rider sharks tile says "from 1 rider"); the chart once there are enough.
   assert.match(src, /\{community && ratingCount\(community\.rating_distribution\) >= COMPACT_COMMUNITY_LOGS && \(/);
-  assert.match(src, /<GameIcon name="shark" size=\{130\} \/>/, 'the empty page has the shark, not a blank sheet');
+  assert.match(src, /<GameIcon name="shark" size=\{emptySharkSize\} \/>/, 'the empty page has the shark, not a blank sheet');
   // The empty page fills the space under the button: an arrow up at LOG THIS RIDE, the line, the shark.
   assert.match(src, /emptyWrap: \{ flexGrow: 1, alignItems: 'center', justifyContent: 'center'/);
   assert.match(src, /contentContainerStyle=\{\[s\.listContent, history\.length === 0 && s\.listContentEmpty\]\}/);
@@ -708,4 +708,15 @@ test('first seconds on the map: pins arrive in the cover fade, late pins land in
   const sheet = read('src/components/map/TileWaitSheet.tsx');
   assert.match(sheet, /pointerEvents="none"/);
   assert.match(sheet, /export const TILE_WAIT_MAX_MS = 6000;/);
+});
+
+test('buttons and the map on small and busy screens: GameButton art waits for its words, the SE shark fits, a gone map is never queried', () => {
+  const button = read('src/ui/GameButton.tsx');
+  assert.match(button, /style=\{\{ width: '100%', aspectRatio: BUTTON\.aspectRatio, opacity: labelAreaHeight > 0 \? 1 : 0 \}\}>/);
+  const detail = read('src/screens/RideTracker/RideDetailScreen.tsx');
+  assert.match(detail, /const emptySharkSize = screenHeight < 740 \? 84 : 130;/);
+  assert.match(detail, /<GameIcon name="shark" size=\{emptySharkSize\} \/>/);
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /findWater: async \(latitude: number, longitude: number, margin\?: number\) => \{\s*if \(!mapAlive\.current\) return null;/);
+  assert.match(map, /if \(key === decoKey\.current \|\| !mapAlive\.current\) return;/);
 });

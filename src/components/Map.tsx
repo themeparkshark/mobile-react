@@ -394,8 +394,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     return () => { snapshotter.current = null; };
   }, [snapshotter]);
   const window = useWindowDimensions();
+  // A map that unmounted (the home map handing over to the park map at launch) is never queried:
+  // the native view is gone and the query would raise "Invalid react tag".
+  const mapAlive = useRef(true);
+  useEffect(() => { mapAlive.current = true; return () => { mapAlive.current = false; }; }, []);
   const mapQuery = useMemo(() => ({
     findWater: async (latitude: number, longitude: number, margin?: number) => {
+      if (!mapAlive.current) return null;
       // MapLibre's rect is [top, right, bottom, left] with top the larger y.
       const found = await mapViewRef.current?.queryRenderedFeaturesInRect(
         [window.height, window.width, 0, 0], undefined, ['water']);
@@ -413,12 +418,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     clearTimeout(decoTimer.current);
     decoTimer.current = setTimeout(async () => {
       const map = mapViewRef.current;
-      if (!map) return;
+      if (!map || !mapAlive.current) return;
       try {
         const [zoom, [[east, north], [west, south]]] = await Promise.all([map.getZoom(), map.getVisibleBounds()]);
         // Skip rebuilding for tiny camera nudges (walking follow) at the same density.
         const key = `${decorationBand(zoom)}|${(north * 4000).toFixed(0)}|${(west * 4000).toFixed(0)}|${((north - south) * 400).toFixed(0)}`;
-        if (key === decoKey.current) return;
+        if (key === decoKey.current || !mapAlive.current) return;
         const rect: [number, number, number, number] = [window.height, window.width, 0, 0];
         const [wood, green, water, homes, buildings, roads] = await Promise.all([
           map.queryRenderedFeaturesInRect(rect, undefined, ['wood']),
