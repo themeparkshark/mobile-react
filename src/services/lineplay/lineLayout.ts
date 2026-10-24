@@ -48,8 +48,12 @@ export function fadeHeight(viewHeight: number): number {
  * PLAY NOW is always fully on screen, above the fade.
  */
 export type ChapterPageFit = 'full' | 'compact' | 'strip';
-/** Header (100) + gap + PLAY NOW with its hint line (about 112) + padding + the fade. */
-export const CHAPTER_FULL_PAGE = 262;
+/**
+ * Header (100) + gap + PLAY NOW with its hint line (about 112) + gap + the named
+ * trail (about 76) + padding + the fade, so the trail ends whole above the fade.
+ * Shorter (a Pro Max page is about 364) leads with PLAY NOW instead.
+ */
+export const CHAPTER_FULL_PAGE = 400;
 /**
  * The 64 pt PLAY NOW card + padding + the fade, plus enough of the header that it
  * reads as a header melting into the mist, never a title sliced mid-line. Below

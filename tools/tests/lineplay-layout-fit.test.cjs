@@ -86,7 +86,8 @@ test('on a short phone the chapter page puts PLAY NOW on screen: one-line header
 test('PLAY NOW is always whole: the page leads with it, shrinks it to one row, or the window steps aside', () => {
   const m = layout();
   // The page's real height decides (it shrinks while Details is open), on every phone.
-  assert.equal(m.chapterPageFit(400, false), 'full', 'Pro Max, roomy page: header, then the big PLAY NOW');
+  assert.equal(m.chapterPageFit(440, false), 'full', 'a roomy page: header, then the big PLAY NOW, then the named trail');
+  assert.equal(m.chapterPageFit(364, false), 'compact', 'Pro Max: the named trail would end in the fade, so PLAY NOW leads');
   assert.equal(m.chapterPageFit(227, false), 'compact', '17 Pro: PLAY NOW first, then a one-line header');
   assert.equal(m.chapterPageFit(149, false), 'compact', '17 Pro reading Details: PLAY NOW still first and whole');
   assert.equal(m.chapterPageFit(400, true), 'compact', 'a short phone always leads with PLAY NOW');
