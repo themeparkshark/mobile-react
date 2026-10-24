@@ -218,6 +218,7 @@ export default function CoinLevelingModal({
       setFx(null); setUnlocks(null); setLevelXp(0); setSlowServer(false);
       stopUiShow(); charge.value = 0; gold.value = 0; bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0; bloomOut.value = 0; ringPulse.value = 0;
       windup.value = 0; gatherRing.value = 0; setAnchor(null); setLockedHeight(0);
+      setFanScale(levelUpPayoff(Math.min(rideCoin.current_level + 1, rideCoin.max_level)).fanScale);
       const isMax = rideCoin.current_level >= rideCoin.max_level;
       setState(isMax ? 'maxed' : 'preview');
     }
@@ -496,7 +497,9 @@ export default function CoinLevelingModal({
         alignItems: 'center',
       }}>
         {/* Behind the card: the big gold fan reaches past its edges on the success beat. */}
-        {anchor && (state === 'leveling' || state === 'success') && (
+        {/* Mounted as soon as the coin is measured (hidden at 0): iOS reuses native views, and a view created on the
+            tap could inherit a just-closed card's fill and border drawn over the coin. Nothing new mounts on the tap. */}
+        {anchor && (
           <View pointerEvents="none" style={{ position: 'absolute', left: anchor.x - SCREEN_W * fanScale / 2, top: anchor.y - SCREEN_W * fanScale / 2,
             width: SCREEN_W * fanScale, height: SCREEN_W * fanScale, alignItems: 'center', justifyContent: 'center', zIndex: 5, ...BARE }}>
             {/* Never turns: a card left open must not spin a screen-sized layer (the small fan on the coin does).
@@ -506,7 +509,7 @@ export default function CoinLevelingModal({
         )}
         {/* Above the card: sparkles fly out over its edges and the new tier's ring pulses outward. */}
         {/* Mounted from the start of the charge (hidden until the burst), so the success frame mounts nothing heavy. */}
-        {anchor && (state === 'leveling' || state === 'success') && !reducedMotion && (
+        {anchor && !reducedMotion && (
           <View pointerEvents="none" style={{ position: 'absolute', left: anchor.x, top: anchor.y, width: 0, height: 0,
             alignItems: 'center', justifyContent: 'center', zIndex: 30, ...BARE }}>
             <Reanimated.View style={[{ position: 'absolute', width: 132, height: 132, borderRadius: 66, borderWidth: nextPayoff.ringWidth,
@@ -570,7 +573,7 @@ export default function CoinLevelingModal({
                     activeOpacity={0.8}
                     onPress={() => state !== 'leveling' && setHoloVisible(true)}
                   >
-                    <View ref={coinRef} collapsable={false} style={{ alignItems: 'center', justifyContent: 'center', marginTop: (state === 'success' ? nextLevel : currentLevel) >= 10 ? 26 : 0,
+                    <View ref={coinRef} collapsable={false} onLayout={() => { if (!anchor) measureAnchor(); }} style={{ alignItems: 'center', justifyContent: 'center', marginTop: (state === 'success' ? nextLevel : currentLevel) >= 10 ? 26 : 0,
                       marginBottom: (state === 'success' ? nextLevel : currentLevel) >= 6 ? 14 : 0 }}>
                       {(state === 'leveling' || state === 'success') && (
                         <View pointerEvents="none" style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>

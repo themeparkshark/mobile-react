@@ -239,7 +239,8 @@ test('the coin art runs on one UI-thread clock, so a level change restarts nothi
   assert.ok(burst.includes('t.value <= 0 ? 0'), 'shards stay hidden until the burst');
   const modal = read('src/components/CoinLevelingModal.tsx');
   assert.ok(modal.includes("{!reducedMotion && (\n                        <>\n                          <View pointerEvents=\"none\" style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>\n                            <ShineSweep"), 'the coin sparkles and shine are mounted with the card, before the charge');
-  assert.ok(modal.includes("{anchor && (state === 'leveling' || state === 'success') && !reducedMotion && ("), 'the over-card sparkles and ring are mounted during the charge');
+  assert.ok(modal.includes("{anchor && !reducedMotion && ("), 'the over-card sparkles and ring are mounted before the charge');
+  assert.ok(modal.includes('onLayout={() => { if (!anchor) measureAnchor(); }}'), 'the coin is measured as soon as it lays out');
 });
 
 test('the level-up payoff grows with every tier, Legendary clearly the biggest', () => {
