@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Asset } from 'expo-asset';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
 import {
@@ -666,6 +666,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     }
   }, [showing, !!view]); // eslint-disable-line react-hooks/exhaustive-deps
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
+  const dimLayer = useMemo(() => [StyleSheet.absoluteFill, styles.dim, dimStyle], [dimStyle]);
   const cardStyle = useAnimatedStyle(() => {
     const t = cardT.value;
     const far = launch.value.x !== 0 || launch.value.y !== 0;
@@ -673,6 +674,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     return { opacity: Math.min(1, t * (far ? 3 : 1.6)), transform: [{ translateX: launch.value.x * (1 - t) }, { translateY: launch.value.y * (1 - t) },
       { scale: far ? 0.15 + 0.85 * t : 0.86 + 0.14 * t }] };
   });
+  const cardLayer = useMemo(() => [styles.wrap, cardStyle], [cardStyle]);
 
   let button: ReactNode | null = null;
   if (flags?.dailyThree && daily) {
@@ -846,13 +848,17 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     <Modal visible={visible && front} transparent animationType="none" statusBarTranslucent
       onRequestClose={revealing ? () => undefined : close}>
       <View style={StyleSheet.absoluteFill}>
-        <Animated.View style={[StyleSheet.absoluteFill, styles.dim, dimStyle]}>
+        <Animated.View style={dimLayer}>
           <Pressable style={StyleSheet.absoluteFill} onPress={revealing || !showing ? undefined : close} accessible={false} />
         </Animated.View>
         <View style={[StyleSheet.absoluteFill, styles.center, { paddingHorizontal: width * 0.05 }]} pointerEvents="box-none">
-          <Animated.View style={[styles.wrap, cardStyle]} pointerEvents={showing ? 'box-none' : 'none'}>
-            <StampRibbon text={shownTitle} reducedMotion={reducedMotion} />
-            {shownContent}
+          {/* The animated wrapper keeps the same props on every render (a changed prop on an animating view can draw
+              one frame of its first style); taps are switched on a plain inner view. */}
+          <Animated.View style={cardLayer}>
+            <View pointerEvents={showing ? 'box-none' : 'none'} style={styles.wrapInner}>
+              <StampRibbon text={shownTitle} reducedMotion={reducedMotion} />
+              {shownContent}
+            </View>
           </Animated.View>
         </View>
         {view?.k === 'flying' && view.legs.length > 0 && <PrizeFlight legs={view.legs} origin={{ x: 0, y: 0 }} reducedMotion={reducedMotion} />}
@@ -944,6 +950,7 @@ const styles = StyleSheet.create({
   dim: { backgroundColor: BRAND.navy },
   center: { alignItems: 'center', justifyContent: 'center' },
   wrap: { alignItems: 'center', alignSelf: 'stretch' },
+  wrapInner: { alignItems: 'center', alignSelf: 'stretch' },
   nextBlock: { gap: 6 },
   pips: { flexDirection: 'row', gap: 3 },
   pip: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: BRAND.gold },
