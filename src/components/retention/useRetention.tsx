@@ -36,6 +36,7 @@ import FlameUpRow from './FlameUpRow';
 import { EmberCard, FreezeSavedCard } from './FreezeMoments';
 import WelcomeBack from './WelcomeBack';
 import RewardReveal, { type PrizeOrigin } from './RewardReveal';
+import LoopPerf, { loopPerfOn } from './LoopPerf';
 import CardSurface from './CardSurface';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
@@ -278,6 +279,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const [welcomePending, setWelcomePending] = useState(false);
   const [awayKnown, setAwayKnown] = useState(0);
   const [freshDaily, setFreshDaily] = useState(0);
+  /** Dev only: the frame graph over loop moments (lane tools turn it on). */
+  const [perfOn, setPerfOn] = useState(loopPerfOn);
   useEffect(() => {
     if (!o.enabled || !player?.id || awayDays.current !== null) return;
     const key = `${LAST_OPEN_KEY}:${player.id}`;
@@ -596,6 +599,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       saved: (streak: number, days = 1) => setView({ k: 'freezeSaved', streak, days }),
       ember: (was: number) => setView({ k: 'ember', was }),
       welcome: () => { if (daily) setView({ k: 'welcome', cards: welcomeCards(daily, { levelChest: pendingChest?.level ?? null }) }); },
+      perf: (on: boolean) => { (globalThis as Record<string, unknown>).__loopsPerfOn = !!on; setPerfOn(!!on); },
       setLastOpen: (daysAgo: number) => { if (player?.id) void AsyncStorage.setItem(`${LAST_OPEN_KEY}:${player.id}`, String(Date.now() - daysAgo * 86400000)); },
       freezeIn: (n = 1) => setView({ k: 'sheet', freezeArrive: n }),
       sheet: (all?: boolean) => setView({ k: 'sheet', all: !!all }),
@@ -852,6 +856,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
           </Animated.View>
         </View>
         {view?.k === 'flying' && view.legs.length > 0 && <PrizeFlight legs={view.legs} origin={{ x: 0, y: 0 }} reducedMotion={reducedMotion} />}
+        {perfOn && <LoopPerf />}
       </View>
     </Modal>
   );

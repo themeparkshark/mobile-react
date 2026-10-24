@@ -45,6 +45,7 @@ import {
 import { askGrownUp } from '../components/GrownUpGate';
 import { GotIt, MAX_FONT, PackArt, artSource, type PackArtKey } from '../components/money/moneyUi';
 import PassStepCard from '../components/retention/PassStepCard';
+import LoopPerf, { loopPerfOn } from '../components/retention/LoopPerf';
 import MemberFlex from '../components/money/MemberFlex';
 import { lastSharkPassSeen, noteSharkPassPoints } from '../components/money/SharkPassBanner';
 import { playSfx } from '../gamekit/SFX';
@@ -873,6 +874,7 @@ export default function SharkPassScreen() {
           </ScrollView>
         )}
       </SafeAreaView>
+      {loopPerfOn() && <LoopPerf />}
       {climbed && climbCard && !landed && (
         // The step card: the steps climbed as gold pips and the prizes now waiting as pictures, one GET THEM! button.
         <PassStepCard step={climbed.to} climbed={climbed.to - climbed.from} reducedMotion={reduced}

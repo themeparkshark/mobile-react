@@ -15,6 +15,7 @@ import { GameIcon, ICON_SOURCES } from '../../ui';
 import type { PaidRewards } from '../../api/endpoints/retention';
 import NextUpRail from '../nextUp/NextUpRail';
 import { setBatterySaver } from '../../power/batterySaver';
+import LoopPerf from './LoopPerf';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
@@ -44,6 +45,7 @@ export default function StreakFlamePreview() {
   const [arrive, setArrive] = useState(0);
   const [arriveKey, setArriveKey] = useState(0);
   const [rm, setRm] = useState(false);
+  const [perf, setPerf] = useState(false);
   // The fixture chest "server" answers after 500 ms.
   const openChest = () => setStage(st => {
     if (!st || st.k !== 'chest' || st.opening || st.rewards) return st;
@@ -74,6 +76,7 @@ export default function StreakFlamePreview() {
       play: (code: string, afterMs = 0) => { if (afterMs > 0) setTimeout(() => play(code), afterMs); else play(code); },
       rm: (on: boolean) => setRm(!!on),
       saver: (on: boolean) => setBatterySaver(!!on),
+      perf: (on: boolean) => setPerf(!!on),
     };
   });
   return (
@@ -124,6 +127,7 @@ export default function StreakFlamePreview() {
             : <TomorrowCard prize={tomorrowPrize(FIXTURE(stage.days, stage.days === 6))} reducedMotion={rm} onDone={() => setStage(null)} />}
         </View>
       )}
+      {perf && <LoopPerf />}
     </View>
   );
 }
