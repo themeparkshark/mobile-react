@@ -483,8 +483,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                   <View style={{ width: chestSize, height: chestSize }}>
                     {phase === 'open' && (
                       // The dark inside of the chest, behind the body: only the part in the open gap shows (a mouth, not a sticker).
-                      <View pointerEvents="none" style={[styles.chestInside, { left: chestSize * 0.15, width: chestSize * 0.64,
-                        top: chestSize * (LID_CUT - 0.1), height: chestSize * 0.16, borderRadius: chestSize * 0.07 }]} />
+                      <View pointerEvents="none" style={[styles.chestInside, { left: chestSize * 0.07, width: chestSize * 0.86,
+                        top: chestSize * (LID_CUT - 0.1), height: chestSize * 0.16, borderRadius: chestSize * 0.03 }]} />
                     )}
                     <View style={[styles.chestBand, { top: chestSize * LID_CUT, width: chestSize, height: chestSize * (1 - LID_CUT) }]}>
                       <Image source={CHEST_CLOSED} style={{ position: 'absolute', top: -chestSize * LID_CUT, width: chestSize, height: chestSize }}
