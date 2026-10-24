@@ -2,15 +2,16 @@ import { Image } from 'expo-image';
 import { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, type SharedValue,
+  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
+import useAmbientLoop from '../../power/useAmbientLoop';
 import { playHaptic, queueHaptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { usePowerBudget } from '../../power';
 import { LOOP_CUES, WELCOME_FX, welcomeTileLabel, type WelcomeCard } from '../../services/retention/loopMotion';
 import { BRAND, ICON_SOURCES } from '../../ui';
 import { GoldBurst, SparkleBurst } from '../../ui/GoldBurst';
-import { DURATION, SPRING, momentParticles } from '../../ui/motion';
+import { AMBIENT, DURATION, SPRING, momentParticles } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import CardSurface from './CardSurface';
 import FlameArt from './FlameArt';
@@ -68,10 +69,17 @@ export default function WelcomeBack({ cards, reducedMotion, onDone }: {
     out.value = withTiming(1, { duration: DURATION.exit, easing: EASE.in });
     setTimeout(onDone, DURATION.exit);
   };
+  // After the hello, Finn keeps breathing and bobbing on the water (ambient budget: rests when idle, in the
+  // background, in Battery Saver idle and with Reduce Motion), so the card never sits still.
+  const bob = useSharedValue(0);
+  useAmbientLoop(() => {
+    bob.value = withDelay(900, withRepeat(withTiming(1, { duration: AMBIENT.breathMs / 2, easing: Easing.inOut(Easing.sin) }), -1, true));
+  }, () => { cancelAnimation(bob); bob.value = withTiming(0, { duration: DURATION.quick }); }, !reducedMotion);
   const splashStyle = useAnimatedStyle(() => ({ opacity: splash.value >= 1 ? 0 : 0.85 * (1 - splash.value),
     transform: [{ scale: 0.5 + 1.2 * splash.value }] }));
   const finnStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: 46 * (1 - finn.value) }, { scale: 0.7 + 0.3 * finn.value }, { rotate: `${-10 * (1 - finn.value)}deg` }],
+    transform: [{ translateY: 46 * (1 - finn.value) - 5 * bob.value }, { scale: (0.7 + 0.3 * finn.value) * (1 + 0.025 * bob.value) },
+      { rotate: `${-10 * (1 - finn.value) + 3 * (bob.value - 0.5)}deg` }],
   }));
   const outStyle = useAnimatedStyle(() => ({ opacity: 1 - out.value, transform: [{ scale: 1 - 0.06 * out.value }] }));
   return (

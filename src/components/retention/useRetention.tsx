@@ -3,7 +3,7 @@ import { Asset } from 'expo-asset';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
 import {
   buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
   type DailyThreeState, type LevelChest, type PaidRewards,
@@ -18,7 +18,7 @@ import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
 import {
-  FULL_SET, LEVEL_CHEST as LEVEL_FX, PRIZE_FLIGHT, REPEAT_CHEST, STREAK_MILESTONES, WELCOME_FX, dailyChain, daysAway, flameMomentFor, flightDoneMs, flightPlan,
+  CHECK, PRIZE_FLIGHT, lidDelay, STREAK_MILESTONES, WELCOME_FX, dailyChain, daysAway, flameMomentFor, flightDoneMs, flightPlan,
   flightTarget, isRareChest, isRepeatChest, mayAskAfterChain, tomorrowPrize, welcomeCards, type FlameMoment, type WelcomeCard,
 } from '../../services/retention/loopMotion';
 import { DURATION, SPRING } from '../../ui/motion';
@@ -66,7 +66,9 @@ type View_ =
   | { k: 'flame'; moment: Exclude<FlameMoment, { kind: 'none' }> }
   | { k: 'tomorrow' }
   | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean;
-      auto?: boolean; state?: DailyThreeState | null; moment?: FlameMoment; repeat?: boolean; rare?: boolean }
+      auto?: boolean; state?: DailyThreeState | null; moment?: FlameMoment; repeat?: boolean; rare?: boolean;
+      /** The card enters at this time (epoch ms): mounted early while the check still flies, shown on the UI thread. */
+      enterAt?: number }
   /** Between cards: the card steps aside and the prizes fly from their rows into the HUD where the kid can see them land. */
   | { k: 'flying'; legs: readonly FlightSpec[] }
   | { k: 'freeze' }
@@ -81,6 +83,8 @@ export interface RetentionOptions {
   /** Signed in, on the map, onboarding done. */
   readonly enabled: boolean;
   readonly mapFocused: boolean;
+  /** The welcome back may show (no find, ride, boss or tutorial up; the daily gift may still be waiting: it goes after). */
+  readonly welcomeFree?: boolean;
   /** Something else covers the map (ride, boss, chest, find): map-button loops pause. */
   readonly mapCovered: boolean;
   /** Nothing else (chest, find, boss, ride, tutorial) is on screen: a level chest may present itself. */
@@ -130,7 +134,13 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   useEffect(() => () => { if (chainTimer.current) clearTimeout(chainTimer.current); }, []);
   const mounted = useRef(true);
   const viewRef = useRef<View_ | null>(null);
+  /** A welcome back is waiting for the first fresh Daily 3 read after the app opened. */
+  const welcomeWaiting = useRef(false);
+  const refreshRef = useRef<((force?: boolean) => Promise<void>) | null>(null);
   const buttonBox = useRef<View>(null);
+  /** The Daily 3 button's centre on screen (window points), kept fresh so the full-set card can grow out of it. */
+  const buttonCenter = useRef<{ x: number; y: number } | null>(null);
+  const fullSetRef = useRef<((at?: { readonly x: number; readonly y: number }, enterInMs?: number, state?: DailyThreeState | null) => void) | null>(null);
   // Dev readout for the lane tools (debug()).
   const presentRef = useRef(false);
   const frontRef = useRef(false);
@@ -180,11 +190,20 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     prevGoals.current = next.goals;
     // Identical answers never re-render the map.
     setDaily(prev => (prev && sameJson(prev, next) ? prev : next));
+    // A welcome back waits for a fresh read after the app opens (never yesterday's goals or flame).
+    if (welcomeWaiting.current) { welcomeWaiting.current = false; setFreshDaily(n => n + 1); }
     if (fresh.length) {
       // The map button flies the check in (its own haptic and sound); a card that is open just updates.
       const index = next.goals.findIndex(g => g.key === fresh[fresh.length - 1]);
       setCelebrate(c => [...new Set([...c, ...fresh])]);
-      if (!viewRef.current) setLanding(l => ({ index, done: doneCount(next.goals), key: (l?.key ?? 0) + 1 }));
+      if (!viewRef.current) {
+        setLanding(l => ({ index, done: doneCount(next.goals), key: (l?.key ?? 0) + 1 }));
+        // The third goal: the chest card mounts now, in the same render as the check's flight, and enters on the
+        // UI thread the moment the ring completes (a busy JS thread can never leave a hold on the map).
+        if (doneCount(next.goals) >= 3 && next.claimable) {
+          fullSetRef.current?.(buttonCenter.current ?? undefined, CHECK.fly + CHECK.fullRing + 40, next);
+        }
+      }
     }
   }, []);
 
@@ -219,6 +238,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       // Offline or a server without these routes: keep what we had, try again on the next focus.
     }
   }, [flags, applyDaily, level]);
+  refreshRef.current = refresh;
 
   useEffect(() => { if (o.enabled && o.mapFocused) void refresh(lastRead.current === 0); }, [o.enabled, o.mapFocused, flags, refresh]);
   useEffect(() => { if (o.enabled) void refresh(true); }, [o.refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -245,31 +265,65 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   // The welcome back is checked once per app open (and again after the app comes back to the front).
   const welcomeChecked = useRef(false);
   const [welcomeDone, setWelcomeDone] = useState(false);
+  const [reopen, setReopen] = useState(0);
   useEffect(() => {
-    const sub = AppState.addEventListener('change', st => { if (st === 'active') { welcomeChecked.current = false; setWelcomeDone(false); } });
+    const sub = AppState.addEventListener('change', st => {
+      if (st === 'active') { welcomeChecked.current = false; awayDays.current = null; setWelcomeDone(false); setReopen(n => n + 1); }
+    });
     return () => sub.remove();
   }, []);
+  // How long since this phone last opened the map for this player, read at once (no server wait), so the
+  // welcome can hold the map's tips and the daily gift until it has said hello.
+  const awayDays = useRef<number | null>(null);
+  const [welcomePending, setWelcomePending] = useState(false);
+  const [awayKnown, setAwayKnown] = useState(0);
+  const [freshDaily, setFreshDaily] = useState(0);
   useEffect(() => {
-    if (!daily || !o.enabled || welcomeChecked.current || !player?.id) return;
-    welcomeChecked.current = true;
+    if (!o.enabled || !player?.id || awayDays.current !== null) return;
     const key = `${LAST_OPEN_KEY}:${player.id}`;
     void AsyncStorage.getItem(key).then(v => {
       const away = daysAway(v ? Number(v) : null, Date.now());
       void AsyncStorage.setItem(key, String(Date.now())).catch(() => undefined);
       if (!mounted.current) return;
-      if (away >= WELCOME_FX.minDaysAway) welcomeCards_.current = welcomeCards(daily, { levelChest: pendingChest?.level ?? null });
-      setWelcomeDone(true);
-    }).catch(() => setWelcomeDone(true));
-  }, [daily, o.enabled, player?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const welcomeCards_ = useRef<WelcomeCard[] | null>(null);
+      awayDays.current = away;
+      if (away >= WELCOME_FX.minDaysAway) {
+        setWelcomePending(true);
+        welcomeWaiting.current = true;
+        lastRead.current = 0;
+        void refreshRef.current?.(true);
+      }
+      setAwayKnown(n => n + 1);
+    }).catch(() => { awayDays.current = 0; setAwayKnown(n => n + 1); });
+  }, [o.enabled, player?.id, reopen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Never hold the map for long: if the goals never load, the tips and the gift go ahead after 15 s.
   useEffect(() => {
-    if (view || !o.screenFree || !o.mapFocused || !o.enabled) return;
-    // Back after a few days: the welcome goes first (it tells the flame and the chest kindly), once.
-    if (welcomeDone && welcomeCards_.current?.length) {
+    if (!welcomePending) return;
+    const t = setTimeout(() => setWelcomePending(false), 15000);
+    return () => clearTimeout(t);
+  }, [welcomePending]);
+  useEffect(() => {
+    if (!daily || !o.enabled || welcomeChecked.current || !player?.id || awayDays.current === null) return;
+    if (awayDays.current >= WELCOME_FX.minDaysAway && welcomeWaiting.current) return;
+    welcomeChecked.current = true;
+    if (awayDays.current >= WELCOME_FX.minDaysAway) welcomeCards_.current = welcomeCards(daily, { levelChest: pendingChest?.level ?? null });
+    if (!welcomeCards_.current?.length) setWelcomePending(false);
+    setWelcomeDone(true);
+  }, [daily, o.enabled, player?.id, awayKnown, freshDaily]); // eslint-disable-line react-hooks/exhaustive-deps
+  const welcomeCards_ = useRef<WelcomeCard[] | null>(null);
+  const welcomeFree = o.welcomeFree ?? o.screenFree;
+  useEffect(() => {
+    // Back after a few days: the welcome goes first, before the map's tips and the daily gift (they wait for it),
+    // and tells the flame and the chest kindly, once.
+    if (!view && welcomeFree && o.mapFocused && o.enabled && welcomeDone && welcomeCards_.current?.length) {
       const cards = welcomeCards_.current;
-      const timer = setTimeout(() => { welcomeCards_.current = null; setView(v => v ?? { k: 'welcome', cards }); }, 500);
+      const timer = setTimeout(() => {
+        welcomeCards_.current = null;
+        setView(v => v ?? { k: 'welcome', cards });
+        setWelcomePending(false);
+      }, 200);
       return () => clearTimeout(timer);
     }
+    if (view || !o.screenFree || !o.mapFocused || !o.enabled) return;
     if (!welcomeDone) return;
     if (pendingChest) {
       const timer = setTimeout(() => {
@@ -294,7 +348,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       }, 700);
       return () => { live = false; clearTimeout(timer); };
     }
-  }, [pendingChest?.level, freezeSaved, daily?.streak.days, view, o.screenFree, o.mapFocused, o.enabled, welcomeDone]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pendingChest?.level, freezeSaved, daily?.streak.days, view, o.screenFree, welcomeFree, o.mapFocused, o.enabled, welcomeDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openSheet = () => {
     setView({ k: 'sheet' });
@@ -322,6 +376,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const writeSeen = (n: number) => { void AsyncStorage.setItem(seenKey, String(n)).catch(() => undefined); };
 
   const tomorrowKey = `${TOMORROW_SEEN_KEY}:${player?.id ?? 0}`;
+  const tomorrowSeen = useRef<boolean | null>(null);
+  useEffect(() => {
+    tomorrowSeen.current = null;
+    void AsyncStorage.getItem(tomorrowKey).then(v => { tomorrowSeen.current = !!v; }).catch(() => undefined);
+  }, [tomorrowKey]);
 
   /**
    * After a chest: the card and its ribbon shrink away together and every prize flies from its own row into its
@@ -356,8 +415,9 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       if (!mounted.current) return;
       let chain: ('flame' | 'tomorrow')[] = [];
       if (src === 'daily' && state) {
-        let seen = false;
-        try { seen = !!(await AsyncStorage.getItem(tomorrowKey)); } catch { /* treat as not seen */ }
+        // Read ahead when the map opened (no storage wait between the last landing and the next card).
+        let seen = tomorrowSeen.current;
+        if (seen === null) { try { seen = !!(await AsyncStorage.getItem(tomorrowKey)); } catch { seen = false; } }
         chain = dailyChain({ moment: moment ?? { kind: 'none' }, prize: tomorrowPrize(state), tomorrowSeen: seen,
           milestoneAway: state.streak.next_milestone?.days_away ?? null });
       }
@@ -379,6 +439,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     const step = chainRef.current.shift();
     if (step === 'flame' && flameRef.current) { setView({ k: 'flame', moment: flameRef.current }); return; }
     if (step === 'tomorrow') {
+      tomorrowSeen.current = true;
       void AsyncStorage.setItem(tomorrowKey, '1').catch(() => undefined);
       setView({ k: 'tomorrow' }); return;
     }
@@ -416,7 +477,6 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     opening.current = true;
     const current = view;
     setView({ ...current, opening: true });
-    const started = Date.now();
     try {
       const seenP = current.src === 'daily' ? readSeen() : Promise.resolve(null);
       const ahead = current.src === 'daily' ? claimAhead.current : null;
@@ -434,16 +494,9 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         if (result.state.streak.counted_today) writeSeen(result.state.streak.days);
         flameRef.current = moment.kind === 'milestone' ? moment : null;
       }
-      // Let the shake build before the lid pops (anticipation reads at 450 ms+).
-      // The Weekly Box shakes longest (900 ms): the week's biggest moment earns the longest wind-up.
-      // The Daily 3 chest follows the chest beats (420 ms of shake, then the held frame); the Weekly Box winds up longest.
-      // The full set holds the lid until its checks have dived in (chestAt), then the chest's own 420 ms gather.
-      const gather = current.repeat ? REPEAT_CHEST.gatherMs : 420;
-      const hold = current.src === 'weekly' ? 900 : current.src === 'daily' ? (current.auto ? FULL_SET.chestAt + gather : gather) : LEVEL_FX.holdMs;
-      const wait = reducedMotion ? 0 : Math.max(0, hold - (Date.now() - started));
-      setTimeout(() => {
-        if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards, state: result.state ?? null, moment });
-      }, wait);
+      // The answer goes straight to the card: the chest keeps its own lid beat on the UI thread (gatherMs),
+      // so a fast server never cuts the shake short and a busy JS thread never adds a second wait.
+      if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards, state: result.state ?? null, moment });
       if (result.state?.goals) applyDaily(result.state);
       if (current.src === 'level') setChests(cs => cs.map(c => (c.level === current.level ? { ...c, opened: true, rewards: result.rewards } : c)));
     } catch {
@@ -511,15 +564,21 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   };
 
   // The third check landed on the map: open the card in full-set mode (checks bounce, ribbon stamps, chest opens by itself).
-  const onFullSet = () => {
+  const onFullSet = (at?: { readonly x: number; readonly y: number }, enterInMs = 0, state: DailyThreeState | null = daily) => {
+    const daily = state;
     if (viewRef.current || !daily?.claimable) return;
+    viewRef.current = { k: 'reveal', src: 'daily', rewards: null, opening: false };
+    // The card grows out of the Daily 3 button while its ring still glows.
+    launchFrom.current = at ? { x: at.x - width / 2, y: at.y - height / 2 } : null;
     // Start the claim now: by the chest beat (900 ms later) the server has usually answered, so the lid never waits.
     claimAhead.current = claimDailyThree();
     claimAhead.current.catch(() => undefined);
     // Straight into the chest card (one card, no sheet in between): the checks bounce, dive in, the lid pops.
     setCelebrate([]);
-    setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false, auto: true, ...dailyFlavor(daily.claimable_date) });
+    setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false, auto: true,
+      enterAt: reducedMotion ? undefined : Date.now() + enterInMs, ...dailyFlavor(daily.claimable_date) });
   };
+  fullSetRef.current = onFullSet;
   /** The repeat version after three chests on this phone, and about one rare chest in ten (stable per claim date). */
   const dailyFlavor = (claimDate: string | null | undefined) => ({
     repeat: isRepeatChest(chestOpens.current), rare: isRareChest(claimDate, player?.id ?? 0),
@@ -573,6 +632,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const cardUp = useRef(false);
   /** Where the next card launches from (relative to the screen centre), set while the prizes fly home. */
   const launchFrom = useRef<{ x: number; y: number } | null>(null);
+  /** The goals as they were when the chest card opened (its preview and size stay put through the claim). */
+  const revealDaily = useRef<DailyThreeState | null>(null);
   const launch = useSharedValue({ x: 0, y: 0 });
   useEffect(() => {
     if (view) setPresent(true);
@@ -581,9 +642,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         cardUp.current = true;
         launch.value = !reducedMotion && launchFrom.current ? launchFrom.current : { x: 0, y: 0 };
         launchFrom.current = null;
+        // A card mounted early (the full set) enters on its own mark, on the UI thread.
+        const wait = view?.k === 'reveal' && view.enterAt ? Math.max(0, view.enterAt - Date.now()) : 0;
         cardT.value = 0;
-        cardT.value = reducedMotion ? withTiming(1, { duration: DURATION.quick }) : withSpring(1, SPRING.settle);
-        dim.value = withTiming(0.55, { duration: DURATION.enter, easing: EASE.out });
+        cardT.value = reducedMotion ? withTiming(1, { duration: DURATION.quick }) : withDelay(wait, withSpring(1, SPRING.settle));
+        dim.value = withDelay(wait, withTiming(0.55, { duration: DURATION.enter, easing: EASE.out }));
       }
       return;
     }
@@ -611,7 +674,9 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   if (flags?.dailyThree && daily) {
     const b = buttonState(daily, new Date().getHours());
     button = (
-      <View ref={buttonBox} collapsable={false}>
+      <View ref={buttonBox} collapsable={false} onLayout={() => {
+        buttonBox.current?.measureInWindow((x, y, w, h) => { if (Number.isFinite(x) && w > 0) buttonCenter.current = { x: x + w / 2, y: y + h / 2 }; });
+      }}>
       <Daily3MapButton pips={b.pips} streak={b.streak} attention={b.attention}
         active={o.mapFocused && !o.mapCovered && !visible} reducedMotion={reducedMotion} landing={landing} onFullSet={onFullSet}
         onPress={() => { playSfx('ui.tap'); openSheet(); }} />
@@ -637,6 +702,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
 
   let title = 'Daily 3';
   let content: ReactNode = null;
+  if (view?.k !== 'reveal') revealDaily.current = null;
   const [allRibbon, setAllRibbon] = useState(false);
   const fullSetSheet = view?.k === 'sheet' && !!view.all;
   useEffect(() => {
@@ -661,6 +727,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     );
   } else if (view?.k === 'reveal') {
     const r = view;
+    // The preview and card size come from the goals as they were when the card opened (the claim's answer
+    // changes the preview to tomorrow's, which must never resize the chest or swap the chips mid-gather).
+    if (!revealDaily.current) revealDaily.current = daily;
+    const dSnap = revealDaily.current ?? daily;
     const levelPreview = r.src === 'level' ? chests.find(c => c.level === r.level)?.preview ?? null : null;
     title = r.src === 'level' ? `Level ${r.level}!` : r.src === 'weekly' ? 'Weekly Box' : r.auto ? 'All 3 done!' : 'Daily 3 done!';
     const footer = r.src === 'level' ? nextLevel(r.level ?? 1)
@@ -687,6 +757,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? WEEKLY : ICON_SOURCES.chest}
         openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? WEEKLY_OPEN : ICON_SOURCES.chestOpen}
         autoOpen={!!r.auto} fullSet={!!r.auto} repeat={!!r.repeat} rare={!!r.rare}
+        delayMs={r.enterAt ? Math.max(0, r.enterAt - Date.now()) : 0}
+        gatherMs={lidDelay({ dropIn: r.src === 'level', autoOpen: !!r.auto, repeat: !!r.repeat, weekly: r.src === 'weekly' })}
         onArrive={r.src === 'level' ? () => {
           // The level chest's claim starts as it lands, so its lid pops on the beat even on a slow server.
           if (r.level && !levelAhead.current) {
@@ -695,8 +767,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
             levelAhead.current = { level: r.level, p };
           }
         } : undefined}
-        expectRows={r.src === 'daily' && daily ? dailyRowCount(daily) : levelPreview ? levelRowCount(levelPreview) : undefined}
-        preview={r.src === 'daily' && daily ? <DailyPreview state={daily} /> : levelPreview ? <LevelPreview p={levelPreview} /> : undefined}
+        expectRows={r.src === 'daily' && dSnap ? dailyRowCount(dSnap) : levelPreview ? levelRowCount(levelPreview) : undefined}
+        preview={r.src === 'daily' && dSnap ? <DailyPreview state={dSnap} /> : levelPreview ? <LevelPreview p={levelPreview} /> : undefined}
         onWear={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('Inventory'); }}
         onPins={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('PinCollections'); }}
         onOpen={() => { void openReveal(); }} onDone={origins => finishReveal(r.rewards, r.src, r.state ?? null, r.moment, origins)} />
@@ -784,7 +856,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     </Modal>
   );
 
-  return { button, overlay, occluding: visible };
+  // A welcome on its way holds the map's tips and the daily gift too (it goes first).
+  return { button, overlay, occluding: visible || welcomePending };
 }
 
 /** How many prize rows the Daily 3 chest will show (the server's preview), so its card fits them with no empty space. */

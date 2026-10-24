@@ -131,7 +131,10 @@ export function NextFlameGoal({ days, size = 30, textStyle, short = false }: {
           <View style={styles.ghostDay}><Text style={styles.ghostDayText} allowFontScaling={false}>{next.day}</Text></View>
         </View>
       )}
-      {line ? <Text style={[styles.goalText, textStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{line}</Text> : null}
+      {/* The days to go lead as a big gold number (a non-reader sees "23" and the bigger flame), then the words. */}
+      {next && next.away > 1 ? <View style={styles.awayChip}><Text style={styles.awayNum} allowFontScaling={false}>{next.away}</Text></View> : null}
+      {line ? <Text style={[styles.goalText, textStyle, styles.goalMin]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+        {next && next.away > 1 ? line.replace(/^\d+\s+/, '') : line}</Text> : null}
     </View>
   );
 }
@@ -176,8 +179,12 @@ const styles = StyleSheet.create({
   goal: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1 },
   arrow: { fontFamily: 'Shark', fontSize: 18, color: GOLD_FX.rays, marginHorizontal: 1, marginTop: 2 },
   ghostWrap: { alignItems: 'center', justifyContent: 'center' },
-  ghostDay: { position: 'absolute', bottom: -2, right: -4, minWidth: 20, height: 18, borderRadius: 9, paddingHorizontal: 3,
+  ghostDay: { position: 'absolute', bottom: -2, right: -4, minWidth: 22, height: 20, borderRadius: 10, paddingHorizontal: 3,
     backgroundColor: '#05346e', borderWidth: 1.5, borderColor: GOLD_FX.rays, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  ghostDayText: { fontFamily: 'Shark', fontSize: 11, color: GOLD_FX.rays, marginTop: 1 },
+  ghostDayText: { fontFamily: 'Shark', fontSize: 13, color: GOLD_FX.rays, marginTop: 1 },
+  awayChip: { marginLeft: 6, minWidth: 34, height: 30, borderRadius: 15, paddingHorizontal: 7, backgroundColor: GOLD_FX.rays,
+    alignItems: 'center', justifyContent: 'center', borderBottomWidth: 3, borderBottomColor: '#c98a00' },
+  awayNum: { fontFamily: 'Shark', fontSize: 21, color: '#075083', marginTop: 2 },
+  goalMin: { fontSize: 15 },
   goalText: { fontFamily: 'Shark', fontSize: 15, color: GOLD_FX.rays, marginLeft: 4, flexShrink: 1 },
 });

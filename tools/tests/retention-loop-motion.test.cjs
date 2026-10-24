@@ -99,8 +99,13 @@ test('check-off and full set fit the motion language (payoff inside 1.5 s, settl
   assert.equal(L.FULL_SET.checkStep, 120);
   // From the third check landing to the chest's lid: ring + sheet hand-off + chest beat + the chest anticipation and hit-stop.
   const chest = motion.momentBeats('chest', { reduced: false });
-  const lid = L.CHECK.ring + L.FULL_SET.sheetAt + L.FULL_SET.chestAt + chest.burstAt;
-  assert.ok(lid <= 1600, `lid pops ${lid} ms after the third check lands`);
+  // The third segment fills faster and the card grows out of the button as it completes.
+  assert.ok(L.CHECK.fullRing < L.CHECK.ring);
+  const lid = L.CHECK.fullRing + L.FULL_SET.sheetAt + L.FULL_SET.chestAt + chest.burstAt;
+  assert.ok(lid <= 1400, `lid pops ${lid} ms after the third check lands`);
+  // The chest's own lid beat matches: checks dive in, then the chest gather.
+  assert.equal(L.lidDelay({ autoOpen: true }), L.FULL_SET.chestAt + chest.anticipation);
+  assert.equal(L.lidDelay({ dropIn: true }), L.LEVEL_CHEST.holdMs);
   assert.ok(L.FULL_SET.flash <= motion.DURATION.flash);
 });
 
@@ -187,7 +192,7 @@ test('the Shark Pass track glides, pours at most three steps one by one, and pop
   const P = loadTs('src/services/money/passMotion.ts');
   const plan = plain(P.climbFills(2, 7));
   assert.deepEqual(Object.keys(plan.at).map(Number), [3, 4, 5, 6, 7]);
-  assert.equal(plan.at[3].at, P.PASS_FX.openAt + P.PASS_FX.scrollMs);
+  assert.equal(plan.at[3].at, P.PASS_FX.openAt + Math.round(P.PASS_FX.scrollMs * 0.6));
   assert.equal(plan.at[4].at - plan.at[3].at, P.PASS_FX.pourMs);
   assert.equal(plan.at[6].ms, 0);
   assert.equal(plan.at[7].ms, 0);
@@ -266,7 +271,9 @@ test('done checks are gold and the map ring flash is a capped gold glow (never a
   assert.doesNotMatch(sheet, /styles\.strike/);
   const btn = read('src/components/retention/Daily3MapButton.tsx');
   assert.doesNotMatch(btn, /\? 1 : 0\.25/);
-  assert.match(btn, /runOnJS\(handOff\)/);
+  // The full set's card is mounted while the check flies and enters on its own UI-thread mark (no map hold).
+  assert.match(btn, /onFullSet\?\.\(center\.current \?\? undefined, Math\.max\(0, CHECK\.fly \+ CHECK\.fullRing/);
+  assert.match(read('src/components/retention/useRetention.tsx'), /withDelay\(wait, withSpring\(1, SPRING\.settle\)\)/);
   // Finn never covers words: he stands beside the button.
   assert.match(read('src/components/retention/StreakMoment.tsx'), /finn: \{ width: 72, height: 72 \}/);
 });
@@ -337,4 +344,24 @@ test('reward numbers roll on the UI thread and every loop card has the hand-draw
   // The flame ladder reads across the room: six clearly different sizes.
   assert.deepEqual([0, 1, 3, 7, 30, 100].map(d => L.flameLook(d).scale), [0.55, 0.7, 0.85, 1.0, 1.1, 1.2]);
   assert.equal(L.FREEZE_FX.landPop, 1.6);
+});
+
+test('one chest reveal, no strobe: one render starts it, the lid and every row run on the UI thread', () => {
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  // No state flips mid-burst (a render there showed a frame of the closed chest and replayed the burst).
+  assert.doesNotMatch(reveal, /setLanded|setSwapped|setButtonReady|setShowTap|setReplay/);
+  // The reveal plan is made once (a ref), and the reveal effect is guarded so it never runs twice.
+  assert.match(reveal, /if \(revealed && !plan\.current\)/);
+  assert.match(reveal, /if \(!revealed \|\| revealRan\.current\) return;/);
+  // The lid swaps on the UI thread on the hit-stop frame (both arts mounted).
+  assert.match(reveal, /lid\.value = withDelay\(P, withTiming\(1, \{ duration: 0 \}\)\)/);
+  // The open chest holds big on its rays for at least 300 ms before it glides into its slot.
+  assert.ok(L.REVEAL_ROWS.heroHold >= 300);
+  assert.match(reveal, /lift\.value = withDelay\(P \+ pl\.hold, withSpring\(0, SPRING\.settle\)\)/);
+  // The answer goes straight to the card (no second JS wait before the burst); the chest keeps its own lid beat.
+  const ret = read('src/components/retention/useRetention.tsx');
+  assert.doesNotMatch(ret, /const wait = reducedMotion/);
+  assert.match(ret, /gatherMs=\{lidDelay\(/);
+  // The chest's preview and size never change mid-gather when the claim's answer updates the goals.
+  assert.match(ret, /revealDaily\.current/);
 });

@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  cancelAnimation, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { haptic, playHaptic, queueHaptic } from '../../gamekit/Haptics';
@@ -74,7 +74,8 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
   readonly attention: ButtonAttention;
   readonly onPress: () => void;
   readonly landing: CheckLanding | null;
-  readonly onFullSet?: () => void;
+  /** The third check landed: the full set's card grows out of the button (its centre on screen, when known). */
+  readonly onFullSet?: (at?: { readonly x: number; readonly y: number }, enterInMs?: number) => void;
   readonly active: boolean;
   readonly reducedMotion: boolean;
 }) {
@@ -109,6 +110,8 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
   const [bubbleDone, setBubbleDone] = useState(0);
   const [sparkCount, setSparkCount] = useState<number>(CHECK.sparkles);
   const anchor = useRef<View>(null);
+  /** The button centre on screen (window points), measured on each landing: the full-set card grows out of it. */
+  const center = useRef<{ x: number; y: number } | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
@@ -161,17 +164,26 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
       return;
     }
     let handed = false;
-    const handOff = full ? () => { if (!handed) { handed = true; onFullSet?.(); } } : null;
+    // The full set's card is mounted while the check is still flying and enters (on the UI thread) the moment the
+    // ring completes, so a busy JS thread never leaves the kid waiting on the map.
+    const t0 = Date.now();
+    const handOff = full ? () => {
+      if (handed) return;
+      handed = true;
+      onFullSet?.(center.current ?? undefined, Math.max(0, CHECK.fly + CHECK.fullRing - (Date.now() - t0)));
+    } : null;
     // Every visual beat is scheduled on the UI thread at once (withDelay from the flight start), so a busy JS
     // thread never stretches it; JS timers only fire the haptics, sounds and the hand-off on the same marks.
     const F = CHECK.fly;
     // A safety net if the ring animation is cancelled (the map was covered mid-fill).
-    if (full) later(() => handOff?.(), F + CHECK.ring + FULL_SET.sheetAt + 400);
+    if (full) later(() => handOff?.(), 250);
     const sparks = momentParticles(full ? CHECK.fullSparkles : CHECK.sparkles, budget, false);
     setSparkCount(sparks);
     anchor.current?.measureInWindow((bx, by, bw, bh) => {
       // Fly from where the shark stands (the middle of the map), relative to this button.
       flyFrom.value = { x: width / 2 - (bx + bw / 2), y: height * 0.49 - (by + bh / 2) };
+      if (Number.isFinite(bx) && bw > 0) center.current = { x: bx + bw / 2, y: by + bh / 2 };
+      handOff?.();
       fly.value = 0;
       flyOn.value = 1;
       fly.value = withTiming(1, { duration: F, easing: EASE.inOut });
@@ -180,9 +192,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
       segs[i].value = 0;
       // The third segment's fill hands off to the full set the frame it completes (UI-thread clock, not a JS timer),
       // so the card opens with the flash, never after a pause on the map.
-      segs[i].value = withDelay(F, withTiming(1, { duration: CHECK.ring, easing: EASE.out }, fin => {
-        if (fin && full && handOff) runOnJS(handOff)();
-      }));
+      segs[i].value = withDelay(F, withTiming(1, { duration: full ? CHECK.fullRing : CHECK.ring, easing: EASE.out }));
       draw.value = 0;
       draw.value = withDelay(F, withTiming(1, { duration: CHECK.draw, easing: EASE.out }));
       stamp.value = 1;
@@ -190,7 +200,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
       stampA.value = withDelay(F, withSequence(withTiming(1, { duration: 60 }),
         withDelay(CHECK.draw + (full ? 260 : 700), withTiming(0, { duration: DURATION.exit, easing: EASE.in }))));
       // One goal: six sparkles on arrival. The third: the ring completes, flashes white, 12 sparkles, a bigger pop.
-      const burstAt = full ? F + CHECK.ring : F;
+      const burstAt = full ? F + CHECK.fullRing : F;
       sparkle.value = 0;
       sparkle.value = withDelay(burstAt, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
       pop.value = withDelay(F, withSequence(withTiming(1.12, { duration: 90, easing: EASE.out }), withSpring(1, SPRING.stamp),
@@ -208,7 +218,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
     });
     playSfx(LOOP_CUES.checkFly.fallback, 0.35);
     later(() => { queueHaptic('hitMedium'); playSfx(cue.fallback, 0.9); }, F);
-    if (full) later(() => { playHaptic('golden'); playSfx(LOOP_CUES.fullSet.fallback, 0.9); }, F + CHECK.ring);
+    if (full) later(() => { playHaptic('golden'); playSfx(LOOP_CUES.fullSet.fallback, 0.9); }, F + CHECK.fullRing);
   }, [landingKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const buttonStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bounce.value }, { scale: press.value * pop.value }] }));

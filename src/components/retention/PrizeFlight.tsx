@@ -6,6 +6,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
+import { counterTicks } from '../../services/retention/counterTicks';
 import { PRIZE_FLIGHT, arcPoint, type FlightLeg, type FlightTarget } from '../../services/retention/loopMotion';
 import { BRAND, ICON_SOURCES } from '../../ui';
 import { HUD_BUMP, SPRING } from '../../ui/motion';
@@ -26,7 +27,8 @@ const ICON_SIZE = 34;
  * Prizes fly home in plain sight: each icon lifts off its own prize row and
  * arcs to its HUD counter (coins first, then tickets, then energy), shrinking
  * a little as it goes. Every landing flashes a gold ring on the counter and
- * bumps it (HUD_BUMP), the first landing pops a "+N" over it, and a light
+ * bumps it (HUD_BUMP) and steps its number up (counterTicks), the first landing
+ * pops a "+N" just under it (never up into the status bar), and a light
  * haptic and a rising tick play per landing. All motion is scheduled on the
  * UI thread from the first frame (withDelay); JS timers only fire the haptics
  * and sounds. The layer never takes touches.
@@ -41,6 +43,12 @@ export default function PrizeFlight({ legs, origin, reducedMotion }: {
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     let step = 0;
+    // Each HUD counter steps up as its icons land (never a jump after the flight).
+    legs.forEach(leg => {
+      const landings = reducedMotion ? [160]
+        : Array.from({ length: leg.icons }, (_, i) => leg.delay + i * PRIZE_FLIGHT.stepMs + PRIZE_FLIGHT.flyMs);
+      counterTicks.plan(leg.target, { amount: leg.amount, landings });
+    });
     legs.forEach(leg => {
       for (let i = 0; i < leg.icons; i++) {
         const at = reducedMotion ? 160 : leg.delay + i * PRIZE_FLIGHT.stepMs + PRIZE_FLIGHT.flyMs;
@@ -96,7 +104,8 @@ function Leg({ leg, origin, reducedMotion }: { readonly leg: FlightSpec; readonl
     return { opacity: t <= 0 || t >= 1 ? 0 : 0.85 * (1 - phase) * (1 - t * 0.5), transform: [{ scale: (0.6 + phase * 0.9) * bump.value }] };
   });
   const glowStyle = useAnimatedStyle(() => ({ opacity: ring.value <= 0 || ring.value >= 1 ? 0 : 0.55 * (1 - ring.value), transform: [{ scale: bump.value }] }));
-  const plusStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, plus.value * 1.4), transform: [{ translateY: -30 - 16 * plus.value }, { scale: 0.6 + 0.4 * plus.value }] }));
+  // The "+N" pops just below its counter and drifts down a little: never up over the clock or the Dynamic Island.
+  const plusStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, plus.value * 1.4), transform: [{ translateY: 22 + 10 * plus.value }, { scale: 0.6 + 0.4 * plus.value }] }));
   return (
     <>
       {icons.map(p => (

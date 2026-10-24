@@ -18,6 +18,8 @@ export const CHECK = {
   fly: 500,
   /** One ring segment filling (EASE.out). */
   ring: 400,
+  /** The third segment fills faster: the full set's card grows out of the button as it completes. */
+  fullRing: 260,
   /** The check drawing itself as a stroke. */
   draw: 260,
   /** How long the "1 of 3" bubble stays up after it pops in. */
@@ -40,15 +42,15 @@ export const FULL_SET = {
   /** From the ring completing to the card opening (handed off on the ring's own UI-thread clock). */
   sheetAt: 0,
   /** When the first check bounces (ms after the card opens). */
-  checksAt: 200,
+  checksAt: 120,
   /** Gap between the three check bounces. */
   checkStep: 120,
   /** Rising coin_tick ladder steps for the three bounces. */
   tickSteps: [0, 4, 8] as const,
   /** The "All 3 done!" ribbon stamping in. */
-  ribbonAt: 500,
+  ribbonAt: 400,
   /** The checks dive into the chest; its anticipation runs from here (momentBeats('chest')). */
-  chestAt: 640,
+  chestAt: 520,
 } as const;
 
 /** Streak milestones that get their own full-screen moment. */
@@ -297,7 +299,25 @@ export { COUNT, HUD_BUMP, PRESS, STAGGER } from '../../ui/motion';
  * then one every 150 ms (a held 380 ms before a hero card), and each number
  * rolls for at most COUNT.ms, so every row has landed and counted inside 1.2 s.
  */
-export const REVEAL_ROWS = { first: 240, beat: 150, hold: 380, finishBy: 1200 } as const;
+export const REVEAL_ROWS = {
+  first: 240, beat: 150, hold: 380, finishBy: 1200,
+  /** The open chest stays big and centred on its full rays this long after the lid pops (the burst frame is the biggest). */
+  heroHold: 340,
+  /** The first prize lands this long after the chest starts gliding up into its slot. */
+  firstAfterGlide: 120,
+} as const;
+
+/**
+ * The lid's beat (ms after the open is asked for): the gather before the hit-stop. A level chest's lid
+ * holds LEVEL_CHEST.holdMs after it auto-opens (or is tapped); the full Daily 3 set waits for its checks
+ * to dive in, then the chest's own gather; a tapped chest gathers for the chest anticipation.
+ */
+export function lidDelay(o: { readonly dropIn?: boolean; readonly autoOpen?: boolean; readonly repeat?: boolean; readonly weekly?: boolean }): number {
+  if (o.dropIn) return LEVEL_CHEST.holdMs;
+  if (o.weekly) return 900;
+  const gather = o.repeat ? REPEAT_CHEST.gatherMs : 420;
+  return o.autoOpen ? FULL_SET.chestAt + gather : gather;
+}
 
 /** How long a row's number rolls when it lands at `startMs` (never past REVEAL_ROWS.finishBy, never under 260 ms). */
 export function rowCountMs(startMs: number, countMs: number = 650): number {
@@ -409,7 +429,7 @@ export function flightDoneMs(plan: readonly FlightLeg[]): number {
  * four beats). About one chest in ten is a rare one: a gold beam and an extra
  * coin spill, picked from the claim date so it never changes on a reload.
  */
-export const REPEAT_CHEST = { afterOpens: 3, gatherMs: 240, rowBeat: 110, first: 180, rareOneIn: 10 } as const;
+export const REPEAT_CHEST = { afterOpens: 3, gatherMs: 240, rowBeat: 110, first: 180, rareOneIn: 10, heroHold: 220 } as const;
 
 export function isRepeatChest(opensOnThisPhone: number): boolean {
   return (Number(opensOnThisPhone) || 0) >= REPEAT_CHEST.afterOpens;

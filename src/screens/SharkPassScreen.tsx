@@ -34,7 +34,7 @@ import { queueHaptic } from '../gamekit/Haptics';
 import { usePowerBudget } from '../power';
 import useAmbientLoop from '../power/useAmbientLoop';
 import { SparkleBurst } from '../ui/GoldBurst';
-import { SPRING, momentParticles } from '../ui/motion';
+import { KICK, SPRING, momentParticles } from '../ui/motion';
 import { EASE } from '../ui/motionEasing';
 import { PASS_FX, climbFills } from '../services/money/passMotion';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -44,6 +44,7 @@ import {
 } from '../api/endpoints/me/shark-pass';
 import { askGrownUp } from '../components/GrownUpGate';
 import { GotIt, MAX_FONT, PackArt, artSource, type PackArtKey } from '../components/money/moneyUi';
+import PassStepCard from '../components/retention/PassStepCard';
 import MemberFlex from '../components/money/MemberFlex';
 import { lastSharkPassSeen, noteSharkPassPoints } from '../components/money/SharkPassBanner';
 import { playSfx } from '../gamekit/SFX';
@@ -265,7 +266,7 @@ export default function SharkPassScreen() {
     scrolled.current = true;
     const offsetOf = (tier: number) => Math.max(0, Math.max(0, Math.min(tiers.length - 1, tier - 1)) * CELL_W - CELL_W);
     const t = setTimeout(() => {
-      const climb = climbRef.current;
+      const climb = climbRef.current ?? climbSeed.current ?? null;
       if (!climb || reduced) { scrollX.value = offsetOf(progress.tier); return; }
       scrollX.value = offsetOf(Math.max(1, climb.from));
       scrollX.value = withDelay(60, withTiming(offsetOf(climb.to), { duration: PASS_FX.scrollMs, easing: EASE.inOut }));
@@ -407,15 +408,47 @@ export default function SharkPassScreen() {
   const running = focused && active && !reduced;
 
   // Step-up moment: the first visit after climbing shows the new step once (last seen step kept per season).
-  const [climbed, setClimbed_] = useState<{ from: number; to: number } | null>(null);
+  const [climbedState, setClimbed_] = useState<{ from: number; to: number } | null>(null);
+  // The climb is known from the first render that has the server's last-seen step, so the track draws the new
+  // steps unlit from its first frame (never lit, then unlit, then poured when the effect catches up).
+  const climbSeed = useRef<{ from: number; to: number } | null | undefined>(undefined);
+  const climbOver = useRef(false);
+  if (climbSeed.current === undefined && progress && progress.last_seen_tier !== undefined) {
+    const last = progress.last_seen_tier ?? 0;
+    climbSeed.current = progress.tier > last ? { from: last, to: progress.tier } : null;
+  }
+  const climbed = climbedState ?? (climbOver.current ? null : climbSeed.current ?? null);
   // The "Step N!" card waits until the new steps have filled on the track (it never covers the climb).
   const [climbCard, setClimbCard] = useState(false);
   const setClimbed = (c: { from: number; to: number } | null) => {
     climbRef.current = c;
     setClimbed_(c);
-    if (!c) { setClimbCard(false); return; }
-    setTimeout(() => setClimbCard(true), reduced ? 0 : climbFills(c.from, c.to, PASS_FX).doneAt + 400);
+    if (!c) { climbOver.current = true; setClimbCard(false); return; }
+    setTimeout(() => setClimbCard(true), reduced ? 0 : climbFills(c.from, c.to, PASS_FX).doneAt + 250);
   };
+  // The prizes now waiting on the track (free row, and the Shark Pass row when it is yours), for the step card.
+  const waitingPrizes = useMemo(() => tiers.flatMap(t => (!t.unlocked ? [] : [
+    ...(t.free && !t.free_claimed ? [t.free] : []),
+    ...(premium && !t.paid_claimed ? [t.paid] : []),
+  ])), [tiers, premium]);
+  // Each step pop gives the track a small kick, and the last one sends a gold flash along it.
+  const kick = useSharedValue(0);
+  const sweep = useSharedValue(0);
+  useEffect(() => {
+    if (!climbed || reduced) return;
+    const plan = climbFills(climbed.from, climbed.to, PASS_FX);
+    const pops = Object.values(plan.at).map(f => f.at + f.ms).sort((a, b) => a - b).filter((t, i, a) => i === 0 || t !== a[i - 1]);
+    if (!pops.length) return;
+    kick.value = withSequence(...pops.map((t, i) => withDelay(i === 0 ? t : Math.max(0, t - pops[i - 1] - KICK.ms * 2),
+      withSequence(withTiming(KICK.maxPt * 0.75, { duration: KICK.ms / 2, easing: EASE.out }), withSpring(0, SPRING.stamp)))));
+    sweep.value = 0;
+    sweep.value = withDelay(pops[pops.length - 1], withTiming(1, { duration: 520, easing: EASE.inOut }));
+  }, [climbed?.from, climbed?.to, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
+  const kickStyle = useAnimatedStyle(() => ({ transform: [{ translateY: kick.value }] }));
+  const sweepStyle = useAnimatedStyle(() => ({
+    opacity: sweep.value <= 0 || sweep.value >= 1 ? 0 : Math.sin(sweep.value * Math.PI) * 0.85,
+    transform: [{ translateX: -160 + sweep.value * (width + 160) }],
+  }));
   // Pour times are wall-clock marks, so a step column the list mounts late (virtualised) still pours on its beat.
   const fills = useMemo(() => {
     if (!climbed || reduced) return null;
@@ -424,7 +457,7 @@ export default function SharkPassScreen() {
     const at: Record<number, { at: number; ms: number }> = {};
     for (const k of Object.keys(plan.at)) { const f = plan.at[Number(k)]; at[Number(k)] = { at: base + f.at, ms: f.ms }; }
     return { at };
-  }, [climbed, reduced]);
+  }, [climbed?.from, climbed?.to, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!season || !progress) return;
     // The server keeps the last step seen (any device). An older server: this phone's copy.
@@ -570,6 +603,7 @@ export default function SharkPassScreen() {
               <Text maxFontSizeMultiplier={MAX_FONT} style={s.rowLabelFree}>FREE</Text>
               <Text maxFontSizeMultiplier={MAX_FONT} style={s.rowLabelPass}>{premium ? 'SHARK PASS · YOURS' : 'SHARK PASS'}</Text>
             </View>
+            <Animated.View style={kickStyle}>
             <Animated.FlatList ref={list} horizontal data={tiers as SharkPassTier[]} keyExtractor={t => String(t.tier)}
               showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10 }}
               getItemLayout={(_, i) => ({ length: CELL_W, offset: CELL_W * i + 10, index: i })}
@@ -585,6 +619,12 @@ export default function SharkPassScreen() {
                     else if (!premium) showToast(`${rewardWords(item.paid)} comes with the Shark Pass.`, 'info');
                   }} />
               )} />
+              {/* A gold flash runs along the track when the climb lands. */}
+              <Animated.View pointerEvents="none" style={[s.sweep, sweepStyle]}>
+                <LinearGradient colors={['rgba(255,214,74,0)', 'rgba(255,236,150,0.9)', 'rgba(255,214,74,0)']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                  style={StyleSheet.absoluteFill} />
+              </Animated.View>
+            </Animated.View>
 
             {season.ended && (
               <View style={s.ended}>
@@ -834,11 +874,10 @@ export default function SharkPassScreen() {
         )}
       </SafeAreaView>
       {climbed && climbCard && !landed && (
-        <GotIt grants={{}} art="gift" title={`Step ${climbed.to}!`} onDone={() => setClimbed(null)}
-          picture={heroLook ? (
-            <View style={{ width: 170, height: 190 }}><Playercard inventory={heroLook} showBackground={false} pinAnchor="body" still={reduced} style={StyleSheet.absoluteFill} /></View>
-          ) : <Image source={EMBLEM} style={{ width: 170, height: 170 }} contentFit="contain" />}
-          caption={`You climbed ${climbed.to - climbed.from} ${climbed.to - climbed.from === 1 ? 'step' : 'steps'}. ${progress?.claimable ? `${progress.claimable} ${progress.claimable === 1 ? 'reward is' : 'rewards are'} ready.` : 'Keep going!'}`} />
+        // The step card: the steps climbed as gold pips and the prizes now waiting as pictures, one GET THEM! button.
+        <PassStepCard step={climbed.to} climbed={climbed.to - climbed.from} reducedMotion={reduced}
+          prizes={waitingPrizes.map((r, i) => <RewardPicture key={i} reward={r} size={60} />)}
+          onGet={() => { setClimbed(null); void claimAll(); }} onDone={() => setClimbed(null)} />
       )}
       {tryOn && (
         <Pressable style={s.tryScrim} onPress={() => setTryOn(null)} accessibilityRole="button" accessibilityLabel="Close">
@@ -1031,6 +1070,7 @@ function Cell({ reward, claimed, ready, locked, pass, pulse, busy, onPress, peek
 }
 
 const s = StyleSheet.create({
+  sweep: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 160 },
   root: { flex: 1, backgroundColor: '#0a4f96' },
   top: { height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10 },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },

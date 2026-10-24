@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { FULL_SET, LEVEL_CHEST as LEVEL_FX, flameMomentFor, tomorrowPrize, type FlameMoment } from '../../services/retention/loopMotion';
+import { flameMomentFor, tomorrowPrize, type FlameMoment } from '../../services/retention/loopMotion';
 import { BRAND } from '../../ui';
 import Daily3MapButton, { type CheckLanding } from './Daily3MapButton';
 import FlameArt from './FlameArt';
@@ -47,9 +47,8 @@ export default function StreakFlamePreview() {
   // The fixture chest "server" answers after 500 ms.
   const openChest = () => setStage(st => {
     if (!st || st.k !== 'chest' || st.opening || st.rewards) return st;
-    // The same holds the map uses: the full set waits for its checks to dive in plus the chest gather; a level chest its lid beat.
-    setTimeout(() => setStage(cur => (cur && cur.k === 'chest' ? { ...cur, opening: false, rewards: cur.src === 'daily' ? DAILY_PAID : LEVEL_PAID } : cur)),
-      st.src === 'daily' ? FULL_SET.chestAt + 420 : LEVEL_FX.holdMs);
+    // The fixture server answers in 300 ms (often before the lid's beat): the chest keeps its own lid mark, like the map.
+    setTimeout(() => setStage(cur => (cur && cur.k === 'chest' ? { ...cur, opening: false, rewards: cur.src === 'daily' ? DAILY_PAID : LEVEL_PAID } : cur)), 300);
     return { ...st, opening: true };
   });
   const play = (code: string) => {

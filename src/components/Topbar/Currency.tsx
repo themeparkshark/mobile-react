@@ -5,6 +5,7 @@ import shortenNumber from '../../helpers/shorten-number';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { useHelp } from '../help/HelpProvider';
 import { glossaryKeyForName } from '../../services/help/glossary';
+import { counterStep, counterTicks } from '../../services/retention/counterTicks';
 
 interface CurrencyProps {
   /** Remote icon URL or a bundled require(); falls back to the gold coin. */
@@ -32,6 +33,10 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   const [displayCount, setDisplayCount] = useState(count);
   const [showTooltip, setShowTooltip] = useState(false);
   const prevCount = useRef(count);
+  const shown = useRef(count);
+  shown.current = displayCount;
+  /** A prize flight is landing here: the number steps up per icon, and the read-back balance waits its turn. */
+  const flight = useRef<{ until: number; timers: ReturnType<typeof setTimeout>[] } | null>(null);
   
   // Tooltip animation
   const tooltipAnim = useRef(new Animated.Value(0)).current;
@@ -104,8 +109,36 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     }
   }, [showTooltip]);
   
+  // Prizes landing from a flight: one step per icon, each with a little hop.
+  useEffect(() => {
+    if (!flyTarget) return;
+    const off = counterTicks.subscribe(flyTarget, plan => {
+      flight.current?.timers.forEach(clearTimeout);
+      const base = shown.current;
+      const n = plan.landings.length;
+      const last = Math.max(...plan.landings);
+      const timers = plan.landings.map((ms, i) => setTimeout(() => {
+        setDisplayCount(counterStep(base, plan.amount, i, n));
+        bounceAnim.setValue(1.18);
+        Animated.spring(bounceAnim, { toValue: 1, friction: 4, useNativeDriver: true }).start();
+      }, ms));
+      // After the last landing the real balance takes over (normally the same number, so nothing moves).
+      timers.push(setTimeout(() => {
+        flight.current = null;
+        setDisplayCount(prevCount.current);
+      }, last + 450));
+      flight.current = { until: Date.now() + last + 450, timers };
+    });
+    return () => { off(); flight.current?.timers.forEach(clearTimeout); };
+  }, [flyTarget]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Bounce + tick animation when value changes
   useEffect(() => {
+    if (flight.current && prevCount.current !== count) {
+      // The read-back balance arrived mid-flight: the landings already count it up.
+      prevCount.current = count;
+      return;
+    }
     if (prevCount.current !== count) {
       const increased = count > prevCount.current;
       
@@ -170,7 +203,7 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   
   // Sync display if count changes externally without animation
   useEffect(() => {
-    if (displayCount !== count && prevCount.current === count) {
+    if (!flight.current && displayCount !== count && prevCount.current === count) {
       setDisplayCount(count);
     }
   }, [count, displayCount]);

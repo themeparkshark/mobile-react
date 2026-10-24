@@ -25,7 +25,8 @@ export const PASS_FX = {
 export function climbFills(from: number, to: number, fx: Pick<typeof PASS_FX, 'openAt' | 'scrollMs' | 'pourMs' | 'maxPoured'> = PASS_FX):
   { readonly at: Record<number, { readonly at: number; readonly ms: number }>; readonly doneAt: number } {
   const at: Record<number, { at: number; ms: number }> = {};
-  const start = fx.openAt + fx.scrollMs;
+  // The first pour starts while the glide is still landing (the track never waits on the camera).
+  const start = fx.openAt + Math.round(fx.scrollMs * 0.6);
   const a = Math.max(0, Math.floor(from));
   const b = Math.max(a, Math.floor(to));
   let doneAt = start;
