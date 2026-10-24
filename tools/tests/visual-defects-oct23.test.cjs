@@ -119,7 +119,7 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
   assert.equal(KIOSK_COLORS.face, '#fff7e6');
   assert.match(cc, /kioskFace: \{[^}]*borderWidth: 4/s);
   assert.equal(KIOSK_COLORS.edge, '#05346e');
-  assert.match(cc, /kioskFace: \{[^}]*\.\.\.SHADOW\.card/s);
+  assert.match(cc, /kioskFace: \{[^}]*\.\.\.SIGN_GLOW/s);
   // Alex's whole button shows (pill, gold rim, stone base, gem); only the loose glow under it is cropped.
   assert.match(cc, /leaveGiftCrop: \{[^}]*overflow: 'hidden'/s);
   assert.ok(LEAVE_GIFT_PILL_SHARE >= 0.89 && LEAVE_GIFT_PILL_SHARE <= 0.92);
@@ -778,7 +778,8 @@ test('the launch cover waits for the header and HUD icons (inside its hard cap),
   const chest = read('src/components/map/ChestMapButton.tsx');
   assert.match(chest, /onLoad=\{onArt\} onError=\{onArt\}/);
   assert.match(chest, /const onArt = \(\) => \{ artDrawn\(\); setDrawn\(true\); \};/);
-  assert.match(chest, /!drawn && styles\.waiting\]/);
+  // Hidden until drawn (opacity 0 on the UI thread), then it pops in.
+  assert.match(chest, /const pop = useAnimatedStyle\(\(\) => \(\{ opacity: fade\.value/);
   assert.match(read('src/components/Topbar/Currency.tsx'), /onLoad=\{artDrawn\}/);
   const avatar = read('src/components/Avatar.tsx');
   assert.match(avatar, /onLoad=\{index === 0 \? artDrawn : undefined\}/);
@@ -993,15 +994,18 @@ test('team bar: before standings answer it says RIDE CONTROL with plain shields,
   assert.match(bar, /\{known \? held\[team\] : ' '\}/);
 });
 
-test('Energy keeps its 12 pt gap on the Pro Max, and lifts only where PLAY RIDE reaches under it', () => {
+test('Energy never sits in one crowded row with PLAY RIDE: under 12 pt of side gap it lifts (the Pro Max too)', () => {
   const layout = loadTs('src/screens/ExploreScreen/parkMapLayout.ts');
-  assert.equal(layout.playRideUnderEnergy(440), false);
-  assert.equal(layout.energyGap(440), 12, 'Pro Max: Energy stays with the avatar');
+  assert.equal(layout.ENERGY_SIDE_CLEARANCE, 12);
+  // Pro Max: the pill ends 4 pt before the Energy column, which read as one tight row: Energy lifts.
+  assert.equal(440 - 16 - layout.ENERGY_PILL_WIDTH - layout.playRideRight(440), 4);
+  assert.equal(layout.playRideUnderEnergy(440), true);
   assert.equal(layout.playRideUnderEnergy(375), true);
   assert.equal(layout.playRideUnderEnergy(402), true);
-  assert.ok(layout.energyGap(375) > 12 && layout.energyGap(402) > 12);
-  // Where Energy is not lifted, the pill ends at least 4 pt before the Energy column.
-  assert.ok(440 - 16 - layout.ENERGY_PILL_WIDTH - layout.playRideRight(440) >= 4);
+  for (const w of [375, 402, 440]) assert.ok(layout.energyGap(w) > 12 && layout.energyGap(w) <= 60, `${w}: ${layout.energyGap(w)}`);
+  // A phone wide enough to leave 12 pt or more keeps Energy with the avatar.
+  assert.equal(layout.playRideUnderEnergy(480), false);
+  assert.equal(layout.energyGap(480), 12);
 });
 
 test('coin card: no 200 pt floor, sized to its content, narrow or a row up when the right column is wide', () => {
@@ -1022,7 +1026,8 @@ test('coin card: no 200 pt floor, sized to its content, narrow or a row up when 
 test('Community Center top cards glow warm like lit signs', () => {
   const cc = read('src/screens/CommunityCenterScreen.tsx');
   assert.match(cc, /const SIGN_GLOW = \{\s*shadowColor: '#ffc95c',/);
-  assert.equal((cc.match(/\.\.\.SIGN_GLOW,/g) || []).length, 2);
+  // All three light cards (wallet, gifts bubble, LEAVE GIFT price plaque) glow as one lit set.
+  assert.equal((cc.match(/\.\.\.SIGN_GLOW,/g) || []).length, 3);
 });
 
 test('short phones: the map rail puts the chest and Daily 3 beside the compass instead of on the Trail Boxes pill', () => {
@@ -1039,7 +1044,9 @@ test('short phones: the map rail puts the chest and Daily 3 beside the compass i
 
 test('Trail Boxes: the flag is read only once signed in, and a check with no answer tries again', () => {
   const src = read('src/services/trail/TrailProvider.tsx');
-  assert.match(src, /if \(!player\?\.id\) return undefined;\s*let on = true;/);
+  assert.match(src, /if \(!player\?\.id\) \{ setFlag\(false\); return undefined; \}\s*let on = true;/);
+  // The last player's answer never carries over after sign-out or to another player.
+  assert.match(src, /return \(\) => \{ on = false; if \(timer\) clearTimeout\(timer\); setFlag\(false\); \};/);
   assert.match(src, /const FLAG_RETRY_MS = \[4_000, 15_000, 45_000\] as const;/);
   assert.match(src, /if \(attempt < FLAG_RETRY_MS\.length\) timer = setTimeout\(\(\) => check\(attempt \+ 1\), FLAG_RETRY_MS\[attempt\]\);/);
   assert.doesNotMatch(src, /TRAILDBG/);
@@ -1049,7 +1056,7 @@ test('launch: the sky sheet waits under the cover from the first frame, PLAY RID
   const sheet = read('src/components/map/TileWaitSheet.tsx');
   assert.match(sheet, /if \(!drawn && !armed\) return;/, 'its 6 s wait starts only when the cover has lifted');
   const button = read('src/components/YellowButton.tsx');
-  assert.match(button, /\{!artLoaded && <View pointerEvents="none" style=\{STAND_IN_PILL\} \/>\}/);
+  assert.match(button, /\{standIn && <StandInPill opacity=\{standInOpacity\} \/>\}/);
   assert.match(button, /const \[artLoaded, setArtLoaded\] = useState\(pillArtSeen\);/);
   assert.doesNotMatch(button.slice(button.indexOf('const markArtReady'), button.indexOf('const markArtLoaded')), /pillArtSeen = true/,
     'the safety never claims the picture is cached');
@@ -1127,4 +1134,55 @@ test('launch never starts the login music while sign-in is still loading (no aud
   assert.match(music, /const \{ player, isReady \} = useContext\(AuthContext\);/);
   assert.match(music, /if \(!player\) \{[\s\S]{0,400}if \(!isReady\) return;/);
   assert.match(music, /\}, \[player, player\?\.enabled_music, isReady\]\);/);
+});
+
+test('map rail: Daily 3 first and the late chest joins at the end, popping in on the UI thread (no button ever moves)', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const mapControls = retention\.button \? <>\{retention\.button\}\{chestButton\}<\/> : chestButton;/);
+  assert.doesNotMatch(explore, /<>\{chestButton\}\{retention\.button\}<\/>/);
+  const chest = read('src/components/map/ChestMapButton.tsx');
+  assert.match(chest, /shown\.value = reduced \? 1 : withSpring\(1,/);
+  assert.match(chest, /transform: \[\{ scale: 0\.7 \+ 0\.3 \* shown\.value \}\]/);
+  assert.match(chest, /if \(drawn\) fade\.value = reduced \? 1 : withTiming\(1, \{ duration: 160 \}\);/);
+});
+
+test('PLAY RIDE: a ride island mostly under the pill and its chip fades out while the pill is up', () => {
+  const layout = loadTs('src/screens/ExploreScreen/parkMapLayout.ts');
+  const base = { hudBottom: 100, left: null, right: null, bottomLeft: 200, bottomRight: 200 };
+  assert.equal(layout.parkMapInsets(base).length, 3, 'no pill, no inset');
+  for (const w of [375, 402, 440]) {
+    const insets = layout.parkMapInsets({ ...base, playRide: w });
+    const pill = insets[insets.length - 1];
+    assert.deepEqual(pill, layout.playRideInset(w));
+    assert.equal(pill.left, w * 0.25 - 6);
+    assert.equal(pill.width, w / 2 + 12);
+    assert.equal(pill.bottom, 70 - 6);
+    // It reaches the pill's top (above the chip) plus the 6 pt gap.
+    assert.ok(Math.abs(pill.bottom + pill.height - (layout.playRideTop(w) + 6)) < 1e-9);
+    assert.equal(pill.share, 0.25);
+  }
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /playRide: playRideShown \? WINDOW_WIDTH : null,/);
+  assert.match(explore, /onShownChange=\{setPlayRideShown\}/);
+  const redeem = read('src/components/RedeemModal.tsx');
+  assert.match(redeem, /useEffect\(\(\) => \{ shownChange\.current\?\.\(shown\); \}, \[shown\]\);/);
+  assert.match(redeem, /useEffect\(\(\) => \(\) => shownChange\.current\?\.\(false\), \[\]\);/);
+});
+
+test('map trees: the first planting fades in (240 ms in MapLibre) and comes sooner, never a hard pop after the lift', () => {
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /iconOpacity: decoShown \? 1 : 0,/);
+  assert.match(map, /iconOpacityTransition: \{ duration: reducedMotion \|\| power\.lowPower \? 0 : DECO_FADE_MS, delay: 0 \},/);
+  assert.match(map, /const DECO_FADE_MS = 240;/);
+  assert.match(map, /setDecoShown\(true\);\s*setDecorations\(buildDecorations\(/);
+  assert.match(map, /\}, decoKey\.current === '' \? 60 : 250\);/);
+});
+
+test('PLAY RIDE stand-in: the art\'s own layers and colors, cross-faded out over 120 ms when the picture draws', () => {
+  const button = read('src/components/YellowButton.tsx');
+  for (const color of ['#723500', '#fbb40e', '#fbcc0e', 'rgba(0,0,0,0.34)']) assert.ok(button.includes(`'${color}'`), color);
+  assert.match(button, /const STAND_IN_FADE_MS = 120;/);
+  assert.match(button, /const \[standIn, setStandIn\] = useState\(!pillArtSeen\);/);
+  assert.match(button, /Animated\.timing\(standInOpacity, \{ toValue: 0, duration: STAND_IN_FADE_MS, useNativeDriver: true \}\)/);
+  assert.match(button, /if \(reducedMotion\) \{ setStandIn\(false\); return undefined; \}/);
 });

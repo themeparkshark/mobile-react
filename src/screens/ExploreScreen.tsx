@@ -1012,6 +1012,8 @@ function ExploreScreen() {
   const leftSlotSwapGuard = useSwapTapGuard(leftSlotKey);
   // The Daily 3 / level chest overlay is up: other map moments wait their turn.
   const [retentionOccluding, setRetentionOccluding] = useState(false);
+  // PLAY RIDE (or a closed ride's sign) is on screen: the declutter keeps ride art out from under it.
+  const [playRideShown, setPlayRideShown] = useState(false);
   const chestReady = chestMayPresent({
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
     firstCatchDone: hasFirstCatch(player, hasCompleted('home_first_find'), caughtThisSession),
@@ -1091,7 +1093,10 @@ function ExploreScreen() {
     if (nextUpWasBusy.current && !nextUpBusy) void nextUpRefresh();
     nextUpWasBusy.current = nextUpBusy;
   }, [nextUpBusy, nextUpRefresh]);
-  const mapControls = retention.button ? <>{chestButton}{retention.button}</> : chestButton;
+  // Daily 3 first, the chest after it: the chest waits for today's gift to load (often a beat after
+  // the map lifts), so it joins at the end of the rail and never pushes Daily 3 down a slot. A claimed
+  // chest leaves from the end too, so no button ever moves.
+  const mapControls = retention.button ? <>{retention.button}{chestButton}</> : chestButton;
   const mapControlsCount = (chestButton ? 1 : 0) + (retention.button ? 1 : 0);
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
@@ -1203,7 +1208,9 @@ function ExploreScreen() {
     bottomLeft: bottomLeftColumnHeight(park?.stores.length ?? 0),
     // With the gym and swords off, the hidden swords pill frees its space.
     bottomRight: bottomRightColumnHeight(mapFlags.gymSwords, ENERGY_GAP),
-  }), [slotTop, suggestionSlots.left, suggestionSlots.leftStub, suggestionSlots.right, suggestionSlots.rightStub, projectPillShown, park?.stores.length, mapFlags.gymSwords]);
+    // While PLAY RIDE is up, a ride island mostly under the pill and its chip fades out (never half hidden).
+    playRide: playRideShown ? WINDOW_WIDTH : null,
+  }), [slotTop, suggestionSlots.left, suggestionSlots.leftStub, suggestionSlots.right, suggestionSlots.rightStub, projectPillShown, park?.stores.length, mapFlags.gymSwords, playRideShown]);
   const declutter = useMemo<MapDeclutterInput | null>(() => park ? { store: declutterStore, items: declutterItems, insets: declutterInsets } : null,
     [park, declutterStore, declutterItems, declutterInsets]);
 
@@ -1458,6 +1465,7 @@ function ExploreScreen() {
               selectedTaskId={selectedTask?.id ?? null}
               liveStatus={activeLiveStatus}
               onOpenChange={setRedeemFlowOpen}
+              onShownChange={setPlayRideShown}
               onPress={async () => {
                 await getRedeemables();
                 await refreshPlayer();

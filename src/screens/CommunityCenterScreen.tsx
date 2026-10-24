@@ -30,7 +30,7 @@ import { LocationContext } from '../context/LocationProvider';
 import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import api from '../api/client';
 import * as Haptics from '../helpers/haptics';
-import { GameIcon, SHADOW, SharkLoader } from '../ui';
+import { GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { kioskLayout, KIOSK_COLORS } from './CommunityCenter/leaveGiftLayout';
 import { ticketLabel, ticketsEarnedFrom } from './CommunityCenter/communityCenterRewards';
@@ -1327,7 +1327,7 @@ export default function CommunityCenterScreen() {
 }
 
 /**
- * The two top cards glow warm, like lit signs in the painted room (lamp light on warm white), so
+ * The three light cards (wallet, gifts bubble, LEAVE GIFT price plaque) glow warm, like lit signs in the painted room (lamp light on warm white), so
  * they belong to the scene instead of reading as stickers on it. iOS draws the halo from the shadow.
  */
 const SIGN_GLOW = {
@@ -1529,7 +1529,9 @@ const styles = StyleSheet.create({
     borderColor: KIOSK_COLORS.edge,
     borderWidth: 4,
     borderRadius: 14,
-    ...SHADOW.card,
+    // The third light card (the LEAVE GIFT price plaque) glows like the wallet and the gifts bubble:
+    // all three read as one lit set in the painted room.
+    ...SIGN_GLOW,
   },
   kioskPrice: {
     position: 'absolute',

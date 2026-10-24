@@ -126,8 +126,9 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
   // read at launch would be cached for 10 minutes and hide Trail Boxes from a player who has them.
   // No answer yet (a busy launch can time the check out): try again a little later, so a slow
   // first check never hides the feature until the app next comes back from the background.
+  // Signed out (or a different player): the last player's answer never carries over to the next one.
   useEffect(() => {
-    if (!player?.id) return undefined;
+    if (!player?.id) { setFlag(false); return undefined; }
     let on = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const check = (attempt: number) => {
@@ -138,7 +139,7 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
       });
     };
     check(0);
-    return () => { on = false; if (timer) clearTimeout(timer); };
+    return () => { on = false; if (timer) clearTimeout(timer); setFlag(false); };
   }, [player?.id]);
   useEffect(() => { if (enabled) { void readMotion().then(setMotion); void hydrateTrailSeen(); } }, [enabled]);
 

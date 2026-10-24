@@ -5,11 +5,35 @@ import { artButtonFontSize } from '../ui/artButtonText';
 
 /** Set once the pill art has drawn anywhere: later buttons know it is in the image cache. */
 let pillArtSeen = false;
-/** The pill drawn in code (gold, warm rim), under the label while the picture is still decoding. */
-const STAND_IN_PILL = {
-  position: 'absolute', left: '3%', right: '3%', top: '8%', bottom: '12%', borderRadius: 999,
-  backgroundColor: '#ffc928', borderWidth: 3, borderColor: '#b86a0c',
+/**
+ * The pill drawn in code while the picture is still decoding, built from the art's own layers and
+ * colors (yellow_button.png, 800 x 204): a soft drop shadow, the dark brown rim, the orange lower
+ * lip and the bright gold top band. Same box as the art (aspect 3.8, the picture fits its width), so
+ * the swap to Alex's picture is not visible.
+ */
+const STAND_IN = {
+  // The picture is 3.92 wide (contain in a 3.8 box): it fills the width and sits 1.5% in from top and bottom.
+  frame: { position: 'absolute', left: 0, right: 0, top: '1.5%', bottom: '1.5%' },
+  shadow: { position: 'absolute', left: '0.6%', right: '0.6%', top: '8%', bottom: 0, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.34)' },
+  rim: { position: 'absolute', left: 0, right: 0, top: 0, bottom: '9.8%', borderRadius: 999, backgroundColor: '#723500', overflow: 'hidden' },
+  lip: { position: 'absolute', left: '1.3%', right: '1.3%', top: '5.5%', bottom: '6.5%', borderRadius: 999, backgroundColor: '#fbb40e', overflow: 'hidden' },
+  band: { position: 'absolute', left: '1%', right: '1%', top: 0, bottom: '17%', borderRadius: 999, backgroundColor: '#fbcc0e' },
 } as const;
+/** The stand-in fades out under the picture over this long once the picture has drawn. */
+const STAND_IN_FADE_MS = 120;
+
+function StandInPill({ opacity }: { readonly opacity: Animated.Value }) {
+  return (
+    <Animated.View pointerEvents="none" style={[STAND_IN.frame, { opacity }]}>
+      <View style={STAND_IN.shadow} />
+      <View style={STAND_IN.rim}>
+        <View style={STAND_IN.lip}>
+          <View style={STAND_IN.band} />
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
 
 export default function YellowButton({
   disabled = false,
@@ -33,6 +57,16 @@ export default function YellowButton({
   // The art itself has drawn (not just the safety below): until then a drawn gold pill sits under
   // the label, so words never show on the bare map, even when the picture is slow to decode.
   const [artLoaded, setArtLoaded] = useState(pillArtSeen);
+  // Mounted only when the picture was not in the cache yet; it cross-fades out once the picture draws.
+  const [standIn, setStandIn] = useState(!pillArtSeen);
+  const standInOpacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!artLoaded || !standIn) return undefined;
+    if (reducedMotion) { setStandIn(false); return undefined; }
+    const fade = Animated.timing(standInOpacity, { toValue: 0, duration: STAND_IN_FADE_MS, useNativeDriver: true });
+    fade.start(({ finished }) => { if (finished) setStandIn(false); });
+    return () => fade.stop();
+  }, [artLoaded, standIn, reducedMotion, standInOpacity]);
   const markArtReady = () => {
     setArtReady(true);
   };
@@ -112,7 +146,7 @@ export default function YellowButton({
           ],
         }}
       >
-        {!artLoaded && <View pointerEvents="none" style={STAND_IN_PILL} />}
+        {standIn && <StandInPill opacity={standInOpacity} />}
         <ImageBackground
           source={require('../../assets/images/yellow_button.png')}
           onLoadEnd={markArtLoaded}

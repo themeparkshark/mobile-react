@@ -35,7 +35,10 @@ export default function RedeemModal({
   selectedTaskId = null,
   liveStatus = null,
   onOpenChange,
+  onShownChange,
 }: {
+  /** PLAY RIDE (or the closed-ride sign) is up or gone: the map keeps its art out from under it. */
+  readonly onShownChange?: (shown: boolean) => void;
   /** The live feed's status for the ride in range (DOWN, CLOSED...): no PLAY RIDE on a closed ride. */
   readonly liveStatus?: string | null;
   /** The ride selected on the map; PLAY RIDE hides while a different ride is selected. */
@@ -74,6 +77,9 @@ export default function RedeemModal({
   const closedLabel = closedReason ? closedRideCopy(closedReason) : null;
   const shown = (available && pillReady) || !!closedLabel;
   const identity = redeemable ? `${redeemable.type}:${redeemable.model.id}` : null;
+  const shownChange = useRef(onShownChange); shownChange.current = onShownChange;
+  useEffect(() => { shownChange.current?.(shown); }, [shown]);
+  useEffect(() => () => shownChange.current?.(false), []);
   // The pill unmounts when the ride stops being available: its next showing waits for its art again.
   useEffect(() => { if (!available) setPillReady(false); }, [available]);
   // The "you're in range" cue lands with the pill itself (never before the button is on screen).

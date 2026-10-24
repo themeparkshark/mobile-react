@@ -80,6 +80,8 @@ const SHARK_TAP_SOUND = require('../../assets/sounds/inventory_item_tap.mp3');
 
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const FOLLOW_ZOOM = 17.6;
+/** The trees and bushes fade in over this long the first time they are planted (no hard pop after the lift). */
+const DECO_FADE_MS = 240;
 /** The cover color while park tiles load: the game's light sky blue, never a dark scene. */
 export { MAP_COVER_SKY } from './map/MapCoverSky';
 
@@ -434,6 +436,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
 
   // Trees, bushes and ripples are planted as icons for what's on screen.
   const [decorations, setDecorations] = useState<GeoJSON.FeatureCollection>(NO_FEATURES);
+  const [decoShown, setDecoShown] = useState(false);
   const [glints, setGlints] = useState<{ latitude: number; longitude: number; seed: number }[]>([]);
   const [lampPoints, setLampPoints] = useState<GeoJSON.FeatureCollection>(NO_FEATURES);
   const decoKey = useRef('');
@@ -458,6 +461,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           map.queryRenderedFeaturesInRect(rect, undefined, ['road', 'path']),
         ]);
         decoKey.current = key;
+        // The first planting fades in (the layer's opacity eases 0 to 1 in MapLibre), so the trees
+        // never pop in a beat after the cover lifts; later plantings (panning) draw at full opacity.
+        setDecoShown(true);
         setDecorations(buildDecorations({ wood: wood.features, green: green.features, water: water.features,
           homes: homes.features, buildings: buildings.features, roads: roads.features },
           { north, south, east, west }, zoom));
@@ -465,7 +471,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         const lamps = buildLampPoints(roads.features, { north, south, east, west }, zoom);
         setLampPoints(lamps);
       } catch { /* map not ready yet; the next camera change retries */ }
-    }, 250);
+    // The first planting goes almost at once (the map just drew); later ones wait for the camera to settle.
+    }, decoKey.current === '' ? 60 : 250);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [window.height, window.width]);
   useEffect(() => () => clearTimeout(decoTimer.current), []);
@@ -942,6 +949,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             iconRotationAlignment: 'viewport',
             iconPitchAlignment: 'viewport',
             symbolSortKey: ['get', 'k'],
+            iconOpacity: decoShown ? 1 : 0,
+            iconOpacityTransition: { duration: reducedMotion || power.lowPower ? 0 : DECO_FADE_MS, delay: 0 },
           }} />
         </ShapeSource>
         {/* Time of day: one tint over the tiles only, so every pin stays bright on top. */}

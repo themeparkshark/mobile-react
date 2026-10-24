@@ -281,7 +281,7 @@ export const BUTTON_GAP = 6;
  * expanded stack shows), the suggestion chips under it, and the two bottom
  * button columns. The map's own button column is added by Map.
  */
-export function parkMapInsets({ hudBottom, left, right, bottomLeft, bottomRight }: {
+export function parkMapInsets({ hudBottom, left, right, bottomLeft, bottomRight, playRide = null }: {
   /** Bottom edge of the status row, map-view points. */
   readonly hudBottom: number;
   /** Suggestion chip under the HUD on the left: stub (56pt) or full card. */
@@ -291,6 +291,8 @@ export function parkMapInsets({ hudBottom, left, right, bottomLeft, bottomRight 
   readonly bottomLeft: number;
   /** Bottom-right column height (energy, swords, avatar). */
   readonly bottomRight: number;
+  /** The screen width while PLAY RIDE (or its closed-ride sign) and its ride chip are up; null otherwise. */
+  readonly playRide?: number | null;
 }): EdgeInset[] {
   // The HUD row hides art that barely reaches under it (share 0.1): nothing peeks between the pills.
   const insets: EdgeInset[] = [{ left: 0, top: 0, width: FULL, height: hudBottom, share: 0.1 }];
@@ -299,7 +301,16 @@ export function parkMapInsets({ hudBottom, left, right, bottomLeft, bottomRight 
   // Buttons are hard insets: no art under them at all (share 0), with a 6 pt gap around them.
   if (bottomLeft > 0) insets.push({ left: 0, bottom: 0, width: 104 + BUTTON_GAP, height: bottomLeft + BUTTON_GAP, share: 0 });
   if (bottomRight > 0) insets.push({ right: 0, bottom: 0, width: 150 + BUTTON_GAP, height: bottomRight + BUTTON_GAP, share: 0 });
+  // PLAY RIDE and its ride chip: a ride island half under the pill reads as clutter (a kid sees a
+  // button on a sliver of art), so art mostly under it fades out while the pill is up (share 0.25).
+  if (playRide) insets.push(playRideInset(playRide));
   return insets;
+}
+
+/** The PLAY RIDE pill and its chip as a map inset (the middle half of the screen), with the button gap around it. */
+export function playRideInset(screenWidth: number): EdgeInset {
+  return { left: screenWidth * 0.25 - BUTTON_GAP, bottom: PLAY_RIDE_REST - BUTTON_GAP, width: screenWidth / 2 + BUTTON_GAP * 2,
+    height: playRideTop(screenWidth) - PLAY_RIDE_REST + BUTTON_GAP * 2, share: 0.25 };
 }
 
 /** Bottom-left column: 32 pt margin, help (54), queue times (80), one row per store (83). */
@@ -326,8 +337,11 @@ export const ENERGY_PLAY_RIDE_CLEARANCE = 8;
 /** The Energy pill (MapResourcePill: 14 pt icon overhang + 76 pt minimum capsule), flush right in the column. */
 export const ENERGY_PILL_WIDTH = 90;
 const RIGHT_COLUMN_RIGHT = 16;
-/** Clear map, side to side, between the PLAY RIDE pill's right end and the Energy pill. */
-export const ENERGY_SIDE_CLEARANCE = 4;
+/**
+ * Clear map, side to side, that PLAY RIDE's right end needs before the Energy pill can stay beside it.
+ * Less than this (the Pro Max had 4 pt) reads as one crowded row, so Energy lifts above the pill instead.
+ */
+export const ENERGY_SIDE_CLEARANCE = 12;
 /** PLAY RIDE spans the middle half of the screen (25% to 75%), so its right end sits here. */
 export function playRideRight(screenWidth: number): number {
   return screenWidth * 0.75;
@@ -339,8 +353,9 @@ export function playRideUnderEnergy(screenWidth: number): boolean {
 /**
  * The gap between the avatar and the Energy pill above it. Only on a phone where the PLAY RIDE
  * pill really reaches under the Energy column (the iPhone SE and the 17 Pro) does Energy sit high
- * enough that its battery clears the pill's top by 8 pt. On a wide phone (Pro Max) the pill ends
- * before the column, so Energy keeps its normal 12 pt gap and stays with the avatar.
+ * enough that its battery clears the pill's top by 8 pt. The Pro Max counts too: its pill ends only
+ * 4 pt before the column, so Energy lifts there as well (a phone with 12 pt or more to spare keeps
+ * the normal 12 pt gap and Energy stays with the avatar).
  */
 export function energyGap(screenWidth: number): number {
   if (!playRideUnderEnergy(screenWidth)) return 12;
