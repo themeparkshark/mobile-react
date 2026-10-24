@@ -846,4 +846,13 @@ test('duel banners and the Big Final chip keep their fill: the pop rides a wrapp
   assert.match(duel, /<Animated\.View style=\{\[styles\.bannerPop, st\]\}>\s*<View style=\{styles\.banner\}>/);
   assert.match(duel, /<Animated\.View style=\{st\}>\s*<View style=\{styles\.finalDrop\}>/);
   assert.doesNotMatch(duel, /\[styles\.banner, st\]|\[styles\.finalDrop, st\]/);
+  assert.doesNotMatch(duel, /scaleY: 2 - Math\.max/, 'no squash and stretch on a filled pill');
+  // The Best Moment polaroid leaves the tree after it pops away (never parked at scale 0 over the banners).
+  assert.match(duel, /const \[polGone, setPolGone\] = useState\(!model\.best \|\| reducedMotion\);/);
+  assert.match(duel, /setTimeout\(\(\) => setPolGone\(true\), beatMs \* 2 \+ 1500 \+ 320\)/);
+  assert.match(duel, /\{model\.best && !polGone \? \(/);
+  // The capture screen can show the won duel card with every banner without beating Fin.
+  const capture = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
+  assert.match(capture, /banners: \['FIN BEATEN', 'RANK UP', 'NEW BEST'\]/);
+  assert.match(capture, />DUEL WIN CARD</);
 });

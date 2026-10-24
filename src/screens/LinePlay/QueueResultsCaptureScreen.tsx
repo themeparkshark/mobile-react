@@ -46,6 +46,7 @@ import { TriviaGame, createLinePlayTriviaSource } from '../../games/trivia';
 import { TriviaDuel } from '../../games/trivia-duel';
 import ChallengeStatusCard from '../../components/rewards/ChallengeStatusCard';
 import { lostTryCopy } from '../../components/rewards/lostTryCard';
+import { DuelResults, type ResultsModel } from '../../games/trivia-duel/ui/DuelResults';
 
 type Run = { game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number };
 
@@ -66,6 +67,22 @@ const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'TRIVIA DUEL, BEAT THE BUZZER', run: { game: 'duel', groupTurn: false, rideUpAfterMs: null } },
 ];
 
+/**
+ * DUEL WIN CARD: Line Trivia's own results card for a won duel with every
+ * banner (FIN BEATEN, RANK UP, NEW BEST), the Fin rank fins and the Best
+ * Moment polaroid, so the win layout is checked without needing autoplay to
+ * beat Fin. The numbers are a fixed sample, never a real player's.
+ */
+const DUEL_WIN: ResultsModel = {
+  won: true, tie: false, myScore: 1576, oppScore: 988, oppName: 'Fin',
+  banners: ['FIN BEATEN', 'RANK UP', 'NEW BEST'], nearMiss: '',
+  rows: [{ label: 'Correct', value: '4/5' }, { label: 'Fastest answer', value: 'Great' }],
+  facts: [{ id: 'sample', fact: 'Earth is shaped almost like a ball.', gold: false, at: 0, isNew: false }],
+  stars: 0, practice: false,
+  rank: { label: 'Captain Fin', progress: 0, next: 'Admiral Fin', stripes: 2, nextStripes: 3, wins: 0, need: 3 },
+  best: { label: '0.9s on Q1' },
+};
+
 /** iPhone SE window, for the SHORT PHONE toggle. */
 const SE_WINDOW = { width: 375, height: 667, scale: 2, fontScale: 1 };
 const SE_FRAME = { width: 375, height: 667 };
@@ -81,6 +98,7 @@ export default function QueueResultsCaptureScreen() {
   runRef.current = run;
   const [shortPhone, setShortPhone] = useState(false);
   const [tryCard, setTryCard] = useState<'back' | 'spent' | null>(null);
+  const [duelCard, setDuelCard] = useState(0);
   const realWindow = useRef(Dimensions.get('window'));
 
   // SHORT PHONE: the window reports an SE size (cards read it through
@@ -234,6 +252,9 @@ export default function QueueResultsCaptureScreen() {
             <Text style={styles.btnText}>{c.label}</Text>
           </TouchableOpacity>
         ))}
+        <TouchableOpacity accessibilityRole="button" style={styles.btn} onPress={() => setDuelCard(Date.now())}>
+          <Text style={styles.btnText}>DUEL WIN CARD</Text>
+        </TouchableOpacity>
         <TouchableOpacity accessibilityRole="button" style={styles.btn} onPress={() => setTryCard('back')}>
           <Text style={styles.btnText}>RIDE TRY CARD, TICKET BACK</Text>
         </TouchableOpacity>
@@ -244,6 +265,15 @@ export default function QueueResultsCaptureScreen() {
           {log.map((line, i) => <Text key={`${i}:${line}`} style={styles.logText}>{line}</Text>)}
         </View>
       </ScrollView>
+      {duelCard ? (
+        <View style={styles.tryScrim}>
+          <View style={shortPhone ? [styles.seFrame, styles.duelStage] : styles.duelFull}>
+            <DuelResults key={duelCard} model={DUEL_WIN} beatMs={500} reducedMotion={false} height={Math.round((shortPhone ? SE_FRAME.height : Dimensions.get('window').height) * 0.5)}
+              onRematch={() => { note('Duel card: REMATCH'); setDuelCard(0); }} onGhost={() => { note('Duel card: PASS TO CREW'); setDuelCard(0); }}
+              onContinue={() => { note('Duel card: DONE'); setDuelCard(0); }} />
+          </View>
+        </View>
+      ) : null}
       {tryCard ? (
         <View style={styles.tryScrim}>
           <View style={shortPhone ? styles.seFrame : styles.fullFrame}>
@@ -291,6 +321,9 @@ const styles = StyleSheet.create({
   tryScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5, 52, 110, 0.55)', alignItems: 'center', justifyContent: 'center' },
   seFrame: { width: 375, height: 667, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ffffff' },
   fullFrame: { alignSelf: 'stretch', alignItems: 'center' },
+  // The duel card sits on the stage's sky, the way it does in the game.
+  duelStage: { backgroundColor: '#8fd3ff' },
+  duelFull: { ...StyleSheet.absoluteFillObject, backgroundColor: '#8fd3ff' },
   log: { marginTop: 12 },
   logText: { fontFamily: 'Knockout', fontSize: 17, color: '#05346e', textAlign: 'center', marginVertical: 2 },
 });

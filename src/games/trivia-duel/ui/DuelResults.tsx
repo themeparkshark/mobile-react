@@ -8,7 +8,7 @@
  * on TPS, and REMATCH (pulses on the beat) / PASS TO CREW / CONTINUE.
  */
 import { openExternal } from '../../../services/external';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
@@ -92,6 +92,10 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const gap = useSharedValue(0);
   const polY = useSharedValue(-300);
   const polS = useSharedValue(1);
+  // The Best Moment polaroid leaves the tree once it has popped away. Left
+  // mounted at scale 0 over the card, it drew the banners under it hollow
+  // (FIN BEATEN and RANK UP lost their gold; NEW BEST, outside its box, kept it).
+  const [polGone, setPolGone] = useState(!model.best || reducedMotion);
 
   useEffect(() => {
     if (reducedMotion) cardO.value = withTiming(1, { duration: 300 });
@@ -107,6 +111,8 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
       ));
       // Then it pops away instead of tucking over the card's words.
       polS.value = withDelay(beatMs * 2 + 1500, withTiming(0, { duration: 260, easing: Easing.in(Easing.quad) }));
+      const gone = setTimeout(() => setPolGone(true), beatMs * 2 + 1500 + 320);
+      return () => clearTimeout(gone);
     } else {
       polS.value = 0;
     }
@@ -205,7 +211,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
           </View>
         </View>
       </Animated.View>
-      {model.best ? (
+      {model.best && !polGone ? (
         <Animated.View style={[styles.polaroid, polStyle]} pointerEvents="none">
           <Image source={ART.polaroid} style={styles.polImg} resizeMode="contain" />
           <View style={styles.polCaption}>
@@ -343,10 +349,11 @@ function Banner({ text, i, reducedMotion }: { text: string; i: number; reducedMo
     if (reducedMotion) return;
     sx.value = withDelay(700 + i * 180, withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 300 })));
   }, [sx, i, reducedMotion]);
-  const st = useAnimatedStyle(() => ({ transform: [{ scaleX: sx.value }, { scaleY: 2 - Math.max(0.6, Math.min(1.25, sx.value)) }] }));
-  // The pop is on a wrapper, the gold on a plain view: a banner that starts
-  // at scale 0 was drawn hollow (no fill) on the current bundle, so the fill
-  // never rides the animated view (same fix as the coin goal dots).
+  // One even scale, like the rank fins and coin dots. The old squash and
+  // stretch (scaleX against scaleY) drew FIN BEATEN and RANK UP hollow, with
+  // no gold fill, on the current bundle. The pop rides a wrapper and the gold
+  // sits on a plain view inside it.
+  const st = useAnimatedStyle(() => ({ transform: [{ scale: sx.value }] }));
   return (
     <Animated.View style={[styles.bannerPop, st]}>
       <View style={styles.banner}>
