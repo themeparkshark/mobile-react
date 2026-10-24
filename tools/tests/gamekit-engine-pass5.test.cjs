@@ -408,6 +408,7 @@ test('GameAudio: pan plays only on a headphone route (Whack v5); the speaker is 
   }
   stubs['./backends'] = { ExpoAvBackend: Fake, AudioApiBackend: Fake, HybridBackend: Fake, audioApiAvailable: () => false };
   const { GameAudio } = loadTs('src/gamekit/audio/GameAudio.ts', stubs, { setInterval, clearInterval });
+  GameAudio.setSfxEnabled(true); GameAudio.setMusicEnabled(true);
   await GameAudio.init();
   await GameAudio.preload(['fx.hit', 'fx.whoosh', 'fx.nope']);
   GameAudio.play('fx.hit', { pan: -0.6 });

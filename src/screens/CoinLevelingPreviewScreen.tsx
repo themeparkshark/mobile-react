@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ImageBackground, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
 import CoinLevelingModal from '../components/CoinLevelingModal';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
@@ -27,11 +27,31 @@ const sampleCoin: RideCoinLevelType = {
     value: 200, description: 'Place this coin in a park gym for 200 team points.' }],
 };
 
+/**
+ * Release-like capture (EXPO_PUBLIC_MOTION_CAPTURE=CoinLevelingPreview, never set in store builds): the coin
+ * levels up on its own (devDrive presses Level Up), Silver, Gold, Prismatic, then Legendary, one after another,
+ * each answered after a server-like wait and held on the success card, so every tier records with no taps.
+ */
+const CAPTURE = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'CoinLevelingPreview';
+const CAPTURE_FROM = Math.max(1, Math.min(9, Number(process.env.EXPO_PUBLIC_COIN_PREVIEW_LEVEL || 1)));
+const CAPTURE_TO = Math.max(CAPTURE_FROM, Math.min(9, Number(process.env.EXPO_PUBLIC_COIN_PREVIEW_LEVEL_TO || 4)));
+const CAPTURE_SERVER_MS = 350;
+const CAPTURE_HOLD_MS = 4200;
+
 export default function CoinLevelingPreviewScreen() {
   const [open, setOpen] = useState(true);
   const [featured, setFeatured] = useState(false);
+  const [run, setRun] = useState(0);
+  const [captured, setCaptured] = useState(0);
   const maxPreview = __DEV__ && process.env.EXPO_PUBLIC_COIN_MAX_PREVIEW === '1';
-  const v2Level = __DEV__ ? Number(process.env.EXPO_PUBLIC_COIN_PREVIEW_LEVEL || 0) : 0;
+  const v2Level = __DEV__ ? Number(process.env.EXPO_PUBLIC_COIN_PREVIEW_LEVEL || 0)
+    : CAPTURE ? Math.min(CAPTURE_TO, CAPTURE_FROM + run) : 0;
+  // Capture: after each success card has held, the next tier opens (a fresh modal, so it presses again).
+  useEffect(() => {
+    if (!CAPTURE || captured <= run || CAPTURE_FROM + run >= CAPTURE_TO) return; // this run's success has not landed yet
+    const t = setTimeout(() => setRun(r => r + 1), CAPTURE_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [captured, run]);
   const v2Coin: RideCoinLevelType | null = v2Level >= 1 && v2Level <= 10 ? {
     ...sampleCoin,
     current_level: v2Level,
@@ -65,11 +85,17 @@ export default function CoinLevelingPreviewScreen() {
           <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#18436C' }}>OPEN COIN</Text>
         </TouchableOpacity>
       </ImageBackground>
-      <CoinLevelingModal visible={open} rideCoin={{ ...previewCoin, is_featured: featured }}
+      <CoinLevelingModal key={run} visible={open} rideCoin={{ ...previewCoin, is_featured: featured }}
         playerEnergy={v2Coin ? 1000 : 25} playerParts={v2Coin ? 60 : 4}
         onClose={() => setOpen(false)}
-        onLevelUp={async () => (v2Coin ? { success: true, ride_coin: v2Coin, spent: { energy: v2Coin.energy_to_next_level,
-          ride_parts: v2Coin.parts_to_next_level }, xp: PREVIEW_LEVEL_XP[v2Level + 1] ?? 0, unlocks: previewUnlocks(v2Level + 1) } : true)}
+        onLevelUp={async () => {
+          if (CAPTURE) {
+            await new Promise<void>(resolve => setTimeout(resolve, CAPTURE_SERVER_MS));
+            setCaptured(c => c + 1);
+          }
+          return v2Coin ? { success: true, ride_coin: v2Coin, spent: { energy: v2Coin.energy_to_next_level,
+            ride_parts: v2Coin.parts_to_next_level }, xp: PREVIEW_LEVEL_XP[v2Level + 1] ?? 0, unlocks: previewUnlocks(v2Level + 1) } : true;
+        }}
         onFeature={async () => { setFeatured(!featured); return true; }} />
     </SafeAreaView>
   );

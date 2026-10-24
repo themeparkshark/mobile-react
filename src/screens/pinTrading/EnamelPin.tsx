@@ -2,7 +2,7 @@
  * A server pin drawn as a real enamel pin, in one Skia canvas:
  * - a soft die-cut shadow (the art tinted to the surface and blurred, in a
  *   padded canvas so the blur never clips on wide art),
- * - the art itself, untouched,
+ * - the art itself, untouched (a gold edition adds a foil rim and a warm glint, never a recolour),
  * - a resting gloss: a long soft white falloff from the upper-left, plus one
  *   small specular dot on the rim,
  * - a moving shine: a soft 0 -> 0.45 -> 0 gradient sweep.
@@ -54,17 +54,30 @@ type Props = {
   /** Always a plain image (static tiles that gain nothing from light). */
   readonly flat?: boolean;
   /**
-   * The gold (or other metal) edition of the same art, lit pins only: a metal edge in this colour
-   * around the die-cut shape, a warm overlay at 55 percent that keeps the art's own hues, outlines and
-   * detail (a full colour blend flattened it into a plain disc), and a warm shine band.
+   * The gold foil edition of the same art, lit pins only: the art itself stays untouched (so a kid still
+   * sees the pin they know), framed by a polished foil rim in this colour (a deep-to-bright metal edge
+   * around the die-cut shape plus a pale inner lip) and swept by a warm glint.
    */
   readonly tint?: string;
 };
 
-/** The metal edge around a tinted pin (fraction of its size, each side). */
-const TINT_EDGE = 0.045;
-/** How strong the warm overlay is on a tinted pin: enough to read gold, low enough that the art survives. */
-const TINT_OVERLAY = 0.55;
+/** The foil rim around a gold pin (fraction of its size, each side). */
+const FOIL_EDGE = 0.06;
+/** The pale inner lip of the foil rim, just outside the art (fraction of its size, each side). */
+const FOIL_LIP = 0.022;
+/** The pale shine of the foil lip. */
+const FOIL_LIGHT = '#fff1b8';
+
+/**
+ * The foil rim's metal, light to dark across the pin (top-left catches the light): a bright face, the
+ * tint itself, a deep edge. Pure, so it is tested.
+ */
+export function foilStops(hex: string): string[] {
+  const n = parseInt(hex.replace('#', '').slice(0, 6), 16);
+  const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const mix = (t: number, to: number) => `#${rgb.map(v => Math.round(v + (to - v) * t).toString(16).padStart(2, '0')).join('')}`;
+  return [mix(0.55, 255), hex.slice(0, 7).toLowerCase(), mix(0.42, 0), mix(0.3, 255)];
+}
 
 /** Under this size the light and shadow are too small to see: a plain image (and no Skia canvas). */
 const FLAT_BELOW = 48;
@@ -132,19 +145,24 @@ function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surfac
           )}
           <Group layer>
             {tint && (
-              // The metal edge: the pin's own silhouette in the tint, a little larger, behind the art.
-              <SkiaImage image={image} x={pad - size * TINT_EDGE} y={pad - size * TINT_EDGE}
-                width={size * (1 + TINT_EDGE * 2)} height={size * (1 + TINT_EDGE * 2)} fit="contain">
-                <BlendColor color={tint} mode="srcIn" />
-              </SkiaImage>
+              // The foil rim: the pin's own silhouette a little larger, filled with polished metal, behind the art.
+              <Group layer>
+                <SkiaImage image={image} x={pad - size * FOIL_EDGE} y={pad - size * FOIL_EDGE}
+                  width={size * (1 + FOIL_EDGE * 2)} height={size * (1 + FOIL_EDGE * 2)} fit="contain" />
+                <Rect x={0} y={0} width={box} height={box} blendMode="srcIn">
+                  <LinearGradient start={vec(pad, pad)} end={vec(pad + size, pad + size)} colors={foilStops(tint)} positions={[0, 0.35, 0.72, 1]} />
+                </Rect>
+              </Group>
             )}
-            <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" />
             {tint && (
-              // A warm overlay, not a colour swap: the art's light parts go gold, outlines and detail stay.
-              <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" blendMode="overlay" opacity={TINT_OVERLAY}>
-                <BlendColor color={tint} mode="srcIn" />
+              // The pale inner lip: a thin bright line where the foil meets the enamel.
+              <SkiaImage image={image} x={pad - size * FOIL_LIP} y={pad - size * FOIL_LIP}
+                width={size * (1 + FOIL_LIP * 2)} height={size * (1 + FOIL_LIP * 2)} fit="contain">
+                <BlendColor color={FOIL_LIGHT} mode="srcIn" />
               </SkiaImage>
             )}
+            {/* The art itself, untouched (the gold edition keeps its own colours inside the foil). */}
+            <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" />
             {/* Resting gloss: a long soft falloff from the upper-left face. */}
             <Rect x={0} y={0} width={box} height={box} blendMode="srcATop">
               <LinearGradient start={vec(pad, pad)} end={vec(pad + size * 0.62, pad + size * 0.62)}
