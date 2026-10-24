@@ -25,7 +25,7 @@ const BOX = require('../../../assets/images/retention/mystery-box.png');
 const CHROME_KNOWN = 440;
 /** The rows area for this many small prize rows and hero cards (row heights plus gaps). */
 function rowsFor(small: number, big: number): number {
-  return small * 51 + big * 108 + 24;
+  return small * 52 + big * 110 + 28;
 }
 const FREEZE = require('../../../assets/images/retention/freeze.png');
 const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
@@ -205,7 +205,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
       rows.forEach((row, i) => later(() => {
         setLanded(n => Math.max(n, i + 1));
         haptic(isBigReward(row.kind) ? 'comboHeavy' : 'tickSelection');
-        if (isBigReward(row.kind)) scroll.current?.scrollToEnd({ animated: false });
+        if (isBigReward(row.kind) && !known) scroll.current?.scrollToEnd({ animated: false });
       }, 120 * (i + 1)));
       later(() => setButtonReady(true), 120 * rows.length + 300);
       return;
@@ -231,7 +231,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
       setLanded(n => Math.max(n, i + 1));
       const big = isBigReward(rows[i].kind);
       // On a small phone the rows scroll: the hero cards (always last) slide into view as they land.
-      if (big) later(() => scroll.current?.scrollToEnd({ animated: true }), 40);
+      // (A card sized to its prizes never scrolls: every row stays in view.)
+      if (big && !known) later(() => scroll.current?.scrollToEnd({ animated: true }), 40);
       queueHaptic(big ? 'comboHeavy' : 'tickSelection');
       playSfx(big ? 'fx.firework' : rows[i].kind === 'coins' || rows[i].kind === 'bonus_coins' ? 'fx.coin' : 'fx.coinTick', big ? 1 : 0.6 + i * 0.08);
     }, ms + H));
