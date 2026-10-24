@@ -14,6 +14,7 @@ import { EmberCard, FreezeSavedCard, FreezeSlots } from './FreezeMoments';
 import { GameIcon, ICON_SOURCES } from '../../ui';
 import type { PaidRewards } from '../../api/endpoints/retention';
 import NextUpRail from '../nextUp/NextUpRail';
+import { setBatterySaver } from '../../power/batterySaver';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
@@ -42,6 +43,7 @@ export default function StreakFlamePreview() {
   const [freezes, setFreezes] = useState(0);
   const [arrive, setArrive] = useState(0);
   const [arriveKey, setArriveKey] = useState(0);
+  const [rm, setRm] = useState(false);
   // The fixture chest "server" answers after 500 ms.
   const openChest = () => setStage(st => {
     if (!st || st.k !== 'chest' || st.opening || st.rewards) return st;
@@ -66,7 +68,12 @@ export default function StreakFlamePreview() {
     else if (code.startsWith('fin')) { setStage(null); setFreezes(f => Math.min(2, f + 1)); setArrive(1); setArriveKey(k => k + 1); }
   };
   useEffect(() => {
-    (globalThis as Record<string, unknown>).__loopsPreview = { play };
+    // play(code, afterMs): a delay lets the recorder start first; rm toggles Reduce Motion for the gym moments.
+    (globalThis as Record<string, unknown>).__loopsPreview = {
+      play: (code: string, afterMs = 0) => { if (afterMs > 0) setTimeout(() => play(code), afterMs); else play(code); },
+      rm: (on: boolean) => setRm(!!on),
+      saver: (on: boolean) => setBatterySaver(!!on),
+    };
   });
   return (
     <View style={{ flex: 1, backgroundColor: '#5c9ad1' }}>
@@ -74,7 +81,7 @@ export default function StreakFlamePreview() {
         <Text style={styles.h}>Flame sizes: 0, 1, 3, 7, 30, 100</Text>
         <View style={styles.tiers}>
           {[0, 1, 3, 7, 30, 100].map(d => (
-            <View key={d} style={styles.tier}><FlameArt days={d} size={58} reducedMotion={false} /><Text style={styles.tierText}>{d}</Text></View>
+            <View key={d} style={styles.tier}><FlameArt days={d} size={58} reducedMotion={rm} /><Text style={styles.tierText}>{d}</Text></View>
           ))}
         </View>
         <Text style={styles.h}>Badges (Profile, friends, Standings)</Text>
@@ -89,31 +96,31 @@ export default function StreakFlamePreview() {
         <Text style={styles.h}>Next Up (real XP toward the next level chest)</Text>
         <NextUpRail item={{ kind: 'ride', icon: 'coin', title: 'Win a ride coin', action: { type: 'ride' } }} onAction={() => undefined} />
         <View style={styles.freezeMock}>
-          <FlameArt days={7} size={70} reducedMotion={false} />
-          <FreezeSlots key={arriveKey} freezes={freezes} cap={2} arrive={arrive} from={{ x: -140, y: 160 }} reducedMotion={false} />
+          <FlameArt days={7} size={70} reducedMotion={rm} />
+          <FreezeSlots key={arriveKey} freezes={freezes} cap={2} arrive={arrive} from={{ x: -140, y: 160 }} reducedMotion={rm} />
         </View>
         <View style={styles.mapMock}>
-          <Daily3MapButton pips={pips} streak={7} attention="none" onPress={() => undefined} landing={landing} active reducedMotion={false}
+          <Daily3MapButton pips={pips} streak={7} attention="none" onPress={() => undefined} landing={landing} active reducedMotion={rm}
             onFullSet={() => setStage({ k: 'tomorrow', days: 7 })} />
         </View>
       </ScrollView>
       {stage && (
         <View style={styles.overlay}>
           <StampRibbon text={stage.k === 'tomorrow' ? 'See you tomorrow' : stage.k === 'chest' ? (stage.src === 'daily' ? 'All 3 done!' : 'Level 4!')
-            : stage.k === 'saved' ? 'Saved!' : stage.k === 'ember' ? 'New day!' : stage.moment.kind === 'milestone' ? 'Big flame!' : 'Flame up!'} reducedMotion={false} />
+            : stage.k === 'saved' ? 'Saved!' : stage.k === 'ember' ? 'New day!' : stage.moment.kind === 'milestone' ? 'Big flame!' : 'Flame up!'} reducedMotion={rm} />
           {stage.k === 'flame'
-            ? <StreakMoment key={JSON.stringify(stage.moment)} moment={stage.moment} reducedMotion={false} onDone={() => setStage(null)} />
+            ? <StreakMoment key={JSON.stringify(stage.moment)} moment={stage.moment} reducedMotion={rm} onDone={() => setStage(null)} />
             : stage.k === 'chest' ? (
-              <RewardReveal key={stage.n} reducedMotion={false} rewards={stage.rewards} opening={stage.opening} onOpen={openChest} onDone={() => setStage(null)}
+              <RewardReveal key={stage.n} reducedMotion={rm} rewards={stage.rewards} opening={stage.opening} onOpen={openChest} onDone={() => setStage(null)}
                 subtitle={stage.src === 'daily' ? 'All three goals done!' : 'You reached Level 4!'} dropIn={stage.src === 'level'}
                 autoOpen={stage.src === 'daily'} fullSet={stage.src === 'daily'}
                 expectRows={stage.src === 'daily' ? { small: 4, big: 1 } : { small: 3, big: 1 }}
                 preview={<GymPreview level={stage.src === 'level'} />}
                 closedArt={stage.src === 'daily' ? ICON_SOURCES.chest : LEVEL_CHEST} openArt={stage.src === 'daily' ? ICON_SOURCES.chestOpen : LEVEL_CHEST_OPEN}
-                footer={stage.src === 'daily' ? <FlameUpRow from={8} to={9} grow reducedMotion={false} /> : undefined} />
-            ) : stage.k === 'saved' ? <FreezeSavedCard streak={stage.streak} days={1} reducedMotion={false} onDone={() => setStage(null)} />
-            : stage.k === 'ember' ? <EmberCard was={stage.was} reducedMotion={false} onDone={() => setStage(null)} />
-            : <TomorrowCard prize={tomorrowPrize(FIXTURE(stage.days, stage.days === 6))} reducedMotion={false} onDone={() => setStage(null)} />}
+                footer={stage.src === 'daily' ? <FlameUpRow from={8} to={9} grow reducedMotion={rm} /> : undefined} />
+            ) : stage.k === 'saved' ? <FreezeSavedCard streak={stage.streak} days={1} reducedMotion={rm} onDone={() => setStage(null)} />
+            : stage.k === 'ember' ? <EmberCard was={stage.was} reducedMotion={rm} onDone={() => setStage(null)} />
+            : <TomorrowCard prize={tomorrowPrize(FIXTURE(stage.days, stage.days === 6))} reducedMotion={rm} onDone={() => setStage(null)} />}
         </View>
       )}
     </View>

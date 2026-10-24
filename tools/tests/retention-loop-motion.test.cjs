@@ -136,12 +136,68 @@ test('a normal day is one tap after the chest; big flames and tomorrow cards onl
   assert.equal(L.mayAskAfterChain(['tomorrow']), false);
 });
 
-test('the level chest rattles three times, each harder, then a hand, then it opens by itself at 2 s', () => {
-  const r = L.LEVEL_CHEST.rattles;
-  assert.deepEqual(plain(r.map(x => x.at)), [0, 380, 760]);
+test('the level chest rattles three times inside 900 ms, shows a hand at 900 ms and bursts inside 1.5 s untapped', () => {
+  const C = L.LEVEL_CHEST;
+  const r = C.rattles;
   assert.deepEqual(plain(r.map(x => x.deg)), [8, 13, 18]);
-  assert.ok(L.LEVEL_CHEST.handAt > r[2].at && L.LEVEL_CHEST.autoOpenAt === 2000);
-  assert.equal(L.LEVEL_CHEST.rowBeat, 180);
+  // Rattles never overlap and all end by 900 ms after the card opens.
+  for (let i = 1; i < r.length; i++) assert.ok(r[i].at - r[i - 1].at >= C.rattleMs, `rattle ${i} spacing`);
+  assert.ok(C.landMs + r[2].at + C.rattleMs <= 900);
+  assert.equal(C.handAt, 900);
+  // Auto-open, the held lid beat and the hit-stop: the burst lands inside 1.5 s of the card.
+  assert.ok(C.autoOpenAt + C.holdMs + motion.DURATION.hitStop <= 1500);
+  assert.equal(C.rowBeat, 180);
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  assert.match(reveal, /later\(\(\) => requestOpen\(\), LEVEL_CHEST\.autoOpenAt\)/);
+  // Its claim starts when it lands (onArrive), so a slow server never makes it late.
+  assert.match(read('src/components/retention/useRetention.tsx'), /levelAhead\.current = \{ level: r\.level, p \}/);
+});
+
+test('prizes fly home from their own rows: coins first, then tickets, then energy, 300 ms to the next card', () => {
+  const rows = [{ kind: 'xp', amount: 55 }, { kind: 'energy', amount: 20 }, { kind: 'coins', amount: 20 }, { kind: 'tickets', amount: 1 },
+    { kind: 'bonus_coins', amount: 5 }, { kind: 'item', amount: 1 }];
+  const plan = plain(L.flightPlan(rows, () => true));
+  assert.deepEqual(plan.map(l => l.target), ['coins', 'tickets', 'energy']);
+  assert.equal(plan[0].amount, 25);
+  assert.ok(plan[0].icons >= 6 && plan[0].icons <= 8);
+  assert.ok(plan.every(l => l.icons <= L.PRIZE_FLIGHT.maxIcons));
+  assert.deepEqual(plan.map(l => l.delay), [30, 110, 190]);
+  // Every icon lands inside about 1 s, and the next card starts 300 ms after the last landing.
+  const done = L.flightDoneMs(plan);
+  assert.ok(done <= 1300, `next card at ${done}`);
+  assert.equal(done, Math.max(...plan.map(l => l.lastLand)) + 300);
+  // A counter that is not on screen gets no flight; nothing to fly hands off right after the exit.
+  assert.deepEqual(plain(L.flightPlan(rows, t => t !== 'tickets')).map(l => l.target), ['coins', 'energy']);
+  assert.ok(L.flightDoneMs([]) <= 400);
+  assert.equal(L.flightTarget('xp'), null);
+});
+
+test('repeat chests are shorter and about one in ten is rare (stable per day)', () => {
+  assert.equal(L.isRepeatChest(0), false);
+  assert.equal(L.isRepeatChest(3), true);
+  assert.ok(L.REPEAT_CHEST.gatherMs < motion.momentBeats('chest', { reduced: false }).anticipation);
+  assert.equal(L.isRareChest('2026-10-24', 35), L.isRareChest('2026-10-24', 35));
+  let rare = 0;
+  for (let d = 1; d <= 365; d++) if (L.isRareChest(`2026-day-${d}`, 35)) rare++;
+  assert.ok(rare > 15 && rare < 60, `rare ${rare} of 365`);
+  assert.equal(L.isRareChest(null, 35), false);
+});
+
+test('the Shark Pass track glides, pours at most three steps one by one, and pops each', () => {
+  const P = loadTs('src/services/money/passMotion.ts');
+  const plan = plain(P.climbFills(2, 7));
+  assert.deepEqual(Object.keys(plan.at).map(Number), [3, 4, 5, 6, 7]);
+  assert.equal(plan.at[3].at, P.PASS_FX.openAt + P.PASS_FX.scrollMs);
+  assert.equal(plan.at[4].at - plan.at[3].at, P.PASS_FX.pourMs);
+  assert.equal(plan.at[6].ms, 0);
+  assert.equal(plan.at[7].ms, 0);
+  assert.equal(P.PASS_FX.nodePop, 1.3);
+  assert.equal(P.PASS_FX.sparkles, 8);
+  assert.deepEqual(plain(P.climbFills(4, 4).at), {});
+  const screen = read('src/screens/SharkPassScreen.tsx');
+  // The glide runs on the UI thread, and no price ever animates.
+  assert.match(screen, /scrollTo\(list, x, 0, false\)/);
+  assert.match(screen, /useAmbientLoop\(/);
 });
 
 test('the check flight arc starts at the shark and ends on the button', () => {
@@ -181,7 +237,14 @@ test('the full set flows into the chest, prizes fly home in sight, then the big 
   assert.match(hook, /claimAhead\.current = claimDailyThree\(\)/);
   assert.match(hook, /src: 'daily', claimDate: daily\.claimable_date, rewards: null, opening: false, auto: true/);
   // The modal steps aside while prizes fly into the HUD, then the chain continues one card at a time.
-  assert.match(hook, /setView\(\{ k: 'flying' \}\)/);
+  assert.match(hook, /setView\(\{ k: 'flying', legs \}\)/);
+  assert.match(hook, /<PrizeFlight legs=\{view\.legs\}/);
+  // The next card never waits on the balance read (no 1.4 s hold): it starts 300 ms after the last landing.
+  assert.doesNotMatch(hook, /setTimeout\(r, 1400\)/);
+  assert.match(hook, /flightDoneMs\(plan\)/);
+  // The last card stays mounted through its exit (no lone default ribbon), and the card leaves faster than it came.
+  assert.match(hook, /lastCard\.current/);
+  assert.match(hook, /PRIZE_FLIGHT\.exitMs, easing: EASE\.in/);
   assert.match(hook, /setView\(\{ k: 'flame', moment: flameRef\.current \}\)/);
   assert.match(hook, /setView\(\{ k: 'tomorrow' \}\)/);
   assert.match(hook, /dailyChain\(/);
@@ -231,6 +294,11 @@ test('welcome back: only after 3+ days, real cards only, kind words, at most thr
   assert.deepEqual(saved.map(c => c.kind), ['goals', 'saved', 'levelChest']);
   for (const c of [...ember, ...saved]) assert.ok(L.kidSafeCopy(c.text), c.text);
   for (const c of [...ember, ...saved]) assert.doesNotMatch(c.text, /miss|away|days ago/i);
+  // Picture-first tiles: one number or one short word under each picture.
+  assert.deepEqual(saved.map(c => L.welcomeTileLabel(c)), ['0 of 3', '9', 'Lv 4']);
+  assert.deepEqual(ember.map(c => L.welcomeTileLabel(c)), ['0 of 3', 'New!', 'Open!']);
+  for (const c of [...ember, ...saved]) assert.ok(L.welcomeTileLabel(c).length <= 6);
+  assert.equal(L.WELCOME_FX.finnAt, 0);
   assert.equal(L.welcomeCards(null).length, 0);
 });
 
@@ -254,4 +322,19 @@ test('freezes: earned shields fly home, a saved flame cracks its ice, an ended f
   assert.equal(L.FREEZE_FX.glintEveryMs, 6000);
   assert.equal(L.FREEZE_FX.fallMs, 600);
   for (const t of ['Your freeze saved your flame!', 'Start a new flame today!']) assert.ok(L.kidSafeCopy(t));
+});
+
+test('reward numbers roll on the UI thread and every loop card has the hand-drawn surface', () => {
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  assert.doesNotMatch(reveal, /setInterval\(/);
+  assert.match(reveal, /useAnimatedProps\(/);
+  for (const f of ['RewardReveal', 'StreakMoment', 'TomorrowCard', 'FreezeMoments', 'WelcomeBack', 'Daily3Sheet']) {
+    assert.match(read(`src/components/retention/${f}.tsx`), /<CardSurface \/>/, f);
+  }
+  const flight = read('src/components/retention/PrizeFlight.tsx');
+  assert.match(flight, /'worklet'/);
+  assert.doesNotMatch(flight, /useNativeDriver: false/);
+  // The flame ladder reads across the room: six clearly different sizes.
+  assert.deepEqual([0, 1, 3, 7, 30, 100].map(d => L.flameLook(d).scale), [0.55, 0.7, 0.85, 1.0, 1.1, 1.2]);
+  assert.equal(L.FREEZE_FX.landPop, 1.6);
 });

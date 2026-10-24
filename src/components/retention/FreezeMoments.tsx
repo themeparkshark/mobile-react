@@ -67,6 +67,7 @@ function Shield({ size, fly, reducedMotion }: {
   const t = useSharedValue(fly && !reducedMotion ? 0 : 1);
   const land = useSharedValue(1);
   const frost = useSharedValue(0);
+  const flashRing = useSharedValue(0);
   const glint = useSharedValue(0);
   const from = useSharedValue(fly?.from ?? { x: 0, y: 0 });
   const puffs = fly && !reducedMotion ? momentParticles(FREEZE_FX.frost, budget, false) : 0;
@@ -75,10 +76,14 @@ function Shield({ size, fly, reducedMotion }: {
     if (reducedMotion) { queueHaptic('hitMedium'); playSfx(LOOP_CUES.freezeEarn.fallback, 0.8); return; }
     const delay = 200 + fly.order * 160;
     t.value = withDelay(delay, withTiming(1, { duration: FREEZE_FX.flyMs, easing: EASE.inOut }));
-    land.value = withDelay(delay + FREEZE_FX.flyMs, withSequence(withTiming(0.8, { duration: 60 }), withSpring(1, SPRING.land)));
-    frost.value = withDelay(delay + FREEZE_FX.flyMs, withTiming(1, { duration: 700, easing: EASE.out }));
-    const timer = setTimeout(() => { queueHaptic('hitMedium'); playSfx(LOOP_CUES.freezeEarn.fallback, 0.8); }, delay + FREEZE_FX.flyMs);
-    return () => clearTimeout(timer);
+    // It lands big (1.6x) and springs into its slot, the slot ring flashes ice blue and frost puffs out.
+    land.value = withDelay(delay + FREEZE_FX.flyMs, withSequence(withTiming(FREEZE_FX.landPop, { duration: 90, easing: EASE.out }), withSpring(1, SPRING.land)));
+    frost.value = withDelay(delay + FREEZE_FX.flyMs, withTiming(1, { duration: 800, easing: EASE.out }));
+    flashRing.value = withDelay(delay + FREEZE_FX.flyMs, withSequence(withTiming(1, { duration: 80 }), withTiming(0, { duration: 520, easing: EASE.out })));
+    // A clink: a rigid tap, then a light one 70 ms later.
+    const timer = setTimeout(() => { queueHaptic('hitRigid'); playSfx(LOOP_CUES.freezeEarn.fallback, 0.8); }, delay + FREEZE_FX.flyMs);
+    const timer2 = setTimeout(() => queueHaptic('tapLight'), delay + FREEZE_FX.flyMs + 140);
+    return () => { clearTimeout(timer); clearTimeout(timer2); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // A glint sweeps across the shield every 6 s.
   useAmbientLoop(() => {
@@ -91,10 +96,12 @@ function Shield({ size, fly, reducedMotion }: {
     return { opacity: Math.min(1, t.value * 4), transform: [{ translateX: p.x }, { translateY: p.y }, { scale: s * land.value },
       { rotate: `${(1 - t.value) * 200}deg` }] };
   });
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flashRing.value, transform: [{ scale: 1 + 0.5 * (1 - flashRing.value) }] }));
   const glintStyle = useAnimatedStyle(() => ({ opacity: glint.value > 0 && glint.value < 1 ? 1 : 0,
     transform: [{ translateX: -size + size * 2 * glint.value }, { rotate: '24deg' }] }));
   return (
     <View style={{ width: size, height: size, zIndex: fly ? 5 : 0 }} accessibilityLabel="Streak freeze">
+      {fly && <Animated.View pointerEvents="none" style={[styles.flash, { width: size + 12, height: size + 12, borderRadius: size }, flashStyle]} />}
       <Animated.View style={[StyleSheet.absoluteFill, style]}>
         <Image source={FREEZE} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden', borderRadius: size * 0.3 }]} pointerEvents="none">
@@ -104,7 +111,7 @@ function Shield({ size, fly, reducedMotion }: {
           </Animated.View>
         </View>
       </Animated.View>
-      {puffs > 0 && <FrostPuff progress={frost} count={puffs} radius={size * 0.9} />}
+      {puffs > 0 && <FrostPuff progress={frost} count={puffs} radius={size * 1.2} />}
     </View>
   );
 }
@@ -274,6 +281,7 @@ export function EmberCard({ was, reducedMotion, onDone }: {
 
 const styles = StyleSheet.create({
   slots: { gap: 4, alignItems: 'center' },
+  flash: { position: 'absolute', left: -6, top: -6, borderWidth: 4, borderColor: '#bfe8ff', backgroundColor: 'rgba(191,232,255,0.35)' },
   slot: { borderRadius: 10, borderWidth: 2.5, borderStyle: 'dashed', borderColor: '#9fd2f5', alignItems: 'center', justifyContent: 'center' },
   slotOpen: { borderColor: BRAND.gold, backgroundColor: 'rgba(255, 207, 59, 0.15)' },
   plus: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold, marginTop: -2 },

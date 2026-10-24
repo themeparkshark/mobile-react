@@ -201,6 +201,8 @@ export function arcPoint(t: number, from: { x: number; y: number }, to: { x: num
  */
 export const FREEZE_FX = {
   flyMs: 500,
+  /** The shield lands big and springs into its slot. */
+  landPop: 1.6,
   frost: 6,
   glintEveryMs: 6000,
   crackAt: 450,

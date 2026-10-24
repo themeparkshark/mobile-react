@@ -128,7 +128,12 @@ function NextChestBar({ reduced }: { readonly reduced: boolean }) {
   const chestStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bob.value }, { rotate: `${wiggle.value * 6}deg` }, { scale: pop.value }] }));
   if (!xp || xp.needed <= 0) return null;
   return (
-    <View style={styles.barRow} accessibilityLabel={`${Math.round(pct * 100)} percent of the way to the Level ${level + 1} chest`}>
+    <View style={styles.barRow} accessibilityLabel={`${Math.max(0, xp.needed - xp.current)} XP to the Level ${level + 1} chest`}>
+      {/* A picture sentence: this much XP, along the bar, to that chest (zero reading). */}
+      <View style={styles.left}>
+        <GameIcon name="xp" size={15} />
+        <Text style={styles.leftText} allowFontScaling={false}>{Math.max(0, Math.round(xp.needed - xp.current))}</Text>
+      </View>
       <View style={styles.track} onLayout={e => setW(e.nativeEvent.layout.width)}>
         <Animated.View style={[styles.fill, fillStyle]} />
         <Animated.View pointerEvents="none" style={[styles.shine, shineStyle]}>
@@ -153,6 +158,8 @@ const styles = StyleSheet.create({
   mid: { flex: 1, gap: 2 },
   title: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  left: { flexDirection: 'row', alignItems: 'center', gap: 1, backgroundColor: BRAND.navy, borderRadius: 8, paddingHorizontal: 4, height: 16 },
+  leftText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.gold, marginTop: 1 },
   track: { flex: 1, height: 9, borderRadius: 5, backgroundColor: '#cfe9fb', borderWidth: 1.5, borderColor: BRAND.navy, overflow: 'hidden' },
   fill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: BRAND.gold },
   shine: { position: 'absolute', top: -6, width: 22, height: 22 },
