@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import * as RootNavigation from '../../RootNavigation';
-import all, { allWithMeta } from '../../api/endpoints/players/all';
+import { allWithMeta } from '../../api/endpoints/players/all';
 import FloatingParticles from '../../components/FloatingParticles';
 import { AuthContext } from '../../context/AuthProvider';
 import { PlayerType } from '../../models/player-type';
@@ -16,8 +16,9 @@ import { standingsGeneration } from './standingsCache';
 const PAGE_SIZE_HINT = 15;
 
 // Survives tab switches, so returning to this tab shows the last board at once.
-const cache: { players: PlayerType[]; page: number; more: boolean; generation: number; vipBonus: boolean } =
-  { players: [], page: 1, more: true, generation: standingsGeneration(), vipBonus: true };
+// vipNote is remembered across every loaded page: a VIP player first seen on page 2 still turns the line on.
+const cache: { players: PlayerType[]; page: number; more: boolean; generation: number; vipBonus: boolean; vipNote: string | null } =
+  { players: [], page: 1, more: true, generation: standingsGeneration(), vipBonus: true, vipNote: null };
 
 /** The number the server ranked this list by (see experienceScore). */
 const xpScore = (player: PlayerType) => experienceScore(player);
@@ -39,6 +40,7 @@ export default function Experience() {
       if (id !== request.current) return;
       cache.vipBonus = xpIncludesVipBonus(meta);
       cache.players = list ?? [];
+      cache.vipNote = xpVipNote(cache.players, cache.vipBonus);
       cache.page = 1;
       cache.more = (list?.length ?? 0) >= PAGE_SIZE_HINT;
       setPlayers(cache.players);
@@ -50,11 +52,13 @@ export default function Experience() {
     if (loadingMore || !cache.more) return;
     setLoadingMore(true);
     try {
-      const next = await all(cache.page + 1);
+      const { players: next, meta } = await allWithMeta(cache.page + 1);
+      cache.vipBonus = xpIncludesVipBonus(meta);
       cache.page += 1;
       cache.more = (next?.length ?? 0) >= PAGE_SIZE_HINT;
       const seen = new Set(cache.players.map(p => p.id));
       cache.players = [...cache.players, ...(next ?? []).filter(p => !seen.has(p.id))];
+      cache.vipNote = xpVipNote(cache.players, cache.vipBonus);
       setPlayers(cache.players);
     } catch {
       // Keep what is shown; the button stays so the player can try again.
@@ -71,7 +75,7 @@ export default function Experience() {
   const slots = podiumSlots(players);
   const copy = STANDINGS_EMPTY_COPY.xp;
   // Honest board: while VIP bonus XP counts in this ranking, one plain line says so.
-  const vipNote = xpVipNote(players, cache.vipBonus);
+  const vipNote = cache.vipNote ?? xpVipNote(players, cache.vipBonus);
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>

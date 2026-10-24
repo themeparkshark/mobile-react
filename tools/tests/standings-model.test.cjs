@@ -109,5 +109,9 @@ test('the XP board says plainly when VIP bonus XP counts in the ranking', () => 
   assert.doesNotMatch(model.XP_VIP_NOTE, /\u2014|bet|odds|hurry|now!/i);
   const board = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/LeaderboardsScreen/Experience.tsx'), 'utf8');
   assert.match(board, /cache\.vipBonus = xpIncludesVipBonus\(meta\);/);
-  assert.match(board, /const vipNote = xpVipNote\(players, cache\.vipBonus\);/);
+  assert.match(board, /const vipNote = cache\.vipNote \?\? xpVipNote\(players, cache\.vipBonus\);/);
+  // A VIP player first seen on a later page still turns the line on: it is worked out from every loaded page.
+  assert.match(board, /cache\.players = \[\.\.\.cache\.players, \.\.\.\(next \?\? \[\]\)\.filter\(p => !seen\.has\(p\.id\)\)\];\n\s*cache\.vipNote = xpVipNote\(cache\.players, cache\.vipBonus\);/);
+  assert.match(board, /const \{ players: next, meta \} = await allWithMeta\(cache\.page \+ 1\);\n\s*cache\.vipBonus = xpIncludesVipBonus\(meta\);/);
+  assert.equal(model.xpVipNote([{ is_subscribed: false }, { is_subscribed: false }, { is_subscribed: true }], true), model.XP_VIP_NOTE, 'page 1 plus page 2');
 });

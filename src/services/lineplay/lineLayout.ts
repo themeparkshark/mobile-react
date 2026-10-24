@@ -71,6 +71,13 @@ export function stripTrailFits(viewHeight: number): boolean {
   return viewHeight >= 5 * 2 + CHAPTER_STRIP + STRIP_TRAIL_GAP + STRIP_TRAIL_ROW;
 }
 
+/** The strip with its name and the 3 mini bubbles (18 pt) under it, inside the gold button. */
+export const STRIP_WITH_DOTS = 66;
+/** Too short for the bubbles row, tall enough for the mini bubbles inside the strip (Details open on an SE). */
+export function stripDotsFit(viewHeight: number): boolean {
+  return viewHeight >= 5 * 2 + STRIP_WITH_DOTS;
+}
+
 /**
  * The page window's smallest useful height: the strip plus the frame's rims,
  * padding and the gap above the rail. Below this (an iPhone SE reading Details)
@@ -96,17 +103,27 @@ export function pageRailMode(pagesShown: boolean): PageRailMode {
 }
 
 /**
+ * What the one rail button does while the window has stepped aside. A kid who pressed pause
+ * reads "Tap play when you're ready", so the button is Play: one tap resumes and brings the
+ * games back. Any other time it just shows the games again ('show', no play triangle).
+ */
+export type RailBackAction = 'play' | 'show';
+export function railBackAction(state: string, pauseReason: string | null | undefined): RailBackAction {
+  return state === 'paused' && pauseReason === 'manual' ? 'play' : 'show';
+}
+
+/**
  * Details open or close: the page window dips to this opacity (never to 0, so
  * no frame shows an empty window), takes its new size, then fades back up.
  * Dip, the two-frame wait for the new layout and the rise stay near 200 ms.
  */
-export const PAGES_DIP_OPACITY = 0.35;
-export const PAGES_DIP_MS = 50;
-export const PAGES_RISE_MS = 120;
+export const PAGES_DIP_OPACITY = 0.84;
+export const PAGES_DIP_MS = 40;
+export const PAGES_RISE_MS = 100;
 /** If the window's size did not change (no onLayout), it rises after this. */
-export const PAGES_RISE_FALLBACK_MS = 60;
+export const PAGES_RISE_FALLBACK_MS = 40;
 /** The UI thread starts the rise after at most this long at the dim, whatever the JS thread is doing. */
-export const PAGES_DIM_HOLD_MAX_MS = 130;
+export const PAGES_DIM_HOLD_MAX_MS = 60;
 
 export function chapterPageFit(viewHeight: number, shortScreen: boolean): ChapterPageFit {
   if (!(viewHeight > 0)) return shortScreen ? 'compact' : 'full';
@@ -197,17 +214,18 @@ export function boardFits(viewport: { width: number; height: number }, headerHei
  * header becomes a column on the left and the board takes the page's whole
  * height on the right, so the whole puzzle and both ports are on screen with no
  * scrolling. Room around it is kept thin so the tiles get the height: the
- * card's padding (4 top and bottom) and the panel's rims and padding (3 + 3).
+ * card's padding (2 top and bottom) and the panel's rims and padding (3 + 1), so
+ * an iPhone SE's tiles are at least 44 pt, the size a 7-year-old's finger needs.
  */
-export const BESIDE_CARD_PAD_V = 4;
-export const BESIDE_PANEL_PAD_V = 3;
+export const BESIDE_CARD_PAD_V = 2;
+export const BESIDE_PANEL_PAD_V = 1;
 export const BESIDE_V = BESIDE_CARD_PAD_V * 2 + (3 + BESIDE_PANEL_PAD_V) * 2;
 /** Gap between beside tiles; each tile's touch area reaches half of it, so a finger in a gap still turns a tile. */
-export const BESIDE_TILE_GAP = 4;
+export const BESIDE_TILE_GAP = 3;
 /** The panel's sides: rims plus padding wide enough for the ports (19 pt each side). */
 const BESIDE_PANEL_SIDES = (3 + 22) * 2;
 /** The header column ("Fix the signal", the stars and the clue button) needs this much width. */
-export const BESIDE_COLUMN = 128;
+export const BESIDE_COLUMN = 122;
 /** The smallest board beside its header: 3 tiles of about 30 pt each. */
 export const BESIDE_FLOOR = 100;
 /** "Tap a tile to turn it." on one line across the page, above the board and its column. */
@@ -325,11 +343,16 @@ export function foldGap(viewHeight: number, foldBottom: number, nextHeight: numb
 }
 
 /** What the chapter page's PLAY NOW opens: the first unplayed clue, then the crew relay, then Crew Prompts. */
+/** The chapter's 3 clue page ids, in order (trivia, field note, finale). */
+export function chapterMissionIds(chapter: { readonly id: string; readonly finale: { readonly idSuffix: string } }): string[] {
+  return [`${chapter.id}-trivia`, `${chapter.id}-field-note`, `${chapter.id}-${chapter.finale.idSuffix}`];
+}
+
 export function chapterPlayNow(chapter: {
   readonly id: string; readonly missionNames: readonly string[];
   readonly finale: { readonly idSuffix: string }; readonly relay: { readonly title: string };
 }, completedIds: ReadonlySet<string>): { readonly id: string; readonly name: string; readonly done: number } {
-  const missionIds = [`${chapter.id}-trivia`, `${chapter.id}-field-note`, `${chapter.id}-${chapter.finale.idSuffix}`];
+  const missionIds = chapterMissionIds(chapter);
   const done = missionIds.filter(id => completedIds.has(id)).length;
   const next = missionIds.findIndex(id => !completedIds.has(id));
   if (next >= 0) return { id: missionIds[next], name: chapter.missionNames[next] ?? '', done };

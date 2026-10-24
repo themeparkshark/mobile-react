@@ -2,7 +2,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { borderRadius, spacing } from '../../../design-system';
 import { GameIcon } from '../../../ui';
 import KidText from './KidText';
-import type { PageRailMode } from '../../../services/lineplay/lineLayout';
+import ClueDots from './ClueDots';
+import type { GameIconName } from '../../../ui/iconNames';
+import type { PageRailMode, RailBackAction } from '../../../services/lineplay/lineLayout';
 
 interface Props {
   readonly index: number;
@@ -26,6 +28,16 @@ interface Props {
   readonly mode?: PageRailMode;
   readonly onShowPages?: () => void;
   /**
+   * 'play' while a kid has pressed pause: the one button says Play and one tap resumes and brings
+   * the games back (the card says "Tap play when you're ready"). 'show' at any other time: it
+   * says Show games, with an up arrow like the Details pill, never a play triangle.
+   */
+  readonly backAction?: RailBackAction;
+  /** The clue trail as 3 mini bubbles in place of a count (one count form on every screen). */
+  readonly progressDots?: { readonly done: readonly boolean[]; readonly current: number } | null;
+  /** A small picture beside "Next: ..." so a kid who can't read yet still knows what comes next. */
+  readonly nextIcon?: GameIconName;
+  /**
    * The page above has its own gold button (PLAY NOW, or the game itself): Next is a quiet white
    * button, so a kid sees exactly one gold button to press.
    */
@@ -35,13 +47,17 @@ interface Props {
 /** Keeps the next playable round visible after a player finishes a queue activity. */
 export default function ActivityPageRail({ index, count, nextLabel, firstLabel = 'Chapter',
   progressText, progressAccessibilityLabel, onFirst, onArcade, arcadePaused = false, onNext,
-  moreAvailable = false, morePaused = false, onMore, mode = 'pages', onShowPages, quiet = false }: Props) {
+  moreAvailable = false, morePaused = false, onMore, mode = 'pages', onShowPages, quiet = false,
+  backAction = 'show', progressDots = null, nextIcon }: Props) {
   if (mode === 'back' && onShowPages) {
+    const play = backAction === 'play';
     return <View style={styles.rail}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to the games. Hides the details."
+      <Pressable accessibilityRole="button"
+        accessibilityLabel={play ? 'Play. Starts the games again and hides the details.' : 'Show the games. Hides the details.'}
         onPress={onShowPages} style={({ pressed }) => [styles.next, pressed && styles.pressed]}>
-        <GameIcon name="play" size={26} />
-        <Text style={styles.nextText} numberOfLines={1}>Back to games</Text>
+        {play ? <GameIcon name="play" size={26} />
+          : <View style={styles.upArrow}><GameIcon name="arrow" size={22} /></View>}
+        <Text style={styles.nextText} numberOfLines={1}>{play ? 'Play' : 'Show games'}</Text>
       </Pressable>
     </View>;
   }
@@ -60,7 +76,9 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
       <Text style={styles.arcadeText}>ARCADE</Text>
       {progressText ? <KidText style={styles.arcadeProgress} numberOfLines={1}
         accessibilityLabel={progressAccessibilityLabel}>{progressText}</KidText> : null}
-    </Pressable> : <KidText style={styles.count}
+    </Pressable> : progressDots ? <ClueDots done={progressDots.done} current={progressDots.current}
+      accessibilityLabel={progressAccessibilityLabel} />
+      : <KidText style={styles.count}
       accessibilityLabel={progressAccessibilityLabel ?? `Activity ${index + 1} of ${count}`}>
       {progressText ?? `${index + 1}/${count}`}
     </KidText>}
@@ -68,6 +86,7 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
       accessibilityLabel={showMore ? 'Add more queue activities' : wrapsToFirst ? `Return to ${firstLabel.toLowerCase()}` : `Next activity: ${nextLabel}`}
       disabled={showMore ? morePaused : count <= 1} onPress={showMore ? onMore : onNext}
       style={[styles.next, calm && styles.nextQuiet, (showMore ? morePaused : count <= 1) && styles.disabled]}>
+      {nextIcon && !showMore && count > 1 && !wrapsToFirst ? <GameIcon name={nextIcon} size={24} /> : null}
       <Text style={[styles.nextText, calm && styles.nextTextQuiet]} numberOfLines={1}>
         {showMore ? morePaused ? 'Resume for more rounds' : 'More queue rounds'
           : count <= 1 ? 'Only activity' : wrapsToFirst ? `Back to ${firstLabel.toLowerCase()}` : `Next: ${nextLabel}`}
@@ -88,6 +107,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md, backgroundColor: '#0875c9' },
   disabled: { opacity: 0.45 },
   pressed: { transform: [{ scale: 0.97 }] },
+  upArrow: { transform: [{ rotate: '-90deg' }] },
   chapterText: { color: '#fff', fontFamily: 'Knockout', fontSize: 15 },
   count: { color: '#075d9f', fontFamily: 'Knockout', fontSize: 14, minWidth: 35,
     textAlign: 'center' },

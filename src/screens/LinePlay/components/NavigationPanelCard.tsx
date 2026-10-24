@@ -244,7 +244,10 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   // chapter rail. Size the tiles from the height this page really has.
   // Before the header is measured, assume its usual height, so the first frame already picks the right layout.
   // The room the board is sized for: the page's own size, or the bigger size it is about to grow to.
-  const growing = targetHeight != null && viewport.height > 0 && targetHeight > viewport.height + 1;
+  // The screen knows the window's new height in the same frame it changes (Details opening or closing,
+  // or an SE crew row lending its room), before this page's own measurement arrives: the board lays
+  // out for that height at once, so no frame shows the old board cut by a smaller window.
+  const growing = targetHeight != null && viewport.height > 0 && Math.abs(targetHeight - viewport.height) > 1;
   const room = growing ? { width: viewport.width, height: targetHeight as number } : viewport;
   const layout = navBoardLayout(room, headerHeight || HEADER_GUESS, !!onMakeRoom);
   const beside = layout === 'beside';
@@ -293,7 +296,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   // "Tap to play" strip, like the chapter's PLAY NOW strip. The tap closes Details so the board has room.
   if (onMakeRoom && layout === 'strip') {
     const title = trace.solved ? look.solvedTitle : look.repairTitle;
-    const withHeader = navStripHeader(viewport.height);
+    const withHeader = navStripHeader(room.height);
     return <PageScroll fill={BRAND.cream} contentStyle={[styles.contentStrip, withHeader && styles.contentStripHeader]}
       onLayout={onLayout} still>
       {withHeader && <LinearGradient colors={[BRAND.blueBright, BRAND.blue]} style={[styles.hero, styles.heroCompact, styles.heroStrip]}>
@@ -335,9 +338,9 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
       <Text style={styles.successCopy}>{stars === 3 ? 'Perfect repair: not a single wasted turn.'
         : stars === 2 ? 'Clean work. A few extra turns, still a great repair.'
           : 'Repaired! Try another circuit for a cleaner run.'}</Text>
-      <GameButton label={mode === 'mission' ? 'FIND THE NEXT SIGNAL' : (nextLabel ?? 'NEXT ROUND').toUpperCase()}
+      <GameButton label={mode === 'mission' ? 'SPOT THE CLUE' : (nextLabel ?? 'NEXT ROUND').toUpperCase()}
         icon="arrow" onPress={onNext} disabled={paused} fullWidth
-        accessibilityLabel={mode === 'mission' ? 'Next mission: Find the missing signal' : `Next: ${nextLabel ?? 'next round'}`} />
+        accessibilityLabel={mode === 'mission' ? 'Next mission: Spot the clue' : `Next: ${nextLabel ?? 'next round'}`} />
       <GameButton label="Try another circuit" variant="ghost" onPress={onNewRound} disabled={paused}
         accessibilityLabel="Play another navigation circuit" />
   </Animated.View>;

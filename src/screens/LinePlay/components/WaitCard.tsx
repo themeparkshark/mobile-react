@@ -367,8 +367,8 @@ export default function WaitCard({
           {compact && !completed && onPlayBonus && <Pressable accessibilityRole="button"
             accessibilityLabel={rewardTrackingAvailable ? 'Open queue games for bonus rewards' : 'Open queue games'}
             onPress={onPlayBonus} disabled={paused}
-            style={({ pressed }) => [styles.compactArcade, paused && styles.playButtonDisabled, pressed && styles.playButtonPressed]}>
-            <Text style={styles.compactArcadeText}>ARCADE</Text>
+            style={({ pressed }) => [styles.compactArcade, paused && styles.buttonResting, pressed && styles.playButtonPressed]}>
+            <Text style={[styles.compactArcadeText, paused && styles.buttonRestingText]}>ARCADE</Text>
           </Pressable>}
           {!completed && <Pressable accessibilityRole="button" accessibilityLabel={paused ? 'Resume queue games' : 'Pause queue games'}
             onPress={onTogglePause} style={styles.pauseButton} hitSlop={8}>
@@ -445,8 +445,8 @@ export default function WaitCard({
         {!compact && !completed && onPlayBonus && (
           <Pressable accessibilityRole="button" accessibilityLabel={rewardTrackingAvailable ? "Open queue games for bonus rewards" : "Open queue games"}
             onPress={onPlayBonus} disabled={paused}
-            style={({ pressed }) => [styles.playButton, paused && styles.playButtonDisabled, pressed && styles.playButtonPressed]}>
-            <Text style={styles.playButtonText}>{playLabel}</Text>
+            style={({ pressed }) => [styles.playButton, paused && styles.buttonResting, pressed && styles.playButtonPressed]}>
+            <Text style={[styles.playButtonText, paused && styles.buttonRestingText]}>{playLabel}</Text>
           </Pressable>
         )}
 
@@ -576,7 +576,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 5, borderBottomColor: '#d99a00',
   },
   playButtonPressed: { transform: [{ translateY: 3 }], borderBottomWidth: 2 },
-  playButtonDisabled: { opacity: 0.5 },
+  // Resting while paused: the same button in white with a navy outline (never a faded gold, which
+  // turns grey-green over the blue card). Play on the card wakes it up again.
+  buttonResting: { backgroundColor: '#e8f6ff', borderWidth: 2, borderColor: '#0b4f8a', borderBottomWidth: 3,
+    borderBottomColor: '#0b4f8a', opacity: 0.9 },
+  buttonRestingText: { color: '#0b4f8a' },
   playButtonText: { fontFamily: 'Shark', fontSize: 21, color: '#075083' },
   wrap: {
     borderRadius: borderRadius.xxl,

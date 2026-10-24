@@ -17,8 +17,9 @@ import type { ChapterClue } from '../../../services/lineplay/chapterClue';
 import { chapterKicker, chapterPageKicker } from '../../../services/lineplay/labels';
 import { borderRadius, spacing } from '../../../design-system';
 import { BRAND, GameIcon } from '../../../ui';
-import { chapterPageFit, chapterPlayNow, foldGap, STRIP_TRAIL_GAP as STRIP_TRAIL_GAP_PT, STRIP_TRAIL_ROW, stripTrailFits,
+import { chapterPageFit, chapterPlayNow, foldGap, STRIP_TRAIL_GAP as STRIP_TRAIL_GAP_PT, STRIP_TRAIL_ROW, stripDotsFit, stripTrailFits,
 } from '../../../services/lineplay/lineLayout';
+import ClueDots from './ClueDots';
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 import PageScroll from './PageScroll';
 import KidText from './KidText';
@@ -36,6 +37,12 @@ interface Props {
    * so the clue a kid taps next is fully on screen without scrolling.
    */
   readonly compact?: boolean;
+  /**
+   * The page's scroll height as the screen measured it in the same frame the window changed size
+   * (Details opening or closing). The page picks its layout from it at once, so no frame shows the
+   * old layout cut by the new window. Its own measurement is used until the screen has one.
+   */
+  readonly windowHeight?: number;
 }
 
 // Reduced motion: no entering animation at all. (A springified entering
@@ -44,11 +51,12 @@ interface Props {
 const riseFor = (reduced: boolean) => (index: number) => reduced ? undefined
   : FadeInDown.delay(60 + index * 70).springify().damping(15);
 
-export default function ChapterCard({ chapter, completedIds, crewRelay, chapterClue = null, paused, signalAvailable = false, onChooseMission, compact: shortScreen = false }: Props) {
+export default function ChapterCard({ chapter, completedIds, crewRelay, chapterClue = null, paused, signalAvailable = false, onChooseMission, compact: shortScreen = false, windowHeight }: Props) {
   const [storyOpen, setStoryOpen] = useState(false);
   // The page's real height decides what leads (it shrinks while Details is open), so PLAY NOW
   // is always whole: never a button cut by the frame's edge.
-  const [viewHeight, setViewHeight] = useState(0);
+  const [measuredHeight, setViewHeight] = useState(0);
+  const viewHeight = windowHeight != null && windowHeight > 0 ? windowHeight : measuredHeight;
   // The first screen ends on whole blocks: the crew row starts below the window when it would peek.
   const [trailBottom, setTrailBottom] = useState(0);
   const [trailHeight, setTrailHeight] = useState(0);
@@ -112,25 +120,31 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
 
   const measure = (event: { nativeEvent: { layout: { height: number } } }) => {
     const height = Math.round(event.nativeEvent.layout.height);
-    if (height !== viewHeight) setViewHeight(height);
+    if (height !== measuredHeight) setViewHeight(height);
   };
 
-  // A very short page (an iPhone SE with Details open): the page is just one PLAY NOW row that fits whole.
+  // A very short page (an iPhone SE): the page is one PLAY row that fits whole. It always reads
+  // "PLAY <clue name>"; the clue count is the bubbles, never a "CLUE 1" number in the strip.
   if (fit === 'strip') {
-    // Room for the 1 2 3 bubbles under the strip (a closed iPhone SE page): they fill the window and
-    // own the count, so the strip just says PLAY. Too short for them: the strip alone, with its CLUE number.
+    // Room for the 1 2 3 bubbles under the strip (a closed iPhone SE page): they fill the window.
+    // Too short for them (Details open): the strip grows to fill its window (no empty pale band)
+    // and carries the same 3 bubbles, small, under its name.
     const withTrail = stripTrailFits(viewHeight);
+    const dotsInStrip = !withTrail && stripDotsFit(viewHeight);
     return (
       <PageScroll fill={FRAME_FILL} contentStyle={[styles.contentStrip, withTrail && styles.contentStripTrail]}
         onLayout={measure} still>
         <Pressable accessibilityRole="button"
           accessibilityLabel={`${done === 3 ? 'Play' : 'Start'} ${nextName}`}
           disabled={paused} onPress={() => onChooseMission(nextId)}
-          style={({ pressed }) => [styles.playStrip, paused && styles.missionPaused, pressed && styles.pressed]}>
-          <Text style={styles.playStripText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-            <Text style={styles.playStripKicker}>{done === 3 || withTrail ? 'PLAY' : 'CLUE '}{done === 3 || withTrail ? null
-              : <Text style={styles.playStripDigit}>{done + 1}</Text>}{'  '}</Text>{nextName}
-          </Text>
+          style={({ pressed }) => [styles.playStrip, !withTrail && styles.playStripFill, paused && styles.missionPaused, pressed && styles.pressed]}>
+          <View style={styles.playStripCopy}>
+            <Text style={styles.playStripText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+              <Text style={styles.playStripKicker}>{'PLAY  '}</Text>{nextName}
+            </Text>
+            {dotsInStrip && <ClueDots size={18} current={done === 3 ? -1 : nextMissionIndex}
+              done={missionIds.map(id => completedIds.has(id))} accessibilityLabel={`${done} of 3 ${chapter.progressNoun}`} />}
+          </View>
           <GameIcon name="play" size={40} />
         </Pressable>
         {withTrail && <View style={styles.stripTrail} accessibilityLabel={`${done} of 3 ${chapter.progressNoun}`}>
@@ -142,8 +156,8 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
               disabled={paused} onPress={() => onChooseMission(missionIds[index])}
               style={({ pressed }) => [styles.step, styles.stepStrip, current && styles.stepCurrent, complete && styles.stepDone,
                 paused && styles.missionPaused, pressed && styles.pressed]}>
-              <View style={[styles.stepBadge, styles.stepBadgeStrip, complete && styles.stepBadgeDone]}>
-                {complete ? <GameIcon name="check" size={18} /> : <Text style={[styles.stepNumber, styles.stepNumberStrip]}>{index + 1}</Text>}
+              <View style={[styles.stepBadge, styles.stepBadgeStrip, current && !complete && styles.stepBadgeCurrent, complete && styles.stepBadgeDone]}>
+                {complete ? <GameIcon name="check" size={18} /> : <Text style={[styles.stepNumber, styles.stepNumberStrip, current && styles.stepNumberCurrent]}>{index + 1}</Text>}
               </View>
             </Pressable>;
           })}
@@ -175,8 +189,8 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
             disabled={paused} onPress={() => onChooseMission(missionIds[index])}
             style={({ pressed }) => [styles.step, compact && styles.stepCompact, current && styles.stepCurrent, complete && styles.stepDone,
               paused && styles.missionPaused, pressed && styles.pressed]}>
-            <View style={[styles.stepBadge, complete && styles.stepBadgeDone]}>
-              {complete ? <GameIcon name="check" size={22} /> : <Text style={styles.stepNumber}>{index + 1}</Text>}
+            <View style={[styles.stepBadge, current && !complete && styles.stepBadgeCurrent, complete && styles.stepBadgeDone]}>
+              {complete ? <GameIcon name="check" size={22} /> : <Text style={[styles.stepNumber, current && styles.stepNumberCurrent]}>{index + 1}</Text>}
             </View>
             {!compact && <Text style={styles.stepName} numberOfLines={3}>{name}</Text>}
           </Pressable>;
@@ -279,8 +293,10 @@ const styles = StyleSheet.create({
   stepStrip: { minHeight: 0, height: STRIP_TRAIL_ROW, paddingVertical: 0, padding: 0, justifyContent: 'center' },
   stepBadgeStrip: { width: 30, height: 30, borderRadius: 15 },
   stepNumberStrip: { fontSize: 15 },
-  playStripText: { flex: 1, color: BRAND.navy, fontFamily: 'Shark', fontSize: 19, lineHeight: 23 },
-  playStripDigit: { fontFamily: 'Shark', fontSize: 15 },
+  playStripText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 19, lineHeight: 23 },
+  // Details open on an iPhone SE: the strip fills its window (a big gold button, no pale band).
+  playStripFill: { flexGrow: 1, maxHeight: 112 },
+  playStripCopy: { flex: 1, gap: 4 },
   playStripKicker: { color: '#7c4200', fontFamily: 'Knockout', fontSize: 14, letterSpacing: 0.8 },
   playNowCopy: { flex: 1, paddingRight: spacing.sm },
   playNowKicker: { color: '#7c4200', fontFamily: 'Knockout', fontSize: 14, letterSpacing: 0.8 },
@@ -297,6 +313,9 @@ const styles = StyleSheet.create({
   stepBadge: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
     backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.navy },
   stepBadgeDone: { backgroundColor: '#ffffff' },
+  // The clue a kid is on is a gold bubble, the same as the rail's and the strip's mini bubbles.
+  stepBadgeCurrent: { backgroundColor: BRAND.gold },
+  stepNumberCurrent: { color: BRAND.navy },
   stepNumber: { color: '#fff', fontFamily: 'Shark', fontSize: 17, marginTop: 2 },
   stepName: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 14, lineHeight: 17, textAlign: 'center', marginTop: 6 },
   crewRow: { flexDirection: 'row', gap: 8, marginTop: spacing.md },

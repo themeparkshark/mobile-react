@@ -300,7 +300,7 @@ const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
   completedTitle: 'Star chart restored!',
   completedStory: 'Your shark has all three signals. Finish your wait with the crew challenge or another quick game. Your time near the ride still earns Ride Parts.',
   progressNoun: 'signals found',
-  missionNames: ['Fix the signal', 'Find the missing signal', 'Rebuild the star chart'],
+  missionNames: ['Fix the signal', 'Spot the clue', 'Rebuild the star chart'],
   finale: { idSuffix: 'star-chart', title: 'Rebuild the Star Chart',
     preview: 'Match space symbols to restore your shark’s missing chart. Race solo or let your crew call out the pairs.',
     memoryDeckId: 'space' },

@@ -111,7 +111,7 @@ test('PLAY NOW is always whole: the page leads with it, shrinks it to one row, o
   assert.match(card, /const rise = riseFor\(useUiReducedMotion\(\) \|\| entered\.current\);/, 'a layout switch never replays the entrance');
   const screen = read(SCREEN);
   assert.match(screen, /const pagesShown = pageWindowShown\(pagesHeight, detailsOpen\);/);
-  assert.match(screen, /<View style=\{\[styles\.pagesInner, !pagesShown && styles\.pagesHidden\]\}/,
+  assert.match(screen, /<View ref=\{pagesInnerRef\} style=\{\[styles\.pagesInner, !pagesShown && styles\.pagesHidden\]\}/,
     'hidden, not unmounted: the page and its scroll spot stay put');
   const scroll = read('src/screens/LinePlay/components/PageScroll.tsx');
   assert.match(scroll, /const more = moreBelowNow && !still;/);
@@ -152,7 +152,7 @@ test('Details opens smoothly: one commit, the crew row fades and the page window
   assert.doesNotMatch(screen, /pagesFade\.value = 0/, 'never an empty window');
   assert.doesNotMatch(screen, /withTiming\(0, \{ duration: 0 \}\)/);
   const m = layout();
-  assert.ok(m.PAGES_DIP_OPACITY >= 0.3 && m.PAGES_DIP_OPACITY < 1);
+  assert.ok(m.PAGES_DIP_OPACITY >= 0.8 && m.PAGES_DIP_OPACITY < 1, 'a soft cross-fade: no frame under 80%');
   assert.ok(m.PAGES_DIP_MS + m.PAGES_RISE_MS < 220, 'dip plus rise under 220 ms');
   assert.ok(m.PAGES_DIP_MS + m.PAGES_RISE_FALLBACK_MS + m.PAGES_RISE_MS < 320, 'the fallback rise starts soon too');
   const scroll = read('src/screens/LinePlay/components/PageScroll.tsx');
@@ -225,13 +225,14 @@ test('an iPhone SE reading Details: no rail button acts on the hidden page; one 
   const hidden = rail({ mode: 'back' });
   const only = buttons(hidden);
   assert.equal(only.length, 1, 'while the window is hidden: one button, no Chapter, no Next, no count');
-  assert.equal(words(only[0].props.children), 'Back to games');
+  assert.equal(words(only[0].props.children), 'Show games', 'not paused: it shows the games, no play triangle');
   assert.match(only[0].props.accessibilityLabel, /Hides the details/);
+  assert.equal(JSON.stringify(only[0].props.children).includes('"name":"play"'), false);
   only[0].props.onPress();
   assert.deepEqual(calls, ['back'], 'the tap closes Details; it never pages a window nobody can see');
   assert.equal(hidden.find(node => node.type === 'KidText'), undefined);
   const screen = read(SCREEN);
-  assert.match(screen, /mode=\{railMode\} onShowPages=\{closeDetails\}/);
+  assert.match(screen, /mode=\{railMode\} onShowPages=\{onRailBack\} backAction=\{railBack\}/);
   assert.match(screen, /const closeDetails = useCallback\(\(\) => onDetailsChange\(false\), \[onDetailsChange\]\);/);
   assert.match(screen, /detailsOpen=\{detailsOpen\}\n\s*onDetailsChange=\{onDetailsChange\}/, 'the screen owns Details, so it can close it');
   // No empty hole between Details and the rail: the stepped-aside window leaves the flow under the rail.
@@ -344,7 +345,7 @@ test('the window stepped aside: the rail stays put and the crew row comes back i
 test('one gold button per screen: the rail Next is quiet on the chapter page and the board page', () => {
   const screen = read(SCREEN);
   assert.match(screen, /const railQuiet = visibleItem\?\.kind === 'chapter_intro' \|\| boardPage;/);
-  assert.match(screen, /mode=\{railMode\} onShowPages=\{closeDetails\} quiet=\{railQuiet\}/);
+  assert.match(screen, /mode=\{railMode\} onShowPages=\{onRailBack\} backAction=\{railBack\} quiet=\{railQuiet\}/);
   const rail = read('src/screens/LinePlay/components/ActivityPageRail.tsx');
   assert.match(rail, /const calm = quiet && !showMore;/);
   assert.match(rail, /nextQuiet: \{ backgroundColor: '#ffffff'/);
@@ -479,7 +480,8 @@ test('the closed SE chapter page fills its window: the 1 2 3 bubbles sit under t
   const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
   assert.match(chapter, /const withTrail = stripTrailFits\(viewHeight\);/);
   assert.match(chapter, /\{withTrail && <View style=\{styles\.stripTrail\}/);
-  assert.match(chapter, /done === 3 \|\| withTrail \? 'PLAY' : 'CLUE '/, 'the bubbles own the count');
+  assert.match(chapter, /<Text style=\{styles\.playStripKicker\}>\{'PLAY  '\}<\/Text>\{nextName\}/, 'the strip always says PLAY; the bubbles own the count');
+  assert.doesNotMatch(chapter, /'CLUE '/);
 });
 
 test('an SE board page is drawn for its lent height from the first frame (no small board, no pop)', () => {
@@ -492,10 +494,91 @@ test('an SE board page is drawn for its lent height from the first frame (no sma
   assert.equal(m.lentBoardViewport(true, true, 211, true, 44), undefined, 'Details open: the page is what it is');
   assert.equal(m.lentBoardViewport(true, false, 0, false, 44), undefined);
   const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
-  assert.match(card, /const growing = targetHeight != null && viewport\.height > 0 && targetHeight > viewport\.height \+ 1;/);
+  assert.match(card, /const growing = targetHeight != null && viewport\.height > 0 && Math\.abs\(targetHeight - viewport\.height\) > 1;/);
   assert.match(card, /const layout = navBoardLayout\(room, headerHeight \|\| HEADER_GUESS, !!onMakeRoom\);/);
   assert.match(card, /still=\{hideBoard \|\| growing\}/, 'no stale more-below arrow while the window grows');
   const screen = read(SCREEN);
-  assert.match(screen, /navigationTargetHeight=\{boardTargetHeight\}/);
+  assert.match(screen, /navigationTargetHeight=\{boardTargetHeight \?\? pageViewHeight\}/);
   assert.match(screen, /setPagesMeasuredLent\(lentAtCommit\.current\);/);
+});
+
+test('paused by hand with Details open on an SE: the one rail button is Play, and one tap resumes', () => {
+  const m = layout();
+  assert.equal(m.railBackAction('paused', 'manual'), 'play');
+  assert.equal(m.railBackAction('paused', 'left_area'), 'show', 'an automatic pause cannot be played away');
+  assert.equal(m.railBackAction('active', null), 'show');
+  const { runtime } = require('./helpers/reward-hook-runtime.cjs');
+  const calls = [];
+  const rail = props => runtime('src/screens/LinePlay/components/ActivityPageRail.tsx', {
+    '../../../ui': { GameIcon: 'GameIcon' }, './KidText': { default: 'KidText' }, './ClueDots': { default: 'ClueDots' },
+    '../../../design-system': { borderRadius: { lg: 16, md: 12 }, spacing: { sm: 8, xs: 4, md: 12, lg: 16 } },
+  }, { index: 1, count: 4, nextLabel: 'Spot the clue', onFirst: () => {}, onNext: () => calls.push('next'),
+    onShowPages: () => calls.push('back'), mode: 'back', ...props });
+  const find = (app, type) => { const out = []; const walk = node => { if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) return node.forEach(walk); if (node.type === type) out.push(node); walk(node.props?.children); };
+    walk(app.tree); return out; };
+  const play = rail({ backAction: 'play' });
+  const [button] = find(play, 'Pressable');
+  assert.equal(find(play, 'Text')[0].props.children, 'Play');
+  assert.equal(find(play, 'GameIcon')[0].props.name, 'play', 'the same play picture as the card');
+  assert.match(button.props.accessibilityLabel, /^Play\. Starts the games again/);
+  button.props.onPress();
+  assert.deepEqual(calls, ['back']);
+  // The screen: the one button closes Details AND starts the same resume countdown as the card's play button.
+  const screen = read(SCREEN);
+  assert.match(screen, /const railBack = railBackAction\(snapshot\.state, snapshot\.pauseReason\);/);
+  assert.match(screen, /const onRailBack = useCallback\(\(\) => \{\n\s*closeDetails\(\);\n\s*if \(railBack === 'play' && !resuming\) setResuming\(true\);\n\s*\}, \[closeDetails, railBack, resuming\]\);/);
+  assert.match(screen, /<ResumeCountdown active=\{resuming\} onDone=\{\(\) => \{\n\s*setResuming\(false\);\n\s*session\.resume\(\);/,
+    'the countdown ends in session.resume()');
+  // The card's paused line points at that one button.
+  const card = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.match(card, /Tap play when you’re ready\./);
+});
+
+test('Details toggle: the pages lay out for the new window in the same frame (no sliced board), soft dip', () => {
+  const screen = read(SCREEN);
+  assert.match(screen, /useLayoutEffect\(\(\) => \{\n\s*pagesInnerRef\.current\?\.measure\(/, 'measured before anything is drawn');
+  assert.match(screen, /\}, \[detailsOpen\]\);/);
+  assert.match(screen, /const pageViewHeight = pagesHeight > PAGE_FRAME_V \? pagesHeight - PAGE_FRAME_V : undefined;/);
+  assert.match(screen, /windowHeight=\{pageViewHeight\}/);
+  const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
+  assert.match(chapter, /const viewHeight = windowHeight != null && windowHeight > 0 \? windowHeight : measuredHeight;/);
+  const m = layout();
+  assert.ok(m.PAGES_DIP_OPACITY >= 0.8);
+  assert.ok(m.PAGES_DIP_MS + m.PAGES_DIM_HOLD_MAX_MS + m.PAGES_RISE_MS < 250, 'under 250 ms end to end, even on a busy JS thread');
+});
+
+test('one clue count form: 3 mini bubbles on the rail, in the SE strip and on the chapter page; mission 2 has its own name', () => {
+  const screen = read(SCREEN);
+  assert.doesNotMatch(screen, /CLUE \$\{storyStep\}\/3/, 'no CLUE 1/3 text on the rail');
+  assert.match(screen, /progressDots=\{storyStep && snapshot\.chapter \? \{ current: storyStep - 1,/);
+  assert.match(screen, /nextIcon=\{pageIcon\(activityPages\[nextPageIndex\]\)\}/);
+  assert.match(screen, /case 'lore': return chapter && item\.id === `\$\{chapter\.id\}-field-note` \? chapter\.missionNames\[1\] : 'Field Note';/);
+  assert.match(screen, /case 'lore': return 'search';/, 'Spot the clue gets a magnifier picture');
+  assert.match(read('src/services/lineplay/chapters.ts'), /missionNames: \['Fix the signal', 'Spot the clue', 'Rebuild the star chart'\]/,
+    'not two near-twin signal names');
+  const m = layout();
+  assert.equal(m.stripDotsFit(80), true, 'SE reading Details: the mini bubbles ride inside the strip');
+  assert.equal(m.stripDotsFit(70), false);
+  assert.deepEqual(plain(m.chapterMissionIds({ id: 'c', finale: { idSuffix: 'star-chart' } })), ['c-trivia', 'c-field-note', 'c-star-chart']);
+  const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
+  assert.match(chapter, /playStripFill: \{ flexGrow: 1, maxHeight: 112 \}/, 'the strip fills its window: no empty pale band');
+  assert.match(chapter, /stepBadgeCurrent: \{ backgroundColor: BRAND\.gold \}/, 'the current clue is gold everywhere');
+  const dots = read('src/screens/LinePlay/components/ClueDots.tsx');
+  assert.match(dots, /dotNow: \{ backgroundColor: BRAND\.gold \}/);
+  assert.match(dots, /\{complete \? <GameIcon name="check"/);
+});
+
+test('the paused ARCADE button rests in white with a navy outline (never faded gold, which reads grey-green)', () => {
+  const card = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.doesNotMatch(card, /playButtonDisabled/);
+  assert.match(card, /\[styles\.compactArcade, paused && styles\.buttonResting, pressed && styles\.playButtonPressed\]/);
+  assert.match(card, /buttonResting: \{ backgroundColor: '#e8f6ff', borderWidth: 2, borderColor: '#0b4f8a'/);
+});
+
+test('an iPhone SE board shows tiles of at least 44 pt (not only touch areas)', () => {
+  const m = layout();
+  const side = m.boardBesideSide({ width: 337, height: 151 });
+  assert.ok(m.besideTileSide(side) >= 44, `SE tiles ${m.besideTileSide(side)} pt`);
+  assert.ok(m.besideTileSide(m.boardBesideSide({ width: 366, height: 227 })) >= 50, '17 Pro keeps big tiles');
 });

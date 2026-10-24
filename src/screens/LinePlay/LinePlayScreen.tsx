@@ -20,7 +20,7 @@
 import { playSfx } from '../../gamekit/SFX';
 import { haptic } from '../../gamekit/Haptics';
 import { openAppSettings } from '../../services/external';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, FlatList, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,6 +34,7 @@ import * as Haptics from 'expo-haptics';
 import { StackActions, useNavigation, useRoute } from '@react-navigation/native';
 import { colors, spacing, borderRadius } from '../../design-system';
 import { GameDialog, gameAlert } from '../../ui';
+import type { GameIconName } from '../../ui/iconNames';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { useLinePlaySession } from '../../services/lineplay/useLinePlaySession';
@@ -147,9 +148,27 @@ function pageName(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string }
     case 'puzzle': return 'Codebreaker';
     // The board mission keeps the chapter's own name, so PLAY NOW, the rail and the board header match.
     case 'trivia': return chapter?.navigationPanel && item.id === `${chapter.id}-trivia` ? chapter.missionNames[0] : 'Shark Trivia';
-    case 'lore': return 'Field Note';
+    // The chapter's clue 2 keeps its mission name too (the bubble, the rail and the page say one name).
+    case 'lore': return chapter && item.id === `${chapter.id}-field-note` ? chapter.missionNames[1] : 'Field Note';
     case 'prediction': return 'Wait Guess';
     case 'minigame': return item.title ?? GAME_NAMES[item.gameId] ?? 'Arcade round';
+  }
+}
+
+/** A small picture for each page, beside the rail's "Next: ..." so a kid who can't read yet still follows. */
+function pageIcon(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string } | undefined): GameIconName | undefined {
+  switch (item?.kind) {
+    case 'chapter_intro': return 'map';
+    case 'crew_grid': return 'sparkle';
+    case 'circuit': return 'wrench';
+    case 'crew_relay': return 'shark';
+    case 'signal': return 'map';
+    case 'puzzle': return 'lock';
+    case 'trivia': return 'info';
+    case 'lore': return 'search';
+    case 'prediction': return 'timer';
+    case 'minigame': return 'star';
+    default: return undefined;
   }
 }
 
@@ -162,7 +181,7 @@ import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLive
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { linePlayTipReady } from '../../services/help/tipGate';
-import { chapterPlayNow, crewRowInBand, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIM_HOLD_MAX_MS, PAGES_DIP_MS, PAGES_DIP_OPACITY,
+import { chapterMissionIds, chapterPlayNow, crewRowInBand, PAGE_FRAME_V, railBackAction, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIM_HOLD_MAX_MS, PAGES_DIP_MS, PAGES_DIP_OPACITY,
   PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
@@ -806,9 +825,28 @@ export default function LinePlayScreen() {
   const onDetailsChange = useCallback((open: boolean) => {
     dipPages(() => setDetailsOpen(open));
   }, [dipPages]);
+  // The window's new height in the same frame Details opens or closes (the New Architecture measures
+  // synchronously in a layout effect, before anything is drawn). The pages lay out for it at once,
+  // so no frame shows the old board or chapter page cut by the new window.
+  const pagesInnerRef = useRef<View | null>(null);
+  useLayoutEffect(() => {
+    pagesInnerRef.current?.measure((_x, _y, _width, height) => {
+      const next = Math.round(height);
+      if (next > 0) setPagesHeight(previous => previous === next ? previous : next);
+    });
+  }, [detailsOpen]);
 
   /** "Back to games" and "Tap to play": Details closes so the pages get their room back. */
   const closeDetails = useCallback(() => onDetailsChange(false), [onDetailsChange]);
+  /**
+   * The rail's one button while the window has stepped aside. Paused by hand, it is Play: one tap
+   * resumes (the same countdown as the card's play button) and brings the games back.
+   */
+  const railBack = railBackAction(snapshot.state, snapshot.pauseReason);
+  const onRailBack = useCallback(() => {
+    closeDetails();
+    if (railBack === 'play' && !resuming) setResuming(true);
+  }, [closeDetails, railBack, resuming]);
   useEffect(() => () => {
     if (revealTimer.current) clearTimeout(revealTimer.current);
   }, []);
@@ -965,6 +1003,8 @@ export default function LinePlayScreen() {
   // An iPhone SE board page's height once the crew row has lent its room: known before the row leaves,
   // so the board slides in already at its final size (the window grows around it, nothing pops).
   const boardTargetHeight = lentBoardViewport(fit.short, detailsOpen, pagesHeight, pagesMeasuredLent, crewRowHeight);
+  // Every page's scroll height from the window's own height (known the frame it changes).
+  const pageViewHeight = pagesHeight > PAGE_FRAME_V ? pagesHeight - PAGE_FRAME_V : undefined;
   // One gold button per screen: the chapter page has PLAY NOW and the board page is the game itself
   // (its "Tap to play" and "Next signal" are gold), so there the rail's Next is a quiet white button.
   const railQuiet = visibleItem?.kind === 'chapter_intro' || boardPage;
@@ -1226,7 +1266,7 @@ export default function LinePlayScreen() {
                 setPagesMeasuredLent(lentAtCommit.current);
                 revealPages();
               }}>
-            <View style={[styles.pagesInner, !pagesShown && styles.pagesHidden]}
+            <View ref={pagesInnerRef} style={[styles.pagesInner, !pagesShown && styles.pagesHidden]}
               accessibilityElementsHidden={!pagesShown} importantForAccessibility={pagesShown ? 'auto' : 'no-hide-descendants'}>
             <FlatList
               ref={activityListRef}
@@ -1269,6 +1309,7 @@ export default function LinePlayScreen() {
                     />
                   ) : item.kind === 'chapter_intro' && snapshot.chapter ? (
                     <ChapterCard chapter={snapshot.chapter} completedIds={completedActivityIds} compact={fit.short}
+                      windowHeight={pageViewHeight}
                       crewRelay={snapshot.crewRelay} paused={snapshot.state !== 'active'}
                       chapterClue={chapterClue}
                       signalAvailable={sharedPages.length > 0}
@@ -1300,7 +1341,7 @@ export default function LinePlayScreen() {
                       onNavigationReplay={() => session.startNextNavigationRound(item.id)}
                       onNavigationMakeRoom={detailsOpen ? closeDetails : undefined}
                       navigationTitle={snapshot.chapter?.navigationPanel ? snapshot.chapter.missionNames[0] : undefined}
-                      navigationTargetHeight={boardTargetHeight}
+                      navigationTargetHeight={boardTargetHeight ?? pageViewHeight}
                       onNavigationNext={() => item.kind === 'circuit'
                         ? jumpToPage(index + 1 < activityPages.length ? index + 1 : 0)
                         : jumpToPage(activityPages.findIndex(page => page.id === `${snapshot.chapter?.id}-field-note`))}
@@ -1332,9 +1373,12 @@ export default function LinePlayScreen() {
             <Reanimated.View layout={reducedFx ? undefined : LinearTransition.duration(180)}
               onLayout={event => setRailBlock(Math.round(event.nativeEvent.layout.height))}>
             <ActivityPageRail index={visiblePageIndex} count={activityPages.length}
-              mode={railMode} onShowPages={closeDetails} quiet={railQuiet}
+              mode={railMode} onShowPages={onRailBack} backAction={railBack} quiet={railQuiet}
               firstLabel={activityPages[0]?.kind === 'chapter_intro' ? 'Chapter' : 'First round'}
-              progressText={storyStep ? `CLUE ${storyStep}/3`
+              // On a clue, the count is the same 3 mini bubbles as the chapter page (one count form).
+              progressDots={storyStep && snapshot.chapter ? { current: storyStep - 1,
+                done: chapterMissionIds(snapshot.chapter).map(id => completedActivityIds.has(id)) } : null}
+              progressText={storyStep ? undefined
                 // CHAPTER, the same word as the rail's Chapter button (one word for one idea).
                 : activityPages[visiblePageIndex]?.kind === 'chapter_intro' ? 'CHAPTER' : 'FREE PLAY'}
               progressAccessibilityLabel={storyStep ? `Story clue ${storyStep} of 3`
@@ -1342,6 +1386,7 @@ export default function LinePlayScreen() {
                   ? 'Ride chapter. Choose a clue to begin.'
                   : 'Free play. Play any game you like.'}
               nextLabel={pageName(activityPages[nextPageIndex], snapshot.chapter)}
+              nextIcon={pageIcon(activityPages[nextPageIndex])}
               onFirst={() => jumpToPage(0)} onNext={() => jumpToPage(nextPageIndex)}
               moreAvailable={snapshot.playlist.length < MAX_SESSION_ACTIVITY_SLOTS}
               morePaused={snapshot.state !== 'active'}
