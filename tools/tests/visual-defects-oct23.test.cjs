@@ -421,7 +421,7 @@ test('Ride Detail on an SE: a small community count is one row and the empty lin
   assert.match(src, /\{community && ratingCount\(community\.rating_distribution\) >= COMPACT_COMMUNITY_LOGS && \(/);
   assert.match(src, /<GameIcon name="shark" size=\{emptySharkSize\} \/>/, 'the empty page has the shark, not a blank sheet');
   // The empty page fills the space under the button: an arrow up at LOG THIS RIDE, the line, the shark.
-  assert.match(src, /emptyWrap: \{ flexGrow: 1, alignItems: 'center', justifyContent: 'center'/);
+  assert.match(src, /emptyWrap: \{ flexGrow: 1, alignItems: 'center', justifyContent: 'flex-start'/);
   assert.match(src, /contentContainerStyle=\{\[s\.listContent, history\.length === 0 && s\.listContentEmpty\]\}/);
   assert.match(src, /<LogPointer \/>/);
   assert.match(src, /pointer: \{ transform: \[\{ rotate: '-90deg' \}\] \}/);
@@ -721,7 +721,7 @@ test('buttons and the map on small and busy screens: GameButton art waits for it
   const detail = read('src/screens/RideTracker/RideDetailScreen.tsx');
   assert.match(detail, /const emptySharkSize = emptySharkFor\(screenHeight, emptyRoom, emptyWordsHeight\);/);
   assert.match(detail, /if \(screenHeight < 700 \|\| room <= 0 \|\| words <= 0\) return 0;/, 'no shark on the SE, and none before the room is measured');
-  assert.match(detail, /return left >= 72 \? Math\.min\(170, left\) : 0;/, 'the shark grows into the room left (no dead band on a Pro Max), capped');
+  assert.match(detail, /return left >= 72 \? Math\.min\(230, left\) : 0;/, 'the shark grows into the room left (no dead band on a Pro Max), capped');
   assert.match(detail, /\{emptySharkSize > 0 && !\(community/);
   assert.match(detail, /<GameIcon name="shark" size=\{emptySharkSize\} \/>/);
   const map = read('src/components/Map.tsx');

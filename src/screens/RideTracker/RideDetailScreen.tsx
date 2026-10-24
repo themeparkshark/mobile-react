@@ -208,11 +208,11 @@ function LogPointer() {
 /** Space above the waiting shark, and kept free under it inside the empty page. */
 const EMPTY_ART_GAP = 14;
 const EMPTY_BOTTOM = 12;
-/** The waiting shark's size: the room left under the words (never bigger than 170, never under 72). */
+/** The waiting shark's size: the room left under the words (never bigger than 230, never under 72). */
 export function emptySharkFor(screenHeight: number, room: number, words: number): number {
   if (screenHeight < 700 || room <= 0 || words <= 0) return 0;
-  const left = Math.floor(room - words - EMPTY_ART_GAP - EMPTY_BOTTOM - 8);
-  return left >= 72 ? Math.min(170, left) : 0;
+  const left = Math.floor(room - words - EMPTY_ART_GAP - EMPTY_BOTTOM - 4 - 8);
+  return left >= 72 ? Math.min(230, left) : 0;
 }
 
 // ─── Main ───
@@ -482,7 +482,7 @@ const s = StyleSheet.create({
 
   // ─── Content ───
   listContent: { paddingBottom: FOOTER_CLEARANCE },
-  // No rides yet: the empty page fills the space under the button and centers in it (no blank third).
+  // No rides yet: the empty page fills the space under the button (arrow on top, the shark grows into the rest).
   listContentEmpty: { flexGrow: 1 },
 
   // ─── Stats Row ───
@@ -555,7 +555,8 @@ const s = StyleSheet.create({
   entryShareIcon: { color: B.skyDark, fontSize: 11, fontFamily: 'Knockout' },
 
   // ─── Empty ───
-  emptyWrap: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 0, paddingBottom: EMPTY_BOTTOM },
+  // The arrow sits right under LOG THIS RIDE (it points at it); the shark fills the room below.
+  emptyWrap: { flexGrow: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4, paddingBottom: EMPTY_BOTTOM },
   emptyWords: { alignItems: 'center' },
   emptyArt: { marginTop: EMPTY_ART_GAP, opacity: 0.95 },
   emptyTitle: { color: '#05346e', fontSize: 18, fontFamily: 'Shark', marginTop: 8 },
