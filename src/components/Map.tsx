@@ -24,6 +24,8 @@ import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { Animated, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
+import { AMBIENT } from '../ui/motion';
+import { EASE } from '../ui/motionEasing';
 import { BRAND, GameIcon, SHADOW } from '../ui';
 import { AuthContext } from '../context/AuthProvider';
 import { HeadingContext, HeadingControlContext, LocationContext } from '../context/LocationProvider';
@@ -215,13 +217,21 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const travelCourse = useSharedValue(0);
   const wakeTrail = useDerivedValue(() => wakeTurn(travelCourse.value, mapBearing.value));
   useEffect(() => {
-    if (reducedMotion || !screenFocused || ambientFrozen) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
+    // Breathing and swaying only while someone can see it: off screen, in the background, under a catch
+    // and with Reduce Motion the shark rests (logged in development, for the battery proof).
+    if (reducedMotion || !screenFocused || ambientFrozen || !appActive) {
+      if (__DEV__) console.log(`[shark-life] rest focused=${screenFocused} active=${appActive} frozen=${ambientFrozen} reduced=${reducedMotion}`);
+      idle.value = 0; sway.value = 0; glow.value = 0.5; return;
+    }
+    if (__DEV__) console.log('[shark-life] breathe');
     const ease = REasing.inOut(REasing.sin);
-    idle.value = withRepeat(withSequence(withTiming(1, { duration: 1000, easing: ease }), withTiming(0, { duration: 1000, easing: ease })), -1, false);
+    // One breath every AMBIENT.breathMs (2.4 s): the body swells a little taller and thinner, then settles.
+    const half = AMBIENT.breathMs / 2;
+    idle.value = withRepeat(withSequence(withTiming(1, { duration: half, easing: ease }), withTiming(0, { duration: half, easing: ease })), -1, false);
     sway.value = withRepeat(withSequence(withTiming(1, { duration: 1200, easing: ease }), withTiming(-1, { duration: 1200, easing: ease })), -1, false);
     glow.value = withRepeat(withSequence(withTiming(1, { duration: 1400, easing: ease }), withTiming(0, { duration: 1400, easing: ease })), -1, false);
     return () => { cancelAnimation(idle); cancelAnimation(sway); cancelAnimation(glow); };
-  }, [reducedMotion, screenFocused, ambientFrozen, idle, sway, glow]);
+  }, [reducedMotion, screenFocused, ambientFrozen, appActive, idle, sway, glow]);
   // Weak GPS: graded by the fix's accuracy (40 m small and faint, 150 m wide and stronger).
   const weak = useSharedValue(0);
   const weakAccuracy = useSharedValue(WEAK_RING_MIN_M);
@@ -238,7 +248,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const facing = useSharedValue(1);
   const stride = useSharedValue(0);
   useAnimatedReaction(() => facingFor(travelCourse.value, mapBearing.value, facing.value > 0 ? 1 : -1), (next, prevSign) => {
-    if (prevSign !== null && next !== prevSign) facing.value = withTiming(next, { duration: 260 });
+    // The turn: the art flips through its edge with a little stretch (180 ms), like a cartoon about-face.
+    if (prevSign !== null && next !== prevSign) facing.value = withTiming(next, { duration: 180, easing: EASE.inOut });
   });
   // The stride runs only while walking, at the walking pace (a stroll waddles slower).
   const strideMs = useRef(0);
@@ -626,7 +637,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const lastReact = useRef(0);
   const tapCount = useRef(0);
   const react = useCallback((m: SharkMood) => {
-    if (reducedMotion) return;
+    if (reducedMotion) {
+      // Reduce Motion: no hop or twirl, a quick 160 ms glow pose instead (the tap still answers).
+      if (m === 'tap') glow.value = withSequence(withTiming(1, { duration: 80 }), withTiming(0.5, { duration: 80 }));
+      return;
+    }
     // A lettered outfit never mirrors, so its look-around is a wiggle.
     const mood: SharkMood = m === 'look' && mirrorOk.value === 0 ? 'wiggle' : m;
     const now = Date.now();
@@ -657,9 +672,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       wiggle.value = withSequence(withTiming(-9, { duration: 90 }), withTiming(9, { duration: 120 }), withTiming(-6, { duration: 110 }), withSpring(0, { damping: 8, stiffness: 220 }));
     }
     if (mood === 'look') {
-      // A look over the shoulder and back: a turn of the head the way a curious pet does.
-      const back = facing.value;
-      facing.value = withSequence(withTiming(-back, { duration: 240 }), withDelay(650, withTiming(back, { duration: 240 })));
+      // A curious look: the head tilts 8 degrees, holds, and comes back (a pet hearing its name).
+      const side = Math.random() < 0.5 ? -1 : 1;
+      wiggle.value = withSequence(withTiming(8 * side, { duration: 300, easing: EASE.inOut }), withDelay(600, withTiming(0, { duration: 300, easing: EASE.inOut })));
     }
     if (mood === 'tap' || mood === 'cheer') sparkleBurst.value = withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: mood === 'tap' ? 650 : 520, easing: REasing.out(REasing.quad) }), withTiming(0, { duration: 0 }));
     // Worn Secret pieces show off their moment on a tap (and now and then on their own).
@@ -1161,10 +1176,16 @@ function useSharkStyles(live: SharedValue<number>, m: SharkMotion) {
     const lean = m.mirrorOk.value > 0 ? 7 * mid * (f >= 0 ? -1 : 1) : 0;
     // Reactions: a hop up with a squash on the way down and on landing, a wiggle, a twirl.
     const sq = m.squash.value;
+    // Breath: 1.00 to 1.03 tall and 1.00 to 0.985 wide. Walking: a foot-contact squash each step
+    // (1.03 wide, 0.97 tall for the moment the stride touches down). Turning: a 1.08 stretch mid-flip.
+    const breath = m.idle.value * (1 - m.wake.value);
+    const contact = m.wake.value * Math.pow(1 - m.stride.value, 6);
     return {
-      transform: [{ translateY: -8 * m.idle.value - 5 * step - 30 * m.hop.value + 4 * sq },
+      transform: [{ translateY: -5 * m.idle.value - 3 * step - 30 * m.hop.value + 4 * sq },
         { rotate: `${3 * m.sway.value + 4 * (step - 0.5) * m.wake.value + lean + m.wiggle.value + Math.max(-7, Math.min(7, 0.06 * m.turnLean.value))}deg` },
-        { scale: 1 + 0.04 * m.idle.value + 0.06 * m.hop.value }, { scaleX: sx * m.twirl.value * (1 + 0.12 * sq) }, { scaleY: (1 - 0.06 * mid) * (1 - 0.14 * sq) }],
+        { scale: 1 + 0.06 * m.hop.value },
+        { scaleX: sx * m.twirl.value * (1 + 0.12 * sq) * (1 - 0.015 * breath) * (1 + 0.03 * contact) },
+        { scaleY: (1 + 0.08 * mid) * (1 - 0.14 * sq) * (1 + 0.03 * breath) * (1 - 0.03 * contact) }],
     };
   });
   const shadow = useAnimatedStyle(() => {

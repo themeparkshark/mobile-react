@@ -10,6 +10,9 @@ import type redeemPrepItem from '../../api/endpoints/me/prep-items/redeem';
 import Topbar from '../../components/Topbar';
 import Wrapper from '../../components/Wrapper';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
+import Currency from '../../components/Topbar/Currency';
+import { CurrencyContext } from '../../context/CurrencyProvider';
+import { AuthContext } from '../../context/AuthProvider';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import HomeFindMarker from './HomeFindMarker';
@@ -184,6 +187,9 @@ function HomeCatchPreview() {
   const found = useRef(0);
   const lastGrade = useRef<PhotoGrade>('good');
   const catchOpen = useCatchOpen();
+  const { currencies } = useContext(CurrencyContext);
+  const { player } = useContext(AuthContext);
+  const [coins, setCoins] = useState(() => player?.coins ?? 350);
   const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - catchShown.value * 1.6) }));
 
   const items: PrepItemType[] = useMemo(() => FIXTURES.map((fixture, index) => ({
@@ -361,6 +367,8 @@ function HomeCatchPreview() {
   return (
     <Wrapper><View style={styles.root}>
     <Topbar>
+      {/* The coin chip as on the park map, so a catch's coins can be seen landing and rolling the count. */}
+      <TopbarColumn><Currency image={currencies[0]?.icon_url} count={coins} name="Coins" flyTarget="coins" /></TopbarColumn>
       <TopbarColumn><Text style={styles.travel}>HOME HUNT</Text></TopbarColumn>
     </Topbar>
     <View ref={container} collapsable={false} style={styles.content}
@@ -377,7 +385,8 @@ function HomeCatchPreview() {
           void measure();
           if (!mapStill) setTimeout(() => void snapshotter.current?.().then(uri => uri && setMapStill(uri)), 600);
         }}>
-        {items.filter(item => !caught.has(item.pivot_id!)).map((item, index) => (
+        {/* Each fixture keeps its own index after a catch (a caught find no longer shifts the others' range). */}
+        {items.map((item, index) => caught.has(item.pivot_id!) ? null : (
           <HomeFindMarker key={item.pivot_id} item={item} distance={Math.round(Math.hypot(FIXTURES[index].north, FIXTURES[index].east) / 5) * 5} inRange={FIXTURES[index].inRange}
             animated={!STILL && index < 4} hidden={request?.pivotId === item.pivot_id} onTap={tapFind} onExpire={noop}
             fingerSide={sides[item.pivot_id!] ?? 'right'} showFinger={index === nearestInRange}
@@ -409,7 +418,7 @@ function HomeCatchPreview() {
         autoEscape={autoplay && SCRIPT[step]?.again ? 'again' : 'map'}
         onRideAgain={(item) => { if (autoplay) rodeAgain.current = true; void startCatch(item); }}
         warm={autoplay && EXP !== 'nowarm' ? SCRIPT.slice(step, step + 2).map((entry, i) => ({ item: scriptItem(step + i), forceRide: EXP === 'noforce' ? null : { kind: entry.kind, sky: entry.sky } })) : undefined}
-        onCollected={() => undefined} onUnavailable={() => undefined}
+        onCollected={data => setCoins(c => c + (data.rewards.coins ?? 0))} onUnavailable={() => undefined}
         onFailed={(line) => setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error' })}
         onDone={done => {
           const pivot = request?.pivotId;

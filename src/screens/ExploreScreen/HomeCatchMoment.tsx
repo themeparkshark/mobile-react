@@ -13,7 +13,7 @@ const RIDE_STAMP: Partial<Record<RideKind, number>> = {
   teacups: require('../../../assets/images/ride-photo/teacup-back.webp'),
 };
 import Animated, {
-  Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import type { PrepItemType } from '../../models/prep-item-type';
@@ -24,6 +24,13 @@ import { CurrencyContext } from '../../context/CurrencyProvider';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
+import { GoldBurst } from '../../ui/GoldBurst';
+import { DURATION, EASE, SPRING, flashPeak, momentParticles } from '../../ui/motionEasing';
+import { GOLD_FX, PARTICLES } from '../../ui/motion';
+import { arcPoint, catchHaptics, catchPlan, type CatchPlan } from '../../components/map/alive/mapWow';
+import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
+import { usePowerBudget } from '../../power';
+import { holdHud } from '../../components/Topbar/hudPulse';
 import { findDisplayName } from './homeFindCopy';
 import { setHomeHuntRankLine } from './homeHuntRankStore';
 import { findImageSource, FIND_ART_SIZE } from './PrepItem';
@@ -103,6 +110,19 @@ const STICKER = 64;
 const STICKER_LEFT = 8;
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+/** The common catch's flight home and arc (mapWow catchPlan). */
+const CATCH_FLY_MS = 600;
+const CATCH_ARC_PT = 80;
+const CATCH_RISE_PT = 24;
+/** The rising haptic ladder under the wobbles (tap, tick, light, medium); the burst's own haptics fire on the burst. */
+function catchHapticPlan(plan: CatchPlan, t0: number, alive: () => boolean): void {
+  for (const step of catchHaptics(plan)) {
+    if (step.at >= plan.hitStopAt) continue;
+    const fire = () => { if (alive()) catchHaptic(step.intent, step.at === 0 ? 3 : 2); };
+    const delay = step.at - (Date.now() - t0);
+    if (delay <= 0) fire(); else setTimeout(fire, delay);
+  }
+}
 /** The catch reveal's fade onto the map before the print flies (CatchReveal fades in 220 ms). */
 const REVEAL_FADE_MS = 230;
 /** After the print's 460 ms flight lands, the map and player updates commit. */
@@ -128,6 +148,43 @@ function Spark({ index, count, pop, color }: { index: number; count: number; pop
     };
   });
   return <Animated.View pointerEvents="none" style={[styles.spark, { backgroundColor: index % 3 ? color : BRAND.white }, style]} />;
+}
+
+const MAP_SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
+const GLOW_TEX = require('../../../assets/images/map/fx/glow.png');
+const SPARK_TINTS = [GOLD_FX.rays, BRAND.white, GOLD_FX.glow, '#4fb3ff'];
+
+/** A burst sparkle: flung out radially, then gravity pulls it down as it fades (UI thread, one shared clock). */
+function BurstSparkle({ index, count, t }: { index: number; count: number; t: SharedValue<number> }) {
+  const angle = (index / count) * Math.PI * 2 + (index % 2 ? 0.22 : -0.1);
+  const speed = index % 3 === 0 ? 150 : index % 3 === 1 ? 118 : 92;
+  const size = index % 3 === 0 ? 20 : 15;
+  const style = useAnimatedStyle(() => {
+    const p = t.value;
+    if (p <= 0 || p >= 1) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }] };
+    const s = p * 0.9;
+    return {
+      opacity: p < 0.12 ? p / 0.12 : 1 - (p - 0.12) / 0.88,
+      transform: [{ translateX: Math.sin(angle) * speed * s }, { translateY: -Math.cos(angle) * speed * s + 140 * s * s },
+        { scale: (p < 0.15 ? p / 0.15 : 1) * (1.1 - 0.5 * p) }, { rotate: `${p * 160}deg` }],
+    };
+  });
+  return <Animated.Image source={MAP_SPARKLE} resizeMode="contain"
+    style={[styles.burstSparkle, { width: size, height: size, left: -size / 2, top: -size / 2, tintColor: SPARK_TINTS[index % SPARK_TINTS.length] }, style]} />;
+}
+
+/** A gather sparkle: drawn in toward the find while it charges (the light collecting before the burst). */
+function GatherSparkle({ index, count, charge }: { index: number; count: number; charge: SharedValue<number> }) {
+  const angle = (index / count) * Math.PI * 2 + 0.4;
+  const style = useAnimatedStyle(() => {
+    const c = charge.value;
+    if (c <= 0.02 || c >= 0.99) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }] };
+    // Each sparkle runs its own lap of the gather, slightly offset, so they arrive one after another.
+    const local = Math.min(1, Math.max(0, c * 1.25 - (index % 4) * 0.08));
+    const r = 74 * (1 - local);
+    return { opacity: Math.sin(local * Math.PI), transform: [{ translateX: Math.sin(angle) * r }, { translateY: -Math.cos(angle) * r }, { scale: 0.5 + 0.5 * local }] };
+  });
+  return <Animated.Image source={MAP_SPARKLE} resizeMode="contain" style={[styles.gatherSparkle, { tintColor: GOLD_FX.raysSoft }, style]} />;
 }
 
 export interface HomeCatchHandle {
@@ -184,6 +241,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const systemReduced = useReducedGameMotion();
   // Development recordings can show one catch with Reduce Motion on.
   const reducedMotion = (__DEV__ && forceReducedMotion) || systemReduced;
+  const power = usePowerBudget();
   const { refreshPlayer, player } = useContext(AuthContext);
   // Uncommon's tighter lamp is earned per player, never per device.
   useEffect(() => { setRidePhotoPlayer(player?.id ?? null); }, [player?.id]);
@@ -227,6 +285,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const aliveRef = useRef(0);
 
   const pop = useSharedValue(0);
+  // The four-beat catch: press squash, gather (rise, halo, inward sparkles), held flash, burst pop and gold.
+  const squash = useSharedValue(0);
+  const charge = useSharedValue(0);
+  const flash = useSharedValue(0);
+  const popScale = useSharedValue(1);
+  const burstFx = useSharedValue(0);
+  const gold = useSharedValue(0);
+  const goldBloom = useSharedValue(0);
   const lift = useSharedValue(0);
   const wobble = useSharedValue(0);
   const fly = useSharedValue(0);
@@ -295,6 +361,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     setBonusXp(typeof data.photo?.bonus_xp === 'number' && data.photo.bonus_xp > 0 ? data.photo.bonus_xp : null);
     // Via the print, the map and player updates wait out the close and the flight (their commits never land in
     // the hand-off's frames); they still run if the catch is closed early.
+    // The counters wait for their coins: the new balance rolls in when the first coin lands (hudPulse).
+    if (!data.replayed && data.rewards.coins > 0) holdHud('coins', 2600);
+    if (!data.replayed && data.rewards.tickets > 0) holdHud('tickets', 2600);
     const settle = () => {
       if (data.hunt_week?.rank_line) setHomeHuntRankLine(data.hunt_week.rank_line);
       latest.current.onCollected(data);
@@ -307,8 +376,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (!viaPrint) badgeIn.value = pad;
     if (!viaPrint) {
       if (!data.replayed) catchSound('whoosh', { volume: 0.6 });
-      fly.value = withTiming(1, { duration: motion ? CATCH_TIMING.fly : 1, easing: Easing.inOut(Easing.cubic) });
-      await wait(motion ? CATCH_TIMING.fly : 60);
+      fly.value = withTiming(1, { duration: motion ? CATCH_FLY_MS : 1, easing: EASE.inOut });
+      await wait(motion ? CATCH_FLY_MS : 60);
       if (aliveRef.current !== token) return;
       itemGone.value = withTiming(1, { duration: 80 });
       await arrive(next, data, token);
@@ -409,7 +478,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const alive = () => aliveRef.current === token;
     const { item, pivotId } = request;
     const motion = !latest.current.reducedMotion;
-    [pop, lift, wobble, fly, badgeIn, reveal, progress, gradeIn].forEach(value => { cancelAnimation(value); value.value = 0; });
+    [pop, lift, wobble, fly, badgeIn, reveal, progress, gradeIn, squash, charge, flash, burstFx, gold, goldBloom].forEach(value => { cancelAnimation(value); value.value = 0; });
+    cancelAnimation(popScale); popScale.value = 1;
     badgeKick.value = 1;
     setSummary(null); setPhoto(null); setCascade(0); setBonusXp(null);
     setShowing(request);
@@ -431,31 +501,77 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     setCatchOpen(true);
 
     void (async () => {
-      catchHaptic('hitMedium', 2);
+      // The catch, four beats (src/ui/motion.ts, mapWow catchPlan): a squish under the finger, then
+      // wobble wobble wobble while it rises and the gold gathers, one held frame with a soft flash,
+      // a gold burst, and the find flies home. The server answers during the wobbles.
+      const plan = catchPlan({ reduced: !motion });
+      const t0 = Date.now();
+      catchMark('tap');
+      catchHapticPlan(plan, t0, alive);
       catchSound('pop');
-      pop.value = withTiming(1, { duration: motion ? CATCH_TIMING.pop * 2.6 : 1, easing: Easing.out(Easing.quad) });
-      lift.value = motion ? withSpring(1, { damping: 9, stiffness: 260 }) : 1;
-      wobble.value = motion ? withDelay(CATCH_TIMING.pop, withSequence(
-        withTiming(1, { duration: 90 }), withTiming(-1, { duration: 120 }), withTiming(0.6, { duration: 110 }),
-        withTiming(0, { duration: 90 }))) : 0;
-      const [result] = await Promise.all([
-        catchFind(latest.current.redeem, item.id, pivotId, latest.current.getFix(), { catch_style: 'chomp' }),
-        wait(CATCH_TIMING.pop + CATCH_TIMING.minHover),
-      ]);
+      const run = catchFind(latest.current.redeem, item.id, pivotId, latest.current.getFix(), { catch_style: 'chomp' });
+      if (motion) {
+        squash.value = withSequence(withTiming(1, { duration: plan.squashMs, easing: EASE.out }), withSpring(0, SPRING.stamp));
+        charge.value = withDelay(plan.squashMs, withTiming(1, { duration: plan.anticipationMs, easing: EASE.charge }));
+        lift.value = withDelay(plan.squashMs, withTiming(1, { duration: plan.anticipationMs, easing: EASE.out }));
+        const [w1, w2, w3] = plan.wobbles;
+        wobble.value = withSequence(
+          withDelay(w1.at, withTiming(w1.deg, { duration: 75 })), withTiming(0, { duration: 75 }),
+          withDelay(w2.at - w1.at - 150, withTiming(-w2.deg, { duration: 75 })), withTiming(0, { duration: 75 }),
+          withDelay(w3.at - w2.at - 150, withTiming(w3.deg, { duration: 75 })), withTiming(0, { duration: 75 }));
+      }
+      // The answer usually lands inside the wobbles; a slow one keeps a small held wobble going (never a freeze).
+      let result: CatchResult | null = null;
+      void run.then(r => { result = r; });
+      await wait(Math.max(0, plan.hitStopAt - (Date.now() - t0)));
       if (!alive()) return;
-      if (result.kind !== 'caught') {
-        catchHaptic('failBuzz', 3);
-        lift.value = withTiming(0, { duration: 220 });
+      if (!result && motion) wobble.value = withRepeat(withSequence(withTiming(5, { duration: 90 }), withTiming(-5, { duration: 90 })), -1, true);
+      const settled = result ?? await run;
+      if (!alive()) return;
+      cancelAnimation(wobble);
+      if (settled.kind !== 'caught') {
+        // A funny miss, never a sad one: the find boings out of the grab and hops back to its spot.
+        catchHaptic('hitSoft', 3);
+        catchMark('miss');
+        wobble.value = motion ? withSequence(withTiming(-14, { duration: 90 }), withSpring(0, SPRING.pop)) : 0;
+        charge.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
+        lift.value = withSpring(0, SPRING.pop);
         await wait(300);
         if (!alive()) return;
         itemGone.value = withTiming(1, { duration: 160 });
-        if (result.kind === 'gone') latest.current.onUnavailable();
-        latest.current.onFailed(result.line, result.kind === 'failed');
+        if (settled.kind === 'gone') latest.current.onUnavailable();
+        latest.current.onFailed(settled.line, settled.kind === 'failed');
         await wait(170);
         if (alive()) finish(false);
         return;
       }
-      await land(item, result.data, token, false);
+      wobble.value = withTiming(0, { duration: 40 });
+      // Hit-stop: one held beat with the soft flash (none with Dim Flashing Lights or Reduce Motion).
+      catchMark('hitstop');
+      const peak = flashPeak(isDimFlashingLightsEnabled(), !motion);
+      flash.value = withSequence(withTiming(peak, { duration: 40 }), withTiming(0, { duration: DURATION.flash - 40, easing: EASE.in }));
+      await wait(motion ? DURATION.hitStop : 0);
+      if (!alive()) return;
+      // Burst: the find pops past full size, the gold blooms, a ring and sparkles fly.
+      catchMark('burst');
+      catchHaptic('comboHeavy', 3);
+      setTimeout(() => { if (alive()) catchHaptic('success', 3); }, 180);
+      catchSound('chime', { volume: 0.8 });
+      if (motion) {
+        popScale.value = withSequence(withTiming(plan.burstScale, { duration: 90, easing: EASE.out }), withSpring(1.18, SPRING.pop));
+        pop.value = 0;
+        pop.value = withTiming(1, { duration: DURATION.bloom, easing: EASE.out });
+        burstFx.value = 0;
+        burstFx.value = withTiming(1, { duration: DURATION.sparkle, easing: Easing.linear });
+        gold.value = withSequence(withTiming(1, { duration: 120, easing: EASE.out }), withDelay(260, withTiming(0, { duration: 420, easing: EASE.in })));
+        goldBloom.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: DURATION.bloom - 140 }));
+        charge.value = withTiming(0, { duration: 260 });
+        // The find holds its pop for a beat, then flies home (land() plays the arc).
+        await wait(Math.max(0, plan.flyAt - plan.burstAt));
+        if (!alive()) return;
+      }
+      catchMark('fly');
+      await land(item, settled.data, token, false);
     })();
   // A new request (or a retry of the same find) starts a fresh moment.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -689,21 +805,35 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const from = fromPoint(showing);
   const itemStyle = useAnimatedStyle(() => {
     const f = fly.value;
-    const fx0 = flyFromX.value, fy0 = flyFromY.value;
-    const arc = Math.min(180, Math.max(90, Math.abs(target.y - fy0) * 0.45));
-    const x = fx0 + (target.x - fx0) * f;
-    const y = fy0 + (target.y - fy0) * f - arc * 4 * f * (1 - f) - 18 * lift.value * (1 - f);
+    // The flight home: a quadratic arc with an 80 pt apex, an edge-spin and a shrink to half size.
+    const start = { x: flyFromX.value, y: flyFromY.value - CATCH_RISE_PT * lift.value };
+    const p = arcPoint(start, target, CATCH_ARC_PT, f);
+    const press = 1 - 0.14 * squash.value;
     return {
       opacity: 1 - itemGone.value,
-      transform: [{ translateX: x - FIND_ART_SIZE / 2 }, { translateY: y - FIND_ART_SIZE / 2 },
-        { rotate: `${wobble.value * 14 + f * 200}deg` }, { scale: (1 + 0.45 * lift.value) * (1 - 0.55 * f) }],
+      transform: [{ translateX: p.x - FIND_ART_SIZE / 2 }, { translateY: p.y - FIND_ART_SIZE / 2 },
+        { rotate: `${wobble.value + f * 360}deg` },
+        { scale: press * (1 + 0.12 * charge.value) * popScale.value * (1 - 0.6 * f) },
+        // A coin-like edge turn while it flies (never thinner than a third, so it reads as the same find).
+        { scaleX: f > 0 && f < 1 ? Math.max(0.35, Math.abs(Math.cos(f * Math.PI * 1.5))) : 1 }],
     };
   });
+  // The gather: a gold halo builds under the find while it rises; the soft flash on the held frame.
+  const haloStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, 0.55 + 0.45 * charge.value) * Math.max(charge.value, gold.value) * (1 - fly.value),
+    transform: [{ translateX: from.x - 70 }, { translateY: from.y - CATCH_RISE_PT * lift.value - 70 }, { scale: 0.7 + 0.5 * charge.value + 0.3 * goldBloom.value }],
+  }));
+  const flashStyle = useAnimatedStyle(() => ({
+    opacity: flash.value,
+    transform: [{ translateX: from.x - 110 }, { translateY: from.y - CATCH_RISE_PT - 110 }],
+  }));
+  const goldStyle = useAnimatedStyle(() => ({ transform: [{ translateX: from.x - 130 }, { translateY: from.y - CATCH_RISE_PT - 130 }] }));
+  const gatherOrigin = useAnimatedStyle(() => ({ transform: [{ translateX: from.x }, { translateY: from.y - CATCH_RISE_PT * lift.value }] }));
   const ringStyle = useAnimatedStyle(() => ({
     opacity: pop.value <= 0 || pop.value >= 1 ? 0 : 0.9 * (1 - pop.value),
-    transform: [{ translateX: from.x - 40 }, { translateY: from.y - 40 }, { scale: 0.4 + 1.8 * pop.value }],
+    transform: [{ translateX: from.x - 40 }, { translateY: from.y - CATCH_RISE_PT - 40 }, { scale: 0.5 + 1.9 * pop.value }],
   }));
-  const sparkOrigin = useAnimatedStyle(() => ({ transform: [{ translateX: from.x }, { translateY: from.y }] }));
+  const sparkOrigin = useAnimatedStyle(() => ({ transform: [{ translateX: from.x }, { translateY: from.y - CATCH_RISE_PT }] }));
   const badgeStyle = useAnimatedStyle(() => ({
     opacity: badgeIn.value,
     transform: [{ translateY: (1 - badgeIn.value) * 40 }, { scale: 0.92 + 0.08 * badgeIn.value }],
@@ -733,7 +863,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const item = showing?.item ?? null;
   const art = item ? findImageSource(item) : null;
   const color = item ? rarityColor(item.rarity) : BRAND.gold;
-  const sparks = item && !reducedMotion && catchStyleFor(item.rarity) === 'chomp' ? burstSparkCount(item.rarity) : 0;
+  const motionFx = !!item && !reducedMotion && catchStyleFor(item.rarity) === 'chomp';
+  const sparks = motionFx ? momentParticles(PARTICLES.sparkles, power, reducedMotion) : 0;
+  const gatherCount = motionFx ? momentParticles(8, power, reducedMotion) : 0;
   const name = item ? findDisplayName(item.name, item.set_name) : '';
   const stageFor = rideItem ?? primed?.item ?? readyItem;
   const sceneArt = useRideArt();
@@ -860,10 +992,19 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       </View>}
 
       {item && <>
-        <Animated.View style={[styles.ring, { borderColor: color }, ringStyle]} pointerEvents="none" />
-        <Animated.View style={[styles.sparkOrigin, sparkOrigin]} pointerEvents="none">
-          {Array.from({ length: sparks }, (_, index) => <Spark key={index} index={index} count={sparks} pop={pop} color={color} />)}
+        {/* Gather: a gold halo builds under the find (ground-glow art, tinted gold). */}
+        <Animated.Image source={GLOW_TEX} resizeMode="stretch" style={[styles.halo, { tintColor: GOLD_FX.glow }, haloStyle]} />
+        {motionFx && <Animated.View style={[styles.goldAt, goldStyle]} pointerEvents="none">
+          <GoldBurst size={260} amount={gold} bloom={goldBloom} spin={false} reduced={reducedMotion} />
+        </Animated.View>}
+        <Animated.View style={[styles.ring, { borderColor: GOLD_FX.rays }, ringStyle]} pointerEvents="none" />
+        <Animated.View style={[styles.sparkOrigin, gatherOrigin]} pointerEvents="none">
+          {Array.from({ length: gatherCount }, (_, index) => <GatherSparkle key={index} index={index} count={gatherCount} charge={charge} />)}
         </Animated.View>
+        <Animated.View style={[styles.sparkOrigin, sparkOrigin]} pointerEvents="none">
+          {Array.from({ length: sparks }, (_, index) => <BurstSparkle key={index} index={index} count={sparks} t={burstFx} />)}
+        </Animated.View>
+        <Animated.Image source={GLOW_TEX} resizeMode="stretch" style={[styles.flash, { tintColor: GOLD_FX.core }, flashStyle]} />
         <Animated.View style={[styles.item, itemStyle]} pointerEvents="none">
           {art ? <Image source={art} style={styles.itemArt} contentFit="contain" transition={0} />
             : <View style={[styles.itemFallback, { backgroundColor: color }]}><GameIcon name="gift" size={30} /></View>}
@@ -929,6 +1070,11 @@ const styles = StyleSheet.create({
   tint: { backgroundColor: 'rgba(11,47,92,0.35)' },
   warmCanvas: { position: 'absolute', left: 0, top: 0, width: 2, height: 2, opacity: 0.01 },
   ring: { position: 'absolute', left: 0, top: 0, width: 80, height: 80, borderRadius: 40, borderWidth: 5 },
+  halo: { position: 'absolute', left: 0, top: 0, width: 140, height: 140 },
+  flash: { position: 'absolute', left: 0, top: 0, width: 220, height: 220 },
+  goldAt: { position: 'absolute', left: 0, top: 0, width: 260, height: 260 },
+  burstSparkle: { position: 'absolute' },
+  gatherSparkle: { position: 'absolute', left: -7, top: -7, width: 14, height: 14 },
   sparkOrigin: { position: 'absolute', left: 0, top: 0, width: 0, height: 0 },
   spark: { position: 'absolute', left: -4, top: -4, width: 8, height: 8, borderRadius: 2 },
   item: { position: 'absolute', left: 0, top: 0, width: FIND_ART_SIZE, height: FIND_ART_SIZE },

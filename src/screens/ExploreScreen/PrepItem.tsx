@@ -1,7 +1,12 @@
 import { Image, ImageSource } from 'expo-image';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import { useFocusEffect } from '@react-navigation/native';
+import { BAND_FADE_MS, BAND_LOOK, SPAWN, bookSpawn, findBand, hopAt, newSpawnClock, ringAt } from '../../components/map/alive/mapWow';
+import { EASE, SPRING } from '../../ui/motionEasing';
+import { GOLD_FX } from '../../ui/motion';
+import { queueHaptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { PrepItemType } from '../../models/prep-item-type';
 import prepItemImage from '../../helpers/prepItemImages';
@@ -123,6 +128,23 @@ const GLOW = require('../../../assets/images/ride-photo/glow.webp');
 const SPARKLE = require('../../../assets/images/ride-photo/sparkle.webp');
 const FOOTSTEPS = require('../../../assets/images/ride-photo/footsteps.webp');
 const FINGER = require('../../../assets/images/ride-photo/tap-hand.webp');
+const MAP_SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
+/** One spawn wave for every find on the map: finds that arrive together pop 90 ms apart (at most 5 pop). */
+const spawnClock = newSpawnClock();
+/** Spawn sparkles fling up and out from the ground (angle in degrees from straight up). */
+const SPAWN_SPARKS = [-50, -18, 18, 50] as const;
+
+/** A spawn sparkle: flung up 18 pt and out, fading over 600 ms (driven by the find's spawn clock). */
+function SpawnSparkle({ angle, t }: { angle: number; t: ReturnType<typeof useSharedValue<number>> }) {
+  const rad = (angle * Math.PI) / 180;
+  const style = useAnimatedStyle(() => {
+    const p = t.value;
+    if (p <= 0 || p >= 1) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }] };
+    const out = 1 - (1 - p) * (1 - p);
+    return { opacity: 1 - p, transform: [{ translateX: Math.sin(rad) * 26 * out }, { translateY: -Math.cos(rad) * 18 * out - 6 * out }, { scale: 0.6 + 0.5 * (1 - p) }] };
+  });
+  return <Animated.Image source={MAP_SPARKLE} resizeMode="contain" style={[styles.spawnSpark, { tintColor: GOLD_FX.raysSoft }, style]} />;
+}
 
 /** "2 min" in the final five minutes, null before; calls onExpire once it is gone. Only ticks while the map is live. */
 function useLeavingSoon(activeTo: string | null | undefined, onExpire: () => void, live: boolean): string | null {
@@ -184,6 +206,9 @@ function RarityMark({ tier }: { tier: number }) {
  */
 function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, distance = null }: Props) {
   const { clock, active } = useMapAlive();
+  const reduced = useReducedGameMotion();
+  const reducedRef = useRef(reduced);
+  reducedRef.current = reduced;
   const leavingSoon = useLeavingSoon(prepItem.active_to, onExpire, active);
   // One small tag: "70 m", "70 m · 2 min" or just "2 min" in range. Always mounted (a marker never changes layout).
   const far = !inRange && distance != null ? formatFindDistance(distance) : '';
@@ -198,21 +223,98 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   // Each find bobs on its own beat so a cluster never moves in lockstep.
   const phase = ((prepItem.pivot_id ?? prepItem.id) % 7) / 7;
 
+  // ── Getting warmer (mapWow BAND_LOOK): far finds sit small and still, mid ones breathe a faint gold halo,
+  // near ones glow brighter and bob, and in range the find hops every 2.4 s while two gold rings call.
+  // The band changes cross-fade over 240 ms (never a snap).
+  const band = findBand(distance, inRange);
+  const bandLook = BAND_LOOK[band];
+  const level = useSharedValue(bandLook.level);
+  const firstBand = useRef(true);
+  useEffect(() => {
+    level.value = withTiming(bandLook.level, { duration: BAND_FADE_MS, easing: EASE.out });
+    // Entering range: one small buzz, once (never repeating while the kid stands there).
+    if (!firstBand.current && band === 'inRange') queueHaptic('tapLight', 1);
+    firstBand.current = false;
+  }, [band]); // eslint-disable-line react-hooks/exhaustive-deps
   const bob = useAnimatedStyle(() => {
-    if (!moving) return { transform: [{ translateY: 0 }] };
-    if (look.hop) {
-      const hop = Math.abs(Math.sin(clock.value * Math.PI * 1.15 + phase * Math.PI));
-      const land = 1 - hop;
-      return { transform: [{ translateY: -11 * hop }, { scaleX: 1 + 0.07 * land ** 6 }, { scaleY: 1 - 0.07 * land ** 6 }] };
+    const lv = level.value;
+    if (!moving) return { transform: [{ translateY: 0 }, { scaleX: 1 }, { scaleY: 1 }] };
+    const ms = clock.value * 1000;
+    if (lv > 2.5) {
+      const h = hopAt(ms, 2400, phase);
+      const k = Math.min(1, (lv - 2.5) * 2);
+      return { transform: [{ translateY: -10 * h.lift * k }, { scaleX: 1 + 0.08 * h.squash * k }, { scaleY: 1 - 0.08 * h.squash * k }] };
     }
-    const drift = Math.sin((clock.value * 0.55 + phase) * Math.PI * 2);
-    return { transform: [{ translateY: -3 * drift }, { rotate: `${2.5 * drift}deg` }] };
-  }, [look.hop, phase, moving]);
+    const near = Math.max(0, Math.min(1, lv - 1));
+    const drift = Math.sin((ms / 1600 + phase) * Math.PI * 2);
+    const sway = Math.sin((clock.value * 0.55 + phase) * Math.PI * 2);
+    return { transform: [{ translateY: -4 * drift * near - 2 * sway * (1 - near) }, { scaleX: 1 }, { scaleY: 1 }] };
+  }, [phase, moving]);
+  // Far to in range: scale 0.6, 0.7, 0.85, 1 and opacity 0.75, 0.9, 1, 1 (interpolated on the UI thread).
+  const bandStyle = useAnimatedStyle(() => {
+    const lv = level.value;
+    const scale = lv < 1 ? 0.6 + 0.1 * lv : lv < 2 ? 0.7 + 0.15 * (lv - 1) : 0.85 + 0.15 * (lv - 2);
+    const opacity = lv < 1 ? 0.75 + 0.15 * lv : Math.min(1, 0.9 + 0.1 * (lv - 1));
+    return { opacity, transform: [{ scale }] };
+  });
+  // The gold halo breathes slower far away and faster up close.
+  const halo = useAnimatedStyle(() => {
+    const lv = level.value;
+    const strength = lv < 1 ? 0.25 * lv : lv < 2 ? 0.25 + 0.3 * (lv - 1) : 0.55 + 0.2 * Math.min(1, lv - 2);
+    const breathS = lv < 1.5 ? 1.8 : 0.9;
+    const wave = moving ? 0.5 + 0.5 * Math.sin((clock.value / breathS + phase) * Math.PI * 2) : 0.7;
+    return { opacity: strength * (0.55 + 0.45 * wave), transform: [{ scaleY: 0.5 }, { scale: 0.85 + 0.2 * wave }] };
+  }, [moving, phase]);
+  const ring0 = useAnimatedStyle(() => {
+    const on = Math.max(0, Math.min(1, (level.value - 2.5) * 2));
+    if (!moving || on <= 0) return { opacity: 0, transform: [{ scaleY: 0.5 }, { scale: 1 }] };
+    const r = ringAt(clock.value * 1000 + phase * 1100, 0);
+    return { opacity: r.opacity * on, transform: [{ scaleY: 0.5 }, { scale: r.scale }] };
+  }, [moving, phase]);
+  const ring1 = useAnimatedStyle(() => {
+    const on = Math.max(0, Math.min(1, (level.value - 2.5) * 2));
+    if (!moving || on <= 0) return { opacity: 0, transform: [{ scaleY: 0.5 }, { scale: 1 }] };
+    const r = ringAt(clock.value * 1000 + phase * 1100, 1);
+    return { opacity: r.opacity * on, transform: [{ scaleY: 0.5 }, { scale: r.scale }] };
+  }, [moving, phase]);
   const pulse = useAnimatedStyle(() => {
     if (!moving) return { opacity: inRange ? 0.75 : 0.45, transform: [{ scale: 1 }] };
     const wave = 0.5 + 0.5 * Math.sin((clock.value * (inRange ? 1.1 : 0.5) + phase) * Math.PI * 2);
     return { opacity: (inRange ? 0.6 : 0.35) + 0.35 * wave, transform: [{ scale: 0.9 + 0.2 * wave }] };
   }, [inRange, phase, moving]);
+
+  // ── The spawn pop (Pokemon GO / Pikmin Bloom): a water ring at the ground, the find pops up past full
+  // size and settles with one overshoot, and four sparkles fling up. Finds arriving together stagger
+  // 90 ms (at most 5 pop, the rest fade in). Coming back to the map plays it again. Reduce Motion: a fade.
+  const spawn = useSharedValue(1);
+  const spawnRise = useSharedValue(0);
+  const spawnRing = useSharedValue(0);
+  const spawnSpark = useSharedValue(0);
+  const spawnFade = useSharedValue(1);
+  const playSpawn = useCallback(() => {
+    if (hidden) return;
+    const { delay, pop } = bookSpawn(spawnClock, Date.now());
+    if (reducedRef.current || !pop) {
+      spawnFade.value = 0;
+      spawnFade.value = withDelay(delay, withTiming(1, { duration: SPAWN.fadeMs, easing: EASE.out }));
+      return;
+    }
+    spawnFade.value = 1;
+    spawn.value = 0;
+    spawn.value = withDelay(delay, withSequence(withTiming(SPAWN.overshoot, { duration: SPAWN.popMs, easing: EASE.out }), withSpring(1, SPRING.pop)));
+    spawnRise.value = 8;
+    spawnRise.value = withDelay(delay, withSequence(withTiming(-6, { duration: SPAWN.popMs, easing: EASE.out }), withSpring(0, SPRING.pop)));
+    spawnRing.value = 0;
+    spawnRing.value = withDelay(delay + 120, withTiming(1, { duration: 560, easing: EASE.out }));
+    spawnSpark.value = 0;
+    spawnSpark.value = withDelay(delay + 200, withTiming(1, { duration: 600, easing: EASE.out }));
+  }, [hidden]); // eslint-disable-line react-hooks/exhaustive-deps
+  useFocusEffect(useCallback(() => { playSpawn(); }, [playSpawn]));
+  const spawnStyle = useAnimatedStyle(() => ({ opacity: spawnFade.value, transform: [{ translateY: spawnRise.value }, { scale: spawn.value }] }));
+  const spawnRingStyle = useAnimatedStyle(() => {
+    const p = spawnRing.value;
+    return { opacity: p <= 0 || p >= 1 ? 0 : 0.6 * (1 - p), transform: [{ scaleY: 0.45 }, { scale: 0.4 + 1.2 * p }] };
+  });
   const below = fingerSide === 'below-left' || fingerSide === 'below-right';
   const leftSide = fingerSide === 'left' || fingerSide === 'below-left';
   // Below the find the finger points up at it (rotated), so it stays off the player's shark.
@@ -224,7 +326,6 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
     return { transform: [{ translateY: (below ? 5 : -5) * tap }, { rotate: tilt }] };
   }, [phase, moving, tilt, below]);
   // One pulse per new key: the art swells 1.35x and a ring blooms (Reduce Motion: the ring only, no swell).
-  const reduced = useReducedGameMotion();
   const pulseV = useSharedValue(0);
   useEffect(() => {
     if (pulseKey == null) return;
@@ -237,8 +338,14 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
 
   return (
     <View style={[styles.box, hidden && styles.hidden]} pointerEvents="box-none">
-      <View style={[styles.scaled, { opacity: look.opacity, transform: [{ scale: look.scale }] }]}>
+      <Animated.View style={[styles.scaled, bandStyle]}>
+        <Animated.View style={[styles.spawnRing, spawnRingStyle]} pointerEvents="none" />
+        <Animated.View style={[styles.scaled, styles.overlay, spawnStyle]}>
         <View style={styles.groundShadow} />
+        {/* Getting warmer: a gold halo that breathes faster up close, and two gold rings calling in range. */}
+        <Animated.Image source={GLOW} style={[styles.groundGlow, { tintColor: GOLD_FX.glow }, halo]} />
+        <Animated.View style={[styles.callRing, ring0]} pointerEvents="none" />
+        <Animated.View style={[styles.callRing, ring1]} pointerEvents="none" />
         {/* Commons glow warm gold in range (never the grey that read as a loading bar). */}
         {inRange && <Animated.Image source={GLOW} style={[styles.groundGlow, { tintColor: tier === 1 ? BRAND.gold : color }, pulse]} />}
         {look.rays && <Animated.View style={[styles.rays, rays]} pointerEvents="none">
@@ -260,7 +367,11 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         </Animated.View>
         {SPARKLES.slice(0, look.sparkles).map(spark => <Sparkle key={spark.phase} {...spark}
           color={look.rays ? BRAND.goldLight : color} animated={moving} />)}
-      </View>
+        </Animated.View>
+        <View style={styles.spawnOrigin} pointerEvents="none">
+          {SPAWN_SPARKS.map(angle => <SpawnSparkle key={angle} angle={angle} t={spawnSpark} />)}
+        </View>
+      </Animated.View>
       {/* Ride Photo finds wear a camera badge that also carries the rarity mark (pips, gem or crown). */}
       {ridePhoto && <View style={[styles.cameraBadge, chromeless && styles.chromeOff, { backgroundColor: color }, !inRange && styles.cameraBadgeFar]}>
         <GameIcon name="camera" size={inRange ? 16 : 12} />
@@ -292,6 +403,12 @@ const styles = StyleSheet.create({
   // re-measures marker views on any child mount).
   chromeOff: { opacity: 0 },
   scaled: { width: B, height: B, alignItems: 'center', justifyContent: 'center' },
+  overlay: { position: 'absolute', left: 0, top: 0 },
+  // The in-range call: thin gold rings on the ground (an ellipse, scaled flat), expanding and fading.
+  callRing: { position: 'absolute', top: B / 2 + A / 2 - 36, width: 60, height: 60, borderRadius: 30, borderWidth: 3, borderColor: GOLD_FX.rays },
+  spawnRing: { position: 'absolute', top: B / 2 + A / 2 - 40, left: B / 2 - 32, width: 64, height: 64, borderRadius: 32, borderWidth: 3, borderColor: BRAND.white },
+  spawnOrigin: { position: 'absolute', left: B / 2, top: B / 2 + A / 2 - 10, width: 0, height: 0 },
+  spawnSpark: { position: 'absolute', left: -7, top: -7, width: 14, height: 14 },
   // Round, soft ground marks (an ellipse, never a pill that reads as a loading bar).
   groundShadow: { position: 'absolute', top: B / 2 + A / 2 - 24, width: 36, height: 36, borderRadius: 18,
     backgroundColor: 'rgba(5,52,110,0.18)', transform: [{ scaleY: 0.28 }] },
