@@ -9,6 +9,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withRepeat,
   withSequence,
   withSpring,
   withTiming,
@@ -16,10 +17,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { playSfx } from '../gamekit/SFX';
 import { LinearGradient } from 'expo-linear-gradient';
-import { GoldBurst, RadialFlash, ShineSweep, SparkleBurst } from '../ui/GoldBurst';
-import { DURATION, EASE, PARTICLES, SPRING, flashPeak, momentBeats, momentParticles } from '../ui/motionEasing';
+import { GatherRings, GoldBurst, RadialFlash, ShineSweep, SparkleBurst } from '../ui/GoldBurst';
+import { DURATION, EASE, GOLD_FX, PARTICLES, SPRING, flashPeak, momentBeats, momentParticles, windupWobble } from '../ui/motionEasing';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 import StrokedText from './StrokedText';
+import GameIcon from '../ui/GameIcon';
 import { usePowerBudget } from '../power';
 
 /**
@@ -46,6 +48,7 @@ export default function CoinCatchReveal({
   ready = true,
   handoff = null,
   onBurst,
+  onExit,
   onDone,
 }: {
   /** The summary hero slot the coin lands in (shared element). */
@@ -57,6 +60,8 @@ export default function CoinCatchReveal({
   readonly ready?: boolean;
   /** Fires at the burst. */
   readonly onBurst?: () => void;
+  /** Fires when the coin starts leaving for the summary, so the summary fades in under it (no empty frame between). */
+  readonly onExit?: () => void;
   readonly onDone: () => void;
 }) {
   const { width, height } = useWindowDimensions();
@@ -64,8 +69,8 @@ export default function CoinCatchReveal({
   const finished = useRef(false);
   const [burst, setBurst] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
-  const callbacks = useRef({ onDone, onBurst });
-  callbacks.current = { onDone, onBurst };
+  const callbacks = useRef({ onDone, onBurst, onExit });
+  callbacks.current = { onDone, onBurst, onExit };
   const handoffRef = useRef<CatchHandoff | null>(handoff);
   handoffRef.current = handoff;
   const origin = useRef({ x: 0, y: 0 });
@@ -88,11 +93,15 @@ export default function CoinCatchReveal({
   const bloom = useSharedValue(0);
   const sparkle = useSharedValue(0);
   const shine = useSharedValue(0);
+  // The wind-up (0 to 1, linear): the wobble grows bigger and faster from it, and gold rings tighten onto the coin.
+  const windup = useSharedValue(0);
+  const rings = useSharedValue(0);
+  const tapCue = useSharedValue(0);
   const budget = usePowerBudget();
   const [reducedFx, setReducedFx] = useState(false);
 
   const stopVisuals = () => {
-    [flip, scale, wobble, lift, flash, rays, title, backdrop, coinOpacity, confetti, shiftX, exitScale, bloom, sparkle, shine]
+    [flip, scale, wobble, lift, flash, rays, title, backdrop, coinOpacity, confetti, shiftX, exitScale, bloom, sparkle, shine, windup, rings, tapCue]
       .forEach(value => cancelAnimation(value));
   };
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
@@ -147,6 +156,8 @@ export default function CoinCatchReveal({
 
       // 5. Exit: into the summary's hero slot when it is known, else up and away.
       const exit = () => {
+        callbacks.current.onExit?.();
+        cancelAnimation(tapCue); tapCue.value = withTiming(0, { duration: 120 });
         const target = handoffRef.current;
         const coinSize = Math.min(width * 0.52, 240);
         if (target) {
@@ -189,30 +200,23 @@ export default function CoinCatchReveal({
       const T = { wobble: 420, burst: beats.burstAt, lift: beats.settledAt + 150, done: beats.settledAt + 510 };
       phase.current = 'anticipation';
 
-      // 1. Anticipation: the coin spins in from edge-on, then wobbles three
-      //    times with each wobble's haptic stronger than the last.
+      // 1. Anticipation: the coin spins in from edge-on, then winds up: it swells, its wobble grows bigger
+      //    and faster, the gold behind it brightens and gold rings close in on it faster and faster, with
+      //    each haptic stronger than the last. Every frame looks closer to popping (no "is it stuck" beat).
       playSfx('whoosh', 0.7);
+      const windFor = WINDUP_MS;
       flip.value = withTiming(1, { duration: 480, easing: EASE.out });
       scale.value = withSequence(
-        withTiming(0.8, { duration: 480, easing: EASE.out }),
-        // The wind-up: the coin keeps swelling while it wobbles and the gold gathers (never a still hold),
-        // then draws in a little (the squash before the pop) and punches past full size.
-        withTiming(0.9, { duration: Math.max(0, T.burst - 480 - 240), easing: EASE.charge }),
+        withTiming(0.75, { duration: 480, easing: EASE.out }),
+        // The wind-up: a strong swell while it wobbles and the gold gathers,
+        // then it draws in a little (the squash before the pop) and punches past full size.
+        withTiming(0.95, { duration: windFor, easing: EASE.charge }),
         withTiming(0.72, { duration: 240, easing: EASE.in }),
         withTiming(1.28, { duration: 110, easing: Easing.out(Easing.quad) }),
         withSpring(1, SPRING.pop),
       );
-
-      const wobbleOnce = (deg: number) => withSequence(
-        withTiming(deg, { duration: 60 }),
-        withTiming(-deg, { duration: 100 }),
-        withTiming(0, { duration: 60 }),
-      );
-      wobble.value = withDelay(T.wobble, withSequence(
-        wobbleOnce(12),
-        withDelay(40, wobbleOnce(17)),
-        withDelay(40, wobbleOnce(23)),
-      ));
+      windup.value = withDelay(480, withTiming(1, { duration: windFor, easing: Easing.linear }));
+      rings.value = withDelay(480, withSequence(withTiming(3, { duration: windFor, easing: Easing.in(Easing.quad) }), withTiming(0, { duration: 0 })));
       [
         [T.wobble, Haptics.ImpactFeedbackStyle.Light],
         [T.wobble + 260, Haptics.ImpactFeedbackStyle.Medium],
@@ -227,10 +231,10 @@ export default function CoinCatchReveal({
         // Hit-stop: one held white frame (capped well under the photosensitivity limit).
         flash.value = withDelay(Math.max(0, burstAt - DURATION.hitStop), withSequence(
           withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 40 }), withTiming(0, { duration: DURATION.flash })));
-        // The gold gathers behind the coin while it wobbles (a faint glow swelling), then blooms.
+        // The gold gathers behind the coin while it wobbles (a glow that keeps brightening), then blooms.
         const gatherFrom = T.wobble;
         rays.value = burstAt > gatherFrom + 200
-          ? withSequence(withDelay(gatherFrom, withTiming(0.4, { duration: burstAt - gatherFrom, easing: EASE.charge })),
+          ? withSequence(withDelay(gatherFrom, withTiming(0.55, { duration: burstAt - gatherFrom, easing: EASE.charge })),
             withTiming(1, { duration: 200, easing: EASE.out }))
           : withDelay(burstAt, withTiming(1, { duration: 200, easing: EASE.out }));
         bloom.value = withDelay(burstAt, withSequence(withTiming(1, { duration: 140, easing: EASE.out }),
@@ -249,6 +253,9 @@ export default function CoinCatchReveal({
           success();
           playSfx('coin', 0.9);
         });
+        // A big gold "tap" pill pulses in once the coin has landed (a kid who cannot read sees where to tap).
+        tapCue.value = withDelay(burstAt + 700, withSequence(withSpring(1, SPRING.stamp),
+          withRepeat(withSequence(withTiming(1.07, { duration: 480, easing: EASE.inOut }), withTiming(1, { duration: 480, easing: EASE.inOut })), 4, false)));
         at(exitAt, () => { phase.current = 'exit'; exit(); });
         at(exitAt + (T.done - T.lift) + 400, finish); // safety net if the animation is interrupted
       };
@@ -258,8 +265,8 @@ export default function CoinCatchReveal({
       fastForwardRef.current = () => {
         // A first tap during the anticipation goes straight to the payoff.
         clearTimers();
-        [flip, scale, wobble, flash, rays, title, confetti, bloom, sparkle, shine].forEach(value => cancelAnimation(value));
-        flip.value = 1; wobble.value = 0;
+        [flip, scale, wobble, flash, rays, title, confetti, bloom, sparkle, shine, windup, rings].forEach(value => cancelAnimation(value));
+        flip.value = 1; wobble.value = 0; windup.value = 0; rings.value = 0;
         scale.value = withSequence(withTiming(1.28, { duration: 90, easing: Easing.out(Easing.quad) }),
           withSpring(1, SPRING.pop));
         scheduleBurst(80);
@@ -288,7 +295,7 @@ export default function CoinCatchReveal({
       { translateY: lift.value },
       { perspective: 800 },
       { rotateY: `${(1 - flip.value) * 540}deg` },
-      { rotateZ: `${wobble.value}deg` },
+      { rotateZ: `${wobble.value + windupWobble(windup.value, WINDUP_MS, 3, 15)}deg` },
       { scale: scale.value * exitScale.value },
     ],
     opacity: coinOpacity.value,
@@ -303,6 +310,7 @@ export default function CoinCatchReveal({
     transform: [{ scale: 1.5 - title.value * 0.5 }, { rotate: `${(1 - title.value) * -4}deg` }],
   }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdrop.value }));
+  const tapStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, tapCue.value * 1.5), transform: [{ scale: 0.6 + 0.4 * tapCue.value }] }));
 
   const coinSize = Math.min(width * 0.52, 240);
 
@@ -351,6 +359,7 @@ export default function CoinCatchReveal({
             : <Image source={GENERIC_COIN} style={{ width: coinSize, height: coinSize }} contentFit="contain" />}
           {!reducedFx && <ShineSweep progress={shine} size={coinSize * 0.86} />}
         </Animated.View>
+        {!reducedFx && <GatherRings progress={rings} size={coinSize * 0.98} count={2} color={GOLD_FX.rays} width={6} />}
         {!reducedFx && <SparkleBurst progress={sparkle} radius={coinSize * 0.95}
           count={momentParticles(PARTICLES.sparkles, budget, reducedFx)} />}
         {/* The hit-stop flash pops on the coin, not over the whole screen. */}
@@ -364,7 +373,13 @@ export default function CoinCatchReveal({
       </Animated.View>
 
       <Confetti progress={confetti} originY={height * 0.42} width={width} />
-      {burst && <Text style={styles.skip}>Tap to continue</Text>}
+      {/* Where to tap, for a kid who cannot read yet: a big gold pill with the check, gently pulsing. */}
+      {burst && (
+        <Animated.View pointerEvents="none" style={[styles.tapPill, reducedFx ? null : tapStyle]}>
+          <GameIcon name="check" size={30} />
+          <Text style={styles.tapText}>TAP!</Text>
+        </Animated.View>
+      )}
     </Pressable>
   );
 }
@@ -379,13 +394,17 @@ const styles = StyleSheet.create({
   ride: {
     fontFamily: 'Shark', fontSize: 26, color: '#ffffff', textAlign: 'center', marginTop: 4,
   },
-  skip: {
-    position: 'absolute', bottom: 60, alignSelf: 'center', fontFamily: 'Shark',
-    fontSize: 17, color: '#ffffff', textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1,
+  tapPill: {
+    position: 'absolute', bottom: 56, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8,
+    minHeight: 56, paddingHorizontal: 26, borderRadius: 28, backgroundColor: '#ffcf3b',
+    borderWidth: 3, borderColor: '#ffffff', borderBottomWidth: 6, borderBottomColor: '#d99a00',
   },
+  tapText: { fontFamily: 'Shark', fontSize: 26, color: '#05346e', paddingTop: 3 },
 });
 
 const GENERIC_COIN = require('../../assets/icons/game/coin.png');
+/** The wind-up between the coin's flip-in (480 ms) and the squash before the pop (240 ms). */
+const WINDUP_MS = Math.max(1, momentBeats('coinReveal', { reduced: false }).burstAt - 480 - 240);
 const BACKDROP = ['#0d5bb0', '#08408c', '#042a62'] as const;
 /** How much of the deep-water gradient covers the blurred world art: the water tint shows through, its props (a window grid, the chest, a laurel) no longer read as shapes. */
 const WORLD_VEIL = 0.9;
