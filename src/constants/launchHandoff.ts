@@ -36,6 +36,12 @@ export const COVER_SMOOTH_FRAMES = 3;
  * drawn (a phone too busy, or no network): a kid is never stuck on a loading screen.
  */
 export const COVER_HARD_MAX_MS = 4000;
+/**
+ * The launch cover's own cap: while the screen is still picking the home map or the park map (and
+ * no map has drawn), the launch splash stays up, its bar creeping, up to this long from its first
+ * frame, instead of lifting onto a bare map and showing a second loading screen after it.
+ */
+export const COVER_LAUNCH_MAX_MS = 9000;
 
 /**
  * When the cover lifts, from what is true now. It never lifts onto a map with no tiles:
@@ -49,9 +55,19 @@ export const COVER_HARD_MAX_MS = 4000;
 export function coverLiftAt(state: {
   readonly now: number; readonly startedAt: number; readonly drawn: boolean; readonly held: boolean;
   readonly artPending?: boolean;
+  /** The app's first cover (the launch scene). */
+  readonly launch?: boolean;
+  /** When the newest map mounted under this cover. */
+  readonly mountedAt?: number;
 }): number {
-  const hard = state.startedAt + COVER_HARD_MAX_MS;
-  if (!state.drawn || state.artPending) return hard;
+  const launch = state.launch === true;
+  const launchCap = state.startedAt + COVER_LAUNCH_MAX_MS;
+  // The launch cover gives each map that mounts under it (the park map replacing the home map) its
+  // own 4 s to draw, inside the launch cap, so a slow park pick never lifts the splash onto a bare
+  // map and then shows a second, sky loading screen.
+  const from = Math.max(state.startedAt, state.mountedAt ?? state.startedAt);
+  const hard = launch ? Math.min(launchCap, from + COVER_HARD_MAX_MS) : state.startedAt + COVER_HARD_MAX_MS;
+  if (!state.drawn || state.artPending) return launch && state.held ? launchCap : hard;
   if (!state.held) return state.now;
   return Math.min(hard, Math.max(state.now, state.startedAt + COVER_MAX_MS));
 }

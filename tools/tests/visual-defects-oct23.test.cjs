@@ -1055,3 +1055,18 @@ test('launch cover: once its fade has begun no newer plan snaps it back to full 
   assert.doesNotMatch(cover, /opacity\.value = 1;/, 'nothing raises the cover back up mid-lift');
   assert.match(cover, /runOnJS\(coverLifted\)\(liftToken\.value\)/, 'the fade reports the newest plan, so the cover leaves when it ends');
 });
+
+test('launch cover covers a slow park pick: no lift onto a bare map, then a second sky loading screen', () => {
+  const k = loadTs('src/constants/launchHandoff.ts');
+  // Not drawn, still picking home or park: the launch splash stays (bar creeping) up to its own cap.
+  assert.equal(k.coverLiftAt({ now: 1500, startedAt: 1000, drawn: false, held: true, launch: true }), 1000 + k.COVER_LAUNCH_MAX_MS);
+  // A park map that mounts under it gets its own 4 s, inside the cap.
+  assert.equal(k.coverLiftAt({ now: 3500, startedAt: 1000, drawn: false, held: false, launch: true, mountedAt: 3000 }), 3000 + k.COVER_HARD_MAX_MS);
+  assert.equal(k.coverLiftAt({ now: 9500, startedAt: 1000, drawn: false, held: false, launch: true, mountedAt: 9000 }), 1000 + k.COVER_LAUNCH_MAX_MS);
+  assert.ok(k.COVER_LAUNCH_MAX_MS <= 9000, 'a kid is never stuck on the splash');
+  // A later cover (walking into a park) keeps the plain 4 s cap.
+  assert.equal(k.coverLiftAt({ now: 1500, startedAt: 1000, drawn: false, held: true }), 1000 + k.COVER_HARD_MAX_MS);
+  const store = read('src/components/map/mapCover.ts');
+  assert.match(store, /launch: plan\.launch, mountedAt \}\);/);
+  assert.equal((store.match(/mountedAt = now;/g) || []).length, 2);
+});

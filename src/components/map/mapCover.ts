@@ -44,6 +44,8 @@ export interface CoverPlan {
 
 let plan: CoverPlan = { up: false, version: 0, token: 0, deadline: 0, share: null, ceiling: 0, lifting: false, launch: false, shown: false };
 let startedAt = 0;
+/** When the newest map mounted under the cover (the launch cover gives each one its own time to draw). */
+let mountedAt = 0;
 let mapMounted = false;
 let firstCover = true;
 let drawn = false;
@@ -82,7 +84,7 @@ export function coverLifted(tok: number) {
 /** Re-plan the lift from what is true now: lift at once, or wait (bar creeping to the next step). */
 function replan(now: number, notify = true) {
   if (!plan.up || plan.lifting) return;
-  const at = coverLiftAt({ now, startedAt, drawn, held, artPending: artWaiting.size > 0 });
+  const at = coverLiftAt({ now, startedAt, drawn, held, artPending: artWaiting.size > 0, launch: plan.launch, mountedAt });
   if (at <= now) { publish({ ...plan, lifting: true, share: null }, notify); return; }
   const ceiling = Math.max(plan.ceiling, coverCeiling(mapMounted, held));
   if (at === plan.deadline && ceiling === plan.ceiling) return;
@@ -97,12 +99,13 @@ function replan(now: number, notify = true) {
 export function armMapCover(now = Date.now()) {
   if (plan.up && !plan.lifting) return;
   startedAt = now;
+  mountedAt = now;
   mapMounted = false;
   drawn = false;
   const launch = firstCover;
   firstCover = false;
   publish({
-    up: true, token: plan.token + 1, deadline: coverLiftAt({ now, startedAt, drawn, held, artPending: artWaiting.size > 0 }),
+    up: true, token: plan.token + 1, deadline: coverLiftAt({ now, startedAt, drawn, held, artPending: artWaiting.size > 0, launch, mountedAt }),
     share: launch ? null : LATER_COVER_SHARE, ceiling: coverCeiling(false, held), lifting: false, launch, shown: false,
   }, false);
 }
@@ -115,10 +118,11 @@ export function beginMapCover(now = Date.now()): number {
   const continuing = plan.up && !plan.lifting;
   const launch = continuing ? plan.launch : firstCover;
   if (!continuing) { startedAt = now; firstCover = false; }
+  mountedAt = now;
   mapMounted = true;
   drawn = false;
   publish({
-    up: true, token: plan.token + 1, deadline: coverLiftAt({ now, startedAt, drawn, held, artPending: artWaiting.size > 0 }),
+    up: true, token: plan.token + 1, deadline: coverLiftAt({ now, startedAt, drawn, held, artPending: artWaiting.size > 0, launch, mountedAt }),
     share: continuing || launch ? null : LATER_COVER_SHARE,
     ceiling: Math.max(continuing ? plan.ceiling : 0, coverCeiling(true, held)), lifting: false, launch, shown: false,
   });
