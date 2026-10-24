@@ -68,10 +68,10 @@ export function useRecapBuild(dayKey: string | null, cardRef?: RefObject<View | 
   const { height } = useWindowDimensions();
   const [key, setKey] = useState<string | null>(null);
   const [skipped, setSkipped] = useState(false);
-  const [waiting, setWaiting] = useState(false);
+  const [gaveUp, setGaveUp] = useState<string | null>(null);
   useEffect(() => {
-    if (!dayKey || preference === null) { setWaiting(false); return undefined; }
-    if (played.has(dayKey)) { setKey(null); setWaiting(false); return undefined; }
+    if (!dayKey || preference === null) return undefined;
+    if (played.has(dayKey)) { setKey(current => (current === dayKey ? current : null)); return undefined; }
     let active = true;
     const start = () => {
       if (!active || played.has(dayKey)) return;
@@ -79,7 +79,6 @@ export function useRecapBuild(dayKey: string | null, cardRef?: RefObject<View | 
       viewportListeners.delete(look);
       clearTimeout(giveUp);
       played.add(dayKey);
-      setWaiting(false);
       setSkipped(false);
       setKey(dayKey);
     };
@@ -90,16 +89,18 @@ export function useRecapBuild(dayKey: string | null, cardRef?: RefObject<View | 
       });
     }
     if (!cardRef) { start(); return undefined; }
-    setWaiting(true);
     viewportListeners.add(look);
-    const giveUp = setTimeout(() => { active = false; viewportListeners.delete(look); setWaiting(false); }, VISIBLE_WAIT_MS);
+    const giveUp = setTimeout(() => { active = false; viewportListeners.delete(look); setGaveUp(dayKey); }, VISIBLE_WAIT_MS);
     // One look once the card has laid out (it may already be on screen).
     const first = setTimeout(look, 120);
     return () => { active = false; viewportListeners.delete(look); clearTimeout(giveUp); clearTimeout(first); };
   }, [dayKey, preference, cardRef, height]);
   const skip = useCallback(() => setSkipped(true), []);
-  // While waiting to be seen, the card holds its starting frame (nothing counted yet); a tap still shows it all.
-  const hold = waiting && !skipped;
+  // Today's build has not started yet (not seen, or the Reduce Motion answer is still coming): the card holds its
+  // starting frame from its very first render, so it never flashes the finished card and then empties.
+  // A tap still shows it all; a card never scrolled to within VISIBLE_WAIT_MS simply shows.
+  const pending = !!dayKey && key !== dayKey && gaveUp !== dayKey && !played.has(dayKey);
+  const hold = pending && !skipped;
   return { key, hold, instant: !hold && (preference === true || skipped || key === null), skip };
 }
 
@@ -118,7 +119,7 @@ function useBeat(build: RecapBuild, at: number, run: (() => void) | undefined) {
 
 /** The header sky: day blue warming into a gold sunset. */
 export function RecapSky({ build }: { readonly build: RecapBuild }) {
-  const t = useSharedValue(build.key ? 0 : 1);
+  const t = useSharedValue(build.instant ? 1 : 0);
   useEffect(() => {
     if (build.instant) { cancelAnimation(t); t.value = 1; return undefined; }
     t.value = 0;
@@ -138,7 +139,7 @@ export function RecapStamp({ build, at, from = 1.6, children, onLand }: {
   readonly build: RecapBuild; readonly at: number; readonly from?: number; readonly children: ReactNode;
   readonly onLand?: () => void;
 }) {
-  const p = useSharedValue(build.key ? 0 : 1);
+  const p = useSharedValue(build.instant ? 1 : 0);
   const squash = useSharedValue(0);
   useBeat(build, at + DURATION.slam, onLand);
   useEffect(() => {
@@ -168,9 +169,9 @@ export function RecapStat({ build, index, value, label, icon, valueStyle, labelS
 }) {
   const at = recapStatAt(index);
   const stamp = statStamps(value);
-  const pop = useSharedValue(build.key ? 0 : 1);
-  const fly = useSharedValue(build.key ? 0 : 1);
-  const num = useSharedValue(build.key ? 0 : 1);
+  const pop = useSharedValue(build.instant ? 1 : 0);
+  const fly = useSharedValue(build.instant ? 1 : 0);
+  const num = useSharedValue(build.instant ? 1 : 0);
   const squash = useSharedValue(0);
   const [shown, setShown] = useState(build.instant ? value : 0);
   useBeat(build, at, () => {
@@ -218,7 +219,7 @@ export function RecapStat({ build, index, value, label, icon, valueStyle, labelS
 
 /** The best coin of the day dropping in like a polaroid. */
 export function RecapPolaroid({ build, coinUrl, isNew }: { readonly build: RecapBuild; readonly coinUrl: string; readonly isNew: boolean }) {
-  const t = useSharedValue(build.key ? 0 : 1);
+  const t = useSharedValue(build.instant ? 1 : 0);
   useEffect(() => {
     if (build.instant) { cancelAnimation(t); t.value = 1; return undefined; }
     t.value = 0;
@@ -242,7 +243,7 @@ export function RecapPolaroid({ build, coinUrl, isNew }: { readonly build: Recap
 export function RecapClosingStamp({ build, parkName }: { readonly build: RecapBuild; readonly parkName: string }) {
   const reduced = useReduceMotionPreference() === true;
   const budget = usePowerBudget();
-  const burst = useSharedValue(build.key ? 0 : 1);
+  const burst = useSharedValue(build.instant ? 1 : 0);
   const sparkles = momentParticles(RECAP_BUILD.stampSparkles, budget, reduced || build.instant);
   const onLand = useCallback(() => {
     playHaptic('golden');
@@ -265,7 +266,7 @@ export function RecapClosingStamp({ build, parkName }: { readonly build: RecapBu
 
 /** What comes next, honest and with no timer: tomorrow's Daily 3 day (the flame) or nothing at all. */
 export function RecapTomorrow({ build, line }: { readonly build: RecapBuild; readonly line: string | null }) {
-  const t = useSharedValue(build.key ? 0 : 1);
+  const t = useSharedValue(build.instant ? 1 : 0);
   useEffect(() => {
     if (build.instant) { cancelAnimation(t); t.value = 1; return undefined; }
     t.value = 0;

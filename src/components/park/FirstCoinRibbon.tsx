@@ -12,7 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  Easing, ReduceMotion, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { playHaptic } from '../../gamekit/Haptics';
 import { playMoment } from '../../gamekit/audio/playMoment';
@@ -49,8 +49,10 @@ function Ribbon({ onDone, reduced }: { readonly onDone: () => void; readonly red
   useEffect(() => {
     const exitAt = FIRST_COIN.ribbonAt + 300 + FIRST_COIN.holdMs;
     if (reduced) {
-      drop.value = withSequence(withTiming(1, { duration: DURATION.quick }, ok => { if (ok) runOnJS(land)(); }),
-        withDelay(FIRST_COIN.holdMs, withTiming(0, { duration: DURATION.quick }, ok => { if (ok) runOnJS(finish)(); })));
+      // A real 160 ms fade in and out (Reanimated would skip a plain timing under the system Reduce Motion).
+      const fade = { duration: DURATION.quick, reduceMotion: ReduceMotion.Never };
+      drop.value = withSequence(ReduceMotion.Never, withTiming(1, fade, ok => { if (ok) runOnJS(land)(); }),
+        withDelay(FIRST_COIN.holdMs, withTiming(0, fade, ok => { if (ok) runOnJS(finish)(); }), ReduceMotion.Never));
       return () => cancelAnimation(drop);
     }
     sweep.value = withTiming(1, { duration: FIRST_COIN.sweepMs, easing: EASE.inOut });

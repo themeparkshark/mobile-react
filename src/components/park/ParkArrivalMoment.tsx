@@ -26,11 +26,11 @@
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence,
-  withSpring, withTiming, Easing, type SharedValue,
+  withSpring, withTiming, Easing, ReduceMotion, type SharedValue,
 } from 'react-native-reanimated';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { queueHaptic } from '../../gamekit/Haptics';
@@ -109,7 +109,9 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
   const drop = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
   const shine = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
   const ping = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
-  const [targets, setTargets] = useState<(Point | null)[]>([null, null, null]);
+  // Where each card lands, as a shared value: the moment never re-renders React once it has started
+  // (a React commit mid-moment can flash the animated views back to their first frame on Fabric).
+  const targets = useSharedValue<(Point | null)[]>([null, null, null]);
   const phase = useRef<'arming' | 'in' | 'out' | 'done'>('arming');
   const doneRef = useRef(onDone); doneRef.current = onDone;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -135,7 +137,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
     playSfx('fx.whoosh', 0.6);
     cancelAnimation(clock);
     if (reduced) {
-      leave.value = withTiming(1, { duration: DURATION.quick }, ok => { if (ok) runOnJS(finish)(); });
+      leave.value = withTiming(1, { duration: DURATION.quick, reduceMotion: ReduceMotion.Never }, ok => { if (ok) runOnJS(finish)(); });
       return;
     }
     fly.forEach((v, i) => {
@@ -182,9 +184,12 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
     startedAt.current = Date.now();
     shown.value = 1;
     clock.value = 0;
-    clock.value = withTiming(ARRIVAL.clockMs, { duration: ARRIVAL.clockMs, easing: Easing.linear });
+    // The beat clock always runs in real time: Reanimated would otherwise jump it to the end under the
+    // system Reduce Motion setting and fire every cue (the handoff included) on the first frame.
+    clock.value = withTiming(ARRIVAL.clockMs, { duration: ARRIVAL.clockMs, easing: Easing.linear, reduceMotion: ReduceMotion.Never });
     if (reduced) {
-      const fade = { duration: DURATION.quick };
+      // Reduce Motion: one 160 ms fade in, no travel.
+      const fade = { duration: DURATION.quick, reduceMotion: ReduceMotion.Never };
       scrim.value = withTiming(1, fade);
       ribbon.value = withTiming(1, fade);
       banner.value = withTiming(1, fade);
@@ -270,7 +275,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
         // Only a coin that is actually on screen (below the HUD row) gets a flight; otherwise the card folds into the HUD.
         return local.x > 24 && local.x < width - 24 && local.y > HUD_TOP + HUD_ROW_HEIGHT + 40 && local.y < height - 170 ? local : null;
       }));
-      if (active) setTargets(points);
+      if (active) targets.value = points;
     })();
     return () => { active = false; };
   }, [cards, projector, width, height]);
@@ -358,13 +363,13 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
         {cards.map((card, i) => (
           <TodayCard key={card.kind} card={card} index={i} width={cardWidth} drop={drop[i]} fly={fly[i]} leave={leave}
             shine={shine[i]} flip={card.kind === 'limited' ? flip : undefined}
-            from={{ x: width / 2 + (i - (cards.length - 1) / 2) * (cardWidth + 10), y: cardsTop + 80 }}
-            to={targets[i] ?? { x: stackX, y: stackY }} toCoin={!!targets[i]} reduced={reduced} />
+            fromX={width / 2 + (i - (cards.length - 1) / 2) * (cardWidth + 10)} fromY={cardsTop + 80}
+            targets={targets} stackX={stackX} stackY={stackY} reduced={reduced} />
         ))}
       </View>
       {goal && <GoalStrip goal={goal} progress={goalIn} leave={leave} top={cardsTop + 172} />}
       {!reduced && cards.map((card, i) => (
-        <CoinPing key={`ping-${card.kind}`} at={targets[i] ?? { x: stackX, y: stackY }} progress={ping[i]} coin={!!targets[i]} />
+        <CoinPing key={`ping-${card.kind}`} index={i} targets={targets} stackX={stackX} stackY={stackY} progress={ping[i]} />
       ))}
     </Animated.View>
   );
@@ -420,15 +425,20 @@ const StampLetter = memo(function StampLetter({ char, size, at, clock, reduced }
 });
 
 /** A today card: drops in on SPRING.land, catches a shine, then flies to where it lives. */
-function TodayCard({ card, index, width, drop, fly, leave, shine, flip, from, to, toCoin, reduced }: {
+const TodayCard = memo(function TodayCard({ card, index, width, drop, fly, leave, shine, flip, fromX, fromY, targets, stackX, stackY, reduced }: {
   readonly card: ArrivalCard; readonly index: number; readonly width: number;
   readonly drop: SharedValue<number>; readonly fly: SharedValue<number>; readonly leave: SharedValue<number>;
   readonly shine: SharedValue<number>; readonly flip?: SharedValue<number>;
-  readonly from: Point; readonly to: Point; readonly toCoin: boolean;
+  readonly fromX: number; readonly fromY: number;
+  readonly targets: SharedValue<(Point | null)[]>; readonly stackX: number; readonly stackY: number;
   readonly reduced: boolean;
 }) {
   const style = useAnimatedStyle(() => {
     if (reduced) return { opacity: Math.min(drop.value, 1 - leave.value) };
+    const target = targets.value[index] ?? null;
+    const toCoin = target !== null;
+    const to = target ?? { x: stackX, y: stackY };
+    const from = { x: fromX, y: fromY };
     const f = fly.value;
     // Out to the right first, then up the right edge (x eases out, y eases in), so a card
     // bound for the HUD never crosses the Ride Control or Adventure chips on its way.
@@ -466,7 +476,7 @@ function TodayCard({ card, index, width, drop, fly, leave, shine, flip, from, to
       <CardTag card={card} />
     </Animated.View>
   );
-}
+});
 
 function CardTag({ card }: { readonly card: ArrivalCard }) {
   if (card.kind === 'limited') return <View style={styles.tag}><Text style={styles.tagText} allowFontScaling={false}>LIMITED</Text></View>;
@@ -512,7 +522,7 @@ function CardFace({ card, flip, shine }: { readonly card: ArrivalCard; readonly 
 }
 
 /** Today's Daily 3 under the cards: a flame (with the streak) and three pips, gold when done. Pictures only. */
-function GoalStrip({ goal, progress, leave, top }: {
+const GoalStrip = memo(function GoalStrip({ goal, progress, leave, top }: {
   readonly goal: ArrivalGoal; readonly progress: SharedValue<number>; readonly leave: SharedValue<number>; readonly top: number;
 }) {
   const style = useAnimatedStyle(() => ({
@@ -529,7 +539,7 @@ function GoalStrip({ goal, progress, leave, top }: {
       </View>
     </View>
   </Animated.View>;
-}
+});
 
 const PING_MS = 520;
 
@@ -537,35 +547,47 @@ const PING_MS = 520;
  * Where a card lands: on a map coin, two gold rings spread and a small gold coin hops out ("it is here");
  * on the stack button, a gold disc bumps to HUD_BUMP.peak behind two rings (the button catches it).
  */
-function CoinPing({ at, progress, coin }: { readonly at: Point; readonly progress: SharedValue<number>; readonly coin: boolean }) {
+const CoinPing = memo(function CoinPing({ index, targets, stackX, stackY, progress }: {
+  readonly index: number; readonly targets: SharedValue<(Point | null)[]>; readonly stackX: number; readonly stackY: number;
+  readonly progress: SharedValue<number>;
+}) {
+  const place = useAnimatedStyle(() => {
+    const at = targets.value[index] ?? { x: stackX, y: stackY };
+    return { transform: [{ translateX: at.x - 40 }, { translateY: at.y - 40 }] };
+  });
   const outer = useAnimatedStyle(() => {
     const t = progress.value;
+    const coin = targets.value[index] !== null && targets.value[index] !== undefined;
     return { opacity: t <= 0 || t >= 1 ? 0 : 1 - t, transform: [{ scale: 0.4 + (coin ? 1.6 : 1.1) * t }] };
   });
   const inner = useAnimatedStyle(() => {
     const t = Math.max(0, Math.min(1, (progress.value - 0.18) / 0.82));
     return { opacity: t <= 0 || t >= 1 ? 0 : 0.9 * (1 - t), transform: [{ scale: 0.3 + 1.1 * t }] };
   });
+  // On the stack button: a gold disc bumps to HUD_BUMP.peak behind the rings (the button catches the card).
   const catcher = useAnimatedStyle(() => {
     const t = progress.value;
-    if (t <= 0 || t >= 1) return { opacity: 0 };
+    const coin = targets.value[index] !== null && targets.value[index] !== undefined;
+    if (coin || t <= 0 || t >= 1) return { opacity: 0 };
     const bump = t < 0.3 ? t / 0.3 : 1 - (t - 0.3) / 0.7;
     return { opacity: 0.6 * bump, transform: [{ scale: 1 + (HUD_BUMP.peak - 1) * bump }] };
   });
+  // On a map coin: a small gold coin hops out of it ("it is here").
   const hop = useAnimatedStyle(() => {
     const t = progress.value;
-    if (t <= 0 || t >= 1) return { opacity: 0 };
+    const coin = targets.value[index] !== null && targets.value[index] !== undefined;
+    if (!coin || t <= 0 || t >= 1) return { opacity: 0 };
     return { opacity: t < 0.7 ? 1 : (1 - t) / 0.3, transform: [{ translateY: -26 * Math.sin(t * Math.PI) }, { scale: 0.6 + 0.5 * Math.sin(t * Math.PI) }] };
   });
-  return <View pointerEvents="none" style={[styles.pingBox, { left: at.x - 40, top: at.y - 40 }]}>
-    {!coin && <Animated.View style={[styles.catcher, catcher]} />}
+  return <Animated.View pointerEvents="none" style={[styles.pingBox, place]}>
+    <Animated.View style={[styles.catcher, catcher]} />
     <Animated.View style={[styles.ring, outer]} />
     <Animated.View style={[styles.ring, styles.ringWhite, inner]} />
-    {coin && <Animated.View style={[styles.hop, hop]}>
+    <Animated.View style={[styles.hop, hop]}>
       <Image source={ARRIVAL_ART.goldCoin} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
-    </Animated.View>}
-  </View>;
-}
+    </Animated.View>
+  </Animated.View>;
+});
 
 /**
  * Today's limited coin turning slowly (a Y-spin, one turn per 4 s) while ambient motion may run; on the
@@ -635,7 +657,7 @@ function ConfettiPiece({ piece, progress }: {
 }
 
 const styles = StyleSheet.create({
-  pingBox: { position: 'absolute', width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
+  pingBox: { position: 'absolute', left: 0, top: 0, width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
   ring: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 5, borderColor: GOLD_FX.rays },
   ringWhite: { borderWidth: 3, borderColor: BRAND.white },
   catcher: { position: 'absolute', width: 58, height: 58, borderRadius: 18, backgroundColor: GOLD_FX.raysSoft },

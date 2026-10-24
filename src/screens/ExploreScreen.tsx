@@ -398,6 +398,19 @@ function ExploreScreen() {
     return () => clearTimeout(timer);
   }, [pendingCollect, redeemFlowOpen]);
 
+  // QA (dev builds only): replay the coin's flight home after a ride win for the nearest coin on the map,
+  // the same path onTaskCompleted takes (lane.sh eval 'globalThis.__tpsCollectPreview()').
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    (globalThis as Record<string, unknown>).__tpsCollectPreview = () => {
+      const won = redeemables?.tasks.find(t => Number.isFinite(Number(t.latitude)) && Number.isFinite(Number(t.longitude)));
+      if (!won) return 'no coin on the map';
+      setPendingCollect({ latitude: Number(won.latitude), longitude: Number(won.longitude), coinUrl: won.coin_url || null, first: false });
+      return `collect ${won.name}`;
+    };
+    return () => { delete (globalThis as Record<string, unknown>).__tpsCollectPreview; };
+  }, [redeemables]);
+
   // Handler for when user taps a prep item in home mode — enforce proximity
   // A tap catches; the server's nearby check (`auto`) only feeds Finn's first find.
   const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number, source: 'tap' | 'auto' = 'tap') => {

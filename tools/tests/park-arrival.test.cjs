@@ -123,3 +123,20 @@ test('the moment stays on the motion language, the power budget and kid-safe art
   assert.match(explore, /otherModalOpen:[^\n]*arrivalBusy/, 'the daily chest waits for the arrival');
   assert.match(explore, /dialogOpen:[^\n]*arrivalBusy/, "Finn's tips wait for the arrival");
 });
+
+test('the beat clock runs in real time under the system Reduce Motion (Reanimated would jump it and fire the handoff at once)', () => {
+  const src = read('src/components/park/ParkArrivalMoment.tsx');
+  assert.match(src, /clock\.value = withTiming\(ARRIVAL\.clockMs, \{[^}]*reduceMotion: ReduceMotion\.Never/);
+  const ribbon = read('src/components/park/FirstCoinRibbon.tsx');
+  assert.match(ribbon, /reduceMotion: ReduceMotion\.Never/, 'the Reduce Motion fade is a real fade');
+});
+
+test('the moment never re-renders React once it plays: stable props, card targets in a shared value', () => {
+  const src = read('src/components/park/ParkArrivalMoment.tsx');
+  assert.match(src, /const targets = useSharedValue<\(Point \| null\)\[\]>/);
+  assert.doesNotMatch(src, /setTargets|useState\(/, 'no React state inside the stage');
+  const hook = read('src/components/park/useParkArrival.tsx');
+  assert.match(hook, /const onDone = useCallback\(/, 'a stable onDone');
+  assert.match(hook, /const layer = useMemo\(/);
+  assert.match(hook, /goal=\{playing\.goal\}/, 'the Daily 3 goal is fixed when the moment starts');
+});

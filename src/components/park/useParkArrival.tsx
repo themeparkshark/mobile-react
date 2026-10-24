@@ -56,7 +56,9 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
   const parkName = (park?.display_name || park?.name || '').trim();
   const [seen, setSeen] = useState<ArrivalSeen | null>(null);
   const [boss, setBoss] = useState<{ parkId: number; value: ArrivalBoss | null; final: boolean } | null>(null);
-  const [playing, setPlaying] = useState<{ parkId: number; cards: ArrivalCard[]; replay: boolean } | null>(null);
+  const [playing, setPlaying] = useState<{ parkId: number; cards: ArrivalCard[]; goal: ArrivalGoal | null; replay: boolean } | null>(null);
+  // Today's Daily 3 read has answered (or given up): the arrival starts with what it knows, then never changes.
+  const [goalSettled, setGoalSettled] = useState<string | null>(null);
   const [goal, setGoal] = useState<ArrivalGoal | null>(null);
   // When this park's arrival last finished (this app run): the Today chip stays in the HUD stack only while fresh.
   const [endedAt, setEndedAt] = useState<{ parkId: number; at: number } | null>(null);
@@ -106,6 +108,7 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
       .catch(() => setBoss({ parkId: forPark, value: null, final: true }));
     // Today's Daily 3 (only where the server has it on): one close goal under the cards and on the Today chip.
     const debug = __DEV__ && process.env.EXPO_PUBLIC_PARK_ARRIVAL_DEBUG === '1';
+    const key = fetchKey;
     void loadRetentionFlags().then(flags => {
       if (debug) console.log('[arrival] flags', JSON.stringify(flags));
       if (!flags?.dailyThree) return undefined;
@@ -114,9 +117,13 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
         if (!state.enabled) return;
         setGoal({ done: doneCount(state.goals), total: state.goals.length || 3, streak: state.streak.days });
       });
-    }).catch(error => { if (debug) console.log('[arrival] goal failed', String(error)); });
+    }).catch(error => { if (debug) console.log('[arrival] goal failed', String(error)); })
+      .finally(() => setGoalSettled(key));
     // A slow feed never holds the moment: after BOSS_WAIT_MS it plays without the boss card.
-    const timer = setTimeout(() => setBoss(current => (current?.parkId === forPark ? current : { parkId: forPark, value: null, final: false })), BOSS_WAIT_MS);
+    const timer = setTimeout(() => {
+      setBoss(current => (current?.parkId === forPark ? current : { parkId: forPark, value: null, final: false }));
+      setGoalSettled(key);
+    }, BOSS_WAIT_MS);
     return () => clearTimeout(timer);
   }, [fetchKey, parkId]);
 
@@ -132,7 +139,7 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     if (__DEV__ && process.env.EXPO_PUBLIC_PARK_ARRIVAL_DEBUG === '1') {
       console.log('[arrival]', JSON.stringify({ due, ready, playing: !!playing, parkId, tasks: tasks?.length ?? null, boss: boss?.parkId ?? null, started: startedFor.current }));
     }
-    if (!due || !ready || playing || parkId === null || !tasks || boss?.parkId !== parkId || !playerId) return;
+    if (!due || !ready || playing || parkId === null || !tasks || boss?.parkId !== parkId || !playerId || goalSettled !== fetchKey) return;
     const key = always ? `${playerId}:${parkId}:${day}:${entry.current.count}` : `${playerId}:${parkId}:${day}`;
     if (startedFor.current === key) return;
     startedFor.current = key;
@@ -140,8 +147,8 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     const next = markArrivalSeen(seen, parkId, day);
     setSeen(next);
     void AsyncStorage.setItem(KEY(playerId), JSON.stringify(next)).catch(() => undefined);
-    setPlaying({ parkId, cards: cardsFor(boss.value), replay: false });
-  }, [due, ready, playing, parkId, tasks, boss, playerId, day, seen, cardsFor, always]);
+    setPlaying({ parkId, cards: cardsFor(boss.value), goal, replay: false });
+  }, [due, ready, playing, parkId, tasks, boss, playerId, day, seen, cardsFor, always, goalSettled, fetchKey, goal]);
 
   // Leaving the park ends the moment at once.
   useEffect(() => { if (playing && playing.parkId !== parkId) setPlaying(null); }, [parkId, playing]);
@@ -150,8 +157,8 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
   const replay = useCallback(() => {
     if (parkId === null || playing) return;
     queueHaptic('tapLight');
-    setPlaying({ parkId, cards: cardsFor(boss?.parkId === parkId ? boss.value : null), replay: true });
-  }, [parkId, playing, cardsFor, boss]);
+    setPlaying({ parkId, cards: cardsFor(boss?.parkId === parkId ? boss.value : null), goal, replay: true });
+  }, [parkId, playing, cardsFor, boss, goal]);
 
   const todayCards = useMemo(() => (parkId !== null && seen && arrivalSeenToday(seen, parkId, day) ? cardsFor(boss?.parkId === parkId ? boss.value : null) : []),
     [parkId, seen, day, cardsFor, boss]);
@@ -168,13 +175,18 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     node: <TodayChip parkName={parkName} cards={todayCards} goal={goal} onPress={replay} />,
   } : null;
 
-  const layer = playing ? (
+  // Stable props only: the moment never re-renders while it plays (a re-render of the map must not reach it).
+  const playingParkId = playing?.parkId ?? null;
+  const onDone = useCallback(() => {
+    setEndedAt(current => (playingParkId === null ? current : { parkId: playingParkId, at: Date.now() }));
+    setPlaying(null);
+  }, [playingParkId]);
+  const layer = useMemo(() => (playing ? (
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 60 }]}>
       <ParkArrivalMoment key={`${playing.parkId}:${playing.replay ? 'r' : 'f'}`} parkName={parkName} cards={playing.cards}
-        goal={goal} projector={projector} replay={playing.replay}
-        onDone={() => { setEndedAt({ parkId: playing.parkId, at: Date.now() }); setPlaying(null); }} />
+        goal={playing.goal} projector={projector} replay={playing.replay} onDone={onDone} />
     </View>
-  ) : null;
+  ) : null), [playing, parkName, projector, onDone]);
 
   // Due and not started yet: Finn's tips and the daily chest wait their turn, but never longer than
   // PENDING_MAX_MS (a map whose coins never load must not hold the chest forever).

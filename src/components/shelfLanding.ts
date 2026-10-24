@@ -17,7 +17,7 @@ export const SHELF_LANDING = {
   puffMs: 760,
   /** How far the sparkles fly, in slot widths. */
   puffReach: 1.8,
-  sparkles: 10,
+  sparkles: 12,
   /** Neighbours tip as the slot coin squashes, one after another outward. */
   jiggleAfterMs: 0,
   jiggleStepMs: 40,

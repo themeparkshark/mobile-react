@@ -331,12 +331,13 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
       <ShelfKick landingKey={landingKey}>
       <View style={{ position: 'relative', height: coinSize + 43 }}>
         <ParkShelfArtwork variant={shelfArt(section)} height={55} />
-        {shine && <RowShine landingKey={shine} width={width - 40} />}
         <View style={{ flexDirection: 'row', justifyContent: 'center', position: 'absolute', top: 4, width: '100%' }}>
           {row.map((task, index) => {
             const owned = completedFor(section).find(done => done.id === task.id);
             const arriving = matchesArrival(section, task.id);
-            const hidden = arriving && !!arrival.target && landedKey !== requestKey;
+            // The slot waits empty from the first frame (not only once the landing has measured it), so the coin
+            // is never seen sitting in its slot before it lands; a landing that cannot run shows it at once.
+            const hidden = arriving && landedKey !== requestKey && closedKey !== requestKey && !arrival.failed;
             const focused = focusSlot?.section === section && focusSlot.task.id === task.id;
             return <View key={task.id} style={{ paddingLeft: index === 0 ? 0 : 7 }}>
               <ShelfJiggle landingKey={landingKey} distance={landingColumn >= 0 ? index - landingColumn : 0}>
@@ -381,6 +382,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
             </View>;
           })}
         </View>
+        {/* A full row gleams once, over its coins. */}
+        {shine && <RowShine landingKey={shine} width={width - 40} />}
       </View>
       </ShelfKick>
     </View>
