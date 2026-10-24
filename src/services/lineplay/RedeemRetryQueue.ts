@@ -98,10 +98,30 @@ export class RedeemRetryQueue<TPayload> {
     this.appStateSub = null;
   }
 
+  /**
+   * Read the stored items for a write. A storage read that fails throws, so a
+   * mutation or drain stops instead of writing over items it could not see
+   * (a hiccup must never wipe what is waiting). Data that cannot be parsed is
+   * copied to `<key>.corrupt` for diagnosis and treated as empty, so one bad
+   * write cannot block the queue forever.
+   */
+  private async readForWrite(): Promise<RetryItem<TPayload>[]> {
+    const raw = await AsyncStorage.getItem(this.storageKey);
+    if (!raw) return [];
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as RetryItem<TPayload>[];
+    } catch {
+      // fall through to the corrupt copy below
+    }
+    await AsyncStorage.setItem(`${this.storageKey}.corrupt`, raw);
+    return [];
+  }
+
+  /** Read for display only: any failure reads as empty and nothing is written. */
   private async read(): Promise<RetryItem<TPayload>[]> {
     try {
-      const raw = await AsyncStorage.getItem(this.storageKey);
-      return raw ? (JSON.parse(raw) as RetryItem<TPayload>[]) : [];
+      return await this.readForWrite();
     } catch {
       return [];
     }
@@ -114,7 +134,8 @@ export class RedeemRetryQueue<TPayload> {
   /** Serialize a mutation through the write chain. */
   private mutate(fn: (items: RetryItem<TPayload>[]) => RetryItem<TPayload>[]): Promise<void> {
     const next = this.writeChain.then(async () => {
-      const items = await this.read();
+      // Throws on a failed read, so nothing stored is overwritten blind.
+      const items = await this.readForWrite();
       await this.write(fn(items));
     });
     // Swallow errors so the chain never breaks; individual reads/writes retry.
@@ -170,7 +191,12 @@ export class RedeemRetryQueue<TPayload> {
     let succeeded = 0;
 
     try {
-      const items = await this.read();
+      let items: RetryItem<TPayload>[];
+      try {
+        items = await this.readForWrite();
+      } catch {
+        return 0; // storage hiccup: leave everything as it is for the next drain
+      }
       if (items.length === 0) return 0;
 
       const survivors: RetryItem<TPayload>[] = [];
