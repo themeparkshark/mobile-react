@@ -171,13 +171,14 @@ const FavoriteStar: React.FC<{ on: boolean; size: number }> = React.memo(({ on, 
           </Animated.View>
         );
       })}
-      {on ? <GameIcon name="star" size={size} /> : (
-        <>
-          <GameIcon name="star" size={size} mono={B.white} />
-          <GameIcon name="star" size={inner} mono={B.starSlot}
-            style={{ position: 'absolute', left: (size - inner) / 2, top: (size - inner) / 2 + size * 0.03 }} />
-        </>
-      )}
+      {/* Both looks stay mounted and only swap opacity: a toggle never remounts the pictures, so a busy
+          phone never shows an empty slot while the new star image decodes. */}
+      <View style={{ position: 'absolute', left: 0, top: 0, opacity: on ? 0 : 1 }}>
+        <GameIcon name="star" size={size} mono={B.white} />
+        <GameIcon name="star" size={inner} mono={B.starSlot}
+          style={{ position: 'absolute', left: (size - inner) / 2, top: (size - inner) / 2 + size * 0.03 }} />
+      </View>
+      <View style={{ opacity: on ? 1 : 0 }}><GameIcon name="star" size={size} /></View>
     </Animated.View>
   );
 });

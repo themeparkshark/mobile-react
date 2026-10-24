@@ -1098,3 +1098,10 @@ test('wave 3 round 2: PLAY RIDE waits for Finn, Battery Saver stills the launch,
   assert.match(pill, /opacity: ready \? 1 : 0,/, 'pill and words share one opacity');
   assert.doesNotMatch(pill, /const markArtReady = \(\) => \{[^}]*pillArtSeen = true/, 'the safety timer never marks the art as seen');
 });
+
+test('favorite star: both looks stay mounted and swap opacity, so a toggle never shows an empty slot', () => {
+  const detail = read('src/screens/RideTracker/RideDetailScreen.tsx');
+  assert.match(detail, /<View style=\{\{ position: 'absolute', left: 0, top: 0, opacity: on \? 0 : 1 \}\}>/);
+  assert.match(detail, /<View style=\{\{ opacity: on \? 1 : 0 \}\}><GameIcon name="star" size=\{size\} \/><\/View>/);
+  assert.doesNotMatch(detail, /\{on \? <GameIcon name="star"/);
+});
