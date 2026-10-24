@@ -29,7 +29,7 @@ import { LinePlayMovementContext } from '../gamekit/LinePlayMovementContext';
 import { RhythmTapGame } from '../games/rhythm';
 import SprintLab from '../games/rhythm/multiplayer/SprintLab';
 
-type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'random';
+type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'current' | 'banana' | 'random';
 
 const GAMES: { type: GameType; label: string; emoji: string; desc: string }[] = [
   { type: 'random', label: 'Random', emoji: '[?]', desc: 'Randomly picks a mini-game' },
@@ -57,6 +57,12 @@ export default function MiniGameTesterScreen() {
   const sharkyPreview = __DEV__ ? process.env.EXPO_PUBLIC_SHARKY_PREVIEW : undefined;
   const [activeGame, setActiveGame] = useState<GameType | null>(sharkyPreview ? 'shark' : null);
   const [showPostWin, setShowPostWin] = useState(false);
+  // Dev only: lane captures open a game straight from the debugger (globalThis.__wowPlay('tap')).
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    (globalThis as { __wowPlay?: (t: GameType | null) => void }).__wowPlay = setActiveGame;
+    return () => { delete (globalThis as { __wowPlay?: unknown }).__wowPlay; };
+  }, []);
   const [lastResult, setLastResult] = useState<string>('');
   // Studio engine demo. EXPO_PUBLIC_ENGINE_DEMO=1 opens it on launch with the
   // scripted autoplay tour (used to capture the engine demo video).

@@ -33,7 +33,10 @@ import {
   type VoiceInfo,
 } from '../core/audioMix';
 import { beatMapFromBpm, type BeatMap } from '../core/beatMap';
-import { AudioApiBackend, ExpoAvBackend, HybridBackend, audioApiAvailable, type AudioBackend } from './backends';
+import { AudioApiBackend, ExpoAvBackend, HybridBackend, SilentBackend, audioApiAvailable, type AudioBackend } from './backends';
+
+/** Dev capture log of every cue play (EXPO_PUBLIC_AUDIO_LOG=1 with studio mute): the lane's beat log. */
+const AUDIO_LOG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_AUDIO_LOG === '1';
 import { CHRIS_BEDS, CHRIS_CUES, type BedDef, type CueDef } from './chrisBank';
 import { routePan, type AudioRoute } from '../core/audioRoute';
 
@@ -111,6 +114,13 @@ class GameAudioEngine {
     if (!this.sfxEnabled && !this.musicEnabled) return Promise.resolve();
     this.initPromise = (async () => {
       let backend: AudioBackend | null = null;
+      // Dev studio mute: never wake the audio hardware (a stuck simulator output aborts AVAudioEngine start).
+      if (this.studioMute) {
+        backend = new SilentBackend();
+        await backend.init();
+        this.backend = backend;
+        return;
+      }
       if (choice !== 'expo-av' && audioApiAvailable()) {
         try {
           // audio-api for WAV/MP3 one-shots, expo-av for AAC beds/stingers.
@@ -329,6 +339,7 @@ class GameAudioEngine {
     this.prune(now);
     if (def.duck) this.duck(def.duck.db, def.duck.attackMs ?? 60, def.duck.holdMs ?? len, def.duck.releaseMs ?? 300);
     this.onPlay?.(name, { voices: this.active.length, backend: backend.name });
+    if (this.studioMute && AUDIO_LOG) console.log(`[wow-audio] ${now % 100000} ${name}${key.includes('#l') ? ` ${key.split('#')[1]}` : ''}`);
     return id;
   }
 
