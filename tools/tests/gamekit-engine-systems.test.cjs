@@ -365,7 +365,7 @@ test('SoundEffectProvider is the only writer of the Music setting into the game 
 
 test('memory QUICK ring: centred on the chain plate, small enough to stay on screen, and a QUICK match fires the gold hit punch', () => {
   const hud = fs.readFileSync(path.join(root, 'src/games/memory/Hud.tsx'), 'utf8');
-  assert.match(hud, /ringWrap: \{ position: 'absolute', left: '50%', top: '50%', marginLeft: -42, marginTop: -42, width: 84, height: 84/);
+  assert.match(hud, /ringWrap: \{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' \}/);
   const r = Number(/const RING_MAX_R = (\d+);/.exec(hud)[1]);
   // The compact plate's centre sits about x 364 on a 402 pt screen.
   assert.ok(364 + r + 1.25 <= 402, `ring r ${r} stays on screen`);

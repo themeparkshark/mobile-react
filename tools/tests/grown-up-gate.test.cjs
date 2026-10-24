@@ -322,3 +322,11 @@ test('the miss count survives a force-quit, so the longer rests hold', async () 
   await Promise.resolve();
   assert.equal(Number(store['grown-up-gate:rest-until']), 4000 + 600000, 'third miss in a row: 10 minutes');
 });
+
+test('the lane-only navigator hook is inert unless a lane Metro sets EXPO_PUBLIC_LANE_NAV=1', () => {
+  const nav = read('src/RootNavigation.tsx');
+  const lines = nav.split('\n').filter(l => /__laneNav/.test(l));
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /^if \(process\.env\.EXPO_PUBLIC_LANE_NAV === '1'\) \(globalThis as \{ __laneNav\?: typeof navigationRef \}\)\.__laneNav = navigationRef;$/);
+  for (const f of ['eas.json', 'app.config.js', 'package.json']) assert.doesNotMatch(read(f), /EXPO_PUBLIC_LANE_NAV/, `${f} never sets it`);
+});

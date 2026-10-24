@@ -283,8 +283,9 @@ const styles = StyleSheet.create({
   chainShow: { backgroundColor: '#fff4c2', borderColor: MM.goldDeep },
   chainCompact: { width: undefined, minWidth: 58, paddingHorizontal: 10 },
   streakIdle: { opacity: 0.45 },
-  // Centred on the plate (any width), so the ring never hangs off the screen edge beside a compact plate.
-  ringWrap: { position: 'absolute', left: '50%', top: '50%', marginLeft: -42, marginTop: -42, width: 84, height: 84, alignItems: 'center', justifyContent: 'center' },
+  // Fills the plate and centres the rings on it (any plate width). Not left: '50%': on device that
+  // resolved against the padded content box and put the ring about 10 pt left of the plate's centre.
+  ringWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   quickRing: { position: 'absolute', width: RING_MAX_R * 2, height: RING_MAX_R * 2, borderRadius: RING_MAX_R, borderWidth: 2.5, borderColor: MM.gold },
   // Outer edge at r 16 + half the stroke, like the old SVG circle's stroke at its hit peak.
   quickRingHit: {
