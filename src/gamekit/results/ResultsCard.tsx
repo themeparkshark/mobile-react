@@ -150,6 +150,16 @@ export function defaultMessage(stars: number, near: boolean, newBest = false): s
   return feelingTitle(stars, near, newBest);
 }
 
+/**
+ * When the title slams in: just after the last earned star stamps, so a star
+ * word (GREAT!) never gives the stars away before they land (the same rule as
+ * Sharky, Boss, the Duel and Memory). No stars, no wait.
+ */
+export function titleDelayMs(stars: number, stepMs: number, reducedMotion: boolean): number {
+  if (reducedMotion || stars <= 0) return 0;
+  return STAR_BASE_DELAY + (Math.min(3, stars) - 1) * stepMs + 140;
+}
+
 export function ResultsCard({
   score, stars, message, thresholds, personalBest, maxCombo, stats, note, reducedMotion = false, onRevealed, rival,
   buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer, onNewBestLanded, wrapUp = false, starGoal, wrapReason = null, extras, peek = 0, children: actions,
@@ -230,7 +240,8 @@ export function ResultsCard({
     <View style={[styles.card, short && styles.cardShort]}>
       {/* Drawn before the ribbon, so the ribbon covers the shark's feet. */}
       {peek > 0 && !sendOff ? <PodiumPeek scale={peek} reducedMotion={reducedMotion} /> : null}
-      <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} />
+      <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap}
+        delayMs={saved || sendOff ? 0 : titleDelayMs(stars, starStepMs, reducedMotion)} />
 
       {saved || sendOff ? (
         <SavedStamp reducedMotion={reducedMotion} delayMs={STAR_BASE_DELAY}

@@ -75,3 +75,14 @@ test('no betting words on a kids card, spoken ones included', () => {
     for (const s of strings) assert.doesNotMatch(s, /\b(bet|bets|wager|wagers|stake|stakes|dice|gamble|jackpot|odds)\b/i, `${f}: ${s}`);
   }
 });
+
+test('the shared card holds its star title until the last star stamps (no GREAT! before the stars land)', () => {
+  const card = read('src/gamekit/results/ResultsCard.tsx');
+  assert.match(card, /delayMs=\{saved \|\| sendOff \? 0 : titleDelayMs\(stars, starStepMs, reducedMotion\)\}/);
+  const fn = card.slice(card.indexOf('export function titleDelayMs'), card.indexOf('export function ResultsCard'));
+  const titleDelayMs = new Function('STAR_BASE_DELAY', `${fn.replace(/export function titleDelayMs\(stars: number, stepMs: number, reducedMotion: boolean\): number/, 'return function (stars, stepMs, reducedMotion)').replace(/\/\*\*[\s\S]*?\*\//, '')}`)(260);
+  assert.equal(titleDelayMs(0, 464, false), 0, 'no stars, no wait');
+  assert.equal(titleDelayMs(2, 464, false), 260 + 464 + 140, 'Whack 2 stars: after the second stamp');
+  assert.equal(titleDelayMs(3, 220, false), 260 + 440 + 140);
+  assert.equal(titleDelayMs(3, 464, true), 0, 'Reduce Motion: in place');
+});
