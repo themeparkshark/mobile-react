@@ -97,6 +97,15 @@ export interface SharkyResultsProps {
 
 /** Hops of the cheering shark, then it stands still. */
 export const CHEER_HOPS = 8;
+/** When the first star stamps, and the gap between stamps (ms). */
+export const STAR_AT = 1450;
+export const STAR_GAP = 220;
+
+/** When the ribbon title slams: just after the last star lands (or as the stars would start). */
+export function sharkyTitleAt(stars: number): number {
+  return stars > 0 ? STAR_AT + (Math.min(3, stars) - 1) * STAR_GAP + 120 : STAR_AT;
+}
+
 /** PLAY AGAIN pulses this many times, then rests. */
 export const PLAY_PULSES = 3;
 
@@ -205,6 +214,8 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
     ...(data.closeSkims > 0 ? [{ label: data.closeSkims === 1 ? 'CLOSE SKIM' : 'CLOSE SKIMS', value: String(data.closeSkims) }] : []),
   ], [data.bestChainMult, data.closeSkims]);
   const title = bestAwareTitle(wrapTitle ?? data.headline, data.stars, newBest) ?? data.headline;
+  // The title waits for the last star stamp (stars at STAR_AT + i x STAR_GAP), so GREAT! never gives the count away.
+  const titleAt = sharkyTitleAt(saved ? 0 : data.stars);
   const goal = useMemo(() => (data.thresholds && !saved && !wrapTitle ? nextStarGoal(data.score, data.thresholds) : null), [data.thresholds, data.score, saved, wrapTitle]);
   const bars = useMemo(() => aheadBars(data.splits), [data.splits]);
   // One feeling line under the score, the same slot the shared card uses:
@@ -223,7 +234,8 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
     <View style={[styles.root, { width: win.width, height: win.height }]} onLayout={onLayout}>
       <LinearGradient colors={['#dff3ff', NEUTRAL]} style={StyleSheet.absoluteFill} />
       <View style={styles.trim} />
-      <ResultsRibbon title={title} reducedMotion={reducedMotion} style={[styles.headline, short && styles.headlineShort]} />
+      {/* The feeling word slams in as the last star stamps (never before the stars). */}
+      <ResultsRibbon title={title} reducedMotion={reducedMotion} delayMs={titleAt} style={[styles.headline, short && styles.headlineShort]} />
 
       {/* The shark on stage */}
       {/* Tall phones give the title room above the shark. Short phones (SE) get a
@@ -246,7 +258,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
         {/* The shared card's order: stars (or the stamp), then the score, then NEW BEST. */}
         {saved ? <SavedStamp reducedMotion={reducedMotion} delayMs={1450} /> : (
           <View style={[styles.stars, short && styles.starsShort]}>
-            {[0, 1, 2].map((i) => <Star key={i} index={i} on={i < data.stars} delayMs={1450 + i * 220} reduced={reducedMotion} small={short} />)}
+            {[0, 1, 2].map((i) => <Star key={i} index={i} on={i < data.stars} delayMs={STAR_AT + i * STAR_GAP} reduced={reducedMotion} small={short} />)}
           </View>
         )}
         {/* The score counts up on the UI thread (no re-render of this card per step). */}

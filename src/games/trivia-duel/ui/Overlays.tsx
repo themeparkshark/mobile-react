@@ -220,22 +220,52 @@ export function Ribbon({ text, holdMs, ribbonKey, reducedMotion }: { text: strin
  * Three chips in the tile grid: SAFE / HALF / GO BIG. Each chip shows one big
  * number: your score if you're right with base points, and under it the
  * points a miss takes away (a red arrow down, never a betting word: this is
- * a kids' quiz, not a bet). The suggested chip glows gold with a one-line
- * reason; doing nothing takes it.
+ * a kids' quiz, not a bet). The suggested chip glows gold; doing nothing
+ * takes it. The topic is in the white question card above (never drawn over
+ * the marquee bulbs), and the hint under the chips is a picture line: a check
+ * mark and WIN!, a fin and STAY AHEAD!, or lightning and GO BIG!, with the
+ * seconds on a clock. The full reason is spoken.
  */
-export function WagerChips({ stakes, labels, picked, suggested, reason, ifRight, onPick, secondsLeft, category, height }: {
-  stakes: number[]; labels: readonly string[]; picked: number; suggested: number; reason: string; ifRight: number[];
+export function WagerChips({ stakes, labels, picked, suggested, reason, kind, ifRight, onPick, secondsLeft, category, height }: {
+  stakes: number[]; labels: readonly string[]; picked: number; suggested: number; reason: string; kind: WagerHintKind; ifRight: number[];
   onPick: (i: number) => void; secondsLeft: number; category: string; height: number;
 }) {
   return (
-    <View style={[styles.wager, { height }]}>
-      <Text style={styles.wagerTitle} numberOfLines={1}>{`BIG FINAL: ${category.toUpperCase()}`}</Text>
+    <View style={[styles.wager, { height }]} accessibilityLabel={`Big Final: ${category}`}>
+      {/* Keeps the chips clear of the marquee bulb rail (no words on the bulbs). */}
+      <View style={styles.wagerRail} />
       <View style={styles.chipRow}>
         {stakes.map((s, i) => (
           <Chip key={i} i={i} label={labels[i]} stake={s} ifRight={ifRight[i]} picked={picked === i} suggested={suggested === i} onPick={onPick} />
         ))}
       </View>
-      <Text style={styles.reason}>{`${reason}  ${secondsLeft}s`}</Text>
+      <WagerHint kind={kind} reason={reason} secondsLeft={secondsLeft} />
+    </View>
+  );
+}
+
+export type WagerHintKind = 'win' | 'stay' | 'keep' | 'go';
+
+/** The words each hint picture carries: two at most, big, for a kid who barely reads. */
+export const WAGER_HINT: Record<WagerHintKind, { icon: 'check' | 'fin' | 'rush'; word: string }> = {
+  win: { icon: 'check', word: 'WIN!' },
+  stay: { icon: 'fin', word: 'STAY AHEAD!' },
+  keep: { icon: 'fin', word: 'STAY AHEAD!' },
+  go: { icon: 'rush', word: 'GO BIG!' },
+};
+
+function WagerHint({ kind, reason, secondsLeft }: { kind: WagerHintKind; reason: string; secondsLeft: number }) {
+  const h = WAGER_HINT[kind] ?? WAGER_HINT.keep;
+  return (
+    <View style={styles.hint} accessible accessibilityLabel={`${reason} ${secondsLeft} seconds`}>
+      <View style={styles.hintPill}>
+        <GameIcon name={h.icon} size={20} />
+        <Text style={styles.hintWord}>{h.word}</Text>
+      </View>
+      <View style={styles.hintPill}>
+        <GameIcon name="timer" size={18} />
+        <Text style={styles.hintWord}>{secondsLeft}</Text>
+      </View>
     </View>
   );
 }
@@ -280,11 +310,15 @@ export function CategoryPick({ cats, mine, picked, left, oppName, onPick, height
 }) {
   return (
     <View style={[styles.wager, { height }]}>
-      <Text style={styles.wagerTitle}>{mine ? 'YOU PICK THE FINAL' : `${oppName.toUpperCase()} IS PICKING`}</Text>
+      {/* Who picks is in the white question card above; nothing is drawn on the bulb rail. */}
+      <View style={styles.wagerRail} accessibilityLabel={mine ? 'You pick the final topic' : `${oppName} is picking the final topic`} />
       <View style={[styles.chipRow, { flex: 1 }]}>
         {cats.map((c, i) => <CategoryCard key={i} i={i} label={c} picked={picked === i} out={picked >= 0 && picked !== i} disabled={!mine || picked >= 0} onPick={onPick} />)}
       </View>
-      <Text style={styles.reason}>{mine ? `Behind picks the topic.  ${left}s` : 'Behind picks the topic.'}</Text>
+      {/* The clock, as a picture (the white card above already says who picks). */}
+      <View style={styles.hint} accessible accessibilityLabel={mine ? `${left} seconds to pick` : 'Behind picks the topic'}>
+        {mine ? <View style={styles.hintPill}><GameIcon name="timer" size={18} /><Text style={styles.hintWord}>{left}</Text></View> : <View style={styles.wagerRail} />}
+      </View>
     </View>
   );
 }
@@ -435,8 +469,11 @@ const styles = StyleSheet.create({
   ribbonImg: { position: 'absolute', width: 300, height: 64 },
   ribbonText: { marginTop: -6 },
   wager: { alignItems: 'center', justifyContent: 'space-between', paddingTop: 2, paddingBottom: 4 },
-  wagerTitle: { fontFamily: 'Shark', fontSize: 20, color: C.navy, opacity: 0.6 },
-  reason: { fontFamily: 'Knockout', fontSize: 16, color: C.navy },
+  // The marquee bulb rail's height: the chips start under it, with nothing drawn on the bulbs.
+  wagerRail: { height: 26 },
+  hint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  hintPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 8, paddingVertical: 1 },
+  hintWord: { fontFamily: 'Shark', fontSize: 16, color: C.navy },
   chipRow: { flexDirection: 'row', alignSelf: 'stretch', justifyContent: 'space-between' },
   chipCell: { flex: 1, marginHorizontal: 4 },
   chipGlow: { position: 'absolute', left: -6, right: -6, top: -6, bottom: -6, borderRadius: 24, backgroundColor: 'rgba(254,201,14,0.55)' },

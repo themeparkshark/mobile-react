@@ -31,7 +31,7 @@ export const LOST_TRY_TITLE = 'Good Try!';
 export const RETRY_TRY_TITLE = 'One More Try!';
 
 export function lostTryCopy(input: LostTryInput): LostTryCopy {
-  const hasRetry = input.firstCoinTicketReturned || input.rescueRetryAvailable || !!input.retryOffered;
+  const hasRetry = lostTryHasRetry(input);
   const title = hasRetry ? RETRY_TRY_TITLE : LOST_TRY_TITLE;
   if (input.usedRescuePass) {
     return {
@@ -44,4 +44,15 @@ export function lostTryCopy(input: LostTryInput): LostTryCopy {
   const n = Math.max(0, Math.round(input.lostTicketCost));
   if (n > 0) return { title, message: `${n} Ticket${n === 1 ? '' : 's'} used.`, ticket: -n };
   return { title, message: 'No Ticket spent.', ticket: 0 };
+}
+
+/**
+ * True when a lost ride try still has a retry on offer (the Ticket came back,
+ * a Rescue retry, or a paid one more try). With none, a miss whose game
+ * already showed its own GOOD TRY! card goes straight back to the map: one
+ * card per miss in a moving line. RedeemRedeemableModal and the queue results
+ * capture both use this rule.
+ */
+export function lostTryHasRetry(input: Pick<LostTryInput, 'firstCoinTicketReturned' | 'rescueRetryAvailable' | 'retryOffered'>): boolean {
+  return input.firstCoinTicketReturned || input.rescueRetryAvailable || !!input.retryOffered;
 }

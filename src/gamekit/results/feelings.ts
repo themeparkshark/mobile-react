@@ -158,6 +158,21 @@ export function bestAwareTitle(title: string | undefined, stars: number, isNewBe
   return title;
 }
 
+/**
+ * The Boss Bash ribbon. The stars decide the feeling word, the same rule as
+ * every other game (3 INCREDIBLE!, 2 GREAT!, 1 NICE!), so the title and the
+ * stars never disagree (STILL FIGHTING! over three gold stars read as a
+ * loss). A team win keeps its win words; STILL FIGHTING! is only for a 0-star
+ * round that hit, and GOOD TRY! for no hits. A personal best is never soft.
+ */
+export function bossTitle(input: { won: boolean; ko: boolean; noHits: boolean; stars: number; newBest: boolean }): string {
+  const { won, ko, noHits, stars, newBest } = input;
+  if (won) return ko && !noHits ? 'YOU FINISHED IT!' : 'TEAM WON!';
+  if (noHits) return 'GOOD TRY!';
+  if (stars > 0) return feelingTitle(stars, false, newBest);
+  return bestAwareTitle('STILL FIGHTING!', 0, newBest) ?? 'STILL FIGHTING!';
+}
+
 export type EndFeel = 'win' | 'best' | 'saved' | 'try';
 
 /**

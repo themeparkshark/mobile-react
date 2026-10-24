@@ -61,7 +61,7 @@ import {
 } from './engine/match';
 import { finalPointsLost, nearMiss, rideNearMiss } from './engine/nearMiss';
 import {
-  bellValue, duelStars, flameTier, rideStars, rideWon, speedPoints, streakMult, suggestWager, wagerStakes,
+  bellValue, duelStars, flameTier, rideStars, rideWon, speedPoints, streakMult, suggestWager, wagerStakes, type WagerSuggestion,
 } from './engine/scoring';
 import { ART, C, FIN_POSE_ORDER, type FinPose, type SharkLook } from './art';
 import {
@@ -159,6 +159,12 @@ export interface TriviaDuelProps {
   coinImage?: ImageSourcePropType | string | null;
   /** Pre-loaded authored pool (tests / previews); loaded from LinePlay content otherwise. */
   pool?: PoolQuestion[];
+  /**
+   * Capture screens only: 'win' plays every answer right and fast so the won
+   * card can be checked on the real stage in release-like JS. Ignored unless
+   * __DEV__ or a capture build (EXPO_PUBLIC_PERF_CAPTURE=1); store builds never set it.
+   */
+  captureAutoplay?: 'win';
   ghost?: GhostRecord | null;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
@@ -167,6 +173,8 @@ export interface TriviaDuelProps {
 
 const { width: SW } = Dimensions.get('window');
 const AUTOPLAY = __DEV__ && process.env.EXPO_PUBLIC_TRIVIA_AUTOPLAY === '1';
+/** Dev or a release-JS capture build: the only places captureAutoplay works. */
+const CAPTURE_OK = __DEV__ || process.env.EXPO_PUBLIC_PERF_CAPTURE === '1';
 const TIER_TEXT: Record<SpeedTier, string> = { lightning: 'LIGHTNING!', great: 'GREAT', nice: 'NICE', none: '' };
 const TIER_COLOR: Record<SpeedTier, string> = { lightning: '#fff3b0', great: C.gold, nice: C.blue, none: C.cream };
 /** 11.6 stamp widths (share of screen width): tier stamps 38-45%, event stamps 55-70%. */
@@ -188,6 +196,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const auth = useContext(AuthContext) as { player?: { username?: string } } | null;
   const myName = (auth?.player?.username ?? 'You').slice(0, 12);
   const isRide = mode === 'ride';
+  const autoWin = CAPTURE_OK && props.captureAutoplay === 'win';
+  const auto = AUTOPLAY || autoWin;
   const shell = useRef<GameShellV2Handle>(null);
   const fx = useRef<FxStageHandle>(null);
   const backFx = useRef<FxStageHandle>(null);
@@ -243,7 +253,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const [bellOn, setBellOn] = useState(false);
   const [bellKey, setBellKey] = useState(0);
   const [chip, setChip] = useState<string | null>(null);
-  const [wager, setWager] = useState<{ stakes: number[]; picked: number; suggested: number; reason: string; ifRight: number[]; left: number } | null>(null);
+  const [wager, setWager] = useState<{ stakes: number[]; picked: number; suggested: number; reason: string; kind: WagerSuggestion['kind']; ifRight: number[]; left: number } | null>(null);
   const [relaxed, setRelaxed] = useState(false);
   useEffect(() => { void loadMemory().then((m) => setRelaxed(!!m.relaxed)); }, []);
   const toggleRelaxed = useCallback(() => {
@@ -898,7 +908,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       const sug = suggestWager(t.me.score, t.opp.score, m);
       finalWager.current = sug.index;
       const ifRight = st.map((s) => t.me.score + Math.round(POINTS.base * m) + s);
-      setWager({ stakes: st, picked: -1, suggested: sug.index, reason: sug.reason, ifRight, left: Math.round(WAGER.pickMs / 1000) });
+      setWager({ stakes: st, picked: -1, suggested: sug.index, reason: sug.reason, kind: sug.kind, ifRight, left: Math.round(WAGER.pickMs / 1000) });
       setPhase('wager');
       sfx(CUE.chip, { volume: 0.7 });
       wagerOpen.current = true;
@@ -1046,7 +1056,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   dispatchRef.current = (ev: number, a: number, b: number) => {
     const r = round;
     if (!r || !plan) return;
-    if (AUTOPLAY) autoplayOn(ev, r);
+    if (auto) autoplayOn(ev, r);
     if (__DEV__ && (ev === EV_LOCK || ev === EV_SUB_LOCK || ev === EV_BUZZ || ev === EV_FIN_BUZZ)) console.log('[trivia-duel] ev', { ev, a, b, round: r.index, type: r.spec.type, sub: subMode });
     switch (ev) {
       case EV_UNLOCK: {
@@ -1625,7 +1635,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const autoplayOn = (ev: number, r: PlannedRound) => {
     const q = r.question;
     const k = (autoN.current += 1);
-    const skill = (mixSeed(seedRef.current, k) % 100) / 100;
+    const skill = autoWin ? 0 : (mixSeed(seedRef.current, k) % 100) / 100;
     const pick = skill < 0.78 ? q.correctIndex : (q.correctIndex + 1) % Math.max(2, q.choices.length);
     const tapAt = (i: number, ms: number) => later(ms, () => {
       const alive = tilesRef.current.map((t, kk) => (t !== 'removed' ? kk : -1)).filter((kk) => kk >= 0);
@@ -1633,10 +1643,10 @@ export function TriviaDuel(props: TriviaDuelProps) {
       runOnUI((y: number) => { 'worklet'; onTapUI(y); })(x);
     });
     if (ev === EV_UNLOCK) {
-      const ms = 900 + skill * 2200;
+      const ms = autoWin ? 650 : 900 + skill * 2200;
       if (r.spec.type === 'buzz') {
         const fb = oppIn.current.buzzMs ?? -1;
-        if (playsRef.current % 2 === 0 || fb < 0) later(Math.min(ms * 0.6, fb >= 0 ? fb - 150 : 99999), onBuzzUI);
+        if (autoWin || playsRef.current % 2 === 0 || fb < 0) later(Math.min(ms * 0.6, fb >= 0 ? fb - 150 : 99999), onBuzzUI);
       } else if (q.format === 'closest' && q.slider) {
         const guess = q.slider.truth + (skill < 0.7 ? 0 : 3);
         later(ms * 0.6, () => setSliderVal(guess));
@@ -1650,10 +1660,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
     else if (ev === EV_TIMEOUT && r.spec.type === 'buzz') tapAt(pick, 1200);
   };
   useEffect(() => {
-    if (!AUTOPLAY) return;
-    if (phase === 'wager' && wager) later(1600, () => pickWager((mixSeed(seedRef.current, 77) % 10) < 7 ? wager.suggested : (wager.suggested + 1) % 3));
+    if (!auto) return;
+    if (phase === 'wager' && wager) later(1600, () => pickWager(autoWin || (mixSeed(seedRef.current, 77) % 10) < 7 ? wager.suggested : (wager.suggested + 1) % 3));
     if (phase === 'category' && catPick?.picker === 'me') later(900, () => pickCategory(1));
-    if (phase === 'results' && results && !isRide) later(6500, () => (playsRef.current < 3 ? onRematch() : playsRef.current === 3 && !ghost ? void onPassToCrew() : onContinue()));
+    // A capture win stays on its card (the capture taps DONE itself).
+    if (phase === 'results' && results && !isRide && !autoWin) later(6500, () => (playsRef.current < 3 ? onRematch() : playsRef.current === 3 && !ghost ? void onPassToCrew() : onContinue()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, results]);
 
@@ -1809,7 +1820,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const finalTopic = plan?.rounds[roundIdx]?.question.category ?? '';
   const boardText = phase === 'finalIntro' ? "Fin's Final is next"
     : phase === 'category' ? (catPick?.picker === 'me' ? 'You pick the topic' : `${oppName} picks the topic`)
-    : phase === 'wager' ? `Topic: ${finalTopic}. Pick how big.`
+    // The topic sits crisp in the white card (never over the marquee bulbs); the chips under it need no words.
+    : phase === 'wager' ? `Big Final: ${finalTopic}`
     : preview ? '' : q?.prompt ?? '';
 
   return (
@@ -1981,6 +1993,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
                 picked={wager.picked}
                 suggested={wager.suggested}
                 reason={wager.reason}
+                kind={wager.kind}
                 ifRight={wager.ifRight}
                 onPick={pickWager}
                 secondsLeft={wager.left}

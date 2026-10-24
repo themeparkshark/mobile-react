@@ -1,19 +1,25 @@
 /**
  * ResultsRibbon: Alex's red ribbon with the big results title, the one title
  * every results card shares (the shared card, Sharky Swim). It slams in once
- * (1.25 then settles) and then rests. Reduced motion: it simply appears.
+ * (1.25 then settles) and then rests, optionally after `delayMs` (after the
+ * last star). Reduced motion: it simply appears.
  */
 
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 
 const RIBBON = require('../../../assets/images/ribbon.png');
 
-export function ResultsRibbon({ title, reducedMotion = false, style }: {
+export function ResultsRibbon({ title, reducedMotion = false, style, delayMs = 0 }: {
   title: string;
   reducedMotion?: boolean;
+  /**
+   * Wait before the slam. A card whose title is a star word (GREAT!) holds it
+   * until the last star has stamped, so the title never gives the stars away.
+   */
+  delayMs?: number;
   /** Where the ribbon sits (the shared card hangs it over its top edge). */
   style?: StyleProp<ViewStyle>;
 }) {
@@ -23,12 +29,12 @@ export function ResultsRibbon({ title, reducedMotion = false, style }: {
       ribbon.value = 1;
       return undefined;
     }
-    ribbon.value = withSequence(
+    ribbon.value = withDelay(Math.max(0, delayMs), withSequence(
       withTiming(1.25, { duration: 160, easing: Easing.out(Easing.back(2)) }),
       withSpring(1, { damping: 10, stiffness: 260 }),
-    );
+    ));
     return () => cancelAnimation(ribbon);
-  }, [reducedMotion, ribbon]);
+  }, [reducedMotion, ribbon, delayMs]);
   const ribbonStyle = useAnimatedStyle(() => ({ transform: [{ scale: ribbon.value }], opacity: ribbon.value > 0 ? 1 : 0 }));
   return (
     <Animated.View style={[styles.wrap, style, ribbonStyle]} accessibilityRole="header" accessibilityLabel={title}>

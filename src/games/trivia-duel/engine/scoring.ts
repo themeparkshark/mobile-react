@@ -195,7 +195,10 @@ export function wagerStakes(score: number): number[] {
 
 export interface WagerSuggestion {
   index: number;
+  /** Spoken (a11y) and logged; the board draws `kind` as a picture instead. */
   reason: string;
+  /** What the suggested chip does, as a picture: win (a right answer wins it), stay (stays ahead), keep (keeps the lead), go (behind: go for it). */
+  kind: 'win' | 'stay' | 'keep' | 'go';
 }
 
 /**
@@ -209,13 +212,13 @@ export function suggestWager(me: number, opp: number, m: number): WagerSuggestio
   const stakes = wagerStakes(me);
   const right = (k: number) => me + Math.round(POINTS.base * m) + stakes[k];
   for (let k = 0; k < stakes.length; k++) {
-    if (right(k) > 2 * opp + WAGER.lockMargin) return { index: k, reason: "Wins it if you're right." };
+    if (right(k) > 2 * opp + WAGER.lockMargin) return { index: k, reason: "Wins it if you're right.", kind: 'win' };
   }
-  if (me < opp) return { index: stakes.length - 1, reason: 'You need it all.' };
+  if (me < opp) return { index: stakes.length - 1, reason: 'You need it all.', kind: 'go' };
   for (let k = 0; k < stakes.length; k++) {
-    if (right(k) > 2 * opp + WAGER.coverMargin) return { index: k, reason: 'Stays ahead if they get it.' };
+    if (right(k) > 2 * opp + WAGER.coverMargin) return { index: k, reason: 'Stays ahead if they get it.', kind: 'stay' };
   }
-  return { index: 0, reason: 'Keeps the lead if they miss.' };
+  return { index: 0, reason: 'Keeps the lead if they miss.', kind: 'keep' };
 }
 
 /** Final: correct = question points + stake; wrong/timeout = -stake. Score never drops below 0. */

@@ -12,6 +12,11 @@
  *   - SHARKY IN LINE: Sharky's own results card.
  *   - RHYTHM / CURRENT QUEST IN LINE: the other queue games' cards.
  *   - LINE TRIVIA / TRIVIA DUEL: the duel's own results card.
+ *   - LINE TRIVIA, AUTOPLAY WIN: the real duel on its stage, every answer
+ *     right (capture-only autoplay), so the won card shows in release JS.
+ *   - RIDE MISS, NO RETRY / TICKET BACK: the map's ride challenge missed, then
+ *     the same lostTryHasRetry rule RedeemRedeemableModal runs: no retry goes
+ *     straight back (one card), the Ticket back opens the try card.
  *   - RIDE TRY CARD: the map ride challenge's GOOD TRY! card with the same
  *     words and buttons RedeemRedeemableModal passes (ticket back, ticket
  *     spent), since a live miss needs a ticket and a coin in dev.
@@ -45,10 +50,14 @@ import { CurrentQuestQueueGame } from '../../games/current-quest';
 import { TriviaGame, createLinePlayTriviaSource } from '../../games/trivia';
 import { TriviaDuel } from '../../games/trivia-duel';
 import ChallengeStatusCard from '../../components/rewards/ChallengeStatusCard';
-import { lostTryCopy } from '../../components/rewards/lostTryCard';
+import { lostTryCopy, lostTryHasRetry } from '../../components/rewards/lostTryCard';
 import { DuelResults, type ResultsModel } from '../../games/trivia-duel/ui/DuelResults';
 
-type Run = { game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number };
+type Run = {
+  game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel' | 'duelWin' | 'rideMiss'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number;
+  /** RIDE MISS: what the server said about the lost try (a ticket and coin fixture). */
+  miss?: { ticketBack: boolean; ticketCost: number };
+};
 
 const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'WHACK IN LINE', run: { game: 'tap', groupTurn: false, rideUpAfterMs: null } },
@@ -65,6 +74,12 @@ const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'CURRENT QUEST, RIDE UP IN 6 S', run: { game: 'current', groupTurn: false, rideUpAfterMs: 6000 } },
   { label: 'LINE TRIVIA', run: { game: 'trivia', groupTurn: false, rideUpAfterMs: null } },
   { label: 'TRIVIA DUEL, BEAT THE BUZZER', run: { game: 'duel', groupTurn: false, rideUpAfterMs: null } },
+  // The real duel on its real stage, every answer right and fast: the won card in release JS.
+  { label: 'LINE TRIVIA, AUTOPLAY WIN', run: { game: 'duelWin', groupTurn: false, rideUpAfterMs: null } },
+  // The map's ride challenge, played and missed (no taps): 1 Ticket spent and no retry,
+  // so the game's own card is the only card and DONE goes back to the map.
+  { label: 'RIDE MISS, NO RETRY', run: { game: 'rideMiss', groupTurn: false, rideUpAfterMs: null, miss: { ticketBack: false, ticketCost: 1 } } },
+  { label: 'RIDE MISS, TICKET BACK', run: { game: 'rideMiss', groupTurn: false, rideUpAfterMs: null, miss: { ticketBack: true, ticketCost: 0 } } },
 ];
 
 /**
@@ -228,6 +243,21 @@ export default function QueueResultsCaptureScreen() {
     setRun(null);
     setQueueEnded(null);
   };
+  // RIDE MISS: the same rule RedeemRedeemableModal runs after a lost try.
+  // With no retry the game's own card was the only card: back to the map.
+  // With the Ticket back, the try card offers the free retry.
+  const rideMissDone = () => {
+    const miss = run?.miss;
+    if (!miss) return;
+    const retry = lostTryHasRetry({ firstCoinTicketReturned: miss.ticketBack, rescueRetryAvailable: false, retryOffered: false });
+    if (retry) {
+      note('Ride miss: try card (Ticket back)');
+      setRun(null);
+      setTryCard('back');
+      return;
+    }
+    end(`Ride miss: back to the map, one card (${miss.ticketCost} Ticket used, no retry)`);
+  };
   const common = run ? {
     visible: true,
     seed: 4242 + run.key,
@@ -301,6 +331,12 @@ export default function QueueResultsCaptureScreen() {
         {run && common && run.game === 'trivia' ? (
           <TriviaGame key={run.key} visible title="Line Trivia" seed={run.key}
             source={createLinePlayTriviaSource({ parkId: 8, seed: run.key })} onClose={common.onClose} onComplete={common.onComplete} />
+        ) : null}
+        {run && common && run.game === 'duelWin' ? (
+          <TriviaDuel key={run.key} visible mode="queue" title="Trivia Duel" seed={run.key} parkId={8} captureAutoplay="win" onClose={common.onClose} onComplete={common.onComplete} />
+        ) : null}
+        {run && common && run.game === 'rideMiss' ? (
+          <TriviaDuel key={run.key} visible mode="ride" seed={run.key} parkId={8} onClose={rideMissDone} onComplete={rideMissDone} />
         ) : null}
         {run && common && run.game === 'duel' ? (
           <TriviaDuel key={run.key} visible mode="ride" seed={run.key} parkId={8} onClose={common.onClose} onComplete={common.onComplete} />

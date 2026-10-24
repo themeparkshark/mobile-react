@@ -546,7 +546,7 @@ test('Trivia Duel ends on the shared ribbon and brag chips: dots for right answe
 
 test('Boss results share the ribbon and read the raid in pictures, not a data line', () => {
   const bash = read('src/games/boss/bash/BashResults.tsx');
-  assert.match(bash, /<ResultsRibbon title=\{bestAwareTitle\(won \?/);
+  assert.match(bash, /<ResultsRibbon title=\{bossTitle\(/);
   assert.doesNotMatch(bash, /styles\.bannerText/);
   assert.doesNotMatch(bash, /HP left\}\{left/, 'no "3,047 HP left · 18 min left · 6 fighting" line');
   assert.match(bash, /<GameIcon name="timer" size=\{20\} \/>/);
@@ -684,7 +684,7 @@ test('round 3: one card per ride miss, one surface, one exit word, honest ticks 
   // A miss with no retry: the game's own card is the only card (no second GOOD TRY!).
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /lostFromGameRef\.current = true;\s*await resolveAttempt\('loss'\)/);
-  assert.match(modal, /const lostHasRetry = firstCoinTicketReturned \|\| rescueRetryAvailable \|\| canOfferRetry;/);
+  assert.match(modal, /const lostHasRetry = lostTryHasRetry\(\{ firstCoinTicketReturned, rescueRetryAvailable, retryOffered: canOfferRetry \}\);/);
   assert.match(modal, /if \(lostHasRetry\) \{ lostFromGameRef\.current = false; return; \}[\s\S]{0,140}if \(lostClosingRef\.current\) return;\s*lostClosingRef\.current = true;\s*void handleLostClose\(\);/);
   assert.match(modal, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost, retryOffered: canOfferRetry \}\)/);
   // The duel's coin goal never promises a retry it cannot know about.
@@ -712,7 +712,7 @@ test('round 3: one card per ride miss, one surface, one exit word, honest ticks 
   assert.match(bash, /<GameIcon name="crown" size=\{20\} \/><Text style=\{styles\.newBestText\}>NEW BEST!<\/Text>/);
   assert.doesNotMatch(bash, /rotate: '8deg'|Team wins, you get|' Parts'/);
   assert.match(bash, /again: \{[^}]*backgroundColor: BRAND\.gold/);
-  assert.match(bash, /<GameIcon name="trophy" size=\{28\} \/>/);
+  assert.match(bash, /<GameIcon name="trophy" size=\{20\} \/>/);
   assert.match(bash, /<Image source=\{portrait \?\? BOSS_ART\[boss\]\} style=\{styles\.hpBoss\}/);
   // One exit word: DONE, CONTINUE only while a reward is still to collect.
   const shell = read('src/gamekit/GameShellV2.tsx');
@@ -725,7 +725,7 @@ test('round 3: one card per ride miss, one surface, one exit word, honest ticks 
   assert.match(shell, /styles\.headerCenter, hudBack && styles\.headerHidden/);
   assert.match(read('src/games/trivia-duel/TriviaDuel.tsx'), /lockLabel: resultsUp \? null : locks\.me, stake: resultsUp \? null : stakes\.me/);
   // The Fin rank row: shown after a win only, fins for the wins needed, a bigger gold-trimmed next hat.
-  assert.match(duel, /model\.rank && \(model\.won \|\| model\.banners\.includes\('RANK UP'\)\)/);
+  assert.match(duel, /: model\.rank && model\.won \? \(/, 'the fins row only after a win (RANK UP has its own row)');
   assert.match(duel, /<RankPips wins=/);
   assert.match(duel, /<RankHat stripes=\{[^}]*\} big \/>/);
   // Sharky score: a full-width count-up field so its shadow sits under the fill at every size.
@@ -767,9 +767,11 @@ test('a kids quiz never uses betting words: the Big Final picks points, it is no
   }
   const game = read('src/games/trivia-duel/TriviaDuel.tsx');
   assert.doesNotMatch(game, /Place your bet/);
-  assert.match(game, /Pick how big\./);
+  // The topic sits crisp in the white question card, never on the marquee bulbs.
+  assert.match(game, /phase === 'wager' \? `Big Final: \$\{finalTopic\}`/);
   const ov = read('src/games/trivia-duel/ui/Overlays.tsx');
-  assert.match(ov, /BIG FINAL: \$\{category\.toUpperCase\(\)\}/);
+  assert.doesNotMatch(ov, /wagerTitle/, 'no title drawn over the bulb rail');
+  assert.match(ov, /<View style=\{styles\.wagerRail\} \/>/);
   assert.match(ov, /<GameIcon name="arrow" size=\{14\} style=\{styles\.chipMissArrow\} \/>/, 'a miss is a red arrow down, not "bet 250"');
 });
 
@@ -788,7 +790,7 @@ test('a NEW BEST never feels like a loss: no SO CLOSE!, GOOD TRY! or NICE TRY! n
   assert.equal(feelings.endFeel({ stars: 0, isNewBest: true, saved: false }), 'best', 'a 0-star best sounds like a win');
   // Every own-card game runs its title through the same rule.
   assert.match(read('src/games/memory/MemoryResults.tsx'), /bestAwareTitle\(data\.banner, data\.stars, data\.newBest\)/);
-  assert.match(read('src/games/boss/bash/BashResults.tsx'), /bestAwareTitle\([^\n]*'STILL FIGHTING!', stars, best && !noHits\)/);
+  assert.match(read('src/games/boss/bash/BashResults.tsx'), /bossTitle\(\{ won, ko, noHits, stars, newBest: best && !noHits \}\)/);
   assert.match(read('src/games/sharky/hud/SharkyResults.tsx'), /bestAwareTitle\(wrapTitle \?\? data\.headline, data\.stars, newBest\)/);
   assert.match(read('src/gamekit/results/ResultsCard.tsx'), /bestAwareTitle\(message, stars, best\.isNewBest\)/);
 });
@@ -855,4 +857,88 @@ test('duel banners and the Big Final chip keep their fill: the pop rides a wrapp
   const capture = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
   assert.match(capture, /banners: \['FIN BEATEN', 'RANK UP', 'NEW BEST'\]/);
   assert.match(capture, />DUEL WIN CARD</);
+});
+
+
+test('Boss titles follow the stars like every game: three gold stars never sit under STILL FIGHTING!', () => {
+  const t = (o) => feelings.bossTitle({ won: false, ko: false, noHits: false, newBest: false, ...o });
+  assert.equal(t({ stars: 3 }), 'INCREDIBLE!');
+  assert.equal(t({ stars: 2 }), 'GREAT!');
+  assert.equal(t({ stars: 1 }), 'NICE!');
+  assert.equal(t({ stars: 0 }), 'STILL FIGHTING!', 'only a 0-star round that hit is still fighting');
+  assert.equal(t({ stars: 0, newBest: true }), 'YOUR BEST YET!');
+  assert.equal(t({ stars: 2, newBest: true }), 'GREAT!');
+  assert.equal(t({ stars: 0, noHits: true }), 'GOOD TRY!');
+  assert.equal(t({ stars: 3, won: true, ko: true }), 'YOU FINISHED IT!');
+  assert.equal(t({ stars: 1, won: true }), 'TEAM WON!');
+  for (const stars of [1, 2, 3]) {
+    for (const newBest of [false, true]) {
+      const title = t({ stars, newBest });
+      assert.ok(!feelings.isSoftTryTitle(title), `${stars} stars reads ${title}`);
+    }
+  }
+});
+
+test('star words never give the stars away: the ribbon waits for the last stamp', () => {
+  const ribbon = read('src/gamekit/results/ResultsRibbon.tsx');
+  assert.match(ribbon, /ribbon\.value = withDelay\(Math\.max\(0, delayMs\), withSequence\(/);
+  const sharky = read('src/games/sharky/hud/SharkyResults.tsx');
+  assert.match(sharky, /<ResultsRibbon title=\{title\} reducedMotion=\{reducedMotion\} delayMs=\{titleAt\}/);
+  assert.match(sharky, /delayMs=\{STAR_AT \+ i \* STAR_GAP\}/);
+  // The title lands just after the last star of the run (3 stars: 1450 + 2 x 220 + 120).
+  const m = sharky.match(/export const STAR_AT = (\d+);[\s\S]*?export const STAR_GAP = (\d+);/);
+  const [at, gap] = [Number(m[1]), Number(m[2])];
+  const titleAt = (stars) => (stars > 0 ? at + (Math.min(3, stars) - 1) * gap + 120 : at);
+  assert.ok(titleAt(3) > at + 2 * gap, 'after the third stamp');
+  assert.ok(titleAt(1) > at, 'after the first stamp');
+  assert.match(sharky, /return stars > 0 \? STAR_AT \+ \(Math\.min\(3, stars\) - 1\) \* STAR_GAP \+ 120 : STAR_AT;/);
+  assert.match(read('src/games/boss/bash/BashResults.tsx'), /delayMs=\{reduced \|\| won \|\| noHits \? 0 : 450 \+ Math\.max\(0, Math\.min\(3, stars\) - 1\) \* 260 \+ 120\}/);
+});
+
+test('the Duel card hugs its content, a loss bar is never solid red, and RANK UP lights the new hat', () => {
+  const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
+  assert.doesNotMatch(duel, /minHeight: model\.ride \? undefined : height - 8/, 'no fixed full-height card');
+  assert.match(duel, /<Animated\.View style=\{\[styles\.card, cardStyle\]\}>/);
+  // 0 points: no gap bar at all; otherwise Fin's lead is navy on a sky track.
+  assert.match(duel, /!model\.ride && !model\.won && model\.myScore > 0 && model\.oppScore > model\.myScore/);
+  assert.match(duel, /gapSeg: \{ backgroundColor: GAP_NAVY \}/);
+  assert.match(duel, /gap\.value > 0\.5 \? C\.gold : GAP_NAVY/);
+  assert.doesNotMatch(duel.match(/gapTrack: \{[^}]*\}/)[0], /coral/);
+  // RANK UP: old hat, arrow, the new hat big with a gold pop and sparkles.
+  assert.match(duel, /model\.rank && rankUp \? <RankUpRow from=\{Math\.max\(0, \(model\.rank\.stripes \?\? 1\) - 1\)\} to=\{model\.rank\.stripes \?\? 1\}/);
+  assert.match(duel, /<RankHat stripes=\{to\} big \/>/);
+  assert.match(duel, /<GameIcon name="sparkle" size=\{24\} \/>/);
+});
+
+test('the Big Final board reads without words: picture hints, a clock, nothing on the bulbs', () => {
+  const ov = read('src/games/trivia-duel/ui/Overlays.tsx');
+  assert.match(ov, /win: \{ icon: 'check', word: 'WIN!' \}/);
+  assert.match(ov, /go: \{ icon: 'rush', word: 'GO BIG!' \}/);
+  assert.match(ov, /<GameIcon name="timer" size=\{18\} \/>/);
+  assert.doesNotMatch(ov, /Behind picks the topic\.  \$\{left\}s/);
+  // Every hint word is two words at most.
+  for (const m of ov.matchAll(/word: '([^']+)'/g)) assert.ok(m[1].split(/\s+/).length <= 2, m[1]);
+});
+
+test('the Boss loot strip has no unlabelled icon: the trophy is a WIN tag with an equals sign', () => {
+  const bash = read('src/games/boss/bash/BashResults.tsx');
+  assert.doesNotMatch(bash, /\{won \? null : <GameIcon name="trophy" size=\{28\} \/>\}/);
+  assert.match(bash, /<View style=\{styles\.lootWin\}><GameIcon name="trophy" size=\{20\} \/><Text style=\{styles\.lootWinText\} maxFontSizeMultiplier=\{1\.2\}>WIN<\/Text><\/View>/);
+  assert.match(bash, /<Text style=\{styles\.lootEq\}>=<\/Text>/);
+});
+
+test('a ride miss with no retry is one card: the modal and the capture share lostTryHasRetry', () => {
+  const lost = load('src/components/rewards/lostTryCard.ts');
+  assert.equal(lost.lostTryHasRetry({ firstCoinTicketReturned: false, rescueRetryAvailable: false, retryOffered: false }), false);
+  assert.equal(lost.lostTryHasRetry({ firstCoinTicketReturned: true, rescueRetryAvailable: false, retryOffered: false }), true);
+  assert.equal(lost.lostTryHasRetry({ firstCoinTicketReturned: false, rescueRetryAvailable: true }), true);
+  assert.equal(lost.lostTryHasRetry({ firstCoinTicketReturned: false, rescueRetryAvailable: false, retryOffered: true }), true);
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /const lostHasRetry = lostTryHasRetry\(\{ firstCoinTicketReturned, rescueRetryAvailable, retryOffered: canOfferRetry \}\);/);
+  const cap = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
+  assert.match(cap, /const retry = lostTryHasRetry\(/);
+  assert.match(cap, /captureAutoplay="win"/);
+  // Capture autoplay only works in dev or a capture build, never in a store build.
+  const duel = read('src/games/trivia-duel/TriviaDuel.tsx');
+  assert.match(duel, /const CAPTURE_OK = __DEV__ \|\| process\.env\.EXPO_PUBLIC_PERF_CAPTURE === '1';/);
+  assert.match(duel, /const autoWin = CAPTURE_OK && props\.captureAutoplay === 'win';/);
 });

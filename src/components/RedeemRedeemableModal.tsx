@@ -31,7 +31,7 @@ import * as RootNavigation from '../RootNavigation';
 import TicketPunch from './TicketPunch';
 import { serverPerkChips, type PerkChipData } from './coin/progressionModel';
 import ChallengeStatusCard from './rewards/ChallengeStatusCard';
-import { lostTryCopy } from './rewards/lostTryCard';
+import { lostTryCopy, lostTryHasRetry } from './rewards/lostTryCard';
 import { markStandingsStale } from '../screens/LeaderboardsScreen/standingsCache';
 import { challengeRibbon, outOfTicketsCopy, type TicketSources } from './rewards/challengeCopy';
 import { prefetchParkShelf } from '../services/collection/parkShelfPrefetch';
@@ -577,7 +577,7 @@ export default function RedeemRedeemableModal({
     && !firstCoinTicketReturned && !rescueRetryAvailable && (vip || adsAvailable());
   // The try card's title, line and ticket picture (GOOD TRY!, never a made-up SO CLOSE!).
   const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost, retryOffered: canOfferRetry });
-  const lostHasRetry = firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry;
+  const lostHasRetry = lostTryHasRetry({ firstCoinTicketReturned, rescueRetryAvailable, retryOffered: canOfferRetry });
   // One card per miss in a moving line: when the game's own card was the
   // GOOD TRY! and nothing can be retried, its CONTINUE goes straight back to
   // the map (no second GOOD TRY! card, no second tap).

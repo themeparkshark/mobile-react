@@ -147,9 +147,11 @@ test('suggestWager: every branch of 5.5', () => {
   let s = sc.suggestWager(1000, 300, 1);
   assert.equal(s.index, 0);
   assert.equal(s.reason, "Wins it if you're right.");
+  assert.equal(s.kind, 'win');
   s = sc.suggestWager(700, 400, 1); // 700+100+0 = 800 < 1150; +350 = 1150 no; +700 = 1500 > 1150
   assert.equal(s.index, 2);
   assert.equal(s.reason, "Wins it if you're right.");
+  assert.equal(s.kind, 'win');
   // 2) Trailing with no locking chip: ALL IN.
   s = sc.suggestWager(300, 600, 1);
   assert.equal(s.index, 2);
@@ -163,10 +165,12 @@ test('suggestWager: every branch of 5.5', () => {
   s = sc.suggestWager(520, 500, 1); // cover 1100: 620 / 880 / 1140 -> ALL IN covers
   assert.equal(s.index, 2);
   assert.equal(s.reason, 'Stays ahead if they get it.');
+  assert.equal(s.kind, 'stay');
   s = sc.suggestWager(900, 700, 1.5); // lock 1750: 1050/1500/1950 -> ALL IN locks
   assert.equal(s.index, 2);
   s = sc.suggestWager(800, 600, 1); // lock 1550: 900/1300/1700 -> ALL IN; check cover not reached first
   assert.equal(s.reason, "Wins it if you're right.");
+  assert.equal(s.kind, 'win');
 });
 test('ride points and stars', () => {
   assert.equal(sc.ridePoints(true, 0, 640), 250);

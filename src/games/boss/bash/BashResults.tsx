@@ -17,7 +17,7 @@ import { BRAND } from '../../../ui/tokens';
 import GameIcon from '../../../ui/GameIcon';
 import { BASH_ART } from './art';
 import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
-import { bestAwareTitle } from '../../../gamekit/results/feelings';
+import { bossTitle } from '../../../gamekit/results/feelings';
 import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { ResultSecondaryButton } from '../../../gamekit/results/ResultButtons';
 
@@ -126,7 +126,8 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   return (
     <View style={styles.card} accessibilityViewIsModal>
       {/* The one results title every game shares: Alex's ribbon over the card's top edge. */}
-      <ResultsRibbon title={bestAwareTitle(won ? (ko && !noHits ? 'YOU FINISHED IT!' : 'TEAM WON!') : noHits ? 'GOOD TRY!' : 'STILL FIGHTING!', stars, best && !noHits) ?? 'GOOD TRY!'}
+      {/* The star word waits for the last star (no spoilers); a won raid's stars are simply there. */}
+      <ResultsRibbon title={bossTitle({ won, ko, noHits, stars, newBest: best && !noHits })} delayMs={reduced || won || noHits ? 0 : 450 + Math.max(0, Math.min(3, stars) - 1) * 260 + 120}
         reducedMotion={reduced} style={styles.ribbonWrap} />
       <View style={styles.head}>
         <View>
@@ -201,9 +202,14 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
 
       {rewards && <View style={styles.loot} accessible accessibilityLabel={`If your team beats it you get ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`}>
         {won && <ChestPop reduced={reduced} />}
-        {/* A picture, not a sentence: the trophy is "if the team wins", the open chest is "it is yours". */}
+        {/* "If the team wins" as a labelled tag (a trophy and WIN), then an
+            equals sign: every icon in the strip has a number or a word. The
+            open chest is "it is yours". */}
         <View style={styles.lootRow}>
-          {won ? null : <GameIcon name="trophy" size={28} />}
+          {won ? null : <View style={styles.lootIf} importantForAccessibility="no-hide-descendants">
+            <View style={styles.lootWin}><GameIcon name="trophy" size={20} /><Text style={styles.lootWinText} maxFontSizeMultiplier={1.2}>WIN</Text></View>
+            <Text style={styles.lootEq}>=</Text>
+          </View>}
           <Loot icon="coins" n={rewards.coins} count={won} reduced={reduced} />
           <Loot icon="xp" n={rewards.xp} count={won} reduced={reduced} />
           <Loot icon="energy" n={rewards.energy} count={won} reduced={reduced} />
@@ -300,6 +306,10 @@ const styles = StyleSheet.create({
   chest: { position: 'absolute', right: 4, top: -16, width: 52, height: 52 },
   lootRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   lootItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  lootIf: { flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: -8 },
+  lootWin: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: BRAND.gold, borderRadius: 10, borderWidth: 2, borderColor: BRAND.navy, paddingLeft: 3, paddingRight: 6, paddingVertical: 1 },
+  lootWinText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
+  lootEq: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy },
   lootNum: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy },
   receipt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8 },
   receiptErr: { backgroundColor: '#ffe3df', borderRadius: 10, padding: 4 },

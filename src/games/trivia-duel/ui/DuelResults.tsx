@@ -22,6 +22,8 @@ import GameIcon from '../../../ui/GameIcon';
 
 /** The shared results card blue (ResultsCard): one surface on every results card. */
 const CARD_BLUE = '#0768b9';
+/** Fin's lead on the loss gap bar (navy, never red). */
+const GAP_NAVY = '#05346e';
 
 /**
  * The duel's stat rows as the shared brag chips: right answers as gold dots
@@ -121,13 +123,16 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
 
   const cardStyle = useAnimatedStyle(() => ({ opacity: cardO.value, transform: [{ translateY: cardY.value }] }));
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
-  const gapStyle = useAnimatedStyle(() => ({ backgroundColor: gap.value > 0.5 ? C.gold : C.coral }));
+  // Fin's lead is navy on a sky track (never a red "you lost" bar); it blinks
+  // gold a few beats: that much more and you catch him.
+  const gapStyle = useAnimatedStyle(() => ({ backgroundColor: gap.value > 0.5 ? C.gold : GAP_NAVY }));
   // Drops in centre for 1.5s, then pops away (never parked over the card's words).
   const polStyle = useAnimatedStyle(() => ({ opacity: polS.value > 0.02 ? 1 : 0, transform: [{ translateY: polY.value }, { scale: polS.value }, { rotate: '-6deg' }] }));
   // A lost ride challenge shows its right answers on the coin goal row instead.
   const rideGoal = model.ride && !model.ride.won && model.ride.need ? { right: Math.min(model.ride.right ?? 0, model.ride.need), need: model.ride.need } : null;
   const chips = duelChips(model.rows).filter((c) => !(rideGoal && c.label === 'RIGHT ANSWERS'));
   const finalLost = model.finalLost && model.finalLost > 0 ? model.finalLost : 0;
+  const rankUp = model.banners.includes('RANK UP');
 
   const total = Math.max(1, model.myScore + model.oppScore);
   const fact = model.facts[0];
@@ -135,7 +140,10 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
     : model.practice ? (model.won ? 'PRACTICE WIN!' : 'GOOD PRACTICE!') : model.won ? 'YOU WIN!' : model.tie ? 'DEAD EVEN!' : 'GOOD GAME!';
   return (
     <View style={[styles.root, { height }]} pointerEvents="box-none">
-      <Animated.View style={[styles.card, { minHeight: model.ride ? undefined : height - 8 }, cardStyle]}>
+      {/* The card hugs what it shows, anchored at the bottom like Sharky and
+          Boss, so the stage acts above it (a fixed full height left an empty
+          blue band under DONE on a loss). */}
+      <Animated.View style={[styles.card, cardStyle]}>
         {/* The one results title every game shares: Alex's ribbon over the card's top edge. */}
         <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} />
         <View style={styles.head}>
@@ -154,7 +162,9 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             {[1, 2, 3].map((k) => <StarPip key={k} on={k <= model.stars} i={k} reducedMotion={reducedMotion} />)}
           </View>
         ) : null}
-        {!model.ride && !model.won && model.oppScore > model.myScore ? (
+        {/* The gap bar only when you scored: at 0 it would be all Fin, a bar
+            that only says "you lost". The score and REMATCH say enough. */}
+        {!model.ride && !model.won && model.myScore > 0 && model.oppScore > model.myScore ? (
           <View style={styles.gapTrack}>
             <View style={[styles.gapMe, { flex: model.myScore / total }]} />
             <Animated.View style={[styles.gapSeg, { flex: (model.oppScore - model.myScore) / total }, gapStyle]} />
@@ -179,7 +189,8 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             would be a bar that means nothing): today's hat, one fin per win
             needed (gold for each one won) and the bigger, gold-trimmed hat
             those wins unlock. */}
-        {model.rank && (model.won || model.banners.includes('RANK UP')) ? (
+        {model.rank && rankUp ? <RankUpRow from={Math.max(0, (model.rank.stripes ?? 1) - 1)} to={model.rank.stripes ?? 1} label={model.rank.label} reducedMotion={reducedMotion} />
+          : model.rank && model.won ? (
           <View style={styles.rankRow} accessible
             accessibilityLabel={model.rank.next ? `${model.rank.label} now. ${Math.max(0, (model.rank.need ?? 0) - (model.rank.wins ?? 0))} more wins to face ${model.rank.next}` : `${model.rank.label}, the top rank`}>
             <RankHat stripes={model.rank.stripes ?? 0} />
@@ -316,6 +327,37 @@ function GoalPop({ k, reducedMotion, children }: { k: number; reducedMotion: boo
 }
 
 /**
+ * RANK UP, as a picture: the old hat, an arrow, and the new hat big on its
+ * gold badge. The new hat pops in (gold) with a sparkle once the banners have
+ * landed, so the biggest moment on the card is the one that moves. The fins
+ * toward the next hat start again on the next win's card.
+ */
+function RankUpRow({ from, to, label, reducedMotion }: { from: number; to: number; label: string; reducedMotion: boolean }) {
+  const pop = useSharedValue(reducedMotion ? 1 : 0);
+  const spark = useSharedValue(reducedMotion ? 1 : 0);
+  useEffect(() => {
+    if (reducedMotion) return;
+    pop.value = withDelay(1100, withSequence(withTiming(1.35, { duration: 140, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 7, stiffness: 280 })));
+    spark.value = withDelay(1180, withSequence(withTiming(1, { duration: 160 }), withDelay(500, withTiming(0.7, { duration: 300 }))));
+  }, [pop, spark, reducedMotion]);
+  const popSt = useAnimatedStyle(() => ({ opacity: pop.value > 0.02 ? 1 : 0, transform: [{ scale: pop.value }] }));
+  const sparkSt = useAnimatedStyle(() => ({ opacity: spark.value, transform: [{ scale: 0.6 + spark.value * 0.4 }] }));
+  return (
+    <View style={styles.rankRow} accessible accessibilityLabel={`Rank up! Fin is now ${label}`}>
+      <View style={styles.rankUpOld}><RankHat stripes={from} /></View>
+      <View style={styles.rankPips}>
+        <GameIcon name="arrow" size={30} />
+      </View>
+      <Animated.View style={popSt}>
+        <RankHat stripes={to} big />
+        <Animated.View style={[styles.rankSparkL, sparkSt]} pointerEvents="none"><GameIcon name="sparkle" size={24} /></Animated.View>
+        <Animated.View style={[styles.rankSparkR, sparkSt]} pointerEvents="none"><GameIcon name="sparkle" size={18} /></Animated.View>
+      </Animated.View>
+    </View>
+  );
+}
+
+/**
  * The Big Final that missed: lightning, BIG FINAL, then a red pill with an
  * arrow pointing down at the points it took (no minus sign to work out, no
  * dice, no betting words). The full sentence is spoken.
@@ -394,9 +436,9 @@ const styles = StyleSheet.create({
   scoreMe: { fontFamily: 'Shark', fontSize: 30, color: '#ffffff' },
   scoreVs: { fontFamily: 'Knockout', fontSize: 15, color: '#cdeaff', marginHorizontal: 8 },
   scoreOpp: { fontFamily: 'Shark', fontSize: 24, color: '#cdeaff' },
-  gapTrack: { flexDirection: 'row', height: 12, borderRadius: 6, borderWidth: 2.5, borderColor: C.ink, overflow: 'hidden', backgroundColor: '#ffffff', marginTop: 6 },
+  gapTrack: { flexDirection: 'row', height: 12, borderRadius: 6, borderWidth: 2.5, borderColor: C.ink, overflow: 'hidden', backgroundColor: '#bfe8ff', marginTop: 6 },
   gapMe: { backgroundColor: C.gold },
-  gapSeg: { backgroundColor: C.coral },
+  gapSeg: { backgroundColor: GAP_NAVY },
   banners: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 },
   bannerPop: { margin: 3 },
   banner: { backgroundColor: C.gold, borderWidth: 2.5, borderColor: C.ink, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2 },
@@ -408,6 +450,9 @@ const styles = StyleSheet.create({
   rankPips: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, marginHorizontal: 4 },
   rankPip: { width: 30, height: 30, borderRadius: 15, borderWidth: 2.5, borderColor: '#05346e', backgroundColor: '#3d9be6', alignItems: 'center', justifyContent: 'center' },
   rankPipOn: { backgroundColor: '#ffffff' },
+  rankUpOld: { opacity: 0.6 },
+  rankSparkL: { position: 'absolute', left: -14, top: -10 },
+  rankSparkR: { position: 'absolute', right: -10, bottom: -6 },
   fact: { flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 10, paddingVertical: 6 },
   factText: { flex: 1, fontSize: 15, fontWeight: '700', color: C.navy },
   factLong: { fontSize: 14 },
