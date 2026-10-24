@@ -143,7 +143,8 @@ function SpawnSparkle({ angle, t }: { angle: number; t: ReturnType<typeof useSha
     const out = 1 - (1 - p) * (1 - p);
     return { opacity: 1 - p, transform: [{ translateX: Math.sin(rad) * 26 * out }, { translateY: -Math.cos(rad) * 18 * out - 6 * out }, { scale: 0.6 + 0.5 * (1 - p) }] };
   });
-  return <Animated.Image source={MAP_SPARKLE} resizeMode="contain" style={[styles.spawnSpark, { tintColor: GOLD_FX.raysSoft }, style]} />;
+  // Tint on a plain image inside the animated view: an animated style on the image itself can drop its tint.
+  return <Animated.View style={[styles.spawnSpark, style]}><Image source={MAP_SPARKLE} tintColor={GOLD_FX.raysSoft} style={styles.fill} contentFit="contain" transition={0} /></Animated.View>;
 }
 
 /** "2 min" in the final five minutes, null before; calls onExpire once it is gone. Only ticks while the map is live. */
@@ -343,16 +344,22 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         <Animated.View style={[styles.scaled, styles.overlay, spawnStyle]}>
         <View style={styles.groundShadow} />
         {/* Getting warmer: a gold halo that breathes faster up close, and two gold rings calling in range. */}
-        <Animated.Image source={GLOW} style={[styles.groundGlow, { tintColor: GOLD_FX.glow }, halo]} />
+        <Animated.View style={[styles.groundGlow, halo]} pointerEvents="none">
+          <Image source={GLOW} tintColor={GOLD_FX.glow} style={styles.fill} contentFit="fill" transition={0} />
+        </Animated.View>
         <Animated.View style={[styles.callRing, ring0]} pointerEvents="none" />
         <Animated.View style={[styles.callRing, ring1]} pointerEvents="none" />
         {/* Commons glow warm gold in range (never the grey that read as a loading bar). */}
-        {inRange && <Animated.Image source={GLOW} style={[styles.groundGlow, { tintColor: tier === 1 ? BRAND.gold : color }, pulse]} />}
+        {inRange && <Animated.View style={[styles.groundGlow, pulse]} pointerEvents="none">
+          <Image source={GLOW} tintColor={tier === 1 ? BRAND.gold : color} style={styles.fill} contentFit="fill" transition={0} />
+        </Animated.View>}
         {look.rays && <Animated.View style={[styles.rays, rays]} pointerEvents="none">
           {[0, 45, 90, 135].map(angle => <View key={angle}
             style={[styles.ray, { backgroundColor: color, transform: [{ rotate: `${angle}deg` }] }]} />)}
         </Animated.View>}
-        {look.aura && <Animated.Image source={GLOW} style={[styles.aura, { tintColor: color }, pulse]} />}
+        {look.aura && <Animated.View style={[styles.aura, pulse]} pointerEvents="none">
+          <Image source={GLOW} tintColor={color} style={styles.fill} contentFit="fill" transition={0} />
+        </Animated.View>}
         <Animated.View style={[styles.pulseRing, { borderColor: color }, pulseRing]} pointerEvents="none" />
         <Animated.View style={pulseArt}>
         <Animated.View style={[styles.art, bob]}>
@@ -404,6 +411,7 @@ const styles = StyleSheet.create({
   chromeOff: { opacity: 0 },
   scaled: { width: B, height: B, alignItems: 'center', justifyContent: 'center' },
   overlay: { position: 'absolute', left: 0, top: 0 },
+  fill: { width: '100%', height: '100%' },
   // The in-range call: thin gold rings on the ground (an ellipse, scaled flat), expanding and fading.
   callRing: { position: 'absolute', top: B / 2 + A / 2 - 36, width: 60, height: 60, borderRadius: 30, borderWidth: 3, borderColor: GOLD_FX.rays },
   spawnRing: { position: 'absolute', top: B / 2 + A / 2 - 40, left: B / 2 - 32, width: 64, height: 64, borderRadius: 32, borderWidth: 3, borderColor: BRAND.white },

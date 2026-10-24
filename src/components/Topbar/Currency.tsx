@@ -23,6 +23,8 @@ interface CurrencyProps {
 
 const FALLBACK_ICON = require('../../../assets/images/coingold.png');
 const COUNT_FONT = 19;
+/** The icon's centre from the chip container's left edge (currencyRow marginLeft 14, icon left -18, 36 wide). */
+const ICON_CENTER_X = 14 - 18 + 18;
 /** "+25", "+1,200" for the float-up over the chip. */
 function countText(n: number): string {
   return Math.round(n).toLocaleString('en-US');
@@ -36,7 +38,9 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     if (flyTarget && containerRef.current) {
       containerRef.current.measureInWindow((x, y, width, height) => {
         if (x !== undefined && y !== undefined) {
-          registerTarget(flyTarget, x + width / 2, y + height / 2);
+          // Coins aim at the icon riding the chip's left edge (it punches as they land), never at the
+          // middle, where a pile of landing coins would cover the digits rolling up.
+          registerTarget(flyTarget, x + ICON_CENTER_X, y + height / 2);
         }
       });
     }

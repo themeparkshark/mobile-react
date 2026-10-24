@@ -169,8 +169,10 @@ function BurstSparkle({ index, count, t }: { index: number; count: number; t: Sh
         { scale: (p < 0.15 ? p / 0.15 : 1) * (1.1 - 0.5 * p) }, { rotate: `${p * 160}deg` }],
     };
   });
-  return <Animated.Image source={MAP_SPARKLE} resizeMode="contain"
-    style={[styles.burstSparkle, { width: size, height: size, left: -size / 2, top: -size / 2, tintColor: SPARK_TINTS[index % SPARK_TINTS.length] }, style]} />;
+  // The tint sits on a plain image inside the animated view (an animated style on the image can drop its tint).
+  return <Animated.View style={[styles.burstSparkle, { width: size, height: size, left: -size / 2, top: -size / 2 }, style]}>
+    <Image source={MAP_SPARKLE} tintColor={SPARK_TINTS[index % SPARK_TINTS.length]} style={styles.fxFill} contentFit="contain" transition={0} />
+  </Animated.View>;
 }
 
 /** A gather sparkle: drawn in toward the find while it charges (the light collecting before the burst). */
@@ -184,7 +186,9 @@ function GatherSparkle({ index, count, charge }: { index: number; count: number;
     const r = 74 * (1 - local);
     return { opacity: Math.sin(local * Math.PI), transform: [{ translateX: Math.sin(angle) * r }, { translateY: -Math.cos(angle) * r }, { scale: 0.5 + 0.5 * local }] };
   });
-  return <Animated.Image source={MAP_SPARKLE} resizeMode="contain" style={[styles.gatherSparkle, { tintColor: GOLD_FX.raysSoft }, style]} />;
+  return <Animated.View style={[styles.gatherSparkle, style]}>
+    <Image source={MAP_SPARKLE} tintColor={GOLD_FX.raysSoft} style={styles.fxFill} contentFit="contain" transition={0} />
+  </Animated.View>;
 }
 
 export interface HomeCatchHandle {
@@ -334,6 +338,15 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     },
   }), [layer.width, showBackdrop, offset.x, offset.y]);
 
+  // A common's start point is set before its first frame paints (the catch effect runs after paint).
+  useLayoutEffect(() => {
+    if (!request || catchStyleFor(request.item.rarity) === 'ride_photo' || layer.width === 0) return;
+    const start = fromPoint(request);
+    flyFromX.value = start.x;
+    flyFromY.value = start.y;
+    fly.value = 0; itemGone.value = 0; lift.value = 0; wobble.value = 0; popScale.value = 1;
+  }, [request?.pivotId, request?.attempt, layer.width > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // The stage opens on the commit that renders it with the primed find (its own rarity, speed and hints).
   useLayoutEffect(() => {
     if (primed) stage.current?.prime(primed.item, primed.from);
@@ -407,6 +420,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (!brief) beats.push(() => { gradeIn.value = motion ? withSpring(1, { damping: 10, stiffness: 260 }) : 1; });
     if (newRideRef.current) beats.push(() => { rideIn.value = motion ? withSpring(1, { damping: 10, stiffness: 240 }) : 1; });
     if (!data.replayed) beats.push(() => {
+      // The header comes back before the coins set off, so the kid sees them land in the counter (it bumps and rolls).
+      if (data.rewards.coins > 0 || data.rewards.tickets > 0) showCatchChrome(false);
       layerRef.current?.measureInWindow((x, y) => {
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
         const startX = x + target.x, startY = y + target.y;
@@ -802,7 +817,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Styles ─────────────────────────────────────────────────────────────
-  const from = fromPoint(showing);
+  // A common's art is drawn on the same commit the map hides its marker (the request), never a frame later:
+  // otherwise the find vanishes for the first beats of the wobble on a busy phone.
+  const chompRequest = request && catchStyleFor(request.item.rarity) !== 'ride_photo' ? request : null;
+  const from = fromPoint(showing ?? chompRequest);
   const itemStyle = useAnimatedStyle(() => {
     const f = fly.value;
     // The flight home: a quadratic arc with an 80 pt apex, an edge-spin and a shrink to half size.
@@ -860,7 +878,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     });
   };
 
-  const item = showing?.item ?? null;
+  const item = showing?.item ?? chompRequest?.item ?? null;
   const art = item ? findImageSource(item) : null;
   const color = item ? rarityColor(item.rarity) : BRAND.gold;
   const motionFx = !!item && !reducedMotion && catchStyleFor(item.rarity) === 'chomp';
@@ -993,7 +1011,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
 
       {item && <>
         {/* Gather: a gold halo builds under the find (ground-glow art, tinted gold). */}
-        <Animated.Image source={GLOW_TEX} resizeMode="stretch" style={[styles.halo, { tintColor: GOLD_FX.glow }, haloStyle]} />
+        <Animated.View style={[styles.halo, haloStyle]} pointerEvents="none">
+          <Image source={GLOW_TEX} tintColor={GOLD_FX.glow} style={styles.fxFill} contentFit="fill" transition={0} />
+        </Animated.View>
         {motionFx && <Animated.View style={[styles.goldAt, goldStyle]} pointerEvents="none">
           <GoldBurst size={260} amount={gold} bloom={goldBloom} spin={false} reduced={reducedMotion} />
         </Animated.View>}
@@ -1004,7 +1024,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         <Animated.View style={[styles.sparkOrigin, sparkOrigin]} pointerEvents="none">
           {Array.from({ length: sparks }, (_, index) => <BurstSparkle key={index} index={index} count={sparks} t={burstFx} />)}
         </Animated.View>
-        <Animated.Image source={GLOW_TEX} resizeMode="stretch" style={[styles.flash, { tintColor: GOLD_FX.core }, flashStyle]} />
+        <Animated.View style={[styles.flash, flashStyle]} pointerEvents="none">
+          <Image source={GLOW_TEX} tintColor={GOLD_FX.core} style={styles.fxFill} contentFit="fill" transition={0} />
+        </Animated.View>
         <Animated.View style={[styles.item, itemStyle]} pointerEvents="none">
           {art ? <Image source={art} style={styles.itemArt} contentFit="contain" transition={0} />
             : <View style={[styles.itemFallback, { backgroundColor: color }]}><GameIcon name="gift" size={30} /></View>}
@@ -1071,6 +1093,7 @@ const styles = StyleSheet.create({
   warmCanvas: { position: 'absolute', left: 0, top: 0, width: 2, height: 2, opacity: 0.01 },
   ring: { position: 'absolute', left: 0, top: 0, width: 80, height: 80, borderRadius: 40, borderWidth: 5 },
   halo: { position: 'absolute', left: 0, top: 0, width: 140, height: 140 },
+  fxFill: { width: '100%', height: '100%' },
   flash: { position: 'absolute', left: 0, top: 0, width: 220, height: 220 },
   goldAt: { position: 'absolute', left: 0, top: 0, width: 260, height: 260 },
   burstSparkle: { position: 'absolute' },
