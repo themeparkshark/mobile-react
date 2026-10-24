@@ -821,7 +821,9 @@ test('a slow map shows the living sky (clouds and the bobbing shark), never a fl
 test('SE fits: the coin-in-range card sits left above the help button and ends before Energy; the gifts bubble shares the wallet row', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /const COIN_TIP_WIDTH = Math\.min\(300, WINDOW_WIDTH - 124\);/);
-  assert.match(explore, /left: 12, width: COIN_TIP_WIDTH, bottom: bottomLeftColumnHeight\(stores\) \+ 6/);
+  assert.match(explore, /WINDOW_WIDTH - 12 - 16 - rightColumnWidth - 8/);
+  assert.match(explore, /left: 12, width, bottom: bottomLeftColumnHeight\(stores\) \+ 6/);
+  assert.match(explore, /onLayout=\{event => setRightColumnWidth\(Math\.round\(event\.nativeEvent\.layout\.width\)\)\}/);
   assert.match(explore, /small=\{parkTip === 'coin_in_range' && SHORT_MAP\}/);
   const cc = read('src/screens/CommunityCenterScreen.tsx');
   assert.match(cc, /SHORT_SCREEN && styles\.giftCountBadgeShort,\s*SHORT_SCREEN && \{ top: 60 \+ ART_SHIFT \},/);
@@ -889,7 +891,7 @@ test('Energy sits high enough that its battery clears the PLAY RIDE pill by 8 pt
   assert.equal(layout.bottomRightColumnHeight(false, 45), 32 + 44 + 84 + 45);
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /const ENERGY_GAP = energyGap\(WINDOW_WIDTH\);/);
-  assert.match(explore, /<View style=\{\{ marginBottom: ENERGY_GAP, gap: 6, alignItems: 'flex-end' \}\}>/);
+  assert.match(explore, /<View style=\{\{ marginBottom: ENERGY_GAP, gap: 6, alignItems: 'flex-end' \}\}/);
 });
 
 test('ride pins drop in when their slot first gets a ride (slots mount empty), 40 ms apart, nearest first', () => {
@@ -908,7 +910,7 @@ test('Finn tips at the park: the welcome stops short of the right buttons, the c
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /const PARK_WELCOME_TIP_STYLE = \{ position: 'absolute', left: 12, right: 78, top: 132, zIndex: 40 \} as const;/);
   assert.match(explore, /art=\{parkTip === 'coin_in_range' \? <CoinTipPicture \/> : undefined\}/);
-  assert.match(explore, /pointerLeft=\{parkTip === 'coin_in_range' \? COIN_TIP_POINTER : undefined\}/);
+  assert.match(explore, /pointerLeft=\{parkTip === 'coin_in_range' \? coinTipPointer\(park\.stores\.length, rightColumnWidth\) : undefined\}/);
   // The retry note waits while Finn's park tip is on screen (one card at a time).
   assert.match(explore, /mapLoadFailed && !\(parkTip && activeTip === parkTip\) && \(/);
   const { TIP_COPY } = loadTs('src/services/help/helpTopics.ts');
