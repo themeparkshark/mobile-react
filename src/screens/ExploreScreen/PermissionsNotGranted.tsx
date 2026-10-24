@@ -90,10 +90,9 @@ export default function PermissionsNotGranted() {
         <View style={[styles.finds, compact && styles.findsCompact]}>
           {FINDS.map((source, i) => <Find key={i} source={source} i={i} />)}
         </View>
-        <Text style={styles.body}>
-          Treasures pop up around you, even at home. At the park, walk up to a ride to win its ride coin.
-        </Text>
-        <Text style={styles.small}>Your location is only used to place items and rides near you.</Text>
+        {/* Two short lines a 7-year-old can read; the pictures above carry the rest. */}
+        <Text style={styles.body}>Treasures pop up near you, even at home!</Text>
+        <Text style={styles.small}>Your location only puts treasures and rides near you.</Text>
         <View style={{ width: '82%', marginTop: 16 }}>
           <YellowButton text={asking ? 'One sec…' : 'Turn On Location'} onPress={turnOn} />
         </View>

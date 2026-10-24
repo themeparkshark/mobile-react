@@ -170,6 +170,11 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const onMapSettled = useCallback(() => { setMapSettled(version => version + 1); }, []);
   const containerRef = useRef<View>(null);
   const [chip, setChip] = useState<HuntChipMessage | null>(null);
+  // While Finn owns the map (his hello, the first find, "Nice catch") he is the
+  // only voice: the "A find is close!" chip and the safety tip wait their turn.
+  const quietRef = useRef(quiet);
+  quietRef.current = quiet;
+  useEffect(() => { if (quiet) setChip(current => (current?.key.startsWith('near-') ? null : current)); }, [quiet]);
   const [footprints, setFootprints] = useState<readonly Rect[]>([]);
   const [hudWidth, setHudWidth] = useState(0);
   // A finger moving the map means "done with that line": the peek leaves (status lines stay).
@@ -377,7 +382,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
           if (!pingedPivots.current.has(nearbyItem.pivot_id)) {
             pingedPivots.current.add(nearbyItem.pivot_id);
             queueHaptic('tickSelection', 1);
-            setChip(current => current ?? { key: `near-${nearbyItem.pivot_id}`, text: 'A find is close! Tap it to catch.' });
+            if (!quietRef.current) setChip(current => current ?? { key: `near-${nearbyItem.pivot_id}`, text: 'A find is close! Tap it to catch.' });
           }
         }
       } catch (error) {
@@ -439,14 +444,14 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     }
   }, [highlightNearestFind, placed, homeLocationConfirmed]);
   useEffect(() => {
-    if (safetyLineShown || !homeLocationConfirmed) return;
+    if (safetyLineShown || !homeLocationConfirmed || quiet) return;
     const top = activePrepItems.reduce((best, item) => Math.max(best, item.rarity ?? 0), 0);
     if (shouldShowSafetyLine(top, safetyLineShown)) {
       safetyLineShown = true;
       showToast(SAFETY_LINE, 'info', 6000);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prepItems, homeLocationConfirmed]);
+  }, [prepItems, homeLocationConfirmed, quiet]);
 
   /** A map coordinate in this view's own points (the catch layer's space), or null. */
   const toLocal = useCallback(async (latitude: number, longitude: number) => {

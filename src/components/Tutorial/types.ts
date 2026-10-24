@@ -66,6 +66,8 @@ export interface TutorialStep {
   subtitle?: string;
   /** Where to position the teacher shark */
   sharkPosition: SharkPosition;
+  /** Finn stands beside his bubble (bottom-center): keeps the middle of the map clear for a waiting find. */
+  beside?: boolean;
   /** Shark's mood/expression */
   sharkMood: SharkMood;
   /** Spotlight target area (null = no spotlight, full overlay) */

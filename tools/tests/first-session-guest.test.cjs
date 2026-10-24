@@ -217,6 +217,7 @@ test('welcome back (and a new player hello) only says "it landed right next to y
   const waiting = getStepsForSequence('onboarding', { guestPlayed: true, findReady: false })[0];
   assert.equal(ready.title, GUEST_WELCOME_BACK.title);
   assert.match(ready.text, /right next to you/);
+  assert.equal(ready.beside, true, 'Finn stands beside his bubble so the find at the middle of the map stays in view');
   assert.equal(ready.nextText, 'Grab it!');
   assert.doesNotMatch(`${waiting.text} ${waiting.subtitle}`, /landed|right next to you|here/i);
   assert.match(waiting.subtitle, /Walk around/);
@@ -247,8 +248,8 @@ test('Finn’s warm-up win is its own card: Finn cheering, a burst, what is next
   const source = read('src/games/memory/MemoryResults.tsx');
   assert.match(source, /if \(firstWin\) return <FirstWinCard /);
   const card = source.slice(source.indexOf('function FirstWinCard'), source.indexOf('/** Fades a section in'));
-  assert.ok(source.includes("FINN_GRAD = require('../../../assets/images/tutorial/teacher-shark.png')"), 'the same graduate Finn as the rest of the first minute');
-  assert.ok(card.includes('source={FINN_GRAD}'));
+  assert.ok(source.includes("FINN_CHEER = require('../../assets/games/memory/studio/barker_fist_pump.png')"), 'the same boater Finn the kid just played with, cheering (no costume swap)');
+  assert.ok(card.includes('source={FINN_CHEER}'));
   assert.match(card, /<SparkleBurst /);
   assert.match(card, /playLadder\('mm_sharp_twinkle'/, 'the twinkle ladder, not a lone hit');
   assert.match(card, /FIRST_WIN_COPY\.next/);
@@ -301,12 +302,13 @@ test('the first win is a staged celebration: squash pop, ribbon unfurl, one-shot
   assert.match(card, /<ShowerBit /, 'a shower falls from the top');
   assert.match(card, /shower\.value = withDelay\(B\.shower, withTiming\(1/, 'the shower plays once (no repeat)');
   assert.doesNotMatch(card, /withRepeat/, 'nothing loops forever on a card a kid may leave open');
-  assert.match(card, /fly\.value = withTiming\(1/, 'the coin lifts off the card');
-  assert.match(card, /setTimeout\(claim, FIRST_WIN_BEATS\.coinFly\)/, 'the coin step follows the coin');
+  assert.match(card, /fly\.value = withTiming\(1/, 'the coin hops on CONTINUE');
+  assert.match(card, /setFirstWinCoinSpot\(/, 'the coin hands its screen spot to the shelf step');
+  assert.match(card, /claimTimer\.current = setTimeout\(claim, FIRST_WIN_BEATS\.coinLift\)/, 'the coin step follows the coin');
   assert.match(card, /if \(reducedMotion\) \{ claim\(\); return; \}/, 'reduced motion goes on at once');
   assert.match(card, /<TapHint delay=\{0\} style=\{styles\.firstWinHand\} \/>/, 'a tapping hand on CONTINUE after 3 s');
-  const { FIRST_WIN_BEATS } = { FIRST_WIN_BEATS: { pulse: 1500, hand: 3000 } };
-  assert.match(source, new RegExp(`pulse: ${FIRST_WIN_BEATS.pulse}, hand: ${FIRST_WIN_BEATS.hand}`));
+  assert.match(source, /next: 200, button: 320, live: 650, pulse: 1100, hand: 3000/, 'rows settle by 0.3 s, CONTINUE live at 0.65 s');
+  assert.doesNotMatch(card.slice(card.indexOf('const nextSt'), card.indexOf('const coinSt')), /opacity: (next|btn)\.value/, 'the rows are never invisible on the card');
   assert.ok(card.includes('accessibilityRole="header"'), 'the header stays accessible');
 });
 
@@ -404,4 +406,60 @@ test('the name step starts with a rolled kid-safe name, so a kid can just tap th
   assert.match(src, /useState\(rollName\)/);
   assert.doesNotMatch(src, /'Dole'/, 'no brand names in rolled names');
   assert.match(src, /selectTextOnFocus/, 'typing your own name replaces the rolled one');
+});
+
+// Wave 2 round 1 (Oct 23): a guaranteed first-win end, no empty or skippable first frames,
+// the same coin travels to the shelf, Finn stays clear of the find, Finn is the only voice.
+
+test('the warm-up first win never waits: the card is built on the frame the run ends, and a watchdog guarantees it', () => {
+  const source = read('src/games/memory/MemoryGame.tsx');
+  const finish = source.slice(source.indexOf('const finishRun = useCallback'), source.indexOf('// Board clear (3 beats'));
+  assert.match(finish, /if \(r\.mode === 'warmup'\) \{[\s\S]*?showEnd\(r, won\);[\s\S]*?return;/, 'warm-up result is synchronous');
+  assert.match(source, /const armEndWatch = useCallback/, 'an end watchdog exists');
+  assert.match(source, /endWatch\.current = setTimeout\(/, 'the watchdog is its own timer, not one of later()');
+  assert.doesNotMatch(source.slice(source.indexOf('const clearTimers'), source.indexOf('const clearTimers') + 200), /endWatch/, 'clearTimers can never cancel the watchdog');
+  assert.match(source, /armEndWatch\(r, true, r\.mode === 'warmup' \? 1800 : 7000\)/, 'armed the moment the board is clear');
+  assert.match(source, /if \(reducedMotion\) \{\s*\/\/ Still: the CLEARED sign lands the instant/, 'reduced motion shows CLEARED at once');
+});
+
+test('first-win CONTINUE takes taps only once it is shown, and the ride picture says where coins come from', () => {
+  const source = read('src/games/memory/MemoryResults.tsx');
+  const card = source.slice(source.indexOf('function FirstWinCard'), source.indexOf('/** One piece of the one-shot shower'));
+  assert.match(card, /pointerEvents=\{live \? 'auto' : 'none'\}/);
+  assert.match(card, /disabled=\{!live\}/);
+  assert.match(card, /if \(leaving\.current \|\| !live\) return;/);
+  assert.match(card, /useEffect\(\(\) => \(\) => \{ if \(claimTimer\.current\) clearTimeout\(claimTimer\.current\); \}, \[\]\)/, 'the claim timer is cleared on unmount');
+  assert.match(source, /FIRST_WIN_RIDE = require\('..\/..\/..\/assets\/icons\/game\/ride.png'\)/, 'existing ride art, no new art');
+});
+
+test('the shelf step flies the same coin from the first-win card spot', () => {
+  const { setFirstWinCoinSpot, takeFirstWinCoinSpot } = loadTs('src/games/memory/firstWinHandoff.ts');
+  assert.equal(takeFirstWinCoinSpot(), null);
+  setFirstWinCoinSpot({ x: 100, y: 400, size: 40 });
+  assert.equal(JSON.stringify(takeFirstWinCoinSpot()), JSON.stringify({ x: 100, y: 400, size: 40 }));
+  assert.equal(takeFirstWinCoinSpot(), null, 'used once');
+  setFirstWinCoinSpot({ x: 1, y: 2, size: 40 });
+  assert.equal(takeFirstWinCoinSpot(4000, Date.now() + 5000), null, 'stale spots are ignored');
+  const taste = read('src/screens/ExploreScreen/GuestTaste.tsx');
+  assert.match(taste, /takeFirstWinCoinSpot\(\)/);
+  assert.match(taste, /translateX: from\.x \* \(1 - t\) \+ SLOT_ONE_X \* t/);
+});
+
+test('while Finn owns the map, the find chip and the safety tip wait', () => {
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /if \(!quietRef\.current\) setChip\(/);
+  assert.match(home, /if \(safetyLineShown \|\| !homeLocationConfirmed \|\| quiet\) return;/);
+  const teacher = read('src/components/Tutorial/TeacherShark.tsx');
+  assert.match(teacher, /if \(beside\) return \{ bottom: bottomOffset - 8/);
+});
+
+test('Reduce Motion: the results card never hangs at opacity 0, and the CLEARED sign stays up', () => {
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  // Root cause of the first-win freeze: in Reduce Motion the results value jumps 0 -> 1 with no
+  // animation, and a jump that lands before the animated style is hooked up is never drawn.
+  assert.equal((shell.match(/reducedMotion \? styles\.resultsStill : resultsStyle/g) || []).length, 2, 'both results cards');
+  assert.match(shell, /resultsStill: \{ opacity: 1, transform: \[\{ scale: 1 \}\] \}/);
+  const booth = read('src/games/memory/MemoryBooth.tsx');
+  // Reanimated finishes timings at once under the system Reduce Motion, so a delayed fade-out hid the sign.
+  assert.match(booth, /if \(!reducedMotion\) out\.value = withDelay\(delay \+ 1100/);
 });

@@ -344,6 +344,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
             text={currentStep.text}
             subtitle={currentStep.subtitle}
             picture={currentStep.picture}
+            beside={currentStep.beside}
             mood={currentStep.sharkMood}
             position={currentStep.sharkPosition}
             nextText={currentStep.nextText}

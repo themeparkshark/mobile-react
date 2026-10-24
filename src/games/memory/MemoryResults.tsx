@@ -38,6 +38,7 @@ import GameIcon from '../../ui/GameIcon';
 import type { CoinEdition, Grade } from './engine';
 import { deckById } from './decks';
 import { faceFor } from './faces';
+import { setFirstWinCoinSpot } from './firstWinHandoff';
 import { AlbumBody, ChallengeBody, NewChip, ShareBack, type DailySummary, type RunRewards } from './MemoryExtras';
 import { MM } from './theme';
 
@@ -242,22 +243,33 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
 
 /**
  * Finn's warm-up win: the very first win of a new player, and the biggest beat
- * of the first minute. A staged celebration of about 1.8 s on the underwater
- * scene: Finn pops in with a squash and stretch, the ribbon unfurls, a one-shot
- * shower of bubbles, sparkles and coins falls from the top, then what comes
- * next and one big CONTINUE (one pulse at 1.5 s, a tapping hand at 3 s).
- * Finn keeps a small cheer for a few seconds, then stands still. On CONTINUE
- * the gold coin lifts off the card and arcs up off screen, so the coin that
- * drops onto the shelf next is the same coin. Transforms and opacity only.
+ * of the first minute. A staged celebration on the underwater scene: Finn pops
+ * in with a squash and stretch, the ribbon unfurls, a one-shot shower of
+ * bubbles, sparkles and coins falls from the top, and the card is full by
+ * its first frame: a ride car with its coin (what comes next, no reading needed)
+ * and one big CONTINUE (one pulse at 1.1 s, a tapping hand at 3 s). CONTINUE
+ * takes taps once it is fully shown. Finn keeps a small cheer for a few
+ * seconds, then stands still. On CONTINUE the coin hops and its screen spot is
+ * handed to the shelf step, which flies that same coin onto the shelf.
+ * Transforms and opacity only.
  */
 export const FIRST_WIN_COPY = { next: 'Up next: ride coins!' } as const;
-const FINN_GRAD = require('../../../assets/images/tutorial/teacher-shark.png');
+// The same Finn the kid just played with (boater and striped vest, the warm-up
+// host), pumping his fist: no costume swap between the board and the win.
+// Existing barker art from the memory booth.
+const FINN_CHEER = require('../../assets/games/memory/studio/barker_fist_pump.png');
 const FIRST_WIN_COIN = require('../../../assets/images/coingold.png');
+/** Existing game icon art: a ride car on its track, so 'ride coins' reads without reading. */
+const FIRST_WIN_RIDE = require('../../../assets/icons/game/ride.png');
 const FIRST_WIN_BACKDROP = require('../../../assets/images/screens/park/background-new.png');
 const SHOWER_BUBBLE = require('../../../assets/images/map/fx/bubble.png');
 const SHOWER_SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
 /** When each beat lands, in ms from the card's first frame. */
-export const FIRST_WIN_BEATS = { finn: 0, ribbon: 150, shower: 120, next: 900, button: 1200, pulse: 1500, hand: 3000, coinFly: 420 } as const;
+// Every part of the card is on it from the first frame (no empty cream while a
+// kid looks); the ribbon unfurls and the rows settle on their beats. CONTINUE
+// only takes taps from 0.65 s (live), so a mashing kid cannot skip the win in
+// its first frames.
+export const FIRST_WIN_BEATS = { finn: 0, ribbon: 120, shower: 120, next: 200, button: 320, live: 650, pulse: 1100, hand: 3000, coinLift: 160 } as const;
 const SHOWER = 20;
 function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim: () => void; reducedMotion: boolean }) {
   const win = useWindowDimensions();
@@ -272,7 +284,11 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
   const pulse = useSharedValue(0);
   const fly = useSharedValue(0);
   const [hand, setHand] = useState(false);
+  const [live, setLive] = useState(false);
   const leaving = useRef(false);
+  const coinRef = useRef<View>(null);
+  const claimTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (claimTimer.current) clearTimeout(claimTimer.current); }, []);
   useEffect(() => {
     Haptic.hitMedium();
     GameAudio.play('fx.hit', { volume: 0.5 });
@@ -281,6 +297,7 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
       GameAudio.playLadder('mm_sharp_twinkle', 4 + i, { volume: 0.8 });
     }, 260 + i * 150));
     timers.push(setTimeout(() => setHand(true), FIRST_WIN_BEATS.hand));
+    timers.push(setTimeout(() => setLive(true), FIRST_WIN_BEATS.live));
     if (!reducedMotion) {
       const B = FIRST_WIN_BEATS;
       // Squash and stretch: 0 -> overshoot tall -> squash wide -> settle.
@@ -306,13 +323,26 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
     };
   }, [reducedMotion, pop, squash, cheer, ring, ribbon, shower, next, btn, pulse, fly]);
   const onContinue = () => {
-    if (leaving.current) return;
+    if (leaving.current || !live) return;
     leaving.current = true;
     Haptic.tapLight();
-    if (reducedMotion) { claim(); return; }
-    GameAudio.playLadder('mm_sharp_twinkle', 8, { volume: 0.7 });
-    fly.value = withTiming(1, { duration: FIRST_WIN_BEATS.coinFly, easing: Easing.in(Easing.quad) });
-    setTimeout(claim, FIRST_WIN_BEATS.coinFly);
+    // Remember where the coin sits: the shelf step flies this same coin from here.
+    const go = () => {
+      if (reducedMotion) { claim(); return; }
+      GameAudio.playLadder('mm_sharp_twinkle', 8, { volume: 0.7 });
+      fly.value = withTiming(1, { duration: FIRST_WIN_BEATS.coinLift, easing: Easing.out(Easing.quad) });
+      claimTimer.current = setTimeout(claim, FIRST_WIN_BEATS.coinLift);
+    };
+    const node = coinRef.current;
+    if (!node) { go(); return; }
+    let sent = false;
+    const once = () => { if (!sent) { sent = true; go(); } };
+    node.measureInWindow((x, y, w, h) => {
+      if (w > 0 && h > 0) setFirstWinCoinSpot({ x, y, size: Math.min(w, h) });
+      once();
+    });
+    // Never wait on the measure.
+    claimTimer.current = setTimeout(once, 120);
   };
   const finnSt = useAnimatedStyle(() => ({
     opacity: pop.value > 0 ? 1 : 0,
@@ -324,12 +354,13 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
   // The card pops in with Finn, so it is never an empty frame waiting for its ribbon.
   const cardSt = useAnimatedStyle(() => ({ opacity: Math.min(1, pop.value * 1.6), transform: [{ scale: 0.9 + 0.1 * Math.min(1, pop.value) }] }));
   const ribbonSt = useAnimatedStyle(() => ({ opacity: ribbon.value > 0 ? 1 : 0, transform: [{ scaleX: Math.max(0.05, ribbon.value) }] }));
-  const nextSt = useAnimatedStyle(() => ({ opacity: next.value, transform: [{ translateY: (1 - next.value) * 8 }] }));
-  const btnSt = useAnimatedStyle(() => ({ opacity: btn.value, transform: [{ scale: (0.9 + btn.value * 0.1) * (1 + pulse.value * 0.08) }] }));
-  // The coin lifts and arcs up and off the top: the shelf coin drops in from there.
+  // The next line and CONTINUE are on the card from its first frame (never an empty
+  // cream card); on their beat they settle with a small pop.
+  const nextSt = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - next.value) * 6 }, { scale: 0.94 + next.value * 0.06 }] }));
+  const btnSt = useAnimatedStyle(() => ({ transform: [{ scale: (0.92 + btn.value * 0.08) * (1 + pulse.value * 0.08) }] }));
+  // The coin gives a little hop on CONTINUE; the shelf step then flies this same coin from its spot.
   const coinSt = useAnimatedStyle(() => ({
-    transform: [{ translateX: fly.value * win.width * 0.18 }, { translateY: -fly.value * (win.height * 0.75) + Math.sin(fly.value * Math.PI) * -30 },
-      { scale: 1 + fly.value * 0.6 }, { rotateZ: `${fly.value * 200}deg` }],
+    transform: [{ translateY: -Math.sin(fly.value * Math.PI) * 10 }, { scale: 1 + fly.value * 0.18 }],
   }));
   const finn = Math.min(210, win.height * 0.24);
   return (
@@ -344,18 +375,24 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
         <View style={[styles.firstWinFinn, { width: finn, height: finn, marginTop: -finn * 0.62 }]} pointerEvents="none">
           {reducedMotion ? null : <Animated.View style={[styles.firstWinRing, { borderRadius: finn / 2 }, ringSt]} />}
           {reducedMotion ? null : <SparkleBurst size={finn * 1.3} delay={120} />}
-          <Animated.Image source={FINN_GRAD} style={[{ width: finn, height: finn }, finnSt]} resizeMode="contain" />
+          <Animated.Image source={FINN_CHEER} style={[{ width: finn, height: finn }, finnSt]} resizeMode="contain" />
         </View>
         <Animated.View accessible accessibilityRole="header" accessibilityLabel={`${banner} ${FIRST_WIN_COPY.next}`} style={[styles.firstWinHead, ribbonSt]}>
           <Banner text={banner} show reducedMotion={reducedMotion} />
         </Animated.View>
         <Animated.View style={[styles.firstWinNext, nextSt]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-          <Animated.Image source={FIRST_WIN_COIN} style={[styles.firstWinCoin, coinSt]} resizeMode="contain" />
+          {/* A ride car with the coin it gives: coins come from rides, no reading needed. */}
+          <View style={styles.firstWinPic}>
+            <Image source={FIRST_WIN_RIDE} style={styles.firstWinRide} resizeMode="contain" />
+            <View ref={coinRef} collapsable={false} style={styles.firstWinCoinSpot}>
+              <Animated.Image source={FIRST_WIN_COIN} style={[styles.firstWinCoin, coinSt]} resizeMode="contain" />
+            </View>
+          </View>
           <Text style={styles.firstWinNextText}>{FIRST_WIN_COPY.next}</Text>
         </Animated.View>
-        <Animated.View style={[styles.firstWinBtnWrap, btnSt]}>
-          <Pressable onPress={onContinue} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]}
-            accessibilityRole="button">
+        <Animated.View style={[styles.firstWinBtnWrap, btnSt]} pointerEvents={live ? 'auto' : 'none'}>
+          <Pressable onPress={onContinue} disabled={!live} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]}
+            accessibilityRole="button" accessibilityState={{ disabled: !live }}>
             <Text style={styles.bigBtnText}>CONTINUE</Text>
           </Pressable>
           {hand ? <TapHint delay={0} style={styles.firstWinHand} /> : null}
@@ -618,7 +655,10 @@ const styles = StyleSheet.create({
   firstWinHead: { alignSelf: 'stretch', alignItems: 'center' },
   firstWinRing: { ...StyleSheet.absoluteFillObject, borderWidth: 6, borderColor: MM.gold },
   firstWinNext: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 14 },
-  firstWinCoin: { width: 54, height: 54 },
+  firstWinPic: { width: 84, height: 58 },
+  firstWinRide: { position: 'absolute', left: 0, top: 4, width: 62, height: 50 },
+  firstWinCoinSpot: { position: 'absolute', right: 0, bottom: 0, width: 40, height: 40 },
+  firstWinCoin: { width: 40, height: 40 },
   firstWinBtnWrap: { alignSelf: 'stretch', alignItems: 'center' },
   // The fingertip (bottom of the hand) lands on the lower right of CONTINUE.
   firstWinHand: { right: 26, bottom: 6 },

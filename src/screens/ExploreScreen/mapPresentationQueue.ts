@@ -82,8 +82,9 @@ export function hasFirstCatch(player: { completed_tasks_count?: number; ride_coi
 /**
  * The first-time home intro (three quick cards, once per player) waits its
  * turn: after Finn's onboarding, never over a find, a dialog or the daily
- * chest, and never in the half second between the first catch and Finn's
- * "Nice catch" line.
+ * chest. A player who caught a find this visit is already hunting (Finn just
+ * said "Walk around to find more!"), so the cards wait for a later visit
+ * instead of putting three pages of reading between the kid and the next find.
  */
 export function homeIntroMayPresent(state: {
   readonly homeConfirmed: boolean;
@@ -98,5 +99,6 @@ export function homeIntroMayPresent(state: {
 }): boolean {
   if (!state.homeConfirmed || !state.onboardingDone || state.tutorialActive) return false;
   if (state.findOpen || state.findPending || state.otherModalOpen || state.chestShowing) return false;
-  return !state.caughtThisSession || state.firstFindLineDone;
+  // firstFindLineDone is kept in the shape for callers; a catch this visit holds the cards either way.
+  return !state.caughtThisSession;
 }

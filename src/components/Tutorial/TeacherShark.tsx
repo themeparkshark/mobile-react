@@ -78,6 +78,12 @@ interface TeacherSharkProps {
   pointAtNext?: boolean;
   /** A small picture under the line: 'walk' shows two stepping feet. */
   picture?: 'walk';
+  /**
+   * Finn stands beside his bubble instead of under it (bottom-center only).
+   * For steps where a find is waiting at the middle of the map: the bubble
+   * stays low, so the find and its pointing hand stay in view above it.
+   */
+  beside?: boolean;
 }
 
 export default function TeacherShark({
@@ -96,6 +102,7 @@ export default function TeacherShark({
   bottomOffset = 20,
   pointAtNext = false,
   picture,
+  beside = false,
 }: TeacherSharkProps) {
   const reducedMotion = useUiReducedMotion();
   const bobValue = useSharedValue(0);
@@ -201,6 +208,8 @@ export default function TeacherShark({
       case 'bottom-right':
         return { bottom: bottomOffset, right: 16 };
       case 'bottom-center':
+        // Beside: Finn on the left, his bubble to his right, both low on the screen.
+        if (beside) return { bottom: bottomOffset - 8, left: 8, right: 10, flexDirection: 'row-reverse' as const, alignItems: 'flex-end' as const };
         // 16 on both sides: with maxWidth = screen - 32 the bubble sits truly centred.
         return { bottom: bottomOffset, left: 16, right: 16, alignItems: 'center' as const };
       case 'top-left':
@@ -220,7 +229,7 @@ export default function TeacherShark({
     >
       {/* Speech bubble: tap to finish Finn's line. */}
       {/* The pop animates this wrapper only; the card inside keeps its own background and shadow layers. */}
-      <Animated.View style={[styles.bubbleWrap, bubbleStyle]}>
+      <Animated.View style={[styles.bubbleWrap, beside && styles.bubbleWrapBeside, bubbleStyle]}>
       <View style={styles.speechBubble}>
         <Pressable
           onPress={finishLine}
@@ -246,12 +255,12 @@ export default function TeacherShark({
 
           {title && <Text style={styles.title}>{title}</Text>}
 
-          {/* Main text, word by word; hidden words keep their space. */}
-          <Text style={styles.mainText}>
+          {/* Main text, word by word; hidden words keep their space. A title-only bubble has none. */}
+          {text ? <Text style={styles.mainText}>
             {parts.map((part, i) => (
               <Text key={i} style={i < shown ? undefined : styles.hiddenWord}>{part}</Text>
             ))}
-          </Text>
+          </Text> : null}
 
           {subtitle && (
             <Text style={[styles.subtitleText, talking && styles.hiddenWord]}>{subtitle}</Text>
@@ -270,14 +279,14 @@ export default function TeacherShark({
           )}
         </View>
 
-        {/* Speech bubble tail */}
-        <View style={styles.bubbleTailBorder} />
-        <View style={styles.bubbleTail} />
+        {/* Speech bubble tail: down to Finn, or left to Finn when he stands beside it. */}
+        <View style={beside ? styles.sideTailBorder : styles.bubbleTailBorder} />
+        <View style={beside ? styles.sideTail : styles.bubbleTail} />
       </View>
       </Animated.View>
 
       {/* Shark Character: Teacher Finn */}
-      <Animated.View style={[styles.sharkContainer, sharkAnimStyle]}>
+      <Animated.View style={[styles.sharkContainer, beside && styles.sharkContainerBeside, sharkAnimStyle]}>
         <Image
           source={TEACHER_SHARK_IMAGE}
           style={styles.sharkImage}
@@ -300,6 +309,18 @@ const styles = StyleSheet.create({
   bubbleWrap: {
     marginBottom: 12,
     marginHorizontal: 16,
+  },
+  bubbleWrapBeside: { flex: 1, marginHorizontal: 0, marginLeft: 6, marginBottom: 18 },
+  sharkContainerBeside: { alignSelf: 'flex-end', width: 96, height: 120 },
+  sideTailBorder: {
+    position: 'absolute', left: -17, bottom: 26, width: 0, height: 0,
+    borderTopWidth: 13, borderBottomWidth: 13, borderRightWidth: 15,
+    borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRightColor: BRAND.blueBright,
+  },
+  sideTail: {
+    position: 'absolute', left: -11, bottom: 29, width: 0, height: 0,
+    borderTopWidth: 10, borderBottomWidth: 10, borderRightWidth: 12,
+    borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRightColor: BRAND.white,
   },
   speechBubble: {
     backgroundColor: BRAND.white,

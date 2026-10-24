@@ -416,7 +416,7 @@ function ExploreScreen() {
     return () => clearTimeout(timer);
   }, [pendingCollect, redeemFlowOpen]);
 
-  // Handler for when user taps a prep item in home mode — enforce proximity
+  // Handler for when user taps a prep item in home mode: enforce proximity
   // A tap catches; the server's nearby check (`auto`) only feeds Finn's first find.
   const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number, source: 'tap' | 'auto' = 'tap') => {
     if (!homeLocationConfirmed || !parkLoaded) return;
@@ -444,7 +444,7 @@ function ExploreScreen() {
         return;
       }
     } else {
-      // No location available — show too far modal with unknown distance
+      // No location available: show too far modal with unknown distance
       setTooFarMeters(null);
       setShowTooFarModal(true);
       return;
@@ -1204,7 +1204,7 @@ function ExploreScreen() {
   return (
     <Wrapper>
       <Topbar>
-        {/* Topbar currencies — only for signed-in users */}
+        {/* Topbar currencies: only for signed-in users */}
         {player ? (
           <>
             {/* Park mode: Shark Coins, Keys, Tickets as matching pills. Retired

@@ -261,7 +261,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
 
   return (
     <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: '#09268f' }}>
-      {/* Looping video background — exact screen dimensions */}
+      {/* Looping video background: exact screen dimensions */}
       <Video
         source={SPLASH_VIDEO}
         resizeMode={ResizeMode.COVER}
@@ -270,7 +270,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
         isMuted
         style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
       />
-      {/* Logo — bounces in + gentle float */}
+      {/* Logo: bounces in + gentle float */}
       <Animated.View
         style={{
           position: 'absolute',
@@ -291,7 +291,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
           contentFit="contain"
         />
       </Animated.View>
-      {/* Light overlay for button contrast — only bottom half */}
+      {/* Light overlay for button contrast: only bottom half */}
       <LinearGradient
         colors={['transparent', 'rgba(5,52,110,0.3)']}
         style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: SCREEN_HEIGHT * 0.4 }}

@@ -32,6 +32,7 @@ import TapHint from '../../components/TapHint';
 import TeacherShark from '../../components/Tutorial/TeacherShark';
 import { playSfx } from '../../gamekit/SFX';
 import MemoryGame from '../../games/memory/MemoryGame';
+import { takeFirstWinCoinSpot } from '../../games/memory/firstWinHandoff';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import {
   EMPTY_GUEST_TASTE, GUEST_TASTE_COPY as COPY, guestStep, readGuestTaste, saveGuestTaste, type GuestTasteProgress,
@@ -225,7 +226,28 @@ function ChurroFind({ reduced, toBadge, room, onCatch, onBagged, onDone }: {
  */
 function ShelfCoinLanding({ reduced, compact, onDone }: { reduced: boolean; compact: boolean; onDone: () => void }) {
   const fly = useSharedValue(reduced ? 1 : 0), glow = useSharedValue(0);
+  // Where the coin starts: by default big, above the ribbon. Right after Finn's
+  // first-win card it starts on the exact spot and size of that card's coin, so
+  // the kid sees the same coin travel onto the shelf. React state (not shared
+  // values) so the first frame after the measure always draws it there.
+  const handoff = useRef(reduced ? null : takeFirstWinCoinSpot());
+  const [from, setFrom] = useState<{ x: number; y: number; s: number; seen: boolean }>(
+    { x: 0, y: FLY_FROM_Y, s: 2.1, seen: !handoff.current });
   const [landed, setLanded] = useState(reduced);
+  const flyRef = useRef<View>(null);
+  const onFlyLayout = useCallback(() => {
+    const spot = handoff.current;
+    handoff.current = null;
+    if (!spot) return;
+    // Never hidden if the measure is slow.
+    const show = setTimeout(() => setFrom(current => ({ ...current, seen: true })), 150);
+    flyRef.current?.measureInWindow((x, y, w) => {
+      clearTimeout(show);
+      if (!(w > 0)) { setFrom(current => ({ ...current, seen: true })); return; }
+      const k = w / SOCKET; // the shelf card is scaled down on short phones
+      setFrom({ x: (spot.x + spot.size / 2 - (x + w / 2)) / k, y: (spot.y + spot.size / 2 - (y + w / 2)) / k, s: spot.size / w, seen: true });
+    });
+  }, []);
   const done = useRef(false);
   const finish = useCallback(() => { if (!done.current) { done.current = true; onDone(); } }, [onDone]);
   const land = useCallback(() => {
@@ -251,9 +273,9 @@ function ShelfCoinLanding({ reduced, compact, onDone }: { reduced: boolean; comp
   // The coin drops in big over the ribbon and ends in socket 1.
   const coinStyle = useAnimatedStyle(() => {
     const t = fly.value;
-    return { opacity: landed ? 0 : 1, transform: [
-      { translateX: SLOT_ONE_X * t }, { translateY: FLY_FROM_Y * (1 - t) - Math.sin(t * Math.PI) * 50 },
-      { rotate: `${(1 - t) * -25}deg` }, { scale: 2.1 - 1.1 * t }] };
+    return { opacity: landed || !from.seen ? 0 : 1, transform: [
+      { translateX: from.x * (1 - t) + SLOT_ONE_X * t }, { translateY: from.y * (1 - t) - Math.sin(t * Math.PI) * 50 },
+      { rotate: `${(1 - t) * -25}deg` }, { scale: from.s + (1 - from.s) * t }] };
   });
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scale: 1 + glow.value * 0.5 }] }));
   return <Pressable style={[styles.shelfWrap, compact && styles.shelfWrapCompact]} onPress={finish} accessibilityRole="button"
@@ -274,6 +296,8 @@ function ShelfCoinLanding({ reduced, compact, onDone }: { reduced: boolean; comp
               {slot === 0 && landed && !reduced && <View style={styles.socketBurst}><SparkleBurst size={150} /></View>}
             </View>)}
           </View>
+          {/* An unmoved twin of the flying coin's box: measured for the hand-off (a transformed view measures moved). */}
+          <View ref={flyRef} collapsable={false} onLayout={onFlyLayout} pointerEvents="none" style={[styles.flyCoin, styles.flyAnchor]} />
           <Animated.View pointerEvents="none" style={[styles.flyCoin, coinStyle]}>
             <Image source={COIN} style={styles.flyCoinImg} contentFit="contain" />
           </Animated.View>
@@ -374,6 +398,7 @@ const styles = StyleSheet.create({
   ownedCoinImg: { width: SOCKET - 10, height: SOCKET - 10 },
   flyCoin: { position: 'absolute', top: 4, left: '50%', marginLeft: -SOCKET / 2, width: SOCKET, height: SOCKET, zIndex: 3 },
   flyCoinImg: { width: SOCKET, height: SOCKET },
+  flyAnchor: { opacity: 0 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   card: { width: '100%', maxWidth: 360, alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 26,
     borderWidth: 4, borderColor: BRAND.white, paddingTop: 58, paddingHorizontal: 20, paddingBottom: 14, ...SHADOW.lifted },

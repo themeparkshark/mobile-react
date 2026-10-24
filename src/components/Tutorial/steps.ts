@@ -18,6 +18,10 @@ const homeOnboardingSteps: TutorialStep[] = [
     text: "Hey, new shark! I'm Finn. Finds pop up around you, even at home.",
     subtitle: 'One just landed right next to you. Let’s grab it!',
     sharkPosition: 'bottom-center', sharkMood: 'waving', nextText: 'Grab it!', delay: 400,
+    // A find lands at the middle of the map: Finn stands beside his bubble so the
+    // find and its pointing hand stay in view. Every home hello (sniffing, ready,
+    // no find, welcome back) inherits this, so the bubble never jumps between them.
+    beside: true,
   },
 ];
 
@@ -184,7 +188,7 @@ const homeNoFindSteps: TutorialStep[] = [{
  */
 export const GUEST_WELCOME_BACK = {
   title: 'You’re back!',
-  ready: { text: 'Your first real treat landed right next to you.', button: 'Grab it!' },
+  ready: { text: 'A treat is right next to you!', button: 'Grab it!' },
   waiting: { text: 'Real treats pop up near you.', subtitle: 'Walk around to find one!', button: 'Let’s hunt!' },
 } as const;
 const guestWelcomeBackSteps = (findReady: boolean): TutorialStep[] => [{
