@@ -840,3 +840,10 @@ test('Sharky TIME! holds a short beat in a moving line; the capture log names ev
   assert.match(capture, /finishAt\.current = cues\.current\.length;/);
   assert.match(capture, /note\(`End: \$\{finishCueLine\(finishCues\(cues\.current, finishAt\.current\)\)\}`\);/);
 });
+
+test('duel banners and the Big Final chip keep their fill: the pop rides a wrapper, the colour a plain view', () => {
+  const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
+  assert.match(duel, /<Animated\.View style=\{\[styles\.bannerPop, st\]\}>\s*<View style=\{styles\.banner\}>/);
+  assert.match(duel, /<Animated\.View style=\{st\}>\s*<View style=\{styles\.finalDrop\}>/);
+  assert.doesNotMatch(duel, /\[styles\.banner, st\]|\[styles\.finalDrop, st\]/);
+});

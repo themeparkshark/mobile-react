@@ -327,9 +327,11 @@ function BigFinalLost({ points, reducedMotion }: { points: number; reducedMotion
     <View style={styles.finalLostPill} accessible accessibilityLabel={`The Big Final missed, so ${points.toLocaleString()} points went away`}>
       <GameIcon name="rush" size={22} />
       <Text style={styles.finalLostText}>BIG FINAL</Text>
-      <Animated.View style={[styles.finalDrop, st]}>
-        <GameIcon name="arrow" size={20} style={styles.arrowDown} />
-        <Text style={styles.finalDropText}>{points.toLocaleString()}</Text>
+      <Animated.View style={st}>
+        <View style={styles.finalDrop}>
+          <GameIcon name="arrow" size={20} style={styles.arrowDown} />
+          <Text style={styles.finalDropText}>{points.toLocaleString()}</Text>
+        </View>
       </Animated.View>
     </View>
   );
@@ -342,9 +344,14 @@ function Banner({ text, i, reducedMotion }: { text: string; i: number; reducedMo
     sx.value = withDelay(700 + i * 180, withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 300 })));
   }, [sx, i, reducedMotion]);
   const st = useAnimatedStyle(() => ({ transform: [{ scaleX: sx.value }, { scaleY: 2 - Math.max(0.6, Math.min(1.25, sx.value)) }] }));
+  // The pop is on a wrapper, the gold on a plain view: a banner that starts
+  // at scale 0 was drawn hollow (no fill) on the current bundle, so the fill
+  // never rides the animated view (same fix as the coin goal dots).
   return (
-    <Animated.View style={[styles.banner, st]}>
-      <Text style={styles.bannerText}>{text}</Text>
+    <Animated.View style={[styles.bannerPop, st]}>
+      <View style={styles.banner}>
+        <Text style={styles.bannerText}>{text}</Text>
+      </View>
     </Animated.View>
   );
 }
@@ -384,7 +391,8 @@ const styles = StyleSheet.create({
   gapMe: { backgroundColor: C.gold },
   gapSeg: { backgroundColor: C.coral },
   banners: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 },
-  banner: { backgroundColor: C.gold, borderWidth: 2.5, borderColor: C.ink, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2, margin: 3 },
+  bannerPop: { margin: 3 },
+  banner: { backgroundColor: C.gold, borderWidth: 2.5, borderColor: C.ink, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2 },
   bannerText: { fontFamily: 'Shark', fontSize: 18, color: C.navy },
   near: { fontFamily: 'Knockout', fontSize: 18, color: '#ffffff', textAlign: 'center', marginTop: 6 },
   rows: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 },
