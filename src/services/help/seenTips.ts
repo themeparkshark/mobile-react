@@ -103,8 +103,10 @@ export function createSeenTipStore(kv: KeyValueStore, playerId: number | string)
         return { seen: new Set(), fresh: false };
       }
     },
+    // Always writes. The provider hands over its in-memory list, which already
+    // holds the new id; skipping the write when `current` had it meant nothing
+    // was ever saved, so every one-time tip came back on the next launch.
     mark(id, current) {
-      if (current.has(id)) return Promise.resolve(new Set(current));
       return write(new Set([...current, id]));
     },
     markMany(ids, current) {
