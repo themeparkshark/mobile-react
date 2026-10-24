@@ -48,14 +48,17 @@ export function coverDeadline(now: number, current: {
  * While the screen still picks the home map or the park map at launch, the one cover (one bar,
  * never restarted) holds, but never past COVER_MAX_MS from its first frame: a kid never waits on
  * a slow park lookup. At that point it lifts onto whichever map has drawn (a park map that arrives
- * later gets its own short cover). Once the choice is made, the normal deadline is back, and a map
- * still gets COVER_MAP_MIN_MS to draw.
+ * later gets its own short cover). Once the choice is made, the normal deadline is back; a choice
+ * made late only adds COVER_SWAP_MIN_MS, so the cover stays well under 3 s.
  */
 export function coverHoldDeadline(held: boolean, now: number, current: { readonly startedAt: number; readonly deadline: number }): number {
   const hard = current.startedAt + COVER_HARD_MAX_MS;
   if (held) return Math.min(hard, Math.max(current.deadline, current.startedAt + COVER_MAX_MS));
-  return Math.min(hard, Math.max(current.startedAt + COVER_MAX_MS, now + COVER_MAP_MIN_MS));
+  return Math.min(hard, Math.max(current.startedAt + COVER_MAX_MS, now + COVER_SWAP_MIN_MS));
 }
+
+/** Once the screen has picked its map late, the cover stays this long at most past COVER_MAX_MS (a beat for the swap). */
+export const COVER_SWAP_MIN_MS = 500;
 
 /** Where the bar starts: the splash's share at launch, a short head start for a later cover. */
 export function coverStartShare(firstCover: boolean, continuing: boolean, currentShare: number): number {

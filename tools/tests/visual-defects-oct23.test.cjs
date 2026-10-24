@@ -487,7 +487,8 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   assert.equal(k.coverHoldDeadline(true, 1500, { startedAt: 1000, deadline: 1200 }), 1000 + k.COVER_MAX_MS);
   assert.equal(k.coverHoldDeadline(true, 1500, { startedAt: 1000, deadline: 1000 + k.COVER_HARD_MAX_MS }), 1000 + k.COVER_HARD_MAX_MS, 'no map yet: only the hard cap');
   assert.equal(k.coverHoldDeadline(false, 1500, { startedAt: 1000, deadline: 6000 }), 1000 + k.COVER_MAX_MS);
-  assert.equal(k.coverHoldDeadline(false, 3000, { startedAt: 1000, deadline: 6000 }), Math.min(1000 + k.COVER_HARD_MAX_MS, 3000 + k.COVER_MAP_MIN_MS));
+  assert.equal(k.coverHoldDeadline(false, 3000, { startedAt: 1000, deadline: 6000 }), Math.min(1000 + k.COVER_HARD_MAX_MS, 3000 + k.COVER_SWAP_MIN_MS));
+  assert.ok(k.COVER_MAX_MS + k.COVER_SWAP_MIN_MS <= 3000, 'a late map choice keeps the cover under 3 s');
   assert.equal(k.coverHoldDeadline(false, 5800, { startedAt: 1000, deadline: 6000 }), 1000 + k.COVER_HARD_MAX_MS);
   assert.equal(k.coverCanLift(true, false), true);
   assert.equal(k.coverCanLift(true, true), false, 'held while the screen picks home or park');
