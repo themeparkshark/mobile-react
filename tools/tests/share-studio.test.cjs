@@ -34,7 +34,7 @@ const capture = loadTs('src/share/capture.ts', {
   'react-native-view-shot': { captureRef: async () => 'file:///tmp/card.jpg' },
   // The grown-up gate passes here; its own tests cover a no.
   // Like services/external: a file url is shared under a readable name (shareFileName), never its UUID.
-  '../services/external': { shareExternal: async (content, _o, name) => {
+  '../services/external': { SHARE_SHEET_WAIT_MS: 30000, shareExternal: async (content, _o, name) => {
       shared.last = content.url && name ? { ...content, url: `file:///cache/share-card/${name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'Theme-Park-Shark'}.jpg` } : content;
       return shared.result; }, shareFileExternal: async () => 'closed',
     shareFileName: (name, ext) => `${name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'Theme-Park-Shark'}.${ext}` },
@@ -151,11 +151,11 @@ test('export sizes are exactly 1080x1920 and 1080x1080 at every density', () => 
 
 test('the iOS share sheet reports the destination as a short label; dismissal is not a share', async () => {
   shared.result = { action: 'sharedAction', activityType: 'com.burbn.instagram.shareextension' };
-  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { opened: true, shared: true, activity: 'instagram' });
+  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { ended: 'shared', opened: true, shared: true, activity: 'instagram' });
   shared.result = { action: 'dismissedAction' };
-  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { opened: true, shared: false, activity: null });
+  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { ended: 'closed', opened: true, shared: false, activity: null });
   shared.result = null; // the grown-up said no
-  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { opened: false, shared: false, activity: null });
+  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { ended: 'declined', opened: false, shared: false, activity: null });
   assert.equal(capture.activityLabel('com.apple.UIKit.activity.SaveToCameraRoll'), 'save_photo');
   assert.equal(capture.activityLabel('com.zhiliaoapp.musically.ShareExtension'), 'tiktok');
   assert.equal(capture.activityLabel('com.apple.UIKit.activity.Message'), 'messages');
@@ -449,10 +449,8 @@ test('the share sheet names the picture (no random id) and sends the link line w
   fsCalls.length = 0;
   await capture.openShareSheet('file:///tmp/B80AB5AF-733B.jpg', 'Come play Theme Park Shark with me! https://themeparkshark.com/app?c=flex_find');
   assert.equal(capture.SHARE_FILE_NAME, 'Theme Park Shark');
-  assert.deepEqual(JSON.parse(JSON.stringify(shared.last)), {
-    url: 'file:///cache/share-card/Theme-Park-Shark.jpg',
-    message: 'Come play Theme Park Shark with me! https://themeparkshark.com/app?c=flex_find',
-  });
+  assert.equal(shared.last.url, 'file:///cache/share-card/Theme-Park-Shark.jpg');
+  assert.equal(shared.last.message, 'Come play Theme Park Shark with me! https://themeparkshark.com/app?c=flex_find');
   // A card's own name (the hotfix's readable names): Whack-a-Shark-12840.jpg.
   await capture.openShareSheet('file:///tmp/x.jpg', 'm', 'Whack-a-Shark 12840');
   assert.equal(shared.last.url, 'file:///cache/share-card/Whack-a-Shark-12840.jpg');
@@ -464,4 +462,20 @@ test('the share sheet names the picture (no random id) and sends the link line w
   for (const f of ['src/share/ShareStudioHost.tsx', 'src/games/whack/ui/ShareCard.tsx', 'src/games/memory/MemoryExtras.tsx', 'src/share/LookShareButton.tsx', 'src/components/RideTracker/ShareableRideCard.tsx']) {
     assert.match(fs.readFileSync(pathMod.join(repo, f), "utf8"), /openShareSheet\(uri, shareMessage\(/, `${f}: the link rides with the picture`);
   }
+});
+
+test('a park day card never goes out with an empty coin frame, and reads "My Park Day"', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const read = f => fs.readFileSync(path.join(__dirname, '..', '..', f), 'utf8');
+  assert.equal(copy.flexCopy('park_day', { coinsCaught: 1, newCoins: 0, coinUrls: [] }).title, 'My Park Day');
+  // No coin art with the day: the plain Ride Coin fills the slot.
+  assert.match(read('src/share/FlexHero.tsx'), /const shown: readonly \(FlexArt \| null\)\[\] = arts\.length \? arts\.slice\(0, 9\) : \[null\];/);
+  // Slow or broken art swaps to its fallback at FLEX_ART_FALLBACK_MS; the share waits past that before capturing.
+  const art = read('src/share/FlexArtwork.tsx');
+  assert.match(art, /export const FLEX_ART_FALLBACK_MS = 4000;/);
+  assert.match(art, /setTimeout\(\(\) => setLate\(true\), FLEX_ART_FALLBACK_MS\)/);
+  const host = read('src/share/ShareStudioHost.tsx');
+  assert.match(host, /export const FLEX_CAPTURE_WAIT_MS = FLEX_ART_FALLBACK_MS \+ 2000;/);
+  assert.match(host, /for \(let waited = 0; waited < FLEX_CAPTURE_WAIT_MS && !readyRef\.current; waited \+= 100\)/);
 });

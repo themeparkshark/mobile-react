@@ -415,7 +415,8 @@ function TitleHero({ frame, size }: { readonly frame: FlexFrame; readonly size: 
 
 /** Park day: the day's coins, full colour, in a grid sized to the count. */
 function CoinGridHero({ arts, frame, size }: { readonly arts: readonly FlexArt[]; readonly frame: FlexFrame; readonly size: number }) {
-  const shown = arts.slice(0, 9);
+  // No coin art came with the day: the plain Ride Coin fills the slot, so the frame is never empty.
+  const shown: readonly (FlexArt | null)[] = arts.length ? arts.slice(0, 9) : [null];
   const n = Math.max(1, shown.length);
   const cols = n === 1 ? 1 : n <= 4 ? 2 : 3;
   const rows = Math.ceil(n / cols);

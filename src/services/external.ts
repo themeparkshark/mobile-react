@@ -16,7 +16,7 @@
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
-import { Linking, Share, type ShareContent, type ShareOptions } from 'react-native';
+import { Linking, Platform, Share, type ShareContent, type ShareOptions } from 'react-native';
 import { askGrownUp, type GateReason } from '../components/GrownUpGate';
 
 /** Where a link goes, in kid words, for the grown-up gate's "This leaves the game" line. Exported for tests. */
@@ -65,16 +65,9 @@ export const SHARE_SHEET_WAIT_MS = 30_000;
 export async function shareExternal(content: ShareContent, options?: ShareOptions, name?: string) {
   if (!(await askGrownUp(SHARE))) return null;
   const url = 'url' in content && content.url ? content.url : null;
-  const named = url && name ? { ...content, url: await namedShareCopy(url, name) } : content;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      Share.share(named, options),
-      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), SHARE_SHEET_WAIT_MS); }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+  const copy = url && name ? await namedShareCopy(url, name) : { file: url ?? '', release: () => undefined };
+  const named = url && name ? { ...content, url: copy.file } : content;
+  return waitForSheet<Awaited<ReturnType<typeof Share.share>> | null>(Share.share(named, options), copy, null);
 }
 
 /**
@@ -86,55 +79,89 @@ export function shareFileName(name: string, ext: string): string {
   return `${base || 'Theme-Park-Shark'}.${ext}`;
 }
 
-/** One folder for the named copy; each share clears the last one, so copies never pile up. */
+/** The named copies live here, one subfolder per share so each keeps its readable name. */
 const SHARE_DIR = 'share-card/';
 
-/** The capture copied under a readable name. The original uri when the copy cannot be made. */
-async function namedShareCopy(uri: string, name: string | undefined): Promise<string> {
+/** Subfolders whose share sheet has not closed yet: never deleted, even after a timeout. */
+const liveShareDirs = new Set<string>();
+let shareSeq = 0;
+
+/** A share copy and the release to call once its sheet has really closed. */
+interface ShareCopy { readonly file: string; readonly release: () => void }
+
+/**
+ * The capture copied under a readable name, in its own subfolder. Older copies are
+ * cleared first, except any a sheet still holds open (a sheet can outlive the
+ * SHARE_SHEET_WAIT_MS timeout), so copies never pile up and an open sheet never
+ * loses its file. The original uri when the copy cannot be made.
+ */
+async function namedShareCopy(uri: string, name: string | undefined): Promise<ShareCopy> {
   const cache = FileSystem.cacheDirectory;
   // view-shot hands back a bare path on iOS ("/private/var/.../UUID.png"); expo-file-system wants file://.
   const from = uri.startsWith('/') ? `file://${uri}` : uri;
-  if (!name || !cache || !/^file:/i.test(from)) return uri;
+  const unnamed: ShareCopy = { file: uri, release: () => undefined };
+  if (!name || !cache || !/^file:/i.test(from)) return unnamed;
   const ext = (/\.([A-Za-z0-9]{2,5})(?:[?#].*)?$/.exec(from)?.[1] ?? 'png').toLowerCase();
-  const dir = `${cache}${SHARE_DIR}`;
+  const root = `${cache}${SHARE_DIR}`;
+  const slot = `${Date.now().toString(36)}-${(shareSeq += 1)}`;
+  const dir = `${root}${slot}/`;
   try {
-    await FileSystem.deleteAsync(dir, { idempotent: true });
+    const old = await FileSystem.readDirectoryAsync(root).catch(() => [] as string[]);
+    await Promise.all(old.filter(entry => !liveShareDirs.has(entry))
+      .map(entry => FileSystem.deleteAsync(`${root}${entry}`, { idempotent: true }).catch(() => undefined)));
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
     const to = `${dir}${shareFileName(name, ext)}`;
     await FileSystem.copyAsync({ from, to });
-    return to;
+    liveShareDirs.add(slot);
+    return { file: to, release: () => { liveShareDirs.delete(slot); } };
   } catch {
-    return uri;
+    return unnamed;
+  }
+}
+
+/** Races a sheet against SHARE_SHEET_WAIT_MS; the copy is released only when the sheet itself settles. */
+async function waitForSheet<T>(sheet: Promise<T>, copy: ShareCopy, onTimeout: T): Promise<T> {
+  void sheet.then(copy.release, copy.release);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      sheet,
+      new Promise<T>(resolve => { timer = setTimeout(() => resolve(onTimeout), SHARE_SHEET_WAIT_MS); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 /**
  * How a file share ended:
- * - closed: the share sheet came up and closed again (shared or cancelled; iOS does not say which);
+ * - shared: iOS says the kid picked a place and it went (Messages, Save Image...);
+ * - closed: the sheet came up and closed. On iOS that is a cancel; Android never says, so
+ *   there it means shared or cancelled. Never show a success stamp for this one;
  * - declined: the grown-up said no, or this phone cannot share;
  * - timeout: the sheet never answered within SHARE_SHEET_WAIT_MS (it may still be up and
  *   working), so the button comes back without counting it as a no.
  */
-export type ShareFileOutcome = 'closed' | 'declined' | 'timeout';
+export type ShareFileOutcome = 'shared' | 'closed' | 'declined' | 'timeout';
 
 /**
  * Shares a file (a share card image) after the grown-up gate. Throws when the sheet
  * fails to open. `name` titles the file in the sheet ("Whack-a-Shark 460" becomes
- * Whack-a-Shark-460.png).
+ * Whack-a-Shark-460.png). On iOS this is the same system sheet through Share.share,
+ * which tells a real share apart from a cancel.
  */
 export async function shareFileExternal(uri: string, options?: Sharing.SharingOptions, name?: string): Promise<ShareFileOutcome> {
   if (!(await askGrownUp(SHARE))) return 'declined';
-  if (!(await Sharing.isAvailableAsync())) return 'declined';
-  const file = await namedShareCopy(uri, name);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      Sharing.shareAsync(file, options).then((): ShareFileOutcome => 'closed'),
-      new Promise<ShareFileOutcome>(resolve => { timer = setTimeout(() => resolve('timeout'), SHARE_SHEET_WAIT_MS); }),
-    ]);
-  } finally {
-    clearTimeout(timer);
+  if (Platform.OS === 'ios') {
+    const copy = await namedShareCopy(uri, name);
+    const file = copy.file.startsWith('/') ? `file://${copy.file}` : copy.file;
+    const sheet = Share.share({ url: file }).then((result): ShareFileOutcome => (
+      result.action === Share.sharedAction ? 'shared' : 'closed'));
+    return waitForSheet(sheet, copy, 'timeout');
   }
+  if (!(await Sharing.isAvailableAsync())) return 'declined';
+  const copy = await namedShareCopy(uri, name);
+  return waitForSheet(Sharing.shareAsync(copy.file, options).then((): ShareFileOutcome => 'closed'), copy, 'timeout');
 }
 
 /** The Terms of Service or Privacy Policy, ungated (Apple allows legal links). */

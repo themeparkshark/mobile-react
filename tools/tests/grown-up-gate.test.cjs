@@ -268,12 +268,14 @@ test('the gate answers only after it has faded out, so the share sheet can prese
   const g = gateModule();
   assert.equal(g.GATE_DISMISS_FALLBACK_MS, 2000);
   assert.match(gate, /if \(Platform\.OS !== 'ios'\) \{ finish\(\); return; \}/, 'Android answers at once');
-  assert.equal(g.GATE_SHOW_WATCHDOG_MS, 3000);
+  assert.equal(g.GATE_SHOW_WATCHDOG_MS, 5000);
   const ext = read('src/services/external.ts');
   assert.match(ext, /export const SHARE_SHEET_WAIT_MS = 30_000;/);
-  assert.match(ext, /Sharing\.shareAsync\(file, options\)\.then\(\(\): ShareFileOutcome => 'closed'\),\s*new Promise<ShareFileOutcome>\(resolve => \{ timer = setTimeout\(\(\) => resolve\('timeout'\), SHARE_SHEET_WAIT_MS\); \}\)/);
-  assert.match(ext, /Share\.share\(named, options\),\s*new Promise<null>/);
-  assert.match(read('src/components/RideTracker/ShareableRideCard.tsx'), /if \(outcome\.opened\) \{\s*setShared\(true\);\s*onShare\?\.\(\);/, 'after the sheet the card stays open with a Shared! check');
+  assert.match(ext, /new Promise<T>\(resolve => \{ timer = setTimeout\(\(\) => resolve\(onTimeout\), SHARE_SHEET_WAIT_MS\); \}\)/);
+  assert.match(ext, /waitForSheet\(Sharing\.shareAsync\(copy\.file, options\)\.then\(\(\): ShareFileOutcome => 'closed'\), copy, 'timeout'\)/);
+  assert.match(ext, /result\.action === Share\.sharedAction \? 'shared' : 'closed'/, 'iOS tells a share from a cancel');
+  assert.match(ext, /\(Share\.share\(named, options\), copy, null\)/);
+  assert.match(read('src/components/RideTracker/ShareableRideCard.tsx'), /if \(outcome === 'shared'\) setShared\(true\);\s*if \(outcome === 'shared' \|\| outcome === 'closed'\) onShare\?\.\(\);/, 'after the sheet the card stays open; the Shared! check only when it went');
 });
 
 test('one safe-area root above every provider (first-tap warm-up crash, ship gate Oct 23)', () => {
@@ -321,4 +323,52 @@ test('the miss count survives a force-quit, so the longer rests hold', async () 
   relaunched.judgeGate('0', 5, 4000);
   await Promise.resolve();
   assert.equal(Number(store['grown-up-gate:rest-until']), 4000 + 600000, 'third miss in a row: 10 minutes');
+});
+
+test('the lane-only navigator hook lives in src/dev and loads only when a lane Metro sets EXPO_PUBLIC_LANE_NAV=1', () => {
+  assert.doesNotMatch(read('src/RootNavigation.tsx'), /__laneNav|LANE_NAV/, 'no QA scaffolding in the navigator');
+  const users = [];
+  const walk = dir => {
+    for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+      const rel = path.join(dir, entry.name);
+      if (entry.isDirectory()) { if (entry.name !== 'node_modules') walk(rel); }
+      else if (/\.(ts|tsx|js)$/.test(entry.name) && /laneNav|LANE_NAV/.test(read(rel))) users.push(rel);
+    }
+  };
+  walk('src');
+  assert.deepEqual(users, ['src/dev/laneNav.ts']);
+  const app = read('App.tsx').split('\n').filter(l => /laneNav|LANE_NAV/.test(l));
+  assert.deepEqual(app.filter(l => !l.startsWith('//')), ["if (process.env.EXPO_PUBLIC_LANE_NAV === '1') require('./src/dev/laneNav');"]);
+  for (const f of ['eas.json', 'app.config.js', 'package.json']) assert.doesNotMatch(read(f), /EXPO_PUBLIC_LANE_NAV/, `${f} never sets it`);
+});
+
+test('Memory Daily (and its SHARE NOW) is dev-only in 1.7.3: no player-facing screen opens the Memory booth', () => {
+  // The Daily (and the results card's share flip) open only from the booth menu.
+  const menu = read('src/games/memory/MemoryMenu.tsx');
+  assert.match(menu, /const menu = props\.menu \|\| devMenu;/);
+  assert.match(menu, /const devMenu = typeof __DEV__ !== 'undefined' && __DEV__ && /);
+  // Only MiniGameSelector passes menu, and only outside a ride challenge.
+  const passers = [];
+  const walk = dir => {
+    for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+      const rel = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(rel);
+      else if (/\.tsx$/.test(entry.name) && /<MemoryGame\b[^>]*\bmenu[=\s}]/.test(read(rel))) passers.push(rel);
+    }
+  };
+  walk('src');
+  assert.deepEqual(passers, ['src/components/MiniGameSelector.tsx']);
+  assert.match(read('src/components/MiniGameSelector.tsx'), /menu=\{rewardMode !== 'task-attempt'\}/);
+  // Every MiniGameSelector a player can reach is a ride challenge; the legacy mode is the dev tester's.
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /<MiniGameSelector[\s\S]{0,300}?rewardMode="task-attempt"/);
+  const devRoutes = read('src/devRoutes.tsx');
+  assert.match(devRoutes, /export const DEV_SCREENS: readonly DevScreen\[\] = __DEV__\s*\?/);
+  assert.match(devRoutes, /\{ name: 'MiniGameTester', getComponent: \(\) => require\('\.\/screens\/MiniGameTesterScreen'\)\.default \}/);
+  // The QUICK bonus (and its gold hit punch) is a Time Attack system, and Time Attack is a booth pick too.
+  const engine = read('src/games/memory/engine.ts');
+  assert.deepEqual(engine.split('\n').filter(l => /\bquick: true\b/.test(l)).map(l => l.trim().split(':')[0]), ['timeAttack']);
+  assert.match(menu, /if \(pick\?\.kind === 'timeAttack'\) return <MemoryGame \{\.\.\.props\} mode="timeAttack"/);
+  // If the Daily ever ships, its share must go through the gated helper like every other card.
+  // The lane's share path: the gate and named file come from openShareSheet (services/external underneath).
+  assert.match(read('src/games/memory/MemoryExtras.tsx'), /await openShareSheet\(uri, shareMessage\(campaignUrl\('memory'\)\), `Memory Daily \$\{daily\.day\}`\)/);
 });

@@ -28,7 +28,7 @@ interface ShareableRideCardProps {
   queued?: boolean;
 }
 
-/** How long the "Shared!" check stays on the button. */
+/** How long the "Shared!" check stays on the button. Shown only when iOS says it really went. */
 export const SHARED_STAMP_MS = 2000;
 
 /** "Ridden 1 time", "Ridden 12 times". Exported for tests. */
@@ -121,7 +121,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
   const storyRef = useRef<View>(null);
   const busy = useRef(false);
   const [sharing, setSharing] = useState(false);
-  // A gold check and "Shared!" for a moment after the sheet closes; the card stays open.
+  // A gold check and "Shared!" for a moment, only when the share really went (never after a cancel).
   const [shared, setShared] = useState(false);
   useEffect(() => {
     if (!shared) return undefined;
@@ -164,12 +164,11 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
 
       // The same share path as the Share Studio cards (grown-up gate first, then the share sheet).
       // The gate shows above this card's sheet (GrownUpGateSlot). Back on the card after the sheet
-      // (even a cancel), with a Shared! check: a kid who backs out lands on their card.
-      const outcome = await openShareSheet(uri, shareMessage(campaignUrl('ride_log')), `${ride.ride_name} Ride Card`);
-      if (outcome.opened) {
-        setShared(true);
-        onShare?.();
-      }
+      // (even a cancel): a kid who backs out lands on their card, with the plain Share Ride Card
+      // button again. The Shared! check is only for a share iOS says really went (never a cancel).
+      const { ended: outcome } = await openShareSheet(uri, shareMessage(campaignUrl('ride_log')), `${ride.ride_name} Ride Card`);
+      if (outcome === 'shared') setShared(true);
+      if (outcome === 'shared' || outcome === 'closed') onShare?.();
     } catch {
       gameAlert('Could not make your card', 'Your ride is saved. Try sharing it again.');
     } finally {

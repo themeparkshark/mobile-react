@@ -91,6 +91,9 @@ import RideLogOutboxSync from './src/services/RideLogOutboxSync';
 import RemintNoticeModal from './src/components/RemintNoticeModal';
 import { PowerProvider } from './src/power';
 
+// Polish-lane QA only (src/dev/laneNav.ts): inlined to false, so it never ships.
+if (process.env.EXPO_PUBLIC_LANE_NAV === '1') require('./src/dev/laneNav');
+
 export default function App() {
   if (__DEV__ && process.env.EXPO_PUBLIC_ERROR_FALLBACK_PREVIEW === '1') {
     return <ErrorFallback error={new Error('preview')} resetError={() => undefined} />;

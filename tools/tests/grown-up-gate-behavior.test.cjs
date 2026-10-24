@@ -50,6 +50,7 @@ function hooksRuntime() {
     }
   }
   const React = {
+    useContext(ctx) { return ctx.value; },
     useState(init) {
       const inst = current;
       const slot = inst.hooks[inst.i] ??= { v: typeof init === 'function' ? init() : init };
@@ -98,6 +99,7 @@ function hooksRuntime() {
     render(inst);
     return {
       get tree() { return inst.tree; },
+      rerender(next) { inst.props = next; render(inst); },
       unmount() {
         inst.alive = false;
         for (const slot of inst.hooks) if (slot && slot.cleanup) { slot.cleanup(); slot.cleanup = null; }
@@ -286,6 +288,25 @@ test('a gate that did show never trips the watchdog', async () => {
   assert.equal(modalOf(root).props.visible, true);
 });
 
+test('a slow or hot phone that presents the gate at 3.5 s still gets the gate, not "Tap Share again"', async () => {
+  const { gate, settle, tick, mountHost } = loadGate();
+  const root = mountHost(false);
+  const ask = track(gate.askGrownUp(SHARE, 9));
+  await settle();
+  await tick(3500);
+  assert.doesNotMatch(textOf(root.tree), /again/, 'no hint while the gate is still on its way');
+  assert.equal(ask.done, false);
+  modalOf(root).props.onShow();
+  await tick(gate.GATE_SHOW_WATCHDOG_MS * 2);
+  assert.equal(ask.done, false, 'the gate showed late, so the grown-up gets to answer');
+  assert.equal(modalOf(root).props.visible, true);
+  answer(gate, root, 9);
+  await pressOk(root, settle);
+  modalOf(root).props.onDismiss();
+  await settle();
+  assert.equal(ask.value, true);
+});
+
 test('Android answers at once (no iOS fade wait)', async () => {
   const { gate, settle, mountHost } = loadGate('android');
   const root = mountHost(false);
@@ -297,41 +318,93 @@ test('Android answers at once (no iOS fade wait)', async () => {
   assert.equal(ask.value, true);
 });
 
-function loadExternal({ gateYes = true, sheet = 'hang' } = {}) {
+function loadExternal({ gateYes = true, sheet = 'hang', os = 'android', iosAction = 'sharedAction' } = {}) {
   const clock = fakeClock();
   const calls = { share: [], copy: [], del: [], mkdir: [], rnShare: [] };
+  // A tiny cache folder: share-card/<slot>/ entries the helper made.
+  const dirs = new Set();
+  const pending = [];
+  const sheetResult = value => {
+    if (sheet === 'hang') return new Promise(() => {});
+    if (sheet === 'manual') return new Promise(resolve => pending.push(() => resolve(value)));
+    return Promise.resolve(value);
+  };
   const external = loadTs('src/services/external.ts', {
     'expo-file-system': {
       cacheDirectory: 'file:///cache/',
-      deleteAsync: async (dir, opts) => { calls.del.push([dir, opts]); },
-      makeDirectoryAsync: async dir => { calls.mkdir.push(dir); },
+      readDirectoryAsync: async dir => { assert.equal(dir, 'file:///cache/share-card/'); return [...dirs]; },
+      deleteAsync: async (path, opts) => { calls.del.push([path, opts]); dirs.delete(path.replace('file:///cache/share-card/', '').replace(/\/$/, '')); },
+      makeDirectoryAsync: async dir => { calls.mkdir.push(dir); dirs.add(dir.replace('file:///cache/share-card/', '').replace(/\/$/, '')); },
       copyAsync: async ({ from, to }) => { calls.copy.push([from, to]); },
     },
     'expo-sharing': {
       isAvailableAsync: async () => true,
-      shareAsync: (uri, options) => { calls.share.push([uri, options]); return sheet === 'hang' ? new Promise(() => {}) : Promise.resolve(); },
+      shareAsync: (uri, options) => { calls.share.push([uri, options]); return sheetResult(undefined); },
     },
     'expo-web-browser': { openBrowserAsync: async () => undefined },
-    'react-native': { Linking: { canOpenURL: async () => true, openURL: async () => undefined, openSettings: async () => undefined }, Share: { share: content => { calls.rnShare.push(content); return sheet === 'hang' ? new Promise(() => {}) : Promise.resolve({ action: 'sharedAction' }); } } },
+    'react-native': {
+      Platform: { OS: os },
+      Linking: { canOpenURL: async () => true, openURL: async () => undefined, openSettings: async () => undefined },
+      Share: {
+        sharedAction: 'sharedAction', dismissedAction: 'dismissedAction',
+        share: content => { calls.rnShare.push(content); return sheetResult({ action: iosAction }); },
+      },
+    },
     '../components/GrownUpGate': { askGrownUp: async () => gateYes },
   }, { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout });
-  const settle = async () => { for (let k = 0; k < 20; k++) await Promise.resolve(); };
-  return { external, calls, tick: ms => clock.tick(ms, settle), settle };
+  // Real macrotask turns flush every pending microtask (the copy, the sheet and the race).
+  const settle = async () => { for (let k = 0; k < 12; k++) await new Promise(resolve => setImmediate(resolve)); };
+  return { external, calls, dirs, pending, tick: ms => clock.tick(ms, settle), settle };
 }
 
+/** share-card/<slot>/<Name> with the slot taken out, so assertions read the readable name. */
+const named = path => path.replace(/share-card\/[^/]+\//, 'share-card/*/');
+
 test('a share sheet that never answers frees the button at SHARE_SHEET_WAIT_MS', async () => {
-  const { external, tick, settle } = loadExternal({ sheet: 'hang' });
-  const done = track(external.shareFileExternal('file:///tmp/1ED163AE-B648.png', { mimeType: 'image/png' }, 'Whack-a-Shark 460'));
-  await settle();
-  await tick(external.SHARE_SHEET_WAIT_MS - 1);
-  assert.equal(done.done, false);
-  await tick(1);
-  assert.equal(done.value, 'timeout', 'a slow sheet is not a grown-up no');
-  const text = track(external.shareExternal({ message: 'hi' }));
-  await settle();
-  await tick(external.SHARE_SHEET_WAIT_MS);
-  assert.equal(text.done, true);
-  assert.equal(text.value, null);
+  for (const os of ['android', 'ios']) {
+    const { external, tick, settle } = loadExternal({ sheet: 'hang', os });
+    const done = track(external.shareFileExternal('file:///tmp/1ED163AE-B648.png', { mimeType: 'image/png' }, 'Whack-a-Shark 460'));
+    await settle();
+    await tick(external.SHARE_SHEET_WAIT_MS - 1);
+    assert.equal(done.done, false, os);
+    await tick(1);
+    assert.equal(done.value, 'timeout', `${os}: a slow sheet is not a grown-up no`);
+    const text = track(external.shareExternal({ message: 'hi' }));
+    await settle();
+    await tick(external.SHARE_SHEET_WAIT_MS);
+    assert.equal(text.done, true);
+    assert.equal(text.value, null);
+  }
+});
+
+test('iOS tells a real share from a cancel: "shared" only on sharedAction, "closed" on a cancel (no Shared! stamp)', async () => {
+  const went = loadExternal({ sheet: 'closes', os: 'ios', iosAction: 'sharedAction' });
+  const a = track(went.external.shareFileExternal('/private/var/tmp/AB.png', { mimeType: 'image/png' }, 'Autopia Ride Card'));
+  await went.settle();
+  assert.equal(a.value, 'shared');
+  assert.equal(went.calls.share.length, 0, 'iOS goes through Share.share, which reports the action');
+  assert.equal(named(went.calls.rnShare[0].url), 'file:///cache/share-card/*/Autopia-Ride-Card.png');
+  const backedOut = loadExternal({ sheet: 'closes', os: 'ios', iosAction: 'dismissedAction' });
+  const b = track(backedOut.external.shareFileExternal('/private/var/tmp/AB.png', { mimeType: 'image/png' }, 'Autopia Ride Card'));
+  await backedOut.settle();
+  assert.equal(b.value, 'closed', 'a cancel is never reported as shared');
+  // Android never says which, so it stays "closed" (no stamp).
+  const android = loadExternal({ sheet: 'closes', os: 'android' });
+  const c = track(android.external.shareFileExternal('file:///tmp/a.png', undefined, 'Ride Photo'));
+  await android.settle();
+  assert.equal(c.value, 'closed');
+  // Without a name, a bare iOS path still goes out as a file url.
+  const bare = loadExternal({ sheet: 'closes', os: 'ios' });
+  await bare.external.shareFileExternal('/private/var/tmp/x.png');
+  assert.equal(bare.calls.rnShare[0].url, 'file:///private/var/tmp/x.png');
+});
+
+test('the ride card stamps "Shared!" only when the share went, never after a cancel', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const code = fs.readFileSync(path.join(__dirname, '..', '..', 'src/components/RideTracker/ShareableRideCard.tsx'), 'utf8');
+  assert.match(code, /if \(outcome === 'shared'\) setShared\(true\);/);
+  assert.doesNotMatch(code, /outcome === 'closed'\)\s*\{\s*setShared/);
 });
 
 test('the share sheet shows a readable file name, never the capture UUID', async () => {
@@ -339,28 +412,58 @@ test('the share sheet shows a readable file name, never the capture UUID', async
   const done = track(external.shareFileExternal('file:///tmp/1ED163AE-B648-4C2B.png', { mimeType: 'image/png' }, 'Whack-a-Shark 460'));
   await settle();
   assert.equal(done.value, 'closed');
-  assert.deepEqual(calls.copy, [['file:///tmp/1ED163AE-B648-4C2B.png', 'file:///cache/share-card/Whack-a-Shark-460.png']]);
-  assert.equal(calls.share[0][0], 'file:///cache/share-card/Whack-a-Shark-460.png');
-  assert.equal(calls.del[0][0], 'file:///cache/share-card/', 'the last copy is cleared first, so copies never pile up');
+  assert.equal(calls.copy[0][0], 'file:///tmp/1ED163AE-B648-4C2B.png');
+  assert.equal(named(calls.copy[0][1]), 'file:///cache/share-card/*/Whack-a-Shark-460.png');
+  assert.equal(calls.share[0][0], calls.copy[0][1]);
   assert.equal(external.shareFileName('Space Mountain Ride Card', 'jpg'), 'Space-Mountain-Ride-Card.jpg');
   assert.equal(external.shareFileName("Pirates' Lair: Tom & Becky", 'png'), 'Pirates-Lair-Tom-Becky.png');
   assert.equal(external.shareFileName('***', 'png'), 'Theme-Park-Shark.png');
   // view-shot's bare iOS path is copied too.
   await external.shareFileExternal('/private/var/tmp/ABC.jpg', undefined, 'Ride Photo');
-  assert.deepEqual(calls.copy.at(-1), ['file:///private/var/tmp/ABC.jpg', 'file:///cache/share-card/Ride-Photo.jpg']);
-  assert.equal(calls.share.at(-1)[0], 'file:///cache/share-card/Ride-Photo.jpg');
+  assert.equal(calls.copy.at(-1)[0], 'file:///private/var/tmp/ABC.jpg');
+  assert.equal(named(calls.copy.at(-1)[1]), 'file:///cache/share-card/*/Ride-Photo.jpg');
+  assert.equal(calls.share.at(-1)[0], calls.copy.at(-1)[1]);
   // No name: the capture is shared as is.
   await external.shareFileExternal('file:///tmp/x.png');
   assert.equal(calls.share.at(-1)[0], 'file:///tmp/x.png');
 });
 
+test('each share gets its own copy; old copies are cleared, but never one a sheet still holds after a timeout', async () => {
+  const { external, calls, dirs, pending, tick, settle } = loadExternal({ sheet: 'manual' });
+  const first = track(external.shareFileExternal('file:///tmp/a.png', undefined, 'Whack-a-Shark 1'));
+  await settle();
+  await tick(external.SHARE_SHEET_WAIT_MS);
+  assert.equal(first.value, 'timeout', 'the button comes back');
+  const firstFile = calls.share[0][0];
+  const firstSlot = /share-card\/([^/]+)\//.exec(firstFile)[1];
+  // The first sheet is still up: a second share must not pull its file out from under it.
+  const second = track(external.shareFileExternal('file:///tmp/b.png', undefined, 'Whack-a-Shark 2'));
+  await settle();
+  const secondFile = calls.share[1][0];
+  assert.notEqual(secondFile, firstFile);
+  assert.ok(dirs.has(firstSlot), 'the open sheet keeps its file');
+  assert.equal(calls.del.length, 0);
+  // Both sheets close; the next share clears both old copies and keeps only its own.
+  pending.splice(0).forEach(close => close());
+  await settle();
+  assert.equal(second.value, 'closed');
+  const third = track(external.shareFileExternal('file:///tmp/c.png', undefined, 'Whack-a-Shark 3'));
+  await settle();
+  assert.equal(calls.del.length, 2, 'both finished copies are cleared, so copies never pile up');
+  assert.equal(dirs.size, 1);
+  pending.splice(0).forEach(close => close());
+  await settle();
+  assert.equal(third.value, 'closed');
+});
+
 test('Share Studio cards (iOS Share.share with a file url) get a readable name too; links and text are untouched', async () => {
-  const { external, calls, settle } = loadExternal({ sheet: 'closes' });
+  const { external, calls, settle } = loadExternal({ sheet: 'closes', os: 'ios' });
   const flex = track(external.shareExternal({ url: '/private/var/tmp/4F1C-UUID.jpg' }, undefined, 'Golden Churro'));
   await settle();
   assert.deepEqual(flex.value, { action: 'sharedAction' });
-  assert.deepEqual(calls.copy.at(-1), ['file:///private/var/tmp/4F1C-UUID.jpg', 'file:///cache/share-card/Golden-Churro.jpg']);
-  assert.equal(calls.rnShare.at(-1).url, 'file:///cache/share-card/Golden-Churro.jpg');
+  assert.equal(calls.copy.at(-1)[0], 'file:///private/var/tmp/4F1C-UUID.jpg');
+  assert.equal(named(calls.copy.at(-1)[1]), 'file:///cache/share-card/*/Golden-Churro.jpg');
+  assert.equal(calls.rnShare.at(-1).url, calls.copy.at(-1)[1]);
   const copies = calls.copy.length;
   await external.shareExternal({ message: 'hi', url: 'https://themeparkshark.com/x' }, undefined, 'Article');
   assert.equal(calls.rnShare.at(-1).url, 'https://themeparkshark.com/x', 'a web link is shared as is');
@@ -386,4 +489,102 @@ test('the ride card share sheets keep their buttons reachable: the backdrop and 
     assert.match(code, /style=\{\w+\.modalContent\} onPress=\{\(\) => \{\}\} accessible=\{false\}>/, file);
     assert.match(code, /style=\{\w+\.modalClose\} accessibilityRole="button" accessibilityLabel="Close">/, file);
   }
+});
+
+test('useGameMusic: a mid-game Music off stops only this game\'s bed and never writes the app-wide Music setting', async () => {
+  const rt = hooksRuntime();
+  const calls = [];
+  const auth = { value: { player: { enabled_music: true } } };
+  const GameAudio = {
+    init: async () => undefined,
+    setMusicEnabled: v => calls.push(['setMusicEnabled', v]),
+    music: {
+      setAppMusicBridge: () => undefined,
+      play: async (bed, fade) => { calls.push(['play', bed, fade]); },
+      switchTo: async bed => { calls.push(['switchTo', bed]); },
+      stop: ms => { calls.push(['stop', ms]); },
+    },
+  };
+  const { useGameMusic } = loadTs('src/gamekit/audio/useGameMusic.ts', {
+    react: rt.React,
+    '../../context/AuthProvider': { AuthContext: auth },
+    '../../context/MusicProvider': { MusicContext: { value: null } },
+    './GameAudio': { GameAudio },
+  });
+  const Game = props => { useGameMusic(props.bed, { at: 'bar', enabled: props.enabled }); return null; };
+  const game = rt.mount(Game, { bed: 'mm_loop_main', enabled: true });
+  await rt.settle();
+  assert.deepEqual(calls, [['play', 'mm_loop_main', 300]], 'the bed starts');
+  calls.length = 0;
+  // The game turns its music off mid-round: its bed fades out, and the app-wide setting is untouched.
+  game.rerender({ bed: 'mm_loop_main', enabled: false });
+  await rt.settle();
+  assert.deepEqual(calls, [['stop', 400]]);
+  // Back on: the bed starts fresh (not a switch on a stopped director).
+  calls.length = 0;
+  game.rerender({ bed: 'mm_loop_main', enabled: true });
+  await rt.settle();
+  assert.deepEqual(calls, [['play', 'mm_loop_main', 300]]);
+  // A bed change while on is a musical switch, not a restart.
+  calls.length = 0;
+  game.rerender({ bed: 'mm_loop_fever', enabled: true });
+  await rt.settle();
+  assert.deepEqual(calls, [['switchTo', 'mm_loop_fever']]);
+  // The player's Music setting off (from Settings) also stops the bed, still without writing the setting.
+  calls.length = 0;
+  auth.value = { player: { enabled_music: false } };
+  game.rerender({ bed: 'mm_loop_fever', enabled: true });
+  await rt.settle();
+  assert.deepEqual(calls, [['stop', 400]]);
+  calls.length = 0;
+  game.unmount();
+  assert.deepEqual(calls, [['stop', 400]], 'leaving the game fades its bed');
+  assert.equal(calls.some(c => c[0] === 'setMusicEnabled'), false);
+});
+
+test('flex card art that is blocked or slow is replaced by its bundled fallback before the share captures, so no slot is ever blank', async () => {
+  const clock = fakeClock();
+  const rt = hooksRuntime();
+  const ctx = { value: null };
+  const art = loadTs('src/share/FlexArtwork.tsx', {
+    react: { ...rt.React, createContext: () => ctx, useMemo: (fn) => fn() },
+    'react/jsx-runtime': { jsx: el, jsxs: el, Fragment: 'Fragment' },
+    'expo-image': { Image: 'Image' },
+  }, { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout });
+  const ready = [];
+  // The readiness the card uses (onReadyChange -> the share's readyRef).
+  const wanted = new Set(); const done = new Set();
+  ctx.value = { register: k => wanted.add(k), ready: k => { done.add(k); ready.push(k); } };
+  const images = tree => find(tree, n => n.type === 'Image');
+  const shown = tree => images(tree).filter(n => ![].concat(n.props.style).some(s => s && s.opacity === 0));
+  const settle = rt.settle;
+
+  // 1. A coin url that never answers (throttled): at FLEX_ART_FALLBACK_MS the plain coin takes the slot.
+  const slow = rt.mount(art.FlexArtwork, { art: 'https://cdn.example/slow-coin.png', fallback: 7, style: { width: 10 } });
+  await settle();
+  assert.equal(shown(slow.tree).length, 0, 'nothing drawn yet, and the card is not ready');
+  await clock.tick(art.FLEX_ART_FALLBACK_MS - 1, settle);
+  assert.equal(shown(slow.tree).length, 0);
+  await clock.tick(1, settle);
+  const fb = shown(slow.tree);
+  assert.equal(fb.length, 1);
+  assert.equal(fb[0].props.source, 7, 'the bundled Ride Coin');
+  fb[0].props.onLoad();
+  assert.equal(done.size, 1, 'the slot counts as drawn once the fallback is on screen');
+
+  // 2. A coin url that fails (blocked): the fallback at once.
+  const blocked = rt.mount(art.FlexArtwork, { art: 'https://blocked.example/coin.png', fallback: 7, style: { width: 10 } });
+  await settle();
+  images(blocked.tree)[0].props.onError();
+  await settle();
+  assert.equal(shown(blocked.tree)[0].props.source, 7);
+
+  // 3. No art at all (a park day with no coin art): the fallback from the first frame.
+  const none = rt.mount(art.FlexArtwork, { art: null, fallback: 7, style: { width: 10 } });
+  await settle();
+  assert.equal(shown(none.tree)[0].props.source, 7);
+
+  // The share waits past the fallback swap before it captures.
+  const host = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/share/ShareStudioHost.tsx'), 'utf8');
+  assert.match(host, /FLEX_CAPTURE_WAIT_MS = FLEX_ART_FALLBACK_MS \+ 2000/);
 });

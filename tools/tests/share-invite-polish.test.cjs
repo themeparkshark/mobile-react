@@ -148,7 +148,7 @@ test('a Share Studio sheet fades out before the grown-up gate, and is a layer wh
 
 test('a ride card shares from inside its sheet: the gate slot shows above it, a no keeps the card open', async () => {
   const card = src('src/components/RideTracker/ShareableRideCard.tsx');
-  assert.match(card, /const uri = await captureFlex\(storyRef, 'story'\);[\s\S]{0,300}const outcome = await openShareSheet\(uri, shareMessage\(campaignUrl\('ride_log'\)\), `\$\{ride\.ride_name\} Ride Card`\);\s*if \(outcome\.opened\) \{\s*setShared\(true\);/);
+  assert.match(card, /const uri = await captureFlex\(storyRef, 'story'\);[\s\S]{0,700}const \{ ended: outcome \} = await openShareSheet\(uri, shareMessage\(campaignUrl\('ride_log'\)\), `\$\{ride\.ride_name\} Ride Card`\);\s*if \(outcome === 'shared'\) setShared\(true\);/);
   assert.doesNotMatch(card, /shareFileExternal|beforeShare/, 'one share path for every card (gate, then the iOS share sheet)');
   for (const file of ['src/screens/RideTracker/RideHistoryScreen.tsx', 'src/screens/RideTracker/RideDetailScreen.tsx']) {
     const screen = src(file);
@@ -178,8 +178,8 @@ test('a ride card shares from inside its sheet: the gate slot shows above it, a 
 
 test('a grown-up gate iOS never shows answers "no" and steps aside, so later asks are not stuck', () => {
   const gate = src('src/components/GrownUpGate.tsx');
-  // The hotfix gate (slots, answer after the fade) is the base; this lane adds the toast, grace beat and money wait.
-  assert.match(gate, /export const GATE_SHOW_WATCHDOG_MS = 3000;/);
+  // The hotfix gate (slots, answer after the fade, 5 s watchdog from round 4) is the base; this lane adds the money wait.
+  assert.match(gate, /export const GATE_SHOW_WATCHDOG_MS = 5000;/);
   assert.match(gate, /onShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
   // Never shown means no (never yes), and never silent: a kid-readable toast, plus a dev warning naming the ask.
   // The hotfix's round 3 watchdog (a no at once with the retry hint), with this lane's longer real-money wait.
@@ -194,12 +194,12 @@ test('the gate watchdog re-arms for every ask and gives real-money gates longer'
   const body = gate.slice(gate.indexOf('export const GATE_SHOW_WATCHDOG_MS'), gate.indexOf('/** How long the kind'));
   const js = body.replace(/export /g, '').replace('(reason: GateReason | null | undefined): number', '(reason)');
   const ms = new Function(`${js}\nreturn { gateWatchdogMs };`)();
-  assert.equal(ms.gateWatchdogMs({ kind: 'share' }), 3000);
-  assert.equal(ms.gateWatchdogMs({ kind: 'leave', where: 'x' }), 3000);
-  assert.equal(ms.gateWatchdogMs(null), 3000);
-  assert.equal(ms.gateWatchdogMs({ kind: 'money', price: '$1', gets: 'x' }), 6000);
-  assert.equal(ms.gateWatchdogMs({ kind: 'renews', what: 'x', price: '$1', period: 'month', trial: null }), 6000);
-  assert.equal(ms.gateWatchdogMs({ kind: 'vip' }), 6000);
+  assert.equal(ms.gateWatchdogMs({ kind: 'share' }), 5000);
+  assert.equal(ms.gateWatchdogMs({ kind: 'leave', where: 'x' }), 5000);
+  assert.equal(ms.gateWatchdogMs(null), 5000);
+  assert.equal(ms.gateWatchdogMs({ kind: 'money', price: '$1', gets: 'x' }), 8000);
+  assert.equal(ms.gateWatchdogMs({ kind: 'renews', what: 'x', price: '$1', period: 'month', trial: null }), 8000);
+  assert.equal(ms.gateWatchdogMs({ kind: 'vip' }), 8000);
 });
 
 /* ------------------------------------------------------------------ round 2 */

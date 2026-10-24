@@ -72,10 +72,13 @@ function syncShowGate() { showGate = hosts.length ? hosts[hosts.length - 1].show
 let open: Promise<boolean> | null = null;
 /** iOS shows nothing new while a modal is still sliding away: the answer waits for the gate to be gone. */
 export const GATE_DISMISS_FALLBACK_MS = 2000;
-/** A gate that iOS refused to present (another modal was in the way) closes as a no, never hangs. */
-export const GATE_SHOW_WATCHDOG_MS = 3000;
+/**
+ * A gate that iOS refused to present (another modal was in the way) closes as a no, never hangs.
+ * Long enough that a slow or hot phone still gets its gate (presenting can take 3 s or more there).
+ */
+export const GATE_SHOW_WATCHDOG_MS = 5000;
 /** Real money (a buy, a plan, VIP) waits longer: a busy phone must not close a gate a grown-up is reading. */
-export const GATE_SHOW_WATCHDOG_MONEY_MS = 6000;
+export const GATE_SHOW_WATCHDOG_MONEY_MS = 8000;
 /** The watchdog wait for one ask. Exported for tests. */
 export function gateWatchdogMs(reason: GateReason | null | undefined): number {
   return reason && (reason.kind === 'money' || reason.kind === 'renews' || reason.kind === 'vip') ? GATE_SHOW_WATCHDOG_MONEY_MS : GATE_SHOW_WATCHDOG_MS;

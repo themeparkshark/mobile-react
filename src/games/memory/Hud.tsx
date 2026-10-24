@@ -37,11 +37,12 @@ const STREAK = require('../../assets/games/memory/studio/streak.png');
  * object). A View ring looks the same and costs less.
  *
  * Two rings, both moved only by opacity and scale on the UI thread:
- * - the flight ring closes in from r 38 to r 16 (a thin gold line);
+ * - the flight ring closes in from r 34 to r 16 (a thin gold line). r 34 keeps it on screen
+ *   beside the compact plate at the right edge (plate centre about x 364 of 402);
  * - the hit ring sits at r 16 with a thick 5 px gold stroke and pops on a QUICK hit,
  *   the same punch the old SVG gave by fattening its stroke from 2 to 5 px.
  */
-const RING_MAX_R = 38;
+const RING_MAX_R = 34;
 const RING_HIT_R = 16;
 const RING_HIT_STROKE = 5;
 
@@ -282,8 +283,9 @@ const styles = StyleSheet.create({
   chainShow: { backgroundColor: '#fff4c2', borderColor: MM.goldDeep },
   chainCompact: { width: undefined, minWidth: 58, paddingHorizontal: 10 },
   streakIdle: { opacity: 0.45 },
-  // Centred on the plate (any width), so the ring never hangs off the screen edge beside a compact plate.
-  ringWrap: { position: 'absolute', left: '50%', top: '50%', marginLeft: -42, marginTop: -42, width: 84, height: 84, alignItems: 'center', justifyContent: 'center' },
+  // Fills the plate and centres the rings on it (any plate width). Not left: '50%': on device that
+  // resolved against the padded content box and put the ring about 10 pt left of the plate's centre.
+  ringWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   quickRing: { position: 'absolute', width: RING_MAX_R * 2, height: RING_MAX_R * 2, borderRadius: RING_MAX_R, borderWidth: 2.5, borderColor: MM.gold },
   // Outer edge at r 16 + half the stroke, like the old SVG circle's stroke at its hit peak.
   quickRingHit: {
