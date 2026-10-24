@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { ReactNode, useContext, useEffect } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
-import { catchDim, catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { catchDim, catchShown, isCatchDimmed, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 import { chromeHeal, touchHeal, useCommitHeal } from './map/alive/commitHeal';
 import * as RootNavigation from '../RootNavigation';
 import { NotificationContext } from '../context/NotificationProvider';
@@ -20,6 +20,8 @@ import { emitTabReselect } from '../utils/tabReselect';
  * end at least this far above the bar.
  */
 export const BOTTOM_BAR_OVERHANG = 56;
+
+const catchHasChrome = () => isCatchDimmed() || isCatchShown();
 
 export default function Wrapper({
   children,
@@ -44,7 +46,8 @@ export default function Wrapper({
   // A catch moment owns the whole screen: the tab bar slides away on the UI thread (no re-render).
   // A common catch keeps the tab bar in place and only softens it (catchDim): the header and footer never move for it.
   // Round 5: a commit here mid-catch re-sends the softened bar (commitHeal), so it never flashes back to full.
-  useCommitHeal(chromeHeal);
+  // Wave 4: only while a catch has the chrome (Wrapper is on every screen; nothing heals at rest).
+  useCommitHeal(chromeHeal, catchHasChrome);
   const barSlide = useAnimatedStyle(() => ({ opacity: 1 - 0.4 * catchDim.value + touchHeal(chromeHeal), transform: [{ translateY: 160 * catchShown.value }] }));
 
   const items = [

@@ -13,9 +13,11 @@ import { GOLD_FX } from '../../ui/motion';
 import { CATCH_RAY_COUNT, catchRayShape } from '../../components/map/alive/mapWow';
 
 const INK = 'rgba(11,58,115,0.75)';
-function CatchRays({ size }: { readonly size: number }) {
+
+/** The rays' paths for one size (built once per size, shared by every catch). */
+function useRayPaths(size: number) {
   const c = size / 2;
-  const { rays, shine } = useMemo(() => {
+  return useMemo(() => {
     const body = Skia.Path.Make();
     const hi = Skia.Path.Make();
     for (let i = 0; i < CATCH_RAY_COUNT; i++) {
@@ -42,21 +44,38 @@ function CatchRays({ size }: { readonly size: number }) {
     }
     return { rays: body, shine: hi };
   }, [size, c]);
+}
+
+/**
+ * Wave 4: the bloom and the inked rays as Skia nodes (drawn in a size x size box from 0,0), so the catch burst
+ * lives in one canvas whose transforms come straight from the UI-thread clock (no view style a React commit
+ * could reset). `raysOnly` drops the bloom (the grand catch's second, counter-turning ring).
+ */
+export const CatchRaysArt = memo(function CatchRaysArt({ size, raysOnly = false }: { readonly size: number; readonly raysOnly?: boolean }) {
+  const c = size / 2;
+  const { rays, shine } = useRayPaths(size);
   return (
-    <Canvas style={{ width: size, height: size }} pointerEvents="none">
+    <Group>
       {/* The light: warm and soft, white-hot at the centre, gone at the rim (never a hard disc). */}
-      <Circle cx={c} cy={c} r={c}>
+      {!raysOnly && <Circle cx={c} cy={c} r={c}>
         <RadialGradient c={vec(c, c)} r={c}
           colors={['rgba(255,251,234,1)', 'rgba(255,213,74,0.75)', 'rgba(255,201,60,0.3)', 'rgba(255,201,60,0)']}
           positions={[0, 0.2, 0.55, 1]} />
-      </Circle>
-      <Group>
-        <Path path={rays}>
-          <RadialGradient c={vec(c, c)} r={c * 0.92} colors={[GOLD_FX.core, GOLD_FX.rays, '#F2A91E']} positions={[0.08, 0.38, 1]} />
-        </Path>
-        <Path path={rays} style="stroke" strokeWidth={2.2 * (size / 320)} strokeJoin="round" color={INK} />
-        <Path path={shine} style="stroke" strokeWidth={1.8 * (size / 320)} strokeCap="round" color="rgba(255,255,255,0.8)" />
-      </Group>
+      </Circle>}
+      <Path path={rays}>
+        <RadialGradient c={vec(c, c)} r={c * 0.92} colors={[GOLD_FX.core, GOLD_FX.rays, '#F2A91E']} positions={[0.08, 0.38, 1]} />
+      </Path>
+      <Path path={rays} style="stroke" strokeWidth={2.2 * (size / 320)} strokeJoin="round" color={INK} />
+      <Path path={shine} style="stroke" strokeWidth={1.8 * (size / 320)} strokeCap="round" color="rgba(255,255,255,0.8)" />
+    </Group>
+  );
+});
+
+/** The same art in its own canvas (static; a wrapper view moves it). */
+function CatchRays({ size }: { readonly size: number }) {
+  return (
+    <Canvas style={{ width: size, height: size }} pointerEvents="none">
+      <CatchRaysArt size={size} />
     </Canvas>
   );
 }

@@ -78,6 +78,14 @@ type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; ra
  * the picker choose every ride and sky (the production pick-and-warm path).
  */
 const EXP = __DEV__ ? process.env.EXPO_PUBLIC_HH3_EXP ?? '' : '';
+/**
+ * Wave 4: release-like capture (EXPO_PUBLIC_MOTION_CAPTURE=HomeCatchPreview with `expo start --no-dev`, never set in
+ * store builds). The common find is caught on its own as the 1st, 2nd, 5th, 10th and 25th catch of a session, 6 s
+ * apart, and the frame times and beats are written to Documents/catch-trace.log, so frame-rate and timing claims
+ * come from release JS, not the dev graph.
+ */
+const CAPTURE = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';
+const CAPTURE_CATCHES: number[] = String(process.env.EXPO_PUBLIC_MOTION_CAPTURE_ORDER || '1,2,5,10,25').split(',').map(Number).filter((n: number) => n > 0);
 /** Map-chrome budget captures: 'still' (frozen map, resting chrome), 'still-bare' (same, chrome invisible), 'still-peek' (a find tapped). */
 const STILL = EXP.startsWith('still');
 const BARE = EXP === 'still-bare';
@@ -365,7 +373,7 @@ function HomeCatchPreview() {
   }, true);
   // A Release preview build has no console: the trace is flushed to Documents/catch-trace.log.
   useEffect(() => {
-    if (!autoplay) return;
+    if (!autoplay && !CAPTURE) return;
     const timer = setInterval(() => {
       void FileSystem.writeAsStringAsync(`${FileSystem.documentDirectory}catch-trace.log`, catchTraceBuffer.join('\n')).catch(() => undefined);
     }, 4000);
@@ -380,6 +388,18 @@ function HomeCatchPreview() {
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoplay]);
+  // Release-like capture: the common pretzel is caught as catch 1, 2, 5, 10 and 25 of a session (see CAPTURE).
+  useEffect(() => {
+    if (!CAPTURE) return undefined;
+    const timers = CAPTURE_CATCHES.map((n, i) => setTimeout(() => {
+      resetCatchSessionForPreview(n - 1);
+      catchTraceBuffer.push(`[capture] ${Date.now()} catch ${n}`);
+      const pretzel = items.find(entry => entry.rarity <= 1 && FIXTURES[items.indexOf(entry)]?.inRange);
+      if (pretzel) tapFind(pretzel);
+    }, 9000 + i * 6000));
+    return () => timers.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const stageItem = request?.item ?? items[0];
 
   return (

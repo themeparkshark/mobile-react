@@ -15,7 +15,7 @@ import { catchStyleFor } from './ridePhoto';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { formatFindDistance, msUntilLeavesInChanges } from './homeFindCopy';
 import { findImageOrder, findLook, mapGlowColor } from './findPresentation';
-import { catchHidePivot, tapPivot, tapSquash } from './catchPresence';
+import { catchDim, catchHidePivot, tapPivot, tapSquash } from './catchPresence';
 
 /**
  * A tinted glow or sparkle. React Native's own Image applies tintColor every time; expo-image sometimes drew
@@ -335,11 +335,14 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   const leftSide = fingerSide === 'left' || fingerSide === 'below-left';
   // Below the find the finger points up at it (rotated), so it stays off the player's shark.
   const tilt = below ? '210deg' : leftSide ? '-28deg' : '28deg';
+  // Wave 4: the finger steps aside while a catch plays (it fades with the map's controls on the tap frame and
+  // comes back only as the badge leaves), so two callouts never compete with the catch.
   const finger = useAnimatedStyle(() => {
-    if (!live) return { transform: [{ translateY: 0 }, { rotate: tilt }] };
+    const away = 1 - catchDim.value;
+    if (!live) return { opacity: away, transform: [{ translateY: 0 }, { rotate: tilt }] };
     // Out of phase with the item's hop.
     const tap = Math.abs(Math.sin(tick.value * Math.PI * 1.15 + phase * Math.PI + 1.4));
-    return { transform: [{ translateY: (below ? 5 : -5) * tap }, { rotate: tilt }] };
+    return { opacity: away, transform: [{ translateY: (below ? 5 : -5) * tap }, { rotate: tilt }] };
   }, [phase, live, tilt, below]);
   // One pulse per new key: the art swells 1.35x and a ring blooms (Reduce Motion: the ring only, no swell).
   const pulseV = useSharedValue(0);

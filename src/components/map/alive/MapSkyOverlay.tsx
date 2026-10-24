@@ -17,8 +17,9 @@ import { useMapAlive } from './MapAliveContext';
 
 // A cloud is a few overlapping soft puffs; offsets are in cloud-local px.
 const PUFFS: readonly [number, number, number][] = [[0, 0, 92], [70, 14, 70], [-68, 16, 64], [24, -30, 58]];
-const SHADOW_INK = 'rgba(18,52,96,0.11)';
-const SHADOW_CLEAR = 'rgba(18,52,96,0)';
+// Wave 4: house blue at half the old strength, so a passing cloud reads as a cartoon shadow, never grey dirt on the art.
+const SHADOW_INK = 'rgba(7,104,185,0.055)';
+const SHADOW_CLEAR = 'rgba(7,104,185,0)';
 
 function Cloud({ clock, i, width, height, strength }: {
   clock: SharedValue<number>; i: number; width: number; height: number; strength: number;

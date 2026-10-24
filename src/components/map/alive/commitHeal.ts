@@ -21,11 +21,16 @@ export const HEAL_MS = 320;
 /** One rising sequence for every heal value (two components sharing chromeHeal never fight over it). */
 let healSeq = 0;
 
-/** Run after every commit of the calling component: bumps `heal` for HEAL_MS. */
-export function useCommitHeal(shared?: SharedValue<number>): SharedValue<number> {
+/**
+ * Run after every commit of the calling component: bumps `heal` for HEAL_MS. `when` (wave 4) limits it to the
+ * commits that matter: the app-wide Wrapper heals only while a catch has the chrome dimmed or hidden, so a
+ * screen that never catches pays nothing.
+ */
+export function useCommitHeal(shared?: SharedValue<number>, when?: () => boolean): SharedValue<number> {
   const own = useSharedValue(0);
   const heal = shared ?? own;
   useLayoutEffect(() => {
+    if (when && !when()) return;
     healSeq += 1;
     heal.value = withTiming(healSeq, { duration: HEAL_MS, easing: Easing.linear });
   });

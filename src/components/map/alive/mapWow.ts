@@ -89,7 +89,9 @@ export interface CatchPlan {
  * about 1.4 s, so the tenth catch still feels quick. Reduce Motion skips the wobble and the flight and
  * keeps a short fade.
  */
-export function catchPlan(options: { readonly reduced: boolean; readonly calm?: boolean; readonly walking?: boolean; readonly repeat?: boolean; readonly milestone?: boolean }): CatchPlan {
+export function catchPlan(options: { readonly reduced: boolean; readonly calm?: boolean; readonly walking?: boolean; readonly repeat?: boolean; readonly milestone?: boolean;
+  /** Wave 4: a 5th-catch treat (the star tier) keeps the snappy repeat but holds its burst 280 ms, so the stars read as a reward. */
+  readonly treat?: boolean }): CatchPlan {
   if (options.reduced) {
     const landAt = DURATION.quick;
     return { squashMs: 0, squashTo: 1, anticipationMs: 0, risePt: 0, wobbles: [], hitStopAt: 0, burstAt: 0, burstScale: 1,
@@ -105,7 +107,8 @@ export function catchPlan(options: { readonly reduced: boolean; readonly calm?: 
     // the badge pops in on that frame (in by 0.9 s), the find is home by 1020 and the badge is gone by 1290.
     const hitStopAt = 360;
     const burstAt = hitStopAt + DURATION.hitStop;
-    const suckAt = burstAt + 170;
+    // Wave 4: a treat (every 5th catch) holds its burst 280 ms instead of 170 (still done by about 1.4 s).
+    const suckAt = burstAt + (options.treat ? 280 : 170);
     const suckMs = 90;
     const flyAt = suckAt + suckMs;
     const flyMs = 330;
@@ -169,6 +172,10 @@ export interface BurstVariant {
   readonly beam: boolean;
   /** A milestone: the full KICK and the heavier haptic. */
   readonly milestone: boolean;
+  /** Wave 4: the 5th-catch treat (the star tier holds its burst longer on the snappy repeat). */
+  readonly treat: boolean;
+  /** Wave 4: the 25th: a second ring of rays turning the other way and a gold confetti shower. */
+  readonly grand: boolean;
 }
 
 export const BURST_STARS_MAX = 8;
@@ -176,14 +183,15 @@ export const BURST_RINGS_MAX = 3;
 
 export function burstVariant(catchNumber: number): BurstVariant {
   const n = Math.max(1, Math.floor(catchNumber));
-  if (n % 25 === 0) return { kind: 'grand', inkScale: 1.22, rings: 3, stars: 8, beam: true, milestone: true };
-  if (n % 10 === 0) return { kind: 'beam', inkScale: 1.12, rings: 2, stars: 6, beam: true, milestone: true };
-  if (n % 5 === 0) return { kind: 'stars', inkScale: 1.08, rings: 1, stars: 8, beam: false, milestone: false };
-  if (n === 1) return { kind: 'classic', inkScale: 1, rings: 1, stars: 4, beam: false, milestone: false };
+  // Wave 4: each tier visibly climbs. The 25th is about 1.4x the 10th (1.56 vs 1.12) with a counter-turning ring and confetti.
+  if (n % 25 === 0) return { kind: 'grand', inkScale: 1.56, rings: 3, stars: 8, beam: true, milestone: true, treat: false, grand: true };
+  if (n % 10 === 0) return { kind: 'beam', inkScale: 1.12, rings: 2, stars: 6, beam: true, milestone: true, treat: false, grand: false };
+  if (n % 5 === 0) return { kind: 'stars', inkScale: 1.08, rings: 1, stars: 8, beam: false, milestone: false, treat: true, grand: false };
+  if (n === 1) return { kind: 'classic', inkScale: 1, rings: 1, stars: 4, beam: false, milestone: false, treat: false, grand: false };
   const k = n % 3;
-  if (k === 0) return { kind: 'rings', inkScale: 0.9, rings: 3, stars: 2, beam: false, milestone: false };
-  if (k === 1) return { kind: 'stars', inkScale: 0.95, rings: 1, stars: 6, beam: false, milestone: false };
-  return { kind: 'classic', inkScale: 1, rings: 1, stars: 4, beam: false, milestone: false };
+  if (k === 0) return { kind: 'rings', inkScale: 0.9, rings: 3, stars: 2, beam: false, milestone: false, treat: false, grand: false };
+  if (k === 1) return { kind: 'stars', inkScale: 0.95, rings: 1, stars: 6, beam: false, milestone: false, treat: false, grand: false };
+  return { kind: 'classic', inkScale: 1, rings: 1, stars: 4, beam: false, milestone: false, treat: false, grand: false };
 }
 
 /** The beam drops this long before the held frame and lands on it (the flash is its impact). */
@@ -201,6 +209,26 @@ export function beamAt(t: number, p: CatchPlan): { drop: number; fade: number } 
   const f = (d - BEAM.dropMs) / BEAM.fadeMs;
   if (f >= 1) return null;
   return { drop: 1, fade: f };
+}
+
+/**
+ * Wave 4: the grand catch's gold confetti (the 25th). Each piece pops up and out of the find on the burst, then
+ * flutters down under gravity and fades; `null` when it is not on screen. Capped by the caller (power budget).
+ * Worklet-safe and pure (the pieces are drawn in the burst's one Skia canvas).
+ */
+export const CONFETTI = { max: 14, ms: 1500 } as const;
+export function confettiAt(t: number, p: CatchPlan, i: number, count: number): { x: number; y: number; rot: number; sx: number; alpha: number } | null {
+  'worklet';
+  const d = t - p.burstAt;
+  if (d < 0 || d >= CONFETTI.ms || p.reduced || count <= 0) return null;
+  const u = d / CONFETTI.ms;
+  // A fan over the top half, each piece its own speed (deterministic, never random).
+  const a = -Math.PI / 2 + ((i + 0.5) / count - 0.5) * Math.PI * 1.25;
+  const v = 300 + ((i * 37) % 5) * 45;
+  const s = d / 1000;
+  const x = Math.cos(a) * v * s * (1 - 0.35 * u) + Math.sin(d / 110 + i) * 14 * u;
+  const y = Math.sin(a) * v * s + 520 * s * s;
+  return { x, y, rot: d / 160 * (i % 2 ? -1 : 1) + i, sx: Math.cos(d / 90 + i * 1.3), alpha: u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3 };
 }
 
 /**

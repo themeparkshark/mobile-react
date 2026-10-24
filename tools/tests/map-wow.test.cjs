@@ -142,7 +142,8 @@ test('the catch uses the shared motion language and never punishes a miss', () =
   assert.match(src, /catchPlan\(/);
   assert.match(src, /flashPeak\(isDimFlashingLightsEnabled\(\)/, 'the flash respects Dim Flashing Lights');
   assert.match(src, /momentParticles\(PARTICLES\.sparkles/, 'sparkles go through the power budget');
-  assert.match(src, /CatchRays/, "round 5: the gold is the hand-inked fan on a bloom");
+  assert.match(src, /<CatchBurst /, "the gold is the hand-inked fan on a bloom, drawn by the burst canvas");
+  assert.match(read('src/screens/ExploreScreen/CatchBurst.tsx'), /<CatchRaysArt size=\{goldSize\} \/>/);
   const common = src.slice(src.indexOf('const plan = catchPlan('), src.indexOf("catchMark('fly')"));
   assert.ok(!/failBuzz/.test(common), 'a missed common catch is soft, never an error buzz');
 });
@@ -206,7 +207,8 @@ test('round 2: a common catch never moves the header or the tab bar, can be skip
   const commonPart = effect.slice(effect.indexOf('dimCatchChrome(true)'));
   assert.ok(!/showCatchChrome\(true\)/.test(commonPart), 'a common keeps the header where the coins land');
   assert.match(src, /Math\.max\(0\.4 \* on/, 'the halo holds a floor once the catch starts');
-  assert.match(src, /onPress=\{onSkip\}/, 'tap anywhere skips after the burst');
+  assert.match(src, /Gesture\.Tap\(\)[\s\S]{0,80}onBegin\(\(\) => \{\s*'worklet';\s*if \(clockOn\.value\) skipToEnd\(\);/, 'tap anywhere skips after the burst, on the UI thread');
+  assert.match(src, /onAccessibilityTap=\{onSkip\}/, 'VoiceOver can still skip');
   assert.match(src, /targetRef\.current/, 'the stable callbacks read the badge spot through a ref (no stale top-left start)');
   assert.match(commonPart, /streamHud\('coins'/, 'coins leave from the find on the burst');
   const wrapper = read('src/components/Wrapper.tsx');
@@ -258,7 +260,7 @@ test('round 3: the catch is one function of the clock: squash, wobbles, held fla
 test('round 3: one celebration at a time: the badge rises only once the inked burst fades, and is in before the find lands', () => {
   for (const plan of [wow.catchPlan({ reduced: false }), wow.catchPlan({ reduced: false, repeat: true })]) {
     assert.ok(plan.suckAt + plan.suckMs <= plan.badgeAt, 'the ink is gone before the badge moves (round 4: no cross-fade)');
-    assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /suck < 0\.7 \? 1/);
+    assert.match(read('src/screens/ExploreScreen/CatchBurst.tsx'), /suck < 0\.7 \? 1/);
     assert.ok(plan.badgeAt + plan.badgeInMs <= plan.landAt, 'the slot is there when the find arrives');
     assert.equal(wow.catchFrame(plan.badgeAt - 1, plan).badge, 0);
     assert.ok(wow.catchFrame(plan.landAt, plan).badge > 0.99);
@@ -485,7 +487,7 @@ test('round 5: styles that must survive a commit re-send after it (commitHeal)',
     assert.ok(n >= min, `${file} heals ${n} styles (want ${min}+)`);
   }
   for (const file of ['src/screens/ExploreScreen/HomeExplore.tsx', 'src/components/Map.tsx', 'src/components/Wrapper.tsx', 'src/screens/ExploreScreen/HomeCatchPreviewScreen.tsx']) {
-    assert.match(fs.readFileSync(path.join(root, file), 'utf8'), /useCommitHeal\(chromeHeal\)/, `${file} bumps the chrome heal on commit`);
+    assert.match(fs.readFileSync(path.join(root, file), 'utf8'), /useCommitHeal\(chromeHeal(, \w+)?\)/, `${file} bumps the chrome heal on commit`);
   }
 });
 
@@ -518,7 +520,74 @@ test('round 5: the gold is a hand-inked fan on a soft bloom, varied, and breathi
   for (const s of shapes) assert.ok(s.len <= 160 && s.r0 > 0 && s.half > 4);
   const src = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen/HomeCatchMoment.tsx'), 'utf8');
   assert.doesNotMatch(src, /<GoldBurst /, 'no image fan on the map catch');
-  assert.match(src, /const breathe = 1 \+ 0\.03 \* Math\.sin/, 'a living hold');
+  assert.match(read('src/screens/ExploreScreen/CatchBurst.tsx'), /const breathe = 1 \+ 0\.03 \* Math\.sin/, 'a living hold');
   assert.match(src, /itemRim/, 'the find keeps a white sticker rim on the gold');
   assert.match(src, /repeat: sessionCatches > 0 && !variant\.milestone/, 'a milestone plays the full show, never the snappy repeat');
+});
+
+test('wave 4: the burst lives in one Skia canvas on the clock, never an animated view a commit could reset', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  const burst = read('src/screens/ExploreScreen/CatchBurst.tsx');
+  assert.doesNotMatch(src, /const goldStyle = useAnimatedStyle|const inkStyle = useAnimatedStyle/, 'no view style carries the gold or the ink');
+  assert.doesNotMatch(src, /fx\.gold|fx\.ink/);
+  assert.match(burst, /<Canvas style=\{StyleSheet\.absoluteFill\}/);
+  for (const name of ['goldT', 'goldO', 'inkT', 'inkO', 'ringT', 'ringO']) assert.match(burst, new RegExp(`const ${name} = useDerivedValue\\(`), `${name} is a UI-thread derived value`);
+  assert.doesNotMatch(burst, /useState\([^)]*\)[\s\S]*setInk\([^)]*\)[\s\S]*useAnimatedStyle/, 'no animated view styles in the burst');
+  assert.doesNotMatch(burst, /useAnimatedStyle/);
+  assert.match(burst, /Skia\.Image\.MakeImageFromEncoded/, 'the ink art is decoded once for the app');
+  assert.match(src, /useEffect\(\(\) => \{ void loadBurstInk\(\); \}, \[\]\)/, 'and preloaded when the map mounts');
+});
+
+test('wave 4: the 10th-catch beam is set from a JS flag on the tap (JS never reads back a value it just wrote)', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  const effect = src.slice(src.indexOf('const variant = burstVariant(sessionCatches + 1)'), src.indexOf('// ── Ride Photo hand-offs'));
+  assert.match(effect, /const beam = motion && variant\.beam;/);
+  assert.match(effect, /beamOn\.value = beam \? 1 : 0;/);
+  assert.match(effect, /if \(current\.beam\) list\.push\(\{ at: plan\.hitStopAt, kind: BEAT\.beam/);
+  assert.doesNotMatch(effect, /if \(beamOn\.value\)/, 'no JS read of the beam value');
+  assert.doesNotMatch(src.slice(src.indexOf('const onBeat = useCallback'), src.indexOf('useAnimatedReaction(() => cc.value')), /beamOn\.value/);
+  // The beam drops 300 ms before the held frame: it is on before the clock reaches it on every plan.
+  for (const plan of [wow.catchPlan({ reduced: false, milestone: true })]) assert.ok(plan.hitStopAt - wow.BEAM.dropMs > 0);
+});
+
+test('wave 4: every tier climbs: the 5th holds its stars 250+ ms, the 25th is 1.4x the 10th with a second ring and confetti', () => {
+  const v5 = wow.burstVariant(5), v10 = wow.burstVariant(10), v25 = wow.burstVariant(25), v2 = wow.burstVariant(2);
+  assert.ok(v5.treat && !v2.treat && !v10.treat);
+  const treat = wow.catchPlan({ reduced: false, repeat: true, treat: true });
+  const plain = wow.catchPlan({ reduced: false, repeat: true });
+  assert.ok(treat.suckAt - treat.burstAt >= 250, `5th burst hold ${treat.suckAt - treat.burstAt}`);
+  assert.ok(plain.suckAt - plain.burstAt <= 200, 'ordinary repeats stay snappy');
+  assert.ok(treat.doneAt <= 1450, `5th still settled by ${treat.doneAt}`);
+  assert.ok(v25.inkScale / v10.inkScale >= 1.35, `grand vs beam ${v25.inkScale / v10.inkScale}`);
+  assert.ok(v25.grand && !v10.grand && v25.beam && v10.beam);
+  const p = wow.catchPlan({ reduced: false, milestone: true });
+  assert.equal(wow.confettiAt(p.burstAt - 1, p, 0, 10), null);
+  const mid = wow.confettiAt(p.burstAt + 500, p, 3, 10);
+  assert.ok(mid && mid.alpha === 1 && Number.isFinite(mid.x + mid.y));
+  assert.equal(wow.confettiAt(p.burstAt + wow.CONFETTI.ms, p, 0, 10), null);
+  assert.equal(wow.confettiAt(p.burstAt + 100, wow.catchPlan({ reduced: true }), 0, 10), null, 'no confetti in Reduce Motion');
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /momentParticles\(CONFETTI\.max, power, reducedMotion\)/, 'confetti goes through the power budget');
+  assert.match(src, /treat: variant\.treat/);
+});
+
+test('wave 4: the finger steps aside during a catch, the wash is thin edge bands, cloud shadows are soft house blue', () => {
+  const item = read('src/screens/ExploreScreen/PrepItem.tsx');
+  assert.match(item, /const away = 1 - catchDim\.value;/);
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /vignetteTop: \{[^}]*height: '15%'/);
+  assert.match(src, /vignetteBottom: \{[^}]*height: '15%'/);
+  const sky = read('src/components/map/alive/MapSkyOverlay.tsx');
+  assert.match(sky, /SHADOW_INK = 'rgba\(7,104,185,0\.055\)'/);
+  const wrapper = read('src/components/Wrapper.tsx');
+  assert.match(wrapper, /useCommitHeal\(chromeHeal, catchHasChrome\)/, 'the app-wide bar heals only while a catch has the chrome');
+  assert.match(read('src/components/map/alive/commitHeal.ts'), /if \(when && !when\(\)\) return;/);
+});
+
+test('wave 4: the catch can be captured in release-like JS (motion capture route, never in store builds)', () => {
+  const routes = read('src/devRoutes.tsx');
+  assert.match(routes, /process\.env\.EXPO_PUBLIC_MOTION_CAPTURE\s*\?\s*\[[\s\S]*'HomeCatchPreview'/);
+  assert.match(routes, /motion === 'HomeCatchPreview' \? motion : null/);
+  assert.match(read('src/utils/standalonePreview.ts'), /EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview'/);
+  assert.match(read('src/screens/ExploreScreen/HomeCatchPreviewScreen.tsx'), /const CAPTURE = process\.env\.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';/);
 });
