@@ -110,6 +110,7 @@ import {
 } from './meta/progress';
 import { RIDE_STAGES, STAGES, type StageId } from './stages';
 import { crewForRound, dareBarsFor, drumOffPlace, type Rival } from './multiplayer/drumline';
+import { HudStepBack } from '../../gamekit/results/HudStepBack';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const HEADER_H = 113;
@@ -1176,6 +1177,9 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
           <GestureDetector gesture={gesture}>
             <View style={[styles.touchZone, { top: geom.touchTop, height: fieldH - geom.touchTop }]} />
           </GestureDetector>
+          {/* The HUD steps all the way back under the results card: no rival
+              percent or -13,100 pace chip may sit readable behind the card. */}
+          <HudStepBack back={!!result} reducedMotion={reducedMotion}>
           {rivals.current.length ? (
             <View pointerEvents="none" style={styles.rivalStrip}>
               {rivals.current.map((r, i) => (
@@ -1207,6 +1211,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
               ) : null}
             </Pressable>
           ) : null}
+          </HudStepBack>
           {DEV_PERF ? <PerfOverlay probe={perfProbe} visible style={styles.perf} /> : null}
           {!ready ? (
             <View pointerEvents="none" style={styles.loading}>

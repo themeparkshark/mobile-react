@@ -31,7 +31,9 @@ export function HudStepBack({ back, reducedMotion = false, children }: {
   return (
     <Animated.View
       style={[StyleSheet.absoluteFill, style]}
-      pointerEvents="none"
+      // Touches pass through to the HUD's own buttons while it is up (box-none),
+      // and nothing under the card can be pressed once it steps back.
+      pointerEvents={back ? 'none' : 'box-none'}
       importantForAccessibility={back ? 'no-hide-descendants' : 'auto'}
       accessibilityElementsHidden={back}
     >

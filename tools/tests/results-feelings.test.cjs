@@ -396,6 +396,10 @@ test('Rhythm gets the shared bar: timing fills it, the goal is spoken only, Easy
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.match(whack, /<HudStepBack back=\{!!result\} reducedMotion=\{reducedMotion\}>\s*<WhackHud/, 'the Whack HUD steps back under the card');
   assert.equal((whack.match(/showPace=\{!!ghostRef\.current && !ride && !result\}/g) || []).length, 2, 'no VS BEST pace chip under the results card');
+  const rhythmSrc = read('src/games/rhythm/RhythmTapGame.tsx');
+  assert.match(rhythmSrc, /<HudStepBack back=\{!!result\} reducedMotion=\{reducedMotion\}>[\s\S]*styles\.rivalStrip[\s\S]*<DeltaChip[\s\S]*styles\.marchPill[\s\S]*<\/HudStepBack>/, 'the Rhythm rival strip, pace chip and MARCH pill step back under the card');
+  const step = read('src/gamekit/results/HudStepBack.tsx');
+  assert.match(step, /pointerEvents=\{back \? 'none' : 'box-none'\}/, 'HUD buttons still work while the HUD is up');
   assert.match(rhythm, />TRY TWO THUMBS\?</);
   assert.doesNotMatch(rhythm, /Hit 3 of every 4 \(\$\{hr\}%\)/, 'no percent goal');
   const shell = read('src/gamekit/GameShellV2.tsx');
