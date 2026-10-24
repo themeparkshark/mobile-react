@@ -136,7 +136,7 @@ test('a park queue sees its own fan facts before general play and no other park 
   };
   await checkPark(8, ['gen-37', 'gen-38', 'gen-39', 'gen-40', 'gen-43', 'gen-44', 'gen-45'], 30);
   await checkPark(1, ['gen-48'], 24);
-  await checkPark(6, ['gen-46'], 24);
+  await checkPark(5, ['gen-46'], 24); // Animal Kingdom is server park 5 (6 is EPCOT)
   await checkPark(13, ['gen-47'], 24);
   await checkPark(2, [], 23);
 });

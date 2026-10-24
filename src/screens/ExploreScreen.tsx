@@ -8,7 +8,7 @@ import { Text, View, Pressable, StyleSheet } from 'react-native';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
 import useLivePoll from '../hooks/useLivePoll';
 import useUserIdle, { idlePollInterval, markUserActivity } from '../hooks/useUserIdle';
-import { opportunityIsActive } from './ExploreScreen/mapOpportunityTiming';
+import { everyRideTrulyOpen, nearbyOpportunityOpen, opportunityIsActive } from './ExploreScreen/mapOpportunityTiming';
 import { TaskType } from '../models/task-type';
 import currencyBalance from '../helpers/currency-balance';
 import * as RootNavigation from '../RootNavigation';
@@ -39,6 +39,7 @@ import useAdventureStampMoment from './ExploreScreen/useAdventureStampMoment';
 import { resolveMapQueueContext, resolveRideContextById } from '../services/lineplay/resolveRide';
 import type { RideContext } from '../services/lineplay/LinePlaySession';
 import checkForRedeemable from '../helpers/check-for-redeemable';
+import ParkMapRetryCard, { useParkMapRetry } from './ExploreScreen/ParkMapRetry';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import { PrepItemType } from '../models/prep-item-type';
@@ -181,6 +182,8 @@ function ExploreScreen() {
     navigation.setParams({ highlightNearestFind: undefined });
   }, [highlightParam, navigation]);
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
+  // The last park map load failed (weak signal): the park buttons stay, a calm retry note shows.
+  const [mapLoadFailed, setMapLoadFailed] = useState(false);
   const [activeRedeemable, setActiveRedeemable] = useState<
     CurrentRedeemableType | undefined
   >();
@@ -639,7 +642,10 @@ function ExploreScreen() {
     if (!park?.id || !player?.id) return Promise.resolve();
     if (mapRequest.current?.context === mapContext) return mapRequest.current.promise;
     const promise = currentRedeemables().then(data => {
-      if (mapMounted.current && latestMapContext.current === mapContext) setRedeemables(data);
+      if (mapMounted.current && latestMapContext.current === mapContext) { setRedeemables(data); setMapLoadFailed(false); }
+    }, error => {
+      if (mapMounted.current && latestMapContext.current === mapContext) setMapLoadFailed(true);
+      throw error;
     }).finally(() => {
       if (mapRequest.current?.promise === promise) mapRequest.current = null;
     });
@@ -655,6 +661,8 @@ function ExploreScreen() {
     ...(redeemables?.keys ?? []), ...(redeemables?.redeemables ?? []),
   ], [redeemables]);
   const mapNow = useMapOpportunityClock(timedOpportunities, refreshMapOpportunities, !!park && !!player);
+  useEffect(() => { setMapLoadFailed(false); }, [mapContext]);
+  const mapRetry = useParkMapRetry(mapLoadFailed && !!park && !!player, mapFocused, refreshMapOpportunities);
   const visibleTasks = useMemo(() => (redeemables?.tasks ?? [])
     .filter(task => opportunityIsActive(task, mapNow)), [redeemables?.tasks, mapNow]);
 
@@ -678,7 +686,10 @@ function ExploreScreen() {
     }
     return out;
   }, [visibleTasks, restingTasks, playerLat, playerLng]);
-  const playableTaskId = activeRedeemable?.type === 'task' ? activeRedeemable.model.id : null;
+  // The server can count a resting or closed ride as in range; it is not playable until it opens.
+  const activeLiveStatus = activeRedeemable?.type === 'task' ? liveByTask.get(activeRedeemable.model.id)?.status ?? null : null;
+  const openRedeemable = nearbyOpportunityOpen(activeRedeemable, activeLiveStatus, mapNow) ? activeRedeemable : undefined;
+  const playableTaskId = openRedeemable?.type === 'task' ? openRedeemable.model.id : null;
   const adventureTaskId = adventure && (adventure.phase === 'discover' || adventure.phase === 'play') ? adventure.ride.task_id : null;
   const goalTaskId = tripGoal && !tripGoal.coin_owned ? tripGoal.task_id : null;
   // Every ride island stays mounted, keyed by ride and in first-seen order (new ones append):
@@ -1019,7 +1030,7 @@ function ExploreScreen() {
   // While Fin-ister Nights is on (or its exit / Marquee card is up) the generic park tip stays away.
   const parkTip = frightOwnsParkTips({ modeOn: frightNight.modeOn, recapUp: !!frightEngine.recapOffer || !!frightEngine.marquee })
     ? null : parkTipFor({ inPark: !!park, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
-      rideCoinInRange: activeRedeemable?.type === 'task' || activeRedeemable?.type === 'secret_task' });
+      rideCoinInRange: openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task' });
   const parkOfferSlot = !!player && !!park && !railShowing && suggestionSlots.left == null && suggestionSlots.right == null
     && !parkTip && !isActive && !liveEvt.event;
   const parkTipReady = mapTipReady({
@@ -1146,7 +1157,7 @@ function ExploreScreen() {
     // No own "?": the map's one "?" offers the Fin-ister tutorial while the mode is on.
     if (key === 'fright') return { key, label: frightNight.title, tone: TONES.night, node: <FrightPill inline night={frightNight} engine={frightEngine} /> };
     return { key, label: 'Ride Control', tone: TONES.park, node: <RideControlBar inline control={rideControl} tasks={visibleTasks}
-      hideAllOpen={hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
+      hideAllOpen={!everyRideTrulyOpen({ loaded: !!redeemables, restingCount: restingTasks.length, liveStatuses: visibleTasks.map(task => liveByTask.get(task.id)?.status) }) || hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
       onFocusTask={(task) => setSelectedTask(task)} /> };
   }) : [];
 
@@ -1276,7 +1287,13 @@ function ExploreScreen() {
       {/* Guest: a bright sign-in invitation over the live map */}
       {!player && <GuestInvite />}
       
-      {park && redeemables && (
+      {/* The park buttons never wait on the map data: a failed load keeps them and shows a retry note. */}
+      {park && !redeemables && mapLoadFailed && (
+        <View pointerEvents="box-none" style={{ position: 'absolute', left: 16, right: 16, bottom: 250, zIndex: 11 }}>
+          <ParkMapRetryCard retrying={mapRetry.retrying} onRetry={mapRetry.retryNow} />
+        </View>
+      )}
+      {park && (
         <>
           <View
             style={{
@@ -1359,6 +1376,7 @@ function ExploreScreen() {
               redeemable={mapFocused ? activeRedeemable : undefined}
               park={park}
               selectedTaskId={selectedTask?.id ?? null}
+              liveStatus={activeLiveStatus}
               onOpenChange={setRedeemFlowOpen}
               onPress={async () => {
                 await getRedeemables();
@@ -1559,7 +1577,7 @@ function ExploreScreen() {
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
           hintReady={parkTipReady && !parkTipShowing}
-          sharkCheer={activeRedeemable?.type === 'task' || activeRedeemable?.type === 'secret_task'}
+          sharkCheer={openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task'}
           projector={mapProjector}
           onZoomChange={onMapZoom}
           ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded || retentionOccluding}

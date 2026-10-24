@@ -1,6 +1,6 @@
 import { shareFileExternal } from '../../services/external';
 import React, { useRef, useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated, Easing } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import ViewShot from 'react-native-view-shot';
@@ -11,13 +11,15 @@ import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import SharkReactionIcon, { reactionLabel } from './SharkReactionIcon';
-import { gameAlert } from '../../ui';
+import { GameIcon, gameAlert } from '../../ui';
 import countText from '../../helpers/countText';
 
 interface ShareableRideCardProps {
   ride: PlayerRideType;
   rideCount?: number;
   onShare?: () => void;
+  /** Kept on the phone, not in the journal yet: no count to fetch and nothing to share yet. */
+  queued?: boolean;
 }
 
 // The card itself (captured by ViewShot)
@@ -94,7 +96,24 @@ const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = Reac
 });
 CardContent.displayName = 'CardContent';
 
-const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, onShare }) => {
+/** A small turning arrow inside the share button while the ride total loads. Still with Reduce Motion. */
+const ButtonSpinner: React.FC<{ still: boolean }> = ({ still }) => {
+  const turn = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (still) return;
+    const loop = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [still, turn]);
+  const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  return (
+    <Animated.View style={{ transform: [{ rotate }] }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <GameIcon name="retry" size={18} />
+    </Animated.View>
+  );
+};
+
+const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, onShare, queued = false }) => {
   const viewShotRef = useRef<ViewShot>(null);
   const busy = useRef(false);
   const [sharing, setSharing] = useState(false);
@@ -105,14 +124,14 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
   useEffect(() => {
     let current = true;
     setConfirmedCount(rideCount);
-    setLoadingCount(rideCount == null);
-    if (rideCount == null) {
+    setLoadingCount(rideCount == null && !queued);
+    if (rideCount == null && !queued) {
       void getPlayerRides({ ride_id: ride.ride_id, per_page: 1 }).then(result => {
         if (current) setConfirmedCount(result.meta.total);
       }).catch(() => undefined).finally(() => { if (current) setLoadingCount(false); });
     }
     return () => { current = false; };
-  }, [ride.ride_id, rideCount]);
+  }, [ride.ride_id, rideCount, queued]);
 
   const handleShare = useCallback(async () => {
     if (busy.current || loadingCount) return;
@@ -145,18 +164,27 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
 
   return (
     <View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Share Ride Card"
-        accessibilityState={{ disabled: sharing || loadingCount, busy: sharing || loadingCount }}
-        disabled={sharing || loadingCount}
-        onPress={handleShare}
-        style={({ pressed }) => [cardStyles.shareBtn, pressed && { opacity: 0.85,
-          transform: [{ scale: reducedMotion ? 1 : 0.97 }] }]}
-      >
-        <Text style={cardStyles.shareBtnText}>{sharing ? 'Making your card…'
-          : loadingCount ? 'Loading your ride total…' : 'Share Ride Card'}</Text>
-      </Pressable>
+      {queued ? (
+        // The ride is not in the journal yet, so its total is not known: a calm line, not a button.
+        <Text style={cardStyles.shareLater} accessibilityRole="text">Share once it joins your journal</Text>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Share Ride Card"
+          accessibilityState={{ disabled: sharing || loadingCount, busy: sharing || loadingCount }}
+          disabled={sharing || loadingCount}
+          onPress={handleShare}
+          style={({ pressed }) => [cardStyles.shareBtn, pressed && { opacity: 0.85,
+            transform: [{ scale: reducedMotion ? 1 : 0.97 }] }]}
+        >
+          {/* While the ride total loads, a small spinner sits inside the same button shape. */}
+          <View style={cardStyles.shareBtnRow}>
+            {loadingCount && <ButtonSpinner still={reducedMotion} />}
+            <Text style={[cardStyles.shareBtnText, loadingCount && { opacity: 0.6 }]}>
+              {sharing ? 'Making your card…' : 'Share Ride Card'}</Text>
+          </View>
+        </Pressable>
+      )}
       <ViewShot
         ref={viewShotRef}
         options={{ format: 'png', quality: 1, result: 'tmpfile' }}
@@ -249,6 +277,8 @@ const cardStyles = StyleSheet.create({
     marginBottom: 10,
     ...shadows.md,
   },
+  shareBtnRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  shareLater: { color: '#315C7C', fontSize: 15, fontFamily: 'Knockout', textAlign: 'center', marginBottom: 10 },
   shareBtnText: {
     color: '#000',
     fontSize: 16,

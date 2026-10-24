@@ -114,5 +114,5 @@ test('Q10 the no-leader headline hides while the mode is ON and stays otherwise'
   const bar = read('src/components/RideControlBar.tsx');
   assert.match(bar, /hideAllOpen \? 'RIDE CONTROL' : NO_LEADER_HEADLINE/);
   assert.doesNotMatch(bar, /EVERY RIDE IS OPEN/, 'never claim ride status on the team bar');
-  assert.match(read('src/screens/ExploreScreen.tsx'), /hideAllOpen=\{hideEveryRideOpen\(/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /hideAllOpen=\{(?:!redeemables \|\| |!everyRideTrulyOpen\(\{[^}]*\}\) \|\| )?hideEveryRideOpen\(/);
 });
