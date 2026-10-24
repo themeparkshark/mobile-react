@@ -94,3 +94,10 @@ test('no percentage drawn on a results card extra (Banana Basket ball share is a
   assert.doesNotMatch(banana, /BALL \{x\.share\}%/);
   assert.match(banana, /accessibilityLabel=\{`Your ball share, \$\{x\.share\} percent`\}/);
 });
+
+test('a Memory run that ran out of time shows the pairs it found as coins, never MEMORY 0%', () => {
+  const res = read('src/games/memory/MemoryResults.tsx');
+  assert.match(res, /const pairPips = !data\.won && !data\.headline && data\.pairs/);
+  assert.match(res, /accessibilityLabel=\{`\$\{pairPips\[0\]\} of \$\{pairPips\[1\]\} pairs found`\}/);
+  assert.match(read('src/games/memory/MemoryGame.tsx'), /pairs: \[e\.pairs, e\.pairsTotal\],/);
+});

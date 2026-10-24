@@ -57,6 +57,12 @@ export interface MemoryResultsData {
   banner: string;
   won: boolean;
   recallPct: number;
+  /**
+   * Pairs found and on the board. A run that ran out of time shows these as
+   * coins on the plate (the same picture the ride try card uses), never a
+   * "MEMORY 0%" grade a kid reads as a score of nothing.
+   */
+  pairs?: readonly [number, number];
   /** Replaces the RECALL % plate (duels show points). */
   headline?: { label: string; value: string };
   edition: CoinEdition | null;
@@ -293,7 +299,9 @@ function Headline({ data, reducedMotion, startMs = 0 }: { data: MemoryResultsDat
   const pop = useSharedValue(reducedMotion ? 1 : 0);
   const spin = useSharedValue(reducedMotion ? 0 : 1);
   // One big number that counts up with a coin-tick ladder (Royal Match style).
-  const target = data.headline ? null : data.recallPct;
+  // A lost run shows the pairs it found as coins, not a percent.
+  const pairPips = !data.won && !data.headline && data.pairs && data.pairs[1] > 0 && data.pairs[1] <= 10 ? data.pairs : null;
+  const target = data.headline || pairPips ? null : data.recallPct;
   const [shown, setShown] = useState(reducedMotion || target == null ? target : 0);
   useEffect(() => {
     if (reducedMotion) return undefined;
@@ -322,10 +330,20 @@ function Headline({ data, reducedMotion, startMs = 0 }: { data: MemoryResultsDat
           <View style={[styles.medalBand, { top: 28, backgroundColor: ed === 'bronze' ? 'rgba(150,80,30,0.35)' : ed === 'silver' ? 'rgba(255,255,255,0.55)' : 'rgba(255,200,40,0.45)' }]} />
         </Animated.View>
       ) : null}
-      <View style={styles.recallPlate}>
-        <Text style={styles.recallLabel}>{data.headline?.label ?? 'MEMORY'}</Text>
-        <Text style={styles.recallValue}>{data.headline?.value ?? `${shown ?? data.recallPct}%`}</Text>
-      </View>
+      {pairPips ? (
+        <View style={styles.pairPlate} accessible accessibilityLabel={`${pairPips[0]} of ${pairPips[1]} pairs found`}>
+          {Array.from({ length: pairPips[1] }, (_, i) => (
+            <View key={i} style={styles.pairPip}>
+              {i < pairPips[0] ? <Image source={COIN} style={styles.pairCoin} resizeMode="contain" /> : null}
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.recallPlate}>
+          <Text style={styles.recallLabel}>{data.headline?.label ?? 'MEMORY'}</Text>
+          <Text style={styles.recallValue}>{data.headline?.value ?? `${shown ?? data.recallPct}%`}</Text>
+        </View>
+      )}
       {/* The medal's color says the edition; no "EDITION" jargon for kids. */}
       {ed && data.upgraded ? <Text style={styles.editionText}>COIN UPGRADED!</Text> : null}
     </Animated.View>
@@ -478,6 +496,11 @@ const styles = StyleSheet.create({
   medalTint: { ...StyleSheet.absoluteFillObject, opacity: 0.35, borderRadius: 27 },
   medalBand: { position: 'absolute', left: -10, right: -10, height: 7, transform: [{ rotateZ: '-20deg' }] },
   recallPlate: { flexDirection: 'row', alignItems: 'baseline', backgroundColor: MM.gold, borderRadius: 14, borderWidth: 2.5, borderColor: '#ffffff', paddingHorizontal: 14, paddingVertical: 4 },
+  pairPlate: { flexDirection: 'row', gap: 5, backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 2.5, borderColor: MM.ink,
+    paddingHorizontal: 10, paddingVertical: 6 },
+  pairPip: { width: 26, height: 26, borderRadius: 13, borderWidth: 2.5, borderColor: '#9cc3e4', backgroundColor: '#e3eff9',
+    alignItems: 'center', justifyContent: 'center' },
+  pairCoin: { position: 'absolute', width: 30, height: 30 },
   recallLabel: { fontFamily: 'Knockout', fontSize: 15, color: MM.navyText, marginRight: 6, letterSpacing: 1 },
   recallValue: { fontFamily: 'Shark', fontSize: 30, color: MM.navyText },
   editionText: { width: '100%', textAlign: 'center', fontFamily: 'Shark', fontSize: 13, color: MM.goldDeep, marginTop: 2 },

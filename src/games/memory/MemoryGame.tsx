@@ -1008,6 +1008,7 @@ export default function MemoryGame({
         banner,
         won,
         recallPct: recallPct(e),
+        pairs: [e.pairs, e.pairsTotal],
         edition,
         upgraded,
         stars,
