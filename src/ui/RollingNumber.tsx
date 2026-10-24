@@ -18,7 +18,7 @@
  * Reduce Motion: the new number is simply there.
  * Transforms and opacity only (no per-frame React render, no layout animation).
  */
-import { memo, useEffect, useRef } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import Animated, { cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring,
   withTiming, type SharedValue } from 'react-native-reanimated';
@@ -152,6 +152,11 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
   const plan = useRef<RollColumn[]>([]);
   const rollId = useRef(0);
   const scale = useSharedValue(1);
+  // After a roll lands, the columns go back to their resting width (a rolling column is as wide as the
+  // wider of its old and new digit, so a wide 9 never squeezes into a narrow 1's slot mid-roll).
+  const [, setSettled] = useState(0);
+  const settledText = useRef<string | null>(null);
+  const settle = (t: string) => { settledText.current = t; setSettled(n => n + 1); };
 
   const flat = StyleSheet.flatten(style) ?? {};
   const fontSize = flat.fontSize ?? 16;
@@ -168,6 +173,9 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
       : planRoll(previous.current.text, text, rising.current, big)
         .map(col => (col.from !== null && col.from !== col.to ? { ...col, delay: col.delay + startDelayMs } : col));
     rollId.current += 1;
+    settledText.current = null;
+  } else if (settledText.current === text && plan.current.some(c => c.from !== c.to)) {
+    plan.current = [...text].map(char => ({ char, from: isDigit(char) ? Number(char) : null, to: isDigit(char) ? Number(char) : null, delay: 0 }));
   }
 
   // A gated roll: the bump and the glow start on the gate's frame too (UI thread).
@@ -177,10 +185,12 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
   const landedLater = (ms: number) => {
     if (landTimer.current) clearTimeout(landTimer.current);
     const gain = rising.current;
+    const landedText = text;
     landTimer.current = setTimeout(() => {
       if (celebrate && gain) queueHaptic('tickSelection');
       onLanded?.();
-    }, ms);
+      settle(landedText);
+    }, ms + 60);
   };
   useEffect(() => () => { if (landTimer.current) clearTimeout(landTimer.current); }, []);
   useAnimatedReaction(() => (gate ? gate.value >= 1 && pendingLanding.value === 1 : false), (ready, was) => {
@@ -219,6 +229,7 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
       // A gain the player just earned lands with a tick in the hand; losses land quietly.
       if (celebrate && gain) queueHaptic('tickSelection');
       onLanded?.();
+      settle(text);
     }, longest);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -289,8 +300,10 @@ function DigitColumn({ col, rollId, lineHeight, fontSize, textStyle, flash, flas
   const stretch = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 + ROLL_LOOK.stretch * tickSlide(pos.value) }] }));
   return (
     <View style={{ height: lineHeight }}>
-      {/* The resting digit sizes the column; the strip rolls over it. */}
+      {/* The resting digit sizes the column (with the old digit too while it rolls, so the wider one fits); the strip rolls over it. */}
       <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, { opacity: 0 }]}>{col.char}</Text>
+      {col.from !== null && col.from % 10 !== Number(col.char) && <Text maxFontSizeMultiplier={maxFontSizeMultiplier}
+        style={[textStyle, { opacity: 0 }]}>{String(col.from % 10)}</Text>}
       <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: inset, height: clipH, overflow: 'hidden' }, stretch]}>
         <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0 }, strip]}>
           <DigitStrip cell={cell} lineHeight={lineHeight} textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />
