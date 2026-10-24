@@ -277,6 +277,6 @@ function Twinkle({ spot, radius, clock }: { readonly spot: typeof TWINKLE_SPOTS[
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
   // Explicitly bare: iOS reuses native views, and a reused card's fill and border once showed through for a few frames.
-  origin: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0, backgroundColor: 'transparent', borderWidth: 0 },
+  origin: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0, backgroundColor: 'rgba(255,255,255,0)', borderWidth: 0, borderColor: 'rgba(255,255,255,0)' },
   shineClip: { position: 'absolute', overflow: 'hidden', alignItems: 'center' },
 });

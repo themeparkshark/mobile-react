@@ -498,7 +498,7 @@ export default function CoinLevelingModal({
         {/* Behind the card: the big gold fan reaches past its edges on the success beat. */}
         {anchor && (state === 'leveling' || state === 'success') && (
           <View pointerEvents="none" style={{ position: 'absolute', left: anchor.x - SCREEN_W * fanScale / 2, top: anchor.y - SCREEN_W * fanScale / 2,
-            width: SCREEN_W * fanScale, height: SCREEN_W * fanScale, alignItems: 'center', justifyContent: 'center', zIndex: 5 }}>
+            width: SCREEN_W * fanScale, height: SCREEN_W * fanScale, alignItems: 'center', justifyContent: 'center', zIndex: 5, ...BARE }}>
             {/* Never turns: a card left open must not spin a screen-sized layer (the small fan on the coin does).
                 Its size grows with the tier, so Legendary throws rays well past the card while the kid reads it. */}
             <GoldBurst size={SCREEN_W * fanScale} amount={bloomOut} bloom={bloom} spin={false} reduced={reducedMotion} />
@@ -508,7 +508,7 @@ export default function CoinLevelingModal({
         {/* Mounted from the start of the charge (hidden until the burst), so the success frame mounts nothing heavy. */}
         {anchor && (state === 'leveling' || state === 'success') && !reducedMotion && (
           <View pointerEvents="none" style={{ position: 'absolute', left: anchor.x, top: anchor.y, width: 0, height: 0,
-            alignItems: 'center', justifyContent: 'center', zIndex: 30 }}>
+            alignItems: 'center', justifyContent: 'center', zIndex: 30, ...BARE }}>
             <Reanimated.View style={[{ position: 'absolute', width: 132, height: 132, borderRadius: 66, borderWidth: nextPayoff.ringWidth,
               borderColor: coinTier(nextLevel).ring }, ringPulseStyle]} />
             <SparkleBurst progress={sparkle} radius={SCREEN_W * 0.46} count={momentParticles(nextPayoff.sparkles, budget, reducedMotion)} />
@@ -1272,3 +1272,9 @@ function TierRim({ level, size }: { readonly level: number; readonly size: numbe
 }
 
 const LABEL_STYLE = { fontFamily: 'Shark', fontSize: 22, color: '#05346e', textTransform: 'uppercase' } as const;
+/**
+ * Explicitly bare (no fill, no border) for the layers that mount on the tap: iOS reuses native views, and a reused
+ * view kept a closed tip card's cream fill and gold border, drawn shrinking over the coin. A value that equals the
+ * default is skipped as "no change", so these are clear white and a 0 width, which always get written.
+ */
+const BARE = { backgroundColor: 'rgba(255,255,255,0)', borderWidth: 0, borderColor: 'rgba(255,255,255,0)' } as const;
