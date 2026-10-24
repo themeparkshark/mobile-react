@@ -208,10 +208,11 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             On the ride card it waits for the last star, like Sharky and Boss. */}
         <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} delayMs={model.ride ? rideRibbonDelay(model.stars, reducedMotion) : 0} />
         <View style={styles.head}>
+          {/* Same number style as the score plate above and every other card (1,925, never 1925). */}
           <View style={styles.scoreRow}>
-            <Text style={styles.scoreMe}>{model.myScore}</Text>
+            <Text style={styles.scoreMe}>{model.myScore.toLocaleString()}</Text>
             <Text style={styles.scoreVs}>vs</Text>
-            <Text style={styles.scoreOpp}>{model.oppScore}</Text>
+            <Text style={styles.scoreOpp}>{model.oppScore.toLocaleString()}</Text>
           </View>
         </View>
         {/* Right answers and a low score agree: the Big Final that missed is

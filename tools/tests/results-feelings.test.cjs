@@ -1044,3 +1044,9 @@ test('a results chip reads one of a thing as singular (1 RIGHT ANSWER, 1 BURST),
   assert.equal(chipA11y(1, 'BEST ANSWER'), '1 BEST ANSWER');
   assert.match(src, /accessibilityLabel=\{chipA11y\(pips \? pips\[0\] : value, label\)\}/);
 });
+
+test('the duel card writes scores like every other card (1,925 vs 1,628)', () => {
+  const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
+  assert.match(duel, /\{model\.myScore\.toLocaleString\(\)\}/);
+  assert.match(duel, /\{model\.oppScore\.toLocaleString\(\)\}/);
+});
