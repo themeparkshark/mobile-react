@@ -610,7 +610,7 @@ test('round 5: FINISH! leaves in one shared ease-out: the fan, rings and sparkle
   assert.doesNotMatch(fb, /<GoldBurst/, 'the fan is drawn in the same Skia canvas as the label (never native views lagging behind it)');
   assert.match(fb, /const FinishCanvas = React\.memo\(/, 'the canvas never re-renders mid-beat');
   const whack = read('src/games/whack/WhackAShark.tsx');
-  assert.match(whack, /armed=\{phase === 'play' && secondsLeft != null && secondsLeft <= 2\}/, 'the FINISH! canvas mounts in the last 2 seconds only (idle, drawing nothing)');
+  assert.match(whack, /\(secondsLeft != null && secondsLeft <= 2\)\)\)\}/, 'the FINISH! canvas mounts in the last 2 seconds (idle, drawing nothing), latched through its beat (r6)');
 });
 
 test('round 5: the curtain call bows before the next card; Bursts 2 and up get a quick ripple, about 1 run in 8 a gold one', () => {
@@ -817,4 +817,14 @@ test('r6: Whack has a release-like capture (never set in store builds) for frame
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.match(whack, /const WHACK_CAPTURE = process\.env\.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack';/);
   assert.match(whack, /const PERF_GRAPH = \(__DEV__ \|\| WHACK_CAPTURE\) && process\.env\.EXPO_PUBLIC_WHACK_PERF === '1';/);
+});
+
+test('r6: FINISH! stays armed through its own beat, and the results card leads so the last bow is never followed by an empty board', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /armed=\{phase === 'finish' \|\| \(phase === 'play' && \(finishArmed\.current \|\| \(secondsLeft != null && secondsLeft <= 2\)\)\)\}/);
+  assert.match(whack, /if \(nextLeft != null && nextLeft <= 2\) finishArmed\.current = true;/);
+  assert.match(whack, /const t = buildTimeline\(bi, runIdx, feverFired\);\n\s+finishArmed\.current = false;/);
+  assert.match(whack, /export const RESULTS_LEAD_MS = 300;/);
+  assert.match(whack, /laterInRun\(\(\) => finishRun\(\), t\.boss && b\.result\.bossDown \? 1600 : resultsWait\(\)\);/);
+  assert.match(whack, /laterInRun\(\(\) => finishRun\('banked'\), resultsWait\(\)\);/);
 });

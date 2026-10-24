@@ -146,6 +146,8 @@ const PERF_GRAPH = (__DEV__ || WHACK_CAPTURE) && process.env.EXPO_PUBLIC_WHACK_P
 export const CARD_OVERLAP_MS = 150;
 /** The card mounts (hidden) this long before it lands, so React's mount cost is paid while the curtain plays. */
 export const CARD_MOUNT_LEAD_MS = 320;
+/** The results card's own lead (JS work, mount and entrance) before the moment a breather would land. */
+export const RESULTS_LEAD_MS = 300;
 /** After landing, the card has settled and the board under it goes to rest (no render pass). */
 export const CARD_SETTLE_MS = 520;
 /** r6: the middle Bursts (the short ripple) get the repeat version of FINISH! and the card (about 60 percent). */
@@ -380,6 +382,12 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const finishWall = useRef(-1);
   // Dev capture (EXPO_PUBLIC_FINISH_HOLD_MS): the next card waits out the held FINISH! frame.
   const captureHold = __DEV__ && process.env.EXPO_PUBLIC_FINISH_HOLD_MS ? Number(process.env.EXPO_PUBLIC_DEV_HOLD_FOR_MS || 6000) : 0;
+  /**
+   * FINISH! stays mounted from the last 2 s until its beat is over (a latch). r6: arming on secondsLeft alone let
+   * the end event's `secondsLeft = null` unmount the canvas just before it fired, so it remounted late and the
+   * label showed only its tail (seen in dev at load 280).
+   */
+  const finishArmed = useRef(false);
   /** This Burst's curtain call (full, short ripple or the rare gold one): the next card waits for its bow. */
   const curtainKind = useRef(0);
   // r5: one celebration at a time. The next card waits for FINISH! to hand off AND for the last shark to bow.
@@ -389,6 +397,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   // FINISH! hands off), timed from FINISH!'s UI fire frame, so the board is never empty and grey between them.
   const cardAt = useCallback(() => (finishWall.current < 0 ? Date.now()
     : finishWall.current + Math.max(finishHandoff(curtainKind.current), curtainEndMs(curtainKind.current) - CARD_OVERLAP_MS) + captureHold), [captureHold]);
+  // The results card is the shell's (its own JS work, mount and entrance), so the Run ends RESULTS_LEAD_MS
+  // before the breather would land: the card arrives as the last sharks duck, not after an empty board.
+  const resultsWait = useCallback(() => Math.max(0, cardAt() - RESULTS_LEAD_MS - Date.now()), [cardAt]);
   /** Board-at-rest timer (the card has landed: the board stops redrawing until the next Burst). */
   const restTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearRest = useCallback(() => {
@@ -562,6 +573,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         const nextLeft = left <= 5 && left >= 0 ? left : null;
         // One second early, so a floater already rising never meets the 5 stamp.
         quietRef.current = left <= 6;
+        if (nextLeft != null && nextLeft <= 2) finishArmed.current = true;
         if (nextLeft !== lastLeftRef.current) {
           lastLeftRef.current = nextLeft;
           setSecondsLeft(nextLeft);
@@ -642,6 +654,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const startBurst = useCallback((bi: number, runIdx: number, withSlam: boolean, feverFired = false) => {
     if (feverFired) carryRef.current = { ...carryRef.current, feverReady: false, meter: 0 };
     const t = buildTimeline(bi, runIdx, feverFired);
+    finishArmed.current = false;
     if (bi === 0) tilesRef.current = [];
     tlRef.current = t;
     setTl(t);
@@ -882,7 +895,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     }
     if (bankedEarly) {
       // FINISH! hands off at FINISH_HANDOFF_MS, then the results card takes the stage (one celebration at a time).
-      laterInRun(() => finishRun('banked'), handoffWait());
+      laterInRun(() => finishRun('banked'), resultsWait());
       return;
     }
     // Multiplayer submissions.
@@ -906,7 +919,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const next = t.input.burstIndex + 1;
     if (next >= totalBursts) {
       // The finale's own cam (boss) already played; leave a beat for it.
-      laterInRun(() => finishRun(), t.boss && b.result.bossDown ? 1600 : handoffWait());
+      laterInRun(() => finishRun(), t.boss && b.result.bossDown ? 1600 : resultsWait());
       return;
     }
     // Walk Boost: +2.5%/m, full at 40m, a Golden Start at most once per 3 Bursts, random-seed solo Runs only.
@@ -1260,7 +1273,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={capacity} textMinY={L.hudH + 6}
             flyArrived={flyArrived} onArrive={onCoinsArrive} /> : null}
           {L ? <StampLayer ref={stamps} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} queue={{ maxLive: 1, spacingMs: 150 }} minY={L.hudH + 8} /> : null}
-          {L && !ride ? <FinishBeat trigger={runtime.endTick} armed={phase === 'play' && secondsLeft != null && secondsLeft <= 2} onFire={onFinishFire}
+          {L && !ride ? <FinishBeat trigger={runtime.endTick} armed={phase === 'finish' || (phase === 'play' && (finishArmed.current || (secondsLeft != null && secondsLeft <= 2)))} onFire={onFinishFire}
             label="FINISH!" width={L.w} height={L.h} y={L.hudH + (L.deckTop - L.hudH) * 0.52}
             reduced={reducedMotion} sparkles={momentParticles(FINISH_SPARKLES_MAX, budget, reducedMotion)}
             flash={flashPeak(isDimFlashingLightsEnabled(), reducedMotion)} clipTop={L.hudH + 4} handoffMs={finishHandoff(curtainKind.current)} /> : null}
