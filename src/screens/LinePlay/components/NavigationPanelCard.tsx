@@ -395,11 +395,13 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
     const besideTitle = trace.solved ? look.solvedTitle : look.repairTitle;
     // A short title ("Fix the signal") stays on one line; a long one may take two.
     const titleLines = besideTitle.length <= 15 ? 1 : 2;
+    // In the narrow column the first instruction breaks evenly ("Tap a tile / to turn it."), never a lone "it.".
+    const columnStatus = status === 'Tap a tile to turn it.' ? 'Tap a tile\nto turn it.' : status;
     const statusLine = <View style={[styles.statusTop, statusRow && styles.statusRowAbove]} accessibilityLiveRegion="polite">
       {firstTap && <TurnTileGlyph size={20} />}
       <KidText style={[styles.kicker, styles.kickerStatus, styles.kickerBeside, statusRow && styles.kickerOnCream]}
         numberOfLines={statusRow ? 1 : 2} adjustsFontSizeToFit={statusRow} minimumFontScale={0.85}>
-        {trace.solved ? kickerText : status}</KidText>
+        {trace.solved ? kickerText : statusRow ? status : columnStatus}</KidText>
     </View>;
     return <PageScroll ref={scroll} fill={BRAND.cream} still={hideBoard}
       contentStyle={[styles.cardBeside, { paddingTop: besideTop }]} onLayout={onLayout}
