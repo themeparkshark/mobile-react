@@ -271,11 +271,12 @@ export default function NotificationsScreen() {
               refreshControl={<RefreshControl refreshing={refreshing} tintColor="transparent"
                 onRefresh={() => { setRefreshing(true); loadFirst().catch(() => undefined).finally(() => setRefreshing(false)); }} />}
               ListEmptyComponent={<CaughtUp />}
+              // The refresh shark rides above the first row inside the content, so it always stays in the pulled gap.
+              ListHeaderComponent={<View><SharkRefreshOverlay anchored shark={shark} /></View>}
               ListFooterComponent={paging === 'error'
                 ? <View style={styles.footer}><Pill compact tone="white" icon="retry" label="Try again" onPress={more} /></View>
                 : paging === 'busy' ? <SharkLoader state="loading" compact /> : null}
             />
-            <SharkRefreshOverlay shark={shark} />
           </>
         )}
       </CleanScreenBackground>

@@ -160,8 +160,12 @@ import { linePlayTipReady } from '../../services/help/tipGate';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
 
-/** The dive's water waits at most this long after the screen lays out for its wait and first round. */
-const DIVE_READY_CAP_MS = 1500;
+/**
+ * The dive's water waits at most this long after the screen lays out for its wait and first round.
+ * Short: the screen's own wait card (with the ride's name) is already there, and a held breath longer
+ * than this reads as a stall, so the water opens onto the real screen and the round pops in after.
+ */
+export const DIVE_READY_CAP_MS = 450;
 
 export default function LinePlayScreen() {
   const navigation = useNavigation();

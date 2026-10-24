@@ -43,6 +43,8 @@ import useUiReducedMotion from './useUiReducedMotion';
 import { haptic, queueHaptic } from '../gamekit/Haptics';
 import { DURATION, EASE, SPRING, STAGGER } from './motionEasing';
 import SparkleBurst from './SparkleBurst';
+import { GoldBurst } from './GoldBurst';
+import { LinearGradient } from 'expo-linear-gradient';
 import GameButton from './GameButton';
 import GameIcon from './GameIcon';
 import GameText from './GameText';
@@ -93,6 +95,11 @@ export function partStyle(clock: number, i: number, reduced: boolean) {
 }
 /** The icon stamps in on its own beat: small, past full size, then rest (with a gold glint on a reward). */
 export const ICON_STAMP = { at: 110, from: 0.4, peak: 1.22 } as const;
+/**
+ * A celebrating dialog's prize: a bigger icon that stamps onto a fan of gold rays (the house GoldBurst),
+ * the brightest thing on the screen, with the buzz on the stamp frame itself.
+ */
+export const DIALOG_PRIZE = { iconPt: 84, plainIconPt: 72, raysPt: 230, glowAmount: 1, bloomMs: 420 } as const;
 /** The ribbon drops this far (pt) and stamps down from this scale. */
 const RIBBON_DROP = 24;
 const RIBBON_STAMP_FROM = 1.18;
@@ -101,8 +108,13 @@ export const RIBBON_AT = 0;
 /** Where the ribbon's tails are (the ribbon spans the card's width, 85% of the screen up to 380 pt). */
 const CARD_W = Math.min(380, Dimensions.get('window').width * 0.85);
 const RIBBON_TAIL = { left: CARD_W * 0.06, right: CARD_W * 0.94, y: 30 } as const;
-/** The backdrop: a clear brand blue near the brief's 0.45, never black or grey, no blur pass. */
-export const DIALOG_SCRIM = 'rgba(0,88,196,0.42)';
+/**
+ * The backdrop: underwater, not dirty. Brand blue, deeper at the top and bottom edges and light in the
+ * middle band where the card and most buttons sit, so the colours behind the card stay clean (a heavy
+ * even blue over yellow art reads olive). Never black or grey, no blur pass.
+ */
+export const DIALOG_SCRIM = 'rgba(0,88,196,0.30)';
+export const DIALOG_SCRIM_STOPS = ['rgba(6,96,206,0.44)', 'rgba(20,130,230,0.16)', 'rgba(20,130,230,0.16)', 'rgba(4,70,170,0.46)'] as const;
 /** Message copy on the card, as in UnfoundCoinModal. */
 export const DIALOG_COPY = '#e2f6ff';
 
@@ -188,6 +200,8 @@ export function GameDialog({
   const shown = visible && front;
   const closing = useRef(false);
   const chosen = useRef<number | null>(null);
+  const stampTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (stampTimer.current) clearTimeout(stampTimer.current); }, []);
   const scrim = useSharedValue(0);
   const pop = useSharedValue(0);
   const fade = useSharedValue(0);
@@ -197,6 +211,8 @@ export function GameDialog({
   const tails = useSharedValue(0);
   const iconPop = useSharedValue(1);
   const iconSpark = useSharedValue(0);
+  const prizeGlow = useSharedValue(0);
+  const prizeBloom = useSharedValue(0);
   const actions = layoutActions(buttons, equalChoices);
   const celebrates = dialogCelebrates({ icon, haptic: hapticKind, buttons });
   const request = { title, message, icon, buttons, dismissible };
@@ -221,6 +237,14 @@ export function GameDialog({
           withTiming(ICON_STAMP.peak, { duration: DURATION.tap + 30, easing: EASE.out }), withSpring(1, SPRING.pop)));
       }
       iconSpark.value = 0;
+      prizeGlow.value = 0;
+      prizeBloom.value = 0;
+      if (celebrates && icon) {
+        // The rays gather behind the prize, bloom on the stamp frame, then settle to a warm glow.
+        prizeGlow.value = reducedMotion ? 0.7 : withDelay(ICON_STAMP.at - 60, withTiming(DIALOG_PRIZE.glowAmount, { duration: 220, easing: EASE.out }));
+        if (!reducedMotion) prizeBloom.value = withDelay(ICON_STAMP.at + DURATION.tap, withSequence(
+          withTiming(1, { duration: 90, easing: EASE.out }), withTiming(0, { duration: DIALOG_PRIZE.bloomMs, easing: EASE.in })));
+      }
       if (celebrates && !reducedMotion) {
         iconSpark.value = withDelay(ICON_STAMP.at + DURATION.tap, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
       }
@@ -232,7 +256,13 @@ export function GameDialog({
       if (celebrates && !reducedMotion) {
         tails.value = withDelay(RIBBON_AT + 120, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
       }
-      if (hapticKind !== 'none') haptic(hapticKind);
+      if (celebrates && icon) {
+        // A prize buzzes on its stamp frame (the peak of the pop), not on the open.
+        const kind = hapticKind;
+        stampTimer.current = setTimeout(() => {
+          if (kind !== 'none') haptic(kind); else queueHaptic('hitMedium');
+        }, reducedMotion ? 0 : ICON_STAMP.at + DURATION.tap);
+      } else if (hapticKind !== 'none') haptic(hapticKind);
       else queueHaptic('tickSelection');
     }
     // Opening only depends on visibility; haptic kind and motion are read at open time.
@@ -290,8 +320,9 @@ export function GameDialog({
       <KeyboardAvoidingView testID={testID} enabled={avoidKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: Z.dialog }}>
         <Animated.View style={[StyleSheet.absoluteFill, scrimStyle]}>
-          {/* A light navy tint, no blur pass: a blur under a fading scrim flickered on open and read as a grey wash. */}
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: DIALOG_SCRIM }]} />
+          {/* Underwater light, no blur pass: deeper blue at the edges, light in the middle so the colours stay clean. */}
+          <LinearGradient pointerEvents="none" colors={DIALOG_SCRIM_STOPS} locations={[0, 0.32, 0.68, 1]}
+            style={StyleSheet.absoluteFill} />
           <Pressable accessibilityLabel="Close" accessibilityRole="button" style={{ flex: 1 }}
             disabled={dismiss === null} onPress={() => { if (dismiss !== null) close(dismiss); }} />
         </Animated.View>
@@ -323,11 +354,14 @@ export function GameDialog({
               <GameText preset="title" tone="onBlue" align="center" accessibilityRole="header"
                 style={{ textTransform: 'uppercase' }}>{titleLayout.text}</GameText>
             )}
-            {icon && <Animated.View style={iconStyle}>
-              <GameIcon name={icon} size={72} />
-              {/* A reward's icon lands with a little gold glint around it. */}
-              {celebrates && <SparkleBurst progress={iconSpark} count={5} x={36} y={36} spread={[-200, 20]}
-                dist={[40, 58]} size={[14, 18]} seed={9} />}
+            {icon && <Animated.View style={[{ alignItems: 'center', justifyContent: 'center' }, iconStyle]}>
+              {/* A prize stamps onto a fan of gold rays: the brightest thing on the screen. */}
+              {celebrates && <GoldBurst size={DIALOG_PRIZE.raysPt} amount={prizeGlow} bloom={prizeBloom} reduced={reducedMotion}
+                style={{ position: 'absolute' }} />}
+              <GameIcon name={icon} size={celebrates ? DIALOG_PRIZE.iconPt : DIALOG_PRIZE.plainIconPt} />
+              {/* A reward's icon lands with a ring of gold stars around it. */}
+              {celebrates && <SparkleBurst progress={iconSpark} count={8} x={DIALOG_PRIZE.iconPt / 2} y={DIALOG_PRIZE.iconPt / 2}
+                spread={[-210, 30]} dist={[52, 78]} size={[16, 22]} seed={9} />}
             </Animated.View>}
             {!!message && <GameText preset="body" tone="onBlue" align="center" style={{ color: DIALOG_COPY }}>{message}</GameText>}
             {children}

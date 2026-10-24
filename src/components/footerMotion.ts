@@ -46,15 +46,22 @@ export const FOOTER_MOTION = {
   ringMs: 560,
   ringFrom: 0.7,
   ringTo: 1.9,
-  ringDiscPeak: 0.55,
+  ringDiscPeak: 0.78,
+  /** The ring stays at full brightness for this share of its pulse before it fades (a crisp edge you can see). */
+  ringHold: 0.35,
   /** Sparkles off the compass (before the power budget). */
   compassSparkles: 9,
   /** Little stars off a small icon's pick. */
-  smallSparkles: 4,
+  smallSparkles: 6,
+  smallDist: [32, 52] as readonly [number, number],
+  smallSize: [14, 20] as readonly [number, number],
   /** The rare compass pick: one bigger burst (replaces the normal one, so it stays inside the cap). */
   rareSparkles: 12,
-  rareDist: [96, 150] as readonly [number, number],
-  rareSize: [20, 28] as readonly [number, number],
+  rareDist: [100, 165] as readonly [number, number],
+  rareSize: [24, 32] as readonly [number, number],
+  /** The rare pick's shock ring grows this far (times its size) and a sun glow blooms under the compass. */
+  rareRingTo: 3.6,
+  rareSunPeak: 0.85,
   glintDelayMs: 160,
   glintMs: 500,
   wiggleScale: 1.08,
@@ -110,9 +117,9 @@ export function isRareCompassPick(n: number): boolean {
 }
 
 /** Start the footer bounce for a tap on tab `to` from tab `from`. Does nothing with Reduce Motion. */
-export function playFooterTap(from: number, to: number, reduced: boolean): void {
+export function playFooterTap(from: number, to: number, reduced: boolean): { rare: boolean } {
   const kind = footerTapKind(from, to);
-  if (kind === 'none' || reduced) return;
+  if (kind === 'none' || reduced) return { rare: false };
   const m = footerMotion;
   const F = FOOTER_MOTION;
   cancelAnimation(m.hopY); cancelAnimation(m.hopScale); cancelAnimation(m.hopRotate);
@@ -123,7 +130,7 @@ export function playFooterTap(from: number, to: number, reduced: boolean): void 
     m.hopRotate.value = withSequence(
       withTiming(-F.wiggleDeg, { duration: 60 }), withTiming(F.wiggleDeg, { duration: 90 }),
       withTiming(-F.wiggleDeg / 2, { duration: 80 }), withSpring(0, SPRING.stamp));
-    return;
+    return { rare: false };
   }
   m.hopRotate.value = 0;
   // Every pick: a quick squash wide and short (anticipation), then the hop and the pop.
@@ -186,9 +193,15 @@ export function playFooterTap(from: number, to: number, reduced: boolean): void 
     const burst = withDelay(F.compassSquashMs + 60, withTiming(1, { duration: rare ? DURATION.sparkle + 200 : DURATION.sparkle, easing: EASE.out }));
     if (rare) {
       m.burstRare.value = burst;
+
       m.ringRare.value = withDelay(F.compassSquashMs + 100, withTiming(1, { duration: F.ringMs + 240, easing: EASE.out }));
     } else {
       m.burst.value = burst;
     }
+    return { rare };
   }
+  return { rare: false };
 }
+
+/** The rare compass pick answers in the hand a beat after the press tick, on its burst (ms after the tap). */
+export const RARE_HAPTIC_AT = FOOTER_MOTION.compassSquashMs + 60;

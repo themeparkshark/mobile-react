@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCatchOpen } from '../screens/ExploreScreen/catchPresence';
-import { useDiveActive } from '../fx/diveActive';
+import { AFTER_DIVE_QUIET_MS, diveQuiet, useDiveActive } from '../fx/diveActive';
+import { modalLayers, useAnyModalLayer } from '../ui/modalLayers';
 import { AppState, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
@@ -77,6 +78,16 @@ function probe(): Promise<unknown> {
  * The card (full banner) and the chip at shrink s (0 = card, 1 = chip): the card is gone by 0.45,
  * the chip starts at 0.55, so they are never both above 0.1 at once. Pure (unit tested).
  */
+/**
+ * What "back online" looks like. It is only a confirmation, so it never takes the screen: it keeps
+ * the slim chip (the back-online art with a little pop) wherever the banner already was, and right after
+ * a game dive or while a sheet or reward is up it says nothing at all (the banner just leaves).
+ * Pure (unit tested).
+ */
+export function backOnlineForm(state: { readonly quiet: boolean; readonly modalUp: boolean }): 'chip' | 'skip' {
+  return state.quiet || state.modalUp ? 'skip' : 'chip';
+}
+
 export function bannerCrossFade(s: number): { card: number; chip: number } {
   'worklet';
   const k = Math.min(1, Math.max(0, s));
@@ -88,6 +99,19 @@ export default function OfflineBanner() {
   // The game dive's water owns the screen too: the chip steps aside and comes back once it is gone.
   const diving = useDiveActive();
   const reduceMotion = useReducedMotion();
+  // A sheet, dialog or reward moment owns the screen: the banner waits behind it, never over it.
+  const modalUp = useAnyModalLayer();
+  // Right after a dive the game's first beat belongs to the game: the banner waits out the quiet window,
+  // then comes back as the slim chip (never the full card over the game's header).
+  const [afterDive, setAfterDive] = useState(false);
+  useEffect(() => {
+    if (diving) { setAfterDive(true); return undefined; }
+    if (!afterDive) return undefined;
+    const t = setTimeout(() => setAfterDive(false), AFTER_DIVE_QUIET_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diving]);
+  const backPop = useSharedValue(1);
   const { height: windowHeight } = useWindowDimensions();
   const [phase, setPhase] = useState<Phase>('hidden');
   // A screen showing its own full offline state owns the mark: no second one here.
@@ -114,13 +138,25 @@ export default function OfflineBanner() {
 
   // Full card first so the player learns what happened, then the small chip.
   useEffect(() => {
-    if (phase !== 'offline') {
+    if (phase === 'hidden') {
       setCompact(false);
+      return undefined;
+    }
+    // "Back online" is a slim chip, never the full card across the header or a hero; it pops once.
+    if (phase === 'back') {
+      setCompact(true);
+      if (!reduceMotion) backPop.value = withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 9, stiffness: 220 }));
+      return undefined;
+    }
+    // Offline across a dive: it comes back as the chip.
+    if (afterDive) {
+      setCompact(true);
       return undefined;
     }
     const timer = setTimeout(() => setCompact(true), OFFLINE_COMPACT_AFTER_MS);
     return () => clearTimeout(timer);
-  }, [phase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, afterDive]);
 
   useEffect(() => {
     shrink.value = reduceMotion
@@ -139,6 +175,10 @@ export default function OfflineBanner() {
         // offline call), so every online call that finds the banner up schedules the hide again:
         // the banner can never get stuck on screen after a flaky offline-online-offline-online run.
         if (phaseRef.current === 'offline') {
+          if (backOnlineForm({ quiet: diveQuiet(Date.now()), modalUp: modalLayers.count() > 0 }) === 'skip') {
+            setPhase('hidden');
+            return;
+          }
           setPhase('back');
           Haptics.notificationAsync('success');
         }
@@ -218,11 +258,11 @@ export default function OfflineBanner() {
   }));
   const chipStyle = useAnimatedStyle(() => ({
     opacity: bannerCrossFade(shrink.value).chip,
-    transform: reduceMotion ? [] : [{ scale: 0.6 + 0.4 * Math.min(1, Math.max(0, shrink.value)) }],
+    transform: reduceMotion ? [] : [{ scale: (0.6 + 0.4 * Math.min(1, Math.max(0, shrink.value))) * backPop.value }],
   }));
 
   // A catch moment or a game dive owns the screen, and the offline screen shows its own mark: the banner waits (its probe keeps running).
-  if (!mounted || catchOpen || diving || markOwned) return null;
+  if (!mounted || catchOpen || diving || afterDive || modalUp || markOwned) return null;
   const back = phase === 'back';
   // Below his header bar (Topbar is 70pt under the status bar) so the logo,
   // currency counters and header buttons stay visible and tappable offline.

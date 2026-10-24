@@ -11,20 +11,30 @@
  */
 import { memo, useEffect, useState, type ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
-import { DURATION, EASE, STAGGER, staggerDelay } from './motionEasing';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
+import { DURATION, EASE, SPRING, STAGGER, staggerDelay } from './motionEasing';
+import { GRID_STAGGER, gridDelay } from './stagger';
 import useUiReducedMotion from './useUiReducedMotion';
 
-function StaggerCell({ index, children, style }: { readonly index: number; readonly children: ReactNode; readonly style?: StyleProp<ViewStyle> }) {
+function StaggerCell({ index, children, style, grid = false }: { readonly index: number; readonly children: ReactNode;
+  readonly style?: StyleProp<ViewStyle>;
+  /** A grid of prizes: each cell drops in further and pops past full size (GRID_STAGGER), like a vending machine. */
+  readonly grid?: boolean }) {
   const reduced = useUiReducedMotion();
   // Decided once, on the cell's first mount.
-  const [delay] = useState(() => (reduced ? null : staggerDelay(index)));
+  const [delay] = useState(() => (reduced ? null : grid ? gridDelay(index) : staggerDelay(index)));
   const p = useSharedValue(delay == null ? 1 : 0);
+  const pop = useSharedValue(delay == null || !grid ? 1 : GRID_STAGGER.fromScale);
   useEffect(() => {
-    if (delay != null) p.value = withDelay(delay, withTiming(1, { duration: DURATION.base, easing: EASE.out }));
+    if (delay == null) return;
+    if (grid) {
+      p.value = withDelay(delay, withSpring(1, SPRING.pop));
+      pop.value = withDelay(delay, withSpring(1, SPRING.pop));
+    } else p.value = withDelay(delay, withTiming(1, { duration: DURATION.base, easing: EASE.out }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const rise = useAnimatedStyle(() => ({ opacity: p.value, transform: [{ translateY: (1 - p.value) * STAGGER.risePt }] }));
+  const rise = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, p.value * 2)),
+    transform: [{ translateY: (1 - p.value) * (grid ? GRID_STAGGER.risePt : STAGGER.risePt) }, { scale: pop.value }] }));
   return <Animated.View style={[style, rise]}>{children}</Animated.View>;
 }
 

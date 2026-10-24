@@ -416,7 +416,7 @@ export default function InventoryScreen() {
                       <Text style={{ color: '#15395B', fontWeight: '700' }}>More items didn’t load. Tap to try again.</Text>
                     </Pressable>
                   ) : null}
-                  renderItem={({ item, index }) => <StaggerCell index={index} style={STAGGER_FILL}><Item item={item}
+                  renderItem={({ item, index }) => <StaggerCell grid index={index} style={STAGGER_FILL}><Item item={item}
                     inventory={worn}
                     highlighted={highlightedId === item.id}
                     memberLocked={memberWearLocked(item, isMember, memberLockOn)}

@@ -20,8 +20,8 @@
  */
 import { memo, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
-import Animated, { cancelAnimation, interpolateColor, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring,
-  withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring,
+  withTiming, type SharedValue } from 'react-native-reanimated';
 import { queueHaptic } from '../gamekit/Haptics';
 import { COUNT, EASE, GOLD_FX, HUD_BUMP } from './motionEasing';
 import useUiReducedMotion from './useUiReducedMotion';
@@ -42,14 +42,24 @@ export interface RollingNumberProps {
   readonly hold?: boolean;
   /** Wait this long (ms, on the UI thread) before the digits start rolling, e.g. while coins fly in. */
   readonly startDelayMs?: number;
+  /**
+   * Roll only once this reaches 1 (set on the UI thread, for example by the first coin landing in the
+   * wallet), so the digits answer the coins on the same frame however busy the JS thread is.
+   */
+  readonly gate?: SharedValue<number>;
 }
 
 /** Rolling digit look: the clip is the glyph height, the rolling strip stretches a little with speed. */
 export const ROLL_LOOK = {
   /** The clip window as a share of the font size (digits have no descenders). */
   clipEm: 1.0,
-  /** Gap between digits on the strip, as a share of the line height. */
-  cellGap: 0.3,
+  /** Gap between digits on the strip, as a share of the line height (none: a sliding digit never shows an empty slot). */
+  cellGap: 0,
+  /**
+   * The roll ticks: each step holds a whole digit for this share of its time, then slides to the next.
+   * So almost every frame of a roll reads as a number (never blank or half glyphs for long).
+   */
+  holdShare: 0.55,
   /** How much the rolling digits stretch at full speed. */
   stretch: 0.16,
   /** The digit glow at its peak (share of the way to the flash colour). */
@@ -104,8 +114,29 @@ export function planRoll(fromText: string, toText: string, rising: boolean, bigJ
 
 const STRIP = '01234567890123456789'.split('');
 
+/**
+ * Where the strip sits for a rolling position p: whole digits hold, then slide quickly to the next
+ * (an odometer tick). Pure worklet (unit tested): tickPos(3.2) is 3, tickPos(3.9) is between 3 and 4.
+ */
+export function tickPos(p: number, hold: number = ROLL_LOOK.holdShare): number {
+  'worklet';
+  const base = Math.floor(p);
+  const f = p - base;
+  if (f <= hold) return base;
+  const u = (f - hold) / (1 - hold);
+  return base + u * u * (3 - 2 * u);
+}
+/** How fast the strip is sliding at p (0 holding, 1 mid-slide), for the speed stretch. Pure worklet. */
+export function tickSlide(p: number, hold: number = ROLL_LOOK.holdShare): number {
+  'worklet';
+  const f = p - Math.floor(p);
+  if (f <= hold) return 0;
+  const u = (f - hold) / (1 - hold);
+  return Math.sin(u * Math.PI);
+}
+
 function RollingNumber({ value: incoming, format = defaultFormat, style, maxFontSizeMultiplier = 1.3, bump = true, onLanded,
-  celebrate = false, hold = false, startDelayMs = 0 }: RollingNumberProps) {
+  celebrate = false, hold = false, startDelayMs = 0, gate }: RollingNumberProps) {
   const reduced = useUiReducedMotion();
   // While held, the last number stays put; the roll plays when the hold lifts.
   const heldValue = useRef(incoming);
@@ -136,12 +167,41 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
     rollId.current += 1;
   }
 
+  // A gated roll: the bump and the glow start on the gate's frame too (UI thread).
+  const pendingLanding = useSharedValue(0);
+  const longestSv = useSharedValue(0);
+  const landTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const landedLater = (ms: number) => {
+    if (landTimer.current) clearTimeout(landTimer.current);
+    const gain = rising.current;
+    landTimer.current = setTimeout(() => {
+      if (celebrate && gain) queueHaptic('tickSelection');
+      onLanded?.();
+    }, ms);
+  };
+  useEffect(() => () => { if (landTimer.current) clearTimeout(landTimer.current); }, []);
+  useAnimatedReaction(() => (gate ? gate.value >= 1 && pendingLanding.value === 1 : false), (ready, was) => {
+    if (!ready || was) return;
+    pendingLanding.value = 0;
+    const longest = longestSv.value;
+    runOnJS(landedLater)(longest);
+    if (bump) scale.value = withDelay(longest - 60, withSequence(withTiming(COUNT.finalBump, { duration: 90 }), withSpring(1, HUD_BUMP.spring)));
+    if (celebrate) flash.value = withSequence(withTiming(1, { duration: 120, easing: EASE.out }),
+      withDelay(Math.max(0, longest - 120), withTiming(0, { duration: 360, easing: EASE.in })));
+  });
+
   useEffect(() => {
     const first = previous.current === null;
     const changed = !first && previous.current!.text !== text;
     previous.current = { text, value };
     if (!changed || reduced) return undefined;
     const longest = plan.current.reduce((m, c) => Math.max(m, c.delay), 0) + COUNT.ms;
+    if (gate) {
+      cancelAnimation(scale); cancelAnimation(flash);
+      longestSv.value = longest;
+      pendingLanding.value = 1;
+      return undefined;
+    }
     if (bump) {
       cancelAnimation(scale);
       scale.value = withDelay(longest - 60, withSequence(withTiming(COUNT.finalBump, { duration: 90 }), withSpring(1, HUD_BUMP.spring)));
@@ -162,11 +222,9 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
   }, [text, value, reduced, bump, onLanded, scale, celebrate, flash]);
 
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const baseColor = typeof flat.color === 'string' ? flat.color : '#ffffff';
   const flashColor = rising.current ? ROLL_LOOK.gainFlash : ROLL_LOOK.lossFlash;
-  // One animated colour shared by every digit (the commas stay put).
-  const glow = useAnimatedStyle(() => ({ color: interpolateColor(flash.value * ROLL_LOOK.flashPeak, [0, 1], [baseColor, flashColor]) }),
-    [baseColor, flashColor]);
+  // The glow is a second, flash-coloured copy of each digit strip faded in on top (one opacity per column),
+  // never an animated text colour on every digit cell (that was 20 colour updates per column per frame).
   const textStyle: StyleProp<TextStyle> = [style, { lineHeight, includeFontPadding: false }];
 
   return (
@@ -175,54 +233,80 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
       {plan.current.map((col, i) => col.from === null || col.to === null
         ? <Text key={`c${plan.current.length - i}`} maxFontSizeMultiplier={maxFontSizeMultiplier} style={textStyle}>{col.char}</Text>
         : <DigitColumn key={`d${plan.current.length - i}`} col={col} rollId={rollId.current} lineHeight={lineHeight}
-          fontSize={fontSize} textStyle={textStyle} glow={celebrate ? (glow as StyleProp<TextStyle>) : undefined} maxFontSizeMultiplier={maxFontSizeMultiplier} />)}
+          fontSize={fontSize} textStyle={textStyle} flash={celebrate ? flash : undefined} flashColor={flashColor}
+          maxFontSizeMultiplier={maxFontSizeMultiplier} gate={gate} />)}
     </Animated.View>
   );
 }
 
-function DigitColumn({ col, rollId, lineHeight, fontSize, textStyle, glow, maxFontSizeMultiplier }: {
+function DigitColumn({ col, rollId, lineHeight, fontSize, textStyle, flash, flashColor, maxFontSizeMultiplier, gate }: {
   readonly col: RollColumn; readonly rollId: number; readonly lineHeight: number; readonly fontSize: number;
-  readonly textStyle: StyleProp<TextStyle>; readonly glow?: StyleProp<TextStyle>; readonly maxFontSizeMultiplier: number;
+  readonly textStyle: StyleProp<TextStyle>; readonly flash?: SharedValue<number>; readonly flashColor: string;
+  readonly maxFontSizeMultiplier: number;
+  readonly gate?: SharedValue<number>;
 }) {
   const pos = useSharedValue(col.from ?? 0);
-  const speed = useSharedValue(0);
   const lastRoll = useRef(rollId);
+  /** A gated roll waits here (1) until the gate opens; then it rolls from the UI thread. */
+  const armed = useSharedValue(0);
+  const target = useSharedValue(col.to ?? 0);
+  const delay = useSharedValue(col.delay);
   useEffect(() => {
     if (col.from === null || col.to === null) return;
     if (lastRoll.current === rollId && pos.value === col.to) return;
     lastRoll.current = rollId;
     cancelAnimation(pos);
-    if (col.from === col.to) { pos.value = col.to; return; }
+    if (col.from === col.to) { armed.value = 0; pos.value = col.to; return; }
     pos.value = col.from;
+    target.value = col.to;
+    delay.value = col.delay;
+    if (gate) { armed.value = 1; return; }
     const rest = col.to % 10;
     pos.value = withDelay(col.delay, withTiming(col.to, { duration: COUNT.ms, easing: EASE.out }, done => {
       if (done) pos.value = rest;
     }));
-    // Fast at the start (EASE.out), so the stretch peaks early and eases off as the digit settles.
-    cancelAnimation(speed);
-    speed.value = withDelay(col.delay, withSequence(withTiming(1, { duration: COUNT.ms * 0.2, easing: EASE.out }),
-      withTiming(0, { duration: COUNT.ms * 0.8, easing: EASE.out })));
-  }, [rollId, col.from, col.to, col.delay, pos, speed]);
+  }, [rollId, col.from, col.to, col.delay, pos, armed, target, delay, gate]);
+  // The gate opened (the first coin landed): roll now, on this frame.
+  useAnimatedReaction(() => (gate ? gate.value >= 1 && armed.value === 1 : false), (ready, was) => {
+    if (!ready || was) return;
+    armed.value = 0;
+    const to = target.value;
+    pos.value = withDelay(delay.value, withTiming(to, { duration: COUNT.ms, easing: EASE.out }, done => {
+      if (done) pos.value = to % 10;
+    }));
+  });
   // The clip is the glyph's own height, centred on the line, so no neighbour digit peeks out of a pill.
   const clipH = Math.min(lineHeight, Math.ceil(fontSize * ROLL_LOOK.clipEm));
   const cell = lineHeight * (1 + ROLL_LOOK.cellGap);
   const inset = (lineHeight - clipH) / 2;
-  const strip = useAnimatedStyle(() => ({ transform: [{ translateY: -pos.value * cell - (cell - lineHeight) / 2 - inset }] }));
-  const stretch = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 + ROLL_LOOK.stretch * speed.value }] }));
+  // The strip ticks: a whole digit holds, then slides to the next (no blank slot mid-roll).
+  const strip = useAnimatedStyle(() => ({ transform: [{ translateY: -tickPos(pos.value) * cell - (cell - lineHeight) / 2 - inset }] }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: flash ? flash.value * ROLL_LOOK.flashPeak : 0 }));
+  // The digit stretches a little while it slides, like a smear on a spinning wheel.
+  const stretch = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 + ROLL_LOOK.stretch * tickSlide(pos.value) }] }));
   return (
     <View style={{ height: lineHeight }}>
       {/* The resting digit sizes the column; the strip rolls over it. */}
       <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, { opacity: 0 }]}>{col.char}</Text>
       <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: inset, height: clipH, overflow: 'hidden' }, stretch]}>
         <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0 }, strip]}>
-          {STRIP.map((d, i) => <View key={i} style={{ height: cell, justifyContent: 'center' }}>
-            <Animated.Text maxFontSizeMultiplier={maxFontSizeMultiplier}
-              style={[textStyle, { textAlign: 'center', height: lineHeight }, glow]}>{d}</Animated.Text>
-          </View>)}
+          <DigitStrip cell={cell} lineHeight={lineHeight} textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />
+          {flash && <Animated.View style={[StyleSheet.absoluteFill, glowStyle]}>
+            <DigitStrip cell={cell} lineHeight={lineHeight} textStyle={[textStyle, { color: flashColor }]} maxFontSizeMultiplier={maxFontSizeMultiplier} />
+          </Animated.View>}
         </Animated.View>
       </Animated.View>
     </View>
   );
 }
+
+/** The 0 to 19 digit strip (static text; only its parent moves). */
+const DigitStrip = memo(function DigitStrip({ cell, lineHeight, textStyle, maxFontSizeMultiplier }: {
+  readonly cell: number; readonly lineHeight: number; readonly textStyle: StyleProp<TextStyle>; readonly maxFontSizeMultiplier: number;
+}) {
+  return <>{STRIP.map((d, i) => <View key={i} style={{ height: cell, justifyContent: 'center' }}>
+    <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, { textAlign: 'center', height: lineHeight }]}>{d}</Text>
+  </View>)}</>;
+});
 
 export default memo(RollingNumber);

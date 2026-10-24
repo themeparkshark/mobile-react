@@ -199,7 +199,8 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, 
       keyboardDismissMode="on-drag"
       onEndReachedThreshold={1.5}
       onEndReached={onEndReached}
-      ListHeaderComponent={header}
+      // The refresh shark rides above the first row inside the content, so it always stays in the pulled gap.
+      ListHeaderComponent={onRefresh ? <View>{<SharkRefreshOverlay anchored shark={shark} />}{header}</View> : header}
       ListFooterComponent={footer}
       ListEmptyComponent={empty}
       // The shark is the refresh show; the system spinner still does the work underneath, unseen.
@@ -217,7 +218,6 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, 
         return <Animated.View entering={first.current ? staggerIn(index, { reduced }) : undefined}>{row}</Animated.View>;
       }}
     />
-    {onRefresh && <SharkRefreshOverlay shark={shark} />}
     </View>
   );
 }

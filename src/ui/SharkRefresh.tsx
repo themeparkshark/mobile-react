@@ -59,6 +59,21 @@ export const PULL_SHOW = {
   leaveMs: DURATION.base,
 } as const;
 
+/** The anchored overlay's box: it sits just above the list's content (ListHeaderComponent), this tall (pt). */
+export const ANCHOR_BOX = 140;
+
+/**
+ * Anchored to the content (rendered in the list header, above the first row), the shark rides the
+ * pull natively: wherever the content is, the shark's drawn bottom edge is PULL_SHOW.clearPt above it,
+ * even on a frame where the UI thread has not caught up with the scroll. Its top offset inside the
+ * ANCHOR_BOX for a drawn scale. Pure worklet (unit tested).
+ */
+export function anchoredSharkTop(scale: number): number {
+  'worklet';
+  const A = PULL_SHOW.artPt;
+  return ANCHOR_BOX - PULL_SHOW.clearPt - A / 2 - (scale * A) / 2;
+}
+
 /** How the shark looks at a pull distance (pt). Pure: size grows with the pull, never past full. */
 export function pullLook(pull: number): { scale: number; opacity: number; y: number } {
   'worklet';
@@ -137,18 +152,26 @@ export function useSharkRefresh(refreshing: boolean): SharkRefresh {
   return { onScroll, pull, flip, swim, done, busy, splash, reduced };
 }
 
-/** Draw the shark over the top of the list (pointer events pass through). Put it after the list. */
-export function SharkRefreshOverlay({ shark, top = 0 }: { readonly shark: SharkRefresh; readonly top?: number }) {
+/**
+ * Draw the shark over the top of the list (pointer events pass through). Put it after the list, or,
+ * better, pass `anchored` and render it as the first thing in the list's ListHeaderComponent: then it
+ * rides the content natively and its bottom edge always clears the first row (no lag under load).
+ */
+export function SharkRefreshOverlay({ shark, top = 0, anchored = false }: { readonly shark: SharkRefresh; readonly top?: number;
+  readonly anchored?: boolean }) {
   const { pull, flip, swim, done, busy, splash, reduced } = shark;
   const A = PULL_SHOW.artPt;
   const doneShare = PULL_SHOW.doneMs / (PULL_SHOW.doneMs + PULL_SHOW.leaveMs);
+  // Anchored: the splash, ring and check sit around the resting shark's centre inside ANCHOR_BOX.
+  const restTop = anchored ? anchoredSharkTop(PULL_SHOW.restScale) : PULL_SHOW.restY - A / 2;
+  const base = anchored ? restTop + A / 2 - PULL_SHOW.restY : 0;
   const sharkStyle = useAnimatedStyle(() => {
     const look = pullLook(pull.value);
     const d = done.value;
     const leaving = d > doneShare ? (d - doneShare) / (1 - doneShare) : 0;
     const resting = busy.value === 1;
-    const y = resting ? PULL_SHOW.restY - A / 2 : look.y;
-    if (reduced) return { opacity: resting || pull.value >= PULL_SHOW.thresholdPt ? 1 - leaving : 0, transform: [{ translateY: PULL_SHOW.restY - A / 2 }] };
+    const y = resting ? restTop : anchored ? anchoredSharkTop(look.scale) : look.y;
+    if (reduced) return { opacity: resting || pull.value >= PULL_SHOW.thresholdPt ? 1 - leaving : 0, transform: [{ translateY: restTop }] };
     const a = swim.value * Math.PI * 2;
     const f = flip.value;
     // Done: it swims off to the side, quick and accelerating (EASE.in feel), nose first.
@@ -195,16 +218,16 @@ export function SharkRefreshOverlay({ shark, top = 0 }: { readonly shark: SharkR
     return { opacity: d > doneShare ? 1 - (d - doneShare) / (1 - doneShare) : 1, transform: [{ scale: reduced ? 1 : s }] };
   });
   return (
-    <View pointerEvents="none" style={[styles.wrap, { top }]}>
-      <Animated.View style={[styles.ring, ringStyle, { top: PULL_SHOW.restY - 30 }]} />
-      <Animated.View style={[styles.splash, splashStyle, { top: PULL_SHOW.restY + 10 }]} />
-      <Animated.View style={[styles.splash, splash2Style, { top: PULL_SHOW.restY + 10 }]} />
-      {!reduced && Array.from({ length: PULL_SHOW.droplets }, (_, i) => <Droplet key={i} i={i} splash={splash} />)}
+    <View pointerEvents="none" style={anchored ? styles.anchor : [styles.wrap, { top }]}>
+      <Animated.View style={[styles.ring, ringStyle, { top: base + PULL_SHOW.restY - 30 }]} />
+      <Animated.View style={[styles.splash, splashStyle, { top: base + PULL_SHOW.restY + 10 }]} />
+      <Animated.View style={[styles.splash, splash2Style, { top: base + PULL_SHOW.restY + 10 }]} />
+      {!reduced && Array.from({ length: PULL_SHOW.droplets }, (_, i) => <Droplet key={i} i={i} splash={splash} base={base} />)}
       <Animated.View style={[{ width: A, height: A }, sharkStyle]}>
         <Image source={SHARK_ART} style={{ width: A, height: A }} contentFit="contain" cachePolicy="memory-disk" />
         <Animated.View style={[styles.bubble, bubbleStyle]} />
       </Animated.View>
-      <Animated.View style={[styles.check, checkStyle, { top: PULL_SHOW.restY - 14 }]}>
+      <Animated.View style={[styles.check, checkStyle, { top: base + PULL_SHOW.restY - 14 }]}>
         <GoldCheck size={30} />
       </Animated.View>
     </View>
@@ -213,6 +236,8 @@ export function SharkRefreshOverlay({ shark, top = 0 }: { readonly shark: SharkR
 
 const styles = StyleSheet.create({
   wrap: { position: 'absolute', left: 0, right: 0, height: 120, alignItems: 'center' },
+  // Just above the content's top edge, inside the scroll content (it moves with the pull natively).
+  anchor: { position: 'absolute', left: 0, right: 0, bottom: '100%', height: ANCHOR_BOX, alignItems: 'center' },
   ring: { position: 'absolute', width: 60, height: 60, borderRadius: 30, borderWidth: 3, borderColor: BRAND.white,
     backgroundColor: 'rgba(191, 229, 255, 0.35)' },
   splash: { position: 'absolute', width: 70, height: 26, borderRadius: 35, borderWidth: 3, borderColor: BRAND.white,
@@ -235,10 +260,10 @@ export function dropletAt(i: number, k: number): { x: number; y: number; opacity
   return { x, y, opacity: k <= 0 || k >= 1 ? 0 : k < 0.15 ? k / 0.15 : 1 - Math.max(0, k - 0.55) / 0.45 };
 }
 
-function Droplet({ i, splash }: { readonly i: number; readonly splash: SharedValue<number> }) {
+function Droplet({ i, splash, base = 0 }: { readonly i: number; readonly splash: SharedValue<number>; readonly base?: number }) {
   const style = useAnimatedStyle(() => {
     const d = dropletAt(i, splash.value);
     return { opacity: d.opacity, transform: [{ translateX: d.x }, { translateY: d.y }] };
   });
-  return <Animated.View style={[styles.droplet, style, { top: PULL_SHOW.restY + 12 }]} />;
+  return <Animated.View style={[styles.droplet, style, { top: base + PULL_SHOW.restY + 12 }]} />;
 }

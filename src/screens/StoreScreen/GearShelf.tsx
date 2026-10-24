@@ -25,6 +25,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { formatCoins, slotWord, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
 import { useAnyModalLayer } from '../../ui/modalLayers';
+import { gridRiseIn } from '../../ui/stagger';
 import Playercard from '../../components/Playercard';
 import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import { previewLook } from './TryOnSheet';
@@ -333,7 +334,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
                 </Animated.View>
               )}
               {shelf.filter(i => (filter !== 'all' || i.id !== star?.id) && passesFilter(i, filter, balance)).map((item, i) => (
-                <Animated.View key={`${filter}:${item.id}`} entering={still ? undefined : !firstIds.current?.has(item.id) || filter !== 'all' ? FadeIn.duration(160) : FadeIn.delay(60 + Math.min(i, 8) * 30).duration(180)}>
+                <Animated.View key={`${filter}:${item.id}`} entering={still ? undefined : !firstIds.current?.has(item.id) || filter !== 'all' ? FadeIn.duration(160) : gridRiseIn(i) ?? FadeIn.duration(160)}>
                   <ShopTile item={item as ShopItem} width={TILE_W} still={still} vipLocked={!!item.is_member_item && !vip}
                     affordable={balance >= item.cost} balance={balance} justBought={bought.includes(item.id)} onOpen={openItem} onWish={wish} />
                 </Animated.View>

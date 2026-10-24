@@ -13,8 +13,10 @@
  */
 import { memo, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
 import GameIcon from './GameIcon';
+import SparkleBurst from './SparkleBurst';
+import { DURATION, EASE } from './motionEasing';
 import { BEZIER } from './motion';
 import { Z } from './tokens';
 
@@ -25,17 +27,21 @@ const IN_OUT = Easing.bezierFn(BEZIER.inOut[0], BEZIER.inOut[1], BEZIER.inOut[2]
 
 /** The coin flight (pure data, unit tested). */
 export const COIN_FLIGHT = {
-  /** Coins in one flight at most (inside the 12-sprite cap with room to spare). */
-  max: 6,
+  /** Coins in one flight at most: a handful a kid can see pour in (still under the 12-sprite cap). */
+  max: 10,
   flyMs: 560,
-  staggerMs: 70,
-  /** Coin size (pt): big enough to read as a coin on a phone. */
-  size: 22,
+  staggerMs: 55,
+  /** Coin size (pt): a real coin on a phone, not a dot. */
+  size: 26,
   /** How high the arc rises over the straight line (pt), plus a little per coin. */
-  arcPt: 90,
-  arcStepPt: 10,
+  arcPt: 96,
+  arcStepPt: 12,
+  /** How wide the coins fan out around the arc (pt). */
+  spreadPt: 130,
   /** Mid-air pop past full size. */
-  midScale: 1.18,
+  midScale: 1.22,
+  /** Gold stars that pop where the last coin lands (gains only, through the power budget). */
+  endSparkles: 7,
 } as const;
 
 /** Where coin i of n starts and lands (it leaves i * staggerMs late). Pure (unit tested). */
@@ -49,7 +55,7 @@ export function coinAt(t: number, i: number, n: number, from: Point, to: Point):
   'worklet';
   const spread = n > 1 ? i / (n - 1) - 0.5 : 0;
   // The control point: above the middle of the line, fanned a little per coin so they read as several.
-  const cx = (from.x + to.x) / 2 + spread * 70;
+  const cx = (from.x + to.x) / 2 + spread * COIN_FLIGHT.spreadPt;
   const cy = Math.min(from.y, to.y) - COIN_FLIGHT.arcPt - (i % 3) * COIN_FLIGHT.arcStepPt;
   const u = 1 - t;
   const x = u * u * from.x + 2 * u * t * cx + t * t * to.x;
@@ -60,7 +66,13 @@ export function coinAt(t: number, i: number, n: number, from: Point, to: Point):
 
 type Flight = { id: number; from: Point; to: Point; count: number; size: number; onLand?: (i: number) => void; onDone?: () => void;
   /** The moment the coins really start moving (the host mounted the flight), to time what answers them. */
-  onStart?: () => void };
+  onStart?: () => void;
+  /** Counted up on the UI thread as each coin lands (the wallet squashes and rolls on the same frame). */
+  landed?: SharedValue<number>;
+  /** Counted up on the UI thread as each coin leaves. */
+  left?: SharedValue<number>;
+  /** A little pop of gold stars where the last coin lands (a gain coming home). */
+  sparkleEnd?: boolean };
 let nextId = 1;
 const hosts = new Set<(f: Flight) => void>();
 
@@ -74,18 +86,30 @@ export function flyCoins(f: Omit<Flight, 'id' | 'size'> & { readonly size?: numb
 
 /** Wallet chips coins can fly into (the newest focused one wins). `onHit` runs as each coin lands in it. */
 type Measure = (done: (p: Point | null) => void) => void;
-type Target = { id: string; measure: Measure; onHit?: (i: number) => void };
+/** How a wallet chip answers coins sent to it: a JS hit, a UI-thread landing counter, and a heads-up when coins leave for it. */
+export interface CoinTargetAnswer {
+  readonly onHit?: (i: number) => void;
+  readonly landed?: SharedValue<number>;
+  /** Coins are on their way and land within `ms`: a gain that shows up now waits for them instead of flying its own. */
+  readonly onIncoming?: (ms: number) => void;
+}
+type Target = { id: string; measure: Measure } & CoinTargetAnswer;
 const targets: Target[] = [];
-export function registerCoinTarget(id: string, measure: Measure, onHit?: (i: number) => void): () => void {
-  const entry: Target = { id, measure, onHit };
+export function registerCoinTarget(id: string, measure: Measure, answer: CoinTargetAnswer = {}): () => void {
+  const entry: Target = { id, measure, ...answer };
   targets.push(entry);
   return () => { const i = targets.indexOf(entry); if (i >= 0) targets.splice(i, 1); };
 }
-/** Where coins should land right now (the newest registered wallet chip), or null, with its hit answer. */
-export function measureCoinTarget(done: (p: Point | null, onHit?: (i: number) => void) => void): void {
+/** Where coins should land right now (the newest registered wallet chip), or null, with how it answers. */
+export function measureCoinTarget(done: (p: Point | null, answer?: CoinTargetAnswer) => void): void {
   const top = targets[targets.length - 1];
   if (!top) { done(null); return; }
-  top.measure(p => done(p, top.onHit));
+  top.measure(p => done(p, top));
+}
+/** How long a flight of n coins takes from its first coin leaving to its last coin landing (ms). Pure. */
+export function flightMs(n: number): number {
+  const k = Math.max(1, Math.min(COIN_FLIGHT.max, Math.floor(n)));
+  return (k - 1) * COIN_FLIGHT.staggerMs + COIN_FLIGHT.flyMs;
 }
 
 export function CoinFlightHost() {
@@ -113,15 +137,32 @@ function FlightRun({ flight, onDone }: { readonly flight: Flight; readonly onDon
     flight.onStart?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return <>{Array.from({ length: flight.count }, (_, i) => <FlyingCoin key={i} clock={p} i={i} flight={flight} />)}</>;
+  // The last coin home: a pop of gold stars right where it lands.
+  const end = useSharedValue(0);
+  const lastLand = total;
+  useAnimatedReaction(() => p.value >= lastLand - 10, (now, before) => {
+    if (now && !before && flight.sparkleEnd) end.value = withDelay(0, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
+  });
+  return <>
+    {Array.from({ length: flight.count }, (_, i) => <FlyingCoin key={i} clock={p} i={i} flight={flight} />)}
+    {flight.sparkleEnd && <SparkleBurst progress={end} count={COIN_FLIGHT.endSparkles} x={flight.to.x} y={flight.to.y}
+      dist={[22, 42]} size={[14, 20]} gravity={14} seed={flight.id} />}
+  </>;
 }
 
 const FlyingCoin = memo(function FlyingCoin({ clock, i, flight }: { readonly clock: SharedValue<number>; readonly i: number; readonly flight: Flight }) {
   const n = flight.count;
   const half = flight.size / 2;
   const onLand = flight.onLand;
+  const landed = flight.landed;
+  const left = flight.left;
   useAnimatedReaction(() => clock.value >= i * COIN_FLIGHT.staggerMs + COIN_FLIGHT.flyMs, (now, before) => {
-    if (now && !before && onLand) runOnJS(onLand)(i);
+    if (!now || before) return;
+    if (landed) landed.value += 1;
+    if (onLand) runOnJS(onLand)(i);
+  });
+  useAnimatedReaction(() => clock.value > i * COIN_FLIGHT.staggerMs, (now, before) => {
+    if (now && !before && left) left.value += 1;
   });
   const style = useAnimatedStyle(() => {
     const raw = (clock.value - i * COIN_FLIGHT.staggerMs) / COIN_FLIGHT.flyMs;

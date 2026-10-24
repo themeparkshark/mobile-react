@@ -688,7 +688,7 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
                   }}
                   numColumns={3}
                   renderItem={({ item, index }) => (
-                    <StaggerCell index={index} style={{ padding: 8, flex: 1 }}>
+                    <StaggerCell grid index={index} style={{ padding: 8, flex: 1 }}>
                       <Item item={item} onPurchase={purchaseItem} />
                     </StaggerCell>
                   )}

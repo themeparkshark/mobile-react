@@ -73,7 +73,7 @@ test('dive: LinePlay is the real screen under the water (no skeleton landing), t
   assert.match(src, /onLayout=\{onRootLayout\}/, 'the real root says when it is laid out');
   assert.match(src, /const diveReady = snapshot\.startedAt != null && snapshot\.playlist\.length > 0;/,
     'the water waits for the wait card and the first round, so no skeleton shows under the opening hole');
-  assert.match(src, /DIVE_READY_CAP_MS = 1500/);
+  assert.match(src, /DIVE_READY_CAP_MS = 450/);
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
   assert.equal((gym.match(/onLayout=\{notifyDiveLanded\}/g) || []).length, 3, 'every GymBattle root tells the water it landed');
   const sheet = read('src/screens/LinePlay/group/WhosInLineSheet.tsx');
@@ -89,7 +89,7 @@ test('dive: LinePlay is the real screen under the water (no skeleton landing), t
 
 test('offline chip steps aside while the water is up (a light store, no heavy imports)', () => {
   const banner = read('src/components/OfflineBanner.tsx');
-  assert.match(banner, /if \(!mounted \|\| catchOpen \|\| diving \|\| markOwned\) return null;/);
+  assert.match(banner, /if \(!mounted \|\| catchOpen \|\| diving \|\| afterDive \|\| modalUp \|\| markOwned\) return null;/);
   assert.match(banner, /from '\.\.\/fx\/diveActive'/);
   const store = read('src/fx/diveActive.ts');
   assert.doesNotMatch(store, /from '\.\/DiveIris'|react-native-skia|expo-image/);
@@ -107,7 +107,7 @@ test('dialog: parts are fully opaque from the first frame and only move; the ico
   assert.match(src, /export const ICON_STAMP = \{ at: 110, from: 0\.4, peak: 1\.22 \}/);
   assert.match(src, /celebrates && <SparkleBurst progress=\{iconSpark\}/);
   assert.doesNotMatch(src, /BlurView/);
-  assert.match(src, /DIALOG_SCRIM = 'rgba\(0,88,196,0\.42\)'/, 'a clear blue backdrop near 0.45, never a grey wash');
+  assert.match(src, /DIALOG_SCRIM_STOPS = \['rgba\(6,96,206,0\.44\)'/, 'an underwater blue backdrop (round 5: light in the middle band), never a grey wash');
 });
 
 test('footer: every pick squashes first, a gold disc and ring pulse under it, the rare compass pick is one big burst', () => {
@@ -129,7 +129,7 @@ test('footer: every pick squashes first, a gold disc and ring pulse under it, th
 test('coins fly to where they live: an arc from the tap into the wallet, a squash on each hit', () => {
   const flight = loadTs('src/ui/CoinFlight.tsx', {
     react: { memo: c => c }, 'react/jsx-runtime': {}, 'react-native': rn, 'react-native-reanimated': reanimated,
-    './GameIcon': {}, './motion': motion, './tokens': { Z: { toast: 2000 } },
+    './GameIcon': {}, './motion': motion, './tokens': { Z: { toast: 2000 } }, './SparkleBurst': {}, './motionEasing': easing,
   });
   const from = { x: 60, y: 700 }; const to = { x: 340, y: 90 };
   for (let i = 0; i < 5; i++) {
@@ -143,7 +143,7 @@ test('coins fly to where they live: an arc from the tap into the wallet, a squas
   assert.equal(lands.length, 5);
   assert.ok(lands[4] <= 1000, 'the last coin lands inside a second');
   assert.equal(flight.coinLandTimes(40).length, flight.COIN_FLIGHT.max, 'capped');
-  assert.ok(flight.COIN_FLIGHT.size >= 18 && flight.COIN_FLIGHT.size <= 24);
+  assert.ok(flight.COIN_FLIGHT.size >= 22 && flight.COIN_FLIGHT.size <= 28, 'round 5: coins a kid can see (22 to 28 pt)');
 
   const wallet = loadTs('src/ui/WalletChange.tsx', {
     react: { memo: c => c }, 'react/jsx-runtime': {}, 'react-native': rn, 'react-native-reanimated': reanimated,
@@ -155,13 +155,13 @@ test('coins fly to where they live: an arc from the tap into the wallet, a squas
   assert.deepEqual(plain(wallet.walletFlight(chip, { x: 200, y: 600 }, true)), { from: chip, to: { x: 200, y: 600 } }, 'a spend flies out to what you bought');
   assert.equal(wallet.walletFlight(chip, { x: 350, y: 95 }, true), null, 'a tap on the chip fans the coins right there');
   assert.equal(wallet.walletFlight(chip, null, false), null);
-  assert.ok(wallet.WALLET_FX.flightCoins >= 3 && wallet.WALLET_FX.flightCoins <= 5);
+  assert.ok(wallet.WALLET_FX.flightCoins >= 6 && wallet.WALLET_FX.flightCoins <= 10, 'round 5: a handful of coins');
   const src = read('src/ui/WalletChange.tsx');
-  assert.match(src, /registerCoinTarget\('wallet', measureChip, onCoinHit\)/, 'reward toasts can send coins to the chip, which squashes on each');
-  assert.match(src, /Date\.now\(\) - arrivedAt\.current < WALLET_FX\.arrivedMs/, 'coins a toast already flew in never fly twice');
-  assert.match(read('src/components/Toast.tsx'), /count: coins, onLand: onHit \}\)/);
-  assert.match(src, /flyCoins\(\{ from: path\.from, to: path\.to, count: flightN, onStart \}\)/,
-    'the pill and the digits answer when the coins really start moving, even on a busy JS thread');
+  assert.match(src, /registerCoinTarget\('wallet', measureChip, \{\n\s+landed,/, 'reward toasts can send coins to the chip, which squashes on each (UI thread)');
+  assert.match(src, /now - arrivedAt\.current < WALLET_FX\.arrivedMs/, 'coins a toast already flew in never fly twice');
+  assert.match(read('src/components/Toast.tsx'), /count: coins, onLand: answer\?\.onHit, landed: answer\?\.landed/);
+  assert.match(src, /flyCoins\(\{ from: path\.from, to: path\.to, count: flightN, landed: spend \? undefined : landed,/,
+    'round 5: the pill and the digits answer on the frame a coin lands, on the UI thread');
   assert.match(read('src/ui/CoinFlight.tsx'), /flight\.onStart\?\.\(\);/);
   assert.match(read('src/Root.tsx'), /<CoinFlightHost \/>/);
 });
@@ -174,11 +174,11 @@ test('toasts: picture first, spring up with an icon hop, a "+25 coins" toast fli
     'react-native-reanimated': reanimated, '../gamekit/Haptics': {}, '../ui/motionEasing': easing, '../ui/SparkleBurst': {},
     '../ui/GoldCheck': {}, '../ui/CoinFlight': {}, '../ui/motion': motion, '../power/PowerProvider': {},
     '../ui/useUiReducedMotion': {}, '../design-system': { colors: {}, shadows: {}, borderRadius: {}, spacing: { md: 12 }, typography: {} },
-    '../utils/toast': {}, '../ui': { BRAND: {}, iconForEmoji: () => null, resolveIconName: n => n },
+    '../utils/toast': {}, '../ui': { BRAND: {}, FONT: {}, iconForEmoji: () => null, resolveIconName: n => n },
   });
-  assert.equal(toast.toastCoinCount('+25 coins'), 3);
-  assert.equal(toast.toastCoinCount('You got +480 Coins!'), 5);
-  assert.equal(toast.toastCoinCount('+1 coin'), 3, 'a single coin still reads as coins flying');
+  assert.equal(toast.toastCoinCount('+25 coins'), 5);
+  assert.equal(toast.toastCoinCount('You got +480 Coins!'), 6);
+  assert.equal(toast.toastCoinCount('+1 coin'), 4, 'a single coin still reads as coins flying');
   assert.equal(toast.toastCoinCount('New ride story unlocked'), 0);
   assert.equal(toast.toastCoinCount('-140 coins'), 0, 'never flies coins for a spend message');
   assert.ok(toast.TOAST_MOTION.iconPt >= 34);
@@ -209,10 +209,10 @@ test('pull to refresh: the shark fills the gap, a two-ring splash with droplets,
 
 test('grids stagger in once: Inventory and the Shark Shop rise cell by cell on first mount (FlashList-safe)', () => {
   const cell = read('src/ui/StaggerCell.tsx');
-  assert.match(cell, /useState\(\(\) => \(reduced \? null : staggerDelay\(index\)\)\)/, 'decided once on first mount, none with Reduce Motion');
+  assert.match(cell, /useState\(\(\) => \(reduced \? null : grid \? gridDelay\(index\) : staggerDelay\(index\)\)\)/, 'decided once on first mount, none with Reduce Motion');
   assert.doesNotMatch(cell, /entering=/, 'no layout animation inside a recycling list');
-  assert.match(read('src/screens/InventoryScreen.tsx'), /<StaggerCell index=\{index\} style=\{STAGGER_FILL\}>/);
-  assert.match(read('src/screens/StoreScreen.tsx'), /<StaggerCell index=\{index\} style=\{\{ padding: 8, flex: 1 \}\}>/);
+  assert.match(read('src/screens/InventoryScreen.tsx'), /<StaggerCell grid index=\{index\} style=\{STAGGER_FILL\}>/);
+  assert.match(read('src/screens/StoreScreen.tsx'), /<StaggerCell grid index=\{index\} style=\{\{ padding: 8, flex: 1 \}\}>/);
   for (let i = 0; i < 8; i++) assert.ok(motion.staggerDelay(i) + motion.DURATION.base <= motion.STAGGER.capMs);
   assert.equal(motion.staggerDelay(8), null, 'the ninth cell is simply there');
 });

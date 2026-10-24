@@ -2,7 +2,8 @@ import { Image } from 'expo-image';
 import { ReactNode, useContext, useEffect, useRef } from 'react';
 import { Dimensions, Image as RNImage, ImageBackground, Text, View } from 'react-native';
 import Animated, { interpolate, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
-import { COMPASS_INDEX, FOOTER_MOTION, footerIndex, footerMotion, playFooterTap } from './footerMotion';
+import { queueHaptic } from '../gamekit/Haptics';
+import { COMPASS_INDEX, FOOTER_MOTION, RARE_HAPTIC_AT, footerIndex, footerMotion, playFooterTap } from './footerMotion';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { BRAND } from '../ui/tokens';
 import { GOLD_FX } from '../ui/motion';
@@ -190,8 +191,12 @@ export default function Wrapper({
                       pressHaptic="tickSelection"
                       onPress={() => {
                         if (isCatchShown()) return;
-                        if (!previewMode) playFooterTap(footerIndex(RootNavigation.navigationRef.getCurrentRoute()?.name),
-                          key, reducedMotion);
+                        if (!previewMode) {
+                          const pick = playFooterTap(footerIndex(RootNavigation.navigationRef.getCurrentRoute()?.name),
+                            key, reducedMotion);
+                          // The rare compass pick: a bigger answer in the hand on its burst (the press already ticked).
+                          if (pick.rare) setTimeout(() => queueHaptic('hitMedium'), RARE_HAPTIC_AT);
+                        }
                         // Already here: the screen scrolls back to its top (News).
                         if (!onNavigate && RootNavigation.navigationRef.getCurrentRoute()?.name === item.screen
                           && emitTabReselect(item.screen)) return;
@@ -293,8 +298,9 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
     const m = footerMotion;
     const r = m.ring.value;
     if (m.hopIndex.value !== index || r <= 0 || r >= 1) return { opacity: 0 };
-    return { opacity: r < 0.12 ? r / 0.12 : 1 - (r - 0.12) / 0.88,
-      transform: [{ scale: F.ringFrom + (F.ringTo - F.ringFrom) * r }] };
+    // A crisp gold ring: up fast, holds bright, then fades as it grows.
+    return { opacity: r < 0.1 ? r / 0.1 : r < F.ringHold ? 1 : 1 - (r - F.ringHold) / (1 - F.ringHold),
+      transform: [{ scale: F.ringFrom + (F.ringTo - F.ringFrom) * (1 - (1 - r) * (1 - r)) }] };
   });
   // A soft gold disc under the ring: the pick reads as a glow on the bar, not just a line.
   const disc = useAnimatedStyle(() => {
@@ -308,7 +314,20 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
   const rareRing = useAnimatedStyle(() => {
     const r = footerMotion.ringRare.value;
     if (!compass || r <= 0 || r >= 1) return { opacity: 0 };
-    return { opacity: r < 0.1 ? r / 0.1 : 1 - (r - 0.1) / 0.9, transform: [{ scale: 0.8 + 2.4 * r }] };
+    return { opacity: r < 0.08 ? r / 0.08 : r < 0.3 ? 1 : 1 - (r - 0.3) / 0.7,
+      transform: [{ scale: 0.8 + (F.rareRingTo - 0.8) * (1 - (1 - r) * (1 - r)) }] };
+  });
+  // The rare pick's second ring, a beat behind the first (a double shock wave).
+  const rareRing2 = useAnimatedStyle(() => {
+    const r = Math.max(0, footerMotion.ringRare.value - 0.12) / 0.88;
+    if (!compass || r <= 0 || r >= 1) return { opacity: 0 };
+    return { opacity: 0.9 * (r < 0.1 ? r / 0.1 : 1 - (r - 0.1) / 0.9), transform: [{ scale: 0.8 + 2.6 * (1 - (1 - r) * (1 - r)) }] };
+  });
+  // The rare pick's sun: a big warm glow that blooms under the compass and fades.
+  const rareSun = useAnimatedStyle(() => {
+    const r = footerMotion.ringRare.value;
+    if (!compass || r <= 0 || r >= 1) return { opacity: 0 };
+    return { opacity: F.rareSunPeak * (r < 0.12 ? r / 0.12 : Math.max(0, 1 - (r - 0.12) / 0.6)), transform: [{ scale: 0.8 + 1.6 * Math.min(1, r * 2) }] };
   });
   // A small icon's own stars, only when it is the one picked.
   const smallBurst = useDerivedValue(() => (footerMotion.hopIndex.value === index ? footerMotion.burstSmall.value : 0));
@@ -325,12 +344,23 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
       <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: (size - ringSize) / 2, top: ringTop,
         width: ringSize, height: ringSize, borderRadius: ringSize / 2, backgroundColor: GOLD_FX.glow }, disc]} />
       {compass && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: (size - ringSize) / 2, top: ringTop,
-        width: ringSize, height: ringSize, borderRadius: ringSize / 2, borderWidth: 4, borderColor: GOLD_FX.rays }, rareRing]} />}
+        width: ringSize, height: ringSize, borderRadius: ringSize / 2, backgroundColor: GOLD_FX.raysSoft }, rareSun]} />}
+      {compass && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: (size - ringSize) / 2, top: ringTop,
+        width: ringSize, height: ringSize, borderRadius: ringSize / 2, borderWidth: 6, borderColor: GOLD_FX.rays,
+        alignItems: 'center', justifyContent: 'center' }, rareRing]}>
+        <View style={{ width: ringSize - 8, height: ringSize - 8, borderRadius: (ringSize - 8) / 2, borderWidth: 2, borderColor: BRAND.white }} />
+      </Animated.View>}
+      {compass && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: (size - ringSize) / 2, top: ringTop,
+        width: ringSize, height: ringSize, borderRadius: ringSize / 2, borderWidth: 3, borderColor: GOLD_FX.glow }, rareRing2]} />}
+      {/* The pick ring: a bright gold band with a crisp dark-gold outer edge and a white inner line. */}
       <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: (size - ringSize) / 2,
         top: compass ? 14 : (size - ringSize) / 2, width: ringSize, height: ringSize, borderRadius: ringSize / 2,
-        borderWidth: 4, borderColor: GOLD_FX.glow, alignItems: 'center', justifyContent: 'center' }, ring]}>
-        <View style={{ width: ringSize - 6, height: ringSize - 6, borderRadius: (ringSize - 6) / 2, borderWidth: 1.5,
-          borderColor: BRAND.white }} />
+        borderWidth: 1.5, borderColor: BRAND.goldLip, alignItems: 'center', justifyContent: 'center' }, ring]}>
+        <View style={{ width: ringSize - 3, height: ringSize - 3, borderRadius: (ringSize - 3) / 2, borderWidth: 4.5,
+          borderColor: GOLD_FX.rays, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: ringSize - 12, height: ringSize - 12, borderRadius: (ringSize - 12) / 2, borderWidth: 1.5,
+            borderColor: BRAND.white }} />
+        </View>
       </Animated.View>
       <Animated.View style={[compass ? { transformOrigin: 'bottom' } : null, style]}>
         {children}
@@ -346,7 +376,7 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
       {compass && <SparkleBurst progress={footerMotion.burstRare} count={F.rareSparkles} x={size / 2} y={44}
         spread={[-200, 20]} dist={F.rareDist} size={F.rareSize} gravity={22} seed={7} />}
       {!compass && <SparkleBurst progress={smallBurst} count={F.smallSparkles} x={size / 2} y={size / 2}
-        spread={[-170, -10]} dist={[30, 44]} size={[12, 16]} gravity={10} seed={index + 11} />}
+        spread={[-175, -5]} dist={F.smallDist} size={F.smallSize} gravity={10} seed={index + 11} />}
     </View>
   );
 }

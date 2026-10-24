@@ -16,12 +16,12 @@
  * Coins go through momentParticles (power budget; none with Reduce Motion), at most 6.
  */
 import { memo, useEffect, useRef, useState } from 'react';
-import { COIN_FLIGHT, flyCoins, registerCoinTarget, type Point } from './CoinFlight';
+import { flightMs, flyCoins, registerCoinTarget, type Point } from './CoinFlight';
 import { lastTouch, freshTouch } from './lastTouch';
 import { useScreenFocused } from './AmbientSwim';
 import { View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
-  type SharedValue } from 'react-native-reanimated';
+import Animated, { cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring,
+  withTiming, type SharedValue } from 'react-native-reanimated';
 import { usePowerBudget } from '../power/PowerProvider';
 import GameIcon from './GameIcon';
 import RollingNumber from './RollingNumber';
@@ -39,9 +39,9 @@ export const WALLET_FX = {
   /** A held change waits this long after the hold lifts (the sheet finishes leaving). */
   afterHoldMs: 220,
   /** Big enough to read as coins on a phone (18 to 22 pt). */
-  coinSize: 20,
-  /** Coins flown between the chip and the thing you tapped (3 to 5). */
-  flightCoins: 5,
+  coinSize: 22,
+  /** Coins flown between the chip and the thing you tapped: a handful a kid can see pour in (6 to 10). */
+  flightCoins: 8,
   /** A tap this recent is where the coins fly from or to (ms). */
   touchFreshMs: 6000,
   /** A tap closer than this to the chip is a tap on the chip: the coins fan out right there (pt). */
@@ -112,18 +112,26 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
   const n = Math.min(6, momentParticles(WALLET_FX.coins, budget, reduced));
   const flightN = Math.min(WALLET_FX.flightCoins, momentParticles(WALLET_FX.flightCoins, budget, reduced));
   // While held, nothing moves. When the hold lifts (or the value changes in view) the coins go first
-  // and the digits follow, all timed on the UI thread (no JS timers).
+  // and the digits follow. Everything that answers the coins (the pill's squash on each coin, the digit
+  // roll, the landing bump) runs on the UI thread on the frame a coin lands or leaves, never behind a busy JS thread.
   const shown = useRef(value);
   const wasHeld = useRef(hold);
-  const lead = useRef<number>(WALLET_FX.rollAfterMs);
-  // What the digits show: it moves to the new value only when the coins say so (then it rolls).
+  // What the digits show: it moves to the new value at once, and the roll waits on `gate` (opened on the UI thread).
   const [released, setReleased] = useState(value);
   const fly = useSharedValue(0);
   const bump = useSharedValue(1);
   const squash = useSharedValue(0);
+  /** 1 opens the digit roll (RollingNumber gate). */
+  const gate = useSharedValue(1);
+  /** Coins that landed in the chip (gains) and left it (spends), counted on the UI thread. */
+  const landed = useSharedValue(0);
+  const left = useSharedValue(0);
+  /** 1 while this change is a spend (the pill answers coins leaving), 0 for a gain (coins landing). */
+  const spendSv = useSharedValue(0);
   const spendRef = useRef(true);
   const [local, setLocal] = useState(true);
   const iconRef = useRef<View>(null);
+  const gateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const measureChip = (done: (p: Point | null) => void) => {
     const node = iconRef.current;
@@ -131,18 +139,43 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
     node.measureInWindow((x, y, w, h) => done(Number.isFinite(x) && w > 0 ? { x: x + w / 2, y: y + h / 2 } : null));
   };
   // Reward toasts send their coins here while this screen is focused: each one squashes the pill as it
-  // lands, and the gain that follows within WALLET_FX.arrivedMs just rolls (the coins are already home).
+  // lands (UI thread), and a gain that shows up while they fly, or just after, rolls under them (no second flight).
   const arrivedAt = useRef(0);
-  const onCoinHit = () => {
-    arrivedAt.current = Date.now();
-    cancelAnimation(squash);
-    squash.value = withSequence(withTiming(1, { duration: 40, easing: EASE.out }), withSpring(0, HUD_BUMP.spring));
-  };
+  const incomingUntil = useRef(0);
+  const markArrived = () => { arrivedAt.current = Date.now(); };
   useEffect(() => {
     if (!focused) return undefined;
-    return registerCoinTarget('wallet', measureChip, onCoinHit);
+    return registerCoinTarget('wallet', measureChip, {
+      landed,
+      onIncoming: ms => { incomingUntil.current = Date.now() + ms; },
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focused]);
+
+  // Each coin that lands in (or leaves) the pill squashes it on that frame; the first one opens the roll,
+  // and the pill lands with COUNT.finalBump as the roll settles.
+  const hit = () => {
+    'worklet';
+    cancelAnimation(squash);
+    squash.value = withSequence(withTiming(1, { duration: 40, easing: EASE.out }), withSpring(0, HUD_BUMP.spring));
+    if (gate.value < 1) {
+      gate.value = 1;
+      cancelAnimation(bump);
+      bump.value = withSequence(withTiming(HUD_BUMP.peak, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring),
+        withDelay(Math.max(0, COUNT.ms - 420), withSequence(
+          withTiming(COUNT.finalBump, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring))));
+    }
+  };
+  useAnimatedReaction(() => landed.value, (now, before) => {
+    if (before === null || now <= before) return;
+    if (spendSv.value === 0) hit();
+    runOnJS(markArrived)();
+  });
+  useAnimatedReaction(() => left.value, (now, before) => {
+    if (before === null || now <= before) return;
+    if (spendSv.value === 1) hit();
+  });
+  useEffect(() => () => { if (gateTimer.current) clearTimeout(gateTimer.current); }, []);
 
   useEffect(() => {
     if (hold) { wasHeld.current = true; return; }
@@ -152,56 +185,55 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
     const spend = spendRef.current;
     const wait = wasHeld.current ? WALLET_FX.afterHoldMs : 0;
     wasHeld.current = false;
-    cancelAnimation(fly); cancelAnimation(bump); cancelAnimation(squash);
+    cancelAnimation(fly); cancelAnimation(bump); cancelAnimation(squash); cancelAnimation(gate);
     fly.value = 0;
-    const touch = freshTouch(lastTouch(), Date.now(), WALLET_FX.touchFreshMs);
-    // Coins that a reward toast already flew in: no second flight, the digits roll and the pill lands.
-    if (!spend && Date.now() - arrivedAt.current < WALLET_FX.arrivedMs) {
-      lead.current = 0;
+    spendSv.value = spend ? 1 : 0;
+    if (gateTimer.current) clearTimeout(gateTimer.current);
+    /** Never strand the digits: whatever happens to the coins, the roll opens by `ms`. */
+    const gateBy = (ms: number) => { gateTimer.current = setTimeout(() => { if (gate.value < 1) gate.value = 1; }, ms); };
+    const now = Date.now();
+    // Coins a reward toast flew in (or is flying in): no second flight; the roll waits on their next landing.
+    if (!spend && (now < incomingUntil.current || now - arrivedAt.current < WALLET_FX.arrivedMs)) {
+      const flying = now < incomingUntil.current;
+      gate.value = flying ? 0 : 1;
       setReleased(value);
-      bump.value = withDelay(COUNT.ms - 40, withSequence(
+      if (flying) gateBy(incomingUntil.current - now + 300);
+      else bump.value = withDelay(COUNT.ms - 40, withSequence(
         withTiming(COUNT.finalBump, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring)));
       return;
     }
+    const touch = freshTouch(lastTouch(), Date.now(), WALLET_FX.touchFreshMs);
     const playLocal = () => {
       setLocal(true);
+      gate.value = 0;
+      setReleased(value);
       fly.value = withDelay(wait, withTiming(1, { duration: WALLET_FX.flyMs + 5 * 45, easing: EASE.out }));
+      // The local fan: the roll opens as the first coin reaches the pill (a spend: as the first one leaves).
       const first = spend ? 40 : WALLET_FX.flyMs * 0.6;
-      const landAt = WALLET_FX.rollAfterMs + COUNT.ms;
+      gate.value = withDelay(wait + Math.min(first, WALLET_FX.rollAfterMs + 40), withTiming(1, { duration: 0 }));
       bump.value = withDelay(wait + first, withSequence(
         withTiming(HUD_BUMP.peak, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring),
-        withDelay(Math.max(0, landAt - first - 360), withSequence(
+        withDelay(Math.max(0, COUNT.ms - 360), withSequence(
           withTiming(COUNT.finalBump, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring)))));
+      gateBy(wait + WALLET_FX.flyMs + 400);
     };
-    if (reduced || flightN <= 0 || !touch) { lead.current = wait + WALLET_FX.rollAfterMs; setReleased(value); playLocal(); return; }
-    // The digits keep the old number until the coins are on their way, then roll under them.
+    if (reduced || flightN <= 0 || !touch) { playLocal(); return; }
+    // The digits are armed on the new number now and roll on the frame the first coin lands (or leaves).
+    gate.value = 0;
+    setReleased(value);
     measureChip(chip => {
       const path = chip ? walletFlight(chip, touch, spend) : null;
-      if (!path) { lead.current = WALLET_FX.rollAfterMs; setReleased(value); playLocal(); return; }
+      if (!path) { playLocal(); return; }
       setLocal(false);
       const go = () => {
-        // Everything that answers the coins starts when they really start moving (on a busy JS thread the
-        // flight can mount a beat late): the pill squashes on each coin and the digits roll under them.
-        const onStart = () => {
-          const hits = Array.from({ length: flightN }, (_, i) => i * COIN_FLIGHT.staggerMs + (spend ? 30 : COIN_FLIGHT.flyMs));
-          const seq: number[] = [];
-          let t = 0;
-          hits.forEach(at => { seq.push(at - t); t = at + 60; });
-          squash.value = withSequence(...hits.flatMap((_, i) => [
-            withDelay(Math.max(0, seq[i]), withTiming(1, { duration: 30, easing: EASE.out })),
-            withTiming(0, { duration: 30, easing: EASE.in }),
-          ]), withSpring(0, HUD_BUMP.spring));
-          lead.current = hits[0];
-          setReleased(value);
-          bump.value = withDelay(hits[0] + COUNT.ms - 40, withSequence(
-            withTiming(COUNT.finalBump, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring)));
-        };
-        const flew = flyCoins({ from: path.from, to: path.to, count: flightN, onStart });
-        if (!flew) { lead.current = WALLET_FX.rollAfterMs; setReleased(value); playLocal(); }
+        const flew = flyCoins({ from: path.from, to: path.to, count: flightN, landed: spend ? undefined : landed,
+          left: spend ? left : undefined, sparkleEnd: !spend });
+        if (!flew) { playLocal(); return; }
+        gateBy(flightMs(flightN) + 600);
       };
       if (wait > 0) setTimeout(go, wait); else go();
     });
-  }, [value, hold, fly, bump, squash, reduced, flightN]);
+  }, [value, hold, fly, bump, squash, gate, landed, left, spendSv, reduced, flightN]);
 
   const chipStyle = useAnimatedStyle(() => ({ transform: [
     { scaleX: bump.value * (1 + WALLET_FX.hitSquash * squash.value) },
@@ -214,8 +246,7 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
         <GameIcon name="coins" size={iconSize} />
         {local && Array.from({ length: n }, (_, i) => <Coin key={`${spend ? 's' : 'g'}${i}`} progress={fly} i={i} n={n} spend={spend} />)}
       </View>
-      <RollingNumber value={released} format={format} style={textStyle} hold={hold}
-        startDelayMs={lead.current} celebrate />
+      <RollingNumber value={released} format={format} style={textStyle} hold={hold} gate={gate} celebrate />
     </Animated.View>
   );
 }

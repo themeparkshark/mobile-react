@@ -82,7 +82,7 @@ test('offline banner: the card and the chip are never both visible', () => {
   const { bannerCrossFade } = loadTs('src/components/OfflineBanner.tsx', {
     react: {}, 'react/jsx-runtime': {}, 'react-native': rn,
     'react-native-reanimated': { ...reanimated, makeMutable: value => ({ value }) },
-    'react-native-safe-area-context': {}, '../screens/ExploreScreen/catchPresence': {}, '../api/client': {},
+    'react-native-safe-area-context': {}, '../screens/ExploreScreen/catchPresence': {}, '../ui/modalLayers': {}, '../api/client': {},
     '../RootNavigation': {}, '../helpers/haptics': {}, '../services/connectivity': {}, '../ui': { Z: {}, BRAND: {}, OUTLINE: {}, FONT: {}, HIT_SLOP: {} },
   });
   for (let s = -0.2; s <= 1.2; s += 0.01) {
