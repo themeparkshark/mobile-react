@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet,
-  RefreshControl, Animated, Easing,
+  RefreshControl, Animated, Easing, AccessibilityInfo,
 } from 'react-native';
 import RideTrackerFrame from './RideTrackerFrame';
 import { FOOTER_CLEARANCE } from '../../components/Wrapper';
@@ -101,22 +101,49 @@ MetaPill.displayName = 'MetaPill';
 
 // ─── Favorite star ───
 // Off: Alex's star drawn as a white rim around a darker blue middle (an empty slot to fill).
-// On: the full gold star. It pops with a spring when you save the ride.
+// On: the full gold star. Saving pops it with a spring and six little gold stars burst out of it, so
+// the star itself says "saved" with zero reading and nothing ever covers the ride's name (it replaced a
+// words banner that sat on long names). Taking it off shrinks it back into its slot. Native driver only.
+const SPARKS = [0, 1, 2, 3, 4, 5].map(i => {
+  const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+  return { x: Math.cos(a), y: Math.sin(a) };
+});
 const FavoriteStar: React.FC<{ on: boolean; size: number }> = React.memo(({ on, size }) => {
   const pop = useRef(new Animated.Value(1)).current;
+  const burst = useRef(new Animated.Value(0)).current;
   const reducedMotion = useReducedGameMotion();
   const first = useRef(true);
   useEffect(() => {
     if (first.current) { first.current = false; return; }
-    if (!on || reducedMotion) return;
-    pop.setValue(0.7);
-    const anim = Animated.spring(pop, { toValue: 1, friction: 3, tension: 160, useNativeDriver: true });
+    if (reducedMotion) return;
+    pop.setValue(on ? 0.7 : 1.15);
+    burst.setValue(0);
+    const anim = Animated.parallel([
+      Animated.spring(pop, { toValue: 1, friction: 3, tension: 160, useNativeDriver: true }),
+      ...(on ? [Animated.timing(burst, { toValue: 1, duration: 520, easing: Easing.out(Easing.quad), useNativeDriver: true })] : []),
+    ]);
     anim.start();
     return () => anim.stop();
-  }, [on, reducedMotion, pop]);
+  }, [on, reducedMotion, pop, burst]);
   const inner = Math.round(size * 0.56);
+  const spark = Math.round(size * 0.32);
+  const reach = size * 0.95;
   return (
     <Animated.View style={{ width: size, height: size, transform: [{ scale: pop }] }}>
+      {on && !reducedMotion && SPARKS.map((d, i) => (
+        <Animated.View key={i} pointerEvents="none" accessible={false}
+          style={{
+            position: 'absolute', left: (size - spark) / 2, top: (size - spark) / 2,
+            opacity: burst.interpolate({ inputRange: [0, 0.15, 0.7, 1], outputRange: [0, 1, 1, 0] }),
+            transform: [
+              { translateX: burst.interpolate({ inputRange: [0, 1], outputRange: [0, d.x * reach] }) },
+              { translateY: burst.interpolate({ inputRange: [0, 1], outputRange: [0, d.y * reach] }) },
+              { scale: burst.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.4, 1, 0.6] }) },
+            ],
+          }}>
+          <GameIcon name="star" size={spark} />
+        </Animated.View>
+      ))}
       {on ? <GameIcon name="star" size={size} /> : (
         <>
           <GameIcon name="star" size={size} mono={B.white} />
@@ -165,9 +192,6 @@ export default function RideDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [shareEntry, setShareEntry] = useState<PlayerRideType | null>(null);
   const [imageError, setImageError] = useState(false);
-  const toastOpacity = useRef(new Animated.Value(0)).current;
-  const toastY = useRef(new Animated.Value(-10)).current;
-  const [toastText, setToastText] = useState('');
   const [loadError, setLoadError] = useState(false);
   const loadedOnce = useRef(false);
 
@@ -200,33 +224,17 @@ export default function RideDetailScreen() {
     setRefreshing(true); await fetchData(); setRefreshing(false);
   }, [fetchData]);
 
-  const showToast = useCallback((text: string) => {
-    setToastText(text);
-    toastOpacity.setValue(0);
-    toastY.setValue(-10);
-    Animated.parallel([
-      Animated.timing(toastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.timing(toastY, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ]).start(() => {
-      setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(toastOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
-          Animated.timing(toastY, { toValue: -10, duration: 400, useNativeDriver: true }),
-        ]).start();
-      }, 1200);
-    });
-  }, [toastOpacity, toastY]);
-
   const handleWishlistToggle = useCallback(async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const result = await toggleWishlist(rideId);
       setWishlisted(result.wishlisted);
-      showToast(result.wishlisted ? 'SAVED TO FAVORITES' : 'TAKEN OFF FAVORITES');
+      // The star's pop and burst say it on screen; VoiceOver hears it in words.
+      AccessibilityInfo.announceForAccessibility(result.wishlisted ? 'Saved to favorites' : 'Taken off favorites');
     } catch (e) {
       gameAlert("Couldn't update your wishlist", 'Check your connection and try again.');
     }
-  }, [rideId, showToast]);
+  }, [rideId]);
 
   const avgRating = history.filter(h => h.rating).length > 0
     ? history.filter(h => h.rating).reduce((sum, h) => sum + (h.rating || 0), 0) / history.filter(h => h.rating).length
@@ -386,16 +394,6 @@ export default function RideDetailScreen() {
         </Pressable>
       </Modal>
 
-      {/* Favorite toast */}
-      <Animated.View
-        pointerEvents="none"
-        style={[s.toast, { opacity: toastOpacity, transform: [{ translateY: toastY }] }]}
-      >
-        {/* A little point up at the header star it confirms. */}
-        <View style={s.toastPoint} />
-        <GameIcon name="star" size={22} />
-        <Text style={s.toastText}>{toastText}</Text>
-      </Animated.View>
     </RideTrackerFrame>
   );
 }
@@ -512,33 +510,4 @@ const s = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(5,52,110,0.6)', justifyContent: 'center', padding: 20 },
   modalContent: { maxHeight: '80%' },
   modalClose: { marginTop: 12 },
-
-  // ─── Toast ───
-  // Hangs from the header star (top right, just under the header), never over the page's shark.
-  toast: {
-    position: 'absolute',
-    top: 10,
-    right: 12,
-    // The game's own toast: a white card with a navy rim, a gold star and navy Shark words.
-    backgroundColor: B.white,
-    borderRadius: 16,
-    borderWidth: 3,
-    borderColor: B.navy,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  toastText: { color: B.navy, fontSize: 16, fontFamily: 'Shark' },
-  // A navy diamond peeking out of the card's top edge, under the star's center (12 pt pad + 22 pt to the star's middle).
-  toastPoint: {
-    position: 'absolute', top: -8, right: 15, width: 13, height: 13, backgroundColor: B.white,
-    borderColor: B.navy, borderLeftWidth: 3, borderTopWidth: 3, transform: [{ rotate: '45deg' }],
-  },
 });

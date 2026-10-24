@@ -43,6 +43,13 @@ export default function YellowButton({
     reported.current = true;
     readyRef.current?.();
   }, [artReady, labelAreaHeight]);
+  // A press that turns disabled (or Reduce Motion turning on) mid-press never leaves the pill at 0.97.
+  useEffect(() => {
+    if (disabled || reducedMotion) { animated.stopAnimation(); animated.setValue(1); }
+    return () => animated.stopAnimation();
+  }, [animated, disabled, reducedMotion]);
+  // The pill and its words are one piece: neither draws until both are ready (same layer, same opacity).
+  const ready = artReady && labelAreaHeight > 0;
   const zoomOut = () => {
     if (disabled || reducedMotion) {
       return;
@@ -84,6 +91,7 @@ export default function YellowButton({
     >
       <Animated.View
         style={{
+          opacity: ready ? 1 : 0,
           transform: [
             {
               scale: animated,
@@ -113,7 +121,6 @@ export default function YellowButton({
               adjustsFontSizeToFit={true}
               maxFontSizeMultiplier={1.2}
               style={{
-                opacity: labelAreaHeight > 0 && artReady ? 1 : 0,
                 textAlign: 'center',
                 fontSize: artButtonFontSize(labelAreaHeight),
                 color: 'white',

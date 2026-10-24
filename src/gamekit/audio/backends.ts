@@ -16,6 +16,7 @@
 
 import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
+import { audioWanted, whenAudioMayStart } from './startGate';
 
 /**
  * react-native-audio-api 0.6 AudioParam automation is unsafe from JS: the
@@ -391,8 +392,41 @@ export class AudioApiBackend implements AudioBackend {
     if (!this.mod) throw new Error('react-native-audio-api unavailable');
   }
 
+  /**
+   * Light on purpose: the graph (and the AudioContext that wakes the audio hardware) starts on the
+   * first load that may use it, after launch and only while the player can hear something
+   * (startGate.ts). A stalled audio server can then never abort the app during launch.
+   */
   async init(): Promise<void> {
-    if (this.ctx) return;
+    // Nothing to do yet: see startGraph.
+  }
+
+  private graphTry: Promise<boolean> | null = null;
+  private pendingMaster = 1;
+
+  /** Start the graph if the gate allows it. False means: play this cue on expo-av instead. */
+  private startGraph(): Promise<boolean> {
+    if (this.ctx) return Promise.resolve(true);
+    if (this.graphTry) return this.graphTry;
+    const attempt = (async () => {
+      await whenAudioMayStart();
+      if (this.ctx) return true;
+      if (!audioWanted()) return false;
+      try {
+        this.buildGraph();
+        return true;
+      } catch {
+        this.ctx = null;
+        return false;
+      }
+    })();
+    this.graphTry = attempt;
+    // A quiet player (both sounds off) may turn sound on later: ask the gate again then.
+    void attempt.then((ok) => { if (!ok && this.graphTry === attempt) this.graphTry = null; });
+    return attempt;
+  }
+
+  private buildGraph(): void {
     this.ctx = new this.mod.AudioContext();
     try {
       this.mod.AudioManager?.setAudioSessionOptions?.({ iosCategory: 'ambient', iosMode: 'default', iosOptions: ['mixWithOthers'], iosAllowHaptics: true });
@@ -409,6 +443,7 @@ export class AudioApiBackend implements AudioBackend {
     this.musicLowpass.connect(this.master);
     this.musicBus = this.ctx.createGain();
     this.musicBus.connect(this.musicLowpass);
+    this.master.gain.value = this.pendingMaster;
   }
 
   isLoaded(key: string): boolean {
@@ -433,6 +468,7 @@ export class AudioApiBackend implements AudioBackend {
     if (inFlight) return inFlight;
     const job = this.decodeChain.then(async () => {
       if (this.buffers.has(key)) return true;
+      if (!(await this.startGraph())) return false;
       const path = await localPath(src);
       if (!path) return false;
       try {
@@ -571,6 +607,7 @@ export class AudioApiBackend implements AudioBackend {
   }
 
   setMasterGain(gain: number): void {
+    this.pendingMaster = gain;
     if (this.master) this.master.gain.value = gain;
   }
 

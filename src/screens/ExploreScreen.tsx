@@ -140,6 +140,9 @@ import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, parkM
   type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
 import { UpperText } from '../ui/upper';
 
+/** After the map cover lifts, Finn's park tips wait this long (the map, its pins and PLAY RIDE arrive first). */
+const MAP_CALM_MS = 5000;
+
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
 // Community Center range in meters (same as task buildings - config.mobile.redeem_radius)
@@ -283,10 +286,22 @@ function ExploreScreen() {
 
   // The map's loading cover is up: tips, tutorials and slams wait for the map to arrive.
   const mapCovered = useMapCovered();
+  // The first seconds after the cover lifts belong to the map, its pins and PLAY RIDE: Finn's park
+  // tips wait MAP_CALM_MS, so a kid never meets a pile of cards (at most one card in that window).
+  const [mapCalm, setMapCalm] = useState(false);
+  useEffect(() => {
+    if (mapCovered) { setMapCalm(false); return; }
+    const timer = setTimeout(() => setMapCalm(true), MAP_CALM_MS);
+    return () => clearTimeout(timer);
+  }, [mapCovered]);
   // At launch the home map can show for a moment before the park check settles and swaps in the
   // park map. Hold the one cover (never past its deadline) until the screen knows which map it is.
   const mapChoicePending = !!player && permissionGranted && !park && !homeLocationConfirmed;
-  useEffect(() => { holdMapCover(mapChoicePending); }, [mapChoicePending]);
+  // A park map also waits (inside the same budget) for its ride pins, so they arrive in the cover's
+  // fade instead of popping in a second after it.
+  const pinsPending = !!player && !!park && !redeemables && !mapLoadFailed;
+  const coverHold = mapChoicePending || pinsPending;
+  useEffect(() => { holdMapCover(coverHold); }, [coverHold]);
   useEffect(() => () => holdMapCover(false), []);
   useEffect(() => {
     if (homeLocationConfirmed) return;
@@ -735,9 +750,11 @@ function ExploreScreen() {
     .map((id, index) => [id, index])), [rideTasks, taskDistance]);
   // First reveal of a park's islands: nearest drop in first.
   const revealRef = useRef<{ context: string; delays: globalThis.Map<number, number> } | null>(null);
+  // Pins that land under the loading cover are simply there when it fades (no drop nobody sees);
+  // pins that arrive after it lift land together in one pop (no trickle across the map).
   if (redeemables && visibleTasks.length && revealRef.current?.context !== mapContext) {
-    revealRef.current = { context: mapContext, delays: revealDelays([...visibleTasks]
-      .sort((a, b) => (taskDistance.get(a.id) ?? 0) - (taskDistance.get(b.id) ?? 0)).map(task => task.id)) };
+    revealRef.current = { context: mapContext, delays: mapCovered ? new globalThis.Map<number, number>()
+      : revealDelays(visibleTasks.map(task => task.id), 0, 0) };
   }
   const [mapFocusRequest, setMapFocusRequest] = useState<{ latitude: number; longitude: number; zoom: number; requestId: number } | null>(null);
   // Dev-only stress for the MapLibre marker guard (EXPO_PUBLIC_FRIGHT_STRESS=1): pans and zooms
@@ -1045,7 +1062,7 @@ function ExploreScreen() {
       rideCoinInRange: openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task' });
   const parkOfferSlot = !!player && !!park && !railShowing && suggestionSlots.left == null && suggestionSlots.right == null
     && !parkTip && !isActive && !liveEvt.event;
-  const parkTipReady = !mapCovered && mapTipReady({
+  const parkTipReady = !mapCovered && mapCalm && mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
     dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
     bossOrChest: bossOpen || bossOccluded || dailyGiftOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),

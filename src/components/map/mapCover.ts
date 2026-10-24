@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   COVER_FADE_MS, COVER_FINISH_MS, LATER_COVER_SHARE, coverCeiling, coverLiftAt,
 } from '../../constants/launchHandoff';
+import { openAudioStartAfterLaunch } from '../../gamekit/audio/startGate';
 
 /**
  * The map screen's one loading cover (sky, shark, bar) while the park tiles draw.
@@ -62,7 +63,10 @@ function publish(next: Omit<CoverPlan, 'version'>, notify = true) {
 /** The cover with this token finished fading (called by MapLaunchCover from the UI thread). */
 export function coverLifted(tok: number) {
   if (tok !== plan.token || !plan.up) return;
+  const wasLaunch = plan.launch;
   publish({ ...plan, up: false, lifting: false, share: null });
+  // Launch is over: the audio hardware may wake once the map has settled (never during launch).
+  if (wasLaunch) openAudioStartAfterLaunch();
 }
 
 /** Re-plan the lift from what is true now: lift at once, or wait (bar creeping to the next step). */

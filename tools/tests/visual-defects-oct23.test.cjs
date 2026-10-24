@@ -386,14 +386,15 @@ test('Ride Detail title fits by measured width; scores read as numbers with a sh
   assert.equal(m.riderSharksCaption({ rating_distribution: { 4: 2 }, unique_riders: 3 }), 'from 2 ratings');
   assert.equal(m.riderSharksCaption({ rating_distribution: { 5: 1 }, unique_riders: 1 }), 'from 1 rating');
   assert.equal(m.riderSharksCaption({ rating_distribution: {}, unique_riders: 3 }), 'from 3 riders');
-  // The favorites toast hangs from the header star (top right), never over the page's shark.
-  assert.match(src, /toast: \{\s*position: 'absolute',\s*top: 10,\s*right: 12,/);
-  assert.match(src, /<View style=\{s\.toastPoint\} \/>/);
-  // One heading face app-wide (navy Shark, like Settings), one tile icon treatment, the game's own toast.
+  // No text toast over the ride's name: the star pops and bursts six little stars (zero reading),
+  // and VoiceOver hears the words.
+  assert.doesNotMatch(src, /toast/i);
+  assert.match(src, /const SPARKS = \[0, 1, 2, 3, 4, 5\]/);
+  assert.match(src, /announceForAccessibility\(result\.wishlisted \? 'Saved to favorites' : 'Taken off favorites'\)/);
+  assert.match(src, /\{on && !reducedMotion && SPARKS\.map/, 'no burst with Reduce Motion');
+  // One heading face app-wide (navy Shark, like Settings), one tile icon treatment.
   assert.match(src, /sectionTitle: \{[^}]*color: B\.navy, fontSize: 17,[^}]*fontFamily: 'Shark'/s);
   assert.equal((src.match(/<View style=\{\[?s\.statIcon/g) || []).length, 4, "three tiles, the third has a filled and an empty form");
-  assert.match(src, /toast: \{[^}]*backgroundColor: B\.white,[^}]*borderColor: B\.navy/s);
-  assert.match(src, /'SAVED TO FAVORITES' : 'TAKEN OFF FAVORITES'/);
   assert.match(src, /withNumberFont\(date\.toLocaleDateString/);
 });
 
@@ -435,7 +436,7 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   // The map registers with the one screen cover; it draws the cover itself only on preview screens.
   assert.match(map, /useLayoutEffect\(\(\) => \{\s*const tok = beginMapCover\(\);/);
   assert.match(map, /return \(\) => releaseMapCover\(tok\);/);
-  assert.match(map, /const revealMap = \(\) => mapCoverDrawn\(coverToken\.current\);/);
+  assert.match(map, /const revealMap = \(\) => \{ mapCoverDrawn\(coverToken\.current\);/);
   assert.match(map, /\{coverHost === 'self' && <MapLaunchCover style=\{styles\.cover\} \/>\}/);
   assert.doesNotMatch(map, /Animated\.timing\(cover/, 'no JS-timer lift (RN Animated delay is a JS setTimeout)');
   const cover = read('src/components/map/MapCoverSky.tsx');
@@ -550,7 +551,7 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   assert.match(explore, /<Map onPress=\{[^\n]*\n\s*coverHost="screen"/);
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /<Map coverHost="screen" /);
   // Tips, tutorials, the home intro and the adventure slam wait for the cover to lift.
-  assert.match(explore, /const parkTipReady = !mapCovered && mapTipReady\(\{/);
+  assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && mapTipReady\(\{/);
   assert.match(explore, /if \(!mapFocused \|\| mapCovered \|\| !player/);
   assert.match(explore, /if \(mapFocused && !mapCovered && player/);
   assert.match(explore, /introAllowed=\{mapFocused && !mapCovered && homeIntroAllowed\}/);
@@ -635,8 +636,13 @@ test('plain ride names: no trademark marks from the wait-times feed or the ride 
 
 test('PLAY RIDE is one piece: the pill, its label and the ride chip appear together once the pill art has drawn', () => {
   const button = read('src/components/YellowButton.tsx');
-  // The label never draws before the pill art (words with no button).
-  assert.match(button, /opacity: labelAreaHeight > 0 && artReady \? 1 : 0,/);
+  // The pill and its label are one layer with one opacity: neither draws before both are ready.
+  assert.match(button, /const ready = artReady && labelAreaHeight > 0;/);
+  assert.match(button, /<Animated\.View\s+style=\{\{\s+opacity: ready \? 1 : 0,/);
+  assert.doesNotMatch(button, /opacity: labelAreaHeight > 0 && artReady/);
+  // A press that turns disabled mid-press (or Reduce Motion) never leaves the pill at 0.97.
+  assert.match(button, /if \(disabled \|\| reducedMotion\) \{ animated\.stopAnimation\(\); animated\.setValue\(1\); \}/);
+  assert.match(button, /return \(\) => animated\.stopAnimation\(\);/);
   assert.match(button, /onLoadEnd=\{markArtReady\}/);
   assert.match(button, /if \(reported\.current \|\| !artReady \|\| labelAreaHeight <= 0\) return;/, 'reports once, only when the art drew and the label has its size');
   assert.match(button, /setTimeout\(markArtReady, pillArtSeen \? 120 : 800\)/, 'a safety if the image never reports');
@@ -653,4 +659,53 @@ test('Ride Detail keeps the same three tiles on every ride and its hint names th
   assert.match(src, /<Text style=\{\[s\.statVal, s\.statValEmpty\]\}>\?<\/Text>/);
   assert.match(src, /Rode it\? Tap LOG THIS RIDE\./);
   assert.match(src, /numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.8\}>\{withNumberFont\(riderSharksCaption/);
+});
+
+test('launch never wakes the audio hardware: the audio-api graph starts after the cover lifts, and only for a player who can hear it', () => {
+  const backends = read('src/gamekit/audio/backends.ts');
+  const gate = read('src/gamekit/audio/startGate.ts');
+  // init() is light; the AudioContext is made only in buildGraph, behind the gate, on the first load.
+  assert.match(backends, /async init\(\): Promise<void> \{\s*\/\/ Nothing to do yet: see startGraph\.\s*\}/);
+  assert.equal((backends.match(/new this\.mod\.AudioContext\(\)/g) || []).length, 1);
+  assert.match(backends, /private buildGraph\(\): void \{\s*this\.ctx = new this\.mod\.AudioContext\(\);/);
+  assert.match(backends, /await whenAudioMayStart\(\);\s*if \(this\.ctx\) return true;\s*if \(!audioWanted\(\)\) return false;/);
+  assert.match(backends, /if \(!\(await this\.startGraph\(\)\)\) return false;/, 'a load that may not start the graph plays on expo-av');
+  assert.match(backends, /this\.master\.gain\.value = this\.pendingMaster;/, 'the master gain set before the graph existed still applies');
+  // The launch cover opens the gate once it has lifted; a first screen that is not the map has a safety.
+  assert.match(read('src/components/map/mapCover.ts'), /if \(wasLaunch\) openAudioStartAfterLaunch\(\);/);
+  assert.match(gate, /export const AUDIO_START_SAFETY_MS = 7000;/);
+  assert.match(read('src/context/SoundEffectProvider.tsx'),
+    /setAudioWanted\(!\(isReady && !player\?\.enabled_sound_effects\), !\(isReady && !player\?\.enabled_music\)\);/);
+});
+
+test('audio start gate: shut until launch is over, then open; quiet players never want the hardware', async () => {
+  const g = loadTs('src/gamekit/audio/startGate.ts');
+  assert.equal(g.audioStartOpen(), false);
+  let opened = false;
+  const wait = g.whenAudioMayStart().then(() => { opened = true; });
+  await new Promise(r => setTimeout(r, 5));
+  assert.equal(opened, false);
+  g.openAudioStartAfterLaunch(1);
+  await wait;
+  assert.equal(opened, true);
+  assert.equal(g.audioStartOpen(), true);
+  g.setAudioWanted(false, false);
+  assert.equal(g.audioWanted(), false);
+  g.setAudioWanted(false, true);
+  assert.equal(g.audioWanted(), true);
+});
+
+test('first seconds on the map: pins arrive in the cover fade, late pins land in one pop, Finn tips wait 5 s, no bare lawn', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const pinsPending = !!player && !!park && !redeemables && !mapLoadFailed;/);
+  assert.match(explore, /useEffect\(\(\) => \{ holdMapCover\(coverHold\); \}, \[coverHold\]\);/);
+  assert.match(explore, /delays: mapCovered \? new globalThis\.Map<number, number>\(\)\s*: revealDelays\(visibleTasks\.map\(task => task\.id\), 0, 0\)/);
+  assert.match(explore, /const MAP_CALM_MS = 5000;/);
+  assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && mapTipReady\(\{/);
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /\{!covered && <TileWaitSheet drawn=\{tilesDrawn\} \/>\}/);
+  assert.match(map, /onDidFinishRenderingFrameFully=\{covered \|\| !tilesDrawn \? revealMap : undefined\}/);
+  const sheet = read('src/components/map/TileWaitSheet.tsx');
+  assert.match(sheet, /pointerEvents="none"/);
+  assert.match(sheet, /export const TILE_WAIT_MAX_MS = 6000;/);
 });
