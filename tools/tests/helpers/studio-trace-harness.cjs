@@ -93,6 +93,9 @@ function traceEngine({ start = Date.UTC(2026, 9, 24, 17, 0, 0), hybrid = true, t
   // One realm for everything so GameAudio, playMoment and catchAudio share their singletons.
   const realm = loadTs('tools/tests/helpers/studio-trace-entry.ts', stubs, globals);
   realm.Haptics.setHapticTraceListener((intent) => haptics.push({ t: clock.now, intent }));
+  // As SoundEffectProvider does once the player's settings load (the engine starts muted until then).
+  realm.GameAudio.setSfxEnabled(true);
+  realm.GameAudio.setMusicEnabled(true);
   return { clock, haptics, audio, ...realm };
 }
 
