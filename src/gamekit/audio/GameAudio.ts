@@ -83,8 +83,10 @@ class GameAudioEngine {
   private lastPlayed = new Map<string, number>();
   private lastVariant = new Map<string, number>();
   private nextId = 1;
-  private sfxEnabled = true;
-  private musicEnabled = true;
+  // Off until the player's settings are known (SoundEffectProvider turns them on): a muted player never
+  // hears a blip, or wakes the audio hardware, while the app is still loading.
+  private sfxEnabled = false;
+  private musicEnabled = false;
   /** Dev only: EXPO_PUBLIC_STUDIO_MUTE=1 keeps studio simulators silent (master gain pinned to 0). */
   private readonly studioMute = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
   private masterVolume = this.studioMute ? 0 : 1;

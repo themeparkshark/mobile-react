@@ -266,6 +266,11 @@ export default function PostWinRewardsModal({
   const isNewCoin = coinTimesCollected === 1;
   const [coinArtFailed, setCoinArtFailed] = useState(false);
   useEffect(() => { setCoinArtFailed(false); }, [taskCoinUrl, visible]);
+  // Warm the coin art while the game is still being played (this modal is mounted, hidden, the whole time),
+  // so the catch reveal of a brand-new coin shows its real art on time instead of waiting on the download.
+  useEffect(() => {
+    if (taskCoinUrl && typeof Image.prefetch === 'function') void Image.prefetch([taskCoinUrl], 'memory-disk').catch(() => undefined);
+  }, [taskCoinUrl]);
   // The coin catch plays first and hands its coin to the summary's hero slot.
   const [caught, setCaught] = useState(false);
   // Standings: the weekly goal note lands on this screen right as the coin reveal ends.

@@ -69,6 +69,8 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
           { name: 'BoxRevealPreview', getComponent: () => require('./screens/pins/BoxRevealPreviewScreen').default },
           { name: 'PostWinRewardsPreview', getComponent: () => require('./screens/PostWinRewardsPreviewScreen').default },
           { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
+          { name: 'CoinLevelingPreview', getComponent: () => require('./screens/CoinLevelingPreviewScreen').default },
+          { name: 'HomeCatchPreview', getComponent: () => require('./screens/ExploreScreen/HomeCatchPreviewScreen').default },
         ]
       : [];
 
@@ -80,7 +82,8 @@ export function devInitialRoute(): string | null {
   if (!__DEV__) {
     if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') return 'BossMapPreview';
     const motion = process.env.EXPO_PUBLIC_MOTION_CAPTURE;
-    return motion === 'BoxRevealPreview' || motion === 'PostWinRewardsPreview' || motion === 'SetRevealPreview' ? motion : null;
+    return motion === 'BoxRevealPreview' || motion === 'PostWinRewardsPreview' || motion === 'SetRevealPreview'
+      || motion === 'CoinLevelingPreview' || motion === 'HomeCatchPreview' ? motion : null;
   }
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [

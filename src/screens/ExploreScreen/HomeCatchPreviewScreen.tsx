@@ -10,11 +10,14 @@ import type redeemPrepItem from '../../api/endpoints/me/prep-items/redeem';
 import Topbar from '../../components/Topbar';
 import Wrapper from '../../components/Wrapper';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
+import Currency from '../../components/Topbar/Currency';
+import { CurrencyContext } from '../../context/CurrencyProvider';
+import { AuthContext } from '../../context/AuthProvider';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import HomeFindMarker from './HomeFindMarker';
 import type { FingerSide } from './PrepItem';
-import HomeCatchMoment, { resetRideHintForPreview, type BookItem, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
+import HomeCatchMoment, { resetCatchSessionForPreview, resetRideHintForPreview, type BookItem, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import { resetRevealSeenForPreview } from './ridePhoto/CatchReveal';
 import HomeHuntChip, { chipWidthFor, type HuntChipMessage } from './HomeHuntChip';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
@@ -24,11 +27,15 @@ import HomeHudChips from './HomeHudChips';
 import { rideSpec, GRADE_BONUS_XP, setRidePhotoServerEnabled, type PhotoGrade } from './ridePhoto';
 import { preloadRidePhoto, useRideArt } from './ridePhoto/rideAssets';
 import { RIDES, buildStage, sceneVariant } from './ridePhoto/rides';
-import { catchShown, useCatchOpen } from './catchPresence';
+import { useCatchOpen } from './catchPresence';
+import { useChromeBack } from './useChromeBack';
+import { chromeHeal, useCommitHeal } from '../../components/map/alive/commitHeal';
 import type { RideKind, Sky } from './ridePhoto/rides';
 import { resetRideMemoryForPreview } from './ridePhoto/rides/rideMemory';
 import { catchTraceBuffer } from './ridePhoto/catchAudio';
+import { hudClock } from '../../components/Topbar/hudPulse';
 import * as FileSystem from 'expo-file-system';
+import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 
 /**
  * Development-only (EXPO_PUBLIC_HOME_CATCH_PREVIEW=1): the v3 home map with
@@ -58,6 +65,8 @@ const FIXTURES: Fixture[] = [
 if (__DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1') LogBox.ignoreAllLogs(true);
 // The preview is the Ride Photo harness: the server's switch (player_stats.ride_photo_enabled) is on here.
 if (__DEV__) setRidePhotoServerEnabled(true);
+// Captures: `lane.sh eval '__wowResetCatch()'` makes the next catch the first of a session again (the full show).
+if (__DEV__) (globalThis as { __wowResetCatch?: (count?: number) => void }).__wowResetCatch = resetCatchSessionForPreview;
 
 type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean; reduced?: boolean; skip?: boolean;
   /** The server's Legendary roll says no: the find rides by (409). */ escape?: boolean;
@@ -70,6 +79,14 @@ type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; ra
  * the picker choose every ride and sky (the production pick-and-warm path).
  */
 const EXP = __DEV__ ? process.env.EXPO_PUBLIC_HH3_EXP ?? '' : '';
+/**
+ * Wave 4: release-like capture (EXPO_PUBLIC_MOTION_CAPTURE=HomeCatchPreview with `expo start --no-dev`, never set in
+ * store builds). The common find is caught on its own as the 1st, 2nd, 5th, 10th and 25th catch of a session, 6 s
+ * apart, and the frame times and beats are written to Documents/catch-trace.log, so frame-rate and timing claims
+ * come from release JS, not the dev graph.
+ */
+const CAPTURE = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';
+const CAPTURE_CATCHES: number[] = String(process.env.EXPO_PUBLIC_MOTION_CAPTURE_ORDER || '1,2,5,10,25').split(',').map(Number).filter((n: number) => n > 0);
 /** Map-chrome budget captures: 'still' (frozen map, resting chrome), 'still-bare' (same, chrome invisible), 'still-peek' (a find tapped). */
 const STILL = EXP.startsWith('still');
 const BARE = EXP === 'still-bare';
@@ -184,7 +201,23 @@ function HomeCatchPreview() {
   const found = useRef(0);
   const lastGrade = useRef<PhotoGrade>('good');
   const catchOpen = useCatchOpen();
-  const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - catchShown.value * 1.6) }));
+  const { currencies } = useContext(CurrencyContext);
+  const { player } = useContext(AuthContext);
+  const [coins, setCoins] = useState(() => player?.coins ?? 350);
+  const chipsBack = useChromeBack(0);
+  const menusBack = useChromeBack(1);
+  useCommitHeal(chromeHeal);
+  const edgesBack = useChromeBack(3);
+  // The dev frame graph on every capture (UI fps, p5): the wow clips carry their own frame-rate proof.
+  const perf = usePerfProbe(!STILL);
+  // Showcase captures hide the frame graph (`lane.sh eval '__wowPerf(false)'`); perf captures keep it.
+  const [showPerf, setShowPerf] = useState(true);
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    const g = globalThis as { __wowPerf?: (on: boolean) => void };
+    g.__wowPerf = on => setShowPerf(on);
+    return () => { delete g.__wowPerf; };
+  }, []);
 
   const items: PrepItemType[] = useMemo(() => FIXTURES.map((fixture, index) => ({
     id: 900 + index, pivot_id: 9000 + index, name: fixture.name, variant_slug: null, description: null,
@@ -328,9 +361,12 @@ function HomeCatchPreview() {
     console.log(line);
     catchTraceBuffer.push(line);
   };
+  // Wave 4: every slow frame (over 34 ms) with the catch clock it landed on, so a hitch can be placed on a beat.
+  const logSlow = (dt: number, clock: number) => { catchTraceBuffer.push(`[slow] ${Date.now()} dt=${dt.toFixed(1)}ms clock=${Math.round(clock)}`); };
   useFrameCallback(info => {
     const dt = info.timeSincePreviousFrame;
     if (dt == null) return;
+    if (dt > 34) runOnJS(logSlow)(dt, hudClock.value);
     frameCount.value += 1; frameSum.value += dt;
     if (dt > 25) frameSlow.value += 1;
     if (dt > frameWorst.value) frameWorst.value = dt;
@@ -341,7 +377,7 @@ function HomeCatchPreview() {
   }, true);
   // A Release preview build has no console: the trace is flushed to Documents/catch-trace.log.
   useEffect(() => {
-    if (!autoplay) return;
+    if (!autoplay && !CAPTURE) return;
     const timer = setInterval(() => {
       void FileSystem.writeAsStringAsync(`${FileSystem.documentDirectory}catch-trace.log`, catchTraceBuffer.join('\n')).catch(() => undefined);
     }, 4000);
@@ -356,11 +392,25 @@ function HomeCatchPreview() {
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoplay]);
+  // Release-like capture: the common pretzel is caught as catch 1, 2, 5, 10 and 25 of a session (see CAPTURE).
+  useEffect(() => {
+    if (!CAPTURE) return undefined;
+    const timers = CAPTURE_CATCHES.map((n, i) => setTimeout(() => {
+      resetCatchSessionForPreview(n - 1);
+      catchTraceBuffer.push(`[capture] ${Date.now()} catch ${n}`);
+      const pretzel = items.find(entry => entry.rarity <= 1 && FIXTURES[items.indexOf(entry)]?.inRange);
+      if (pretzel) tapFind(pretzel);
+    }, 9000 + i * 6000));
+    return () => timers.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const stageItem = request?.item ?? items[0];
 
   return (
     <Wrapper><View style={styles.root}>
     <Topbar>
+      {/* The coin chip as on the park map, so a catch's coins can be seen landing and rolling the count. */}
+      <TopbarColumn><Currency image={currencies[0]?.icon_url} count={coins} name="Coins" flyTarget="coins" /></TopbarColumn>
       <TopbarColumn><Text style={styles.travel}>HOME HUNT</Text></TopbarColumn>
     </Topbar>
     <View ref={container} collapsable={false} style={styles.content}
@@ -377,23 +427,26 @@ function HomeCatchPreview() {
           void measure();
           if (!mapStill) setTimeout(() => void snapshotter.current?.().then(uri => uri && setMapStill(uri)), 600);
         }}>
-        {items.filter(item => !caught.has(item.pivot_id!)).map((item, index) => (
+        {/* Each fixture keeps its own index after a catch (a caught find no longer shifts the others' range). */}
+        {items.map((item, index) => caught.has(item.pivot_id!) ? null : (
           <HomeFindMarker key={item.pivot_id} item={item} distance={Math.round(Math.hypot(FIXTURES[index].north, FIXTURES[index].east) / 5) * 5} inRange={FIXTURES[index].inRange}
-            animated={!STILL && index < 4} hidden={request?.pivotId === item.pivot_id} onTap={tapFind} onExpire={noop}
+            animated={!STILL && index < 4} hidden={false} onTap={tapFind} onExpire={noop}
             fingerSide={sides[item.pivot_id!] ?? 'right'} showFinger={index === nearestInRange}
-            chromeless={BARE || cascadeOn && !!points.current.get(item.pivot_id!) && bannerCovers(points.current.get(item.pivot_id!)!, size, BOTTOM_SLOT)} />
+            chromeless={BARE || cascadeOn && item.pivot_id !== request?.pivotId && !!points.current.get(item.pivot_id!) && bannerCovers(points.current.get(item.pivot_id!)!, size, BOTTOM_SLOT)} />
         ))}
       </Map>
       {/* Same as the app: kept mounted, hidden and inert during a catch. */}
-      <Animated.View style={[StyleSheet.absoluteFill, chromeFade, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, edgesBack, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <FindEdgeArrows finds={edges} size={size} onPress={onEdgePress} insetTop={12 + 30 + 8 + 24} />
       </Animated.View>
-      {!request && <Animated.View style={[styles.bottom, { bottom: slotBottom }, chromeFade, BARE && styles.hidden]} pointerEvents="box-none">
+      {!request && <Animated.View style={[styles.bottom, { bottom: slotBottom }, edgesBack, BARE && styles.hidden]} pointerEvents="box-none">
         <HomeHuntChip message={chip} onDismiss={() => setChip(null)} />
       </Animated.View>}
-      <Animated.View style={[StyleSheet.absoluteFill, chromeFade, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, menusBack, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <QuickAccessMenu position="left" />
         <RadialStatsMenu />
+      </Animated.View>
+      <Animated.View style={[StyleSheet.absoluteFill, chipsBack, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         {/* As in the app: the top HUD row (free-Ticket countdown, park story). */}
         <HomeHudChips top={hudTop} onWidth={setHudWidth} findsUntilTicket={2} onTicketPress={line => setChip({ key: `t-${Date.now()}`, text: line, ttlMs: 5000 })}
           parkStory={{ title: 'Park story', points: 3, goal: 10, onPress: () => undefined }} />
@@ -409,12 +462,17 @@ function HomeCatchPreview() {
         autoEscape={autoplay && SCRIPT[step]?.again ? 'again' : 'map'}
         onRideAgain={(item) => { if (autoplay) rodeAgain.current = true; void startCatch(item); }}
         warm={autoplay && EXP !== 'nowarm' ? SCRIPT.slice(step, step + 2).map((entry, i) => ({ item: scriptItem(step + i), forceRide: EXP === 'noforce' ? null : { kind: entry.kind, sky: entry.sky } })) : undefined}
-        onCollected={() => undefined} onUnavailable={() => undefined}
+        onCollected={data => setCoins(c => c + (data.rewards.coins ?? 0))} onUnavailable={() => undefined}
         onFailed={(line) => setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error' })}
         onDone={done => {
           const pivot = request?.pivotId;
           setRequest(null);
-          if (done && pivot != null && !autoplay) setCaught(current => new Set([...current, pivot]));
+          if (done && pivot != null && !autoplay) {
+            setCaught(current => new Set([...current, pivot]));
+            // Commons come back 1.6 s later (with the spawn pop), so the first, second and tenth catch can be recorded in one run.
+            const fixture = items.find(entry => entry.pivot_id === pivot);
+            if (fixture && fixture.rarity <= 1) setTimeout(() => setCaught(current => { const next = new Set(current); next.delete(pivot); return next; }), 1600);
+          }
           // Autoplay: after the Rare, ride the Epic (dark ride, 2 photos). A RIDE AGAIN escape waits for its next ride.
           if (autoplay && SCRIPT[stepRef.current]?.again && !rodeAgain.current) return;
           if (autoplay && rodeAgain.current && !done) return;
@@ -422,6 +480,7 @@ function HomeCatchPreview() {
           catches.current += 1;
           if (autoplay && catches.current < SCRIPT.length) setTimeout(() => runStep(catches.current), 2600);
         }} />
+      {!STILL && showPerf && <PerfOverlay probe={perf} style={styles.perf} />}
     </View>
     </View></Wrapper>
   );
@@ -447,6 +506,7 @@ const nearestInRange = FIXTURES.map((f, i) => ({ i, d: f.inRange ? Math.hypot(f.
 
 const styles = StyleSheet.create({
   hidden: { opacity: 0 },
+  perf: { top: 64, right: 6 },
   root: { flex: 1, backgroundColor: '#0768b9' },
   content: { flex: 1, marginTop: -8 },
   travel: { color: '#fff', fontFamily: 'Shark', fontSize: 16, letterSpacing: 2, textAlign: 'center' },
