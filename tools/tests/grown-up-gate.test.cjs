@@ -26,7 +26,7 @@ function gateModule(store = {}, navigated = [], dev = true) {
     react: { useEffect() {}, useState: v => [v, () => {}] },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
     '../ui/iconNames': {}, './RealMoneyMark': { default: 'RealMoneyMark' },
-    'react-native': { Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: s => s }, Text: 'Text', View: 'View' },
+    'react-native': { Modal: 'Modal', Platform: { OS: 'ios' }, Pressable: 'Pressable', StyleSheet: { create: s => s }, Text: 'Text', View: 'View' },
     '../RootNavigation': { navigate: (...args) => navigated.push(args) },
     '../ui': { BRAND: { goldLip: '#d99a00', navy: '#05346e' }, FONT: {}, GameIcon: 'GameIcon' },
     '../ui/modalLayers': { useModalLayer: () => true },
@@ -266,7 +266,8 @@ test('the gate answers only after it has faded out, so the share sheet can prese
   assert.match(gate, /setTimeout\(finish, GATE_DISMISS_FALLBACK_MS\)/, 'a missed onDismiss still answers');
   assert.match(gate, /if \(!shownRef\.current\) close\(false\); \}, GATE_SHOW_WATCHDOG_MS\)/, 'a refused gate answers no');
   const g = gateModule();
-  assert.equal(g.GATE_DISMISS_FALLBACK_MS, 1000);
+  assert.equal(g.GATE_DISMISS_FALLBACK_MS, 2000);
+  assert.match(gate, /if \(Platform\.OS !== 'ios'\) \{ finish\(\); return; \}/, 'Android answers at once');
   assert.equal(g.GATE_SHOW_WATCHDOG_MS, 3000);
   const ext = read('src/services/external.ts');
   assert.match(ext, /export const SHARE_SHEET_WAIT_MS = 30_000;/);

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameIconName } from '../ui/iconNames';
 import RealMoneyMark from './RealMoneyMark';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
 import { useModalLayer } from '../ui/modalLayers';
@@ -70,7 +70,7 @@ let showGate: ShowGate | null = null;
 function syncShowGate() { showGate = hosts.length ? hosts[hosts.length - 1].show : null; }
 let open: Promise<boolean> | null = null;
 /** iOS shows nothing new while a modal is still sliding away: the answer waits for the gate to be gone. */
-export const GATE_DISMISS_FALLBACK_MS = 1000;
+export const GATE_DISMISS_FALLBACK_MS = 2000;
 /** A gate that iOS refused to present (another modal was in the way) closes as a no, never hangs. */
 export const GATE_SHOW_WATCHDOG_MS = 3000;
 
@@ -329,8 +329,10 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const close = useCallback((ok: boolean) => {
     if (!reqRef.current || answerRef.current !== null) return;
     answerRef.current = ok;
+    // Only iOS refuses to present while a modal is leaving (and only iOS reports onDismiss).
+    if (Platform.OS !== 'ios') { finish(); return; }
     setClosing(ok);
-  }, []);
+  }, [finish]);
   useEffect(() => {
     const host = {
       show: (r: GateRequest) => {
