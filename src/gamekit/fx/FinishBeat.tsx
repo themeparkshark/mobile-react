@@ -19,7 +19,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet } from 'react-native';
-import { BlurMask, Canvas, Circle, Group, Path, Skia, Text as SkText } from '@shopify/react-native-skia';
+import { BlurMask, Canvas, Circle, Group, Path, Skia, Text as SkText, rect } from '@shopify/react-native-skia';
 import { cancelAnimation, Easing, ReduceMotion, useDerivedValue, useSharedValue, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useDisplayFont } from './displayFont';
 import { FINISH_BEAT_MS, FINISH_SPARKLES_MAX, finishPose, finishSparkle } from '../core/gameMoments';
@@ -44,6 +44,8 @@ export interface FinishBeatProps {
   sparkles?: number;
   /** Landing flash peak (flashPeak result, 0 for none). */
   flash?: number;
+  /** The rings, flash and sparkles stay below this line (the game's HUD band); the label is never clipped. */
+  clipTop?: number;
 }
 
 function sparkleStar() {
@@ -58,7 +60,7 @@ function sparkleStar() {
   return p;
 }
 
-export const FinishBeat = React.memo(function FinishBeat({ fireKey, label = 'FINISH!', width, height, y, reduced, sparkles = 12, flash = 0 }: FinishBeatProps) {
+export const FinishBeat = React.memo(function FinishBeat({ fireKey, label = 'FINISH!', width, height, y, reduced, sparkles = 12, flash = 0, clipTop = 0 }: FinishBeatProps) {
   const [live, setLive] = useState(false);
   const clock = useSharedValue(-1);
   useEffect(() => {
@@ -77,12 +79,13 @@ export const FinishBeat = React.memo(function FinishBeat({ fireKey, label = 'FIN
   }, [fireKey, clock]);
   useEffect(() => () => cancelAnimation(clock), [clock]);
   if (!live) return null;
-  return <FinishCanvas clock={clock} label={label} width={width} height={height} y={y} reduced={reduced} sparkles={sparkles} flash={flash} />;
+  return <FinishCanvas clock={clock} label={label} width={width} height={height} y={y} reduced={reduced} sparkles={sparkles} flash={flash} clipTop={clipTop} />;
 });
 
-function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash }: {
-  clock: SharedValue<number>; label: string; width: number; height: number; y: number; reduced: boolean; sparkles: number; flash: number;
+function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash, clipTop }: {
+  clock: SharedValue<number>; label: string; width: number; height: number; y: number; reduced: boolean; sparkles: number; flash: number; clipTop: number;
 }) {
+  const clip = useMemo(() => rect(0, clipTop, width, Math.max(0, height - clipTop)), [clipTop, width, height]);
   const font = useDisplayFont(LABEL_PX);
   const star = useMemo(sparkleStar, []);
   const raw = useMemo(() => {
@@ -109,6 +112,7 @@ function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash
   const n = reduced ? 0 : Math.max(0, Math.min(FINISH_SPARKLES_MAX, Math.round(sparkles)));
   return (
     <Canvas style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
+      <Group clip={clip}>
       {flash > 0 ? (
         <Circle cx={cx} cy={y} r={120} color="#ffffff" opacity={flashA}>
           <BlurMask blur={36} style="normal" />
@@ -121,6 +125,7 @@ function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash
         </Group>
       )}
       {Array.from({ length: n }, (_, k) => <Spark key={k} k={k} n={n} clock={clock} cx={cx} cy={y} star={star} />)}
+      </Group>
       {font ? (
         <Group transform={labelT} opacity={labelA}>
           <SkText x={0} y={6} text={label} font={font} color="#05346e" style="stroke" strokeWidth={14} strokeJoin="round" opacity={0.5} />

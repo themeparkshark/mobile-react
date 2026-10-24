@@ -42,6 +42,7 @@ import { registerStudioAudio } from '../../gamekit/audio/studioLibrary';
 import { useGameMusic } from '../../gamekit/audio/useGameMusic';
 import { playHaptic, playPattern } from '../../gamekit/Haptics';
 import { FinishBeat } from '../../gamekit/fx/FinishBeat';
+import { COUNT_END_MS, GO_AT_MS } from '../../gamekit/core/gameMoments';
 import { STAGGER, flashPeak } from '../../ui/motion';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { WHACK_PRIO } from '../../gamekit/core/hapticBus';
@@ -602,7 +603,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         flash(BOSS_NAMES[t.bossKind], t.callout ?? 'BONK THE TENTACLES', GOLD, 1600);
       } else if (bi === 0) {
         // The first burst's banner waits for the shell's GO burst to clear (one callout at a time).
-        setTimeout(() => flash(t.banner, t.callout, '#ffffff', 1300), 520);
+        setTimeout(() => flash(t.banner, t.callout, '#ffffff', 1300), COUNT_END_MS - GO_AT_MS + 20);
       } else {
         flash(t.banner, t.callout, '#ffffff', 1500);
       }
@@ -1100,7 +1101,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
             onArrive={(n) => { for (let k = 0; k < n; k++) setTimeout(() => GameAudio.playLadder(cues.coinTick, Math.min(12, k)), k * 20); }} /> : null}
           {L ? <StampLayer ref={stamps} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} queue={{ maxLive: 1, spacingMs: 150 }} minY={L.hudH + 8} /> : null}
           {L ? <FinishBeat fireKey={finishKey} label="FINISH!" width={L.w} height={L.h} y={L.hudH + (L.deckTop - L.hudH) * 0.52}
-            reduced={reducedMotion} sparkles={reducedMotion ? 0 : 12} flash={flashPeak(isDimFlashingLightsEnabled(), reducedMotion)} /> : null}
+            reduced={reducedMotion} sparkles={reducedMotion ? 0 : 12} flash={flashPeak(isDimFlashingLightsEnabled(), reducedMotion)} clipTop={L.hudH + 4} /> : null}
           {L ? <Banner text={banner.text} sub={banner.sub} color={banner.color} stamp={banner.stamp} top={L.hudH + (L.deckTop - L.hudH) * 0.18} /> : null}
           {phase === 'breather' && breather ? (
             <Breather

@@ -458,3 +458,10 @@ test('round 3: misses and the last rush never go red (Banana top tier and rush i
   assert.doesNotMatch(game, /tipSlip: \{ borderColor: MM\.coral \}/);
   assert.doesNotMatch(game, /ev\.deltaMs > 0 \? 'gold' : 'coral'/);
 });
+
+test('round 3: the first banner waits for the whole GO tail, and the FINISH! rings stay below the HUD', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /flash\(t\.banner, t\.callout, '#ffffff', 1300\), COUNT_END_MS - GO_AT_MS \+ 20\)/);
+  assert.match(whack, /clipTop=\{L\.hudH \+ 4\}/);
+  assert.match(read('src/gamekit/fx/FinishBeat.tsx'), /<Group clip=\{clip\}>/);
+});
