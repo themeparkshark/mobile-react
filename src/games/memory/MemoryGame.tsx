@@ -1625,6 +1625,8 @@ export default function MemoryGame({
               }
             }
             marqueeChain(marquee, e.chain, reducedMotion);
+            // Inside the QUICK window: the thick gold punch, then the next window starts closing in.
+            if (parts.quick) chainPlate.current?.quickHit();
             chainPlate.current?.quick();
             if (r.race && ev.tierUp === 3 && !r.ended) sendAttack(r, gameNow());
           });

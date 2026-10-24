@@ -144,7 +144,8 @@ export const REVEAL_CUES = ['fx.whoosh', 'fx.whooshRev', 'fx.coinTick', 'fx.reve
 
 let preloaded: Promise<void> | null = null;
 export function preloadRevealAudio(): void {
-  preloaded ??= GameAudio.preload([...REVEAL_CUES]).catch(() => undefined);
+  // Not kept while sound is off (no engine), so turning Sound on preloads normally.
+  preloaded ??= GameAudio.preload([...REVEAL_CUES]).then(ok => { if (!ok) preloaded = null; }, () => undefined);
 }
 function play(cue: typeof REVEAL_CUES[number], opts: { volume?: number; pitch?: number } = {}) {
   try { GameAudio.play(cue, opts); } catch { /* audio is decoration */ }

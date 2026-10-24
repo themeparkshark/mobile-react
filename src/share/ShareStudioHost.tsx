@@ -207,7 +207,8 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
         setStage('leaving');
         setTimeout(onDismiss, HANDOFF_MS);
       });
-      const outcome = await openShareSheet(uri, shareMessage(flexShareUrl(request.kind, request.payload)));
+      // The card's title names the file in the share sheet ("Golden-Churro.jpg"), never a UUID.
+      const outcome = await openShareSheet(uri, shareMessage(flexShareUrl(request.kind, request.payload)), flexCopy(request.kind, request.payload).title);
       if (!outcome.opened) { reopen = true; event('dismissed'); }
       else if (outcome.shared === false) event('dismissed');
       else {

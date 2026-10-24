@@ -59,13 +59,14 @@ const REST_KEY = 'grown-up-gate:rest-until';
 let gateRestUntil = 0;
 type GateRequest = { resolve: (ok: boolean) => void; seed: number; reason?: GateReason | null; devOffer?: GateReason };
 type ShowGate = (r: GateRequest) => void;
+type GateHost = { show: ShowGate; hint: (text: string) => void };
 /**
  * Every mounted gate host, oldest first. The root host sits at the bottom; a slot
  * inside a sheet or game <Modal> (GrownUpGateSlot) goes on top while it is up.
  * iOS presents a <Modal> from the view controller that holds it, so only a host
  * inside the top-most modal can show above it: askGrownUp always uses the top one.
  */
-let hosts: { show: ShowGate }[] = [];
+let hosts: GateHost[] = [];
 let showGate: ShowGate | null = null;
 function syncShowGate() { showGate = hosts.length ? hosts[hosts.length - 1].show : null; }
 let open: Promise<boolean> | null = null;
@@ -79,10 +80,32 @@ export const GATE_SHOW_WATCHDOG_MONEY_MS = 6000;
 export function gateWatchdogMs(reason: GateReason | null | undefined): number {
   return reason && (reason.kind === 'money' || reason.kind === 'renews' || reason.kind === 'vip') ? GATE_SHOW_WATCHDOG_MONEY_MS : GATE_SHOW_WATCHDOG_MS;
 }
-/** How long the kind "Try again in a sec" hint stays up after the gate could not show. */
+/** How long the kind "tap again" hint stays up after the gate could not show. */
 export const GATE_HINT_MS = 2200;
-/** The hint a kid sees when the gate could not show, so a tap never does nothing. Exported for tests. */
-export const GATE_RETRY_HINT = 'Try again in a sec';
+/**
+ * The hint a kid sees when the gate could not show, so a tap never does nothing: the
+ * retry arrow and the button to tap again, never a lock (that reads as "not allowed").
+ * Exported for tests.
+ */
+export function gateRetryHint(reason: GateReason | null | undefined): string {
+  return reason?.kind === 'share' ? 'Tap Share again' : 'Tap it again';
+}
+
+/**
+ * The hint goes to the top-most host at the moment it is needed, the one inside the
+ * front modal, so it draws where the kid is looking, never under an open sheet.
+ */
+function showRetryHint(text: string) {
+  hosts[hosts.length - 1]?.hint(text);
+}
+
+/**
+ * Dev only (captures and QA): `globalThis.__gateRefuse = true` makes every gate act as if
+ * iOS refused to present it, so the watchdog and the retry hint can be seen on a device.
+ */
+function devRefuse(): boolean {
+  return __DEV__ && (globalThis as { __gateRefuse?: boolean }).__gateRefuse === true;
+}
 
 /** The 30 s rest survives a force-quit. */
 async function loadRest() {
@@ -324,8 +347,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const [more, setMore] = useState(false);
   // The answer while the gate fades out; null while it is up.
   const [closing, setClosing] = useState<boolean | null>(null);
-  // The gate could not show (iOS refused it): a short "Try again in a sec" instead of a silent no.
-  const [hint, setHint] = useState(false);
+  // The gate could not show (iOS refused it): a short "Tap Share again" instead of a silent no.
+  const [hint, setHint] = useState<string | null>(null);
   const reqRef = useRef<GateRequest | null>(null);
   const answerRef = useRef<boolean | null>(null);
   const shownRef = useRef(false);
@@ -346,7 +369,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     setClosing(ok);
   }, [finish]);
   useEffect(() => {
-    const host = {
+    const host: GateHost = {
+      hint: text => setHint(text),
       show: (r: GateRequest) => {
         reqRef.current?.resolve(false);
         reqRef.current = r; answerRef.current = null; shownRef.current = false;
@@ -373,16 +397,16 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const front = nested ? !!req : layerFront;
   const presenting = !!req && front && closing === null;
   useEffect(() => {
-    if (!presenting || !req) return undefined;
-    // A gate iOS never showed answers no (never yes) with the kind hint. Real money waits longer
-    // (gateWatchdogMs), so a busy phone never closes a gate a grown-up is about to read.
+    if (!presenting) return undefined;
     const t = setTimeout(() => {
-      if (shownRef.current) return;
-      if (__DEV__) console.warn(`GrownUpGate never showed (${req.reason?.kind ?? 'no reason'}): another modal was up. Put a GrownUpGateSlot in it or close it first (share/handoff.ts).`);
-      setHint(true); close(false);
-    }, gateWatchdogMs(req.reason));
+      if (shownRef.current || !reqRef.current || answerRef.current !== null) return;
+      // It never showed, so there is no fade to wait for: a no at once, so the next tap asks fresh.
+      showRetryHint(gateRetryHint(reqRef.current.reason));
+      answerRef.current = false;
+      finish();
+    }, gateWatchdogMs(req?.reason));
     return () => clearTimeout(t);
-  }, [presenting, req, close]);
+  }, [presenting, req, finish]);
   useEffect(() => {
     if (closing === null) return undefined;
     const t = setTimeout(finish, GATE_DISMISS_FALLBACK_MS);
@@ -390,15 +414,15 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   }, [closing, finish]);
   useEffect(() => {
     if (!hint) return undefined;
-    const t = setTimeout(() => setHint(false), GATE_HINT_MS);
+    const t = setTimeout(() => setHint(null), GATE_HINT_MS);
     return () => clearTimeout(t);
   }, [hint]);
   // Not a <Modal>: it draws inside whatever holds this host, so it shows even where the gate could not.
   const hintPill = hint ? (
     <View style={styles.hintWrap} pointerEvents="none">
-      <View style={styles.hint} accessible accessibilityLiveRegion="polite" accessibilityLabel={GATE_RETRY_HINT}>
-        <GameIcon name="lock" size={22} />
-        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.hintText}>{GATE_RETRY_HINT}</Text>
+      <View style={styles.hint} accessible accessibilityLiveRegion="polite" accessibilityLabel={hint}>
+        <GameIcon name="retry" size={22} />
+        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.hintText}>{hint}</Text>
       </View>
     </View>
   ) : null;
@@ -418,7 +442,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   };
   return (
     <>
-    <Modal visible={closing === null} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
+    <Modal visible={closing === null && !devRefuse()} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
       onShow={() => { shownRef.current = true; }} onDismiss={finish}>
       <View style={styles.scrim}>
         {details ? (

@@ -22,10 +22,14 @@ export const RIDE_SHARE_HELD_LABEL = 'Share it after you leave the park';
 interface ShareableRideCardProps {
   ride: PlayerRideType;
   rideCount?: number;
+  /** The share sheet came up and closed (shared or cancelled). The card stays open either way. */
   onShare?: () => void;
   /** Kept on the phone, not in the journal yet: no count to fetch and nothing to share yet. */
   queued?: boolean;
 }
+
+/** How long the "Shared!" check stays on the button. */
+export const SHARED_STAMP_MS = 2000;
 
 /** "Ridden 1 time", "Ridden 12 times". Exported for tests. */
 export function riddenLine(count: number): string {
@@ -117,6 +121,13 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
   const storyRef = useRef<View>(null);
   const busy = useRef(false);
   const [sharing, setSharing] = useState(false);
+  // A gold check and "Shared!" for a moment after the sheet closes; the card stays open.
+  const [shared, setShared] = useState(false);
+  useEffect(() => {
+    if (!shared) return undefined;
+    const t = setTimeout(() => setShared(false), SHARED_STAMP_MS);
+    return () => clearTimeout(t);
+  }, [shared]);
   const [loadingCount, setLoadingCount] = useState(rideCount == null);
   const [confirmedCount, setConfirmedCount] = useState(rideCount);
   const reducedMotion = useReducedGameMotion();
@@ -151,10 +162,14 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
 
       const uri = await captureFlex(storyRef, 'story');
 
-      // The same share path as the Share Studio cards (grown-up gate first, then the iOS share sheet).
-      // The gate shows above this card's sheet (GrownUpGateSlot), so a "no" keeps the card open.
+      // The same share path as the Share Studio cards (grown-up gate first, then the share sheet).
+      // The gate shows above this card's sheet (GrownUpGateSlot). Back on the card after the sheet
+      // (even a cancel), with a Shared! check: a kid who backs out lands on their card.
       const outcome = await openShareSheet(uri, shareMessage(campaignUrl('ride_log')), `${ride.ride_name} Ride Card`);
-      if (outcome.opened) onShare?.();
+      if (outcome.opened) {
+        setShared(true);
+        onShare?.();
+      }
     } catch {
       gameAlert('Could not make your card', 'Your ride is saved. Try sharing it again.');
     } finally {
@@ -192,7 +207,12 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
           {/* While the ride total loads, a small spinner sits beside the same pill. */}
           <View style={cardStyles.sharePillRow}>
             {loadingCount && <ButtonSpinner still={reducedMotion} />}
-            <ShareFace size="reveal" dim={sharing || loadingCount} />
+            {shared && !sharing ? (
+              <View style={cardStyles.sharedStamp} accessibilityLiveRegion="polite">
+                <GameIcon name="check" size={20} />
+                <Text style={cardStyles.sharedText}>Shared!</Text>
+              </View>
+            ) : <ShareFace size="reveal" dim={sharing || loadingCount} />}
           </View>
         </Pressable>
       )}
@@ -235,6 +255,10 @@ const cardStyles = StyleSheet.create({
   heldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12, marginBottom: 4,
     backgroundColor: '#DCEFFB', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 2, borderColor: '#B8E5F8' },
   sharePillRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  // The Shared! check takes the pill's place for a moment (about the same size, so nothing jumps).
+  sharedStamp: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 52, paddingHorizontal: 22, borderRadius: 26,
+    backgroundColor: '#fff6d8', borderWidth: 3, borderColor: '#ffcf3b' },
+  sharedText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
   shareLater: { color: '#315C7C', fontSize: 15, fontFamily: 'Knockout', textAlign: 'center', marginTop: 12, marginBottom: 4 },
   heldText: { color: '#0B4B83', fontSize: 16, fontFamily: 'Knockout', flexShrink: 1 },
   card: {

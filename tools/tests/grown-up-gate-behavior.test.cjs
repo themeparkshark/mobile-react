@@ -234,7 +234,7 @@ test('Not now and a wrong answer both end as a no', async () => {
   assert.equal(wrong.value, false);
 });
 
-test('a gate iOS could not show closes as a no and the kid sees "Try again in a sec", never a silent tap', async () => {
+test('a gate iOS could not show closes as a no at once and the kid sees "Tap Share again" with the retry arrow, never a silent tap', async () => {
   const { gate, settle, tick, mountHost } = loadGate();
   const root = mountHost(false);
   const ask = track(gate.askGrownUp(SHARE, 5));
@@ -242,16 +242,37 @@ test('a gate iOS could not show closes as a no and the kid sees "Try again in a 
   assert.ok(modalOf(root));
   // onShow never fires: iOS refused to present it.
   await tick(gate.GATE_SHOW_WATCHDOG_MS - 1);
-  assert.doesNotMatch(textOf(root.tree), /Try again/);
+  assert.doesNotMatch(textOf(root.tree), /again/);
   await tick(1);
-  assert.match(textOf(root.tree), /Try again in a sec/, 'a kind hint, not a silent no');
-  assert.equal(gate.GATE_RETRY_HINT, 'Try again in a sec');
-  await tick(gate.GATE_DISMISS_FALLBACK_MS);
+  assert.equal(ask.value, false, 'it never showed, so there is no fade to wait for');
+  assert.match(textOf(root.tree), /Tap Share again/, 'a kind hint, not a silent no');
+  const icons = find(root.tree, n => n.type === 'GameIcon').map(n => n.props.name);
+  assert.deepEqual(icons, ['retry'], 'the retry arrow, never a lock (a lock reads as "not allowed")');
+  assert.equal(gate.gateRetryHint(SHARE), 'Tap Share again');
+  assert.equal(gate.gateRetryHint({ kind: 'leave', where: 'a website' }), 'Tap it again');
+  // A second tap right away asks fresh (the first ask is over).
+  const again = track(gate.askGrownUp(SHARE, 6));
+  await settle();
+  modalOf(root).props.onShow();
+  assert.equal(again.done, false);
+  root.unmount();
+  await settle();
+  assert.equal(again.value, false);
+});
+
+test('the retry hint draws from the top host (inside the front modal), never under it', async () => {
+  const { gate, settle, tick, mountHost } = loadGate();
+  const root = mountHost(false);
+  const slot = mountHost(true);
+  const ask = track(gate.askGrownUp(SHARE, 5));
+  await settle();
+  await tick(gate.GATE_SHOW_WATCHDOG_MS);
   assert.equal(ask.value, false);
-  assert.match(textOf(root.tree), /Try again in a sec/, 'the hint outlives the gate');
+  assert.match(textOf(slot.tree), /Tap Share again/, 'the slot inside the front modal shows it');
+  assert.doesNotMatch(textOf(root.tree) || '', /again/, 'the root host under the modal shows nothing');
   await tick(gate.GATE_HINT_MS);
-  assert.doesNotMatch(textOf(root.tree), /Try again/, 'then it goes away');
-  assert.equal(root.tree, null);
+  assert.doesNotMatch(textOf(slot.tree) || '', /again/, 'then it goes away');
+  assert.equal(slot.tree, null);
 });
 
 test('a gate that did show never trips the watchdog', async () => {
@@ -278,7 +299,7 @@ test('Android answers at once (no iOS fade wait)', async () => {
 
 function loadExternal({ gateYes = true, sheet = 'hang' } = {}) {
   const clock = fakeClock();
-  const calls = { share: [], copy: [], del: [], mkdir: [] };
+  const calls = { share: [], copy: [], del: [], mkdir: [], rnShare: [] };
   const external = loadTs('src/services/external.ts', {
     'expo-file-system': {
       cacheDirectory: 'file:///cache/',
@@ -291,7 +312,7 @@ function loadExternal({ gateYes = true, sheet = 'hang' } = {}) {
       shareAsync: (uri, options) => { calls.share.push([uri, options]); return sheet === 'hang' ? new Promise(() => {}) : Promise.resolve(); },
     },
     'expo-web-browser': { openBrowserAsync: async () => undefined },
-    'react-native': { Linking: { canOpenURL: async () => true, openURL: async () => undefined, openSettings: async () => undefined }, Share: { share: () => new Promise(() => {}) } },
+    'react-native': { Linking: { canOpenURL: async () => true, openURL: async () => undefined, openSettings: async () => undefined }, Share: { share: content => { calls.rnShare.push(content); return sheet === 'hang' ? new Promise(() => {}) : Promise.resolve({ action: 'sharedAction' }); } } },
     '../components/GrownUpGate': { askGrownUp: async () => gateYes },
   }, { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout });
   const settle = async () => { for (let k = 0; k < 20; k++) await Promise.resolve(); };
@@ -305,7 +326,7 @@ test('a share sheet that never answers frees the button at SHARE_SHEET_WAIT_MS',
   await tick(external.SHARE_SHEET_WAIT_MS - 1);
   assert.equal(done.done, false);
   await tick(1);
-  assert.equal(done.value, false);
+  assert.equal(done.value, 'timeout', 'a slow sheet is not a grown-up no');
   const text = track(external.shareExternal({ message: 'hi' }));
   await settle();
   await tick(external.SHARE_SHEET_WAIT_MS);
@@ -317,7 +338,7 @@ test('the share sheet shows a readable file name, never the capture UUID', async
   const { external, calls, settle } = loadExternal({ sheet: 'closes' });
   const done = track(external.shareFileExternal('file:///tmp/1ED163AE-B648-4C2B.png', { mimeType: 'image/png' }, 'Whack-a-Shark 460'));
   await settle();
-  assert.equal(done.value, true);
+  assert.equal(done.value, 'closed');
   assert.deepEqual(calls.copy, [['file:///tmp/1ED163AE-B648-4C2B.png', 'file:///cache/share-card/Whack-a-Shark-460.png']]);
   assert.equal(calls.share[0][0], 'file:///cache/share-card/Whack-a-Shark-460.png');
   assert.equal(calls.del[0][0], 'file:///cache/share-card/', 'the last copy is cleared first, so copies never pile up');
@@ -333,11 +354,25 @@ test('the share sheet shows a readable file name, never the capture UUID', async
   assert.equal(calls.share.at(-1)[0], 'file:///tmp/x.png');
 });
 
+test('Share Studio cards (iOS Share.share with a file url) get a readable name too; links and text are untouched', async () => {
+  const { external, calls, settle } = loadExternal({ sheet: 'closes' });
+  const flex = track(external.shareExternal({ url: '/private/var/tmp/4F1C-UUID.jpg' }, undefined, 'Golden Churro'));
+  await settle();
+  assert.deepEqual(flex.value, { action: 'sharedAction' });
+  assert.deepEqual(calls.copy.at(-1), ['file:///private/var/tmp/4F1C-UUID.jpg', 'file:///cache/share-card/Golden-Churro.jpg']);
+  assert.equal(calls.rnShare.at(-1).url, 'file:///cache/share-card/Golden-Churro.jpg');
+  const copies = calls.copy.length;
+  await external.shareExternal({ message: 'hi', url: 'https://themeparkshark.com/x' }, undefined, 'Article');
+  assert.equal(calls.rnShare.at(-1).url, 'https://themeparkshark.com/x', 'a web link is shared as is');
+  await external.shareExternal({ message: 'hi' });
+  assert.equal(calls.copy.length, copies, 'nothing copied for a link or text');
+});
+
 test('a grown-up no shares nothing and copies nothing', async () => {
   const { external, calls, settle } = loadExternal({ gateYes: false, sheet: 'closes' });
   const done = track(external.shareFileExternal('file:///tmp/a.png', undefined, 'Whack-a-Shark 1'));
   await settle();
-  assert.equal(done.value, false);
+  assert.equal(done.value, 'declined');
   assert.equal(calls.share.length, 0);
   assert.equal(calls.copy.length, 0);
 });

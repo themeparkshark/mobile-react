@@ -52,7 +52,7 @@ function soundHarness(enabled = true) {
         },
       } } };
       if (name === './AuthProvider') return { AuthContext: {} };
-      if (name === '../gamekit/SFX') return { SFX: { setEnabled() {}, setMusicEnabled() {} } };
+      if (name === '../gamekit/SFX') return { SFX: { setEnabled() {}, setMusicEnabled() {}, holdUntilSettings() {}, settingsKnown() {} } };
       throw new Error(`Unexpected dependency: ${name}`);
     },
   });

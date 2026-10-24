@@ -134,7 +134,7 @@ test('every campaign QR encodes its own counted link', () => {
 
 test('a Share Studio sheet fades out before the grown-up gate, and is a layer while up', () => {
   const host = src('src/share/ShareStudioHost.tsx');
-  assert.match(host, /const uri = await captureFlex\(cardRef, format\);[\s\S]{0,400}setStage\('leaving'\);[\s\S]{0,200}const outcome = await openShareSheet\(uri, shareMessage\(flexShareUrl\(request\.kind, request\.payload\)\)\);/,
+  assert.match(host, /const uri = await captureFlex\(cardRef, format\);[\s\S]{0,400}setStage\('leaving'\);[\s\S]{0,200}const outcome = await openShareSheet\(uri, shareMessage\(flexShareUrl\(request\.kind, request\.payload\)\), flexCopy\(request\.kind, request\.payload\)\.title\);/,
     'the picture is made first, then the sheet leaves, then the gate and share sheet');
   assert.match(host, /useModalLayer\(stage !== 'gone', 'show'\)/, 'Root dialogs and the gate wait for the sheet');
   assert.equal((host.match(/visible=\{visible\} onShow=\{onShow\} onDismiss=\{onDismiss\}/g) || []).length, 2, 'sheet and moment both hand off');
@@ -148,7 +148,7 @@ test('a Share Studio sheet fades out before the grown-up gate, and is a layer wh
 
 test('a ride card shares from inside its sheet: the gate slot shows above it, a no keeps the card open', async () => {
   const card = src('src/components/RideTracker/ShareableRideCard.tsx');
-  assert.match(card, /const uri = await captureFlex\(storyRef, 'story'\);[\s\S]{0,300}const outcome = await openShareSheet\(uri, shareMessage\(campaignUrl\('ride_log'\)\), `\$\{ride\.ride_name\} Ride Card`\);\s*if \(outcome\.opened\) onShare\?\.\(\);/);
+  assert.match(card, /const uri = await captureFlex\(storyRef, 'story'\);[\s\S]{0,300}const outcome = await openShareSheet\(uri, shareMessage\(campaignUrl\('ride_log'\)\), `\$\{ride\.ride_name\} Ride Card`\);\s*if \(outcome\.opened\) \{\s*setShared\(true\);/);
   assert.doesNotMatch(card, /shareFileExternal|beforeShare/, 'one share path for every card (gate, then the iOS share sheet)');
   for (const file of ['src/screens/RideTracker/RideHistoryScreen.tsx', 'src/screens/RideTracker/RideDetailScreen.tsx']) {
     const screen = src(file);
@@ -182,15 +182,15 @@ test('a grown-up gate iOS never shows answers "no" and steps aside, so later ask
   assert.match(gate, /export const GATE_SHOW_WATCHDOG_MS = 3000;/);
   assert.match(gate, /onShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
   // Never shown means no (never yes), and never silent: a kid-readable toast, plus a dev warning naming the ask.
-  assert.match(gate, /if \(shownRef\.current\) return;[\s\S]{0,300}setHint\(true\); close\(false\);\s*\}, gateWatchdogMs\(req\.reason\)\);/, 'never shown means no, never yes');
-  assert.match(gate, /if \(__DEV__\) console\.warn\(`GrownUpGate never showed/);
+  // The hotfix's round 3 watchdog (a no at once with the retry hint), with this lane's longer real-money wait.
+  assert.match(gate, /if \(shownRef\.current \|\| !reqRef\.current \|\| answerRef\.current !== null\) return;[\s\S]{0,300}answerRef\.current = false;\s*finish\(\);\s*\}, gateWatchdogMs\(req\?\.reason\)\);/, 'never shown means no, never yes');
 });
 
 test('the gate watchdog re-arms for every ask and gives real-money gates longer', () => {
   const gate = src('src/components/GrownUpGate.tsx');
   // Every ask resets shown and re-runs the watch (the effect depends on req).
   assert.match(gate, /reqRef\.current = r; answerRef\.current = null; shownRef\.current = false;/);
-  assert.match(gate, /\}, \[presenting, req, close\]\);/);
+  assert.match(gate, /\}, \[presenting, req, finish\]\);/);
   const body = gate.slice(gate.indexOf('export const GATE_SHOW_WATCHDOG_MS'), gate.indexOf('/** How long the kind'));
   const js = body.replace(/export /g, '').replace('(reason: GateReason | null | undefined): number', '(reason)');
   const ms = new Function(`${js}\nreturn { gateWatchdogMs };`)();

@@ -61,8 +61,8 @@ test('share sheets can save images: the add-to-Photos purpose string names the r
   assert.match(info.NSPhotoLibraryAddUsageDescription, /Save Image in the share sheet/);
   const src = read;
   // Both through the grown-up gate (services/external).
-  assert.match(src('src/share/capture.ts'), /shareExternal\(message \? \{ url: file, message \} : \{ url: file \}\)/);
-  assert.match(src('src/share/capture.ts'), /shareFileExternal\(file/);
+  assert.match(src('src/share/capture.ts'), /shareExternal\(message \? \{ url: uri, message \} : \{ url: uri \}, undefined, name\)/);
+  assert.match(src('src/share/capture.ts'), /shareFileExternal\(uri/);
   assert.match(src('src/components/RideTracker/ShareableRideCard.tsx'), /from 'expo-sharing'/);
 });
 

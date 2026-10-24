@@ -333,8 +333,7 @@ export default function RideDetailScreen() {
           <Pressable style={s.modalContent} onPress={() => {}} accessible={false}>
             {shareEntry && (
               <>
-                <ShareableRideCard ride={shareEntry} rideCount={totalRides} onShare={closeShare} />
-                {/* The one close word of every share sheet (Share Studio uses it too). */}
+                <ShareableRideCard ride={shareEntry} rideCount={totalRides} />
                 <Pressable onPress={() => setShareEntry(null)} style={s.modalClose} accessibilityRole="button" accessibilityLabel="Close">
                   <Text style={s.modalCloseText}>{CLOSE_WORD}</Text>
                 </Pressable>

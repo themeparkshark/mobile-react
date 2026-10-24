@@ -2,9 +2,8 @@
  * Capture a flex card and hand it to the OS share sheet. The OS sheet is the
  * only way out: no in-app posting, no account linking (kid safety).
  */
-import { shareExternal, shareFileExternal, shareFileName } from '../services/external';
+import { shareExternal, shareFileExternal } from '../services/external';
 import * as Clipboard from 'expo-clipboard';
-import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import type { RefObject } from 'react';
 import { PixelRatio, Platform, Share, type View } from 'react-native';
@@ -60,33 +59,14 @@ export function activityLabel(activity: string | null | undefined): string | nul
 export const SHARE_FILE_NAME = 'Theme Park Shark';
 
 /**
- * The capture under a readable name (services/external shareFileName: "Whack-a-Shark-12840.jpg"),
- * never the capture's random id. The same folder as the hotfix's named copies; each share clears it.
- * Any file trouble falls back to the original picture.
+ * The OS share sheet for a card picture, after the grown-up gate. `message` (a short line with the
+ * app link) rides along so Messages and chat apps get the link without a paste; photo-only targets
+ * drop it. `name` titles the file in the share sheet ("Golden Churro" becomes Golden-Churro.jpg),
+ * never a UUID (services/external names the copy).
  */
-export async function friendlyShareFile(uri: string, name: string = SHARE_FILE_NAME): Promise<string> {
-  const cache = FileSystem.cacheDirectory;
-  if (!cache) return uri;
-  const folder = `${cache}share-card/`;
-  try {
-    await FileSystem.deleteAsync(folder, { idempotent: true });
-    await FileSystem.makeDirectoryAsync(folder, { intermediates: true });
-    const to = `${folder}${shareFileName(name, 'jpg')}`;
-    await FileSystem.copyAsync({ from: uri, to });
-    return to;
-  } catch {
-    return uri;
-  }
-}
-
-/**
- * The OS share sheet for a card picture. `message` (a short line with the app link) rides
- * along so Messages and chat apps get the link without a paste; photo-only targets drop it.
- */
-export async function openShareSheet(uri: string, message?: string, name?: string): Promise<ShareOutcome> {
-  const file = await friendlyShareFile(uri, name);
+export async function openShareSheet(uri: string, message?: string, name: string = SHARE_FILE_NAME): Promise<ShareOutcome> {
   if (Platform.OS === 'ios') {
-    const result = await shareExternal(message ? { url: file, message } : { url: file });
+    const result = await shareExternal(message ? { url: uri, message } : { url: uri }, undefined, name);
     if (!result) return { opened: false, shared: false, activity: null };
     if (result.action === Share.sharedAction) return { opened: true, shared: true, activity: activityLabel(result.activityType) };
     return { opened: true, shared: false, activity: null };
@@ -96,7 +76,9 @@ export async function openShareSheet(uri: string, message?: string, name?: strin
   // the text is in the native queue). The picture's QR already scans to the link; the line with the
   // link also goes on the clipboard, and the sheet's title says so.
   if (message) await Clipboard.setStringAsync(message).catch(() => undefined);
-  if (!(await shareFileExternal(file, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: androidShareTitle(message) }))) return { opened: false, shared: false, activity: null };
+  const ended = await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: androidShareTitle(message) }, name);
+  // A timeout may still have the sheet up: count it as opened, so nothing presents over it.
+  if (ended === 'declined') return { opened: false, shared: false, activity: null };
   return { opened: true, shared: null, activity: null };
 }
 
