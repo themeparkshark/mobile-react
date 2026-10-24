@@ -29,12 +29,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { modalLayers, useModalLayer } from './modalLayers';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
-import { BlurView } from 'expo-blur';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withSequence,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
@@ -70,19 +70,29 @@ export const DIALOG_CARD = {
 /** The card pops in from this scale and leaves to CARD_EXIT. */
 const CARD_FROM = 0.86;
 const CARD_EXIT = 0.94;
-/** Each part (ribbon, body, buttons) fades and rises over PART_MS, STAGGER.stepMs after the one above. */
+/** Each part (ribbon, body, buttons) pops and rises over PART_MS, STAGGER.stepMs after the one above. */
 const PART_MS = DURATION.base;
 const PARTS_MS = PART_MS + 2 * STAGGER.stepMs;
-/** Where each part's fade starts: half there on the card's first visible frame. */
-export const PART_FROM_OPACITY = 0.5;
-/** Part i of the card at time `clock` (ms): fades and rises 8 pt into place. */
-function partStyle(clock: number, i: number, reduced: boolean) {
+/**
+ * Parts are fully opaque from their first frame: a half-faded yellow button over the blue card reads
+ * as a disabled olive one, and a fade under the card's own fade flickers. They move only: a pop from
+ * PART_FROM_SCALE with an 8 pt rise.
+ */
+export const PART_FROM_OPACITY = 1;
+export const PART_FROM_SCALE = 0.9;
+/** The card itself is fully visible after this long (ms), so nothing on it ever reads half there. */
+export const CARD_FADE_MS = DURATION.tap;
+/** Part i of the card at time `clock` (ms): pops from 0.9 and rises 8 pt into place. Pure worklet (unit tested). */
+export function partStyle(clock: number, i: number, reduced: boolean) {
   'worklet';
   if (reduced) return {};
-  const t = Math.min(1, Math.max(0, (clock - i * STAGGER.stepMs) / PART_MS));
-  // Parts start half there, so the card is never an empty blue box on its first frames.
-  return { opacity: PART_FROM_OPACITY + (1 - PART_FROM_OPACITY) * t, transform: [{ translateY: (1 - t) * 8 }] };
+  const raw = Math.min(1, Math.max(0, (clock - i * STAGGER.stepMs) / PART_MS));
+  // Ease out (quick arrival, soft landing).
+  const t = 1 - (1 - raw) * (1 - raw) * (1 - raw);
+  return { transform: [{ translateY: (1 - t) * 8 }, { scale: PART_FROM_SCALE + (1 - PART_FROM_SCALE) * t }] };
 }
+/** The icon stamps in on its own beat: small, past full size, then rest (with a gold glint on a reward). */
+export const ICON_STAMP = { at: 110, from: 0.4, peak: 1.22 } as const;
 /** The ribbon drops this far (pt) and stamps down from this scale. */
 const RIBBON_DROP = 24;
 const RIBBON_STAMP_FROM = 1.18;
@@ -91,8 +101,8 @@ export const RIBBON_AT = 0;
 /** Where the ribbon's tails are (the ribbon spans the card's width, 85% of the screen up to 380 pt). */
 const CARD_W = Math.min(380, Dimensions.get('window').width * 0.85);
 const RIBBON_TAIL = { left: CARD_W * 0.06, right: CARD_W * 0.94, y: 30 } as const;
-/** Backdrop blur under the navy scrim (iOS; Android shows the scrim alone). */
-const SCRIM_BLUR = 18;
+/** The backdrop: navy at 0.45 (the brief's backdrop), never black, no blur pass. */
+export const DIALOG_SCRIM = 'rgba(8,56,128,0.45)';
 /** Message copy on the card, as in UnfoundCoinModal. */
 export const DIALOG_COPY = '#e2f6ff';
 
@@ -185,6 +195,8 @@ export function GameDialog({
   const parts = useSharedValue(0);
   const ribbon = useSharedValue(0);
   const tails = useSharedValue(0);
+  const iconPop = useSharedValue(1);
+  const iconSpark = useSharedValue(0);
   const actions = layoutActions(buttons, equalChoices);
   const celebrates = dialogCelebrates({ icon, haptic: hapticKind, buttons });
   const request = { title, message, icon, buttons, dismissible };
@@ -202,7 +214,16 @@ export function GameDialog({
       setMounted(true);
       exit.value = 0;
       scrim.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : DURATION.base, easing: EASE.out });
-      fade.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : DURATION.quick, easing: EASE.out });
+      fade.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : CARD_FADE_MS, easing: EASE.out });
+      iconPop.value = reducedMotion ? 1 : ICON_STAMP.from;
+      if (!reducedMotion) {
+        iconPop.value = withDelay(ICON_STAMP.at, withSequence(
+          withTiming(ICON_STAMP.peak, { duration: DURATION.tap + 30, easing: EASE.out }), withSpring(1, SPRING.pop)));
+      }
+      iconSpark.value = 0;
+      if (celebrates && !reducedMotion) {
+        iconSpark.value = withDelay(ICON_STAMP.at + DURATION.tap, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
+      }
       pop.value = reducedMotion ? 1 : withSpring(1, SPRING.pop);
       parts.value = reducedMotion ? PARTS_MS : withTiming(PARTS_MS, { duration: PARTS_MS });
       ribbon.value = 0;
@@ -257,6 +278,7 @@ export function GameDialog({
       { scale: RIBBON_STAMP_FROM + (1 - RIBBON_STAMP_FROM) * r }] };
   });
   const bodyStyle = useAnimatedStyle(() => partStyle(parts.value, 1, reducedMotion));
+  const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: iconPop.value }] }));
   const buttonsStyle = useAnimatedStyle(() => partStyle(parts.value, 2, reducedMotion));
 
   if (!mounted) return null;
@@ -268,9 +290,8 @@ export function GameDialog({
       <KeyboardAvoidingView testID={testID} enabled={avoidKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: Z.dialog }}>
         <Animated.View style={[StyleSheet.absoluteFill, scrimStyle]}>
-          {/* A soft light blur makes the page recede without greying it; the navy tint stays light so yellow stays yellow. */}
-          <BlurView intensity={SCRIM_BLUR} tint="light" style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: BRAND.scrim }]} />
+          {/* A light navy tint, no blur pass: a blur under a fading scrim flickered on open and read as a grey wash. */}
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: DIALOG_SCRIM }]} />
           <Pressable accessibilityLabel="Close" accessibilityRole="button" style={{ flex: 1 }}
             disabled={dismiss === null} onPress={() => { if (dismiss !== null) close(dismiss); }} />
         </Animated.View>
@@ -302,7 +323,12 @@ export function GameDialog({
               <GameText preset="title" tone="onBlue" align="center" accessibilityRole="header"
                 style={{ textTransform: 'uppercase' }}>{titleLayout.text}</GameText>
             )}
-            {icon && <GameIcon name={icon} size={72} />}
+            {icon && <Animated.View style={iconStyle}>
+              <GameIcon name={icon} size={72} />
+              {/* A reward's icon lands with a little gold glint around it. */}
+              {celebrates && <SparkleBurst progress={iconSpark} count={5} x={36} y={36} spread={[-200, 20]}
+                dist={[40, 58]} size={[14, 18]} seed={9} />}
+            </Animated.View>}
             {!!message && <GameText preset="body" tone="onBlue" align="center" style={{ color: DIALOG_COPY }}>{message}</GameText>}
             {children}
             </Animated.View>

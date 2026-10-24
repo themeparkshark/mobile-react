@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCatchOpen } from '../screens/ExploreScreen/catchPresence';
+import { useDiveActive } from '../fx/diveActive';
 import { AppState, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
@@ -84,6 +85,8 @@ export function bannerCrossFade(s: number): { card: number; chip: number } {
 
 export default function OfflineBanner() {
   const catchOpen = useCatchOpen();
+  // The game dive's water owns the screen too: the chip steps aside and comes back once it is gone.
+  const diving = useDiveActive();
   const reduceMotion = useReducedMotion();
   const { height: windowHeight } = useWindowDimensions();
   const [phase, setPhase] = useState<Phase>('hidden');
@@ -218,8 +221,8 @@ export default function OfflineBanner() {
     transform: reduceMotion ? [] : [{ scale: 0.6 + 0.4 * Math.min(1, Math.max(0, shrink.value)) }],
   }));
 
-  // A catch moment owns the screen, and the offline screen shows its own mark: the banner waits (its probe keeps running).
-  if (!mounted || catchOpen || markOwned) return null;
+  // A catch moment or a game dive owns the screen, and the offline screen shows its own mark: the banner waits (its probe keeps running).
+  if (!mounted || catchOpen || diving || markOwned) return null;
   const back = phase === 'back';
   // Below his header bar (Topbar is 70pt under the status bar) so the logo,
   // currency counters and header buttons stay visible and tappable offline.

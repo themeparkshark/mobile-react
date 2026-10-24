@@ -32,6 +32,7 @@ import OfflineBanner from './components/OfflineBanner';
 import FeedbackHost from './components/Feedback/FeedbackHost';
 import { GameDialogHost } from './ui';
 import { DIVE, DiveIrisHost, recordTouch, registerDivePrewarm } from './fx/DiveIris';
+import { CoinFlightHost } from './ui/CoinFlight';
 import { DURATION } from './ui/motion';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
 import { ShareStudioHost } from './share';
@@ -40,7 +41,7 @@ import { releaseNativeSplash } from './nativeSplash';
 import { addBreadcrumb } from './services/telemetry';
 import { markUserTouch } from './hooks/useUserIdle';
 // A game screen's module loads on the JS thread while the dive's water closes on the UI thread.
-registerDivePrewarm('LinePlay', () => require('./screens/LinePlay/LinePlayScreen'), { landing: true });
+registerDivePrewarm('LinePlay', () => require('./screens/LinePlay/LinePlayScreen'));
 registerDivePrewarm('GymBattle', () => require('./screens/GymBattle'));
 
 const Stack = createNativeStackNavigator();
@@ -332,6 +333,8 @@ export default function App() {
     <OfflineBanner />
     {/* The game dive: a water iris from the tapped button into a game (src/fx/DiveIris.tsx). */}
     <DiveIrisHost />
+    {/* Coins that fly to where they live: wallet gains and spends, reward toasts (src/ui/CoinFlight.tsx). */}
+    <CoinFlightHost />
     {/* Share Studio: Flex moments and share sheets (share-studio/CONTRACT.md). */}
     <ShareStudioHost />
     {/* The one app-wide host for gameAlert / confirmGame (WS0 kit). */}

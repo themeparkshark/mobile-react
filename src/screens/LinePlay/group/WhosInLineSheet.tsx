@@ -8,6 +8,8 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 import { Image } from 'expo-image';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
+import { useDiveSettled } from '../../../fx/DiveIris';
+import { SPRING } from '../../../ui/motionEasing';
 import { BRAND, GameButton, GameIcon, SHADOW, type GameIconName } from '../../../ui';
 import {
   createLineGroup, defaultGroupSize, defaultKidFlag, defaultPlayerName, groupSizeRange,
@@ -47,6 +49,8 @@ export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing,
   readonly onClose?: () => void;
 }) {
   const reducedMotion = useReducedGameMotion();
+  // After a game dive the sheet springs up through the opening water (never mounted under it).
+  const diveSettled = useDiveSettled();
   const [kind, setKind] = useState<GroupKind | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
 
@@ -70,7 +74,7 @@ export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing,
   const filled = useMemo(() => rows.map((row, index) => ({
     name: row.name.trim() || `Player ${index + 1}`, kid: row.kid })), [rows]);
 
-  if (!visible) return null;
+  if (!visible || !diveSettled) return null;
 
   const pickDoor = (door: GroupKind) => {
     if (door === 'solo') { onChoose(createLineGroup('solo', [{ name: ownerName ?? 'Player 1' }])); return; }
@@ -89,7 +93,8 @@ export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing,
       accessibilityViewIsModal>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fill}>
         <View style={styles.fill} />
-        <Animated.View entering={reducedMotion ? undefined : SlideInDown.springify().damping(16)} style={styles.sheet}>
+        <Animated.View entering={reducedMotion ? undefined
+          : SlideInDown.springify().damping(SPRING.settle.damping).stiffness(SPRING.settle.stiffness).mass(SPRING.settle.mass)} style={styles.sheet}>
           {kind == null ? (
             <>
               <View style={styles.header}>

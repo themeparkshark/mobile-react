@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { ReactNode, useContext, useEffect, useRef } from 'react';
 import { Dimensions, Image as RNImage, ImageBackground, Text, View } from 'react-native';
-import Animated, { interpolate, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { interpolate, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 import { COMPASS_INDEX, FOOTER_MOTION, footerIndex, footerMotion, playFooterTap } from './footerMotion';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { BRAND } from '../ui/tokens';
@@ -278,7 +278,8 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
     const picked = m.hopIndex.value === index;
     const left = m.sinkIndex.value === index && !picked;
     const s = picked ? m.hopScale.value : left ? m.sinkScale.value : 1;
-    const q = compass && picked ? m.compassSquash.value : 0;
+    // Every picked icon squashes wide and short first (the anticipation), then hops.
+    const q = picked ? m.compassSquash.value : 0;
     return {
       transform: [
         { translateY: picked ? m.hopY.value : 0 },
@@ -292,9 +293,25 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
     const m = footerMotion;
     const r = m.ring.value;
     if (m.hopIndex.value !== index || r <= 0 || r >= 1) return { opacity: 0 };
-    return { opacity: r < 0.15 ? r / 0.15 : 1 - (r - 0.15) / 0.85,
+    return { opacity: r < 0.12 ? r / 0.12 : 1 - (r - 0.12) / 0.88,
       transform: [{ scale: F.ringFrom + (F.ringTo - F.ringFrom) * r }] };
   });
+  // A soft gold disc under the ring: the pick reads as a glow on the bar, not just a line.
+  const disc = useAnimatedStyle(() => {
+    const m = footerMotion;
+    const r = m.ring.value;
+    if (m.hopIndex.value !== index || r <= 0 || r >= 1) return { opacity: 0 };
+    return { opacity: F.ringDiscPeak * (r < 0.1 ? r / 0.1 : Math.max(0, 1 - (r - 0.1) / 0.6)),
+      transform: [{ scale: 0.6 + 0.7 * Math.min(1, r * 1.6) }] };
+  });
+  // The rare compass pick's wide gold shock ring.
+  const rareRing = useAnimatedStyle(() => {
+    const r = footerMotion.ringRare.value;
+    if (!compass || r <= 0 || r >= 1) return { opacity: 0 };
+    return { opacity: r < 0.1 ? r / 0.1 : 1 - (r - 0.1) / 0.9, transform: [{ scale: 0.8 + 2.4 * r }] };
+  });
+  // A small icon's own stars, only when it is the one picked.
+  const smallBurst = useDerivedValue(() => (footerMotion.hopIndex.value === index ? footerMotion.burstSmall.value : 0));
   const glint = useAnimatedStyle(() => {
     const g = footerMotion.glint.value;
     return { opacity: g > 0 && g < 1 ? 0.8 : 0, transform: [{ translateX: -64 + 128 * g }, { rotate: '20deg' }] };
@@ -302,11 +319,16 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
   // The compass face (the gold disc inside the star), so the glint never crosses the navy base.
   const face = { left: 30, top: 26, width: 40, height: 40 };
   const ringSize = compass ? 64 : 46;
+  const ringTop = compass ? 14 : (size - ringSize) / 2;
   return (
     <View>
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: (size - ringSize) / 2, top: ringTop,
+        width: ringSize, height: ringSize, borderRadius: ringSize / 2, backgroundColor: GOLD_FX.glow }, disc]} />
+      {compass && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: (size - ringSize) / 2, top: ringTop,
+        width: ringSize, height: ringSize, borderRadius: ringSize / 2, borderWidth: 4, borderColor: GOLD_FX.rays }, rareRing]} />}
       <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: (size - ringSize) / 2,
         top: compass ? 14 : (size - ringSize) / 2, width: ringSize, height: ringSize, borderRadius: ringSize / 2,
-        borderWidth: 3, borderColor: GOLD_FX.glow, alignItems: 'center', justifyContent: 'center' }, ring]}>
+        borderWidth: 4, borderColor: GOLD_FX.glow, alignItems: 'center', justifyContent: 'center' }, ring]}>
         <View style={{ width: ringSize - 6, height: ringSize - 6, borderRadius: (ringSize - 6) / 2, borderWidth: 1.5,
           borderColor: BRAND.white }} />
       </Animated.View>
@@ -320,9 +342,11 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
       </Animated.View>
       {compass && <SparkleBurst progress={footerMotion.burst} count={F.compassSparkles} x={size / 2} y={44}
         spread={[-180, 0]} dist={[58, 82]} size={[16, 22]} gravity={18} seed={2} />}
-      {/* Every fifth compass pick: a wider second ring of stars (the footer still surprises on the tenth tap). */}
-      {compass && <SparkleBurst progress={footerMotion.burstRare} count={3} x={size / 2} y={44}
-        spread={[-160, -20]} dist={[86, 110]} size={[18, 24]} gravity={14} seed={7} />}
+      {/* Every fifth compass pick: one big burst of twelve stars high over the footer wave (the footer still surprises on the tenth tap). */}
+      {compass && <SparkleBurst progress={footerMotion.burstRare} count={F.rareSparkles} x={size / 2} y={44}
+        spread={[-200, 20]} dist={F.rareDist} size={F.rareSize} gravity={22} seed={7} />}
+      {!compass && <SparkleBurst progress={smallBurst} count={F.smallSparkles} x={size / 2} y={size / 2}
+        spread={[-170, -10]} dist={[30, 44]} size={[12, 16]} gravity={10} seed={index + 11} />}
     </View>
   );
 }

@@ -160,6 +160,9 @@ import { linePlayTipReady } from '../../services/help/tipGate';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
 
+/** The dive's water waits at most this long after the screen lays out for its wait and first round. */
+const DIVE_READY_CAP_MS = 1500;
+
 export default function LinePlayScreen() {
   const navigation = useNavigation();
   const route = useRoute<any>();
@@ -171,6 +174,23 @@ export default function LinePlayScreen() {
   useEffect(() => {
     if (diveSettled) navigation.setOptions({ animation: 'fade' } as object);
   }, [diveSettled, navigation]);
+  // The game dive's water is the loader: it opens once this screen has laid out and its wait and first
+  // round are on it (no skeleton under the opening hole), or after DIVE_READY_CAP_MS whatever is there.
+  const diveReady = snapshot.startedAt != null && snapshot.playlist.length > 0;
+  const laidOut = useRef(false);
+  const readyCap = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onRootLayout = useCallback(() => {
+    if (diveReady) { notifyDiveLanded(); return; }
+    if (!laidOut.current) readyCap.current = setTimeout(notifyDiveLanded, DIVE_READY_CAP_MS);
+    laidOut.current = true;
+  }, [diveReady]);
+  useEffect(() => {
+    if (!diveReady || !laidOut.current) return undefined;
+    if (readyCap.current) clearTimeout(readyCap.current);
+    const raf = requestAnimationFrame(notifyDiveLanded);
+    return () => cancelAnimationFrame(raf);
+  }, [diveReady]);
+  useEffect(() => () => { if (readyCap.current) clearTimeout(readyCap.current); }, []);
   const { latestLocationSampleRef } = useContext(LocationStatusContext);
   const { player, refreshPlayer } = useContext(AuthContext);
   const prediction = snapshot.prediction;
@@ -849,10 +869,6 @@ export default function LinePlayScreen() {
     );
   }
 
-  // The game dive opens on a light first frame (the same gradient and the two skeleton cards), so the
-  // water's open never waits on a big first mount; the whole screen mounts the moment the water is gone.
-  if (!diveSettled) return <DiveLanding rideName={ride.rideName} night={snapshot.chapter?.palette === 'night'} />;
-
   // The shared signal selects an actual next game. Its page is appended when
   // available so a live unlock does not shift the activity under a player.
   const playSignalGame = (routeChoice: 'route_a' | 'route_b') => {
@@ -889,7 +905,9 @@ export default function LinePlayScreen() {
   const liveCrew = crewLivePrompt(snapshot.signal, completedActivityIds);
 
   return (
-    <View onTouchStart={onAnyTouch} style={[styles.root, snapshot.chapter?.palette === 'night' && { backgroundColor: '#2B2350' }]}>
+    // The game dive's water is the loader: it opens the moment this real screen has laid out under it.
+    <View onTouchStart={onAnyTouch} onLayout={onRootLayout}
+      style={[styles.root, snapshot.chapter?.palette === 'night' && { backgroundColor: '#2B2350' }]}>
       {/* Only a Fin-ister Nights haunt-line chapter gets the night palette; every other chapter stays bright. */}
       <LinearGradient colors={snapshot.chapter?.palette === 'night' ? ['#3B2A6B', '#2B2350', '#1E1838'] : ['#0a7dd1', '#07569e', '#073e87']}
         style={StyleSheet.absoluteFill} />
@@ -1374,21 +1392,6 @@ export default function LinePlayScreen() {
 
 
 // -- skeletons ---------------------------------------------------------------
-
-/** What the game dive opens onto: the screen's own colors and skeleton cards, nothing heavy. */
-function DiveLanding({ rideName, night }: { rideName: string; night: boolean }) {
-  const insets = useSafeAreaInsets();
-  return (
-    <View style={[styles.root, night && { backgroundColor: '#2B2350' }]} onLayout={notifyDiveLanded}>
-      <LinearGradient colors={night ? ['#3B2A6B', '#2B2350', '#1E1838'] : ['#0a7dd1', '#07569e', '#073e87']}
-        style={StyleSheet.absoluteFill} />
-      <View style={{ paddingTop: insets.top + 78 }}>
-        <View style={styles.waitWrap}><WaitCardSkeleton rideName={rideName} /></View>
-        <View style={{ marginTop: spacing.lg }}><ActivitySkeleton /></View>
-      </View>
-    </View>
-  );
-}
 
 function WaitCardSkeleton({ rideName }: { rideName: string }) {
   return <LinearGradient colors={['#159ee2', '#0873bd', '#064780']} style={styles.waitSkeleton}>

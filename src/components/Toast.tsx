@@ -5,6 +5,10 @@ import Animated, { cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, w
 import { queueHaptic, type HapticIntent } from '../gamekit/Haptics';
 import { DURATION, EASE, SPRING } from '../ui/motionEasing';
 import SparkleBurst from '../ui/SparkleBurst';
+import GoldCheck from '../ui/GoldCheck';
+import { flyCoins, measureCoinTarget } from '../ui/CoinFlight';
+import { momentParticles } from '../ui/motion';
+import { usePowerBudget } from '../power/PowerProvider';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { colors, shadows, borderRadius, spacing, typography } from '../design-system';
 import { onToast } from '../utils/toast';
@@ -96,7 +100,26 @@ export const TOAST_MOTION = {
   /** A shine sweeps across a win's card this long after it lands. */
   shineAt: 260,
   shineMs: 520,
+  /** The card springs up from the footer: it starts this much smaller and this far below. */
+  enterScale: 0.9,
+  enterFromPt: 110,
+  /** The icon hops this high as it pops (pt). */
+  iconHopPt: 10,
+  /** Bigger icon: the picture leads, the words follow. */
+  iconPt: 36,
+  /** A "+25 coins" toast flies coins from its icon into the wallet chip on screen (if there is one). */
+  coinFlyAt: 260,
+  coinFlyMax: 5,
 } as const;
+
+/** How many coins a toast's message is worth flying ("+25 coins" gives 5; no amount gives 0). Pure (unit tested). */
+export function toastCoinCount(message: string): number {
+  const m = /\+\s*([\d,]+)\s*coins?\b/i.exec(message);
+  if (!m) return 0;
+  const amount = Number(m[1].replace(/,/g, ''));
+  if (!(amount > 0)) return 0;
+  return Math.min(TOAST_MOTION.coinFlyMax, Math.max(3, Math.ceil(amount / 10)));
+}
 
 /** The haptic a toast plays when it shows: a win buzzes, info ticks, a problem is a soft bump (never an error buzz). */
 export function toastHaptic(type: ToastType): HapticIntent {
@@ -158,6 +181,9 @@ function ToastItem({
   const enter = useSharedValue(0);
   const drag = useSharedValue(0);
   const iconPop = useSharedValue(1);
+  const iconHop = useSharedValue(0);
+  const iconRef = useRef<View>(null);
+  const budget = usePowerBudget();
   const sparkle = useSharedValue(0);
   const shine = useSharedValue(0);
   const hiding = useRef(false);
@@ -176,19 +202,36 @@ function ToastItem({
   useEffect(() => {
     // One buzz through the shared gate when it shows: a win buzzes, info ticks, a problem is a soft bump.
     queueHaptic(toastHaptic(toast.type));
+    let coinTimer: ReturnType<typeof setTimeout> | null = null;
     if (reduced) {
       enter.value = withTiming(1, { duration: DURATION.quick });
     } else {
-      enter.value = withSpring(1, SPRING.settle);
+      // Springs up from the footer with one confident overshoot, then the icon hops and pops.
+      enter.value = withSpring(1, SPRING.stamp);
       iconPop.value = withDelay(TOAST_MOTION.iconPopAt, withSequence(
         withTiming(reward ? TOAST_MOTION.rewardPop : TOAST_MOTION.iconPop, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
+      iconHop.value = withDelay(TOAST_MOTION.iconPopAt, withSequence(
+        withTiming(-TOAST_MOTION.iconHopPt, { duration: 110, easing: EASE.out }), withSpring(0, SPRING.pop)));
+      // "+25 coins": the coins fly from the icon to where they live (the wallet chip on screen).
+      const coins = Math.min(toastCoinCount(toast.message), momentParticles(TOAST_MOTION.coinFlyMax, budget, reduced));
+      if (coins > 0) {
+        coinTimer = setTimeout(() => {
+          measureCoinTarget(target => {
+            if (!target || !iconRef.current) return;
+            iconRef.current.measureInWindow((x, y, w, h) => {
+              if (!Number.isFinite(x) || !(w > 0)) return;
+              flyCoins({ from: { x: x + w / 2, y: y + h / 2 }, to: target, count: coins });
+            });
+          });
+        }, TOAST_MOTION.coinFlyAt);
+      }
       if (win) {
         sparkle.value = withDelay(TOAST_MOTION.iconPopAt + 60, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
         shine.value = withDelay(TOAST_MOTION.shineAt, withTiming(1, { duration: TOAST_MOTION.shineMs, easing: EASE.inOut }));
       }
     }
     const timeout = setTimeout(hide, toast.duration || TOAST_MOTION.showMs);
-    return () => clearTimeout(timeout);
+    return () => { clearTimeout(timeout); if (coinTimer) clearTimeout(coinTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -206,9 +249,10 @@ function ToastItem({
     const e = enter.value;
     return reduced
       ? { opacity: e }
-      : { opacity: Math.min(1, e * 1.6), transform: [{ translateY: (1 - e) * 110 + drag.value }] };
+      : { opacity: Math.min(1, e * 1.6), transform: [{ translateY: (1 - e) * TOAST_MOTION.enterFromPt + drag.value },
+        { scale: TOAST_MOTION.enterScale + (1 - TOAST_MOTION.enterScale) * e }] };
   });
-  const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: iconPop.value }] }));
+  const iconStyle = useAnimatedStyle(() => ({ transform: [{ translateY: iconHop.value }, { scale: iconPop.value }] }));
   const shineStyle = useAnimatedStyle(() => {
     const p = shine.value;
     return { opacity: p > 0 && p < 1 ? 0.75 : 0, transform: [{ translateX: -80 + (width + 80) * p }, { skewX: '-20deg' }] };
@@ -235,8 +279,10 @@ function ToastItem({
         activeOpacity={0.9}
       >
         {/* Icon */}
-        <Animated.View style={iconStyle}>
-          <GameIcon name={toastIcon(toast.type, toast.icon)} size={28} />
+        <Animated.View ref={iconRef} collapsable={false} style={iconStyle}>
+          {toastIcon(toast.type, toast.icon) === 'check'
+            ? <GoldCheck size={TOAST_MOTION.iconPt} />
+            : <GameIcon name={toastIcon(toast.type, toast.icon)} size={TOAST_MOTION.iconPt} />}
         </Animated.View>
 
         {/* Message (server text may carry [icon:name] tokens or legacy emoji; emoji never render) */}
@@ -267,7 +313,7 @@ function ToastItem({
 }
 
 /** Where the toast icon sits inside the card (border + padding + half the 28 pt icon). */
-const TOAST_ICON_CENTER = { x: 3 + spacing.md + 14, y: 3 + spacing.md + 14 } as const;
+const TOAST_ICON_CENTER = { x: 3 + spacing.md + TOAST_MOTION.iconPt / 2, y: 3 + spacing.md + TOAST_MOTION.iconPt / 2 } as const;
 
 // Toast type configurations: a white card with a coloured frame, never a dark or purple fill.
 export const toastConfig: Record<ToastType, { icon: GameIconName; backgroundColor: string; borderColor: string }> = {

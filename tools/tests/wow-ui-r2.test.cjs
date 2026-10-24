@@ -41,6 +41,7 @@ test('wallet: a spend throws coins out and down, a gain brings them up and in; t
   const { walletCoinPath, WALLET_FX } = loadTs('src/ui/WalletChange.tsx', {
     react: { memo: c => c }, 'react/jsx-runtime': {}, 'react-native': rn, 'react-native-reanimated': reanimated,
     '../power/PowerProvider': {}, './GameIcon': {}, './RollingNumber': {}, './motionEasing': easing, './useUiReducedMotion': {},
+    './CoinFlight': { COIN_FLIGHT: { staggerMs: 70, flyMs: 560 } }, './lastTouch': {}, './AmbientSwim': {},
   });
   for (let i = 0; i < 5; i++) {
     const spend = walletCoinPath(i, 5, true);
@@ -59,12 +60,13 @@ test('wallet: a spend throws coins out and down, a gain brings them up and in; t
 test('pull to refresh: the shark grows with the pull, flips at 70 pt, never past full size', () => {
   const { pullLook, PULL_SHOW } = loadTs('src/ui/SharkRefresh.tsx', {
     react: {}, 'react/jsx-runtime': {}, 'react-native': rn, 'expo-image': {}, 'react-native-reanimated': reanimated,
-    '../gamekit/Haptics': {}, './GameIcon': {}, './motionEasing': easing, './tokens': { BRAND: {} }, './useUiReducedMotion': {},
+    '../gamekit/Haptics': {}, './GoldCheck': {}, './motionEasing': easing, './tokens': { BRAND: {} }, './useUiReducedMotion': {},
   });
   assert.equal(PULL_SHOW.thresholdPt, 70);
   assert.equal(pullLook(0).opacity, 0, 'nothing shows at rest');
   assert.equal(pullLook(0).scale, PULL_SHOW.fromScale);
-  assert.equal(pullLook(70).scale, 1);
+  assert.ok(pullLook(70).scale >= 0.55 && pullLook(70).scale < 1, 'at the threshold it fills the 70 pt gap, not past it');
+  assert.equal(pullLook(130).scale, 1, 'a long pull grows it to full size');
   assert.equal(pullLook(400).scale, 1, 'never past full size');
   assert.ok(pullLook(35).scale > pullLook(10).scale, 'grows with the pull');
   assert.ok(pullLook(70).y > pullLook(10).y, 'dives in from the top');
@@ -80,7 +82,9 @@ test('game dive: grows from a fresh tap, else the middle; payoff inside 1.5 s; b
   const { diveOrigin, diveBubble, DIVE } = loadTs('src/fx/DiveIris.tsx', {
     react: {}, 'react/jsx-runtime': {}, 'react-native': rn, '@shopify/react-native-skia': {}, 'react-native-reanimated': reanimated,
     '../gamekit/Haptics': {}, '../RootNavigation': {}, '../ui/motionEasing': easing, '../ui/useUiReducedMotion': {},
-    'expo-image': {}, '../ui/SharkRefresh': { SHARK_ART: 1 },
+    'expo-image': {}, '../ui/SharkRefresh': { SHARK_ART: 1 }, '../../modules/flash-safety': { isDimFlashingLightsEnabled: () => false },
+    '../power/PowerProvider': { usePowerBudget: () => ({}) }, '../ui/lastTouch': { recordLastTouch() {}, lastTouch: () => null },
+    './diveActive': { setDiveActive() {}, useDiveActive: () => false },
   });
   assert.deepEqual({ ...diveOrigin({ x: 50, y: 700, at: 1000 }, 1500, 402, 874) }, { x: 50, y: 700 });
   assert.deepEqual({ ...diveOrigin({ x: 50, y: 700, at: 1000 }, 9000, 402, 874) }, { x: 201, y: 437 }, 'an old tap is not the origin');
@@ -88,8 +92,8 @@ test('game dive: grows from a fresh tap, else the middle; payoff inside 1.5 s; b
   assert.ok(DIVE.closeMs + DIVE.holdMs + DIVE.openMs <= 1500, 'the game is on screen inside 1.5 s');
   assert.ok(DIVE.holdMs <= 600, 'no dead hold');
   const dive = read('src/fx/DiveIris.tsx');
-  assert.match(dive, /navigationRef\.addListener\('state'/, 'the iris opens on the new screen, never on the one you left');
-  assert.match(dive, /setTimeout\(\(\) => openWhenReady\('safety'\), DIVE\.safetyMs\)/, 'a lost signal never leaves the water up');
+  assert.match(dive, /landedListeners\.add\(onLanded\)/, 'the iris opens on the new screen (its landing signal), never on the one you left');
+  assert.match(dive, /setTimeout\(\(\) => decide\('safety'\), DIVE\.safetyMs \* devSlow\(\)\)/, 'a lost signal never leaves the water up (the gate decides)');
   const xs = Array.from({ length: DIVE.bubbles }, (_, i) => diveBubble(i, DIVE.bubbles, 402).x);
   assert.ok(Math.min(...xs) < 100 && Math.max(...xs) > 300, 'bubbles rise across the whole screen');
   const rootSrc = read('src/Root.tsx');

@@ -369,7 +369,7 @@ test('GameDialog: mounting open springs when motion is on, fades under reduced m
   const open = dialogView({});
   assert.ok(open.motions.includes('spring'), 'a host-mounted dialog (visible on mount) gets the spring pop');
   assert.deepEqual(dialogHaptics, ['tickSelection'], 'a selection tick when it opens');
-  assert.equal(open.find(n => n.type === 'BlurView').props.tint, 'light', 'the backdrop is a light blur, never dark');
+  assert.equal(open.find(n => n.type === 'BlurView'), undefined, 'no blur pass under the scrim (it flickered and read grey)');
   const reduced = dialogView({}, true);
   assert.ok(!reduced.motions.includes('spring'), 'reduced motion never springs');
   assert.ok(reduced.motions.includes('timing'));

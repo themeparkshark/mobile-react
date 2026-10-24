@@ -6,12 +6,14 @@
  * values: the new footer picks up the same hop, glow and spin mid-flight on the
  * UI thread, and it reads as one footer that never left.
  *
- * Pick a tab: the icon hops 11 pt and pops 1 to 1.25 to 1 (SPRING.pop), its label
+ * Pick a tab: the icon squashes wide (1.15 by 0.88, the anticipation), then hops 11 pt and pops 1 to 1.25 to 1 (SPRING.pop), its label
  * lifts into place, a warm sunlight glow slides from the old tab to the new one
- * (SPRING.settle) and fades out, a thin gold ring pulses off the new icon, and the
- * old icon dips to 0.92 and back. The big compass (the map) gets its own flourish:
+ * (SPRING.settle) and fades out, a gold ring with a soft gold disc pulses out under the new icon
+ * with four little stars, and the old icon dips to 0.92 and back. The big compass (the map) gets its own flourish:
  * a squash (anticipation), the pop, a small wobble that pivots on its base (its
- * baked shadow never swings), a white glint and nine gold star sparkles that clear its rim. Tapping
+ * baked shadow never swings), a white glint and nine gold star sparkles that clear its rim. Every
+ * fifth compass pick is the rare one: twelve bigger stars fly high over the footer wave with a second,
+ * wider gold ring (one burst, still inside the sparkle cap). Tapping
  * the tab you are on gives a small wiggle instead. At rest every value is
  * identity, so the footer looks exactly as it always has.
  */
@@ -34,18 +36,25 @@ export const FOOTER_MOTION = {
   glowPeak: 1,
   glowHoldMs: 520,
   glowFadeMs: 300,
-  /** Compass anticipation: squash wide and short before the pop. */
+  /** Anticipation for every pick: squash wide and short before the pop (the compass and the small icons). */
   compassSquashMs: 80,
   compassSquashX: 0.15,
   compassSquashY: 0.12,
   /** The compass wobble (degrees), pivoting on its base. */
   compassWobbleDeg: 8,
-  /** The gold ring that pulses off a picked icon. */
-  ringMs: 520,
-  ringFrom: 0.8,
-  ringTo: 1.5,
+  /** The gold ring that pulses off a picked icon (with a soft gold disc under it). */
+  ringMs: 560,
+  ringFrom: 0.7,
+  ringTo: 1.9,
+  ringDiscPeak: 0.55,
   /** Sparkles off the compass (before the power budget). */
   compassSparkles: 9,
+  /** Little stars off a small icon's pick. */
+  smallSparkles: 4,
+  /** The rare compass pick: one bigger burst (replaces the normal one, so it stays inside the cap). */
+  rareSparkles: 12,
+  rareDist: [96, 150] as readonly [number, number],
+  rareSize: [20, 28] as readonly [number, number],
   glintDelayMs: 160,
   glintMs: 500,
   wiggleScale: 1.08,
@@ -84,8 +93,12 @@ export const footerMotion = {
   /** The compass sparkle burst (0 to 1, one shot). */
   burst: makeMutable(0),
   glint: makeMutable(0),
-  /** The rare extra burst: every RARE_EVERY-th compass pick throws a wider ring of stars. */
+  /** The rare burst: every RARE_EVERY-th compass pick throws a big ring of stars instead of the normal one. */
   burstRare: makeMutable(0),
+  /** A small icon's four stars (0 to 1, one shot). */
+  burstSmall: makeMutable(0),
+  /** The rare pick's wide gold shock ring (0 to 1, one shot). */
+  ringRare: makeMutable(0),
 };
 
 /** Every this many compass picks, the flourish is a little bigger (a small surprise on the tenth tap). */
@@ -113,8 +126,14 @@ export function playFooterTap(from: number, to: number, reduced: boolean): void 
     return;
   }
   m.hopRotate.value = 0;
-  m.hopY.value = withSequence(withTiming(-F.hopPt, { duration: 110, easing: EASE.out }), withSpring(0, SPRING.pop));
-  m.hopScale.value = withSequence(withTiming(F.popScale, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop));
+  // Every pick: a quick squash wide and short (anticipation), then the hop and the pop.
+  cancelAnimation(m.compassSquash);
+  m.compassSquash.value = withSequence(
+    withTiming(1, { duration: F.compassSquashMs, easing: EASE.charge }), withSpring(0, SPRING.pop));
+  m.hopY.value = withDelay(F.compassSquashMs, withSequence(
+    withTiming(-F.hopPt, { duration: 110, easing: EASE.out }), withSpring(0, SPRING.pop)));
+  m.hopScale.value = withDelay(F.compassSquashMs, withSequence(
+    withTiming(F.popScale, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
   // The label lifts 2 pt into its spot and fades up.
   m.labelLift.value = F.labelLiftPt;
   m.labelOpacity.value = 0.35;
@@ -136,13 +155,15 @@ export function playFooterTap(from: number, to: number, reduced: boolean): void 
   // A thin gold ring pulses off the new icon.
   cancelAnimation(m.ring);
   m.ring.value = 0;
-  const flourish = to === COMPASS_INDEX ? F.compassSquashMs : 0;
-  m.ring.value = withDelay(flourish + 40, withTiming(1, { duration: F.ringMs, easing: EASE.out }));
+  m.ring.value = withDelay(F.compassSquashMs + 40, withTiming(1, { duration: F.ringMs, easing: EASE.out }));
+  if (to !== COMPASS_INDEX) {
+    cancelAnimation(m.burstSmall);
+    m.burstSmall.value = 0;
+    m.burstSmall.value = withDelay(F.compassSquashMs + 60, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
+  }
   if (to === COMPASS_INDEX) {
     // The compass: squash (anticipation), then the hop and pop, a wobble on its base, a glint and sparkles.
-    cancelAnimation(m.compassSquash); cancelAnimation(m.compassWobble); cancelAnimation(m.glint); cancelAnimation(m.burst);
-    m.compassSquash.value = withSequence(
-      withTiming(1, { duration: F.compassSquashMs, easing: EASE.charge }), withSpring(0, SPRING.pop));
+    cancelAnimation(m.compassWobble); cancelAnimation(m.glint); cancelAnimation(m.burst);
     m.hopY.value = withDelay(F.compassSquashMs, withSequence(
       withTiming(-F.compassHopPt, { duration: 110, easing: EASE.out }), withSpring(0, SPRING.pop)));
     m.hopScale.value = withDelay(F.compassSquashMs, withSequence(
@@ -155,13 +176,19 @@ export function playFooterTap(from: number, to: number, reduced: boolean): void 
     m.glint.value = withDelay(F.glintDelayMs, withTiming(1, { duration: F.glintMs, easing: EASE.inOut }, done => {
       if (done) m.glint.value = 0;
     }));
-    m.burst.value = 0;
-    m.burst.value = withDelay(F.compassSquashMs + 60, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
     compassPicks += 1;
-    cancelAnimation(m.burstRare);
+    const rare = isRareCompassPick(compassPicks);
+    cancelAnimation(m.burstRare); cancelAnimation(m.ringRare);
+    m.burst.value = 0;
     m.burstRare.value = 0;
-    if (isRareCompassPick(compassPicks)) {
-      m.burstRare.value = withDelay(F.compassSquashMs + 120, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
+    m.ringRare.value = 0;
+    // The rare pick throws one big burst instead of the normal one (never two bursts at once).
+    const burst = withDelay(F.compassSquashMs + 60, withTiming(1, { duration: rare ? DURATION.sparkle + 200 : DURATION.sparkle, easing: EASE.out }));
+    if (rare) {
+      m.burstRare.value = burst;
+      m.ringRare.value = withDelay(F.compassSquashMs + 100, withTiming(1, { duration: F.ringMs + 240, easing: EASE.out }));
+    } else {
+      m.burst.value = burst;
     }
   }
 }

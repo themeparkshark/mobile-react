@@ -21,7 +21,9 @@ function loadDive() {
     react: { useState: v => [typeof v === 'function' ? v() : v, () => {}], useEffect() {} }, 'react/jsx-runtime': {},
     'react-native': rn, '@shopify/react-native-skia': {}, 'react-native-reanimated': reanimated,
     '../gamekit/Haptics': {}, '../RootNavigation': {}, '../ui/motionEasing': easing, '../ui/useUiReducedMotion': {},
-    'expo-image': {}, '../ui/SharkRefresh': { SHARK_ART: 1 },
+    'expo-image': {}, '../ui/SharkRefresh': { SHARK_ART: 1 }, '../../modules/flash-safety': { isDimFlashingLightsEnabled: () => false },
+    '../power/PowerProvider': { usePowerBudget: () => ({}) }, '../ui/lastTouch': { recordLastTouch() {}, lastTouch: () => null },
+    './diveActive': { setDiveActive() {}, useDiveActive: () => false },
   });
 }
 
@@ -32,7 +34,7 @@ test('dive: once the game screen is there, the water opens after a short breath 
   assert.ok(coverToOpen >= 560 && coverToOpen <= 700, `cover to fully open ${coverToOpen} ms`);
   assert.ok(first.closeMs + first.holdMs + first.openMs <= 1000, 'the whole first dive is under a second on a phone');
   assert.ok(DIVE.sharkPt >= 220 && DIVE.sharkPt <= 260, 'the shark is big enough to be the frame');
-  assert.ok(DIVE.safetyMs <= 2600, 'a lost signal never holds the water past the settle cap');
+  assert.ok(DIVE.safetyMs <= 2600, 'a game already in the stack opens by its route inside the settle cap');
   const src = read('src/fx/DiveIris.tsx');
   assert.doesNotMatch(src, /openNow\(T\.maxWaitMs\)/, 'no blind timer opens onto the screen you left');
   assert.match(src, /withRepeat\(withTiming\(1, \{ duration: DIVE\.clockMs/, 'the hold keeps moving on its own clock');
@@ -65,26 +67,12 @@ test('dive: the shark swims in from the tap side and stays on screen while it is
   }
 });
 
-test('dive: LinePlay opens on its light first frame and mounts the games once the water is gone', () => {
-  const src = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.match(src, /const diveSettled = useDiveSettled\(\);/);
-  assert.match(src, /if \(!diveSettled\) return <DiveLanding /, 'the water opens onto a light first frame');
-  const landing = src.slice(src.indexOf('function DiveLanding'), src.indexOf('function WaitCardSkeleton'));
-  assert.doesNotMatch(landing, /<Wrapper|FlatList|WaitCoinHero/, 'nothing heavy mounts under the water');
-  const rootSrc = read('src/Root.tsx');
-  assert.match(rootSrc, /registerDivePrewarm\('LinePlay'/, 'the game module loads while the water closes');
-  assert.match(rootSrc, /registerDivePrewarm\('LinePlay'[^\n]+\{ landing: true \}\)/, 'LinePlay tells the water when its landing frame is laid out');
-  assert.match(src, /onLayout=\{notifyDiveLanded\}/);
-  const dive = read('src/fx/DiveIris.tsx');
-  for (const file of ['src/screens/QueueTimesScreen.tsx', 'src/components/fright/FrightSheet.tsx', 'src/screens/ParkScreen.tsx']) {
-    assert.doesNotMatch(read(file), /\.navigate\('LinePlay'/, `${file} dives into LinePlay`);
-  }
-});
+// Round 4 replaced the light landing frame with the water as the loader (tools/tests/wow-ui-r4.test.cjs).
 
-test('dialog: the ribbon is on the card from its first frame and parts start half there', () => {
+test('dialog: the ribbon is on the card from its first frame and parts are fully opaque', () => {
   const src = read('src/ui/GameDialog.tsx');
   assert.match(src, /export const RIBBON_AT = 0;/);
-  assert.match(src, /export const PART_FROM_OPACITY = 0\.5;/);
+  assert.match(src, /export const PART_FROM_OPACITY = 1;/);
   assert.match(src, /opacity: Math\.min\(1, 0\.6 \+ r \* 3\)/, 'the ribbon is never invisible while the card is');
   const button = read('src/ui/GameButton.tsx');
   assert.match(button, /useState\(\(\) =>\n\s+look\.art \? Math\.min\(look\.maxWidth/, 'button labels are on the first frame (no wait for layout)');
@@ -123,7 +111,7 @@ test('footer: a hop you can feel, a brighter glow, compass stars that clear its 
 test('pull to refresh: the shark never reaches below the gap the pull opens', () => {
   const { pullLook, PULL_SHOW } = loadTs('src/ui/SharkRefresh.tsx', {
     react: {}, 'react/jsx-runtime': {}, 'react-native': rn, 'expo-image': {}, 'react-native-reanimated': reanimated,
-    '../gamekit/Haptics': {}, './GameIcon': {}, './motionEasing': easing, './tokens': { BRAND: {} }, './useUiReducedMotion': {},
+    '../gamekit/Haptics': {}, './GoldCheck': {}, './motionEasing': easing, './tokens': { BRAND: {} }, './useUiReducedMotion': {},
   });
   for (let pull = 0; pull <= 220; pull += 5) {
     const look = pullLook(pull);
@@ -139,6 +127,7 @@ test('wallet: coins 18 to 22 pt, and the pill bumps again when the roll lands', 
   const { WALLET_FX, walletCoinPath } = loadTs('src/ui/WalletChange.tsx', {
     react: { memo: c => c }, 'react/jsx-runtime': {}, 'react-native': rn, 'react-native-reanimated': reanimated,
     '../power/PowerProvider': {}, './GameIcon': {}, './RollingNumber': {}, './motionEasing': easing, './useUiReducedMotion': {},
+    './CoinFlight': { COIN_FLIGHT: { staggerMs: 70, flyMs: 560 } }, './lastTouch': {}, './AmbientSwim': {},
   });
   assert.ok(WALLET_FX.coinSize >= 18 && WALLET_FX.coinSize <= 22);
   assert.ok(WALLET_FX.coins <= 6);
