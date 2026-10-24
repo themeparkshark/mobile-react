@@ -140,9 +140,10 @@ export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderPro
         }).start(() => {
           // Studio sound on: every coin that lands climbs one rung of the coin ladder (a big haul sounds
           // bigger). Off (default): exactly today's single landing sound on the first coin.
-          if (!studioMoment('catch.count') && !soundPlayed) {
+          const studio = studioMoment('catch.count');
+          if (!soundPlayed) {
             soundPlayed = true;
-            playCoinSound();
+            if (!studio) playCoinSound();
           }
           
           // Remove coin after animation

@@ -291,7 +291,7 @@ test('legacy playSfx names: switch off plays the same Chris cue as before', asyn
 
 test('wired call sites keep their legacy sound behind studioMoment', () => {
   const sites = [
-    ['src/context/CurrencyFlyProvider.tsx', /if \(!studioMoment\('catch\.count'\) && !soundPlayed\)/],
+    ['src/context/CurrencyFlyProvider.tsx', /const studio = studioMoment\('catch\.count'\);\n\s+if \(!soundPlayed\) \{\n\s+soundPlayed = true;\n\s+if \(!studio\) playCoinSound\(\);/],
     ['src/components/RedeemModal.tsx', /if \(!studioMoment\('coin\.inRange'\)\) void playSound\(require\('\.\.\/\.\.\/assets\/sounds\/in_redeem_zone\.mp3'\)\)/],
     ['src/components/map/alive/CoinCollectFlight.tsx', /if \(!studioMoment\('park\.shelfLand'[^)]*\)\) void playSound\(LAND_SOUND, \{ volume: 0\.55, rate: 1\.15 \}\)/],
     ['src/components/RideTracker/RideLogSuccess.tsx', /if \(!studioMoment\('reward\.rideLogged'[^)]*\)\) playSound\(require\('\.\.\/\.\.\/\.\.\/assets\/sounds\/success\.mp3'\), \{ volume: 0\.65 \}\)/],
