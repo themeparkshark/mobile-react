@@ -27,7 +27,8 @@ import HomeHudChips from './HomeHudChips';
 import { rideSpec, GRADE_BONUS_XP, setRidePhotoServerEnabled, type PhotoGrade } from './ridePhoto';
 import { preloadRidePhoto, useRideArt } from './ridePhoto/rideAssets';
 import { RIDES, buildStage, sceneVariant } from './ridePhoto/rides';
-import { catchDim, catchShown, useCatchOpen } from './catchPresence';
+import { useCatchOpen } from './catchPresence';
+import { useChromeBack } from './useChromeBack';
 import type { RideKind, Sky } from './ridePhoto/rides';
 import { resetRideMemoryForPreview } from './ridePhoto/rides/rideMemory';
 import { catchTraceBuffer } from './ridePhoto/catchAudio';
@@ -193,7 +194,9 @@ function HomeCatchPreview() {
   const { currencies } = useContext(CurrencyContext);
   const { player } = useContext(AuthContext);
   const [coins, setCoins] = useState(() => player?.coins ?? 350);
-  const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value, catchDim.value) * 1.6) }));
+  const chipsBack = useChromeBack(0);
+  const menusBack = useChromeBack(1);
+  const edgesBack = useChromeBack(3);
   // The dev frame graph on every capture (UI fps, p5): the wow clips carry their own frame-rate proof.
   const perf = usePerfProbe(!STILL);
   // Showcase captures hide the frame graph (`lane.sh eval '__wowPerf(false)'`); perf captures keep it.
@@ -407,15 +410,17 @@ function HomeCatchPreview() {
         ))}
       </Map>
       {/* Same as the app: kept mounted, hidden and inert during a catch. */}
-      <Animated.View style={[StyleSheet.absoluteFill, chromeFade, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, edgesBack, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <FindEdgeArrows finds={edges} size={size} onPress={onEdgePress} insetTop={12 + 30 + 8 + 24} />
       </Animated.View>
-      {!request && <Animated.View style={[styles.bottom, { bottom: slotBottom }, chromeFade, BARE && styles.hidden]} pointerEvents="box-none">
+      {!request && <Animated.View style={[styles.bottom, { bottom: slotBottom }, edgesBack, BARE && styles.hidden]} pointerEvents="box-none">
         <HomeHuntChip message={chip} onDismiss={() => setChip(null)} />
       </Animated.View>}
-      <Animated.View style={[StyleSheet.absoluteFill, chromeFade, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, menusBack, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <QuickAccessMenu position="left" />
         <RadialStatsMenu />
+      </Animated.View>
+      <Animated.View style={[StyleSheet.absoluteFill, chipsBack, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         {/* As in the app: the top HUD row (free-Ticket countdown, park story). */}
         <HomeHudChips top={hudTop} onWidth={setHudWidth} findsUntilTicket={2} onTicketPress={line => setChip({ key: `t-${Date.now()}`, text: line, ttlMs: 5000 })}
           parkStory={{ title: 'Park story', points: 3, goal: 10, onPress: () => undefined }} />

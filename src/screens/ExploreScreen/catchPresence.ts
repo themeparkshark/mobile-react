@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Easing, makeMutable, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import { CHROME_BACK, chromeBack } from '../../components/map/alive/mapWow';
+
+export { CHROME_BACK, chromeBack };
 
 /**
  * Whether a catch moment owns the screen. Two layers:
@@ -31,12 +34,29 @@ export function showCatchChrome(on: boolean): void {
  */
 export const catchDim = makeMutable(0);
 let dimmed = false;
+const CHROME_BACK_MS = CHROME_BACK.stepMs * (CHROME_BACK.slots - 1) + CHROME_BACK.popMs;
 
-export function dimCatchChrome(on: boolean): void {
+/**
+ * Round 4: the map's controls come back one after another (STAGGER), each springing up from 0.85 with one
+ * small overshoot, instead of all snapping back on one frame. `catchDimBack` is 1 while they return;
+ * catchDim runs linearly from 1 to 0 over CHROME_BACK.ms so every control reads its own window from it.
+ */
+export const catchDimBack = makeMutable(0);
+export function dimCatchChrome(on: boolean, reduced = false): void {
   if (dimmed === on) return;
   dimmed = on;
-  catchDim.value = withTiming(on ? 1 : 0, { duration: on ? 160 : 200, easing: Easing.out(Easing.cubic) });
+  if (on || reduced) {
+    catchDimBack.value = 0;
+    catchDim.value = withTiming(on ? 1 : 0, { duration: on ? 160 : 200, easing: Easing.out(Easing.cubic) });
+    return;
+  }
+  catchDimBack.value = 1;
+  catchDim.value = withTiming(0, { duration: CHROME_BACK_MS, easing: Easing.linear }, done => { if (done) catchDimBack.value = 0; });
 }
+
+/** Round 4: the map layer's kick on a burst (pt), written by the catch clock on the UI thread. */
+export const catchKickX = makeMutable(0);
+export const catchKickY = makeMutable(0);
 
 export function isCatchDimmed(): boolean {
   return dimmed;

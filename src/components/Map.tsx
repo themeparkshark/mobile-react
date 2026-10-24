@@ -46,7 +46,7 @@ import { DeclutterContext } from './map/declutter/Placed';
 import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapDeclutter';
 import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
-import { catchDim, catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { catchDim, catchDimBack, catchKickX, catchKickY, catchShown, chromeBack, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 import { MOTION_PROBE, MotionProbeFrames, probeCamera, probeCount } from '../dev/motionProbe';
 import { useTrail } from '../services/trail/TrailProvider';
 import { mapTrailOf } from './map/mapTrail';
@@ -764,7 +764,17 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const compassHintRef = useRef<(() => void) | null>(null);
   compassHintRef.current = compassHint.visible ? compassHint.dismiss : null;
   const chromeOff = chromeHidden ? 1 : 0;
-  const chromeStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(Math.max(catchShown.value, catchDim.value) * 1.6, chromeOff)) }), [chromeOff]);
+  // Round 4: after a catch the control rail pops back in its stagger slot (from 0.85, one small overshoot).
+  const chromeStyle = useAnimatedStyle(() => {
+    const c = chromeBack(2, catchShown.value, catchDim.value, catchDimBack.value);
+    return { opacity: chromeOff ? 0 : c.opacity, transform: [{ scale: c.scale }] };
+  }, [chromeOff]);
+  // The burst kicks the map itself (a camera kick of a few points, catchPresence.catchKickX/Y), never the controls.
+  const kickStyle = useAnimatedStyle(() => {
+    const x = catchKickX.value, y = catchKickY.value;
+    const m = Math.max(Math.abs(x), Math.abs(y));
+    return { transform: [{ translateX: x }, { translateY: y }, { scale: 1 + 0.006 * m }] };
+  });
 
   return (
     <MapAliveProvider value={alive}>
@@ -791,6 +801,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           right: 16,
           zIndex: 10,
           gap: 8,
+          transformOrigin: 'top right',
         }, chromeStyle]}
         onLayout={event => {
           const { x, y, width, height } = event.nativeEvent.layout;
@@ -808,6 +819,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
 
       {/* Every marker inside the map (islands, finds, haunts) reads its placement from here. */}
       <DeclutterContext.Provider value={declutter?.store ?? null}>
+      <Reanimated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, kickStyle]}>
       <MapView
         ref={mapViewRef}
         style={StyleSheet.absoluteFill}
@@ -990,6 +1002,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             unmounts afterwards (MapLibre insertReactSubview crash). */}
         {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}
       </MapView>
+      </Reanimated.View>
       </DeclutterContext.Provider>
       {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}
       {viewSize && <MapLightOverlay width={viewSize.width} height={viewSize.height} />}

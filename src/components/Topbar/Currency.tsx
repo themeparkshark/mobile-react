@@ -24,6 +24,8 @@ interface CurrencyProps {
 const FALLBACK_ICON = require('../../../assets/images/coingold.png');
 const GLOW_TEX = require('../../../assets/images/map/fx/glow.png');
 const COUNT_FONT = 19;
+/** A plain gain's "+N": pop, a short hold, a float up and out (the same shape as a stream's, 920 ms in all). */
+const PLUS_PLAIN_MS = 920;
 /** The icon's centre from the chip container's left edge (currencyRow marginLeft 14, icon left -18, 36 wide). */
 const ICON_CENTER_X = 14 - 18 + 18;
 /** "+25", "+1,200" for the float-up over the chip. */
@@ -95,7 +97,7 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     glow.value = withSequence(withTiming(0.5, { duration: 160, easing: EASE.out }), withTiming(0, { duration: DURATION.bloom - 160, easing: EASE.in }));
     setPlusText(`+${countText(gain)}`);
     plus.value = 0;
-    plus.value = withTiming(1, { duration: 1100, easing: Easing.linear });
+    plus.value = withTiming(1, { duration: PLUS_PLAIN_MS, easing: Easing.linear });
   }, [reduced, bump, glow, plus]);
   const rollTo = useCallback((next: number, landed: boolean) => {
     const from = shownRef.current;
@@ -166,14 +168,20 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     const g = Math.max(glow.value, live ? hudGlow(hudClock.value, streamLands.value[0]) : 0);
     return { opacity: g, transform: [{ scaleX: 1 + 0.12 * g }] };
   });
-  // "+N" pops in under the chip, rises into place, holds about 400 ms so it can be read, then fades.
+  // "+N" (round 4): pops in just right of the chip, on the header's blue (never across its white rim), on the
+  // frame the first coin lands, holds while the coins arrive, then floats up and fades within 500 ms of the last.
   const plusStyle = useAnimatedStyle(() => {
-    const live = streamId.value > 0 && hudStreamId.value === streamId.value && !reduced && streamLands.value.length > 0;
-    // In a stream "+N" pops on the frame the first coin lands (the same clock as the coins).
-    const p = live ? (hudClock.value - streamLands.value[0]) / 1100 : plus.value;
-    const a = p <= 0 || p >= 1 ? 0 : p < 0.12 ? p / 0.12 : p < 0.7 ? 1 : 1 - (p - 0.7) / 0.3;
-    return { opacity: a, transform: [{ translateY: 12 * (1 - Math.min(1, p / 0.25)) - 6 * Math.max(0, p - 0.7) / 0.3 },
-      { scale: p < 0.12 ? 0.6 + 0.6 * (p / 0.12) : p < 0.3 ? 1.2 - 0.2 * ((p - 0.12) / 0.18) : 1 }] };
+    const lands = streamLands.value;
+    const live = streamId.value > 0 && hudStreamId.value === streamId.value && !reduced && lands.length > 0;
+    let d: number, hold: number;
+    if (live) { d = hudClock.value - lands[0]; hold = lands[lands.length - 1] - lands[0] + 100; }
+    else { d = plus.value * PLUS_PLAIN_MS; hold = 300; }
+    const out = (d - hold) / 400;
+    if (d <= 0 || out >= 1 || (!live && plus.value <= 0)) return { opacity: 0, transform: [{ translateY: 0 }, { scale: 0.6 }] };
+    const inn = Math.min(1, d / 220);
+    const wave = inn >= 1 ? 0 : Math.exp(-4 * inn) * Math.cos(2.2 * Math.PI * inn) * (1 - inn);
+    const o = Math.max(0, out);
+    return { opacity: Math.min(1, d / 50) * (1 - o * o), transform: [{ translateY: -14 * o }, { scale: 1 - 0.4 * wave }] };
   });
   const up = shown.value >= shown.prev;
 
@@ -266,7 +274,7 @@ const styles = StyleSheet.create({
   gainGlow: { position: 'absolute', left: -14, right: -14, top: -16, bottom: -16 },
   glowFill: { width: '100%', height: '100%' },
   // White with a navy outline (four hard shadows read as an outline at this size), 20 pt: readable at a glance.
-  plus: { position: 'absolute', right: -4, top: 30, fontFamily: 'Shark', fontSize: 20, color: '#ffffff',
+  plus: { position: 'absolute', left: '100%', marginLeft: 6, top: 1, fontFamily: 'Shark', fontSize: 20, color: '#ffffff',
     textShadowColor: '#05346e', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
   countText: {
     textAlign: 'center',

@@ -15,6 +15,7 @@ import HomeFindMarker from './HomeFindMarker';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
 import { useMenuCardFade } from './menuCardFade';
+import { useChromeBack } from './useChromeBack';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { shouldThrottleHomeRequest } from './homeRefresh';
 import { isInPickupRange } from './homeFindCopy';
@@ -184,7 +185,10 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   // Floating cards leave (opacity 0, no touches) while the quick menu is open, and on a catch's tap frame.
   const cardFade = useMenuCardFade();
   // Menus, edge arrows and chips leave on the tap frame (UI thread), never showing through the viewfinder's fade.
-  const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value, catchDim.value) * 1.6) }));
+  // Round 4: after a catch the controls come back one after another (useChromeBack), the HUD's close goal first.
+  const chipsBack = useChromeBack(0);
+  const menusBack = useChromeBack(1);
+  const edgesBack = useChromeBack(3);
   // Where each find is on screen, re-measured when the map settles, so a tap opens the catch from the find on that frame.
   const findPoints = useRef(new globalThis.Map<number, { x: number; y: number }>());
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -710,7 +714,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
         ))}
       </Map>
       {/* Kept mounted (no blank remount on return); hidden and inert during a catch. */}
-      <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, edgesBack]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <FindEdgeArrows finds={edgeFinds} size={containerSize} onPress={onEdgePress} insetTop={edgeTop} />
       </Animated.View>
 
@@ -720,14 +724,14 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       <HomeLive top={TOP} onBarChange={setLiveBar} />
 
       {homeLocationConfirmed && (
-        <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+        <Animated.View style={[StyleSheet.absoluteFill, chipsBack]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
           <HomeHudChips top={hudTop} onWidth={setHudWidth} findsUntilTicket={ticket.until} ticketsCapped={ticket.capped} onTicketPress={showTicketLine}
             parkStory={parkStory} eventChip={eventChip} />
         </Animated.View>
       )}
 
       {/* Menus step back (dimmed, not tappable) while a catch is open. */}
-      <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, menusBack]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         {/* Quick Access Menu - hamburger on left */}
         <QuickAccessMenu position="left" />
 

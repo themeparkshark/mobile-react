@@ -226,7 +226,7 @@ test('round 2: per-find variety and edge arrows', () => {
 test('round 2: the map steps back during a catch and the catch never reads GPS on render', () => {
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /ambientFrozen=\{catchOpen\}/);
-  assert.match(home, /\[StyleSheet\.absoluteFill, chromeFade\]/, "menus leave on the catch shared value");
+  assert.match(home, /\[StyleSheet\.absoluteFill, menusBack\]/, "menus leave on the catch shared value (useChromeBack, wow-map r4)");
   assert.doesNotMatch(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /LocationContext/);
   assert.match(read('src/components/OfflineBanner.tsx'), /if \(!mounted \|\| catchOpen( \|\| markOwned)?\) return null;/);
   const scene = read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx');
@@ -491,7 +491,8 @@ test('round 5: no app or map chrome over the viewfinder; close without a grey st
   assert.doesNotMatch(map, /\{!chromeHidden && <Pressable/, 'the credit stays mounted');
   assert.match(map, /if \(isCatchShown\(\)\) return; void openExternal\(/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
-  assert.match(home, /const chromeFade = useAnimatedStyle\(\(\) => \(\{ opacity: Math\.max\(0, 1 - Math\.max\(catchShown\.value, catchDim\.value\)/, 'menus and arrows fade for the viewfinder and for a common (wow-map r2)');
+  assert.match(read('src/components/map/alive/mapWow.ts'), /Math\.max\(0, 1 - Math\.max\(shown, dim\) \* 1\.6\)/, 'menus and arrows fade for the viewfinder and for a common (wow-map r2, chromeBack r4)');
+  assert.match(home, /useChromeBack\(1\)/);
   assert.match(read('src/components/Wrapper.tsx'), /backgroundColor: '#0e7fd9'/);
   const stage = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   assert.match(stage, /if \(done\) runOnJS\(chromeBack\)\(\);/, 'chrome starts back when the iris meets');

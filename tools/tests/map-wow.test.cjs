@@ -257,8 +257,8 @@ test('round 3: the catch is one function of the clock: squash, wobbles, held fla
 
 test('round 3: one celebration at a time: the badge rises only once the inked burst fades, and is in before the find lands', () => {
   for (const plan of [wow.catchPlan({ reduced: false }), wow.catchPlan({ reduced: false, repeat: true })]) {
-    assert.ok(plan.burstAt + 0.42 * plan.inkMs <= plan.badgeAt, 'the ink starts fading before the badge moves');
-    assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /p < 0\.42 \? 1/);
+    assert.ok(plan.suckAt + plan.suckMs <= plan.badgeAt, 'the ink is gone before the badge moves (round 4: no cross-fade)');
+    assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /suck < 0\.7 \? 1/);
     assert.ok(plan.badgeAt + plan.badgeInMs <= plan.landAt, 'the slot is there when the find arrives');
     assert.equal(wow.catchFrame(plan.badgeAt - 1, plan).badge, 0);
     assert.ok(wow.catchFrame(plan.landAt, plan).badge > 0.99);
@@ -345,4 +345,102 @@ test('round 3: Battery Saver thins the coin stream to 3 or 4 coins', () => {
   assert.equal(wow.coinStreamPlan(10, false, 3).count, 3);
   assert.equal(wow.coinStreamPlan(10, false).count, 8);
   assert.equal(wow.coinStreamPlan(2, false, 4).count, 2);
+});
+
+// Round 4 (panel fixes): a clean burst exit, readable coins, honest badge, a goal after every catch, milestone
+// variety, a hand-drawn beam, a map kick and the controls coming back one after another.
+test('round 4: the burst exits in one clean beat: ink and rays hold full, suck into the find, then the badge pops', () => {
+  for (const plan of [wow.catchPlan({ reduced: false }), wow.catchPlan({ reduced: false, repeat: true })]) {
+    assert.ok(plan.suckMs >= 90 && plan.suckMs <= 130, 'about 120 ms of suck');
+    assert.equal(wow.catchFrame(plan.suckAt - 1, plan).gold, 1, 'rays at full strength until the suck');
+    assert.equal(wow.catchFrame(plan.suckAt + plan.suckMs, plan).gold, 0, 'gone once sucked in');
+    assert.equal(plan.badgeAt, plan.suckAt + plan.suckMs, 'the badge pops on the frame the rays are gone');
+    assert.equal(plan.flyAt, plan.badgeAt, 'the suck is the anticipation for the flight');
+    assert.equal(wow.catchFrame(plan.badgeAt + 70, plan).badge, 1, 'fully opaque within 70 ms (never ghosting)');
+    let peak = 0;
+    for (let t = plan.badgeAt; t < plan.exitAt; t += 4) peak = Math.max(peak, wow.catchFrame(t, plan).badgeScale);
+    assert.ok(peak > 1.02 && peak < 1.12, `one visible overshoot (${peak.toFixed(3)})`);
+    assert.ok(plan.burstAt <= 1500 && plan.doneAt <= 2600);
+  }
+});
+
+test('round 4: coins spray past the ray tips, 40 pt inked coins that shrink as they land', () => {
+  assert.ok(wow.COIN_STREAM.sprayPt >= 120, 'out past the inked burst');
+  assert.equal(wow.COIN_STREAM.sizePt, 40);
+  const from = { x: 200, y: 500 }, to = { x: 40, y: 20 };
+  const spray = wow.coinStreamAt(wow.COIN_STREAM.sprayMs - 1, 0, 8, from, to);
+  assert.ok(Math.hypot(spray.x - from.x, spray.y - from.y) > 110, 'each coin stands clear of the find on the burst frame');
+  const near = wow.coinStreamAt(wow.COIN_STREAM.sprayMs + wow.COIN_STREAM.flightMs - 4, 0, 8, from, to);
+  assert.ok(near.scale < 0.7 && near.scale > 0.55, 'about 25 pt when it lands in the chip');
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /assets\/icons\/game\/coin\.png/, 'Alex\'s single inked coin, not the chip\'s coin pile');
+});
+
+test('round 4: milestone variety (never chance): stars every 5th, the beam every 10th, grand on the 25th', () => {
+  const kinds = new Set();
+  for (let n = 1; n <= 50; n++) {
+    const v = wow.burstVariant(n);
+    kinds.add(v.kind);
+    assert.equal(v.beam, n % 10 === 0 || n % 25 === 0, `beam only on milestones (${n})`);
+    assert.ok(v.stars <= wow.BURST_STARS_MAX && v.rings >= 1 && v.rings <= wow.BURST_RINGS_MAX);
+    assert.deepEqual(plain(wow.burstVariant(n)), plain(v), 'deterministic');
+  }
+  assert.ok(kinds.size >= 4, 'at least four looks across 50 catches');
+  assert.equal(wow.burstVariant(25).kind, 'grand');
+  assert.equal(wow.burstVariant(5).kind, 'stars');
+  assert.ok(wow.burstVariant(25).inkScale > wow.burstVariant(10).inkScale && wow.burstVariant(10).inkScale > 1);
+  const plan = wow.catchPlan({ reduced: false, repeat: true, milestone: true });
+  const drop = wow.beamAt(plan.hitStopAt - 1, plan);
+  assert.ok(drop.drop > 0.98, 'the beam head reaches the find on the held frame');
+  assert.equal(wow.beamAt(plan.hitStopAt - 301, plan), null);
+  assert.equal(wow.beamAt(plan.hitStopAt + 500, plan), null, 'gone after its fade');
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /const BeamColumn = memo/, 'a drawn, tapered column of light, not a flat bar');
+  assert.match(src, /strokeWidth=\{2\.5\}/, 'inked edges');
+  assert.ok(!/BEAM_EVERY/.test(src));
+});
+
+test('round 4: the burst kicks the map (KICK), not while walking or calm; milestones kick the full KICK.maxPt', () => {
+  const plan = wow.catchPlan({ reduced: false });
+  let peak = 0;
+  for (let t = plan.burstAt; t < plan.burstAt + 200; t += 4) peak = Math.max(peak, Math.abs(wow.catchFrame(t, plan).shake));
+  assert.ok(peak > 2 && peak <= 3, `a visible 3 pt kick (${peak.toFixed(2)})`);
+  assert.equal(wow.catchFrame(plan.burstAt + motion.KICK.ms + 1, plan).shake, 0, 'over inside KICK.ms');
+  assert.equal(wow.catchPlan({ reduced: false, milestone: true }).kickPt, motion.KICK.maxPt);
+  assert.equal(wow.catchPlan({ reduced: false, milestone: true, walking: true }).kickPt, 0);
+  assert.equal(wow.catchPlan({ reduced: true, milestone: true }).kickPt, 0);
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /catchKickX\.value/, 'Map.tsx moves the map layer with the kick');
+});
+
+test('round 4: the controls come back one after another, popping from 0.85 with one small overshoot', () => {
+  const pres = wow;
+  const total = pres.CHROME_BACK.stepMs * (pres.CHROME_BACK.slots - 1) + pres.CHROME_BACK.popMs;
+  const at = (slot, ms) => pres.chromeBack(slot, 0, 1 - ms / total, 1);
+  assert.equal(at(0, 0).opacity, 0);
+  assert.ok(at(0, 120).opacity === 1 && at(3, 120).opacity === 0, 'the HUD goal comes back first, the last slot waits');
+  assert.ok(Math.abs(at(2, 60).scale - pres.CHROME_BACK.from) < 0.02, 'from 0.85');
+  let peak = 0;
+  for (let ms = 0; ms <= total; ms += 4) peak = Math.max(peak, at(1, ms).scale);
+  assert.ok(peak > 1.005 && peak < 1.05, `one small overshoot (${peak.toFixed(3)})`);
+  assert.equal(at(3, total).scale, 1);
+  assert.deepEqual(plain(pres.chromeBack(1, 0, 1, 0)), { opacity: 0, scale: 1 }, 'hidden while the catch plays');
+});
+
+test('round 4: an honest badge and a goal after every catch; +N on the header blue; far finds sleep', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /frame\.value\.barGlow \* isNewSV\.value/, 'a repeat find never flashes a fill that did not happen');
+  assert.match(src, /if \(next\.isNew\) list\.push\(\{ at: plan\.tickAt, kind: BEAT\.tick/);
+  assert.match(src, /coinStamp != null/, 'a repeat find stamps its coins on the badge instead');
+  assert.match(src, /total - collected === 1/, 'one more to finish: the last stretch glows');
+  assert.match(src, /backgroundColor: BRAND\.blue, borderWidth: 3, borderColor: BRAND\.gold/, 'the badge wears the house blue and gold');
+  assert.match(src, /kind: BEAT\.exit/, 'the controls start back as the badge leaves');
+  const chips = read('src/screens/ExploreScreen/HomeHudChips.tsx');
+  assert.match(chips, /stampPip/, 'the freshly filled ticket pip stamps in gold');
+  const explore = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(explore, /useChromeBack\(0\)/);
+  const chip = read('src/components/Topbar/Currency.tsx');
+  assert.match(chip, /left: '100%', marginLeft: 6/, '+N sits just right of the chip, on the header blue');
+  const find = read('src/screens/ExploreScreen/PrepItem.tsx');
+  assert.match(find, /const tick = live \? clock : still/, 'a far find stops reading the map clock');
 });

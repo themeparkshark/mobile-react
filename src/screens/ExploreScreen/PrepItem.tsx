@@ -247,10 +247,15 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
     if (!firstBand.current && band === 'inRange') queueHaptic('tapLight', 1);
     firstBand.current = false;
   }, [band]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Round 4: a far find is still (BAND_LOOK far), so its styles read a constant instead of the map's clock and
+  // stop evaluating every frame; it wakes up on the shared clock the moment it is no longer far.
+  const still = useSharedValue(0);
+  const live = moving && band !== 'far';
+  const tick = live ? clock : still;
   const bob = useAnimatedStyle(() => {
     const lv = level.value;
-    if (!moving) return { transform: [{ translateY: 0 }, { scaleX: 1 }, { scaleY: 1 }] };
-    const ms = clock.value * 1000;
+    if (!live) return { transform: [{ translateY: 0 }, { scaleX: 1 }, { scaleY: 1 }] };
+    const ms = tick.value * 1000;
     if (lv > 2.5) {
       const h = hopAt(ms, 2400, phase);
       const k = Math.min(1, (lv - 2.5) * 2);
@@ -258,9 +263,9 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
     }
     const near = Math.max(0, Math.min(1, lv - 1));
     const drift = Math.sin((ms / 1600 + phase) * Math.PI * 2);
-    const sway = Math.sin((clock.value * 0.55 + phase) * Math.PI * 2);
+    const sway = Math.sin((tick.value * 0.55 + phase) * Math.PI * 2);
     return { transform: [{ translateY: -4 * drift * near - 2 * sway * (1 - near) }, { scaleX: 1 }, { scaleY: 1 }] };
-  }, [phase, moving]);
+  }, [phase, live]);
   // Far to in range: scale 0.6, 0.7, 0.85, 1 and opacity 0.75, 0.9, 1, 1 (interpolated on the UI thread).
   const bandStyle = useAnimatedStyle(() => {
     const lv = level.value;
@@ -273,26 +278,26 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
     const lv = level.value;
     const strength = lv < 1 ? 0.25 * lv : lv < 2 ? 0.25 + 0.3 * (lv - 1) : 0.55 + 0.2 * Math.min(1, lv - 2);
     const breathS = lv < 1.5 ? 1.8 : 0.9;
-    const wave = moving ? 0.5 + 0.5 * Math.sin((clock.value / breathS + phase) * Math.PI * 2) : 0.7;
+    const wave = live ? 0.5 + 0.5 * Math.sin((tick.value / breathS + phase) * Math.PI * 2) : 0.7;
     return { opacity: strength * (0.55 + 0.45 * wave), transform: [{ scaleY: 0.5 }, { scale: 0.85 + 0.2 * wave }] };
-  }, [moving, phase]);
+  }, [live, phase]);
   const ring0 = useAnimatedStyle(() => {
     const on = Math.max(0, Math.min(1, (level.value - 2.5) * 2));
-    if (!moving || on <= 0) return { opacity: 0, transform: [{ scaleY: 0.5 }, { scale: 1 }] };
-    const r = ringAt(clock.value * 1000 + phase * 1100, 0);
+    if (!live || on <= 0) return { opacity: 0, transform: [{ scaleY: 0.5 }, { scale: 1 }] };
+    const r = ringAt(tick.value * 1000 + phase * 1100, 0);
     return { opacity: r.opacity * on, transform: [{ scaleY: 0.5 }, { scale: r.scale }] };
-  }, [moving, phase]);
+  }, [live, phase]);
   const ring1 = useAnimatedStyle(() => {
     const on = Math.max(0, Math.min(1, (level.value - 2.5) * 2));
-    if (!moving || on <= 0) return { opacity: 0, transform: [{ scaleY: 0.5 }, { scale: 1 }] };
-    const r = ringAt(clock.value * 1000 + phase * 1100, 1);
+    if (!live || on <= 0) return { opacity: 0, transform: [{ scaleY: 0.5 }, { scale: 1 }] };
+    const r = ringAt(tick.value * 1000 + phase * 1100, 1);
     return { opacity: r.opacity * on, transform: [{ scaleY: 0.5 }, { scale: r.scale }] };
-  }, [moving, phase]);
+  }, [live, phase]);
   const pulse = useAnimatedStyle(() => {
-    if (!moving) return { opacity: inRange ? 0.75 : 0.45, transform: [{ scale: 1 }] };
-    const wave = 0.5 + 0.5 * Math.sin((clock.value * (inRange ? 1.1 : 0.5) + phase) * Math.PI * 2);
+    if (!live) return { opacity: inRange ? 0.75 : 0.45, transform: [{ scale: 1 }] };
+    const wave = 0.5 + 0.5 * Math.sin((tick.value * (inRange ? 1.1 : 0.5) + phase) * Math.PI * 2);
     return { opacity: (inRange ? 0.6 : 0.35) + 0.35 * wave, transform: [{ scale: 0.9 + 0.2 * wave }] };
-  }, [inRange, phase, moving]);
+  }, [inRange, phase, live]);
 
   // ── The spawn pop (Pokemon GO / Pikmin Bloom): a water ring at the ground, the find pops up past full
   // size and settles with one overshoot, and four sparkles fling up. Finds arriving together stagger
@@ -331,11 +336,11 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   // Below the find the finger points up at it (rotated), so it stays off the player's shark.
   const tilt = below ? '210deg' : leftSide ? '-28deg' : '28deg';
   const finger = useAnimatedStyle(() => {
-    if (!moving) return { transform: [{ translateY: 0 }, { rotate: tilt }] };
+    if (!live) return { transform: [{ translateY: 0 }, { rotate: tilt }] };
     // Out of phase with the item's hop.
-    const tap = Math.abs(Math.sin(clock.value * Math.PI * 1.15 + phase * Math.PI + 1.4));
+    const tap = Math.abs(Math.sin(tick.value * Math.PI * 1.15 + phase * Math.PI + 1.4));
     return { transform: [{ translateY: (below ? 5 : -5) * tap }, { rotate: tilt }] };
-  }, [phase, moving, tilt, below]);
+  }, [phase, live, tilt, below]);
   // One pulse per new key: the art swells 1.35x and a ring blooms (Reduce Motion: the ring only, no swell).
   const pulseV = useSharedValue(0);
   useEffect(() => {
@@ -351,7 +356,7 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   const pulseArt = useAnimatedStyle(() => ({ transform: [{ scale: reduced ? 1 : 1 + 0.35 * pulseV.value },
     { scale: tapPivot.value === myPivot ? 1 - 0.14 * tapSquash.value : 1 }] }), [reduced, myPivot]);
   const pulseRing = useAnimatedStyle(() => ({ opacity: pulseV.value, transform: [{ scale: 0.8 + 0.6 * pulseV.value }] }));
-  const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${moving ? (clock.value * 24) % 360 : 0}deg` }] }), [moving]);
+  const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${live ? (tick.value * 24) % 360 : 0}deg` }] }), [live]);
 
   return (
     <Animated.View style={[styles.box, hidden && styles.hidden, handOff]} pointerEvents="box-none">
@@ -389,7 +394,7 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         </Animated.View>
         </Animated.View>
         {SPARKLES.slice(0, look.sparkles).map(spark => <Sparkle key={spark.phase} {...spark}
-          color={look.rays ? BRAND.goldLight : color} animated={moving} />)}
+          color={look.rays ? BRAND.goldLight : color} animated={live} />)}
         </Animated.View>
         <View style={styles.spawnOrigin} pointerEvents="none">
           {SPAWN_SPARKS.map(angle => <SpawnSparkle key={angle} angle={angle} t={spawnSpark} />)}
