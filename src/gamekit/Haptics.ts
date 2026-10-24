@@ -99,7 +99,14 @@ export function areHapticsEnabled(): boolean {
   return enabled;
 }
 
+/** Dev trace (wow-sound studio trace): told on every pulse that actually fires. */
+let traceListener: ((intent: HapticIntent) => void) | null = null;
+export function setHapticTraceListener(fn: ((intent: HapticIntent) => void) | null): void {
+  traceListener = fn;
+}
+
 function run(intent: HapticIntent): void {
+  if (traceListener) traceListener(intent);
   switch (intent) {
     case 'tapLight':
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

@@ -70,7 +70,7 @@ export interface MusicArgs {
 }
 
 export interface AudioBackend {
-  readonly name: 'audio-api' | 'expo-av';
+  readonly name: 'audio-api' | 'expo-av' | 'trace';
   readonly supportsPan: boolean;
   readonly supportsFilter: boolean;
   /** Typical tap-to-sound latency (ms) used for haptic/visual alignment. */
@@ -94,6 +94,8 @@ export interface AudioBackend {
   clockMs?(): number;
   /** True when musicPosition(deck) is a cheap clock read (audio-api), false for an expo-av status call. */
   positionIsCheap?(deck: string): boolean;
+  /** Output latency for one loaded key (the hybrid routes AAC to expo-av); defaults to latencyMs. */
+  latencyOf?(key: string): number;
 }
 
 // =============================================================================
@@ -586,9 +588,9 @@ export class AudioApiBackend implements AudioBackend {
 // Hybrid: audio-api where it can decode, expo-av for everything else
 // =============================================================================
 
-const AV_ONLY_TYPES = new Set(['m4a', 'aac', 'caf', 'mp4']);
+export const AV_ONLY_TYPES = new Set(['m4a', 'aac', 'caf', 'mp4']);
 
-function assetType(src: number): string {
+export function assetType(src: number): string {
   try {
     return (Asset.fromModule(src).type || '').toLowerCase();
   } catch {
@@ -628,6 +630,10 @@ export class HybridBackend implements AudioBackend {
   routeOf(key: string): string | null {
     const b = this.routes.get(key);
     return b ? b.name : null;
+  }
+
+  latencyOf(key: string): number {
+    return (this.routes.get(key) ?? this.api).latencyMs;
   }
 
   async load(key: string, src: number, voices: number): Promise<boolean> {

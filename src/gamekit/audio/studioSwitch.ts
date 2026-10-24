@@ -16,12 +16,19 @@
  * Dev builds can audition with setStudioSoundOverride(true) (dev tester only;
  * ignored in release).
  *
+ * Trace mode (studioTrace.ts, dev + EXPO_PUBLIC_STUDIO_TRACE=1) turns the
+ * studio path on while muted: GameAudio then plays into TraceBackend, which
+ * never touches the audio hardware, so lane simulators can prove timing
+ * without making a sound.
+ *
  * Approval path: Dustin says yes to a moment (or the whole pack) ->
  * `node tools/audio/approve-moments.mjs --all` (or moment names) adds the
  * moment cues to <studio>/APPROVED.json -> `node tools/audio/sync-studio-audio.mjs`
  * moves them into studio.generated.ts -> flip STUDIO_SOUND_DEFAULT -> turn on
  * the `studio_sound` flag.
  */
+
+import { studioTraceOn } from './studioTrace';
 
 /** The feature-flags read (api/endpoints/platform/feature-flags), injected so the engine never imports the API client. */
 export type FlagReader = () => Promise<{ flags?: Record<string, boolean> } | null | undefined>;
@@ -45,6 +52,7 @@ export function studioMuted(): boolean {
 
 /** True only when every key is turned. Cheap: safe to call on every play. */
 export function isStudioSoundOn(): boolean {
+  if (studioTraceOn()) return true; // dev only, and the engine is on the silent TraceBackend
   if (studioMuted()) return false;
   if (override !== null && isDev()) return override;
   return STUDIO_SOUND_DEFAULT && (flag?.on ?? false);

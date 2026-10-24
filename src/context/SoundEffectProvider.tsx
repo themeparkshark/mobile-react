@@ -11,6 +11,7 @@ import { AuthContext } from './AuthProvider';
 import { SFX } from '../gamekit/SFX';
 import { GameAudio } from '../gamekit/audio/GameAudio';
 import { loadStudioSoundFlag } from '../gamekit/audio/studioSwitch';
+import { studioTraceOn, traceEvent } from '../gamekit/audio/studioTrace';
 import getFeatureFlags from '../api/endpoints/platform/feature-flags';
 
 export interface SoundEffectContextType {
@@ -63,6 +64,11 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
     <SoundEffectContext.Provider
       value={{
         playSound: async (pendingSound: any, options?: { volume?: number; rate?: number }) => {
+          if (studioTraceOn()) {
+            // Silent trace (dev lanes): log the legacy sound, never open an expo-av player.
+            traceEvent('legacy', 'playSound', `asset ${String(pendingSound)}${options?.volume !== undefined ? ` vol ${options.volume}` : ''}`);
+            return;
+          }
           if (isReady && !player?.enabled_sound_effects) {
             return;
           }

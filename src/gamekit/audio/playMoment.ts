@@ -32,7 +32,18 @@ import {
   type MomentName,
   type SoundRef,
 } from './momentMap';
-import { HAPTIC_PATTERNS, playHaptic, queueHaptic, type HapticIntent, type HapticPrimitive } from '../Haptics';
+import {
+  HAPTIC_PATTERNS,
+  hasNativeHaptics,
+  playHaptic,
+  playPattern,
+  queueHaptic,
+  setHapticTraceListener,
+  type HapticIntent,
+  type HapticPrimitive,
+  type HapticStep,
+} from '../Haptics';
+import { studioTraceOn, traceEvent } from './studioTrace';
 
 export interface MomentOptions {
   /** 0..1 on top of the moment's trim. */
@@ -60,8 +71,14 @@ export const momentTraceBuffer: string[] = [];
 function trace(line: string): void {
   if (typeof __DEV__ === 'undefined' || !__DEV__) return;
   const out = `[moment] ${Date.now()} ${line}`;
-  console.log(out);
+  if (studioTraceOn()) traceEvent('moment', line);
+  else console.log(out);
   if (momentTraceBuffer.length < 2000) momentTraceBuffer.push(out);
+}
+
+// Trace mode: every haptic pulse that actually fires is logged next to the sound starts.
+if (studioTraceOn()) {
+  try { setHapticTraceListener((intent) => traceEvent('haptic', intent)); } catch { /* optional */ }
 }
 
 function isDev(): boolean {
@@ -130,25 +147,92 @@ const PRIMITIVE_INTENT: Record<HapticPrimitive, HapticIntent> = {
   error: 'failBuzz',
 };
 
-function fireHaptic(name: MomentName, opts: MomentOptions): void {
+/**
+ * The paired haptic, landing with the sound:
+ *  - app context: every pulse goes through the one shared gate, delayed by the
+ *    moment's delayMs plus the cue's output latency (`leadMs`, 20 ms audio-api,
+ *    80 ms expo-av), so the buzz is felt when the sound is heard, not before;
+ *  - game context: the in-game bus, after delayMs, with alignToAudio (the game
+ *    sets the backend offset once with setHapticAudioOffsetMs);
+ *  - Core Haptics: when the binary has the native player (NATIVE_QUEUE), a
+ *    moment with an `ahap` plays its shaped pattern instead (not while walking:
+ *    the walking rung-down uses the simpler pattern).
+ */
+function fireHaptic(name: MomentName, opts: MomentOptions, leadMs: number): void {
+  const def = MOMENTS[name] as MomentDef;
   const pattern = momentHaptic(name, { walking: opts.walking });
   if (!pattern) return;
-  trace(`haptic ${name} ${pattern}`);
+  const game = opts.context === 'game';
+  const wait = Math.max(0, (opts.delayMs ?? 0) + (game ? 0 : leadMs));
+  const later = (fn: () => void, at: number) => { if (at <= 0) fn(); else setTimeout(fn, at); };
   try {
-    if (opts.context === 'game') {
-      playHaptic(pattern, { alignToAudio: true });
+    const shaped = def.ahap && !opts.walking && hasNativeHaptics() ? def.ahap : null;
+    trace(`haptic ${name} ${shaped ? `ahap ${shaped}` : pattern} +${wait}ms`);
+    if (shaped) {
+      later(() => { playPattern(shaped, { alignToAudio: game, fallback: HAPTIC_PATTERNS[pattern] as HapticStep[] }); }, wait);
+      return;
+    }
+    if (game) {
+      later(() => { playHaptic(pattern, { alignToAudio: true }); }, wait);
       return;
     }
     // Outside games: every pulse goes through the one shared gate (at most one per 120 ms).
     for (const step of HAPTIC_PATTERNS[pattern]) {
       const intent = PRIMITIVE_INTENT[step.p];
-      const at = step.at + (opts.delayMs ?? 0);
-      if (at <= 0) queueHaptic(intent);
-      else setTimeout(() => queueHaptic(intent), at);
+      later(() => queueHaptic(intent), step.at + wait);
     }
   } catch {
     // Haptics are decoration.
   }
+}
+
+/** The sound half of a moment: returns the voice id and the engine cue it started (for latency). */
+function playSound(name: MomentName, def: MomentDef, opts: MomentOptions): { id: number; cue: string | null } {
+  if (!GameAudio.isSfxEnabled()) return { id: 0, cue: null };
+  const now = Date.now();
+  const step = def.ladder ? ladderStep(def, opts.step, lastLadder.get(name), now) : undefined;
+  if (step !== undefined) lastLadder.set(name, { at: now, step });
+  const volume = opts.volume;
+  const delayMs = opts.delayMs ?? 0;
+
+  if (!studioReady(name, opts.useVariant)) {
+    // Switch off (or not approved yet): Chris's sound, with the ladder as a pitch climb.
+    trace(`fallback ${name} ${def.fallback}${step !== undefined ? ` step=${step}` : ''}`);
+    return { id: GameAudio.play(def.fallback, { volume, delayMs, pitch: step !== undefined ? Math.min(12, step) : undefined }), cue: def.fallback };
+  }
+
+  if (opts.useVariant) {
+    const k = ensureCue(name, 'variant', def.variant, 0, false);
+    trace(`studio ${name} variant ${def.variant}`);
+    if (!k) return { id: GameAudio.play(def.fallback, { volume, delayMs }), cue: def.fallback };
+    const id = step !== undefined && GameAudio.cue(k)?.ladder?.length ? GameAudio.playLadder(k, step, { volume, delayMs }) : GameAudio.play(k, { volume, delayMs });
+    return { id, cue: k };
+  }
+
+  const k = ensureCue(name, 'primary', def.primary, 0, true);
+  if (!k) return { id: GameAudio.play(def.fallback, { volume, delayMs }), cue: def.fallback };
+  let id: number;
+  if (step !== undefined) {
+    trace(`studio ${name} ${def.primary} step=${step}`);
+    id = GameAudio.playLadder(k, step, { volume, delayMs });
+  } else if (def.rr?.length) {
+    const pool = (GameAudio.cue(k)?.variants?.length ?? 0) + 1;
+    const rr = nextRoundRobin(pool, lastRr.get(name));
+    lastRr.set(name, rr);
+    trace(`studio ${name} ${def.primary} rr=${rr}`);
+    id = GameAudio.play(k, { volume, delayMs, variant: rr });
+  } else {
+    trace(`studio ${name} ${def.primary}`);
+    id = GameAudio.play(k, { volume, delayMs });
+  }
+  def.layers?.forEach((layer, i) => {
+    if (!refPlayable(layer.ref)) return;
+    const lk = ensureCue(name, `layer${i}`, layer.ref, layer.db ?? 0, false);
+    if (!lk) return;
+    if (layer.step !== undefined) GameAudio.playLadder(lk, layer.step, { volume, delayMs: delayMs + layer.delayMs });
+    else GameAudio.play(lk, { volume, delayMs: delayMs + layer.delayMs });
+  });
+  return { id, cue: k };
 }
 
 /**
@@ -158,55 +242,18 @@ function fireHaptic(name: MomentName, opts: MomentOptions): void {
 export function playMoment(name: MomentName, opts: MomentOptions = {}): number {
   const def = MOMENTS[name] as MomentDef | undefined;
   if (!def) return 0;
-  if (opts.haptic) fireHaptic(name, opts);
+  let played: { id: number; cue: string | null } = { id: 0, cue: null };
   try {
-    if (!GameAudio.isSfxEnabled()) return 0;
-    const now = Date.now();
-    const step = def.ladder ? ladderStep(def, opts.step, lastLadder.get(name), now) : undefined;
-    if (step !== undefined) lastLadder.set(name, { at: now, step });
-    const volume = opts.volume;
-    const delayMs = opts.delayMs ?? 0;
-
-    if (!studioReady(name, opts.useVariant)) {
-      // Switch off (or not approved yet): Chris's sound, with the ladder as a pitch climb.
-      trace(`fallback ${name} ${def.fallback}${step !== undefined ? ` step=${step}` : ''}`);
-      return GameAudio.play(def.fallback, { volume, delayMs, pitch: step !== undefined ? Math.min(12, step) : undefined });
-    }
-
-    if (opts.useVariant) {
-      const k = ensureCue(name, 'variant', def.variant, 0, false);
-      trace(`studio ${name} variant ${def.variant}`);
-      if (!k) return GameAudio.play(def.fallback, { volume, delayMs });
-      return step !== undefined && GameAudio.cue(k)?.ladder?.length ? GameAudio.playLadder(k, step, { volume, delayMs }) : GameAudio.play(k, { volume, delayMs });
-    }
-
-    const k = ensureCue(name, 'primary', def.primary, 0, true);
-    if (!k) return GameAudio.play(def.fallback, { volume, delayMs });
-    let id: number;
-    if (step !== undefined) {
-      trace(`studio ${name} ${def.primary} step=${step}`);
-      id = GameAudio.playLadder(k, step, { volume, delayMs });
-    } else if (def.rr?.length) {
-      const pool = (GameAudio.cue(k)?.variants?.length ?? 0) + 1;
-      const rr = nextRoundRobin(pool, lastRr.get(name));
-      lastRr.set(name, rr);
-      trace(`studio ${name} ${def.primary} rr=${rr}`);
-      id = GameAudio.play(k, { volume, delayMs, variant: rr });
-    } else {
-      trace(`studio ${name} ${def.primary}`);
-      id = GameAudio.play(k, { volume, delayMs });
-    }
-    def.layers?.forEach((layer, i) => {
-      if (!refPlayable(layer.ref)) return;
-      const lk = ensureCue(name, `layer${i}`, layer.ref, layer.db ?? 0, false);
-      if (!lk) return;
-      if (layer.step !== undefined) GameAudio.playLadder(lk, layer.step, { volume, delayMs: delayMs + layer.delayMs });
-      else GameAudio.play(lk, { volume, delayMs: delayMs + layer.delayMs });
-    });
-    return id;
+    played = playSound(name, def, opts);
   } catch {
-    return 0;
+    played = { id: 0, cue: null };
   }
+  if (opts.haptic) {
+    let lead = 0;
+    try { lead = played.cue ? GameAudio.latencyFor(played.cue) : 0; } catch { lead = 0; }
+    fireHaptic(name, opts, lead);
+  }
+  return played.id;
 }
 
 /**

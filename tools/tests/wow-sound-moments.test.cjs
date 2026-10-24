@@ -38,7 +38,7 @@ const REQUIRED = [
   'park.arrival', 'park.shelfLand',
 ];
 /** Moments that deliberately leave the hand alone (ambient, calm timer, sheets, rolling numbers). */
-const SILENT_HAND = new Set(['coin.appear', 'game.lastSeconds', 'ui.sheetOpen', 'ui.sheetClose', 'ui.counterTick']);
+const SILENT_HAND = new Set(['coin.appear', 'game.lastSeconds', 'ui.sheetOpen', 'ui.sheetClose', 'ui.counterTick', 'catch.fly']);
 
 const exists = (rel) => !!rel && fs.existsSync(path.join(root, rel)) && fs.statSync(path.join(root, rel)).size > 1024;
 
@@ -110,7 +110,7 @@ test('every moment pairs a haptic (or is a documented silent hand) on the same f
 });
 
 test('the six moment Core Haptics patterns exist with expo-haptics fallbacks spaced for real pulses', () => {
-  for (const name of ['momentCatch', 'momentComboTier', 'momentFeverStart', 'momentStreakIgnite', 'momentChestOpen', 'momentParkArrival']) {
+  for (const name of ['momentCatchGather', 'momentCatch', 'momentComboTier', 'momentFeverStart', 'momentStreakIgnite', 'momentChestOpen', 'momentParkArrival']) {
     assert.ok(pattern.AHAP_LIBRARY[name], name);
     const steps = pattern.hapticFallbackFor(name, pattern.AHAP_LIBRARY[name]);
     assert.ok(steps.length >= 2, `${name} fallback is shaped, not one thump`);
@@ -145,7 +145,7 @@ test('beds named for each game exist in the studio library', () => {
 
 // ----------------------------------------------------------------- runtime
 
-function harness({ dev = false, sfx = true, muted = false, approved = false } = {}) {
+function harness({ dev = false, sfx = true, muted = false, approved = false, native = false } = {}) {
   const calls = [];
   const cues = new Map();
   const GameAudio = {
@@ -171,6 +171,9 @@ function harness({ dev = false, sfx = true, muted = false, approved = false } = 
       HAPTIC_PATTERNS: grammar.HAPTIC_PATTERNS,
       playHaptic: (p) => haptics.push({ via: 'bus', p }),
       queueHaptic: (i) => haptics.push({ via: 'gate', i }),
+      playPattern: (p) => haptics.push({ via: 'ahap', p }),
+      hasNativeHaptics: () => native,
+      setHapticTraceListener: () => undefined,
     },
   }, { __DEV__: dev, process: { env } });
   return { calls, cues, haptics, sw, mm, pm };
@@ -295,6 +298,8 @@ test('wired call sites keep their legacy sound behind studioMoment', () => {
     ['src/screens/LinePlay/components/ActivitySlot.tsx', /studioMoment\('game\.correct'\)/],
     ['src/screens/ExploreScreen/ridePhoto/catchAudio.ts', /if \(moment && studioMoment\(moment, \{ volume: opts\.volume \}\)\) return;\n\s+GameAudio\.play\(cue, \{ volume: opts\.volume, pitch: opts\.pitch \}\);/],
     ['src/gamekit/SFX.ts', /const studio = !!moment && studioMoment\(moment, \{ volume: volumeScale \}\);\n\s+const id = studio \? 1 : GameAudio\.play\(cue, \{ volume: volumeScale \}\);/],
+    ['src/components/retention/useRetention.tsx', /if \(!studioMoment\(next\.claimable \? 'loop\.daily3Done' : 'loop\.daily3Check'\)\) \{\n\s+playSfx\(next\.claimable \? 'fx\.reveal' : 'fx\.coinTick'\);/],
+    ['src/components/retention/useRetention.tsx', /haptic\('success'\); if \(!studioMoment\('loop\.freeze'\)\) playSfx\('fx\.purchase'\);/],
   ];
   for (const [file, re] of sites) assert.match(read(file), re, file);
 });

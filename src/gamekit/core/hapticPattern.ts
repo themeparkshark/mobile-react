@@ -93,8 +93,16 @@ export const AHAP_LIBRARY = {
   bananaGoldenHour: [C(0, 600, 0.5, 0.2, 0.8, 0.9)],
   // Moments (wow-sound lane, Oct 24 2026; audio/momentMap.ts `ahap`). Shaped to the studio cue
   // envelopes: t = 0 is the cue's first transient, so the buzz lands on the same frame as the sound.
-  /** Catch: three rising wobble taps, the burst (heavy) at 700 ms, then a 120 ms soft sparkle. */
-  momentCatch: [T(0, 0.3, 0.4), T(220, 0.45, 0.5), T(440, 0.6, 0.6), T(700, 1, 0.7), C(700, 120, 0.45, 0.9, 0.1, 0.9)],
+  /**
+   * Catch, the gather (catch.tap): the press, then three rising wobble taps on the wobble swings
+   * (mapWow catchHaptics: 200, 350, 480 ms after the tap). Ends before the hit-stop.
+   */
+  momentCatchGather: [T(0, 0.45, 0.6), T(200, 0.3, 0.4), T(350, 0.45, 0.5), T(480, 0.6, 0.6)],
+  /**
+   * Catch, the burst (catch.burst): t = 0 IS the gold burst. A heavy hit, a 120 ms soft sparkle,
+   * and the success lift 180 ms later (mapWow's burst haptics), so the big pulse sits on the burst frame.
+   */
+  momentCatch: [T(0, 1, 0.7), C(0, 120, 0.45, 0.9, 0.1, 0.9), T(180, 0.7, 0.9)],
   /** Combo tier / level-up: a stamp, a brighter second tap, a short shimmer tail. */
   momentComboTier: [T(0, 0.8, 0.6), T(60, 1, 0.8), C(60, 160, 0.5, 0.7, 0, 0.5)],
   /** Fever start: a swell that rises into one big hit (sh_fever_start peaks near 350 ms). */
@@ -128,7 +136,8 @@ export const FALLBACK_STEPS: Partial<Record<AhapPatternName, HapticStep[]>> = {
   bossEasySlam: [{ at: 0, p: 'heavy' }],
   bossFinRefill: [{ at: 0, p: 'selection' }, { at: 120, p: 'selection' }, { at: 240, p: 'selection' }],
   // Moments: re-timed to >= 110 ms so every pulse plays on expo-haptics until the native player ships.
-  momentCatch: [{ at: 0, p: 'selection' }, { at: 220, p: 'selection' }, { at: 440, p: 'light' }, { at: 700, p: 'heavy' }, { at: 880, p: 'success' }],
+  momentCatchGather: [{ at: 0, p: 'light' }, { at: 200, p: 'selection' }, { at: 350, p: 'light' }, { at: 480, p: 'medium' }],
+  momentCatch: [{ at: 0, p: 'heavy' }, { at: 180, p: 'success' }],
   momentComboTier: [{ at: 0, p: 'heavy' }, { at: 120, p: 'rigid' }],
   momentFeverStart: [{ at: 0, p: 'soft' }, { at: 350, p: 'heavy' }],
   momentStreakIgnite: [{ at: 0, p: 'heavy' }, { at: 150, p: 'soft' }, { at: 300, p: 'light' }],

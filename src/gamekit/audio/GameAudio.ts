@@ -35,6 +35,8 @@ import {
 import { beatMapFromBpm, type BeatMap } from '../core/beatMap';
 import { AudioApiBackend, ExpoAvBackend, HybridBackend, audioApiAvailable, type AudioBackend } from './backends';
 import { CHRIS_BEDS, CHRIS_CUES, type BedDef, type CueDef } from './chrisBank';
+import { TraceBackend } from './traceBackend';
+import { studioTraceOn, traceEvent } from './studioTrace';
 import { routePan, type AudioRoute } from '../core/audioRoute';
 
 export interface PlayOptions {
@@ -83,6 +85,12 @@ class GameAudioEngine {
   /** Dev only: EXPO_PUBLIC_STUDIO_MUTE=1 keeps studio simulators silent (master gain pinned to 0). */
   private readonly studioMute = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
   private masterVolume = this.studioMute ? 0 : 1;
+  /**
+   * Dev only: EXPO_PUBLIC_STUDIO_TRACE=1 runs the whole engine into TraceBackend, which never touches
+   * the audio hardware, and logs every start. Sound settings stay "on" inside the engine so the trace
+   * shows what a player with sound on would hear; nothing is audible either way.
+   */
+  private readonly traceMode = studioTraceOn();
   private busGain: Record<Bus, number> = { ...BUS_DEFAULT };
   private ducks: Duck[] = [];
   private duckTimer: ReturnType<typeof setInterval> | null = null;
@@ -111,6 +119,13 @@ class GameAudioEngine {
     if (!this.sfxEnabled && !this.musicEnabled) return Promise.resolve();
     this.initPromise = (async () => {
       let backend: AudioBackend | null = null;
+      if (this.traceMode) {
+        // Silent by construction: no native backend is ever created in trace mode.
+        const trace = new TraceBackend(audioApiAvailable());
+        await trace.init();
+        this.backend = trace;
+        return;
+      }
       if (choice !== 'expo-av' && audioApiAvailable()) {
         try {
           // audio-api for WAV/MP3 one-shots, expo-av for AAC beds/stingers.
@@ -137,6 +152,18 @@ class GameAudioEngine {
   /** Typical output latency of the active backend (ms). */
   get latencyMs(): number {
     return this.backend?.latencyMs ?? 80;
+  }
+
+  /**
+   * Output latency for one cue (ms): the hybrid plays WAV/MP3 on audio-api (20 ms) and AAC
+   * stingers on expo-av (80 ms). Haptics paired with the cue wait this long so they land together.
+   */
+  latencyFor(name: string): number {
+    const def = this.cues.get(name);
+    const backend = this.backend;
+    if (!def || !backend) return this.latencyMs;
+    const file = this.files(name, def)[0];
+    return file && backend.latencyOf ? backend.latencyOf(file.key) : backend.latencyMs;
   }
 
   registerCues(defs: Record<string, CueDef>): void {
@@ -220,6 +247,7 @@ class GameAudioEngine {
   }
 
   setSfxEnabled(v: boolean): void {
+    if (this.traceMode) { traceEvent('legacy', 'setting', `sound effects ${v ? 'on' : 'off'} (trace keeps the engine on, silent)`); v = true; }
     this.sfxEnabled = v;
     if (!v) this.backend?.stopAll();
   }
@@ -229,6 +257,7 @@ class GameAudioEngine {
   }
 
   setMusicEnabled(v: boolean): void {
+    if (this.traceMode) { traceEvent('legacy', 'setting', `music ${v ? 'on' : 'off'} (trace keeps the engine on, silent)`); v = true; }
     this.musicEnabled = v;
     if (!v) this.music.stop(200);
   }
@@ -400,6 +429,7 @@ class GameAudioEngine {
 
   /** Duck the music bus: attack to -db, hold, release. Deepest duck wins. */
   duck(db: number, attackMs = 60, holdMs = 300, releaseMs = 300): void {
+    if (this.traceMode) traceEvent('duck', `-${db} dB`, `attack ${attackMs} hold ${holdMs} release ${releaseMs}`);
     this.ducks.push({ start: Date.now(), db, a: attackMs, h: holdMs, r: releaseMs });
     if (this.duckTimer) return;
     this.duckTimer = setInterval(() => {

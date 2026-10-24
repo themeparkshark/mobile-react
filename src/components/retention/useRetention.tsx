@@ -13,6 +13,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
+import { studioMoment } from '../../gamekit/audio/playMoment';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
@@ -111,7 +112,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       setPop(p => ({ index, key: p.key + 1 }));
       setCelebrate(c => [...new Set([...c, ...fresh])]);
       haptic('success');
-      playSfx(next.claimable ? 'fx.reveal' : 'fx.coinTick');
+      // Studio sound (wow-sound switch, off until Dustin's yes): a check ding per goal, all 3 rings the chord.
+      if (!studioMoment(next.claimable ? 'loop.daily3Done' : 'loop.daily3Check')) {
+        playSfx(next.claimable ? 'fx.reveal' : 'fx.coinTick');
+      }
     }
   }, []);
 
@@ -273,7 +277,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     try {
       const { state } = await buyStreakFreeze();
       applyDaily(state);
-      haptic('success'); playSfx('fx.purchase');
+      haptic('success'); if (!studioMoment('loop.freeze')) playSfx('fx.purchase');
       void refreshPlayer?.();
       setView({ k: 'sheet' });
     } catch {
