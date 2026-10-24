@@ -22,7 +22,7 @@ import { useAmbient } from './power';
 
 const BOX = require('../../../assets/images/retention/mystery-box.png');
 /** Everything around the chest and rows on a known-prize card (safe areas, ribbon, header, flame row, button, padding). */
-const CHROME_KNOWN = 410;
+const CHROME_KNOWN = 440;
 /** The rows area for this many small prize rows and hero cards (row heights plus gaps). */
 function rowsFor(small: number, big: number): number {
   return small * 51 + big * 108 + 24;
