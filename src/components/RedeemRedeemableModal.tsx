@@ -162,6 +162,10 @@ export default function RedeemRedeemableModal({
   const [proofRejected, setProofRejected] = useState(false);
   const spendingRef = useRef(false);
   const protectedRetryRef = useRef(false);
+  // A miss in the game just played: its own results card already said GOOD
+  // TRY!, so the try card only shows when it has a real retry to offer.
+  const lostFromGameRef = useRef(false);
+  const lostClosingRef = useRef(false);
   const claimingRef = useRef(false);
   const afterRewardsHidden = useRef<(() => void) | null>(null);
   const attemptRef = useRef<TaskAttempt | null>(null);
@@ -232,6 +236,8 @@ export default function RedeemRedeemableModal({
       setRetryOffered(true);
       setUsedRescuePass(false);
       setRescueRetryAvailable(false);
+      lostFromGameRef.current = false;
+      lostClosingRef.current = false;
       setStartError(null);
       setRescueUnavailable(false);
       setProofRejected(false);
@@ -520,6 +526,7 @@ export default function RedeemRedeemableModal({
   }, [resolveAttempt]);
 
   const handleGameLose = useCallback(async () => {
+    lostFromGameRef.current = true;
     await resolveAttempt('loss');
   }, [resolveAttempt]);
 
@@ -569,7 +576,20 @@ export default function RedeemRedeemableModal({
   const canOfferRetry = retryOffered && taskType !== null && lostTicketCost > 0 && !usedRescuePass
     && !firstCoinTicketReturned && !rescueRetryAvailable && (vip || adsAvailable());
   // The try card's title, line and ticket picture (GOOD TRY!, never a made-up SO CLOSE!).
-  const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost });
+  const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost, retryOffered: canOfferRetry });
+  const lostHasRetry = firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry;
+  // One card per miss in a moving line: when the game's own card was the
+  // GOOD TRY! and nothing can be retried, its CONTINUE goes straight back to
+  // the map (no second GOOD TRY! card, no second tap).
+  useEffect(() => {
+    if (flowState !== 'lost' || !lostFromGameRef.current) return;
+    if (lostHasRetry) { lostFromGameRef.current = false; return; }
+    // Once only: the map is never asked to close twice if a callback changes.
+    if (lostClosingRef.current) return;
+    lostClosingRef.current = true;
+    void handleLostClose();
+  }, [flowState, lostHasRetry, handleLostClose]);
+  const skipLostCard = lostFromGameRef.current && !lostHasRetry;
   const handleAdRetry = useCallback(async () => {
     const attemptId = attemptRef.current?.id;
     if (adBusy || !attemptId) return;
@@ -869,7 +889,7 @@ export default function RedeemRedeemableModal({
               } else if (outcomeRef.current) resolveAttempt(outcomeRef.current);
             } }}
             quiet={{ label: 'Return to map', onPress: handleLostClose }} />}
-          {flowState === 'lost' && <ChallengeStatusCard title={lostCopy.title} art="soClose" message={lostCopy.message} ticket={lostCopy.ticket}
+          {flowState === 'lost' && !skipLostCard && <ChallengeStatusCard title={lostCopy.title} art="soClose" message={lostCopy.message} ticket={lostCopy.ticket}
             primary={firstCoinTicketReturned || rescueRetryAvailable
               ? { label: location ? 'Try Again' : 'Finding You', onPress: handleProtectedRetry, disabled: !location }
               : canOfferRetry

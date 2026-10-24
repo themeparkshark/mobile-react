@@ -848,15 +848,17 @@ function BananaRun({
     const rideKey = String(rideId ?? 'park');
     const mastery = mode === 'ride' ? masteryAfter(progress.mastery[rideKey] ?? 0, stars) : progress.mastery[rideKey] ?? 0;
     const firstWin = mode === 'ride' && stars >= 1 && !progress.firstWins[jKey];
-    const out = s.endReason === 2;
     const res: GameResult = {
       score: final,
       stars,
       maxCombo: s.maxChain,
       thresholds,
-      message: out ? 'OUT OF HEARTS' : stars >= 1
+      // A 0-star run leaves the title to the shared feelings rule (SO CLOSE!
+      // only when a star really was near, otherwise GOOD TRY!); why the run
+      // ended is in the note.
+      message: stars >= 1
         ? (mode === 'ride' ? 'RIDE COIN EARNED!' : stars === 3 ? 'BASKET MASTER!' : 'NICE HAUL!')
-        : 'SO CLOSE!',
+        : undefined,
       note: stars === 0 ? `${whyLine(facts)} ${tipLine(facts)}`.trim() : cmp ? cmp.line : next ? `+${next.delta} TO ${next.label}` : undefined,
       rival: g ? { name: g.name, score: g.final } : null,
       stats: [

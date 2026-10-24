@@ -221,13 +221,16 @@ export default function QueueResultsCaptureScreen() {
       {tryCard ? (
         <View style={styles.tryScrim}>
           <View style={shortPhone ? styles.seFrame : styles.fullFrame}>
-          {/* The same words and props RedeemRedeemableModal passes on a miss. */}
+          {/* The same words and props RedeemRedeemableModal passes on a miss.
+              The card only shows when a retry is on offer (a miss with none
+              goes straight back to the map): TICKET BACK is the free retry,
+              TICKET SPENT is the "one more try" offer. */}
           <ChallengeStatusCard art="soClose" {...lostTryCopy({ usedRescuePass: false, rescueRetryAvailable: false,
-            firstCoinTicketReturned: tryCard === 'back', lostTicketCost: tryCard === 'back' ? 0 : 1 })}
+            firstCoinTicketReturned: tryCard === 'back', lostTicketCost: tryCard === 'back' ? 0 : 1, retryOffered: tryCard === 'spent' })}
             primary={tryCard === 'back'
               ? { label: 'Try Again', onPress: () => { note('Try card: Try Again'); setTryCard(null); } }
-              : { label: 'Continue', onPress: () => { note('Try card: Continue'); setTryCard(null); } }}
-            quiet={tryCard === 'back' ? { label: 'DONE', onPress: () => { note('Try card: DONE'); setTryCard(null); } } : undefined}
+              : { label: 'Watch Ad: One More Try', onPress: () => { note('Try card: One More Try'); setTryCard(null); } }}
+            quiet={{ label: tryCard === 'back' ? 'DONE' : 'No thanks', onPress: () => { note('Try card: DONE'); setTryCard(null); } }}
             guardRetry={tryCard === 'back'} />
           </View>
         </View>

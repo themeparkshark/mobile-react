@@ -52,7 +52,7 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
    * own Close never starts (and pays for) a new try.
    */
   readonly guardRetry?: boolean;
-  /** Tickets this try changed, as a picture: -1 spent, +1 came back, 0 none spent. */
+  /** Tickets this try changed, as a picture: -1 spent, +1 came back. 0 or none: no picture. */
   readonly ticket?: number;
 }) {
   const primary = capsAction(primaryIn);
@@ -76,9 +76,10 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
         {art === 'soClose' && <Image source={SO_CLOSE_SHARK} contentFit="contain" style={styles.shark}
           accessibilityLabel="The shark missed the coin this time" />}
         {art === 'loading' && <View style={styles.loader}><SharkLoader compact tone="onBlue" /></View>}
-        {ticket != null ? <View style={styles.ticket} importantForAccessibility="no-hide-descendants">
+        {/* Only a change gets a picture: a bare 0 would read as "you have no Tickets". */}
+        {ticket ? <View style={styles.ticket} importantForAccessibility="no-hide-descendants">
           <GameIcon name="ticket" size={30} />
-          <Text style={styles.ticketText}>{ticket > 0 ? `+${ticket}` : ticket < 0 ? `${ticket}` : '0'}</Text>
+          <Text style={[styles.ticketText, ticket > 0 && styles.ticketBack]}>{ticket > 0 ? `+${ticket}` : `${ticket}`}</Text>
         </View> : null}
         <Text style={styles.message}>{message}</Text>
         {primary && <ResultPrimaryButton label={primary.label} onPress={primary.onPress}
@@ -107,4 +108,5 @@ const styles = StyleSheet.create({
   ticket: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 3, borderColor: '#05346e',
     paddingHorizontal: 12, paddingVertical: 2, marginBottom: 8 },
   ticketText: { fontFamily: 'Shark', fontSize: 22, color: '#05346e' },
+  ticketBack: { color: '#1f8a3a' },
 });

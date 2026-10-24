@@ -303,7 +303,7 @@ test('ride challenge status cards sit on a brand navy scrim, and a free miss say
   const src = require('node:fs').readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
   assert.match(src, /backdropColor="#05346e"/);
   assert.ok(!/backdropOpacity=\{flowState === 'preview' \? 0\.5 : 0\.95\}/.test(src), 'status states must not use a near-black backdrop');
-  assert.match(src, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost \}\)/);
+  assert.match(src, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost, retryOffered: canOfferRetry \}\)/);
   assert.deepEqual({ ...lostTryCard.lostTryCopy({ usedRescuePass: false, rescueRetryAvailable: false, firstCoinTicketReturned: false, lostTicketCost: 0 }) },
     { title: 'Good Try!', message: 'No Ticket spent.', ticket: 0 });
   // The dev-only status preview can never reach a release build or a live modal.

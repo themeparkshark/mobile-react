@@ -282,12 +282,14 @@ test('a pass-and-play group turn is one try: DONE is the only button and it fini
   assert.equal(rematches, 0);
   assert.equal(challenges, 0);
   turn.view.unmount();
-  // A won group turn: CONTINUE alone, and it hands the stars to onComplete.
+  // A won group turn: DONE alone (the line banks the run, nothing is left to
+  // collect, so the one exit word is DONE), and it hands the stars to onComplete.
   const win = shell(false, false, { onRematch() { rematches++; } }, movement);
   startPlaying(win.view);
   win.view.change({ result: { score: 900, stars: 2 } });
   assert.equal(button(win.view, 'PLAY AGAIN'), undefined);
-  button(win.view, 'CONTINUE').props.onPress();
+  assert.equal(button(win.view, 'CONTINUE'), undefined, 'CONTINUE only when a reward is still to collect');
+  button(win.view, 'DONE').props.onPress();
   assert.equal(win.calls.complete, 1);
   win.view.unmount();
 });

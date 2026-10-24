@@ -220,6 +220,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
 
   // -- Match state ------------------------------------------------------------------
   const [phase, setPhase] = useState<Phase>('loading');
+  const resultsUp = phase === 'results' || phase === 'crate';
   const [plan, setPlan] = useState<MatchPlan | null>(null);
   const [roundIdx, setRoundIdx] = useState(0);
   const [round, setRound] = useState<PlannedRound | null>(null);
@@ -1556,6 +1557,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       banners, nearMiss: nm.line, rows, facts: newCards.slice(0, 1), stars, practice: mode === 'practice',
       rank: ghost ? null : {
         label: FIN_RANKS[rk.rank].label, progress: nextRank ? Math.min(1, rk.winsAtRank / FIN_RANKS[rk.rank].promoteAfter) : 1, next: nextRank,
+        wins: rk.winsAtRank, need: nextRank ? FIN_RANKS[rk.rank].promoteAfter : 0,
         stripes: FIN_RANKS[rk.rank].stripes, nextStripes: ri < FIN_RANK_ORDER.length - 1 ? FIN_RANKS[FIN_RANK_ORDER[ri + 1]].stripes : null,
       },
       // A missed Final bet is why right answers can still end on a low score:
@@ -1991,10 +1993,12 @@ export function TriviaDuel(props: TriviaDuelProps) {
             </View>
           ) : null}
 
-          <View style={styles.railWrap}>
+          {/* While the results card is up it is the only thing to read: the rail
+              dims and drops its lock times (TIME, 2.3s) and Final stake pills. */}
+          <View style={[styles.railWrap, resultsUp && styles.railDim]}>
             <Rail
-              me={{ name: myName, score: scores.me, look: 'classic', lockLabel: locks.me, stake: stakes.me }}
-              opp={{ name: oppName, score: scores.opp, look: opponentLook, lockLabel: locks.opp, stake: stakes.opp, ghost: !!ghost }}
+              me={{ name: myName, score: scores.me, look: 'classic', lockLabel: resultsUp ? null : locks.me, stake: resultsUp ? null : stakes.me }}
+              opp={{ name: oppName, score: scores.opp, look: opponentLook, lockLabel: resultsUp ? null : locks.opp, stake: resultsUp ? null : stakes.opp, ghost: !!ghost }}
               pips={pips}
               flame={flameT}
               streak={streakView.streak}
@@ -2147,6 +2151,7 @@ const styles = StyleSheet.create({
   bg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#bfeaff' },
   stageWrap: { position: 'absolute', left: 0, right: 0 },
   railWrap: { position: 'absolute', left: 0, right: 0, top: 0 },
+  railDim: { opacity: 0.45 },
   railing: { position: 'absolute', left: 0 },
   deskWrap: { position: 'absolute', left: 0, right: 0 },
   boardWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },

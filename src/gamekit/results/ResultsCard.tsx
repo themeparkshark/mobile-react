@@ -113,6 +113,8 @@ export interface ResultsCardProps {
 
 /** Below this window height (points) the card goes compact (iPhone SE is 667). */
 export const SHORT_PHONE_PT = 740;
+/** A score is points, not coins: its count-up ticks with a soft tap. The coin sound stays for real coin rewards. */
+export const SCORE_TICK_CUE = 'ui.tap';
 const STAR_BASE_DELAY = 260;
 const STAR_STEP = 220;
 const BUCKET_MS = 520;
@@ -229,7 +231,7 @@ export function ResultsCard({
       {sendOff ? null : <>
         <Text style={styles.label}>SCORE</Text>
         <CountUpText value={score} from={0} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
-          onTick={() => GameAudio.play('fx.coin', { volume: 0.35 })} style={[styles.score, short && styles.scoreShort]} />
+          onTick={() => GameAudio.play(SCORE_TICK_CUE, { volume: 0.3 })} style={[styles.score, short && styles.scoreShort]} />
       </>}
 
       {/* The row keeps its height only when something will land in it (no empty gap on a plain card). */}
@@ -304,7 +306,7 @@ function BucketTally({ label, text, value, delayMs, reducedMotion }: {
     const n = value !== undefined ? tallyTickCount(value) : 0;
     const plan = tallySchedule(n, BUCKET_MS);
     const timers = plan.at.map((t, k) => setTimeout(() => {
-      GameAudio.play('fx.coin', { volume: 0.3, pitch: plan.pitch[k] * 0.5 });
+      GameAudio.play(SCORE_TICK_CUE, { volume: 0.3, pitch: plan.pitch[k] * 0.5 });
       if (k === n - 1) playHaptic('tick');
     }, delayMs + t));
     timers.push(setTimeout(() => setShown(value ?? 0), delayMs));

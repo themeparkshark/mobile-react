@@ -20,6 +20,9 @@ import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { feelingChips, type FeelingStat } from '../../../gamekit/results/feelings';
 import GameIcon from '../../../ui/GameIcon';
 
+/** The shared results card blue (ResultsCard): one surface on every results card. */
+const CARD_BLUE = '#0768b9';
+
 /**
  * The duel's stat rows as the shared brag chips: right answers as gold dots
  * (only the ones earned), the best answer speed as a word, a real streak.
@@ -62,8 +65,8 @@ export interface ResultsModel {
   stars: number;
   practice: boolean;
   /** Fin rank bar: label and progress toward the next rank (0..1), or null vs a ghost. */
-  rank?: { label: string; progress: number; next: string | null; stripes?: number; nextStripes?: number | null } | null;
-  /** Points a wrong Final bet took away (shown so right answers and a low score agree). */
+  rank?: { label: string; progress: number; next: string | null; stripes?: number; nextStripes?: number | null; wins?: number; need?: number } | null;
+  /** Points a missed Big Final took away (shown so right answers and a low score agree). */
   lostBet?: number;
   /** Best Moment: the fastest correct lock. */
   best?: { label: string } | null;
@@ -136,13 +139,10 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             <Text style={styles.scoreOpp}>{model.oppScore}</Text>
           </View>
         </View>
-        {/* Right answers and a low score agree: the Final bet that missed is right there. */}
-        {lostBet ? (
-          <View style={styles.betLost} accessible accessibilityLabel={`Your Final bet missed, so ${lostBet} points went away`}>
-            <GameIcon name="dice" size={20} />
-            <Text style={styles.betLostText}>{`FINAL BET  -${lostBet.toLocaleString()}`}</Text>
-          </View>
-        ) : null}
+        {/* Right answers and a low score agree: the Big Final that missed is
+            right there, as a picture (lightning, then a red arrow down to the
+            points it took). No dice and no betting words on a kids' card. */}
+        {lostBet ? <BigFinalLost points={lostBet} reducedMotion={reducedMotion} /> : null}
         {model.ride ? (
           <View style={styles.starRow}>
             {[1, 2, 3].map((k) => <StarPip key={k} on={k <= model.stars} i={k} reducedMotion={reducedMotion} />)}
@@ -169,13 +169,16 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} pips={c.pips} />)}
           </View>
         ) : null}
-        {model.rank ? (
-          // Fin's hat at each end (more gold stripes = a tougher Fin), so the bar reads without the words.
+        {/* Fin's rank, only after a win (a loss makes no rank progress, so it
+            would be a bar that means nothing): today's hat, one fin per win
+            needed (gold for each one won) and the bigger, gold-trimmed hat
+            those wins unlock. */}
+        {model.rank && (model.won || model.banners.includes('RANK UP')) ? (
           <View style={styles.rankRow} accessible
-            accessibilityLabel={model.rank.next ? `${model.rank.label} now. Win more to face ${model.rank.next}` : `${model.rank.label}, the top rank`}>
+            accessibilityLabel={model.rank.next ? `${model.rank.label} now. ${Math.max(0, (model.rank.need ?? 0) - (model.rank.wins ?? 0))} more wins to face ${model.rank.next}` : `${model.rank.label}, the top rank`}>
             <RankHat stripes={model.rank.stripes ?? 0} />
-            <View style={styles.rankTrack}><View style={[styles.rankFill, { width: `${Math.round(model.rank.progress * 100)}%` }]} /></View>
-            {model.rank.next ? <RankHat stripes={model.rank.nextStripes ?? (model.rank.stripes ?? 0) + 1} /> : <GameIcon name="crown" size={30} />}
+            <RankPips wins={model.rank.wins ?? Math.round(model.rank.progress * 3)} need={model.rank.next ? model.rank.need ?? 3 : 0} reducedMotion={reducedMotion} />
+            {model.rank.next ? <RankHat stripes={model.rank.nextStripes ?? (model.rank.stripes ?? 0) + 1} big /> : <GameIcon name="crown" size={34} />}
           </View>
         ) : null}
         {fact ? <FactRow card={fact} /> : null}
@@ -193,9 +196,11 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
                 <Text style={styles.secondaryText}>PASS TO CREW</Text>
               </Pressable>
             ) : null}
-            {/* The only way on (a ride challenge) is the big gold button, like every card. */}
+            {/* The only way on (a ride challenge) is the big gold button, like every card.
+                One exit word on every results card: DONE, and CONTINUE only
+                when a reward is still to collect (a won ride coin). */}
             <Pressable style={[styles.btn, onRematch ? styles.secondary : styles.primary, onGhost ? styles.half : styles.full]} onPress={onContinue} accessibilityRole="button">
-              <Text style={onRematch ? styles.secondaryText : styles.primaryText}>CONTINUE</Text>
+              <Text style={onRematch ? styles.secondaryText : styles.primaryText}>{model.ride?.won ? 'CONTINUE' : 'DONE'}</Text>
             </Pressable>
           </View>
         </View>
@@ -230,18 +235,21 @@ function StarPip({ on, i, reducedMotion }: { on: boolean; i: number; reducedMoti
 
 /**
  * Two right answers win the coin, as pictures: one dot per answer needed
- * (gold for each right one) and the coin at the end, then TRY AGAIN!. The
+ * (gold for each right one) and the coin at the end, then NEXT TIME!. This
+ * card cannot know whether a retry is on offer (the server decides after the
+ * miss), so it never promises TRY AGAIN!: when a retry exists the ride try
+ * card offers it next, otherwise DONE goes straight back to the map. The
  * dots pop in one by one, a small beat when the card lands.
  */
 function CoinGoal({ right, need, reducedMotion }: { right: number; need: number; reducedMotion: boolean }) {
   return (
-    <View style={styles.goal} accessible accessibilityLabel={`${right} of ${need} right answers. ${need} right answers win the coin. Try again!`}>
+    <View style={styles.goal} accessible accessibilityLabel={`${right} of ${need} right answers. ${need} right answers win the coin. Next time!`}>
       <View style={styles.goalRow}>
         {Array.from({ length: need }, (_, k) => <GoalDot key={k} on={k < right} k={k} reducedMotion={reducedMotion} />)}
         <Text style={styles.goalEq}>=</Text>
         <Image source={ART.coin} style={styles.goalCoin} resizeMode="contain" />
       </View>
-      <Text style={styles.goalText}>TRY AGAIN!</Text>
+      <Text style={styles.goalText}>NEXT TIME!</Text>
     </View>
   );
 }
@@ -256,14 +264,70 @@ function GoalDot({ on, k, reducedMotion }: { on: boolean; k: number; reducedMoti
   return <Animated.View style={[styles.goalDot, on && styles.goalDotOn, st]} />;
 }
 
-/** Fin's captain hat with his rank's gold stripes under it. */
-function RankHat({ stripes }: { stripes: number }) {
+/**
+ * Fin's captain hat with his rank's gold chevrons under it. The hat you are
+ * winning toward is bigger and sits on a gold badge, so "that one is better"
+ * reads with zero words.
+ */
+function RankHat({ stripes, big = false }: { stripes: number; big?: boolean }) {
   return (
-    <View style={styles.rankHat}>
-      <Image source={ART.hat} style={styles.rankHatImg} resizeMode="contain" />
+    <View style={[styles.rankHat, big && styles.rankHatBig]}>
+      <Image source={ART.hat} style={big ? styles.rankHatImgBig : styles.rankHatImg} resizeMode="contain" />
       <View style={styles.rankStripes}>
-        {Array.from({ length: Math.max(0, Math.min(3, stripes)) }, (_, k) => <View key={k} style={styles.rankStripe} />)}
+        {Array.from({ length: Math.max(0, Math.min(3, stripes)) }, (_, k) => <View key={k} style={[styles.rankStripe, big && styles.rankStripeBig]} />)}
       </View>
+    </View>
+  );
+}
+
+/** One fin per win the next hat needs: gold for each win so far. */
+function RankPips({ wins, need, reducedMotion }: { wins: number; need: number; reducedMotion: boolean }) {
+  if (need <= 0) return <View style={styles.rankPips} />;
+  return (
+    <View style={styles.rankPips}>
+      {Array.from({ length: Math.min(need, 6) }, (_, k) => (
+        <GoalPop key={k} k={k} reducedMotion={reducedMotion}>
+          <View style={[styles.rankPip, k < wins && styles.rankPipOn]}>
+            <GameIcon name="fin" size={need > 4 ? 16 : 20} mono={k < wins ? undefined : '#9cc9ec'} />
+          </View>
+        </GoalPop>
+      ))}
+    </View>
+  );
+}
+
+function GoalPop({ k, reducedMotion, children }: { k: number; reducedMotion: boolean; children: React.ReactNode }) {
+  const s = useSharedValue(reducedMotion ? 1 : 0);
+  useEffect(() => {
+    if (reducedMotion) return;
+    s.value = withDelay(650 + k * 140, withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 8, stiffness: 300 })));
+  }, [s, k, reducedMotion]);
+  const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  return <Animated.View style={st}>{children}</Animated.View>;
+}
+
+/**
+ * The Big Final that missed: lightning, BIG FINAL, then a red pill with an
+ * arrow pointing down at the points it took (no minus sign to work out, no
+ * dice, no betting words). The full sentence is spoken.
+ */
+function BigFinalLost({ points, reducedMotion }: { points: number; reducedMotion: boolean }) {
+  const drop = useSharedValue(reducedMotion ? 0 : -10);
+  const o = useSharedValue(reducedMotion ? 1 : 0);
+  useEffect(() => {
+    if (reducedMotion) return;
+    o.value = withDelay(500, withTiming(1, { duration: 160 }));
+    drop.value = withDelay(500, withSpring(0, { damping: 9, stiffness: 260 }));
+  }, [o, drop, reducedMotion]);
+  const st = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ translateY: drop.value }] }));
+  return (
+    <View style={styles.betLost} accessible accessibilityLabel={`The Big Final missed, so ${points.toLocaleString()} points went away`}>
+      <GameIcon name="rush" size={22} />
+      <Text style={styles.betLostText}>BIG FINAL</Text>
+      <Animated.View style={[styles.betDrop, st]}>
+        <GameIcon name="arrow" size={20} style={styles.arrowDown} />
+        <Text style={styles.betDropText}>{points.toLocaleString()}</Text>
+      </Animated.View>
     </View>
   );
 }
@@ -304,25 +368,28 @@ function FactRow({ card }: { card: FactCard & { isNew: boolean } }) {
 
 const styles = StyleSheet.create({
   root: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', paddingHorizontal: 10, paddingBottom: 10 },
-  card: { backgroundColor: C.cream, borderRadius: 24, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 7, paddingHorizontal: 14, paddingTop: 42, paddingBottom: 10, marginTop: 34 },
+  // The one results surface every game shares: the blue card with a white border (ResultsCard, try card).
+  card: { backgroundColor: CARD_BLUE, borderRadius: 24, borderWidth: 4, borderColor: '#ffffff', paddingHorizontal: 14, paddingTop: 42, paddingBottom: 10, marginTop: 34,
+    shadowColor: '#05346e', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 18 },
   ribbonWrap: { position: 'absolute', top: -36, left: -14, right: -14 },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   scoreRow: { flexDirection: 'row', alignItems: 'baseline' },
-  scoreMe: { fontFamily: 'Shark', fontSize: 30, color: C.navy },
-  scoreVs: { fontFamily: 'Knockout', fontSize: 15, color: C.navy, opacity: 0.6, marginHorizontal: 8 },
-  scoreOpp: { fontFamily: 'Shark', fontSize: 24, color: C.navy, opacity: 0.6 },
+  scoreMe: { fontFamily: 'Shark', fontSize: 30, color: '#ffffff' },
+  scoreVs: { fontFamily: 'Knockout', fontSize: 15, color: '#cdeaff', marginHorizontal: 8 },
+  scoreOpp: { fontFamily: 'Shark', fontSize: 24, color: '#cdeaff' },
   gapTrack: { flexDirection: 'row', height: 12, borderRadius: 6, borderWidth: 2.5, borderColor: C.ink, overflow: 'hidden', backgroundColor: '#ffffff', marginTop: 6 },
   gapMe: { backgroundColor: C.gold },
   gapSeg: { backgroundColor: C.coral },
   banners: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 },
   banner: { backgroundColor: C.gold, borderWidth: 2.5, borderColor: C.ink, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2, margin: 3 },
   bannerText: { fontFamily: 'Shark', fontSize: 18, color: C.navy },
-  near: { fontFamily: 'Knockout', fontSize: 18, color: C.navy, textAlign: 'center', marginTop: 6 },
+  near: { fontFamily: 'Knockout', fontSize: 18, color: '#ffffff', textAlign: 'center', marginTop: 6 },
   rows: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 },
   starRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginTop: 4 },
   rankRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  rankTrack: { flex: 1, marginHorizontal: 6, height: 12, borderRadius: 6, borderWidth: 2.5, borderColor: C.ink, backgroundColor: '#ffffff', overflow: 'hidden' },
-  rankFill: { height: '100%', backgroundColor: C.blue },
+  rankPips: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, marginHorizontal: 4 },
+  rankPip: { width: 30, height: 30, borderRadius: 15, borderWidth: 2.5, borderColor: '#05346e', backgroundColor: '#3d9be6', alignItems: 'center', justifyContent: 'center' },
+  rankPipOn: { backgroundColor: '#ffffff' },
   fact: { flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 10, paddingVertical: 6 },
   factText: { flex: 1, fontSize: 15, fontWeight: '700', color: C.navy },
   factLong: { fontSize: 14 },
@@ -330,17 +397,23 @@ const styles = StyleSheet.create({
   betLost: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, marginTop: 4, backgroundColor: '#ffffff', borderRadius: 12,
     borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 10, paddingVertical: 2 },
   betLostText: { fontFamily: 'Shark', fontSize: 16, color: C.navy },
+  betDrop: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: C.coral, borderRadius: 10, borderWidth: 2, borderColor: C.ink, paddingLeft: 2, paddingRight: 8, marginVertical: 2 },
+  betDropText: { fontFamily: 'Shark', fontSize: 16, color: '#ffffff' },
+  arrowDown: { transform: [{ rotate: '90deg' }] },
   goal: { alignItems: 'center', marginTop: 6 },
   goalRow: { flexDirection: 'row', alignItems: 'center' },
   goalDot: { width: 24, height: 24, borderRadius: 12, borderWidth: 3, borderColor: C.ink, backgroundColor: '#ffffff', marginHorizontal: 4 },
   goalDotOn: { backgroundColor: C.gold },
-  goalEq: { fontFamily: 'Shark', fontSize: 24, color: C.navy, marginHorizontal: 6 },
+  goalEq: { fontFamily: 'Shark', fontSize: 24, color: '#ffffff', marginHorizontal: 6 },
   goalCoin: { width: 36, height: 36 },
-  goalText: { fontFamily: 'Shark', fontSize: 20, color: C.navy, marginTop: 2 },
+  goalText: { fontFamily: 'Shark', fontSize: 20, color: '#ffffff', marginTop: 2 },
   rankHat: { width: 44, alignItems: 'center' },
-  rankHatImg: { width: 40, height: 28 },
-  rankStripes: { flexDirection: 'row', gap: 2, height: 5, marginTop: 1 },
-  rankStripe: { width: 8, height: 4, borderRadius: 2, backgroundColor: C.gold, borderWidth: 1, borderColor: C.ink },
+  rankHatBig: { width: 64, paddingVertical: 3, borderRadius: 16, borderWidth: 3, borderColor: C.gold, backgroundColor: '#ffffff' },
+  rankHatImg: { width: 38, height: 26 },
+  rankHatImgBig: { width: 52, height: 34 },
+  rankStripes: { flexDirection: 'row', gap: 3, height: 8, marginTop: 2 },
+  rankStripe: { width: 9, height: 6, borderRadius: 2, backgroundColor: C.gold, borderWidth: 1.5, borderColor: C.ink },
+  rankStripeBig: { width: 12, height: 8 },
   readBtn: { marginLeft: 8, backgroundColor: C.blue, borderRadius: 8, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 8, paddingVertical: 3 },
   readText: { fontFamily: 'Knockout', fontSize: 13, color: '#ffffff' },
   buttons: { marginTop: 4 },

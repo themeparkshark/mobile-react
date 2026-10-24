@@ -52,6 +52,9 @@ import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { bestAwareTitle } from '../../../gamekit/results/feelings';
 import { missionIcon } from './missionIcons';
 
+/** The shared results card blue (ResultsCard). */
+const CARD_BLUE = '#0768b9';
+
 export interface SharkyResultsData {
   score: number;
   stars: number;
@@ -247,7 +250,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
           </View>
         )}
         {/* The score counts up on the UI thread (no re-render of this card per step). */}
-        <Animated.View style={scoreStyle}>
+        <Animated.View style={[styles.scoreWrap, scoreStyle]}>
           <CountUpText value={data.score} from={0} delayMs={300} durationMs={1100} punch={1} reducedMotion={reducedMotion}
             style={[styles.score, short && styles.scoreShort]} />
         </Animated.View>
@@ -267,10 +270,10 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
             {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} />)}
           </View>
         ) : null}
-        {goal && !(short && goal.nextStar === 0) ? <NextStarBar goal={goal} delayMs={1500} reducedMotion={reducedMotion} tone="onWhite" /> : null}
+        {goal && !(short && goal.nextStar === 0) ? <NextStarBar goal={goal} delayMs={1500} reducedMotion={reducedMotion} /> : null}
         {gate !== null ? (
           <NextStarBar goal={{ nextStar: 1, progress: gate, near: gate >= 0.85, remaining: 0 }} word={sharkyGateWord(gate)}
-            a11yLabel={`${Math.round(gate * 100)} percent of the way to the Ride Gate`} delayMs={1500} reducedMotion={reducedMotion} tone="onWhite" />
+            a11yLabel={`${Math.round(gate * 100)} percent of the way to the Ride Gate`} delayMs={1500} reducedMotion={reducedMotion} />
         ) : null}
 
         <Animated.View style={[styles.playWrap, short && styles.playWrapShort, btnStyle]}>
@@ -343,8 +346,14 @@ const styles = StyleSheet.create({
   headlineShort: { top: 16 },
   sharkWrap: { position: 'absolute', alignItems: 'center' },
   dizzyStars: { position: 'absolute', top: -6 },
-  card: { width: '92%', backgroundColor: NEUTRAL, borderRadius: 26, borderWidth: 4, borderColor: INK, padding: 14, alignItems: 'center', marginTop: -6 },
-  score: { fontFamily: 'Shark', fontSize: 54, color: REWARD, textShadowColor: INK, textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 0 },
+  // The one results surface every game shares: the blue card with a white border.
+  card: { width: '92%', backgroundColor: CARD_BLUE, borderRadius: 26, borderWidth: 4, borderColor: '#ffffff', padding: 14, alignItems: 'center', marginTop: -6,
+    shadowColor: '#05346e', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 18 },
+  // Full width with a fixed line height: the count-up field never starts
+  // narrower than its final number, so the navy shadow always sits right under
+  // the gold fill (a narrow field scrolled the glyphs off their shadow at SE size).
+  scoreWrap: { alignSelf: 'stretch' },
+  score: { width: '100%', fontFamily: 'Shark', fontSize: 54, lineHeight: 62, color: REWARD, textShadowColor: INK, textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 0 },
   newBest: { flexDirection: 'row', alignItems: 'center', backgroundColor: REWARD, borderRadius: 999, borderWidth: 3, borderColor: INK, paddingHorizontal: 12, paddingVertical: 2, marginTop: 2 },
   newBestText: { fontFamily: 'Shark', fontSize: 18, color: INK, marginLeft: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 },
@@ -369,13 +378,13 @@ const styles = StyleSheet.create({
   mCheck: { position: 'absolute', top: -8, right: -8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: INK, padding: 1 },
   mTrack: { width: 40, height: 10, marginTop: 4, borderRadius: 5, backgroundColor: '#cfe6fb', borderWidth: 2, borderColor: INK, overflow: 'hidden' },
   mFill: { height: '100%', backgroundColor: REWARD },
-  small: { fontFamily: 'Shark', fontSize: 16, color: INK, marginLeft: 4 },
+  small: { fontFamily: 'Shark', fontSize: 16, color: '#ffffff', marginLeft: 4 },
   tokens: { flexDirection: 'row', alignItems: 'center' },
   tokenArt: { width: 24, height: 24 },
   medal: { width: 46, height: 46 },
   cardShort: { paddingVertical: 10 },
   starsShort: { marginVertical: 2 },
-  scoreShort: { fontSize: 44 },
+  scoreShort: { fontSize: 44, lineHeight: 52 },
   playWrapShort: { marginTop: 8 },
   newCardShort: { fontSize: 16, paddingVertical: 4, marginBottom: 0 },
   medalShort: { width: 40, height: 40 },

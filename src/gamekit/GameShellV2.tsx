@@ -140,6 +140,8 @@ export interface ShellResultsArgs {
    * replay would skip it: then the claim button leads.
    */
   playAgainFirst: boolean;
+  /** The exit word every results card uses: DONE, or CONTINUE when a reward is still to collect. */
+  claimLabel: 'DONE' | 'CONTINUE';
   /** A queue event saved a run that had points but no star yet (RUN SAVED stamp). */
   saved: boolean;
   reducedMotion: boolean;
@@ -330,6 +332,12 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const [headsUp, setHeadsUp] = useState(false);
     // Safety net: once the results have had RESULTS_FALLBACK_MS to appear, show them with no fade.
     const [resultsSafe, setResultsSafe] = useState(false);
+    /**
+     * The same "safe" flag without a re-render: set when the fade landed on a
+     * mounted surface (so the tree is not rebuilt for nothing). A game surface
+     * that empties on a later render still falls back to the shared card.
+     */
+    const resultsSafeRef = useRef(false);
     const ownCelebrationRef = useRef(ownCelebration);
     ownCelebrationRef.current = ownCelebration && !!renderResults;
     /** A results surface (the game's own or the shared card) is on screen. */
@@ -561,6 +569,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     useEffect(() => {
       if (!visible || phase !== 'results') {
         setResultsSafe(false);
+        resultsSafeRef.current = false;
         return undefined;
       }
       // Reduced motion has no fade to wait for: the results are safe at once.
@@ -573,6 +582,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       const t = setTimeout(() => {
         // The fade finished on a view that was already mounted: the card is
         // solid, so skip the extra re-render of the whole results tree.
+        resultsSafeRef.current = true;
         if (surfaceAtFade && surfaceShownRef.current && resultsOpacity.value >= 0.999 && resultsScale.value > 0.98) return;
         // Land the fade on its end values too, so the card is solid either way.
         cancelAnimation(resultsOpacity);
@@ -887,7 +897,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const challengeOffered = !rideChallenge && !wrap && !turnOnly ? onChallenge : undefined;
     const playAgainFirst = rematchOffered && (!won || canBankRun);
     const saved = effectiveResult?.meta?.partial === true;
-    const claimLabel = won ? 'CONTINUE' : 'DONE';
+    // One exit word on every results card: DONE, and CONTINUE only when a
+    // reward is still to collect (a won ride coin, or a win the line has not
+    // banked yet).
+    const claimLabel = won && (rideChallenge || !canBankRun) ? 'CONTINUE' : 'DONE';
 
     // A game-owned results surface, when the game has one and it rendered.
     // Nothing rendered by the time the fallback fires: the shared card shows.
@@ -904,12 +917,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       rematch: rematchOffered ? rematchRun : undefined,
       challenge: challengeOffered,
       playAgainFirst,
+      claimLabel,
       saved,
       reducedMotion,
-    }) : null), [phase, renderResults, effectiveResult, stars, won, wrapReason, handleClaim, rematchOffered, rematchRun, challengeOffered, playAgainFirst, saved, reducedMotion]);
+    }) : null), [phase, renderResults, effectiveResult, stars, won, wrapReason, handleClaim, rematchOffered, rematchRun, challengeOffered, playAgainFirst, claimLabel, saved, reducedMotion]);
     const gameResults = isEmptyResultsNode(ownSurface) ? null : ownSurface;
     // A wrap-up (ride's up) has no game surface to wait for: the shared card shows at once.
-    const showSharedCard = phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || wrap != null)));
+    const showSharedCard = phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || resultsSafeRef.current || wrap != null)));
     sharedCardShownRef.current = showSharedCard;
     surfaceShownRef.current = gameResults != null || showSharedCard;
 
@@ -919,9 +933,12 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const gameContent = (
         <View style={styles.root}>
           {/* Header */}
+          {/* While results are up the card is the only thing to read: the
+              game's title and score step back and the close X dims (it still
+              works, a safe way out if a card ever stalls). */}
           <View style={styles.header}>
             <TouchableOpacity
-              style={styles.iconBtn}
+              style={[styles.iconBtn, phase === 'results' && styles.headerDim]}
               onPress={handleExit}
               hitSlop={12}
               accessibilityRole="button"
@@ -929,7 +946,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             >
               <GameIcon name={phase === 'playing' ? 'pause' : 'close'} size={26} />
             </TouchableOpacity>
-            <View style={styles.headerCenter}>
+            <View style={[styles.headerCenter, phase === 'results' && styles.headerHidden]} importantForAccessibility={phase === 'results' ? 'no-hide-descendants' : 'auto'}>
               <Text style={styles.title} numberOfLines={1}>
                 {title}
               </Text>
@@ -940,7 +957,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               ) : null}
             </View>
             {hideHeaderScore ? null : (
-              <View style={styles.headerScore}>
+              <View style={[styles.headerScore, phase === 'results' && styles.headerHidden]} importantForAccessibility={phase === 'results' ? 'no-hide-descendants' : 'auto'}>
                 {headerScore ?? (
                   <ScoreDisplay
                     score={score}
@@ -1162,6 +1179,8 @@ function GoalMeter({ current, target, label, reducedMotion }: { current: number;
 }
 
 const styles = StyleSheet.create({
+  headerDim: { opacity: 0.45 },
+  headerHidden: { opacity: 0 },
   frameBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#05346e' },
   resultsShown: { opacity: 1 },
   resultsFill: { width: '100%', alignItems: 'center' },

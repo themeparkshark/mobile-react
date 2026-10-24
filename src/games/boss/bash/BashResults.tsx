@@ -126,7 +126,6 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       {/* The one results title every game shares: Alex's ribbon over the card's top edge. */}
       <ResultsRibbon title={won ? (ko && !noHits ? 'YOU FINISHED IT!' : 'TEAM WON!') : noHits ? 'GOOD TRY!' : 'STILL FIGHTING!'}
         reducedMotion={reduced} style={styles.ribbonWrap} />
-      {best && !noHits && <View style={styles.best}><Text style={styles.bestText}>NEW BEST!</Text></View>}
       <View style={styles.head}>
         <View>
           <Image source={won ? (defeated ?? portrait ?? BOSS_ART[boss]) : (portrait ?? BOSS_ART[boss])} style={styles.bossPic} contentFit="contain" />
@@ -139,6 +138,8 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
             : <View accessible accessibilityLabel={`You hit ${bossName} for ${damage.toLocaleString()}${teamDamage > 0 ? `. Your team has done ${(teamDamage + damage).toLocaleString()}` : ''}${rate < 1 ? `. From home you hit at ${Math.round(rate * 100)} percent power` : ''}${capped ? '. That is the most one shark can do to this boss' : ''}`}>
               <CountUpText value={damage} delayMs={reduced ? 0 : 200} durationMs={reduced ? 1 : 700} style={styles.dmg} />
             </View>}
+          {/* The same gold crown NEW BEST! pill every results card uses. */}
+          {best && !noHits ? <View style={styles.newBest}><GameIcon name="crown" size={20} /><Text style={styles.newBestText}>NEW BEST!</Text></View> : null}
           {/* Pictures, not sentences: a pin for a hit from home, a lock when this
               shark hit the most it can. The full words are spoken. */}
           {!noHits && (rate < 1 || capped) ? <View style={styles.tags} importantForAccessibility="no-hide-descendants">
@@ -162,9 +163,20 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
 
       <View style={styles.raid}>
         {/* Won: the stamp and "Boss down!" say it; an empty pale bar read as broken. */}
-        {!won && <View style={styles.hpTrack}>
-          <View style={[styles.hpGold, { width: pct(startHp) }]} />
-          <Animated.View style={[styles.hpRed, fill]} />
+        {/* The HP bar in pictures: the boss's face marks what it has left (red),
+            your fin sits on your hits (your blue), and the team's earlier hits
+            are gold. */}
+        {!won && <View style={styles.hpRow} importantForAccessibility="no-hide-descendants">
+          <Image source={portrait ?? BOSS_ART[boss]} style={styles.hpBoss} contentFit="contain" />
+          <View style={styles.hpWrap}>
+            {!noHits && startHp > hpAfter ? <View style={[styles.hpFin, { left: pct((startHp + hpAfter) / 2) }]}>
+              <GameIcon name="fin" size={18} />
+            </View> : null}
+            <View style={styles.hpTrack}>
+              <View style={[styles.hpMine, { width: pct(startHp) }]} />
+              <Animated.View style={[styles.hpRed, fill]} />
+            </View>
+          </View>
         </View>}
         {/* Pictures, not a sentence: the bar is the HP, then a clock and a fin
             for the sharks still fighting (swords mean your attacks). The
@@ -180,8 +192,9 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
 
       {rewards && <View style={styles.loot} accessible accessibilityLabel={`If your team beats it you get ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`}>
         {won && <ChestPop reduced={reduced} />}
-        <Text style={styles.lootTitle}>{won ? 'Your loot is on the way' : 'Team wins, you get'}</Text>
+        {/* A picture, not a sentence: the trophy is "if the team wins", the open chest is "it is yours". */}
         <View style={styles.lootRow}>
+          {won ? null : <GameIcon name="trophy" size={28} />}
           <Loot icon="coins" n={rewards.coins} count={won} reduced={reduced} />
           <Loot icon="xp" n={rewards.xp} count={won} reduced={reduced} />
           <Loot icon="energy" n={rewards.energy} count={won} reduced={reduced} />
@@ -191,7 +204,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
 
       {receipt && !noHits && <View style={[styles.receipt, receipt === 'error' && styles.receiptErr]} accessibilityLiveRegion="polite">
         <GameIcon name={receipt === 'saved' ? 'check' : receipt === 'error' ? 'info' : 'timer'} size={18} />
-        <Text style={styles.receiptText} maxFontSizeMultiplier={1.3}>
+        <Text style={[styles.receiptText, receipt === 'error' && styles.receiptTextErr]} maxFontSizeMultiplier={1.3}>
           {receipt === 'saved' ? 'SAVED FOR THE TEAM!' : receipt === 'saving' ? 'SENDING...' : receiptNote ?? 'Not saved yet. We will keep trying.'}</Text>
       </View>}
       {/* Brags only, the shared chips: two at most, a zero is never a chip. */}
@@ -207,7 +220,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
         <Pressable accessibilityRole="button" onPress={once(onAgain)} style={({ pressed: p }) => [styles.again, p && { transform: [{ scale: 0.97 }] }]}
           accessibilityLabel={`Attack again for ${next?.energyCost} Energy${warmNext ? ', with a free head start fin' : ''}. You have ${n.energyAfter} Energy.`}>
           {warmNext && <Image source={BASH_ART.finFull} style={styles.againFin} contentFit="contain" />}
-          <Text style={styles.againText}>ATTACK AGAIN</Text>
+          <Text style={[styles.againText, { color: BRAND.navy }]}>ATTACK AGAIN</Text>
           <View style={styles.cost}><GameIcon name="energy" size={22} /><Text style={styles.costText}>{next?.energyCost}</Text></View>
         </Pressable>
         {/* Your Energy and the attacks left as pictures; the sentence is spoken. */}
@@ -229,7 +242,8 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
 }
 
 function Loot({ icon, n, count = false, reduced = false }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: number; count?: boolean; reduced?: boolean }) {
-  const word = icon === 'xp' ? ' XP' : icon === 'parts' ? ' Parts' : '';
+  // The icon says what it is (the XP badge, the parts picture): a number only.
+  const word = '';
   // Team win: the loot counts up after the chest opens.
   return <View style={styles.lootItem}><GameIcon name={icon} size={26} />
     {count ? <CountUpText value={n} delayMs={reduced ? 0 : 1000} durationMs={reduced ? 1 : 650} suffix={word} reducedMotion={reduced} style={styles.lootNum} />
@@ -237,47 +251,54 @@ function Loot({ icon, n, count = false, reduced = false }: { icon: 'coins' | 'xp
 }
 
 const styles = StyleSheet.create({
-  card: { width: '92%', backgroundColor: BRAND.cream, borderRadius: 26, borderWidth: 4, borderColor: BRAND.navy, padding: 16, paddingTop: 44, marginTop: 30 },
+  // The one results surface every game shares: the blue card with a white border.
+  card: { width: '92%', backgroundColor: BRAND.blue, borderRadius: 26, borderWidth: 4, borderColor: BRAND.white, padding: 16, paddingTop: 44, marginTop: 30,
+    shadowColor: BRAND.navy, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 18 },
   ribbonWrap: { position: 'absolute', top: -36, left: -14, right: -14 },
   kept: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   raidIcons: { flexDirection: 'row', justifyContent: 'center', gap: 18, marginTop: 6 },
   raidIcon: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  raidNum: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
-  raidUnit: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navySoft, marginLeft: 1, marginTop: 4 },
-  best: { position: 'absolute', right: 12, top: 36, backgroundColor: BRAND.red, borderRadius: 10, borderWidth: 2, borderColor: BRAND.white,
-    paddingHorizontal: 8, paddingVertical: 2, transform: [{ rotate: '8deg' }] },
-  bestText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
+  raidNum: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white },
+  raidUnit: { fontFamily: 'Shark', fontSize: 12, color: '#cdeaff', marginLeft: 1, marginTop: 4 },
+  newBest: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: BRAND.gold, borderRadius: 999, borderWidth: 3,
+    borderColor: BRAND.navy, paddingHorizontal: 10, paddingVertical: 1, marginTop: 2 },
+  newBestText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginLeft: 5 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   bossPic: { width: 76, height: 76 },
-  perf: { marginTop: 4, fontSize: 9, color: '#333', textAlign: 'center' },
+  perf: { marginTop: 4, fontSize: 9, color: '#ffffff', textAlign: 'center' },
   koTag: { position: 'absolute', bottom: -2, fontFamily: 'Shark', fontSize: 12, color: BRAND.white, backgroundColor: BRAND.red,
     paddingHorizontal: 5, borderRadius: 6, overflow: 'hidden' },
   stamp: { position: 'absolute', right: -10, top: -6, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 2, borderColor: BRAND.red, borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.85)', transform: [{ rotate: '-14deg' }] },
   stampText: { fontFamily: 'Shark', fontSize: 11, lineHeight: 11, color: BRAND.red, textAlign: 'center' },
-  kicker: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, letterSpacing: 0.4 },
+  kicker: { fontFamily: 'Shark', fontSize: 14, color: '#cdeaff', letterSpacing: 0.4 },
   dmg: { alignSelf: 'stretch', textAlign: 'left', fontFamily: 'Shark', fontSize: 48, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0, padding: 0 },
-  zero: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 4 },
+  zero: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white, marginTop: 4 },
   stars: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 4 },
   starSlot: { width: 46, height: 46 },
   raid: { marginTop: 10 },
-  hpTrack: { height: 20, borderRadius: 10, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.sky, overflow: 'hidden' },
-  hpGold: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.gold },
+  hpRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  hpBoss: { width: 30, height: 30 },
+  hpWrap: { flex: 1, paddingTop: 16 },
+  hpFin: { position: 'absolute', top: 0, marginLeft: -9 },
+  // Track = the team's earlier hits (gold); your hits are your blue; the red is what the boss has left.
+  hpTrack: { height: 20, borderRadius: 10, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.gold, overflow: 'hidden' },
+  hpMine: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#6fd0ff' },
   hpRed: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.red },
-  raidLine: { marginTop: 4, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, textAlign: 'center' },
+  raidLine: { marginTop: 4, fontFamily: 'Shark', fontSize: 15, color: BRAND.white, textAlign: 'center' },
   loot: { marginTop: 10, backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 2, borderColor: BRAND.sky, paddingVertical: 8, alignItems: 'center' },
   warm: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 14,
     borderWidth: 2, borderColor: BRAND.navy, backgroundColor: BRAND.gold },
   warmText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
   againFin: { width: 26, height: 26, marginRight: 6 },
   chest: { position: 'absolute', right: 4, top: -16, width: 52, height: 52 },
-  lootTitle: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft },
-  lootRow: { flexDirection: 'row', gap: 16, marginTop: 4 },
+  lootRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   lootItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   lootNum: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy },
   receipt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8 },
   receiptErr: { backgroundColor: '#ffe3df', borderRadius: 10, padding: 4 },
-  receiptText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, flexShrink: 1, textAlign: 'center' },
+  receiptText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, flexShrink: 1, textAlign: 'center' },
+  receiptTextErr: { color: BRAND.navy },
   chips: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 10 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.sky,
@@ -285,13 +306,14 @@ const styles = StyleSheet.create({
   tagText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
   walletRow: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 8 },
   doneBtn: { flex: 0, minHeight: 52, marginTop: 10 },
-  again: { marginTop: 14, minHeight: 64, borderRadius: 20, backgroundColor: BRAND.red, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 7,
-    borderBottomColor: BRAND.redLip, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  // Gold first, like every results card's big button.
+  again: { marginTop: 14, minHeight: 64, borderRadius: 20, backgroundColor: BRAND.gold, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 7,
+    borderBottomColor: BRAND.goldLip, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
   doneBig: { backgroundColor: BRAND.gold, borderBottomColor: BRAND.goldLip },
   againText: { fontFamily: 'Shark', fontSize: 24, color: BRAND.white, letterSpacing: 0.5 },
   cost: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: BRAND.cream, borderRadius: 14, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
   costText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
-  wallet: { marginTop: 6, fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy, textAlign: 'center' },
+  wallet: { marginTop: 6, fontFamily: 'Knockout', fontSize: 15, color: BRAND.white, textAlign: 'center' },
   walletNum: { fontFamily: 'Shark', color: BRAND.navy },
 });
 

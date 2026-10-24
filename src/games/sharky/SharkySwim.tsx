@@ -653,7 +653,7 @@ export function SharkySwim({
         saved={args.saved}
         wrapTitle={args.wrapReason ? args.result.message ?? null : null}
         claim={args.claim}
-        claimLabel={runMode === 'ride' ? (args.won ? 'COLLECT' : 'CONTINUE') : args.won ? 'CONTINUE' : 'DONE'}
+        claimLabel={runMode === 'ride' && args.won ? 'COLLECT' : args.claimLabel}
         challenge={args.challenge}
         challengeLabel="RACE GHOSTS"
         reducedMotion={args.reducedMotion}
