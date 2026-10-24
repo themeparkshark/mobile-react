@@ -70,6 +70,10 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
           { name: 'PostWinRewardsPreview', getComponent: () => require('./screens/PostWinRewardsPreviewScreen').default },
           { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
           { name: 'CoinLevelingPreview', getComponent: () => require('./screens/CoinLevelingPreviewScreen').default },
+          // EXPO_PUBLIC_MOTION_CAPTURE=Whack only: the tester opens Whack-a-Shark on launch (release-JS frame-rate proof).
+          ...(process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack'
+            ? [{ name: 'MiniGameTester', getComponent: () => require('./screens/MiniGameTesterScreen').default }]
+            : []),
         ]
       : [];
 
@@ -81,6 +85,7 @@ export function devInitialRoute(): string | null {
   if (!__DEV__) {
     if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') return 'BossMapPreview';
     const motion = process.env.EXPO_PUBLIC_MOTION_CAPTURE;
+    if (motion === 'Whack') return 'MiniGameTester';
     return motion === 'BoxRevealPreview' || motion === 'PostWinRewardsPreview' || motion === 'SetRevealPreview'
       || motion === 'CoinLevelingPreview' ? motion : null;
   }

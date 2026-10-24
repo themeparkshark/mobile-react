@@ -572,7 +572,7 @@ test('round 4: the breather and the count read with zero words (pictures, a UI-t
   assert.match(ov, /<CountUpText value=\{p\.burstScore\}/);
   assert.doesNotMatch(ov, /SAVE IT FOR THE FINALE|save fever|7s of x2|tap when you're set|Keep shuffling/);
   assert.match(ov, /<NextPreview shape=\{p\.nextShape\}/);
-  assert.match(ov, /<GameIcon name="streak" size=\{40\} \/>/, 'the fever pad is a flame');
+  assert.match(ov, /<GameIcon name="streak" size=\{34\} \/>/, 'the fever pad is a flame');
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.match(shell, /\{countdownDemo \?\? \(objective \?/);
   const coach = read('src/games/whack/ui/CoachDemo.tsx');
@@ -641,7 +641,7 @@ test('round 5: the curtain call bows before the next card; Bursts 2 and up get a
   }
   assert.ok(gold > 20 && gold < 90, `rare gold curtain about 1 in 8 (${gold}/400)`);
   const whack = read('src/games/whack/WhackAShark.tsx');
-  assert.match(whack, /Math\.max\(FINISH_HANDOFF_MS, curtainEndMs\(curtainKind\.current\)\)/, 'the next card waits for the last bow');
+  assert.match(whack, /Math\.max\(finishHandoff\(curtainKind\.current\), curtainEndMs\(curtainKind\.current\)\)/, 'the next card waits for the last bow');
   const src = read('src/games/whack/render/renderState.ts');
   assert.match(src, /an\.curtainKind === CURTAIN_GOLDEN && i === 4 \? F_GOLDEN : F_POP/);
 });
@@ -656,12 +656,12 @@ test('round 5: the breather sits below the HUD, shows at most 3 picture stats an
   assert.doesNotMatch(ov, /`\+\$\{Math\.round\(p\.walkMeters\)\}m`/, 'no +0m unit to read');
   assert.match(ov, /p\.walkPct > 0\.01 \|\| !!p\.boostReady/, 'the walk ring hides at zero');
   assert.match(ov, /styles\.bestMark/, 'your best is a ghost fin on the star bar');
-  assert.match(ov, /<CountUpText value=\{p\.burstScore\} fromValue=\{0\}/, 'the +N rolls up from 0 on a card that mounts with its final score');
+  assert.match(ov, /<CountUpText value=\{p\.burstScore\} fromValue=\{rollFrom\}/, 'the +N rolls on a card that mounts with its final score (r6: from a fifth, never +0)');
   assert.match(read('src/gamekit/fx/CountUpText.tsx'), /const first = reducedMotion \|\| fromValue == null \? value : fromValue;/);
   assert.doesNotMatch(ov, /BANK &amp; EXIT/, 'the exit pad is a picture, not a money word');
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.match(whack, /top=\{L \? L\.hudH \+ 6 : 14\}/);
-  assert.match(whack, /setTimeout\(\(\) => setReadyOn\(true\), 600\)/, 'the pads arrive as the last beat of the card');
+  assert.match(whack, /setTimeout\(\(\) => setReadyOn\(true\), landIn \+ padsAfter\(curtainKind\.current\)\)/, 'the pads arrive as the last beat of the card');
   assert.match(whack, /countdownPillFieldY=\{L \? L\.hudH \+ 8 : undefined\}/, 'the coach card sits below the HUD');
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.match(shell, /opacity: fieldIn\.value, transform: \[\{ scale: 1 \+ 0\.03 \* pillT\.value \}\]/, 'the pill arrives with the stage, never over a blank frame');
@@ -684,7 +684,7 @@ test('round 5: every bonk reads at arm\'s length (bigger stars, a contact ring),
 
 test('round 5: the last-5 ticks are queued ahead on the UI clock, so a late JS thread still lands on the stamp', () => {
   const whack = read('src/games/whack/WhackAShark.tsx');
-  assert.match(whack, /const LAST5_LEAD_MS = 160;/);
+  assert.match(whack, /const LAST5_LEAD_MS = 320;/);
   assert.match(whack, /Math\.ceil\(\(rem - LAST5_LEAD_MS\) \/ 1000\)/);
   assert.match(whack, /const delayMs = Math\.max\(0, Math\.round\(toCrossMs - lag\)\);/);
   assert.match(whack, /\[wow-sync\]/, 'the dev beat log prints the measured lag');
@@ -696,4 +696,125 @@ test('round 5: a shark that gets away blows a raspberry (tongue out, a wiggle), 
   assert.match(src, /const cheeky = finnish && \(k === K_FINN \|\| k === K_TWIN \|\| k === K_SPRINTER\) && wob > 0;/);
   assert.match(src, /const frame = cheeky \? F_TONGUE : finnish \? F_DUCK/);
   assert.match(src, /if \(cheeky\) rs\.rot\[i\] = 7 \* Math\.sin\(t \* Math\.PI \* 3\);/);
+});
+
+// ---------------------------------------------------------------------------
+// Wave 4 round 1 (r6): no dead hold, an idle card is a still frame, a roll you can watch.
+
+test('r6: the breather lands as the curtain\'s last sharks duck, timed from FINISH!\'s UI fire frame', () => {
+  const rs = loadTs('src/games/whack/render/renderState.ts');
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /export const CARD_OVERLAP_MS = 150;/);
+  assert.match(whack, /finishWall\.current \+ Math\.max\(finishHandoff\(curtainKind\.current\), curtainEndMs\(curtainKind\.current\) - CARD_OVERLAP_MS\)/);
+  // The card is on screen before the last shark is down, and never before FINISH! hands off.
+  const full = Math.max(gm.FINISH_HANDOFF_MS, rs.curtainEndMs(rs.CURTAIN_FULL) - 150);
+  const short = Math.max(gm.FINISH_HANDOFF_SHORT_MS, rs.curtainEndMs(rs.CURTAIN_SHORT) - 150);
+  assert.ok(full < rs.curtainEndMs(rs.CURTAIN_FULL) && full >= gm.FINISH_HANDOFF_MS);
+  assert.ok(short < rs.curtainEndMs(rs.CURTAIN_SHORT) && short >= gm.FINISH_HANDOFF_SHORT_MS);
+  // From the label leaving to the card landing the sharks are still bowing (no empty board over 150 ms + overlap).
+  assert.ok(full - (gm.FINISH_HANDOFF_MS + gm.FINISH_EXIT_MS) <= 300, `full gap ${full - (gm.FINISH_HANDOFF_MS + gm.FINISH_EXIT_MS)} ms is covered by the bow`);
+  // The UI fire frame's wall clock reaches JS (a late JS thread cannot push the card back).
+  const fb = read('src/gamekit/fx/FinishBeat.tsx');
+  assert.match(fb, /runOnJS\(fired\)\(Date\.now\(\)\)/);
+  assert.match(whack, /const onFinishFire = useCallback\(\(firedAt: number\) => \{\n\s+finishWall\.current = firedAt;/);
+  // The card mounts hidden ahead of time and the entrance runs on a UI-thread delay.
+  assert.match(whack, /const mountIn = Math\.max\(0, enterAt - CARD_MOUNT_LEAD_MS - Date\.now\(\)\);/);
+  const ov = read('src/games/whack/ui/Overlays.tsx');
+  assert.match(ov, /enter\.value = withDelay\(enterIn, /);
+  assert.match(ov, /<Animated\.View style=\{\[styles\.dim, dimStyle\]\}/, 'the veil rides the card\'s own spring');
+});
+
+test('r6: the +N roll never shows +0 for points you earned and runs on the UI clock with an end pop', () => {
+  const ov = read('src/games/whack/ui/Overlays.tsx');
+  assert.match(ov, /return total > 0 \? Math\.max\(1, Math\.round\(total \* BREATHER_ROLL\.fromShare\)\) : 0;/);
+  assert.match(ov, /BREATHER_ROLL = \{ landMs: 160, ms: 720, fromShare: 0\.2, punch: 1\.22 \}/);
+  assert.match(ov, /punchAt="end"/);
+  assert.match(ov, /onDone=\{p\.onRollDone\}/);
+  const cu = read('src/gamekit/fx/CountUpText.tsx');
+  assert.match(cu, /shown\.value = withDelay\(wait, withTiming\(value/);
+  assert.doesNotMatch(cu, /setTimeout\(run, delayMs\)/, 'no JS-timer delay that can hold the first number and then snap');
+  assert.match(cu, /scale\.value = withDelay\(punchAt === 'end' \? wait \+ ms : wait, pop\);/);
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /GameAudio\.play\(cues\.tally, \{ volume: 0\.85, pitch: Math\.min\(12, bankTick\.current \+ 1\) \}\);/, 'a gold pop a step above the tick ladder');
+  // The roll lands inside the card's first second (full card) and quicker on a repeat card.
+  assert.ok(160 + 720 <= 1000);
+  assert.match(ov, /BREATHER_ROLL_QUICK = \{ landMs: 110, ms: 460/);
+});
+
+test('r6: an idle card is a still frame (board at rest, no per-frame writes when nothing moves)', () => {
+  const rt = read('src/games/whack/useWhackRuntime.ts');
+  assert.match(rt, /r\.frameWall = Date\.now\(\);\n\s+\/\/ At rest under a card[^\n]*\n\s+if \(r\.rest\) return;/, 'no render pass and no tick at rest');
+  assert.match(rt, /r\.running = true;\n\s+r\.rest = false;/, 'every Burst start wakes the board');
+  assert.match(rt, /rt\.value\.rest = false;\n\s+const a = an\.value;\n\s+a\.curtainAt = -1;/, 'GO wakes the board');
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /if \(runToken\.current === token && !finishing\.current\) runtime\.setRest\(true\);/);
+  assert.match(whack, /if \(phase !== 'breather' \|\| finishing\.current\) return;\n\s+clearRest\(\);/, 'GO cancels a pending rest');
+  assert.match(whack, /runtime\.setRest\(false\);/, 'the rematch count plays over a live board');
+  // Clock and layers only write shared values when something changed.
+  assert.match(read('src/gamekit/useGameClock.ts'), /if \(simMs\.value !== c\.simMs\) simMs\.value = c\.simMs;/);
+  const st = read('src/gamekit/fx/StampLayer.tsx');
+  assert.match(st, /if \(live && clock\.value !== t\) clock\.value = t;/, 'an empty stamp layer never redraws');
+  assert.doesNotMatch(st, /clock\.value \+= /);
+  const perf = read('src/gamekit/perf/PerfOverlay.tsx');
+  assert.match(perf, /if \(!enabled \|\| !jsLoop\) return undefined;/, 'no JS rAF loop in a shipped game');
+  assert.match(read('src/games/whack/WhackAShark.tsx'), /usePerfProbe\(visible, PERF_GRAPH\)/);
+});
+
+test('r6: the camera snaps to rest instead of writing a sub-pixel transform for seconds', () => {
+  const cam = loadTs('src/gamekit/core/camera.ts');
+  const c = cam.createCamera(cam.CAMERA_PRESETS.whack, 3);
+  cam.kick(c, 3, 2);
+  for (let i = 0; i < 90; i++) cam.stepCamera(c, 16.7);
+  assert.equal(c.kx, 0);
+  assert.equal(c.ky, 0);
+  const x0 = c.x;
+  cam.stepCamera(c, 16.7);
+  assert.equal(c.x, x0, 'a settled camera stops changing');
+});
+
+test('r6: FINISH! never crosses the 16 pt gutters, the fan swells brighter, and repeat Bursts get the short beat', () => {
+  const fb = read('src/gamekit/fx/FinishBeat.tsx');
+  assert.match(fb, /export const FINISH_GUTTER = 16;/);
+  assert.match(fb, /const maxK = inner \/ Math\.max\(1, raw \+ LABEL_OUTLINE\);/);
+  assert.match(fb, /const cap = kx > maxK \? maxK \/ kx : 1;/);
+  // At the slam's peak (1.8x) the capped width stays inside the gutters for a long word on an SE.
+  const width = 375, raw = 480, outline = 14;
+  const inner = width - 32;
+  const fit = Math.min(1, (inner * 0.86) / ((raw + outline) * 1.12));
+  const maxK = inner / (raw + outline);
+  const kx = 1.8 * 1.0 * fit;
+  const shown = Math.min(kx, maxK) * (raw + outline);
+  assert.ok(shown <= inner + 1e-9, `peak ${shown} fits ${inner}`);
+  assert.match(fb, /const raysA = useDerivedValue\(\(\) => Math\.min\(1, pose\.value\.gold \+ 0\.25 \* swell \* pose\.value\.bloom\)\);/);
+  assert.match(fb, /const swell = flash > 0 \? 1 : 0\.4;/, 'Dim Flashing Lights keeps a softer swell');
+  // The short beat leaves sooner and keeps one shared exit.
+  assert.equal(gm.FINISH_HANDOFF_SHORT_MS, 340);
+  assert.equal(gm.finishPose(gm.FINISH_HANDOFF_SHORT_MS + gm.FINISH_EXIT_MS, false, gm.FINISH_HANDOFF_SHORT_MS).alpha, 0);
+  assert.ok(gm.finishPose(gm.FINISH_HANDOFF_SHORT_MS + gm.FINISH_EXIT_MS, false).alpha > 0.9, 'the full beat still holds');
+  assert.equal(gm.finishSparkle(0, 12, gm.FINISH_HANDOFF_SHORT_MS + gm.FINISH_EXIT_MS, gm.FINISH_HANDOFF_SHORT_MS).alpha, 0);
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /handoffMs=\{finishHandoff\(curtainKind\.current\)\}/);
+  assert.match(whack, /quick: repeatBurst\(curtainKind\.current\),/);
+});
+
+test('r6: last-5 cues get 320 ms of lead; Battery Saver drops the contact ring; pads read with pictures', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /const LAST5_LEAD_MS = 320;/);
+  const juice = read('src/games/whack/useWhackJuice.ts');
+  assert.match(juice, /if \(!budget \|\| budget\.particleScale >= 0\.75\) \{\n\s+fx\.current\?\.ring\(p\.x, cy, \{ color: '#ffffff'/);
+  const ov = read('src/games/whack/ui/Overlays.tsx');
+  assert.match(ov, /<Image source=\{THEMED_SHARK_FRAMES\[theme\]\[1\]\} style=\{styles\.padShark\}/, 'plain GO is the blue shark');
+  assert.match(ov, /<Image source=\{ART\.golden\} style=\{styles\.padShark\}/, 'GO x2 is the golden shark');
+  assert.match(ov, /bank: \{ marginTop: 14, minHeight: 56,/, 'the exit pad is a real 56 pt button');
+  // The pads fit an SE inside the 16 pt gutters.
+  assert.ok(132 + 12 + 196 <= 375 - 32);
+});
+
+test('r6: Whack has a release-like capture (never set in store builds) for frame-rate proof', () => {
+  const routes = read('src/devRoutes.tsx');
+  assert.match(routes, /if \(motion === 'Whack'\) return 'MiniGameTester';/);
+  assert.match(read('src/utils/standalonePreview.ts'), /EXPO_PUBLIC_MOTION_CAPTURE === 'Whack'\) return true;/);
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /const WHACK_CAPTURE = process\.env\.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack';/);
+  assert.match(whack, /const PERF_GRAPH = \(__DEV__ \|\| WHACK_CAPTURE\) && process\.env\.EXPO_PUBLIC_WHACK_PERF === '1';/);
 });

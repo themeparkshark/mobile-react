@@ -92,11 +92,23 @@ export const StampLayer = React.memo(forwardRef<StampLayerHandle, StampLayerProp
   const reducedRef = useRef(reducedMotion);
   reducedRef.current = reducedMotion;
 
+  // The layer's own time runs every frame, but the drawing clock moves only while a stamp is on screen (plus
+  // one frame to land its end pose): an empty layer never redraws its canvas (an idle breather stayed busy).
+  const layerT = useSharedValue(0);
   useFrameCallback((info) => {
     'worklet';
     const raw = info.timeSincePreviousFrame;
     if (raw == null) return;
-    clock.value += (raw > 50 ? 50 : raw) * (timeScale ? timeScale.value : 1);
+    const t = layerT.value + (raw > 50 ? 50 : raw) * (timeScale ? timeScale.value : 1);
+    layerT.value = t;
+    const rows = slotsSv.value;
+    let live = false;
+    for (let i = 0; i < rows.length; i++) {
+      const st = stylesSv.value[i];
+      if (rows[i][0] >= 0 && t - rows[i][0] <= st.inMs + st.holdMs + st.outMs + 50) { live = true; break; }
+    }
+    // Frames are capped at 50 ms, so the last live frame always lands past the stamp's end (its done pose).
+    if (live && clock.value !== t) clock.value = t;
   });
 
   const start = useCallback((item: StampItem, now: number) => {
@@ -116,12 +128,12 @@ export const StampLayer = React.memo(forwardRef<StampLayerHandle, StampLayerProp
     const x = width <= half * 2 ? width / 2 : Math.max(half, Math.min(width - half, item.x));
     const y = Math.max(minY + FONT_PX * k, Math.min(maxY ?? height - 20, item.y));
     setSlots((prev) => prev.map((s, i) => (i === slot ? { text: item.text, color: item.color, plate } : s)));
-    const startAt = clock.value;
+    const startAt = layerT.value;
     const next = slotsSv.value.map((row, i) => (i === slot ? [startAt, x, y, k, w] : row));
     const styles = stylesSv.value.map((st, i) => (i === slot ? style : st));
     stylesSv.value = styles;
     slotsSv.value = next;
-  }, [font, width, height, minY, maxY, clock, slotsSv, stylesSv]);
+  }, [font, width, height, minY, maxY, layerT, slotsSv, stylesSv]);
 
   const pump = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);

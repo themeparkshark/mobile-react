@@ -55,7 +55,9 @@ export default function MiniGameTesterScreen() {
     : 'Space Mountain';
   // Studio lab (dev only): EXPO_PUBLIC_SHARKY_PREVIEW=queue|ride opens Sharky Swim on launch.
   const sharkyPreview = __DEV__ ? process.env.EXPO_PUBLIC_SHARKY_PREVIEW : undefined;
-  const [activeGame, setActiveGame] = useState<GameType | null>(sharkyPreview ? 'shark' : null);
+  // Release-like capture (EXPO_PUBLIC_MOTION_CAPTURE=Whack, never set in store builds): open Whack on launch.
+  const whackCapture = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack';
+  const [activeGame, setActiveGame] = useState<GameType | null>(sharkyPreview ? 'shark' : whackCapture ? 'tap' : null);
   const [showPostWin, setShowPostWin] = useState(false);
   // Dev only: lane captures open a game straight from the debugger (globalThis.__wowPlay('tap')).
   useEffect(() => {

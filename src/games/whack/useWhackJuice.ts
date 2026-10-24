@@ -293,7 +293,11 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         fx.current?.burst('impactSpray', p.x, cy, rank >= 2
           ? { count: n, color: TINT.gold, speed: rank >= 3 ? 1.35 : 1.18, size: rank >= 3 ? 1.15 : 1.05 }
           : { count: n });
-        fx.current?.ring(p.x, cy, { color: '#ffffff', from: 14, to: rank >= 2 ? 86 : 64, ms: 120 });
+        // r6: Battery Saver (a thinned particle budget) keeps the stars but drops the contact ring,
+        // so the thinner-effects mode is consistent.
+        if (!budget || budget.particleScale >= 0.75) {
+          fx.current?.ring(p.x, cy, { color: '#ffffff', from: 14, to: rank >= 2 ? 86 : 64, ms: 120 });
+        }
       }
     }
     // Hot hands hit harder (r4: from the first bonk): the board kicks 2 pt away from the touch at x1 and

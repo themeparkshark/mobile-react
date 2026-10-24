@@ -401,6 +401,11 @@ export function finalStampPose(t: number, isTime: boolean, isLast: boolean, redu
  */
 export const FINISH_HANDOFF_MS = 560;
 /**
+ * r6: the repeat version (the middle Bursts of a Run, the ones that end on the short ripple): the same slam,
+ * rings and fan, held about 60 percent as long, so the tenth run is never slower than the first.
+ */
+export const FINISH_HANDOFF_SHORT_MS = 340;
+/**
  * r5: one shared exit. The label, the ray fan, the rings and the sparkles all leave together on this one
  * ease-out (never rays alone after the label: the r4 ghost beat). Exits stay faster than entrances.
  */
@@ -433,12 +438,12 @@ export interface FinishPose extends FinalStampPose {
  * At FINISH_HANDOFF_MS the label and fan leave on DURATION.exit (exits faster than entrances).
  * Reduced: the label fades, no rings, no flash, no fan.
  */
-export function finishPose(t: number, reduced: boolean): FinishPose {
+export function finishPose(t: number, reduced: boolean, handoff: number = FINISH_HANDOFF_MS): FinishPose {
   'worklet';
   const base = finalStampPose(t, true, false, reduced);
   // One shared fade for every piece (easeOut: quick to start leaving, soft at the end).
-  const out = t <= FINISH_HANDOFF_MS ? 1 : 1 - easeOutCubic(clamp01((t - FINISH_HANDOFF_MS) / FINISH_EXIT_MS));
-  const alpha = t < 0 || t >= FINISH_HANDOFF_MS + FINISH_EXIT_MS ? 0
+  const out = t <= handoff ? 1 : 1 - easeOutCubic(clamp01((t - handoff) / FINISH_EXIT_MS));
+  const alpha = t < 0 || t >= handoff + FINISH_EXIT_MS ? 0
     : reduced ? (t < DURATION.quick ? clamp01(t / DURATION.quick) : 1) * out : base.alpha * out;
   if (t < 0 || reduced || alpha <= 0) return { ...base, alpha, ringR: 0, ringA: 0, ring2R: 0, ring2A: 0, flash: 0, gold: 0, bloom: 0 };
   const land = DURATION.slam;
@@ -465,11 +470,11 @@ export function finishPose(t: number, reduced: boolean): FinishPose {
  * Coin sparkle k of n at `t` ms of the finish beat: out in a full ring from the landing, gravity, spin and a
  * fade; r5: they leave with the label on the shared exit (finishPose), never after it.
  */
-export function finishSparkle(k: number, n: number, t: number): { x: number; y: number; alpha: number; scale: number; rot: number } {
+export function finishSparkle(k: number, n: number, t: number, handoff: number = FINISH_HANDOFF_MS): { x: number; y: number; alpha: number; scale: number; rot: number } {
   'worklet';
   const p = clamp01((t - DURATION.slam) / 820);
-  if (t < DURATION.slam || t >= FINISH_HANDOFF_MS + FINISH_EXIT_MS) return { x: 0, y: 0, alpha: 0, scale: 0, rot: 0 };
-  const out = t <= FINISH_HANDOFF_MS ? 1 : 1 - easeOutCubic(clamp01((t - FINISH_HANDOFF_MS) / FINISH_EXIT_MS));
+  if (t < DURATION.slam || t >= handoff + FINISH_EXIT_MS) return { x: 0, y: 0, alpha: 0, scale: 0, rot: 0 };
+  const out = t <= handoff ? 1 : 1 - easeOutCubic(clamp01((t - handoff) / FINISH_EXIT_MS));
   const ang = (k / Math.max(1, n)) * Math.PI * 2 - Math.PI / 2 + (k % 2 ? 0.26 : 0);
   const r = 60 + 150 * easeOutCubic(p) * (k % 2 ? 0.72 : 1);
   return {

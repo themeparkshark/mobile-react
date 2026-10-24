@@ -23,6 +23,10 @@ test('a release-mode motion capture (EXPO_PUBLIC_MOTION_CAPTURE=<route>, never s
   assert.equal(load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'CoinLevelingPreview' }).devInitialRoute(), 'CoinLevelingPreview');
   assert.equal(routes.devInitialRoute(), 'BoxRevealPreview');
   assert.equal(load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'MiniGameTester' }).devInitialRoute(), null, 'only the reveal galleries');
+  // wow-games r6: the Whack capture adds the tester (opening Whack) for release-JS frame-rate proof, and only then.
+  const whack = load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'Whack' });
+  assert.equal(whack.devInitialRoute(), 'MiniGameTester');
+  assert.ok(whack.DEV_SCREENS.map(screen => screen.name).includes('MiniGameTester'));
 });
 
 test('development keeps every preview route and the original flag priority', () => {

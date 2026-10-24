@@ -52,6 +52,11 @@ export interface RuntimeFlags {
   scoreBase: number;
   /** False between Runs (the old sim's score never shows under a fresh count). */
   scoreLive: boolean;
+  /**
+   * The board is at rest under a card (breather, results): the frame skips the render pass and the tick, so
+   * the board canvas, the HUD and every tick-driven glow stop redrawing (an idle card is a still frame).
+   */
+  rest: boolean;
 }
 
 /** Runtime-only event (outside the sim's range): a logged touch-down, for the Line Party tap log. */
@@ -69,7 +74,7 @@ function createFlags(): RuntimeFlags {
   return {
     running: false, acc: 0, easeT: 600, endSeen: false, bot: false, botEv: z(-1), botAt: z(0), botHits: z(0),
     swipeHole: -1, swipeX0: 0, reducedMotion: false, wallMs: 0, logTaps: false, frameWall: 0, hatBounces: 0, resumedAt: -99999,
-    scoreBase: 0, scoreLive: false,
+    scoreBase: 0, scoreLive: false, rest: false,
   };
 }
 
@@ -130,6 +135,8 @@ export interface WhackRuntime {
   /** Shift game time by `ms` (positive runs ahead, negative holds) to stay on the room's board clock. */
   nudge: (ms: number) => void;
   setRunning: (on: boolean, easeIn?: boolean) => void;
+  /** Put the board at rest under a card (no render pass, no tick) or wake it; a Burst start always wakes it. */
+  setRest: (on: boolean) => void;
   /** Bank now (line call / BANK & EXIT). */
   bank: () => void;
   /** A ghost (PB or rival) hit this well: flash its tinted finger (colour 0 PB, 1-3 rivals). */
@@ -270,6 +277,8 @@ export function useWhackRuntime(opts: {
       const a = an.value;
       const L = geo.value;
       r.frameWall = Date.now();
+      // At rest under a card: nothing on the board moves, so nothing is recomputed or redrawn.
+      if (r.rest) return;
       if (r.running && !s.ended) {
         let f = 1;
         if (r.easeT < 600) {
@@ -400,6 +409,7 @@ export function useWhackRuntime(opts: {
         an.value.curtainAt = -1;
         an.value.curtainKind = ck;
         r.running = true;
+        r.rest = false;
         r.logTaps = lt;
         r.acc = 0;
         r.easeT = 600;
@@ -431,6 +441,7 @@ export function useWhackRuntime(opts: {
     wake: (stepMs: number) => {
       runOnUI((step: number) => {
         'worklet';
+        rt.value.rest = false;
         const a = an.value;
         a.curtainAt = -1;
         // Reading order from the centre out; a future start time waits on the hole's own clock.
@@ -463,6 +474,12 @@ export function useWhackRuntime(opts: {
         rt.value.running = v;
         if (ease) rt.value.easeT = 0;
       })(on, easeIn);
+    },
+    setRest: (on: boolean) => {
+      runOnUI((v: boolean) => {
+        'worklet';
+        rt.value.rest = v;
+      })(on);
     },
     ghostTap: (hole: number, color: number) => {
       runOnUI((h: number, c: number) => {

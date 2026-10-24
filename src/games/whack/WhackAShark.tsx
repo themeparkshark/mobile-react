@@ -42,7 +42,7 @@ import { registerStudioAudio } from '../../gamekit/audio/studioLibrary';
 import { useGameMusic } from '../../gamekit/audio/useGameMusic';
 import { playHaptic, playPattern } from '../../gamekit/Haptics';
 import { FinishBeat } from '../../gamekit/fx/FinishBeat';
-import { COUNT_END_MS, FINISH_HANDOFF_MS, FINISH_SPARKLES_MAX, GO_AT_MS } from '../../gamekit/core/gameMoments';
+import { COUNT_END_MS, FINISH_HANDOFF_MS, FINISH_HANDOFF_SHORT_MS, FINISH_SPARKLES_MAX, GO_AT_MS } from '../../gamekit/core/gameMoments';
 import { LiveScore } from '../../gamekit/fx/LiveScore';
 import { STAGGER, flashPeak, momentParticles } from '../../ui/motion';
 import { usePowerBudget } from '../../power';
@@ -69,7 +69,7 @@ import {
 import { A_CANDY, A_FADE, A_INK, A_SCAN, BOSS_NAMES } from './timeline';
 import { computeLayout, type BoardLayout } from './render/layout';
 import { boxesFor, poseScaleFor } from './render/boxes';
-import { THEME_FX, curtainEndMs, curtainKindFor } from './render/renderState';
+import { CURTAIN_SHORT, THEME_FX, curtainEndMs, curtainKindFor } from './render/renderState';
 import { ShareCardButton, TILE_DECOY, TILE_QUICK } from './ui/ShareCard';
 import { WhackBoard, WhackHud, useBoardImages } from './render/WhackBoard';
 import { useWhackRuntime } from './useWhackRuntime';
@@ -133,7 +133,28 @@ export interface WhackHandle {
 }
 
 /** The last-5 ticks are queued this far ahead of each second crossing (absorbs a late JS thread). */
-const LAST5_LEAD_MS = 160;
+// r6: 320 ms of lead (r5 measured JS lag up to 206 ms against 160), so every tick and the whistle land on the stamp.
+const LAST5_LEAD_MS = 320;
+/**
+ * Release-like capture of Whack (EXPO_PUBLIC_MOTION_CAPTURE=Whack with `expo start --no-dev`, see devRoutes):
+ * store builds never set it, so it folds away. With it, the autoplay bot and the frame graph work in release JS.
+ */
+const WHACK_CAPTURE = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack';
+/** The frame graph (dev or capture only, EXPO_PUBLIC_WHACK_PERF=1). */
+const PERF_GRAPH = (__DEV__ || WHACK_CAPTURE) && process.env.EXPO_PUBLIC_WHACK_PERF === '1';
+/** The breather lands this long before the curtain call's last shark is down (one spring, never an empty board). */
+export const CARD_OVERLAP_MS = 150;
+/** The card mounts (hidden) this long before it lands, so React's mount cost is paid while the curtain plays. */
+export const CARD_MOUNT_LEAD_MS = 320;
+/** After landing, the card has settled and the board under it goes to rest (no render pass). */
+export const CARD_SETTLE_MS = 520;
+/** r6: the middle Bursts (the short ripple) get the repeat version of FINISH! and the card (about 60 percent). */
+const repeatBurst = (curtain: number) => curtain === CURTAIN_SHORT;
+const finishHandoff = (curtain: number) => (repeatBurst(curtain) ? FINISH_HANDOFF_SHORT_MS : FINISH_HANDOFF_MS);
+/** The pads pop in this long after the card lands (the repeat card is quicker). */
+const padsAfter = (curtain: number) => (repeatBurst(curtain) ? 380 : 600);
+/** Autoplay presses GO this long after the card lands (captures can hold the idle card longer). */
+const AUTO_GO_MS = (__DEV__ || WHACK_CAPTURE) && Number(process.env.EXPO_PUBLIC_WHACK_AUTO_GO_MS) > 0 ? Number(process.env.EXPO_PUBLIC_WHACK_AUTO_GO_MS) : 3500;
 const LIFETIME_KEY = '@whack/lifetime_bursts';
 const RUN_OF_DAY_KEY = '@whack/run_of_day';
 const CARDS_KEY = '@whack/finn_cards';
@@ -168,7 +189,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const format: WhackFormat = props.format ?? 'queue';
   const ride = format === 'ride';
   const lineRun = format === 'lineDay' || format === 'weekly';
-  const devAuto = __DEV__ && process.env.EXPO_PUBLIC_GAME_AUTOPLAY === '1';
+  const devAuto = (__DEV__ || WHACK_CAPTURE) && process.env.EXPO_PUBLIC_GAME_AUTOPLAY === '1';
   const autoplay = !!props.autoplay || devAuto;
   const difficulty: Difficulty = props.difficulty ?? 2;
   const rideKey = props.rideId != null ? String(props.rideId) : (taskName ?? null);
@@ -185,7 +206,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const shellRef = useRef<GameShellV2Handle>(null);
   const fx = useRef<FxStageHandle>(null);
   const stamps = useRef<StampLayerHandle>(null);
-  const perf = usePerfProbe(visible);
+  const perf = usePerfProbe(visible, PERF_GRAPH);
   // Perf tier (full / lite / min) and the thermal ladder: an older or hot phone keeps 60fps by thinning particles, never by dropping a tell.
   const perfTier = usePerfTier({ active: visible });
   const tierScale = TIER_SCALES[perfTier.tierJs] ?? TIER_SCALES[0];
@@ -220,6 +241,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
 
   // ---------------------------------------------------------------- run state
   const [phase, setPhase] = useState<Phase>('play');
+  const phaseRef = useRef<Phase>('play');
+  phaseRef.current = phase;
   const [burstIdx, setBurstIdx] = useState(0);
   const [tl, setTl] = useState<Timeline | null>(null);
   const [fever, setFever] = useState(false);
@@ -233,6 +256,10 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     duelLine: string | null; incoming: number; feverReady: boolean; bossNext: boolean; boost: boolean;
     split?: { text: string; ahead: boolean; delta?: number; best?: number } | null;
     nextShape?: string; nextBoss?: number; goalStar?: { progress: number; target: number; three: boolean; best?: number | null } | null;
+    /** Wall clock the card lands on (it mounts a moment early, hidden; the UI thread runs the entrance). */
+    enterAt: number;
+    /** The repeat card of a middle Burst (a quicker roll and pads). */
+    quick: boolean;
   }>(null);
   /** Ghost split (6.11): this Run's banked total minus the PB ghosts' totals over the same Bursts. */
   const splitRef = useRef({ mine: 0, best: 0, known: true });
@@ -357,7 +384,17 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const curtainKind = useRef(0);
   // r5: one celebration at a time. The next card waits for FINISH! to hand off AND for the last shark to bow.
   const handoffWait = useCallback(() => (finishWall.current < 0 ? 0
-    : Math.max(0, Math.max(FINISH_HANDOFF_MS, curtainEndMs(curtainKind.current)) + captureHold - (Date.now() - finishWall.current))), [captureHold]);
+    : Math.max(0, Math.max(finishHandoff(curtainKind.current), curtainEndMs(curtainKind.current)) + captureHold - (Date.now() - finishWall.current))), [captureHold]);
+  // r6: the breather lands as the last sharks duck (CARD_OVERLAP_MS before the curtain ends, never before
+  // FINISH! hands off), timed from FINISH!'s UI fire frame, so the board is never empty and grey between them.
+  const cardAt = useCallback(() => (finishWall.current < 0 ? Date.now()
+    : finishWall.current + Math.max(finishHandoff(curtainKind.current), curtainEndMs(curtainKind.current) - CARD_OVERLAP_MS) + captureHold), [captureHold]);
+  /** Board-at-rest timer (the card has landed: the board stops redrawing until the next Burst). */
+  const restTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearRest = useCallback(() => {
+    if (restTimer.current) clearTimeout(restTimer.current);
+    restTimer.current = null;
+  }, []);
   const budget = usePowerBudget();
   /** UI-thread arrivals of fly-to-score labels: the header pill bumps on that frame. */
   const flyArrived = useSharedValue(0);
@@ -379,6 +416,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     GameAudio.playLadder(cues.coinTick, Math.min(12, bankTick.current));
     bankTick.current += 1;
   }, [cues.coinTick]);
+  // The roll's last digit: one gold tally pop a step above the ladder's top, and a light tap.
+  const onBankRollDone = useCallback(() => {
+    GameAudio.play(cues.tally, { volume: 0.85, pitch: Math.min(12, bankTick.current + 1) });
+    playHaptic('tap', { priority: WHACK_PRIO.flow });
+  }, [cues.tally]);
   const finisher = useFinisher({
     clock: runtime.clock, camera, fx, stamps, width: field?.w ?? 390, height: field?.h ?? 700,
     stinger: ride ? cues.stingWin : cues.stingBoss, reducedMotion,
@@ -882,10 +924,16 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const nextTl = buildTimeline(next, runIndex);
     const g = nextStarGoal(total, RUN_STARS[difficulty]);
     const feverReady = !!carryRef.current.feverReady;
-    const breatherIn = handoffWait();
+    // The card mounts CARD_MOUNT_LEAD_MS before it lands (hidden, so React's mount cost is paid during the
+    // curtain) and its entrance runs on a UI-thread delay to enterAt (r6: no empty board, no dead hold).
+    const enterAt = cardAt();
+    const mountIn = Math.max(0, enterAt - CARD_MOUNT_LEAD_MS - Date.now());
     setTimeout(() => {
       bankTick.current = 0;
+      const landIn = Math.max(0, enterAt - Date.now());
       setBreather({
+        enterAt,
+        quick: repeatBurst(curtainKind.current),
         burstScore: b.score,
         runScore: total,
         stats: [
@@ -925,20 +973,36 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       setReadyOn(false);
       setPhase('breather');
       // The pads pop in as the last beat of the card (r5: no ghosted buttons; a mashing thumb still gets 600 ms).
-      setTimeout(() => setReadyOn(true), 600);
+      setTimeout(() => setReadyOn(true), landIn + padsAfter(curtainKind.current));
+      // Once the card has settled the board under it is a still frame: no render pass, no redraw.
+      clearRest();
+      const token = runToken.current;
+      restTimer.current = setTimeout(() => {
+        restTimer.current = null;
+        if (runToken.current === token && !finishing.current) runtime.setRest(true);
+      }, landIn + CARD_SETTLE_MS);
       // Autoplay saves a banked fever for the finale (the expert line).
-      if (autoplay) setTimeout(() => onReadyRef.current(feverReady && next === totalBursts - 1), 3500);
-    }, breatherIn);
-  }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay]);
+      if (autoplay) setTimeout(() => onReadyRef.current(feverReady && next === totalBursts - 1), landIn + AUTO_GO_MS);
+    }, mountIn);
+  }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay, cardAt, clearRest, runtime]);
 
   const onReady = useCallback((goFever: boolean) => {
     if (phase !== 'breather' || finishing.current) return;
+    clearRest();
     setBreather(null);
     setReveal(null);
     startBurst(burstIdx + 1, runIndex, true, goFever && !!carryRef.current.feverReady);
-  }, [phase, startBurst, burstIdx, runIndex]);
+  }, [phase, startBurst, burstIdx, runIndex, clearRest]);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+
+  // Under the results card the board is a still frame too, once the final curtain has bowed.
+  useEffect(() => {
+    if (!result) return undefined;
+    const t = setTimeout(() => runtime.setRest(true), CARD_SETTLE_MS + 700);
+    return () => clearTimeout(t);
+  }, [result, runtime]);
+  useEffect(() => () => clearRest(), [clearRest]);
 
   const onBankExit = useCallback(() => {
     setBreather(null);
@@ -1002,6 +1066,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const handleRematch = useCallback(() => {
     finishing.current = false;
     runToken.current += 1;
+    clearRest();
+    // The rematch count plays over a live board (its wells breathe again), not the frozen results frame.
+    runtime.setRest(false);
     const nextRun = runIndex + 1;
     setRunIndex(nextRun);
     bankedRef.current = [];
@@ -1015,7 +1082,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     showTimerLen(buildTimeline(0, nextRun).lengthMs);
     // The shell runs the fresh count (2-1-GO on a repeat) and calls onStart at GO, which starts the
     // burst: no second READY/GO slam and no burst running under the count (one start, one callout).
-  }, [runIndex, showTimerLen, buildTimeline, runtime]);
+  }, [runIndex, showTimerLen, buildTimeline, runtime, clearRest]);
 
   // Wrap-up (boarding / left the queue): bank the live Burst from a coherent snapshot.
   const wrapMirror = useRef<{ score: number } | null>(null);
@@ -1108,8 +1175,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   );
   // FINISH!'s JS half, on the beat's first frame: the whistle (unless the UI clock already queued it on
   // the zero frame), the finisher buzz, and a clear stage.
-  const onFinishFire = useCallback(() => {
-    finishWall.current = Date.now();
+  const onFinishFire = useCallback((firedAt: number) => {
+    finishWall.current = firedAt;
     if (Date.now() - preWhistle.current > 600) GameAudio.play(cues.whistle, { volume: 0.8, pitch: 5 });
     quietRef.current = true;
     stamps.current?.clear();
@@ -1196,7 +1263,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           {L && !ride ? <FinishBeat trigger={runtime.endTick} armed={phase === 'play' && secondsLeft != null && secondsLeft <= 2} onFire={onFinishFire}
             label="FINISH!" width={L.w} height={L.h} y={L.hudH + (L.deckTop - L.hudH) * 0.52}
             reduced={reducedMotion} sparkles={momentParticles(FINISH_SPARKLES_MAX, budget, reducedMotion)}
-            flash={flashPeak(isDimFlashingLightsEnabled(), reducedMotion)} clipTop={L.hudH + 4} /> : null}
+            flash={flashPeak(isDimFlashingLightsEnabled(), reducedMotion)} clipTop={L.hudH + 4} handoffMs={finishHandoff(curtainKind.current)} /> : null}
           {L ? <Banner text={banner.text} sub={banner.sub} color={banner.color} stamp={banner.stamp} top={L.hudH + (L.deckTop - L.hudH) * 0.18} /> : null}
           {phase === 'breather' && breather ? (
             <Breather
@@ -1213,6 +1280,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
               theme={theme}
               goalStar={breather.goalStar}
               onCountTick={onBankTick}
+              onRollDone={onBankRollDone}
+              enterAt={breather.enterAt}
+              quick={breather.quick}
               walkPct={Math.min(1, ((metersNow() - walkBaseRef.current) * WALK_PCT_PER_M) / 100)}
               walkMeters={metersNow() - walkBaseRef.current}
               boostReady={breather.boost ? 'GOLDEN START' : null}
@@ -1231,7 +1301,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
             />
           ) : null}
           {/* Dev frame graph in the bottom corner, clear of the GO and FINISH! sky band. */}
-          {__DEV__ && process.env.EXPO_PUBLIC_WHACK_PERF === '1' ? <PerfOverlay probe={perf} style={{ top: undefined, bottom: 6, right: 6 }} /> : null}
+          {PERF_GRAPH ? <PerfOverlay probe={perf} visible extra={() => `phase ${phaseRef.current}`} style={{ top: undefined, bottom: 6, right: 6 }} /> : null}
           {phase === 'breather' && reveal && reveal.me && reveal.rival ? (
             <View style={styles.revealWrap} pointerEvents="box-none">
               <DuelCard me={reveal.me.score} rival={reveal.rival.score} rivalName={duel?.rival.name ?? 'Captain Fin'} winner={reveal.winner}

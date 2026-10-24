@@ -11,12 +11,12 @@
 import React, { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { Canvas, Path, Skia, rect } from '@shopify/react-native-skia';
 import { CountUpText } from '../../../gamekit/fx/CountUpText';
 import GameIcon from '../../../ui/GameIcon';
-import { COUNT, DURATION, SPRING } from '../../../ui/motion';
+import { DURATION, SPRING } from '../../../ui/motion';
 import { EASE } from '../../../ui/motionEasing';
 import { ART, BOSS_ART, THEMED_SHARK_FRAMES, type WhackTheme } from '../assets';
 
@@ -109,6 +109,27 @@ export interface BreatherProps {
   split?: { text: string; ahead: boolean; delta?: number; best?: number } | null;
   /** One coin tick per step of the banked roll (the caller climbs the pitch ladder). */
   onCountTick?: () => void;
+  /** The roll's last digit landed (the caller plays the gold pop). */
+  onRollDone?: () => void;
+  /**
+   * Wall clock (ms) the card lands on. The card mounts early, hidden, and its entrance, the veil and the roll are
+   * scheduled on the UI thread from this time, so a busy JS thread never leaves an empty board (r5: 750 ms).
+   */
+  enterAt?: number;
+  /** The repeat card of a middle Burst: the same beats, about 60 percent as long. */
+  quick?: boolean;
+}
+
+/** The banked roll (r6): starts as the card lands, never on 0, and climbs long enough to read. */
+export const BREATHER_ROLL = { landMs: 160, ms: 720, fromShare: 0.2, punch: 1.22 } as const;
+export const BREATHER_ROLL_QUICK = { landMs: 110, ms: 460, fromShare: 0.2, punch: 1.18 } as const;
+const ROLL_EASE = Easing.out(Easing.quad);
+/** Gold sparkles in the roll's end pop (capped; none with Reduce Motion). */
+const POP_SPARKS = 6;
+
+/** The first number the roll shows: a fifth of the total, so the card never says +0 for points you earned. */
+export function breatherRollFrom(total: number): number {
+  return total > 0 ? Math.max(1, Math.round(total * BREATHER_ROLL.fromShare)) : 0;
 }
 
 /** Stat label to a picture (no reading): the value sits next to its icon. */
@@ -140,13 +161,39 @@ function NextPreview({ shape, theme, boss }: { shape?: string; theme: WhackTheme
   );
 }
 
+/** One gold sparkle of the roll's end pop: out from the number on the pop clock, then gone (UI thread). */
+function PopSpark({ k, pop }: { k: number; pop: SharedValue<number> }) {
+  const ang = (k / POP_SPARKS) * Math.PI * 2 - Math.PI / 2;
+  const style = useAnimatedStyle(() => {
+    const v = pop.value;
+    const r = 26 + 54 * v;
+    return {
+      opacity: v <= 0 || v >= 1 ? 0 : 1 - v * v,
+      transform: [{ translateX: Math.cos(ang) * r * 1.5 }, { translateY: Math.sin(ang) * r }, { rotate: `${45 + v * 90}deg` }, { scale: 1.1 - 0.6 * v }],
+    };
+  });
+  return <Animated.View pointerEvents="none" style={[styles.popSpark, k % 2 ? styles.popSparkWhite : null, style]} />;
+}
+
 export function Breather(p: BreatherProps) {
   const pad = useSharedValue(0);
   const enter = useSharedValue(0);
+  const pop = useSharedValue(0);
+  // How long until the card lands, fixed at mount (the parent mounts the card early, hidden).
+  const enterIn = React.useRef(Math.max(0, (p.enterAt ?? 0) - Date.now())).current;
+  const rollFrom = React.useRef(breatherRollFrom(p.burstScore)).current;
+  const roll = p.quick ? BREATHER_ROLL_QUICK : BREATHER_ROLL;
   useEffect(() => {
-    // The card rises out of the FINISH! rings onto a calm board: up from below, settling with no wobble.
-    enter.value = p.reduced ? withTiming(1, { duration: DURATION.quick }) : withSpring(1, SPRING.settle);
-  }, [enter, p.reduced]);
+    // The card rises out of the FINISH! rings onto a calm board: up from below, settling with no wobble, on
+    // a UI-thread delay so it lands on time however busy JS is.
+    enter.value = withDelay(enterIn, p.reduced ? withTiming(1, { duration: DURATION.quick }) : withSpring(1, SPRING.settle));
+    // The roll's payoff: a gold ring and a few sparkles burst from the number on its last digit.
+    if (!p.reduced && p.burstScore > 0) pop.value = withDelay(enterIn + roll.landMs + roll.ms, withTiming(1, { duration: 460, easing: EASE.out }));
+  }, [enter, pop, enterIn, roll, p.reduced, p.burstScore]);
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: pop.value <= 0 || pop.value >= 1 ? 0 : 0.95 * (1 - pop.value),
+    transform: [{ scale: 0.5 + 1.3 * pop.value }],
+  }));
   useEffect(() => {
     // r5: the pads are the last beat of the card stagger. They never sit ghosted: hidden until they can be
     // pressed, then they pop in at full strength on SPRING.pop with one pulse to draw the eye (and one more
@@ -192,9 +239,12 @@ export function Breather(p: BreatherProps) {
           ))}
         </View>
         <View style={styles.scoreRow}>
+          <Animated.View pointerEvents="none" style={[styles.popRing, ringStyle]} />
+          {p.reduced || p.burstScore <= 0 ? null : Array.from({ length: POP_SPARKS }, (_, k) => <PopSpark key={k} k={k} pop={pop} />)}
           <GameIcon name="coins" size={34} />
-          <CountUpText value={p.burstScore} fromValue={0} reducedMotion={p.reduced} prefix="+" delayMs={200} durationMs={COUNT.ms} tickEvery={tickEvery} onTick={p.onCountTick}
-            style={styles.cardScore} />
+          <CountUpText value={p.burstScore} fromValue={rollFrom} reducedMotion={p.reduced} prefix="+" delayMs={enterIn + roll.landMs}
+            durationMs={roll.ms} easing={ROLL_EASE} punch={roll.punch} punchAt="end" tickEvery={tickEvery} onTick={p.onCountTick}
+            onDone={p.onRollDone} style={styles.cardScore} />
         </View>
         <View style={styles.chips}>
           {showRun ? (
@@ -250,13 +300,17 @@ export function Breather(p: BreatherProps) {
       <View style={styles.thumbZone}>
         {p.feverReady && p.onFever ? (
           <Animated.View style={[styles.split, padStyle]}>
+            {/* r6: the two pads read with zero words. Plain GO is the everyday blue shark; GO x2 is the golden
+                shark with the flame, so a non-reader can tell save the fever from use it. */}
             <Pressable accessibilityRole="button" accessibilityLabel="Go and save the fever" onPress={p.readyEnabled ? p.onReady : undefined}
               style={styles.go}>
+              <Image source={THEMED_SHARK_FRAMES[theme][1]} style={styles.padShark} resizeMode="contain" />
               <Text style={styles.goText}>GO</Text>
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Go with fever, 7 seconds of double points" onPress={p.readyEnabled ? p.onFever : undefined}
               style={styles.goFever}>
-              <GameIcon name="streak" size={40} />
+              <Image source={ART.golden} style={styles.padShark} resizeMode="contain" />
+              <GameIcon name="streak" size={34} />
               <Text style={styles.goText}>GO</Text>
               <View style={styles.multBadge}><Text style={styles.multText}>x2</Text></View>
             </Pressable>
@@ -272,8 +326,8 @@ export function Breather(p: BreatherProps) {
         {p.canBank ? (
           <Animated.View style={padStyle}>
             <Pressable accessibilityRole="button" accessibilityLabel="Keep your points and finish" onPress={p.onBank} style={styles.bank} hitSlop={10}>
-              <GameIcon name="trophy" size={22} />
-              <GameIcon name="check" size={20} />
+              <GameIcon name="trophy" size={28} />
+              <GameIcon name="check" size={24} />
             </Pressable>
           </Animated.View>
         ) : null}
@@ -330,7 +384,10 @@ const styles = StyleSheet.create({
   pipOn: { backgroundColor: GOLD },
   pipNow: { transform: [{ scale: 1.2 }] },
   pipDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: NAVY },
-  scoreRow: { flexDirection: 'row', alignItems: 'center' },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  popRing: { position: 'absolute', left: '50%', top: '50%', marginLeft: -48, marginTop: -48, width: 96, height: 96, borderRadius: 48, borderWidth: 6, borderColor: GOLD },
+  popSpark: { position: 'absolute', left: '50%', top: '50%', marginLeft: -6, marginTop: -6, width: 12, height: 12, borderRadius: 2, backgroundColor: GOLD, borderWidth: 2, borderColor: NAVY },
+  popSparkWhite: { backgroundColor: '#ffffff' },
   runPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: NAVY, paddingHorizontal: 10, paddingVertical: 2 },
   starRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, alignSelf: 'stretch', paddingHorizontal: 18 },
   starTrackWrap: { flex: 1, marginHorizontal: 8, justifyContent: 'center' },
@@ -371,13 +428,14 @@ const styles = StyleSheet.create({
   feverHint: { fontFamily: 'Knockout', fontSize: 13, color: NAVY, marginTop: 4, textAlign: 'center' },
   split: { flexDirection: 'row', alignItems: 'center' },
   go: {
-    width: 128, height: 88, borderRadius: 44, backgroundColor: '#ffffff', borderWidth: 4, borderColor: NAVY,
-    borderBottomWidth: 9, alignItems: 'center', justifyContent: 'center', marginRight: 12,
+    width: 132, height: 88, borderRadius: 44, backgroundColor: '#ffffff', borderWidth: 4, borderColor: NAVY,
+    borderBottomWidth: 9, alignItems: 'center', justifyContent: 'center', marginRight: 12, flexDirection: 'row',
   },
   goFever: {
     width: 196, height: 96, borderRadius: 48, backgroundColor: GOLD, borderWidth: 4, borderColor: NAVY,
-    borderBottomWidth: 9, alignItems: 'center', justifyContent: 'center',
+    borderBottomWidth: 9, alignItems: 'center', justifyContent: 'center', flexDirection: 'row',
   },
+  padShark: { width: 40, height: 40, marginRight: 2 },
   goText: { fontFamily: 'Shark', fontSize: 30, color: NAVY },
   thumbZone: { position: 'absolute', left: 0, right: 0, bottom: 26, alignItems: 'center' },
   ready: {
@@ -386,7 +444,9 @@ const styles = StyleSheet.create({
   },
   readyText: { fontFamily: 'Shark', fontSize: 40, color: NAVY },
   readySub: { fontFamily: 'Knockout', fontSize: 13, color: NAVY, marginTop: -4 },
-  bank: { marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 3, borderColor: NAVY },
+  // r6: a real 56 pt button with the pads' chunky bottom edge (was a small chip).
+  bank: { marginTop: 14, minHeight: 56, minWidth: 104, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 22,
+    borderRadius: 28, backgroundColor: '#ffffff', borderWidth: 4, borderBottomWidth: 7, borderColor: NAVY },
   bankText: { fontFamily: 'Shark', fontSize: 17, color: NAVY },
   duel: { marginTop: 10, alignSelf: 'stretch', backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: NAVY, padding: 10, alignItems: 'center' },
   duelTitle: { fontFamily: 'Shark', fontSize: 22, color: NAVY },

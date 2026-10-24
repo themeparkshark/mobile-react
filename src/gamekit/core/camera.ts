@@ -273,6 +273,13 @@ export function stepCamera(cam: CameraState, dtMs: number): void {
   cam.baseZoom += (cam.baseZoomTarget - cam.baseZoom) * k;
   cam.leanX += (cam.leanTargetX - cam.leanX) * k;
   cam.leanY += (cam.leanTargetY - cam.leanY) * k;
+  // Snap to rest once a spring or ease is below a hundredth of a point: the asymptotic tail would otherwise
+  // write a new transform every frame for seconds after a hit (an idle board kept re-compositing).
+  if (Math.abs(cam.kx) < 0.01 && Math.abs(cam.kvx) < 0.1) { cam.kx = 0; cam.kvx = 0; }
+  if (Math.abs(cam.ky) < 0.01 && Math.abs(cam.kvy) < 0.1) { cam.ky = 0; cam.kvy = 0; }
+  if (Math.abs(cam.baseZoomTarget - cam.baseZoom) < 0.0001) cam.baseZoom = cam.baseZoomTarget;
+  if (Math.abs(cam.leanTargetX - cam.leanX) < 0.01) cam.leanX = cam.leanTargetX;
+  if (Math.abs(cam.leanTargetY - cam.leanY) < 0.01) cam.leanY = cam.leanTargetY;
 
   const i = cfg.intensity;
   cam.x = sx + cam.kx * i + cam.leanX;

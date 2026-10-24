@@ -31,7 +31,7 @@ import {
   cancelAnimation, Easing, ReduceMotion, runOnJS, useAnimatedReaction, useDerivedValue, useSharedValue, withSequence, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useDisplayFont } from './displayFont';
-import { FINISH_BEAT_MS, FINISH_FAN_OF_GO, FINISH_SPARKLES_MAX, finishPose, finishSparkle } from '../core/gameMoments';
+import { FINISH_BEAT_MS, FINISH_FAN_OF_GO, FINISH_HANDOFF_MS, FINISH_SPARKLES_MAX, finishPose, finishSparkle } from '../core/gameMoments';
 import { GOLD_FX } from '../../ui/motion';
 
 /** Dev capture only: hold the beat on this time (ms) for 6 s so a screenshot shows an exact frame. */
@@ -43,6 +43,10 @@ const SOFT_ART = require('../../../assets/images/reveal/soft-spot.webp');
 
 /** The last-5 number size, so FINISH! lands with the same weight. */
 const LABEL_PX = 110;
+/** Screen gutters the label never crosses (pt), its outline width, and how much of the inner width it rests at. */
+export const FINISH_GUTTER = 16;
+const LABEL_OUTLINE = 14;
+const REST_OF_GUTTER = 0.86;
 
 export interface FinishBeatProps {
   /** Bump to fire (0 never fires). */
@@ -51,8 +55,11 @@ export interface FinishBeatProps {
   trigger?: SharedValue<number>;
   /** Keep the canvas mounted (drawing nothing) so a `trigger` fire lands on its own frame. */
   armed?: boolean;
-  /** Called on JS once the beat has started (sound, haptic, clearing other callouts). */
-  onFire?: () => void;
+  /**
+   * Called on JS once the beat has started (sound, haptic, clearing other callouts), with the wall clock of
+   * the UI frame it fired on, so a busy JS thread can still time the next card from the real fire frame.
+   */
+  onFire?: (firedAt: number) => void;
   label?: string;
   width: number;
   height: number;
@@ -65,6 +72,8 @@ export interface FinishBeatProps {
   flash?: number;
   /** The rings, flash and sparkles stay below this line (the game's HUD band); the label is never clipped. */
   clipTop?: number;
+  /** When the beat hands off (FINISH_HANDOFF_MS, or FINISH_HANDOFF_SHORT_MS for a repeat Burst). */
+  handoffMs?: number;
 }
 
 function sparkleStar() {
@@ -97,6 +106,7 @@ function runClock(clock: SharedValue<number>) {
 
 export const FinishBeat = React.memo(function FinishBeat({
   fireKey = 0, trigger, armed = false, onFire, label = 'FINISH!', width, height, y, reduced, sparkles = 12, flash = 0, clipTop = 0,
+  handoffMs = FINISH_HANDOFF_MS,
 }: FinishBeatProps) {
   const [live, setLive] = useState(false);
   const clock = useSharedValue(-1);
@@ -104,11 +114,11 @@ export const FinishBeat = React.memo(function FinishBeat({
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const onFireRef = React.useRef(onFire);
   onFireRef.current = onFire;
-  const fired = React.useCallback(() => {
+  const fired = React.useCallback((firedAt?: number) => {
     setLive(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setLive(false), liveFor);
-    onFireRef.current?.();
+    onFireRef.current?.(typeof firedAt === 'number' ? firedAt : Date.now());
   }, [liveFor]);
   useEffect(() => {
     if (!fireKey) return;
@@ -121,13 +131,13 @@ export const FinishBeat = React.memo(function FinishBeat({
     (v, prev) => {
       if (prev == null || v === prev || v <= 0) return;
       runClock(clock);
-      runOnJS(fired)();
+      runOnJS(fired)(Date.now());
     },
     [trigger],
   );
   useEffect(() => () => { cancelAnimation(clock); if (timer.current) clearTimeout(timer.current); }, [clock]);
   if (!live && !armed) return null;
-  return <FinishCanvas clock={clock} label={label} width={width} height={height} y={y} reduced={reduced} sparkles={sparkles} flash={flash} clipTop={clipTop} />;
+  return <FinishCanvas clock={clock} label={label} width={width} height={height} y={y} reduced={reduced} sparkles={sparkles} flash={flash} clipTop={clipTop} handoff={handoffMs} />;
 });
 
 /**
@@ -135,8 +145,8 @@ export const FinishBeat = React.memo(function FinishBeat({
  * re-reconciled on a busy JS thread could drop the label for a few frames mid-beat. With stable props the
  * canvas never re-renders once mounted; every frame of the beat comes from the UI-thread clock.
  */
-const FinishCanvas = React.memo(function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash, clipTop }: {
-  clock: SharedValue<number>; label: string; width: number; height: number; y: number; reduced: boolean; sparkles: number; flash: number; clipTop: number;
+const FinishCanvas = React.memo(function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash, clipTop, handoff }: {
+  clock: SharedValue<number>; label: string; width: number; height: number; y: number; reduced: boolean; sparkles: number; flash: number; clipTop: number; handoff: number;
 }) {
   const clip = useMemo(() => rect(0, clipTop, width, Math.max(0, height - clipTop)), [clipTop, width, height]);
   const font = useDisplayFont(LABEL_PX);
@@ -144,15 +154,21 @@ const FinishCanvas = React.memo(function FinishCanvas({ clock, label, width, hei
   const raw = useMemo(() => {
     try { return font ? font.measureText(label).width : LABEL_PX * 0.62 * label.length; } catch { return LABEL_PX * 0.62 * label.length; }
   }, [font, label]);
-  // Never cut off: shrink to fit with room for the overshoot and the outline.
-  const fit = Math.min(1, (width - 32) / Math.max(1, raw * 1.12));
+  // Never cut off (r6): the word rests at REST_OF_GUTTER of the width inside the 16 pt gutters, and the slam's
+  // overshoot is capped so the whole word plus its 14 pt outline stays inside them on every frame (r5 showed a
+  // clipped FNISH for 2 frames). The extra energy goes into the ray fan's swell instead.
+  const inner = Math.max(1, width - 2 * FINISH_GUTTER);
+  const fit = Math.min(1, (inner * REST_OF_GUTTER) / Math.max(1, (raw + LABEL_OUTLINE) * 1.12));
+  const maxK = inner / Math.max(1, raw + LABEL_OUTLINE);
   const cx = width / 2;
-  const pose = useDerivedValue(() => finishPose(clock.value, reduced));
+  const pose = useDerivedValue(() => finishPose(clock.value, reduced, handoff));
   const labelT = useDerivedValue(() => {
     const p = pose.value;
+    const kx = p.scale * p.sx * fit;
+    const cap = kx > maxK ? maxK / kx : 1;
     return [
       { translateX: cx }, { translateY: y }, { rotate: p.rot },
-      { scaleX: p.scale * p.sx * fit }, { scaleY: p.scale * p.sy * fit },
+      { scaleX: kx * cap }, { scaleY: p.scale * p.sy * fit * cap },
       { translateX: -raw / 2 }, { translateY: LABEL_PX * 0.36 },
     ];
   });
@@ -164,13 +180,16 @@ const FinishCanvas = React.memo(function FinishCanvas({ clock, label, width, hei
   const flashA = useDerivedValue(() => flash * pose.value.flash);
   const raysImg = useImage(RAYS_ART);
   const softImg = useImage(SOFT_ART);
-  // The fan, glow and core: GoldBurst's exact curves, on the canvas's own clock (always in step with the label).
-  const glowA = useDerivedValue(() => Math.min(1, 0.85 * pose.value.gold + 0.15 * pose.value.bloom));
-  const raysA = useDerivedValue(() => Math.min(1, 0.95 * pose.value.gold + 0.1 * pose.value.bloom));
-  const coreA = useDerivedValue(() => Math.min(1, 0.55 * pose.value.gold + 0.6 * pose.value.bloom));
-  const glowT = useDerivedValue(() => [{ translateX: cx }, { translateY: y }, { scale: 0.55 + 0.45 * pose.value.gold + 0.3 * pose.value.bloom }]);
-  const raysT = useDerivedValue(() => [{ translateX: cx }, { translateY: y }, { scale: 0.5 + 0.5 * pose.value.gold + 0.14 * pose.value.bloom }]);
-  const coreT = useDerivedValue(() => [{ translateX: cx }, { translateY: y }, { scale: 0.8 + 0.5 * pose.value.bloom }]);
+  // The fan, glow and core on the canvas's own clock (always in step with the label). r6: the landing swell
+  // (bloom, the first 320 ms) pushes the rays to full and the core bloom up to GO's strength, so FINISH! is the
+  // brightest still of the run; Dim Flashing Lights and Reduce Motion (flash 0) keep a softer swell.
+  const swell = flash > 0 ? 1 : 0.4;
+  const glowA = useDerivedValue(() => Math.min(1, 0.95 * pose.value.gold + 0.35 * swell * pose.value.bloom));
+  const raysA = useDerivedValue(() => Math.min(1, pose.value.gold + 0.25 * swell * pose.value.bloom));
+  const coreA = useDerivedValue(() => Math.min(1, 0.7 * pose.value.gold + 0.9 * swell * pose.value.bloom));
+  const glowT = useDerivedValue(() => [{ translateX: cx }, { translateY: y }, { scale: 0.55 + 0.45 * pose.value.gold + 0.35 * pose.value.bloom }]);
+  const raysT = useDerivedValue(() => [{ translateX: cx }, { translateY: y }, { scale: 0.5 + 0.5 * pose.value.gold + 0.22 * pose.value.bloom }]);
+  const coreT = useDerivedValue(() => [{ translateX: cx }, { translateY: y }, { scale: 0.8 + 0.6 * pose.value.bloom }]);
   const n = reduced ? 0 : Math.max(0, Math.min(FINISH_SPARKLES_MAX, Math.round(sparkles)));
   // GO's fan is 1.3 screen widths; FINISH!'s is 0.8 of that, clipped below the HUD like the rings.
   const fan = Math.round(width * 1.3 * FINISH_FAN_OF_GO);
@@ -208,7 +227,7 @@ const FinishCanvas = React.memo(function FinishCanvas({ clock, label, width, hei
           <Circle cx={cx} cy={y} r={ring2R} color="#ffffff" style="stroke" strokeWidth={4} opacity={ring2A} />
         </Group>
       )}
-      {Array.from({ length: n }, (_, k) => <Spark key={k} k={k} n={n} clock={clock} cx={cx} cy={y} star={star} />)}
+      {Array.from({ length: n }, (_, k) => <Spark key={k} k={k} n={n} clock={clock} cx={cx} cy={y} star={star} handoff={handoff} />)}
       </Group>
       {font ? (
         <Group transform={labelT} opacity={labelA}>
@@ -223,10 +242,10 @@ const FinishCanvas = React.memo(function FinishCanvas({ clock, label, width, hei
   );
 });
 
-function Spark({ k, n, clock, cx, cy, star }: {
-  k: number; n: number; clock: SharedValue<number>; cx: number; cy: number; star: ReturnType<typeof Skia.Path.Make>;
+function Spark({ k, n, clock, cx, cy, star, handoff }: {
+  k: number; n: number; clock: SharedValue<number>; cx: number; cy: number; star: ReturnType<typeof Skia.Path.Make>; handoff: number;
 }) {
-  const sp = useDerivedValue(() => finishSparkle(k, n, clock.value));
+  const sp = useDerivedValue(() => finishSparkle(k, n, clock.value, handoff));
   const size = 9 + (k % 3) * 4;
   const transform = useDerivedValue(() => [
     { translateX: cx + sp.value.x }, { translateY: cy + sp.value.y }, { rotate: sp.value.rot }, { scale: size * sp.value.scale },
