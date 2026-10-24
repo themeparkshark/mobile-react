@@ -290,7 +290,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   }));
   const beamStyle = useAnimatedStyle(() => ({ opacity: beam.value, transform: [{ scaleY: 0.4 + 0.6 * beam.value }] }));
   const chestStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: bob.value - drop.value * 160 }, { rotate: `${shake.value}deg` }, { scale: pop.value },
+    // The drop starts just above the stage (always in sight inside the card), never from off the card.
+    transform: [{ translateY: bob.value - drop.value * 70 }, { rotate: `${shake.value}deg` }, { scale: pop.value },
       { scaleY: squash.value }, { scaleX: 2 - squash.value }],
   }));
   const leakStyle = useAnimatedStyle(() => ({ opacity: leak.value, transform: [{ scaleX: 0.6 + leak.value * 0.6 }] }));
