@@ -1,4 +1,3 @@
-import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -12,6 +11,8 @@ import { FULL_SET, LOOP_CUES } from '../../services/retention/loopMotion';
 import { DURATION, SPRING } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import FlameArt from './FlameArt';
+import GoldCheckCoin from './GoldCheckCoin';
+import { FreezeSlots } from './FreezeMoments';
 import {
   doneCount, goalAction, milestoneLine, resetLabel, showsBar, streakSubline, tomorrowLine, weekdayLetter, weeklyLine,
 } from '../../services/retention/logic';
@@ -34,7 +35,7 @@ export type GoalTap = 'chest' | 'closet' | 'friends' | 'snack' | 'ride';
  * Every number on it comes from the server.
  */
 export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyFreeze, onGoal, onClose, onReminders, busy, coins,
-  celebrate, celebrateAll = false, onAutoClaim, reducedMotion, coach, onCoachDone }: {
+  celebrate, celebrateAll = false, onAutoClaim, reducedMotion, coach, onCoachDone, freezeArrive = 0 }: {
   readonly state: DailyThreeState;
   readonly now: number;
   readonly onClaim: () => void;
@@ -55,6 +56,8 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
   /** First open: a three-line "how it works" card over the sheet. */
   readonly coach: boolean;
   readonly onCoachDone: () => void;
+  /** Freezes that just arrived (from the Weekly Box): they fly into their slots. */
+  readonly freezeArrive?: number;
 }) {
   const done = doneCount(state.goals);
   const s = state.streak;
@@ -97,16 +100,9 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
             </View>
           )}
         </View>
-        <View style={styles.freezes} accessible accessibilityLabel={`${s.freezes} of ${s.freeze_cap} streak freezes`}>
-          {Array.from({ length: s.freeze_cap }, (_, i) => i < s.freezes ? (
-            <Image key={i} source={FREEZE} style={styles.freezeIcon} contentFit="contain" />
-          ) : (
-            <Pressable key={i} onPress={canBuyFreeze ? onBuyFreeze : undefined} disabled={busy || !canBuyFreeze} hitSlop={4}
-              accessibilityRole="button" accessibilityLabel={canBuyFreeze ? `Get a streak freeze for ${s.freeze_price} coins` : 'Empty freeze slot'}
-              style={[styles.freezeSlot, canBuyFreeze && styles.freezeSlotBuy]}>
-              {canBuyFreeze && <Text style={styles.freezePlus}>+</Text>}
-            </Pressable>
-          ))}
+        <View accessible accessibilityLabel={`${s.freezes} of ${s.freeze_cap} streak freezes`}>
+          <FreezeSlots freezes={s.freezes} cap={s.freeze_cap} arrive={Math.min(freezeArrive, s.freezes)} from={{ x: -120, y: 260 }}
+            reducedMotion={reducedMotion} emptyPressable={canBuyFreeze && !busy} onEmptyPress={onBuyFreeze} />
         </View>
       </View>
 
@@ -256,25 +252,9 @@ function GoalRow({ goal, index, pop, onPress, reducedMotion, bounceAt }: {
   );
 }
 
-const CHECK_BOX = 36;
-const CHECK_PATH = (() => {
-  const p = Skia.Path.Make();
-  p.moveTo(CHECK_BOX * 0.25, CHECK_BOX * 0.53);
-  p.lineTo(CHECK_BOX * 0.43, CHECK_BOX * 0.7);
-  p.lineTo(CHECK_BOX * 0.76, CHECK_BOX * 0.32);
-  return p;
-})();
-
-/** The gold done check (the same one that stamps on the map button): gold coin, white rim, a navy-edged white tick. */
+/** The gold done check (the same mark that stamps on the map button). */
 function GoldCheck({ draw }: { readonly draw: SharedValue<number> }) {
-  return (
-    <Canvas style={{ width: CHECK_BOX, height: CHECK_BOX }}>
-      <Circle cx={CHECK_BOX / 2} cy={CHECK_BOX / 2} r={CHECK_BOX / 2 - 1.5} color={BRAND.gold} />
-      <Circle cx={CHECK_BOX / 2} cy={CHECK_BOX / 2} r={CHECK_BOX / 2 - 1.5} color={BRAND.white} style="stroke" strokeWidth={2.5} />
-      <Path path={CHECK_PATH} style="stroke" strokeWidth={7} color={BRAND.navy} strokeCap="round" strokeJoin="round" end={draw} />
-      <Path path={CHECK_PATH} style="stroke" strokeWidth={4} color={BRAND.white} strokeCap="round" strokeJoin="round" end={draw} />
-    </Canvas>
-  );
+  return <GoldCheckCoin size={36} draw={draw} />;
 }
 
 function ChestBlock({ state, done, busy, onClaim, reducedMotion, charging = false }: {

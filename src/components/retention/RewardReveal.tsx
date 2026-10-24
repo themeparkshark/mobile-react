@@ -11,7 +11,8 @@ import { haptic, playHaptic, queueHaptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { usePowerBudget } from '../../power';
 import { doneDelay, isBigReward, rewardRows, rowSchedule, type RewardRow } from '../../services/retention/logic';
-import { LEVEL_CHEST, REVEAL_ROWS, countStart, rowCountMs } from '../../services/retention/loopMotion';
+import { FULL_SET, LEVEL_CHEST, LOOP_CUES, REVEAL_ROWS, countStart, rowCountMs } from '../../services/retention/loopMotion';
+import GoldCheckCoin from './GoldCheckCoin';
 import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 import { GoldBurst, RadialFlash, SparkleBurst } from '../../ui/GoldBurst';
 import { COUNT, DURATION, PARTICLES, SPRING, flashPeak, momentBeats, momentParticles } from '../../ui/motion';
@@ -37,7 +38,7 @@ const STALL_MS = 6000;
  * shows a tap ring, and opens by itself after 2 s. Shows only what the server paid.
  */
 export default function RewardReveal({ subtitle, closedArt, openArt, rewards, opening, onOpen, onDone, onWear, onPins,
-  reducedMotion, doneLabel, footer, dropIn = false, autoOpen = false, expectRows }: {
+  reducedMotion, doneLabel, footer, dropIn = false, autoOpen = false, expectRows, preview, fullSet = false }: {
   readonly subtitle: string;
   readonly closedArt: ImageSource | number;
   readonly openArt: ImageSource | number;
@@ -56,8 +57,12 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   readonly dropIn?: boolean;
   /** Open by itself on arrival (the full Daily 3 set flows straight into its chest). */
   readonly autoOpen?: boolean;
-  /** How many prize rows are coming, when known (the Daily 3 chest): the rows area fits them, no empty card. */
-  readonly expectRows?: number;
+  /** The prize rows coming, when known (the Daily 3 chest): the rows area fits them, no empty card. */
+  readonly expectRows?: { readonly small: number; readonly big: number };
+  /** What is inside (known amounts), shown while the chest gathers. */
+  readonly preview?: React.ReactNode;
+  /** The full Daily 3 set: three gold checks bounce in a row, then dive into the chest as it gathers. */
+  readonly fullSet?: boolean;
 }) {
   const ambient = useAmbient();
   const budget = usePowerBudget();
@@ -66,12 +71,13 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   // The chest never resizes at the reveal (no jump); the rows area takes the rest of the screen.
   // Small phones (SE) get a compact layout so every prize shows without scrolling.
   const compact = height < 720;
-  const known = typeof expectRows === 'number' && expectRows > 0;
+  const known = !!expectRows && expectRows.small + expectRows.big > 0;
   const size = Math.min(width * (known ? 0.5 : 0.44), height * (compact ? 0.17 : known ? 0.25 : 0.21), known ? 210 : 190);
   const stageH = size + (known ? 70 : 8);
   // Rows get a fixed area (scrolls only on small phones), so the card never changes height.
   const baseRows = compact ? Math.max(200, height - size - 300) : Math.max(200, Math.min(300, height - size - 380));
-  const rowsHeight = known ? Math.min(baseRows, expectRows * (compact ? 50 : 56) + 18) : baseRows;
+  const rowsHeight = known && expectRows
+    ? Math.min(baseRows + 60, expectRows.small * (compact ? 50 : 54) + expectRows.big * 104 + 18) : baseRows;
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
   const pop = useSharedValue(1);
@@ -146,7 +152,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   // Gather: the shake builds and gold light grows behind the chest for as long as the server takes,
   // with rising ticks (never a static line), then settles calmly if it is slow.
   useEffect(() => {
-    if (!opening || revealed) return;
+    // The full set starts gathering on its first frame (its claim is already on the way).
+    if (!(opening || autoOpen) || revealed) return;
     setStalled(false);
     setShowTap(false);
     cancelAnimation(tapRing); tapRing.value = 0;
@@ -166,7 +173,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     }
     playSfx('fx.redeemOpen', 0.8);
     return () => { clearTimeout(stall); cancelAnimation(shake); shake.value = 0; };
-  }, [opening, revealed, reducedMotion, shake]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [opening || autoOpen, revealed, reducedMotion, shake]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hold, burst, settle: then one row per beat.
   useEffect(() => {
@@ -244,7 +251,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
 
   return (
     <View style={styles.card}>
-      <Text style={styles.subtitle}>{subtitle}</Text>
+      {fullSet ? <FullSetChecks reducedMotion={reducedMotion} /> : <Text style={styles.subtitle}>{subtitle}</Text>}
       <Pressable onPress={!revealed && !opening ? requestOpen : skip} disabled={opening && !revealed} accessibilityRole="button"
         accessibilityLabel={revealed ? 'Opened' : 'Tap to open'} style={[styles.stage, { height: stageH }]}
         onLayout={e => setStage({ x: e.nativeEvent.layout.x + e.nativeEvent.layout.width / 2, y: e.nativeEvent.layout.y + e.nativeEvent.layout.height / 2 })}>
@@ -273,7 +280,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
           showsVerticalScrollIndicator={false}>
           {!revealed ? (
             <View style={[styles.hintBox, { height: rowsHeight - 8 }]}>
-              {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+              {hint ? <Text style={styles.hint}>{hint}</Text> : preview && !stalled ? <PreviewIn>{preview}</PreviewIn> : null}
             </View>
           ) : rows.map((row, i) => (
             <Row key={row.kind} row={row} shown={i < landed} reducedMotion={reducedMotion} compact={compact}
@@ -289,6 +296,51 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
       {stage && budget.animate && budget.particleScale >= 0.5 && <RewardBurst progress={burst} x={stage.x} y={stage.y} />}
     </View>
   );
+}
+
+/**
+ * The full set's three gold checks: they bounce one after another (120 ms apart, rising ticks), then
+ * dive into the chest as it starts to gather (the goals you finished charge the chest).
+ */
+function FullSetChecks({ reducedMotion }: { readonly reducedMotion: boolean }) {
+  const a = useSharedValue(reducedMotion ? 1 : 0);
+  const b = useSharedValue(reducedMotion ? 1 : 0);
+  const c = useSharedValue(reducedMotion ? 1 : 0);
+  const dive = useSharedValue(0);
+  const vals = [a, b, c];
+  useEffect(() => {
+    if (reducedMotion) return;
+    vals.forEach((v, i) => {
+      v.value = withDelay(FULL_SET.checksAt + i * FULL_SET.checkStep, withSequence(withTiming(1.35, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
+    });
+    dive.value = withDelay(FULL_SET.chestAt, withTiming(1, { duration: 300, easing: EASE.in }));
+    const timers = FULL_SET.tickSteps.map((step, i) => setTimeout(() => {
+      queueHaptic('tickSelection');
+      playSfx(LOOP_CUES.checkBounce.fallback, 0.5 + step / 16);
+    }, FULL_SET.checksAt + i * FULL_SET.checkStep));
+    return () => timers.forEach(clearTimeout);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <View style={styles.checks} accessibilityLabel="All three goals done">
+      {vals.map((v, i) => <DivingCheck key={i} v={v} dive={dive} index={i} />)}
+    </View>
+  );
+}
+
+function DivingCheck({ v, dive, index }: { readonly v: SharedValue<number>; readonly dive: SharedValue<number>; readonly index: number }) {
+  const style = useAnimatedStyle(() => ({
+    opacity: Math.min(1, v.value * 2) * (1 - dive.value),
+    transform: [{ translateX: (1 - index) * 52 * dive.value }, { translateY: 90 * dive.value }, { scale: v.value * (1 - 0.6 * dive.value) }],
+  }));
+  return <Animated.View style={style}><GoldCheckCoin size={40} /></Animated.View>;
+}
+
+/** The preview of what is inside rises in softly while the chest gathers. */
+function PreviewIn({ children }: { readonly children: React.ReactNode }) {
+  const a = useSharedValue(0);
+  useEffect(() => { a.value = withTiming(1, { duration: DURATION.enter, easing: EASE.out }); }, [a]);
+  const style = useAnimatedStyle(() => ({ opacity: 0.9 * a.value, transform: [{ translateY: (1 - a.value) * 10 }] }));
+  return <Animated.View style={[{ alignItems: 'center', gap: 6 }, style]}>{children}</Animated.View>;
 }
 
 /** Gold coins arcing up out of the open chest and falling back with gravity (one shared progress, budgeted count). */
@@ -446,6 +498,7 @@ const styles = StyleSheet.create({
   card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
     paddingTop: 20, paddingBottom: 14, paddingHorizontal: 12, alignItems: 'center', overflow: 'hidden' },
   subtitle: { fontFamily: 'Knockout', fontSize: 17, color: '#e4f7ff', textAlign: 'center', minHeight: 22 },
+  checks: { flexDirection: 'row', gap: 12, height: 44, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   stage: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
   abs: { position: 'absolute' },
   center: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
@@ -472,7 +525,7 @@ const styles = StyleSheet.create({
   smallBtnText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
   bottom: { alignSelf: 'stretch', minHeight: 96, justifyContent: 'flex-end', gap: 8, marginTop: 6 },
   // The Daily 3 chest footer holds the flame row too.
-  bottomKnown: { minHeight: 150 },
+  bottomKnown: { minHeight: 146 },
   button: { alignSelf: 'stretch', backgroundColor: BRAND.gold, borderRadius: 16, paddingVertical: 12,
     alignItems: 'center', borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },
   buttonPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },

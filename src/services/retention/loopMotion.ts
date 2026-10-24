@@ -29,25 +29,26 @@ export const CHECK = {
 } as const;
 
 /**
- * The full set (all three goals): the sheet opens, the three checks bounce
- * 120 ms apart on a rising tick, "All 3 done!" stamps, and the chest opens on
- * the chest beats (momentBeats('chest')).
+ * The full set (all three goals): the card opens with the ring's flash, three
+ * gold checks bounce 120 ms apart on a rising tick, "All 3 done!" stamps, the
+ * checks dive into the chest and it opens on the chest beats (momentBeats('chest')).
+ * Third check landing to the lid: ring 400 + chestAt 640 + 420 + hit-stop 70, about 1.5 s.
  */
 export const FULL_SET = {
-  /** The white ring flash on the map button (capped by flashPeak). */
+  /** The gold glow on the map ring (capped by flashPeak). */
   flash: 220,
-  /** From the ring completing to the sheet opening (the flash is still fading). */
-  sheetAt: 120,
-  /** When the first check bounces (ms after the sheet opens). */
-  checksAt: 300,
+  /** From the ring completing to the card opening (handed off on the ring's own UI-thread clock). */
+  sheetAt: 0,
+  /** When the first check bounces (ms after the card opens). */
+  checksAt: 200,
   /** Gap between the three check bounces. */
   checkStep: 120,
   /** Rising coin_tick ladder steps for the three bounces. */
   tickSteps: [0, 4, 8] as const,
   /** The "All 3 done!" ribbon stamping in. */
-  ribbonAt: 700,
-  /** The chest takes over (anticipation starts). */
-  chestAt: 900,
+  ribbonAt: 500,
+  /** The checks dive into the chest; its anticipation runs from here (momentBeats('chest')). */
+  chestAt: 640,
 } as const;
 
 /** Streak milestones that get their own full-screen moment. */
@@ -189,6 +190,19 @@ export function arcPoint(t: number, from: { x: number; y: number }, to: { x: num
   return { x: u * u * from.x + 2 * u * t * cx + t * t * to.x, y: u * u * from.y + 2 * u * t * cy + t * t * to.y };
 }
 
+/**
+ * Streak freezes (ms): an earned shield flies to its slot on an arc, lands on
+ * the land spring and puffs six frost sparkles; a full shield glints every 6 s;
+ * a freeze that saved the flame cracks its ice shell and the halves fall away.
+ */
+export const FREEZE_FX = {
+  flyMs: 500,
+  frost: 6,
+  glintEveryMs: 6000,
+  crackAt: 450,
+  fallMs: 600,
+} as const;
+
 /** The shared small-moment tokens (src/ui/motion.ts), re-exported so loop code has one import. */
 export { COUNT, HUD_BUMP, PRESS, STAGGER } from '../../ui/motion';
 
@@ -269,6 +283,8 @@ export const LOOP_CUES = {
   flameUp: { studio: 'tv_flame_ignite', variant: 'sh_powerup', fallback: 'fx.reveal' },
   milestone: { studio: 'sting_new_record', variant: 'sh_crowd_cheer', fallback: 'fx.reward' },
   tomorrow: { studio: 'sh_glock', variant: 'sh_glock', fallback: 'ui.select' },
+  freezeEarn: { studio: 'sh_freeze', variant: 'sh_freeze', fallback: 'fx.reveal' },
+  freezeSaved: { studio: 'sh_unfreeze', variant: 'sh_unfreeze', fallback: 'fx.reveal' },
 } as const;
 
 export type LoopCue = keyof typeof LOOP_CUES;

@@ -18,7 +18,7 @@ import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
-import { dailyChain, flameMomentFor, mayAskAfterChain, tomorrowPrize, type FlameMoment } from '../../services/retention/loopMotion';
+import { FULL_SET, dailyChain, flameMomentFor, mayAskAfterChain, tomorrowPrize, type FlameMoment } from '../../services/retention/loopMotion';
 import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
 import { useModalLayer } from '../../ui/modalLayers';
@@ -28,6 +28,7 @@ import StreakMoment from './StreakMoment';
 import TomorrowCard from './TomorrowCard';
 import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
 import FlameUpRow from './FlameUpRow';
+import { EmberCard, FreezeSavedCard } from './FreezeMoments';
 import RewardReveal from './RewardReveal';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
@@ -52,7 +53,7 @@ const TOMORROW_SEEN_KEY = 'tps.retention.tomorrowSeen.v1';
 const FLY_GAP_MS = 950;
 
 type View_ =
-  | { k: 'sheet'; all?: boolean }
+  | { k: 'sheet'; all?: boolean; freezeArrive?: number }
   | { k: 'flame'; moment: Exclude<FlameMoment, { kind: 'none' }> }
   | { k: 'tomorrow' }
   | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean;
@@ -61,6 +62,8 @@ type View_ =
   | { k: 'flying' }
   | { k: 'freeze' }
   | { k: 'freezeSaved'; days: number; streak: number }
+  /** The streak ended: the flame settles into a warm ember, once. */
+  | { k: 'ember'; was: number }
   | { k: 'push' };
 
 export interface RetentionOptions {
@@ -207,7 +210,19 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       const timer = setTimeout(() => setView(v => v ?? { k: 'freezeSaved', days: freezeSaved, streak: daily.streak.days }), 700);
       return () => clearTimeout(timer);
     }
-  }, [pendingChest?.level, freezeSaved, view, o.screenFree, o.mapFocused, o.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+    // A flame this phone celebrated has gone back to an ember (no freeze left): say it kindly, once.
+    if (daily && daily.streak.days === 0 && !daily.streak.counted_today) {
+      let live = true;
+      const timer = setTimeout(() => {
+        void readSeen().then(seen => {
+          if (!live || !mounted.current || !seen || seen <= 0) return;
+          writeSeen(0);
+          setView(v => v ?? { k: 'ember', was: seen });
+        });
+      }, 700);
+      return () => { live = false; clearTimeout(timer); };
+    }
+  }, [pendingChest?.level, freezeSaved, daily?.streak.days, view, o.screenFree, o.mapFocused, o.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openSheet = () => {
     setView({ k: 'sheet' });
@@ -258,6 +273,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       }
       chainRef.current = chain;
       if (chain.length) { showChain(); return; }
+      // A freeze from the Weekly Box flies into its slot beside the flame.
+      if (src === 'weekly' && paid && (paid.freezes ?? 0) > 0) { setView({ k: 'sheet', freezeArrive: paid.freezes }); return; }
       if (src !== 'daily' && await mayAskForPush()) { setView({ k: 'push' }); return; }
       if (src === 'daily' && mayAskAfterChain(chain) && await mayAskForPush()) { setView({ k: 'push' }); return; }
       setView(null);
@@ -325,7 +342,9 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       // Let the shake build before the lid pops (anticipation reads at 450 ms+).
       // The Weekly Box shakes longest (900 ms): the week's biggest moment earns the longest wind-up.
       // The Daily 3 chest follows the chest beats (420 ms of shake, then the held frame); the Weekly Box winds up longest.
-      const wait = reducedMotion ? 0 : Math.max(0, (current.src === 'weekly' ? 900 : current.src === 'daily' ? 420 : 300) - (Date.now() - started));
+      // The full set holds the lid until its checks have dived in (chestAt), then the chest's own 420 ms gather.
+      const hold = current.src === 'weekly' ? 900 : current.src === 'daily' ? (current.auto ? FULL_SET.chestAt + 420 : 420) : 300;
+      const wait = reducedMotion ? 0 : Math.max(0, hold - (Date.now() - started));
       setTimeout(() => {
         if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards, state: result.state ?? null, moment });
       }, wait);
@@ -392,7 +411,9 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     // Start the claim now: by the chest beat (900 ms later) the server has usually answered, so the lid never waits.
     claimAhead.current = claimDailyThree();
     claimAhead.current.catch(() => undefined);
-    setView({ k: 'sheet', all: true });
+    // Straight into the chest card (one card, no sheet in between): the checks bounce, dive in, the lid pops.
+    setCelebrate([]);
+    setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false, auto: true });
   };
 
   // Dev only: drive the loop moments from the lane tools (CDP) on the live scratch data.
@@ -403,6 +424,9 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       land: (index: number, done: number) => setLanding(l => ({ index, done, key: (l?.key ?? 0) + 1 })),
       flame: (days: number, from?: number) => setView({ k: 'flame', moment: flameMomentFor(from ?? days - 1, days, true) as Exclude<FlameMoment, { kind: 'none' }> }),
       tomorrow: () => setView({ k: 'tomorrow' }),
+      saved: (streak: number, days = 1) => setView({ k: 'freezeSaved', streak, days }),
+      ember: (was: number) => setView({ k: 'ember', was }),
+      freezeIn: (n = 1) => setView({ k: 'sheet', freezeArrive: n }),
       sheet: (all?: boolean) => setView({ k: 'sheet', all: !!all }),
       forgetFlame: () => { void AsyncStorage.removeItem(seenKey); },
       setSeen: (n: number) => writeSeen(n),
@@ -463,7 +487,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     if (allRibbon) title = 'All 3 done!';
     content = (
       <Daily3Sheet state={daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
-        celebrateAll={!!view.all} onAutoClaim={() => {
+        celebrateAll={!!view.all} freezeArrive={view.freezeArrive ?? 0} onAutoClaim={() => {
           if (!daily.claimable) return;
           setCelebrate([]);
           setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false, auto: true });
@@ -485,10 +509,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
           <View style={styles.pips}>{[0, 1, 2, 3, 4].map(i => <View key={i} style={[styles.pip, i < 5 && styles.pipLit]} />)}</View>
         </View>
       )
-      : r.state && r.moment?.kind !== 'milestone' ? (
-        <FlameUpRow from={r.moment?.kind === 'plusOne' ? r.moment.from : r.state.streak.days} to={r.state.streak.days}
-          grow={r.moment?.kind === 'plusOne'} reducedMotion={reducedMotion} />
-      ) : daily && r.moment?.kind !== 'milestone' ? (
+      : r.state ? (
+        <FlameUpRow from={r.moment && r.moment.kind !== 'none' ? Math.max(0, r.state.streak.days - 1) : r.state.streak.days}
+          to={r.state.streak.days} grow={!!r.moment && r.moment.kind !== 'none'} reducedMotion={reducedMotion} />
+      ) : daily ? (
         <View style={styles.nextRow}>
           <GameIcon name="streak" size={26} />
           <Text style={styles.nextText}>{tomorrowLine(daily)}</Text>
@@ -500,7 +524,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
           : r.src === 'weekly' ? 'A whole week of flames. Tap the box!' : r.auto ? 'All three goals done!' : 'All three goals done. Tap your chest!'}
         closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? WEEKLY : ICON_SOURCES.chest}
         openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? WEEKLY_OPEN : ICON_SOURCES.chestOpen}
-        autoOpen={!!r.auto} expectRows={r.src === 'daily' && daily ? dailyRowCount(daily) : undefined}
+        autoOpen={!!r.auto} fullSet={!!r.auto} expectRows={r.src === 'daily' && daily ? dailyRowCount(daily) : undefined}
+        preview={r.src === 'daily' && daily ? <DailyPreview state={daily} /> : undefined}
         onWear={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('Inventory'); }}
         onPins={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('PinCollections'); }}
         onOpen={() => { void openReveal(); }} onDone={() => finishReveal(r.rewards, r.src, r.state ?? null, r.moment)} />
@@ -531,16 +556,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     );
   } else if (view?.k === 'freezeSaved') {
     title = 'Saved!';
-    content = (
-      <View style={styles.card}>
-        <Image source={FREEZE} style={styles.bigArt} contentFit="contain" />
-        <Text style={styles.lead}>{`A freeze saved your ${view.streak}-day flame!`}</Text>
-        <Text style={styles.small}>{view.days > 1 ? `It covered ${view.days} missed days.` : 'It covered the day you missed.'}</Text>
-        <Pressable onPress={close} accessibilityRole="button" style={({ pressed }) => [styles.gold, pressed && styles.pressed]}>
-          <Text style={styles.goldText}>KEEP IT GOING</Text>
-        </Pressable>
-      </View>
-    );
+    content = <FreezeSavedCard streak={view.streak} days={view.days} reducedMotion={reducedMotion} onDone={close} />;
+  } else if (view?.k === 'ember') {
+    title = 'New day!';
+    content = <EmberCard was={view.was} reducedMotion={reducedMotion} onDone={close} />;
   } else if (view?.k === 'push') {
     title = 'Reminders';
     content = (
@@ -578,10 +597,28 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
 }
 
 /** How many prize rows the Daily 3 chest will show (the server's preview), so its card fits them with no empty space. */
-function dailyRowCount(d: DailyThreeState): number {
+function dailyRowCount(d: DailyThreeState): { small: number; big: number } {
   const r = d.reward;
   const m = d.claimable_milestone;
-  return [r.coins, r.tickets, r.energy, r.xp].filter(n => n > 0).length + (m?.gear ? 1 : 0) + (m && m.mystery_boxes > 0 ? 1 : 0);
+  return { small: [r.coins, r.tickets, r.energy, r.xp].filter(n => n > 0).length, big: (m?.gear ? 1 : 0) + (m && m.mystery_boxes > 0 ? 1 : 0) };
+}
+
+/** What is inside the Daily 3 chest (the server's preview), shown while it gathers: icons and numbers, zero reading. */
+function DailyPreview({ state }: { readonly state: DailyThreeState }) {
+  const r = state.reward;
+  const chips = ([['coins', r.coins], ['ticket', r.tickets], ['energy', r.energy], ['xp', r.xp]] as const).filter(([, n]) => n > 0);
+  return (
+    <>
+      <View style={styles.previewRow}>
+        {chips.map(([icon, n]) => (
+          <View key={icon} style={styles.previewChip}><GameIcon name={icon} size={30} /><Text style={styles.previewText}>{n}</Text></View>
+        ))}
+      </View>
+      {state.claimable_milestone?.gear && (
+        <View style={[styles.previewChip, styles.previewGear]}><GameIcon name="gift" size={30} /><Text style={styles.previewGearText}>NEW GEAR</Text></View>
+      )}
+    </>
+  );
 }
 
 function lvOf(p: { experience_level?: { level: number } } | null | undefined): number {
@@ -630,5 +667,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 3 },
   priceText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, marginTop: 1 },
   nextRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  previewRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
+  previewChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 14,
+    paddingHorizontal: 10, paddingVertical: 5 },
+  previewText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white, marginTop: 2 },
+  previewGear: { backgroundColor: BRAND.gold },
+  previewGearText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, marginTop: 2 },
   nextText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, textAlign: 'center', flexShrink: 1 },
 });

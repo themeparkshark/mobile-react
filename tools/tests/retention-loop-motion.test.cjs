@@ -100,7 +100,7 @@ test('check-off and full set fit the motion language (payoff inside 1.5 s, settl
   // From the third check landing to the chest's lid: ring + sheet hand-off + chest beat + the chest anticipation and hit-stop.
   const chest = motion.momentBeats('chest', { reduced: false });
   const lid = L.CHECK.ring + L.FULL_SET.sheetAt + L.FULL_SET.chestAt + chest.burstAt;
-  assert.ok(lid <= 2600, `lid pops ${lid} ms after the third check lands`);
+  assert.ok(lid <= 1600, `lid pops ${lid} ms after the third check lands`);
   assert.ok(L.FULL_SET.flash <= motion.DURATION.flash);
 });
 
@@ -177,7 +177,6 @@ test('loop moments run on the UI thread and respect the power budget', () => {
 
 test('the full set flows into the chest, prizes fly home in sight, then the big flame or tomorrow (one modal, never stacked)', () => {
   const hook = read('src/components/retention/useRetention.tsx');
-  assert.match(hook, /setView\(\{ k: 'sheet', all: true \}\)/);
   // The claim starts when the third check lands, so the chest never waits on the server.
   assert.match(hook, /claimAhead\.current = claimDailyThree\(\)/);
   assert.match(hook, /src: 'daily', claimDate: daily\.claimable_date, rewards: null, opening: false, auto: true/);

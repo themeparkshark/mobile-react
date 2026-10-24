@@ -8,8 +8,20 @@ import StampRibbon from './StampRibbon';
 import StreakFlame from './StreakFlame';
 import StreakMoment from './StreakMoment';
 import TomorrowCard from './TomorrowCard';
+import RewardReveal from './RewardReveal';
+import FlameUpRow from './FlameUpRow';
+import { EmberCard, FreezeSavedCard, FreezeSlots } from './FreezeMoments';
+import { ICON_SOURCES } from '../../ui';
+import type { PaidRewards } from '../../api/endpoints/retention';
 
-type Stage = { k: 'flame'; moment: Exclude<FlameMoment, { kind: 'none' }> } | { k: 'tomorrow'; days: number } | null;
+const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
+const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
+const DAILY_PAID: PaidRewards = { coins: 15, tickets: 1, energy: 20, xp: 35 };
+const LEVEL_PAID: PaidRewards = { coins: 120, tickets: 2, energy: 30, item: { id: 1, name: 'Captain Hat', image: null, rarity: 2 } };
+
+type Stage = { k: 'flame'; moment: Exclude<FlameMoment, { kind: 'none' }> } | { k: 'tomorrow'; days: number }
+  | { k: 'chest'; src: 'daily' | 'level'; rewards: PaidRewards | null; opening: boolean; n: number }
+  | { k: 'saved'; streak: number } | { k: 'ember'; was: number } | null;
 
 const FIXTURE = (days: number, milestoneTomorrow = false) => ({
   done: true,
@@ -26,6 +38,15 @@ export default function StreakFlamePreview() {
   const [stage, setStage] = useState<Stage>(null);
   const [pips, setPips] = useState([false, false, false]);
   const [landing, setLanding] = useState<CheckLanding | null>(null);
+  const [freezes, setFreezes] = useState(0);
+  const [arrive, setArrive] = useState(0);
+  const [arriveKey, setArriveKey] = useState(0);
+  // The fixture chest "server" answers after 500 ms.
+  const openChest = () => setStage(st => {
+    if (!st || st.k !== 'chest' || st.opening || st.rewards) return st;
+    setTimeout(() => setStage(cur => (cur && cur.k === 'chest' ? { ...cur, opening: false, rewards: cur.src === 'daily' ? DAILY_PAID : LEVEL_PAID } : cur)), 500);
+    return { ...st, opening: true };
+  });
   const play = (code: string) => {
     const n = Number(code.replace(/\D/g, '')) || 1;
     if (code.startsWith('m')) setStage({ k: 'flame', moment: flameMomentFor(n - 1, n, true) as Exclude<FlameMoment, { kind: 'none' }> });
@@ -36,7 +57,12 @@ export default function StreakFlamePreview() {
       setStage(null);
       setPips([0, 1, 2].map(i => i < done));
       setLanding(l => ({ index: done - 1, done, key: (l?.key ?? 0) + 1 }));
-    } else if (code === 'reset') { setStage(null); setPips([false, false, false]); }
+    } else if (code === 'reset') { setStage(null); setPips([false, false, false]); setFreezes(0); setArrive(0); }
+    else if (code.startsWith('chestd')) setStage({ k: 'chest', src: 'daily', rewards: null, opening: false, n: Date.now() });
+    else if (code.startsWith('chestl')) setStage({ k: 'chest', src: 'level', rewards: null, opening: false, n: Date.now() });
+    else if (code.startsWith('saved')) setStage({ k: 'saved', streak: n });
+    else if (code.startsWith('ember')) setStage({ k: 'ember', was: n });
+    else if (code.startsWith('fin')) { setStage(null); setFreezes(f => Math.min(2, f + 1)); setArrive(1); setArriveKey(k => k + 1); }
   };
   useEffect(() => {
     (globalThis as Record<string, unknown>).__loopsPreview = { play };
@@ -55,9 +81,13 @@ export default function StreakFlamePreview() {
         <View style={styles.row}><Text style={styles.rowName}>captaindax</Text><StreakFlame streak={0} best={6} size={24} /></View>
         <Text style={styles.h}>Moments</Text>
         <View style={styles.buttons}>
-          {['p1', 'p2', 'm3', 'm7', 'p12', 'm30', 'm100', 't2', 't6', 'land1', 'land2', 'land3', 'reset'].map(c => (
+          {['p1', 'p2', 'm3', 'm7', 'p12', 'm30', 'm100', 't2', 't6', 'land1', 'land2', 'land3', 'chestd', 'chestl', 'saved8', 'ember12', 'fin', 'reset'].map(c => (
             <Pressable key={c} onPress={() => play(c)} style={styles.btn}><Text style={styles.btnText}>{c}</Text></Pressable>
           ))}
+        </View>
+        <View style={styles.freezeMock}>
+          <FlameArt days={7} size={70} reducedMotion={false} />
+          <FreezeSlots key={arriveKey} freezes={freezes} cap={2} arrive={arrive} from={{ x: -140, y: 160 }} reducedMotion={false} />
         </View>
         <View style={styles.mapMock}>
           <Daily3MapButton pips={pips} streak={7} attention="none" onPress={() => undefined} landing={landing} active reducedMotion={false}
@@ -66,9 +96,19 @@ export default function StreakFlamePreview() {
       </ScrollView>
       {stage && (
         <View style={styles.overlay}>
-          <StampRibbon text={stage.k === 'tomorrow' ? 'See you tomorrow' : stage.moment.kind === 'milestone' ? 'Big flame!' : 'Flame up!'} reducedMotion={false} />
+          <StampRibbon text={stage.k === 'tomorrow' ? 'See you tomorrow' : stage.k === 'chest' ? (stage.src === 'daily' ? 'All 3 done!' : 'Level 4!')
+            : stage.k === 'saved' ? 'Saved!' : stage.k === 'ember' ? 'New day!' : stage.moment.kind === 'milestone' ? 'Big flame!' : 'Flame up!'} reducedMotion={false} />
           {stage.k === 'flame'
             ? <StreakMoment key={JSON.stringify(stage.moment)} moment={stage.moment} reducedMotion={false} onDone={() => setStage(null)} />
+            : stage.k === 'chest' ? (
+              <RewardReveal key={stage.n} reducedMotion={false} rewards={stage.rewards} opening={stage.opening} onOpen={openChest} onDone={() => setStage(null)}
+                subtitle={stage.src === 'daily' ? 'All three goals done!' : 'You reached Level 4!'} dropIn={stage.src === 'level'}
+                autoOpen={stage.src === 'daily'} fullSet={stage.src === 'daily'}
+                expectRows={stage.src === 'daily' ? { small: 4, big: 0 } : undefined}
+                closedArt={stage.src === 'daily' ? ICON_SOURCES.chest : LEVEL_CHEST} openArt={stage.src === 'daily' ? ICON_SOURCES.chestOpen : LEVEL_CHEST_OPEN}
+                footer={stage.src === 'daily' ? <FlameUpRow from={8} to={9} grow reducedMotion={false} /> : undefined} />
+            ) : stage.k === 'saved' ? <FreezeSavedCard streak={stage.streak} days={1} reducedMotion={false} onDone={() => setStage(null)} />
+            : stage.k === 'ember' ? <EmberCard was={stage.was} reducedMotion={false} onDone={() => setStage(null)} />
             : <TomorrowCard prize={tomorrowPrize(FIXTURE(stage.days, stage.days === 6))} reducedMotion={false} onDone={() => setStage(null)} />}
         </View>
       )}
@@ -89,6 +129,7 @@ const styles = StyleSheet.create({
   buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   btn: { backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
   btnText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
+  freezeMock: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16, padding: 10 },
   mapMock: { height: 120, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 20 },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5, 52, 110, 0.55)', alignItems: 'center', justifyContent: 'center', padding: 8 },
 });
