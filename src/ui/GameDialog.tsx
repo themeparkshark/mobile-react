@@ -114,7 +114,9 @@ const RIBBON_TAIL = { left: CARD_W * 0.06, right: CARD_W * 0.94, y: 30 } as cons
  * even blue over yellow art reads olive). Never black or grey, no blur pass.
  */
 export const DIALOG_SCRIM = 'rgba(0,88,196,0.30)';
-export const DIALOG_SCRIM_STOPS = ['rgba(6,96,206,0.44)', 'rgba(20,130,230,0.16)', 'rgba(20,130,230,0.16)', 'rgba(4,70,170,0.46)'] as const;
+export const DIALOG_SCRIM_STOPS = ['rgba(6,96,206,0.42)', 'rgba(30,140,235,0.1)', 'rgba(30,140,235,0.1)', 'rgba(4,70,170,0.42)'] as const;
+/** Where the backdrop's light band starts and ends (share of the screen): most of the screen stays nearly clear. */
+export const DIALOG_SCRIM_AT = [0, 0.2, 0.82, 1] as const;
 /** Message copy on the card, as in UnfoundCoinModal. */
 export const DIALOG_COPY = '#e2f6ff';
 
@@ -321,7 +323,7 @@ export function GameDialog({
         style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: Z.dialog }}>
         <Animated.View style={[StyleSheet.absoluteFill, scrimStyle]}>
           {/* Underwater light, no blur pass: deeper blue at the edges, light in the middle so the colours stay clean. */}
-          <LinearGradient pointerEvents="none" colors={DIALOG_SCRIM_STOPS} locations={[0, 0.32, 0.68, 1]}
+          <LinearGradient pointerEvents="none" colors={DIALOG_SCRIM_STOPS} locations={DIALOG_SCRIM_AT}
             style={StyleSheet.absoluteFill} />
           <Pressable accessibilityLabel="Close" accessibilityRole="button" style={{ flex: 1 }}
             disabled={dismiss === null} onPress={() => { if (dismiss !== null) close(dismiss); }} />

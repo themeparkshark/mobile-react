@@ -205,3 +205,6 @@ export function playFooterTap(from: number, to: number, reduced: boolean): { rar
 
 /** The rare compass pick answers in the hand a beat after the press tick, on its burst (ms after the tap). */
 export const RARE_HAPTIC_AT = FOOTER_MOTION.compassSquashMs + 60;
+
+// Dev only: the lane captures can play a footer pick over the debugger (the map screen freezes dev JS in a busy simulator).
+if (typeof __DEV__ !== 'undefined' && __DEV__) (globalThis as { __playFooterTap?: typeof playFooterTap }).__playFooterTap = playFooterTap;

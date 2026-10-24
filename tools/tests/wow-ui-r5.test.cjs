@@ -109,7 +109,8 @@ test('coin toasts: picture first (coin stack and a big gold amount), coins that 
 test('dialog: an underwater backdrop that keeps colours clean, a prize on gold rays, the buzz on the stamp', () => {
   const src = read('src/ui/GameDialog.tsx');
   const stops = /DIALOG_SCRIM_STOPS = \[([^\]]+)\]/.exec(src)[1].match(/0\.\d+\)/g).map(s => Number(s.slice(0, -1)));
-  assert.ok(stops[1] <= 0.2 && stops[2] <= 0.2, 'the middle band (card and buttons) is only lightly tinted');
+  assert.ok(stops[1] <= 0.12 && stops[2] <= 0.12, 'the middle band (card and buttons) is only lightly tinted');
+  assert.match(src, /DIALOG_SCRIM_AT = \[0, 0\.2, 0\.82, 1\]/, 'and it covers most of the screen');
   assert.ok(stops[0] >= 0.4 && stops[3] >= 0.4, 'the edges read underwater');
   assert.match(src, /celebrates && <GoldBurst size=\{DIALOG_PRIZE\.raysPt\}/);
   assert.match(src, /export const DIALOG_PRIZE = \{ iconPt: 84,/);

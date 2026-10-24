@@ -107,7 +107,7 @@ test('dialog: parts are fully opaque from the first frame and only move; the ico
   assert.match(src, /export const ICON_STAMP = \{ at: 110, from: 0\.4, peak: 1\.22 \}/);
   assert.match(src, /celebrates && <SparkleBurst progress=\{iconSpark\}/);
   assert.doesNotMatch(src, /BlurView/);
-  assert.match(src, /DIALOG_SCRIM_STOPS = \['rgba\(6,96,206,0\.44\)'/, 'an underwater blue backdrop (round 5: light in the middle band), never a grey wash');
+  assert.match(src, /DIALOG_SCRIM_STOPS = \['rgba\(6,96,206,0\.42\)'/, 'an underwater blue backdrop (round 5: light in the middle band), never a grey wash');
 });
 
 test('footer: every pick squashes first, a gold disc and ring pulse under it, the rare compass pick is one big burst', () => {
