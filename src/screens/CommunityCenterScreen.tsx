@@ -32,6 +32,7 @@ import api from '../api/client';
 import * as Haptics from '../helpers/haptics';
 import { GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { kioskLayout, KIOSK_COLORS } from './CommunityCenter/leaveGiftLayout';
 import { ticketLabel, ticketsEarnedFrom } from './CommunityCenter/communityCenterRewards';
 
 /** A small busy mark for buttons and slots: his fin bobbing, still under reduced motion. */
@@ -72,22 +73,20 @@ const LOCKER_HEIGHT_RATIO = 0.12;
 const Q_BUTTON_Y_RATIO = 0.315;
 const Q_BUTTON_SIZE = 60; // slightly larger tap target
 
-// Leave Gift button: it sits in the empty green slot painted into the background, under the 350
-// price. The slot spans about 0.70 to 0.99 of the art's width and is centered at 0.77 of its height.
-// The button used to be a fixed 160 pt wide at 0.66, so it ran 23 pt off a 402 pt phone and missed
-// the slot. Now it scales with the art and covers the slot exactly on every phone.
-// It must cover the whole slot: a narrower button (tried for a wider right margin) leaves a second,
-// painted green button showing beside it. A bigger margin needs the art's slot moved in (art change).
-const LEAVE_GIFT_ART_ASPECT = 842 / 375;
-const LEAVE_GIFT_W = Math.round(SCREEN_WIDTH * 0.31);
-const LEAVE_GIFT_H = Math.round(LEAVE_GIFT_W / LEAVE_GIFT_ART_ASPECT);
-const LEAVE_GIFT_LEFT = Math.round(SCREEN_WIDTH * 0.678);
+// Leave Gift: the painted kiosk (price plus an empty green slot) runs to the art's right edge,
+// so a button on the painted slot sat 4 to 5 pt from the screen edge. A drawn kiosk face covers
+// the painted price and slot, and LEAVE GIFT sits on it 16 pt from the edge (leaveGiftLayout.ts).
+const KIOSK = kioskLayout(SCREEN_WIDTH, SCALED_HEIGHT);
+/** What leaving a gift costs (the painted plaque said 350; ours draws it with the spend coin). */
+const GIFT_COST = 350;
+const LEAVE_GIFT_W = KIOSK.button.width;
+const LEAVE_GIFT_H = KIOSK.button.height;
+const LEAVE_GIFT_LEFT = KIOSK.button.left;
 /**
  * The button never grows: it pulses with a soft white shine instead of a scale, so it never
  * moves toward the screen edge. The press squish also never goes past full size.
  */
 export const LEAVE_GIFT_SHINE = 0.3;
-const LEAVE_GIFT_CENTER_Y_RATIO = 0.77;
 /**
  * The art is sized to the screen width, so it is taller than every phone (20 pt on a 17 Pro,
  * 167 pt on an iPhone SE). Buttons that must always be reachable sit on the screen, not on the
@@ -110,8 +109,10 @@ const ART_SHIFT = SHORT_SCREEN
   : 0;
 /** LEAVE GIFT's top in the art's frame (the art moves up by ART_SHIFT on short phones). */
 const LEAVE_GIFT_TOP = SHORT_SCREEN
-  ? SCALED_HEIGHT * LEAVE_GIFT_CENTER_Y_RATIO - LEAVE_GIFT_H / 2
-  : Math.min(SCALED_HEIGHT * LEAVE_GIFT_CENTER_Y_RATIO - LEAVE_GIFT_H / 2, SCREEN_HEIGHT - LEAVE_GIFT_H - 2);
+  ? KIOSK.button.top
+  : Math.min(KIOSK.button.top, SCREEN_HEIGHT - LEAVE_GIFT_H - 2);
+/** The drawn kiosk moves with the button when a tall phone clamps it on screen. */
+const KIOSK_NUDGE = LEAVE_GIFT_TOP - KIOSK.button.top;
 const GO_BACK_W = 180;
 const GO_BACK_H = 55;
 /** GO BACK: the bottom row beside LEAVE GIFT on short phones, else its old spot above the screen bottom. */
@@ -340,7 +341,7 @@ export default function CommunityCenterScreen() {
   
   // Pulse animation for Leave Gift button when available
   useEffect(() => {
-    if (!reduced && center?.can_give && (player?.coins ?? 0) >= 350) {
+    if (!reduced && center?.can_give && (player?.coins ?? 0) >= GIFT_COST) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -620,7 +621,7 @@ export default function CommunityCenterScreen() {
     animatePress(leaveGiftScale);
     playSound('buttonPress');
     
-    const hasEnoughCoins = (player?.coins ?? 0) >= 350;
+    const hasEnoughCoins = (player?.coins ?? 0) >= GIFT_COST;
     if (!hasEnoughCoins) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       playSound('nope');
@@ -891,7 +892,7 @@ export default function CommunityCenterScreen() {
     );
   };
   
-  const hasEnoughCoins = (player?.coins ?? 0) >= 350;
+  const hasEnoughCoins = (player?.coins ?? 0) >= GIFT_COST;
   
   return (
     <View style={styles.container}>
@@ -994,6 +995,18 @@ export default function CommunityCenterScreen() {
             {/* Three gift slots */}
             {[0, 1, 2].map(renderSlot)}
             
+            {/* The drawn kiosk face over the painted price and slot: our price with the coin stack
+                (the coin you spend everywhere) and LEAVE GIFT 16 pt from the screen edge. */}
+            <View pointerEvents="none" style={[styles.kioskFace, {
+              left: KIOSK.face.left, top: KIOSK.face.top + KIOSK_NUDGE, width: KIOSK.face.width, height: KIOSK.face.height }]}>
+              <View style={styles.kioskLight} />
+            </View>
+            <View pointerEvents="none" accessible accessibilityLabel={`A gift costs ${GIFT_COST} coins`}
+              style={[styles.kioskPrice, { left: KIOSK.price.left, top: KIOSK.price.top + KIOSK_NUDGE, width: KIOSK.price.width, height: KIOSK.price.height }]}>
+              <Image source={require('../../assets/icons/game/coins.png')} style={styles.kioskCoin} contentFit="contain" />
+              <Text style={styles.kioskPriceText}>{GIFT_COST}</Text>
+            </View>
+
             {/* Leave Gift button with pulse animation */}
             <Animated.View
               style={[
@@ -1008,6 +1021,9 @@ export default function CommunityCenterScreen() {
               ]}
             >
               <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Leave a gift for ${GIFT_COST} coins`}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={handleLeaveGiftPress}
                 disabled={giving}
                 activeOpacity={0.8}
@@ -1148,7 +1164,7 @@ export default function CommunityCenterScreen() {
                   style={styles.exchangeIcon}
                   contentFit="contain"
                 />
-                <Text style={styles.exchangeValue}>-350</Text>
+                <Text style={styles.exchangeValue}>-{GIFT_COST}</Text>
                 <Text style={styles.exchangeLabel}>Coins</Text>
               </View>
               <GameIcon name="arrow" size={32} />
@@ -1233,7 +1249,7 @@ export default function CommunityCenterScreen() {
           <View style={styles.notEnoughModalContent}>
             <Text style={styles.notEnoughModalTitle}>Not Enough Coins!</Text>
             <Text style={styles.notEnoughModalMessage}>
-              You need 350 coins to leave a gift for another player.
+              You need {GIFT_COST} coins to leave a gift for another player.
             </Text>
             <View style={styles.coinCompareContainer}>
               <View style={styles.coinCompareItem}>
@@ -1256,7 +1272,7 @@ export default function CommunityCenterScreen() {
                     style={styles.coinCompareIcon}
                     contentFit="contain"
                   />
-                  <Text style={styles.coinCompareValueGreen}>350</Text>
+                  <Text style={styles.coinCompareValueGreen}>{GIFT_COST}</Text>
                 </View>
               </View>
             </View>
@@ -1465,6 +1481,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
+  },
+  kioskFace: {
+    position: 'absolute',
+    backgroundColor: KIOSK_COLORS.face,
+    borderColor: KIOSK_COLORS.edge,
+    borderWidth: 3,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  kioskLight: {
+    position: 'absolute', left: 4, right: 4, top: 2, height: 3, borderRadius: 2,
+    backgroundColor: KIOSK_COLORS.light,
+  },
+  kioskPrice: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kioskCoin: {
+    width: 22,
+    height: 22,
+    marginRight: 5,
+  },
+  kioskPriceText: {
+    fontFamily: 'Shark',
+    fontSize: 20,
+    color: '#fec90e',
+    textShadowColor: '#1f2226',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 0,
   },
   leaveGiftButton: {
     position: 'absolute',

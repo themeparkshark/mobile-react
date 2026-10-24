@@ -40,8 +40,15 @@ test('park map retries back off calmly: 5 s, 10 s, 20 s, then every 30 s', () =>
 });
 
 test('while the rides have not loaded, the status bar never claims every ride is open', () => {
-  const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
-  assert.match(screen, /hideAllOpen=\{!everyRideTrulyOpen\(\{ loaded: !!redeemables, restingCount: restingTasks\.length, liveStatuses: visibleTasks\.map\(task => liveByTask\.get\(task\.id\)\?\.status\) \}\) \|\| hideEveryRideOpen\(/);
+  const read = f => require('node:fs').readFileSync(require('node:path').join(__dirname, '../../', f), 'utf8');
+  // The team bar makes no ride-status claim at all (no leader = "no team has a ride yet"),
+  // so it needs no ride-load gate; only Fin-ister nights swap the title.
+  const bar = read('src/components/RideControlBar.tsx');
+  assert.doesNotMatch(bar, /EVERY RIDE IS OPEN/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /hideAllOpen=\{hideEveryRideOpen\(/);
+  // Before standings load the title is blank and fades in: no RIDE CONTROL -> NO TEAM swap at launch.
+  assert.match(bar, /const titleIn = useSharedValue\(control \? 1 : 0\)/);
+  assert.match(bar, /<Animated\.Text style=\{\[styles\.kicker, titleStyle\]\}/);
 });
 
 test('standing at a resting ride, its "Back" chip sits above the art, clear of the player shark', () => {

@@ -109,10 +109,24 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
   assert.match(gym, /noTeamOverlay: \{[^}]*zIndex: 10/s);
   const cc = read('src/screens/CommunityCenterScreen.tsx');
-  // The button fills the green slot painted in the background (0.70 to 0.99 of the width).
-  // A narrower button leaves a painted twin showing beside it, so it covers the slot exactly.
-  assert.match(cc, /LEAVE_GIFT_W = Math\.round\(SCREEN_WIDTH \* 0\.31\)/);
-  assert.match(cc, /LEAVE_GIFT_LEFT = Math\.round\(SCREEN_WIDTH \* 0\.678\)/);
+  // The painted kiosk runs to the art's edge, so a drawn kiosk face covers its price and green slot
+  // (no painted twin shows) and LEAVE GIFT ends 16 pt from the screen edge on every phone.
+  assert.match(cc, /const KIOSK = kioskLayout\(SCREEN_WIDTH, SCALED_HEIGHT\);/);
+  assert.match(cc, /LEAVE_GIFT_LEFT = KIOSK\.button\.left;/);
+  const { kioskLayout, PAINTED_SLOT, PAINTED_PRICE, SCREEN_GUTTER } = loadTs('src/screens/CommunityCenter/leaveGiftLayout.ts');
+  for (const [phone, w] of [['SE', 375], ['17 Pro', 402], ['Pro Max', 440]]) {
+    const artH = w * 2144 / 964;
+    const k = kioskLayout(w, artH);
+    assert.ok(w - (k.button.left + k.button.width) >= SCREEN_GUTTER, `${phone}: LEAVE GIFT is 16 pt from the edge`);
+    assert.ok(k.face.left <= w * PAINTED_SLOT.left - 8, `${phone}: the face covers the painted slot's left rim`);
+    assert.ok(k.face.left + k.face.width > w, `${phone}: the face runs off the right edge like the painted kiosk`);
+    assert.ok(k.face.top <= artH * PAINTED_PRICE.top && k.face.top + k.face.height >= artH * PAINTED_SLOT.bottom + 6, `${phone}: painted price and slot covered`);
+    assert.ok(k.button.top >= k.price.top + 20 && k.button.top + k.button.height <= k.face.top + k.face.height, `${phone}: button sits on the face, under the price`);
+    assert.ok(k.button.width >= 80, `${phone}: still a big tap target`);
+  }
+  // The price on the kiosk is the coin stack (the coin you spend everywhere), never the painted ride coin.
+  assert.match(cc, /accessibilityLabel=\{`A gift costs \$\{GIFT_COST\} coins`\}/);
+  assert.match(cc, /icons\/game\/coins\.png'\)\} style=\{styles\.kioskCoin\}/);
   // It pulses with a white shine, never a scale, and the press squish never passes full size.
   assert.doesNotMatch(cc, /LEAVE_GIFT_PULSE|Animated\.multiply\(pulseAnim/);
   assert.match(cc, /export const LEAVE_GIFT_SHINE = 0\.3;/);
@@ -372,13 +386,24 @@ test('Ride Detail on an SE: a small community count is one row and the empty lin
   assert.doesNotMatch(src, /#abd9f1/);
 });
 
-test('the map loading cover shows Alex clouds and a bobbing shark, not a blank sheet', () => {
-  assert.match(read('src/components/Map.tsx'), /<MapCoverSky \/>/);
+test('the map loading cover shows Alex clouds, a bobbing shark and the splash bar finishing', () => {
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /<MapCoverSky done=\{coverDone\} \/>/);
+  assert.match(map, /setTimeout\(revealMap, COVER_MAX_MS\)/);
   const cover = read('src/components/map/MapCoverSky.tsx');
   assert.match(cover, /explore\/cloud\.png/);
   assert.match(cover, /icons\/game\/shark\.png/);
-  assert.match(cover, /useNativeDriver: true/);
-  assert.match(cover, /if \(reduced\)/);
+  // UI-thread loops that start on the first frame (no wait for an async Reduce Motion answer).
+  assert.match(cover, /from 'react-native-reanimated'/);
+  assert.match(cover, /useUiReducedMotion/);
+  assert.doesNotMatch(cover, /useReducedGameMotion/);
+  assert.match(cover, /withRepeat\(/);
+  // One bar from launch to map: the splash fills LAUNCH_HANDOFF_SHARE, the cover fills the rest.
+  assert.match(cover, /useSharedValue\(LAUNCH_HANDOFF_SHARE\)/);
+  assert.match(read('src/screens/LoadingScreen.tsx'), /<Progress progress=\{progress \* LAUNCH_HANDOFF_SHARE\} \/>/);
+  const k = loadTs('src/constants/launchHandoff.ts');
+  assert.ok(k.LAUNCH_HANDOFF_SHARE > 0.5 && k.LAUNCH_HANDOFF_SHARE < 0.9);
+  assert.ok(k.COVER_MAX_MS <= 3200, 'the cover never holds longer than about 3 s');
 });
 
 test('VIP plaza art fills its white frame edge to edge (its baked frame is cropped off)', () => {

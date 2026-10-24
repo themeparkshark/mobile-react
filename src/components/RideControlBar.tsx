@@ -83,6 +83,13 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
   // With no leader yet, say what it really means: no team has won a ride today.
   const headline = !control ? 'RIDE CONTROL'
     : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : hideAllOpen ? 'RIDE CONTROL' : NO_LEADER_HEADLINE;
+  // Until today's standings load, the title stays blank (its space kept) and then fades in,
+  // so the launch never shows one title and swaps it for another a second later.
+  const titleIn = useSharedValue(control ? 1 : 0);
+  useEffect(() => {
+    if (control) titleIn.value = withTiming(1, { duration: 220 });
+  }, [control, titleIn]);
+  const titleStyle = useAnimatedStyle(() => ({ opacity: titleIn.value }));
 
   return (
     <>
@@ -91,7 +98,7 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
         onPress={() => setOpen(true)} style={[styles.barWrap, compact && styles.barWrapCompact, inline && styles.inline]}>
         <LinearGradient colors={[BRAND.blueBright, BRAND.blue, BRAND.blueLip]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
           style={[styles.bar, compact && styles.barCompact]}>
-          {!compact && <Text style={styles.kicker} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{headline}</Text>}
+          {!compact && <Animated.Text style={[styles.kicker, titleStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{headline}</Animated.Text>}
           <View style={styles.chips}>
             {TEAM_ORDER.map(team => <TeamChip key={team} team={team} count={held[team]} yours={yours === team} leading={leader === team} />)}
           </View>

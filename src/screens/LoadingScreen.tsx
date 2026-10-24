@@ -122,6 +122,7 @@ const BUBBLES = [
 import { useAsyncEffect, useEffectOnceWhen, useTimeoutWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import Progress from '../components/Progress';
+import { LAUNCH_HANDOFF_SHARE } from '../constants/launchHandoff';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationStatusContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
@@ -187,6 +188,7 @@ export default function LoadingScreen() {
 
   // Real progress: signed in (50), park check done (100). The bar moves with
   // actual work, and a short floor keeps the art on screen long enough to land.
+  // It fills only LAUNCH_HANDOFF_SHARE of the bar: the map's sky cover fills the rest.
   const mountedAt = useRef(Date.now());
   const MIN_SHOW_MS = 1200;
   useAsyncEffect(async () => {
@@ -305,7 +307,7 @@ export default function LoadingScreen() {
               borderWidth: 3,
             }}
           >
-            <Progress progress={progress} />
+            <Progress progress={progress * LAUNCH_HANDOFF_SHARE} />
           </View>
         </View>
       </SafeAreaView>

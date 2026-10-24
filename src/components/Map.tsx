@@ -1,5 +1,6 @@
 import { openExternal } from '../services/external';
 import MapCoverSky from './map/MapCoverSky';
+import { COVER_MAX_MS } from '../constants/launchHandoff';
 import { Image } from 'expo-image';
 import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
@@ -351,19 +352,22 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     }
   }, [location?.latitude, location?.longitude]);
 
-  // A light sky cover hides the blank map while tiles stream in, then
-  // lifts away once the map has fully drawn (or after 4 s, whatever happens).
+  // A light sky cover hides the blank map while tiles stream in. Its bar continues the
+  // splash's bar; once the map has fully drawn (or after COVER_MAX_MS, whatever happens)
+  // the bar fills and the cover lifts away.
   const cover = useRef(new Animated.Value(1)).current;
   const [covered, setCovered] = useState(true);
+  const [coverDone, setCoverDone] = useState(false);
   const revealed = useRef(false);
   const revealMap = () => {
     if (revealed.current) return;
     revealed.current = true;
-    Animated.timing(cover, { toValue: 0, duration: 450, easing: Easing.out(Easing.quad), useNativeDriver: true })
+    setCoverDone(true);
+    Animated.timing(cover, { toValue: 0, delay: 180, duration: 420, easing: Easing.out(Easing.quad), useNativeDriver: true })
       .start(() => setCovered(false));
   };
   useEffect(() => {
-    const t = setTimeout(revealMap, 4000);
+    const t = setTimeout(revealMap, COVER_MAX_MS);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -991,7 +995,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           opacity: cover, transform: [{ scale: cover.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }] }]}>
           {/* The light sky with Alex's drawn clouds and a bobbing shark while the park tiles stream in
               (the old underwater scene read dark, and a flat sheet read blank). */}
-          <MapCoverSky />
+          <MapCoverSky done={coverDone} />
         </Animated.View>
       )}
       {__DEV__ && MOTION_PROBE && <MotionProbeFrames />}
