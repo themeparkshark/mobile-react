@@ -51,7 +51,7 @@ export function peekScale(h: number): number {
   // No room at all (the card already reaches the top padding, as on an SE): no peek.
   if (!(h >= PEEK_MIN_ROOM_PT)) return 0;
   const k = Math.min(PEEK_SCALE, (Math.max(0, h) + PEEK_HEADROOM_PT) / 160);
-  return k >= PEEK_MIN_SCALE ? Math.round(k * 100) / 100 : 0;
+  return k >= PEEK_MIN_SCALE ? Math.floor(k * 100) / 100 : 0;
 }
 
 /** How the scene draws in a zone of height h: the podium, the peek over the ribbon, or nothing. */
