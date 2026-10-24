@@ -19,7 +19,7 @@ export const NOT_NOW_COPY = {
   gamesHint: 'Play at home',
   park: 'Ride coins',
   parkHint: 'Win these at the park',
-  hint: 'Turn on location any time to find treasures near you.',
+  hint: 'Turn on location any time to find treats near you.',
   news: 'Read park news',
 } as const;
 
@@ -93,13 +93,13 @@ export default function PermissionsNotGranted() {
       <FullBackdrop />
       <Animated.View entering={reduced ? undefined : FadeInUp.duration(450).springify().damping(14)} style={styles.card}>
         <Image source={FINN} style={[styles.shark, compact && styles.sharkCompact]} contentFit="contain" accessibilityLabel="Finn the shark" />
-        <Text style={[styles.title, compact && styles.titleCompact]}>Let’s find your first treasures!</Text>
+        <Text style={[styles.title, compact && styles.titleCompact]}>Let’s find your first treats!</Text>
         <View style={[styles.finds, compact && styles.findsCompact]}>
           {FINDS.map((source, i) => <Find key={i} source={source} i={i} reduced={reduced} />)}
         </View>
         {/* Two short lines a 7-year-old can read; the pictures above carry the rest. */}
-        <Text style={styles.body}>Treasures pop up near you, even at home!</Text>
-        <Text style={styles.small}>Your location only puts treasures and rides near you.</Text>
+        <Text style={styles.body}>Treats pop up near you, even at home!</Text>
+        <Text style={styles.small}>Your location only puts treats and rides near you.</Text>
         <View style={{ width: '82%', marginTop: 16 }}>
           <YellowButton text={asking ? 'One sec…' : 'Turn On Location'} onPress={turnOn} />
         </View>

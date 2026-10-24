@@ -253,7 +253,8 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
  * handed to the shelf step, which flies that same coin onto the shelf.
  * Transforms and opacity only.
  */
-export const FIRST_WIN_COPY = { next: 'Up next: ride coins!' } as const;
+// Two words: the ride car and coin picture carries the meaning for a non-reader.
+export const FIRST_WIN_COPY = { next: 'Ride coins!', a11y: 'Next, win ride coins!' } as const;
 // The same Finn the kid just played with (boater and striped vest, the warm-up
 // host), pumping his fist: no costume swap between the board and the win.
 // Existing barker art from the memory booth.
@@ -269,6 +270,8 @@ const SHOWER_SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
 // kid looks); the ribbon unfurls and the rows settle on their beats. CONTINUE
 // only takes taps from 0.65 s (live), so a mashing kid cannot skip the win in
 // its first frames.
+/** How much of Finn's height rises above the first-win card. */
+export const FIRST_WIN_FINN_OVERHANG = 0.62;
 export const FIRST_WIN_BEATS = { finn: 0, ribbon: 120, shower: 120, next: 200, button: 320, live: 650, pulse: 1100, hand: 3000, coinLift: 160 } as const;
 const SHOWER = 20;
 function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim: () => void; reducedMotion: boolean }) {
@@ -363,9 +366,12 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
     transform: [{ translateY: -Math.sin(fly.value * Math.PI) * 10 }, { scale: 1 + fly.value * 0.18 }],
   }));
   const finn = Math.min(232, win.height * 0.26);
-  // Finn rises above the card by 0.62 of his height, which layout does not count, so the
-  // block would sit high with empty sea below. Shift it down to the optical centre.
-  const lift = finn * 0.26;
+  // Finn rises above the card's outer edge by his overhang (0.62 of his height, less the
+  // card's 6 pt top padding and 3 pt border), which layout does not count, so the block sat
+  // high with empty sea below. In this centred column a top margin moves the card down by
+  // half its size, so a margin of the whole overhang centres Finn plus card on the screen
+  // (on screen, 17 Pro: equal sea above Finn's hat and below the card).
+  const lift = Math.max(0, finn * FIRST_WIN_FINN_OVERHANG - 9);
   return (
     <View style={[styles.wrap, { width: win.width, height: win.height }]}>
       <LinearGradient pointerEvents="none" style={StyleSheet.absoluteFill}
@@ -375,12 +381,12 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
         {Array.from({ length: SHOWER }, (_, k) => <ShowerBit key={k} k={k} t={shower} w={win.width} h={win.height} />)}
       </View>}
       <Animated.View style={[styles.firstWinCard, { marginTop: lift }, cardSt]}>
-        <View style={[styles.firstWinFinn, { width: finn, height: finn, marginTop: -finn * 0.62 }]} pointerEvents="none">
+        <View style={[styles.firstWinFinn, { width: finn, height: finn, marginTop: -finn * FIRST_WIN_FINN_OVERHANG }]} pointerEvents="none">
           {reducedMotion ? null : <Animated.View style={[styles.firstWinRing, { borderRadius: finn / 2 }, ringSt]} />}
           {reducedMotion ? null : <SparkleBurst size={finn * 1.3} delay={120} />}
           <Animated.Image source={FINN_CHEER} style={[{ width: finn, height: finn }, finnSt]} resizeMode="contain" />
         </View>
-        <Animated.View accessible accessibilityRole="header" accessibilityLabel={`${banner} ${FIRST_WIN_COPY.next}`} style={[styles.firstWinHead, ribbonSt]}>
+        <Animated.View accessible accessibilityRole="header" accessibilityLabel={`${banner} ${FIRST_WIN_COPY.a11y}`} style={[styles.firstWinHead, ribbonSt]}>
           <Banner text={banner} show reducedMotion={reducedMotion} />
         </Animated.View>
         <Animated.View style={[styles.firstWinNext, nextSt]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>

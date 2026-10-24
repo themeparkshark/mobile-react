@@ -188,7 +188,7 @@ export function catchProgressLine(summary: Pick<CatchSummary, 'setName' | 'colle
 
 /** The catch moment's error line: the server's words when it sends them, plain words otherwise. */
 export function catchErrorLine(status: number | null, serverError: string | null | undefined): string {
-  if (status === 410) return 'It wandered off. More finds are on the way!';
+  if (status === 410) return 'It wandered off. More treats are on the way!';
   if (typeof serverError === 'string' && serverError.trim()) return serverError.trim();
   return 'Could not catch it. Tap to try again.';
 }
@@ -206,15 +206,17 @@ export interface MapStatusLine {
 }
 
 /** The home map's state as one short line (a chip, never a card), or null while finds are up. */
-export function mapStatusLine({ homeLocationConfirmed, isLoading, empty, loadError, rankLine = null }: {
+export function mapStatusLine({ homeLocationConfirmed, isLoading, empty, loadError, rankLine = null, firstHunt = false }: {
   homeLocationConfirmed: boolean; isLoading: boolean; empty: boolean; loadError: boolean; rankLine?: string | null;
+  /** A brand new player's first hunt: the saved treats stay up and the map retries by itself, with no grown-up words. */
+  firstHunt?: boolean;
 }): MapStatusLine | null {
   if (!homeLocationConfirmed) return { text: 'Checking your map...', tone: 'info', action: null };
-  if (isLoading) return { text: 'Scouting for finds...', tone: 'info', action: null };
+  if (isLoading) return { text: 'Scouting for treats...', tone: 'info', action: null };
   if (empty && loadError) return { text: 'Map didn’t load · tap to try again', tone: 'error', action: 'retry' };
   // A quiet map still shows this week's standing when there is one (tap opens the board).
   if (empty) return rankLine ? { text: `All quiet · ${rankLine}`, tone: 'info', action: 'standings' }
     : { text: 'All quiet · tap for your collection', tone: 'info', action: 'collections' };
-  if (loadError) return { text: 'Saved map · tap to refresh', tone: 'info', action: 'retry' };
+  if (loadError) return firstHunt ? null : { text: 'Saved map · tap to refresh', tone: 'info', action: 'retry' };
   return null;
 }

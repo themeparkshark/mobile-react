@@ -167,9 +167,12 @@ const GULL_GRAB = require('../../assets/games/memory/studio/gull_grab.png');
 const GULL_OFF = require('../../assets/games/memory/studio/gull_takeoff.png');
 const TIDE_ARROW = require('../../assets/games/memory/studio/tide_arrow.png');
 const HALO = require('../../assets/games/memory/v8/fx/glow_halo_2.png');
-// Existing carnival art reused for the warm-up sky (no new art): Sharky's bunting and the map's cloud.
+// Existing carnival art reused for the warm-up sky (no new art): Sharky's bunting and this game's own
+// outlined cloud (the same line art as Finn's dust puffs, not a flat blob).
 const SKY_BUNTING = require('../../assets/games/sharky/tide/v71/gate_rush_bunting.png');
-const SKY_CLOUD = require('../../../assets/images/screens/explore/cloud.png');
+const SKY_CLOUD = require('../../assets/games/memory/v8/fx/cloud_puff_2.png');
+/** cloud_puff_2 is 192 x 172. */
+const CLOUD_RATIO = 172 / 192;
 
 /**
  * Finn's warm-up: the 2-row board leaves a tall band of empty sky above the
@@ -189,9 +192,9 @@ function WarmupSky({ g }: { g: BoothGeo }) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Image source={SKY_CLOUD} resizeMode="contain"
-        style={{ position: 'absolute', left: g.W * 0.06, top: Math.max(6, top - cloud * 0.9), width: cloud, height: cloud * (155 / 232), opacity: 0.95 }} />
+        style={{ position: 'absolute', left: g.W * 0.06, top: Math.max(6, top - cloud * 0.9), width: cloud, height: cloud * CLOUD_RATIO }} />
       <Image source={SKY_CLOUD} resizeMode="contain"
-        style={{ position: 'absolute', right: g.W * 0.08, top: Math.max(4, top - cloud * 1.15), width: cloud * 0.72, height: cloud * 0.72 * (155 / 232), opacity: 0.9 }} />
+        style={{ position: 'absolute', right: g.W * 0.08, top: Math.max(4, top - cloud * 1.15), width: cloud * 0.72, height: cloud * 0.72 * CLOUD_RATIO, transform: [{ scaleX: -1 }] }} />
       <Image source={SKY_BUNTING} resizeMode="contain"
         style={{ position: 'absolute', left: (g.W - bw) / 2, top, width: bw, height: h }} />
     </View>

@@ -393,7 +393,7 @@ test('location cards: the scene runs full-bleed behind the footer, Finn stays un
 test('save card: the dots sit centred above the title and a returning family sees the same button brings their shark back', () => {
   const taste = read('src/screens/ExploreScreen/GuestTaste.tsx');
   const card = taste.slice(taste.indexOf('function SaveCard'), taste.indexOf('function ProgressDots'));
-  assert.ok(card.indexOf('<ProgressDots') > card.indexOf('styles.finnWrap') && card.indexOf('<ProgressDots') < card.indexOf('styles.title'));
+  assert.ok(card.indexOf('<ProgressDots') > card.indexOf('styles.saveFinnWrap') && card.indexOf('<ProgressDots') < card.indexOf('styles.title'));
   assert.ok(card.indexOf('COPY.save.have') > card.indexOf('<SignInButtons'), 'under the Apple button');
   assert.doesNotMatch(taste, /dots: \{ position: 'absolute'/);
   const { GUEST_TASTE_COPY } = guestTasteModule();
@@ -493,14 +493,24 @@ test('warm-up: CLEARED starts the moment the last pair goes, and the sky above t
   assert.match(game, /&& !signNow\) awning\.current\?\.sign\('CLEARED'\)/, 'never a second sign');
   assert.match(game, /mode === 'warmup' \? <WarmupSky g=\{g\} \/> : null/);
   assert.match(game, /gate_rush_bunting\.png/);
-  assert.match(game, /screens\/explore\/cloud\.png/);
+  // The game's own outlined cloud line art, not the flat map blob.
+  assert.match(game, /memory\/v8\/fx\/cloud_puff_2\.png/);
+  assert.doesNotMatch(game, /screens\/explore\/cloud\.png/);
 });
 
 test('first-win card: the ride car and a 62 pt coin sit side by side above the line, block at the optical centre', () => {
   const results = read('src/games/memory/MemoryResults.tsx');
   assert.match(results, /firstWinPic: \{ flexDirection: 'row'/);
   assert.match(results, /firstWinCoin: \{ width: 62, height: 62 \}/);
-  assert.match(results, /const lift = finn \* 0\.26;/, 'Finn rises above the card, so the block is shifted down by his overhang');
+  assert.match(results, /const lift = Math\.max\(0, finn \* FIRST_WIN_FINN_OVERHANG - 9\);/, 'the whole overhang: a centred column moves the card by half its margin');
+  assert.match(results, /marginTop: -finn \* FIRST_WIN_FINN_OVERHANG \}/);
+  // Block centring math for SE, 17 Pro and Pro Max: equal sea above the hat and below the card.
+  for (const h of [667, 874, 956]) {
+    const finn = Math.min(232, h * 0.26), over = finn * 0.62 - 9, card = 300 + finn * 0.38;
+    const top = (h - card) / 2 + over / 2 - over, bottom = h - ((h - card) / 2 + over / 2 + card);
+    assert.ok(Math.abs(top - bottom) < 1, `height ${h}: block centred`);
+    assert.ok(top > 24, `height ${h}: Finn's hat clears the status bar`);
+  }
   assert.match(results, /styles\.firstWinCard, \{ marginTop: lift \}/);
   assert.doesNotMatch(results, /firstWinCoinSpot: \{ position: 'absolute'/, 'the coin no longer sits on top of the car');
 });
@@ -535,4 +545,48 @@ test('home hello: Finn says hi in one short line, the same word (treats) everywh
   const steps = read('src/components/Tutorial/steps.ts');
   assert.doesNotMatch(steps, /Hey, new shark/);
   assert.match(steps, /text: "Hi, I'm Finn! Treats pop up near you, even at home\.",\s*subtitle: 'One is right next to you!'/);
+});
+
+test('one Finn from the win through the ask: the sign-in card uses the same boater Finn, waving', () => {
+  const taste = read('src/screens/ExploreScreen/GuestTaste.tsx');
+  const card = taste.slice(taste.indexOf('function SaveCard'), taste.indexOf('function ProgressDots'));
+  assert.match(taste, /FINN_BOATER_WAVE = require\('..\/..\/assets\/games\/memory\/studio\/barker_wave\.png'\)/);
+  assert.match(card, /source=\{FINN_BOATER_WAVE\}/);
+  assert.doesNotMatch(card, /teacher-shark|source=\{FINN\}/, 'no graduation-gown Finn before sign-in');
+});
+
+test('one word for one thing: every kid-facing line in minute one says treats, never finds or treasures', () => {
+  const intro = read('src/screens/ExploreScreen/HomeIntro.tsx');
+  const steps = intro.slice(intro.indexOf('HOME_INTRO_STEPS'), intro.indexOf('function storageKey'));
+  assert.match(steps, /title: 'Treats pop up near you'/);
+  assert.doesNotMatch(steps, /'[^']*\b[Ff]inds?\b[^']*'/, 'no "find" in the intro cards a kid reads');
+  const primer = read('src/screens/ExploreScreen/PermissionsNotGranted.tsx');
+  assert.doesNotMatch(primer, /[Tt]reasures?/);
+  assert.match(primer, /Treats pop up near you, even at home!/);
+  const look = loadTs('src/screens/ExploreScreen/findPresentation.ts');
+  assert.equal(look.mapStatusLine({ homeLocationConfirmed: true, isLoading: true, empty: true, loadError: false }).text, 'Scouting for treats...');
+  assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /'A treat is close! Tap it to catch\.'/);
+});
+
+test('first-win card: two words under the ride car and coin picture', () => {
+  const results = read('src/games/memory/MemoryResults.tsx');
+  assert.match(results, /FIRST_WIN_COPY = \{ next: 'Ride coins!', a11y: 'Next, win ride coins!' \}/);
+  assert.match(results, /accessibilityLabel=\{`\$\{banner\} \$\{FIRST_WIN_COPY\.a11y\}`\}/);
+});
+
+test('first hunt: the map shows only the treats (footsteps, no metres, no Saved map pill) and a failed load heals itself', () => {
+  const look = loadTs('src/screens/ExploreScreen/findPresentation.ts');
+  const base = { homeLocationConfirmed: true, isLoading: false, empty: false, loadError: true };
+  assert.equal(look.mapStatusLine({ ...base, firstHunt: true }), null, 'no grown-up words on the first map');
+  assert.equal(look.mapStatusLine(base).text, 'Saved map · tap to refresh', 'later visits keep the line');
+  assert.equal(look.mapStatusLine({ ...base, empty: true, firstHunt: true }).action, 'retry', 'an empty map still offers a retry');
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const firstHunt = !!firstVisit\.current && catchesThisVisit < 2;/);
+  assert.match(explore, /firstHunt=\{firstHunt\}/);
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /plainDistance=\{firstHunt\}/);
+  assert.match(home, /AUTO_RETRY_MS = \[5_000, 15_000, 30_000\]/);
+  assert.match(home, /if \(!loadError\) \{ errorRetries\.current = 0; return undefined; \}/);
+  const marker = read('src/screens/ExploreScreen/PrepItem.tsx');
+  assert.match(marker, /!inRange && !far && <Image source=\{FOOTSTEPS\}/, 'footsteps alone when there is no number');
 });

@@ -15,22 +15,25 @@ export interface HomeIntroStep {
   readonly badge?: string;
 }
 
-/** Three quick cards: where finds come from, how to grab one, why sets matter. */
+/**
+ * Three quick cards: where treats come from, how to grab one, why sets matter.
+ * Kid-facing copy says 'treats', the same word Finn uses in minute one (the code still says 'find').
+ */
 export const HOME_INTRO_STEPS: readonly HomeIntroStep[] = [
   {
-    title: 'Finds pop up near you',
+    title: 'Treats pop up near you',
     body: 'Snacks and toys show up on the map around you.',
     art: require('../../../assets/images/prep-items/churros/churro_18.png'),
   },
   {
     title: 'Walk close, then tap',
-    body: 'A close find hops and glows. Tap it!',
+    body: 'A close treat hops and glows. Tap it!',
     art: require('../../../assets/images/screens/pin-collections/shark.png'),
     badge: 'TAP!',
   },
   {
     title: 'Fill sets for rewards',
-    body: 'Each find fills a set. Sets earn Energy and Tickets.',
+    body: 'Each treat fills a set. Sets earn Energy and Tickets.',
     art: require('../../../assets/images/screens/profile/pin_collections.png'),
     badge: 'Snack Stand 3/12',
   },

@@ -41,10 +41,11 @@ import { BRAND, GameButton, GameIcon, SHADOW } from '../../ui';
 
 const CHURRO = require('../../../assets/images/prep-items/churros/churro_01.png');
 const COIN = require('../../../assets/images/coingold.png');
-const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
 const UNDERWATER = require('../../../assets/images/screens/park/background-new.png');
 /** The same boater Finn the kid just played with (existing barker art), cheering on the shelf step. */
 const FINN_BOATER = require('../../assets/games/memory/studio/barker_dance.png');
+/** The same boater Finn waving on the sign-in card (existing barker art, 436 x 576). */
+const FINN_BOATER_WAVE = require('../../assets/games/memory/studio/barker_wave.png');
 
 /** Steps in Finn's progress dots. */
 const STEP_INDEX = { find: 0, play: 1, coin: 2, save: 3 } as const;
@@ -351,9 +352,10 @@ function SaveCard({ reduced, onPlayMore }: { reduced: boolean; onPlayMore: () =>
     {/* Reduce Motion: no entering animation. With the system setting on, FadeIn left the
         card at its first frame (opacity 0): a guest saw an empty sea and never the sign-in ask. */}
     <Animated.View entering={reduced ? undefined : FadeIn.duration(260)} style={styles.card}>
-      <View style={styles.finnWrap} accessible accessibilityLabel="Finn holding your churro">
-        <Image source={FINN} style={styles.finn} contentFit="contain" />
-        <Image source={CHURRO} style={styles.finnChurro} contentFit="contain" />
+      {/* The same boater Finn from the warm-up, the win and the shelf, waving: one mascot
+          look from the win through the ask (the graduate Finn takes over after sign-in). */}
+      <View style={styles.saveFinnWrap} accessible accessibilityLabel="Finn waving">
+        <Image source={FINN_BOATER_WAVE} style={styles.saveFinn} contentFit="contain" />
       </View>
       {/* Centred above the title, like the dots in Finn's bubble. */}
       <ProgressDots index={STEP_INDEX.save} total={4} />
@@ -444,9 +446,8 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   card: { width: '100%', maxWidth: 360, alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 26,
     borderWidth: 4, borderColor: BRAND.white, paddingTop: 58, paddingHorizontal: 20, paddingBottom: 14, ...SHADOW.lifted },
-  finnWrap: { position: 'absolute', top: -78, width: 132, height: 132 },
-  finn: { width: 132, height: 132 },
-  finnChurro: { position: 'absolute', right: -6, bottom: 26, width: 48, height: 48, transform: [{ rotate: '18deg' }] },
+  saveFinnWrap: { position: 'absolute', top: -92, width: 112, height: 148 },
+  saveFinn: { width: 112, height: 148 },
   title: { fontFamily: 'Shark', fontSize: 28, color: BRAND.navy, textAlign: 'center' },
   body: { fontFamily: 'Knockout', fontSize: 18, lineHeight: 23, color: BRAND.navySoft, textAlign: 'center', marginTop: 6 },
   grownUpGroup: { alignItems: 'center', marginTop: 14 },

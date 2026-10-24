@@ -109,6 +109,8 @@ interface Props {
   chromeless?: boolean;
   /** Metres to the find: out of range it shows as a small tag under the art (with the timer when it is leaving). */
   distance?: number | null;
+  /** A brand new player's first hunt: a far find shows only its footsteps (walk to it), no '35 m' number to read. */
+  plainDistance?: boolean;
 }
 
 /** The find sits at the exact centre of the marker box, so its art is on its real spot. */
@@ -182,11 +184,12 @@ function RarityMark({ tier }: { tier: number }) {
  * twinkle with 4-point stars. One shared glow image, no iOS shadows, and motion
  * only when `animated` (in range or among the nearest), on the map's clock.
  */
-function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, distance = null }: Props) {
+function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, distance = null, plainDistance = false }: Props) {
   const { clock, active } = useMapAlive();
   const leavingSoon = useLeavingSoon(prepItem.active_to, onExpire, active);
   // One small tag: "70 m", "70 m · 2 min" or just "2 min" in range. Always mounted (a marker never changes layout).
-  const far = !inRange && distance != null ? formatFindDistance(distance) : '';
+  // First hunt: no number. The footsteps alone say "walk to it" (drawn below when there is no tag).
+  const far = !inRange && distance != null && !plainDistance ? formatFindDistance(distance) : '';
   const tag = [far || null, leavingSoon].filter(Boolean).join(' · ');
   const imageSource = useMemo(() => findImageSource(prepItem),
     [prepItem.icon_url, prepItem.variant_slug, prepItem.name]); // eslint-disable-line react-hooks/exhaustive-deps

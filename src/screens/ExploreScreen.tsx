@@ -384,6 +384,9 @@ function ExploreScreen() {
   // find, he is the only voice. Event chips, the park story chip and the event
   // recap wait (the daily chest already waits through chestMayPresent).
   const finnOwnsMap = isActive || firstLineGap || !!pendingFind || (isReady && !hasCompleted('onboarding'));
+  // A brand new player's first visit, until the first catch after Finn's tutorial find:
+  // the map shows only Finn's shark, the treats and the footer (no distances, no 'Saved map').
+  const firstHunt = !!firstVisit.current && catchesThisVisit < 2;
   const [homeIntroOpen, setHomeIntroOpen] = useState(false);
   // The generic park tip is on screen: the Fin-ister intro waits for it (never two first-run cards at once).
   const [parkTipShowing, setParkTipShowing] = useState(false);
@@ -1339,7 +1342,7 @@ function ExploreScreen() {
           parkStory={activeParkProject && !finnOwnsMap ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null}
           eventChip={liveEvt.event?.include_home && !finnOwnsMap ? <EventHomeChip event={liveEvt.event} onPress={() => setEventOpen(true)} /> : null}
-          quiet={finnOwnsMap} />
+          quiet={finnOwnsMap} firstHunt={firstHunt} />
       )}
       {/* Trail Boxes at home: your boxes wait for the next park day (pill above the avatar menu; only when you have boxes). */}
       {player && !park && permissionGranted && (
