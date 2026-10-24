@@ -66,6 +66,7 @@ import { boxesFor, poseScaleFor } from './render/boxes';
 import { THEME_FX } from './render/renderState';
 import { ShareCardButton, TILE_DECOY, TILE_QUICK } from './ui/ShareCard';
 import { WhackBoard, WhackHud, useBoardImages } from './render/WhackBoard';
+import { HudStepBack } from '../../gamekit/results/HudStepBack';
 import { useWhackRuntime } from './useWhackRuntime';
 import { Banner, Breather, DuelCard } from './ui/Overlays';
 import { duelTimeline } from './net/duel';
@@ -989,13 +990,17 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
             <GestureDetector gesture={runtime.gesture}>
               <Animated.View style={[StyleSheet.absoluteFill, camera.style]}>
                 <WhackBoard L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} images={images} hud={hud} theme={theme}
-                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} hudOutside />
+                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride && !result} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} hudOutside />
               </Animated.View>
             </GestureDetector>
           ) : null}
           {L ? (
-            <WhackHud L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} hud={hud} pace={pace}
-              showPace={!!ghostRef.current && !ride} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} />
+            // The HUD steps all the way back under the results card: no pace
+            // chip or score plate may say a different number than the card.
+            <HudStepBack back={!!result} reducedMotion={reducedMotion}>
+              <WhackHud L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} hud={hud} pace={pace}
+                showPace={!!ghostRef.current && !ride && !result} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} />
+            </HudStepBack>
           ) : null}
           {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={capacity}
             onArrive={(n) => { for (let k = 0; k < n; k++) setTimeout(() => GameAudio.playLadder(cues.coinTick, Math.min(12, k)), k * 20); }} /> : null}

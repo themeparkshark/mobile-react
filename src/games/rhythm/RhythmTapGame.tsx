@@ -950,7 +950,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       // Accuracy, steadiness numbers and millisecond timing stay off the card,
       // and a warming-up beat is no brag, so it is not a chip.
       stats: [
-        ...(sum.steadinessLabel !== 'Warming up' ? [{ label: 'YOUR BEAT', value: sum.steadinessLabel.toUpperCase() }] : []),
+        ...(sum.steadinessLabel && sum.steadinessLabel !== 'Warming up' ? [{ label: 'YOUR BEAT', value: sum.steadinessLabel.toUpperCase() }] : []),
         // Only a Drum-Off win is a brag: no chip ever says the kid came 3rd or 4th.
         ...(rivals.current.length && drumOffPlace(sum.accuracy, rivals.current) === 1 ? [{ label: 'DRUM-OFF', value: 'WON!' }] : []),
         ...(plan.format === 'queue' && !plan.ftue && sum.marchStars > 0 ? [{ label: 'MARCH STARS', value: `${sum.marchStars} of 3`, pips: [sum.marchStars, 3] as const }] : []),

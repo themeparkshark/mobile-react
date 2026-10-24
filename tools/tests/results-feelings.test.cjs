@@ -390,6 +390,12 @@ test('Rhythm gets the shared bar: timing fills it, the goal is spoken only, Easy
   assert.doesNotMatch(rhythm, /Try with Easy Beat/);
   assert.match(rhythm, /resultAction=\{/);
   assert.match(rhythm, /label: 'YOUR BEAT', value: sum\.steadinessLabel\.toUpperCase\(\)/);
+  assert.match(rhythm, /sum\.steadinessLabel && sum\.steadinessLabel !== 'Warming up'/, 'no beat chip when the run had too few hits');
+  const score = read('src/games/rhythm/core/score.ts');
+  assert.match(score, /errs\.length >= STEADY_MIN_HITS && s\.score > 0 \? steadinessOf\(errs\) : null/, 'an empty run never reads Rock steady');
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /<HudStepBack back=\{!!result\} reducedMotion=\{reducedMotion\}>\s*<WhackHud/, 'the Whack HUD steps back under the card');
+  assert.equal((whack.match(/showPace=\{!!ghostRef\.current && !ride && !result\}/g) || []).length, 2, 'no VS BEST pace chip under the results card');
   assert.match(rhythm, />TRY TWO THUMBS\?</);
   assert.doesNotMatch(rhythm, /Hit 3 of every 4 \(\$\{hr\}%\)/, 'no percent goal');
   const shell = read('src/gamekit/GameShellV2.tsx');
