@@ -3,8 +3,11 @@ import { StyleSheet } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import MapCoverSky, { MAP_COVER_SKY } from './MapCoverSky';
 
-/** The longest the sheet waits for tiles after the cover lifted, before it fades anyway. */
-export const TILE_WAIT_MAX_MS = 6000;
+/**
+ * The longest the sheet waits for tiles after the cover lifted, before it fades anyway. Park cell
+ * service is slow: 12 s covers a slow tile download, so a kid sees the living sky, not a flat blue map.
+ */
+export const TILE_WAIT_MAX_MS = 12000;
 const FADE_MS = 320;
 
 /**

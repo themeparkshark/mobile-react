@@ -710,7 +710,7 @@ test('first seconds on the map: pins arrive in the cover fade, late pins land in
   assert.match(map, /onDidFinishRenderingFrameFully=\{covered \|\| !tilesDrawn \? revealMap : undefined\}/);
   const sheet = read('src/components/map/TileWaitSheet.tsx');
   assert.match(sheet, /pointerEvents="none"/);
-  assert.match(sheet, /export const TILE_WAIT_MAX_MS = 6000;/);
+  assert.match(sheet, /export const TILE_WAIT_MAX_MS = 12000;/);
 });
 
 test('buttons and the map on small and busy screens: GameButton art waits for its words, the SE shark fits, a gone map is never queried', () => {
@@ -1032,7 +1032,8 @@ test('short phones: the map rail puts the chest and Daily 3 beside the compass i
   assert.match(map, /railSide: \{ flexDirection: 'row-reverse', alignItems: 'flex-start' \},/);
   // The declutter keeps map art out from under the two-column rail too.
   assert.match(map, /w: 54 \* 2 \+ 8 \+ 12, h: railColumnHeight\(extraCount\) \+ 12/);
-  assert.match(read('src/screens/ExploreScreen.tsx'), /railFloor=\{rightColumnHeight > 0 \? 32 \+ rightColumnHeight : 0\}/);
+  // Before the right column is measured, its planned height stands in, so a short phone never starts in one column (Daily 3 on the Trail Boxes pill) and jumps.
+  assert.match(read('src/screens/ExploreScreen.tsx'), /railFloor=\{rightColumnHeight > 0 \? 32 \+ rightColumnHeight : bottomRightColumnHeight\(mapFlags\.gymSwords, ENERGY_GAP\)\}/);
   assert.match(map, /return buttons <= 0 \? 0 : buttons \* RAIL_BUTTON \+ \(buttons - 1\) \* RAIL_GAP;/);
 });
 
