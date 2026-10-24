@@ -150,14 +150,16 @@ export function Breather(p: BreatherProps) {
   const padStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   const cardStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, enter.value * 1.6),
-    transform: [{ translateY: (1 - enter.value) * 60 }, { scale: 0.86 + 0.14 * enter.value }],
+    transform: [{ translateY: (1 - enter.value) * 60 }, { scale: 0.9 + 0.1 * enter.value }],
   }));
   const theme = p.theme ?? 'park';
   const tickEvery = Math.max(1, Math.round(p.burstScore / 10));
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <View style={styles.dim} pointerEvents="none" />
-      <Animated.View style={[styles.card, cardStyle]} accessibilityLabel={`Burst ${p.burstNumber} of ${p.bursts} banked. ${p.burstScore} points.`}>
+      {/* The animated layer carries only the motion; the bordered cream card is a plain view inside it. */}
+      <Animated.View style={cardStyle}>
+      <View style={styles.card} accessibilityLabel={`Burst ${p.burstNumber} of ${p.bursts} banked. ${p.burstScore} points.`}>
         {/* Bursts as pips: banked ones are gold with a check (no words). */}
         <View style={styles.pips}>
           {Array.from({ length: p.bursts }, (_, i) => (
@@ -218,6 +220,7 @@ export function Breather(p: BreatherProps) {
           <GameIcon name="arrow" size={18} />
           <NextPreview shape={p.nextShape} theme={theme} boss={p.nextBoss} />
         </View>
+      </View>
       </Animated.View>
       <View style={styles.thumbZone}>
         {p.feverReady && p.onFever ? (
