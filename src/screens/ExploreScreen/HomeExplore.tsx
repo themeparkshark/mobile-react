@@ -16,6 +16,7 @@ import RadialStatsMenu from '../../components/RadialStatsMenu';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
 import { useMenuCardFade } from './menuCardFade';
 import { useChromeBack } from './useChromeBack';
+import { chromeHeal, useCommitHeal } from '../../components/map/alive/commitHeal';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { shouldThrottleHomeRequest } from './homeRefresh';
 import { isInPickupRange } from './homeFindCopy';
@@ -189,6 +190,8 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   const chipsBack = useChromeBack(0);
   const menusBack = useChromeBack(1);
   const edgesBack = useChromeBack(3);
+  // Round 5: a HomeExplore commit mid-catch (the badge's answer, the open flag) re-sends the chrome's styles.
+  useCommitHeal(chromeHeal);
   // Where each find is on screen, re-measured when the map settles, so a tap opens the catch from the find on that frame.
   const findPoints = useRef(new globalThis.Map<number, { x: number; y: number }>());
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });

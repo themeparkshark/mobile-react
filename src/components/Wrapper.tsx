@@ -3,6 +3,7 @@ import { ReactNode, useContext, useEffect } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { catchDim, catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { chromeHeal, touchHeal, useCommitHeal } from './map/alive/commitHeal';
 import * as RootNavigation from '../RootNavigation';
 import { NotificationContext } from '../context/NotificationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
@@ -42,7 +43,9 @@ export default function Wrapper({
   const { notificationCount } = useContext(NotificationContext);
   // A catch moment owns the whole screen: the tab bar slides away on the UI thread (no re-render).
   // A common catch keeps the tab bar in place and only softens it (catchDim): the header and footer never move for it.
-  const barSlide = useAnimatedStyle(() => ({ opacity: 1 - 0.4 * catchDim.value, transform: [{ translateY: 160 * catchShown.value }] }));
+  // Round 5: a commit here mid-catch re-sends the softened bar (commitHeal), so it never flashes back to full.
+  useCommitHeal(chromeHeal);
+  const barSlide = useAnimatedStyle(() => ({ opacity: 1 - 0.4 * catchDim.value + touchHeal(chromeHeal), transform: [{ translateY: 160 * catchShown.value }] }));
 
   const items = [
     {

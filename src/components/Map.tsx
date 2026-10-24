@@ -47,6 +47,7 @@ import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapD
 import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
 import { catchDim, catchDimBack, catchKickX, catchKickY, catchShown, chromeBack, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { chromeHeal, touchHeal, useCommitHeal } from './map/alive/commitHeal';
 import { MOTION_PROBE, MotionProbeFrames, probeCamera, probeCount } from '../dev/motionProbe';
 import { useTrail } from '../services/trail/TrailProvider';
 import { mapTrailOf } from './map/mapTrail';
@@ -764,9 +765,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const compassHintRef = useRef<(() => void) | null>(null);
   compassHintRef.current = compassHint.visible ? compassHint.dismiss : null;
   const chromeOff = chromeHidden ? 1 : 0;
+  // Round 5: every Map commit re-sends the rail's style for a moment (commitHeal), so it never shows a stale frame.
+  useCommitHeal(chromeHeal);
   // Round 4: after a catch the control rail pops back in its stagger slot (from 0.85, one small overshoot).
   const chromeStyle = useAnimatedStyle(() => {
-    const c = chromeBack(2, catchShown.value, catchDim.value, catchDimBack.value);
+    const c = chromeBack(2, catchShown.value, catchDim.value, catchDimBack.value + touchHeal(chromeHeal));
     return { opacity: chromeOff ? 0 : c.opacity, transform: [{ scale: c.scale }] };
   }, [chromeOff]);
   // The burst kicks the map itself (a camera kick of a few points, catchPresence.catchKickX/Y), never the controls.

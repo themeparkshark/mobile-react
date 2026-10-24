@@ -142,7 +142,7 @@ test('the catch uses the shared motion language and never punishes a miss', () =
   assert.match(src, /catchPlan\(/);
   assert.match(src, /flashPeak\(isDimFlashingLightsEnabled\(\)/, 'the flash respects Dim Flashing Lights');
   assert.match(src, /momentParticles\(PARTICLES\.sparkles/, 'sparkles go through the power budget');
-  assert.match(src, /GoldBurst/);
+  assert.match(src, /CatchRays/, "round 5: the gold is the hand-inked fan on a bloom");
   const common = src.slice(src.indexOf('const plan = catchPlan('), src.indexOf("catchMark('fly')"));
   assert.ok(!/failBuzz/.test(common), 'a missed common catch is soft, never an error buzz');
 });
@@ -168,7 +168,7 @@ test('round 2: the first catch settles by 2.6 s with no still hold over 600 ms; 
   const again = wow.catchPlan({ reduced: false, repeat: true });
   assert.equal(again.repeat, true);
   assert.equal(again.wobbles.length, 2, 'the repeat wobbles twice');
-  assert.ok(again.doneAt <= 1450 && again.doneAt >= 1300, `repeat about 1.4 s (${again.doneAt})`);
+  assert.ok(again.doneAt <= 1400 && again.doneAt >= 1200, `repeat settled by 1.4 s (${again.doneAt})`);
   assert.ok(again.burstAt < first.burstAt && again.burstAt - again.hitStopAt === motion.DURATION.hitStop, 'the repeat keeps its held frame');
   assert.ok(again.burstScale >= 1.18 && again.burstScale <= 1.35);
   const h = wow.catchHaptics(again);
@@ -440,7 +440,7 @@ test('round 4: an honest badge and a goal after every catch; +N on the header bl
   const explore = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(explore, /useChromeBack\(0\)/);
   const chip = read('src/components/Topbar/Currency.tsx');
-  assert.match(chip, /left: '100%', marginLeft: 6/, '+N sits just right of the chip, on the header blue');
+  assert.match(chip, /plusAnchor/, '+N sits just right of the chip, on the header blue (round 5: on an anchor after the pill)');
   const find = read('src/screens/ExploreScreen/PrepItem.tsx');
   assert.match(find, /const tick = live \? clock : still/, 'a far find stops reading the map clock');
 });
@@ -451,4 +451,73 @@ test('round 4: nothing on the catch path re-renders mid-catch (the caught pin, t
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(src, /const StreamCoin = memo\(/);
   assert.match(src, /!badgeOn && styles\.gateOff/, 'a finished badge is gated off in the done commit');
+});
+
+
+// Round 5 (panel blockers and fixes): a readable counter, no stale frames after commits, snappier repeats,
+// hand-inked gold with a bloom, and every catch ends on the next goal.
+test('round 5: odometer digits fade inside the pill instead of relying on a clip', () => {
+  assert.equal(wow.digitCellOpacity(0), 1);
+  assert.equal(wow.digitCellOpacity(0.1), 1);
+  assert.ok(wow.digitCellOpacity(0.4) > 0 && wow.digitCellOpacity(0.4) < 1);
+  assert.equal(wow.digitCellOpacity(0.6), 0, 'a digit half a line away is already gone (well inside the rim)');
+  assert.equal(wow.digitCellOpacity(-1), 0);
+  const src = fs.readFileSync(path.join(root, 'src/components/Topbar/RollingDigits.tsx'), 'utf8');
+  assert.match(src, /digitCellOpacity\(d\)/, 'each rolling cell fades with its distance');
+  assert.doesNotMatch(src, /const STRIP/, 'no 20-digit strip that can draw past the pill');
+});
+
+test('round 5: "+N" hangs off an anchor after the pill, never over the digits', () => {
+  const src = fs.readFileSync(path.join(root, 'src/components/Topbar/Currency.tsx'), 'utf8');
+  assert.doesNotMatch(src, /left: '100%'/, 'no percentage left (it resolved inside the pill)');
+  assert.match(src, /plusAnchor: \{ width: 0/);
+  const pill = src.indexOf('</TouchableOpacity>'), anchor = src.indexOf('styles.plusAnchor'), plus = src.indexOf('styles.plus, plusStyle');
+  assert.ok(pill > 0 && anchor > pill && plus > anchor, 'the +N lives after the pill, inside the zero-width anchor');
+});
+
+test('round 5: styles that must survive a commit re-send after it (commitHeal)', () => {
+  const heal = fs.readFileSync(path.join(root, 'src/components/map/alive/commitHeal.ts'), 'utf8');
+  assert.match(heal, /useLayoutEffect\(\(\) => \{/);
+  for (const [file, min] of [['src/screens/ExploreScreen/HomeCatchMoment.tsx', 20], ['src/components/Topbar/Currency.tsx', 3],
+    ['src/screens/ExploreScreen/useChromeBack.ts', 1], ['src/components/Map.tsx', 1], ['src/components/Wrapper.tsx', 1]]) {
+    const src = fs.readFileSync(path.join(root, file), 'utf8');
+    const n = (src.match(/touchHeal\(/g) || []).length;
+    assert.ok(n >= min, `${file} heals ${n} styles (want ${min}+)`);
+  }
+  for (const file of ['src/screens/ExploreScreen/HomeExplore.tsx', 'src/components/Map.tsx', 'src/components/Wrapper.tsx', 'src/screens/ExploreScreen/HomeCatchPreviewScreen.tsx']) {
+    assert.match(fs.readFileSync(path.join(root, file), 'utf8'), /useCommitHeal\(chromeHeal\)/, `${file} bumps the chrome heal on commit`);
+  }
+});
+
+test('round 5: repeats are snappy (hold <= 200 ms, badge by 0.9 s, settled by 1.4 s) and the first still fits 2.6 s', () => {
+  const r = wow.catchPlan({ reduced: false, repeat: true });
+  assert.ok(r.suckAt - r.burstAt <= 200, `burst hold ${r.suckAt - r.burstAt}`);
+  assert.ok(r.badgeAt <= 900, `badge in by ${r.badgeAt}`);
+  assert.ok(r.doneAt <= 1400, `settled by ${r.doneAt}`);
+  const f = wow.catchPlan({ reduced: false });
+  assert.ok(f.doneAt <= 2600 && f.burstAt <= 1500);
+  // The next goal pops in after the badge, early enough to read before the badge leaves.
+  for (const p of [f, r]) {
+    assert.ok(p.nextAt > p.badgeAt && p.exitAt - p.nextAt >= 300, `next goal on screen ${p.exitAt - p.nextAt} ms`);
+    assert.equal(wow.nextGoalAt(p.nextAt - 1, p).scale, 0);
+    let peak = 0;
+    for (let t = p.nextAt; t < p.nextAt + 400; t += 4) peak = Math.max(peak, wow.nextGoalAt(t, p).scale);
+    assert.ok(peak > 1.05 && peak < 1.35, `one visible overshoot (${peak})`);
+    assert.ok(Math.abs(wow.nextGoalAt(p.nextAt + 500, p).scale - 1) < 1e-9);
+  }
+  const src = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen/HomeCatchMoment.tsx'), 'utf8');
+  assert.match(src, /cc\.value = cut;/, 'skip cuts the burst and plays the coin stream fast');
+  assert.match(src, /nextMissing\(page, item\.id, next\.complete\)/, 'the next goal is the set\'s next missing find');
+});
+
+test('round 5: the gold is a hand-inked fan on a soft bloom, varied, and breathing through the hold', () => {
+  const rays = wow;
+  const shapes = Array.from({ length: rays.CATCH_RAY_COUNT }, (_, i) => rays.catchRayShape(i, 320));
+  const lens = new Set(shapes.map(s => Math.round(s.len))), widths = new Set(shapes.map(s => Math.round(s.half * 10)));
+  assert.ok(lens.size >= 10 && widths.size >= 10, 'every ray a little different (hand-made)');
+  for (const s of shapes) assert.ok(s.len <= 160 && s.r0 > 0 && s.half > 4);
+  const src = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen/HomeCatchMoment.tsx'), 'utf8');
+  assert.doesNotMatch(src, /<GoldBurst /, 'no image fan on the map catch');
+  assert.match(src, /const breathe = 1 \+ 0\.03 \* Math\.sin/, 'a living hold');
+  assert.match(src, /itemRim/, 'the find keeps a white sticker rim on the gold');
 });

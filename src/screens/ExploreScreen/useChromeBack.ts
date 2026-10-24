@@ -1,5 +1,6 @@
 import { useAnimatedStyle } from 'react-native-reanimated';
 import { catchDim, catchDimBack, catchShown, chromeBack } from './catchPresence';
+import { chromeHeal, touchHeal } from '../../components/map/alive/commitHeal';
 
 /**
  * A map control layer that steps back on the tap frame of a catch and comes back in its stagger slot
@@ -9,7 +10,9 @@ import { catchDim, catchDimBack, catchShown, chromeBack } from './catchPresence'
  */
 export function useChromeBack(slot: number, mode: 'drop' | 'pop' = 'drop', extraHidden = 0) {
   return useAnimatedStyle(() => {
-    const c = chromeBack(slot, catchShown.value, catchDim.value, catchDimBack.value);
+    // Round 5: re-runs for a moment after every commit (chromeHeal), so a re-render can never leave a control
+    // undimmed mid-catch or popped back before its slot (both styles carry a transform, so they always re-send).
+    const c = chromeBack(slot, catchShown.value, catchDim.value, catchDimBack.value + touchHeal(chromeHeal));
     const opacity = Math.max(0, c.opacity * (1 - extraHidden));
     if (mode === 'pop') return { opacity, transform: [{ scale: c.scale }] };
     return { opacity, transform: [{ translateY: -(1 - c.scale) * 48 }] };

@@ -75,6 +75,11 @@ export interface CatchPlan {
   /** Round 4. The burst exit: the ink and the gold rays suck back into the find (anticipation for the flight). */
   readonly suckAt: number;
   readonly suckMs: number;
+  /**
+   * Round 5. The next goal: the set's next missing find pops onto the badge's corner as a navy silhouette in a
+   * gold ring (a picture, no words), so every catch ends pointing at the next one.
+   */
+  readonly nextAt: number;
 }
 
 /**
@@ -90,33 +95,33 @@ export function catchPlan(options: { readonly reduced: boolean; readonly calm?: 
     return { squashMs: 0, squashTo: 1, anticipationMs: 0, risePt: 0, wobbles: [], hitStopAt: 0, burstAt: 0, burstScale: 1,
       gatherSparkles: 0, burstSparkles: 0, flyAt: 0, flyMs: DURATION.quick, arcPt: 0, landAt, kickPt: 0,
       repeat: !!options.repeat, coinsAt: 0, barMs: 1, tickAt: landAt, exitAt: landAt + 900, exitMs: DURATION.quick, doneAt: landAt + 900 + DURATION.quick,
-      reduced: true, heroScale: 1, landScale: 1, inkMs: 1, goldHoldMs: 0, badgeAt: 0, badgeInMs: DURATION.quick, suckAt: 0, suckMs: 1 };
+      reduced: true, heroScale: 1, landScale: 1, inkMs: 1, goldHoldMs: 0, badgeAt: 0, badgeInMs: DURATION.quick, suckAt: 0, suckMs: 1, nextAt: landAt };
   }
   const squashMs = DURATION.tap;
   // A milestone catch (the beam) kicks the map the full KICK.maxPt; none while walking or in calm power.
   const kickPt = options.calm || options.walking ? 0 : options.milestone ? KICK.maxPt : 3;
   if (options.repeat) {
-    // Repeat (round 4): burst at 450, the ink holds to 680 then sucks back into the find by 780, the badge pops
-    // in on that frame and the find flies home by 1140; the bar settles and the badge is gone by 1440.
-    const hitStopAt = 380;
+    // Repeat (round 5, snappier): burst at 430, the burst holds only 170 ms then sucks back into the find by 690,
+    // the badge pops in on that frame (in by 0.9 s), the find is home by 1020 and the badge is gone by 1290.
+    const hitStopAt = 360;
     const burstAt = hitStopAt + DURATION.hitStop;
-    const suckAt = burstAt + 230;
-    const suckMs = 100;
+    const suckAt = burstAt + 170;
+    const suckMs = 90;
     const flyAt = suckAt + suckMs;
-    const flyMs = 360;
+    const flyMs = 330;
     const landAt = flyAt + flyMs;
-    const barMs = 130;
-    const exitMs = 140;
-    const exitAt = landAt + barMs + 30;
+    const barMs = 120;
+    const exitMs = 130;
+    const exitAt = landAt + barMs + 20;
     return {
       squashMs, squashTo: 0.86, anticipationMs: hitStopAt - squashMs, risePt: 18,
-      wobbles: [{ at: 90, deg: 10 }, { at: 240, deg: 14 }],
+      wobbles: [{ at: 90, deg: 10 }, { at: 220, deg: 14 }],
       hitStopAt, burstAt, burstScale: 1.25,
       gatherSparkles: 4, burstSparkles: 8,
       flyAt, flyMs, arcPt: 60, landAt, kickPt,
       repeat: true, coinsAt: burstAt, barMs, tickAt: landAt + barMs + 10, exitAt, exitMs, doneAt: exitAt + exitMs,
-      reduced: false, heroScale: 1.5, landScale: 0.95, inkMs: suckAt + suckMs - burstAt, goldHoldMs: 120, badgeAt: flyAt, badgeInMs: 220,
-      suckAt, suckMs,
+      reduced: false, heroScale: 1.5, landScale: 0.95, inkMs: suckAt + suckMs - burstAt, goldHoldMs: 120, badgeAt: flyAt, badgeInMs: 200,
+      suckAt, suckMs, nextAt: flyAt + 160,
     };
   }
   // First catch (round 4): tap 0, wobbles to 580, held frame 600, burst 670 (the find pops to about 2x on a gold
@@ -132,8 +137,9 @@ export function catchPlan(options: { readonly reduced: boolean; readonly calm?: 
   const flyMs = 540;
   const landAt = flyAt + flyMs;
   const barMs = 340;
+  // Round 5: the badge stays a beat longer (to 2380) so the next-goal silhouette reads; still settled by 2.6 s.
   const exitMs = DURATION.exit;
-  const exitAt = 2250;
+  const exitAt = 2380;
   return {
     squashMs, squashTo: 0.86, anticipationMs: hitStopAt - squashMs, risePt: 24,
     wobbles: [{ at: 90, deg: 8 }, { at: 260, deg: 12 }, { at: 430, deg: 16 }],
@@ -142,7 +148,7 @@ export function catchPlan(options: { readonly reduced: boolean; readonly calm?: 
     flyAt, flyMs, arcPt: 80, landAt, kickPt,
     repeat: false, coinsAt: burstAt, barMs, tickAt: landAt + barMs + 20, exitAt, exitMs, doneAt: exitAt + exitMs,
     reduced: false, heroScale: 1.7, landScale: 0.95, inkMs: suckAt + suckMs - burstAt, goldHoldMs: 160, badgeAt: flyAt, badgeInMs: DURATION.enter,
-    suckAt, suckMs,
+    suckAt, suckMs, nextAt: flyAt + 160,
   };
 }
 
@@ -616,6 +622,51 @@ export function rollPos(t: number, startAt: number, from: number, to: number, ms
   const over = to > from ? 0.09 : 0;
   if (u < 0.82) return from + (to + over - from) * easeOut3(u / 0.82);
   return to + over * (1 - easeInOut3((u - 0.82) / 0.18));
+}
+
+/**
+ * Round 5: an odometer digit's opacity from its distance to the window (in digit heights). Fully shown within
+ * 0.15 of the centre, gone by 0.6, so a rolling digit fades out well inside the pill's rim (no clip needed).
+ */
+export function digitCellOpacity(d: number): number {
+  'worklet';
+  const a = Math.abs(d);
+  if (a <= 0.15) return 1;
+  if (a >= 0.6) return 0;
+  return 1 - (a - 0.15) / 0.45;
+}
+
+/**
+ * Round 5: the next-goal silhouette on the badge at clock time `t`: pops from 0 to one overshoot (SPRING.pop feel),
+ * then bobs 2 pt and its gold ring pulses outward once every 700 ms. Worklet; scale 0 before nextAt.
+ */
+export function nextGoalAt(t: number, p: CatchPlan): { scale: number; bob: number; ring: number } {
+  'worklet';
+  const d = t - p.nextAt;
+  if (d < 0) return { scale: 0, bob: 0, ring: -1 };
+  const scale = d < 120 ? 1.2 * easeOut3(d / 120) : 1 + 0.2 * settle((d - 120) / 300);
+  const ring = d < 200 ? -1 : ((d - 200) % 700) / 700;
+  return { scale, bob: -2 * Math.sin(d / 160), ring };
+}
+
+/* Round 5: the catch's hand-inked sunburst (CatchRays draws it once with Skia). */
+export const CATCH_RAY_COUNT = 16;
+
+/** Deterministic wobble per ray (0..1), so every catch draws the same hand-made fan. */
+function wob(i: number, k: number): number {
+  const x = Math.sin((i + 1) * 12.9898 + k * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** One ray's outline (pure, unit tested): a tapered, slightly bent spike from r0 to its tip. */
+export function catchRayShape(i: number, size: number): { angle: number; r0: number; len: number; half: number; bend: number } {
+  const long = i % 2 === 0;
+  const angle = (i / CATCH_RAY_COUNT) * Math.PI * 2 + (wob(i, 1) - 0.5) * 0.08;
+  const r0 = size * 0.11;
+  const len = (size / 2) * (long ? 0.9 : 0.64) * (0.9 + 0.1 * wob(i, 2));
+  const half = (long ? 17 : 11) * (0.85 + 0.3 * wob(i, 3)) * (size / 320);
+  const bend = (wob(i, 4) - 0.5) * 7 * (size / 320);
+  return { angle, r0, len, half, bend };
 }
 
 /* ------------------------------------------------- the controls coming back */

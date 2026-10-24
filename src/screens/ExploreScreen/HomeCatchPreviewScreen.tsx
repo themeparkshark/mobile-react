@@ -29,6 +29,7 @@ import { preloadRidePhoto, useRideArt } from './ridePhoto/rideAssets';
 import { RIDES, buildStage, sceneVariant } from './ridePhoto/rides';
 import { useCatchOpen } from './catchPresence';
 import { useChromeBack } from './useChromeBack';
+import { chromeHeal, useCommitHeal } from '../../components/map/alive/commitHeal';
 import type { RideKind, Sky } from './ridePhoto/rides';
 import { resetRideMemoryForPreview } from './ridePhoto/rides/rideMemory';
 import { catchTraceBuffer } from './ridePhoto/catchAudio';
@@ -196,6 +197,7 @@ function HomeCatchPreview() {
   const [coins, setCoins] = useState(() => player?.coins ?? 350);
   const chipsBack = useChromeBack(0);
   const menusBack = useChromeBack(1);
+  useCommitHeal(chromeHeal);
   const edgesBack = useChromeBack(3);
   // The dev frame graph on every capture (UI fps, p5): the wow clips carry their own frame-rate proof.
   const perf = usePerfProbe(!STILL);

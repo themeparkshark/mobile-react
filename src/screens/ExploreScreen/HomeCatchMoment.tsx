@@ -25,9 +25,10 @@ import { CurrencyContext } from '../../context/CurrencyProvider';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
-import { GoldBurst } from '../../ui/GoldBurst';
+import CatchRays from './CatchRays';
 import { DURATION, EASE, SPRING, flashPeak, momentParticles } from '../../ui/motionEasing';
 import { GOLD_FX, PARTICLES } from '../../ui/motion';
+import { nextGoalAt } from '../../components/map/alive/mapWow';
 import { arcPoint, beamAt, BEAM, burstVariant, BURST_RINGS_MAX, BURST_STARS_MAX, catchFrame, catchHaptics, catchPlan, catchStage, coinStreamAt, coinStreamPlan, COIN_STREAM, type CatchBeatHaptic, type CatchFrame, type CatchPlan } from '../../components/map/alive/mapWow';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { usePowerBudget } from '../../power';
@@ -43,6 +44,7 @@ import { Sunburst } from '../../gamekit/fx/ShaderFx';
 import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, setRidePhotoPlayer, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
+import { touchHeal, useCommitHeal } from '../../components/map/alive/commitHeal';
 import { catchDim, catchHidePivot, catchKickX, catchKickY, dimCatchChrome, setCatchOpen, showCatchChrome } from './catchPresence';
 import reportRideOff from '../../api/endpoints/me/prep-items/ride-off';
 import { READY_RIDES, RIDES, rideStamps, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
@@ -70,6 +72,16 @@ export function bookSlots(page: readonly BookItem[], caughtId: number, isNew: bo
       owned: owned[i].owned, isNew: isNew && owned[i].caught, caught: owned[i].caught,
       stars, prevStars: before, newBest: owned[i].caught && !isNew && photo.newBest === true };
   });
+}
+
+/**
+ * Round 5: the next goal after a catch, as a picture. The first find of the set's book page that is still missing
+ * (never the one just caught), or null when the set is done or the page is not this set's. Honest: only real
+ * set items, in the book's own order.
+ */
+export function nextMissing(page: readonly BookItem[] | null, caughtId: number, complete: boolean): BookItem | null {
+  if (!page || complete) return null;
+  return page.find(entry => !entry.is_collected && entry.id !== caughtId) ?? null;
 }
 
 /** One item on a set's book page (what the catch reveal draws in its slots). */
@@ -345,14 +357,16 @@ const StreamCoin = memo(function StreamCoin({ index, t, count, geo, source }: {
   </>;
 });
 
-type BadgeStyles = Record<'badge' | 'kick' | 'landRing' | 'bar' | 'barGlow' | 'newPop' | 'grade' | 'ride' | 'countOld' | 'countNew' | 'coinStamp' | 'oneMore', ReturnType<typeof useAnimatedStyle<ViewStyle>>>;
+type BadgeStyles = Record<'badge' | 'kick' | 'landRing' | 'bar' | 'barGlow' | 'newPop' | 'grade' | 'ride' | 'countOld' | 'countNew' | 'coinStamp' | 'oneMore' | 'next' | 'nextRing', ReturnType<typeof useAnimatedStyle<ViewStyle>>>;
 
 /**
  * The collection badge as a memo (round 3): it re-renders only when its content changes (the server's answer,
  * before it shows), never while it is on screen, so its animated views never get their first-render styles
  * pushed back mid-moment (the badge blinking out, the count stepping back).
  */
-const CatchBadge = memo(function CatchBadge({ st, summary, photo, bonusXp, newRide, art, name, color, left, bottom, coinStamp }: {
+const CatchBadge = memo(function CatchBadge({ st, summary, photo, bonusXp, newRide, art, name, color, left, bottom, coinStamp, nextArt }: {
+  /** Round 5: the set's next missing find (its art drawn as a navy silhouette on the badge's corner). */
+  readonly nextArt: ReturnType<typeof findImageSource> | null;
   /** Round 4: a repeat find's coins, stamped on the badge (its set count did not change, so the bar stays put). */
   readonly coinStamp: number | null;
   readonly st: BadgeStyles; readonly summary: CatchSummary | null; readonly photo: { image: SkImage | null; grade: PhotoGrade } | null;
@@ -403,6 +417,14 @@ const CatchBadge = memo(function CatchBadge({ st, summary, photo, bonusXp, newRi
               <Text style={styles.coinStampText} numberOfLines={1}>+{coinStamp}</Text>
             </View>
           </Animated.View>}
+          {/* Round 5, the next goal: the set's next missing find as a navy silhouette in a gold ring, popping onto the
+              badge's corner after the catch lands (a Pokedex shadow: a picture, no words). */}
+          {nextArt && !photo ? <Animated.View style={[styles.nextAt, st.next]} pointerEvents="none">
+            <Animated.View style={[styles.nextRing, st.nextRing]} />
+            <View style={styles.nextDisc}>
+              <RNImage source={nextArt as never} style={[styles.nextArt, { tintColor: '#0b3a73' }]} resizeMode="contain" fadeDuration={0} />
+            </View>
+          </Animated.View> : null}
           {photo && <Animated.View style={[styles.gradeChip, { backgroundColor: GRADE_CHIP[photo.grade][0] }, st.grade]}>
             {Array.from({ length: GRADE_STARS[photo.grade] }, (_, i) => <GameIcon key={i} name="star" size={14} />)}
             <Text style={[styles.gradeText, { color: GRADE_CHIP[photo.grade][1] }]} numberOfLines={1}>{GRADE_LABEL[photo.grade]}</Text>
@@ -437,12 +459,12 @@ type FxValues = { readonly frame: SharedValue<CatchFrame>; readonly clock: Share
  * re-render pushes each animated view's first-render style again (PropsFilter), which showed up as stale
  * frames mid-catch (the halo blinking, the burst jumping back a beat).
  */
-const CatchFx = memo(function CatchFx({ fx, sv, layerHeight, art, color, motionFx, sparks, stars, gatherCount, goldSize, goldAmt, goldBloom, fxT, gatherT, reduced, onCopyShown }: {
+const CatchFx = memo(function CatchFx({ fx, sv, layerHeight, art, color, motionFx, sparks, stars, gatherCount, goldSize, fxT, gatherT, onCopyShown }: {
   readonly fx: FxStyles; readonly sv: FxValues; readonly layerHeight: number;
   readonly art: ReturnType<typeof findImageSource> | null; readonly color: string; readonly motionFx: boolean;
   readonly sparks: number; readonly stars: number; readonly gatherCount: number; readonly goldSize: number;
-  readonly goldAmt: SharedValue<number>; readonly goldBloom: SharedValue<number>; readonly fxT: SharedValue<number>; readonly gatherT: SharedValue<number>;
-  readonly reduced: boolean; readonly onCopyShown: () => void;
+  readonly fxT: SharedValue<number>; readonly gatherT: SharedValue<number>;
+  readonly onCopyShown: () => void;
 }) {
   return <>
     {/* Gather: a gold halo builds under the find (ground-glow art, tinted gold). */}
@@ -460,8 +482,9 @@ const CatchFx = memo(function CatchFx({ fx, sv, layerHeight, art, color, motionF
     {motionFx && <Animated.View style={[styles.waterRing, fx.water]} pointerEvents="none">
       <Image source={WATER_RING} style={styles.fxFill} contentFit="contain" transition={0} />
     </Animated.View>}
+    {/* Round 5: a soft gold bloom lights the map and a hand-inked sunburst sits on it (static Skia art, one wrapper moves). */}
     {motionFx && <Animated.View style={[styles.goldAt, { width: goldSize, height: goldSize }, fx.gold]} pointerEvents="none">
-      <GoldBurst size={goldSize} amount={goldAmt} bloom={goldBloom} spin reduced={reduced} />
+      <CatchRays size={goldSize} />
     </Animated.View>}
     {motionFx && <Animated.View style={[styles.inkBurst, fx.ink]} pointerEvents="none">
       <Image source={INK_BURST} style={styles.fxFill} contentFit="contain" transition={0} />
@@ -481,6 +504,8 @@ const CatchFx = memo(function CatchFx({ fx, sv, layerHeight, art, color, motionF
       <RNImage source={GLOW_TEX} style={[styles.fxFill, { tintColor: GOLD_FX.core }]} resizeMode="stretch" fadeDuration={0} />
     </Animated.View>
     <Animated.View style={[styles.item, fx.item]} pointerEvents="none">
+      {/* Round 5: a soft white rim keeps the find readable on the gold (a sticker on the burst). */}
+      <RNImage source={GLOW_TEX} style={[styles.itemRim, { tintColor: '#ffffff' }]} resizeMode="stretch" fadeDuration={0} />
       {art ? <Image source={art} style={styles.itemArt} contentFit="contain" transition={0} onDisplay={onCopyShown} />
         : <View style={[styles.itemFallback, { backgroundColor: color }]}><GameIcon name="gift" size={30} /></View>}
     </Animated.View>
@@ -571,6 +596,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   };
   const [bonusXp, setBonusXp] = useState<number | null>(null);
   const [coinStamp, setCoinStamp] = useState<number | null>(null);
+  const [nextArt, setNextArt] = useState<ReturnType<typeof findImageSource> | null>(null);
+  /** Round 5: the caught find's set page, read from the tap (one light GET) so the badge can show the next goal. */
+  const commonSet = useRef<{ slug: string; items: readonly BookItem[] | null } | null>(null);
   /**
    * Round 4: a plain (React) gate over the badge, on from the server's answer to the done frame. A React commit
    * after the badge has left could flash an old frame of its animated props on Fabric (r4 clip, one frame at
@@ -615,6 +643,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   // worklet of mapWow.catchFrame(clock, plan), so a busy JS thread can no longer stretch or desync the beats.
   // JS only answers the server, plays sounds and haptics (runOnJS from the clock), and finishes at doneAt.
   const cc = hudClock;
+  /** Round 5: every commit of this moment re-sends its styles for a moment (commitHeal): no stale first-render frames. */
+  const heal = useCommitHeal();
   const planSV = useSharedValue<CatchPlan>(catchPlan({ reduced: false }));
   /** 1 while a common's clock drives the badge (the Ride Photo path drives it with the values above). */
   const clockOn = useSharedValue(0);
@@ -659,8 +689,6 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     catchKickY.value = k * kickDirY.value;
   });
   // Channels the shared fx components take as values.
-  const goldAmt = useDerivedValue(() => (clockOn.value ? frame.value.gold : 0));
-  const goldBloomV = useDerivedValue(() => (clockOn.value ? frame.value.bloom : 0));
   const fxT = useDerivedValue(() => (clockOn.value ? frame.value.fx : -1));
   const gatherT = useDerivedValue(() => (clockOn.value && cc.value < planSV.value.burstAt ? frame.value.charge * (1 - miss.value) : 0));
 
@@ -937,12 +965,20 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     cancelAnimation(holdWobble);
     holdWobble.value = 0;
   };
-  /** Tap after the burst: the rest of the clock plays in 220 ms (coins home, badge away, counter rolled). */
+  /**
+   * Tap after the burst (round 5): cut straight to the coin stream. The burst is gone on the next frame (the clock
+   * jumps to the middle of its suck-back), then the rest plays in 380 ms, so the kid still sees the coins pour
+   * into the counter and the find drop into its badge, just fast.
+   */
   const skipToEnd = () => {
     'worklet';
     if (!continued.value || cc.value < planSV.value.burstAt || skipSV.value) return;
     skipSV.value = 1;
-    cc.value = withTiming(endAt.value, { duration: 220, easing: Easing.out(Easing.cubic) });
+    const p = planSV.value;
+    const cut = Math.max(cc.value, p.suckAt + p.suckMs * 0.6);
+    cancelAnimation(cc);
+    cc.value = cut;
+    cc.value = withTiming(endAt.value, { duration: 380, easing: Easing.inOut(Easing.quad) });
   };
 
   /** Sound, haptics and marks on the clock's beats (runOnJS from the UI thread; nothing visual waits on them). */
@@ -1025,7 +1061,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const motion = !latest.current.reducedMotion;
     [badgeIn, reveal, progress, gradeIn, barGlow].forEach(value => { cancelAnimation(value); value.value = 0; });
     badgeKick.value = 1;
-    setSummary(null); setPhoto(null); setCascade(0); setBonusXp(null); setCoinStamp(null);
+    setSummary(null); setPhoto(null); setCascade(0); setBonusXp(null); setCoinStamp(null); setNextArt(null);
     isNewSV.value = 0;
     setShowing(request);
     const start = fromPoint(request);
@@ -1045,6 +1081,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       return;
     }
     itemGone.value = 0;
+    // The set page loads while the find wobbles (the badge's next-goal silhouette); never waited on.
+    const slug = item.set_slug;
+    if (slug && commonSet.current?.slug !== slug) {
+      commonSet.current = { slug, items: null };
+      void (loadSetPage ?? defaultLoadSetPage)(slug).then(items => {
+        if (commonSet.current?.slug === slug) commonSet.current = { slug, items: items ?? null };
+      }).catch(() => undefined);
+    }
     // A common never moves the header or the tab bar (the counter stays put for its coins): the tab bar
     // softens and the map's own controls fade, on the UI thread from this frame.
     dimCatchChrome(true);
@@ -1132,6 +1176,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       inkScale.value = v.inkScale; ringN.value = v.rings; starN.value = v.stars;
       isNewSV.value = next.isNew ? 1 : 0;
       setCoinStamp(!next.isNew && !data.replayed && data.rewards.coins > 0 ? data.rewards.coins : null);
+      // The next goal (same commit as the summary, while the badge is still hidden): the set's next missing find.
+      const cs = commonSet.current;
+      const page = cs && cs.slug === item.set_slug ? cs.items : null;
+      const upNext = nextMissing(page, item.id, next.complete);
+      setNextArt(upNext ? findImageSource({ icon_url: upNext.icon_url, variant_slug: upNext.variant_slug, name: upNext.name }) : null);
       const list: Beat[] = [...ladder,
         { at: plan.hitStopAt + 1, kind: BEAT.hitstop, arg: 0 },
         { at: plan.burstAt, kind: BEAT.burst, arg: 0 }, { at: plan.burstAt + 180, kind: BEAT.success, arg: 0 },
@@ -1410,6 +1459,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const goldSize = Math.round(Math.min(window.width, 440) * 0.8);
   // Every common-catch view is a worklet of the one clock (frame = catchFrame(clock, plan)).
   const itemStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     if (!onUi()) return HIDDEN;
     const f = frame.value;
     const m = miss.value;
@@ -1433,6 +1483,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   });
   // The gather: a gold halo builds under the find while it rises (a floor once the catch starts, so it never blinks).
   const haloStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     if (!onUi()) return HIDDEN;
     const f = frame.value;
     const m = miss.value;
@@ -1447,6 +1498,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     };
   });
   const flashStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     if (!onUi()) return HIDDEN;
     return {
     opacity: clockOn.value ? frame.value.flash * peakFlash.value : 0,
@@ -1454,14 +1506,26 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     };
   });
   // The gold rays suck back into the find with the ink (round 4): full strength, then a quick pull to nothing.
+  // Round 5: the bloom and inked rays (CatchRays) on one wrapper. They swell in with the burst, keep breathing and
+  // turning through the hold (a living hold: never a still frame a stale commit could stick to), then suck back.
   const goldStyle = useAnimatedStyle(() => {
-    const suck = clockOn.value ? frame.value.suck : 0;
-    return { transform: [{ translateX: stageX.value - goldSize / 2 }, { translateY: stageY.value - goldSize / 2 },
-      { scale: inkScale.value * (1 - suck * suck) }] };
+    touchHeal(heal);
+    if (!onUi()) return HIDDEN;
+    const f = frame.value;
+    const on = clockOn.value;
+    const g = on ? f.gold : 0;
+    if (g <= 0) return { opacity: 0, transform: [{ translateX: -999 }, { translateY: -999 }, { scale: 0 }, { rotate: '0deg' }] };
+    const b = cc.value - planSV.value.burstAt;
+    const suck = f.suck;
+    const breathe = 1 + 0.03 * Math.sin(b / 85);
+    return { opacity: Math.min(1, g * 1.1) * (suck < 0.6 ? 1 : 1 - (suck - 0.6) / 0.4),
+      transform: [{ translateX: stageX.value - goldSize / 2 }, { translateY: stageY.value - goldSize / 2 },
+        { scale: inkScale.value * (0.5 + 0.5 * g + 0.12 * f.bloom) * breathe * (1 - suck * suck) }, { rotate: `${inkTurn.value * 0.5 + b * 0.018}deg` }] };
   });
   // Alex's inked gold burst: snaps out past full size on the burst, holds (the screenshot frame), then fades
   // before the badge rises. Every catch turns it to a new angle, so catch ten never looks like catch two.
   const inkStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     if (!onUi()) return HIDDEN;
     const p = clockOn.value ? frame.value.ink : -1;
     if (p < 0) return { opacity: 0, transform: [{ translateX: -999 }, { translateY: -999 }, { scale: 0 }, { rotate: '0deg' }] };
@@ -1474,11 +1538,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     return {
       opacity: suck < 0.7 ? 1 : Math.max(0, 1 - (suck - 0.7) / 0.3),
       transform: [{ translateX: stageX.value - INK_SIZE / 2 }, { translateY: stageY.value - INK_SIZE / 2 },
-        { scale: inkScale.value * (0.35 + 0.85 * (1 - (1 - grow) * (1 - grow)) + 0.08 * p) * pull }, { rotate: `${inkTurn.value + 12 * p - 40 * suck}deg` }],
+        { scale: inkScale.value * 0.78 * (0.35 + 0.85 * (1 - (1 - grow) * (1 - grow)) + 0.08 * p) * (1 + 0.025 * Math.sin(b / 70)) * pull }, { rotate: `${inkTurn.value + 12 * p - 40 * suck}deg` }],
     };
   });
   // A blue water ring splashes out under the find.
   const waterStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     if (!onUi()) return HIDDEN;
     const p = clockOn.value ? frame.value.ink : -1;
     if (p < 0) return { opacity: 0, transform: [{ translateX: -999 }, { translateY: -999 }, { scale: 0 }] };
@@ -1491,6 +1556,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   // onto the find and lands on the held frame (its flash is the impact), then narrows and fades while the
   // burst blooms. The column is static Skia art; only this wrapper moves (scaleY from the top edge).
   const beamStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     if (!onUi()) return HIDDEN;
     const at = beamOn.value && clockOn.value ? beamAt(cc.value, planSV.value) : null;
     if (!at) return { opacity: 0, transform: [{ translateX: -999 }, { scaleX: 1 }, { scaleY: 0 }] };
@@ -1499,6 +1565,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   });
   // Where the beam hits: a flat gold splash ring on the ground (scaleY 0.45), from the held frame.
   const splashStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     if (!onUi()) return HIDDEN;
     const d = beamOn.value && clockOn.value ? cc.value - planSV.value.hitStopAt : -1;
     const u = d / 520;
@@ -1506,12 +1573,13 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     return { opacity: 0.95 * (1 - u), transform: [{ translateX: stageX.value - 60 }, { translateY: stageY.value + 18 - 60 },
       { scaleY: 0.45 }, { scale: 0.3 + 1.9 * (1 - (1 - u) * (1 - u)) }] };
   });
-  const starOrigin = useAnimatedStyle(() => ({ transform: [{ translateX: stageX.value }, { translateY: stageY.value }] }));
+  const starOrigin = useAnimatedStyle(() => { touchHeal(heal); return ({ transform: [{ translateX: stageX.value }, { translateY: stageY.value }] }); });
   // Edge bands in house blue while a common plays: the map steps back a touch, the counter stays bright.
-  const vignetteStyle = useAnimatedStyle(() => ({ opacity: catchDim.value }));
+  const vignetteStyle = useAnimatedStyle(() => { touchHeal(heal); return ({ opacity: catchDim.value, transform: [{ translateX: 0 }] }); });
   // The bar ticks gold only when it really moved (a NEW find); a repeat find never flashes a fill that did not happen.
-  const barGlowStyle = useAnimatedStyle(() => ({ opacity: clockOn.value ? frame.value.barGlow * isNewSV.value : barGlow.value }));
+  const barGlowStyle = useAnimatedStyle(() => { touchHeal(heal); return ({ opacity: clockOn.value ? frame.value.barGlow * isNewSV.value : barGlow.value, transform: [{ translateX: 0 }] }); });
   const gatherOrigin = useAnimatedStyle(() => {
+    touchHeal(heal);
     const f = frame.value;
     const sx = flyFromX.value + (stageX.value - flyFromX.value) * f.glide;
     const sy = flyFromY.value + (stageY.value - flyFromY.value) * f.glide;
@@ -1519,6 +1587,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   });
   const sparkOrigin = starOrigin;
   const badgeStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     if (!onUi()) return HIDDEN;
     if (clockOn.value) {
       // Round 4: a common's badge pops in (opaque in 70 ms, 0.6 to one small overshoot), never ghosting through rays.
@@ -1528,22 +1597,25 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const b = badgeIn.value;
     return { opacity: b, transform: [{ translateY: (1 - b) * 40 }, { scale: 0.92 + 0.08 * b }] };
   });
-  const stickerKick = useAnimatedStyle(() => ({ transform: [{ scale: clockOn.value ? frame.value.kick : badgeKick.value }, { rotate: '-6deg' }] }));
+  const stickerKick = useAnimatedStyle(() => { touchHeal(heal); return ({ transform: [{ scale: clockOn.value ? frame.value.kick : badgeKick.value }, { rotate: '-6deg' }] }); });
   const landRing = useAnimatedStyle(() => {
+    touchHeal(heal);
     const r = clockOn.value ? frame.value.landRing : ringPop.value;
     return { opacity: r <= 0 || r >= 1 ? 0 : 1 - r, transform: [{ scale: 0.6 + 1.2 * Math.max(0, r) }] };
   });
   const barStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     const v = clockOn.value ? barFrom.value + (barTo.value - barFrom.value) * frame.value.bar : progress.value;
     return { transform: [{ scaleX: Math.max(0.001, v) }] };
   });
   const newStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     const r = clockOn.value ? frame.value.newPop : reveal.value;
     return { opacity: Math.min(1, r * 1.4), transform: [{ rotate: '-10deg' }, { scale: r > 0 ? 0.4 + 0.6 * r : 0.4 }] };
   });
-  const rideStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, rideIn.value * 1.5), transform: [{ translateY: (1 - rideIn.value) * 12 }, { scale: 0.7 + 0.3 * rideIn.value }] }));
-  const gradeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, gradeIn.value * 1.5), transform: [{ translateY: (1 - gradeIn.value) * 10 }, { scale: 0.7 + 0.3 * gradeIn.value }] }));
-  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdrop.value }));
+  const rideStyle = useAnimatedStyle(() => { touchHeal(heal); return ({ opacity: Math.min(1, rideIn.value * 1.5), transform: [{ translateY: (1 - rideIn.value) * 12 }, { scale: 0.7 + 0.3 * rideIn.value }] }); });
+  const gradeStyle = useAnimatedStyle(() => { touchHeal(heal); return ({ opacity: Math.min(1, gradeIn.value * 1.5), transform: [{ translateY: (1 - gradeIn.value) * 10 }, { scale: 0.7 + 0.3 * gradeIn.value }] }); });
+  const backdropStyle = useAnimatedStyle(() => { touchHeal(heal); return ({ opacity: backdrop.value, transform: [{ translateX: 0 }] }); });
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -1561,9 +1633,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     'worklet';
     return clockOn.value ? (cc.value >= planSV.value.landAt ? 1 : 0) : (cascadeSV.value >= 2 ? 1 : 0);
   };
-  const countOld = useAnimatedStyle(() => ({ opacity: 1 - countSwap() }));
+  const countOld = useAnimatedStyle(() => { touchHeal(heal); return ({ opacity: 1 - countSwap(), transform: [{ translateX: 0 }] }); });
   // The new count pops as it steps up (one overshoot, SPRING.stamp feel), so the kid sees the number grow.
   const countNew = useAnimatedStyle(() => {
+    touchHeal(heal);
     const on = countSwap();
     const d = clockOn.value ? cc.value - planSV.value.landAt : 999;
     const u = Math.min(1, Math.max(0, d / 320));
@@ -1572,6 +1645,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   });
   // A repeat find's coins stamp onto the badge as it lands (from 1.7, SPRING.stamp's settle).
   const coinStampStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     const d = clockOn.value ? cc.value - planSV.value.landAt : -1;
     if (d < 0) return { opacity: 0, transform: [{ rotate: '-8deg' }, { scale: 1.7 }] };
     const u = Math.min(1, d / 300);
@@ -1580,12 +1654,25 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   });
   // One more to finish the set: the last stretch of the bar breathes gold after the count steps up.
   const oneMoreStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     const d = clockOn.value ? cc.value - planSV.value.tickAt : -1;
-    if (d < 0) return { opacity: 0 };
-    return { opacity: 0.45 + 0.45 * Math.sin(d / 140) };
+    if (d < 0) return { opacity: 0, transform: [{ translateX: 0 }] };
+    return { opacity: 0.45 + 0.45 * Math.sin(d / 140), transform: [{ translateX: 0 }] };
+  });
+  // Round 5: the next goal pops onto the badge's corner, bobs, and its gold ring pulses (only on a common's clock).
+  const nextStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
+    const g = clockOn.value ? nextGoalAt(cc.value, planSV.value) : { scale: 0, bob: 0, ring: -1 };
+    return { opacity: g.scale > 0 ? 1 : 0, transform: [{ translateY: g.bob }, { rotate: '8deg' }, { scale: g.scale }] };
+  });
+  const nextRingStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
+    const r = clockOn.value ? nextGoalAt(cc.value, planSV.value).ring : -1;
+    return { opacity: r < 0 ? 0 : 0.8 * (1 - r), transform: [{ scale: 1 + 0.6 * Math.max(0, r) }] };
   });
   const badgeStyles = useMemo<BadgeStyles>(() => ({ badge: badgeStyle, kick: stickerKick, landRing, bar: barStyle, barGlow: barGlowStyle,
-    newPop: newStyle, grade: gradeStyle, ride: rideStyle, countOld, countNew, coinStamp: coinStampStyle, oneMore: oneMoreStyle }), []); // eslint-disable-line react-hooks/exhaustive-deps
+    newPop: newStyle, grade: gradeStyle, ride: rideStyle, countOld, countNew, coinStamp: coinStampStyle, oneMore: oneMoreStyle,
+    next: nextStyle, nextRing: nextRingStyle }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const fxStyles = useMemo<FxStyles>(() => ({ halo: haloStyle, beam: beamStyle, splash: splashStyle, water: waterStyle, gold: goldStyle, ink: inkStyle,
     gather: gatherOrigin, spark: sparkOrigin, star: starOrigin, flash: flashStyle, item: itemStyle }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const fxValues = useMemo<FxValues>(() => ({ frame, clock: cc, plan: planSV, on: clockOn, beamOn, ringN, starN, sx: stageX, sy: stageY }), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1726,12 +1813,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       </View>}
 
       {item && <CatchFx fx={fxStyles} sv={fxValues} layerHeight={layer.height} art={art} color={color} motionFx={motionFx} sparks={sparks} stars={stars} gatherCount={gatherCount}
-        goldSize={goldSize} goldAmt={goldAmt} goldBloom={goldBloomV} fxT={fxT} gatherT={gatherT} reduced={reducedMotion} onCopyShown={onCopyShown} />}
+        goldSize={goldSize} fxT={fxT} gatherT={gatherT} onCopyShown={onCopyShown} />}
 
       {/* The badge stays mounted (hidden at badgeIn 0), so the first reward never mounts its views mid-cascade */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, !badgeOn && styles.gateOff]}>
       <CatchBadge st={badgeStyles} summary={summary} photo={photo} bonusXp={bonusXp} newRide={newRide} art={art} name={name} color={color}
-        left={badgeLeft} bottom={badgeBottom} coinStamp={coinStamp} />
+        left={badgeLeft} bottom={badgeBottom} coinStamp={coinStamp} nextArt={nextArt} />
       </View>
       {/* The coin stream (always mounted, still until a catch throws its coins). */}
       {layer.width > 0 && <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -1776,6 +1863,12 @@ const styles = StyleSheet.create({
   spark: { position: 'absolute', left: -4, top: -4, width: 8, height: 8, borderRadius: 2 },
   item: { position: 'absolute', left: 0, top: 0, width: FIND_ART_SIZE, height: FIND_ART_SIZE },
   itemArt: { width: FIND_ART_SIZE, height: FIND_ART_SIZE },
+  nextAt: { position: 'absolute', right: -34, top: (BADGE_HEIGHT - 44) / 2, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  nextRing: { position: 'absolute', width: 44, height: 44, borderRadius: 22, borderWidth: 3, borderColor: GOLD_FX.rays },
+  nextDisc: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ffffff', borderWidth: 3, borderColor: GOLD_FX.rays,
+    alignItems: 'center', justifyContent: 'center' },
+  nextArt: { width: 28, height: 28, opacity: 0.88 },
+  itemRim: { position: 'absolute', left: -18, top: -18, width: FIND_ART_SIZE + 36, height: FIND_ART_SIZE + 36, opacity: 0.85 },
   itemFallback: { width: FIND_ART_SIZE, height: FIND_ART_SIZE, borderRadius: FIND_ART_SIZE / 2, alignItems: 'center', justifyContent: 'center' },
   badge: { position: 'absolute', width: BADGE_WIDTH, height: BADGE_HEIGHT, borderRadius: BADGE_HEIGHT / 2,
     flexDirection: 'row', alignItems: 'center', paddingLeft: STICKER_LEFT + STICKER + 8, paddingRight: 16,

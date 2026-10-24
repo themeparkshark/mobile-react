@@ -6,6 +6,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { DURATION, EASE, HUD_BUMP } from '../../ui/motionEasing';
 import { GOLD_FX } from '../../ui/motion';
 import { hudGlow, hudPunch, rollMs } from '../map/alive/mapWow';
+import { touchHeal, useCommitHeal } from '../map/alive/commitHeal';
 import RollingDigits, { type DigitStream } from './RollingDigits';
 import { hudClock, hudStreamId, onHudPulse } from './hudPulse';
 import shortenNumber from '../../helpers/shorten-number';
@@ -159,11 +160,15 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     });
     return () => { off(); if (release.current) clearTimeout(release.current); };
   }, [flyTarget, rollTo, reduced, bump]);
+  // Round 5: the chip re-renders when a stream starts; its icon, glow and "+N" re-send for a moment after (commitHeal).
+  const heal = useCommitHeal();
   const iconStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     const live = streamId.value > 0 && hudStreamId.value === streamId.value && !reduced;
     return { transform: [{ scale: bump.value * (live ? hudPunch(hudClock.value, streamLands.value) : 1) }] };
   });
   const glowStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     const live = streamId.value > 0 && hudStreamId.value === streamId.value && !reduced && streamLands.value.length > 0;
     const g = Math.max(glow.value, live ? hudGlow(hudClock.value, streamLands.value[0]) : 0);
     return { opacity: g, transform: [{ scaleX: 1 + 0.12 * g }] };
@@ -171,6 +176,7 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   // "+N" (round 4): pops in just right of the chip, on the header's blue (never across its white rim), on the
   // frame the first coin lands, holds while the coins arrive, then floats up and fades within 500 ms of the last.
   const plusStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
     const lands = streamLands.value;
     const live = streamId.value > 0 && hudStreamId.value === streamId.value && !reduced && lands.length > 0;
     let d: number, hold: number;
@@ -215,9 +221,13 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
             <RollingDigits text={shortenNumber(shown.value)} previous={shortenNumber(shown.prev)} up={up}
               ms={rollMs(shown.prev, shown.value)} fontSize={COUNT_FONT} textStyle={styles.countText} reduced={reduced} stream={shown.stream ?? null} rollKey={shown.key} />
           </View>
-          <Reanimated.Text allowFontScaling={false} style={[styles.plus, plusStyle]}>{plusText}</Reanimated.Text>
         </View>
       </TouchableOpacity>
+      {/* "+N" hangs off a zero-width anchor laid out right after the pill, so it always starts past the pill's
+          right rim (round 4's left:'100%' resolved inside the pill and drew over the digits: "4310"). */}
+      <View style={styles.plusAnchor} pointerEvents="none">
+        <Reanimated.Text allowFontScaling={false} numberOfLines={1} style={[styles.plus, plusStyle]}>{plusText}</Reanimated.Text>
+      </View>
       
       {/* Tooltip popup */}
       <Animated.View 
@@ -249,7 +259,10 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
+  plusAnchor: { width: 0, height: 30, overflow: 'visible' },
   // Every balance wears the same pill: icon riding the left edge, number
   // centered in a navy capsule, so the bar reads as one tidy set.
   currencyRow: {
@@ -274,7 +287,7 @@ const styles = StyleSheet.create({
   gainGlow: { position: 'absolute', left: -14, right: -14, top: -16, bottom: -16 },
   glowFill: { width: '100%', height: '100%' },
   // White with a navy outline (four hard shadows read as an outline at this size), 20 pt: readable at a glance.
-  plus: { position: 'absolute', left: '100%', marginLeft: 6, top: 1, fontFamily: 'Shark', fontSize: 20, color: '#ffffff',
+  plus: { position: 'absolute', left: 5, top: 1, width: 72, fontFamily: 'Shark', fontSize: 20, color: '#ffffff',
     textShadowColor: '#05346e', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
   countText: {
     textAlign: 'center',
