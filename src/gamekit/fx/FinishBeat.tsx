@@ -73,6 +73,8 @@ function sparkleStar() {
   return p;
 }
 
+/** Dev capture only: how long a capture hold lasts (EXPO_PUBLIC_CAPTURE_HOLD_FOR_MS, default 6 s). */
+const CAPTURE_HOLD_FOR = __DEV__ ? Number(process.env.EXPO_PUBLIC_CAPTURE_HOLD_FOR_MS || 6000) : 6000;
 const HOLD = HOLD_MS > 0 && HOLD_MS < FINISH_BEAT_MS;
 
 /** Start the beat's clock (worklet: runs on the trigger frame, or from JS through the shared value). */
@@ -82,7 +84,7 @@ function runClock(clock: SharedValue<number>) {
   clock.value = 0;
   const lin = { easing: Easing.linear, reduceMotion: ReduceMotion.Never };
   clock.value = HOLD
-    ? withSequence(withTiming(HOLD_MS, { duration: HOLD_MS, ...lin }), withTiming(HOLD_MS + 0.01, { duration: 6000, ...lin }),
+    ? withSequence(withTiming(HOLD_MS, { duration: HOLD_MS, ...lin }), withTiming(HOLD_MS + 0.01, { duration: CAPTURE_HOLD_FOR, ...lin }),
       withTiming(FINISH_BEAT_MS, { duration: FINISH_BEAT_MS - HOLD_MS, ...lin }))
     : withTiming(FINISH_BEAT_MS, { duration: FINISH_BEAT_MS, ...lin });
 }
@@ -92,7 +94,7 @@ export const FinishBeat = React.memo(function FinishBeat({
 }: FinishBeatProps) {
   const [live, setLive] = useState(false);
   const clock = useSharedValue(-1);
-  const liveFor = FINISH_BEAT_MS + 40 + (HOLD ? 6000 : 0);
+  const liveFor = FINISH_BEAT_MS + 40 + (HOLD ? CAPTURE_HOLD_FOR : 0);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const onFireRef = React.useRef(onFire);
   onFireRef.current = onFire;

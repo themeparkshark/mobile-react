@@ -395,7 +395,8 @@ function launchHat(an: HoleAnim, L: BoardLayout, i: number, seed: number, ox?: n
 export const CURTAIN_STEP_MS = 45;
 export const CURTAIN_RISE_MS = 150;
 /** The bow ends here (ms after the end frame): the sharks duck back, so the next card owns a calm board. */
-export const CURTAIN_BOW_MS = 1250;
+export const CURTAIN_BOW_MS = __DEV__ && process.env.EXPO_PUBLIC_FINISH_HOLD_MS
+  ? Number(process.env.EXPO_PUBLIC_CAPTURE_HOLD_FOR_MS || 6000) : 1250;
 export const CURTAIN_DUCK_MS = 160;
 /** Reading order from the centre out, so the wave starts where the eye already is. */
 export const CURTAIN_ORDER = [4, 1, 3, 5, 7, 0, 2, 6, 8];
