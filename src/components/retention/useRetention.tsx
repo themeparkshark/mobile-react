@@ -129,7 +129,23 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   useEffect(() => {
     // An all-off answer is checked again on the next focus (a read that raced sign-in, or a flag just turned on).
     if (!o.enabled || (flags && (flags.dailyThree || flags.levelChests))) return;
-    void loadRetentionFlags(undefined, player?.id ?? '').then(f => { if (mounted.current && f && !sameJson(f, flags)) setFlags(f); });
+    let live = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // A failed or all-off read (slow network at launch, a read that raced sign-in) tries again on its own while the map
+    // is up: 15 s, then 30 s, then each minute, so Daily 3 never stays hidden for a whole session.
+    let tries = 0;
+    const attempt = () => {
+      void loadRetentionFlags(undefined, player?.id ?? '', Date.now()).then(f => {
+        if (!live || !mounted.current) return;
+        if (f && !sameJson(f, flags)) setFlags(f);
+        if (!f || (!f.dailyThree && !f.levelChests)) {
+          tries += 1;
+          timer = setTimeout(attempt, tries === 1 ? 15_000 : tries === 2 ? 30_000 : 60_000);
+        }
+      });
+    };
+    if (player?.id) attempt();
+    return () => { live = false; if (timer) clearTimeout(timer); };
   }, [o.enabled, o.mapFocused, o.refreshKey, flags, player?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Warm the art once the features are on, so the first reveal never pops in.

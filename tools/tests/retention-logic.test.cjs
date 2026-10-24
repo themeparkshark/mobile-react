@@ -122,6 +122,20 @@ test('retention flags: an off answer read before sign-in never sticks to the pla
   assert.equal((await F.loadRetentionFlags(on, 35, 61000)).dailyThree, true);
 });
 
+test('retention flags: a signed-out read still in flight never answers for the signed-in player', async () => {
+  const F = load('src/services/retention/flags.ts');
+  let release;
+  const slowOff = () => new Promise(r => { release = () => r({ flags: {} }); });
+  const on = async () => ({ flags: { daily_three: true, level_chests: true } });
+  const first = F.loadRetentionFlags(slowOff, '', 1000);
+  const mine = await F.loadRetentionFlags(on, 35, 1100);
+  assert.equal(mine.dailyThree, true, 'the player gets their own read, not the signed-out one');
+  release();
+  assert.equal((await first).dailyThree, false);
+  // The late signed-out answer never overwrites the player's cached flags.
+  assert.equal((await F.loadRetentionFlags(async () => ({ flags: {} }), 35, 1200)).dailyThree, true);
+});
+
 test('weekly line is honest about what is still reachable this week', () => {
   const days = states => states.map((state, i) => ({ date: `2026-10-${12 + i}`, state }));
   const wk = (over) => state({ week: { ...state().week, ...over } });
