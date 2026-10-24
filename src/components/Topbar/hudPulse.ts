@@ -4,7 +4,8 @@
  * number rolls exactly when the coin arrives (Monopoly GO: the counter waits for the coins). A balance
  * that goes up with nothing flying in rolls at once. No React, no timers per frame: a tiny listener set.
  */
-type Listener = (event: { readonly kind: 'hold'; readonly untilMs: number } | { readonly kind: 'land'; readonly gain: number | null }) => void;
+type Listener = (event: { readonly kind: 'hold'; readonly untilMs: number } | { readonly kind: 'land'; readonly gain: number | null }
+  | { readonly kind: 'punch'; readonly last: boolean }) => void;
 
 const listeners = new Map<string, Set<Listener>>();
 
@@ -24,4 +25,12 @@ export function holdHud(target: string, ms: number): void {
 /** The flight landed: bump the chip and roll to the new balance (`gain` shows as "+N" when known). */
 export function pulseHud(target: string, gain: number | null = null): void {
   listeners.get(target)?.forEach(l => l({ kind: 'land', gain }));
+}
+
+/**
+ * One more coin of a stream landed (after the first, which called pulseHud): the icon punches a little,
+ * and the last coin of the stream punches full size. The number is already rolling.
+ */
+export function punchHud(target: string, last: boolean): void {
+  listeners.get(target)?.forEach(l => l({ kind: 'punch', last }));
 }

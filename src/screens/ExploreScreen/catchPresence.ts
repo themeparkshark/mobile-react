@@ -24,6 +24,24 @@ export function showCatchChrome(on: boolean): void {
   catchShown.value = withTiming(on ? 1 : 0, { duration: on ? 220 : 180, easing: Easing.out(Easing.cubic) });
 }
 
+/**
+ * A common catch (the tap-to-catch on the map) never moves the header or the tab bar (Dustin's rule):
+ * the counter stays where the coins land. `catchDim` softens the tab bar and fades the map's own
+ * controls instead, on the UI thread from the tap frame.
+ */
+export const catchDim = makeMutable(0);
+let dimmed = false;
+
+export function dimCatchChrome(on: boolean): void {
+  if (dimmed === on) return;
+  dimmed = on;
+  catchDim.value = withTiming(on ? 1 : 0, { duration: on ? 160 : 200, easing: Easing.out(Easing.cubic) });
+}
+
+export function isCatchDimmed(): boolean {
+  return dimmed;
+}
+
 export function setCatchOpen(value: boolean): void {
   if (open === value) return;
   open = value;

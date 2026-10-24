@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { ReactNode, useContext, useEffect } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
-import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { catchDim, catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 import * as RootNavigation from '../RootNavigation';
 import { NotificationContext } from '../context/NotificationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
@@ -41,7 +41,8 @@ export default function Wrapper({
   const { checkPermission, hasPermission } = usePermissions();
   const { notificationCount } = useContext(NotificationContext);
   // A catch moment owns the whole screen: the tab bar slides away on the UI thread (no re-render).
-  const barSlide = useAnimatedStyle(() => ({ transform: [{ translateY: 160 * catchShown.value }] }));
+  // A common catch keeps the tab bar in place and only softens it (catchDim): the header and footer never move for it.
+  const barSlide = useAnimatedStyle(() => ({ opacity: 1 - 0.4 * catchDim.value, transform: [{ translateY: 160 * catchShown.value }] }));
 
   const items = [
     {

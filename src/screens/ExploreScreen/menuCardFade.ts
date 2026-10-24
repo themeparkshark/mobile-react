@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import * as QuickMenu from '../../components/QuickAccessMenu';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { catchShown } from './catchPresence';
+import { catchDim, catchShown } from './catchPresence';
 
 const NEVER_OPEN = () => false;
 /** The quick menu's open state (QuickAccessMenu.useQuickMenuOpen, from the menu branch), when present. */
@@ -20,7 +20,7 @@ export function useMenuCardFade() {
   useEffect(() => {
     shown.value = withTiming(menuOpen ? 0 : 1, { duration: reduced ? 0 : 150 });
   }, [menuOpen, reduced, shown]);
-  const style = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - catchShown.value * 1.6) * shown.value }));
+  const style = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value, catchDim.value) * 1.6) * shown.value }));
   const pointerEvents: 'none' | 'box-none' = menuOpen ? 'none' : 'box-none';
   return { style, pointerEvents, menuOpen };
 }

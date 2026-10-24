@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
-import Reanimated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { DURATION, EASE, HUD_BUMP } from '../../ui/motionEasing';
 import { GOLD_FX } from '../../ui/motion';
@@ -22,6 +22,7 @@ interface CurrencyProps {
 }
 
 const FALLBACK_ICON = require('../../../assets/images/coingold.png');
+const GLOW_TEX = require('../../../assets/images/map/fx/glow.png');
 const COUNT_FONT = 19;
 /** The icon's centre from the chip container's left edge (currencyRow marginLeft 14, icon left -18, 36 wide). */
 const ICON_CENTER_X = 14 - 18 + 18;
@@ -90,7 +91,7 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     glow.value = withSequence(withTiming(0.5, { duration: 160, easing: EASE.out }), withTiming(0, { duration: DURATION.bloom - 160, easing: EASE.in }));
     setPlusText(`+${countText(gain)}`);
     plus.value = 0;
-    plus.value = withTiming(1, { duration: 600, easing: EASE.out });
+    plus.value = withTiming(1, { duration: 1100, easing: Easing.linear });
   }, [reduced, bump, glow, plus]);
   const rollTo = useCallback((next: number, landed: boolean) => {
     const from = shownRef.current;
@@ -118,6 +119,13 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     if (!flyTarget) return undefined;
     const off = onHudPulse(flyTarget, event => {
       if (event.kind === 'hold') { holdUntil.current = Math.max(holdUntil.current, event.untilMs); return; }
+      if (event.kind === 'punch') {
+        // A stream's later coins: a small punch each, the full bump on the last one (the roll is already going).
+        if (reduced) return;
+        const peak = event.last ? HUD_BUMP.peak : 1 + (HUD_BUMP.peak - 1) * 0.5;
+        bump.value = withSequence(withTiming(peak, { duration: 60, easing: EASE.out }), withSpring(1, HUD_BUMP.spring));
+        return;
+      }
       holdUntil.current = 0;
       if (release.current) { clearTimeout(release.current); release.current = null; }
       if (pending.current != null) { const v = pending.current; pending.current = null; rollTo(v, true); return; }
@@ -128,10 +136,13 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   }, [flyTarget, rollTo, reduced, bump]);
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scaleX: 1 + 0.12 * glow.value }] }));
-  const plusStyle = useAnimatedStyle(() => ({
-    opacity: plus.value <= 0 || plus.value >= 1 ? 0 : plus.value < 0.15 ? plus.value / 0.15 : 1 - (plus.value - 0.15) / 0.85,
-    transform: [{ translateY: -20 * plus.value }, { scale: 0.8 + 0.25 * Math.min(1, plus.value * 4) }],
-  }));
+  // "+N" pops in under the chip, rises into place, holds about 400 ms so it can be read, then fades.
+  const plusStyle = useAnimatedStyle(() => {
+    const p = plus.value;
+    const a = p <= 0 || p >= 1 ? 0 : p < 0.12 ? p / 0.12 : p < 0.7 ? 1 : 1 - (p - 0.7) / 0.3;
+    return { opacity: a, transform: [{ translateY: 12 * (1 - Math.min(1, p / 0.25)) - 6 * Math.max(0, p - 0.7) / 0.3 },
+      { scale: p < 0.12 ? 0.6 + 0.6 * (p / 0.12) : p < 0.3 ? 1.2 - 0.2 * ((p - 0.12) / 0.18) : 1 }] };
+  });
   const up = shown.value >= shown.prev;
 
   const { explain, glossary } = useHelp();
@@ -148,8 +159,10 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
       <TouchableOpacity onPress={handlePress} activeOpacity={0.7} accessibilityRole="button"
         accessibilityLabel={`${label}: ${count.toLocaleString()}`} accessibilityHint={term ? 'Tells you what this is and how to get more' : undefined}>
         <View style={styles.currencyRow}>
-          {/* The soft gold underglow on a gain (code-drawn, no new art). */}
-          <Reanimated.View pointerEvents="none" style={[styles.gainGlow, glowStyle]} />
+          {/* The soft gold underglow on a gain: the map's glow texture tinted gold, opacity only (no live shadow pass). */}
+          <Reanimated.View pointerEvents="none" style={[styles.gainGlow, glowStyle]}>
+            <Image source={GLOW_TEX} tintColor={GOLD_FX.glow} style={styles.glowFill} contentFit="fill" transition={0} />
+          </Reanimated.View>
           <Reanimated.View style={[styles.iconWrap, iconStyle]}>
             <Image
               source={typeof image === 'number' ? image : image ? { uri: image } : FALLBACK_ICON}
@@ -218,10 +231,11 @@ const styles = StyleSheet.create({
   },
   iconWrap: { position: 'absolute', left: -18, top: -5 },
   countBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  gainGlow: { position: 'absolute', left: 6, right: 6, top: -4, bottom: -4, borderRadius: 18,
-    backgroundColor: GOLD_FX.glow, shadowColor: GOLD_FX.glow, shadowOpacity: 0.9, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
-  plus: { position: 'absolute', right: 2, top: 22, fontFamily: 'Shark', fontSize: 16, color: GOLD_FX.raysSoft,
-    textShadowColor: 'rgba(5,52,110,0.9)', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
+  gainGlow: { position: 'absolute', left: -14, right: -14, top: -16, bottom: -16 },
+  glowFill: { width: '100%', height: '100%' },
+  // White with a navy outline (four hard shadows read as an outline at this size), 20 pt: readable at a glance.
+  plus: { position: 'absolute', right: -4, top: 30, fontFamily: 'Shark', fontSize: 20, color: '#ffffff',
+    textShadowColor: '#05346e', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
   countText: {
     textAlign: 'center',
     fontSize: COUNT_FONT,

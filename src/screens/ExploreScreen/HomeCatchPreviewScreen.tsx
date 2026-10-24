@@ -27,11 +27,12 @@ import HomeHudChips from './HomeHudChips';
 import { rideSpec, GRADE_BONUS_XP, setRidePhotoServerEnabled, type PhotoGrade } from './ridePhoto';
 import { preloadRidePhoto, useRideArt } from './ridePhoto/rideAssets';
 import { RIDES, buildStage, sceneVariant } from './ridePhoto/rides';
-import { catchShown, useCatchOpen } from './catchPresence';
+import { catchDim, catchShown, useCatchOpen } from './catchPresence';
 import type { RideKind, Sky } from './ridePhoto/rides';
 import { resetRideMemoryForPreview } from './ridePhoto/rides/rideMemory';
 import { catchTraceBuffer } from './ridePhoto/catchAudio';
 import * as FileSystem from 'expo-file-system';
+import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 
 /**
  * Development-only (EXPO_PUBLIC_HOME_CATCH_PREVIEW=1): the v3 home map with
@@ -190,7 +191,9 @@ function HomeCatchPreview() {
   const { currencies } = useContext(CurrencyContext);
   const { player } = useContext(AuthContext);
   const [coins, setCoins] = useState(() => player?.coins ?? 350);
-  const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - catchShown.value * 1.6) }));
+  const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value, catchDim.value) * 1.6) }));
+  // The dev frame graph on every capture (UI fps, p5): the wow clips carry their own frame-rate proof.
+  const perf = usePerfProbe(!STILL);
 
   const items: PrepItemType[] = useMemo(() => FIXTURES.map((fixture, index) => ({
     id: 900 + index, pivot_id: 9000 + index, name: fixture.name, variant_slug: null, description: null,
@@ -423,7 +426,12 @@ function HomeCatchPreview() {
         onDone={done => {
           const pivot = request?.pivotId;
           setRequest(null);
-          if (done && pivot != null && !autoplay) setCaught(current => new Set([...current, pivot]));
+          if (done && pivot != null && !autoplay) {
+            setCaught(current => new Set([...current, pivot]));
+            // Commons come back 1.6 s later (with the spawn pop), so the first, second and tenth catch can be recorded in one run.
+            const fixture = items.find(entry => entry.pivot_id === pivot);
+            if (fixture && fixture.rarity <= 1) setTimeout(() => setCaught(current => { const next = new Set(current); next.delete(pivot); return next; }), 1600);
+          }
           // Autoplay: after the Rare, ride the Epic (dark ride, 2 photos). A RIDE AGAIN escape waits for its next ride.
           if (autoplay && SCRIPT[stepRef.current]?.again && !rodeAgain.current) return;
           if (autoplay && rodeAgain.current && !done) return;
@@ -431,6 +439,7 @@ function HomeCatchPreview() {
           catches.current += 1;
           if (autoplay && catches.current < SCRIPT.length) setTimeout(() => runStep(catches.current), 2600);
         }} />
+      {!STILL && <PerfOverlay probe={perf} style={styles.perf} />}
     </View>
     </View></Wrapper>
   );
@@ -456,6 +465,7 @@ const nearestInRange = FIXTURES.map((f, i) => ({ i, d: f.inRange ? Math.hypot(f.
 
 const styles = StyleSheet.create({
   hidden: { opacity: 0 },
+  perf: { top: 64, right: 6 },
   root: { flex: 1, backgroundColor: '#0768b9' },
   content: { flex: 1, marginTop: -8 },
   travel: { color: '#fff', fontFamily: 'Shark', fontSize: 16, letterSpacing: 2, textAlign: 'center' },

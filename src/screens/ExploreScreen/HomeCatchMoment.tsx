@@ -1,6 +1,7 @@
 import { forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AccessibilityInfo, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Canvas, Group, Image as SkImageNode, ImageFormat, Picture, Rect, RadialGradient, vec, type SkImage } from '@shopify/react-native-skia';
@@ -27,10 +28,10 @@ import { BRAND, GameIcon } from '../../ui';
 import { GoldBurst } from '../../ui/GoldBurst';
 import { DURATION, EASE, SPRING, flashPeak, momentParticles } from '../../ui/motionEasing';
 import { GOLD_FX, PARTICLES } from '../../ui/motion';
-import { arcPoint, catchHaptics, catchPlan, type CatchPlan } from '../../components/map/alive/mapWow';
+import { arcPoint, catchHaptics, catchPlan, coinStreamAt, coinStreamPlan, COIN_STREAM, type CatchPlan } from '../../components/map/alive/mapWow';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { usePowerBudget } from '../../power';
-import { holdHud } from '../../components/Topbar/hudPulse';
+import { holdHud, pulseHud, punchHud } from '../../components/Topbar/hudPulse';
 import { findDisplayName } from './homeFindCopy';
 import { setHomeHuntRankLine } from './homeHuntRankStore';
 import { findImageSource, FIND_ART_SIZE } from './PrepItem';
@@ -41,7 +42,7 @@ import { Sunburst } from '../../gamekit/fx/ShaderFx';
 import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, setRidePhotoPlayer, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
-import { setCatchOpen, showCatchChrome } from './catchPresence';
+import { catchDim, dimCatchChrome, setCatchOpen, showCatchChrome } from './catchPresence';
 import reportRideOff from '../../api/endpoints/me/prep-items/ride-off';
 import { READY_RIDES, RIDES, rideStamps, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
 import { loadRideMemory, recordRide, ridesSnapped } from './ridePhoto/rides/rideMemory';
@@ -110,6 +111,13 @@ const STICKER = 64;
 const STICKER_LEFT = 8;
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+/**
+ * Common catches this session. The first is the full show; later ones play the shorter repeat (mapWow
+ * catchPlan repeat), so the tenth catch is still quick and fun, never a long hold.
+ */
+let sessionCatches = 0;
+/** Development previews: the next catch plays as the first of a session again. */
+export function resetCatchSessionForPreview(): void { sessionCatches = 0; }
 /** The common catch's flight home and arc (mapWow catchPlan). */
 const CATCH_FLY_MS = 600;
 const CATCH_ARC_PT = 80;
@@ -151,6 +159,17 @@ function Spark({ index, count, pop, color }: { index: number; count: number; pop
 }
 
 const MAP_SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
+/** House art (already in the app): Alex's inked gold burst, the blue water ring and the gold star. */
+const INK_BURST = require('../../../assets/fx/burst-gold.webp');
+const WATER_RING = require('../../../assets/fx/waterring.webp');
+const MINI_STAR = require('../../../assets/fx/mini-star.webp');
+const COIN_FALLBACK = require('../../../assets/images/coingold.png');
+const STREAM_COIN = 30;
+const INK_SIZE = 210;
+const WATER_W = 150;
+const WATER_H = 85;
+const VIGNETTE_TOP = ['rgba(7,104,185,0.28)', 'rgba(7,104,185,0)'] as const;
+const VIGNETTE_BOTTOM = ['rgba(7,104,185,0)', 'rgba(7,104,185,0.3)'] as const;
 const GLOW_TEX = require('../../../assets/images/map/fx/glow.png');
 const SPARK_TINTS = [GOLD_FX.rays, BRAND.white, GOLD_FX.glow, '#4fb3ff'];
 
@@ -188,6 +207,51 @@ function GatherSparkle({ index, count, charge }: { index: number; count: number;
   });
   return <Animated.View style={[styles.gatherSparkle, style]}>
     <Image source={MAP_SPARKLE} tintColor={GOLD_FX.raysSoft} style={styles.fxFill} contentFit="contain" transition={0} />
+  </Animated.View>;
+}
+
+/** A star flung from the burst (bigger than a sparkle, so it reads even at 10 frames a second). */
+function BurstStar({ index, t }: { index: number; t: SharedValue<number> }) {
+  const angle = -Math.PI / 2 + (index - 1.5) * 0.9;
+  const reach = index % 2 ? 96 : 120;
+  const style = useAnimatedStyle(() => {
+    const p = t.value;
+    if (p <= 0 || p >= 1) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }, { rotate: '0deg' }] };
+    const out = 1 - (1 - p) * (1 - p) * (1 - p);
+    return {
+      opacity: p < 0.6 ? 1 : 1 - (p - 0.6) / 0.4,
+      transform: [{ translateX: Math.cos(angle) * reach * out }, { translateY: Math.sin(angle) * reach * out + 90 * p * p },
+        { scale: (p < 0.12 ? p / 0.12 : 1) * (1.15 - 0.45 * p) }, { rotate: `${(index % 2 ? -1 : 1) * p * 220}deg` }],
+    };
+  });
+  return <Animated.View pointerEvents="none" style={[styles.burstStar, style]}>
+    <Image source={MINI_STAR} style={styles.fxFill} contentFit="contain" transition={0} />
+  </Animated.View>;
+}
+
+/**
+ * One coin of the stream (Monopoly GO): out of the find on the burst, then a throw into the counter.
+ * Always mounted and still (opacity 0) until a stream runs, so no catch mounts views on its burst frame.
+ */
+function StreamCoin({ index, t, count, geo, source }: {
+  index: number; t: SharedValue<number>; count: SharedValue<number>;
+  geo: SharedValue<{ fx: number; fy: number; tx: number; ty: number }>; source: string | number;
+}) {
+  const style = useAnimatedStyle(() => {
+    const n = count.value;
+    if (index >= n || t.value <= 0) return { opacity: 0, transform: [{ translateX: -100 }, { translateY: -100 }, { scale: 0 }, { scaleX: 1 }] };
+    const g = geo.value;
+    const at = coinStreamAt(t.value, index, n, { x: g.fx, y: g.fy }, { x: g.tx, y: g.ty });
+    if (!at) return { opacity: 0, transform: [{ translateX: -100 }, { translateY: -100 }, { scale: 0 }, { scaleX: 1 }] };
+    return {
+      opacity: 1,
+      transform: [{ translateX: at.x - STREAM_COIN / 2 }, { translateY: at.y - STREAM_COIN / 2 }, { scale: at.scale },
+        // The coin's edge turns as it flies (never thinner than a third, so it always reads as a coin).
+        { scaleX: Math.max(0.35, Math.abs(Math.cos(at.spin * Math.PI))) }],
+    };
+  });
+  return <Animated.View pointerEvents="none" style={[styles.streamCoin, style]}>
+    <Image source={typeof source === 'number' ? source : { uri: source }} placeholder={COIN_FALLBACK} style={styles.fxFill} contentFit="contain" transition={0} />
   </Animated.View>;
 }
 
@@ -250,7 +314,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   // Uncommon's tighter lamp is earned per player, never per device.
   useEffect(() => { setRidePhotoPlayer(player?.id ?? null); }, [player?.id]);
   const { currencies } = useContext(CurrencyContext);
-  const { triggerFly } = useCurrencyFly();
+  const { triggerFly, getTarget } = useCurrencyFly();
   const layerRef = useRef<View>(null);
   const stage = useRef<RideStageHandle>(null);
   const [layer, setLayer] = useState({ width: 0, height: 0 });
@@ -311,13 +375,38 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const flyFromX = useSharedValue(0);
   const flyFromY = useSharedValue(0);
   const rideIn = useSharedValue(0);
+  // Round 2: the halo's floor once a catch starts (no blink between the squash and the gather), the coin
+  // stream's clock and geometry, the inked burst and water ring, and the set bar's gold tick.
+  const started = useSharedValue(0);
+  const coinT = useSharedValue(0);
+  const coinN = useSharedValue(0);
+  const coinGeo = useSharedValue({ fx: 0, fy: 0, tx: 0, ty: 0 });
+  const ink = useSharedValue(0);
+  const barGlow = useSharedValue(0);
+  /** The running common catch's clock, so land() and arrive() keep its beats (and a tap can skip it). */
+  const clockRef = useRef<{ t0: number; plan: CatchPlan; skippable: boolean; streamed: boolean } | null>(null);
+  const skipped = useRef(false);
+  const skipWake = useRef<(() => void) | null>(null);
+  /** A wait a skip can cut short (only after the burst: the server has answered by then). */
+  const pause = (ms: number) => new Promise<void>(resolve => {
+    if (skipped.current || ms <= 0) { resolve(); return; }
+    const timer = setTimeout(() => { skipWake.current = null; resolve(); }, ms);
+    skipWake.current = () => { clearTimeout(timer); skipWake.current = null; resolve(); };
+  });
+  const pauseUntil = (at: number) => { const c = clockRef.current; return pause(c ? c.t0 + at - Date.now() : 0); };
 
-  const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request, onRideAgain });
-  latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request, onRideAgain };
+  const latest = useRef({ getFix, currencies, triggerFly, getTarget, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request, onRideAgain });
+  latest.current = { getFix, currencies, triggerFly, getTarget, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request, onRideAgain };
 
   const badgeLeft = (layer.width - BADGE_WIDTH) / 2;
   const target = { x: badgeLeft + STICKER_LEFT + STICKER / 2, y: layer.height - badgeBottom - BADGE_HEIGHT / 2 - 8 };
   const fromPoint = (req: CatchRequest | null) => req?.from ?? { x: layer.width / 2, y: layer.height * 0.45 };
+  // land() and arrive() are stable callbacks: they read the badge spot and the layer offset through refs
+  // (round 1 read a stale target from the first render, so the coins set off from the top-left corner).
+  const targetRef = useRef(target);
+  targetRef.current = target;
+  const offsetRef = useRef(offset);
+  offsetRef.current = offset;
 
   // The map steps back: a cached blurred still, a navy tint and a vignette, never a live blur or a per-open snapshot.
   const showBackdrop = useCallback((on: boolean) => {
@@ -375,8 +464,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // Via the print, the map and player updates wait out the close and the flight (their commits never land in
     // the hand-off's frames); they still run if the catch is closed early.
     // The counters wait for their coins: the new balance rolls in when the first coin lands (hudPulse).
-    if (!data.replayed && data.rewards.coins > 0) holdHud('coins', 2600);
-    if (!data.replayed && data.rewards.tickets > 0) holdHud('tickets', 2600);
+    // A common's coins already streamed out of the burst (they hold the counter themselves).
+    const streamed = !viaPrint && !!clockRef.current?.streamed;
+    if (!streamed && !data.replayed && data.rewards.coins > 0) holdHud('coins', 2600);
+    if (!streamed && !data.replayed && data.rewards.tickets > 0) holdHud('tickets', 2600);
     const settle = () => {
       if (data.hunt_week?.rank_line) setHomeHuntRankLine(data.hunt_week.rank_line);
       latest.current.onCollected(data);
@@ -389,8 +480,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (!viaPrint) badgeIn.value = pad;
     if (!viaPrint) {
       if (!data.replayed) catchSound('whoosh', { volume: 0.6 });
-      fly.value = withTiming(1, { duration: motion ? CATCH_FLY_MS : 1, easing: EASE.inOut });
-      await wait(motion ? CATCH_FLY_MS : 60);
+      const flyMs = clockRef.current?.plan.flyMs ?? CATCH_FLY_MS;
+      fly.value = withTiming(1, { duration: motion && !skipped.current ? flyMs : 120, easing: EASE.inOut });
+      await pause(motion ? flyMs : 60);
+      if (skipped.current) await wait(120);
       if (aliveRef.current !== token) return;
       itemGone.value = withTiming(1, { duration: 80 });
       await arrive(next, data, token);
@@ -415,16 +508,19 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const beats: (() => void)[] = [];
     // After the full reveal the badge is only the hand-off: the progress tick and the coins flying home.
     const brief = revealedRef.current;
+    const clock = clockRef.current;
+    const plan = !brief && clock ? clock.plan : null;
+    const barMs = plan ? plan.barMs : 420;
     if (next.isNew && !brief) beats.push(() => { reveal.value = motion ? withSpring(1, { damping: 9, stiffness: 260 }) : 1; });
-    beats.push(() => { progress.value = withTiming(next.progressTo, { duration: motion ? 420 : 1, easing: Easing.out(Easing.cubic) }); });
+    beats.push(() => { progress.value = withTiming(next.progressTo, { duration: motion && !skipped.current ? barMs : 1, easing: Easing.out(Easing.cubic) }); });
     if (!brief) beats.push(() => { gradeIn.value = motion ? withSpring(1, { damping: 10, stiffness: 260 }) : 1; });
     if (newRideRef.current) beats.push(() => { rideIn.value = motion ? withSpring(1, { damping: 10, stiffness: 240 }) : 1; });
-    if (!data.replayed) beats.push(() => {
+    if (!data.replayed && !clock?.streamed) beats.push(() => {
       // The header comes back before the coins set off, so the kid sees them land in the counter (it bumps and rolls).
       if (data.rewards.coins > 0 || data.rewards.tickets > 0) showCatchChrome(false);
       layerRef.current?.measureInWindow((x, y) => {
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-        const startX = x + target.x, startY = y + target.y;
+        const startX = x + targetRef.current.x, startY = y + targetRef.current.y;
         const { currencies: list, triggerFly: flyTo } = latest.current;
         if (data.rewards.coins > 0 && list[0]?.icon_url) {
           flyTo({ imageUrl: list[0].icon_url, amount: Math.min(data.rewards.coins, 8), startX, startY, targetPosition: 'coins' });
@@ -435,20 +531,37 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       });
       catchHaptic('tapLight', 1);
     });
+    // A common keeps its plan's pace (the repeat cascades twice as fast); the ride reveal keeps 120 ms.
+    const step = plan?.repeat ? 60 : 120;
     for (let i = 0; i < beats.length; i++) {
-      await wait(120);
+      await pause(step);
       if (aliveRef.current !== token) return;
       setCascade(i + 1);
       beats[i]();
       catchSound('tick', { pitch: 2 + i * 2, volume: 0.7 });
     }
     AccessibilityInfo.announceForAccessibility(`Caught ${next.setName ? `for ${next.setName}` : ''}${next.isNew ? ', new' : ''}`);
-    await wait(brief ? (newRideRef.current ? 1100 : 650) : 1300);
+    if (plan) {
+      // The set bar fills, then ticks: a gold flash along the bar and a small buzz (the close goal, said with no words).
+      await pause(barMs);
+      if (aliveRef.current !== token) return;
+      if (!skipped.current) {
+        catchHaptic('tickSelection', 2);
+        catchSound('tick', { pitch: 14, volume: 0.6 });
+        barGlow.value = motion ? withSequence(withTiming(1, { duration: 90, easing: EASE.out }), withTiming(0, { duration: 420, easing: EASE.in })) : 0;
+        badgeKick.value = motion ? withSequence(withTiming(1.1, { duration: 80 }), withSpring(1, SPRING.stamp)) : 1;
+      }
+      // Then the badge leaves on the plan's clock: settled by 2.6 s, the repeat by about 1.4 s.
+      await pauseUntil(plan.exitAt);
+    } else {
+      await wait(brief ? (newRideRef.current ? 1100 : 650) : 1300);
+    }
     if (aliveRef.current !== token) return;
-    badgeIn.value = withTiming(0, { duration: CATCH_TIMING.exit });
-    await wait(CATCH_TIMING.exit);
+    const exitMs = skipped.current ? 120 : plan ? plan.exitMs : CATCH_TIMING.exit;
+    badgeIn.value = withTiming(0, { duration: exitMs, easing: EASE.in });
+    await wait(exitMs);
     if (aliveRef.current === token) finish(true);
-  }, [target.x, target.y]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The photo sticker's image is native memory; free it once the sticker has re-rendered without it.
   const photoRef = useRef<SkImage | null>(null);
@@ -483,8 +596,58 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (!keepReveal) requestAnimationFrame(() => requestAnimationFrame(() => { setReveal(null); setRevealEscape(null); revealHidden.value = false; }));
     // RIDE AGAIN: the app chrome and the map stay hidden under the covering card (the next ride opens there).
     if (!keepReveal) { showCatchChrome(false); setCatchOpen(false); }
+    dimCatchChrome(false);
+    clockRef.current = null; skipped.current = false; skipWake.current = null;
+    cancelAnimation(started); started.value = 0; barGlow.value = 0;
     latest.current.onDone(caught);
   };
+
+  /**
+   * The coins burst out of the find on the gold-burst frame and stream into the counter one after another
+   * (40 ms apart). The first to land starts the counter's roll, each one punches its icon, every third
+   * gives a tiny tick in the hand, the last bumps it full size and "+N" pops under it.
+   */
+  const streamCoins = (data: RedeemPrepItemResponseType['data'], plan: CatchPlan, motion: boolean) => {
+    const clock = clockRef.current;
+    if (!clock || data.replayed) return;
+    const coins = data.rewards.coins;
+    const off = offsetRef.current;
+    const lifted = { x: flyFromX.value, y: flyFromY.value - plan.risePt };
+    const { getTarget, triggerFly: flyTo } = latest.current;
+    if (data.rewards.tickets > 0) {
+      flyTo({ imageSource: TICKET_ICON, amount: Math.min(data.rewards.tickets, 6), startX: lifted.x + off.x, startY: lifted.y + off.y, targetPosition: 'tickets' });
+    }
+    if (!(coins > 0)) return;
+    clock.streamed = true;
+    const stream = coinStreamPlan(coins, !motion);
+    const chip = getTarget('coins');
+    if (!chip || stream.count === 0) {
+      // No counter on screen (or Reduce Motion): the counter simply rolls once, a beat after the burst.
+      setTimeout(() => pulseHud('coins', coins), motion ? 300 : DURATION.quick);
+      return;
+    }
+    coinGeo.value = { fx: lifted.x, fy: lifted.y, tx: chip.x - off.x, ty: chip.y - off.y };
+    coinN.value = stream.count;
+    const total = stream.landAt[stream.landAt.length - 1] + 40;
+    coinT.value = 0;
+    coinT.value = withTiming(total, { duration: total, easing: Easing.linear });
+    holdHud('coins', total + 400);
+    stream.landAt.forEach((ms, i) => setTimeout(() => {
+      const last = i === stream.count - 1;
+      if (i === 0) pulseHud('coins', coins); else punchHud('coins', last);
+      if (i % 3 === 2) catchHaptic('tickSelection', 1);
+      if (i % 2 === 0 || last) catchSound('tick', { pitch: 2 + i, volume: 0.45 });
+    }, ms));
+  };
+
+  /** Tap anywhere after the burst: the catch jumps to its end (the find home, the badge away). */
+  const onSkip = useCallback(() => {
+    const clock = clockRef.current;
+    if (!clock?.skippable || skipped.current) return;
+    skipped.current = true;
+    catchMark('skip');
+    skipWake.current?.();
+  }, []);
 
   useEffect(() => {
     if (!request || layer.width === 0) return;
@@ -493,18 +656,19 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const alive = () => aliveRef.current === token;
     const { item, pivotId } = request;
     const motion = !latest.current.reducedMotion;
-    [pop, lift, wobble, fly, badgeIn, reveal, progress, gradeIn, squash, charge, flash, burstFx, gold, goldBloom].forEach(value => { cancelAnimation(value); value.value = 0; });
+    [pop, lift, wobble, fly, badgeIn, reveal, progress, gradeIn, squash, charge, flash, burstFx, gold, goldBloom, ink, barGlow].forEach(value => { cancelAnimation(value); value.value = 0; });
     cancelAnimation(popScale); popScale.value = 1;
     badgeKick.value = 1;
     setSummary(null); setPhoto(null); setCascade(0); setBonusXp(null);
     setShowing(request);
-    showCatchChrome(true);
     const start = fromPoint(request);
     flyFromX.value = start.x;
     flyFromY.value = start.y;
 
-    // Uncommon and rarer: the Ride Photo viewfinder (usually already opening from the tap).
+    // Uncommon and rarer: the Ride Photo viewfinder (usually already opening from the tap). It owns the
+    // whole screen, so the header and tab bar slide away for it.
     if (catchStyleFor(item.rarity) === 'ride_photo') {
+      showCatchChrome(true);
       itemGone.value = 1;
       redeemRun.current = null;
       setRideItem(item);
@@ -513,27 +677,41 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       return;
     }
     itemGone.value = 0;
+    // A common never moves the header or the tab bar (the counter stays put for its coins): the tab bar
+    // softens and the map's own controls fade, on the UI thread from this frame.
+    dimCatchChrome(true);
     setCatchOpen(true);
 
     void (async () => {
       // The catch, four beats (src/ui/motion.ts, mapWow catchPlan): a squish under the finger, then
       // wobble wobble wobble while it rises and the gold gathers, one held frame with a soft flash,
-      // a gold burst, and the find flies home. The server answers during the wobbles.
-      const plan = catchPlan({ reduced: !motion });
+      // a gold burst that throws the coins into the counter, and the find flies home to its badge.
+      // The server answers during the wobbles. Later catches this session play the short repeat.
+      const plan = catchPlan({ reduced: !motion, repeat: sessionCatches > 0 });
       const t0 = Date.now();
-      catchMark('tap');
+      clockRef.current = { t0, plan, skippable: false, streamed: false };
+      skipped.current = false;
+      catchMark(plan.repeat ? 'tap-repeat' : 'tap');
       catchHapticPlan(plan, t0, alive);
       catchSound('pop');
       const run = catchFind(latest.current.redeem, item.id, pivotId, latest.current.getFix(), { catch_style: 'chomp' });
+      // The halo never blinks out between the squash and the gather: it holds a floor once the catch starts.
+      started.value = motion ? withTiming(1, { duration: DURATION.tap }) : 1;
       if (motion) {
         squash.value = withSequence(withTiming(1, { duration: plan.squashMs, easing: EASE.out }), withSpring(0, SPRING.stamp));
         charge.value = withDelay(plan.squashMs, withTiming(1, { duration: plan.anticipationMs, easing: EASE.charge }));
         lift.value = withDelay(plan.squashMs, withTiming(1, { duration: plan.anticipationMs, easing: EASE.out }));
-        const [w1, w2, w3] = plan.wobbles;
-        wobble.value = withSequence(
-          withDelay(w1.at, withTiming(w1.deg, { duration: 75 })), withTiming(0, { duration: 75 }),
-          withDelay(w2.at - w1.at - 150, withTiming(-w2.deg, { duration: 75 })), withTiming(0, { duration: 75 }),
-          withDelay(w3.at - w2.at - 150, withTiming(w3.deg, { duration: 75 })), withTiming(0, { duration: 75 }));
+        // Each wobble swings out and back over 150 ms, alternating sides, each one stronger.
+        const swings: number[] = [];
+        let after = 0;
+        const steps = plan.wobbles.flatMap((w, i) => {
+          const side = i % 2 === 0 ? 1 : -1;
+          const gap = Math.max(0, w.at - after);
+          after = w.at + 150;
+          swings.push(side * w.deg);
+          return [withDelay(gap, withTiming(side * w.deg, { duration: 75 })), withTiming(0, { duration: 75 })];
+        });
+        if (steps.length > 0) wobble.value = withSequence(...(steps as [number, ...number[]]));
       }
       // The answer usually lands inside the wobbles; a slow one keeps a small held wobble going (never a freeze).
       let result: CatchResult | null = null;
@@ -550,6 +728,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         catchMark('miss');
         wobble.value = motion ? withSequence(withTiming(-14, { duration: 90 }), withSpring(0, SPRING.pop)) : 0;
         charge.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
+        started.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
         lift.value = withSpring(0, SPRING.pop);
         await wait(300);
         if (!alive()) return;
@@ -567,22 +746,29 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       flash.value = withSequence(withTiming(peak, { duration: 40 }), withTiming(0, { duration: DURATION.flash - 40, easing: EASE.in }));
       await wait(motion ? DURATION.hitStop : 0);
       if (!alive()) return;
-      // Burst: the find pops past full size, the gold blooms, a ring and sparkles fly.
+      // Burst: the find pops past full size, the gold blooms, Alex's inked burst and a blue water ring
+      // splash out, sparkles and stars fly, and the coins burst out toward the counter.
       catchMark('burst');
+      sessionCatches += 1;
+      if (clockRef.current) clockRef.current.skippable = true;
       catchHaptic('comboHeavy', 3);
       setTimeout(() => { if (alive()) catchHaptic('success', 3); }, 180);
       catchSound('chime', { volume: 0.8 });
+      streamCoins(settled.data, plan, motion);
       if (motion) {
         popScale.value = withSequence(withTiming(plan.burstScale, { duration: 90, easing: EASE.out }), withSpring(1.18, SPRING.pop));
         pop.value = 0;
         pop.value = withTiming(1, { duration: DURATION.bloom, easing: EASE.out });
         burstFx.value = 0;
         burstFx.value = withTiming(1, { duration: DURATION.sparkle, easing: Easing.linear });
-        gold.value = withSequence(withTiming(1, { duration: 120, easing: EASE.out }), withDelay(260, withTiming(0, { duration: 420, easing: EASE.in })));
+        ink.value = 0;
+        ink.value = withTiming(1, { duration: plan.repeat ? 460 : DURATION.bloom + 80, easing: Easing.linear });
+        const hold = plan.repeat ? 140 : 360;
+        gold.value = withSequence(withTiming(1, { duration: 120, easing: EASE.out }), withDelay(hold, withTiming(0, { duration: plan.repeat ? 300 : 480, easing: EASE.in })));
         goldBloom.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: DURATION.bloom - 140 }));
         charge.value = withTiming(0, { duration: 260 });
         // The find holds its pop for a beat, then flies home (land() plays the arc).
-        await wait(Math.max(0, plan.flyAt - plan.burstAt));
+        await pause(Math.max(0, plan.flyAt - plan.burstAt));
         if (!alive()) return;
       }
       catchMark('fly');
@@ -821,6 +1007,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   // otherwise the find vanishes for the first beats of the wobble on a busy phone.
   const chompRequest = request && catchStyleFor(request.item.rarity) !== 'ride_photo' ? request : null;
   const from = fromPoint(showing ?? chompRequest);
+  // The rays reach about 80 percent of the screen width (a burst you can screenshot, not a lens glow).
+  const goldSize = Math.round(Math.min(window.width, 440) * 0.8);
   const itemStyle = useAnimatedStyle(() => {
     const f = fly.value;
     // The flight home: a quadratic arc with an 80 pt apex, an edge-spin and a shrink to half size.
@@ -838,14 +1026,37 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   });
   // The gather: a gold halo builds under the find while it rises; the soft flash on the held frame.
   const haloStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, 0.55 + 0.45 * charge.value) * Math.max(charge.value, gold.value) * (1 - fly.value),
+    // A floor of 0.4 once the catch has started, so the halo never blinks out between the squash and the gather.
+    opacity: Math.max(0.4 * started.value, Math.min(1, 0.55 + 0.45 * charge.value) * Math.max(charge.value, gold.value)) * (1 - fly.value),
     transform: [{ translateX: from.x - 70 }, { translateY: from.y - CATCH_RISE_PT * lift.value - 70 }, { scale: 0.7 + 0.5 * charge.value + 0.3 * goldBloom.value }],
   }));
   const flashStyle = useAnimatedStyle(() => ({
     opacity: flash.value,
     transform: [{ translateX: from.x - 110 }, { translateY: from.y - CATCH_RISE_PT - 110 }],
   }));
-  const goldStyle = useAnimatedStyle(() => ({ transform: [{ translateX: from.x - 130 }, { translateY: from.y - CATCH_RISE_PT - 130 }] }));
+  const goldStyle = useAnimatedStyle(() => ({ transform: [{ translateX: from.x - goldSize / 2 }, { translateY: from.y - CATCH_RISE_PT - goldSize / 2 }] }));
+  // Alex's inked gold burst: snaps out past full size on the burst, then fades (the hand-drawn frame of the moment).
+  const inkStyle = useAnimatedStyle(() => {
+    const p = ink.value;
+    const grow = p < 0.3 ? p / 0.3 : 1;
+    return {
+      opacity: p <= 0 || p >= 1 ? 0 : p < 0.45 ? 1 : 1 - (p - 0.45) / 0.55,
+      transform: [{ translateX: from.x - INK_SIZE / 2 }, { translateY: from.y - CATCH_RISE_PT - INK_SIZE / 2 },
+        { scale: 0.35 + 0.85 * (1 - (1 - grow) * (1 - grow)) + 0.08 * p }, { rotate: `${12 * p}deg` }],
+    };
+  });
+  // A blue water ring splashes out on the ground under the find.
+  const waterStyle = useAnimatedStyle(() => {
+    const p = ink.value;
+    return {
+      opacity: p <= 0 || p >= 1 ? 0 : 0.95 * (1 - p),
+      transform: [{ translateX: from.x - WATER_W / 2 }, { translateY: from.y + 10 - WATER_H / 2 }, { scale: 0.4 + 1.5 * (1 - (1 - p) * (1 - p)) }],
+    };
+  });
+  const starOrigin = useAnimatedStyle(() => ({ transform: [{ translateX: from.x }, { translateY: from.y - CATCH_RISE_PT }] }));
+  // Edge bands in house blue while a common plays: the map steps back a touch, the counter stays bright.
+  const vignetteStyle = useAnimatedStyle(() => ({ opacity: catchDim.value }));
+  const barGlowStyle = useAnimatedStyle(() => ({ opacity: barGlow.value }));
   const gatherOrigin = useAnimatedStyle(() => ({ transform: [{ translateX: from.x }, { translateY: from.y - CATCH_RISE_PT * lift.value }] }));
   const ringStyle = useAnimatedStyle(() => ({
     opacity: pop.value <= 0 || pop.value >= 1 ? 0 : 0.9 * (1 - pop.value),
@@ -883,6 +1094,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const color = item ? rarityColor(item.rarity) : BRAND.gold;
   const motionFx = !!item && !reducedMotion && catchStyleFor(item.rarity) === 'chomp';
   const sparks = motionFx ? momentParticles(PARTICLES.sparkles, power, reducedMotion) : 0;
+  const stars = motionFx ? momentParticles(4, power, reducedMotion) : 0;
+  const coinSource: string | number = currencies[0]?.icon_url ?? COIN_FALLBACK;
   const gatherCount = motionFx ? momentParticles(8, power, reducedMotion) : 0;
   const name = item ? findDisplayName(item.name, item.set_name) : '';
   const stageFor = rideItem ?? primed?.item ?? readyItem;
@@ -985,6 +1198,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         </Canvas>}
       </Animated.View>
 
+      {/* A common catch: soft house-blue edge bands while it plays (opacity only, always mounted). */}
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, vignetteStyle]}>
+        <LinearGradient colors={VIGNETTE_TOP} style={styles.vignetteTop} />
+        <LinearGradient colors={VIGNETTE_BOTTOM} style={styles.vignetteBottom} />
+      </Animated.View>
+      {/* Tap anywhere after the burst to skip to the end (the tenth catch never makes a kid wait). */}
+      {chompRequest && <Pressable style={StyleSheet.absoluteFill} onPress={onSkip} accessibilityRole="button" accessibilityLabel="Skip" />}
+
       {warming && warmPics && <Canvas pointerEvents="none" style={styles.warmCanvas}>
         <Group transform={WARM_SCALE}>
           <Picture picture={warmPics.backdrop} />
@@ -1014,8 +1235,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         <Animated.View style={[styles.halo, haloStyle]} pointerEvents="none">
           <Image source={GLOW_TEX} tintColor={GOLD_FX.glow} style={styles.fxFill} contentFit="fill" transition={0} />
         </Animated.View>
-        {motionFx && <Animated.View style={[styles.goldAt, goldStyle]} pointerEvents="none">
-          <GoldBurst size={260} amount={gold} bloom={goldBloom} spin={false} reduced={reducedMotion} />
+        {motionFx && <Animated.View style={[styles.waterRing, waterStyle]} pointerEvents="none">
+          <Image source={WATER_RING} style={styles.fxFill} contentFit="contain" transition={0} />
+        </Animated.View>}
+        {motionFx && <Animated.View style={[styles.goldAt, { width: goldSize, height: goldSize }, goldStyle]} pointerEvents="none">
+          <GoldBurst size={goldSize} amount={gold} bloom={goldBloom} spin reduced={reducedMotion} />
+        </Animated.View>}
+        {motionFx && <Animated.View style={[styles.inkBurst, inkStyle]} pointerEvents="none">
+          <Image source={INK_BURST} style={styles.fxFill} contentFit="contain" transition={0} />
         </Animated.View>}
         <Animated.View style={[styles.ring, { borderColor: GOLD_FX.rays }, ringStyle]} pointerEvents="none" />
         <Animated.View style={[styles.sparkOrigin, gatherOrigin]} pointerEvents="none">
@@ -1023,6 +1250,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         </Animated.View>
         <Animated.View style={[styles.sparkOrigin, sparkOrigin]} pointerEvents="none">
           {Array.from({ length: sparks }, (_, index) => <BurstSparkle key={index} index={index} count={sparks} t={burstFx} />)}
+        </Animated.View>
+        <Animated.View style={[styles.sparkOrigin, starOrigin]} pointerEvents="none">
+          {Array.from({ length: stars }, (_, index) => <BurstStar key={index} index={index} t={burstFx} />)}
         </Animated.View>
         <Animated.View style={[styles.flash, flashStyle]} pointerEvents="none">
           <Image source={GLOW_TEX} tintColor={GOLD_FX.core} style={styles.fxFill} contentFit="fill" transition={0} />
@@ -1057,6 +1287,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
             <View style={styles.progressRow}>
               <View style={styles.track}>
                 <Animated.View style={[styles.fill, { backgroundColor: summary?.setColor ?? BRAND.gold }, barStyle]} />
+                <Animated.View pointerEvents="none" style={[styles.barGlow, barGlowStyle]} />
               </View>
               {shownCount != null && <Text style={styles.count}>{shownCount}/{total}</Text>}
             </View>
@@ -1082,6 +1313,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
           </Animated.View></View>}
         </Animated.View>
       </>
+      {/* The coin stream (always mounted, still until a catch throws its coins). */}
+      {layer.width > 0 && <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        {Array.from({ length: COIN_STREAM.max }, (_, index) => (
+          <StreamCoin key={index} index={index} t={coinT} count={coinN} geo={coinGeo} source={coinSource} />))}
+      </View>}
     </View>
   );
 });
@@ -1095,8 +1331,15 @@ const styles = StyleSheet.create({
   halo: { position: 'absolute', left: 0, top: 0, width: 140, height: 140 },
   fxFill: { width: '100%', height: '100%' },
   flash: { position: 'absolute', left: 0, top: 0, width: 220, height: 220 },
-  goldAt: { position: 'absolute', left: 0, top: 0, width: 260, height: 260 },
+  goldAt: { position: 'absolute', left: 0, top: 0 },
   burstSparkle: { position: 'absolute' },
+  burstStar: { position: 'absolute', left: -14, top: -14, width: 28, height: 28 },
+  inkBurst: { position: 'absolute', left: 0, top: 0, width: INK_SIZE, height: INK_SIZE },
+  waterRing: { position: 'absolute', left: 0, top: 0, width: WATER_W, height: WATER_H },
+  streamCoin: { position: 'absolute', left: 0, top: 0, width: STREAM_COIN, height: STREAM_COIN },
+  vignetteTop: { position: 'absolute', left: 0, right: 0, top: 0, height: 150 },
+  vignetteBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 190 },
+  barGlow: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 4, backgroundColor: '#fff3b0' },
   gatherSparkle: { position: 'absolute', left: -7, top: -7, width: 14, height: 14 },
   sparkOrigin: { position: 'absolute', left: 0, top: 0, width: 0, height: 0 },
   spark: { position: 'absolute', left: -4, top: -4, width: 8, height: 8, borderRadius: 2 },

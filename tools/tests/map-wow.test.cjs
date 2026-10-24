@@ -154,3 +154,78 @@ test('the map shark breathes on the shared clock and rests in the background', (
   assert.match(map, /\[shark-life\] rest/);
   assert.match(map, /contact = m\.wake\.value/);
 });
+
+// Round 2 (panel blockers): the catch settles inside 2.6 s, later catches are short, the coins come out of
+// the find, the header never moves for a common, nothing blinks.
+test('round 2: the first catch settles by 2.6 s with no still hold over 600 ms; repeats finish in about 1.4 s', () => {
+  const first = wow.catchPlan({ reduced: false });
+  assert.equal(first.repeat, false);
+  assert.ok(first.doneAt <= 2600, `first catch done by 2.6 s (${first.doneAt})`);
+  assert.equal(first.coinsAt, first.burstAt, 'the coins leave on the burst frame');
+  assert.ok(first.tickAt > first.landAt && first.tickAt - first.landAt <= 600, 'the set bar ticks soon after the find lands');
+  assert.ok(first.exitAt - first.tickAt <= 600, 'never a still hold over 600 ms before the badge leaves');
+  assert.ok(first.exitMs < motion.DURATION.enter, 'exits are faster than entrances');
+  const again = wow.catchPlan({ reduced: false, repeat: true });
+  assert.equal(again.repeat, true);
+  assert.equal(again.wobbles.length, 2, 'the repeat wobbles twice');
+  assert.ok(again.doneAt <= 1450 && again.doneAt >= 1300, `repeat about 1.4 s (${again.doneAt})`);
+  assert.ok(again.burstAt < first.burstAt && again.burstAt - again.hitStopAt === motion.DURATION.hitStop, 'the repeat keeps its held frame');
+  assert.ok(again.burstScale >= 1.18 && again.burstScale <= 1.35);
+  const h = wow.catchHaptics(again);
+  assert.deepEqual(plain(h.map(s => s.intent)), ['tapLight', 'tickSelection', 'hitMedium', 'comboHeavy', 'success']);
+  for (let i = 1; i < h.length; i++) assert.ok(h[i].at - h[i - 1].at >= 120, 'one haptic per 120 ms gate');
+  const reduced = wow.catchPlan({ reduced: true, repeat: true });
+  assert.ok(reduced.doneAt <= 1300 && reduced.wobbles.length === 0);
+});
+
+test('round 2: the coin stream bursts out of the find and lands one coin after another in the counter', () => {
+  const s = wow.coinStreamPlan(25, false);
+  assert.equal(s.count, wow.COIN_STREAM.max, 'at most 8 coins fly, whatever the amount');
+  assert.equal(wow.coinStreamPlan(3, false).count, 3, 'a small win flies its real number of coins');
+  assert.equal(wow.coinStreamPlan(0, false).count, 0);
+  assert.equal(wow.coinStreamPlan(10, true).count, 0, 'Reduce Motion: no flight, the counter just rolls');
+  for (let i = 1; i < s.landAt.length; i++) assert.equal(s.landAt[i] - s.landAt[i - 1], 40, '40 ms apart');
+  const first = wow.catchPlan({ reduced: false });
+  assert.ok(first.coinsAt + s.landAt[s.landAt.length - 1] < first.doneAt, 'every coin is home before the moment ends');
+  const from = { x: 200, y: 500 }, to = { x: 40, y: 20 };
+  const start = wow.coinStreamAt(1, 0, 8, from, to);
+  assert.ok(Math.abs(start.x - from.x) < 3 && Math.abs(start.y - from.y) < 3, 'starts at the find (never a screen corner)');
+  const sprayEnd = wow.coinStreamAt(wow.COIN_STREAM.sprayMs - 1, 3, 8, from, to);
+  assert.ok(sprayEnd.y < from.y, 'the spray goes up, toward the counter');
+  const near = wow.coinStreamAt(s.landAt[0] - 5, 0, 8, from, to);
+  assert.ok(Math.hypot(near.x - to.x, near.y - to.y) < 12, 'arrives at the counter');
+  assert.equal(wow.coinStreamAt(s.landAt[0] + 5, 0, 8, from, to), null, 'gone once landed');
+  assert.equal(wow.coinStreamAt(10, 3, 8, from, to), null, 'later coins wait their turn');
+});
+
+test('round 2: a common catch never moves the header or the tab bar, can be skipped, and the halo never blinks', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  const effect = src.slice(src.indexOf('const { item, pivotId } = request;'), src.indexOf("catchMark('fly')"));
+  const rideBranch = effect.slice(effect.indexOf("if (catchStyleFor(item.rarity) === 'ride_photo')"), effect.indexOf('dimCatchChrome(true)'));
+  assert.match(rideBranch, /showCatchChrome\(true\)/, 'only the full-screen viewfinder slides the chrome away');
+  const commonPart = effect.slice(effect.indexOf('dimCatchChrome(true)'));
+  assert.ok(!/showCatchChrome\(true\)/.test(commonPart), 'a common keeps the header where the coins land');
+  assert.match(src, /Math\.max\(0\.4 \* started\.value/, 'the halo holds a floor once the catch starts');
+  assert.match(src, /onPress=\{onSkip\}/, 'tap anywhere skips after the burst');
+  assert.match(src, /targetRef\.current/, 'the stable callbacks read the badge spot through a ref (no stale top-left start)');
+  assert.match(src, /streamCoins\(settled\.data/, 'coins leave from the find on the burst');
+  const wrapper = read('src/components/Wrapper.tsx');
+  assert.match(wrapper, /1 - 0\.4 \* catchDim\.value/, 'the tab bar softens in place');
+  const chip = read('src/components/Topbar/Currency.tsx');
+  assert.ok(!/shadowRadius: 10/.test(chip), 'the gain glow is a texture, not a live shadow');
+  assert.match(chip, /kind === 'punch'/);
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /const DecorationLayer = memo\(/, 'trees are not re-sent to MapLibre on every Map render');
+  assert.match(map, /decoFrozen\.current\) return/, 'no re-plant under a catch');
+});
+
+test('round 2: the shark has character beats (fin flick, a look toward a find, a hop for a new find)', () => {
+  const life = loadTs('src/components/map/sharkLife.ts');
+  const seven = [0, 1, 2, 3, 4, 5, 6].map(n => life.nextFidget(n, false));
+  assert.ok(seven.includes('flick') && seven.includes('look') && seven.includes('hop'));
+  for (let i = 1; i < seven.length; i++) assert.notEqual(seven[i], seven[i - 1], 'never the same beat twice in a row');
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /mood === 'flick'/);
+  assert.match(map, /lookRef\.current/);
+  assert.match(map, /sharkHop > hopSeen\.current/);
+});

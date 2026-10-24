@@ -25,7 +25,7 @@ import HomeCatchMoment, { type CatchRequest, type HomeCatchHandle } from './Home
 import { pickupFix } from './homeCatch';
 import { catchStyleFor } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
-import { useCatchOpen, catchShown } from './catchPresence';
+import { useCatchOpen, catchDim, catchShown } from './catchPresence';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
 import { bannerCovers, clusterFinds, edgeArrowPlacement, findFootprint, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
 import type { FingerSide } from './PrepItem';
@@ -184,10 +184,11 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   // Floating cards leave (opacity 0, no touches) while the quick menu is open, and on a catch's tap frame.
   const cardFade = useMenuCardFade();
   // Menus, edge arrows and chips leave on the tap frame (UI thread), never showing through the viewfinder's fade.
-  const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - catchShown.value * 1.6) }));
+  const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value, catchDim.value) * 1.6) }));
   // Where each find is on screen, re-measured when the map settles, so a tap opens the catch from the find on that frame.
   const findPoints = useRef(new globalThis.Map<number, { x: number; y: number }>());
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [sharkLook, setSharkLook] = useState<-1 | 0 | 1>(0);
   const [edgeFinds, setEdgeFinds] = useState<EdgeFind[]>([]);
   const [findSides, setFindSides] = useState<Record<number, FingerSide>>({});
   const [cascadeOn, setCascadeOn] = useState(false);
@@ -506,6 +507,16 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
 
   const catchingPivot = catchRequest?.pivotId ?? catching?.pivotId ?? null;
 
+  // A new find in range: the shark gives one happy hop (Map reads the bump; nothing repeats).
+  const [sharkHop, setSharkHop] = useState(0);
+  const inRangeSeen = useRef<Set<number>>(new Set());
+  const inRangeIds = useMemo(() => placed.filter(entry => entry.inRange && entry.item.pivot_id != null).map(entry => entry.item.pivot_id as number), [placed]);
+  useEffect(() => {
+    const fresh = inRangeIds.some(id => !inRangeSeen.current.has(id));
+    inRangeSeen.current = new Set(inRangeIds);
+    if (fresh) setSharkHop(n => n + 1);
+  }, [inRangeIds]);
+
   // Battery: full motion only for finds in range and the 3 nearest; the rest sit still.
   const animatedPivots = useMemo(() => new Set(placed.filter(entry => entry.distance != null)
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0)).slice(0, 3).map(entry => entry.item.pivot_id)
@@ -558,6 +569,12 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
         if (off) edges.push({ item, point, distance });
       }
       findPoints.current = next;
+      // The shark's look-around turns toward the nearest find in range (screen side of it, from the centre).
+      const nearestIn = placed.filter(entry => entry.inRange && entry.item.pivot_id != null)
+        .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))[0];
+      const nearPoint = nearestIn?.item.pivot_id != null ? next.get(nearestIn.item.pivot_id) : undefined;
+      const look: -1 | 0 | 1 = nearPoint ? (nearPoint.x < containerSize.width / 2 ? -1 : 1) : 0;
+      setSharkLook(current => (current === look ? current : look));
       // The finger cue goes on the side away from the player's shark (screen centre while following).
       const sides: Record<number, FingerSide> = {};
       // Below the shark, the finger hangs under the find, so it never lands on the shark's board.
@@ -669,6 +686,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       }}>
       {/* Map with prep items - player marker is handled by Map component */}
       <Map controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled} focusCoordinate={findFocus}
+        sharkLook={sharkLook} sharkHop={sharkHop}
         extraControls={chestButton} extraControlsCount={chestButtonCount} ambientFrozen={catchOpen} chromeHidden={catchOpen} onUserPan={onUserPan}
         hintReady={compassHintReady && !catchOpen && introSeen === true}>
         {homeLocationConfirmed && allPlaced.map(({ item: prepItem, distance, inRange }) => (

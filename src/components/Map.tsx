@@ -1,6 +1,6 @@
 import { openExternal } from '../services/external';
 import { Image } from 'expo-image';
-import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, memo, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { PlayerSharkMarker } from './map/PlayerSharkMarker';
@@ -46,7 +46,7 @@ import { DeclutterContext } from './map/declutter/Placed';
 import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapDeclutter';
 import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
-import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { catchDim, catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 import { MOTION_PROBE, MotionProbeFrames, probeCamera, probeCount } from '../dev/motionProbe';
 import { useTrail } from '../services/trail/TrailProvider';
 import { mapTrailOf } from './map/mapTrail';
@@ -120,7 +120,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
 /** Stable empty data for always-mounted sources that are off (never a new object per render). */
 const NO_FEATURES: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, chromeHidden = false, fright = null, onUserPan, declutter = null }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, chromeHidden = false, fright = null, onUserPan, declutter = null }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -158,6 +158,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly hintReady?: boolean;
   /** Something to catch right here (a ride coin in range): the shark perks up and cheers now and then. */
   readonly sharkCheer?: boolean;
+  /** Screen side (-1 left, 1 right) of the nearest find in range: the shark's look-around turns toward it. */
+  readonly sharkLook?: -1 | 0 | 1;
+  /** Bumped when a find appears in range: the shark gives one happy hop. */
+  readonly sharkHop?: number;
   /** Trail Boxes (steps stream): the box filling as you walk rides on the shark; it hops when one is ready. */
   readonly trail?: MapTrail | null;
 }) {
@@ -413,11 +417,14 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const [lampPoints, setLampPoints] = useState<GeoJSON.FeatureCollection>(NO_FEATURES);
   const decoKey = useRef('');
   const decoTimer = useRef<ReturnType<typeof setTimeout>>();
+  // A catch on top freezes the planted set (no re-plant mid-moment); it catches up once the catch is over.
+  const decoFrozen = useRef(ambientFrozen);
+  decoFrozen.current = ambientFrozen;
   const refreshDecorations = useCallback(() => {
     clearTimeout(decoTimer.current);
     decoTimer.current = setTimeout(async () => {
       const map = mapViewRef.current;
-      if (!map) return;
+      if (!map || decoFrozen.current) return;
       try {
         const [zoom, [[east, north], [west, south]]] = await Promise.all([map.getZoom(), map.getVisibleBounds()]);
         // Skip rebuilding for tiny camera nudges (walking follow) at the same density.
@@ -444,6 +451,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [window.height, window.width]);
   useEffect(() => () => clearTimeout(decoTimer.current), []);
+  // Unfrozen (the catch is over): catch up with any camera move that happened under it.
+  useEffect(() => { if (!ambientFrozen) refreshDecorations(); }, [ambientFrozen, refreshDecorations]);
   // Find guide: dashed path for a few seconds, edge arrow while off screen.
   const [viewSize, setViewSize] = useState<{ width: number; height: number } | null>(null);
   const [guidePoint, setGuidePoint] = useState<{ x: number; y: number } | null>(null);
@@ -635,6 +644,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const fxKick = useFxKick();
   const sparkleBurst = useSharedValue(0);
   const lastReact = useRef(0);
+  const lookRef = useRef<-1 | 0 | 1>(sharkLook);
+  lookRef.current = sharkLook;
   const tapCount = useRef(0);
   const react = useCallback((m: SharkMood) => {
     if (reducedMotion) {
@@ -672,9 +683,20 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       wiggle.value = withSequence(withTiming(-9, { duration: 90 }), withTiming(9, { duration: 120 }), withTiming(-6, { duration: 110 }), withSpring(0, { damping: 8, stiffness: 220 }));
     }
     if (mood === 'look') {
-      // A curious look: the head tilts 8 degrees, holds, and comes back (a pet hearing its name).
+      // A curious look: the head tilts, holds, and comes back (a pet hearing its name). With a find in
+      // range it looks toward the find, a little longer and with a tiny lift (go on, it's right there).
+      const toward = lookRef.current;
+      const side = toward !== 0 ? toward : Math.random() < 0.5 ? -1 : 1;
+      const deg = toward !== 0 ? 12 : 8;
+      wiggle.value = withSequence(withTiming(deg * side, { duration: 300, easing: EASE.inOut }), withDelay(toward !== 0 ? 800 : 600, withTiming(0, { duration: 300, easing: EASE.inOut })));
+      if (toward !== 0) hop.value = withSequence(withTiming(0.12, { duration: 200, easing: EASE.out }), withDelay(700, withTiming(0, { duration: 260, easing: EASE.inOut })));
+    }
+    if (mood === 'flick') {
+      // A fin flick: a quick swish one way, a snap back past centre and a settle, with a little squash.
       const side = Math.random() < 0.5 ? -1 : 1;
-      wiggle.value = withSequence(withTiming(8 * side, { duration: 300, easing: EASE.inOut }), withDelay(600, withTiming(0, { duration: 300, easing: EASE.inOut })));
+      wiggle.value = withSequence(withTiming(-5 * side, { duration: 70, easing: EASE.out }), withTiming(11 * side, { duration: 110, easing: EASE.inOut }),
+        withSpring(0, { damping: 9, stiffness: 300 }));
+      squash.value = withSequence(withTiming(0.35, { duration: 70 }), withSpring(0, { damping: 8, stiffness: 280 }));
     }
     if (mood === 'tap' || mood === 'cheer') sparkleBurst.value = withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: mood === 'tap' ? 650 : 520, easing: REasing.out(REasing.quad) }), withTiming(0, { duration: 0 }));
     // Worn Secret pieces show off their moment on a tap (and now and then on their own).
@@ -701,6 +723,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     next();
     return () => clearTimeout(timer);
   }, [lifeOn, react, fxWorn]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A find just came into range: one happy hop (no repeat; the next one needs a new find).
+  const hopSeen = useRef(sharkHop);
+  useEffect(() => {
+    if (sharkHop > hopSeen.current && lifeOn && !power.idle) react('hop');
+    hopSeen.current = sharkHop;
+  }, [sharkHop, lifeOn, power.idle, react]);
   // A ride coin in range: the shark perks up and cheers every few seconds until you play it.
   useEffect(() => {
     if (!lifeOn || !sharkCheer || power.idle) return;
@@ -736,7 +764,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const compassHintRef = useRef<(() => void) | null>(null);
   compassHintRef.current = compassHint.visible ? compassHint.dismiss : null;
   const chromeOff = chromeHidden ? 1 : 0;
-  const chromeStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value * 1.6, chromeOff)) }), [chromeOff]);
+  const chromeStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(Math.max(catchShown.value, catchDim.value) * 1.6, chromeOff)) }), [chromeOff]);
 
   return (
     <MapAliveProvider value={alive}>
@@ -895,21 +923,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           }}
         />
         <Images images={DECO_ICONS} />
-        <ShapeSource id="tps-decorations" shape={decorations}>
-          <SymbolLayer id="tps-decorations" belowLayerID="plaza" style={{
-            iconImage: ['get', 'icon'],
-            // Zoom must lead the expression; each stop scales by the item's own size.
-            iconSize: ['interpolate', ['exponential', 1.4], ['zoom'],
-              15, ['*', 0.32, ['get', 's']], 16, ['*', 0.46, ['get', 's']], 17, ['*', 0.68, ['get', 's']],
-              18, ['*', 0.95, ['get', 's']], 19, ['*', 1.3, ['get', 's']]],
-            iconAllowOverlap: true,
-            iconIgnorePlacement: true,
-            iconAnchor: 'bottom',
-            iconRotationAlignment: 'viewport',
-            iconPitchAlignment: 'viewport',
-            symbolSortKey: ['get', 'k'],
-          }} />
-        </ShapeSource>
+        {/* Memoized with a fixed style: a Map re-render (a catch opening, the chrome hiding) never re-sends the
+            layer's style, which made MapLibre re-place the trees and blink them out for a frame or two. */}
+        <DecorationLayer shape={decorations} />
         {/* Time of day: one tint over the tiles only, so every pin stays bright on top. */}
         {/* A background layer, not a GeoJSON fill: it covers the whole viewport, including tiles that
             have not drawn yet, so a camera jump never shows an untinted strip. */}
@@ -1163,6 +1179,29 @@ type SharkStyles = ReturnType<typeof useSharkStyles>;
  * The player shark's animated styles for one drawn copy. `live` is 1 while that copy is on
  * screen; at 0 every style returns a fixed value, so a hidden copy does no per-frame work.
  */
+const DECORATION_STYLE = {
+  iconImage: ['get', 'icon'],
+  // Zoom must lead the expression; each stop scales by the item's own size.
+  iconSize: ['interpolate', ['exponential', 1.4], ['zoom'],
+    15, ['*', 0.32, ['get', 's']], 16, ['*', 0.46, ['get', 's']], 17, ['*', 0.68, ['get', 's']],
+    18, ['*', 0.95, ['get', 's']], 19, ['*', 1.3, ['get', 's']]],
+  iconAllowOverlap: true,
+  iconIgnorePlacement: true,
+  iconAnchor: 'bottom',
+  iconRotationAlignment: 'viewport',
+  iconPitchAlignment: 'viewport',
+  symbolSortKey: ['get', 'k'],
+} as const;
+
+/** Trees, bushes and ripples: re-sent to MapLibre only when the planted set changes. */
+const DecorationLayer = memo(function DecorationLayer({ shape }: { readonly shape: GeoJSON.FeatureCollection }) {
+  return (
+    <ShapeSource id="tps-decorations" shape={shape}>
+      <SymbolLayer id="tps-decorations" belowLayerID="plaza" style={DECORATION_STYLE as never} />
+    </ShapeSource>
+  );
+});
+
 function useSharkStyles(live: SharedValue<number>, m: SharkMotion) {
   const shark = useAnimatedStyle(() => {
     if (live.value === 0) return { transform: [{ translateY: 0 }, { rotate: '0deg' }, { scale: 1 }, { scaleX: 1 }, { scaleY: 1 }] };
@@ -1184,8 +1223,8 @@ function useSharkStyles(live: SharedValue<number>, m: SharkMotion) {
       transform: [{ translateY: -5 * m.idle.value - 3 * step - 30 * m.hop.value + 4 * sq },
         { rotate: `${3 * m.sway.value + 4 * (step - 0.5) * m.wake.value + lean + m.wiggle.value + Math.max(-7, Math.min(7, 0.06 * m.turnLean.value))}deg` },
         { scale: 1 + 0.06 * m.hop.value },
-        { scaleX: sx * m.twirl.value * (1 + 0.12 * sq) * (1 - 0.015 * breath) * (1 + 0.03 * contact) },
-        { scaleY: (1 + 0.08 * mid) * (1 - 0.14 * sq) * (1 + 0.03 * breath) * (1 - 0.03 * contact) }],
+        { scaleX: sx * m.twirl.value * (1 + 0.12 * sq) * (1 - 0.02 * breath) * (1 + 0.03 * contact) },
+        { scaleY: (1 + 0.08 * mid) * (1 - 0.14 * sq) * (1 + 0.04 * breath) * (1 - 0.03 * contact) }],
     };
   });
   const shadow = useAnimatedStyle(() => {

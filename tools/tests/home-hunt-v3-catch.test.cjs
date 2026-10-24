@@ -491,7 +491,7 @@ test('round 5: no app or map chrome over the viewfinder; close without a grey st
   assert.doesNotMatch(map, /\{!chromeHidden && <Pressable/, 'the credit stays mounted');
   assert.match(map, /if \(isCatchShown\(\)\) return; void openExternal\(/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
-  assert.match(home, /const chromeFade = useAnimatedStyle\(\(\) => \(\{ opacity: Math\.max\(0, 1 - catchShown\.value/);
+  assert.match(home, /const chromeFade = useAnimatedStyle\(\(\) => \(\{ opacity: Math\.max\(0, 1 - Math\.max\(catchShown\.value, catchDim\.value\)/, 'menus and arrows fade for the viewfinder and for a common (wow-map r2)');
   assert.match(read('src/components/Wrapper.tsx'), /backgroundColor: '#0e7fd9'/);
   const stage = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   assert.match(stage, /if \(done\) runOnJS\(chromeBack\)\(\);/, 'chrome starts back when the iris meets');

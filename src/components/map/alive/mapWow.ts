@@ -49,30 +49,116 @@ export interface CatchPlan {
   readonly landAt: number;
   /** A small screen kick away from the tap on the burst (pt), 0 when calm, walking or reduced. */
   readonly kickPt: number;
+  /** The second and later catches of a session: two wobbles, no long hold, done in about 1.4 s. */
+  readonly repeat: boolean;
+  /** The coins burst out of the find on the gold-burst frame and stream into the counter. */
+  readonly coinsAt: number;
+  /** After the find lands in its badge, the set bar fills over this long, then ticks (gold, a haptic). */
+  readonly barMs: number;
+  readonly tickAt: number;
+  /** The badge leaves here (exits are faster than entrances), and the moment is over at doneAt. */
+  readonly exitAt: number;
+  readonly exitMs: number;
+  readonly doneAt: number;
 }
 
 /**
- * The catch timeline (ms from the tap). Payoff (the burst) inside 1.5 s and everything home inside
- * 2.6 s (the motion language caps); Reduce Motion skips the wobble and the flight, keeps a short fade.
+ * The catch timeline (ms from the tap). Payoff (the burst) inside 1.5 s and everything home and settled
+ * inside 2.6 s (the motion language caps), never a still hold over 600 ms. The first catch of a session
+ * is the full show; later ones (`repeat`) keep the same four beats but shorter: two wobbles and done in
+ * about 1.4 s, so the tenth catch still feels quick. Reduce Motion skips the wobble and the flight and
+ * keeps a short fade.
  */
-export function catchPlan(options: { readonly reduced: boolean; readonly calm?: boolean; readonly walking?: boolean }): CatchPlan {
+export function catchPlan(options: { readonly reduced: boolean; readonly calm?: boolean; readonly walking?: boolean; readonly repeat?: boolean }): CatchPlan {
   if (options.reduced) {
+    const landAt = DURATION.quick;
     return { squashMs: 0, squashTo: 1, anticipationMs: 0, risePt: 0, wobbles: [], hitStopAt: 0, burstAt: 0, burstScale: 1,
-      gatherSparkles: 0, burstSparkles: 0, flyAt: 0, flyMs: DURATION.quick, arcPt: 0, landAt: DURATION.quick, kickPt: 0 };
+      gatherSparkles: 0, burstSparkles: 0, flyAt: 0, flyMs: DURATION.quick, arcPt: 0, landAt, kickPt: 0,
+      repeat: !!options.repeat, coinsAt: 0, barMs: 1, tickAt: landAt, exitAt: landAt + 900, exitMs: DURATION.quick, doneAt: landAt + 900 + DURATION.quick };
   }
   const squashMs = DURATION.tap;
+  const kickPt = options.calm || options.walking ? 0 : 3;
+  if (options.repeat) {
+    const hitStopAt = 380;
+    const burstAt = hitStopAt + DURATION.hitStop;
+    const flyAt = 560;
+    const flyMs = 440;
+    const landAt = flyAt + flyMs;
+    const barMs = 240;
+    const exitMs = 150;
+    const exitAt = landAt + 250;
+    return {
+      squashMs, squashTo: 0.86, anticipationMs: hitStopAt - squashMs, risePt: 18,
+      wobbles: [{ at: 90, deg: 10 }, { at: 240, deg: 14 }],
+      hitStopAt, burstAt, burstScale: 1.25,
+      gatherSparkles: 4, burstSparkles: 8,
+      flyAt, flyMs, arcPt: 60, landAt, kickPt,
+      repeat: true, coinsAt: burstAt, barMs, tickAt: landAt + barMs, exitAt, exitMs, doneAt: exitAt + exitMs,
+    };
+  }
   const hitStopAt = 600;
   const burstAt = hitStopAt + DURATION.hitStop;
   const flyAt = 900;
   const flyMs = 600;
+  const landAt = flyAt + flyMs;
+  const barMs = 420;
+  const exitMs = DURATION.exit;
+  const exitAt = 2250;
   return {
     squashMs, squashTo: 0.86, anticipationMs: hitStopAt - squashMs, risePt: 24,
     wobbles: [{ at: 90, deg: 8 }, { at: 260, deg: 12 }, { at: 430, deg: 16 }],
     hitStopAt, burstAt, burstScale: 1.35,
     gatherSparkles: 8, burstSparkles: PARTICLES.sparkles,
-    flyAt, flyMs, arcPt: 80, landAt: flyAt + flyMs,
-    kickPt: options.calm || options.walking ? 0 : 3,
+    flyAt, flyMs, arcPt: 80, landAt, kickPt,
+    repeat: false, coinsAt: burstAt, barMs, tickAt: landAt + barMs + 20, exitAt, exitMs, doneAt: exitAt + exitMs,
   };
+}
+
+/**
+ * The coins of a catch: one coin per coin won (at most 8), sprayed out of the find on the burst, then
+ * each arcs into the counter 40 ms after the last. `landAt[i]` is when coin i lands (ms after coinsAt):
+ * the first landing starts the counter's roll, every landing punches its icon, the last one bumps it.
+ */
+export const COIN_STREAM = { max: 8, staggerMs: 40, sprayMs: 160, flightMs: 520, sprayPt: 46, arcPt: 70 } as const;
+
+export function coinStreamPlan(coins: number, reduced: boolean): { readonly count: number; readonly landAt: readonly number[] } {
+  if (!(coins > 0)) return { count: 0, landAt: [] };
+  if (reduced) return { count: 0, landAt: [0] };
+  const count = Math.min(COIN_STREAM.max, Math.max(1, Math.floor(coins)));
+  const landAt = Array.from({ length: count }, (_, i) => i * COIN_STREAM.staggerMs + COIN_STREAM.sprayMs + COIN_STREAM.flightMs);
+  return { count, landAt };
+}
+
+/**
+ * One streaming coin's position at `t` ms after the burst (layer points): out of the find in a short
+ * spray along its own angle, a beat of hang, then a quadratic arc into the counter. Null before it starts
+ * and after it lands. Worklet-safe.
+ */
+export function coinStreamAt(t: number, index: number, count: number, from: { x: number; y: number }, to: { x: number; y: number }):
+  { x: number; y: number; scale: number; spin: number } | null {
+  'worklet';
+  const local = t - index * COIN_STREAM.staggerMs;
+  if (local < 0) return null;
+  // A fan pointing up and toward the counter, so the spray already leads the eye home.
+  const spread = count > 1 ? index / (count - 1) - 0.5 : 0;
+  const angle = -Math.PI / 2 + spread * 2.2 + (to.x < from.x ? -0.35 : 0.35);
+  const reach = COIN_STREAM.sprayPt * (index % 2 ? 0.8 : 1);
+  const sx = from.x + Math.cos(angle) * reach;
+  const sy = from.y + Math.sin(angle) * reach;
+  if (local < COIN_STREAM.sprayMs) {
+    const p = local / COIN_STREAM.sprayMs;
+    const out = 1 - (1 - p) * (1 - p);
+    return { x: from.x + (sx - from.x) * out, y: from.y + (sy - from.y) * out, scale: 0.4 + 0.6 * out, spin: p * 0.5 };
+  }
+  const f = (local - COIN_STREAM.sprayMs) / COIN_STREAM.flightMs;
+  if (f >= 1) return null;
+  // EASE.inOut by hand (cubic), so it reads as a throw: slow off the spray, fast into the chip.
+  const e = f < 0.5 ? 4 * f * f * f : 1 - Math.pow(-2 * f + 2, 3) / 2;
+  const cx = (sx + to.x) / 2;
+  const cy = Math.min(sy, to.y) - COIN_STREAM.arcPt;
+  const u = 1 - e;
+  return { x: u * u * sx + 2 * u * e * cx + e * e * to.x, y: u * u * sy + 2 * u * e * cy + e * e * to.y,
+    scale: 1 - 0.45 * e, spin: 0.5 + 2 * e };
 }
 
 export type CatchBeatHaptic = 'tapLight' | 'tickSelection' | 'hitMedium' | 'comboHeavy' | 'success' | 'hitSoft';
@@ -89,6 +175,8 @@ export function catchHaptics(plan: CatchPlan, options: { readonly walking?: bool
   const steps: { at: number; intent: CatchBeatHaptic }[] = [{ at: 0, intent: 'tapLight' }];
   if (plan.wobbles.length === 3) {
     steps.push({ at: 200, intent: 'tickSelection' }, { at: 350, intent: 'tapLight' }, { at: 480, intent: 'hitMedium' });
+  } else if (plan.wobbles.length === 2) {
+    steps.push({ at: 150, intent: 'tickSelection' }, { at: 290, intent: 'hitMedium' });
   }
   steps.push({ at: plan.burstAt, intent: 'comboHeavy' }, { at: plan.burstAt + 180, intent: 'success' });
   return options.walking ? steps.map(s => ({ at: s.at, intent: down[s.intent] })) : steps;
