@@ -483,6 +483,11 @@ test('Sharky results fit a short phone: smaller stage, tight card, the bottom ro
   assert.doesNotMatch(sharky, /setBelow\(true\)/, 'the below rows never pop in and push the card off screen');
   assert.match(sharky, /belowIn\.value = withDelay\(2400, withTiming\(1/);
   assert.match(sharky, /stage: \{ width: '100%', flex: 1, minHeight: 0,/, 'the stage flexes into the room the card leaves');
+  // One results picture: the ribbon rides on the card's top edge (never pinned to the top of
+  // the screen, where an SE status bar cut into it), with the podium standing on it.
+  assert.match(sharky, /<Animated\.View style=\{\[styles\.card[^\n]*\n(?:\s*\{\/\*[\s\S]*?\*\/\}\n)?\s*<ResultsRibbon title=\{title\} reducedMotion=\{reducedMotion\} delayMs=\{titleAt\} style=\{styles\.ribbonWrap\} \/>/);
+  assert.match(sharky, /ribbonWrap: \{ position: 'absolute', top: -36, left: -14, right: -14/);
+  assert.doesNotMatch(sharky, /styles\.headline/, 'no screen-top title');
   assert.match(sharky, /setK\(Math\.max\(0\.4, Math\.min\(1, h \/ STAGE_POSE_PT\)\)\)/, 'shark and podium scale to the stage');
   assert.match(sharky, /marginBottom: bottomPad/, 'the card clears the home bar');
   assert.match(sharky, /below: \{ width: '100%', flexDirection: 'row'/);
@@ -984,7 +989,7 @@ test('Duel ride card: the title lands after its last star; chips are pictures', 
   assert.equal(m.exports.duelChipIcon('RIGHT ANSWERS'), 'check');
   assert.equal(m.exports.duelChipIcon('BEST ANSWER'), 'rush');
   const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
-  assert.match(duel, /delayMs=\{model\.ride \? rideRibbonDelay\(model\.stars, reducedMotion\) : 0\}/);
+  assert.match(duel, /delayMs=\{rideRibbonDelay\(model\.stars, reducedMotion\)\}/);
   assert.match(duel, /withDelay\(RIDE_STAR_AT \+ i \* RIDE_STAR_GAP,/);
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /\{icon \? <GameIcon name=\{icon\} size=\{20\} style=\{styles\.chipIcon\} \/> : <Text style=\{styles\.chipLabel\}>\{label\}<\/Text>\}/);

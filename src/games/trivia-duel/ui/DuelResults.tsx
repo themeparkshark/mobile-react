@@ -205,8 +205,8 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
         onCardLayout?.(h);
       }}>
         {/* The one results title every game shares: Alex's ribbon over the card's top edge.
-            On the ride card it waits for the last star, like Sharky and Boss. */}
-        <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} delayMs={model.ride ? rideRibbonDelay(model.stars, reducedMotion) : 0} />
+            It waits for the last star, like Sharky, Whack and Boss. */}
+        <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} delayMs={rideRibbonDelay(model.stars, reducedMotion)} />
         <View style={styles.head}>
           {/* Same number style as the score plate above and every other card (1,925, never 1925). */}
           <View style={styles.scoreRow}>
@@ -219,11 +219,11 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             right there, as a picture (lightning, then a red arrow down to the
             points it took). No dice and no betting words on a kids' card. */}
         {finalLost ? <BigFinalLost points={finalLost} reducedMotion={reducedMotion} /> : null}
-        {model.ride ? (
-          <View style={styles.starRow}>
-            {[1, 2, 3].map((k) => <StarPip key={k} on={k <= model.stars} i={k} reducedMotion={reducedMotion} />)}
-          </View>
-        ) : null}
+        {/* Every Duel card (Line Trivia, a duel, a ride challenge) stamps the same
+            star row the other games do, so a win and a miss read as one family. */}
+        <View style={styles.starRow} accessible accessibilityLabel={`${model.stars} of 3 stars`}>
+          {[1, 2, 3].map((k) => <StarPip key={k} on={k <= model.stars} i={k} reducedMotion={reducedMotion} />)}
+        </View>
         {/* The gap bar only when you scored: at 0 it would be all Fin, a bar
             that only says "you lost". The score and REMATCH say enough. */}
         {!model.ride && !model.won && model.myScore > 0 && model.oppScore > model.myScore ? (

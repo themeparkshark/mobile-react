@@ -24,7 +24,7 @@
 
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { MusicContext } from '../../context/MusicProvider';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   runOnJS,
@@ -111,6 +111,11 @@ import {
 import { RIDE_STAGES, STAGES, type StageId } from './stages';
 import { crewForRound, dareBarsFor, drumOffPlace, type Rival } from './multiplayer/drumline';
 import { HudStepBack } from '../../gamekit/results/HudStepBack';
+import GameIcon from '../../ui/GameIcon';
+
+/** The Two Thumbs offer's picture: the same drum and rim notes the parade plays. */
+const TWO_DRUM = require('../../assets/games/rhythm/note_drum.png');
+const TWO_RIM = require('../../assets/games/rhythm/note_rim.png');
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const HEADER_H = 113;
@@ -1127,21 +1132,30 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       resultExtras={plan && !plan.ftue && result && offerTwo ? (
         <View style={styles.twoCard}>
           <Text style={styles.twoTitle}>TRY TWO THUMBS?</Text>
-          <Text style={styles.twoBody}>Blue on the left thumb, coral on the right.</Text>
+          {/* A picture, not a sentence: the phone split in two, the blue drum
+              under the left thumb and the coral rim under the right. */}
+          <View style={styles.twoPhone} accessible accessibilityLabel="Blue drum on the left thumb, coral rim on the right thumb">
+            <View style={[styles.twoHalf, styles.twoHalfLeft]}>
+              <Image source={TWO_DRUM} style={styles.twoNote} resizeMode="contain" />
+            </View>
+            <View style={[styles.twoHalf, styles.twoHalfRight]}>
+              <Image source={TWO_RIM} style={styles.twoNote} resizeMode="contain" />
+            </View>
+          </View>
           <View style={styles.twoRow}>
             <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
               progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
               saveGrip({ ...gripPrefs, grip: GRIP_TWO, swap: 0 });
               setOfferTwo(false);
             }}>
-              <Text style={styles.easyBtnTxt}>YES</Text>
+              <View style={styles.twoBtnIn}><GameIcon name="check" size={18} /><Text style={styles.easyBtnTxt}>YES</Text></View>
             </Pressable>
             <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
               progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
               void saveProgress(progressRef.current);
               setOfferTwo(false);
             }}>
-              <Text style={styles.easyBtnTxt}>NO THANKS</Text>
+              <View style={styles.twoBtnIn}><GameIcon name="close" size={16} /><Text style={styles.easyBtnTxt}>NO THANKS</Text></View>
             </Pressable>
           </View>
         </View>
@@ -1290,8 +1304,14 @@ const styles = StyleSheet.create({
   knobOn: { alignSelf: 'flex-end' },
   twoCard: { alignItems: 'center', marginTop: 6 },
   twoTitle: { fontFamily: 'Shark', fontSize: 16, color: '#0b3a6b' },
-  twoBody: { fontFamily: 'Knockout', fontSize: 13, color: '#1f6fc0', marginBottom: 2 },
+  twoPhone: { flexDirection: 'row', width: 150, height: 58, marginTop: 4, marginBottom: 2, borderRadius: 14, borderWidth: 3, borderColor: '#0b3a6b',
+    overflow: 'hidden', backgroundColor: '#ffffff' },
+  twoHalf: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  twoHalfLeft: { backgroundColor: '#d6ecff', borderRightWidth: 2, borderRightColor: '#0b3a6b' },
+  twoHalfRight: { backgroundColor: '#ffe1d9' },
+  twoNote: { width: 44, height: 44 },
   twoRow: { flexDirection: 'row', gap: 10 },
+  twoBtnIn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   easyBtn: { alignSelf: 'center', marginTop: 6, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 3, borderColor: '#0b3a6b', paddingHorizontal: 16, paddingVertical: 6 },
   easyBtnTxt: { fontFamily: 'Shark', fontSize: 15, color: '#1f6fc0' },
   marchPill: { position: 'absolute', left: 12, top: 94, minWidth: 104, height: 44, borderRadius: 22, borderWidth: 3, borderColor: '#0b3a6b', backgroundColor: '#ffffff', paddingHorizontal: 14, justifyContent: 'center', alignItems: 'flex-start' },

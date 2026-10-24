@@ -51,7 +51,8 @@ import { useWalkSense } from '../../gamekit/motion/useWalkSense';
 import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BOSS_ART, THEMED_SHARK_FRAMES, THEMES, type WhackTheme } from './assets';
-import { buildBurst, walkOk, type Timeline, type WalkBoost } from './timeline';
+import { buildBurst, walkOk, type Timeline, type WalkBoost, type WhackThemeId } from './timeline';
+import { FinnUnlock } from './FinnUnlock';
 import {
   E_ATTACK, E_BLOCKED, E_BOSS_DMG, E_BOSS_DOWN, E_DECOY, E_END, E_HIT, E_SPLAT, E_SPLAT_CLEAR, E_WIN, NO_CARRY, createSim, type BurstCarry, type BurstResult,
 } from './sim';
@@ -74,7 +75,7 @@ import { ghostFromRun, paceAt, pbGhostKey } from './net/ghost';
 import { mapGhostHole } from './formations';
 import { createLocalNetAdapter } from './net/localAdapter';
 import { ghostDeltaLine, lineDaySeed, lineDayXform, parkLocalDate, type LineDayEntry } from './net/lineDay';
-import { applyMastery, applyRunToBook, cardTitle, nextRunOfDay, type CardBook, type FinnCard, type MasteryBook } from './meta/collection';
+import { applyMastery, applyRunToBook, nextRunOfDay, type CardBook, type FinnCard, type MasteryBook } from './meta/collection';
 import type { DuelReveal, WhackDuelConfig, WhackGhost, WhackNetAdapter, WhackRaidConfig } from './net/types';
 
 registerStudioAudio(['whack', 'boss']);
@@ -220,6 +221,16 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const [fever, setFever] = useState(false);
   const [shellScore, setShellScore] = useState(0);
   const [result, setResult] = useState<GameResult | null>(null);
+  // The costume Finn this run unlocked: shown as a picture in the card, never as the title.
+  const [unlockedTheme, setUnlockedTheme] = useState<WhackThemeId | null>(null);
+  // The capture autoplay's "ready" tap between bursts: cleared when the run ends,
+  // restarts or unmounts, so it can never start a burst under the next run's countdown.
+  const autoReadyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearAutoReady = useCallback(() => {
+    if (autoReadyTimer.current) clearTimeout(autoReadyTimer.current);
+    autoReadyTimer.current = null;
+  }, []);
+  useEffect(() => clearAutoReady, [clearAutoReady]);
   const [banner, setBanner] = useState<{ text: string | null; sub?: string | null; color?: string; stamp: number }>({ text: null, stamp: 0 });
   const [breather, setBreather] = useState<null | {
     burstScore: number; runScore: number; stats: { label: string; value: string }[]; next: string; readyAt: number; goal: string | null;
@@ -569,6 +580,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     if (finishing.current) return;
     finishing.current = true;
     // The Run is over the moment this is called: no breather timer or autoplay may start another Burst.
+    clearAutoReady();
     setPhase('done');
     setBreather(null);
     runtime.setRunning(false);
@@ -665,10 +677,12 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       const sting = !wrappedRef.current && !(ride && last?.result.win);
       if (sting) GameAudio.play(stars > 0 ? cues.stingWin : cues.stingLose);
       meta.ownFinishSfx = sting;
+      // The star title keeps its moment; the new Finn is a picture inside the card.
+      setUnlockedTheme(unlocked ? (unlocked as FinnCard).theme as WhackThemeId : null);
       setResult({
         score: total,
         stars,
-        message: unlocked ? `NEW FINN: ${cardTitle(theme)}` : message,
+        message,
         maxCombo: maxStreak,
         thresholds: ride || format === 'raid' || format === 'duel' ? undefined : thresholds,
         rival: format === 'duel' ? { name: duel?.rival.name ?? 'Captain Fin', score: rivalTotalRef.current }
@@ -822,7 +836,10 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       setPhase('breather');
       setTimeout(() => setReadyOn(true), 1200);
       // Autoplay saves a banked fever for the finale (the expert line).
-      if (autoplay) setTimeout(() => onReadyRef.current(feverReady && next === totalBursts - 1), 3500);
+      if (autoplay) {
+        clearAutoReady();
+        autoReadyTimer.current = setTimeout(() => { autoReadyTimer.current = null; onReadyRef.current(feverReady && next === totalBursts - 1); }, 3500);
+      }
     }, 800);
   }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay]);
 
@@ -850,7 +867,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     boostedRunRef.current = false;
     lastBoostRef.current = -9;
     walkBaseRef.current = metersNow();
+    clearAutoReady();
     setResult(null);
+    setUnlockedTheme(null);
     if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     startWall.current = Date.now();
@@ -886,7 +905,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     bankedRef.current = [];
     carryRef.current = NO_CARRY;
     boostedRunRef.current = false;
+    clearAutoReady();
     setResult(null);
+    setUnlockedTheme(null);
     if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     setBreather(null);
@@ -980,6 +1001,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       onResume={handleResume}
       onRematch={!ride && format !== 'duel' ? handleRematch : undefined}
       onComplete={onComplete}
+      resultExtras={result && unlockedTheme ? <FinnUnlock theme={unlockedTheme} reducedMotion={reducedMotion} /> : undefined}
       resultCardFooter={result ? <ShareCardButton chip tiles={tilesRef.current} rideName={taskName ?? null} score={result.score} stars={result.stars ?? 0} /> : undefined}
       onClose={onClose}
       onQuit={onQuit}
