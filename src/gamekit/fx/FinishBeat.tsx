@@ -20,10 +20,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { BlurMask, Canvas, Circle, Group, Path, Skia, Text as SkText } from '@shopify/react-native-skia';
-import { cancelAnimation, Easing, ReduceMotion, useDerivedValue, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import { cancelAnimation, Easing, ReduceMotion, useDerivedValue, useSharedValue, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useDisplayFont } from './displayFont';
 import { FINISH_BEAT_MS, FINISH_SPARKLES_MAX, finishPose, finishSparkle } from '../core/gameMoments';
 import { GOLD_FX } from '../../ui/motion';
+
+/** Dev capture only: hold the beat on this time (ms) for 6 s so a screenshot shows an exact frame. */
+const HOLD_MS = __DEV__ ? Number(process.env.EXPO_PUBLIC_FINISH_HOLD_MS || -1) : -1;
 
 /** The last-5 number size, so FINISH! lands with the same weight. */
 const LABEL_PX = 110;
@@ -63,8 +66,13 @@ export const FinishBeat = React.memo(function FinishBeat({ fireKey, label = 'FIN
     setLive(true);
     cancelAnimation(clock);
     clock.value = 0;
-    clock.value = withTiming(FINISH_BEAT_MS, { duration: FINISH_BEAT_MS, easing: Easing.linear, reduceMotion: ReduceMotion.Never });
-    const id = setTimeout(() => setLive(false), FINISH_BEAT_MS + 40);
+    const lin = { easing: Easing.linear, reduceMotion: ReduceMotion.Never };
+    const hold = HOLD_MS > 0 && HOLD_MS < FINISH_BEAT_MS;
+    clock.value = hold
+      ? withSequence(withTiming(HOLD_MS, { duration: HOLD_MS, ...lin }), withTiming(HOLD_MS + 0.01, { duration: 6000, ...lin }),
+        withTiming(FINISH_BEAT_MS, { duration: FINISH_BEAT_MS - HOLD_MS, ...lin }))
+      : withTiming(FINISH_BEAT_MS, { duration: FINISH_BEAT_MS, ...lin });
+    const id = setTimeout(() => setLive(false), FINISH_BEAT_MS + 40 + (hold ? 6000 : 0));
     return () => clearTimeout(id);
   }, [fireKey, clock]);
   useEffect(() => () => cancelAnimation(clock), [clock]);

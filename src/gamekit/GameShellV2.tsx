@@ -84,6 +84,9 @@ import { FinalSeconds } from './fx/FinalSeconds';
 import { COUNT_END_MS, GO_AT_MS, GO_SPARKLES, RARE_GO_SPARKLES, STAGE_READY_MAX_MS, countPose, countSteps, finalSecondsBeat, isRareGo, noteCountStart } from './core/gameMoments';
 import { AMBIENT, DURATION, flashPeak, momentParticles } from '../ui/motion';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
+
+/** Dev capture only: hold the drawn count on this clock time (ms) for 6 s. Never set in release. */
+const COUNT_HOLD_MS = __DEV__ ? Number(process.env.EXPO_PUBLIC_COUNT_HOLD_MS || -1) : -1;
 import { EASE } from '../ui/motionEasing';
 import { usePowerBudget } from '../power';
 
@@ -440,10 +443,21 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const runCountStage = useCallback((fromMs: number) => {
       cancelAnimation(cdClock);
       cdClock.value = fromMs;
-      cdClock.value = withTiming(COUNT_END_MS, { duration: COUNT_END_MS - fromMs, easing: Easing.linear, reduceMotion: CLOCK_ALWAYS }, (finished) => {
+      const done = (finished?: boolean) => {
         'worklet';
         if (finished) runOnJS(endCountStage)();
-      });
+      };
+      // Dev capture only (EXPO_PUBLIC_COUNT_HOLD_MS): the drawn count pauses on one pose for 6 s so a
+      // screenshot shows an exact frame on a loaded machine (play still opens on time).
+      if (COUNT_HOLD_MS > fromMs && COUNT_HOLD_MS < COUNT_END_MS) {
+        cdClock.value = withSequence(
+          withTiming(COUNT_HOLD_MS, { duration: COUNT_HOLD_MS - fromMs, easing: Easing.linear, reduceMotion: CLOCK_ALWAYS }),
+          withTiming(COUNT_HOLD_MS + 0.01, { duration: 6000, easing: Easing.linear, reduceMotion: CLOCK_ALWAYS }),
+          withTiming(COUNT_END_MS, { duration: COUNT_END_MS - COUNT_HOLD_MS, easing: Easing.linear, reduceMotion: CLOCK_ALWAYS }, done),
+        );
+      } else {
+        cdClock.value = withTiming(COUNT_END_MS, { duration: COUNT_END_MS - fromMs, easing: Easing.linear, reduceMotion: CLOCK_ALWAYS }, done);
+      }
       setGoTail(true);
     }, [cdClock, endCountStage]);
     const fireCountStep = useCallback((step: ReturnType<typeof countSteps>[number]) => {

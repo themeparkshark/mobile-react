@@ -444,3 +444,17 @@ test('round 3: the Whack chase is a picture (bead vs ghost fin, a star that fill
   assert.match(whack, /chase=\{\{ star: chaseStar, starPop: chasePop, earned: chaseEarned/);
   assert.match(whack, /GameAudio\.playLadder\(cues\.coinTick, 9/, 'a gold ding when the bead passes the ghost');
 });
+
+test('round 3: misses and the last rush never go red (Banana top tier and rush in gold, OUT! white, Memory slips calm blue)', () => {
+  const field = read('src/games/banana-basket/render/Field.tsx');
+  assert.match(field, /const TIER_COLORS = \[INK, INK, BLUE, GOLD, HOT\];/);
+  assert.doesNotMatch(field, /if \(s\.rushOn\) return CORAL;/);
+  assert.doesNotMatch(field, /if \(st === ST_OUT\) return CORAL;/);
+  assert.doesNotMatch(field, /n >= 20 \? CORAL/);
+  const fxs = read('src/games/memory/BoardFx.tsx');
+  assert.doesNotMatch(fxs, /slipPath\} style="stroke" strokeWidth=\{2\} strokeCap="round" color=\{MM\.coral\}/);
+  assert.doesNotMatch(read('src/games/memory/MemoryExtras.tsx'), /slip: \{ bg: MM\.coral/);
+  const game = read('src/games/memory/MemoryGame.tsx');
+  assert.doesNotMatch(game, /tipSlip: \{ borderColor: MM\.coral \}/);
+  assert.doesNotMatch(game, /ev\.deltaMs > 0 \? 'gold' : 'coral'/);
+});

@@ -1704,7 +1704,7 @@ export default function MemoryGame({
             cards.current[e.ids[ev.a]]?.slip(wob);
             cards.current[e.ids[ev.b]]?.slip(wob);
             if (ev.kind === 'a' && ev.ghost >= 0) {
-              // Teaching beat (a): the forgotten card lifts and shows its face, a coral dashed arc to the wrong card.
+              // Teaching beat (a): the forgotten card lifts and shows its face, a calm white dashed arc to the wrong card.
               const gid = e.ids[ev.ghost];
               cards.current[gid]?.forgot();
               const cg = slotCenter(g, ev.ghost);
@@ -1887,7 +1887,7 @@ export default function MemoryGame({
         }
         case 'clock': {
           const top = g.rope.y + 18;
-          flights.current?.tag(`${ev.deltaMs > 0 ? '+' : '-'}${(Math.abs(ev.deltaMs) / 1000).toFixed(ev.deltaMs % 1000 ? 1 : 0)}s`, g.W / 2, top, 56, ev.deltaMs > 0 ? 'gold' : 'coral');
+          flights.current?.tag(`${ev.deltaMs > 0 ? '+' : '-'}${(Math.abs(ev.deltaMs) / 1000).toFixed(ev.deltaMs % 1000 ? 1 : 0)}s`, g.W / 2, top, 56, ev.deltaMs > 0 ? 'gold' : 'blue');
           if (ev.deltaMs > 0) GameAudio.play('ui.tap', { volume: 0.2 });
           break;
         }
@@ -2573,7 +2573,7 @@ const styles = StyleSheet.create({
   parPlate: { height: 34, borderRadius: 12, backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: MM.ink, paddingHorizontal: 10, justifyContent: 'center', marginRight: 8 },
   parText: { fontFamily: 'Shark', fontSize: 15, color: MM.navyText },
   incomingRim: { position: 'absolute', borderRadius: 24, borderWidth: 5, borderColor: MM.urgent },
-  stumble: { position: 'absolute', borderRadius: 14, backgroundColor: 'rgba(120,132,150,0.45)', borderWidth: 4, borderColor: MM.coral },
+  stumble: { position: 'absolute', borderRadius: 14, backgroundColor: 'rgba(120,132,150,0.45)', borderWidth: 4, borderColor: '#0768b9' },
   wash: { position: 'absolute', backgroundColor: '#ffffff', borderRadius: 14 },
   gullFrame: { position: 'absolute', left: 0, top: 0, width: 80, height: 70 },
   headsUp: { borderWidth: 6, borderColor: MM.gold },
@@ -2591,7 +2591,7 @@ const styles = StyleSheet.create({
   arrowHeadL: { width: 0, height: 0, borderTopWidth: 8, borderBottomWidth: 8, borderRightWidth: 10, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRightColor: MM.navyText },
   arrowHeadR: { width: 0, height: 0, borderTopWidth: 8, borderBottomWidth: 8, borderLeftWidth: 10, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: MM.navyText },
   tip: { position: 'absolute', alignSelf: 'center', backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: MM.scout, paddingHorizontal: 14, paddingVertical: 6 },
-  tipSlip: { borderColor: MM.coral },
+  tipSlip: { borderColor: '#0768b9' },
   tipText: { fontFamily: 'Knockout', fontSize: 16, color: MM.navyText },
   unlock: { position: 'absolute', left: 40, right: 40, alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 3, borderColor: MM.gold, paddingVertical: 10 },
   unlockKicker: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, letterSpacing: 1 },

@@ -559,6 +559,15 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     setTimeout(() => setBanner((b) => (b.text === text ? { ...b, text: null, sub: null } : b)), ms);
   }, []);
 
+  // The HUD timer shows a burst's full length while its count or READY/GO runs (no 0 or 30 jumping to 12 at GO).
+  const showTimerLen = useCallback((len: number) => {
+    runOnUI(() => {
+      'worklet';
+      if (runtime.rt.value.running) return;
+      runtime.sim.value = { ...runtime.sim.value, len, t: 0 };
+    })();
+  }, [runtime.rt, runtime.sim]);
+
   const startBurst = useCallback((bi: number, runIdx: number, withSlam: boolean, feverFired = false) => {
     if (feverFired) carryRef.current = { ...carryRef.current, feverReady: false, meter: 0 };
     const t = buildTimeline(bi, runIdx, feverFired);
@@ -600,6 +609,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       GameAudio.play(cues.start, { volume: 0.8 });
     };
     if (withSlam) {
+      showTimerLen(t.lengthMs);
       flash('READY...', null, '#ffffff', 450);
       GameAudio.play(cues.pip);
       setTimeout(() => {
@@ -611,7 +621,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     } else {
       go();
     }
-  }, [buildTimeline, runtime, autoplay, cues, flash, bossFx, juice]);
+  }, [buildTimeline, runtime, autoplay, cues, flash, bossFx, juice, showTimerLen]);
 
   const finishRun = useCallback((reason?: string) => {
     if (finishing.current) return;
@@ -923,16 +933,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   // The HUD timer shows this burst's length from the first frame of the count (12, not the empty sim's 30),
   // so a kid never sees the number jump at GO.
   const previewLen = useMemo(() => (format === 'duel' ? 15000 : buildTimeline(0, runIndex).lengthMs), [buildTimeline, runIndex, format]);
+  // Before the first burst (the shell's count) and on Play again (the rematch count), never under a results card.
   useEffect(() => {
-    // Before the first burst of a run (the shell's count), and after a run while the rematch count runs.
-    if (!visible || (tlRef.current && phase !== 'done')) return;
-    const len = previewLen;
-    runOnUI(() => {
-      'worklet';
-      if (runtime.rt.value.running) return;
-      runtime.sim.value = { ...runtime.sim.value, len, t: 0 };
-    })();
-  }, [visible, previewLen, runtime.rt, runtime.sim, phase]);
+    if (!visible || tlRef.current) return;
+    showTimerLen(previewLen);
+  }, [visible, previewLen, showTimerLen]);
 
   const handlePause = useCallback((reason?: string) => {
     runtime.setRunning(false);
@@ -965,9 +970,10 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     setBreather(null);
+    showTimerLen(buildTimeline(0, nextRun).lengthMs);
     // The shell runs the fresh count (2-1-GO on a repeat) and calls onStart at GO, which starts the
     // burst: no second READY/GO slam and no burst running under the count (one start, one callout).
-  }, [runIndex]);
+  }, [runIndex, showTimerLen, buildTimeline]);
 
   // Wrap-up (boarding / left the queue): bank the live Burst from a coherent snapshot.
   const wrapMirror = useRef<{ score: number } | null>(null);

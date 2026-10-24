@@ -681,9 +681,9 @@ const styles = StyleSheet.create({
   center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   cornerTR: { position: 'absolute', top: -6, right: -6 },
   seenTag: {
-    position: 'absolute', width: 52, alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 8, borderWidth: 2, borderColor: MM.coral,
+    position: 'absolute', width: 52, alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 8, borderWidth: 2, borderColor: '#0768b9',
   },
-  seenText: { fontFamily: 'Shark', fontSize: 13, color: MM.coral },
+  seenText: { fontFamily: 'Shark', fontSize: 13, color: '#0768b9' },
 });
 
 export type { SharedValue };
