@@ -201,3 +201,13 @@ test('pull to refresh: the shark fills the gap, a two-ring splash with droplets,
   assert.equal(PULL_SHOW.droplets, 5);
   assert.match(read('src/ui/SharkRefresh.tsx'), /<GoldCheck size=\{30\} \/>/);
 });
+
+test('grids stagger in once: Inventory and the Shark Shop rise cell by cell on first mount (FlashList-safe)', () => {
+  const cell = read('src/ui/StaggerCell.tsx');
+  assert.match(cell, /useState\(\(\) => \(reduced \? null : staggerDelay\(index\)\)\)/, 'decided once on first mount, none with Reduce Motion');
+  assert.doesNotMatch(cell, /entering=/, 'no layout animation inside a recycling list');
+  assert.match(read('src/screens/InventoryScreen.tsx'), /<StaggerCell index=\{index\} style=\{STAGGER_FILL\}>/);
+  assert.match(read('src/screens/StoreScreen.tsx'), /<StaggerCell index=\{index\} style=\{\{ padding: 8, flex: 1 \}\}>/);
+  for (let i = 0; i < 8; i++) assert.ok(motion.staggerDelay(i) + motion.DURATION.base <= motion.STAGGER.capMs);
+  assert.equal(motion.staggerDelay(8), null, 'the ninth cell is simply there');
+});

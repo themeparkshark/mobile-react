@@ -1,4 +1,5 @@
 import { FlashList } from '@shopify/flash-list';
+import StaggerCell from '../ui/StaggerCell';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
@@ -686,10 +687,10 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
                     backgroundColor: 'rgba(255, 255, 255, .6)',
                   }}
                   numColumns={3}
-                  renderItem={({ item }) => (
-                    <View style={{ padding: 8, flex: 1 }}>
+                  renderItem={({ item, index }) => (
+                    <StaggerCell index={index} style={{ padding: 8, flex: 1 }}>
                       <Item item={item} onPurchase={purchaseItem} />
-                    </View>
+                    </StaggerCell>
                   )}
                   estimatedItemSize={80}
                   keyExtractor={(item) => String(item.id)}

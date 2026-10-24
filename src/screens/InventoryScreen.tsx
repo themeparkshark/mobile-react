@@ -1,4 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
+import StaggerCell from '../ui/StaggerCell';
+const STAGGER_FILL = { flex: 1 } as const;
 import { Image } from 'expo-image';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
@@ -414,11 +416,11 @@ export default function InventoryScreen() {
                       <Text style={{ color: '#15395B', fontWeight: '700' }}>More items didn’t load. Tap to try again.</Text>
                     </Pressable>
                   ) : null}
-                  renderItem={({ item }) => <Item item={item}
+                  renderItem={({ item, index }) => <StaggerCell index={index} style={STAGGER_FILL}><Item item={item}
                     inventory={worn}
                     highlighted={highlightedId === item.id}
                     memberLocked={memberWearLocked(item, isMember, memberLockOn)}
-                    onToggle={changeOutfit} />}
+                    onToggle={changeOutfit} /></StaggerCell>}
                   estimatedItemSize={compact ? 116 : 150}
                   keyExtractor={(item) => item.id.toString()}
                   numColumns={3}
