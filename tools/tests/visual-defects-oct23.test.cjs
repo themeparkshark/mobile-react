@@ -1048,3 +1048,10 @@ test('launch: the sky sheet waits under the cover from the first frame, PLAY RID
   assert.doesNotMatch(button.slice(button.indexOf('const markArtReady'), button.indexOf('const markArtLoaded')), /pillArtSeen = true/,
     'the safety never claims the picture is cached');
 });
+
+test('launch cover: once its fade has begun no newer plan snaps it back to full (no long double picture)', () => {
+  const cover = read('src/components/map/MapLaunchCover.tsx');
+  assert.match(cover, /if \(liftStarted\.value === 1 \|\| opacity\.value < 1\) \{ liftStarted\.value = 1; liftAskedAt\.value = -1; return; \}/);
+  assert.doesNotMatch(cover, /opacity\.value = 1;/, 'nothing raises the cover back up mid-lift');
+  assert.match(cover, /runOnJS\(coverLifted\)\(liftToken\.value\)/, 'the fade reports the newest plan, so the cover leaves when it ends');
+});

@@ -57,7 +57,13 @@ function CoverSky({ plan, style, blockTouches, launch }: {
   // half-faded double picture. -1: no lift asked for. Runs only while a lift is waiting.
   const liftAskedAt = useSharedValue(-1);
   const smoothFrames = useSharedValue(0);
+  // The token the cover reports when its fade ends: always the newest plan's, so a fade that began
+  // under an older plan still lifts the cover the moment it finishes.
   const liftToken = useSharedValue(plan.token);
+  // 1 once the lift has begun (the gate started it, or the deadline fade is under way). From then on
+  // no newer plan touches the fade: the cover only ever goes down, never back up to full (a second
+  // map mounting mid-fade used to snap it back and fade it again, a long half-faded double picture).
+  const liftStarted = useSharedValue(0);
   const liftGate = useFrameCallback((info) => {
     'worklet';
     if (liftAskedAt.value < 0) return;
@@ -66,26 +72,27 @@ function CoverSky({ plan, style, blockTouches, launch }: {
     smoothFrames.value = gap > 0 && gap < 34 ? smoothFrames.value + 1 : 0;
     if (smoothFrames.value < COVER_SMOOTH_FRAMES && info.timestamp - liftAskedAt.value < COVER_SMOOTH_WAIT_MS) return;
     liftAskedAt.value = -1;
-    const tok = liftToken.value;
+    liftStarted.value = 1;
     cancelAnimation(fill);
     // The last stretch of the bar fills only now, as the map arrives, then the cover fades.
     fill.value = withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) });
     opacity.value = withDelay(COVER_FINISH_MS, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) },
-      (finished) => { 'worklet'; if (finished) runOnJS(coverLifted)(tok); }));
+      (finished) => { 'worklet'; if (finished) runOnJS(coverLifted)(liftToken.value); }));
   }, false);
   // A layout effect: the plan reaches the UI thread in the same commit that mounts the cover. The
   // UI thread works out the time left itself (from the plan's wall-clock deadline), so a busy UI
   // thread (the map screen's first mount) that runs this late never pushes the lift past its deadline.
   useLayoutEffect(() => {
     const tok = plan.token;
-    const done = (finished?: boolean) => { 'worklet'; if (finished) runOnJS(coverLifted)(tok); };
     if (plan.lifting) liftGate.setActive(true);
     runOnUI((deadline: number, share: number | null, ceiling: number, lifting: boolean) => {
       'worklet';
+      liftToken.value = tok;
+      // The lift has begun (or the deadline fade is already drawing): let it finish, never restart it.
+      if (liftStarted.value === 1 || opacity.value < 1) { liftStarted.value = 1; liftAskedAt.value = -1; return; }
       cancelAnimation(opacity);
       if (lifting) {
         // The bar keeps creeping; the frame gate above finishes it and fades the cover.
-        liftToken.value = tok;
         smoothFrames.value = 0;
         liftAskedAt.value = 0;
         return;
@@ -97,12 +104,12 @@ function CoverSky({ plan, style, blockTouches, launch }: {
       // full. It fills the rest only as the cover lifts. It never moves back.
       const remaining = Math.max(0, deadline - Date.now());
       if (share !== null) fill.value = share;
-      opacity.value = 1;
       const creep = Math.max(0, remaining - COVER_FINISH_MS);
       fill.value = withSequence(
         withTiming(Math.max(fill.value, ceiling), { duration: Math.max(250, creep), easing: Easing.linear }),
         withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) }));
-      opacity.value = withDelay(remaining, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) }, done));
+      opacity.value = withDelay(remaining, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) },
+        (finished) => { 'worklet'; if (finished) runOnJS(coverLifted)(liftToken.value); }));
     })(plan.deadline, plan.share, plan.ceiling, plan.lifting);
   // One set of animations per plan.
   // eslint-disable-next-line react-hooks/exhaustive-deps
