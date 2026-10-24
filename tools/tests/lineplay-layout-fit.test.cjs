@@ -365,6 +365,9 @@ test('the chapter page ends on whole blocks: the crew row starts below the windo
   assert.equal(m.foldGap(150, 176, 52, 12), 12, 'the bubbles themselves are below the window');
   const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
   assert.match(chapter, /marginTop: foldGap\(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP\)/);
+  // Details open on a 17 Pro: the bubbles would peek under PLAY NOW and the header, so they start below the window too.
+  assert.match(chapter, /marginTop: foldGap\(viewHeight, leadBottom, trailHeight, compact \? TRAIL_GAP_COMPACT : TRAIL_GAP\)/);
+  assert.equal(m.foldGap(149, 130, 44, 8), 21, '17 Pro reading Details: bubbles below the window, not a sliver');
 });
 
 test('the coin has no box: the halo canvas reaches past the ring and no plank shadow sits in the ring', () => {
