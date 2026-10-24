@@ -176,6 +176,11 @@ interface GameShellV2Props {
   /** Short objective line shown under the countdown. */
   objective?: string;
   /**
+   * A picture demo of how to play, shown in the countdown pill instead of the objective text (a
+   * 7-year-old reads it with zero words). The objective stays as the VoiceOver label.
+   */
+  countdownDemo?: React.ReactNode;
+  /**
    * Whole seconds left on a timed round. From 5 down the clock turns gold, a
    * soft gold edge breathes and each second stamps in; 0 slams TIME! (the
    * game still owns its own end). Pass only while the round runs.
@@ -289,6 +294,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       fever = false,
       personalBest,
       objective,
+      countdownDemo,
       goal,
       result,
       starMultipliers = DEFAULT_STAR_MULT,
@@ -947,12 +953,12 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               style={styles.cdTouch}
               onPress={skipCountdown}
               accessibilityRole="button"
-              accessibilityLabel={`Starting in ${countText}. Tap to skip.`}
+              accessibilityLabel={`${objective ? `${objective} ` : ""}Starting in ${countText}. Tap to skip.`}
             >
               <Animated.View style={[styles.cdPill, pillBreath]} pointerEvents="none">
                 {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
-                {objective ? <Text style={styles.cdPillText} numberOfLines={2}>{objective}</Text> : null}
-                <Text style={styles.skipHint}>tap to skip</Text>
+                {countdownDemo ?? (objective ? <Text style={styles.cdPillText} numberOfLines={2}>{objective}</Text> : null)}
+                {countdownDemo ? null : <Text style={styles.skipHint}>tap to skip</Text>}
               </Animated.View>
             </Pressable>
           ) : null}

@@ -269,6 +269,12 @@ export interface HoleAnim {
   ghostHole: number[];
   ghostC: number[];
   ghostNext: number;
+  /**
+   * Curtain call (wow-games r4): fx ms when the burst ended, -1 off. Every empty well pops a shark up on a
+   * reading-order stagger and they wave together, so FINISH! lands on a full, happy board (cosmetic only:
+   * the sim has ended, nothing is tappable).
+   */
+  curtainAt: number;
 }
 
 export function createHoleAnim(): HoleAnim {
@@ -284,7 +290,33 @@ export function createHoleAnim(): HoleAnim {
     fingerAt: -99999, fingerX: 0, fingerY: 0, fingerSpin: 0, fxNow: 0, veil: 0, fever: 0,
     hatAt: arr(-1), hatCrit: arr(0), releaseAt: -99999, releaseX: 0, releaseY: 0,
     ghostAt: arr(-99999, GHOST_SLOTS), ghostHole: arr(0, GHOST_SLOTS), ghostC: arr(0, GHOST_SLOTS), ghostNext: 0,
+    curtainAt: -1,
   };
+}
+
+/** Curtain call timing: each well joins CURTAIN_STEP_MS after the one before it, rising over CURTAIN_RISE_MS. */
+export const CURTAIN_STEP_MS = 45;
+export const CURTAIN_RISE_MS = 150;
+/** Reading order from the centre out, so the wave starts where the eye already is. */
+export const CURTAIN_ORDER = [4, 1, 3, 5, 7, 0, 2, 6, 8];
+
+/**
+ * Curtain-call pose for well `i` at fx time `now` (pure, unit-tested): rise 0..1 on an outBack pop, a wave
+ * sway in degrees and a small hop. Returns rise -1 before the well's turn.
+ */
+export function curtainPose(i: number, now: number, at: number, reduced: boolean): { rise: number; rot: number; hop: number } {
+  'worklet';
+  if (at < 0) return { rise: -1, rot: 0, hop: 0 };
+  let order = 0;
+  for (let k = 0; k < 9; k++) if (CURTAIN_ORDER[k] === i) order = k;
+  const c = now - at - order * CURTAIN_STEP_MS;
+  if (c < 0) return { rise: -1, rot: 0, hop: 0 };
+  if (reduced) return { rise: 1, rot: 0, hop: 0 };
+  const rise = c < CURTAIN_RISE_MS ? 0.3 + 0.7 * outBack(c / CURTAIN_RISE_MS, 1.8) : 1;
+  // Everyone waves together (1.6 Hz, alternate wells lean the other way) and hops on the beat.
+  const w = Math.sin((now - at) * 0.01005 + (i % 2) * Math.PI);
+  const hop = c > CURTAIN_RISE_MS ? Math.max(0, Math.sin((now - at) * 0.02010)) * 5 : 0;
+  return { rise, rot: 7 * w, hop };
 }
 
 function clamp01(v: number): number {
@@ -726,6 +758,16 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
       }
     } else {
       rs.rimLight[i] = 0;
+    }
+    // Curtain call: the burst is over and this well is empty, so its shark pops up and waves.
+    if (rs.frame[i] === F_NONE && s.ended && an.curtainAt >= 0) {
+      const cp = curtainPose(i, now, an.curtainAt, reducedMotion);
+      if (cp.rise >= 0) {
+        rise = cp.rise;
+        rs.frame[i] = F_POP;
+        rs.rot[i] = cp.rot;
+        placePose(rs, i, boxes[F_POP], popBox, cx, base + (1 - rise) * H * 0.9 - cp.hop, H, poseScale ? poseScale[F_POP] : 1);
+      }
     }
     // Contact shadow on the water disc grows with the rise (0.3 -> 0.7 cell).
     if (rs.frame[i] !== F_NONE && rise > 0) {

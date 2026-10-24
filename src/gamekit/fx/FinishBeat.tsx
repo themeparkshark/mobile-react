@@ -9,21 +9,28 @@
  * gold and white coin sparkles flies out, falls and fades. Then it holds, so
  * the kid reads it, and fades before the results card.
  *
- * Mounted only for the beat (about 1.5 s): nothing draws before or after it.
+ * Round 4: the house GoldBurst ray fan opens behind the label (0.8 of GO's), so the end is the
+ * brightest frame of the run, and the beat hands off at FINISH_HANDOFF_MS (no dead hold).
+ *
+ * Two ways to fire. `fireKey` (JS) mounts the canvas for the beat. `trigger` (a shared value the game
+ * bumps on the UI frame its clock hits zero) starts the clock on the UI thread with no JS round trip;
+ * pass `armed` while the end is near so the canvas is already mounted, drawing nothing, when it fires.
  * One clock on the UI thread drives every piece (core/gameMoments finishPose).
  *
- *   const [finishKey, setFinishKey] = useState(0);
- *   <FinishBeat fireKey={finishKey} label="FINISH!" width={W} height={H} y={stampY} reduced={rm} sparkles={12} />
- *   setFinishKey((k) => k + 1); // fire
+ *   <FinishBeat trigger={runtime.endTick} armed={lastSeconds} label="FINISH!" width={W} height={H} y={stampY} reduced={rm}
+ *     sparkles={momentParticles(FINISH_SPARKLES_MAX, budget, rm)} />
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { BlurMask, Canvas, Circle, Group, Path, Skia, Text as SkText, rect } from '@shopify/react-native-skia';
-import { cancelAnimation, Easing, ReduceMotion, useDerivedValue, useSharedValue, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
+import {
+  cancelAnimation, Easing, ReduceMotion, runOnJS, useAnimatedReaction, useDerivedValue, useSharedValue, withSequence, withTiming, type SharedValue,
+} from 'react-native-reanimated';
 import { useDisplayFont } from './displayFont';
-import { FINISH_BEAT_MS, FINISH_SPARKLES_MAX, finishPose, finishSparkle } from '../core/gameMoments';
+import { FINISH_BEAT_MS, FINISH_FAN_OF_GO, FINISH_SPARKLES_MAX, finishPose, finishSparkle } from '../core/gameMoments';
 import { GOLD_FX } from '../../ui/motion';
+import { GoldBurst } from '../../ui/GoldBurst';
 
 /** Dev capture only: hold the beat on this time (ms) for 6 s so a screenshot shows an exact frame. */
 const HOLD_MS = __DEV__ ? Number(process.env.EXPO_PUBLIC_FINISH_HOLD_MS || -1) : -1;
@@ -33,7 +40,13 @@ const LABEL_PX = 110;
 
 export interface FinishBeatProps {
   /** Bump to fire (0 never fires). */
-  fireKey: number;
+  fireKey?: number;
+  /** UI-thread fire: the beat starts on the frame this value changes (and is above 0). */
+  trigger?: SharedValue<number>;
+  /** Keep the canvas mounted (drawing nothing) so a `trigger` fire lands on its own frame. */
+  armed?: boolean;
+  /** Called on JS once the beat has started (sound, haptic, clearing other callouts). */
+  onFire?: () => void;
   label?: string;
   width: number;
   height: number;
@@ -60,25 +73,52 @@ function sparkleStar() {
   return p;
 }
 
-export const FinishBeat = React.memo(function FinishBeat({ fireKey, label = 'FINISH!', width, height, y, reduced, sparkles = 12, flash = 0, clipTop = 0 }: FinishBeatProps) {
+const HOLD = HOLD_MS > 0 && HOLD_MS < FINISH_BEAT_MS;
+
+/** Start the beat's clock (worklet: runs on the trigger frame, or from JS through the shared value). */
+function runClock(clock: SharedValue<number>) {
+  'worklet';
+  cancelAnimation(clock);
+  clock.value = 0;
+  const lin = { easing: Easing.linear, reduceMotion: ReduceMotion.Never };
+  clock.value = HOLD
+    ? withSequence(withTiming(HOLD_MS, { duration: HOLD_MS, ...lin }), withTiming(HOLD_MS + 0.01, { duration: 6000, ...lin }),
+      withTiming(FINISH_BEAT_MS, { duration: FINISH_BEAT_MS - HOLD_MS, ...lin }))
+    : withTiming(FINISH_BEAT_MS, { duration: FINISH_BEAT_MS, ...lin });
+}
+
+export const FinishBeat = React.memo(function FinishBeat({
+  fireKey = 0, trigger, armed = false, onFire, label = 'FINISH!', width, height, y, reduced, sparkles = 12, flash = 0, clipTop = 0,
+}: FinishBeatProps) {
   const [live, setLive] = useState(false);
   const clock = useSharedValue(-1);
-  useEffect(() => {
-    if (!fireKey) return undefined;
+  const liveFor = FINISH_BEAT_MS + 40 + (HOLD ? 6000 : 0);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onFireRef = React.useRef(onFire);
+  onFireRef.current = onFire;
+  const fired = React.useCallback(() => {
     setLive(true);
-    cancelAnimation(clock);
-    clock.value = 0;
-    const lin = { easing: Easing.linear, reduceMotion: ReduceMotion.Never };
-    const hold = HOLD_MS > 0 && HOLD_MS < FINISH_BEAT_MS;
-    clock.value = hold
-      ? withSequence(withTiming(HOLD_MS, { duration: HOLD_MS, ...lin }), withTiming(HOLD_MS + 0.01, { duration: 6000, ...lin }),
-        withTiming(FINISH_BEAT_MS, { duration: FINISH_BEAT_MS - HOLD_MS, ...lin }))
-      : withTiming(FINISH_BEAT_MS, { duration: FINISH_BEAT_MS, ...lin });
-    const id = setTimeout(() => setLive(false), FINISH_BEAT_MS + 40 + (hold ? 6000 : 0));
-    return () => clearTimeout(id);
-  }, [fireKey, clock]);
-  useEffect(() => () => cancelAnimation(clock), [clock]);
-  if (!live) return null;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setLive(false), liveFor);
+    onFireRef.current?.();
+  }, [liveFor]);
+  useEffect(() => {
+    if (!fireKey) return;
+    runClock(clock);
+    fired();
+  }, [fireKey, clock, fired]);
+  // The UI-thread fire: the clock starts on the very frame the game's clock hits zero.
+  useAnimatedReaction(
+    () => (trigger ? trigger.value : 0),
+    (v, prev) => {
+      if (prev == null || v === prev || v <= 0) return;
+      runClock(clock);
+      runOnJS(fired)();
+    },
+    [trigger],
+  );
+  useEffect(() => () => { cancelAnimation(clock); if (timer.current) clearTimeout(timer.current); }, [clock]);
+  if (!live && !armed) return null;
   return <FinishCanvas clock={clock} label={label} width={width} height={height} y={y} reduced={reduced} sparkles={sparkles} flash={flash} clipTop={clipTop} />;
 });
 
@@ -109,8 +149,20 @@ function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash
   const ring2R = useDerivedValue(() => pose.value.ring2R);
   const ring2A = useDerivedValue(() => pose.value.ring2A);
   const flashA = useDerivedValue(() => flash * pose.value.flash);
+  const gold = useDerivedValue(() => pose.value.gold);
+  const bloom = useDerivedValue(() => pose.value.bloom);
   const n = reduced ? 0 : Math.max(0, Math.min(FINISH_SPARKLES_MAX, Math.round(sparkles)));
+  // GO's fan is 1.3 screen widths; FINISH!'s is 0.8 of that, clipped below the HUD like the rings.
+  const fan = Math.round(width * 1.3 * FINISH_FAN_OF_GO);
   return (
+    <View style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
+    {reduced ? null : (
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: clipTop, bottom: 0, overflow: 'hidden' }}>
+        <View style={{ position: 'absolute', left: cx - fan / 2, top: y - clipTop - fan / 2, width: fan, height: fan }}>
+          <GoldBurst size={fan} amount={gold as never} bloom={bloom as never} spin={false} reduced={reduced} />
+        </View>
+      </View>
+    )}
     <Canvas style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
       <Group clip={clip}>
       {flash > 0 ? (
@@ -135,6 +187,7 @@ function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash
         </Group>
       ) : null}
     </Canvas>
+    </View>
   );
 }
 

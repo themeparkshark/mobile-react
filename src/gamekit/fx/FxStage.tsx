@@ -323,13 +323,15 @@ export interface FxStageProps {
   textMinY?: number;
   /** Called when fly-to-score labels land (digit-roll the header score, tick). */
   onFlyUpArrive?: (count: number) => void;
+  /** UI-thread twin of onFlyUpArrive: bumped on the frame a fly-to-score label lands (a HUD bump with no JS hop). */
+  flyArrived?: SharedValue<number>;
   style?: StyleProp<ViewStyle>;
 }
 
 const SIZE_SCALE = { sm: 20 / FLY_FONT_PX, md: 26 / FLY_FONT_PX, lg: 30 / FLY_FONT_PX, xl: 40 / FLY_FONT_PX };
 
 export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(function FxStage(
-  { width, height, capacity = 200, layerBudget, timeScale, paused, atlasImage, reducedMotion = false, flashCap = 0.6, onArrive, onFlyUpArrive, style, textMinY = 0 },
+  { width, height, capacity = 200, layerBudget, timeScale, paused, atlasImage, reducedMotion = false, flashCap = 0.6, onArrive, onFlyUpArrive, flyArrived, style, textMinY = 0 },
   ref,
 ) {
   const state = useSharedValue<FxState>(createFxState(capacity, layerBudget));
@@ -351,6 +353,7 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
 
   const notifyArrive = useMemo(() => (n: number) => onArrive?.(n), [onArrive]);
   const notifyFly = useMemo(() => (n: number) => onFlyUpArrive?.(n), [onFlyUpArrive]);
+  const wantFly = !!onFlyUpArrive;
 
   useFrameCallback((info) => {
     'worklet';
@@ -379,7 +382,8 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
     if (s.flyArrivals > 0) {
       const n = s.flyArrivals;
       s.flyArrivals = 0;
-      runOnJS(notifyFly)(n);
+      if (flyArrived) flyArrived.value = flyArrived.value + n;
+      if (wantFly) runOnJS(notifyFly)(n);
     }
     if (busy) tick.value = tick.value + 1;
   });

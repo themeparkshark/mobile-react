@@ -9,11 +9,16 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { Canvas, Path, Skia, rect } from '@shopify/react-native-skia';
+import { CountUpText } from '../../../gamekit/fx/CountUpText';
+import GameIcon from '../../../ui/GameIcon';
+import { DURATION, SPRING } from '../../../ui/motion';
+import { EASE } from '../../../ui/motionEasing';
+import { ART, BOSS_ART, THEMED_SHARK_FRAMES, type WhackTheme } from '../assets';
 
 const NAVY = '#05346e';
 const GOLD = '#ffcf3b';
@@ -21,41 +26,34 @@ const BLUE = '#0768b9';
 const CREAM = '#fff8e4';
 const CORAL = '#ff6b5c';
 
+/**
+ * Banner: one short callout at a time, in the bubble-font look of the big stamps (round 4): the words sit
+ * on a cream plate with a navy ink edge, stamp in from 1.6 on SPRING.stamp and leave by CALLOUT_LIFE_MS.
+ */
 export function Banner({ text, sub, color = '#ffffff', stamp, top }: { text: string | null; sub?: string | null; color?: string; stamp: number; top: number }) {
   const s = useSharedValue(0);
   const o = useSharedValue(0);
   useEffect(() => {
     if (!text) {
-      o.value = withTiming(0, { duration: 160 });
+      o.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
       return;
     }
-    s.value = 2.2;
-    o.value = 1;
-    s.value = withTiming(1, { duration: 140, easing: Easing.out(Easing.back(2)) });
+    s.value = 1.6;
+    o.value = withTiming(1, { duration: DURATION.tap });
+    s.value = withSpring(1, SPRING.stamp);
   }, [text, stamp, s, o]);
   const style = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ scale: s.value }] }));
+  const gold = color.toLowerCase() === GOLD;
   return (
     <Animated.View pointerEvents="none" style={[styles.banner, { top }, style]}>
-      {text ? <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.bannerText, { color }]}>{text}</Text> : null}
-      {sub ? <Text style={styles.bannerSub}>{sub}</Text> : null}
+      {text ? (
+        <View style={[styles.plate, gold && styles.plateGold]}>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.bannerText, gold && styles.bannerTextGold]}>{text}</Text>
+          {sub ? <Text numberOfLines={1} adjustsFontSizeToFit style={styles.bannerSub}>{sub}</Text> : null}
+        </View>
+      ) : null}
     </Animated.View>
   );
-}
-
-function useCountUp(to: number, ms = 700): number {
-  const [v, setV] = useState(0);
-  useEffect(() => {
-    const t0 = Date.now();
-    let raf = 0;
-    const step = () => {
-      const k = Math.min(1, (Date.now() - t0) / ms);
-      setV(Math.round(to * (1 - (1 - k) * (1 - k))));
-      if (k < 1) raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [to, ms]);
-  return v;
 }
 
 function Ring({ pct, size = 64 }: { pct: number; size?: number }) {
@@ -79,12 +77,19 @@ export interface BreatherProps {
   runScore: number;
   stats: { label: string; value: string }[];
   nextBanner: string;
+  /** The next Burst's shape id (b2 lure, b3 patterns, b4 twins, b5 boss, rush golden): drawn as a picture. */
+  nextShape?: string;
+  /** Boss art index when the next Burst is a Boss Run. */
+  nextBoss?: number;
+  theme?: WhackTheme;
   walkPct: number;
   walkMeters: number;
   boostReady: string | null;
   incomingSplats: number;
   readyEnabled: boolean;
   goal: string | null;
+  /** The next star as a picture: how full (0..1) and its score. */
+  goalStar?: { progress: number; target: number; three: boolean } | null;
   /** Show the Walk Boost row (random-seed solo Queue Runs only). */
   showWalk?: boolean;
   /** A banked fever: the pad splits into GO and GO FEVER. */
@@ -96,73 +101,137 @@ export interface BreatherProps {
   onBank: () => void;
   canBank: boolean;
   duelLine?: string | null;
-  /** Split vs your best (Mario Kart ghost splits): "+340 AHEAD OF YOUR BEST" in gold, or the best to chase, never a red minus. */
-  split?: { text: string; ahead: boolean } | null;
+  /** Split vs your best (Mario Kart ghost splits), never a red minus. */
+  split?: { text: string; ahead: boolean; delta?: number; best?: number } | null;
+  /** One coin tick per step of the banked roll (the caller climbs the pitch ladder). */
+  onCountTick?: () => void;
+}
+
+/** Stat label to a picture (no reading): the value sits next to its icon. */
+const STAT_ICON: Record<string, 'rush' | 'streak' | 'star' | 'timer'> = { QUICK: 'rush', STREAK: 'streak', CRITS: 'star', 'LOOK-UPS': 'timer' };
+
+/** The next Burst as a picture: what is new, drawn with the game's own art. */
+function NextPreview({ shape, theme, boss }: { shape?: string; theme: WhackTheme; boss?: number }) {
+  const finn = THEMED_SHARK_FRAMES[theme][1];
+  if (shape === 'b2') {
+    return (
+      <View style={styles.nextRow}>
+        <Image source={ART.angler} style={styles.nextArt} resizeMode="contain" />
+        <View style={[styles.nextBadge, { backgroundColor: '#ffffff' }]}>
+          <View style={[styles.xBar, { transform: [{ rotate: '45deg' }] }]} />
+          <View style={[styles.xBar, { transform: [{ rotate: '-45deg' }] }]} />
+        </View>
+      </View>
+    );
+  }
+  if (shape === 'b5' || shape === 'raid') {
+    return <View style={styles.nextRow}><Image source={(BOSS_ART[boss ?? 0] ?? BOSS_ART[0]).src} style={styles.nextBossArt} resizeMode="contain" /></View>;
+  }
+  if (shape === 'rush') return <View style={styles.nextRow}><Image source={ART.golden} style={styles.nextArt} resizeMode="contain" /><GameIcon name="sparkle" size={22} /></View>;
+  const n = shape === 'b3' ? 3 : shape === 'b4' ? 2 : 1;
+  return (
+    <View style={styles.nextRow}>
+      {Array.from({ length: n }, (_, i) => <Image key={i} source={finn} style={[styles.nextArt, n > 1 && { width: 34, height: 34, marginHorizontal: -2 }]} resizeMode="contain" />)}
+    </View>
+  );
 }
 
 export function Breather(p: BreatherProps) {
-  const count = useCountUp(p.burstScore);
   const pulse = useSharedValue(1);
   const enter = useSharedValue(0);
   useEffect(() => {
-    enter.value = withSpring(1, { damping: 14, stiffness: 180 });
+    // The card rises out of the FINISH! rings: up from below, a touch small, settling with no wobble.
+    enter.value = withSpring(1, SPRING.settle);
   }, [enter]);
   useEffect(() => {
     if (p.readyEnabled) pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: 420 }), withTiming(1, { duration: 420 })), -1);
     else pulse.value = 1;
   }, [p.readyEnabled, pulse]);
   const padStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
-  const cardStyle = useAnimatedStyle(() => ({ opacity: enter.value, transform: [{ translateY: (1 - enter.value) * -30 }] }));
+  const cardStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, enter.value * 1.6),
+    transform: [{ translateY: (1 - enter.value) * 60 }, { scale: 0.86 + 0.14 * enter.value }],
+  }));
+  const theme = p.theme ?? 'park';
+  const tickEvery = Math.max(1, Math.round(p.burstScore / 10));
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <View style={styles.dim} pointerEvents="none" />
-      <Animated.View style={[styles.card, cardStyle]}>
-        <Text style={styles.cardKicker}>{`BURST ${p.burstNumber} OF ${p.bursts} BANKED`}</Text>
-        <Text style={styles.cardScore}>{`+${count.toLocaleString()}`}</Text>
-        <Text style={styles.cardRun}>{`RUN ${p.runScore.toLocaleString()}`}</Text>
+      <Animated.View style={[styles.card, cardStyle]} accessibilityLabel={`Burst ${p.burstNumber} of ${p.bursts} banked. ${p.burstScore} points.`}>
+        {/* Bursts as pips: banked ones are gold with a check (no words). */}
+        <View style={styles.pips}>
+          {Array.from({ length: p.bursts }, (_, i) => (
+            <View key={i} style={[styles.pip, i < p.burstNumber ? styles.pipOn : null, i === p.burstNumber - 1 ? styles.pipNow : null]}>
+              {i < p.burstNumber ? <View style={styles.pipDot} /> : null}
+            </View>
+          ))}
+        </View>
+        <View style={styles.scoreRow}>
+          <GameIcon name="coins" size={34} />
+          <CountUpText value={p.burstScore} prefix="+" delayMs={180} durationMs={650} tickEvery={tickEvery} onTick={p.onCountTick}
+            style={styles.cardScore} />
+        </View>
+        <View style={styles.runPill}>
+          <GameIcon name="trophy" size={18} />
+          <Text style={styles.cardRun}>{p.runScore.toLocaleString()}</Text>
+        </View>
         <View style={styles.chips}>
-          {p.stats.map((s) => (
-            <View key={s.label} style={styles.chip}>
+          {p.stats.filter((s) => STAT_ICON[s.label]).map((s) => (
+            <View key={s.label} style={styles.chip} accessibilityLabel={`${s.label} ${s.value}`}>
+              <GameIcon name={STAT_ICON[s.label]} size={18} />
               <Text style={styles.chipValue}>{s.value}</Text>
-              <Text style={styles.chipLabel}>{s.label}</Text>
             </View>
           ))}
         </View>
         {p.duelLine ? <Text style={styles.duelLine}>{p.duelLine}</Text> : null}
         {p.split ? (
-          <View style={[styles.splitChip, { backgroundColor: p.split.ahead ? '#FFE79A' : '#fff8e4' }]}>
-            <Text style={[styles.splitText, { color: p.split.ahead ? '#5a3200' : '#05346e' }]}>{p.split.text}</Text>
+          <View style={[styles.splitChip, { backgroundColor: p.split.ahead ? '#FFE79A' : '#fff8e4' }]} accessibilityLabel={p.split.text}>
+            <GameIcon name="fin" size={18} />
+            <Text style={[styles.splitText, { color: p.split.ahead ? '#5a3200' : '#05346e' }]}>
+              {p.split.ahead && p.split.delta != null ? `+${p.split.delta.toLocaleString()}` : p.split.best != null ? p.split.best.toLocaleString() : p.split.text}
+            </Text>
           </View>
         ) : null}
-        {p.goal ? <Text style={styles.goal}>{p.goal}</Text> : null}
-        {p.showWalk !== false ? (
-          <View style={styles.walkRow}>
-            <Ring pct={p.walkPct} size={52} />
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.walkTitle}>{p.boostReady ? `WALK BOOST: ${p.boostReady}` : 'WALK BOOST'}</Text>
-              <Text style={styles.walkSub}>{p.boostReady ? 'Your steps in line put a golden in the next Burst' : `+${Math.round(p.walkMeters)}m walked. Keep shuffling!`}</Text>
+        {p.goalStar ? (
+          <View style={styles.starRow} accessibilityLabel={p.goal ?? undefined}>
+            <GameIcon name="star" size={24} />
+            <View style={styles.starTrack}>
+              <View style={[styles.starFill, { width: `${Math.round(Math.max(0.04, Math.min(1, p.goalStar.progress)) * 100)}%` }]} />
             </View>
+            {p.goalStar.three ? <GameIcon name="trophy" size={22} /> : <GameIcon name="star" size={18} />}
+          </View>
+        ) : p.goal ? <Text style={styles.goal}>{p.goal}</Text> : null}
+        {p.showWalk !== false ? (
+          <View style={styles.walkRow} accessibilityLabel={p.boostReady ? `Walk boost: ${p.boostReady}` : `Walk boost, ${Math.round(p.walkMeters)} meters`}>
+            <View>
+              <Ring pct={p.walkPct} size={46} />
+              <View style={styles.ringIcon}><GameIcon name="queue" size={20} /></View>
+            </View>
+            {p.boostReady ? <Image source={ART.golden} style={{ width: 34, height: 34, marginLeft: 8 }} resizeMode="contain" />
+              : <Text style={styles.walkTitle}>{`+${Math.round(p.walkMeters)}m`}</Text>}
           </View>
         ) : null}
         {p.incomingSplats > 0 ? (
           <Text style={styles.incoming}>{`INCOMING: ${p.incomingSplats} CANDY SPLAT${p.incomingSplats > 1 ? 'S' : ''}. 3 QUICK HITS IN A ROW BLOCK ONE`}</Text>
         ) : null}
-        <Text style={[styles.next, p.bossNext && { color: CORAL }]}>{p.bossNext ? `BOSS RUN: ${p.nextBanner}` : `NEXT: ${p.nextBanner}`}</Text>
-        {p.feverReady ? <Text style={styles.feverHint}>FEVER READY: SAVE IT FOR THE FINALE FOR UP TO x8</Text> : null}
+        <View style={styles.nextWrap} accessibilityLabel={p.bossNext ? `Boss run: ${p.nextBanner}` : `Next: ${p.nextBanner}`}>
+          <GameIcon name="arrow" size={18} />
+          <NextPreview shape={p.nextShape} theme={theme} boss={p.nextBoss} />
+        </View>
       </Animated.View>
       <View style={styles.thumbZone}>
         {p.feverReady && p.onFever ? (
           <View style={styles.split}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Go without fever" onPress={p.readyEnabled ? p.onReady : undefined}
+            <Pressable accessibilityRole="button" accessibilityLabel="Go and save the fever" onPress={p.readyEnabled ? p.onReady : undefined}
               style={[styles.go, !p.readyEnabled && styles.readyOff]}>
               <Text style={styles.goText}>GO</Text>
-              <Text style={styles.readySub}>save fever</Text>
             </Pressable>
             <Animated.View style={padStyle}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Go with fever" onPress={p.readyEnabled ? p.onFever : undefined}
+              <Pressable accessibilityRole="button" accessibilityLabel="Go with fever, 7 seconds of double points" onPress={p.readyEnabled ? p.onFever : undefined}
                 style={[styles.goFever, !p.readyEnabled && styles.readyOff]}>
-                <Text style={styles.goText}>GO FEVER</Text>
-                <Text style={styles.readySub}>7s of x2</Text>
+                <GameIcon name="streak" size={40} />
+                <Text style={styles.goText}>GO</Text>
+                <View style={styles.multBadge}><Text style={styles.multText}>x2</Text></View>
               </Pressable>
             </Animated.View>
           </View>
@@ -171,7 +240,6 @@ export function Breather(p: BreatherProps) {
             <Pressable accessibilityRole="button" accessibilityLabel="Ready for the next Burst" onPress={p.readyEnabled ? p.onReady : undefined}
               style={[styles.ready, !p.readyEnabled && styles.readyOff]}>
               <Text style={styles.readyText}>GO</Text>
-              <Text style={styles.readySub}>tap when you're set</Text>
             </Pressable>
           </Animated.View>
         )}
@@ -220,32 +288,52 @@ export function DuelCard({ me, rival, rivalName, winner, wins, onEmote }: {
 
 const styles = StyleSheet.create({
   banner: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  bannerText: {
-    fontFamily: 'Shark', fontSize: 40, textAlign: 'center', paddingHorizontal: 24, alignSelf: 'stretch',
-    textShadowColor: NAVY, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 1,
+  plate: {
+    maxWidth: '86%', backgroundColor: CREAM, borderRadius: 20, borderWidth: 3, borderColor: NAVY, paddingHorizontal: 16, paddingVertical: 4,
+    alignItems: 'center', shadowColor: NAVY, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 0, elevation: 3,
   },
-  bannerSub: {
-    fontFamily: 'Shark', fontSize: 20, color: '#ffffff', marginTop: 4, textAlign: 'center', paddingHorizontal: 20,
-    textShadowColor: NAVY, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 1,
-  },
+  plateGold: { backgroundColor: GOLD },
+  bannerText: { fontFamily: 'Shark', fontSize: 30, color: NAVY, textAlign: 'center' },
+  bannerTextGold: { color: '#5a3200' },
+  bannerSub: { fontFamily: 'Shark', fontSize: 16, color: BLUE, textAlign: 'center' },
+  pips: { flexDirection: 'row', marginBottom: 2 },
+  pip: { width: 18, height: 18, borderRadius: 9, borderWidth: 2.5, borderColor: NAVY, backgroundColor: '#ffffff', marginHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  pipOn: { backgroundColor: GOLD },
+  pipNow: { transform: [{ scale: 1.2 }] },
+  pipDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: NAVY },
+  scoreRow: { flexDirection: 'row', alignItems: 'center' },
+  runPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: NAVY, paddingHorizontal: 10, paddingVertical: 2 },
+  starRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, alignSelf: 'stretch', paddingHorizontal: 18 },
+  starTrack: { flex: 1, height: 14, borderRadius: 7, borderWidth: 2.5, borderColor: NAVY, backgroundColor: '#ffffff', marginHorizontal: 8, overflow: 'hidden' },
+  starFill: { height: '100%', backgroundColor: GOLD },
+  ringIcon: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  nextWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  nextRow: { flexDirection: 'row', alignItems: 'center', marginLeft: 8 },
+  nextArt: { width: 44, height: 44 },
+  nextBossArt: { width: 70, height: 56 },
+  nextBadge: { width: 22, height: 22, borderRadius: 11, borderWidth: 2.5, borderColor: NAVY, marginLeft: -12, marginTop: 20, alignItems: 'center', justifyContent: 'center' },
+  xBar: { position: 'absolute', width: 12, height: 3, borderRadius: 2, backgroundColor: NAVY },
+  multBadge: { position: 'absolute', top: -10, right: -8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 3, borderColor: NAVY, paddingHorizontal: 7, paddingVertical: 1 },
+  multText: { fontFamily: 'Shark', fontSize: 18, color: NAVY },
   dim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(191,229,255,0.35)' },
   card: {
     marginTop: 14, marginHorizontal: 16, backgroundColor: CREAM, borderRadius: 22, borderWidth: 4, borderColor: NAVY,
     paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center',
   },
   cardKicker: { fontFamily: 'Knockout', fontSize: 15, letterSpacing: 1.5, color: BLUE },
-  cardScore: { fontFamily: 'Shark', fontSize: 48, color: NAVY, marginTop: 2 },
-  cardRun: { fontFamily: 'Shark', fontSize: 18, color: BLUE },
+  cardScore: { fontFamily: 'Shark', fontSize: 48, color: GOLD, marginLeft: 6, minWidth: 120, textAlign: 'left',
+    textShadowColor: '#7a4300', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
+  cardRun: { fontFamily: 'Shark', fontSize: 18, color: BLUE, marginLeft: 6 },
   chips: { flexDirection: 'row', marginTop: 10 },
-  chip: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 3, borderColor: NAVY, paddingHorizontal: 10, paddingVertical: 4, marginHorizontal: 4, alignItems: 'center' },
-  chipValue: { fontFamily: 'Shark', fontSize: 18, color: NAVY },
+  chip: { flexDirection: 'row', backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 3, borderColor: NAVY, paddingHorizontal: 10, paddingVertical: 4, marginHorizontal: 4, alignItems: 'center' },
+  chipValue: { fontFamily: 'Shark', fontSize: 18, color: NAVY, marginLeft: 5 },
   chipLabel: { fontFamily: 'Knockout', fontSize: 11, color: BLUE, letterSpacing: 1 },
   duelLine: { fontFamily: 'Shark', fontSize: 18, color: CORAL, marginTop: 8 },
-  splitChip: { marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, borderWidth: 2, borderColor: NAVY },
-  splitText: { fontFamily: 'Shark', fontSize: 16 },
+  splitChip: { flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, borderWidth: 2, borderColor: NAVY },
+  splitText: { fontFamily: 'Shark', fontSize: 16, marginLeft: 6 },
   goal: { fontFamily: 'Knockout', fontSize: 15, color: NAVY, marginTop: 8 },
-  walkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, alignSelf: 'stretch' },
-  walkTitle: { fontFamily: 'Shark', fontSize: 17, color: NAVY },
+  walkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  walkTitle: { fontFamily: 'Shark', fontSize: 17, color: NAVY, marginLeft: 8 },
   walkSub: { fontFamily: 'Knockout', fontSize: 13, color: BLUE },
   incoming: { fontFamily: 'Knockout', fontSize: 13, color: CORAL, marginTop: 8, textAlign: 'center' },
   next: { fontFamily: 'Shark', fontSize: 18, color: BLUE, marginTop: 10 },

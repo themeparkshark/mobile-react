@@ -394,10 +394,17 @@ export function finalStampPose(t: number, isTime: boolean, isLast: boolean, redu
 // ---------------------------------------------------------------------------
 // The finish beat (FINISH!, TIME!): the climax of the last-5 drumroll.
 
-/** The whole finish beat; the label holds until 1100 then fades by 1400. */
-export const FINISH_BEAT_MS = 1500;
+/**
+ * The whole finish beat (wow-games r4: payoff, then hand off; no dead hold). The label lands at
+ * DURATION.slam, holds until FINISH_HANDOFF_MS while the rings and the gold fan roll out, and leaves
+ * on DURATION.exit while the next card rises out of the rings (one clock, a cross-fade, no gap).
+ */
+export const FINISH_HANDOFF_MS = 560;
+export const FINISH_BEAT_MS = FINISH_HANDOFF_MS + DURATION.exit + 60;
 /** Coin sparkles per finish burst (motion PARTICLES.sparkles cap). */
 export const FINISH_SPARKLES_MAX = 12;
+/** The FINISH! ray fan is this share of GO's (GO is the start's money frame; the end is a close second). */
+export const FINISH_FAN_OF_GO = 0.8;
 
 export interface FinishPose extends FinalStampPose {
   /** Gold shockwave ring (pt) and its opacity. */
@@ -408,29 +415,40 @@ export interface FinishPose extends FinalStampPose {
   readonly ring2A: number;
   /** Landing flash 0..1 (scaled by flashPeak). */
   readonly flash: number;
+  /** The gold ray fan behind the label (GoldBurst amount) and its landing swell. */
+  readonly gold: number;
+  readonly bloom: number;
 }
 
 /**
  * The finish beat at `t` ms: the label slams from 1.8 (finalStampPose TIME!),
  * lands at DURATION.slam with the squash; on that frame the gold ring rolls
  * out 40 to 210 pt over 380 ms and fades, a white ring follows 60 ms later,
- * and the flash peaks then fades over 160 ms. Reduced: the label fades, no rings, no flash.
+ * the flash peaks then fades over 160 ms and the gold fan opens behind it.
+ * At FINISH_HANDOFF_MS the label and fan leave on DURATION.exit (exits faster than entrances).
+ * Reduced: the label fades, no rings, no flash, no fan.
  */
 export function finishPose(t: number, reduced: boolean): FinishPose {
   'worklet';
   const base = finalStampPose(t, true, false, reduced);
-  if (t < 0 || reduced) return { ...base, ringR: 0, ringA: 0, ring2R: 0, ring2A: 0, flash: 0 };
+  const out = t <= FINISH_HANDOFF_MS ? 1 : 1 - clamp01((t - FINISH_HANDOFF_MS) / DURATION.exit);
+  const alpha = t < 0 ? 0 : reduced ? (t < DURATION.quick ? clamp01(t / DURATION.quick) : 1) * out : base.alpha * out;
+  if (t < 0 || reduced) return { ...base, alpha, ringR: 0, ringA: 0, ring2R: 0, ring2A: 0, flash: 0, gold: 0, bloom: 0 };
   const land = DURATION.slam;
   const p1 = clamp01((t - land) / 380);
   const p2 = clamp01((t - land - 60) / 420);
   const fp = (t - land) / 160;
+  const bt = (t - land) / 320;
   return {
     ...base,
+    alpha,
     ringR: t < land ? 0 : 40 + 170 * easeOutCubic(p1),
     ringA: t < land ? 0 : 0.9 * (1 - p1),
     ring2R: t < land + 60 ? 0 : 30 + 150 * easeOutCubic(p2),
     ring2A: t < land + 60 ? 0 : 0.7 * (1 - p2),
     flash: fp < 0 || fp >= 1 ? 0 : 1 - easeOutCubic(fp),
+    gold: t < land ? 0.35 * clamp01(t / land) : Math.min(1, 0.35 + 0.65 * clamp01((t - land) / 80)) * out,
+    bloom: bt < 0 || bt >= 1 ? 0 : Math.sin(Math.PI * bt) * (1 - 0.4 * bt),
   };
 }
 

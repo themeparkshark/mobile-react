@@ -48,6 +48,10 @@ export interface RuntimeFlags {
   hatBounces: number;
   /** fx time of the last look-up resume (the resume tap shows a soft release ring, never a bonk). */
   resumedAt: number;
+  /** Banked Run points before this Burst (the header adds the live sim score on the UI thread). */
+  scoreBase: number;
+  /** False between Runs (the old sim's score never shows under a fresh count). */
+  scoreLive: boolean;
 }
 
 /** Runtime-only event (outside the sim's range): a logged touch-down, for the Line Party tap log. */
@@ -65,6 +69,7 @@ function createFlags(): RuntimeFlags {
   return {
     running: false, acc: 0, easeT: 600, endSeen: false, bot: false, botEv: z(-1), botAt: z(0), botHits: z(0),
     swipeHole: -1, swipeX0: 0, reducedMotion: false, wallMs: 0, logTaps: false, frameWall: 0, hatBounces: 0, resumedAt: -99999,
+    scoreBase: 0, scoreLive: false,
   };
 }
 
@@ -105,10 +110,23 @@ export interface WhackRuntime {
   an: SharedValue<HoleAnim>;
   tick: SharedValue<number>;
   rt: SharedValue<RuntimeFlags>;
+  /** Run score for the header (banked + live), written on the UI thread on the frame a hit lands. */
+  liveScore: SharedValue<number>;
+  /** Bumps on the UI frame a Burst's clock reaches its end (FINISH! fires from it, no JS round trip). */
+  endTick: SharedValue<number>;
   clock: GameClockHandle;
   gesture: ReturnType<typeof Gesture.Manual>;
-  /** Start a Burst on a fresh sim (JS thread). `logTaps` echoes every touch-down (live party rounds). */
-  start: (s: WhackSim, bot: boolean, logTaps?: boolean) => void;
+  /**
+   * Start a Burst on a fresh sim (JS thread). `logTaps` echoes every touch-down (live party rounds).
+   * `scoreBase` is the Run's banked points so far (the header score adds the live sim score to it).
+   */
+  start: (s: WhackSim, bot: boolean, logTaps?: boolean, scoreBase?: number) => void;
+  /** New Run: the header score shows 0 until the first Burst starts. */
+  resetScore: () => void;
+  /** GO wakes the board: every well ripples in turn on the UI clock (STAGGER), no JS timers. */
+  wake: (stepMs: number) => void;
+  /** Snapshot without the tap log (the 4 Hz HUD poll never copies the whole log across threads). */
+  mirrorLite: () => Promise<SimMirror>;
   /** Shift game time by `ms` (positive runs ahead, negative holds) to stay on the room's board clock. */
   nudge: (ms: number) => void;
   setRunning: (on: boolean, easeIn?: boolean) => void;
@@ -137,6 +155,8 @@ export function useWhackRuntime(opts: {
   const an = useSharedValue<HoleAnim>(createHoleAnim());
   const tick = useSharedValue(0);
   const rt = useSharedValue<RuntimeFlags>(createFlags());
+  const liveScore = useSharedValue(0);
+  const endTick = useSharedValue(0);
   const bridge = useEventBridge(onEvents, 512);
   // UI -> JS replies go through stable JS callbacks (never a Promise resolver).
   const mirrorWaiters = useRef<((m: SimMirror) => void)[]>([]);
@@ -270,6 +290,9 @@ export function useWhackRuntime(opts: {
       }
       if (s.ended && !r.endSeen) {
         r.endSeen = true;
+        // The UI frame the clock hits zero: FINISH! and the curtain call start here, not after a JS hop.
+        endTick.value = endTick.value + 1;
+        a.curtainAt = a.fxNow + 90;
         // FINISH: every live target ducks in reading order on a 60 ms stagger.
         let k = 0;
         for (let h = 0; h < 9; h++) {
@@ -290,6 +313,9 @@ export function useWhackRuntime(opts: {
         r.hatBounces = R.hatBounces;
         pushEvent(ring.value, E_HAT_BOUNCE, 0, 0, 0, s.t);
       }
+      // Header score: banked + live, written only when it changes (the score pill rolls from it on this thread).
+      const ls = r.scoreBase + (r.scoreLive ? s.score : 0);
+      if (ls !== liveScore.value) liveScore.value = ls;
       tick.value = tick.value + 1;
       bridge.flush();
     },
@@ -355,13 +381,23 @@ export function useWhackRuntime(opts: {
       rt.value.swipeHole = -1;
     }), [sim, rt, an, geo, bridge]);
 
+  const liteWaiters = useRef<((m: SimMirror) => void)[]>([]);
+  const onMirrorLite = useCallback((m: SimMirror) => {
+    const q = liteWaiters.current;
+    liteWaiters.current = [];
+    q.forEach((f) => f(m));
+  }, []);
+
   return useMemo<WhackRuntime>(() => ({
-    sim, rs, an, tick, rt, clock, gesture,
-    start: (s: WhackSim, bot: boolean, logTaps = false) => {
-      runOnUI((next: WhackSim, b: boolean, lt: boolean) => {
+    sim, rs, an, tick, rt, liveScore, endTick, clock, gesture,
+    start: (s: WhackSim, bot: boolean, logTaps = false, scoreBase = 0) => {
+      runOnUI((next: WhackSim, b: boolean, lt: boolean, base: number) => {
         'worklet';
         sim.value = next;
         const r = rt.value;
+        r.scoreBase = base;
+        r.scoreLive = true;
+        an.value.curtainAt = -1;
         r.running = true;
         r.logTaps = lt;
         r.acc = 0;
@@ -381,8 +417,39 @@ export function useWhackRuntime(opts: {
           a.hitAt[i] = -99999;
           a.helmPopAt[i] = -99999;
         }
-      })(s, bot, logTaps);
+      })(s, bot, logTaps, scoreBase);
     },
+    resetScore: () => {
+      runOnUI(() => {
+        'worklet';
+        rt.value.scoreBase = 0;
+        rt.value.scoreLive = false;
+        liveScore.value = 0;
+      })();
+    },
+    wake: (stepMs: number) => {
+      runOnUI((step: number) => {
+        'worklet';
+        const a = an.value;
+        a.curtainAt = -1;
+        // Reading order from the centre out; a future start time waits on the hole's own clock.
+        const order = [4, 1, 3, 5, 7, 0, 2, 6, 8];
+        for (let k = 0; k < 9; k++) {
+          const h = order[k];
+          a.rippleAt[h] = a.local[h] + k * step;
+          a.rippleBig[h] = 1;
+        }
+      })(stepMs);
+    },
+    mirrorLite: () => new Promise<SimMirror>((resolve) => {
+      liteWaiters.current.push(resolve);
+      if (liteWaiters.current.length > 1) return;
+      runOnUI(() => {
+        'worklet';
+        const s = sim.value;
+        runOnJS(onMirrorLite)({ score: s.score, t: s.t, taps: [], streak: s.streak, frozen: s.frozen, ended: s.ended, wallMs: rt.value.wallMs });
+      })();
+    }),
     nudge: (ms: number) => {
       runOnUI((d: number) => {
         'worklet';
@@ -431,5 +498,5 @@ export function useWhackRuntime(opts: {
         runOnJS(onFinal)({ result: simResult(s), taps: s.taps.slice(), pos: s.pos.slice(), wallMs: rt.value.wallMs });
       })();
     }),
-  }), [sim, rs, an, tick, rt, clock, gesture, onMirror, onFinal]);
+  }), [sim, rs, an, tick, rt, liveScore, endTick, clock, gesture, onMirror, onFinal, onMirrorLite]);
 }

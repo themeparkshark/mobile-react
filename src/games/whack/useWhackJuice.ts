@@ -46,6 +46,17 @@ import { KICK } from '../../ui/motion';
 const GOLD = '#ffcf3b';
 const CORAL = '#ff6b5c';
 
+/** Board kick (pt) per combo tier rank (x1, x2, x3, x5): it grows with the combo, capped at KICK.maxPt. */
+export function kickPtForRank(rank: number): number {
+  return Math.min(KICK.maxPt, rank >= 3 ? KICK.maxPt : rank === 2 ? 3 : 2);
+}
+
+const BONKS = new Set(['late', 'good', 'goodLite', 'goodStars', 'quick', 'quickLite', 'crit', 'critImpact', 'golden', 'helmet']);
+/** Feel names that are a real bonk on a friendly target (they get the spray and the kick). */
+export function isBonk(name: string): boolean {
+  return BONKS.has(name);
+}
+
 export function pickCue(...names: string[]): string {
   for (const n of names) if (GameAudio.hasCue(n)) return n;
   return names[names.length - 1];
@@ -163,7 +174,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     // v5 three FX tiers (8.6); hit-stops teach the grade (6.6). The costume poses already draw their
     // dizzy stars and impact dashes (8.5), so Finn-class bonks never add procedural stars or impact stars:
     // the ring, splash and flash carry the hit, and the fly-up travels to the score.
-    late: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackLate', priority: WHACK_PRIO.good, burst: [{ emitter: 'bubbles', count: 3 }],
+    late: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackLate', priority: WHACK_PRIO.good, localStop: 40, burst: [{ emitter: 'bubbles', count: 3 }],
       ring: { from: 8, to: 40, ms: 150 }, flyUp: { size: 'sm', to: scoreAt } },
     good: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackGood', priority: WHACK_PRIO.good, localStop: 50, burst: [{ emitter: 'splash', count: 4 }],
       ring: { from: 10, to: 70, ms: 180 }, flyUp: { size: 'md', to: scoreAt } },
@@ -263,10 +274,22 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     feel(name as never, { ...p, slot: h, step, text, magnetTo: hud, dx: 0, dy: -1, input: true, ...look });
     // Hot hands hit harder: from x3 every bonk kicks the board down 2 pt (3 pt in fever), one kick per
     // KICK.ms at most; never while walking, with Reduce Motion or on a shared party board.
+    // Every bonk lands (r4): a spray of small gold and white stars pops from the contact point and falls,
+    // 6 on a light hit, 8 from QUICK up, thinned by the clutter governor when 3+ wells are busy.
+    if (isBonk(name)) {
+      const heavy = name !== 'late' && name !== 'good' && name !== 'goodLite' && name !== 'goodStars';
+      const n = busy.current.size >= 3 ? 4 : heavy ? 8 : 6;
+      fx.current?.burst('impactSpray', p.x, p.y + (layout.current?.spriteH[h] ?? 60) * 0.28, { count: n });
+    }
+    // Hot hands hit harder (r4: from the first bonk): the board kicks 2 pt away from the touch at x1 and
+    // x2, 3 pt at x3 and 4 pt (KICK.maxPt) in fever, one kick per KICK.ms at most; never while walking,
+    // with Reduce Motion or on a shared party board.
     const nowMs = Date.now();
-    if (rank >= 2 && camera && !reducedMotion && !walking && !party && nowMs - lastKick.current >= KICK.ms) {
+    if (isBonk(name) && camera && !reducedMotion && !walking && !party && nowMs - lastKick.current >= KICK.ms) {
       lastKick.current = nowMs;
-      camera.kick(0, rank >= 3 ? KICK.maxPt - 1 : 2);
+      const G = layout.current;
+      const side = G ? Math.sign(G.cx[h] - G.w / 2) : 0;
+      camera.kick(side, kickPtForRank(rank));
     }
     // Local hit-stop and global freezes go straight to the Bonk Rush clock.
     if (clock && def) {

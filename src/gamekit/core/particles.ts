@@ -279,6 +279,15 @@ export const EMITTERS = {
     life: [0.36, 0.44], size: [9, 13], sizeEnd: 0.35, gravity: 900, drag: 1.2, spin: [-420, 420],
     fadeIn: 0, fadeOut: 0.35, prio: PRIO.hit, colors: [WHITE], twos: true, jitter: 6,
   },
+  /**
+   * Impact spray (wow-games r4): small gold and white stars that pop up from the contact point, arc over
+   * and fall with gravity, fading over about half a second (they settle, never vanish at full).
+   */
+  impactSpray: {
+    sprite: FX_SPRITE.starArt, count: [6, 8], speed: [240, 400], angle: -90, spread: 150,
+    life: [0.45, 0.6], size: [7, 10], sizeEnd: 0.4, gravity: 1100, drag: 1.1, spin: [-480, 480],
+    fadeIn: 0, fadeOut: 0.45, prio: PRIO.hit, colors: [TINT.gold, WHITE, TINT.gold], twos: true, jitter: 5,
+  },
   /** Velocity-aligned sparks (crit, boss hits, electric). */
   sparks: {
     sprite: FX_SPRITE.streak, count: [8, 12], speed: [380, 620], angle: -90, spread: 360,

@@ -289,10 +289,10 @@ test('round 2: the medallion draws the decimal as a dot (x2.5 never reads x25), 
   assert.match(stamp, /const half = w \* 0\.61 \+ 10;/, 'room for overshoot and tilt');
 });
 
-test('round 2: Whack hits hotter by tier (kick from x3, tier-up hit-stop, pitch climbs by tier); the last 5 only crosses to React on change', () => {
+test('round 2 (r4 update): Whack hits hotter by tier (kick on every bonk, growing by tier; tier-up hit-stop, pitch climbs by tier); the last 5 only crosses to React on change', () => {
   const juice = read('src/games/whack/useWhackJuice.ts');
-  assert.match(juice, /rank >= 2 && camera && !reducedMotion && !walking && !party && nowMs - lastKick\.current >= KICK\.ms/);
-  assert.match(juice, /camera\.kick\(0, rank >= 3 \? KICK\.maxPt - 1 : 2\)/);
+  assert.match(juice, /isBonk\(name\) && camera && !reducedMotion && !walking && !party && nowMs - lastKick\.current >= KICK\.ms/);
+  assert.match(juice, /camera\.kick\(side, kickPtForRank\(rank\)\)/);
   assert.match(juice, /govHitStop\(governor, Date\.now\(\), reducedMotion \? 30 : 55, 3, false\)/);
   assert.match(juice, /comboTierRank\(multNow\(\)\) \* 2\)/);
   assert.ok(motion.KICK.maxPt - 1 <= 4);
@@ -363,8 +363,8 @@ test('round 3: FINISH! lands at the last-5 size with a gold shockwave, a capped 
   const mid = gm.finishPose(D + 300, false);
   assert.ok(mid.ringR > land.ringR && mid.ringA < land.ringA, 'the ring rolls out and fades');
   assert.equal(gm.finishPose(D + 200, false).flash, 0, 'the flash is one short beat');
-  assert.ok(gm.finishPose(900, false).alpha === 1, 'holds so the kid reads it');
-  assert.ok(gm.finishPose(1450, false).alpha < 0.05, 'gone before the results card');
+  assert.ok(gm.finishPose(gm.FINISH_HANDOFF_MS - 10, false).alpha === 1, 'holds so the kid reads it');
+  assert.ok(gm.finishPose(gm.FINISH_HANDOFF_MS + motion.DURATION.exit, false).alpha < 0.05, 'gone as the next card arrives');
   assert.ok(gm.FINISH_BEAT_MS <= 1500);
   assert.ok(gm.FINISH_SPARKLES_MAX <= 12);
   for (let k = 0; k < 12; k++) {
@@ -459,19 +459,21 @@ test('round 3: misses and the last rush never go red (Banana top tier and rush i
   assert.doesNotMatch(game, /ev\.deltaMs > 0 \? 'gold' : 'coral'/);
 });
 
-test('round 3: the first banner waits for the whole GO tail, and the FINISH! rings stay below the HUD', () => {
+test('round 3 (r4 update): a first-encounter callout waits for the whole GO tail (no BONK EM word banner), and the FINISH! rings stay below the HUD', () => {
   const whack = read('src/games/whack/WhackAShark.tsx');
-  assert.match(whack, /flash\(t\.banner, t\.callout, '#ffffff', 1300\), COUNT_END_MS - GO_AT_MS \+ 20\)/);
+  assert.match(whack, /setTimeout\(\(\) => flash\(callout, null, '#ffffff', 900\), bi === 0 \? COUNT_END_MS - GO_AT_MS \+ 20 : 0\)/);
+  assert.doesNotMatch(whack, /flash\(t\.banner, t\.callout/);
   assert.match(whack, /clipTop=\{L\.hudH \+ 4\}/);
   assert.match(read('src/gamekit/fx/FinishBeat.tsx'), /<Group clip=\{clip\}>/);
 });
 
-test('round 3: Whack FINISH! fires on the frame the clock hits 0, before the bank round trip (no dead gap after the 1)', () => {
+test('round 3 (r4 update): Whack FINISH! fires on the UI frame the clock hits 0 (runtime.endTick), never after a JS hop', () => {
   const whack = read('src/games/whack/WhackAShark.tsx');
-  const i = whack.indexOf('const onBurstEnd');
-  const body = whack.slice(i, whack.indexOf('const b = await bankBurst();', i));
-  assert.match(body, /setFinishKey\(\(k\) => k \+ 1\);/);
-  assert.match(body, /fx\.current\?\.clearText\(\);/);
+  assert.match(whack, /<FinishBeat trigger=\{runtime\.endTick\}/);
+  const fire = whack.slice(whack.indexOf('const onFinishFire'), whack.indexOf('const onFinishFire') + 600);
+  assert.match(fire, /fx\.current\?\.clearText\(\);/);
+  const rt = read('src/games/whack/useWhackRuntime.ts');
+  assert.match(rt, /r\.endSeen = true;\s*\/\/[^\n]*\n\s*endTick\.value = endTick\.value \+ 1;/);
 });
 
 test('round 3: with a game-owned end stamp, the 1 holds at 0 until the game leaves play (no empty sky before FINISH!)', () => {
@@ -480,4 +482,105 @@ test('round 3: with a game-owned end stamp, the 1 holds at 0 until the game leav
   const p = gm.finalStampPose(999, false, true, false);
   assert.equal(p.alpha, 1, 'the 1 is at full strength');
   assert.ok(p.ring < 0.01, 'its ring has closed');
+});
+
+// ---------------------------------------------------------------------------
+// Round 4: no dead holds at the climax, a header that answers on the hit frame, pictures over words.
+
+test('round 4: FINISH! opens a gold ray fan on the landing and hands off at FINISH_HANDOFF_MS (no hold over 600 ms)', () => {
+  const D = motion.DURATION.slam;
+  assert.ok(gm.FINISH_HANDOFF_MS <= 600, 'the payoff never sits still longer than 600 ms');
+  assert.ok(gm.FINISH_BEAT_MS < 1000, 'the whole beat is under a second');
+  assert.ok(gm.FINISH_FAN_OF_GO >= 0.7 && gm.FINISH_FAN_OF_GO <= 0.9, 'the fan is about 0.8 of GO');
+  assert.equal(gm.finishPose(D + 100, false).gold, 1, 'the fan is full just after the landing');
+  assert.ok(gm.finishPose(D + 60, false).bloom > 0.4, 'the fan swells on the landing frame');
+  assert.ok(gm.finishPose(gm.FINISH_HANDOFF_MS + motion.DURATION.exit, false).gold < 0.01, 'the fan leaves with the label');
+  assert.ok(motion.DURATION.exit < motion.DURATION.enter, 'exits are faster than entrances');
+  const r = gm.finishPose(D + 100, true);
+  assert.equal(r.gold, 0);
+  assert.equal(r.alpha, 1, 'Reduce Motion still shows the word');
+  assert.ok(gm.finishPose(gm.FINISH_HANDOFF_MS + motion.DURATION.exit + 10, true).alpha < 0.05);
+});
+
+test('round 4: the curtain call pops every empty well from the centre out and they wave together (Reduce Motion: up, still)', () => {
+  const rs = loadTs('src/games/whack/render/renderState.ts');
+  assert.equal(rs.curtainPose(4, 0, -1, false).rise, -1, 'off until the burst ends');
+  assert.ok(rs.curtainPose(4, 10, 0, false).rise >= 0.3, 'the centre well goes first');
+  assert.equal(rs.curtainPose(8, 10, 0, false).rise, -1, 'a corner waits its turn');
+  const last = 8 * rs.CURTAIN_STEP_MS + rs.CURTAIN_RISE_MS;
+  for (let i = 0; i < 9; i++) assert.equal(rs.curtainPose(i, last + 1, 0, false).rise, 1);
+  assert.ok(last <= 600, `the whole board is up inside 600 ms, got ${last}`);
+  const a = rs.curtainPose(0, last + 200, 0, false).rot;
+  const b = rs.curtainPose(1, last + 200, 0, false).rot;
+  assert.ok(Math.sign(a) !== Math.sign(b) || Math.abs(a) < 0.5, 'neighbours lean opposite ways');
+  assert.ok(Math.abs(a) <= 7.001);
+  assert.deepEqual(plain(rs.curtainPose(8, 10, 0, true)), { rise: -1, rot: 0, hop: 0 });
+  assert.deepEqual(plain(rs.curtainPose(8, last, 0, true)), { rise: 1, rot: 0, hop: 0 });
+  const rt = read('src/games/whack/useWhackRuntime.ts');
+  assert.match(rt, /a\.curtainAt = a\.fxNow \+ 90;/, 'it starts on the UI frame the clock hits 0');
+  assert.match(rt, /an\.value\.curtainAt = -1;/, 'a new burst clears it');
+});
+
+test('round 4: the header score is a UI-thread roll fed on the hit frame (no 250 ms poll, no setShellScore per tick)', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  const at = whack.indexOf('// Pace line, Line of the Day ghost pucks');
+  const poll = whack.slice(at, whack.indexOf('}, 250);', at));
+  assert.doesNotMatch(poll, /setShellScore/, 'the poll never writes the header score');
+  assert.match(poll, /mirrorLite\(\)/, 'the poll never copies the tap log');
+  assert.match(whack, /headerScore=\{<LiveScore value=\{runtime\.liveScore\} arrived=\{flyArrived\}/);
+  const rt = read('src/games/whack/useWhackRuntime.ts');
+  assert.match(rt, /const ls = r\.scoreBase \+ \(r\.scoreLive \? s\.score : 0\);\s*if \(ls !== liveScore\.value\) liveScore\.value = ls;/);
+  const live = read('src/gamekit/fx/LiveScore.tsx');
+  assert.match(live, /useAnimatedProps/);
+  assert.doesNotMatch(live, /useState|setInterval|requestAnimationFrame/);
+  assert.match(live, /HUD_BUMP\.peak/, 'a landing bumps the pill by the HUD bump token');
+  assert.match(read('src/gamekit/fx/FxStage.tsx'), /if \(flyArrived\) flyArrived\.value = flyArrived\.value \+ n;/, 'arrivals bump on the UI thread');
+});
+
+test('round 4: every bonk sprays small gold and white stars that fall and fade, and the kick grows with the tier', () => {
+  const p = loadTs('src/gamekit/core/particles.ts');
+  const e = p.EMITTERS.impactSpray;
+  assert.ok(e.count[1] <= 12, 'never more than 12 per burst');
+  assert.ok(e.gravity > 0 && e.life[0] >= 0.4 && e.life[1] <= 0.9, 'they fall and fade over 400 to 900 ms');
+  const juice = read('src/games/whack/useWhackJuice.ts');
+  assert.match(juice, /fx\.current\?\.burst\('impactSpray'/);
+  const k0 = juice.indexOf('export function kickPtForRank');
+  const src = juice.slice(k0, juice.indexOf('\n}\n', k0) + 2);
+  const kick = new Function('KICK', `${src.replace('export ', '').replace(/: number/g, '')}; return kickPtForRank;`)(motion.KICK);
+  const ladder = [0, 1, 2, 3].map(kick);
+  for (let i = 1; i < 4; i++) assert.ok(ladder[i] >= ladder[i - 1], `kick climbs: ${ladder}`);
+  assert.ok(ladder[0] >= 2 && ladder[3] <= motion.KICK.maxPt);
+  assert.match(juice, /late: \{[^\n]*localStop: 40/, 'even a late bonk holds the sprite 40 ms');
+});
+
+test('round 4: the last 5 ticks climb a semitone each second on the UI clock, and coin ticks never fan out on JS timers', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /GameAudio\.play\(cues\.tick, \{ volume: 0\.6, pitch: 5 - sec \}\)/);
+  assert.match(whack, /if \(sec > 0 && sec !== prev\) runOnJS\(lastFiveTick\)\(sec\);/);
+  assert.doesNotMatch(whack, /setTimeout\(\(\) => GameAudio\.playLadder\(cues\.coinTick/);
+  assert.match(whack, /if \(now - c\.at < 30 \|\| n <= 0\) return;/, 'one coin tick per 30 ms at most');
+  assert.match(whack, /runtime\.wake\(STAGGER\.stepMs\)/, 'the GO wake ripples on the UI clock');
+  assert.match(whack, /sparkles=\{momentParticles\(FINISH_SPARKLES_MAX, budget, reducedMotion\)\}/, 'Battery Saver thins FINISH! too');
+});
+
+test('round 4: the breather and the count read with zero words (pictures, a UI-thread roll, no fever sentence)', () => {
+  const ov = read('src/games/whack/ui/Overlays.tsx');
+  assert.doesNotMatch(ov, /requestAnimationFrame/, 'no per-frame JS count-up');
+  assert.match(ov, /<CountUpText value=\{p\.burstScore\}/);
+  assert.doesNotMatch(ov, /SAVE IT FOR THE FINALE|save fever|7s of x2|tap when you're set|Keep shuffling/);
+  assert.match(ov, /<NextPreview shape=\{p\.nextShape\}/);
+  assert.match(ov, /<GameIcon name="streak" size=\{40\} \/>/, 'the fever pad is a flame');
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /\{countdownDemo \?\? \(objective \?/);
+  const coach = read('src/games/whack/ui/CoachDemo.tsx');
+  assert.doesNotMatch(coach, /<Text/, 'the demo has no words');
+  assert.doesNotMatch(coach, /#ff6b5c|'red'|coral/i, 'the X is navy on white, never red');
+  const src = coach.slice(coach.indexOf('export function coachPose'), coach.indexOf('export function CoachDemo'));
+  const js = src.replace('export ', '').replace("'worklet';", '').replace(/\(p: number\): \{[^}]*\}/, '(p)');
+  const pose = new Function(`${js}; return coachPose;`)();
+  assert.equal(pose(0.1).check, 0, 'no check before the bonk lands');
+  assert.ok(pose(0.24).check > 1.1, 'the check pops past full');
+  assert.equal(pose(0.4).check, 1);
+  assert.equal(pose(0.6).cross, 0, 'the lure shakes no first');
+  assert.equal(pose(0.8).cross, 1);
 });
