@@ -348,10 +348,11 @@ test('wave 3 round 2: the level-up card never empties, collapses or mounts the n
   const modal = read('src/components/CoinLevelingModal.tsx');
   assert.ok(!/scale: Math\.max\(0, successIn\.value\)/.test(modal), 'the success content is never scaled to nothing on its first frame');
   assert.ok(modal.includes('scale: 0.84 + 0.16 * successIn.value'), 'it stamps in from a little small, already visible');
-  assert.ok(/state === 'leveling' \? \(\s*<View style=\{\{ alignSelf: 'stretch', height: CTA_HEIGHT/.test(modal), 'the charge bar takes the Level Up button\'s own spot');
+  assert.ok(modal.includes("<View style={{ alignSelf: 'stretch', height: CTA_HEIGHT, justifyContent: 'center' }}>"), 'the charge bar takes the Level Up button\'s own spot');
+  assert.equal((modal.match(/<YellowButton/g) || []).length, 2, 'one CTA from Level Up! to Awesome! (never remounted), plus the max-level Nice!');
   assert.ok(modal.includes("(state === 'preview' || state === 'confirm' || state === 'leveling') && !isMaxLevel"), 'the card body stays during the charge');
   assert.ok(!modal.includes('LEVELING STATE'), 'no separate short charging card');
-  assert.ok(modal.includes('<OneTimeTip id="coin_card" ready={visible && state === \'preview\'} compact instantExit'), 'the card tip leaves at once at the tap (no stray fading pill over the coin)');
+  assert.ok(modal.includes('<OneTimeTip id="coin_card" ready={visible && (state === \'preview\' || state === \'leveling\')} compact instantExit'), 'the card tip leaves at once at the tap (no stray fading pill over the coin)');
   assert.ok(read('src/components/help/CoachTip.tsx').includes('exiting={reduced || instantExit ? undefined') && read('src/components/help/CoachTip.tsx').includes('entering={reduced || instantExit ? undefined'), 'CoachTip can skip its layout animation');
   assert.ok(modal.includes('setLockedHeight(contentHeight.current)') && modal.includes('minHeight: (state === \'leveling\' || state === \'success\') && lockedHeight > 0'), 'the card keeps its height through the success card');
   assert.ok(/level=\{nextLevel\}[\s\S]{0,300}animate=\{state === 'success'\}/.test(modal), 'the next tier is mounted (still) before the burst');

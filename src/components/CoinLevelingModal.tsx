@@ -965,82 +965,12 @@ export default function CoinLevelingModal({
                       </Text>
                     </View>}
                     {/* First look at a coin card: what leveling costs and does, once. */}
-                    <OneTimeTip id="coin_card" ready={visible && state === 'preview'} compact instantExit
-                      style={{ alignSelf: 'stretch', marginBottom: 8 }} />
-                    {/* ── Level Up Button ── it turns into the charge bar in its own spot (same height), so nothing moves. */}
-                    {state === 'leveling' ? (
-                      <View style={{ alignSelf: 'stretch', height: CTA_HEIGHT, alignItems: 'center', justifyContent: 'center' }}
-                        accessible accessibilityLiveRegion="polite"
-                        accessibilityLabel={slowServer ? 'Almost there' : 'Powering up your coin'}>
-                        {/* A dark track with a bright gold fill: easy to see on the pale card. */}
-                        <View style={{
-                          width: '86%', height: 24, borderRadius: 12,
-                          backgroundColor: '#0b3a66', borderWidth: 3, borderColor: '#ffffff',
-                          overflow: 'hidden', marginBottom: 8,
-                        }}>
-                          <Reanimated.View style={[{
-                            position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%',
-                            backgroundColor: '#ffcf3b', transformOrigin: 'left',
-                          }, chargeStyle]}>
-                            <View style={{ position: 'absolute', left: 0, right: 0, top: 2, height: 5, borderRadius: 3,
-                              backgroundColor: '#fff2b0' }} />
-                          </Reanimated.View>
-                        </View>
-                        {/* The label swaps on the UI thread (a starved JS thread can't hold it on Powering up!). */}
-                        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                          <Reanimated.Text style={[LABEL_STYLE, poweringStyle]}>Powering up!</Reanimated.Text>
-                          <Reanimated.Text style={[LABEL_STYLE, { position: 'absolute' }, almostStyle]}>Almost there!</Reanimated.Text>
-                        </View>
-                      </View>
-                    ) : canLevelUp || !missingAction ? <YellowButton
-                      text="Level Up!"
-                      disabled={!canLevelUp}
-                      onPress={handleLevelUp}
-                    /> : <YellowButton
-                      text={missingAction.label}
-                      onPress={() => {
-                        if (missingAction.kind === 'parts' && onPlayInLine) {
-                          pendingLinePlayRef.current = true; handleClose();
-                        } else if (missingAction.kind === 'energy') {
-                          pendingExploreRef.current = true; handleClose();
-                        } else {
-                          setShowPartsHelp(true);
-                        }
-                      }}
-                    />}
-
-                    {/* Helper text for what you're missing */}
-                    {!canLevelUp && state !== 'leveling' && (
-                      <Text style={{
-                        fontFamily: 'Knockout', fontSize: 11,
-                        color: '#315D7B',
-                        textAlign: 'center', marginTop: 8,
-                      }}>
-                        {!hasParts
-                          ? showPartsHelp || !onPlayInLine
-                            ? 'Win this ride again or play LinePlay in its line to earn Ride Parts.'
-                            : 'Play LinePlay in this line to earn Ride Parts.'
-                          : 'Energy comes from finds on your home map.'}
-                      </Text>
-                    )}
-                    {/* Ride Parts are earned at the ride and never sold. The shop
-                        only helps with what is sold: Tickets for more ride
-                        challenges, or Energy. */}
-                    {/* Short only on energy: the one pack that covers it, right here (grown-up gated). */}
-                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && hasParts && !hasEnergy && (
-                      <CoinTopUpOffer currency="energy" reason="level-up" need={Math.max(1, rideCoin.energy_to_next_level - playerEnergy)}
-                        style={{ marginTop: 8 }} />
-                    )}
-                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && !hasParts && (
-                      <TouchableOpacity onPress={() => { pendingSuppliesRef.current = !hasParts ? 'tickets' : 'featured'; handleClose(); }}
-                        accessibilityRole="button" hitSlop={8}
-                        accessibilityLabel={!hasParts ? 'Get tickets in Supplies. A grown-up buys these with real money.' : 'See Supplies packs with energy. A grown-up buys these with real money.'}>
-                        <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: '#0B5FA8', textAlign: 'center',
-                          marginTop: 6, textDecorationLine: 'underline' }}>
-                          {!hasParts ? 'Out of tickets? Get more in Supplies (real money)' : 'Need energy? Supplies packs have it (real money)'}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
+                    {/* It stays mounted (hidden) through the charge: removing it at the tap left a stray copy of it
+                        drawn over the coin for a few frames on iOS. */}
+                    <View style={{ alignSelf: 'stretch', opacity: state === 'leveling' ? 0 : 1 }}>
+                      <OneTimeTip id="coin_card" ready={visible && (state === 'preview' || state === 'leveling')} compact instantExit
+                        style={{ alignSelf: 'stretch', marginBottom: 8 }} />
+                    </View>
                   </>
                 )}
 
@@ -1118,9 +1048,95 @@ export default function CoinLevelingModal({
                       )}
                     </View>
 
-                    {/* The label shows on the first success frame (its size is known up front, no wait on a layout pass). */}
-                    <YellowButton text="Awesome!" onPress={handleClose} estimatedWidth={SUCCESS_CTA_WIDTH} />
                   </Reanimated.View>
+                )}
+
+                {/* ── The one CTA ── Level Up!, then the charge bar in its spot, then Awesome!: one button that never
+                    remounts (a new button's art decoded a few frames late on the success card) and one height, so
+                    nothing in the card moves from the tap to the settled card. */}
+                {(state === 'success' || (!showEditions && !isMaxLevel && (state === 'preview' || state === 'confirm' || state === 'leveling'))) && (
+                  <View style={{ alignSelf: 'stretch', height: CTA_HEIGHT, justifyContent: 'center' }}>
+                    <View style={{ opacity: state === 'leveling' ? 0 : 1 }} pointerEvents={state === 'leveling' ? 'none' : 'auto'}>
+                      <YellowButton
+                        estimatedWidth={SUCCESS_CTA_WIDTH}
+                        text={state === 'success' ? 'Awesome!' : canLevelUp || !missingAction ? 'Level Up!' : missingAction.label}
+                        disabled={state !== 'success' && !canLevelUp && !missingAction}
+                        onPress={() => {
+                          if (state === 'success') { handleClose(); return; }
+                          if (canLevelUp || !missingAction) return handleLevelUp();
+                          if (missingAction.kind === 'parts' && onPlayInLine) {
+                            pendingLinePlayRef.current = true; handleClose();
+                          } else if (missingAction.kind === 'energy') {
+                            pendingExploreRef.current = true; handleClose();
+                          } else {
+                            setShowPartsHelp(true);
+                          }
+                        }}
+                      />
+                    </View>
+                    {state === 'leveling' && (
+                      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}
+                        accessible accessibilityLiveRegion="polite"
+                        accessibilityLabel={slowServer ? 'Almost there' : 'Powering up your coin'}>
+                        {/* A dark track with a bright gold fill: easy to see on the pale card. */}
+                        <View style={{
+                          width: '86%', height: 24, borderRadius: 12,
+                          backgroundColor: '#0b3a66', borderWidth: 3, borderColor: '#ffffff',
+                          overflow: 'hidden', marginBottom: 8,
+                        }}>
+                          <Reanimated.View style={[{
+                            position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%',
+                            backgroundColor: '#ffcf3b', transformOrigin: 'left',
+                          }, chargeStyle]}>
+                            <View style={{ position: 'absolute', left: 0, right: 0, top: 2, height: 5, borderRadius: 3,
+                              backgroundColor: '#fff2b0' }} />
+                          </Reanimated.View>
+                        </View>
+                        {/* The label swaps on the UI thread (a starved JS thread can't hold it on Powering up!). */}
+                        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                          <Reanimated.Text style={[LABEL_STYLE, poweringStyle]}>Powering up!</Reanimated.Text>
+                          <Reanimated.Text style={[LABEL_STYLE, { position: 'absolute' }, almostStyle]}>Almost there!</Reanimated.Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {!showEditions && !isMaxLevel && (state === 'preview' || state === 'confirm' || state === 'leveling') && (
+                  <>
+                    {/* Helper text for what you're missing */}
+                    {!canLevelUp && state !== 'leveling' && (
+                      <Text style={{
+                        fontFamily: 'Knockout', fontSize: 11,
+                        color: '#315D7B',
+                        textAlign: 'center', marginTop: 8,
+                      }}>
+                        {!hasParts
+                          ? showPartsHelp || !onPlayInLine
+                            ? 'Win this ride again or play LinePlay in its line to earn Ride Parts.'
+                            : 'Play LinePlay in this line to earn Ride Parts.'
+                          : 'Energy comes from finds on your home map.'}
+                      </Text>
+                    )}
+                    {/* Ride Parts are earned at the ride and never sold. The shop
+                        only helps with what is sold: Tickets for more ride
+                        challenges, or Energy. */}
+                    {/* Short only on energy: the one pack that covers it, right here (grown-up gated). */}
+                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && hasParts && !hasEnergy && (
+                      <CoinTopUpOffer currency="energy" reason="level-up" need={Math.max(1, rideCoin.energy_to_next_level - playerEnergy)}
+                        style={{ marginTop: 8 }} />
+                    )}
+                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && !hasParts && (
+                      <TouchableOpacity onPress={() => { pendingSuppliesRef.current = !hasParts ? 'tickets' : 'featured'; handleClose(); }}
+                        accessibilityRole="button" hitSlop={8}
+                        accessibilityLabel={!hasParts ? 'Get tickets in Supplies. A grown-up buys these with real money.' : 'See Supplies packs with energy. A grown-up buys these with real money.'}>
+                        <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: '#0B5FA8', textAlign: 'center',
+                          marginTop: 6, textDecorationLine: 'underline' }}>
+                          {!hasParts ? 'Out of tickets? Get more in Supplies (real money)' : 'Need energy? Supplies packs have it (real money)'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
                 )}
 
                 {/* ══════════════════════════════════════ */}
