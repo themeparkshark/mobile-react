@@ -33,6 +33,8 @@ test('press look: a squash for buttons, a subtle one for rows, a dim with Reduce
   assert.deepEqual({ ...pressLook('none', false) }, { scale: 1, sinkPt: 0, heldOpacity: 1 });
   assert.equal(pressHapticAt('button'), 'pressIn', 'buttons buzz on touch-down so it feels instant');
   assert.equal(pressHapticAt('subtle'), 'press', 'rows buzz on release, so starting a scroll never buzzes');
+  assert.equal(pressHapticAt('button', true), 'held', 'a button in a list waits a beat, so a scroll that starts on it stays silent');
+  assert.equal(easing.PRESS.scrollHoldMs, 90);
 });
 
 test('PressableScale: one haptic per press, a squash and a spring back, a shake on a disabled tap', () => {
@@ -49,7 +51,7 @@ test('PressableScale: one haptic per press, a squash and a spring back, a shake 
   const before = view.motions.length;
   pressable().props.onPressIn({}); pressable().props.onPress({});
   assert.equal(presses, 1, 'nothing fires');
-  assert.equal(haptics.length, 1, 'no buzz on a disabled tap');
+  assert.deepEqual(haptics, ['tapLight', 'hitSoft'], 'a disabled tap is a soft nope in the hand, never a tap buzz or an error');
   assert.ok(view.motions.length > before, 'it shakes no');
   assert.equal(pressable().props.accessibilityState.disabled, true);
 });
@@ -95,7 +97,8 @@ test('footer: the bounce follows the director numbers and everything returns to 
   assert.equal(F.hopPt, 6);
   assert.equal(F.popScale, 1.25);
   assert.equal(F.sinkScale, 0.92);
-  assert.equal(F.compassSpinMs, 500);
+  assert.equal(F.compassSquashMs, 80, 'the compass squashes before it pops (anticipation)');
+  assert.ok(F.compassWobbleDeg <= 10, 'a small wobble on its base, never a full turn of the baked shadow');
   assert.equal(F.wiggleScale, 1.08);
   const m = footer.footerMotion;
   footer.playFooterTap(0, 2, false);
@@ -107,7 +110,10 @@ test('footer: the bounce follows the director numbers and everything returns to 
   assert.equal(m.sinkScale.value, 1);
   assert.equal(m.glowOpacity.value, 0, 'the glow never stays lit');
   assert.equal(m.glowX.value, 2);
-  assert.equal(m.compassSpin.value, 0, 'one full turn ends where it started');
+  assert.equal(m.compassSquash.value, 0, 'the squash springs back to rest');
+  assert.equal(m.compassWobble.value, 0, 'the wobble ends upright');
+  assert.equal(m.ring.value, 1, 'the ring pulse ran to its end (drawn invisible at 1)');
+  assert.equal(m.burst.value, 1, 'the sparkle burst ran to its end (drawn invisible at 1)');
   assert.equal(m.labelLift.value, 0);
   assert.equal(m.labelOpacity.value, 1);
   m.hopIndex.value = -1;
@@ -121,12 +127,15 @@ test('footer: positions and sizes of the five icons are unchanged (motion only)'
     "justifyContent: 'space-between'", 'aspectRatio: 5.3']) assert.ok(source.includes(needle), `footer lost: ${needle}`);
   assert.match(source, /pressHaptic="tickSelection"/, 'a tab pick is a selection tick');
   assert.doesNotMatch(source, /react-native-svg/, 'no animated SVG in the footer');
+  assert.doesNotMatch(source, /compassSpin|shadowRadius: 14/, 'no spinning compass art, no animated iOS shadow under the glow');
+  assert.match(source, /cachePolicy="memory-disk"/, 'footer icons stay decoded in memory, so a tab switch never blanks them');
+  assert.match(source, /transformOrigin: 'bottom'/, 'the compass wobbles on its base');
 });
 
 test('rolling number: digits roll the short way up for gains and down for losses, ones column first', () => {
   const { planRoll, defaultFormat } = loadTs('src/ui/RollingNumber.tsx', {
     react: { memo: c => c }, 'react/jsx-runtime': {}, 'react-native': {}, 'react-native-reanimated': {},
-    './motionEasing': easing, './useUiReducedMotion': {},
+    './motionEasing': easing, './useUiReducedMotion': {}, '../gamekit/Haptics': { queueHaptic() {} },
   });
   assert.equal(defaultFormat(12345), '12,345');
   const up = JSON.parse(JSON.stringify(planRoll('375', '855', true, false)));

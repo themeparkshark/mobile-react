@@ -41,7 +41,11 @@ import { Burst } from './social/SocialFx';
 import { effectiveStatus, initialTab, mergePage, searchHint, type FriendStatus, type FriendsTab } from './social/socialModel';
 import { SurfaceContext, clearStatus, setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
 import { staggerIn } from '../ui/stagger';
-import AmbientSwim from '../ui/AmbientSwim';
+import AmbientSwim, { Breathe } from '../ui/AmbientSwim';
+import { SharkRefreshOverlay, useSharkRefresh } from '../ui/SharkRefresh';
+
+/** FlashList on the UI thread's scroll handler, so the pull-to-refresh shark follows the finger. */
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList) as unknown as typeof FlashList;
 
 const CREST = require('../../assets/images/screens/friends/noti.png');
 // The shark-and-envelope cut off its square tile (same art as the bell's request badge), so it sits in the tab like the heart.
@@ -178,9 +182,13 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, 
   const reduced = useUiReducedMotion();
   const first = useRef(true);
   useEffect(() => { const t = setTimeout(() => { first.current = false; }, 900); return () => clearTimeout(t); }, []);
+  const shark = useSharkRefresh(!!refreshing);
   return (
-    <FlashList
+    <View style={{ flex: 1 }}>
+    <AnimatedFlashList
       ref={listRef}
+      onScroll={onRefresh ? (shark.onScroll as never) : undefined}
+      scrollEventThrottle={16}
       data={rows as Row[]}
       extraData={overrides}
       keyExtractor={row => row.key}
@@ -194,7 +202,8 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, 
       ListHeaderComponent={header}
       ListFooterComponent={footer}
       ListEmptyComponent={empty}
-      refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={CLEAN_SCREEN_ACCENT} /> : undefined}
+      // The shark is the refresh show; the system spinner still does the work underneath, unseen.
+      refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor="transparent" /> : undefined}
       renderItem={({ item, index }) => {
         if (item.type === 'header') return <SectionHeader label={item.label} icon={item.icon} count={item.count} />;
         if (item.type === 'hint') return <Text style={styles.hint} maxFontSizeMultiplier={1.3}>{item.text}</Text>;
@@ -208,6 +217,8 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, 
         return <Animated.View entering={first.current ? staggerIn(index, { reduced }) : undefined}>{row}</Animated.View>;
       }}
     />
+    {onRefresh && <SharkRefreshOverlay shark={shark} />}
+    </View>
   );
 }
 
@@ -218,7 +229,8 @@ function Empty({ title, message, onFind }: { readonly title: string; readonly me
       <AmbientSwim><Image source={CREST} style={styles.emptyArt} contentFit="contain" /></AmbientSwim>
       <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.2}>{title}</Text>
       <Text style={styles.emptyText} maxFontSizeMultiplier={1.3}>{message}</Text>
-      {onFind && <Pill label="Find friends" icon="search" tone="gold" onPress={onFind} style={{ marginTop: 14 }} />}
+      {/* The way out of an empty screen breathes gently (ambient budget), so the eye lands on it. */}
+      {onFind && <Breathe><Pill label="Find friends" icon="search" tone="gold" onPress={onFind} style={{ marginTop: 14 }} /></Breathe>}
     </Animated.View>
   );
 }

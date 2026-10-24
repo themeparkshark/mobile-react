@@ -1,10 +1,12 @@
 import { Image } from 'expo-image';
 import { ReactNode, useContext, useEffect, useRef } from 'react';
-import { Dimensions, ImageBackground, Text, View } from 'react-native';
+import { Dimensions, Image as RNImage, ImageBackground, Text, View } from 'react-native';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import { COMPASS_INDEX, footerIndex, footerMotion, playFooterTap } from './footerMotion';
+import { COMPASS_INDEX, FOOTER_MOTION, footerIndex, footerMotion, playFooterTap } from './footerMotion';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { BRAND } from '../ui/tokens';
 import { GOLD_FX } from '../ui/motion';
+import SparkleBurst from '../ui/SparkleBurst';
 import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 import * as RootNavigation from '../RootNavigation';
 import { NotificationContext } from '../context/NotificationProvider';
@@ -22,6 +24,31 @@ import { emitTabReselect } from '../utils/tabReselect';
  * end at least this far above the bar.
  */
 export const BOTTOM_BAR_OVERHANG = 56;
+
+/** The five footer icons, required once at module load. */
+const FOOTER_ICONS = {
+  news: require('../../assets/images/toolbar/news.png'),
+  leaderboard: require('../../assets/images/toolbar/leaderboard.png'),
+  explore: require('../../assets/images/toolbar/explore.png'),
+  social: require('../../assets/images/toolbar/social.png'),
+  profile: require('../../assets/images/toolbar/profile.png'),
+} as const;
+
+/**
+ * Every tab screen mounts its own footer, so a tab switch used to decode the five icons again
+ * from disk while the labels were already painted (icons blank for a few frames). Decode them
+ * once at start-up into the memory cache; each footer then paints them on its first frame.
+ */
+let footerIconsWarm = false;
+export function warmFooterIcons(): void {
+  if (footerIconsWarm) return;
+  footerIconsWarm = true;
+  const uris = Object.values(FOOTER_ICONS)
+    .map(icon => RNImage.resolveAssetSource(icon)?.uri)
+    .filter((uri): uri is string => !!uri);
+  if (uris.length) void Image.prefetch(uris, 'memory-disk').catch(() => { footerIconsWarm = false; });
+}
+warmFooterIcons();
 
 export default function Wrapper({
   children,
@@ -56,26 +83,26 @@ export default function Wrapper({
     const x = interpolate(m.glowX.value, [0, 1, 2, 3, 4], c);
     // Bigger behind the big compass.
     const size = interpolate(Math.abs(m.glowX.value - COMPASS_INDEX), [0, 1], [1.7, 1], 'clamp');
-    return { opacity: m.glowOpacity.value, transform: [{ translateX: x - 32 }, { scale: size }] };
+    return { opacity: m.glowOpacity.value, transform: [{ translateX: x - GLOW / 2 }, { scale: size }] };
   });
 
   const items = [
     {
-      icon: require('../../assets/images/toolbar/news.png'),
+      icon: FOOTER_ICONS.news,
       screen: 'News',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
       text: 'News',
     },
     {
-      icon: require('../../assets/images/toolbar/leaderboard.png'),
+      icon: FOOTER_ICONS.leaderboard,
       screen: 'Leaderboard',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
       text: 'Standings',
     },
     {
-      icon: require('../../assets/images/toolbar/explore.png'),
+      icon: FOOTER_ICONS.explore,
       screen: 'Explore',
       // Every tab says what it is; the big compass is the map (kids asked what it did).
       text: 'Map',
@@ -83,14 +110,14 @@ export default function Wrapper({
       sound: require('../../assets/sounds/explore_button_press.mp3'),
     },
     {
-      icon: require('../../assets/images/toolbar/social.png'),
+      icon: FOOTER_ICONS.social,
       screen: 'Social',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
       text: 'Social',
     },
     {
-      icon: require('../../assets/images/toolbar/profile.png'),
+      icon: FOOTER_ICONS.profile,
       screen: 'Profile',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
@@ -132,12 +159,13 @@ export default function Wrapper({
               justifyContent: 'space-between',
             }}
           >
-            {/* A soft gold glow that slides to the picked tab and fades (never lit at rest). */}
-            <Animated.View pointerEvents="none" style={[{
-              position: 'absolute', left: 0, top: -7, width: 64, height: 64, borderRadius: 32,
-              backgroundColor: 'rgba(255, 213, 74, 0.55)', shadowColor: GOLD_FX.glow, shadowOpacity: 1,
-              shadowRadius: 14, shadowOffset: { width: 0, height: 0 },
-            }, glowStyle]} />
+            {/* Warm sunlight that slides to the picked tab and fades (never lit at rest). Pale cream
+                rings stacked into a soft radial, no shadow pass: over the blue bar it reads as light, never olive. */}
+            <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: -14, width: GLOW, height: GLOW,
+              alignItems: 'center', justifyContent: 'center' }, glowStyle]}>
+              {GLOW_RINGS.map(r => <View key={r.size} style={{ position: 'absolute', width: r.size, height: r.size,
+                borderRadius: r.size / 2, backgroundColor: r.color }} />)}
+            </Animated.View>
             {items.map((item, key) => {
               return (
                 <View key={key} onLayout={event => {
@@ -188,6 +216,9 @@ export default function Wrapper({
                           }}
                           source={item.icon}
                           contentFit="contain"
+                          cachePolicy="memory-disk"
+                          recyclingKey={item.screen}
+                          priority="high"
                         />
                       </FooterIcon>
                     </Button>
@@ -223,34 +254,72 @@ export default function Wrapper({
   );
 }
 
-/** One footer icon: hops and pops when picked, dips when left, wiggles on a re-tap; the compass spins. */
+/** The sunlight behind a picked tab: soft cream rings stacked into a radial (pure data). */
+const GLOW = 78;
+const GLOW_RINGS = [
+  { size: 78, color: 'rgba(255, 250, 232, 0.16)' },
+  { size: 64, color: 'rgba(255, 248, 225, 0.2)' },
+  { size: 50, color: 'rgba(255, 246, 214, 0.28)' },
+  { size: 36, color: 'rgba(255, 251, 234, 0.42)' },
+] as const;
+
+/**
+ * One footer icon: hops and pops when picked, dips when left, wiggles on a re-tap, and a thin gold
+ * ring pulses off it. The compass squashes first, wobbles on its base (transformOrigin bottom, so its
+ * baked shadow stays under it), gets a white glint across its face and throws six gold sparkles.
+ */
 function FooterIcon({ index, children }: { readonly index: number; readonly children: ReactNode }) {
   const compass = index === COMPASS_INDEX;
+  const size = compass ? 100 : 50;
+  const F = FOOTER_MOTION;
   const style = useAnimatedStyle(() => {
     const m = footerMotion;
     const picked = m.hopIndex.value === index;
     const left = m.sinkIndex.value === index && !picked;
+    const s = picked ? m.hopScale.value : left ? m.sinkScale.value : 1;
+    const q = compass && picked ? m.compassSquash.value : 0;
     return {
       transform: [
         { translateY: picked ? m.hopY.value : 0 },
-        { scale: picked ? m.hopScale.value : left ? m.sinkScale.value : 1 },
-        { rotate: `${(picked ? m.hopRotate.value : 0) + (compass ? m.compassSpin.value : 0)}deg` },
+        { scaleX: s * (1 + F.compassSquashX * q) },
+        { scaleY: s * (1 - F.compassSquashY * q) },
+        { rotate: `${(picked ? m.hopRotate.value : 0) + (compass && picked ? m.compassWobble.value : 0)}deg` },
       ],
     };
   });
+  const ring = useAnimatedStyle(() => {
+    const m = footerMotion;
+    const r = m.ring.value;
+    if (m.hopIndex.value !== index || r <= 0 || r >= 1) return { opacity: 0 };
+    return { opacity: r < 0.15 ? r / 0.15 : 1 - (r - 0.15) / 0.85,
+      transform: [{ scale: F.ringFrom + (F.ringTo - F.ringFrom) * r }] };
+  });
   const glint = useAnimatedStyle(() => {
     const g = footerMotion.glint.value;
-    return { opacity: g > 0 && g < 1 ? 0.75 : 0, transform: [{ translateX: -70 + 140 * g }, { rotate: '20deg' }] };
+    return { opacity: g > 0 && g < 1 ? 0.8 : 0, transform: [{ translateX: -64 + 128 * g }, { rotate: '20deg' }] };
   });
+  // The compass face (the gold disc inside the star), so the glint never crosses the navy base.
+  const face = { left: 30, top: 26, width: 40, height: 40 };
+  const ringSize = compass ? 64 : 46;
   return (
-    <Animated.View style={style}>
-      {children}
-      {compass && <View pointerEvents="none" style={{ position: 'absolute', left: 10, top: 10, width: 80, height: 80,
-        borderRadius: 40, overflow: 'hidden' }}>
-        <Animated.View style={[{ position: 'absolute', top: -20, left: 30, width: 16, height: 120,
-          backgroundColor: 'rgba(255, 255, 255, 0.85)', borderRadius: 8 }, glint]} />
-      </View>}
-    </Animated.View>
+    <View>
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: (size - ringSize) / 2,
+        top: compass ? 14 : (size - ringSize) / 2, width: ringSize, height: ringSize, borderRadius: ringSize / 2,
+        borderWidth: 3, borderColor: GOLD_FX.glow, alignItems: 'center', justifyContent: 'center' }, ring]}>
+        <View style={{ width: ringSize - 6, height: ringSize - 6, borderRadius: (ringSize - 6) / 2, borderWidth: 1.5,
+          borderColor: BRAND.white }} />
+      </Animated.View>
+      <Animated.View style={[compass ? { transformOrigin: 'bottom' } : null, style]}>
+        {children}
+        {compass && <View pointerEvents="none" style={{ position: 'absolute', ...face, borderRadius: face.width / 2,
+          overflow: 'hidden' }}>
+          <Animated.View style={[{ position: 'absolute', top: -14, left: 14, width: 12, height: 68,
+            backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: 6 }, glint]} />
+        </View>}
+      </Animated.View>
+      {compass && <SparkleBurst progress={footerMotion.burst} count={F.compassSparkles} x={size / 2} y={44}
+        spread={[-170, -10]} dist={[34, 50]} size={[11, 16]} gravity={14} seed={2} />}
+    </View>
   );
 }
 

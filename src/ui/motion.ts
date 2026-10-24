@@ -268,6 +268,8 @@ export const PRESS = {
   shakeMs: 200,
   /** Reduce Motion: no scale, a dim on press instead. */
   reducedOpacity: 0.85,
+  /** A button inside a scrolling list buzzes after this hold (a scroll that starts on it cancels first). */
+  scrollHoldMs: 90,
 } as const;
 
 /** Lists arriving one row after another, only the first time. */

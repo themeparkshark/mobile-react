@@ -66,7 +66,7 @@ type DialogDemo = 'simple' | 'confirm' | 'three' | 'long';
 type Backdrop = 'cream' | 'blue';
 
 const DIALOG_DEMOS: Record<DialogDemo, () => void> = {
-  simple: () => gameAlert('Coin saved!', 'It is waiting on your park shelf.'),
+  simple: () => gameAlert('Coin saved!', 'It is waiting on your park shelf.', undefined, { icon: 'coin', haptic: 'success' }),
   confirm: () => {
     void confirmGame({ title: 'Leave the line?', message: 'Your queue progress is saved for today.', confirmLabel: 'Leave', cancelLabel: 'Keep playing', destructive: true })
       .then(leave => { if (leave) gameAlert('You left the line', undefined, undefined, { icon: 'check' }); });

@@ -28,7 +28,8 @@ import { useWishCount } from './StoreScreen/wishStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Reanimated, { type SharedValue, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 import { clockOffset, formatCoins } from '../helpers/shopShelves';
-import RollingNumber from '../ui/RollingNumber';
+import WalletChange from '../ui/WalletChange';
+import { useAnyModalLayer } from '../ui/modalLayers';
 import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -271,6 +272,8 @@ function ShopTabs({ tab, onChange, coins, onWishlist, withBack = false }: {
   withBack?: boolean;
 }) {
   const wishes = useWishCount();
+  // The try-on (or any sheet) covers the wallet: hold the change until the kid can see the coins leave.
+  const covered = useAnyModalLayer();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: coins == null ? 0 : 12 }}>
     {withBack && <View style={{ marginLeft: 12, marginTop: 10 }}><BackButton /></View>}
@@ -289,11 +292,9 @@ function ShopTabs({ tab, onChange, coins, onWishlist, withBack = false }: {
           <WishHeart on={wishes > 0} size={20} />
           {wishes > 0 && <Text maxFontSizeMultiplier={1.3} style={tabStyles.wishText}>{wishes}</Text>}
         </Pressable>
-        <View style={tabStyles.coins} accessible accessibilityLabel={`${formatCoins(coins)} coins`}>
-          <GameIcon name="coins" size={20} />
-          {/* The balance rolls to its new number (a buy rolls down, a gift rolls up). */}
-          <RollingNumber value={coins} format={formatCoins} style={tabStyles.coinsText} />
-        </View>
+        {/* A buy throws coins out of the chip and rolls it down; a gift flies coins in and rolls it up. */}
+        <WalletChange value={coins} format={formatCoins} hold={covered} style={tabStyles.coins} textStyle={tabStyles.coinsText}
+          accessibilityLabel={`${formatCoins(coins)} coins`} />
       </>
     )}
     </View>

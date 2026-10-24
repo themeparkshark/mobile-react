@@ -20,6 +20,7 @@
 import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
 import { InlineBackContext } from './inlineBack';
 import * as Haptics from 'expo-haptics';
+import { queueHaptic } from '../../gamekit/Haptics';
 import { openMembership } from '../../components/GrownUpGate';
 import { FxSceneBackdrop } from '../../fx/FxSolo';
 import { FX_BLURB, FX_SCENES, FxKey, fxKeyOf, isSecretItem } from '../../fx/registry';
@@ -438,6 +439,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     // In-flight lock: a second tap before the server answers never starts a second buy.
     if (buyingRef.current) return;
     buyingRef.current = true;
+    // "Yes, buy it!" answers in the hand on the tap itself (the shared haptic gate).
+    queueHaptic('hitMedium');
     if (phase === 'idle') { directBuys.push(Date.now()); if (directBuys.filter(t => Date.now() - t < 120_000).length >= 3) directCapped = true; }
     setPhase('buying');
     try {

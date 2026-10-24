@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, createContext, useContext, useCallback, ReactNode } from 'react';
 import { PanResponder, StyleSheet, Text, View, TouchableOpacity, Dimensions } from 'react-native';
 import Animated, { cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring,
-  withTiming, type SharedValue } from 'react-native-reanimated';
+  withTiming } from 'react-native-reanimated';
 import { queueHaptic, type HapticIntent } from '../gamekit/Haptics';
-import { DURATION, EASE, GOLD_FX, SPRING } from '../ui/motionEasing';
+import { DURATION, EASE, SPRING } from '../ui/motionEasing';
+import SparkleBurst from '../ui/SparkleBurst';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { colors, shadows, borderRadius, spacing, typography } from '../design-system';
 import { onToast } from '../utils/toast';
@@ -81,6 +82,15 @@ export const TOAST_MOTION = {
   iconPopAt: 120,
   /** A swipe this far (pt) toward the edge dismisses it. */
   swipePt: 24,
+  /** How big the icon pops: a reward pops bigger than a plain win or a note. */
+  iconPop: 1.25,
+  rewardPop: 1.35,
+  /** Star sparkles off a win's icon (before the power budget). */
+  winSparkles: 5,
+  rewardSparkles: 7,
+  /** A shine sweeps across a win's card this long after it lands. */
+  shineAt: 260,
+  shineMs: 520,
 } as const;
 
 /** The haptic a toast plays when it shows: a win buzzes, info ticks, a problem is a soft bump (never an error buzz). */
@@ -144,8 +154,10 @@ function ToastItem({
   const drag = useSharedValue(0);
   const iconPop = useSharedValue(1);
   const sparkle = useSharedValue(0);
+  const shine = useSharedValue(0);
   const hiding = useRef(false);
   const win = toast.type === 'success' || toast.type === 'reward';
+  const reward = toast.type === 'reward';
 
   const hide = useCallback(() => {
     if (hiding.current) return;
@@ -164,8 +176,11 @@ function ToastItem({
     } else {
       enter.value = withSpring(1, SPRING.settle);
       iconPop.value = withDelay(TOAST_MOTION.iconPopAt, withSequence(
-        withTiming(1.25, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
-      if (win) sparkle.value = withDelay(TOAST_MOTION.iconPopAt, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
+        withTiming(reward ? TOAST_MOTION.rewardPop : TOAST_MOTION.iconPop, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
+      if (win) {
+        sparkle.value = withDelay(TOAST_MOTION.iconPopAt + 60, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
+        shine.value = withDelay(TOAST_MOTION.shineAt, withTiming(1, { duration: TOAST_MOTION.shineMs, easing: EASE.inOut }));
+      }
     }
     const timeout = setTimeout(hide, toast.duration || TOAST_MOTION.showMs);
     return () => clearTimeout(timeout);
@@ -189,22 +204,26 @@ function ToastItem({
       : { opacity: Math.min(1, e * 1.6), transform: [{ translateY: (1 - e) * 110 + drag.value }] };
   });
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: iconPop.value }] }));
+  const shineStyle = useAnimatedStyle(() => {
+    const p = shine.value;
+    return { opacity: p > 0 && p < 1 ? 0.75 : 0, transform: [{ translateX: -80 + (width + 80) * p }, { skewX: '-20deg' }] };
+  });
 
   const config = toastConfig[toast.type];
 
   return (
-    <Animated.View
-      {...pan.panHandlers}
+    <Animated.View {...pan.panHandlers} style={[{ marginBottom: index * 8 }, cardStyle]}>
+    <View
       style={[
         styles.toast,
         {
           backgroundColor: config.backgroundColor,
           borderColor: config.borderColor,
-          marginBottom: index * 8,
         },
-        cardStyle,
       ]}
     >
+      {/* A win's shine sweeps once across the card (clipped by the card's rounded frame). */}
+      {win && !reduced && <Animated.View pointerEvents="none" style={[styles.shine, shineStyle]} />}
       <TouchableOpacity
         style={styles.toastContent}
         onPress={hide}
@@ -213,7 +232,6 @@ function ToastItem({
         {/* Icon */}
         <Animated.View style={iconStyle}>
           <GameIcon name={toastIcon(toast.type, toast.icon)} size={28} />
-          {win && !reduced && <ToastSparkles progress={sparkle} />}
         </Animated.View>
 
         {/* Message (server text may carry [icon:name] tokens or legacy emoji; emoji never render) */}
@@ -234,36 +252,22 @@ function ToastItem({
           </TouchableOpacity>
         )}
       </TouchableOpacity>
+    </View>
+      {/* Star sparkles fly off a win's icon, outside the card so nothing clips them (one shot, then gone). */}
+      {win && !reduced && <SparkleBurst progress={sparkle} count={reward ? TOAST_MOTION.rewardSparkles : TOAST_MOTION.winSparkles}
+        x={TOAST_ICON_CENTER.x} y={TOAST_ICON_CENTER.y} spread={[-200, 20]} dist={[26, 44]} size={[14, 18]} gravity={12}
+        seed={toast.message.length} />}
     </Animated.View>
   );
 }
 
-const SPARKS = [{ dx: -16, dy: -18 }, { dx: 18, dy: -14 }, { dx: 2, dy: -24 }];
-
-/** Three gold sparkles that fly off a win's icon and fade (one shot, then gone). */
-function ToastSparkles({ progress }: { progress: SharedValue<number> }) {
-  return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: 10, top: 10 }}>
-      {SPARKS.map((s, i) => <Spark key={i} progress={progress} dx={s.dx} dy={s.dy} />)}
-    </View>
-  );
-}
-
-function Spark({ progress, dx, dy }: { progress: SharedValue<number>; dx: number; dy: number }) {
-  const style = useAnimatedStyle(() => {
-    const p = progress.value;
-    return {
-      opacity: p <= 0 || p >= 1 ? 0 : p < 0.2 ? p * 5 : 1 - (p - 0.2) / 0.8,
-      transform: [{ translateX: dx * p }, { translateY: dy * p + 10 * p * p }, { rotate: `${p * 90}deg` }, { scale: 1 - p * 0.4 }],
-    };
-  });
-  return <Animated.View style={[{ position: 'absolute', width: 8, height: 8, backgroundColor: GOLD_FX.glow,
-    borderRadius: 1.5, borderWidth: 1, borderColor: GOLD_FX.core }, style]} />;
-}
+/** Where the toast icon sits inside the card (border + padding + half the 28 pt icon). */
+const TOAST_ICON_CENTER = { x: 3 + spacing.md + 14, y: 3 + spacing.md + 14 } as const;
 
 // Toast type configurations: a white card with a coloured frame, never a dark or purple fill.
 export const toastConfig: Record<ToastType, { icon: GameIconName; backgroundColor: string; borderColor: string }> = {
-  success: { icon: 'check', backgroundColor: BRAND.white, borderColor: BRAND.green },
+  // Success is gold and white (never green): the same family as every win in the app.
+  success: { icon: 'check', backgroundColor: BRAND.white, borderColor: BRAND.gold },
   error: { icon: 'close', backgroundColor: BRAND.white, borderColor: BRAND.red },
   warning: { icon: 'info', backgroundColor: BRAND.cream, borderColor: BRAND.goldLip },
   info: { icon: 'info', backgroundColor: BRAND.white, borderColor: BRAND.blueBright },
@@ -328,6 +332,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing.md,
     gap: spacing.sm,
+  },
+  shine: {
+    position: 'absolute',
+    top: -10,
+    bottom: -10,
+    left: 0,
+    width: 34,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
   },
   message: {
     flex: 1,

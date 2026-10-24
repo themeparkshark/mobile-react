@@ -42,6 +42,19 @@ export type GameDialogOptions = {
   readonly equalChoices?: boolean;
 };
 
+/** Icons that mean "you got something": a dialog with one of these (and no destructive choice) celebrates. */
+export const REWARD_ICONS: readonly GameIconName[] = ['coin', 'coins', 'gift', 'chest', 'chestOpen', 'trophy', 'star', 'xp'];
+
+/**
+ * Does this dialog celebrate? A success haptic or a reward icon, and never when a choice is destructive
+ * (leaving, deleting and warnings stay calm). Pure, unit tested.
+ */
+export function dialogCelebrates(request: Pick<GameDialogOptions, 'icon' | 'haptic' | 'buttons'>): boolean {
+  if (request.haptic === 'warning') return false;
+  if ((request.buttons ?? []).some(button => button.style === 'destructive')) return false;
+  return request.haptic === 'success' || (!!request.icon && REWARD_ICONS.includes(request.icon));
+}
+
 export type DialogAction = GameDialogButton & { readonly index: number; readonly variant: GameButtonVariant };
 
 export type DialogRequest = GameDialogOptions & {

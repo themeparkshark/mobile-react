@@ -9,14 +9,21 @@
  * number lands with a COUNT.finalBump on SPRING.stamp. Gains roll up, losses roll down.
  * A big jump (over 10,000) rolls only the top columns; the rest snap.
  * The first value on screen never rolls (a screen load is silent and still).
+ * Each column clips to the digit's own height (no neighbour digits peeking above or below a pill),
+ * and the rolling digits stretch a little with speed, like a real odometer wheel.
+ * `celebrate`: a gain the player just earned flashes a warm cream light behind the number and lands
+ * with a selection tick; a loss flashes a calm sky blue (never red) and lands quietly.
+ * `hold`: keep showing the last number (for example while a sheet covers the wallet); when the
+ * hold lifts, it rolls to the new number where the kid can see it.
  * Reduce Motion: the new number is simply there.
- * Transforms only (no per-frame React render, no layout animation).
+ * Transforms and opacity only (no per-frame React render, no layout animation).
  */
 import { memo, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring,
   withTiming } from 'react-native-reanimated';
-import { COUNT, EASE, HUD_BUMP } from './motionEasing';
+import { queueHaptic } from '../gamekit/Haptics';
+import { COUNT, EASE, GOLD_FX, HUD_BUMP } from './motionEasing';
 import useUiReducedMotion from './useUiReducedMotion';
 
 export interface RollingNumberProps {
@@ -29,7 +36,25 @@ export interface RollingNumberProps {
   readonly bump?: boolean;
   /** Called when a roll finishes (JS). */
   readonly onLanded?: () => void;
+  /** A change the player just caused: a light flash and, for gains, a landing tick. */
+  readonly celebrate?: boolean;
+  /** Keep the last number on screen until this turns false, then roll. */
+  readonly hold?: boolean;
 }
+
+/** Rolling digit look: the clip is the glyph height, the rolling strip stretches a little with speed. */
+export const ROLL_LOOK = {
+  /** The clip window as a share of the font size (digits have no descenders). */
+  clipEm: 1.0,
+  /** Gap between digits on the strip, as a share of the line height. */
+  cellGap: 0.3,
+  /** How much the rolling digits stretch at full speed. */
+  stretch: 0.16,
+  /** The flash behind the number at its peak. */
+  flashPeak: 0.55,
+  gainFlash: GOLD_FX.raysSoft,
+  lossFlash: '#bfe5ff',
+} as const;
 
 export const defaultFormat = (value: number) => Math.round(value).toLocaleString('en-US');
 
@@ -77,9 +102,16 @@ export function planRoll(fromText: string, toText: string, rising: boolean, bigJ
 
 const STRIP = '01234567890123456789'.split('');
 
-function RollingNumber({ value, format = defaultFormat, style, maxFontSizeMultiplier = 1.3, bump = true, onLanded }: RollingNumberProps) {
+function RollingNumber({ value: incoming, format = defaultFormat, style, maxFontSizeMultiplier = 1.3, bump = true, onLanded,
+  celebrate = false, hold = false }: RollingNumberProps) {
   const reduced = useUiReducedMotion();
+  // While held, the last number stays put; the roll plays when the hold lifts.
+  const heldValue = useRef(incoming);
+  if (!hold) heldValue.current = incoming;
+  const value = hold ? heldValue.current : incoming;
   const text = format(value);
+  const flash = useSharedValue(0);
+  const rising = useRef(true);
   const previous = useRef<{ text: string; value: number } | null>(null);
   const plan = useRef<RollColumn[]>([]);
   const rollId = useRef(0);
@@ -93,11 +125,11 @@ function RollingNumber({ value, format = defaultFormat, style, maxFontSizeMultip
   if (previous.current === null) {
     plan.current = [...text].map(char => ({ char, from: isDigit(char) ? Number(char) : null, to: isDigit(char) ? Number(char) : null, delay: 0 }));
   } else if (previous.current.text !== text) {
-    const rising = value >= previous.current.value;
+    rising.current = value >= previous.current.value;
     const big = Math.abs(value - previous.current.value) > 10_000;
     plan.current = reduced
       ? [...text].map(char => ({ char, from: isDigit(char) ? Number(char) : null, to: isDigit(char) ? Number(char) : null, delay: 0 }))
-      : planRoll(previous.current.text, text, rising, big);
+      : planRoll(previous.current.text, text, rising.current, big);
     rollId.current += 1;
   }
 
@@ -111,32 +143,43 @@ function RollingNumber({ value, format = defaultFormat, style, maxFontSizeMultip
       cancelAnimation(scale);
       scale.value = withDelay(longest - 60, withSequence(withTiming(COUNT.finalBump, { duration: 90 }), withSpring(1, HUD_BUMP.spring)));
     }
-    if (onLanded) {
-      const t = setTimeout(onLanded, longest);
-      return () => clearTimeout(t);
+    if (celebrate) {
+      cancelAnimation(flash);
+      flash.value = withSequence(withTiming(1, { duration: 120, easing: EASE.out }),
+        withDelay(longest - 120, withTiming(0, { duration: 360, easing: EASE.in })));
     }
-    return undefined;
-  }, [text, value, reduced, bump, onLanded, scale]);
+    const gain = rising.current;
+    const t = setTimeout(() => {
+      // A gain the player just earned lands with a tick in the hand; losses land quietly.
+      if (celebrate && gain) queueHaptic('tickSelection');
+      onLanded?.();
+    }, longest);
+    return () => clearTimeout(t);
+  }, [text, value, reduced, bump, onLanded, scale, celebrate, flash]);
 
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value * ROLL_LOOK.flashPeak }));
   const textStyle: StyleProp<TextStyle> = [style, { lineHeight, includeFontPadding: false }];
 
   return (
     <Animated.View style={[{ flexDirection: 'row', alignItems: 'center' }, bumpStyle]}
       accessible accessibilityRole="text" accessibilityLabel={text}>
+      {celebrate && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: -6, right: -6, top: -2, bottom: -2,
+        borderRadius: 10, backgroundColor: rising.current ? ROLL_LOOK.gainFlash : ROLL_LOOK.lossFlash }, flashStyle]} />}
       {plan.current.map((col, i) => col.from === null || col.to === null
         ? <Text key={`c${plan.current.length - i}`} maxFontSizeMultiplier={maxFontSizeMultiplier} style={textStyle}>{col.char}</Text>
         : <DigitColumn key={`d${plan.current.length - i}`} col={col} rollId={rollId.current} lineHeight={lineHeight}
-          textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />)}
+          fontSize={fontSize} textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />)}
     </Animated.View>
   );
 }
 
-function DigitColumn({ col, rollId, lineHeight, textStyle, maxFontSizeMultiplier }: {
-  readonly col: RollColumn; readonly rollId: number; readonly lineHeight: number;
+function DigitColumn({ col, rollId, lineHeight, fontSize, textStyle, maxFontSizeMultiplier }: {
+  readonly col: RollColumn; readonly rollId: number; readonly lineHeight: number; readonly fontSize: number;
   readonly textStyle: StyleProp<TextStyle>; readonly maxFontSizeMultiplier: number;
 }) {
   const pos = useSharedValue(col.from ?? 0);
+  const speed = useSharedValue(0);
   const lastRoll = useRef(rollId);
   useEffect(() => {
     if (col.from === null || col.to === null) return;
@@ -149,15 +192,27 @@ function DigitColumn({ col, rollId, lineHeight, textStyle, maxFontSizeMultiplier
     pos.value = withDelay(col.delay, withTiming(col.to, { duration: COUNT.ms, easing: EASE.out }, done => {
       if (done) pos.value = rest;
     }));
-  }, [rollId, col.from, col.to, col.delay, pos]);
-  const strip = useAnimatedStyle(() => ({ transform: [{ translateY: -pos.value * lineHeight }] }));
+    // Fast at the start (EASE.out), so the stretch peaks early and eases off as the digit settles.
+    cancelAnimation(speed);
+    speed.value = withDelay(col.delay, withSequence(withTiming(1, { duration: COUNT.ms * 0.2, easing: EASE.out }),
+      withTiming(0, { duration: COUNT.ms * 0.8, easing: EASE.out })));
+  }, [rollId, col.from, col.to, col.delay, pos, speed]);
+  // The clip is the glyph's own height, centred on the line, so no neighbour digit peeks out of a pill.
+  const clipH = Math.min(lineHeight, Math.ceil(fontSize * ROLL_LOOK.clipEm));
+  const cell = lineHeight * (1 + ROLL_LOOK.cellGap);
+  const inset = (lineHeight - clipH) / 2;
+  const strip = useAnimatedStyle(() => ({ transform: [{ translateY: -pos.value * cell - (cell - lineHeight) / 2 - inset }] }));
+  const stretch = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 + ROLL_LOOK.stretch * speed.value }] }));
   return (
-    <View style={{ height: lineHeight, overflow: 'hidden' }}>
+    <View style={{ height: lineHeight }}>
       {/* The resting digit sizes the column; the strip rolls over it. */}
       <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, { opacity: 0 }]}>{col.char}</Text>
-      <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0 }, strip]}>
-        {STRIP.map((d, i) => <Text key={i} maxFontSizeMultiplier={maxFontSizeMultiplier}
-          style={[textStyle, { textAlign: 'center', height: lineHeight }]}>{d}</Text>)}
+      <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: inset, height: clipH, overflow: 'hidden' }, stretch]}>
+        <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0 }, strip]}>
+          {STRIP.map((d, i) => <View key={i} style={{ height: cell, justifyContent: 'center' }}>
+            <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, { textAlign: 'center', height: lineHeight }]}>{d}</Text>
+          </View>)}
+        </Animated.View>
       </Animated.View>
     </View>
   );

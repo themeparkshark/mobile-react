@@ -7,11 +7,13 @@
  * UI thread, and it reads as one footer that never left.
  *
  * Pick a tab: the icon hops 6 pt and pops 1 to 1.25 to 1 (SPRING.pop), its label
- * lifts into place, a soft gold glow slides from the old tab to the new one
- * (SPRING.settle) and fades out, and the old icon dips to 0.92 and back. The big
- * compass (the map) spins one turn with a white glint. Tapping the tab you are on
- * gives a small wiggle instead. At rest every value is identity, so the footer
- * looks exactly as it always has.
+ * lifts into place, a warm sunlight glow slides from the old tab to the new one
+ * (SPRING.settle) and fades out, a thin gold ring pulses off the new icon, and the
+ * old icon dips to 0.92 and back. The big compass (the map) gets its own flourish:
+ * a squash (anticipation), the pop, a small wobble that pivots on its base (its
+ * baked shadow never swings), a white glint and six gold star sparkles. Tapping
+ * the tab you are on gives a small wiggle instead. At rest every value is
+ * identity, so the footer looks exactly as it always has.
  */
 import { cancelAnimation, makeMutable, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { EASE, DURATION, SPRING } from '../ui/motionEasing';
@@ -30,7 +32,20 @@ export const FOOTER_MOTION = {
   glowPeak: 0.85,
   glowHoldMs: 380,
   glowFadeMs: 300,
-  compassSpinMs: 500,
+  /** Compass anticipation: squash wide and short before the pop. */
+  compassSquashMs: 80,
+  compassSquashX: 0.15,
+  compassSquashY: 0.12,
+  /** The compass wobble (degrees), pivoting on its base. */
+  compassWobbleDeg: 8,
+  /** The gold ring that pulses off a picked icon. */
+  ringMs: 520,
+  ringFrom: 0.8,
+  ringTo: 1.5,
+  /** Sparkles off the compass (before the power budget). */
+  compassSparkles: 6,
+  glintDelayMs: 160,
+  glintMs: 500,
   wiggleScale: 1.08,
   wiggleDeg: 7,
 } as const;
@@ -58,7 +73,14 @@ export const footerMotion = {
   labelOpacity: makeMutable(1),
   glowX: makeMutable(0),
   glowOpacity: makeMutable(0),
-  compassSpin: makeMutable(0),
+  /** Compass squash amount: 1 is wide and short, a spring back through 0 overshoots into a small stretch. */
+  compassSquash: makeMutable(0),
+  /** Compass wobble (degrees), pivoting on the base. */
+  compassWobble: makeMutable(0),
+  /** The gold ring off the picked icon (0 to 1, one shot). */
+  ring: makeMutable(0),
+  /** The compass sparkle burst (0 to 1, one shot). */
+  burst: makeMutable(0),
   glint: makeMutable(0),
 };
 
@@ -99,15 +121,29 @@ export function playFooterTap(from: number, to: number, reduced: boolean): void 
   m.glowOpacity.value = withSequence(
     withTiming(F.glowPeak, { duration: 90, easing: EASE.out }),
     withDelay(F.glowHoldMs, withTiming(0, { duration: F.glowFadeMs, easing: EASE.in })));
+  // A thin gold ring pulses off the new icon.
+  cancelAnimation(m.ring);
+  m.ring.value = 0;
+  const flourish = to === COMPASS_INDEX ? F.compassSquashMs : 0;
+  m.ring.value = withDelay(flourish + 40, withTiming(1, { duration: F.ringMs, easing: EASE.out }));
   if (to === COMPASS_INDEX) {
-    cancelAnimation(m.compassSpin); cancelAnimation(m.glint);
-    m.compassSpin.value = 0;
+    // The compass: squash (anticipation), then the hop and pop, a wobble on its base, a glint and sparkles.
+    cancelAnimation(m.compassSquash); cancelAnimation(m.compassWobble); cancelAnimation(m.glint); cancelAnimation(m.burst);
+    m.compassSquash.value = withSequence(
+      withTiming(1, { duration: F.compassSquashMs, easing: EASE.charge }), withSpring(0, SPRING.pop));
+    m.hopY.value = withDelay(F.compassSquashMs, withSequence(
+      withTiming(-F.hopPt, { duration: 110, easing: EASE.out }), withSpring(0, SPRING.pop)));
+    m.hopScale.value = withDelay(F.compassSquashMs, withSequence(
+      withTiming(F.popScale, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
+    const w = F.compassWobbleDeg;
+    m.compassWobble.value = withDelay(F.compassSquashMs + 110, withSequence(
+      withTiming(-w, { duration: 70, easing: EASE.out }), withTiming(w * 0.75, { duration: 100, easing: EASE.inOut }),
+      withTiming(-w * 0.35, { duration: 90, easing: EASE.inOut }), withSpring(0, SPRING.stamp)));
     m.glint.value = 0;
-    m.compassSpin.value = withTiming(360, { duration: F.compassSpinMs, easing: EASE.out }, done => {
-      if (done) m.compassSpin.value = 0;
-    });
-    m.glint.value = withDelay(120, withTiming(1, { duration: F.compassSpinMs, easing: EASE.inOut }, done => {
+    m.glint.value = withDelay(F.glintDelayMs, withTiming(1, { duration: F.glintMs, easing: EASE.inOut }, done => {
       if (done) m.glint.value = 0;
     }));
+    m.burst.value = 0;
+    m.burst.value = withDelay(F.compassSquashMs + 60, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
   }
 }

@@ -16,10 +16,12 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import useAmbientLoop from '../power/useAmbientLoop';
 import useUiReducedMotion from './useUiReducedMotion';
 import { BRAND } from './tokens';
+import { AMBIENT } from './motion';
 
 export const SWIM = { loopMs: 4000, widePt: 12, tallPt: 6, tiltDeg: 4, bubbleMs: 2600, bubbleGapMs: 1400 } as const;
 
-const BUBBLES = [{ x: -34, size: 9, delay: 0 }, { x: 30, size: 7, delay: 600 }, { x: -12, size: 6, delay: 1200 }];
+/** Bubbles big enough to read on a phone: a white rim, a pale water fill and a highlight dot. */
+const BUBBLES = [{ x: -40, size: 14, delay: 0 }, { x: 34, size: 11, delay: 600 }, { x: -12, size: 10, delay: 1200 }];
 
 export default function AmbientSwim({ children, bubbles = true }: { readonly children: ReactNode; readonly bubbles?: boolean }) {
   const reduced = useUiReducedMotion();
@@ -60,5 +62,25 @@ function Bubble({ rise, x, size, delay }: { rise: SharedValue<number>; x: number
     };
   });
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2,
-    borderWidth: 1.5, borderColor: BRAND.white, backgroundColor: 'rgba(191, 229, 255, 0.45)' }, style]} />;
+    borderWidth: 2, borderColor: BRAND.white, backgroundColor: 'rgba(191, 229, 255, 0.55)' }, style]}>
+    <View style={{ position: 'absolute', left: size * 0.18, top: size * 0.14, width: size * 0.28, height: size * 0.28,
+      borderRadius: size, backgroundColor: BRAND.white }} />
+  </Animated.View>;
+}
+
+/**
+ * <Breathe>: the one way forward on a quiet screen breathes 1.0 to 1.03 every AMBIENT.breathMs.
+ * Ambient budget only (useAmbientLoop and screen focus); still with Reduce Motion.
+ */
+export function Breathe({ children }: { readonly children: ReactNode }) {
+  const reduced = useUiReducedMotion();
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
+  const b = useSharedValue(0);
+  useAmbientLoop(() => {
+    b.value = 0;
+    b.value = withRepeat(withTiming(1, { duration: AMBIENT.breathMs / 2, easing: Easing.inOut(Easing.sin) }), -1, true);
+  }, () => { cancelAnimation(b); b.value = withTiming(0, { duration: 300 }); }, focused && !reduced);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.03 * b.value }] }));
+  return <Animated.View style={style}>{children}</Animated.View>;
 }

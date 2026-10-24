@@ -14,8 +14,8 @@
  * Reduce Motion: no scale or travel, a dim to PRESS.reducedOpacity while held; the haptic stays.
  * Transforms and opacity only, on the UI thread: the layout at rest never changes.
  */
-import { type ReactNode, useCallback, useRef } from 'react';
-import { Pressable, type GestureResponderEvent, type Insets, type StyleProp, type ViewStyle, type AccessibilityRole,
+import { type ReactNode, createContext, useCallback, useContext, useEffect, useRef } from 'react';
+import { Pressable, ScrollView, type GestureResponderEvent, type Insets, type StyleProp, type ViewStyle, type AccessibilityRole,
   type AccessibilityState } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { queueHaptic, type HapticIntent } from '../gamekit/Haptics';
@@ -41,9 +41,21 @@ export function pressLook(variant: PressVariant, reduced: boolean): PressLook {
   return { scale: PRESS.scale, sinkPt: PRESS.sinkPt, heldOpacity: 1 };
 }
 
-/** When the press haptic fires: buttons on touch-down, rows and cards on release (so a scroll never buzzes). */
-export function pressHapticAt(variant: PressVariant): 'pressIn' | 'press' {
-  return variant === 'button' ? 'pressIn' : 'press';
+/**
+ * When the press haptic fires: buttons on touch-down, rows and cards on release (so a scroll never buzzes).
+ * A button inside a scrolling list waits PRESS.scrollHoldMs first: a finger that starts a scroll on it
+ * cancels the press before then and never buzzes; a quick tap still buzzes on release.
+ */
+export function pressHapticAt(variant: PressVariant, inScroll = false): 'pressIn' | 'held' | 'press' {
+  if (variant !== 'button') return 'press';
+  return inScroll ? 'held' : 'pressIn';
+}
+
+/** RN's ScrollView (and FlatList, which renders one) tells its children they scroll (null outside one). */
+const ScrollContext = ((ScrollView as unknown as { Context?: React.Context<unknown> } | undefined)?.Context
+  ?? (typeof createContext === 'function' ? createContext<unknown>(null) : undefined)) as React.Context<unknown>;
+function useInScroll(): boolean {
+  return useContext(ScrollContext) != null;
 }
 
 export interface PressScaleOptions {
@@ -64,7 +76,12 @@ export function usePressScale({ variant = 'button', disabled = false, haptic = '
   const depth = useSharedValue(0);
   const shake = useSharedValue(0);
   const downAt = useRef(0);
-  const hapticAt = pressHapticAt(variant);
+  const inScroll = useInScroll();
+  const hapticAt = pressHapticAt(variant, inScroll);
+  // A button in a list: the touch-down buzz waits a beat so a scroll that starts on it stays silent.
+  const heldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heldFired = useRef(false);
+  useEffect(() => () => { if (heldTimer.current) clearTimeout(heldTimer.current); }, []);
 
   const dims = look.heldOpacity < 1;
   const style = useAnimatedStyle(() => {
@@ -84,9 +101,15 @@ export function usePressScale({ variant = 'button', disabled = false, haptic = '
     cancelAnimation(depth);
     depth.value = withTiming(1, { duration: PRESS.inMs, easing: EASE.out });
     if (haptic && hapticAt === 'pressIn') queueHaptic(haptic);
+    if (haptic && hapticAt === 'held') {
+      heldFired.current = false;
+      if (heldTimer.current) clearTimeout(heldTimer.current);
+      heldTimer.current = setTimeout(() => { heldTimer.current = null; heldFired.current = true; queueHaptic(haptic); }, PRESS.scrollHoldMs);
+    }
   }, [disabled, variant, haptic, hapticAt, depth]);
 
   const pressOut = useCallback(() => {
+    if (heldTimer.current) { clearTimeout(heldTimer.current); heldTimer.current = null; }
     if (variant === 'none') return;
     if (depth.value === 0) return;
     // A very quick tap still shows the whole squash: finish going down, then spring back up.
@@ -98,10 +121,16 @@ export function usePressScale({ variant = 'button', disabled = false, haptic = '
 
   const pressed = useCallback(() => {
     if (haptic && hapticAt === 'press') queueHaptic(haptic);
+    // A quick tap in a list let go before the held buzz: it buzzes now, on the tap itself.
+    if (haptic && hapticAt === 'held' && !heldFired.current) queueHaptic(haptic);
+    heldFired.current = false;
   }, [haptic, hapticAt]);
 
   const rejected = useCallback(() => {
-    if (reduced || variant === 'none') return;
+    if (variant === 'none') return;
+    // A soft nope in the hand (never an error buzz), even with Reduce Motion.
+    queueHaptic('hitSoft');
+    if (reduced) return;
     const q = PRESS.shakeMs / 4;
     shake.value = withSequence(
       withTiming(-PRESS.shakePt, { duration: q }),

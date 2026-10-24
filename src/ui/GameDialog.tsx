@@ -18,8 +18,10 @@
  * becomes a wrapping heading on the card (and warns in dev) so it never
  * shrinks to an unreadable size.
  * Motion (src/ui/motion.ts): the scrim fades in over DURATION.base, the card pops from 0.86 with
- * one overshoot (SPRING.pop) while it fades in over DURATION.quick, and its parts (ribbon, body,
- * buttons) arrive STAGGER.stepMs apart. It leaves quicker than it came: scale 0.94 and fade over
+ * one overshoot (SPRING.pop) while it fades in over DURATION.quick, the ribbon drops in from above and
+ * stamps down (SPRING.stamp, from 1.18), then the body and buttons arrive STAGGER.stepMs apart.
+ * A celebrating dialog (a reward icon or a success haptic, never a destructive one) throws a pair of
+ * gold star sparkles off the ribbon tails as it lands. It leaves quicker than it came: scale 0.94 and fade over
  * DURATION.exit on EASE.in. A selection tick on open. Reduced motion fades.
  * The preference is known on the first render (useUiReducedMotion), so a
  * dialog that mounts already open still springs.
@@ -32,18 +34,22 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { Dimensions } from 'react-native';
 import useUiReducedMotion from './useUiReducedMotion';
 import { haptic, queueHaptic } from '../gamekit/Haptics';
 import { DURATION, EASE, SPRING, STAGGER } from './motionEasing';
+import SparkleBurst from './SparkleBurst';
 import GameButton from './GameButton';
 import GameIcon from './GameIcon';
 import GameText from './GameText';
 import Ribbon from '../components/Ribbon';
 import {
   createDialogStore,
+  dialogCelebrates,
   dialogTitleLayout,
   dismissAction,
   RIBBON_TITLE_MAX,
@@ -74,6 +80,14 @@ function partStyle(clock: number, i: number, reduced: boolean) {
   const t = Math.min(1, Math.max(0, (clock - i * STAGGER.stepMs) / PART_MS));
   return { opacity: t, transform: [{ translateY: (1 - t) * 8 }] };
 }
+/** The ribbon drops this far (pt) and stamps down from this scale. */
+const RIBBON_DROP = 24;
+const RIBBON_STAMP_FROM = 1.18;
+/** The ribbon lands this long after the card starts (the card leads, the title stamps). */
+const RIBBON_AT = 60;
+/** Where the ribbon's tails are (the ribbon spans the card's width, 85% of the screen up to 380 pt). */
+const CARD_W = Math.min(380, Dimensions.get('window').width * 0.85);
+const RIBBON_TAIL = { left: CARD_W * 0.06, right: CARD_W * 0.94, y: 30 } as const;
 /** Backdrop blur under the navy scrim (iOS; Android shows the scrim alone). */
 const SCRIM_BLUR = 18;
 /** Message copy on the card, as in UnfoundCoinModal. */
@@ -166,7 +180,10 @@ export function GameDialog({
   const fade = useSharedValue(0);
   const exit = useSharedValue(0);
   const parts = useSharedValue(0);
+  const ribbon = useSharedValue(0);
+  const tails = useSharedValue(0);
   const actions = layoutActions(buttons, equalChoices);
+  const celebrates = dialogCelebrates({ icon, haptic: hapticKind, buttons });
   const request = { title, message, icon, buttons, dismissible };
   const titleLayout = dialogTitleLayout(title);
   useEffect(() => {
@@ -185,6 +202,12 @@ export function GameDialog({
       fade.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : DURATION.quick, easing: EASE.out });
       pop.value = reducedMotion ? 1 : withSpring(1, SPRING.pop);
       parts.value = reducedMotion ? PARTS_MS : withTiming(PARTS_MS, { duration: PARTS_MS });
+      ribbon.value = 0;
+      ribbon.value = reducedMotion ? 1 : withDelay(RIBBON_AT, withSpring(1, SPRING.stamp));
+      tails.value = 0;
+      if (celebrates && !reducedMotion) {
+        tails.value = withDelay(RIBBON_AT + 90, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
+      }
       if (hapticKind !== 'none') haptic(hapticKind);
       else queueHaptic('tickSelection');
     }
@@ -223,7 +246,13 @@ export function GameDialog({
     ],
   }));
   // Each part reads the shared clock directly (a shared value read only inside a nested worklet is not tracked).
-  const ribbonStyle = useAnimatedStyle(() => partStyle(parts.value, 0, reducedMotion));
+  // The ribbon drops in and stamps down: one overshoot past its spot, then rest.
+  const ribbonStyle = useAnimatedStyle(() => {
+    if (reducedMotion) return {};
+    const r = ribbon.value;
+    return { opacity: Math.min(1, r * 3), transform: [{ translateY: -RIBBON_DROP * (1 - r) },
+      { scale: RIBBON_STAMP_FROM + (1 - RIBBON_STAMP_FROM) * r }] };
+  });
   const bodyStyle = useAnimatedStyle(() => partStyle(parts.value, 1, reducedMotion));
   const buttonsStyle = useAnimatedStyle(() => partStyle(parts.value, 2, reducedMotion));
 
@@ -247,6 +276,12 @@ export function GameDialog({
           {titleLayout.placement === 'ribbon' && (
             <Animated.View accessible accessibilityRole="header" accessibilityLabel={title} style={[{ width: '100%', zIndex: 2 }, ribbonStyle]}>
               <Ribbon text={titleLayout.text} />
+              {celebrates && <>
+                <SparkleBurst progress={tails} count={3} x={RIBBON_TAIL.left} y={RIBBON_TAIL.y} spread={[-200, -120]}
+                  dist={[22, 40]} size={[14, 18]} seed={3} />
+                <SparkleBurst progress={tails} count={3} x={RIBBON_TAIL.right} y={RIBBON_TAIL.y} spread={[-60, 20]}
+                  dist={[22, 40]} size={[14, 18]} seed={5} />
+              </>}
             </Animated.View>
           )}
           <View style={{
