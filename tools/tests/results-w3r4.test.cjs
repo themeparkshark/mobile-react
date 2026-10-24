@@ -90,6 +90,10 @@ test('the shared card speaks the family language: buttons inside, gold score wit
   assert.equal(podium.podiumScale(60), 0, 'too little room: no squashed shark');
   assert.equal(podium.podiumScale(500), 1);
   assert.ok(podium.podiumScale(120) > 0.4 && podium.podiumScale(120) < 1);
+  // A tall card leaves no room: a star run still gets the shark, peeking over the ribbon.
+  assert.equal(podium.podiumMode(300, true), 'podium');
+  assert.equal(podium.podiumMode(40, true), 'peek');
+  assert.equal(podium.podiumMode(40, false), 'none', 'no star and no room: nothing');
   const src = read('src/gamekit/results/ResultsPodium.tsx');
   assert.match(src, /withRepeat\(withSequence\([\s\S]*?\), PODIUM_HOPS\)/, 'the hop rests after a few beats');
   assert.match(src, /if \(reducedMotion \|\| k === 0\) return undefined;/);

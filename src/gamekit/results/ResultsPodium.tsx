@@ -8,9 +8,12 @@
  *   - Anything else: the shark swims calmly, off the podium (a 0-star run is
  *     never a podium moment and never a sad face).
  *
- * The shark and podium scale with the room the card leaves (like Sharky), and
- * hide when there is too little (an iPhone SE with a tall card). All motion is
- * Reanimated on the UI thread; Reduce Motion shows the pose with no hop.
+ * The shark and podium scale with the room the card leaves (like Sharky).
+ * A tall card (a big Whack win) leaves no room for the podium, so the
+ * cheering shark peeks up from behind the ribbon's left end instead: the
+ * best runs never lose their moment. A run with no star and no room shows
+ * nothing. All motion is Reanimated on the UI thread; Reduce Motion shows the
+ * pose with no hop.
  */
 import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
@@ -29,6 +32,15 @@ export const PODIUM_MIN_PT = 96;
 /** The cheer hops this many times, then rests. */
 export const PODIUM_HOPS = 3;
 
+/** How big the peeking shark draws when there is no room for the podium. */
+export const PEEK_SCALE = 0.5;
+
+/** How the scene draws in a zone of height h: the podium, the peek over the ribbon, or nothing. */
+export function podiumMode(h: number, cheer: boolean): 'podium' | 'peek' | 'none' {
+  if (podiumScale(h) > 0) return 'podium';
+  return cheer ? 'peek' : 'none';
+}
+
 /** How big the scene draws in a zone of height h (0 = hidden). */
 export function podiumScale(h: number): number {
   if (!(h >= PODIUM_MIN_PT)) return 0;
@@ -36,7 +48,9 @@ export function podiumScale(h: number): number {
 }
 
 export function ResultsPodium({ cheer, reducedMotion = false, delayMs = 120 }: { cheer: boolean; reducedMotion?: boolean; delayMs?: number }) {
-  const [k, setK] = useState(0);
+  const [zoneH, setZoneH] = useState(-1);
+  const mode = zoneH < 0 ? 'none' : podiumMode(zoneH, cheer);
+  const k = mode === 'podium' ? podiumScale(zoneH) : mode === 'peek' ? PEEK_SCALE : 0;
   const rise = useSharedValue(reducedMotion ? 0 : 40);
   const o = useSharedValue(reducedMotion ? 1 : 0);
   const hop = useSharedValue(0);
@@ -54,10 +68,17 @@ export function ResultsPodium({ cheer, reducedMotion = false, delayMs = 120 }: {
   }, [k === 0, cheer, reducedMotion, delayMs, hop, rise, o]); // eslint-disable-line react-hooks/exhaustive-deps
   const sceneSt = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ translateY: rise.value }] }));
   const sharkSt = useAnimatedStyle(() => ({ transform: [{ translateY: hop.value }] }));
-  const onLayout = (e: LayoutChangeEvent) => setK(podiumScale(e.nativeEvent.layout.height));
+  const onLayout = (e: LayoutChangeEvent) => setZoneH(Math.round(e.nativeEvent.layout.height));
   return (
     <View style={styles.zone} onLayout={onLayout} pointerEvents="none" importantForAccessibility="no-hide-descendants">
-      {k > 0 ? (
+      {mode === 'peek' ? (
+        // Peeks up from behind the ribbon's left end (the card draws over its feet).
+        <Animated.View style={[styles.peek, sceneSt]}>
+          <Animated.View style={sharkSt}>
+            <Image source={ART.cheer} style={{ width: 130 * k, height: 160 * k }} resizeMode="contain" />
+          </Animated.View>
+        </Animated.View>
+      ) : k > 0 ? (
         <Animated.View style={[styles.scene, { width: 210 * k, height: cheer ? 110 * k : 150 * k }, sceneSt]}>
           <Animated.View style={[styles.shark, { bottom: (cheer ? 70 : 18) * k }, sharkSt]}>
             <Image source={cheer ? ART.cheer : ART.swim} style={cheer ? { width: 130 * k, height: 160 * k } : { width: 190 * k, height: 130 * k }} resizeMode="contain" />
@@ -74,4 +95,5 @@ const styles = StyleSheet.create({
   zone: { flex: 1, width: '100%', justifyContent: 'flex-end', alignItems: 'center', minHeight: 0, marginBottom: 22 },
   scene: { alignItems: 'center', justifyContent: 'flex-end' },
   shark: { position: 'absolute', alignSelf: 'center' },
+  peek: { position: 'absolute', left: '7%', bottom: -10 },
 });
