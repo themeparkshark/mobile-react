@@ -138,7 +138,7 @@ test('Details opens smoothly: one commit, the crew row fades and the page window
   assert.equal((card.match(/onPress=\{toggleDetails\}/g) ?? []).length, 2);
   assert.match(card, /entering=\{reducedMotion \? undefined : FadeIn\.delay\(100\)\.duration\(180\)\}/);
   const screen = read(SCREEN);
-  assert.match(screen, /exiting=\{reducedFx \? undefined : FadeOut\.duration\(140\)\}\n\s*onLayout=\{event => setCrewRowHeight\(Math\.round\(event\.nativeEvent\.layout\.height\)\)\}>\{groupPlay\.strip\}<\/Reanimated\.View>/);
+  assert.match(screen, /exiting=\{reducedFx \|\| fit\.short \? undefined : FadeOut\.duration\(140\)\}\n\s*onLayout=\{event => setCrewRowHeight\(Math\.round\(event\.nativeEvent\.layout\.height\)\)\}>\{groupPlay\.strip\}<\/Reanimated\.View>/);
   // No glide through a square clip (it cut glyphs mid-move), and no blink: the window dips to 35%
   // (never 0), takes its new size inside its own rounded frame, then rises once it has its new size.
   assert.equal((screen.match(/LinearTransition/g) ?? []).length, 2, 'only the rail glides (import + one use)');

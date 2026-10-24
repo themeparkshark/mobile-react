@@ -1122,8 +1122,11 @@ export default function LinePlayScreen() {
 
         {/* A short phone reading Details lends the crew row's space to the activity page; it comes back on Hide.
             The row fades and the pages glide (Reanimated layout animations, UI thread), so nothing pops. */}
+        {/* A short phone removes the row at once (no exit fade), so the page gets its room in the same
+            frame it changes: an exiting view keeps its space until its fade ends, which showed the board
+            squeezed for a moment. */}
         {!crewLent && <Reanimated.View entering={reducedFx ? undefined : FadeIn.duration(200)}
-          exiting={reducedFx ? undefined : FadeOut.duration(140)}
+          exiting={reducedFx || fit.short ? undefined : FadeOut.duration(140)}
           onLayout={event => setCrewRowHeight(Math.round(event.nativeEvent.layout.height))}>{groupPlay.strip}</Reanimated.View>}
 
         {/* Activity area (bottom) */}
