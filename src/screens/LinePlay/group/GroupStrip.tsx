@@ -3,7 +3,10 @@
  * above the activities; tap it to change the crew. Solo players get a quiet
  * way to add people later, because crews often form after the first game.
  */
+import { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
+import { CrewBadgeFx } from './CrewBadgeFx';
 import { BRAND, GameIcon } from '../../../ui';
 import { groupStandings, hasKids, isPassAndPlay, type LineGroup } from '../../../services/lineplay/lineGroup';
 import PlayerBadge from './PlayerBadge';
@@ -22,6 +25,12 @@ export default function GroupStrip({ group, onEdit, compact = false }: {
   /** Short phones: a slimmer row (still a 40 pt target with its hitSlop). */
   readonly compact?: boolean;
 }) {
+  // Who was already in the crew the first time the strip drew: only players who join after that drop in.
+  const seen = useRef<Set<string> | null>(null);
+  const reduced = useReducedGameMotion();
+  const ids = group?.players.map(player => String(player.id)).join('|') ?? '';
+  // Remember the crew after each draw (never during render), so the next new player is the only one that drops in.
+  useEffect(() => { seen.current = new Set(ids ? ids.split('|') : []); }, [ids]);
   if (!isPassAndPlay(group)) {
     return <Pressable accessibilityRole="button" accessibilityLabel="Add your crew for pass and play"
       onPress={onEdit} hitSlop={6} style={({ pressed }) => [styles.soloChip, compact && styles.compactChip, pressed && styles.pressed]}>
@@ -32,9 +41,21 @@ export default function GroupStrip({ group, onEdit, compact = false }: {
   return <Pressable accessibilityRole="button" accessibilityLabel={`${stripLine(group)}. Edit crew`}
     onPress={onEdit} hitSlop={compact ? 4 : undefined} style={({ pressed }) => [styles.strip, compact && styles.compactChip, pressed && styles.pressed]}>
     <View style={styles.badges}>
-      {group.players.map((player, index) => <View key={player.id} style={index > 0 ? styles.overlap : null}>
-        <PlayerBadge name={player.name} index={index} size={28} kid={player.kid} />
-      </View>)}
+      {(() => {
+        const known = seen.current;
+        const stars = new Map(groupStandings(group).map(row => [String(row.player.id), row.stars]));
+        let joining = 0;
+        const badges = group.players.map((player, index) => {
+          const id = String(player.id);
+          const joinOrder = known && !known.has(id) ? joining++ : null;
+          return <View key={player.id} style={index > 0 ? styles.overlap : null}>
+            <CrewBadgeFx joinOrder={joinOrder} starsKey={stars.get(id) ?? 0} reduced={reduced}>
+              <PlayerBadge name={player.name} index={index} size={28} kid={player.kid} />
+            </CrewBadgeFx>
+          </View>;
+        });
+        return badges;
+      })()}
     </View>
     <Text style={styles.line} numberOfLines={1}>{stripLine(group)}</Text>
     <GameIcon name="edit" size={22} />

@@ -15,7 +15,7 @@ import { leaderLine } from './group/useGroupPlay';
 import type { RideCoinLevelType } from '../../models/ride-coin-level-type';
 
 /** Development-only visual check of Play together (L3). Stages advance on a timer or a tap. */
-const STAGES = ['opener', 'names', 'handoff', 'kid', 'podium', 'strip', 'recap', 'card'] as const;
+const STAGES = ['crew', 'opener', 'names', 'handoff', 'kid', 'podium', 'strip', 'recap', 'card'] as const;
 const STAGE_MS = 6000;
 
 const family = createLineGroup('family', [{ name: 'Dustin' }, { name: 'Maya', kid: true }, { name: 'Leo', kid: true }, { name: 'Jess' }]);
@@ -42,6 +42,20 @@ const coin = {
   player_level_required: 1, is_unlocked: true, current_perks: [], next_level_perks: [],
 } as RideCoinLevelType;
 
+/** The warm crew: one player, then two more join (drop, wave, +1), then the first round's stars float hearts up. */
+function CrewJoinDemo() {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const timers = [setTimeout(() => setStep(1), 900), setTimeout(() => setStep(2), 2600)];
+    return () => timers.forEach(clearTimeout);
+  }, []);
+  const solo = { ...family, players: family.players.slice(0, 1) };
+  const three = { ...family, players: family.players.slice(0, 3) };
+  const scored = firstRound();
+  const group = step === 0 ? solo : step === 1 ? three : { ...scored, players: scored.players.slice(0, 3) };
+  return <GroupStrip group={group} onEdit={() => undefined} />;
+}
+
 export default function LineGroupPreviewScreen() {
   const fixed = process.env.EXPO_PUBLIC_LINE_GROUP_STAGE;
   const [index, setIndex] = useState(() => Math.max(0, STAGES.indexOf(fixed as typeof STAGES[number])));
@@ -65,6 +79,7 @@ export default function LineGroupPreviewScreen() {
           <View style={styles.fakeWait}><Text style={styles.fakeWaitText}>Wait screen (L2)</Text></View>
           {(stage === 'strip' || stage === 'opener' || stage === 'names') && <GroupStrip group={afterRounds} onEdit={noop} />}
           {stage === 'strip' && <GroupStrip group={null} onEdit={noop} />}
+          {stage === 'crew' && <CrewJoinDemo />}
           {stage === 'recap' && <ScrollView contentContainerStyle={styles.recap}>
             <GroupRecapCard group={afterRounds} realMinutes={38} postedMinutes={60} partsEarned={3} rewardsConfirmed coin={coin} />
           </ScrollView>}

@@ -372,10 +372,12 @@ function ExploreScreen() {
   const mapProjector = useRef<MapProjector | null>(null);
   const avatarRef = useRef<View>(null);
   const flightLayerRef = useRef<View>(null);
+  // The map's HUD layer (MapStatusStack, the arrival and the First coin today! ribbon are drawn in it).
+  const parkLayerRef = useRef<View>(null);
   const reducedMotion = useReducedGameMotion();
   const [pendingCollect, setPendingCollect] = useState<{ latitude: number; longitude: number; coinUrl: string | null; first: boolean } | null>(null);
   const [collectFlight, setCollectFlight] = useState<{ key: number; from: { x: number; y: number }; to: { x: number; y: number };
-    coinUrl: string | null; label: string | null; crowned?: boolean } | null>(null);
+    coinUrl: string | null; label: string | null; crowned?: boolean; hudTop?: number } | null>(null);
   const avatarPop = useSharedValue(1);
   const avatarPopStyle = useAnimatedStyle(() => ({ transform: [{ scale: avatarPop.value }] }));
   const popAvatar = useCallback(() => {
@@ -393,13 +395,15 @@ function ExploreScreen() {
         if (!ref.current) { resolve(null); return; }
         ref.current.measureInWindow((x, y, width, height) => resolve(Number.isFinite(x) ? { x, y, width, height } : null));
       });
-      const [start, avatar, layer] = await Promise.all([
-        mapProjector.current?.(collect.latitude, collect.longitude) ?? null, measure(avatarRef), measure(flightLayerRef)]);
+      const [start, avatar, layer, hud] = await Promise.all([
+        mapProjector.current?.(collect.latitude, collect.longitude) ?? null, measure(avatarRef), measure(flightLayerRef), measure(parkLayerRef)]);
       if (!avatar || !layer || !mapFocusedRef.current) return;
       const from = start ?? { x: layer.x + layer.width / 2, y: layer.y + layer.height / 2 };
       // The first coin of the day flies straight into the "First coin today!" ribbon, then home (one throw, no wait).
       setCollectFlight({ key: Date.now(), coinUrl: collect.coinUrl, label: collect.first ? 'New coin on your shelf!' : null,
         crowned: firstCoinClaim.current(),
+        // The crowned ribbon sits where it sits on the map HUD layer, in the flight layer's points.
+        hudTop: hud ? hud.y - layer.y : 0,
         from: { x: from.x - layer.x, y: from.y - layer.y },
         to: { x: avatar.x + avatar.width / 2 - layer.x, y: avatar.y + avatar.height / 2 - layer.y } });
     }, 650);
@@ -1500,6 +1504,8 @@ function ExploreScreen() {
       {/* Park Mode: the game map */}
       {park && (
       <View
+        ref={parkLayerRef}
+        collapsable={false}
         style={{
           flex: 1,
           marginTop: -8,
@@ -1731,7 +1737,7 @@ function ExploreScreen() {
           onLand={popAvatar}
           onDone={() => { setCollectFlight(null); firstCoin.noteCollected(); }} />}
         {collectFlight?.crowned && <FirstCoinRibbon key={collectFlight.key}
-          toss={{ from: collectFlight.from, to: collectFlight.to, coinUrl: collectFlight.coinUrl, onLand: popAvatar }}
+          toss={{ from: collectFlight.from, to: collectFlight.to, coinUrl: collectFlight.coinUrl, onLand: popAvatar, hudTop: collectFlight.hudTop }}
           onDone={() => setCollectFlight(null)} />}
       </View>
       {/* Too Far Away: ribbon + blue card with a distance meter */}

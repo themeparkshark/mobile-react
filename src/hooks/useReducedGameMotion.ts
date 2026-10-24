@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 
-/** Stay still until the native preference is known; respect changes in-session. */
+/**
+ * Stay still until the native preference is known; respect changes in-session.
+ * Starts from the app-wide cached answer once iOS has given one, so a screen that mounts after start-up knows
+ * on its first render: its entering animations play (an `entering` read as "reduced" on the mount render is
+ * skipped for good) and its count-ups never show the final number, drop to 0, then count up again.
+ */
 export default function useReducedGameMotion() {
-  const [reduced, setReduced] = useState(true);
+  const [reduced, setReduced] = useState(() => lastKnown ?? true);
   useEffect(() => {
     let mounted = true;
     let preferenceChanged = false;

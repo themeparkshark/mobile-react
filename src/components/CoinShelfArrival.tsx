@@ -231,9 +231,9 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
       ring={target.width * 0.55} starSize={shiny ? 13 : 11} x={slotCenter.x} y={slotCenter.y} />}
     {!reduced && shiny && <BurstCanvas progress={puff} count={0} radius={target.width} ring={target.width * 0.9}
       x={slotCenter.x} y={slotCenter.y} delayed={0.18} />}
-    {/* The caption sits in clear space: under the screen title when the slot is low, under the slot's own plank when it is high
-        (never over a section banner such as Limited Coins at the bottom). */}
-    <Animated.View style={[styles.chip, target.y + target.height / 2 > target.frameHeight * 0.32
+    {/* The caption sits at the top of the shelf, over the coins above (never over a section banner such as Coin Guide or
+        Limited Coins); only when the slot itself is in that top strip does it go under the slot's plank instead. */}
+    <Animated.View style={[styles.chip, target.y > CHIP_CLEAR
       ? { top: 8 } : { top: Math.min(target.frameHeight - 90, target.y + target.height + 34) }, chipStyle]} accessibilityLiveRegion="polite">
       <View style={styles.chipBody}>
       <GameIcon name="coin" size={30} />
@@ -280,6 +280,9 @@ function TrailGhost({ lag, alpha, progress, hover, dx, dy, end, left, top, size 
     <Image source={SOFT} tintColor={GOLD_FX.rays} contentFit="fill" transition={0} style={StyleSheet.absoluteFill} />
   </Animated.View>;
 }
+
+/** The caption's own strip at the top of the shelf (its height plus a margin). */
+const CHIP_CLEAR = 96;
 
 const styles = StyleSheet.create({
   dim: { backgroundColor: '#05346e' },

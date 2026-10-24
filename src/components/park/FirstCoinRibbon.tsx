@@ -45,6 +45,8 @@ export type FirstCoinThrow = {
   readonly coinUrl?: string | null;
   /** The shelf button pops on the coin's landing frame. */
   readonly onLand?: () => void;
+  /** Where the map's HUD layer starts in this layer (the ribbon keeps its place under the HUD rows). */
+  readonly hudTop?: number;
 };
 
 export default function FirstCoinRibbon({ onDone, toss }: { readonly onDone: () => void; readonly toss?: FirstCoinThrow }) {
@@ -76,7 +78,7 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
   const finish = () => { perfMark('firstCoin.done'); doneRef.current(); };
   const impact = () => { perfMark('firstCoin.impact'); playHaptic('golden'); playMoment('game.newRecord'); };
   const landHome = () => { queueHaptic('tapLight'); landRef.current?.(); };
-  const top = HUD_TOP + FIRST_COIN.topOffset;
+  const top = (toss?.hudTop ?? 0) + HUD_TOP + FIRST_COIN.topOffset;
   // The ribbon's coin slot (layer points) and where the coin starts (its spot on the map, or the map's middle).
   const slot = { x: 12 + 13 + COIN / 2, y: top + 33 };
   const from = toss?.from ?? { x: width / 2, y: height * 0.42 };
