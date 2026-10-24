@@ -150,7 +150,7 @@ const MAP_CALM_MS = 5000;
 const SHORT_MAP = Dimensions.get('window').height < 740;
 const COIN_TIP_STYLE = {
   position: 'absolute', right: 12, width: Math.min(300, Dimensions.get('window').width - 24),
-  bottom: SHORT_MAP ? 150 : 196, zIndex: 40,
+  bottom: SHORT_MAP ? 162 : 196, zIndex: 40,
 } as const;
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
