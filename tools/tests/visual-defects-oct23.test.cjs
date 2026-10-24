@@ -819,7 +819,7 @@ test('SE fits: the coin-in-range card is narrow on the right above PLAY RIDE; th
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /position: 'absolute', right: 12, width: Math\.min\(300, Dimensions\.get\('window'\)\.width - 24\),/);
   assert.match(explore, /compact=\{parkTip === 'coin_in_range' && SHORT_MAP\}/);
-  assert.match(read('src/screens/CommunityCenterScreen.tsx'), /SHORT_SCREEN && \{ top: 128 \},/);
+  assert.match(read('src/screens/CommunityCenterScreen.tsx'), /SHORT_SCREEN && \{ top: 136 \},/);
 });
 
 test('favorites star: bigger staggered burst with a white ring flash, native driver, nothing with Reduce Motion', () => {
