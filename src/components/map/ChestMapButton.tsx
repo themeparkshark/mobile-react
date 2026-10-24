@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, SHADOW } from '../../ui';
@@ -14,11 +15,15 @@ const CHEST = require('../../../assets/images/daily/chest-closed.png');
 export default function ChestMapButton({ onPress }: { readonly onPress: () => void }) {
   // The map's loading cover waits for the chest art, so the button is never an empty blue circle.
   const artDrawn = useCoverArt();
+  // The button shows only once its chest has drawn: when today's chest arrives after the map, it never
+  // flashes an empty blue circle first.
+  const [drawn, setDrawn] = useState(false);
+  const onArt = () => { artDrawn(); setDrawn(true); };
   return (
     <Pressable onPress={() => { haptic('tapLight'); onPress(); }} accessibilityRole="button"
       accessibilityLabel="Daily chest, ready to open" hitSlop={6}
-      style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
-      <Image source={CHEST} style={styles.chest} contentFit="contain" transition={0} onLoad={artDrawn} onError={artDrawn} />
+      style={({ pressed }) => [styles.button, pressed && styles.pressed, !drawn && styles.waiting]}>
+      <Image source={CHEST} style={styles.chest} contentFit="contain" transition={0} onLoad={onArt} onError={onArt} />
       <View style={styles.dot} accessibilityElementsHidden />
     </Pressable>
   );
@@ -28,6 +33,7 @@ const styles = StyleSheet.create({
   button: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center',
     backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },
   pressed: { transform: [{ scale: 0.94 }] },
+  waiting: { opacity: 0 },
   chest: { width: 36, height: 36 },
   dot: { position: 'absolute', top: -3, right: -3, width: 16, height: 16, borderRadius: 8,
     backgroundColor: BRAND.gold, borderWidth: 2.5, borderColor: BRAND.white },

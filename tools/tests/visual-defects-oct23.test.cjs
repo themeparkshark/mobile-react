@@ -769,7 +769,10 @@ test('the launch cover waits for the header and HUD icons (inside its hard cap),
   assert.equal((explore.match(/<Currency coverArt image=/g) || []).length, 5);
   assert.match(explore, /<Avatar player=\{player\} size="lg" onArtDrawn=\{avatarArtDrawn\} \/>/);
   assert.match(explore, /const avatarArtDrawn = useCoverArt\(!!player\);/);
-  assert.match(read('src/components/map/ChestMapButton.tsx'), /onLoad=\{artDrawn\} onError=\{artDrawn\}/);
+  const chest = read('src/components/map/ChestMapButton.tsx');
+  assert.match(chest, /onLoad=\{onArt\} onError=\{onArt\}/);
+  assert.match(chest, /const onArt = \(\) => \{ artDrawn\(\); setDrawn\(true\); \};/);
+  assert.match(chest, /!drawn && styles\.waiting\]/);
   assert.match(read('src/components/Topbar/Currency.tsx'), /onLoad=\{artDrawn\}/);
   const avatar = read('src/components/Avatar.tsx');
   assert.match(avatar, /onLoad=\{index === 0 \? artDrawn : undefined\}/);
