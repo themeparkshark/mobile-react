@@ -1,6 +1,8 @@
 /** Development-only screens that intentionally own their initial navigation. */
 export function isStandalonePreviewMode(): boolean {
   if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') return true;
+  // Release-like captures of a big moment's gallery (devRoutes.tsx): stay on the gallery.
+  if (process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'BoxRevealPreview') return true;
   return __DEV__ && (
     process.env.EXPO_PUBLIC_MAP_ALIVE_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_STREAK_FLAME_PREVIEW === '1' ||

@@ -150,8 +150,12 @@ export default function CoinLevelingModal({
   const bloomOut = useSharedValue(0);
   const budget = usePowerBudget();
   const [slowServer, setSlowServer] = useState(false);
-  const stopUiShow = () => { [charge, gold, bloom, sparkle, shine, ringPulse, bloomOut].forEach(value => cancelUi(value)); };
+  const stopUiShow = () => { [charge, gold, bloom, sparkle, shine, ringPulse, bloomOut, slow].forEach(value => cancelUi(value)); };
   const chargeStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.001, charge.value) }] }));
+  // 0 while charging, 1 once the server is slow (scheduled on the UI thread with the charge).
+  const slow = useSharedValue(0);
+  const poweringStyle = useAnimatedStyle(() => ({ opacity: 1 - slow.value }));
+  const almostStyle = useAnimatedStyle(() => ({ opacity: slow.value, transform: [{ scale: 0.9 + 0.1 * slow.value }] }));
   // The payoff is bigger than the card: the gold and sparkles burst out past its edges and a
   // ring in the new tier's colour pulses outward. Anchored on the coin (measured, plain Views only).
   const rootRef = useRef<View>(null);
@@ -283,6 +287,8 @@ export default function CoinLevelingModal({
     } else {
       charge.value = 0.85;
     }
+    cancelUi(slow); slow.value = 0;
+    slow.value = uiDelay(SLOW_SERVER_LABEL_MS, uiTiming(1, { duration: DURATION.quick }));
     upgradeTimers.current.push(setTimeout(() => { if (mounted.current) setSlowServer(true); }, SLOW_SERVER_LABEL_MS));
 
     const scaleUp = Animated.timing(coinScale, {
@@ -979,13 +985,11 @@ export default function CoinLevelingModal({
                           backgroundColor: '#fff2b0' }} />
                       </Reanimated.View>
                     </View>
-                    <Text style={{
-                      fontFamily: 'Shark', fontSize: 22,
-                      color: '#05346e',
-                      textTransform: 'uppercase',
-                    }}>
-                      {slowServer ? 'Almost there!' : 'Powering up!'}
-                    </Text>
+                    {/* The label swaps on the UI thread (a starved JS thread can't hold it on Powering up!). */}
+                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                      <Reanimated.Text style={[LABEL_STYLE, poweringStyle]}>Powering up!</Reanimated.Text>
+                      <Reanimated.Text style={[LABEL_STYLE, { position: 'absolute' }, almostStyle]}>Almost there!</Reanimated.Text>
+                    </View>
                   </View>
                 )}
 
@@ -1180,11 +1184,19 @@ export default function CoinLevelingModal({
 function TierRim({ level, size }: { readonly level: number; readonly size: number }) {
   const tier = coinTier(level);
   if (tier.level < 2) return null;
-  const d = size + 10;
+  // A metal band: a dark outer edge, a thick band in the tier colour and a bright inner lip.
+  const d = size + 16;
+  const band = d - 6;
+  const lip = band - 16;
   return (
     <View pointerEvents="none" style={{ position: 'absolute', width: d, height: d, borderRadius: d / 2, borderWidth: 3,
       borderColor: tier.ringDeep, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ width: d - 6, height: d - 6, borderRadius: (d - 6) / 2, borderWidth: 5, borderColor: tier.ring }} />
+      <View style={{ width: band, height: band, borderRadius: band / 2, borderWidth: 8, borderColor: tier.ring,
+        alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: lip, height: lip, borderRadius: lip / 2, borderWidth: 2, borderColor: tier.ringDeep }} />
+      </View>
     </View>
   );
 }
+
+const LABEL_STYLE = { fontFamily: 'Shark', fontSize: 22, color: '#05346e', textTransform: 'uppercase' } as const;

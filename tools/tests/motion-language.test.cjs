@@ -169,6 +169,8 @@ test('the chaser escalates past the Golden Box', () => {
   assert.ok(src.includes('sparkle2'), 'a second sparkle wave');
   assert.ok(src.includes('stampFlash'), 'the serial gets its own hit-stop flash');
   assert.ok(src.includes('chaserRim'), 'a gold rim marks the gold edition');
+  assert.ok(src.includes('<RadialFlash flash={flash}'), 'the box flash pops on the box');
+  assert.ok(!/StyleSheet\.absoluteFill, styles\.flash/.test(src), 'no full-screen white wash');
 });
 
 test('daily chest: the wallet changes only when the coins land, and the old glow is gone', () => {
@@ -189,6 +191,7 @@ test('the level-up payoff is bigger than the card and the tier is unmistakable',
   assert.ok(src.includes("toValue: 1.35"), 'the new coin pops to 1.35x');
   assert.ok(src.includes('<TierRim'), 'a tier-coloured rim');
   assert.ok(src.includes('SLOW_SERVER_LABEL_MS'), 'Almost there! comes in time for a slow server');
+  assert.ok(src.includes('slow.value = uiDelay(SLOW_SERVER_LABEL_MS'), 'the label swaps on the UI thread, even with a busy JS thread');
   assert.ok(motion.SLOW_SERVER_LABEL_MS < 2000 && motion.SLOW_SERVER_LABEL_MS > 900, 'after the charge, before 2 s');
 });
 

@@ -572,7 +572,6 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     ],
   }));
   const stampStyle = useAnimatedStyle(() => ({ opacity: stamp.value > 0 ? 1 : 0, transform: [{ scale: interpolate(stamp.value, [0, 1], [2.4, 1]) }, { rotate: '-8deg' }] }));
-  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
   const foilStyle = useAnimatedStyle(() => ({ opacity: foil.value <= 0 || foil.value >= 1 ? 0 : 0.85, transform: [{ translateX: -pinSize * 0.9 + foil.value * pinSize * 2.4 }, { rotate: '20deg' }] }));
   const backerStyle = useAnimatedStyle(() => ({ opacity: settle.value * (1 - wearFly.value), transform: [{ scale: 0.9 + settle.value * 0.1 }] }));
   // rotateY = (1 - flip) * 540: the front faces you when cos(angle) > 0.
@@ -637,6 +636,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             </View>
           )}
           <Ring size={boxSize * 1.2} t={ring} />
+          {/* The hit-stop flash pops on the box, never as a full-screen wash (ui/motion.ts). */}
+          <RadialFlash flash={flash} size={boxSize * 1.7} />
           {!noBox && (
             <Animated.View style={[{ width: boxSize, height: boxSize }, boxStyle]}>
               <Animated.View style={[StyleSheet.absoluteFill, closedStyle]}>
@@ -674,7 +675,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
           )}
           {/* A Disney-style pin card behind a regular pin once it lands (gold moments keep their rays). */}
           {(!gold || pull.is_chaser) && (phase === 'show' || phase === 'pop') && (
-            <Animated.View style={[styles.backer, pull.is_chaser && styles.backerGold, { width: pinSize * 1.25, height: pinSize * 1.3, top: (boxSize - pinSize) / 2 - boxSize * 0.5 - pinSize * 0.14 }, backerStyle]}>
+            <Animated.View style={[styles.backer, golden && !pull.is_chaser && styles.backerGolden, pull.is_chaser && styles.backerGold, { width: pinSize * 1.25, height: pinSize * 1.3, top: (boxSize - pinSize) / 2 - boxSize * 0.5 - pinSize * 0.14 }, backerStyle]}>
               <View style={styles.backerHole} />
               {/* The best pin gets the best card: gold foil, limited edition, its number. */}
               {pull.is_chaser && <Animated.View pointerEvents="none" style={[styles.foilSheen, { height: pinSize * 1.8, top: -pinSize * 0.25 }, foilStyle]} />}
@@ -799,7 +800,6 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
           </View>
         )}
 
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, golden && styles.flashGold, flashStyle]} />
 
         {(phase === 'show' || phase === 'summary') && (
           <View style={[styles.footer, { paddingBottom: insets.bottom + 18 }]}>
@@ -859,10 +859,7 @@ const styles = StyleSheet.create({
   serialStamp: { backgroundColor: '#3b2a05', borderColor: BRAND.gold, borderWidth: 3, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2 },
   serialStampText: { fontFamily: FONT.display, fontSize: 26, color: BRAND.gold, paddingTop: 3 },
   confettiOrigin: { position: 'absolute', alignSelf: 'center', width: 1, height: 1 },
-  flash: { backgroundColor: '#ffffff' },
   goldWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  // Golden Box: a warm gold flash (a white wash read as a dropped frame on the gold stage).
-  flashGold: { backgroundColor: '#ffd75a' },
   dim: { backgroundColor: '#000814' },
   tapHint: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 6 },
   tapText: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, paddingTop: 3 },
@@ -883,6 +880,8 @@ const styles = StyleSheet.create({
   ticketText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 3, flexShrink: 1 },
   backer: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center' },
   backerGold: { backgroundColor: BRAND.gold, borderColor: BRAND.white, borderWidth: 5, justifyContent: 'space-between', paddingBottom: 8, overflow: 'hidden' },
+  // A Golden Box pin sits on a cream card with a gold edge (the chaser's card is all gold).
+  backerGolden: { borderColor: BRAND.gold, borderWidth: 5 },
   chaserRim: { position: 'absolute', borderWidth: 4, borderColor: '#d99a00', alignItems: 'center', justifyContent: 'center' },
   chaserRimInner: { ...StyleSheet.absoluteFillObject, borderWidth: 5, borderColor: '#ffe27a' },
   foilSheen: { position: 'absolute', left: 0, width: 26, backgroundColor: 'rgba(255,255,255,0.75)' },
