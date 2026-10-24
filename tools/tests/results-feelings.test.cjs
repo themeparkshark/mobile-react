@@ -479,7 +479,7 @@ test('Sharky results fit a short phone: smaller stage, tight card, the bottom ro
   assert.doesNotMatch(sharky, /requestAnimationFrame/, 'the count-up no longer re-renders every frame');
   // The score counts up on the UI thread: no re-render of the card per step.
   assert.doesNotMatch(sharky, /setInterval|useCountUp/);
-  assert.match(sharky, /<CountUpText value=\{data\.score\} from=\{0\} delayMs=\{300\} durationMs=\{600\}/);
+  assert.match(sharky, /<CountUpText value=\{data\.score\} from=\{0\} delayMs=\{150\} durationMs=\{600\}/);
   // The shared card's order: stars, then score.
   assert.ok(sharky.indexOf('<View style={[styles.stars') < sharky.indexOf('<CountUpText value={data.score}'));
 });
@@ -954,6 +954,7 @@ test('the Duel stage drops onto the real card: measured height, no flat sky band
   assert.match(stage, /export const BACKDROP_SKY = '#15b6fe';/);
   assert.match(stage, /<Rect x=\{-80\} y=\{bgRect\.y - 1600\} width=\{W \+ 160\} height=\{1604\} color=\{BACKDROP_SKY\} \/>/);
   assert.match(stage, /translateY: a\.takeover\.value \* \(dropSv \? dropSv\.value : drop\)/);
+  assert.match(stage, /<Group opacity=\{0\.55\} transform=\{\[\{ translateY: -sunUp \}\]\}>/, 'the rays reach into the revealed sky');
   const duel = read('src/games/trivia-duel/TriviaDuel.tsx');
   assert.match(duel, /fgHide\.value = withTiming\(on \? 1 : 0, \{ duration: d \}\);/);
   assert.match(duel, /<Animated\.View style=\{\[StyleSheet\.absoluteFill, fgStyle\]\} pointerEvents="none">\s*<Image source=\{ART\.railing\}/);
@@ -978,10 +979,10 @@ test('Duel ride card: the title lands after its last star; chips are pictures', 
   assert.match(card, /\{icon \? <GameIcon name=\{icon\} size=\{20\} style=\{styles\.chipIcon\} \/> : <Text style=\{styles\.chipLabel\}>\{label\}<\/Text>\}/);
 });
 
-test('Sharky result word lands fast in a moving line: stars from 950 ms, score counts in 600 ms', () => {
+test('Sharky result word lands fast in a moving line: stars from 850 ms, score counts in 600 ms', () => {
   const sharky = read('src/games/sharky/hud/SharkyResults.tsx');
   const at = Number(sharky.match(/export const STAR_AT = (\d+);/)[1]);
-  assert.ok(at <= 1000, `STAR_AT ${at}`);
+  assert.ok(at <= 900, `STAR_AT ${at}`);
   // 650 ms hold + 220 ms fade + the 2-star title: under 2.5 s from the bell.
   assert.ok(650 + 220 + at + 220 + 120 <= 2500);
   assert.match(sharky, /<SavedStamp reducedMotion=\{reducedMotion\} delayMs=\{STAR_AT\} \/>/);

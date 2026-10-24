@@ -10,9 +10,9 @@
  *           shared button rule: PLAY AGAIN leads unless a win's reward is
  *           still waiting (playAgainFirst false), then the claim leads.
  *           DONE sits right under it as a white button, never a text link
- *   300ms   hero stat 1 (under the stars, like the shared card): the score counts up over 600ms on the UI thread (CountUpText), the last
+ *   150ms   hero stat 1 (under the stars, like the shared card): the score counts up over 600ms on the UI thread (CountUpText), the last
  *           digit slams 1.3 to 1.0 with impact Medium; NEW BEST adds a burst
- *   950ms   stars slam one at a time, 220ms apart, bass hit +0/+3/+7 st,
+ *   850ms   stars slam one at a time, 220ms apart, bass hit +0/+3/+7 st,
  *           Medium, Medium, Heavy
  *           hero stat 2: "Best chain x4 · 9 Close Skims"; the shared
  *           next-star bar (NextStarBar), same as every other game
@@ -98,8 +98,8 @@ export interface SharkyResultsProps {
 /** Hops of the cheering shark, then it stands still. */
 export const CHEER_HOPS = 8;
 /** When the first star stamps, and the gap between stamps (ms). */
-/** A kid in a moving line hears the result word within about 1.3 s of the card (950 ms, then 220 ms per star). */
-export const STAR_AT = 950;
+/** A kid in a moving line hears the result word within about 1.3 s of the card (850 ms, then 220 ms per star). */
+export const STAR_AT = 850;
 export const STAR_GAP = 220;
 
 /** When the ribbon title slams: just after the last star lands (or as the stars would start). */
@@ -264,7 +264,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
         )}
         {/* The score counts up on the UI thread (no re-render of this card per step). */}
         <Animated.View style={[styles.scoreWrap, scoreStyle]}>
-          <CountUpText value={data.score} from={0} delayMs={300} durationMs={600} punch={1} reducedMotion={reducedMotion}
+          <CountUpText value={data.score} from={0} delayMs={150} durationMs={600} punch={1} reducedMotion={reducedMotion}
             style={[styles.score, short && styles.scoreShort]} />
         </Animated.View>
         {newBest ? (

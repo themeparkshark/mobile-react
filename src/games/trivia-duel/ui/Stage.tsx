@@ -137,6 +137,8 @@ export const Stage = React.memo(function Stage({ width: W, height: FULL, bandH, 
   const crownImg = useImage(ART.crown);
   const crowdImgs = [useImage(SHARKS.pink), useImage(SHARKS.green), useImage(SHARKS.orange), useImage(SHARKS.blue), useImage(SHARKS.red), useImage(SHARKS.classic)];
 
+  /** Sky a takeover can reveal above the band (the most the scene can drop). */
+  const sunUp = Math.max(0, FULL - H);
   const seaTop = H * 0.47;
   const deckTop = H * 0.62;
   const podTop = H * 0.7;
@@ -340,8 +342,10 @@ export const Stage = React.memo(function Stage({ width: W, height: FULL, bandH, 
         ) : (
           <Rect x={-40} y={-20} width={W + 80} height={H + 40} color={C.sky} />
         )}
-        <Group opacity={0.55}>
-          <Sunburst cx={W / 2} cy={marq.y + marq.h * 0.55} radius={W * 0.8} intensity={a.sunburst} rays={14} width={W} height={H * 0.62} speed={sunburstSpeed} />
+        {/* The rays reach up into the sky a takeover reveals (sunUp), so a
+            dropped scene shows no edge where they used to stop. */}
+        <Group opacity={0.55} transform={[{ translateY: -sunUp }]}>
+          <Sunburst cx={W / 2} cy={marq.y + marq.h * 0.55 + sunUp} radius={W * 0.8 + sunUp} intensity={a.sunburst} rays={14} width={W} height={H * 0.62 + sunUp} speed={sunburstSpeed} />
         </Group>
         <Path path={shimmer} color="rgba(255,255,255,0.7)" style="stroke" strokeWidth={2} strokeCap="round" />
         {/* Blazing: a warm 10% gold sky tint (never dark) */}
