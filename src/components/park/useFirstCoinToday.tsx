@@ -24,7 +24,13 @@ export default function useFirstCoinToday({ playerId, free }: {
   readonly playerId: number | null | undefined;
   /** No other big moment (arrival, chest, catch, flight, dialog) is on screen. */
   readonly free: boolean;
-}): { readonly noteCollected: () => void; readonly layer: ReactNode; readonly showing: boolean } {
+}): {
+  readonly noteCollected: () => void;
+  /** For a coin that is about to fly home: true (and marked) when it is the first of the day, so it flies into the ribbon instead. */
+  readonly claim: () => boolean;
+  readonly layer: ReactNode;
+  readonly showing: boolean;
+} {
   const stored = useRef<string | null | undefined>(undefined);
   const [queued, setQueued] = useState(false);
   const [playing, setPlaying] = useState<number | null>(null);
@@ -39,15 +45,16 @@ export default function useFirstCoinToday({ playerId, free }: {
     return () => { active = false; devReset = null; };
   }, [playerId]);
 
-  const noteCollected = useCallback(() => {
-    if (!playerId || stored.current === undefined) return;
+  const claim = useCallback(() => {
+    if (!playerId || stored.current === undefined) return false;
     const today = parkDayKey(new Date());
-    if (!isFirstCoinToday(stored.current, today)) return;
+    if (!isFirstCoinToday(stored.current, today)) return false;
     // Marked first, so a quick exit never replays it.
     stored.current = today;
     void AsyncStorage.setItem(KEY(playerId), today).catch(() => undefined);
-    setQueued(true);
+    return true;
   }, [playerId]);
+  const noteCollected = useCallback(() => { if (claim()) setQueued(true); }, [claim]);
 
   useEffect(() => {
     if (!queued || !free || playing) return undefined;
@@ -61,5 +68,5 @@ export default function useFirstCoinToday({ playerId, free }: {
       <FirstCoinRibbon key={playing} onDone={() => setPlaying(null)} />
     </View>
   ) : null;
-  return { noteCollected, layer, showing: !!playing || queued };
+  return { noteCollected, claim, layer, showing: !!playing || queued };
 }

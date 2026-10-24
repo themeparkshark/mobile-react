@@ -13,7 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
-import RideUpCelebration, { RIDE_UP } from './RideUpCelebration';
+import RideUpCelebration, { RIDE_UP, RideUpHero, RideUpKicker } from './RideUpCelebration';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
 import { BRAND, GameButton, GameIcon, type GameIconName } from '../../../ui';
 import type { PredictionResolution } from '../../../services/lineplay/content';
@@ -181,9 +181,12 @@ export default function SessionRecap({
   return (
     <View style={{ flex: 1 }}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recapCard}>
+      {/* "Your ride's up!": the header card itself is the celebration (pop, title stamp, gold bar, rays, burst). */}
+      <RideUpHero active={rideUp}>{backdrop => (
       <LinearGradient colors={['#13a8e9', '#0879ca', '#0768b9']} style={styles.recapHero}>
+        {backdrop}
         <View style={styles.recapHeroCopy}>
-          <Text style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : leftQueue ? 'WAIT WRAPPED UP' : 'LINEPLAY COMPLETE'}</Text>
+          <RideUpKicker active={rideUp} style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : leftQueue ? 'WAIT WRAPPED UP' : 'LINEPLAY COMPLETE'}</RideUpKicker>
           <Text style={styles.recapRide} numberOfLines={2}>{rideName}</Text>
           <Text style={styles.recapTime} accessibilityLabel={`${Math.floor(elapsedSeconds / 60)} minutes ${secs} seconds`}>
             {minutes}m {secs}s</Text>
@@ -201,6 +204,7 @@ export default function SessionRecap({
           </Animated.View>
         )}
       </LinearGradient>
+      )}</RideUpHero>
 
       {leftQueue && onStillInLine && (
         <Animated.View entering={enter(0)} style={styles.stillInLineCard}>

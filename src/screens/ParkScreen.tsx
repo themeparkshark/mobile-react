@@ -12,6 +12,8 @@ import Loading from '../components/Loading';
 import ParkTrophyModal from '../components/ParkTrophyModal';
 import ParkShelfArtwork from '../components/ParkShelfArtwork';
 import CoinShelfArrival from '../components/CoinShelfArrival';
+import GameIcon from '../ui/GameIcon';
+import { claimOfflineMark } from '../services/connectivity';
 import { RowShine, ShelfJiggle, ShelfKick } from '../components/ShelfLandingFx';
 import { rowComplete, shinyLanding } from '../components/shelfLanding';
 import DevPerfHud from '../components/park/DevPerfHud';
@@ -445,16 +447,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
             }}
             source={require('../../assets/images/screens/park/background-new.png')}
           >
-            {progressStale && <Pressable onPress={() => setRefreshVersion(version => version + 1)}
-              accessibilityRole="button" accessibilityLabel="Retry park progress refresh"
-              style={{ backgroundColor: '#edfaff', padding: 12, margin: 16, borderRadius: 12,
-                borderWidth: 2, borderColor: '#ffc932' }}>
-              <Text style={{ color: '#075b9b', textAlign: 'center', fontFamily: 'Knockout', fontSize: 16 }}>
-                {currentPark
-                  ? 'Your shelf did not update yet. Tap to try again.'
-                  : 'Your shelf did not load yet. Tap to try again.'}
-              </Text>
-            </Pressable>}
+            {progressStale && <ShelfRetryBanner loaded={!!currentPark} onRetry={() => setRefreshVersion(version => version + 1)} />}
             {currentPark && tasks && secretTasks && (
               <ScrollView ref={scrollRef} scrollEnabled={!arrival.target} onContentSizeChange={arrival.notifyLayout}
                 onScroll={notifyRecapViewport} scrollEventThrottle={120} onMomentumScrollEnd={notifyRecapViewport}>
@@ -699,9 +692,28 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                 <Text style={{ fontFamily: 'Knockout', color: '#DFF6FF', fontSize: 15 }}>Keep exploring this park</Text>
               </Pressable>
             </View>}
-          <DevPerfHud top={330} />
+          <DevPerfHud />
         </View>
       )}
     </Wrapper>
   );
+}
+
+const SHELF_OFFLINE_ICON = require('../../assets/images/offline/offline.png');
+
+/**
+ * The shelf could not refresh: one plain card with the offline picture beside the words (never on top of them).
+ * While it shows, it owns the app's offline mark, so the global offline chip does not sit over it.
+ */
+function ShelfRetryBanner({ loaded, onRetry }: { readonly loaded: boolean; readonly onRetry: () => void }) {
+  useEffect(() => claimOfflineMark(), []);
+  return <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Your shelf did not load. Tap to try again."
+    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#edfaff', paddingVertical: 10,
+      paddingHorizontal: 12, margin: 16, borderRadius: 12, borderWidth: 2, borderColor: '#ffc932' }}>
+    <Image source={SHELF_OFFLINE_ICON} style={{ width: 34, height: 34 }} contentFit="contain" />
+    <Text style={{ flex: 1, color: '#075b9b', fontFamily: 'Knockout', fontSize: 16 }}>
+      {loaded ? 'Your shelf did not update yet. Tap to try again.' : 'Your shelf did not load yet. Tap to try again.'}
+    </Text>
+    <GameIcon name="retry" size={26} />
+  </Pressable>;
 }

@@ -37,6 +37,23 @@ test('wired after the catch and after the ride coin flight, only on a real colle
   const ribbon = read('src/components/park/FirstCoinRibbon.tsx');
   assert.match(ribbon, /momentParticles\(FIRST_COIN\.sparkles/);
   assert.match(ribbon, /useReduceMotionPreference/);
-  assert.match(ribbon, /runOnJS\(land\)/, 'the haptic lands with the ribbon on the UI clock');
+  assert.match(ribbon, /runOnJS\(impact\)/, 'the haptic lands with the crown on the UI clock');
   assert.doesNotMatch(ribbon, /withRepeat/, 'one-shot, nothing loops');
+});
+
+test('one continuous throw: the coin flies into the ribbon while it drops, the crown hits on the landing frame, then the coin goes home', () => {
+  const F2 = F.FIRST_COIN;
+  assert.ok(F2.ribbonAt <= F2.coinFlyAt, 'the ribbon is already on its way while the coin flies (no dead map)');
+  assert.equal(F2.crownAt + 120, F.firstCoinImpactAt(), 'the crown slam ends on the coin\'s landing frame');
+  assert.ok(F.firstCoinImpactAt() <= 1200, 'coin, crown and buzz inside 1.2 s');
+  assert.ok(F2.homeAt < F2.exitAt + F2.exitMs && F2.homeAt + F2.homeMs <= 2600, 'the coin flies home as the ribbon leaves, settled by 2.6 s');
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /crowned: firstCoinClaim\.current\(\)/, 'the first coin of the day is claimed as its flight starts');
+  assert.match(explore, /collectFlight && !collectFlight\.crowned && <CoinCollectFlight/, 'a crowned coin never flies to the edge first');
+  assert.match(explore, /collectFlight\?\.crowned && <FirstCoinRibbon/);
+  const ribbon = read('src/components/park/FirstCoinRibbon.tsx');
+  assert.match(ribbon, /onLand: \(\) => void|readonly onLand\?: \(\) => void/);
+  assert.match(ribbon, /TRAIL\.map/, 'a gold comet trail behind the throw');
+  const hook = read('src/components/park/useFirstCoinToday.tsx');
+  assert.match(hook, /const noteCollected = useCallback\(\(\) => \{ if \(claim\(\)\) setQueued\(true\); \}, \[claim\]\)/, 'one claim rule for both paths');
 });

@@ -38,3 +38,12 @@ test('mounted only when the queue really ended with boarding, and the chips land
   assert.match(recap, /const rideUp = endReason === 'boarded'/);
   assert.match(recap, /RIDE_UP\.confettiAt - 160/);
 });
+
+test('the recap\'s own header card is the stage: no veil, no second banner, the real title stamps', () => {
+  const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
+  assert.match(recap, /<RideUpHero active=\{rideUp\}>\{backdrop => \(/, 'the header card itself pops');
+  assert.match(recap, /<RideUpKicker active=\{rideUp\} style=\{styles\.recapKicker\}>/, 'the existing title is the stamp');
+  assert.doesNotMatch(src, /styles\.veil|veil:/, 'no full-page veil');
+  assert.doesNotMatch(src, /YOUR RIDE&apos;S UP!/, 'no duplicate title banner');
+  assert.match(src, /SLAM_SQUASH/);
+});

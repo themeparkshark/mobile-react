@@ -74,3 +74,13 @@ test('about one landing in ten is shiny, fixed per landing; a full row hops left
   const fx = read('src/components/ShelfLandingFx.tsx');
   assert.match(fx, /runOnJS\(rowTick\)\(index\)/, 'each hop ticks on its frame, climbing the ladder');
 });
+
+test('round 4: a short anticipation, the bloom obeys Dim Flashing Lights, the caption keeps clear of section banners', () => {
+  const L = require('./helpers/ts-module.cjs').loadTs('src/components/shelfLanding.ts').SHELF_LANDING;
+  assert.ok(L.first.dropAt <= 250, 'the coin never hovers still for long before it dives');
+  assert.ok(L.first.dropAt + L.first.dropMs + L.hitStopMs + L.shineAfterMs <= 1000, 'dive, slam and row shine start inside 1.0 s');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/CoinShelfArrival.tsx'), 'utf8');
+  assert.match(src, /opacity: \(flashTop > 0 \? 0\.95 : 0\) \* flash\.value/, 'no bloom pop with Dim Flashing Lights');
+  assert.doesNotMatch(src, /bottom: 118/, 'the caption is never parked over the Limited Coins banner');
+  assert.doesNotMatch(src, />Mastery</, 'a picture button, not a reading word');
+});

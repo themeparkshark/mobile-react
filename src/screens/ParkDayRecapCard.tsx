@@ -102,7 +102,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
         ))}
       </View>
       {!selectedDay && <RecapClosingStamp build={build} parkName={recap.park_name} />}
-      {!selectedDay && <RecapTomorrow build={build} line={tomorrow} />}
+      {!selectedDay && <RecapTomorrow build={build} info={tomorrow} />}
       {recap.line_play_sessions > 0 && <GameRichText style={styles.copy}>
         {`[icon:queue] ${recap.eligible_line_minutes} minutes in line · [icon:parts] ${recap.ride_parts_earned} Ride Part${recap.ride_parts_earned === 1 ? '' : 's'}`}
       </GameRichText>}

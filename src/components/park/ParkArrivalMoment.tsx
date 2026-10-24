@@ -649,7 +649,13 @@ const CoinPing = memo(function CoinPing({ index, targets, stackX, stackY, progre
 function SpinningCoin({ flip, shine }: { readonly flip?: SharedValue<number>; readonly shine: SharedValue<number> }) {
   const turn = useSharedValue(0);
   useAmbientLoop(
-    () => { turn.value = 0; turn.value = withRepeat(withTiming(1, { duration: ARRIVAL.coinTurnMs, easing: Easing.linear }), -1, false); },
+    // Face-on through the whole payoff (the 1.2 s poster frame reads as a coin): the one flip at Finn's point is
+    // the first turn, and the slow ambient turn only starts once that flip has landed face-on again.
+    () => {
+      turn.value = 0;
+      turn.value = withDelay(ARRIVAL.pointAt + 120 + ARRIVAL.flipMs + 200,
+        withRepeat(withTiming(1, { duration: ARRIVAL.coinTurnMs, easing: Easing.linear }), -1, false));
+    },
     () => { cancelAnimation(turn); turn.value = 0; },
   );
   const style = useAnimatedStyle(() => {

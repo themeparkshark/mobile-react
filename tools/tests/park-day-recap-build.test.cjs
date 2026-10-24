@@ -55,9 +55,18 @@ test('picture stats: small days stamp, bigger days count; a gold sunset, a Tomor
   const plan = require('./helpers/ts-module.cjs').loadTs('src/components/park/recapBuildPlan.ts');
   const stats = plan.recapStats({ distinct_rides_won: 1, new_coins: 1, coin_upgrades: 0 });
   assert.equal(JSON.stringify(stats.map(s => [s.icon, s.label])), JSON.stringify([['ride', 'RIDE WON'], ['coin', 'NEW COIN']]), 'a zero is never shown');
-  assert.match(card, /<RecapTomorrow build=\{build\} line=\{tomorrow\} \/>/);
+  assert.match(card, /<RecapTomorrow build=\{build\} info=\{tomorrow\} \/>/);
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /onScroll=\{notifyRecapViewport\}/);
   const tomorrow = read('src/components/park/useRecapTomorrow.ts');
   assert.match(tomorrow, /tomorrowLine\(state\)/, 'an honest line from the real Daily 3 streak');
+});
+
+test('round 4: the closing stamp has a gold fan, stats climb, tomorrow is a picture', () => {
+  const build = read('src/components/park/ParkDayRecapBuild.tsx');
+  assert.match(build, /<GoldBurst size=\{260\} amount=\{fan\} spin=\{false\}/, 'a still gold fan (no turning loop) behind the stamp');
+  assert.match(build, /Math\.max\(0, pop\.value - 1\) \* climb/, 'each stat pops a little bigger than the last');
+  assert.match(build, /name=\{info\.prize \? 'gift' : 'star'\}/, 'tomorrow\'s prize as a picture');
+  const tomorrow = read('src/components/park/useRecapTomorrow.ts');
+  assert.match(tomorrow, /prize: state\.streak\.next_milestone\?\.days_away === 1/, 'a gift only when tomorrow really holds a prize');
 });

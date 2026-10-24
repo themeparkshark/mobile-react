@@ -6,11 +6,11 @@
  * ride gets the full moment; a repeat drops straight in.
  */
 export const SHELF_LANDING = {
-  /** First coin of a ride: on screen at once, a short hover while the slot glows, the clink before 1 s. */
-  first: { dropAt: 300, dropMs: 480 },
+  /** First coin of a ride: on screen at once, a short beat of anticipation (under 250 ms) while the slot glows, the clink by 0.65 s. */
+  first: { dropAt: 180, dropMs: 460 },
   repeat: { dropAt: 100, dropMs: 400 },
-  /** Two gold glows on the empty slot (400 ms each). */
-  pulseMs: 800,
+  /** Two gold glows on the empty slot (320 ms each), both done by the landing. */
+  pulseMs: 640,
   /** The coin holds on the landing frame this long before the slot coin squashes (hit-stop). */
   hitStopMs: 60,
   /** The sparkle puff and ring burst from the slot rim. */

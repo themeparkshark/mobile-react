@@ -33,6 +33,8 @@ import { DURATION, EASE, GOLD_FX, SPRING, momentParticles } from '../../ui/motio
 import { SLAM_SQUASH } from '../../ui/motion';
 import { BRAND } from '../../ui/tokens';
 import BurstCanvas from './BurstCanvas';
+import { GoldBurst } from '../../ui/GoldBurst';
+import type { RecapTomorrowInfo } from './useRecapTomorrow';
 import { RECAP_BUILD, recapStatAt, statStamps } from './recapBuildPlan';
 
 export interface RecapBuild {
@@ -191,9 +193,15 @@ export function RecapStat({ build, index, value, label, icon, valueStyle, labelS
     squash.value = withDelay(at + 90 + DURATION.slam, withSequence(withTiming(1, { duration: 40 }), withSpring(0, SPRING.stamp)));
     return () => { [pop, fly, num, squash].forEach(v => cancelAnimation(v)); };
   }, [build.key, build.instant, build.hold, at, value, stamp, pop, fly, num, squash]);
+  // Each stat lands a little hotter than the one before: a bigger pop and a brighter gold halo (the day climbs).
+  const climb = 6 * RECAP_BUILD.climbStep * index;
   const iconStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, pop.value * 2),
-    transform: [{ scale: Math.max(0, pop.value) }],
+    transform: [{ scale: Math.max(0, pop.value) + Math.max(0, pop.value - 1) * climb }],
+  }));
+  const haloStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, pop.value) * (0.35 + 0.2 * index),
+    transform: [{ scale: 0.6 + 0.5 * Math.min(1.2, pop.value) }],
   }));
   const coinStyle = useAnimatedStyle(() => {
     const t = fly.value;
@@ -206,7 +214,8 @@ export function RecapStat({ build, index, value, label, icon, valueStyle, labelS
   } : { opacity: 1 }));
   return <View style={styles.stat} accessible accessibilityLabel={`${value} ${label.toLowerCase()}`}>
     <View style={styles.statIconSlot}>
-      <Animated.View style={iconStyle}><GameIcon name={icon} size={30} /></Animated.View>
+      <Animated.View pointerEvents="none" style={[styles.halo, haloStyle]} />
+      <Animated.View style={iconStyle}><GameIcon name={icon} size={30 + 3 * index} /></Animated.View>
       <Animated.View pointerEvents="none" style={[styles.flyCoin, coinStyle]}><GameIcon name="coin" size={16} /></Animated.View>
     </View>
     <Animated.View style={numStyle}>
@@ -245,14 +254,30 @@ export function RecapClosingStamp({ build, parkName }: { readonly build: RecapBu
   const reduced = useReduceMotionPreference() === true;
   const budget = usePowerBudget();
   const burst = useSharedValue(build.instant ? 1 : 0);
+  // The gold ray fan behind the stamp: blooms on the landing, then rests as a soft still glow (no turning, no cost).
+  const fan = useSharedValue(build.instant ? RECAP_BUILD.fanRest : 0);
   const sparkles = momentParticles(RECAP_BUILD.stampSparkles, budget, reduced || build.instant);
+  useEffect(() => {
+    if (build.instant) { cancelAnimation(fan); fan.value = RECAP_BUILD.fanRest; return undefined; }
+    fan.value = 0;
+    if (build.hold) return undefined;
+    // Gather: the glow builds under the falling stamp (EASE.charge) before it lands.
+    fan.value = withDelay(RECAP_BUILD.stampAt - 200, withTiming(0.35, { duration: 200 + DURATION.slam, easing: EASE.charge }));
+    return () => cancelAnimation(fan);
+  }, [build.key, build.instant, build.hold, fan]);
   const onLand = useCallback(() => {
     playHaptic('golden');
     playMoment('game.win');
     burst.value = 0;
     burst.value = withTiming(1, { duration: DURATION.sparkle });
-  }, [burst]);
+    fan.value = withSequence(withTiming(1, { duration: 140, easing: EASE.out }),
+      withDelay(500, withTiming(RECAP_BUILD.fanRest, { duration: 600, easing: EASE.inOut })));
+  }, [burst, fan]);
   return <View pointerEvents="none" style={styles.closing}>
+    <View pointerEvents="none" style={styles.stampBurst}>
+      <GoldBurst size={260} amount={fan} spin={false} reduced={reduced}
+        style={{ position: 'absolute', left: -130, top: -130 }} />
+    </View>
     <RecapStamp build={build} at={RECAP_BUILD.stampAt} from={1.8} onLand={build.instant ? undefined : onLand}>
       <View style={styles.stampRim}>
         <View style={styles.stampBody}>
@@ -268,27 +293,46 @@ export function RecapClosingStamp({ build, parkName }: { readonly build: RecapBu
   </View>;
 }
 
-/** What comes next, honest and with no timer: tomorrow's Daily 3 day (the flame) or nothing at all. */
-export function RecapTomorrow({ build, line }: { readonly build: RecapBuild; readonly line: string | null }) {
+/**
+ * What comes next, honest and with no timer, as a picture: the flame with tomorrow's day number, an arrow, and
+ * a gift when that day holds a prize (a star when it does not). The words sit small beside it for grown-ups.
+ * Nothing at all when Daily 3 is off.
+ */
+export function RecapTomorrow({ build, info }: { readonly build: RecapBuild; readonly info: RecapTomorrowInfo | null }) {
   const t = useSharedValue(build.instant ? 1 : 0);
+  const gift = useSharedValue(build.instant ? 1 : 0);
   useEffect(() => {
-    if (build.instant) { cancelAnimation(t); t.value = 1; return undefined; }
-    t.value = 0;
+    if (build.instant) { cancelAnimation(t); cancelAnimation(gift); t.value = 1; gift.value = 1; return undefined; }
+    t.value = 0; gift.value = 0;
     if (build.hold) return undefined;
     t.value = withDelay(RECAP_BUILD.tomorrowAt, withSpring(1, SPRING.settle));
-    return () => cancelAnimation(t);
-  }, [build.key, build.instant, build.hold, t]);
+    // The prize pops last, past full size (one overshoot), so the eye ends on it.
+    gift.value = withDelay(RECAP_BUILD.tomorrowAt + 200, withSpring(1, SPRING.pop));
+    return () => { cancelAnimation(t); cancelAnimation(gift); };
+  }, [build.key, build.instant, build.hold, t, gift]);
   const style = useAnimatedStyle(() => ({ opacity: t.value, transform: [{ translateY: 12 * (1 - t.value) }] }));
-  if (!line) return null;
-  return <Animated.View style={[styles.tomorrow, style]}>
-    <GameIcon name="streak" size={24} />
-    <Text style={styles.tomorrowText} numberOfLines={2}>{line}</Text>
+  const giftStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, gift.value * 2), transform: [{ scale: Math.max(0, gift.value) }] }));
+  if (!info) return null;
+  return <Animated.View style={[styles.tomorrow, style]} accessible accessibilityLabel={info.line}>
+    <View style={styles.tomorrowPicture}>
+      <View>
+        <GameIcon name="streak" size={34} />
+        {info.nextDay != null && <View style={styles.dayBadge}>
+          <Text style={styles.dayBadgeText} allowFontScaling={false}>{info.nextDay}</Text>
+        </View>}
+      </View>
+      <GameIcon name="arrow" size={20} />
+      <Animated.View style={giftStyle}><GameIcon name={info.prize ? 'gift' : 'star'} size={info.prize ? 38 : 30} /></Animated.View>
+    </View>
+    <Text style={styles.tomorrowText} numberOfLines={2}>{info.line}</Text>
   </Animated.View>;
 }
 
 const styles = StyleSheet.create({
   stat: { flex: 1, alignItems: 'center' },
-  statIconSlot: { width: 36, height: 34, alignItems: 'center', justifyContent: 'center' },
+  statIconSlot: { width: 44, height: 40, alignItems: 'center', justifyContent: 'center' },
+  halo: { position: 'absolute', width: 44, height: 44, borderRadius: 22, backgroundColor: GOLD_FX.raysSoft,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)' },
   flyCoin: { position: 'absolute', right: -2, top: 0 },
   polaroid: { position: 'absolute', right: 8, top: 8, width: 66, padding: 5, paddingBottom: 12, backgroundColor: BRAND.white,
     borderRadius: 4, borderBottomWidth: 3, borderRightWidth: 1, borderColor: 'rgba(5,52,110,0.25)' },
@@ -306,5 +350,10 @@ const styles = StyleSheet.create({
   stampBurst: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
   tomorrow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: BRAND.blue, borderRadius: 14,
     borderWidth: 3, borderColor: BRAND.white, paddingHorizontal: 12, paddingVertical: 7 },
-  tomorrowText: { flex: 1, fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
+  tomorrowText: { flex: 1, fontFamily: 'Shark', fontSize: 14, color: BRAND.white },
+  tomorrowPicture: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },
+  dayBadge: { position: 'absolute', right: -6, bottom: -4, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: BRAND.gold,
+    borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  dayBadgeText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.navy },
 });

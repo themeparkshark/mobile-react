@@ -134,7 +134,7 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
     // 2. The coin pops in big over a gold glow on the first frame and spins once while it hovers, then
     // 3. dives face-on into the slot (it never turns edge-on right before impact: the weight reads).
     hover.value = withSpring(1, SPRING.pop);
-    spin.value = withTiming(1, { duration: Math.max(240, plan.dropAt), easing: EASE.out });
+    spin.value = withTiming(1, { duration: Math.max(160, plan.dropAt), easing: EASE.out });
     // The glow lives where the coin hovers and fades as it drops (it never trails behind on the shelf).
     glow.value = withSequence(withTiming(firstCollection ? 0.6 : 0.3, { duration: 200, easing: EASE.out }),
       withDelay(Math.max(0, plan.dropAt - 200), withTiming(0, { duration: plan.dropMs * 0.6, easing: EASE.in })));
@@ -183,7 +183,8 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
   // The white flash in the slot stays at or under the shared cap (flashPeak: 0 with Dim Flashing Lights); the
   // brightness comes from a gold glow that blooms on the hit (a glow, not a flash).
   const flashStyle = useAnimatedStyle(() => ({ opacity: flashTop * flash.value, transform: [{ scale: 0.8 + 0.8 * flash.value }] }));
-  const bloomStyle = useAnimatedStyle(() => ({ opacity: 0.95 * flash.value, transform: [{ scale: 0.7 + 0.9 * flash.value }] }));
+  // Dim Flashing Lights (or Reduce Motion): no bloom pop at all, like the wash and the flash.
+  const bloomStyle = useAnimatedStyle(() => ({ opacity: (flashTop > 0 ? 0.95 : 0) * flash.value, transform: [{ scale: 0.7 + 0.9 * flash.value }] }));
   const chipStyle = useAnimatedStyle(() => ({
     opacity: chip.value,
     transform: [{ translateY: (1 - chip.value) * 30 }, { scale: 0.9 + chip.value * 0.1 }],
@@ -230,7 +231,10 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
       ring={target.width * 0.55} starSize={shiny ? 13 : 11} x={slotCenter.x} y={slotCenter.y} />}
     {!reduced && shiny && <BurstCanvas progress={puff} count={0} radius={target.width} ring={target.width * 0.9}
       x={slotCenter.x} y={slotCenter.y} delayed={0.18} />}
-    <Animated.View style={[styles.chip, chipStyle]} accessibilityLiveRegion="polite">
+    {/* The caption sits in clear space: under the screen title when the slot is low, under the slot's own plank when it is high
+        (never over a section banner such as Limited Coins at the bottom). */}
+    <Animated.View style={[styles.chip, target.y + target.height / 2 > target.frameHeight * 0.32
+      ? { top: 8 } : { top: Math.min(target.frameHeight - 90, target.y + target.height + 34) }, chipStyle]} accessibilityLiveRegion="polite">
       <View style={styles.chipBody}>
       <GameIcon name="coin" size={30} />
       <View style={{ flex: 1 }}>
@@ -239,9 +243,11 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
         </Text>
         <Text style={styles.title} numberOfLines={1}>{rideName}</Text>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="View coin mastery" style={styles.primary}
+      {/* A picture button (a star and an arrow): see this coin up close. */}
+      <Pressable accessibilityRole="button" accessibilityLabel="See this coin up close" style={styles.primary}
         onPress={() => { placeNow(); callbacks.current.onInspect(); }}>
-        <Text style={styles.primaryText}>Mastery</Text>
+        <GameIcon name="star" size={22} />
+        <GameIcon name="arrow" size={18} />
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Keep exploring this shelf" hitSlop={8}
         style={styles.close} onPress={() => { placeNow(); callbacks.current.onClose(); }}>
@@ -284,14 +290,13 @@ const styles = StyleSheet.create({
   slotFlash: { position: 'absolute', backgroundColor: '#fffbe8' },
   // Outer layer carries position and shadow; the body carries the fill so the
   // cream always spans the full chip, close button included.
-  chip: { position: 'absolute', bottom: 118, left: 14, right: 14, borderRadius: 18, borderBottomWidth: 5,
+  chip: { position: 'absolute', left: 14, right: 14, borderRadius: 18, borderBottomWidth: 5,
     borderBottomColor: 'rgba(5,52,110,0.35)', elevation: 8 },
   chipBody: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 8, paddingLeft: 10, paddingRight: 6,
     borderRadius: 18, borderWidth: 3, borderColor: '#ffffff', backgroundColor: '#fff8e4', overflow: 'hidden' },
   eyebrow: { fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8, color: '#8a5a00' },
   title: { fontFamily: 'Shark', fontSize: 18, color: '#05346e' },
-  primary: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 12,
+  primary: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 2, justifyContent: 'center', paddingHorizontal: 9, borderRadius: 12,
     backgroundColor: '#ffcf3b', borderBottomWidth: 3, borderBottomColor: '#d99a00' },
-  primaryText: { fontFamily: 'Shark', fontSize: 14, color: '#05346e' },
   close: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 });

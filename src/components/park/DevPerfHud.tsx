@@ -9,7 +9,7 @@ import { StyleSheet } from 'react-native';
 import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 import { PERF_HUD, registerPerfSampler } from './momentPerf';
 
-function Hud({ top, left }: { readonly top: number; readonly left: number }) {
+function Hud({ bottom, left }: { readonly bottom: number; readonly left: number }) {
   const probe = usePerfProbe(true);
   useEffect(() => {
     registerPerfSampler(() => {
@@ -18,12 +18,13 @@ function Hud({ top, left }: { readonly top: number; readonly left: number }) {
     }, probe.reset);
     return () => registerPerfSampler(null, null);
   }, [probe]);
-  return <PerfOverlay probe={probe} visible style={[styles.hud, { top, left }]} />;
+  return <PerfOverlay probe={probe} visible style={[styles.hud, { bottom, left }]} />;
 }
 
-export default function DevPerfHud({ top = 560, left = 112 }: { readonly top?: number; readonly left?: number }) {
+/** Sits low over the footer's left icons, clear of every moment (the moments live above the footer). */
+export default function DevPerfHud({ bottom = 4, left = 4 }: { readonly bottom?: number; readonly left?: number }) {
   if (!PERF_HUD) return null;
-  return <Hud top={top} left={left} />;
+  return <Hud bottom={bottom} left={left} />;
 }
 
-const styles = StyleSheet.create({ hud: { position: 'absolute', right: 'auto', zIndex: 999 } });
+const styles = StyleSheet.create({ hud: { position: 'absolute', right: 'auto', top: 'auto', zIndex: 999 } });

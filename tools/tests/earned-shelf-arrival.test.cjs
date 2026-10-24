@@ -60,7 +60,7 @@ test('arrival actions remain usable immediately; land feedback happens once and 
   './shelfLanding':shelfLanding,'./park/momentPerf':{perfMark(){}},'../hooks/useReducedGameMotion':{default:()=>false,useReduceMotionPreference:()=>false},'../gamekit/audio/playMoment':{playMoment(){return 0;}},'../gamekit/Haptics':{queueHaptic(){}}
  },{target:{x:120,y:170,width:60,height:60,frameWidth:390,frameHeight:650},coinUrl:'coin',rideName:'Snowball',firstCollection:true,
  onLand(){lands++;},onInspect(){inspections++;},onClose(){}});
- const primary=view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='View coin mastery');
+ const primary=view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='See this coin up close');
  primary.props.onPress();view.render();assert.equal(lands,1);assert.equal(inspections,1);
  view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='Keep exploring this shelf').props.onPress();
  assert.equal(lands,1);view.unmount();assert.ok(view.cancelled.length>0);assert.equal(view.timers.size,0);
@@ -95,7 +95,7 @@ test('the landing clink and light haptic fire exactly once, with and without red
    '../gamekit/audio/playMoment':{playMoment:(...args)=>{sfx.push(args);return 0;}},
    '../gamekit/Haptics':{queueHaptic:intent=>{haptics.push(intent);}},
   },{target:{x:120,y:170,width:60,height:60,frameWidth:390,frameHeight:650},coinUrl:'coin',rideName:'Snowball',firstCollection:true,onLand(){},onInspect(){},onClose(){}});
-  view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='View coin mastery')?.props.onPress();view.render();
+  view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='See this coin up close')?.props.onPress();view.render();
   for(const fire of [...view.timers.values()])fire();
   assert.deepEqual(sfx.map(([name])=>name),['park.shelfLand'],`reduced=${reduced}`);assert.equal(haptics.length,1,`one haptic, reduced=${reduced}`);
   view.unmount();

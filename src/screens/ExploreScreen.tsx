@@ -124,6 +124,7 @@ import MapStatusStack, { TONES, type StatusEntry } from '../components/map/MapSt
 import { statusOrder, HUD_BOTTOM } from '../components/map/statusStack';
 import useParkArrival from '../components/park/useParkArrival';
 import useFirstCoinToday from '../components/park/useFirstCoinToday';
+import FirstCoinRibbon from '../components/park/FirstCoinRibbon';
 import DevPerfHud from '../components/park/DevPerfHud';
 import { EventStatusChip, EventHomeChip, EventSheet, EventGainToast, FrenzyBanner, FrenzySweep, EventRecapCard, useRecapDue, useLiveEvent, useStarRides } from '../components/liveEvents';
 import { openableKeys } from '../services/liveEvents/model';
@@ -366,6 +367,7 @@ function ExploreScreen() {
 
   // "First coin today!": the hook lives further down (it waits for the map to be free); the catch calls it here.
   const firstCoinNote = useRef<() => void>(() => undefined);
+  const firstCoinClaim = useRef<() => boolean>(() => false);
   // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
   const mapProjector = useRef<MapProjector | null>(null);
   const avatarRef = useRef<View>(null);
@@ -373,9 +375,12 @@ function ExploreScreen() {
   const reducedMotion = useReducedGameMotion();
   const [pendingCollect, setPendingCollect] = useState<{ latitude: number; longitude: number; coinUrl: string | null; first: boolean } | null>(null);
   const [collectFlight, setCollectFlight] = useState<{ key: number; from: { x: number; y: number }; to: { x: number; y: number };
-    coinUrl: string | null; label: string | null } | null>(null);
+    coinUrl: string | null; label: string | null; crowned?: boolean } | null>(null);
   const avatarPop = useSharedValue(1);
   const avatarPopStyle = useAnimatedStyle(() => ({ transform: [{ scale: avatarPop.value }] }));
+  const popAvatar = useCallback(() => {
+    avatarPop.value = reducedMotion ? 1 : withSequence(withTiming(1.22, { duration: 110 }), withSpring(1, { damping: 6, stiffness: 260 }));
+  }, [avatarPop, reducedMotion]);
   const mapFocusedRef = useRef(mapFocused); mapFocusedRef.current = mapFocused;
   useEffect(() => {
     if (!pendingCollect || redeemFlowOpen) return;
@@ -392,7 +397,9 @@ function ExploreScreen() {
         mapProjector.current?.(collect.latitude, collect.longitude) ?? null, measure(avatarRef), measure(flightLayerRef)]);
       if (!avatar || !layer || !mapFocusedRef.current) return;
       const from = start ?? { x: layer.x + layer.width / 2, y: layer.y + layer.height / 2 };
+      // The first coin of the day flies straight into the "First coin today!" ribbon, then home (one throw, no wait).
       setCollectFlight({ key: Date.now(), coinUrl: collect.coinUrl, label: collect.first ? 'New coin on your shelf!' : null,
+        crowned: firstCoinClaim.current(),
         from: { x: from.x - layer.x, y: from.y - layer.y },
         to: { x: avatar.x + avatar.width / 2 - layer.x, y: avatar.y + avatar.height / 2 - layer.y } });
     }, 650);
@@ -995,6 +1002,7 @@ function ExploreScreen() {
     free: mapFocused && mapFreeForMoment && !arrivalBusy && !retentionOccluding && !dailyGiftOccluded && !collectFlight && !pendingCollect,
   });
   firstCoinNote.current = firstCoin.noteCollected;
+  firstCoinClaim.current = firstCoin.claim;
   const chestShowing = mapFocused && !!dailyGift && chestShouldShow({
     unclaimed: chestUnclaimed, autoReady: chestReady, screenFree: chestScreenFree,
     requested: chestRequested, dismissed: chestDismissed(dailyGift.id),
@@ -1718,10 +1726,13 @@ function ExploreScreen() {
       {/* The collect moment flies over everything on the map screen. */}
       <View ref={flightLayerRef} collapsable={false} pointerEvents="none"
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 60 }}>
-        {collectFlight && <CoinCollectFlight key={collectFlight.key} from={collectFlight.from} to={collectFlight.to}
+        {collectFlight && !collectFlight.crowned && <CoinCollectFlight key={collectFlight.key} from={collectFlight.from} to={collectFlight.to}
           coinUrl={collectFlight.coinUrl} label={collectFlight.label} reducedMotion={reducedMotion}
-          onLand={() => { avatarPop.value = reducedMotion ? 1 : withSequence(withTiming(1.22, { duration: 110 }), withSpring(1, { damping: 6, stiffness: 260 })); }}
+          onLand={popAvatar}
           onDone={() => { setCollectFlight(null); firstCoin.noteCollected(); }} />}
+        {collectFlight?.crowned && <FirstCoinRibbon key={collectFlight.key}
+          toss={{ from: collectFlight.from, to: collectFlight.to, coinUrl: collectFlight.coinUrl, onLand: popAvatar }}
+          onDone={() => setCollectFlight(null)} />}
       </View>
       {/* Too Far Away: ribbon + blue card with a distance meter */}
       <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
