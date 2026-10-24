@@ -130,10 +130,11 @@ export const MOMENTS = {
   'catch.wobble': m({
     group: 'catch', label: 'The coin wobbles three times', beat: 'anticipation',
     primary: 'shared/coin_tick', variant: 'shared/ui_tick', fallback: 'ui.select',
-    ladder: 3, mix: 'ui', gainDb: -0.5, measuredLufs: -19.5, variantGainDb: -1.4, maxVoices: 3,
+    // Rungs 0..9: a quick run starts each catch's three ticks one rung higher (catchHeat, up to 7).
+    ladder: 10, mix: 'ui', gainDb: -0.5, measuredLufs: -19.5, variantGainDb: -1.4, maxVoices: 3,
     haptic: 'tick', hapticOffsetMs: 0,
     today: 'nothing yet (the wobble is new in the wow-map lane)',
-    why: 'Three rising ticks are the held breath before the burst.',
+    why: 'Three rising ticks are the held breath before the burst, and they start a little higher on every quick catch in a row.',
   }),
   'catch.burst': m({
     group: 'catch', label: 'Gold burst: the coin is yours', beat: 'burst',
@@ -178,6 +179,15 @@ export const MOMENTS = {
     haptic: 'golden', hapticOffsetMs: 0, ahap: 'momentCatch',
     today: 'same as catch.burst today',
     why: 'Every twelfth catch rings a little coin shower, a small surprise that keeps the hundredth catch fresh.',
+  }),
+  'catch.milestone': m({
+    group: 'catch', label: 'The 25th, 50th and 100th coin of the day', beat: 'burst',
+    primary: 'shared/sh_powerup', variant: 'shared/sh_tier_up', fallback: 'fx.coin',
+    layers: [{ ref: 'shared/sh_ding', delayMs: 0, db: -4 }, { ref: 'shared/sh_coin_shower', delayMs: 120, db: -2 }],
+    mix: 'fx', gainDb: -1.7, measuredLufs: -16.3, variantGainDb: 0, duck: DUCK_REVEAL, maxVoices: 1,
+    haptic: 'golden', hapticOffsetMs: 0, ahap: 'momentCatch',
+    today: 'same as catch.burst today',
+    why: 'A big day of catching gets a rare powered-up shower on the 25th, 50th and 100th coin, still as short as the bell.',
   }),
   'catch.fly': m({
     group: 'catch', label: 'The coin flies home', beat: 'settle',

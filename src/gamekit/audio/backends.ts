@@ -34,7 +34,7 @@ export function rampParamValue(param: { value: number }, to: number, ms: number,
   if (prev) clearInterval(prev);
   rampTimers.delete(param);
   const from = param.value;
-  if (ms <= 16 || !Number.isFinite(from)) {
+  if (ms <= 16 || !Number.isFinite(from) || Math.abs(to - from) < 1e-4) {
     param.value = to;
     return;
   }
@@ -263,7 +263,7 @@ export class ExpoAvBackend implements AudioBackend {
     if (d.ramp) clearInterval(d.ramp);
     d.ramp = null;
     const from = d.gain;
-    if (rampMs <= AV_RAMP_STEP_MS) {
+    if (rampMs <= AV_RAMP_STEP_MS || Math.abs(gain - from) < 1e-4) {
       d.gain = gain;
       pushDeckVolume(d, gain * this.master);
       return;

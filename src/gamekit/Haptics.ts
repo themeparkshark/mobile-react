@@ -191,6 +191,12 @@ export interface HapticGate {
   request(intent: HapticIntent, priority?: number): 'fired' | 'queued' | 'dropped';
   /** The intent waiting for the window, if any. */
   pending(): HapticIntent | null;
+  /**
+   * A choreographed beat (the catch's tap, wobbles and burst): fire now, never wait.
+   * The window still restarts from here, so other callers keep their spacing after
+   * it, and a weaker pulse waiting for the window is dropped (the beat replaced it).
+   */
+  force(intent: HapticIntent): void;
 }
 
 /**
@@ -237,6 +243,10 @@ export function createHapticGate(options: {
       return 'queued';
     },
     pending: () => waiting?.intent ?? null,
+    force(intent) {
+      if (waiting && waiting.priority <= HAPTIC_PRIORITY[intent]) waiting = null;
+      fireNow(intent);
+    },
   };
 }
 
@@ -258,6 +268,18 @@ const appGate = createHapticGate({
 export function queueHaptic(intent: HapticIntent, priority?: number): void {
   if (!enabled) return;
   appGate.request(intent, priority);
+}
+
+/**
+ * A choreographed beat outside games (the map catch's tap, wobbles and burst):
+ * fires in this same call, so the buzz leaves the JS thread with its sound and
+ * its frame, never held behind the shared 120 ms window. The beats are spaced
+ * 130 ms or more by design; the window restarts from the beat, so everything
+ * else stays gated. Use only for timed choreography, never for repeated taps.
+ */
+export function beatHaptic(intent: HapticIntent): void {
+  if (!enabled) return;
+  appGate.force(intent);
 }
 // =============================================================================
 // Haptic grammar: patterns + priority scheduling (studio engine)

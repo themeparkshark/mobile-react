@@ -23,7 +23,7 @@ import {
   allocateVoice,
   barMs,
   dbToGain,
-  duckGainAt,
+  duckSegment,
   nextGridMs,
   pitchVariance,
   quantizeDelayMs,
@@ -93,7 +93,7 @@ class GameAudioEngine {
   private readonly traceMode = studioTraceOn();
   private busGain: Record<Bus, number> = { ...BUS_DEFAULT };
   private ducks: Duck[] = [];
-  private duckTimer: ReturnType<typeof setInterval> | null = null;
+  private duckTimer: ReturnType<typeof setTimeout> | null = null;
   globalVoices = DEFAULT_GLOBAL_VOICES;
   private groupCaps = new Map<string, number>();
   /** Output route (useAudioRoute keeps it live). Pan only plays on a private route (Whack v5). */
@@ -427,23 +427,32 @@ class GameAudioEngine {
     return routePan(this.route, pan);
   }
 
-  /** Duck the music bus: attack to -db, hold, release. Deepest duck wins. */
+  /**
+   * Duck the music bus: attack to -db, hold, release. Deepest duck wins.
+   * Event driven: one gain ramp per straight piece of the envelope (attack,
+   * hold, release) and one timer to the next piece, never a polling interval;
+   * the hold costs nothing. (Audio-thread AudioParam automation stays off:
+   * react-native-audio-api 0.6 aborts on it, see backends.ts.)
+   */
   duck(db: number, attackMs = 60, holdMs = 300, releaseMs = 300): void {
     if (this.traceMode) traceEvent('duck', `-${db} dB`, `attack ${attackMs} hold ${holdMs} release ${releaseMs}`);
     this.ducks.push({ start: Date.now(), db, a: attackMs, h: holdMs, r: releaseMs });
-    if (this.duckTimer) return;
-    this.duckTimer = setInterval(() => {
-      const now = Date.now();
-      this.ducks = this.ducks.filter((d) => now - d.start < d.a + d.h + d.r);
-      let g = 1;
-      for (const d of this.ducks) g = Math.min(g, duckGainAt(now - d.start, d.db, d.a, d.h, d.r));
-      this.music.setDuckGain(g);
-      if (this.ducks.length === 0 && this.duckTimer) {
-        clearInterval(this.duckTimer);
-        this.duckTimer = null;
-        this.music.setDuckGain(1);
-      }
-    }, 30);
+    this.stepDuck();
+  }
+
+  private stepDuck(): void {
+    if (this.duckTimer) clearTimeout(this.duckTimer);
+    this.duckTimer = null;
+    const now = Date.now();
+    this.ducks = this.ducks.filter((d) => now - d.start < d.a + d.h + d.r);
+    const seg = duckSegment(this.ducks, now);
+    if (seg.nextAt === null) {
+      this.ducks = [];
+      this.music.setDuckGain(1, 30);
+      return;
+    }
+    this.music.setDuckGain(seg.target, seg.rampMs);
+    this.duckTimer = setTimeout(() => this.stepDuck(), seg.rampMs);
   }
 
   async unloadAll(): Promise<void> {
@@ -605,9 +614,11 @@ export class MusicDirector {
     b.musicGain(this.deck, this.gainFor(this.current) * this.baseGain * this.duckGain * this.trimGain * muffle, rampMs);
   }
 
-  setDuckGain(g: number): void {
+  /** Ramp the duck to `g` over `rampMs` (no work when it is already there: a duck's hold). */
+  setDuckGain(g: number, rampMs = 30): void {
+    if (g === this.duckGain) return;
     this.duckGain = g;
-    this.refreshGain(30);
+    this.refreshGain(rampMs);
   }
 
   /** A gentle trim (e.g. -3 dB while the line moves). Never stops music. */

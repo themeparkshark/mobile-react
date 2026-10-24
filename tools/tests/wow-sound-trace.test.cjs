@@ -51,15 +51,51 @@ test('50 catches: the first of the day, quick repeats, a lucky shower every 12th
   for (const c of a.perCatch) assert.deepEqual(plain(c.legacy), [], `#${c.n}: the catch's own pop, chime and whoosh stay quiet (no double sounds)`);
 });
 
-test('sync: every burst sound starts with the burst haptic, every wobble tick with its wobble haptic (<= 10 ms)', async () => {
+test('sync: every catch haptic fires on its own beat, in the same call as its sound (no timer, no gate)', async () => {
   const { a } = await fiftyCatches();
   for (const c of a.perCatch) {
     assert.ok(c.burstSoundMs !== null && c.burstHapticMs !== null, `#${c.n} has a burst sound and haptic`);
-    assert.ok(Math.abs(c.burstSoundMs - c.burstHapticMs) <= 10, `#${c.n} burst ${c.burstSoundMs} vs ${c.burstHapticMs}`);
-    assert.ok(c.burstSoundMs - 670 <= 25, `#${c.n} the burst is heard within one frame and a bit of the visual burst (670 ms)`);
+    assert.equal(c.burstHapticMs, 670, `#${c.n} the burst buzz is on the visual burst frame (670 ms)`);
+    const lag = c.burstSoundMs - c.burstHapticMs;
+    assert.ok(lag >= 0 && lag <= 30, `#${c.n} the sound is heard within the audio-api output latency of its buzz (${lag} ms)`);
     assert.equal(c.wobbleSoundMs.length, 3, `#${c.n} three wobble ticks`);
-    c.wobbleSoundMs.forEach((t, i) => assert.ok(Math.abs(t - c.wobbleHapticMs[i]) <= 10, `#${c.n} tick ${i}: ${t} vs ${c.wobbleHapticMs[i]}`));
+    assert.deepEqual(plain(c.wobbleHapticMs), [200, 350, 480], `#${c.n} wobble buzzes on their beats, even right after a map press buzz`);
+    c.wobbleSoundMs.forEach((t, i) => { const d = t - c.wobbleHapticMs[i]; assert.ok(d >= 0 && d <= 30, `#${c.n} tick ${i}: ${t} vs ${c.wobbleHapticMs[i]}`); });
   }
+});
+
+test('a quick run gets hotter: the wobble and badge ticks climb one rung per quick catch, a pause resets it', async () => {
+  const { a } = await fiftyCatches();
+  const c = (n) => a.perCatch[n - 1];
+  assert.equal(c(1).heat, 0);
+  for (let n = 2; n <= 7; n++) assert.equal(c(n).heat, n - 1, `catch #${n} in a 25 s run`);
+  assert.deepEqual(plain(c(1).wobbleRungs), ['l0', 'l1', 'l2']);
+  assert.deepEqual(plain(c(7).wobbleRungs), ['l6', 'l7', 'l8'], 'the 7th quick catch rings six rungs higher, same three ticks, same length');
+  assert.equal(c(8).heat, 0, 'a 2.5 minute walk resets the run');
+  assert.deepEqual(plain(c(8).wobbleRungs), ['l0', 'l1', 'l2']);
+  for (const x of a.perCatch) {
+    const top = Math.max(...x.wobbleRungs.map((r) => Number(r.slice(1))));
+    assert.ok(top <= 9, `#${x.n} wobble tops out at rung 9 (${top})`);
+    assert.ok(x.heat <= 7);
+  }
+  assert.ok(Number(c(7).badgeRungs[0].slice(1)) > Number(c(1).badgeRungs[0].slice(1)), 'the badge ticks climb with the run too');
+  for (const x of a.perCatch) assert.equal(new Set(x.badgeRungs).size, x.badgeRungs.length, `#${x.n} badge ticks never repeat a rung (${x.badgeRungs.join(' ')})`);
+  assert.equal(c(7).sounds, c(2).sounds, 'hotter, never longer: the same number of catch sounds');
+});
+
+test('the 25th coin of the day rings the rare milestone shower (the 50th and 100th too), never longer than the bell', async () => {
+  const { a, e } = await fiftyCatches();
+  assert.equal(a.perCatch[24].burst, 'catch.milestone', 'catch #25 of the day');
+  const plan = e.Plan;
+  let s = plan.EMPTY_RUN;
+  const day = new Date(2026, 9, 24, 9, 0, 0).getTime();
+  const seen = [];
+  for (let i = 1; i <= 100; i++) { const r = plan.burstMoment(s, day + i * 600_000 / 10); s = r.state; if (r.moment === 'catch.milestone') seen.push(i); }
+  assert.deepEqual(seen, [25, 50, 100]);
+  assert.equal(plan.decodeDay(plan.encodeDay(s)).dayCount, 100, 'the count survives an app restart the same day');
+  assert.deepEqual(plain(plan.decodeDay('2026-10-24')), { dayKey: '2026-10-24', dayCount: 1 }, 'an old stored day (round 2) reads as one catch');
+  const m = e.Map.MOMENTS['catch.milestone'];
+  assert.ok(Math.max(...m.layers.map((l) => l.delayMs)) + 661 <= 900, 'its last layer ends inside the burst window');
 });
 
 test('the 10th time: round-robin never repeats back to back, the coin ladder restarts after a pause, repeats are shorter', async () => {
@@ -88,7 +124,17 @@ test('playMoment haptics: app moments wait for the cue latency; game moments hon
   const hap = e.haptics.find((h) => h.t >= t0);
   assert.ok(snd && hap);
   assert.equal(snd.t - t0, 20, 'the sound is heard after the audio-api latency');
-  assert.equal(hap.t - t0, 20, 'and the buzz lands with it, not 20 ms early');
+  assert.equal(hap.t - t0, 0, 'a fast audio-api cue buzzes in the same call (no timer a busy JS thread could stretch)');
+  // A slow expo-av route (an AAC sting, about 80 ms) still waits for its sound.
+  e.haptics.length = 0;
+  e.clock.advance(5000);
+  await e.Moments.preloadMoments(['game.win']);
+  await flush();
+  const tw = e.clock.now;
+  e.Moments.playMoment('game.win', { haptic: true });
+  await flush(); e.clock.advance(400); await flush();
+  const winHap = e.haptics.find((h) => h.t >= tw);
+  assert.ok(winHap && winHap.t - tw >= 60, `the AAC sting's buzz waits for its sound (${winHap && winHap.t - tw} ms)`);
 
   // Game context with a delay: the buzz waits for the delayed sound (it used to fire at once).
   e.haptics.length = 0;

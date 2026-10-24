@@ -1,10 +1,10 @@
 import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { createSfxLimiter } from '../../../audio/sfxLimiter';
-import { queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
+import { beatHaptic, queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { playMoment, studioMoment, studioReady } from '../../../gamekit/audio/playMoment';
 import type { MomentName } from '../../../gamekit/audio/momentMap';
-import { burstMoment, CATCH_WOBBLE_TICKS_MS, EMPTY_RUN, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
+import { burstMoment, CATCH_WOBBLE_TICKS_MS, catchHeat, decodeDay, EMPTY_RUN, encodeDay, HEAT_MAX, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
 import { traceEvent } from '../../../gamekit/audio/studioTrace';
 
 /**
@@ -127,16 +127,31 @@ const SESSION_IDLE_MS = 4000;
  * thread together (a separate timer drifted 50 to 130 ms under load). No wobble haptics (Reduce Motion
  * skips the wobble) means no ticks.
  */
-let session: { until: number; wobbles: ReturnType<typeof setTimeout>[]; haptics: number; ticks: number; burst: boolean } | null = null;
+let session: { until: number; wobbles: ReturnType<typeof setTimeout>[]; haptics: number; ticks: number; burst: boolean; heat: number } | null = null;
 const WOBBLE_INTENTS = new Set<HapticIntent>(['tickSelection', 'tapLight', 'hitMedium']);
 let run: CatchRunState = EMPTY_RUN;
 let primed = false;
 const DAY_KEY = 'tps.sound.lastCatchDay';
+/** Highest rung of the counter ladder (13 steps, 0..12). */
+const COUNTER_TOP = 12;
+/** Most rungs a quick run lifts the badge ticks. */
+const COUNTER_HEAT_MAX = 4;
+/**
+ * The catch's own beats (tap, three wobbles, burst, success) own the haptic for this long after
+ * the tap: they fire in the same call as their frame and sound (beatHaptic), never held behind the
+ * shared 120 ms window, so a press buzz from the map a moment earlier cannot push them late.
+ * Every player, switch on or off: it is a timing fix, not a new sound.
+ */
+const BEAT_WINDOW_MS = 1200;
+let beatUntil = 0;
 
 function primeCatchState(): void {
   if (primed) return;
   primed = true;
-  void AsyncStorage.getItem(DAY_KEY).then((day) => { if (day && run.dayKey === null) run = { ...run, dayKey: day }; }).catch(() => undefined);
+  void AsyncStorage.getItem(DAY_KEY).then((raw) => {
+    const day = decodeDay(raw);
+    if (day && run.dayKey === null) run = { ...run, dayKey: day.dayKey, dayCount: day.dayCount };
+  }).catch(() => undefined);
 }
 
 function sessionOpen(now = Date.now()): boolean {
@@ -154,20 +169,25 @@ function keepSession(): void {
 
 function onCatchMark(name: string): void {
   if (name === 'tap') {
+    beatUntil = Date.now() + BEAT_WINDOW_MS;
     if (!studioReady('catch.tap')) return;
     primeCatchState();
     endSession();
-    session = { until: Date.now() + SESSION_IDLE_MS, wobbles: [], haptics: 0, ticks: 0, burst: false };
+    const now = Date.now();
+    session = { until: now + SESSION_IDLE_MS, wobbles: [], haptics: 0, ticks: 0, burst: false, heat: catchHeat(run, now) };
+    if (session.heat > 0) traceEvent('mark', 'catch-heat', `+${session.heat}`);
     playMoment('catch.tap');
     return;
   }
+  if (name === 'done' || name === 'miss') beatUntil = 0;
   if (!sessionOpen()) return;
   keepSession();
   if (name === 'burst') {
     session?.wobbles.forEach(clearTimeout);
     if (session) session.burst = true;
     const next = burstMoment(run, Date.now());
-    if (next.moment === 'catch.firstOfDay' && next.state.dayKey) void AsyncStorage.setItem(DAY_KEY, next.state.dayKey).catch(() => undefined);
+    const stored = encodeDay(next.state);
+    if (stored) void AsyncStorage.setItem(DAY_KEY, stored).catch(() => undefined);
     run = next.state;
     traceEvent('mark', 'catch-run', `#${run.count} -> ${next.moment}`);
     playMoment(next.moment);
@@ -193,6 +213,7 @@ export function resetCatchSoundForTests(): void {
   endSession();
   run = EMPTY_RUN;
   primed = true;
+  beatUntil = 0;
 }
 
 /** While a map catch is open (studio on): what the catch's own sounds become. */
@@ -201,29 +222,34 @@ function sessionSound(name: CatchSound, opts: { volume?: number; pitch?: number 
   keepSession();
   if (name === 'pop' || name === 'chime' || name === 'whoosh') return true; // the marks played these
   if (name === 'badge') return studioMoment('catch.land', { volume: opts.volume });
-  if (name === 'tick') return studioMoment('ui.counterTick', { volume: opts.volume, step: opts.pitch });
+  if (name === 'tick') {
+    // The badge ticks (rungs 2..8) climb up to 4 rungs with the run, so the last one still lands on 12, never doubled.
+    const lift = Math.round(((session?.heat ?? 0) * COUNTER_HEAT_MAX) / HEAT_MAX);
+    return studioMoment('ui.counterTick', { volume: opts.volume, step: opts.pitch === undefined ? undefined : Math.min(COUNTER_TOP, opts.pitch + lift) });
+  }
   return false;
 }
 
 /**
- * While a studio-sound catch is open, every catch haptic waits for the audio output latency
- * (20 ms on audio-api), so the buzz is felt on the same frame the sound is heard. Off: unchanged.
+ * A catch haptic. Inside the catch's beat window (tap to burst) it fires in this same call
+ * (beatHaptic): no timer hop, no 120 ms gate, so the buzz leaves the JS thread with its frame and,
+ * with the studio switch on, with its sound (audio-api output is about 20 ms, below what a hand can
+ * tell). Each wobble haptic also plays its rising tick from this call (one JS callback for both).
+ * Outside the window (the Ride Photo catch, the miss, late beats) it is the shared gate, as before.
  */
 export function catchHaptic(intent: HapticIntent, priority = 2): void {
   trace('haptic', intent);
-  let lead = 0;
   try {
     if (sessionOpen() && studioReady('catch.tap')) {
-      lead = GameAudio.latencyMs;
       const s = session;
-      // The held breath: the three wobble haptics each bring a rising tick (one JS callback for both).
+      // The held breath: the three wobble haptics each bring a rising tick, a rung higher in a quick run.
       if (s && !s.burst) {
         s.haptics += 1;
-        if (s.haptics > 1 && s.ticks < CATCH_WOBBLE_TICKS_MS.length && WOBBLE_INTENTS.has(intent)) playMoment('catch.wobble', { step: s.ticks++ });
+        if (s.haptics > 1 && s.ticks < CATCH_WOBBLE_TICKS_MS.length && WOBBLE_INTENTS.has(intent)) playMoment('catch.wobble', { step: s.heat + s.ticks++ });
       }
     }
-  } catch { lead = 0; }
-  if (lead > 0) setTimeout(() => queueHaptic(intent, priority), lead);
+  } catch { /* sound is decoration */ }
+  if (Date.now() < beatUntil) beatHaptic(intent);
   else queueHaptic(intent, priority);
 }
 

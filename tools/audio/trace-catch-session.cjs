@@ -41,6 +41,9 @@ async function run({ catches = 50 } = {}) {
     catchesAt.push(t0);
     const at = (ms) => advance(t0 + ms - e.clock.now);
     // HomeCatchMoment (wow-map): tap mark, haptic plan, pop.
+    // The map's own press buzz lands just before the catch starts (the live trace's +107 ms tap case):
+    // the catch's beats must not wait behind it.
+    e.Haptics.queueHaptic('tapLight', 1);
     e.Catch.catchMark('tap');
     e.Catch.catchHaptic('tapLight', 3);
     e.Catch.catchSound('pop');
@@ -86,6 +89,9 @@ function analyse(e, catchesAt) {
       burstSoundMs: burstSound ? burstSound.t - t0 : null,
       burstHapticMs: burstHaptic ? burstHaptic.t - t0 : null,
       wobbleSoundMs: wobbleSounds.map((s) => s.t - t0),
+      wobbleRungs: wobbleSounds.map((s) => s.name.split('#')[1]),
+      heat: Number((marks.find((m) => inside(m) && m.name === 'catch-heat')?.detail ?? '+0').slice(1)),
+      badgeRungs: sounds.filter((s) => inside(s) && s.name.startsWith('moment:ui.counterTick:')).map((s) => s.name.split('#')[1]),
       wobbleHapticMs: wobbleHaptics.map((h) => h.t - t0),
       sounds: catchSounds.length,
       burstLayersSpanMs: Number.isFinite(end) ? end : 0,
@@ -108,7 +114,7 @@ async function main() {
   const lines = [
     '50-catch map session, real studio engine on the silent TraceBackend (virtual clock; nothing played).',
     'Per catch: burst moment | burst sound ms | burst haptic ms | wobble ticks ms | wobble haptics ms | legacy sounds',
-    ...a.perCatch.map((c) => `#${String(c.n).padStart(2)} ${c.burst.padEnd(17)} snd ${c.burstSoundMs} hap ${c.burstHapticMs} | ticks ${c.wobbleSoundMs.join(',')} | haps ${c.wobbleHapticMs.join(',')} | legacy ${c.legacy.join(',') || 'none'}`),
+    ...a.perCatch.map((c) => `#${String(c.n).padStart(2)} ${c.burst.padEnd(17)} heat +${c.heat} | hap ${c.burstHapticMs} snd ${c.burstSoundMs} | wobble ${c.wobbleRungs.join(' ')} at ${c.wobbleSoundMs.join(',')} haps ${c.wobbleHapticMs.join(',')} | badge ${c.badgeRungs.join(' ')} | legacy ${c.legacy.join(',') || 'none'}`),
     `whack hits round-robin: ${a.hits.join(' ')}`,
     `coin ladder per catch: ${a.ladderRuns.slice(0, 3).map((r) => r.join(',')).join(' | ')} ...`,
     '',

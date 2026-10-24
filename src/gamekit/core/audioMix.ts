@@ -106,6 +106,39 @@ export function combineDucks(gains: readonly number[]): number {
   return g;
 }
 
+/** One duck envelope on the wall clock (ms): attack to -db, hold, release. */
+export interface DuckEnvelope {
+  readonly start: number;
+  readonly db: number;
+  readonly a: number;
+  readonly h: number;
+  readonly r: number;
+}
+
+/**
+ * The next straight piece of the combined duck envelope (deepest wins), so a
+ * duck costs one ramp per piece (attack, hold, release) instead of a polling
+ * timer: `gain` now, the `target` at `nextAt`, reached over `rampMs`. A hold
+ * is a flat piece (target equals gain: no ramp work at all). `nextAt` is null
+ * when every duck is over (the music is back at full).
+ */
+export function duckSegment(ducks: readonly DuckEnvelope[], now: number): { gain: number; target: number; rampMs: number; nextAt: number | null } {
+  const at = (t: number) => {
+    let g = 1;
+    for (const d of ducks) g = Math.min(g, duckGainAt(t - d.start, d.db, d.a, d.h, d.r));
+    return g;
+  };
+  let nextAt: number | null = null;
+  for (const d of ducks) {
+    for (const b of [d.start, d.start + d.a, d.start + d.a + d.h, d.start + d.a + d.h + d.r]) {
+      if (b > now && (nextAt === null || b < nextAt)) nextAt = b;
+    }
+  }
+  const gain = at(now);
+  if (nextAt === null) return { gain, target: 1, rampMs: 0, nextAt: null };
+  return { gain, target: at(nextAt), rampMs: nextAt - now, nextAt };
+}
+
 // =============================================================================
 // Beat clock
 // =============================================================================

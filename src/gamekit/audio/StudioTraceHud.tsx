@@ -7,11 +7,43 @@
  * fires, MARK (white) on a choreography mark. A screen recording then shows the
  * sound, the buzz and the visual burst on the same frames, without one sound.
  * Opacity runs on the UI thread (one shared-value write per event, no per-frame JS).
+ *
+ * The PerfOverlay frame graph sits under the lights, and every UI-thread frame
+ * time since the last reset is kept (sent to JS 4 times a second, about 15
+ * numbers each), so a capture can read p5 fps over a whole run of catches:
+ * globalThis.__studioTrace.perf() and .perfReset() over CDP.
  */
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { onTrace, type TraceEvent } from './studioTrace';
+import { PerfOverlay, usePerfProbe } from '../perf/PerfOverlay';
+
+/** Frame times (ms) since the last perfReset, capped at about 9 minutes of 60 fps. */
+const FRAMES_CAP = 32_000;
+const frames: number[] = [];
+function addFrames(batch: number[]): void {
+  for (const f of batch) if (frames.length < FRAMES_CAP) frames.push(f);
+}
+/** p5 fps (the slowest 5 percent of frames), average fps and the worst frame over the window. */
+export function perfWindow(list: readonly number[] = frames): { frames: number; fpsP5: number; fpsAvg: number; worstMs: number; jankPct: number } {
+  if (list.length === 0) return { frames: 0, fpsP5: 0, fpsAvg: 0, worstMs: 0, jankPct: 0 };
+  const sorted = list.slice().sort((a, b) => a - b);
+  const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
+  const sum = list.reduce((a, b) => a + b, 0);
+  const over = list.filter((f) => f > 25).length; // a missed 60 Hz frame
+  return {
+    frames: list.length,
+    fpsP5: Math.round((1000 / p95) * 10) / 10,
+    fpsAvg: Math.round((1000 * list.length / sum) * 10) / 10,
+    worstMs: Math.round(sorted[sorted.length - 1]),
+    jankPct: Math.round((over / list.length) * 1000) / 10,
+  };
+}
+{
+  const g = globalThis as unknown as { __studioTrace?: Record<string, unknown> };
+  g.__studioTrace = { ...(g.__studioTrace ?? {}), perf: () => perfWindow(), perfReset: () => { frames.length = 0; return true; } };
+}
 
 const FADE_MS = 180;
 
@@ -34,6 +66,22 @@ export default function StudioTraceHud() {
   const hap = useSharedValue(0);
   const mrk = useSharedValue(0);
   const [lines, setLines] = useState<string[]>([]);
+  const probe = usePerfProbe();
+  const batch = useSharedValue<number[]>([]);
+  const acc = useSharedValue(0);
+  useFrameCallback((info) => {
+    'worklet';
+    const dt = info.timeSincePreviousFrame;
+    if (dt == null) return;
+    batch.value.push(dt);
+    acc.value += dt;
+    if (acc.value >= 250) {
+      acc.value = 0;
+      const out = batch.value;
+      batch.value = [];
+      runOnJS(addFrames)(out);
+    }
+  });
   useEffect(() => onTrace((e) => {
     const v = e.kind === 'sound' ? snd : e.kind === 'haptic' ? hap : e.kind === 'mark' ? mrk : null;
     if (!v) return;
@@ -51,6 +99,7 @@ export default function StudioTraceHud() {
       {lines.map((l, i) => (
         <Text key={`${i}-${l}`} style={[styles.line, i === 0 && styles.lineNew]} numberOfLines={1} allowFontScaling={false}>{l}</Text>
       ))}
+      <PerfOverlay probe={probe} style={styles.perf} />
     </View>
   );
 }
@@ -63,4 +112,5 @@ const styles = StyleSheet.create({
   lightText: { color: '#0b2a4a', fontSize: 10, fontWeight: '800' },
   line: { color: '#ffffff', fontSize: 9, backgroundColor: 'rgba(11,42,74,0.72)', paddingHorizontal: 3, marginTop: 1, borderRadius: 3, overflow: 'hidden' },
   lineNew: { backgroundColor: 'rgba(11,42,74,0.92)' },
+  perf: { position: 'relative', top: 0, right: 0, marginTop: 4 },
 });
