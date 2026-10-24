@@ -27,6 +27,7 @@ import { BRAND } from '../../../../ui/tokens';
 import type { WaitCoinProgress } from '../../../../services/lineplay/waitScreen';
 import type { WaitCoin } from './useWaitScreenCoin';
 import CoinFillRing from './CoinFillRing';
+import KidText from '../KidText';
 import { coinLevelMarker, markWaitPartLanded, rememberWaitLevel, waitLevelMark, type WaitKey } from '../../../../services/lineplay/waitLevelMemory';
 import { isDimFlashingLightsEnabled } from '../../../../../modules/flash-safety';
 
@@ -182,14 +183,14 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
           )}
           {burst && <LevelUpBurst fx={burst.fx} size={coinSize} playKey={burst.key} />}
         </Animated.View>
-        {/* One level marker at a time. The ring's goal (an up arrow and "3") is where this fill is going,
-            so the chip under the coin only has to say "2 of 4". Right after a level up the coin wears
+        {/* One level marker at a time. The ring's goal (a gold up arrow, no number: the closed card keeps
+            its numbers to four) says this fill levels the coin up, so the chip under the coin only has to
+            say "2 of 4"; the spoken label names the level. Right after a level up the coin wears
             "LEVELED UP!" instead until the next Part lands. Max level shows the crown there. */}
         {owned && marker === 'goal' && progress.goalLevel != null && (
           <Animated.View entering={reducedMotion || !pipSwapped ? undefined : FadeIn.delay(120).duration(260)}
-            style={styles.goalPip} pointerEvents="none">
-            <View style={styles.goalArrow}><GameIcon name="arrow" size={11} /></View>
-            <Text style={styles.goalText}>{progress.goalLevel}</Text>
+            style={styles.goalPip} pointerEvents="none" testID="coin-goal-pip">
+            <View style={styles.goalArrow}><GameIcon name="arrow" size={14} /></View>
           </Animated.View>
         )}
         {/* "LEVELED UP!" with no number: the closed card keeps its numbers to four, and the
@@ -211,11 +212,12 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
       <View style={[styles.labelChip, progress.ready && owned && styles.labelChipReady, (ribbon != null) && styles.labelChipRibbon]}>
         {progress.ready && owned && !busy && !ribbon && <GameIcon name="sparkle" size={14} />}
         {showCount && <GameIcon name="parts" size={17} />}
-        <Text style={[styles.labelText, showCount && styles.labelTextCount,
+        {/* The count's digits use the flagged-1 font, so "1 of 6" never reads "I of 6". */}
+        <KidText style={[styles.labelText, showCount && styles.labelTextCount,
           ((progress.ready && owned) || ribbon != null) && styles.labelTextReady]} numberOfLines={1}
           adjustsFontSizeToFit minimumFontScale={0.8}>
           {progress.ready && owned && !busy && !ribbon && !error ? 'TAP TO LEVEL UP' : label}
-        </Text>
+        </KidText>
       </View>
       {crowningId && coin && (
         <Modal visible={crowning.visible} transparent animationType="fade" onRequestClose={() => { crowning.done(); setCrowningId(null); }}>
@@ -242,11 +244,9 @@ const styles = StyleSheet.create({
   labelText: { fontFamily: 'Knockout', fontSize: 13, color: '#ffffff', letterSpacing: 0.3 },
   labelTextReady: { color: BRAND.navy },
   labelTextCount: { fontSize: 15, letterSpacing: 0.4 },
-  goalPip: { position: 'absolute', right: -6, bottom: '9%', flexDirection: 'row', alignItems: 'center', gap: 1,
-    paddingLeft: 3, paddingRight: 5, height: 20, borderRadius: 10, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy },
+  goalPip: { position: 'absolute', right: 0, bottom: '9%', alignItems: 'center', justifyContent: 'center',
+    width: 22, height: 22, borderRadius: 11, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy },
   goalArrow: { transform: [{ rotate: '-90deg' }] },
-  // The card's number font: its 1 has a flag, so "10" never reads "IO".
-  goalText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, marginTop: 1 },
   leveledRibbon: { position: 'absolute', top: -9, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 3,
     paddingHorizontal: 7, height: 20, borderRadius: 10, backgroundColor: '#ffffff', borderWidth: 2, borderColor: BRAND.gold },
   leveledText: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.navy, letterSpacing: 0.3 },

@@ -163,6 +163,12 @@ export function boardSideFor(viewport: { width: number; height: number }, header
  * the page shows its header and one "Tap to play" strip instead of a board
  * with a row peeking under the fade. Before layout it assumes the board fits.
  */
+/** The "Tap to play" page keeps the mission header above its strip when the page has this much room. */
+export const NAV_STRIP_HEADER_PAGE = 140;
+export function navStripHeader(viewHeight: number): boolean {
+  return viewHeight >= NAV_STRIP_HEADER_PAGE;
+}
+
 export function boardFits(viewport: { width: number; height: number }, headerHeight: number): boolean {
   if (viewport.width <= 0 || viewport.height <= 0) return true;
   return boardByHeight(viewport, headerHeight) >= BOARD_FLOOR;

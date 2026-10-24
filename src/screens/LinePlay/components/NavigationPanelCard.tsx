@@ -30,7 +30,7 @@ import { circuitThemeFor, type CircuitTheme } from '../../../services/lineplay/c
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 import PageScroll from './PageScroll';
 import KidText from './KidText';
-import { boardFits, boardSideFor, boardTight } from '../../../services/lineplay/lineLayout';
+import { boardFits, boardSideFor, boardTight, navStripHeader } from '../../../services/lineplay/lineLayout';
 
 interface Props {
   readonly seed: number;
@@ -228,21 +228,38 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
     if (width !== viewport.width || height !== viewport.height) setViewport({ width, height });
   };
 
-  // Details open on a page too short for a whole board: one strip, like the chapter's PLAY NOW strip.
+  // Details open on a page too short for a whole board: the mission's header (when it fits) and one
+  // "Tap to play" strip, like the chapter's PLAY NOW strip. The tap closes Details so the board has room.
   if (onMakeRoom && !boardFits(viewport, headerHeight)) {
-    return <PageScroll fill={BRAND.cream} contentStyle={styles.contentStrip} onLayout={onLayout} still>
-      <Pressable accessibilityRole="button" onPress={onMakeRoom}
-        accessibilityLabel={`${trace.solved ? look.solvedTitle : look.repairTitle}. Tap to play. Hides the details.`}
-        style={({ pressed }) => [styles.playStrip, pressed && !reducedMotion && styles.pressed]}>
-        <View style={styles.playStripCopy}>
-          <Text style={styles.playStripTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-            {trace.solved ? look.solvedTitle : look.repairTitle}</Text>
-          <View style={styles.relayRow}>
-            {[0, 1, 2].map(slot => <GameIcon key={slot} name="star" size={14}
-              mono={slot < trace.signals ? undefined : '#9db7cf'} />)}
+    const title = trace.solved ? look.solvedTitle : look.repairTitle;
+    const withHeader = navStripHeader(viewport.height);
+    return <PageScroll fill={BRAND.cream} contentStyle={[styles.contentStrip, withHeader && styles.contentStripHeader]}
+      onLayout={onLayout} still>
+      {withHeader && <LinearGradient colors={[BRAND.blueBright, BRAND.blue]} style={[styles.hero, styles.heroCompact, styles.heroStrip]}>
+        <View style={styles.heroCopy}>
+          <KidText style={styles.kicker} numberOfLines={1}>{kickerText}</KidText>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, styles.titleCompact]} numberOfLines={1}>{title}</Text>
+            <View style={styles.relayRow} accessible accessibilityLabel={`${trace.signals} of 3 ${look.relayNoun} connected`}>
+              {[0, 1, 2].map(slot => <GameIcon key={slot} name="star" size={18}
+                mono={slot < trace.signals ? undefined : '#8fb9e0'} />)}
+            </View>
           </View>
         </View>
-        <Text style={styles.playStripCta}>TAP TO PLAY</Text>
+      </LinearGradient>}
+      <Pressable accessibilityRole="button" onPress={onMakeRoom}
+        accessibilityLabel={`${title}. Tap to play. Hides the details.`}
+        style={({ pressed }) => [styles.playStrip, pressed && !reducedMotion && styles.pressed]}>
+        {withHeader ? <Text style={[styles.playStripTitle, styles.playStripCtaBig]}>TAP TO PLAY</Text> : <>
+          <View style={styles.playStripCopy}>
+            <Text style={styles.playStripTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{title}</Text>
+            <View style={styles.relayRow}>
+              {[0, 1, 2].map(slot => <GameIcon key={slot} name="star" size={14}
+                mono={slot < trace.signals ? undefined : '#9db7cf'} />)}
+            </View>
+          </View>
+          <Text style={styles.playStripCta}>TAP TO PLAY</Text>
+        </>}
         <GameIcon name="play" size={40} />
       </Pressable>
     </PageScroll>;
@@ -389,6 +406,9 @@ const styles = StyleSheet.create({
     paddingVertical: 1, borderRadius: 16, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 5,
     backgroundColor: BRAND.gold },
   playStripCopy: { flex: 1 },
+  contentStripHeader: { gap: 8, padding: 8, paddingBottom: 8 },
+  heroStrip: { minHeight: 0 },
+  playStripCtaBig: { flex: 1, fontSize: 20 },
   playStripTitle: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 18, lineHeight: 22 },
   playStripCta: { color: '#7c4200', fontFamily: 'Knockout', fontSize: 14, letterSpacing: 0.8 },
   success: { marginTop: 12, padding: 12, borderWidth: 3, borderColor: BRAND.gold, borderRadius: 18,

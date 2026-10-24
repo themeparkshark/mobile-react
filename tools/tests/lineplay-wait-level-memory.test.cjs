@@ -54,14 +54,14 @@ function stage(props) {
   });
 }
 const ribbon = app => app.find(node => node.type === 'Text' && words(node.props.children) === 'LEVELED UP!');
-const goal = app => app.find(node => node.type === 'Text' && words(node.props.children) === '4');
+const goal = app => app.find(node => node.props?.testID === 'coin-goal-pip');
 
 test('leaving LinePlay and coming back mid-wait still shows LEVELED UP! (remount), never a bare "0 of 6"', () => {
   memory.forgetWaitLevels();
   memory.rememberWaitLevel(1792812047825, 1, 3);
   const first = stage();
   assert.ok(ribbon(first), 'the ribbon shows');
-  assert.equal(goal(first), undefined, 'no "4" goal beside the ribbon');
+  assert.equal(goal(first), undefined, 'no goal pip beside the ribbon');
   assert.equal(first.find(node => node.type === 'Text' && /LEVEL \d/.test(words(node.props.children))), undefined,
     'the ribbon has no number: the closed card keeps its numbers to four');
   assert.ok(first.find(node => node.props?.accessibilityLabel?.includes('You leveled it up to Level 3 this wait.')));
@@ -70,10 +70,12 @@ test('leaving LinePlay and coming back mid-wait still shows LEVELED UP! (remount
   assert.ok(ribbon(again), 'still LEVELED UP! after a remount');
   // Another wait starts clean.
   assert.equal(ribbon(stage({ waitKey: 42 })), undefined);
-  // The first new Part lands: the ribbon steps aside for the next goal (an up arrow and "4", no "Lv").
+  // The first new Part lands: the ribbon steps aside for the next goal (a gold up arrow, no "Lv").
   again.change({ partsBanked: 1 });
   assert.equal(ribbon(again), undefined);
   assert.ok(goal(again));
+  assert.equal(words(goal(again).props.children).trim(), '', 'the goal pip is a gold up arrow with no number (four numbers on the closed card)');
+  assert.ok(again.find(node => node.props?.accessibilityLabel?.includes('Parts to Level 4')), 'the spoken label still names the level');
   assert.equal(again.find(node => node.type === 'Text' && /\bLv\b/.test(words(node.props.children))), undefined);
   // And that sticks for the rest of the wait, across a remount too.
   assert.equal(ribbon(stage({ partsBanked: 1 })), undefined);

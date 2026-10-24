@@ -237,7 +237,9 @@ test('Details open on a 17 Pro: the navigation page is one "Tap to play" strip, 
   assert.equal(m.boardFits({ width: 0, height: 0 }, 0), true, 'before layout nothing jumps');
   const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
   assert.match(card, /if \(onMakeRoom && !boardFits\(viewport, headerHeight\)\) \{/);
-  assert.match(card, /<PageScroll fill=\{BRAND\.cream\} contentStyle=\{styles\.contentStrip\} onLayout=\{onLayout\} still>/);
+  assert.match(card, /<PageScroll fill=\{BRAND\.cream\} contentStyle=\{\[styles\.contentStrip, withHeader && styles\.contentStripHeader\]\}\n\s*onLayout=\{onLayout\} still>/);
+  assert.equal(m.navStripHeader(147), true, 'a 17 Pro reading Details keeps the mission header over the strip');
+  assert.equal(m.navStripHeader(90), false, 'a shorter page is just the strip');
   assert.match(card, />TAP TO PLAY<\/Text>/);
   const screen = read(SCREEN);
   assert.match(screen, /onNavigationMakeRoom=\{detailsOpen \? closeDetails : undefined\}/,
