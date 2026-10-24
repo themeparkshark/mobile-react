@@ -557,3 +557,10 @@ test('wave 3 rerun round 2: a React commit mid-pop can never leave the chest shu
   const burst = read('src/ui/GoldBurst.tsx');
   assert.equal((burst.match(/resyncOpacity\(/g) || []).length, 3, 'glow, rays and core resend their opacity');
 });
+
+test('wave 3 rerun round 2: Level Up! hides only once the charge bar covers it (no empty slot on the tap frame)', () => {
+  const modal = read('src/components/CoinLevelingModal.tsx');
+  const hide = modal.slice(modal.indexOf('const hideCta = () => {'), modal.indexOf('const showCtaNow'));
+  assert.ok(!/ctaIn\.value = 0/.test(hide.slice(0, hide.indexOf('};'))), 'the tap itself does not hide the button');
+  assert.ok(/if \(state !== 'leveling' \|\| ctaShown\.current\) return;\s*cancelUi\(ctaIn\); ctaIn\.value = 0;/.test(modal), 'it hides after the charge bar commit');
+});

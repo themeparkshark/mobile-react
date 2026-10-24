@@ -209,10 +209,16 @@ export default function CoinLevelingModal({
   const ctaShown = useRef(true);
   const ctaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ctaStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, ctaIn.value * 1.6), transform: [{ scale: 0.72 + 0.28 * ctaIn.value }] }));
+  // The button hides only once the charge bar is on screen over it (an effect after the commit), so the tap never
+  // shows a frame with an empty slot between Level Up! and the charge bar.
   const hideCta = () => {
     if (ctaTimer.current) { clearTimeout(ctaTimer.current); ctaTimer.current = null; }
-    ctaShown.current = false; cancelUi(ctaIn); ctaIn.value = 0; setCtaLive(false);
+    ctaShown.current = false; setCtaLive(false);
   };
+  useEffect(() => {
+    if (state !== 'leveling' || ctaShown.current) return;
+    cancelUi(ctaIn); ctaIn.value = 0;
+  }, [state]);
   const showCtaNow = () => {
     if (ctaTimer.current) { clearTimeout(ctaTimer.current); ctaTimer.current = null; }
     ctaShown.current = true; cancelUi(ctaIn); ctaIn.value = 1; setCtaLive(true);
