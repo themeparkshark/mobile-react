@@ -50,6 +50,7 @@ function hooksRuntime() {
     }
   }
   const React = {
+    useContext(ctx) { return ctx.value; },
     useState(init) {
       const inst = current;
       const slot = inst.hooks[inst.i] ??= { v: typeof init === 'function' ? init() : init };
@@ -98,6 +99,7 @@ function hooksRuntime() {
     render(inst);
     return {
       get tree() { return inst.tree; },
+      rerender(next) { inst.props = next; render(inst); },
       unmount() {
         inst.alive = false;
         for (const slot of inst.hooks) if (slot && slot.cleanup) { slot.cleanup(); slot.cleanup = null; }
@@ -487,4 +489,102 @@ test('the ride card share sheets keep their buttons reachable: the backdrop and 
     assert.match(code, /style=\{\w+\.modalContent\} onPress=\{\(\) => \{\}\} accessible=\{false\}>/, file);
     assert.match(code, /style=\{\w+\.modalClose\} accessibilityRole="button" accessibilityLabel="Close">/, file);
   }
+});
+
+test('useGameMusic: a mid-game Music off stops only this game\'s bed and never writes the app-wide Music setting', async () => {
+  const rt = hooksRuntime();
+  const calls = [];
+  const auth = { value: { player: { enabled_music: true } } };
+  const GameAudio = {
+    init: async () => undefined,
+    setMusicEnabled: v => calls.push(['setMusicEnabled', v]),
+    music: {
+      setAppMusicBridge: () => undefined,
+      play: async (bed, fade) => { calls.push(['play', bed, fade]); },
+      switchTo: async bed => { calls.push(['switchTo', bed]); },
+      stop: ms => { calls.push(['stop', ms]); },
+    },
+  };
+  const { useGameMusic } = loadTs('src/gamekit/audio/useGameMusic.ts', {
+    react: rt.React,
+    '../../context/AuthProvider': { AuthContext: auth },
+    '../../context/MusicProvider': { MusicContext: { value: null } },
+    './GameAudio': { GameAudio },
+  });
+  const Game = props => { useGameMusic(props.bed, { at: 'bar', enabled: props.enabled }); return null; };
+  const game = rt.mount(Game, { bed: 'mm_loop_main', enabled: true });
+  await rt.settle();
+  assert.deepEqual(calls, [['play', 'mm_loop_main', 300]], 'the bed starts');
+  calls.length = 0;
+  // The game turns its music off mid-round: its bed fades out, and the app-wide setting is untouched.
+  game.rerender({ bed: 'mm_loop_main', enabled: false });
+  await rt.settle();
+  assert.deepEqual(calls, [['stop', 400]]);
+  // Back on: the bed starts fresh (not a switch on a stopped director).
+  calls.length = 0;
+  game.rerender({ bed: 'mm_loop_main', enabled: true });
+  await rt.settle();
+  assert.deepEqual(calls, [['play', 'mm_loop_main', 300]]);
+  // A bed change while on is a musical switch, not a restart.
+  calls.length = 0;
+  game.rerender({ bed: 'mm_loop_fever', enabled: true });
+  await rt.settle();
+  assert.deepEqual(calls, [['switchTo', 'mm_loop_fever']]);
+  // The player's Music setting off (from Settings) also stops the bed, still without writing the setting.
+  calls.length = 0;
+  auth.value = { player: { enabled_music: false } };
+  game.rerender({ bed: 'mm_loop_fever', enabled: true });
+  await rt.settle();
+  assert.deepEqual(calls, [['stop', 400]]);
+  calls.length = 0;
+  game.unmount();
+  assert.deepEqual(calls, [['stop', 400]], 'leaving the game fades its bed');
+  assert.equal(calls.some(c => c[0] === 'setMusicEnabled'), false);
+});
+
+test('flex card art that is blocked or slow is replaced by its bundled fallback before the share captures, so no slot is ever blank', async () => {
+  const clock = fakeClock();
+  const rt = hooksRuntime();
+  const ctx = { value: null };
+  const art = loadTs('src/share/FlexArtwork.tsx', {
+    react: { ...rt.React, createContext: () => ctx, useMemo: (fn) => fn() },
+    'react/jsx-runtime': { jsx: el, jsxs: el, Fragment: 'Fragment' },
+    'expo-image': { Image: 'Image' },
+  }, { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout });
+  const ready = [];
+  // The readiness the card uses (onReadyChange -> the share's readyRef).
+  const wanted = new Set(); const done = new Set();
+  ctx.value = { register: k => wanted.add(k), ready: k => { done.add(k); ready.push(k); } };
+  const images = tree => find(tree, n => n.type === 'Image');
+  const shown = tree => images(tree).filter(n => ![].concat(n.props.style).some(s => s && s.opacity === 0));
+  const settle = rt.settle;
+
+  // 1. A coin url that never answers (throttled): at FLEX_ART_FALLBACK_MS the plain coin takes the slot.
+  const slow = rt.mount(art.FlexArtwork, { art: 'https://cdn.example/slow-coin.png', fallback: 7, style: { width: 10 } });
+  await settle();
+  assert.equal(shown(slow.tree).length, 0, 'nothing drawn yet, and the card is not ready');
+  await clock.tick(art.FLEX_ART_FALLBACK_MS - 1, settle);
+  assert.equal(shown(slow.tree).length, 0);
+  await clock.tick(1, settle);
+  const fb = shown(slow.tree);
+  assert.equal(fb.length, 1);
+  assert.equal(fb[0].props.source, 7, 'the bundled Ride Coin');
+  fb[0].props.onLoad();
+  assert.equal(done.size, 1, 'the slot counts as drawn once the fallback is on screen');
+
+  // 2. A coin url that fails (blocked): the fallback at once.
+  const blocked = rt.mount(art.FlexArtwork, { art: 'https://blocked.example/coin.png', fallback: 7, style: { width: 10 } });
+  await settle();
+  images(blocked.tree)[0].props.onError();
+  await settle();
+  assert.equal(shown(blocked.tree)[0].props.source, 7);
+
+  // 3. No art at all (a park day with no coin art): the fallback from the first frame.
+  const none = rt.mount(art.FlexArtwork, { art: null, fallback: 7, style: { width: 10 } });
+  await settle();
+  assert.equal(shown(none.tree)[0].props.source, 7);
+
+  // The share waits past the fallback swap before it captures.
+  const host = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/share/ShareStudioHost.tsx'), 'utf8');
+  assert.match(host, /FLEX_CAPTURE_WAIT_MS = FLEX_ART_FALLBACK_MS \+ 2000/);
 });

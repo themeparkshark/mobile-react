@@ -364,6 +364,10 @@ test('Memory Daily (and its SHARE NOW) is dev-only in 1.7.3: no player-facing sc
   const devRoutes = read('src/devRoutes.tsx');
   assert.match(devRoutes, /export const DEV_SCREENS: readonly DevScreen\[\] = __DEV__\s*\?/);
   assert.match(devRoutes, /\{ name: 'MiniGameTester', getComponent: \(\) => require\('\.\/screens\/MiniGameTesterScreen'\)\.default \}/);
+  // The QUICK bonus (and its gold hit punch) is a Time Attack system, and Time Attack is a booth pick too.
+  const engine = read('src/games/memory/engine.ts');
+  assert.deepEqual(engine.split('\n').filter(l => /\bquick: true\b/.test(l)).map(l => l.trim().split(':')[0]), ['timeAttack']);
+  assert.match(menu, /if \(pick\?\.kind === 'timeAttack'\) return <MemoryGame \{\.\.\.props\} mode="timeAttack"/);
   // If the Daily ever ships, its share must go through the gated helper like every other card.
   assert.match(read('src/games/memory/MemoryExtras.tsx'), /await shareFileExternal\(uri, \{ mimeType: 'image\/png', dialogTitle: 'Share your Daily' \}, `Memory Daily \$\{daily\.day\}`\)/);
 });
