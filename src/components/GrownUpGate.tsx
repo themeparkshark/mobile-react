@@ -73,6 +73,10 @@ let open: Promise<boolean> | null = null;
 export const GATE_DISMISS_FALLBACK_MS = 2000;
 /** A gate that iOS refused to present (another modal was in the way) closes as a no, never hangs. */
 export const GATE_SHOW_WATCHDOG_MS = 3000;
+/** How long the kind "Try again in a sec" hint stays up after the gate could not show. */
+export const GATE_HINT_MS = 2200;
+/** The hint a kid sees when the gate could not show, so a tap never does nothing. Exported for tests. */
+export const GATE_RETRY_HINT = 'Try again in a sec';
 
 /** The 30 s rest survives a force-quit. */
 async function loadRest() {
@@ -314,6 +318,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const [more, setMore] = useState(false);
   // The answer while the gate fades out; null while it is up.
   const [closing, setClosing] = useState<boolean | null>(null);
+  // The gate could not show (iOS refused it): a short "Try again in a sec" instead of a silent no.
+  const [hint, setHint] = useState(false);
   const reqRef = useRef<GateRequest | null>(null);
   const answerRef = useRef<boolean | null>(null);
   const shownRef = useRef(false);
@@ -346,10 +352,13 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     return () => {
       hosts = hosts.filter(h => h !== host);
       syncShowGate();
-      // The modal holding it went away: the ask ends as a no, so no button waits forever.
+      // The modal holding it went away: the ask ends (a yes given during the fade still counts),
+      // so no button waits forever and an answered yes is never lost.
       const left = reqRef.current;
+      const ok = answerRef.current === true;
       reqRef.current = null;
-      left?.resolve(false);
+      answerRef.current = null;
+      left?.resolve(ok);
     };
   }, [nested]);
   // The root gate waits behind any open sheet instead of stacking a second <Modal> (ui/modalLayers.ts).
@@ -359,7 +368,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const presenting = !!req && front && closing === null;
   useEffect(() => {
     if (!presenting) return undefined;
-    const t = setTimeout(() => { if (!shownRef.current) close(false); }, GATE_SHOW_WATCHDOG_MS);
+    const t = setTimeout(() => { if (!shownRef.current) { setHint(true); close(false); } }, GATE_SHOW_WATCHDOG_MS);
     return () => clearTimeout(t);
   }, [presenting, req, close]);
   useEffect(() => {
@@ -367,7 +376,21 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     const t = setTimeout(finish, GATE_DISMISS_FALLBACK_MS);
     return () => clearTimeout(t);
   }, [closing, finish]);
-  if (!req || !front) return null;
+  useEffect(() => {
+    if (!hint) return undefined;
+    const t = setTimeout(() => setHint(false), GATE_HINT_MS);
+    return () => clearTimeout(t);
+  }, [hint]);
+  // Not a <Modal>: it draws inside whatever holds this host, so it shows even where the gate could not.
+  const hintPill = hint ? (
+    <View style={styles.hintWrap} pointerEvents="none">
+      <View style={styles.hint} accessible accessibilityLiveRegion="polite" accessibilityLabel={GATE_RETRY_HINT}>
+        <GameIcon name="lock" size={22} />
+        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.hintText}>{GATE_RETRY_HINT}</Text>
+      </View>
+    </View>
+  ) : null;
+  if (!req || !front) return hintPill;
   const resting = req.seed < 0;
   const q = resting ? null : grownUpQuestion(req.seed);
   const why = resting ? null : gateReasonLines(req.reason);
@@ -382,6 +405,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     setTyped(t => (t.length < 3 ? t + k : t));
   };
   return (
+    <>
     <Modal visible={closing === null} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
       onShow={() => { shownRef.current = true; }} onDismiss={finish}>
       <View style={styles.scrim}>
@@ -461,6 +485,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
         )}
       </View>
     </Modal>
+    {hintPill}
+    </>
   );
 }
 
@@ -498,6 +524,10 @@ const styles = StyleSheet.create({
   keyDelText: { fontFamily: undefined, fontSize: 26 },
   cancel: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
   cancelText: { fontFamily: FONT.display, fontSize: 17, color: GATE_COLORS.inkSoft },
+  hintWrap: { position: 'absolute', left: 0, right: 0, bottom: 110, alignItems: 'center' },
+  hint: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 18,
+    backgroundColor: GATE_COLORS.panel, borderWidth: 3, borderColor: GATE_COLORS.border },
+  hintText: { fontFamily: FONT.display, fontSize: 18, color: GATE_COLORS.ink },
 });
 
 // Load the saved rest and miss count as soon as the app starts (best effort).

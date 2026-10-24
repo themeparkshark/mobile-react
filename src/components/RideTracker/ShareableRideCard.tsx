@@ -151,7 +151,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
       const closed = await shareFileExternal(uri, {
         mimeType: 'image/png',
         dialogTitle: `My ${ride.ride_name} experience on Theme Park Shark!`,
-      });
+      }, `${ride.ride_name} Ride Card`);
       if (closed) onShare?.();
     } catch {
       gameAlert('Could not make your card', 'Your ride is saved. Try sharing it again.');

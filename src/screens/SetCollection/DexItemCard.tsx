@@ -72,7 +72,7 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
         await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
         if (!live || !shareRef.current) return;
         const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, ...parkDayCaptureSize(Platform.OS, PixelRatio.get()) });
-        await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your Ride Photo' });
+        await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your Ride Photo' }, 'Ride Photo');
       } catch {
         gameAlert('Your card didn’t get made', 'Your Ride Photo is still saved. Tap Share to try again.', undefined, { icon: 'retry' });
       } finally {

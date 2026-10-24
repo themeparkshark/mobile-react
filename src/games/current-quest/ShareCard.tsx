@@ -40,7 +40,7 @@ export const ShareCard = forwardRef<ShareCardHandle, { data: ShareCardData }>(fu
       try {
         const uri = await shot.current?.capture?.();
         if (uri && (await Sharing.isAvailableAsync())) {
-          return shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: message });
+          return shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: message }, 'Current Quest');
         }
         return (await shareExternal({ message })) !== null;
       } catch {

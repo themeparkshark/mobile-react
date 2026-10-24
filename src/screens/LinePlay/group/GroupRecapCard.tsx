@@ -63,7 +63,7 @@ export default function GroupRecapCard({ group, realMinutes, postedMinutes, part
       }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, ...parkDayCaptureSize(Platform.OS, PixelRatio.get()) });
-      await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your line crew' });
+      await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your line crew' }, 'Line Crew');
     } catch {
       gameAlert('Card not made', 'Your crew results are saved. Try sharing again.', undefined, { icon: 'retry' });
     } finally {

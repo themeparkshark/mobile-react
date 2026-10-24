@@ -135,7 +135,7 @@ export default function RideWrappedScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const uri = await viewShotRef.current?.capture?.();
       if (uri && await Sharing.isAvailableAsync()) {
-        await shareFileExternal(uri, { mimeType: 'image/png' });
+        await shareFileExternal(uri, { mimeType: 'image/png' }, 'My Ride Year');
       }
     } catch (e) {
       console.error('Share error:', e);
