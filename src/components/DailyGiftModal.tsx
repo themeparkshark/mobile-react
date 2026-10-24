@@ -481,15 +481,17 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                   // The same chest art cut into its body and its lid (two clipped copies, no new art), so on a non-coin
                   // day the lid really opens: it hinges back on the pop and light pours out of the gap.
                   <View style={{ width: chestSize, height: chestSize }}>
+                    {phase === 'open' && (
+                      // The dark inside of the chest, behind the body: only the part in the open gap shows (a mouth, not a sticker).
+                      <View pointerEvents="none" style={[styles.chestInside, { left: chestSize * 0.15, width: chestSize * 0.64,
+                        top: chestSize * (LID_CUT - 0.1), height: chestSize * 0.16, borderRadius: chestSize * 0.07 }]} />
+                    )}
                     <View style={[styles.chestBand, { top: chestSize * LID_CUT, width: chestSize, height: chestSize * (1 - LID_CUT) }]}>
                       <Image source={CHEST_CLOSED} style={{ position: 'absolute', top: -chestSize * LID_CUT, width: chestSize, height: chestSize }}
                         contentFit="contain" transition={0} />
                     </View>
                     {phase === 'open' && (
                       <>
-                        {/* The dark inside of the chest, seen through the open gap. */}
-                        <View pointerEvents="none" style={[styles.chestInside, { left: chestSize * 0.16, width: chestSize * 0.6,
-                          top: chestSize * (LID_CUT - 0.05), height: chestSize * 0.1, borderRadius: chestSize * 0.05 }]} />
                         {/* The seam blazes on the pop and keeps glowing: light pours out of the open chest. */}
                         <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 1.05, height: chestSize * 0.34,
                           left: -chestSize * 0.025, top: chestSize * (LID_CUT - 0.2) }, seamStyle]}>
