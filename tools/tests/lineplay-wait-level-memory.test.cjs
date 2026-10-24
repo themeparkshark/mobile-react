@@ -53,19 +53,21 @@ function stage(props) {
     ...props,
   });
 }
-const ribbon = app => app.find(node => node.type === 'Text' && words(node.props.children) === 'LEVEL 3!');
+const ribbon = app => app.find(node => node.type === 'Text' && words(node.props.children) === 'LEVELED UP!');
 const goal = app => app.find(node => node.type === 'Text' && words(node.props.children) === '4');
 
-test('leaving LinePlay and coming back mid-wait still shows LEVEL 3! (remount), never a bare "0 of 6"', () => {
+test('leaving LinePlay and coming back mid-wait still shows LEVELED UP! (remount), never a bare "0 of 6"', () => {
   memory.forgetWaitLevels();
   memory.rememberWaitLevel(1792812047825, 1, 3);
   const first = stage();
   assert.ok(ribbon(first), 'the ribbon shows');
-  assert.equal(goal(first), undefined, 'one level number on the coin: no "4" goal beside LEVEL 3!');
+  assert.equal(goal(first), undefined, 'no "4" goal beside the ribbon');
+  assert.equal(first.find(node => node.type === 'Text' && /LEVEL \d/.test(words(node.props.children))), undefined,
+    'the ribbon has no number: the closed card keeps its numbers to four');
   assert.ok(first.find(node => node.props?.accessibilityLabel?.includes('You leveled it up to Level 3 this wait.')));
   // A fresh mount (LinePlay left and opened again) reads the same wait's mark.
   const again = stage();
-  assert.ok(ribbon(again), 'still LEVEL 3! after a remount');
+  assert.ok(ribbon(again), 'still LEVELED UP! after a remount');
   // Another wait starts clean.
   assert.equal(ribbon(stage({ waitKey: 42 })), undefined);
   // The first new Part lands: the ribbon steps aside for the next goal (an up arrow and "4", no "Lv").
@@ -75,5 +77,23 @@ test('leaving LinePlay and coming back mid-wait still shows LEVEL 3! (remount), 
   assert.equal(again.find(node => node.type === 'Text' && /\bLv\b/.test(words(node.props.children))), undefined);
   // And that sticks for the rest of the wait, across a remount too.
   assert.equal(ribbon(stage({ partsBanked: 1 })), undefined);
+  memory.forgetWaitLevels();
+});
+
+test('the goal pip fades in when it takes the ribbon\'s place, and a wait with no id is never remembered', () => {
+  const fs = require('node:fs');
+  const source = fs.readFileSync('src/screens/LinePlay/components/waitscreen/WaitCoinStage.tsx', 'utf8');
+  // The swap is a soft fade (the ribbon fades out, the pip fades in), only when it really swaps this visit.
+  assert.match(source, /entering=\{reducedMotion \|\| !pipSwapped \? undefined : FadeIn\.delay\(120\)\.duration\(260\)\}/);
+  assert.match(source, /exiting=\{reducedMotion \? undefined : FadeOut\.duration\(180\)\}/);
+  assert.match(source, /setPipSwapped\(true\);/);
+  // Remembered only under a real wait id: no shared 'wait' key that two waits could collide on.
+  assert.match(source, /waitKey != null \? rememberWaitLevel\(waitKey, coin\.id, target\) : \{ level: target, partLanded: false \}/);
+  assert.doesNotMatch(source, /waitKey \?\? 'wait'/);
+  // With no wait id, the swap still happens on screen when a Part lands.
+  memory.forgetWaitLevels();
+  const app = stage({ waitKey: null });
+  assert.equal(ribbon(app), undefined, 'nothing remembered for a null wait');
+  assert.ok(goal(app));
   memory.forgetWaitLevels();
 });

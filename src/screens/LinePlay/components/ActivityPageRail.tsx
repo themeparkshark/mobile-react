@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { borderRadius, spacing } from '../../../design-system';
 import { GameIcon } from '../../../ui';
 import KidText from './KidText';
+import type { PageRailMode } from '../../../services/lineplay/lineLayout';
 
 interface Props {
   readonly index: number;
@@ -17,12 +18,28 @@ interface Props {
   readonly moreAvailable?: boolean;
   readonly morePaused?: boolean;
   readonly onMore?: () => void;
+  /**
+   * 'back' while the page window has stepped aside (an iPhone SE reading Details):
+   * the page buttons would act on a page nobody can see, so the rail is one
+   * "Back to games" button that closes Details.
+   */
+  readonly mode?: PageRailMode;
+  readonly onShowPages?: () => void;
 }
 
 /** Keeps the next playable round visible after a player finishes a queue activity. */
 export default function ActivityPageRail({ index, count, nextLabel, firstLabel = 'Chapter',
   progressText, progressAccessibilityLabel, onFirst, onArcade, arcadePaused = false, onNext,
-  moreAvailable = false, morePaused = false, onMore }: Props) {
+  moreAvailable = false, morePaused = false, onMore, mode = 'pages', onShowPages }: Props) {
+  if (mode === 'back' && onShowPages) {
+    return <View style={styles.rail}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back to the games. Hides the details."
+        onPress={onShowPages} style={({ pressed }) => [styles.next, pressed && styles.pressed]}>
+        <GameIcon name="play" size={26} />
+        <Text style={styles.nextText} numberOfLines={1}>Back to games</Text>
+      </Pressable>
+    </View>;
+  }
   const wrapsToFirst = index + 1 >= count;
   const showMore = wrapsToFirst && moreAvailable && !!onMore;
   return <View style={styles.rail}>
@@ -64,6 +81,7 @@ const styles = StyleSheet.create({
   chapter: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.md,
     borderRadius: borderRadius.md, backgroundColor: '#0875c9' },
   disabled: { opacity: 0.45 },
+  pressed: { transform: [{ scale: 0.97 }] },
   chapterText: { color: '#fff', fontFamily: 'Knockout', fontSize: 15 },
   count: { color: '#075d9f', fontFamily: 'Knockout', fontSize: 14, minWidth: 35,
     textAlign: 'center' },

@@ -52,6 +52,8 @@ export interface ActivitySlotProps {
   readonly onNavigationTurn?: (index: number) => void;
   readonly onNavigationReplay?: () => void;
   readonly onNavigationNext?: () => void;
+  /** Details is open: a page too short for the whole board offers "Tap to play", which closes Details. */
+  readonly onNavigationMakeRoom?: () => void;
   /** Ride-themed dressing for free-play circuit rounds. */
   readonly circuitTheme?: CircuitTheme;
   /** Name of the page after this one, for a circuit's next button. */
@@ -116,6 +118,7 @@ export default function ActivitySlot({
   onNavigationTurn,
   onNavigationReplay,
   onNavigationNext,
+  onNavigationMakeRoom,
   circuitTheme,
   nextLabel,
   bestStars,
@@ -128,11 +131,11 @@ export default function ActivitySlot({
       if (!onNavigationTurn || !onNavigationReplay || !onNavigationNext) return null;
       return <NavigationPanelCard mode="free" theme={circuitTheme} nextLabel={nextLabel} seed={item.seed}
         progress={navigationProgress} completed={completed} paused={paused}
-        onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} />;
+        onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} onMakeRoom={onNavigationMakeRoom} />;
     case 'trivia':
       if (navigationPanel && item.id === `${chapterId}-trivia` && onNavigationTurn && onNavigationReplay && onNavigationNext)
         return <NavigationPanelCard seed={item.seed} progress={navigationProgress} completed={completed} paused={paused}
-          onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} />;
+          onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} onMakeRoom={onNavigationMakeRoom} />;
       return <TriviaSlot rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed} completed={completed} paused={paused} onAnswered={() => onActivityCompleted(item.id)} />;
     case 'lore':
       return <LoreSlot navigator={navigationPanel && item.id === `${chapterId}-field-note`} rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed}

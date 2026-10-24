@@ -133,7 +133,9 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
     <PageScroll fill={FRAME_FILL} contentStyle={compact && styles.contentCompact} onLayout={measure}>
       {/* A short phone (iPhone SE) puts the clue to play first, fully on screen; the mission header follows. */}
       {compact ? <>{playNow}{header}</> : <>{header}{playNow}</>}
-      <Animated.View entering={rise(2)} style={styles.trail}
+      {/* Compact: just the numbered bubbles (names stay in the spoken label), so the row ends whole
+          above the fade instead of small labels dissolving into it. */}
+      <Animated.View entering={rise(2)} style={[styles.trail, compact && styles.trailCompact]}
         accessibilityLabel={`${done} of 3 ${chapter.progressNoun}`}>
         {chapter.missionNames.map((name, index) => {
           const complete = completedIds.has(missionIds[index]);
@@ -141,12 +143,12 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
           return <Pressable key={name} accessibilityRole="button"
             accessibilityLabel={`${complete ? 'Replay' : 'Open'} ${name}`}
             disabled={paused} onPress={() => onChooseMission(missionIds[index])}
-            style={({ pressed }) => [styles.step, current && styles.stepCurrent, complete && styles.stepDone,
+            style={({ pressed }) => [styles.step, compact && styles.stepCompact, current && styles.stepCurrent, complete && styles.stepDone,
               paused && styles.missionPaused, pressed && styles.pressed]}>
             <View style={[styles.stepBadge, complete && styles.stepBadgeDone]}>
               {complete ? <GameIcon name="check" size={22} /> : <Text style={styles.stepNumber}>{index + 1}</Text>}
             </View>
-            <Text style={styles.stepName} numberOfLines={3}>{name}</Text>
+            {!compact && <Text style={styles.stepName} numberOfLines={3}>{name}</Text>}
           </Pressable>;
         })}
       </Animated.View>
@@ -246,6 +248,8 @@ const styles = StyleSheet.create({
   trail: { flexDirection: 'row', gap: 8, marginTop: spacing.md },
   step: { flex: 1, minHeight: 104, alignItems: 'center', padding: 8, borderRadius: 16, borderWidth: 3,
     borderColor: '#ffffff', backgroundColor: '#e7f8ff' },
+  trailCompact: { marginTop: spacing.sm },
+  stepCompact: { minHeight: 0, paddingVertical: 5 },
   stepCurrent: { borderColor: BRAND.gold, backgroundColor: '#fff8d6' },
   stepDone: { backgroundColor: '#e3f7e3', borderColor: '#bfe8c3' },
   stepBadge: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',

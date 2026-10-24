@@ -110,6 +110,10 @@ export function shownRewards(
     : { tracking: session.serverSessionId != null, unavailable: session.rewardUnavailable, ready: ride.lineRewardsReady };
 }
 
+/** Three steps after the preview's level up (step 5), one more Part lands, so a capture shows the ribbon swap to the next goal. */
+export const PREVIEW_PART_AFTER_LEVEL_STEP = 8;
+
 export function previewWaitScreen(step: number): LineWaitScreenSummary {
-  return { coin_asset_id: 1, parts_banked: Math.min(4, 1 + step), in_line_now: 14, wait_ratio: 0.7, wait_ratio_samples: 23 };
+  const parts = step >= PREVIEW_PART_AFTER_LEVEL_STEP ? 5 : Math.min(4, 1 + step);
+  return { coin_asset_id: 1, parts_banked: parts, in_line_now: 14, wait_ratio: 0.7, wait_ratio_samples: 23 };
 }

@@ -105,7 +105,7 @@ test('PLAY NOW is always whole: the page leads with it, shrinks it to one row, o
   assert.match(card, /<GameIcon name="play" size=\{40\} \/>/);
   assert.match(card, /const rise = riseFor\(useUiReducedMotion\(\) \|\| entered\.current\);/, 'a layout switch never replays the entrance');
   const screen = read(SCREEN);
-  assert.match(screen, /const pagesShown = pageWindowShown\(pagesHeight\);/);
+  assert.match(screen, /const pagesShown = pageWindowShown\(pagesHeight, detailsOpen\);/);
   assert.match(screen, /<View style=\{\[styles\.pagesInner, !pagesShown && styles\.pagesHidden\]\}/,
     'hidden, not unmounted: the page and its scroll spot stay put');
   const scroll = read('src/screens/LinePlay/components/PageScroll.tsx');
@@ -134,11 +134,20 @@ test('Details opens smoothly: one commit, the crew row fades and the page window
   assert.match(card, /entering=\{reducedMotion \? undefined : FadeIn\.delay\(100\)\.duration\(180\)\}/);
   const screen = read(SCREEN);
   assert.match(screen, /exiting=\{reducedFx \? undefined : FadeOut\.duration\(140\)\}>\{groupPlay\.strip\}<\/Reanimated\.View>/);
-  // No glide through a square clip (it cut glyphs mid-move): the window takes its new size unseen,
-  // then fades back in once it has its new size (its onLayout, or a timer).
-  assert.doesNotMatch(screen, /LinearTransition/);
-  assert.match(screen, /<Reanimated\.View style=\{\[styles\.pages, pagesFadeStyle\]\}/);
-  assert.match(screen, /pagesFade\.value = 0;\n\s*revealPending\.current = true;/);
+  // No glide through a square clip (it cut glyphs mid-move), and no blink: the window dips to 35%
+  // (never 0), takes its new size inside its own rounded frame, then rises once it has its new size.
+  assert.equal((screen.match(/LinearTransition/g) ?? []).length, 2, 'only the rail glides (import + one use)');
+  assert.match(screen, /<Reanimated\.View style=\{\[styles\.pages, pagesFadeStyle, !pagesShown && \[styles\.pagesAside, \{ top: railBlock \}\]\]\}/);
+  assert.match(screen, /pagesFade\.value = withTiming\(PAGES_DIP_OPACITY, \{ duration: PAGES_DIP_MS \}\);\n\s*revealPending\.current = true;/);
+  assert.doesNotMatch(screen, /pagesFade\.value = 0/, 'never an empty window');
+  assert.doesNotMatch(screen, /withTiming\(0, \{ duration: 0 \}\)/);
+  const m = layout();
+  assert.ok(m.PAGES_DIP_OPACITY >= 0.3 && m.PAGES_DIP_OPACITY < 1);
+  assert.ok(m.PAGES_DIP_MS + m.PAGES_RISE_MS < 220, 'dip plus rise under 220 ms');
+  assert.ok(m.PAGES_DIP_MS + m.PAGES_RISE_FALLBACK_MS + m.PAGES_RISE_MS < 320, 'the fallback rise starts soon too');
+  const scroll = read('src/screens/LinePlay/components/PageScroll.tsx');
+  assert.match(scroll, /clip: \{ flex: 1, borderRadius: borderRadius\.xxl - RIM, overflow: 'hidden' \}/,
+    'the dimmed page is clipped by its own rounded frame, never a square edge');
   assert.match(screen, /onLayout=\{event => \{ setPagesHeight\(Math\.round\(event\.nativeEvent\.layout\.height\)\); revealPages\(\); \}\}/);
   assert.match(screen, /pages: \{ flex: 1 \}/, 'no square overflow clip on the page window');
   assert.match(screen, /onDetailsChange=\{onDetailsChange\}/);
@@ -165,14 +174,92 @@ test('Details reads like the card: big lines with a picture each, and a Marathon
   assert.match(card, /stampCaption\(stamp\.kind\)/);
   assert.match(card, /'An hour in line!'/, 'no lone 1 that reads like a capital I');
   assert.match(card, /<KidText style=\{styles\.detailLineText\}>\{line\}<\/KidText>/, 'numbers in the flagged-1 font');
-  assert.match(card, /<GameIcon name=\{heroDetailIcon\(index\)\} size=\{20\} \/>/);
+  assert.match(card, /<GameIcon name=\{heroDetailIcon\(line\)\} size=\{20\} \/>/);
   assert.match(card, /detailLineText: \{[^}]*fontSize: 15/);
   assert.match(card, /hitSlop=\{\{ top: 8, bottom: 8, left: 12, right: 12 \}\}/, 'Details is a big target');
   assert.match(card, /rotate: expanded \? '-90deg' : '90deg'/, 'an arrow shows it opens and closes');
   assert.doesNotMatch(card, /That is the ride sign/);
-  // The Marathon line uses the same 20 pt icon column as the other lines, caption first, badge after.
-  assert.match(card, /<GameIcon name=\{stampIcon\(stamp\.kind\)\} size=\{20\} \/>\n\s*<KidText style=\{styles\.detailLineText\}>\{stampCaption\(stamp\.kind\)\}<\/KidText>\n\s*<WaitStampBadge/);
+  // One picture and one caption per mark: the medal (or moon) in the icon column, then the words. No badge
+  // repeating it a third time.
+  assert.match(card, /<GameIcon name=\{stampIcon\(stamp\.kind\)\} size=\{20\} \/>\n\s*<KidText style=\{styles\.detailLineText\}>\{stampCaption\(stamp\.kind\)\}<\/KidText>\n\s*<\/View>\)\}/);
+  const hero = card.slice(card.indexOf('function HeroDetails'), card.indexOf('export default function WaitCard'));
+  assert.doesNotMatch(hero, /WaitStampBadge/);
   const kid = loadTs('src/screens/LinePlay/components/KidText.tsx', { react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} }, 'react-native': {} });
   assert.deepEqual(plain(kid.digitRuns('7:21 until your next Ride Part')), [{ text: '7:21', digits: true }, { text: ' until your next Ride Part', digits: false }]);
   assert.deepEqual(plain(kid.digitRuns('CLUE 1 OF 3')).filter(run => run.digits).map(run => run.text), ['1', '3']);
+});
+
+test('an iPhone SE reading Details: no rail button acts on the hidden page; one "Back to games" closes Details', () => {
+  const m = layout();
+  assert.equal(m.pageWindowShown(30, true), false, 'Details open on an SE: the window steps aside');
+  assert.equal(m.pageWindowShown(30, false), true, 'Details closed: the window always shows');
+  assert.equal(m.pageRailMode(true), 'pages'); assert.equal(m.pageRailMode(false), 'back');
+  const { runtime } = require('./helpers/reward-hook-runtime.cjs');
+  const calls = [];
+  const rail = props => runtime('src/screens/LinePlay/components/ActivityPageRail.tsx', {
+    '../../../ui': { GameIcon: 'GameIcon' }, './KidText': { default: 'KidText' },
+    '../../../design-system': { borderRadius: { lg: 16, md: 12 }, spacing: { sm: 8, xs: 4, md: 12, lg: 16 } },
+  }, { index: 1, count: 4, nextLabel: 'Clue 2', progressText: 'CLUE 1/3', onFirst: () => calls.push('first'),
+    onNext: () => calls.push('next'), onMore: () => calls.push('more'), onShowPages: () => calls.push('back'), ...props });
+  const buttons = app => {
+    const out = [];
+    const walk = node => { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(walk);
+      if (node.type === 'Pressable') out.push(node); walk(node.props?.children); };
+    walk(app.tree); return out;
+  };
+  const words = children => children == null || typeof children === 'boolean' ? ''
+    : Array.isArray(children) ? children.map(words).join('')
+      : typeof children === 'object' ? words(children.props?.children) : String(children);
+  const normal = rail({ mode: 'pages' });
+  assert.equal(buttons(normal).length, 2, 'Chapter and Next on a shown page');
+  const hidden = rail({ mode: 'back' });
+  const only = buttons(hidden);
+  assert.equal(only.length, 1, 'while the window is hidden: one button, no Chapter, no Next, no count');
+  assert.equal(words(only[0].props.children), 'Back to games');
+  assert.match(only[0].props.accessibilityLabel, /Hides the details/);
+  only[0].props.onPress();
+  assert.deepEqual(calls, ['back'], 'the tap closes Details; it never pages a window nobody can see');
+  assert.equal(hidden.find(node => node.type === 'KidText'), undefined);
+  const screen = read(SCREEN);
+  assert.match(screen, /mode=\{railMode\} onShowPages=\{closeDetails\}/);
+  assert.match(screen, /const closeDetails = useCallback\(\(\) => onDetailsChange\(false\), \[onDetailsChange\]\);/);
+  assert.match(screen, /detailsOpen=\{detailsOpen\}\n\s*onDetailsChange=\{onDetailsChange\}/, 'the screen owns Details, so it can close it');
+  // No empty hole between Details and the rail: the stepped-aside window leaves the flow under the rail.
+  assert.match(screen, /pagesAside: \{ position: 'absolute', left: 0, right: 0, bottom: 0 \}/);
+  assert.match(screen, /onLayout=\{event => setRailBlock\(Math\.round\(event\.nativeEvent\.layout\.height\)\)\}/);
+  assert.match(screen, /layout=\{reducedFx \? undefined : LinearTransition\.duration\(180\)\}/, 'the rail glides up on the UI thread');
+});
+
+test('Details open on a 17 Pro: the navigation page is one "Tap to play" strip, never a board row under the fade', () => {
+  const m = layout();
+  assert.equal(m.boardFits({ width: 366, height: 149 }, 60), false, '17 Pro reading Details');
+  assert.equal(m.boardFits({ width: 366, height: 227 }, 60), true, '17 Pro, Details closed: the whole board');
+  assert.equal(m.boardFits({ width: 0, height: 0 }, 0), true, 'before layout nothing jumps');
+  const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
+  assert.match(card, /if \(onMakeRoom && !boardFits\(viewport, headerHeight\)\) \{/);
+  assert.match(card, /<PageScroll fill=\{BRAND\.cream\} contentStyle=\{styles\.contentStrip\} onLayout=\{onLayout\} still>/);
+  assert.match(card, />TAP TO PLAY<\/Text>/);
+  const screen = read(SCREEN);
+  assert.match(screen, /onNavigationMakeRoom=\{detailsOpen \? closeDetails : undefined\}/,
+    'only while Details is open; with Details closed the board always shows');
+  const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
+  assert.equal((slot.match(/onMakeRoom=\{onNavigationMakeRoom\}/g) ?? []).length, 2);
+  // A tight page says what to do on the header's top line, so nothing under the board sits in the fade.
+  assert.match(card, /const statusOnTop = tight && !trace\.solved;/);
+  assert.match(card, /\{!statusOnTop && <View style=\{\[styles\.statusRow, tight && styles\.statusRowTight\]\}>/);
+  assert.match(card, /\? 'Tap a tile to turn it\.'/);
+  assert.match(card, /\{firstTap && <GameIcon name="retry" size=\{16\} \/>\}/, 'a turn-arrow picture for kids who cannot read yet');
+});
+
+test('the chapter page in compact mode ends on whole trail bubbles, no small labels in the fade', () => {
+  const card = read('src/screens/LinePlay/components/ChapterCard.tsx');
+  assert.match(card, /\{!compact && <Text style=\{styles\.stepName\} numberOfLines=\{3\}>\{name\}<\/Text>\}/);
+  assert.match(card, /accessibilityLabel=\{`\$\{complete \? 'Replay' : 'Open'\} \$\{name\}`\}/, 'the names stay in the spoken label');
+  assert.match(card, /stepCompact: \{ minHeight: 0, paddingVertical: 5 \}/);
+});
+
+test('the Welcome tip never shows before the wait card is measured', () => {
+  const screen = read(SCREEN);
+  assert.match(screen, /<OneTimeTip id="lineplay_intro" ready=\{lineTipReady && waitCardBottom != null\}/);
+  assert.match(screen, /<OneTimeTip id="first_ride_part" ready=\{lineTipReady && partTipPending && waitCardBottom != null\}/);
 });

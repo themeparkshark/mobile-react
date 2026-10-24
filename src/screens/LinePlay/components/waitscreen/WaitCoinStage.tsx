@@ -12,7 +12,7 @@
  */
 import { memo, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { ZoomIn, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, ZoomIn, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import ShelfCoin from '../../../../components/collection/ShelfCoin';
 import LevelUpBurst from '../../../../components/coin/LevelUpBurst';
 import Crowning from '../../../../components/coin/Crowning';
@@ -67,6 +67,8 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
 
   // A Part landed: spark the ring.
   const [landKey, setLandKey] = useState(0);
+  /** The goal pip just took the ribbon's place (this visit): it fades in, never pops. */
+  const [pipSwapped, setPipSwapped] = useState(false);
   const lastBanked = useRef<number | null>(null);
   useEffect(() => {
     const previous = lastBanked.current;
@@ -74,8 +76,12 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
     if (previous == null || partsBanked <= previous) return;
     // The WaitCard already chimes and taps for a credited Part; the coin only sparks.
     setLandKey(key => key + 1);
-    // The first new Part after a level up: the coin swaps "LEVEL 3!" for its next goal.
-    if (levelMark && !levelMark.partLanded) setLevelMark(markWaitPartLanded(waitKey, coinId));
+    // The first new Part after a level up: the coin swaps "LEVELED UP!" for its next goal.
+    if (levelMark && !levelMark.partLanded) {
+      // No wait id (never expected): the swap still happens on screen, it is just not remembered.
+      setLevelMark(markWaitPartLanded(waitKey, coinId) ?? { ...levelMark, partLanded: true });
+      setPipSwapped(true);
+    }
   }, [partsBanked]);
 
   // Ready to level: one Medium tap the moment it fills, never on every render.
@@ -121,7 +127,8 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
       setBurst(current => ({ fx: plan, key: (current?.key ?? 0) + 1 }));
       setIgniteKey(key => key + 1);
       setRibbon(levelRibbon(target));
-      setLevelMark(rememberWaitLevel(waitKey ?? 'wait', coin.id, target));
+      // Remembered only under a real wait id, so two waits can never share a mark.
+      setLevelMark(waitKey != null ? rememberWaitLevel(waitKey, coin.id, target) : { level: target, partLanded: false });
       timers.current.push(setTimeout(() => setRibbon(null), 2600));
       scale.value = reducedMotion ? 1 : withSequence(withTiming(0.86, { duration: 90 }), withSpring(1, { damping: 6, stiffness: 240 }));
       void AccessibilityInfo.announceForAccessibility(`Coin leveled up. ${levelRibbon(target)}.`);
@@ -177,18 +184,22 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
         </Animated.View>
         {/* One level marker at a time. The ring's goal (an up arrow and "3") is where this fill is going,
             so the chip under the coin only has to say "2 of 4". Right after a level up the coin wears
-            "LEVEL 3!" instead until the next Part lands. Max level shows the crown there. */}
+            "LEVELED UP!" instead until the next Part lands. Max level shows the crown there. */}
         {owned && marker === 'goal' && progress.goalLevel != null && (
-          <View style={styles.goalPip} pointerEvents="none">
+          <Animated.View entering={reducedMotion || !pipSwapped ? undefined : FadeIn.delay(120).duration(260)}
+            style={styles.goalPip} pointerEvents="none">
             <View style={styles.goalArrow}><GameIcon name="arrow" size={11} /></View>
             <Text style={styles.goalText}>{progress.goalLevel}</Text>
-          </View>
+          </Animated.View>
         )}
+        {/* "LEVELED UP!" with no number: the closed card keeps its numbers to four, and the
+            spoken label still says the level. */}
         {owned && marker === 'ribbon' && leveledTo != null && (
-          <Animated.View entering={reducedMotion ? undefined : ZoomIn.springify().damping(12)} style={styles.leveledRibbon}
+          <Animated.View entering={reducedMotion ? undefined : ZoomIn.springify().damping(12)}
+            exiting={reducedMotion ? undefined : FadeOut.duration(180)} style={styles.leveledRibbon}
             pointerEvents="none">
             <GameIcon name="star" size={13} />
-            <Text style={styles.leveledText}>LEVEL {leveledTo}!</Text>
+            <Text style={styles.leveledText}>LEVELED UP!</Text>
           </Animated.View>
         )}
         {owned && level >= 10 && (

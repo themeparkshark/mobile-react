@@ -137,6 +137,24 @@ export function waitSourceHint(input: Pick<WaitEstimateInput, 'postedMinutes' | 
     : `The ride sign said ${shown}.`;
 }
 
+/**
+ * The sign line in Details UNDER THE COIN HERO, where SIGN SAYS already prints the
+ * sign's number: a plain posted sign needs no line at all (the number is said
+ * once on screen). An old sign says so without repeating its number; a fresh
+ * different reading at the line is new, so it is said, written like SIGN SAYS.
+ */
+export function heroSignDetail(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'> & {
+  readonly freshReadingMinutes?: number | null;
+}): string | null {
+  const posted = signMinutes(input);
+  const fresh = input.freshReadingMinutes;
+  if (fresh != null && Number.isFinite(fresh) && fresh > 0 && fresh !== posted) {
+    return `The ride sign now says ${inLineLabel(Math.round(fresh) * 60)}.`;
+  }
+  if (posted == null) return 'No sign time when you started. Games still work.';
+  return input.waitSource === 'last_known' ? 'That sign time is from a while ago.' : null;
+}
+
 export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
   const posted = signMinutes(input);
   const elapsedMinutes = Math.max(0, input.elapsedSeconds) / 60;
@@ -164,15 +182,21 @@ export interface SharksInLine {
   readonly value: string;
   readonly label: string;
   readonly accessibilityLabel: string;
+  /**
+   * The card shows the crowd as 1 to 3 shark pictures, never a number (the closed
+   * card keeps its numbers to the wait, the clock, the Parts count and the
+   * countdown). One: just you. Two: a few. Three: ten or more. The spoken label keeps the count.
+   */
+  readonly sharks: 1 | 2 | 3;
 }
 
 /** Null hides the stat (offline, older server, or the flag off). */
 export function sharksInLine(count: number | null | undefined): SharksInLine | null {
   if (count == null || !Number.isFinite(count) || count < 1) return null;
   const n = Math.round(count);
-  if (n === 1) return { value: '1', label: 'FIRST SHARK HERE', accessibilityLabel: 'You are the first shark in this line right now.' };
+  if (n === 1) return { value: '1', label: 'FIRST SHARK HERE', accessibilityLabel: 'You are the first shark in this line right now.', sharks: 1 };
   const value = n > 999 ? '999+' : String(n);
-  return { value, label: 'SHARKS HERE', accessibilityLabel: `${value} sharks in this line now.` };
+  return { value, label: 'SHARKS HERE', accessibilityLabel: `${value} sharks in this line now.`, sharks: n >= 10 ? 3 : 2 };
 }
 
 /** "23m", "1h 05m". */

@@ -2,7 +2,7 @@
  * WaitCoinHero: the body of the LinePlay wait screen (stream L2). The ride's
  * own coin sits center stage between two quiet stat columns:
  *
- *   60m  SIGN SAYS        (coin, filling)         12  SHARKS HERE
+ *   60m  SIGN SAYS        (coin, filling)    (shark pictures) SHARKS HERE
  *   23m  IN LINE          "2 of 4 Parts"
  *
  * Picture first for a 7-year-old: one wait number (the ride sign's, the one
@@ -74,6 +74,26 @@ function Stat({ value, label, align, accessibilityLabel, icon }: {
   );
 }
 
+/**
+ * How busy the line is, as 1 to 3 shark pictures and a word, never a number: the
+ * closed card keeps its numbers to the wait, the clock, the Parts count and the
+ * countdown. The exact count is in the spoken label.
+ */
+function CrowdStat({ sharks, label, accessibilityLabel, align }: {
+  sharks: 1 | 2 | 3; label: string; accessibilityLabel: string; align: 'left' | 'right';
+}) {
+  return (
+    <View style={[styles.stat, align === 'right' && styles.statRight]} accessible accessibilityLabel={accessibilityLabel}>
+      <View style={[styles.crowdRow, align === 'right' && styles.crowdRowRight]}>
+        {Array.from({ length: sharks }, (_, index) => <View key={index} style={index > 0 && styles.crowdOverlap}>
+          <GameIcon name="shark" size={index === 0 ? 24 : 20} />
+        </View>)}
+      </View>
+      <Text style={[styles.statLabel, align === 'right' && styles.textRight]} numberOfLines={2}>{label}</Text>
+    </View>
+  );
+}
+
 function WaitCoinHero(props: WaitCoinHeroProps) {
   const preview = waitScreenPreviewEnabled();
   const step = usePreviewStep(preview);
@@ -108,8 +128,8 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, elapsedSeconds, p
     accessibilityLabel={estimate.accessibilityLabel} icon="ride" /> : null;
   const inLineStat = <Stat align="left" value={inLineLabel(elapsedSeconds)} label="IN LINE"
     accessibilityLabel={`In line ${inLineLabel(elapsedSeconds)}.`} icon="timer" />;
-  const sharksStat = sharks ? <Stat align="right" value={sharks.value} label={sharks.label}
-    accessibilityLabel={sharks.accessibilityLabel} icon="shark" /> : null;
+  const sharksStat = sharks ? <CrowdStat align="right" sharks={sharks.sharks} label={sharks.label}
+    accessibilityLabel={sharks.accessibilityLabel} /> : null;
 
   // No server rewards: no coin, so no hole for one. One short row of stats.
   if (waitHeroLayout(rewardsOn) === 'strip') {
@@ -152,6 +172,9 @@ const styles = StyleSheet.create({
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   statLabel: { fontFamily: 'Knockout', fontSize: 13, color: '#cdeaff', letterSpacing: 0.4, marginTop: -1 },
   textRight: { textAlign: 'right' },
+  crowdRow: { flexDirection: 'row', alignItems: 'flex-end', height: 26 },
+  crowdRowRight: { justifyContent: 'flex-end' },
+  crowdOverlap: { marginLeft: -6 },
 });
 
 export default memo(WaitCoinHero);

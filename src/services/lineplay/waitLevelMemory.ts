@@ -1,7 +1,7 @@
 /**
  * The level a kid reached on a ride coin during THIS wait. It lives outside the
  * coin's component, so leaving LinePlay and coming back mid-wait (or any
- * remount) still shows "LEVEL 3!" and never a bare "0 of 6" after 90 minutes.
+ * remount) still shows "LEVELED UP!" and never a bare "0 of 6" after 90 minutes.
  * Pure and unit tested (tools/tests/lineplay-wait-screen.test.cjs).
  */
 
@@ -25,6 +25,7 @@ export function waitLevelMark(wait: WaitKey | null | undefined, coinId: number |
   return marks.get(keyFor(wait, coinId)) ?? null;
 }
 
+/** The wait id must be real (never a shared fallback), so two waits can never share a mark. */
 export function rememberWaitLevel(wait: WaitKey, coinId: number, level: number): WaitLevelMark {
   const key = keyFor(wait, coinId);
   const mark: WaitLevelMark = { level, partLanded: false };
@@ -49,7 +50,7 @@ export function forgetWaitLevels(): void {
 
 /**
  * The one level marker the coin wears, never two level numbers at once:
- * the "LEVEL 3!" ribbon right after a level up, until the first new Part lands;
+ * the "LEVELED UP!" ribbon right after a level up, until the first new Part lands;
  * then the next goal ("up arrow 4"). Nothing at max level (the crown sits there).
  */
 export function coinLevelMarker(mark: WaitLevelMark | null, goalLevel: number | null): 'ribbon' | 'goal' | null {

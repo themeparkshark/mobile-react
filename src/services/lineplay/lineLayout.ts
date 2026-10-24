@@ -63,9 +63,32 @@ export const CHAPTER_STRIP = 54;
  */
 export const PAGE_WINDOW_MIN = CHAPTER_STRIP + 3 * 2 + 10 + 4;
 
-export function pageWindowShown(pagesHeight: number): boolean {
+export function pageWindowShown(pagesHeight: number, detailsOpen = true): boolean {
+  // Only Details squeezes the window this far, so with Details closed it always shows.
+  if (!detailsOpen) return true;
   return !(pagesHeight > 0) || pagesHeight >= PAGE_WINDOW_MIN;
 }
+
+/**
+ * The STORY rail while the page window has stepped aside (an iPhone SE reading
+ * Details): its page buttons would act on a page nobody can see, so the rail is
+ * one big "Back to games" button that closes Details and brings PLAY NOW back.
+ */
+export type PageRailMode = 'pages' | 'back';
+export function pageRailMode(pagesShown: boolean): PageRailMode {
+  return pagesShown ? 'pages' : 'back';
+}
+
+/**
+ * Details open or close: the page window dips to this opacity (never to 0, so
+ * no frame shows an empty window), takes its new size, then fades back up.
+ * Dip plus rise stays under 220 ms.
+ */
+export const PAGES_DIP_OPACITY = 0.35;
+export const PAGES_DIP_MS = 60;
+export const PAGES_RISE_MS = 140;
+/** If the window's size did not change (no onLayout), it rises after this. */
+export const PAGES_RISE_FALLBACK_MS = 90;
 
 export function chapterPageFit(viewHeight: number, shortScreen: boolean): ChapterPageFit {
   if (!(viewHeight > 0)) return shortScreen ? 'compact' : 'full';
@@ -123,11 +146,24 @@ export const BOARD_FLOOR = 110;
  * The widest board that fits both the page width (ports stick out 19pt each
  * side) and the height left under the header, or null before layout.
  */
+function boardByHeight(viewport: { width: number; height: number }, headerHeight: number): number {
+  // The whole board sits above the page's bottom fade, so its last row is never hidden.
+  const above = boardTight(viewport.height) ? ABOVE_BOARD.tight : ABOVE_BOARD.roomy;
+  return viewport.height - fadeHeight(viewport.height) - headerHeight - above - 2;
+}
+
 export function boardSideFor(viewport: { width: number; height: number }, headerHeight: number): number | null {
   if (viewport.width <= 0 || viewport.height <= 0) return null;
   const byWidth = viewport.width - (12 + 3) * 2 - (22 + 3) * 2;
-  // The whole board sits above the page's bottom fade, so its last row is never hidden.
-  const above = boardTight(viewport.height) ? ABOVE_BOARD.tight : ABOVE_BOARD.roomy;
-  const byHeight = viewport.height - fadeHeight(viewport.height) - headerHeight - above - 2;
-  return Math.max(BOARD_FLOOR, Math.min(300, byWidth, byHeight));
+  return Math.max(BOARD_FLOOR, Math.min(300, byWidth, boardByHeight(viewport, headerHeight)));
+}
+
+/**
+ * The page is too short for even the smallest whole board (Details is open):
+ * the page shows its header and one "Tap to play" strip instead of a board
+ * with a row peeking under the fade. Before layout it assumes the board fits.
+ */
+export function boardFits(viewport: { width: number; height: number }, headerHeight: number): boolean {
+  if (viewport.width <= 0 || viewport.height <= 0) return true;
+  return boardByHeight(viewport, headerHeight) >= BOARD_FLOOR;
 }

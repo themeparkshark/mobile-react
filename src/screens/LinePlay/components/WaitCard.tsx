@@ -19,7 +19,7 @@ import { GameIcon, type GameIconName } from '../../../ui';
 import type { LineBonusSummary } from '../../../api/endpoints/me/inline-timer/types';
 import { bonusDoneToday, nextBonusSeconds, ringInfoCopy, ringPill, visiblePips,
   type PipState } from '../../../services/lineplay/bonusRounds';
-import { signMinutes, waitSourceHint, waitStamps, type WaitStamp } from '../../../services/lineplay/waitScreen';
+import { heroSignDetail, waitSourceHint, waitStamps, type WaitStamp } from '../../../services/lineplay/waitScreen';
 import WaitStampBadge from './waitscreen/WaitStampBadge';
 
 /** A detail line with its art, never an emoji. */
@@ -74,6 +74,8 @@ export interface WaitCardProps {
   readonly gameOpen?: boolean;
   /** Details opened or closed (a short phone makes room for it). */
   readonly onDetailsChange?: (open: boolean) => void;
+  /** The screen can close Details too ("Back to games"); when given, this is the truth. */
+  readonly detailsOpen?: boolean;
   /**
    * The wait screen body (L2 WaitCoinHero): the ride's coin center stage with
    * the wait stats. Compact mode only; the Part gem and count move into it.
@@ -134,7 +136,8 @@ function fmt(seconds: number): string {
  * listed ahead of time; the status line says so once a kid reaches it.
  */
 export function heroDetailLines(input: {
-  readonly signLine: string;
+  /** Null when SIGN SAYS already prints the sign's number (a plain posted sign). */
+  readonly signLine: string | null;
   readonly sublineInHeadline: boolean;
   readonly subline: string;
   readonly rewardTrackingAvailable: boolean;
@@ -143,7 +146,7 @@ export function heroDetailLines(input: {
 }): readonly string[] {
   const partsLine = !input.sublineInHeadline ? input.subline
     : input.rewardTrackingAvailable && !input.atCap ? 'Stay near the ride to earn more Parts.' : null;
-  return partsLine ? [input.signLine, partsLine] : [input.signLine];
+  return [input.signLine, partsLine].filter((line): line is string => line != null);
 }
 
 /** One short ticket line, in kid words. */
@@ -164,8 +167,8 @@ export function stampIcon(kind: WaitStamp['kind']): GameIconName {
 }
 
 /** The picture beside each Details line: the ride car for the sign's time, the Parts gem for Parts. */
-export function heroDetailIcon(index: number): GameIconName {
-  return index === 0 ? 'ride' : 'parts';
+export function heroDetailIcon(line: string): GameIconName {
+  return /ride sign|sign time/i.test(line) ? 'ride' : 'parts';
 }
 
 function HeroDetails({ stamps, lines, ticket }: {
@@ -174,14 +177,14 @@ function HeroDetails({ stamps, lines, ticket }: {
   return <View style={styles.heroDetails}>
     {stamps.length > 0 && <View style={styles.stampRow} accessible accessibilityLabel={stamps.map(stamp => stamp.kind === 'marathon'
       ? 'Marathon wait: an hour or more in line.' : 'Night wait, after 8 PM.').join(' ')}>
+      {/* One picture and one short caption per mark: the medal or the moon says it once. */}
       {stamps.map(stamp => <View key={stamp.kind} style={styles.detailLine}>
         <GameIcon name={stampIcon(stamp.kind)} size={20} />
         <KidText style={styles.detailLineText}>{stampCaption(stamp.kind)}</KidText>
-        <WaitStampBadge stamp={stamp} />
       </View>)}
     </View>}
-    {lines.map((line, index) => <View key={line} style={styles.detailLine}>
-      <GameIcon name={heroDetailIcon(index)} size={20} />
+    {lines.map(line => <View key={line} style={styles.detailLine}>
+      <GameIcon name={heroDetailIcon(line)} size={20} />
       <KidText style={styles.detailLineText}>{line}</KidText>
     </View>)}
     {ticket && <View style={styles.detailLine}>
@@ -225,9 +228,11 @@ export default function WaitCard({
   bonus = null,
   gameOpen = false,
   onDetailsChange,
+  detailsOpen,
   hero = null,
 }: WaitCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expandedState, setExpanded] = useState(false);
+  const expanded = detailsOpen ?? expandedState;
   const [reducedMotion, setReducedMotion] = useState(false);
   // Details opens and closes in ONE commit: the screen hears about it right here, not in a
   // later effect, so on a short phone the crew row fades out while the lines fade in and the
@@ -442,11 +447,10 @@ export default function WaitCard({
         </Pressable>}
         {expanded && hero && <Reanimated.View entering={reducedMotion ? undefined : FadeIn.delay(100).duration(180)}
           exiting={reducedMotion ? undefined : FadeOut.duration(120)}><HeroDetails stamps={stamps} lines={heroDetailLines({
-          // A fresh, different reading at the line beats the start time; the same number is never said twice.
-          signLine: entranceFresh && entranceWaitMinutes != null
-            && entranceWaitMinutes !== signMinutes({ postedMinutes: postedWaitMinutes, waitSource })
-            ? `The ride sign now says ${entranceWaitMinutes}m.`
-            : waitSourceHint({ postedMinutes: postedWaitMinutes, waitSource }),
+          // SIGN SAYS already prints the sign's number, so a plain sign gets no line here (said once on
+          // screen). A fresh, different reading at the line is new, so it is said, written like SIGN SAYS.
+          signLine: heroSignDetail({ postedMinutes: postedWaitMinutes, waitSource,
+            freshReadingMinutes: entranceFresh ? entranceWaitMinutes : null }),
           sublineInHeadline, subline, rewardTrackingAvailable, atCap, intervalSeconds: interval,
         })} ticket={rewardTrackingAvailable && ticketAvailable !== null
           ? ticketHint(ticketAvailable, verifiedEligibleSeconds, ticketIntervalSeconds) : null} /></Reanimated.View>}

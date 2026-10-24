@@ -66,8 +66,15 @@ test('sharks in line, time in line and Parts this wait', () => {
   const m = model();
   assert.equal(m.sharksInLine(null), null); assert.equal(m.sharksInLine(0), null);
   assert.equal(m.sharksInLine(1).label, 'FIRST SHARK HERE');
-  assert.deepEqual(plain(m.sharksInLine(14)), { value: '14', label: 'SHARKS HERE', accessibilityLabel: '14 sharks in this line now.' });
+  assert.deepEqual(plain(m.sharksInLine(14)), { value: '14', label: 'SHARKS HERE', accessibilityLabel: '14 sharks in this line now.', sharks: 3 });
   assert.equal(m.sharksInLine(4000).value, '999+');
+  // The card shows the crowd as shark pictures, never a number: 1 is you, 2 a few, 3 ten or more.
+  assert.equal(m.sharksInLine(1).sharks, 1); assert.equal(m.sharksInLine(4).sharks, 2); assert.equal(m.sharksInLine(9).sharks, 2);
+  assert.equal(m.sharksInLine(10).sharks, 3);
+  const hero = read(DIR + 'WaitCoinHero.tsx');
+  assert.match(hero, /<CrowdStat align="right" sharks=\{sharks\.sharks\} label=\{sharks\.label\}\n\s*accessibilityLabel=\{sharks\.accessibilityLabel\} \/>/);
+  const crowd = hero.slice(hero.indexOf('function CrowdStat'), hero.indexOf('function WaitCoinHero('));
+  assert.doesNotMatch(crowd, /value/, 'no number printed for the crowd; the spoken label keeps it');
   assert.equal(m.inLineLabel(23 * 60 + 40), '23m'); assert.equal(m.inLineLabel(65 * 60), '1h 05m');
   assert.equal(m.partsThisWait(3, 1), 4); assert.equal(m.partsThisWait(null), 0);
 });
@@ -151,7 +158,8 @@ test('no server rewards: the coin space collapses into one stat strip, no empty 
   assert.doesNotMatch(stage, /WaitStampBadge|levelPipText/);
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(card, /waitStamps\(elapsedSeconds/, 'the marks moved into Details');
-  assert.match(card, /const \[expanded, setExpanded\] = useState\(false\)/, 'fine print is hidden until Details is tapped');
+  assert.match(card, /const \[expandedState, setExpanded\] = useState\(false\);\n\s*const expanded = detailsOpen \?\? expandedState;/,
+    'fine print is hidden until Details is tapped, and the screen can close it ("Back to games")');
   assert.match(card, /\{!hero && <Text style=\{styles\.waitSourceHint\}>/, 'no second copy of IN LINE and the wait under the hero');
 });
 
@@ -229,8 +237,20 @@ test('Details under the coin hero: two short lines at most, one Parts idea, the 
   assert.equal(card.ticketHint(true, 700, 600), 'You get a ticket when this wait ends.');
   const src = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(src, /\{expanded && hero && <Reanimated\.View [^>]*\n[^>]*><HeroDetails/);
-  assert.match(src, /entranceWaitMinutes !== signMinutes\(\{ postedMinutes: postedWaitMinutes, waitSource \}\)/,
+  assert.match(src, /signLine: heroSignDetail\(\{ postedMinutes: postedWaitMinutes, waitSource,\n\s*freshReadingMinutes: entranceFresh \? entranceWaitMinutes : null \}\)/,
     'the sign number already on the card is never repeated in Details');
+  // A plain posted sign: SIGN SAYS prints 35m, so Details has no sign line at all (the number is said once).
+  const m = model();
+  assert.equal(m.heroSignDetail({ postedMinutes: 35, waitSource: 'posted' }), null);
+  assert.deepEqual(plain(card.heroDetailLines({ ...base, signLine: null })), ['Stay near the ride to earn more Parts.']);
+  assert.equal(m.heroSignDetail({ postedMinutes: 35, waitSource: 'posted', freshReadingMinutes: 35 }), null, 'same reading: nothing new');
+  assert.equal(m.heroSignDetail({ postedMinutes: 35, waitSource: 'posted', freshReadingMinutes: 90 }), 'The ride sign now says 1h 30m.',
+    'a new reading is written like SIGN SAYS');
+  assert.equal(m.heroSignDetail({ postedMinutes: 60, waitSource: 'last_known' }), 'That sign time is from a while ago.',
+    'an old sign says so without repeating its number');
+  assert.equal(m.heroSignDetail({ postedMinutes: 35, waitSource: 'estimate' }), 'No sign time when you started. Games still work.');
+  assert.equal(card.heroDetailIcon('That sign time is from a while ago.'), 'ride');
+  assert.equal(card.heroDetailIcon('Stay near the ride to earn more Parts.'), 'parts');
   assert.match(src, /\{expanded && !hero && <>/);
 });
 

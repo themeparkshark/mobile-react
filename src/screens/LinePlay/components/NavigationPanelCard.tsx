@@ -30,7 +30,7 @@ import { circuitThemeFor, type CircuitTheme } from '../../../services/lineplay/c
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 import PageScroll from './PageScroll';
 import KidText from './KidText';
-import { boardSideFor, boardTight } from '../../../services/lineplay/lineLayout';
+import { boardFits, boardSideFor, boardTight } from '../../../services/lineplay/lineLayout';
 
 interface Props {
   readonly seed: number;
@@ -45,6 +45,11 @@ interface Props {
   readonly theme?: CircuitTheme;
   /** Label for the next action in free play, e.g. the next page's name. */
   readonly nextLabel?: string;
+  /**
+   * Details is open. A page too short for the whole board shows one "Tap to play"
+   * strip instead of a board with a row peeking under the fade; the tap closes Details.
+   */
+  readonly onMakeRoom?: () => void;
 }
 
 const SPACE_SHARK = SPACE_NAVIGATOR_ART;
@@ -120,7 +125,7 @@ function TileArt({ mask, turns, lit, depth, relay, flow, reducedMotion }: {
 
 /** A short original fiction puzzle; the server's verified wait still owns every reward. */
 export default function NavigationPanelCard({ seed, progress: saved, completed, paused, onTurn, onNewRound, onNext,
-  mode = 'mission', theme, nextLabel }: Props) {
+  mode = 'mission', theme, nextLabel, onMakeRoom }: Props) {
   const look = theme ?? circuitThemeFor(undefined, true);
   const progress = useMemo(() => saved ?? createNavigationPanelProgress(seed, 0, completed), [seed, saved, completed]);
   const panel = useMemo(() => createNavigationPanel(seed, progress.round), [seed, progress.round]);
@@ -198,7 +203,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   };
 
   const size = panel.size;
-  const kicker = mode === 'mission'
+  const kickerText = mode === 'mission'
     ? `${look.place} · MISSION 1 OF 3`
     : `${look.place} · SIGNAL REPAIR`;
   const status = paused ? 'Paused. Your circuit is saved right where you left it.'
@@ -206,19 +211,45 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
       : hint != null ? 'Turn the gold-edged tile to reconnect the route.'
         : trace.signals === 3 ? `All ${look.relayNoun} linked! Now reach the exit.`
           : trace.signals === 0 && progress.taps === 0
-            ? `Tap tiles to turn them. Link 3 ${look.relayNoun} to the exit.`
+            ? 'Tap a tile to turn it.'
             : `${trace.signals} / 3 ${look.relayNoun} linked · follow the glow`;
 
   // One thumb, one glance: the whole board and both ports fit above the
   // chapter rail. Size the tiles from the height this page really has.
   const tight = boardTight(viewport.height);
   const boardSide = boardSideFor(viewport, headerHeight);
+  // A tight page says what to do in the header's top line (the rail already counts the clue),
+  // so nothing is left under the board for the fade to cut.
+  const statusOnTop = tight && !trace.solved;
+  const kicker = statusOnTop ? status : kickerText;
+  const firstTap = !paused && !trace.solved && hint == null && trace.signals === 0 && progress.taps === 0;
+  const onLayout = (event: { nativeEvent: { layout: { width: number; height: number } } }) => {
+    const { width, height } = event.nativeEvent.layout;
+    if (width !== viewport.width || height !== viewport.height) setViewport({ width, height });
+  };
+
+  // Details open on a page too short for a whole board: one strip, like the chapter's PLAY NOW strip.
+  if (onMakeRoom && !boardFits(viewport, headerHeight)) {
+    return <PageScroll fill={BRAND.cream} contentStyle={styles.contentStrip} onLayout={onLayout} still>
+      <Pressable accessibilityRole="button" onPress={onMakeRoom}
+        accessibilityLabel={`${trace.solved ? look.solvedTitle : look.repairTitle}. Tap to play. Hides the details.`}
+        style={({ pressed }) => [styles.playStrip, pressed && !reducedMotion && styles.pressed]}>
+        <View style={styles.playStripCopy}>
+          <Text style={styles.playStripTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+            {trace.solved ? look.solvedTitle : look.repairTitle}</Text>
+          <View style={styles.relayRow}>
+            {[0, 1, 2].map(slot => <GameIcon key={slot} name="star" size={14}
+              mono={slot < trace.signals ? undefined : '#9db7cf'} />)}
+          </View>
+        </View>
+        <Text style={styles.playStripCta}>TAP TO PLAY</Text>
+        <GameIcon name="play" size={40} />
+      </Pressable>
+    </PageScroll>;
+  }
 
   return <PageScroll ref={scroll} fill={BRAND.cream} contentStyle={[styles.card, tight && styles.cardTight]}
-    onLayout={event => {
-      const { width, height } = event.nativeEvent.layout;
-      if (width !== viewport.width || height !== viewport.height) setViewport({ width, height });
-    }}
+    onLayout={onLayout}
     onContentSizeChange={() => {
       if (!scrollToPayoff.current || !scroll.current) return;
       scrollToPayoff.current = false;
@@ -228,7 +259,11 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
       <LinearGradient colors={[BRAND.blueBright, BRAND.blue]}
         style={[styles.hero, !trace.solved && styles.heroCompact]}>
         <View style={styles.heroCopy}>
-          <KidText style={styles.kicker} numberOfLines={1}>{kicker}</KidText>
+          {statusOnTop ? <View style={styles.statusTop} accessibilityLiveRegion="polite">
+            {firstTap && <GameIcon name="retry" size={16} />}
+            <KidText style={[styles.kicker, styles.kickerStatus]} numberOfLines={1} adjustsFontSizeToFit
+              minimumFontScale={0.8}>{kicker}</KidText>
+          </View> : <KidText style={styles.kicker} numberOfLines={1}>{kicker}</KidText>}
           <View style={styles.titleRow}>
             <Text style={[styles.title, !trace.solved && styles.titleCompact]} numberOfLines={1}>
               {trace.solved ? look.solvedTitle : look.repairTitle}</Text>
@@ -278,7 +313,10 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
         </View>)}
         <ParticleField ref={particles} width={boardWidth} height={boardWidth} style={styles.particles} />
       </View>
-      <Text style={[styles.panelStatus, tight && styles.panelStatusTight]} accessibilityLiveRegion="polite">{status}</Text>
+      {!statusOnTop && <View style={[styles.statusRow, tight && styles.statusRowTight]}>
+        {firstTap && <GameIcon name="retry" size={18} />}
+        <Text style={[styles.panelStatus, tight && styles.panelStatusTight]} accessibilityLiveRegion="polite">{status}</Text>
+      </View>}
     </Animated.View>
 
     {trace.solved ? <Animated.View style={[styles.success, revealStyle]}>
@@ -337,9 +375,22 @@ const styles = StyleSheet.create({
   hintBadge: { position: 'absolute', right: 2, bottom: 2, width: 22, height: 22, borderRadius: 11,
     backgroundColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.navy },
   particles: { position: 'absolute', left: 0, top: 0 },
-  panelStatus: { fontFamily: 'Knockout', color: BRAND.white, fontSize: 15, lineHeight: 19, marginTop: 11,
+  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 11 },
+  statusRowTight: { marginTop: 6 },
+  panelStatus: { flexShrink: 1, fontFamily: 'Knockout', color: BRAND.white, fontSize: 15, lineHeight: 19,
     textAlign: 'center' },
-  panelStatusTight: { fontSize: 14, lineHeight: 17, marginTop: 6 },
+  panelStatusTight: { fontSize: 14, lineHeight: 17 },
+  // A tight page: the status takes the kicker's line in the header (white, easy to read).
+  statusTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  kickerStatus: { flexShrink: 1, color: BRAND.white, fontSize: 14, letterSpacing: 0.2 },
+  // The one-row "Tap to play" strip (Details open on a short page).
+  contentStrip: { flexGrow: 1, justifyContent: 'center', padding: 5, paddingBottom: 5 },
+  playStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingLeft: 12, paddingRight: 4,
+    paddingVertical: 1, borderRadius: 16, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 5,
+    backgroundColor: BRAND.gold },
+  playStripCopy: { flex: 1 },
+  playStripTitle: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 18, lineHeight: 22 },
+  playStripCta: { color: '#7c4200', fontFamily: 'Knockout', fontSize: 14, letterSpacing: 0.8 },
   success: { marginTop: 12, padding: 12, borderWidth: 3, borderColor: BRAND.gold, borderRadius: 18,
     backgroundColor: BRAND.white, alignItems: 'center', gap: 4 },
   starsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, marginBottom: 2 },
