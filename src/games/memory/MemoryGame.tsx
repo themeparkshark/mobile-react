@@ -268,6 +268,19 @@ interface RaceState {
   layout: Layout;
 }
 
+/** What finishRun read from the saved records, for the result card. */
+interface EndExtras {
+  isNewBest: boolean;
+  rewards: RunRewards | null;
+  daily: DailySummary | null;
+  edition: CoinEdition | null;
+  upgraded: boolean;
+  ridePb: number | null;
+  newRidePb: boolean;
+  extra: string[];
+}
+const NO_END_EXTRAS: EndExtras = { isNewBest: false, rewards: null, daily: null, edition: null, upgraded: false, ridePb: null, newRidePb: false, extra: [] };
+
 export default function MemoryGame({
   visible,
   difficulty = 1,
@@ -916,23 +929,158 @@ export default function MemoryGame({
     }
   }, [deck.id, deck.label, deck.symbols.length, taskName]);
 
+  /** The run whose result card is set, and the end watchdog (see armEndWatch). */
+  const endWatch = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resultFor = useRef<Run | null>(null);
+  /**
+   * The end of a run as a result card, built with no waiting: everything the
+   * card shows is passed in. finishRun fills in the saved records (bests,
+   * album, ride edition); the warm-up and the end watchdog pass none, so the
+   * card can never wait on storage.
+   */
+  const showEnd = useCallback((r: Run, won: boolean, x: EndExtras = NO_END_EXTRAS) => {
+    const e = r.eng;
+    const grades = gradesFor(e);
+    const stars = r.mode === 'ride' ? rideStars(e) : r.mode === 'daily' ? dailyStars(e) : r.mode === 'warmup' ? (won ? 3 : 0) : timeAttackStars(r.cleared);
+    const finalScore = e.score;
+    const verdict = r.src.verdict();
+    const perfect = e.status === 'cleared' && e.turns <= perfectOf(e);
+    const chargedMs = Math.round(chargedElapsed(e));
+    const par = r.mode === 'daily' ? fairParFor(e.pairsTotal) : parFor(e.pairsTotal);
+    const numbers: ResultsNumber[] = [];
+    let banner = won ? 'CLEARED!' : memoryLossBanner(e.pairs, e.pairsTotal, e.status === 'out');
+    let tally: MemoryResultsData['tally'] = null;
+    let chipText: string | null = null;
+    let crownHint: string | null = null;
+    if (r.mode === 'ride') {
+      numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
+      if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
+      if (x.ridePb != null && !r.signal) numbers.push({ label: 'BEST', value: `${(x.ridePb / 1000).toFixed(1)}s`, hot: x.newRidePb });
+      if (won) numbers.push({ label: 'SCORE', value: finalScore.toLocaleString('en-US') });
+      // The luck chip contradicts PERFECT!, and it is jargon on a loss.
+      chipText = won && !perfect ? luckyChip(e) : null;
+      if (perfect && won) banner = 'PERFECT!';
+      // Three crowns but not PERFECT (turns): warm banner plus how to get PERFECT, so 100% never reads as "not perfect".
+      else if (won && stars >= 3) {
+        banner = 'AMAZING!';
+        crownHint = `Clear it in ${perfectOf(e)} turns for PERFECT!`;
+      }
+    } else if (r.mode === 'timeAttack') {
+      banner = `BOARD ${e.board}`;
+      tally = { parts: `${r.cleared} BOARDS · CHAIN ${e.maxChain} · ${e.showtimes} SHOWTIME`, total: finalScore };
+      numbers.push({ label: 'BOARDS', value: `${r.cleared}` });
+      numbers.push({ label: 'BEST CHAIN', value: `${e.maxChain}` });
+    } else if (r.mode === 'daily') {
+      banner = won ? 'DAILY DONE' : `OUT ${e.pairs}/${e.pairsTotal}`;
+      numbers.push({ label: 'TURNS', value: `${e.turns}`, hot: won && e.turns <= par });
+      numbers.push({ label: 'PAR', value: `${par}` });
+      numbers.push({ label: 'STRIKES', value: `${e.strikes}/2` });
+    } else if (r.mode === 'warmup') {
+      banner = won ? 'YOU DID IT!' : 'CLEARED!';
+      numbers.push({ label: 'TURNS', value: `${e.turns}` });
+    }
+    const data: MemoryResultsData = {
+      mode: r.mode === 'race' ? 'race' : r.mode,
+      banner,
+      won,
+      recallPct: recallPct(e),
+      edition: x.edition,
+      upgraded: x.upgraded,
+      stars,
+      numbers,
+      tally,
+      chip: chipText,
+      grades: r.mode === 'warmup' ? null : { memory: grades.memory, speed: grades.speed, chain: grades.chain },
+      tip: r.mode === 'warmup' ? 'Remember where you saw each card. That is the whole game.' : grades.tip,
+      newBest: r.mode === 'ride' && !won ? false : x.isNewBest || x.newRidePb,
+      rewards: r.mode === 'warmup' ? null : x.rewards,
+      daily: x.daily,
+      extraRewards: x.extra,
+      againLabel: r.mode === 'ride' ? null : r.mode === 'warmup' ? null : 'PLAY AGAIN',
+      crownHint,
+    };
+    resultFor.current = r;
+    setScore(finalScore);
+    setResultData(data);
+    setResult({
+      score: finalScore,
+      stars,
+      maxCombo: e.maxChain,
+      message: banner,
+      note: grades.tip,
+      meta: {
+        game: 'memory',
+        engine: ENGINE_VERSION,
+        mode: r.mode,
+        score: finalScore,
+        duration: Math.round(e.elapsedMs),
+        charged_ms: chargedMs,
+        signal_mode: r.signal,
+        seed: baseSeed,
+        tryIndex: r.tryIndex,
+        ranked: r.ranked,
+        runIndex: r.runIndex,
+        deck: deck.id,
+        turns: e.turns,
+        pairs: e.pairs,
+        maxCombo: e.maxChain,
+        showtimes: e.showtimes,
+        stars,
+        edition: x.edition,
+        verdict,
+        log: e.log.slice(),
+        walking: walkingRef.current,
+      },
+    });
+  }, [baseSeed, deck.id]);
+
+  /**
+   * A guaranteed end. Once a board is cleared (or a run ends), the result card
+   * must arrive even if a beat timer is lost or a save never answers. This
+   * timer lives outside `later`, so clearTimers can never cancel it.
+   */
+  const armEndWatch = useCallback((r: Run, won: boolean, ms: number) => {
+    if (endWatch.current) clearTimeout(endWatch.current);
+    endWatch.current = setTimeout(() => {
+      endWatch.current = null;
+      if (runRef.current !== r || resultFor.current === r) return;
+      if (!r.ended) {
+        r.ended = true;
+        r.playing = false;
+        GameAudio.music.stop(400);
+      }
+      // A ride win still mints its coin edition, even on the watchdog's card.
+      const edition = r.mode === 'ride' && won ? editionForStars(rideStars(r.eng)) : null;
+      showEnd(r, won, { ...NO_END_EXTRAS, edition });
+    }, ms);
+  }, [showEnd]);
+  useEffect(() => () => { if (endWatch.current) clearTimeout(endWatch.current); }, []);
+
   const finishRun = useCallback((won: boolean) => {
     const r = runRef.current;
     if (!r || r.ended) return;
     r.ended = true;
     r.playing = false;
     const e = r.eng;
-    const grades = gradesFor(e);
     const stars = r.mode === 'ride' ? rideStars(e) : r.mode === 'daily' ? dailyStars(e) : r.mode === 'warmup' ? (won ? 3 : 0) : timeAttackStars(r.cleared);
     const finalScore = e.score;
     setScore(finalScore);
     GameAudio.music.stop(400);
     GameAudio.music.setState('open', 0);
-    const verdict = r.src.verdict();
     const perfect = e.status === 'cleared' && e.turns <= perfectOf(e);
     const chargedMs = Math.round(chargedElapsed(e));
+    const pbKey = r.mode === 'ride' ? 0 : r.mode === 'daily' ? 2 : r.mode === 'warmup' ? 3 : 1;
+    if (r.mode === 'warmup') {
+      // Finn's warm-up card shows nothing that is saved, so it never waits:
+      // the card comes on this frame and the saves run behind it.
+      showEnd(r, won);
+      void savePersonalBest(pbKey, finalScore).catch(() => undefined);
+      void collectRewards(r, won, perfect, stars).catch(() => undefined);
+      return;
+    }
+    // Saves are best effort; if one never answers, the watchdog shows the card anyway.
+    armEndWatch(r, won, 8000);
     void (async () => {
-      const pbKey = r.mode === 'ride' ? 0 : r.mode === 'daily' ? 2 : r.mode === 'warmup' ? 3 : 1;
       // Saving bests and records is on-device and best effort: a storage
       // failure must never leave the player on a dead board with no result.
       const pb = await savePersonalBest(pbKey, finalScore).catch(() => ({ best: finalScore, isNewBest: false }));
@@ -957,40 +1105,7 @@ export default function MemoryGame({
         await pushRankHistory(e.board).catch(() => undefined);
         await saveTaRuns((await loadTaRuns().catch(() => 0)) + 1).catch(() => undefined);
       }
-      if (runRef.current !== r) return;
-      const par = r.mode === 'daily' ? fairParFor(e.pairsTotal) : parFor(e.pairsTotal);
-      const numbers: ResultsNumber[] = [];
-      let banner = won ? 'CLEARED!' : memoryLossBanner(e.pairs, e.pairsTotal, e.status === 'out');
-      let tally: MemoryResultsData['tally'] = null;
-      let chipText: string | null = null;
-      let crownHint: string | null = null;
-      if (r.mode === 'ride') {
-        numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
-        if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
-        if (ridePb != null && !r.signal) numbers.push({ label: 'BEST', value: `${(ridePb / 1000).toFixed(1)}s`, hot: newRidePb });
-        if (won) numbers.push({ label: 'SCORE', value: finalScore.toLocaleString('en-US') });
-        // The luck chip contradicts PERFECT!, and it is jargon on a loss.
-        chipText = won && !perfect ? luckyChip(e) : null;
-        if (perfect && won) banner = 'PERFECT!';
-        // Three crowns but not PERFECT (turns): warm banner plus how to get PERFECT, so 100% never reads as "not perfect".
-        else if (won && stars >= 3) {
-          banner = 'AMAZING!';
-          crownHint = `Clear it in ${perfectOf(e)} turns for PERFECT!`;
-        }
-      } else if (r.mode === 'timeAttack') {
-        banner = `BOARD ${e.board}`;
-        tally = { parts: `${r.cleared} BOARDS · CHAIN ${e.maxChain} · ${e.showtimes} SHOWTIME`, total: finalScore };
-        numbers.push({ label: 'BOARDS', value: `${r.cleared}` });
-        numbers.push({ label: 'BEST CHAIN', value: `${e.maxChain}` });
-      } else if (r.mode === 'daily') {
-        banner = won ? 'DAILY DONE' : `OUT ${e.pairs}/${e.pairsTotal}`;
-        numbers.push({ label: 'TURNS', value: `${e.turns}`, hot: won && e.turns <= par });
-        numbers.push({ label: 'PAR', value: `${par}` });
-        numbers.push({ label: 'STRIKES', value: `${e.strikes}/2` });
-      } else if (r.mode === 'warmup') {
-        banner = won ? 'YOU DID IT!' : 'CLEARED!';
-        numbers.push({ label: 'TURNS', value: `${e.turns}` });
-      }
+      if (runRef.current !== r || resultFor.current === r) return;
       const extra: string[] = [];
       if (upgraded && edition) extra.push(`UPGRADED TO ${edition.toUpperCase()}`);
       if (r.mode === 'timeAttack' || r.mode === 'ride' || r.mode === 'daily') {
@@ -1003,59 +1118,10 @@ export default function MemoryGame({
           // Mastery waits for the next run.
         }
       }
-      const data: MemoryResultsData = {
-        mode: r.mode === 'race' ? 'race' : r.mode,
-        banner,
-        won,
-        recallPct: recallPct(e),
-        edition,
-        upgraded,
-        stars,
-        numbers,
-        tally,
-        chip: chipText,
-        grades: r.mode === 'warmup' ? null : { memory: grades.memory, speed: grades.speed, chain: grades.chain },
-        tip: r.mode === 'warmup' ? 'Remember where you saw each card. That is the whole game.' : grades.tip,
-        newBest: r.mode === 'ride' && !won ? false : pb.isNewBest || newRidePb,
-        rewards: r.mode === 'warmup' ? null : rewards,
-        daily: dailySum,
-        extraRewards: extra,
-        againLabel: r.mode === 'ride' ? null : r.mode === 'warmup' ? null : 'PLAY AGAIN',
-        crownHint,
-      };
-      setResultData(data);
-      setResult({
-        score: finalScore,
-        stars,
-        maxCombo: e.maxChain,
-        message: banner,
-        note: grades.tip,
-        meta: {
-          game: 'memory',
-          engine: ENGINE_VERSION,
-          mode: r.mode,
-          score: finalScore,
-          duration: Math.round(e.elapsedMs),
-          charged_ms: chargedMs,
-          signal_mode: r.signal,
-          seed: baseSeed,
-          tryIndex: r.tryIndex,
-          ranked: r.ranked,
-          runIndex: r.runIndex,
-          deck: deck.id,
-          turns: e.turns,
-          pairs: e.pairs,
-          maxCombo: e.maxChain,
-          showtimes: e.showtimes,
-          stars,
-          edition,
-          verdict,
-          log: e.log.slice(),
-          walking: walkingRef.current,
-        },
-      });
+      if (runRef.current !== r || resultFor.current === r) return;
+      showEnd(r, won, { isNewBest: pb.isNewBest, rewards, daily: dailySum, edition, upgraded, ridePb, newRidePb, extra });
     })();
-  }, [baseSeed, collectRewards, deck.id, rideKey]);
+  }, [armEndWatch, collectRewards, deck.id, deck.label, rideKey, showEnd]);
 
   // ---------------------------------------------------------------------------
   // Board clear (3 beats on the 232ms grid) and the Final Pair
@@ -1973,12 +2039,23 @@ export default function MemoryGame({
             break;
           }
           const m = lastMatch;
+          // The board is clear: the result card is guaranteed from here, even
+          // if a beat timer is lost (see armEndWatch).
+          armEndWatch(r, true, r.mode === 'warmup' ? 1800 : 7000);
           if (r.mode === 'warmup') {
             r.busy = true;
-            later(flipMs + 110, () => {
-              clearBeats(r, g, m ? m.b : 0);
-              later(EIGHTH_MS * 4, () => finishRun(true));
-            });
+            if (reducedMotion) {
+              // Still: the CLEARED sign lands the instant the last pair matches, then the card.
+              awning.current?.sign('CLEARED');
+              GameAudio.play('mm_board_clear');
+              Haptic.success();
+              later(700, () => finishRun(true));
+            } else {
+              later(flipMs + 110, () => {
+                clearBeats(r, g, m ? m.b : 0);
+                later(EIGHTH_MS * 4, () => finishRun(true));
+              });
+            }
           } else if (m) finalPair(m.a, m.b, ev.bonus, ev.secondsLeft);
           else finishRun(true);
           break;
@@ -2007,7 +2084,7 @@ export default function MemoryGame({
       r.moved.clear();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardCleared, calm, camera, clearBeats, deck, endRace, finalPair, finishRun, flags.scoreOnHud, gameNow, later, reducedMotion, sendAttack, send, showTip, syncHud, timeoutScene]);
+  }, [armEndWatch, boardCleared, calm, camera, clearBeats, deck, endRace, finalPair, finishRun, flags.scoreOnHud, gameNow, later, reducedMotion, sendAttack, send, showTip, syncHud, timeoutScene]);
   applyEventsRef.current = applyEvents;
 
   // ---------------------------------------------------------------------------
