@@ -15,8 +15,8 @@ import { TutorialStep, TutorialSequence } from './types';
 const homeOnboardingSteps: TutorialStep[] = [
   {
     id: 'welcome', sequence: 'onboarding',
-    text: "Hey, new shark! I'm Finn. Finds pop up around you, even at home.",
-    subtitle: 'One just landed right next to you. Let’s grab it!',
+    text: "Hi, I'm Finn! Treats pop up near you, even at home.",
+    subtitle: 'One is right next to you!',
     sharkPosition: 'bottom-center', sharkMood: 'waving', nextText: 'Grab it!', delay: 400,
     // A find lands at the middle of the map: Finn stands beside his bubble so the
     // find and its pointing hand stay in view. Every home hello (sniffing, ready,
@@ -177,7 +177,7 @@ export const TUTORIAL_SEQUENCES: Record<TutorialSequence, TutorialStep[]> = {
  */
 const homeNoFindSteps: TutorialStep[] = [{
   ...homeOnboardingSteps[0],
-  text: "Hey, new shark! I'm Finn. Treats pop up around you, even at home.",
+  text: "Hi, I'm Finn! Treats pop up near you, even at home.",
   subtitle: 'Walk around to find one!',
   nextText: 'Let’s hunt!',
 }];
@@ -206,7 +206,7 @@ const guestWelcomeBackSteps = (findReady: boolean): TutorialStep[] => [{
  */
 export const HOME_LOOKING_MS = 3500;
 export const HOME_LOOKING = {
-  text: "Hey, new shark! I'm Finn. Let me sniff out a treat near you!",
+  text: "Hi, I'm Finn! Let me sniff out a treat near you!",
   guestText: 'Let me sniff out your first real treat!',
 } as const;
 const homeLookingSteps = (played: boolean): TutorialStep[] => [{

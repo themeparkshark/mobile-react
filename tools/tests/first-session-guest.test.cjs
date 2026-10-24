@@ -496,10 +496,12 @@ test('warm-up: CLEARED starts the moment the last pair goes, and the sky above t
   assert.match(game, /screens\/explore\/cloud\.png/);
 });
 
-test('first-win card: the ride car and a 56 pt coin sit side by side above the line', () => {
+test('first-win card: the ride car and a 62 pt coin sit side by side above the line, block at the optical centre', () => {
   const results = read('src/games/memory/MemoryResults.tsx');
   assert.match(results, /firstWinPic: \{ flexDirection: 'row'/);
-  assert.match(results, /firstWinCoin: \{ width: 56, height: 56 \}/);
+  assert.match(results, /firstWinCoin: \{ width: 62, height: 62 \}/);
+  assert.match(results, /const lift = finn \* 0\.26;/, 'Finn rises above the card, so the block is shifted down by his overhang');
+  assert.match(results, /styles\.firstWinCard, \{ marginTop: lift \}/);
   assert.doesNotMatch(results, /firstWinCoinSpot: \{ position: 'absolute'/, 'the coin no longer sits on top of the car');
 });
 
@@ -527,4 +529,10 @@ test('Reduce Motion: the sign-in card and the location primer never use an enter
   for (const file of ['src/screens/ExploreScreen/GuestTaste.tsx', 'src/screens/ExploreScreen/PermissionsNotGranted.tsx']) {
     for (const m of read(file).matchAll(/entering=\{([^}]*)\}/g)) assert.match(m[1], /^(reduced|undefined)/, `${file}: ${m[1]}`);
   }
+});
+
+test('home hello: Finn says hi in one short line, the same word (treats) everywhere', () => {
+  const steps = read('src/components/Tutorial/steps.ts');
+  assert.doesNotMatch(steps, /Hey, new shark/);
+  assert.match(steps, /text: "Hi, I'm Finn! Treats pop up near you, even at home\.",\s*subtitle: 'One is right next to you!'/);
 });

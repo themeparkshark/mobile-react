@@ -362,7 +362,10 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
   const coinSt = useAnimatedStyle(() => ({
     transform: [{ translateY: -Math.sin(fly.value * Math.PI) * 10 }, { scale: 1 + fly.value * 0.18 }],
   }));
-  const finn = Math.min(210, win.height * 0.24);
+  const finn = Math.min(232, win.height * 0.26);
+  // Finn rises above the card by 0.62 of his height, which layout does not count, so the
+  // block would sit high with empty sea below. Shift it down to the optical centre.
+  const lift = finn * 0.26;
   return (
     <View style={[styles.wrap, { width: win.width, height: win.height }]}>
       <LinearGradient pointerEvents="none" style={StyleSheet.absoluteFill}
@@ -371,7 +374,7 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
       {reducedMotion ? null : <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         {Array.from({ length: SHOWER }, (_, k) => <ShowerBit key={k} k={k} t={shower} w={win.width} h={win.height} />)}
       </View>}
-      <Animated.View style={[styles.firstWinCard, cardSt]}>
+      <Animated.View style={[styles.firstWinCard, { marginTop: lift }, cardSt]}>
         <View style={[styles.firstWinFinn, { width: finn, height: finn, marginTop: -finn * 0.62 }]} pointerEvents="none">
           {reducedMotion ? null : <Animated.View style={[styles.firstWinRing, { borderRadius: finn / 2 }, ringSt]} />}
           {reducedMotion ? null : <SparkleBurst size={finn * 1.3} delay={120} />}
@@ -657,13 +660,13 @@ const styles = StyleSheet.create({
   // The picture leads (a ride car, then the coin it gives, side by side), the line sits under it.
   firstWinNext: { alignItems: 'center', marginTop: 6, marginBottom: 16 },
   firstWinPic: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
-  firstWinRide: { width: 76, height: 62 },
-  firstWinCoinSpot: { width: 56, height: 56 },
-  firstWinCoin: { width: 56, height: 56 },
+  firstWinRide: { width: 88, height: 72 },
+  firstWinCoinSpot: { width: 62, height: 62 },
+  firstWinCoin: { width: 62, height: 62 },
   firstWinBtnWrap: { alignSelf: 'stretch', alignItems: 'center' },
   // The fingertip (bottom of the hand) lands on the lower right of CONTINUE.
   firstWinHand: { right: 26, bottom: 6 },
-  firstWinNextText: { fontFamily: 'Shark', fontSize: 25, color: MM.navyText },
+  firstWinNextText: { fontFamily: 'Shark', fontSize: 27, color: MM.navyText },
   card: {
     width: '90%', maxWidth: 400, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
     backfaceVisibility: 'hidden',
