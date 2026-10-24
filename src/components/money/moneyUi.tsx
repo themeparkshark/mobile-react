@@ -213,14 +213,16 @@ function TitleCount({ title, still }: { title: string; still: boolean }) {
     tickEvery={1} onTick={() => haptic('tickSelection')} style={s.gotTitle} />;
 }
 
-export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption, action, footer, share, doneLabel }: {
+export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption, action, footer, share, doneLabel, busyLabel }: {
   grants: ShopGrants | null; art: PackArtKey; title?: string; onDone: () => void;
   /** The closing button's words when it does the next thing (e.g. "Open your box"). */
   doneLabel?: string;
   /** A custom picture instead of the pack art (a season item), and one line under the title. */
   picture?: ReactNode; caption?: string;
-  /** A second button, e.g. "Wear it now" for a pin. */
-  action?: { label: string; onPress: () => void };
+  /** A second button, e.g. "Wear it now" for a pin. It is the yellow one; the close word goes quiet under it. */
+  action?: { label: string; onPress: () => void; icon?: GameIconName };
+  /** While something saves ("Putting it on..."): one busy button, no close, and a tap outside does nothing. */
+  busyLabel?: string;
   /** Shown under the caption (e.g. the locked Shark Pass rewards). */
   footer?: ReactNode;
   /** A Share button (FlexShareButton size "reveal"): always directly under the main button, like every reveal. */
@@ -245,9 +247,11 @@ export function GotIt({ grants, art, title = 'You got it!', onDone, picture, cap
   }, [visible, still, burst, spin, playSound]);
   const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
   if (!grants) return null;
+  // Busy: the card waits for the save, so closing it can never skip the result (or its Share).
+  const close = busyLabel ? () => undefined : onDone;
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onDone} statusBarTranslucent>
-      <Pressable style={s.gotScrim} onPress={onDone} accessibilityRole="button" accessibilityLabel={`${title} Tap to continue.`}>
+    <Modal visible transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
+      <Pressable style={s.gotScrim} onPress={close} accessibilityRole="button" accessibilityLabel={busyLabel ? `${title} ${busyLabel}` : `${title} Tap to continue.`}>
         <View style={s.gotStage}>
           {!still && <Animated.Image source={RAYS} style={[s.gotRays, rays]} resizeMode="contain" />}
           <Animated.View entering={still ? undefined : ZoomIn.springify().damping(9).stiffness(160)}>
@@ -263,10 +267,15 @@ export function GotIt({ grants, art, title = 'You got it!', onDone, picture, cap
           {footer}
         </Animated.View>
         <Animated.View entering={still ? undefined : FadeIn.delay(700)} style={{ marginTop: 18, width: 240, gap: 8 }}>
-          {action && <GameButton label={action.label} icon="pin" onPress={action.onPress} />}
-          {action && share && <View style={{ alignItems: 'center' }}>{share}</View>}
-          <GameButton label={doneLabel ?? (action ? 'Later' : 'Awesome')} variant={action && !doneLabel ? 'ghost' : 'primary'} tone="onBlue" onPress={onDone} />
-          {!action && share && <View style={{ alignItems: 'center' }}>{share}</View>}
+          {/* One order on every reveal: the yellow button, Share right under it, the quiet close last. */}
+          {busyLabel ? <GameButton label={busyLabel} icon="pin" loading accessibilityLabel={busyLabel} /> : (
+            <>
+              {action && <GameButton label={action.label} icon={action.icon ?? 'pin'} onPress={action.onPress} />}
+              {action && share && <View style={{ alignItems: 'center' }}>{share}</View>}
+              <GameButton label={doneLabel ?? (action ? 'Later' : 'Awesome')} variant={action ? 'ghost' : 'primary'} tone="onBlue" onPress={onDone} />
+              {!action && share && <View style={{ alignItems: 'center' }}>{share}</View>}
+            </>
+          )}
         </Animated.View>
       </Pressable>
     </Modal>

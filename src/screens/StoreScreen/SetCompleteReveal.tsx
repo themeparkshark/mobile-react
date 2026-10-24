@@ -83,6 +83,9 @@ export function leaveLabel(wornAll: boolean, titleOn: boolean): string {
 }
 
 
+/** How long Share waits for the fresh look after WEAR IT ALL before it turns on anyway. */
+export const REFRESH_WAIT_MS = 4000;
+
 export default function SetCompleteReveal({ reward, set, still, onDone, onShown, bridged = false }: {
   readonly reward: ShopSetReward | null;
   readonly set: ShopSetSummary | null;
@@ -217,7 +220,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
         : Promise.resolve();
       await Promise.all([reward.title ? equipShopTitle(reward.slug) : Promise.resolve(null), look]);
       // Share stays off until the fresh look is back (savingNow), so the picture is the set as worn.
-      await Promise.resolve(refreshPlayer()).catch(() => undefined);
+      // At most REFRESH_WAIT_MS: a refresh that hangs on park Wi-Fi never keeps Share off (it shares previewLook).
+      await Promise.race([Promise.resolve(refreshPlayer()).catch(() => undefined), new Promise(r => setTimeout(r, REFRESH_WAIT_MS))]);
       settle(true);
     } catch { setAll(s => wearAllNext(s, 'fail')); settle(false); }
   };

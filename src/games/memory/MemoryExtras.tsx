@@ -4,7 +4,7 @@
  *   FaceThumb       one face of a deck sheet at any size (shelf, album, chips)
  *   NewChip         NEW CARD / NEW FOIL / NEW STAMP card flips (results rewards row)
  *   ShareBack       the back of the results card: the Wordle-style grid as an
- *                   image (view-shot), shared only on the SHARE NOW tap
+ *                   image (view-shot), shared only on the Share tap
  *   AlbumBody       deck pages with collected, foil and perfect states, ride stamps
  *                   (inline on results; AlbumSheet wraps it for the booth menu)
  *   ChallengeBody   inline friend picker; SEND is the only thing that posts
@@ -17,6 +17,8 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withRepe
 import Svg, { Path } from 'react-native-svg';
 import { captureFlex, openShareSheet } from '../../share/capture';
 import { OFFSCREEN, StoryShareFrame } from '../../share/StoryShareFrame';
+import { ShareFace } from '../../share/FlexShareButton';
+import { FLEX_SIZE } from '../../share/formats';
 import { GameAudio, Haptic } from '../../gamekit';
 import apiClient from '../../api/client';
 import getFriends from '../../api/endpoints/me/friends';
@@ -255,7 +257,10 @@ export function ShareStoryCard({ daily }: { daily: DailySummary }) {
   );
 }
 
-/** The back of the results card: the share grid, SHARE NOW and BACK (6.10). Shared only on the tap. */
+/** The back of the results card: the story picture as it ships, the Share pill and Back (6.10). Shared only on the tap. */
+/** The share preview's size against the real story picture. */
+const PREVIEW_SCALE = 0.5;
+
 export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () => void }) {
   const storyRef = useRef<View>(null);
   const [busy, setBusy] = useState(false);
@@ -274,8 +279,14 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
   };
   return (
     <View style={{ alignItems: 'center', alignSelf: 'stretch' }}>
-      <View style={{ backgroundColor: '#ffffff', borderRadius: 18 }}>
-        <ShareCard daily={daily} />
+      {/* What you see is what you post: the story picture itself, at half size. */}
+      <View style={styles.storyPreview} accessible accessibilityRole="image"
+        accessibilityLabel={`Your share picture: ${daily.recall}% recall`}>
+        <View style={styles.storyPreviewInner} pointerEvents="none">
+          <StoryShareFrame ribbon="MEMORY MATCH!" cta="Play today's deck with me!" campaign="memory">
+            <ShareStoryCard daily={daily} />
+          </StoryShareFrame>
+        </View>
       </View>
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <StoryShareFrame ref={storyRef} ribbon="MEMORY MATCH!" cta="Play today's deck with me!" campaign="memory">
@@ -283,8 +294,10 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
         </StoryShareFrame>
       </View>
       <Text style={styles.sheetHint}>The picture shows how you did. It never shows the cards.</Text>
-      <Pressable style={styles.bigBtn} onPress={share} accessibilityRole="button">
-        {busy ? <ActivityIndicator color={MM.navyText} /> : <Text style={styles.bigBtnText}>SHARE NOW</Text>}
+      {/* The one share pill every reveal uses, then the quiet Back. */}
+      <Pressable onPress={share} disabled={busy} accessibilityRole="button" accessibilityLabel="Share"
+        accessibilityState={{ busy, disabled: busy }} style={({ pressed }) => [{ marginTop: 4 }, pressed && { transform: [{ scale: 0.96 }] }]}>
+        <ShareFace size="reveal" dim={busy} />
       </Pressable>
       <Pressable onPress={onBack} hitSlop={10} accessibilityRole="button"><Text style={styles.sheetClose}>Back</Text></Pressable>
     </View>
@@ -439,6 +452,12 @@ const styles = StyleSheet.create({
   albumSheet: { maxHeight: '88%' },
   sheetTitle: { fontFamily: 'Shark', fontSize: 28, color: MM.navyText, marginBottom: 8 },
   panelTitle: { fontFamily: 'Shark', fontSize: 20, color: MM.navyText, marginBottom: 2 },
+  // The story picture (360x640) shown at half size: the same card that gets shared.
+  storyPreview: { width: FLEX_SIZE.story.width * PREVIEW_SCALE, height: FLEX_SIZE.story.height * PREVIEW_SCALE, borderRadius: 14,
+    overflow: 'hidden', borderWidth: 3, borderColor: MM.ink },
+  storyPreviewInner: { position: 'absolute', width: FLEX_SIZE.story.width, height: FLEX_SIZE.story.height,
+    left: (FLEX_SIZE.story.width * PREVIEW_SCALE - FLEX_SIZE.story.width) / 2, top: (FLEX_SIZE.story.height * PREVIEW_SCALE - FLEX_SIZE.story.height) / 2,
+    transform: [{ scale: PREVIEW_SCALE }] },
   sheetHint: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, textAlign: 'center', marginVertical: 8 },
   sheetClose: { fontFamily: 'Knockout', fontSize: 15, color: MM.ink, marginTop: 10, textDecorationLine: 'underline' },
   bigBtn: { alignSelf: 'stretch', backgroundColor: MM.gold, borderRadius: 16, paddingVertical: 13, alignItems: 'center', borderBottomWidth: 4, borderBottomColor: MM.goldDeep, marginTop: 10, minHeight: 52 },

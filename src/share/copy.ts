@@ -68,6 +68,15 @@ export function cleanName(value: string | null | undefined, max = 34): string {
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 }
 
+/**
+ * A name for a headline line: scrubbed like cleanName, but never cut off with an ellipsis.
+ * Too long for the line means no line at all (the card falls back to its plain stat).
+ */
+export function wholeName(value: string | null | undefined, max = 34): string {
+  const text = cleanName(value, 1000);
+  return text.length > max ? '' : text;
+}
+
 function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
@@ -130,20 +139,24 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
     const pct = ownedBig(owned);
     const found = count(p.setFound);
     const total = count(p.setTotal);
-    const setName = p.setName ? cleanName(p.setName, 22) : '';
+    // Never an ellipsis in the stat: a set name too long for the line is left out.
+    const setName = p.setName ? wholeName(p.setName, 22) : '';
     const progress = total && found ? `${Math.min(found, total)} of ${total}${setName ? ` ${setName}` : ''}` : setName ? `${setName} set` : null;
     const serial = count(p.serial);
     // The rarity word lives on the ribbon and the pill only: the kicker and stat say something new.
     const special = p.goldenHour ? 'Caught in the Golden Hour' : p.dailyRare ? 'The Daily Rare' : serial ? `Limited edition #${serial}` : null;
     const setLine = pct ? progress : total && found ? (setName ? `${setName} set` : null) : progress;
+    // Not a set (a Shark Pass step, a member gift): the line as given, no " set" added.
+    const source = p.sourceLine ? wholeName(p.sourceLine, 30) || null : null;
+    const sourceSub = source && p.sourceSub ? wholeName(noYear(p.sourceSub), 30) || null : null;
     return {
       ribbon: p.goldenHour ? 'GOLDEN HOUR!' : rarity >= 3 ? `${label.toUpperCase()} FIND!` : 'NEW FIND!',
       kicker: rarity >= 3 || p.goldenHour ? 'My New Find' : `My ${label} Find`,
       title: noRarityWord(cleanName(p.itemName), label),
       big: pct ?? (total && found ? `${Math.min(found, total)}/${total}` : null),
       bigLabel: pct ? 'OF PLAYERS HAVE ONE' : total && found ? 'IN THE SET' : null,
-      stat: special ?? setLine ?? 'Added to my collection',
-      sub: special ? setLine : null,
+      stat: special ?? source ?? setLine ?? 'Added to my collection',
+      sub: special ? (source ?? setLine) : source ? sourceSub : null,
       cta: 'Can you find one?',
       frame: p.goldenHour ? 'golden' : RARITY_FRAME[rarity],
       prop: 'magnifier',
@@ -181,7 +194,8 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
       sub: p.title ? `Title earned: ${cleanName(p.title, 24)}` : null,
       cta: 'Can you finish it?',
       frame: 'legendary',
-      prop: 'treasure',
+      // No prop: a chest beside the dressed shark crowded the look (the look is the brag).
+      prop: null,
       rarity: null,
     };
   },

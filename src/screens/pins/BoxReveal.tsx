@@ -672,7 +672,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               <View style={styles.backerHole} />
               {/* The best pin gets the best card: gold foil, limited edition, its number. */}
               {pull.is_chaser && <Animated.View pointerEvents="none" style={[styles.foilSheen, { height: pinSize * 1.8, top: -pinSize * 0.25 }, foilStyle]} />}
-              {pull.is_chaser && <Text maxFontSizeMultiplier={1} style={styles.backerFoilText}>{pull.serial ? `LIMITED \u00b7 #${pull.serial}` : 'LIMITED'}</Text>}
+              {/* The number lives on the pin's stamp and the GOLD CHASER line: the card says LIMITED once. */}
+              {pull.is_chaser && <Text maxFontSizeMultiplier={1} style={styles.backerFoilText}>LIMITED</Text>}
             </Animated.View>
           )}
           {/* The pin is mounted (and its art decoding) from the start, hidden until it rises. */}

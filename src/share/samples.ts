@@ -47,6 +47,11 @@ export const FLEX_SAMPLES: readonly FlexSample[] = [
     setName: 'Snack Stand', badgeUrl: art('snack-stand.webp'), found: 12, total: 12, title: 'Snack Boss', source: 'home_hunt',
     artUrls: ['popcorn-bucket', 'corn-dog', 'pizza-slice', 'nacho-tray', 'turkey-leg'].map(f => art(`${f}.webp`)),
   }),
+  // A shop set: the card's hero is the player's own shark wearing it (FlexCard LookHero).
+  s('set-complete-look', 'set_complete', {
+    setName: 'Spooky Squad', badgeUrl: art('snack-stand.webp'), found: 3, total: 3, source: 'shop',
+    artUrls: ['popcorn-bucket', 'corn-dog', 'pizza-slice'].map(f => art(`${f}.webp`)),
+  }),
   s('boss-win', 'boss_win', { bossName: 'The Kraken', artUrl: require('../../assets/images/boss/kraken.png'), difficulty: 'shark', title: 'Kraken Tamer', mvp: true }),
   s('stamp', 'stamp', { name: 'Wild Legend Finder', artUrl: art('wild-legend-finder.png'), rarity: 'legendary', how: 'Caught 2 different Legendaries', ownedPct: 0.04, artHasShark: true }),
   s('coin-level', 'coin_level', { coinUrl: COINS[1], level: 7, tierName: 'Tidal', tierIndex: 7, timesCollected: 31 }),

@@ -50,7 +50,8 @@ export default function SharePicturesPreviewScreen() {
       <Text style={{ fontFamily: 'Shark', fontSize: 22, color: '#ffffff' }}>Whack-a-Shark</Text>
       <ShareCardButton tiles={TILES} rideName="Sample Ride" score={12840} stars={2} />
       <Text style={{ fontFamily: 'Shark', fontSize: 22, color: '#ffffff' }}>Memory Match</Text>
-      <View style={{ width: '100%', paddingHorizontal: 16 }}>
+      {/* The real card back is cream with a blue rim (MemoryResults cardBack). */}
+      <View style={{ width: '90%', maxWidth: 400, backgroundColor: '#fff8e4', borderRadius: 26, borderWidth: 3, borderColor: '#0B5CAD', padding: 16 }}>
         <ShareBack onBack={() => undefined} daily={{ day: '2026-10-23', ranked: true, cleared: true, turns: 14, pairs: 8, stars: 3, streak: 4,
           verdicts: [2, 2, 1, 2, 0, 2, 1, 2, 2, 1, 2, 2, 0, 2], deckId: 'classic', recall: 86 }} />
       </View>

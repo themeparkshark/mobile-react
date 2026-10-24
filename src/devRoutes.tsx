@@ -50,6 +50,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'RideLogSuccessPreview', getComponent: () => require('./screens/RideLogSuccessPreviewScreen').default },
       { name: 'UiKitGym', getComponent: () => require('./ui/UiKitGym').default },
       { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
+      { name: 'SharkPassRevealPreview', getComponent: () => require('./screens/SharkPassRevealPreviewScreen').default },
       { name: 'FrightIntroPreview', getComponent: () => require('./components/fright/tutorial/FrightIntroPreviewScreen').default },
       { name: 'SecretShopPreview', getComponent: () => require('./screens/StoreScreen/SecretShopPreviewScreen').default },
       { name: 'MoneyPreview', getComponent: () => require('./screens/MoneyPreviewScreen').default },
@@ -126,6 +127,7 @@ export function devInitialRoute(): string | null {
     [!!process.env.EXPO_PUBLIC_FRIGHT_INTRO_PREVIEW, 'FrightIntroPreview'],
     [!!process.env.EXPO_PUBLIC_SECRET_SHOP_PREVIEW, 'SecretShopPreview'],
     [on(process.env.EXPO_PUBLIC_SET_REVEAL_PREVIEW), 'SetRevealPreview'],
+    [on(process.env.EXPO_PUBLIC_SHARKPASS_REVEAL_PREVIEW), 'SharkPassRevealPreview'],
     [on(process.env.EXPO_PUBLIC_NEWS_PREVIEW), 'News'],
   ];
   return table.find(([enabled]) => enabled)?.[1] ?? null;

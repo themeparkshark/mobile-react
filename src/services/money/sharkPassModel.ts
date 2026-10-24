@@ -170,3 +170,49 @@ export function passGain(prev: { season: string; points: number; tier: number } 
   return { gained, stepUp: state.progress.tier > prev.tier ? state.progress.tier : null };
 }
 
+
+/** Where a wear-first reward card is: asking, saving the look, or done (worn, kept, or the save failed). */
+export type WearChoice = null | 'saving' | 'worn' | 'kept' | 'failed';
+
+/** How long "Putting it on..." may take before the card offers Try again (park Wi-Fi can hang). */
+export const WEAR_TIMEOUT_MS = 8000;
+
+/**
+ * The buttons on a wear-first reward card. Bragging never costs the wear: Share shows only after
+ * the choice, sits right under the yellow button, and the close word is always last.
+ * Pure, so the order is unit tested.
+ */
+export function wearFirstButtons(chosen: WearChoice): {
+  readonly action: 'wear' | 'retry' | null;
+  readonly busy: boolean;
+  readonly share: boolean;
+  /** The close word, and whether tapping it is the "keep my look" choice. */
+  readonly doneLabel: string;
+  readonly doneKeeps: boolean;
+} {
+  switch (chosen) {
+    case null: return { action: 'wear', busy: false, share: false, doneLabel: 'Keep my look', doneKeeps: true };
+    case 'saving': return { action: null, busy: true, share: false, doneLabel: 'Done', doneKeeps: false };
+    case 'failed': return { action: 'retry', busy: false, share: true, doneLabel: 'Done', doneKeeps: false };
+    default: return { action: null, busy: false, share: true, doneLabel: 'Done', doneKeeps: false };
+  }
+}
+
+/** The line under the title for each step of the wear-first card. */
+export function wearFirstCaption(chosen: WearChoice, opening: string, frame: boolean): string {
+  switch (chosen) {
+    // Saving: the button says "Putting it on...", so the line keeps the reward's name (no echo).
+    case 'worn': return frame ? 'Your frame shows on your profile now.' : 'Your shark is wearing it now!';
+    case 'kept': return 'It’s in your closet whenever you want it.';
+    case 'failed': return 'That didn’t work. Tap Try again.';
+    default: return opening;
+  }
+}
+
+/** A wear call that hangs (park Wi-Fi) fails after WEAR_TIMEOUT_MS instead of spinning forever. */
+export function withWearTimeout<T>(run: Promise<T>, ms = WEAR_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('wear timed out')), ms);
+    run.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
+  });
+}

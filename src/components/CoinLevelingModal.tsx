@@ -92,6 +92,9 @@ export default function CoinLevelingModal({
   const [featureBusy, setFeatureBusy] = useState(false);
   const featureBusyRef = useRef(false);
   const sheetScroll = useRef<ScrollView>(null);
+  // The short-phone slide happens once per level-up, never on every layout change.
+  const scrolledForSuccess = useRef(false);
+  useEffect(() => { if (state !== 'success') scrolledForSuccess.current = false; }, [state]);
   const [featureError, setFeatureError] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const upgradeBusy = useRef(false);
@@ -432,7 +435,12 @@ export default function CoinLevelingModal({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 14 }}
             // A short phone (iPhone SE): once the level-up shows, slide down so Awesome and Share both fit.
-            onContentSizeChange={() => { if (state === 'success' && SCREEN_H < 740) sheetScroll.current?.scrollToEnd({ animated: !reducedMotion }); }}
+            // Once per level-up (a kid who scrolls back up is never pulled down again), and only as far as Share needs.
+            onContentSizeChange={(_w, h) => {
+              if (state !== 'success' || SCREEN_H >= 740 || scrolledForSuccess.current) return;
+              scrolledForSuccess.current = true;
+              sheetScroll.current?.scrollTo({ y: Math.max(0, h - SCREEN_H * 0.82 + 16), animated: !reducedMotion });
+            }}
           >
             <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 185,
               backgroundColor: '#168AD7', borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }} />
@@ -484,8 +492,8 @@ export default function CoinLevelingModal({
                     : state === 'maxed' ? 'MAX LEVEL REACHED' : 'LEVEL UP YOUR COIN'}
                 </Text>
 
-                {/* ── Level Badge Row (compact) ── */}
-                <View style={{
+                {/* ── Level Badge Row (compact). Not on success: the ribbon already says the level and its name. ── */}
+                {state !== 'success' && <View style={{
                   flexDirection: 'row',
                   alignItems: 'center',
                   marginBottom: 6,
@@ -498,10 +506,10 @@ export default function CoinLevelingModal({
                     textTransform: 'uppercase',
                     letterSpacing: 0.5,
                   }}>
-                    Lv.{state === 'success' ? nextLevel : currentLevel} {state === 'success' ? nextTierName : tierName}
+                    Lv.{currentLevel} {tierName}
                   </Text>
 
-                  {!isMaxLevel && state !== 'success' && (
+                  {!isMaxLevel && (
                     <>
                       <GameIcon name="arrow" size={16} />
                       <Text style={{
@@ -516,7 +524,7 @@ export default function CoinLevelingModal({
                       </Text>
                     </>
                   )}
-                </View>
+                </View>}
 
                 {!!rideCoin.editions?.length && (state === 'preview' || state === 'maxed') && (
                   <TouchableOpacity accessibilityRole="button"
@@ -925,17 +933,11 @@ export default function CoinLevelingModal({
                         textShadowOffset: { width: 2, height: 2 },
                         textShadowRadius: 0,
                       }}>
-                        {nextTierName}!
+                        New look!
                       </Text>
-                      <Text style={{
-                        fontFamily: 'Knockout', fontSize: 14,
-                        color: '#315D7B',
-                        marginTop: 4,
-                      }}>
-                        Your coin evolved to Level {nextLevel}
-                      </Text>
-                      <Text style={{ fontFamily: 'Knockout', fontSize: 14,
-                        color: '#19496B', marginTop: 5, textAlign: 'center' }}>
+                      {/* One line of what changed (the ribbon already names the level): every line says something new. */}
+                      <Text style={{ fontFamily: 'Knockout', fontSize: 15,
+                        color: '#19496B', marginTop: 4, textAlign: 'center' }}>
                         {nextVisualReward}
                       </Text>
 

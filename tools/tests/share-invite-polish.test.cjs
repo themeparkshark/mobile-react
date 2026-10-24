@@ -62,13 +62,20 @@ test('Whack and Memory results share a story-size picture with the link and QR, 
     react: { useCallback: f => f, useRef: v => ({ current: v }), useState: v => [v, () => {}] },
     'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; } },
     'react-native': { StyleSheet: { create: s => s }, Text: 'Text', TouchableOpacity: 'TouchableOpacity', View: 'View' },
-    '../../../share/capture': {}, '../../../share/StoryShareFrame': {},
+    '../../../share/capture': {}, '../../../share/StoryShareFrame': {}, '../../../share/FlexShareButton': {},
   });
   assert.equal(shareText('Space Mountain', 1200, 2), 'I scored 1,200 in Whack-a-Shark. 2 of 3 stars. Can you beat it?');
   const memory = src('src/games/memory/MemoryExtras.tsx');
   assert.match(memory, /captureFlex\(storyRef, 'story'\);\s*await openShareSheet\(uri\);/);
   assert.match(memory, /campaign="memory"/);
   for (const code of [whack, memory]) assert.doesNotMatch(code, /shareFileExternal|captureRef/, 'one share path: gate, then the share sheet');
+  // One share look everywhere: the gold-rimmed pill, and Memory previews the picture that ships.
+  assert.match(whack, /<ShareFace size="reveal" dim=\{busy\} \/>/);
+  assert.match(memory, /<ShareFace size="reveal" dim=\{busy\} \/>/);
+  assert.doesNotMatch(memory, /SHARE NOW/);
+  const back = memory.slice(memory.indexOf('export function ShareBack('), memory.indexOf('// Album'));
+  assert.match(back, /<View style=\{styles\.storyPreviewInner\} pointerEvents="none">\s*<StoryShareFrame ribbon="MEMORY MATCH!"[^>]*>\s*<ShareStoryCard daily=\{daily\} \/>/);
+  assert.doesNotMatch(back, /<ShareCard daily/, 'the sheet never previews a different card');
 });
 
 test('the crew card names sharks by seat, prints no date, and carries the link and QR', () => {
@@ -391,7 +398,7 @@ test('every full-screen reveal uses the one share pill, under its main button', 
   for (const [file, re] of [
     ['src/components/home/HomeHuntResultsModal.tsx', /kind="standings"[^>]*size="reveal"/],
     ['src/components/coin/Crowning.tsx', /kind="crowned"[^>]*size="reveal"/],
-    ['src/screens/SharkPassScreen.tsx', /share=\{[\s\S]{0,200}<FlexShareButton kind="find" surface="sharkpass" size="reveal"/],
+    ['src/screens/SharkPassScreen.tsx', /const landedShareButton = [\s\S]{0,200}<FlexShareButton kind="find" surface="sharkpass" size="reveal"/],
     ['src/components/money/MonthlyGiftCard.tsx', /share=\{[\s\S]{0,80}<FlexShareButton kind="find" surface="vip_gift" size="reveal"/],
   ]) assert.match(src(file), re, file);
   const gotIt = src('src/components/money/moneyUi.tsx');
@@ -442,26 +449,88 @@ test('on a short phone (iPhone SE) the reveals keep Wear, Done and Share on scre
 
 test('Shark Pass: Share shows only after the wear choice, and wearing waits for the fresh look', () => {
   const pass = src('src/screens/SharkPassScreen.tsx');
-  assert.match(pass, /chosen\?: 'saving' \| 'worn' \| 'kept' \| 'failed';/);
   assert.match(pass, /const landedChoice = landedCanShare && !!landedWear;/);
-  // The pill is gated on the choice when there is a wear button.
-  assert.match(pass, /share=\{landedCanShare && isWearable\(landed\.reward\) && \(!landedWear \|\| landed\.chosen === 'worn' \|\| landed\.chosen === 'kept'\) \?/);
-  // "Wear it now" keeps the card open (no setLanded(next) on the shareable path) and waits for the save and refresh.
-  const choice = pass.slice(pass.indexOf('action={landedChoice ?'), pass.indexOf('} }) : landedWear ?'));
-  assert.doesNotMatch(choice, /setLanded\(landed\.next/);
-  assert.match(choice, /chosen: 'saving'/);
-  assert.match(choice, /landedWear!\.run\(\)\.then\(\(\) => setLanded\(cur => same\(cur\) \? \{ \.\.\.cur!, chosen: 'worn'/);
+  // The wearable, shareable card is the wear-first card; the choice lives in WearFirstReward.
+  assert.match(pass, /\{landed && landedChoice \? \(\s*(?:\/\/[^\n]*\n\s*)*<WearFirstReward resetOn=\{landed\}/);
+  assert.match(pass, /wear=\{landedWear!\} frame=\{landed\.reward\.type === 'frame'\}\s*share=\{landedShareButton\} onDone=\{\(\) => setLanded\(landed\.next \?\? null\)\} \/>/);
+  // The plain card only shares a piece with nothing to wear.
+  assert.match(pass, /share=\{landedCanShare && !landedWear \? landedShareButton : undefined\}/);
   assert.match(pass, /run: \(\) => \{ const id = landed\.itemId!; return wearItem\(\{ id \}\)\.then\(\(\) => refreshPlayer\?\.\(\)\); \}/);
-  // The skip is a real choice, not a close: "Keep my look" turns the card into the share step.
-  assert.match(pass, /onDone=\{landedChoice && !landed\.chosen \? \(\) => setLanded\(\{ \.\.\.landed, chosen: 'kept'/);
-  assert.match(pass, /doneLabel=\{landedChoice && !landed\.chosen \? 'Keep my look' : landedChoice \? 'Done' : undefined\}/);
+  const card = src('src/components/money/WearFirstReward.tsx');
+  assert.match(card, /void withWearTimeout\(wear\.run\(\)\)/, 'a hung save turns into Try again');
+  assert.match(card, /onDone=\{b\.doneKeeps \? \(\) => setChosen\('kept'\) : onDone\}/, '"Keep my look" is a choice, not a close');
+  assert.match(card, /share=\{b\.share \? share : undefined\}/);
+});
+
+test('wear-first buttons: Wear it now is yellow, Keep my look is quiet, Share comes only after the choice', () => {
+  const model = loadTs('src/services/money/sharkPassModel.ts', {});
+  const ask = model.wearFirstButtons(null);
+  assert.deepEqual({ ...ask }, { action: 'wear', busy: false, share: false, doneLabel: 'Keep my look', doneKeeps: true });
+  const saving = model.wearFirstButtons('saving');
+  assert.equal(saving.busy, true);
+  assert.equal(saving.share, false);
+  for (const done of ['worn', 'kept']) {
+    const b = model.wearFirstButtons(done);
+    assert.equal(b.share, true, `${done}: Share shows`);
+    assert.equal(b.action, null);
+    assert.equal(b.doneLabel, 'Done');
+    assert.equal(b.doneKeeps, false);
+  }
+  const failed = model.wearFirstButtons('failed');
+  assert.equal(failed.action, 'retry', 'a failed save offers Try again');
+  assert.equal(failed.share, true);
+  assert.equal(model.wearFirstCaption('saving', 'Snowflake Beanie', false), 'Snowflake Beanie', 'the busy button says Putting it on, not the line too');
+  assert.equal(model.wearFirstCaption('worn', 'x', true), 'Your frame shows on your profile now.');
+  assert.equal(model.wearFirstCaption('failed', 'x', false), 'That didn’t work. Tap Try again.');
+  assert.equal(model.wearFirstCaption(null, 'Snowflake Beanie', false), 'Snowflake Beanie');
+  // GotIt: busy means one busy button, no close, and a tap outside does nothing.
+  const got = src('src/components/money/moneyUi.tsx');
+  assert.match(got, /const close = busyLabel \? \(\) => undefined : onDone;/);
+  assert.match(got, /<Modal visible transparent animationType="fade" onRequestClose=\{close\}/);
+  assert.match(got, /<Pressable style=\{s\.gotScrim\} onPress=\{close\}/);
+  assert.match(got, /\{busyLabel \? <GameButton label=\{busyLabel\} icon="pin" loading/);
+  // With a yellow action the close word is always the quiet ghost under Share.
+  assert.match(got, /variant=\{action \? 'ghost' : 'primary'\}/);
+});
+
+test('a hung wear call fails after the timeout instead of spinning forever', async () => {
+  const model = loadTs('src/services/money/sharkPassModel.ts', {});
+  await assert.rejects(model.withWearTimeout(new Promise(() => {}), 20), /timed out/);
+  assert.equal(await model.withWearTimeout(Promise.resolve(7), 20), 7);
+  assert.equal(model.WEAR_TIMEOUT_MS, 8000);
+});
+
+test('share stat for a piece that is not in a set: the line as given, no " set", never an ellipsis', () => {
+  const { flexCopy } = loadTs('src/share/copy.ts', {});
+  const pass = flexCopy('find', { itemName: 'Snowflake Beanie', artUrl: 'x', rarity: 4, sourceLine: 'Shark Pass · Step 12', sourceSub: 'Frosty Fun Winter Wonderland' });
+  assert.equal(pass.stat, 'Shark Pass · Step 12');
+  assert.equal(pass.sub, 'Frosty Fun Winter Wonderland');
+  const longSeason = flexCopy('find', { itemName: 'Snowflake Beanie', artUrl: 'x', rarity: 4, sourceLine: 'Shark Pass · Step 4', sourceSub: 'The Super Spooky Halloween Season Spectacular' });
+  assert.equal(longSeason.stat, 'Shark Pass · Step 4');
+  assert.equal(longSeason.sub, null, 'a season name too long for the line is dropped, not cut off');
+  const vip = flexCopy('find', { itemName: 'Pumpkin Patch Pin', artUrl: 'x', rarity: 4, sourceLine: 'October member pin' });
+  assert.equal(vip.stat, 'October member pin');
+  assert.equal(vip.sub, null);
+  // An old-style long set name never reaches the stat with an ellipsis or a stray " set".
+  const oldStyle = flexCopy('find', { itemName: 'Snowflake Beanie', artUrl: 'x', rarity: 4, setName: 'Spooky Season · Step 4 of the pass' });
+  assert.equal(oldStyle.stat, 'Added to my collection');
+  for (const c of [pass, longSeason, vip, oldStyle]) {
+    assert.doesNotMatch([c.stat, c.sub].filter(Boolean).join(' '), /…/);
+  }
+  assert.match(src('src/components/money/MonthlyGiftCard.tsx'), /sourceLine: `\$\{monthName\(gift\.month, false\)\} member pin`/);
+  const shark = src('src/screens/SharkPassScreen.tsx');
+  assert.match(shark, /sourceLine: landed\.step \? `Shark Pass · \$\{stepLabel\(landed\.step\)\}` : 'Shark Pass', sourceSub: season\?\.title/);
+  assert.match(shark, /itemId, frameKey, step: tier\.tier,/, 'the step is the claimed one, not the current one');
+  assert.doesNotMatch(shark + src('src/components/money/MonthlyGiftCard.tsx'), /setName: `/);
 });
 
 test('Set Complete shares the shark wearing the set, after the fresh look is back', () => {
   const set = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
   assert.match(set, /const shareLook = useMemo\(\(\) => previewLook\(player\?\.inventory, pieces\.map\(asWearable\), 'player'\)\?\.look \?\? null/);
   assert.match(set, /inventory: shareLook \?\? undefined \}\} \/>/);
-  assert.match(set, /await Promise\.resolve\(refreshPlayer\(\)\)\.catch\(\(\) => undefined\);\s*settle\(true\);/);
+  assert.match(set, /await Promise\.race\(\[Promise\.resolve\(refreshPlayer\(\)\)\.catch\(\(\) => undefined\), new Promise\(r => setTimeout\(r, REFRESH_WAIT_MS\)\)\]\);\s*settle\(true\);/,
+    'a hung refresh never keeps Share off');
+  assert.match(set, /export const REFRESH_WAIT_MS = 4000;/);
   // No level numbers from the server: the XP only, never an empty "LV" ring.
   assert.match(set, /\{reward\.xp > 0 && !xp && \(/);
   assert.match(set, /\{reward\.xp > 0 && !!xp && \(/);
@@ -473,7 +542,7 @@ test('a find card says its rarity once on the ribbon and pill; the kicker and st
   assert.match(find, /kicker: rarity >= 3 \|\| p\.goldenHour \? 'My New Find' : `My \$\{label\} Find`/);
   assert.doesNotMatch(find, /`A \$\{label\} find`/, 'no "A Legendary find" stat');
   assert.match(find, /serial \? `Limited edition #\$\{serial\}`/);
-  assert.match(find, /stat: special \?\? setLine \?\? 'Added to my collection'/);
+  assert.match(find, /stat: special \?\? source \?\? setLine \?\? 'Added to my collection'/);
   assert.match(src('src/screens/pins/BoxReveal.tsx'), /serial: sharePull\.is_chaser \? sharePull\.serial : null/);
   const { flexCopy } = loadTs('src/share/copy.ts', {});
   const chaser = flexCopy('find', { itemName: 'Magic Hat Pin', artUrl: 'x', rarity: 5, serial: 12 });
@@ -504,5 +573,47 @@ test('the coin level-up uses the same labeled Share pill, under its main button'
   assert.match(coin, /<YellowButton text="Awesome!" onPress=\{handleClose\} \/>\s*\{\/\*[\s\S]*?\*\/\}\s*\{nextLevel >= 5 && nextLevel < 10 && \(\s*<FlexShareButton kind="coin_level" surface="coin_sheet" size="md"/);
   assert.doesNotMatch(coin, /size="sm" caption style=\{\{ position: 'absolute'/);
   // On a short phone (iPhone SE) the sheet slides down after the level-up so Awesome and Share both show.
-  assert.match(coin, /onContentSizeChange=\{\(\) => \{ if \(state === 'success' && SCREEN_H < 740\) sheetScroll\.current\?\.scrollToEnd\(/);
+  assert.match(coin, /if \(state !== 'success' \|\| SCREEN_H >= 740 \|\| scrolledForSuccess\.current\) return;\s*scrolledForSuccess\.current = true;/, 'slides once per level-up');
+  assert.doesNotMatch(coin, /scrollToEnd/, 'never yanks a kid who scrolled up back down');
+  // Every line says something new: the ribbon names the level; the card says what changed.
+  assert.doesNotMatch(coin, /Your coin evolved to Level/);
+  assert.match(coin, /\{state !== 'success' && <View style=\{\{/);
+});
+
+test('every reveal line says something new: the box says the serial twice, not three times', () => {
+  const box = src('src/screens/pins/BoxReveal.tsx');
+  assert.doesNotMatch(box, /LIMITED \\u00b7 #/);
+  assert.match(box, /style=\{styles\.backerFoilText\}>LIMITED<\/Text>/);
+  assert.match(box, /GOLD CHASER \{serialLabel\(pull\.serial\)\}/);
+});
+
+test('one share order on every reveal: the yellow button, Share right under it, the quiet close last', () => {
+  // Box: the one yellow button (Next box / Done), then Share.
+  const box = src('src/screens/pins/BoxReveal.tsx');
+  assert.match(box, /icon=\{index < pulls\.length - 1 \? 'gift' : 'check'\} onPress=\{next\} \/>\s*\{sharePull && !choosing && \(\s*<FlexShareButton/);
+  // Set Complete: WEAR IT ALL, then Share, then the leave button.
+  const set = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  const cta = set.indexOf('<ShopCta label={allCopy.label}');
+  const share = set.indexOf('<FlexShareButton kind="set_complete"');
+  const leave = set.indexOf('onPress={() => leave(true)}');
+  assert.ok(cta > 0 && cta < share && share < leave, 'Set Complete order');
+  // Coin: Awesome!, then Share.
+  const coin = src('src/components/CoinLevelingModal.tsx');
+  assert.ok(coin.indexOf('<YellowButton text="Awesome!"') < coin.indexOf('<FlexShareButton kind="coin_level"'));
+  // GotIt (Shark Pass, VIP gift): the action, Share, the close; or the close, then Share.
+  const got = src('src/components/money/moneyUi.tsx');
+  assert.match(got, /\{action && <GameButton[^\n]*\/>\}\s*\{action && share && <View style=\{\{ alignItems: 'center' \}\}>\{share\}<\/View>\}\s*<GameButton label=\{doneLabel/);
+  assert.match(got, /onPress=\{onDone\} \/>\s*\{!action && share && <View/);
+});
+
+test('the shop set picture is the dressed shark, no prop and no medallion', () => {
+  const card = src('src/share/FlexCard.tsx');
+  assert.match(card, /look: isLookSet\(kind, payload\) && !!shark\?\.skin_item/);
+  assert.match(card, /export const LOOK_SHARK_H = 226;/);
+  assert.match(card, /<FlexShark inventory=\{inventory\} height=\{sharkH\} prop=\{null\} \/>/);
+  assert.match(card, /\{look \? <LookHero[^\n]*sharkH=\{LOOK_SHARK_H\}/);
+  const { flexCopy } = loadTs('src/share/copy.ts', {});
+  const set = flexCopy('set_complete', { setName: 'Spooky Squad', badgeUrl: 'x', found: 3, total: 3, source: 'shop' });
+  assert.equal(set.prop, null, 'no treasure chest beside the look');
+  assert.equal(set.kicker, 'My Complete Look');
 });

@@ -21,13 +21,13 @@ import type { InventoryType } from '../models/inventory-type';
 import { flexCopy } from './copy';
 import { ArtReadinessProvider, FlexArtwork } from './FlexArtwork';
 import { FRAMES, RARITY_RAMP, type FlexFrame } from './frames';
-import { FlexHero } from './FlexHero';
+import { FlexHero, HERO_ART, Panel } from './FlexHero';
 import { FlexShark, SHARK_ASPECT } from './FlexShark';
 import { FLEX_SIZE } from './formats';
 import { SHARE_LINK_DISPLAY } from './link';
 import { Outlined } from './Outlined';
 import { QR_BY_KIND } from './qr';
-import type { FlexCopy, FlexFormat, FlexKind, FlexPayload, FlexRarity } from './types';
+import type { FlexCopy, FlexFormat, FlexKind, FlexPayload, FlexPayloads, FlexRarity } from './types';
 
 export { FLEX_EXPORT, FLEX_SIZE } from './formats';
 
@@ -64,7 +64,8 @@ export const FlexCard = forwardRef<View, FlexCardProps>(function FlexCard({ kind
   const frame = FRAMES[copy.frame];
   const shark = payload.inventory ?? inventory;
   const size = FLEX_SIZE[format];
-  const props: LayoutProps = { kind, payload, copy, frame, showShark: !copy.hideShark, inventory: shark, motion: motion ?? {} };
+  const props: LayoutProps = { kind, payload, copy, frame, showShark: !copy.hideShark, inventory: shark, motion: motion ?? {},
+    look: isLookSet(kind, payload) && !!shark?.skin_item };
   return (
     <ArtReadinessProvider onReadyChange={onReadyChange}>
       <View ref={ref} collapsable={false} accessible accessibilityRole="image" accessibilityLabel={copy.a11y}
@@ -86,19 +87,64 @@ interface LayoutProps {
   /** The player's look. */
   readonly inventory: InventoryType | null | undefined;
   readonly motion: FlexCardMotion;
+  /** A finished shop set worn by the shark: the dressed shark is the hero, the pieces sit beside it. */
+  readonly look: boolean;
+}
+
+/** A shop set ("My Complete Look"): the card is about the shark wearing it. Exported for tests. */
+export function isLookSet(kind: FlexKind, payload: FlexPayload): boolean {
+  return kind === 'set_complete' && (payload as FlexPayloads['set_complete']).source === 'shop';
+}
+
+/**
+ * The look card's shark: about half the card's width, the biggest thing on the card. The paper
+ * canvas has empty space above and below the shark, so LOOK_BLEED of it may hang into the margins.
+ */
+export const LOOK_SHARK_H = 226;
+const LOOK_BLEED = 0.13;
+
+/**
+ * "My Complete Look": the dressed shark big in the middle, the set's pieces as a small column of
+ * tiles beside it, and the giant "3/3" as a sticker. No medallion, no prop: the look is the brag.
+ */
+function LookHero({ payload, copy, frame, inventory, motion, sharkH, tile }: {
+  readonly payload: FlexPayload; readonly copy: FlexCopy; readonly frame: FlexFrame; readonly inventory: InventoryType | null | undefined;
+  readonly motion: FlexCardMotion; readonly sharkH: number; readonly tile: number;
+}) {
+  const arts = ((payload as FlexPayloads['set_complete']).artUrls ?? []).slice(0, 4);
+  return (
+    <View style={styles.lookRow}>
+      <View style={[styles.lookTiles, { width: tile, gap: Math.round(tile * 0.15) }]}>
+        {arts.map((art, i) => (
+          <Panel key={i} size={tile} colors={['#ffffff', '#fff6dc']} lip="#d9b25a" rim={frame.rim === '#ffffff' ? '#ffcf3b' : frame.rim} radius={tile * 0.22}>
+            <FlexArtwork id={`look${i}`} art={art} fallback={HERO_ART.gift} style={{ width: tile * 0.74, height: tile * 0.74 }} />
+          </Panel>
+        ))}
+      </View>
+      <Animated.View style={[{ width: sharkH * SHARK_ASPECT, height: sharkH, marginVertical: -sharkH * LOOK_BLEED / 2 }, motion.sharkStyle]}>
+        <FlexShark inventory={inventory} height={sharkH} prop={null} />
+      </Animated.View>
+      {!!copy.big && (
+        <View style={[styles.lookBigCol, { width: tile + 18 }]}>
+          <BigNumber copy={copy} frame={frame} size={44} width={tile + 40} text={motion.bigText} labelSide="bottom" inline style={[styles.lookBig, motion.bigStyle]} />
+        </View>
+      )}
+    </View>
+  );
 }
 
 /** Story: hero box, giant number and shark sizes (pt). The shark is ~38% of the card's width. */
 export const STORY_HERO = 146;
 export const STORY_SHARK_H = 170;
 
-function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion }: LayoutProps) {
+function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion, look }: LayoutProps) {
   return (
     <>
       <StoryBands frame={frame} />
       <View style={styles.storyBody}>
         <Ribbon text={copy.ribbon} width={256} />
         <View style={styles.storyHero}>
+          {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={LOOK_SHARK_H} tile={44} /> : (
           <View style={[styles.storyHeroRow, !showShark && { justifyContent: 'center' }]}>
             <Animated.View style={[{ width: STORY_HERO, height: STORY_HERO }, motion.heroStyle]}>
               <FlexHero kind={kind} payload={payload} frame={frame} size={STORY_HERO} inventory={inventory} />
@@ -111,6 +157,7 @@ function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion 
               </Animated.View>
             )}
           </View>
+          )}
         </View>
         <View style={styles.words}>
           <Text style={[styles.kicker, { color: frame.ink }]} numberOfLines={1}>{copy.kicker}</Text>
@@ -157,7 +204,7 @@ const StoryBands = memo(function StoryBands({ frame }: { readonly frame: FlexFra
 
 const BAND_STAR = require('../../assets/images/screens/pin-collections/star.png');
 
-function SquareLayout({ kind, payload, copy, frame, showShark, inventory, motion }: LayoutProps) {
+function SquareLayout({ kind, payload, copy, frame, showShark, inventory, motion, look }: LayoutProps) {
   // Square (Instagram feed): ribbon / the hero and the player's shark side by side (the shark is a
   // co-star holding its prop, ~37% of the width) / the giant number beside the words / wordmark,
   // CTA, link and QR. Nothing overlaps and nothing leaves the canvas.
@@ -168,6 +215,7 @@ function SquareLayout({ kind, payload, copy, frame, showShark, inventory, motion
       <Ribbon text={copy.ribbon} width={226} />
       <View style={styles.squareStage}>
         <Rays frame={frame} size={360} />
+        {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={136} tile={30} /> : (
         <View style={[styles.squareStageRow, !showShark && { justifyContent: 'center' }]}>
           <Animated.View style={[{ width: heroSize, height: heroSize }, motion.heroStyle]}>
             <FlexHero kind={kind} payload={payload} frame={frame} size={heroSize} inventory={inventory} />
@@ -178,9 +226,10 @@ function SquareLayout({ kind, payload, copy, frame, showShark, inventory, motion
             </Animated.View>
           )}
         </View>
+        )}
       </View>
       <View style={styles.squareWordsRow}>
-        {big && (
+        {big && !look && (
           <View style={styles.squareBigCol}>
             <BigNumber copy={copy} frame={frame} size={52} width={128} text={motion.bigText} labelSide="bottom" inline style={motion.bigStyle} />
           </View>
@@ -346,6 +395,10 @@ const styles = StyleSheet.create({
   card: { overflow: 'hidden' },
   rays: { position: 'absolute', left: '50%', top: '50%', alignItems: 'center', justifyContent: 'center' },
 
+  lookRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', gap: 8 },
+  lookTiles: { alignItems: 'center' },
+  lookBigCol: { alignItems: 'center', justifyContent: 'center' },
+  lookBig: { transform: [{ rotate: '-8deg' }] },
   storyBody: { flex: 1, alignItems: 'center', paddingTop: STORY_SAFE.top, paddingBottom: STORY_SAFE.bottom, paddingHorizontal: 20 },
   storyHero: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' },
   storyHeroRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', width: '100%', paddingLeft: 14 },

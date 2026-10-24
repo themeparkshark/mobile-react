@@ -35,6 +35,13 @@ export interface FlexPayloads {
     readonly serial?: number | null;
     /** Set progress after this find ("4 of 6"). */
     readonly setFound?: number; readonly setTotal?: number;
+    /**
+     * Where the piece came from when it is not part of a set ("Shark Pass · Step 12",
+     * "October member pin"): shown as the stat exactly as given, never with " set" added.
+     */
+    readonly sourceLine?: string;
+    /** A small second line under sourceLine (the season name). Dropped if it would be cut off. */
+    readonly sourceSub?: string;
   };
   readonly ride_photo: FlexBase & {
     readonly itemName: string; readonly artUrl: FlexArt; readonly rarity: RarityInput;

@@ -11,6 +11,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { captureFlex, openShareSheet } from '../../../share/capture';
 import { OFFSCREEN, StoryShareFrame } from '../../../share/StoryShareFrame';
+import { ShareFace } from '../../../share/FlexShareButton';
 
 /** Tile codes: 0 LATE, 1 GOOD, 2 QUICK, 9 decoy hit. */
 export const TILE_LATE = 0;
@@ -56,8 +57,10 @@ export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; ride
   const quick = tiles.filter((t) => t === TILE_QUICK).length;
   return (
     <View>
-      <TouchableOpacity style={styles.button} onPress={share} accessibilityRole="button" accessibilityLabel="Share your run">
-        <Text style={styles.buttonText}>{busy ? 'SHARING...' : 'SHARE'}</Text>
+      {/* The one share pill every reveal uses (gold rim, glyph, "Share"). */}
+      <TouchableOpacity style={styles.button} onPress={share} disabled={busy} accessibilityRole="button" accessibilityLabel="Share your run"
+        accessibilityState={{ busy, disabled: busy }}>
+        <ShareFace size="reveal" dim={busy} />
       </TouchableOpacity>
       {/* Off-screen card (captured on demand). */}
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -89,11 +92,7 @@ export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; ride
 }
 
 const styles = StyleSheet.create({
-  button: {
-    alignSelf: 'center', marginTop: 10, paddingHorizontal: 28, paddingVertical: 10, borderRadius: 22,
-    backgroundColor: '#ffffff', borderWidth: 3, borderColor: NAVY, borderBottomWidth: 6,
-  },
-  buttonText: { fontFamily: 'Shark', fontSize: 20, color: NAVY },
+  button: { alignSelf: 'center', marginTop: 10 },
   card: {
     width: 320, padding: 20, borderRadius: 24, backgroundColor: CREAM, borderWidth: 4, borderColor: NAVY, alignItems: 'center',
   },
