@@ -33,13 +33,27 @@ export const PODIUM_MIN_PT = 96;
 /** The cheer hops this many times, then rests. */
 export const PODIUM_HOPS = 3;
 
-/** How big the peeking shark draws when there is no room for the podium. */
+/** The most the peeking shark draws at when there is no room for the podium. */
 export const PEEK_SCALE = 0.5;
+/** Below this the peek hides (a tiny shark reads as a smudge). */
+export const PEEK_MIN_SCALE = 0.3;
+/**
+ * Room above the zone the peek may use (the stage's top padding is about 56
+ * pt under the safe area), so on an iPhone SE it never climbs into the
+ * status bar.
+ */
+export const PEEK_HEADROOM_PT = 48;
+
+/** How big the peeking shark draws in a zone of height h (0 = no peek): it never climbs past the safe top. */
+export function peekScale(h: number): number {
+  const k = Math.min(PEEK_SCALE, (Math.max(0, h) + PEEK_HEADROOM_PT) / 160);
+  return k >= PEEK_MIN_SCALE ? Math.round(k * 100) / 100 : 0;
+}
 
 /** How the scene draws in a zone of height h: the podium, the peek over the ribbon, or nothing. */
 export function podiumMode(h: number, cheer: boolean): 'podium' | 'peek' | 'none' {
   if (podiumScale(h) > 0) return 'podium';
-  return cheer ? 'peek' : 'none';
+  return cheer && peekScale(h) > 0 ? 'peek' : 'none';
 }
 
 /** How big the scene draws in a zone of height h (0 = hidden). */
@@ -51,7 +65,7 @@ export function podiumScale(h: number): number {
 export function ResultsPodium({ cheer, reducedMotion = false, delayMs = 120 }: { cheer: boolean; reducedMotion?: boolean; delayMs?: number }) {
   const [zoneH, setZoneH] = useState(-1);
   const mode = zoneH < 0 ? 'none' : podiumMode(zoneH, cheer);
-  const k = mode === 'podium' ? podiumScale(zoneH) : mode === 'peek' ? PEEK_SCALE : 0;
+  const k = mode === 'podium' ? podiumScale(zoneH) : mode === 'peek' ? peekScale(zoneH) : 0;
   const rise = useSharedValue(reducedMotion ? 0 : 40);
   const o = useSharedValue(reducedMotion ? 1 : 0);
   const hop = useSharedValue(0);
