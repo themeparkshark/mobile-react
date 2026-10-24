@@ -638,6 +638,8 @@ export default function MemoryGame({
     setPot(null);
     setSlotIds(Array.from({ length: cols * rows }, (_, i) => i));
     setBoardKey((k) => k + 1);
+    // A new board re-deals: the count (Play again) waits for this deal too.
+    setStageDealt(false);
     flights.current?.clear();
   }, []);
 

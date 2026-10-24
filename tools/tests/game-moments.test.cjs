@@ -304,3 +304,15 @@ test('round 2: Current Quest shows one banner at a time (the voyage ribbon waits
   assert.match(cq, /if \(!playing\.current\) return;/);
   assert.match(cq, /later\(COUNT_END_MS - GO_AT_MS, \(\) => \{ if \(playing\.current && run\.voyage\.strokes === 0\) showRibbon\(run\); \}\)/);
 });
+
+test('round 2: Whack Play again has one start (the shell count calls onStart at GO; no second READY/GO slam under the count)', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  const rematch = whack.slice(whack.indexOf('const handleRematch'), whack.indexOf('// Wrap-up (boarding'));
+  assert.doesNotMatch(rematch, /startBurst\(/);
+});
+
+test('round 2: Memory Play again waits for the new deal (a new board clears the dealt flag)', () => {
+  const mem = read('src/games/memory/MemoryGame.tsx');
+  const nb = mem.slice(mem.indexOf('const newBoardView'), mem.indexOf('const newBoardView') + 600);
+  assert.match(nb, /setStageDealt\(false\)/);
+});

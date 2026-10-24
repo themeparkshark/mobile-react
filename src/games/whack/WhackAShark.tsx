@@ -892,8 +892,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     setBreather(null);
-    void claimRunOfDay().finally(() => startBurst(0, nextRun, true));
-  }, [runIndex, startBurst, claimRunOfDay]);
+    // The shell runs the fresh count (2-1-GO on a repeat) and calls onStart at GO, which starts the
+    // burst: no second READY/GO slam and no burst running under the count (one start, one callout).
+  }, [runIndex]);
 
   // Wrap-up (boarding / left the queue): bank the live Burst from a coherent snapshot.
   const wrapMirror = useRef<{ score: number } | null>(null);
