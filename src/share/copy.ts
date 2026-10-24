@@ -149,6 +149,23 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
     // Not a set (a Shark Pass step, a member gift): the line as given, no " set" added.
     const source = p.sourceLine ? wholeName(p.sourceLine, 30) || null : null;
     const sourceSub = source && p.sourceSub ? wholeName(noYear(p.sourceSub), 30) || null : null;
+    // Earned, not found (a Shark Pass step, the member pin): every word says how it was earned, and no
+    // rarity pill, because these pieces have no rarity to show.
+    if (p.prize) {
+      return {
+        ribbon: p.prize === 'member' ? 'MEMBER GIFT!' : 'NEW PRIZE!',
+        kicker: p.prize === 'member' ? 'My Member Pin' : 'My Shark Pass Prize',
+        title: cleanName(p.itemName),
+        big: null,
+        stat: source ?? (p.prize === 'member' ? 'A gift for members' : 'Earned by playing'),
+        sub: sourceSub,
+        cta: 'Come play with me!',
+        // House blue with gold rays (the Shark Pass screen's own colors), not a rarity color.
+        frame: 'standings',
+        prop: null,
+        rarity: null,
+      };
+    }
     return {
       ribbon: p.goldenHour ? 'GOLDEN HOUR!' : rarity >= 3 ? `${label.toUpperCase()} FIND!` : 'NEW FIND!',
       kicker: rarity >= 3 || p.goldenHour ? 'My New Find' : `My ${label} Find`,

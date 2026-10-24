@@ -56,6 +56,7 @@ import { BOX_ART, PIN_ART, type BoxTone } from './PinArt';
 import { PINS_COPY, revealOrder, serialLabel, type Pull } from './pinsModel';
 import { FlexShareButton } from '../../share/FlexShareButton';
 import { useModalHandoff } from '../../share/handoff';
+import { withWearTimeout } from '../../services/money/sharkPassModel';
 
 type Phase = 'drop' | 'ready' | 'shake' | 'hold' | 'pop' | 'show' | 'summary';
 
@@ -281,6 +282,11 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const ambient = useAmbient();
   const [swappedOut, setSwappedOut] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
+  // The wear save: in flight (one busy button), or failed (Try again, and Share may go ahead).
+  const [wearing, setWearing] = useState(false);
+  const [wearFailed, setWearFailed] = useState(false);
+  const live = useRef(true);
+  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   // Paid opens: the coins visibly go into the box (3 for one box, 5 for a bundle).
   const [spending, setSpending] = useState(() => (spend > 0 && !still && variant === 'box' ? (rawPulls.length > 1 || spend >= 1000 ? 5 : 3) : 0));
   const landed = useRef(0);
@@ -537,7 +543,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     else if (phase === 'shake') { if (isGold) holdBreath(); else pop(); }
     else if (phase === 'hold') { /* the breath is short; let it land */ }
     // The result screen ignores stray taps for a moment; gold pins and catches close only with a button.
-    else if (phase === 'show' && !isGold && Date.now() - shownAt.current > 700) next();
+    // While the wear saves, a stray tap never closes the reveal (the busy button says what is happening).
+    else if (phase === 'show' && !isGold && !wearing && Date.now() - shownAt.current > 700) next();
   };
 
   const stageStyle = useAnimatedStyle(() => ({ transform: [{ scale: punch.value }] }));
@@ -595,8 +602,13 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const subtitle = subtitleFor?.(pull) ?? null;
   const wearable = !!onWear && !!canWear?.(pull) && !worn.has(pull.item_id);
   const doWear = (removeId?: number) => {
-    void onWear?.(pull, removeId).then(({ ok, removed }) => {
-      if (!ok) return;
+    if (!onWear || wearing) return;
+    setWearing(true); setWearFailed(false);
+    // A save that hangs on park Wi-Fi turns into Try again after 8 s instead of spinning forever.
+    void withWearTimeout(onWear(pull, removeId)).catch(() => ({ ok: false, removed: null })).then(({ ok, removed }) => {
+      if (!live.current) return;
+      setWearing(false);
+      if (!ok) { setWearFailed(true); queueHaptic('warning', 1); return; }
       setSwappedOut(removed ?? null);
       queueHaptic('success', 1); play('fx.whoosh', { volume: 0.6 }); later(380, () => play('fx.hit', { pitch: 1.4 }));
       // The pin flies up to your lanyard, then comes back to rest.
@@ -609,13 +621,16 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   // Only once the last box is shown, so Share never skips a box still waiting to open.
   const brag = (p: RevealPull | undefined) => !!p && !isCatch && !p.rare && (p.is_chaser || (golden && !p.duplicate));
   // A wearable pin waits for the wear choice first (see the header).
+  // The one box worth bragging about asks first, like the Shark Pass card: a yellow "Wear it" and a
+  // quiet "Keep my lanyard", then Done with Share right under it. Either choice reaches Share in 2 taps.
+  const wearFirst = phase === 'show' && pulls.length === 1 && brag(pull) && wearable && !kept.has(pull.item_id);
   const sharePull = phase === 'summary' ? pulls.find(p => p.is_chaser) ?? null
-    : phase === 'show' && pulls.length === 1 && brag(pull) && (!wearable || kept.has(pull.item_id)) ? pull : null;
+    : phase === 'show' && pulls.length === 1 && brag(pull) && (!wearable || kept.has(pull.item_id) || wearFailed) && !wearing ? pull : null;
   const shareHandoff = async () => { await modal.handoff(); onDone(pulls); };
 
   return (
     <Modal transparent visible={!hidden} animationType="fade" statusBarTranslucent onDismiss={modal.onDismiss}
-      onRequestClose={() => (phase === 'show' || phase === 'summary') && next()}>
+      onRequestClose={() => (phase === 'show' || phase === 'summary') && !wearing && next()}>
       <Pressable style={styles.scrim} onPress={onBackdrop} accessibilityRole="button"
         accessibilityLabel={phase === 'ready' ? 'Open the box' : 'Mystery box'}>
         {/* A soft spotlight: the stage reads as a stage, not the page behind. */}
@@ -785,8 +800,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                 {pulls.map((p, i) => <View key={p.id} style={[styles.pip, i <= index && styles.pipOn, p.is_chaser && i <= index && styles.pipGold]} />)}
               </View>
             )}
-            {phase === 'show' && wearable && !choosing && (
-              <Pressable onPress={() => {
+            {phase === 'show' && wearable && !choosing && !wearFirst && !kept.has(pull.item_id) && (
+              <Pressable disabled={wearing} onPress={() => {
                 // A full lanyard: the kid chooses which pin comes off (nothing is removed for them).
                 if (lanyard.length >= lanyardMax) { queueHaptic('tapLight', 1); setChoosing(true); return; }
                 doWear();
@@ -806,9 +821,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                     </Pressable>
                   ))}
                 </View>
-                <Pressable onPress={() => { queueHaptic('tapLight', 1); setChoosing(false); setKept(k => new Set(k).add(pull.item_id)); }} hitSlop={6} accessibilityRole="button" accessibilityLabel="Keep my lanyard as it is">
-                  <Text maxFontSizeMultiplier={1.2} style={styles.offPickKeep}>Keep my lanyard</Text>
-                </Pressable>
+                <GameButton label="Keep my lanyard" variant="ghost" tone="onBlue" accessibilityLabel="Keep my lanyard as it is"
+                  onPress={() => { queueHaptic('tapLight', 1); setChoosing(false); setKept(k => new Set(k).add(pull.item_id)); }} />
               </View>
             )}
             {phase === 'show' && worn.has(pull.item_id) && (
@@ -816,13 +830,33 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                 <Text maxFontSizeMultiplier={1.2} style={styles.wornText}>On your lanyard!{swappedOut ? ` ${swappedOut} came off.` : ''}</Text>
               </View>
             )}
-            <GameButton label={index < pulls.length - 1 ? 'Next box' : pulls.length > 1 && phase === 'show' ? 'See all' : 'Done'}
-              icon={index < pulls.length - 1 ? 'gift' : 'check'} onPress={next} />
+            {wearFirst && !choosing && (
+              <GameButton label={wearing ? 'Putting it on...' : wearFailed ? 'Try again' : 'Wear it'} icon={wearFailed ? 'retry' : 'pin'}
+                loading={wearing} accessibilityLabel={wearFailed ? 'Try again to wear it on your lanyard' : 'Wear it on your lanyard'}
+                onPress={() => {
+                  // A full lanyard: the kid chooses which pin comes off (nothing is removed for them).
+                  if (lanyard.length >= lanyardMax) { queueHaptic('tapLight', 1); setChoosing(true); return; }
+                  doWear();
+                }} />
+            )}
+            {wearFirst && wearFailed && !choosing && (
+              <Text maxFontSizeMultiplier={1.2} style={styles.wearFailed}>That didn’t work. Tap Try again.</Text>
+            )}
+            {!wearFirst && (
+              <GameButton label={index < pulls.length - 1 ? 'Next box' : pulls.length > 1 && phase === 'show' ? 'See all' : 'Done'}
+                icon={index < pulls.length - 1 ? 'gift' : 'check'} onPress={next} />
+            )}
             {sharePull && !choosing && (
               <FlexShareButton kind="find" surface={golden ? 'golden_box' : 'pin_box'} size="reveal" handoff={shareHandoff}
                 style={{ alignSelf: 'center' }}
                 payload={{ itemName: sharePull.name, artUrl: sharePull.icon_url ?? PIN_ART.chaser, rarity: sharePull.is_chaser ? 5 : 4,
                   serial: sharePull.is_chaser ? sharePull.serial : null }} />
+            )}
+            {/* The quiet choice, last: keep the lanyard as it is (then Done and Share), or Done after a failed save. */}
+            {wearFirst && !choosing && !wearing && (
+              <GameButton label={wearFailed ? 'Done' : 'Keep my lanyard'} variant="ghost" tone="onBlue"
+                accessibilityLabel={wearFailed ? 'Done' : 'Keep my lanyard as it is'}
+                onPress={() => { queueHaptic('tapLight', 1); if (wearFailed) { next(); return; } setKept(k => new Set(k).add(pull.item_id)); }} />
             )}
           </View>
         )}
@@ -899,7 +933,7 @@ const styles = StyleSheet.create({
   wearText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.white, paddingTop: 3 },
   offPick: { alignItems: 'center', gap: 6, backgroundColor: 'rgba(3,32,79,0.85)', borderRadius: 16, borderWidth: 2, borderColor: BRAND.gold, padding: 8 },
   offPickTitle: { fontFamily: FONT.display, fontSize: 17, color: BRAND.white, paddingTop: 2 },
-  offPickKeep: { fontFamily: FONT.display, fontSize: 16, color: BRAND.gold, paddingTop: 4, textDecorationLine: 'underline' },
+  wearFailed: { fontFamily: FONT.display, fontSize: 17, color: '#ffe08a', textAlign: 'center', paddingTop: 2 },
   offPickRow: { flexDirection: 'row', gap: 6 },
   offPickPin: { width: 48, height: 48, borderRadius: 24, backgroundColor: BRAND.cream, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   wornChip: { backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 4 },

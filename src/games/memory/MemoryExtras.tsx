@@ -293,7 +293,7 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
           <ShareStoryCard daily={daily} />
         </StoryShareFrame>
       </View>
-      <Text style={styles.sheetHint}>The picture shows how you did. It never shows the cards.</Text>
+      <Text style={styles.sheetHint}>The picture shows your score, not where the cards are.</Text>
       {/* The one share pill every reveal uses, then the quiet Back. */}
       <Pressable onPress={share} disabled={busy} accessibilityRole="button" accessibilityLabel="Share"
         accessibilityState={{ busy, disabled: busy }} style={({ pressed }) => [{ marginTop: 4 }, pressed && { transform: [{ scale: 0.96 }] }]}>

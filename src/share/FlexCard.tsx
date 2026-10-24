@@ -65,7 +65,9 @@ export const FlexCard = forwardRef<View, FlexCardProps>(function FlexCard({ kind
   const shark = payload.inventory ?? inventory;
   const size = FLEX_SIZE[format];
   const props: LayoutProps = { kind, payload, copy, frame, showShark: !copy.hideShark, inventory: shark, motion: motion ?? {},
-    look: isLookSet(kind, payload) && !!shark?.skin_item };
+    look: isLookSet(kind, payload) && !!shark?.skin_item,
+    // A worn prize pin (Shark Pass, member pin) shows on the shark's chest: the picture proves it is on.
+    chestPin: kind === 'find' && !!payload.inventory?.pin_item };
   return (
     <ArtReadinessProvider onReadyChange={onReadyChange}>
       <View ref={ref} collapsable={false} accessible accessibilityRole="image" accessibilityLabel={copy.a11y}
@@ -89,6 +91,7 @@ interface LayoutProps {
   readonly motion: FlexCardMotion;
   /** A finished shop set worn by the shark: the dressed shark is the hero, the pieces sit beside it. */
   readonly look: boolean;
+  readonly chestPin?: boolean;
 }
 
 /** A shop set ("My Complete Look"): the card is about the shark wearing it. Exported for tests. */
@@ -100,18 +103,18 @@ export function isLookSet(kind: FlexKind, payload: FlexPayload): boolean {
  * The look card's shark: about half the card's width, the biggest thing on the card. The paper
  * canvas has empty space above and below the shark, so LOOK_BLEED of it may hang into the margins.
  */
-export const LOOK_SHARK_H = 226;
+export const LOOK_SHARK_H = 250;
 const LOOK_BLEED = 0.13;
 
 /**
  * "My Complete Look": the dressed shark big in the middle, the set's pieces as a small column of
  * tiles beside it, and the giant "3/3" as a sticker. No medallion, no prop: the look is the brag.
  */
-function LookHero({ payload, copy, frame, inventory, motion, sharkH, tile }: {
+function LookHero({ payload, copy, frame, inventory, motion, sharkH, tile, maxTiles = 4 }: {
   readonly payload: FlexPayload; readonly copy: FlexCopy; readonly frame: FlexFrame; readonly inventory: InventoryType | null | undefined;
-  readonly motion: FlexCardMotion; readonly sharkH: number; readonly tile: number;
+  readonly motion: FlexCardMotion; readonly sharkH: number; readonly tile: number; readonly maxTiles?: number;
 }) {
-  const arts = ((payload as FlexPayloads['set_complete']).artUrls ?? []).slice(0, 4);
+  const arts = ((payload as FlexPayloads['set_complete']).artUrls ?? []).slice(0, maxTiles);
   return (
     <View style={styles.lookRow}>
       <View style={[styles.lookTiles, { width: tile, gap: Math.round(tile * 0.15) }]}>
@@ -137,13 +140,13 @@ function LookHero({ payload, copy, frame, inventory, motion, sharkH, tile }: {
 export const STORY_HERO = 146;
 export const STORY_SHARK_H = 170;
 
-function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion, look }: LayoutProps) {
+function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion, look, chestPin }: LayoutProps) {
   return (
     <>
       <StoryBands frame={frame} />
       <View style={styles.storyBody}>
         <Ribbon text={copy.ribbon} width={256} />
-        <View style={styles.storyHero}>
+        <View style={[styles.storyHero, look && styles.storyHeroLook]}>
           {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={LOOK_SHARK_H} tile={44} /> : (
           <View style={[styles.storyHeroRow, !showShark && { justifyContent: 'center' }]}>
             <Animated.View style={[{ width: STORY_HERO, height: STORY_HERO }, motion.heroStyle]}>
@@ -153,7 +156,7 @@ function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion,
             </Animated.View>
             {showShark && (
               <Animated.View style={[styles.storyShark, motion.sharkStyle]}>
-                <FlexShark inventory={inventory} height={STORY_SHARK_H} prop={copy.prop} />
+                <FlexShark inventory={inventory} height={STORY_SHARK_H} prop={copy.prop} pin={chestPin} />
               </Animated.View>
             )}
           </View>
@@ -164,7 +167,8 @@ function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion,
           <Outlined text={copy.title} style={[styles.storyTitle, titleSize(copy.title, 'story')]} outline={frame.outline} lines={1} />
           {copy.rarity && <RarityChip rarity={copy.rarity} />}
         </View>
-        <StatPlate copy={copy} frame={frame} compact={false} />
+        {/* The look: the 3/3 sticker already says "the whole set", so the plate's room goes to the shark. */}
+        {!look && <StatPlate copy={copy} frame={frame} compact={false} />}
         <Footer kind={kind} copy={copy} frame={frame} logoWidth={120} qr={56} />
       </View>
     </>
@@ -204,40 +208,43 @@ const StoryBands = memo(function StoryBands({ frame }: { readonly frame: FlexFra
 
 const BAND_STAR = require('../../assets/images/screens/pin-collections/star.png');
 
-function SquareLayout({ kind, payload, copy, frame, showShark, inventory, motion, look }: LayoutProps) {
+function SquareLayout({ kind, payload, copy, frame, showShark, inventory, motion, look, chestPin }: LayoutProps) {
   // Square (Instagram feed): ribbon / the hero and the player's shark side by side (the shark is a
   // co-star holding its prop, ~37% of the width) / the giant number beside the words / wordmark,
   // CTA, link and QR. Nothing overlaps and nothing leaves the canvas.
-  const heroSize = 124;
+  // 112: the panel's lip and shadow hang below its box, so 124 touched the kicker under it.
+  const heroSize = 112;
   const big = !!copy.big;
   return (
     <View style={styles.squareBody}>
       <Ribbon text={copy.ribbon} width={226} />
-      <View style={styles.squareStage}>
+      <View style={[styles.squareStage, look && styles.squareStageLook]}>
         <Rays frame={frame} size={360} />
-        {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={136} tile={30} /> : (
+        {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={SQUARE_LOOK_SHARK_H} tile={30} maxTiles={3} /> : (
         <View style={[styles.squareStageRow, !showShark && { justifyContent: 'center' }]}>
           <Animated.View style={[{ width: heroSize, height: heroSize }, motion.heroStyle]}>
             <FlexHero kind={kind} payload={payload} frame={frame} size={heroSize} inventory={inventory} />
           </Animated.View>
           {showShark && (
             <Animated.View style={[styles.squareShark, motion.sharkStyle]}>
-              <FlexShark inventory={inventory} height={SQUARE_SHARK_H} prop={copy.prop} />
+              <FlexShark inventory={inventory} height={SQUARE_SHARK_H} prop={copy.prop} pin={chestPin} />
             </Animated.View>
           )}
         </View>
         )}
       </View>
-      <View style={styles.squareWordsRow}>
+      {/* The look: words centered under the dressed shark like Story; the 3/3 sticker already says "the
+          whole set", so the stat plate stays off and the shark gets that room. */}
+      <View style={[styles.squareWordsRow, look && styles.squareWordsLook]}>
         {big && !look && (
           <View style={styles.squareBigCol}>
             <BigNumber copy={copy} frame={frame} size={52} width={128} text={motion.bigText} labelSide="bottom" inline style={motion.bigStyle} />
           </View>
         )}
-        <View style={{ flex: 1 }}>
+        <View style={look ? styles.squareWordsLookCol : { flex: 1 }}>
           <Text style={[styles.kickerSmall, { color: frame.ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.kicker}</Text>
           <Outlined text={copy.title} style={[styles.squareTitle, titleSize(copy.title, 'square')]} outline={frame.outline} lines={1} />
-          <StatPlate copy={copy} frame={frame} compact />
+          {!look && <StatPlate copy={copy} frame={frame} compact />}
         </View>
       </View>
       <Footer kind={kind} copy={copy} frame={frame} logoWidth={104} qr={42} compact />
@@ -247,6 +254,8 @@ function SquareLayout({ kind, payload, copy, frame, showShark, inventory, motion
 
 /** The square card's shark: a co-star beside the hero (~37% of the width), holding its prop. */
 export const SQUARE_SHARK_H = 150;
+/** The square look card's dressed shark: the biggest thing on the card (about 42% of its width). */
+export const SQUARE_LOOK_SHARK_H = 196;
 
 /** The giant brag number: a tilted outlined sticker (over the hero on Story), caption above, beside or under it. */
 function BigNumber({ copy, frame, size, width, text, style, labelSide = 'top', inline = false }: {
@@ -384,7 +393,8 @@ const StatPlate = memo(function StatPlate({ copy, frame, compact }: { readonly c
   return (
     <View style={[styles.plate, compact && styles.plateCompact, { backgroundColor: frame.plate, borderColor: frame.outline }]}>
       <Text style={[styles.statLine, compact && styles.statLineCompact, { color: frame.plateInk }]} numberOfLines={2}>{copy.stat}</Text>
-      {!!copy.sub && <Text style={[styles.subLine, compact && styles.subLineCompact, { color: frame.plateInk }]}
+      {/* Square (compact) keeps one line: a second line squeezed the hero into the words. */}
+      {!!copy.sub && !compact && <Text style={[styles.subLine, { color: frame.plateInk }]}
         numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{copy.sub}</Text>}
     </View>
   );
@@ -401,6 +411,8 @@ const styles = StyleSheet.create({
   lookBig: { transform: [{ rotate: '-8deg' }] },
   storyBody: { flex: 1, alignItems: 'center', paddingTop: STORY_SAFE.top, paddingBottom: STORY_SAFE.bottom, paddingHorizontal: 20 },
   storyHero: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' },
+  // The hat clears the ribbon: the dressed shark sits a little lower than the centre.
+  storyHeroLook: { paddingTop: 22 },
   storyHeroRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', width: '100%', paddingLeft: 14 },
   storyShark: { marginRight: -18, marginBottom: -20 },
   storyBig: { left: -24, bottom: -8, transform: [{ rotate: '-8deg' }] },
@@ -433,13 +445,16 @@ const styles = StyleSheet.create({
   statLine: { fontFamily: 'Shark', fontSize: 18, lineHeight: 22 },
   statLineCompact: { fontSize: 14, lineHeight: 17 },
   subLine: { fontFamily: 'Knockout', fontSize: 14, marginTop: 1, opacity: 0.85 },
-  subLineCompact: { fontSize: 11 },
 
   squareBody: { flex: 1, alignItems: 'center', paddingTop: 6, paddingBottom: 8, paddingHorizontal: 14 },
   squareStage: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', paddingTop: 14 },
   squareStageRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 10 },
   squareShark: { marginRight: -14, marginTop: 6, marginBottom: -14 },
-  squareWordsRow: { flexDirection: 'row', alignItems: 'center', width: '100%', gap: 8, marginTop: 2 },
+  squareWordsRow: { flexDirection: 'row', alignItems: 'center', width: '100%', gap: 8, marginTop: 8 },
+  squareWordsLook: { justifyContent: 'center', marginTop: 12 },
+  // The look's stage takes most of the spare room (the footer shares it otherwise).
+  squareStageLook: { flex: 2.6 },
+  squareWordsLookCol: { flex: 1, alignItems: 'center' },
   squareBigCol: { width: 128, alignItems: 'flex-start' },
   kickerSmall: { fontFamily: 'Shark', fontSize: 14, textShadowColor: 'rgba(3,20,48,0.35)', textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
   squareTitle: { fontFamily: 'Shark', fontSize: 20, lineHeight: 23, color: '#ffffff' },

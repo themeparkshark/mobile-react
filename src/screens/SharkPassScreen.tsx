@@ -36,7 +36,7 @@ import {
 } from '../api/endpoints/me/shark-pass';
 import { askGrownUp } from '../components/GrownUpGate';
 import { GotIt, MAX_FONT, PackArt, artSource, type PackArtKey } from '../components/money/moneyUi';
-import WearFirstReward from '../components/money/WearFirstReward';
+import WearFirstReward, { WornLook } from '../components/money/WearFirstReward';
 import MemberFlex from '../components/money/MemberFlex';
 import { lastSharkPassSeen, noteSharkPassPoints } from '../components/money/SharkPassBanner';
 import { playSfx } from '../gamekit/SFX';
@@ -81,7 +81,7 @@ const EMBLEM = require('../../assets/images/sharkpass/pass-emblem.webp');
 const SCENE = require('../../assets/images/sharkpass/scene-northern-lights.webp');
 
 /** The player's own look with a season pin on its pin spot (nothing is saved): the hero's "this could be you". */
-function withSeasonPin(base: InventoryType | undefined, reward: SharkPassReward | null | undefined): InventoryType | null {
+export function withSeasonPin(base: InventoryType | undefined, reward: SharkPassReward | null | undefined): InventoryType | null {
   if (!base?.skin_item || !reward || reward.type !== 'item' || reward.slot !== 'pin') return base ?? null;
   const bundled = SEASON_ART[reward.art];
   const uri = bundled ? RNImage.resolveAssetSource(bundled)?.uri : reward.icon_url;
@@ -444,10 +444,20 @@ export default function SharkPassScreen() {
 
   // The reward card's wear button and Share: Share is the last reveal's, and a wearable piece asks to wear it first.
   const landedCanShare = !!landed && !landed.twin && isWearable(landed.reward) && !landed.emblem && !landed.next;
-  const landedWear: { label: string; run: () => Promise<unknown> } | undefined = !landed ? undefined
-    : landed.frameKey ? { label: 'Wear it now', run: () => { const key = landed.frameKey!; return wearFrame(key).then(() => load()); } }
+  // The save is timed out on its own; the refresh after it is raced (wearThenRefresh), so a slow
+  // refresh never says "That didn't work" for a wear that saved.
+  const landedWear: { label: string; run: () => Promise<unknown>; refresh?: () => unknown } | undefined = !landed ? undefined
+    : landed.frameKey ? { label: 'Wear it now', run: () => wearFrame(landed.frameKey!), refresh: () => load() }
     : landed.itemId ? { label: landed.reward.type === 'item' && landed.reward.slot === 'background' ? 'Set as my scene' : 'Wear it now',
-      run: () => { const id = landed.itemId!; return wearItem({ id }).then(() => refreshPlayer?.()); } }
+      run: () => wearItem({ id: landed.itemId! }), refresh: () => refreshPlayer?.() }
+    : undefined;
+  // Worn: the kid's own shark wearing the new piece (a season pin on its pin spot, a frame around it).
+  const wornLook = landed && landed.reward.type === 'item' && landed.reward.slot === 'pin'
+    ? withSeasonPin(player?.inventory as InventoryType | undefined, landed.reward) : null;
+  const landedWornPicture = !landed ? undefined
+    : landed.reward.type === 'frame' ? <MemberFlex inventory={player?.inventory as InventoryType | undefined} frame={landed.reward.art} vip={!!player?.is_subscribed} size={190} still={reduced} />
+    : wornLook?.skin_item && landed.reward.type === 'item'
+      ? <WornLook inventory={wornLook} art={SEASON_ART[landed.reward.art] ?? landed.reward.icon_url} still={reduced} />
     : undefined;
   const landedChoice = landedCanShare && !!landedWear;
   const landedPicture = !landed ? null : landed.emblem ? <Image source={EMBLEM} style={{ width: 180, height: 180 }} contentFit="contain" />
@@ -469,10 +479,12 @@ export default function SharkPassScreen() {
   ) : undefined;
   // Show it off: the kid's shark wearing the new piece and the step it came from. No price, no "bought".
   // The last reveal in a chain only, so Share never skips a reward still waiting to show.
-  const landedShareButton = landed && landedCanShare && isWearable(landed.reward) ? (
+  const landedShareButton = (worn: boolean) => landed && landedCanShare && isWearable(landed.reward) ? (
     <FlexShareButton kind="find" surface="sharkpass" size="reveal" handoff={landedShare.handoff}
       payload={{ itemName: landed.reward.name, artUrl: (landed.reward.type === 'frame' ? FRAME_ART[landed.reward.art] : SEASON_ART[landed.reward.art]) ?? (landed.reward.type === 'item' ? landed.reward.icon_url : null) ?? EMBLEM,
-        rarity: 4, sourceLine: landed.step ? `Shark Pass · ${stepLabel(landed.step)}` : 'Shark Pass', sourceSub: season?.title }} />
+        prize: 'pass', sourceLine: landed.step ? `Earned at ${stepLabel(landed.step)}` : undefined, sourceSub: season?.title,
+        // Worn: the card's shark wears it even if the fresh look is still on its way.
+        inventory: worn && wornLook?.skin_item ? wornLook : undefined }} />
   ) : undefined;
 
   return (
@@ -860,17 +872,17 @@ export default function SharkPassScreen() {
       {landed && landedChoice ? (
         // A wearable piece asks first ("Wear it now" or "Keep my look"); Share shows only after that choice,
         // so bragging never skips the wear (WearFirstReward, tested in sharkPassModel).
-        <WearFirstReward resetOn={landed} title={landed.title} picture={landedPicture} footer={landedFooter}
+        <WearFirstReward resetOn={landed} title={landed.title} picture={landedPicture} wornPicture={landedWornPicture} footer={landedFooter}
           caption={landed.caption ?? rewardWords(landed.reward)} wear={landedWear!} frame={landed.reward.type === 'frame'}
           share={landedShareButton} onDone={() => setLanded(landed.next ?? null)} />
       ) : landed && (
         <GotIt grants={{}} art="gift" title={landed.title} onDone={() => setLanded(landed.next ?? null)}
           picture={landedPicture} footer={landedFooter}
-          share={landedCanShare && !landedWear ? landedShareButton : undefined}
+          share={landedCanShare && !landedWear ? landedShareButton(false) : undefined}
           caption={landed.caption ?? rewardWords(landed.reward)}
           action={landedWear ? { label: landedWear.label, onPress: () => {
             setLanded(landed.next ?? null);
-            void landedWear.run().then(() => gameAlert('Looking sharp!', landed.frameKey ? 'Your frame shows on your profile now.' : 'Your shark is wearing it now. Everyone can see it.'))
+            void landedWear.run().then(() => { void Promise.resolve().then(landedWear.refresh).catch(() => undefined); }).then(() => gameAlert('Looking sharp!', landed.frameKey ? 'Your frame shows on your profile now.' : 'Your shark is wearing it now. Everyone can see it.'))
               .catch(() => gameAlert('That didn’t work', landed.frameKey ? 'Try again from Your Frames on this screen.' : 'Find it in your closet and put it on there.'));
           } } : undefined} />
       )}

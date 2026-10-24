@@ -41,7 +41,7 @@ import { stageCard, wearAllCopy, wearAllNext, wearAllSlots, xpBar, type WearAllS
 import { isItemWorn, slotForItem } from '../../helpers/wardrobe';
 import { getLook, putLook } from '../../api/endpoints/me/look';
 import { ShopSetReward, ShopSetSummary } from '../../models/shop-today';
-import { BRAND, FONT, GameIcon } from '../../ui';
+import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
 import { asWearable, previewLook } from './TryOnSheet';
 import { MAX_FONT, REVEAL_NAVY, SHOP_SURFACE, ShopCta, ShopStage } from './shopUi';
 import { wearItem } from './inventoryQueue';
@@ -314,12 +314,11 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
                 </Text>
               </Pressable>
             )}
-            {/* Leave without wearing anything: a real button, not a link (Dustin: "tap off easier"). */}
-            <Pressable onPress={() => leave(true)} disabled={waiting} accessibilityRole="button"
-              accessibilityHint={all === 'done' || titleOnly === 'done' ? 'Closes the reveal' : 'Closes without wearing anything'}
-              style={({ pressed }) => [styles.leave, { width: Math.min(320, W - 48) }, pressed && styles.leavePressed]}>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leaveText}>{waiting ? 'Saving...' : leaveLabel(all === 'done', titleOnly === 'done')}</Text>
-            </Pressable>
+            {/* Leave without wearing anything: the same quiet ghost button as every reveal's "keep" choice
+                (Shark Pass "Keep my look", the box's "Keep my lanyard"), full-size hit area. */}
+            <GameButton label={waiting ? 'Saving...' : leaveLabel(all === 'done', titleOnly === 'done')} variant="ghost" tone="onBlue"
+              onPress={() => leave(true)} disabled={waiting} style={{ width: Math.min(320, W - 48) }}
+              accessibilityHint={all === 'done' || titleOnly === 'done' ? 'Closes the reveal' : 'Closes without wearing anything'} />
           </View>
         </View>
       </Animated.View>
@@ -385,10 +384,6 @@ const styles = StyleSheet.create({
   alertText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, textAlign: 'center' },
   buttons: { width: '100%', alignItems: 'center', gap: 4, marginTop: 'auto' },
   close: { position: 'absolute', right: 14, zIndex: 3 },
-  leave: { minHeight: 52, borderRadius: 18, borderWidth: 3, borderColor: 'rgba(255,255,255,0.85)', alignItems: 'center',
-    justifyContent: 'center', marginTop: 4 },
-  leavePressed: { transform: [{ scale: 0.97 }], backgroundColor: 'rgba(255,255,255,0.08)' },
-  leaveText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.white, letterSpacing: 0.5 },
   textButton: { minHeight: 44, minWidth: 120, alignItems: 'center', justifyContent: 'center' },
   link: { fontFamily: FONT.display, fontSize: 16, color: BRAND.goldLight, textDecorationLine: 'underline' },
   bit: { position: 'absolute', top: 0, left: 0, height: 12, borderRadius: 2 },

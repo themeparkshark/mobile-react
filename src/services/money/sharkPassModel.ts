@@ -209,6 +209,27 @@ export function wearFirstCaption(chosen: WearChoice, opening: string, frame: boo
   }
 }
 
+/** How long the card waits for the fresh look after a wear saved, before it shows "worn" anyway. */
+export const WEAR_REFRESH_MS = 4000;
+
+/**
+ * Put it on, then fetch the fresh look. Only the save can fail: it times out after wearMs. The
+ * refresh is raced against refreshMs and never turns a wear that saved into "That didn't work".
+ */
+export async function wearThenRefresh(save: () => Promise<unknown>, refresh?: (() => unknown) | null,
+  wearMs = WEAR_TIMEOUT_MS, refreshMs = WEAR_REFRESH_MS): Promise<'worn' | 'failed'> {
+  try { await withWearTimeout(Promise.resolve().then(save), wearMs); } catch { return 'failed'; }
+  if (refresh) {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      Promise.resolve().then(refresh).catch(() => undefined),
+      new Promise<void>(r => { t = setTimeout(r, refreshMs); }),
+    ]);
+    if (t) clearTimeout(t);
+  }
+  return 'worn';
+}
+
 /** A wear call that hangs (park Wi-Fi) fails after WEAR_TIMEOUT_MS instead of spinning forever. */
 export function withWearTimeout<T>(run: Promise<T>, ms = WEAR_TIMEOUT_MS): Promise<T> {
   return new Promise<T>((resolve, reject) => {

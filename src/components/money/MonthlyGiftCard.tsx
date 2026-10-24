@@ -83,7 +83,7 @@ export default function MonthlyGiftCard() {
           // Show off the month's members-only pin. No price, no "VIP costs".
           share={landed.pin && landed.art && PIN_ART[landed.art] ? (
             <FlexShareButton kind="find" surface="vip_gift" size="reveal" handoff={landedShare.handoff}
-              payload={{ itemName: landed.pin, artUrl: PIN_ART[landed.art], rarity: 4, sourceLine: `${monthName(gift.month, false)} member pin` }} />
+              payload={{ itemName: landed.pin, artUrl: PIN_ART[landed.art], prize: 'member', sourceLine: `${monthName(gift.month, false)} member gift` }} />
           ) : undefined}
           onDone={() => setLanded(null)} />
       )}

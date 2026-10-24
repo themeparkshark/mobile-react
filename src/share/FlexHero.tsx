@@ -135,13 +135,15 @@ function Tag({ text, color, size }: { readonly text: string; readonly color: str
 function FindHero({ p, size }: { readonly p: FlexPayloads['find']; readonly size: number }) {
   const rarity = normalizeRarity(p.rarity);
   const look = RARITY_RAMP[rarity];
-  const colors: [string, string] = p.goldenHour ? ['#fff4c2', '#ffcf3b'] : ['#ffffff', look.chip];
+  // An earned prize (Shark Pass, member pin) has no rarity: a plain gold prize panel, no rarity stars.
+  const prize = !!p.prize;
+  const colors: [string, string] = p.goldenHour || prize ? ['#fff4c2', '#ffcf3b'] : ['#ffffff', look.chip];
   return (
     <View style={{ width: size, height: size }}>
-      <Panel size={size} colors={colors} lip={p.goldenHour ? '#d99a00' : look.frame} rim={look.frame}>
+      <Panel size={size} colors={colors} lip={p.goldenHour || prize ? '#d99a00' : look.frame} rim={prize ? '#ffffff' : look.frame}>
         <FlexArtwork art={p.artUrl} fallback={HERO_ART.gift} style={{ width: size * 0.76, height: size * 0.76 }} />
       </Panel>
-      {(rarity >= 4 || p.goldenHour) && <Stars size={size} count={rarity === 5 || p.goldenHour ? 5 : 3} />}
+      {!prize && (rarity >= 4 || p.goldenHour) && <Stars size={size} count={rarity === 5 || p.goldenHour ? 5 : 3} />}
       {p.dailyRare && <View style={{ position: 'absolute', right: -size * 0.06, top: size * 0.02 }}><Tag text="DAILY RARE" color="#9b4dff" size={size} /></View>}
     </View>
   );

@@ -47,9 +47,14 @@ const PROP_SPOT: Readonly<Record<PropKey, { x: number; y: number; w: number; h: 
   photos: { x: -0.22, y: 0.4, w: 0.48, h: 0.38, rotate: -8 },
 };
 
-export const FlexShark = memo(function FlexShark({ inventory, height, flip = false, prop = null, style }: {
+/** The chest pin spot (Playercard's body anchor), a little bigger so it reads on a picture. */
+const CHEST_PIN = { x: 0.45, y: 0.5, w: 0.15 } as const;
+
+export const FlexShark = memo(function FlexShark({ inventory, height, flip = false, prop = null, pin = false, style }: {
   readonly inventory: InventoryType | null | undefined;
   readonly height: number;
+  /** Draw the worn pin on the chest (a new pin is the brag on its card). Never mirrored. */
+  readonly pin?: boolean;
   /** Mirror the shark (the art faces left). The prop is mirrored in place, never its art. */
   readonly flip?: boolean;
   readonly prop?: PropKey | null;
@@ -79,6 +84,11 @@ export const FlexShark = memo(function FlexShark({ inventory, height, flip = fal
             style={StyleSheet.absoluteFill} />
         ))}
       </View>
+      {pin && !!inventory?.pin_item?.icon_url && (
+        <FlexArtwork id="chest-pin" art={inventory.pin_item.icon_url} fallback={TRANSPARENT}
+          style={{ position: 'absolute', width: width * CHEST_PIN.w, height: width * CHEST_PIN.w, top: height * CHEST_PIN.y,
+            left: flip ? width * (1 - CHEST_PIN.x - CHEST_PIN.w) : width * CHEST_PIN.x }} />
+      )}
       {!spot?.behind && propView}
     </View>
   );

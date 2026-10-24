@@ -29,7 +29,9 @@ export interface FlexBase {
 export interface FlexPayloads {
   readonly crowned: FlexBase & { readonly coinUrl: FlexArt; readonly tierName?: string; readonly timesCollected?: number };
   readonly find: FlexBase & {
-    readonly itemName: string; readonly artUrl: FlexArt; readonly rarity: RarityInput; readonly setName?: string;
+    readonly itemName: string; readonly artUrl: FlexArt;
+    /** Left out for an earned prize (see prize): those pieces have no rarity. */
+    readonly rarity?: RarityInput; readonly setName?: string;
     readonly goldenHour?: boolean; readonly dailyRare?: boolean; readonly caughtCount?: number;
     /** A gold chaser's own number ("Limited edition #12"). */
     readonly serial?: number | null;
@@ -42,6 +44,11 @@ export interface FlexPayloads {
     readonly sourceLine?: string;
     /** A small second line under sourceLine (the season name). Dropped if it would be cut off. */
     readonly sourceSub?: string;
+    /**
+     * Earned, not found: a Shark Pass prize ('pass') or a monthly member pin ('member'). The card says
+     * "My Shark Pass Prize" / "My Member Pin", never "FIND", and shows no rarity (these have none).
+     */
+    readonly prize?: 'pass' | 'member';
   };
   readonly ride_photo: FlexBase & {
     readonly itemName: string; readonly artUrl: FlexArt; readonly rarity: RarityInput;
