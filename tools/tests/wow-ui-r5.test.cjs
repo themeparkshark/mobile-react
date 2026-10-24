@@ -154,3 +154,13 @@ test('refresh shark: anchored to the content, its bottom edge always clears the 
   assert.match(read('src/screens/FriendsScreen.tsx'), /<SharkRefreshOverlay anchored shark=\{shark\} \/>/);
   assert.match(read('src/screens/NotificationsScreen.tsx'), /<SharkRefreshOverlay anchored shark=\{shark\} \/>/);
 });
+
+test('dive: once the game screen lays out, the open is timed on the UI thread (never a late JS timer)', () => {
+  const dive = read('src/fx/DiveIris.tsx');
+  assert.match(dive, /layoutCapMs: 450,/);
+  assert.match(dive, /openNow\(Math\.max\(DIVE\.layoutCapMs \* devSlow\(\), T\.holdMs - \(Date\.now\(\) - coveredAt\)\)\);/);
+  assert.match(dive, /if \(open\.value === 0\) openNow\(/, 'a round landing first brings the open forward');
+  const lp = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(lp, /if \(!laidOut\.current\) notifyDiveLaidOut\(\);/);
+  assert.doesNotMatch(lp, /setTimeout\(notifyDiveLanded, DIVE_READY_CAP_MS\)/);
+});

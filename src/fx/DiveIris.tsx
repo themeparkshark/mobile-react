@@ -72,6 +72,12 @@ export const DIVE = {
   safetyMs: 2500,
   /** The open always waits at least this long (UI thread) after the landing signal, so the screen has drawn. */
   drawMs: 50,
+  /**
+   * Once the game screen has laid out under the water, the water opens at most this long later, timed
+   * on the UI thread (a JS timer on a starved JS thread fired seconds late). Its round landing first
+   * opens it sooner.
+   */
+  layoutCapMs: 450,
   /** If the water has not covered the screen this long after its close should have ended, go anyway (ms). */
   watchdogMs: 1200,
   /** How often the water re-checks after safetyMs (ms). */
@@ -163,6 +169,7 @@ const listeners = new Set<(dive: Dive | null) => void>();
 const settleListeners = new Set<(settled: boolean) => void>();
 const prewarm = new Map<string, { load: () => unknown }>();
 const landedListeners = new Set<() => void>();
+const laidOutListeners = new Set<() => void>();
 
 /**
  * Root registers how to load a game screen's module, so it loads on the JS thread while the water
@@ -176,6 +183,14 @@ export function registerDivePrewarm(name: string, load: () => unknown): void {
 /** A game screen's root view is laid out natively: the water can open onto it now. */
 export function notifyDiveLanded(): void {
   landedListeners.forEach(l => l());
+}
+
+/**
+ * A game screen's root has laid out but its first round is still coming: the water opens by itself
+ * DIVE.layoutCapMs later (on the UI thread), or sooner when notifyDiveLanded() follows.
+ */
+export function notifyDiveLaidOut(): void {
+  laidOutListeners.forEach(l => l());
 }
 
 export { useDiveActive } from './diveActive';
@@ -359,8 +374,25 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
       skipHold = true;
       if (decided && open.value === 0) openNow(DIVE.drawMs);
     };
+    /** The laid-out signal already scheduled a capped open on the UI thread; a landing can bring it forward. */
+    let capped = false;
+    const onLaidOut = () => {
+      if (!alive || decided || landed) return;
+      mark('laid-out');
+      decided = true;
+      capped = true;
+      setHolding(false);
+      openNow(Math.max(DIVE.layoutCapMs * devSlow(), T.holdMs - (Date.now() - coveredAt)));
+    };
     const onLanded = () => {
       if (landed) return;
+      if (capped) {
+        landed = true;
+        mark('landed(capped)');
+        // Still under water (the capped open is waiting): open now instead.
+        if (open.value === 0) openNow(Math.max(DIVE.drawMs, skipHold ? 0 : T.holdMs - (Date.now() - coveredAt)));
+        return;
+      }
       mark('landed');
       // Decide now; the open itself waits DIVE.drawMs on the UI thread so the screen has drawn under the
       // water (a frame wait on the JS thread could sit for seconds behind a busy render).
@@ -374,6 +406,7 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
       queueHaptic('hitMedium');
       if (!decided) setHolding(true);
       landedListeners.add(onLanded);
+      laidOutListeners.add(onLaidOut);
       if (!went) { went = true; dive.go(); mark('go'); }
       timers.push(setTimeout(() => decide('safety'), DIVE.safetyMs * devSlow()));
     };
@@ -390,7 +423,7 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     close.value = withTiming(1, { duration: T.closeMs, easing: EASE.in }, done => {
       if (done) runOnJS(onCovered)(Date.now());
     });
-    cleanups.push(() => { landedListeners.delete(onLanded); });
+    cleanups.push(() => { landedListeners.delete(onLanded); laidOutListeners.delete(onLaidOut); });
     cleanups.push(() => cancelAnimation(clock));
     return () => { alive = false; timers.forEach(clearTimeout); cleanups.forEach(c => c()); };
     // eslint-disable-next-line react-hooks/exhaustive-deps

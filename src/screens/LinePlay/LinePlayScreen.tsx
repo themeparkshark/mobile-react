@@ -17,7 +17,7 @@
  * Route params: { ride: RideContext }. Wire via Root.tsx Stack.Screen "LinePlay".
  */
 
-import { notifyDiveLanded, useDiveSettled } from '../../fx/DiveIris';
+import { notifyDiveLaidOut, notifyDiveLanded, useDiveSettled } from '../../fx/DiveIris';
 import { playSfx } from '../../gamekit/SFX';
 import { haptic } from '../../gamekit/Haptics';
 import { openAppSettings } from '../../services/external';
@@ -187,7 +187,8 @@ export default function LinePlayScreen() {
   const onRootLayout = useCallback(() => {
     if (__DEV__) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.(`lp-layout ready=${diveReady}`);
     if (diveReady) { notifyDiveLanded(); return; }
-    if (!laidOut.current) readyCap.current = setTimeout(notifyDiveLanded, DIVE_READY_CAP_MS);
+    // The water opens by itself DIVE_READY_CAP_MS later, timed on the UI thread (DiveIris layoutCapMs).
+    if (!laidOut.current) notifyDiveLaidOut();
     laidOut.current = true;
   }, [diveReady]);
   useEffect(() => {
