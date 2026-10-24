@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Modal from 'react-native-modal';
 import Animated, {
@@ -319,6 +319,16 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     playSfx('win'); playSfx('coin', 0.9);
   };
 
+  const pendingCelebrate = useRef<boolean | null>(null);
+  const celebrateRef = useRef(celebrate);
+  celebrateRef.current = celebrate;
+  useLayoutEffect(() => {
+    if (phase !== 'open' || pendingCelebrate.current === null) return;
+    const isTicket = pendingCelebrate.current;
+    pendingCelebrate.current = null;
+    celebrateRef.current(isTicket);
+  }, [phase]);
+
   const open = async () => {
     if (claiming.current || phase !== 'closed') return;
     claiming.current = true;
@@ -354,8 +364,10 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       const isTicket = mainKind(chestAmounts(confirmed, confirmedToday)) === 'tickets';
       revealTimer.current = setTimeout(() => {
         if (!mounted.current) return;
+        // The pop starts once the open card is committed (useLayoutEffect below), so the lid never bursts over
+        // "Opening your chest" and the light, the prize and Awesome! share its first frame.
+        pendingCelebrate.current = isTicket;
         setPhase('open');
-        celebrate(isTicket);
       }, reducedMotion ? 0 : Math.max(0, 440 - (Date.now() - startedAt)));
     } catch {
       // A previous successful claim can outlive this screen. Reconcile before retrying.

@@ -34,6 +34,7 @@ function chest({ reconciled = null, reduced = false } = {}) {
         effects.push(() => { prev?.cleanup?.(); slots[key].cleanup = fn(); });
       }
     },
+    useLayoutEffect(fn, deps) { return react.useEffect(fn, deps); },
     useContext(context) { return context === AuthContext
       ? { player: { username: 'localqa' }, refreshPlayer() { refreshes++; } }
       : { setDailyGift(value) { acknowledged.push(value); } }; },

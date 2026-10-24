@@ -518,3 +518,9 @@ test('wave 3 rerun round 2: the daily chest card keeps one height from the tap t
   assert.ok(/styles\.laterButton, styles\.laterInSlot/.test(chest), 'Back to map sits in the same spot while the chest is shut');
   assert.ok(!/\{phase === 'open' && \(\s*<Pressable onPress=\{dismiss\}/.test(chest), 'no button mounts at the payoff');
 });
+
+test('wave 3 rerun round 2: the chest pops once the open card is committed, never over "Opening your chest"', () => {
+  const chest = read('src/components/DailyGiftModal.tsx');
+  assert.ok(/pendingCelebrate\.current = isTicket;\s*setPhase\('open'\);/.test(chest), 'the reveal only marks the pop as pending');
+  assert.ok(/useLayoutEffect\(\(\) => \{\s*if \(phase !== 'open' \|\| pendingCelebrate\.current === null\) return;[\s\S]*?celebrateRef\.current\(isTicket\);\s*\}, \[phase\]\);/.test(chest), 'it starts on the committed open card');
+});
