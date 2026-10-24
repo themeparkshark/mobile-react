@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, View, Text, StyleSheet, Platform } from 'react-native';
+import { AccessibilityInfo, View, Text, StyleSheet, Platform, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import Reanimated, { useAnimatedStyle, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import Reanimated, { useAnimatedStyle, useFrameCallback, useSharedValue, type AnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { COIN_TIERS } from '../constants/coinTiers';
 import { usePowerBudget } from '../power';
 
@@ -262,18 +262,32 @@ function useCoinClock(running: boolean): Clock {
   return t;
 }
 
+/**
+ * A moving light dot with its glow drawn as a soft halo disc (no iOS shadow): a shadow on a moving view is
+ * recomputed every frame the whole time the card is up, the halo costs nothing extra.
+ */
+function GlowDot({ size, color, halo = color, style }: {
+  readonly size: number; readonly color: string; readonly halo?: string;
+  readonly style: StyleProp<AnimatedStyle<ViewStyle>>;
+}) {
+  const outer = size * 2.6;
+  return (
+    <Reanimated.View pointerEvents="none" style={[{
+      position: 'absolute', width: outer, height: outer, borderRadius: outer / 2, backgroundColor: `${halo}40`,
+      alignItems: 'center', justifyContent: 'center',
+    }, style]}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
+    </Reanimated.View>
+  );
+}
+
 function Mercury({ i, t, size, gold }: { readonly i: number; readonly t: Clock; readonly size: number; readonly gold: boolean }) {
   const orbitRadius = size / 2 + 2;
   const style = useAnimatedStyle(() => ({
     transform: [{ rotate: `${i * 120 + 360 * phase(t.value, 3000 + i * 800)}deg` }, { translateY: -orbitRadius }],
   }));
   const color = gold ? '#fbbf24' : '#e2e8f0';
-  return (
-    <Reanimated.View pointerEvents="none" style={[{
-      position: 'absolute', width: gold ? 6 : 5, height: gold ? 6 : 5, borderRadius: 3, backgroundColor: color,
-      ...Platform.select({ ios: { shadowColor: color, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 4 }, android: {} }),
-    }, style]} />
-  );
+  return <GlowDot size={gold ? 6 : 5} color={color} style={style} />;
 }
 
 function Mote({ i, t, size, level }: { readonly i: number; readonly t: Clock; readonly size: number; readonly level: number }) {
@@ -289,12 +303,7 @@ function Mote({ i, t, size, level }: { readonly i: number; readonly t: Clock; re
     opacity: 0.2 + 0.8 * wave(t.value, 2 * (400 + i * 100)),
     transform: [{ rotate: `${i * 60 + dir * 360 * phase(t.value, 4000 + i * 600)}deg` }, { translateY: -orbitRadius }],
   }));
-  return (
-    <Reanimated.View pointerEvents="none" style={[{
-      position: 'absolute', width: moteSize, height: moteSize, borderRadius: moteSize / 2, backgroundColor: color,
-      ...Platform.select({ ios: { shadowColor: color, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 3 }, android: {} }),
-    }, style]} />
-  );
+  return <GlowDot size={moteSize} color={color} style={style} />;
 }
 
 function Star({ i, t, size }: { readonly i: number; readonly t: Clock; readonly size: number }) {
@@ -305,13 +314,7 @@ function Star({ i, t, size }: { readonly i: number; readonly t: Clock; readonly 
     opacity: 0.3 + 0.7 * wave(t.value, 2 * (600 + i * 150)),
     transform: [{ rotate: `${i * 45 + dir * 360 * phase(t.value, 6000 + i * 1000)}deg` }, { translateY: -orbitRadius }],
   }));
-  return (
-    <Reanimated.View pointerEvents="none" style={[{
-      position: 'absolute', width: starSize, height: starSize, borderRadius: starSize / 2,
-      backgroundColor: i % 2 === 0 ? '#fde68a' : '#fed7aa',
-      ...Platform.select({ ios: { shadowColor: '#fbbf24', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 2 }, android: {} }),
-    }, style]} />
-  );
+  return <GlowDot size={starSize} color={i % 2 === 0 ? '#fde68a' : '#fed7aa'} halo="#fbbf24" style={style} />;
 }
 
 /** A light ray that flares out from the centre: wait i x 180 ms, flare for 800 ms, rest 1.2 s, repeat. */
