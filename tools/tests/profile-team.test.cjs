@@ -98,6 +98,9 @@ test('team badges never show the old mouse face or Earth globe (IP safety, round
   const badgeSrc = require('node:fs').readFileSync('src/components/TeamBadge.tsx', 'utf8');
   assert.match(badgeSrc, /needle: icon === 'map' && size < SMALL_EMBLEM/);
   assert.match(badgeSrc, /\{l\.needle \? <Needle size=\{l\.glyph\} \/> : <GameIcon name=\{icon\} size=\{l\.glyph\} \/>\}/);
+  // It reads as a compass, not a diamond: a navy bezel ring, a tilted needle and a pivot.
+  assert.match(badgeSrc, /l\.needle \? \{ borderWidth: 1, borderColor: NEEDLE_NORTH \} : null/);
+  assert.match(badgeSrc, /rotate: '35deg'/);
   // The Green chip sits one step deeper than the shield's green, so the shield and compass stand out on it.
   const teamsMod = loadTs('src/constants/teams.ts');
   assert.notEqual(teamsMod.teamChipColor('globe'), teamsMod.TEAMS.globe.color);

@@ -20,8 +20,11 @@ test('the ring has one notch per Part and lights as Parts land', () => {
     nextTierName: 'Gold' });
   assert.equal(p.notches, 4); assert.equal(p.lit, 3); assert.equal(p.fill, 0.75);
   assert.equal(p.ready, false); assert.equal(p.label, '3 of 4 Parts to Level 3', 'one Parts idea: no tier name on the chip');
-  assert.equal(m.waitCoinProgress({ level: 3, maxLevel: 10, partsBanked: 0, partsToNext: 6, energyToNext: 30, playerEnergy: 0 }).label,
-    '0 of 6 Parts to Level 4', 'right after a level up the chip reads as the next goal, not as nothing earned');
+  assert.equal(p.chip, '3 of 4', 'the chip is one number pair; the gem beside it says Parts');
+  assert.equal(p.goalLevel, 3, 'the level it fills toward sits on the ring');
+  const after = m.waitCoinProgress({ level: 3, maxLevel: 10, partsBanked: 0, partsToNext: 6, energyToNext: 30, playerEnergy: 0 });
+  assert.equal(after.label, '0 of 6 Parts to Level 4', 'right after a level up the spoken label reads as the next goal');
+  assert.equal(after.chip, '0 of 6'); assert.equal(after.goalLevel, 4);
   const long = m.waitCoinProgress({ level: 9, maxLevel: 10, partsBanked: 10, partsToNext: 40, energyToNext: 260, playerEnergy: 0 });
   assert.equal(long.notches, 0, 'a 40 Part step draws a smooth arc'); assert.equal(long.fill, 0.25);
 });
@@ -36,6 +39,7 @@ test('level up is offered only when Parts AND Energy cover it; never auto-spent'
   assert.equal(m.waitCoinProgress({ ...base, playerEnergy: null }).ready, false, 'unknown Energy never offers a tap');
   const maxed = m.waitCoinProgress({ ...base, level: 10, playerEnergy: 999 });
   assert.equal(maxed.maxed, true); assert.equal(maxed.ready, false); assert.equal(maxed.fill, 1);
+  assert.equal(maxed.goalLevel, null, 'no goal badge at max level (the crown sits there)');
   // The stage calls the existing server level-up (Parts + Energy spent there), nothing else.
   const hook = read(DIR + 'useWaitScreenCoin.ts');
   assert.match(hook, /levelUpRideCoin\(coin\.id, coin\.level\)/);
@@ -165,38 +169,44 @@ test('one wait source of truth: "no sign time" never shows next to a SIGN SAYS n
       }
     }
   }
-  assert.equal(m.waitSourceHint({ postedMinutes: 60, waitSource: 'last_known' }), 'The ride sign said 1h 00m a while ago.');
-  assert.equal(m.waitSourceHint({ postedMinutes: 35, waitSource: 'posted' }), 'The ride sign said 35m when you got in line.',
+  assert.equal(m.waitSourceHint({ postedMinutes: 60, waitSource: 'last_known' }), 'The ride sign said 1 hr a while ago.');
+  assert.equal(m.waitSourceHint({ postedMinutes: 35, waitSource: 'posted' }), 'The ride sign said 35 min.',
     'the Details line names the SIGN SAYS number, so it never reads as a dangling "That"');
+  assert.equal(m.waitSourceHint({ postedMinutes: 90, waitSource: 'posted' }), 'The ride sign said 1 hr 30 min.');
+  assert.equal(m.minutesWords(5), '5 min');
   for (const waitSource of ['posted', 'last_known']) {
-    const est = m.waitEstimate({ postedMinutes: 35, waitSource, ratio: null, elapsedSeconds: 600 });
-    assert.ok(m.waitSourceHint({ postedMinutes: 35, waitSource }).includes(est.kidValue), 'same number, same format as SIGN SAYS');
-    assert.ok(m.waitSourceHint({ postedMinutes: 35, waitSource }).split(/\s+/).length <= 12);
+    const hint = m.waitSourceHint({ postedMinutes: 35, waitSource });
+    assert.ok(hint.includes('35 min'), 'same number as SIGN SAYS, in the one Details minute format');
+    assert.doesNotMatch(hint, /\d+m\b/, 'never "35m" beside "10 min" in one Details block');
+    assert.ok(hint.split(/\s+/).length <= 12);
   }
   // The card and its hero read the same sign time (the dev preview included).
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(card, /waitSourceHint\(\{ postedMinutes: postedWaitMinutes, waitSource \}\)/);
   assert.doesNotMatch(card, /No posted wait was found/);
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.equal((screen.match(/waitSource=\{shownWait\(snapshot\)\.waitSource\}/g) ?? []).length, 2);
-  assert.equal((screen.match(/=\{shownWait\(snapshot\)\.plannedWaitMinutes\}/g) ?? []).length, 2);
+  assert.match(screen, /const wait = shownWait\(snapshot\);/, 'one sign-time read per render');
+  assert.equal((screen.match(/waitSource=\{wait\.waitSource\}/g) ?? []).length, 2);
+  assert.equal((screen.match(/=\{wait\.plannedWaitMinutes\}/g) ?? []).length, 2);
   assert.doesNotMatch(read(DIR + 'WaitCoinHero.tsx'), /waitSource: 'posted'/, 'the hero preview never invents its own sign time');
   // Same for "earns Parts": the card never says "No Parts at this ride" beside a filling Parts ring.
-  assert.match(screen, /rewardTrackingAvailable=\{shownRewards\(snapshot, ride\)\.tracking\}/);
-  assert.match(screen, /lineRewardsReady=\{shownRewards\(snapshot, ride\)\.ready\}/);
-  assert.match(screen, /rewardsOn=\{shownRewards\(snapshot, ride\)\.tracking && !shownRewards\(snapshot, ride\)\.unavailable\}/);
+  assert.match(screen, /const rewards = shownRewards\(snapshot, ride\);/, 'one rewards read per render');
+  assert.equal((screen.match(/shownRewards\(/g) ?? []).length, 1);
+  assert.match(screen, /rewardTrackingAvailable=\{rewards\.tracking\}/);
+  assert.match(screen, /lineRewardsReady=\{rewards\.ready\}/);
+  assert.match(screen, /rewardsOn=\{rewards\.tracking && !rewards\.unavailable\}/);
   assert.doesNotMatch(read(DIR + 'WaitCoinHero.tsx'), /rewardsOn: true/);
 });
 
 test('Details under the coin hero: two short lines at most, one Parts idea, the cap only once reached', () => {
   const card = loadTs('src/screens/LinePlay/components/WaitCard.tsx', {
-    react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {}, Fragment: 'Fragment' }, 'react-native': { StyleSheet: { create: x => x } }, 'expo-linear-gradient': {}, 'react-native-svg': {},
+    react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {}, Fragment: 'Fragment' }, 'react-native': { StyleSheet: { create: x => x } }, 'expo-linear-gradient': {}, 'react-native-svg': {}, 'react-native-reanimated': {},
     '../../../design-system': { colors: { textPrimary: '#fff' }, spacing: { sm: 8, xs: 4, md: 12 }, borderRadius: { xxl: 24 }, shadows: { lg: {} } },
     '../../../context/SoundEffectProvider': {}, '../../../helpers/hapticPatterns': {}, '../../../ui': {},
     '../../../services/lineplay/partCountdown': {}, '../../../services/lineplay/bonusRounds': {},
     '../../../services/lineplay/waitScreen': model(), './waitscreen/WaitStampBadge': {},
   });
-  const base = { signLine: 'The ride sign said 35m when you got in line.', sublineInHeadline: true,
+  const base = { signLine: 'The ride sign said 35 min.', sublineInHeadline: true,
     subline: 'until your next Ride Part', rewardTrackingAvailable: true, atCap: false, intervalSeconds: 600 };
   assert.deepEqual(plain(card.heroDetailLines(base)), [base.signLine, '1 Ride Part every 10 min near the ride.']);
   // The status line could not hold its subline (checking, paused, at the cap): Details shows it instead of a second Parts idea.
@@ -212,7 +222,7 @@ test('Details under the coin hero: two short lines at most, one Parts idea, the 
   assert.equal(card.ticketHint(true, 0, 600), 'Stay near the ride 10:00 more for a ticket.');
   assert.equal(card.ticketHint(true, 700, 600), 'You get a ticket when this wait ends.');
   const src = read('src/screens/LinePlay/components/WaitCard.tsx');
-  assert.match(src, /\{expanded && hero && <HeroDetails/);
+  assert.match(src, /\{expanded && hero && <Reanimated\.View [^>]*\n[^>]*><HeroDetails/);
   assert.match(src, /entranceWaitMinutes !== signMinutes\(\{ postedMinutes: postedWaitMinutes, waitSource \}\)/,
     'the sign number already on the card is never repeated in Details');
   assert.match(src, /\{expanded && !hero && <>/);

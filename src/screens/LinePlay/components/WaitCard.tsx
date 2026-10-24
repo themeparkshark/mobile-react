@@ -6,6 +6,7 @@
 
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import Reanimated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
 import type { PauseReason, WaitSource, RewardConnectionIssue } from '../../../services/lineplay/LinePlaySession';
@@ -157,6 +158,11 @@ export function stampCaption(kind: WaitStamp['kind']): string {
   return kind === 'marathon' ? '1 hour in line!' : 'A night wait!';
 }
 
+/** The picture in the Details icon column for a wait mark: a medal for an hour in line, the moon at night. */
+export function stampIcon(kind: WaitStamp['kind']): GameIconName {
+  return kind === 'marathon' ? 'medal1' : 'moon';
+}
+
 /** The picture beside each Details line: the ride car for the sign's time, the Parts gem for Parts. */
 export function heroDetailIcon(index: number): GameIconName {
   return index === 0 ? 'ride' : 'parts';
@@ -168,9 +174,10 @@ function HeroDetails({ stamps, lines, ticket }: {
   return <View style={styles.heroDetails}>
     {stamps.length > 0 && <View style={styles.stampRow} accessible accessibilityLabel={stamps.map(stamp => stamp.kind === 'marathon'
       ? 'Marathon wait: an hour or more in line.' : 'Night wait, after 8 PM.').join(' ')}>
-      {stamps.map(stamp => <View key={stamp.kind} style={styles.stampItem}>
+      {stamps.map(stamp => <View key={stamp.kind} style={styles.detailLine}>
+        <GameIcon name={stampIcon(stamp.kind)} size={20} />
+        <Text style={styles.detailLineText}>{stampCaption(stamp.kind)}</Text>
         <WaitStampBadge stamp={stamp} />
-        <Text style={styles.stampCaption}>{stampCaption(stamp.kind)}</Text>
       </View>)}
     </View>}
     {lines.map((line, index) => <View key={line} style={styles.detailLine}>
@@ -221,10 +228,19 @@ export default function WaitCard({
   hero = null,
 }: WaitCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  // Details opens and closes in ONE commit: the screen hears about it right here, not in a
+  // later effect, so on a short phone the crew row fades out while the lines fade in and the
+  // pages glide (Reanimated layout animations on the UI thread). Reduce Motion: it just switches.
+  const toggleDetails = () => {
+    const next = !expanded;
+    setExpanded(next);
+    onDetailsChange?.(next);
+  };
   const onDetailsChangeRef = useRef(onDetailsChange);
   onDetailsChangeRef.current = onDetailsChange;
-  useEffect(() => { onDetailsChangeRef.current?.(expanded); }, [expanded]);
-  const [reducedMotion, setReducedMotion] = useState(false);
+  // If the card goes away while open, the screen gets its crew row back.
+  useEffect(() => () => onDetailsChangeRef.current?.(false), []);
   useEffect(() => {
     let alive = true;
     void AccessibilityInfo.isReduceMotionEnabled().then(value => { if (alive) setReducedMotion(value); })
@@ -366,7 +382,7 @@ export default function WaitCard({
           </View>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
             accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
-            onPress={() => setExpanded(value => !value)} style={styles.compactDetails}
+            onPress={toggleDetails} style={styles.compactDetails}
             hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}>
             <View style={styles.detailsPill}>
               <Text style={styles.detailsButtonText}>{expanded ? 'Hide' : 'Details'}</Text>
@@ -421,10 +437,11 @@ export default function WaitCard({
         )}
 
         {!compact && <Pressable accessibilityRole="button" accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
-          onPress={() => setExpanded(value => !value)} style={[styles.detailsButton, compact && styles.compactDetails]} hitSlop={6}>
+          onPress={toggleDetails} style={[styles.detailsButton, compact && styles.compactDetails]} hitSlop={6}>
           <Text style={styles.detailsButtonText}>{expanded ? 'Hide details' : `${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m · details`}</Text>
         </Pressable>}
-        {expanded && hero && <HeroDetails stamps={stamps} lines={heroDetailLines({
+        {expanded && hero && <Reanimated.View entering={reducedMotion ? undefined : FadeIn.delay(100).duration(180)}
+          exiting={reducedMotion ? undefined : FadeOut.duration(120)}><HeroDetails stamps={stamps} lines={heroDetailLines({
           // A fresh, different reading at the line beats the start time; the same number is never said twice.
           signLine: entranceFresh && entranceWaitMinutes != null
             && entranceWaitMinutes !== signMinutes({ postedMinutes: postedWaitMinutes, waitSource })
@@ -432,7 +449,7 @@ export default function WaitCard({
             : waitSourceHint({ postedMinutes: postedWaitMinutes, waitSource }),
           sublineInHeadline, subline, rewardTrackingAvailable, atCap, intervalSeconds: interval,
         })} ticket={rewardTrackingAvailable && ticketAvailable !== null
-          ? ticketHint(ticketAvailable, verifiedEligibleSeconds, ticketIntervalSeconds) : null} />}
+          ? ticketHint(ticketAvailable, verifiedEligibleSeconds, ticketIntervalSeconds) : null} /></Reanimated.View>}
         {expanded && !hero && <>
           {compact && <>
             <Text style={styles.meterSub}>{subline}</Text>
@@ -492,10 +509,7 @@ export default function WaitCard({
 
 const styles = StyleSheet.create({
   heroDetails: { gap: 6, marginTop: 6 },
-  stampRow: { flexDirection: 'row', gap: 12, paddingVertical: 2 },
-  stampItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  stampCaption: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 15,
-    textShadowColor: '#073e79', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
+  stampRow: { gap: 6 },
   // Details reads like part of the card, not fine print: 15 pt white with the card's navy ink under it.
   detailLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   detailLineText: { flexShrink: 1, color: '#ffffff', fontFamily: 'Knockout', fontSize: 15, lineHeight: 19,

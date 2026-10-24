@@ -90,6 +90,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as RootNavigation from '../../RootNavigation';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { MovementFxGate, MOVING_CHIP_LINGER_MS, nextBonusSeconds } from '../../services/lineplay/bonusRounds';
 import { playBonusCue, type BonusCue } from '../../services/lineplay/bonusCues';
 import type { CurrentTier } from '../../games/current-quest/v1/logic';
@@ -159,7 +160,7 @@ import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLive
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { linePlayTipReady } from '../../services/help/tipGate';
-import { lineScreenFit, PAGE_EDGE_FADE, pageEdgeFade } from '../../services/lineplay/lineLayout';
+import { lineScreenFit } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
 
@@ -189,9 +190,6 @@ export default function LinePlayScreen() {
   const [rootHeight, setRootHeight] = useState(0);
   /** Short phones (iPhone SE) get a smaller coin and tighter gaps so the activity pages keep real room. */
   const fit = lineScreenFit(rootHeight, insets.top, insets.bottom);
-  /** Where the activity pages end, as a fraction of the screen, so their fade matches the water behind. */
-  const [pagesEnd, setPagesEnd] = useState(0.8);
-  const pagesRef = useRef<View>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [arcadeOpen, setArcadeOpen] = useState(false);
   const queuedArcadeGame = useRef<Extract<ActivityItem, { kind: 'minigame' }> | null>(null);
@@ -804,12 +802,6 @@ export default function LinePlayScreen() {
       }
     });
   }, []);
-  const measurePages = useCallback(() => {
-    pagesRef.current?.measureInWindow((_x, y, _width, height) => {
-      const screenH = Dimensions.get('window').height;
-      if (Number.isFinite(y) && Number.isFinite(height) && screenH > 0) setPagesEnd((y + height) / screenH);
-    });
-  }, []);
   const secondsToNextBonus = bonus ? nextBonusSeconds(bonus, snapshot.verifiedEligibleSeconds,
     snapshot.verifiedPresenceAt, Date.now()) : null;
   const movementContext = useMemo(() => ({
@@ -904,6 +896,8 @@ export default function LinePlayScreen() {
   const backdrop = snapshot.chapter?.palette === 'night' ? NIGHT_BACKDROP : DAY_BACKDROP;
   /** One clock per render (the dev preview reads Date.now), so the card and its coin can never be a tick apart. */
   const clock = shownClock(snapshot);
+  const wait = shownWait(snapshot);
+  const rewards = shownRewards(snapshot, ride);
 
   return (
     <View onTouchStart={onAnyTouch} onLayout={event => setRootHeight(event.nativeEvent.layout.height)}
@@ -963,16 +957,16 @@ export default function LinePlayScreen() {
             <WaitCard
               compact={snapshot.state !== 'complete'}
               rideName={ride.rideName}
-              postedWaitMinutes={shownWait(snapshot).plannedWaitMinutes}
-              waitSource={shownWait(snapshot).waitSource}
+              postedWaitMinutes={wait.plannedWaitMinutes}
+              waitSource={wait.waitSource}
               entranceWaitMinutes={snapshot.entranceWaitMinutes}
               entranceWaitObservedAt={snapshot.entranceWaitObservedAt}
               entranceWaitChangeMinutes={snapshot.entranceWaitChangeMinutes}
               elapsedSeconds={clock.elapsedSeconds}
-              rewardTrackingAvailable={shownRewards(snapshot, ride).tracking}
-              rewardUnavailable={shownRewards(snapshot, ride).unavailable}
+              rewardTrackingAvailable={rewards.tracking}
+              rewardUnavailable={rewards.unavailable}
               rewardConnectionIssue={snapshot.rewardConnectionIssue}
-              lineRewardsReady={shownRewards(snapshot, ride).ready}
+              lineRewardsReady={rewards.ready}
               verifiedEligibleSeconds={clock.verifiedEligibleSeconds}
               verifiedPresenceAt={clock.verifiedPresenceAt}
               creditedParts={clock.creditedParts}
@@ -1005,11 +999,11 @@ export default function LinePlayScreen() {
                 creditedParts={clock.creditedParts}
                 bonusParts={snapshot.bonus?.slots.filter(slot => slot.state === 'claimed').length ?? 0}
                 elapsedSeconds={clock.elapsedSeconds}
-                plannedWaitMinutes={shownWait(snapshot).plannedWaitMinutes}
-                waitSource={shownWait(snapshot).waitSource}
+                plannedWaitMinutes={wait.plannedWaitMinutes}
+                waitSource={wait.waitSource}
                 playerEnergy={player?.energy ?? null}
                 covered={activeGame != null || arcadeOpen || projectOpen}
-                rewardsOn={shownRewards(snapshot, ride).tracking && !shownRewards(snapshot, ride).unavailable}
+                rewardsOn={rewards.tracking && !rewards.unavailable}
                 onLeveled={() => void refreshPlayer().catch(() => undefined)}
               /> : null}
             />
@@ -1038,8 +1032,10 @@ export default function LinePlayScreen() {
           }}
           onOpenProject={() => setProjectOpen(true)} />}
 
-        {/* A short phone reading Details lends the crew row's space to the activity page; it comes back on Hide. */}
-        {!(fit.short && detailsOpen) && groupPlay.strip}
+        {/* A short phone reading Details lends the crew row's space to the activity page; it comes back on Hide.
+            The row fades and the pages glide (Reanimated layout animations, UI thread), so nothing pops. */}
+        {!(fit.short && detailsOpen) && <Reanimated.View entering={reducedFx ? undefined : FadeIn.duration(200)}
+          exiting={reducedFx ? undefined : FadeOut.duration(140)}>{groupPlay.strip}</Reanimated.View>}
 
         {/* Activity area (bottom) */}
         <View style={[styles.activityArea, { marginTop: fit.activityGap }]}>
@@ -1125,8 +1121,9 @@ export default function LinePlayScreen() {
             <ActivitySkeleton />
           ) : (
             <>
-            {/* The pages end in a soft fade above the rail, so a long card never looks cut through a line of text. */}
-            <View ref={pagesRef} onLayout={measurePages} collapsable={false} style={styles.pages}>
+            {/* Each page is a framed window (PageScroll) that stays put above the rail while its content scrolls.
+                When Details opens or closes, only this window glides (UI thread); the rail below never moves. */}
+            <Reanimated.View layout={reducedFx ? undefined : LinearTransition.duration(220)} style={styles.pages}>
             <FlatList
               ref={activityListRef}
               data={activityPages}
@@ -1167,7 +1164,7 @@ export default function LinePlayScreen() {
                       onGuess={(symbols) => void session.guessPuzzle(symbols)}
                     />
                   ) : item.kind === 'chapter_intro' && snapshot.chapter ? (
-                    <ChapterCard chapter={snapshot.chapter} completedIds={completedActivityIds}
+                    <ChapterCard chapter={snapshot.chapter} completedIds={completedActivityIds} compact={fit.short}
                       crewRelay={snapshot.crewRelay} paused={snapshot.state !== 'active'}
                       chapterClue={chapterClue}
                       signalAvailable={sharedPages.length > 0}
@@ -1217,9 +1214,7 @@ export default function LinePlayScreen() {
                 </View>
               )}
             />
-            <LinearGradient pointerEvents="none" colors={pageEdgeFade(backdrop, pagesEnd)}
-              style={styles.pageEdgeFade} />
-            </View>
+            </Reanimated.View>
             <ActivityPageRail index={visiblePageIndex} count={activityPages.length}
               firstLabel={activityPages[0]?.kind === 'chapter_intro' ? 'Chapter' : 'First round'}
               progressText={storyStep ? `CLUE ${storyStep}/3`
@@ -1462,8 +1457,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 6 },
   queueTrackingButtonText: { color: '#073e79', fontFamily: 'Knockout', fontSize: 14 },
   activityArea: { flex: 1, marginTop: spacing.lg },
-  pages: { flex: 1 },
-  pageEdgeFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: PAGE_EDGE_FADE },
+  // Clipped, so while it glides (Details open/close) the page never slides under the rail.
+  pages: { flex: 1, overflow: 'hidden' },
   page: {
     width: SCREEN_W,
     height: '100%',

@@ -49,7 +49,15 @@ export interface WaitCoinProgress {
   /** Parts and Energy both cover it: the coin offers a one-tap level up. */
   readonly ready: boolean;
   readonly energyShort: number;
+  /** The full sentence, for the coin's spoken label: "2 of 4 Parts to Level 3". */
   readonly label: string;
+  /**
+   * What the chip under the coin shows: just the count with the Parts gem beside
+   * it ("2 of 4"). The level it counts toward lives on the ring as a goal badge.
+   */
+  readonly chip: string;
+  /** The level the ring is filling toward (its goal badge), or null at max level. */
+  readonly goalLevel: number | null;
 }
 
 export function waitCoinProgress(input: WaitCoinInput): WaitCoinProgress {
@@ -58,7 +66,7 @@ export function waitCoinProgress(input: WaitCoinInput): WaitCoinProgress {
   const banked = Math.max(0, Math.floor(input.partsBanked || 0));
   if (level >= maxLevel) {
     return { fill: 1, notches: 0, lit: 0, maxed: true, partsReady: false, ready: false, energyShort: 0,
-      label: `Level ${level} · max level` };
+      label: `Level ${level} · max level`, chip: `Level ${level} · max level`, goalLevel: null };
   }
   const need = Math.max(1, Math.round(input.partsToNext || 1));
   const fill = Math.min(1, banked / need);
@@ -66,16 +74,18 @@ export function waitCoinProgress(input: WaitCoinInput): WaitCoinProgress {
   const energyKnown = input.playerEnergy != null;
   const energyShort = energyKnown ? Math.max(0, Math.round(input.energyToNext) - Math.round(input.playerEnergy!)) : 0;
   const ready = partsReady && energyKnown && energyShort === 0;
-  // One Parts idea on the wait card: the ring and "2 of 4 Parts to Level 3". The chip
-  // always counts toward the NEXT level, so right after a level up "0 of 6 Parts to
-  // Level 4" reads as a new goal, never as "you earned nothing". The next look's
-  // name stays in the spoken label of the coin, not on the chip.
-  const label = ready ? 'Ready to level up'
-    : partsReady ? energyKnown ? `Parts ready · ${energyShort} more Energy` : 'Parts ready'
-      : `${banked} of ${need} Parts to Level ${level + 1}`;
+  // One Parts idea on the wait card: the ring, its "Lv 3" goal badge and the "2 of 4"
+  // chip (one number pair, the gem says what they count). The chip always counts toward
+  // the NEXT level, so right after a level up "0 of 6" sits under a "Lv 4" goal: a new
+  // goal, never "you earned nothing". The full sentence is the coin's spoken label.
+  const status = ready ? 'Ready to level up'
+    : partsReady ? energyKnown ? `Parts ready · ${energyShort} more Energy` : 'Parts ready' : null;
   return {
     fill, notches: need <= MAX_RING_NOTCHES ? need : 0, lit: Math.min(banked, need),
-    maxed: false, partsReady, ready, energyShort, label,
+    maxed: false, partsReady, ready, energyShort,
+    label: status ?? `${banked} of ${need} Parts to Level ${level + 1}`,
+    chip: status ?? `${banked} of ${need}`,
+    goalLevel: level + 1,
   };
 }
 
@@ -119,11 +129,21 @@ export function signMinutes(input: Pick<WaitEstimateInput, 'postedMinutes' | 'wa
 export function waitSourceHint(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'>): string {
   const posted = signMinutes(input);
   if (posted == null) return 'No sign time when you started. Games still work.';
-  // Names the number (same format as SIGN SAYS), so the line makes sense on its own.
-  const shown = inLineLabel(posted * 60);
+  // Names the number, spelled the same way as every other time in Details ("10 min"),
+  // so one block never mixes "35m" and "10 min". The ride-car picture ties it to SIGN SAYS.
+  const shown = minutesWords(posted);
   return input.waitSource === 'last_known'
     ? `The ride sign said ${shown} a while ago.`
-    : `The ride sign said ${shown} when you got in line.`;
+    : `The ride sign said ${shown}.`;
+}
+
+/** Minutes in words for Details lines: "35 min", "1 hr", "1 hr 30 min". */
+export function minutesWords(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  if (hours === 0) return `${rest} min`;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
 }
 
 export function waitEstimate(input: WaitEstimateInput): WaitEstimate {

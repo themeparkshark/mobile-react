@@ -28,6 +28,7 @@ import { createNavigationPanel, createNavigationPanelProgress, navigationPanelSt
   traceNavigationPanel, type NavigationPanelProgress } from '../../../services/lineplay/navigationPanel';
 import { circuitThemeFor, type CircuitTheme } from '../../../services/lineplay/circuitTheme';
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
+import PageScroll from './PageScroll';
 
 interface Props {
   readonly seed: number;
@@ -210,7 +211,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   // chapter rail. Size the tiles from the height this page really has.
   const boardSide = boardSideFor(viewport, headerHeight);
 
-  return <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.card}
+  return <PageScroll ref={scroll} fill={BRAND.cream} contentStyle={styles.card}
     onLayout={event => {
       const { width, height } = event.nativeEvent.layout;
       if (width !== viewport.width || height !== viewport.height) setViewport({ width, height });
@@ -293,7 +294,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
         accessibilityLabel="Play another navigation circuit" />
     </Animated.View> : null}
     <Text style={styles.footer}>Play solo or pass the phone. Keep walking with the line; your circuit stays saved.</Text>
-  </ScrollView>;
+  </PageScroll>;
 }
 
 /** Room the card spends around the board: card and panel padding, borders, status line. */
@@ -311,8 +312,7 @@ export function boardSideFor(viewport: { width: number; height: number }, header
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1 },
-  card: { padding: 12, borderRadius: 22, borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.cream },
+  card: { padding: 12, paddingBottom: 12 },
   hero: { minHeight: 92, borderRadius: 16, flexDirection: 'row', alignItems: 'center', overflow: 'hidden',
     paddingLeft: 14, borderWidth: 3, borderColor: BRAND.navy },
   heroCompact: { minHeight: 0, paddingRight: 8 },

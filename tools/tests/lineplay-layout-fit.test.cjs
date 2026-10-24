@@ -23,30 +23,67 @@ test('an iPhone SE tightens up; a 17 Pro and a Pro Max keep the full coin', () =
   assert.equal(m.lineScreenFit(0, 0, 0).short, false, 'before the first layout nothing jumps');
 });
 
-test('the page fade ends in the exact water color behind it', () => {
+test('a page fades into its OWN frame color, never toward the dark water (no olive band over a yellow card)', () => {
   const m = layout();
-  const day = ['#0a7dd1', '#07569e', '#073e87'];
-  assert.deepEqual(plain(m.gradientColorAt(day, 0)), [10, 125, 209]);
-  assert.deepEqual(plain(m.gradientColorAt(day, 0.5)), [7, 86, 158]);
-  assert.deepEqual(plain(m.gradientColorAt(day, 1)), [7, 62, 135]);
-  assert.deepEqual(plain(m.gradientColorAt(day, 0.75)), [7, 74, 147]);
-  assert.deepEqual(plain(m.pageEdgeFade(day, 1)), ['rgba(7,62,135,0)', 'rgba(7,62,135,1)']);
-  assert.deepEqual(plain(m.gradientColorAt(day, Number.NaN)), [7, 62, 135], 'a bad measure falls back to the bottom color');
+  // A near-white mist of the frame fill (70% toward white): yellow goes cream, never olive.
+  assert.deepEqual(plain(m.frameFade('#bcecff')), { colors: ['rgba(235,249,255,0)', 'rgba(235,249,255,1)', 'rgba(235,249,255,1)'],
+    locations: [0, 0.62, 1] });
+  assert.deepEqual(plain(m.frameFade('#fff8e4').colors[1]), 'rgba(255,253,247,1)');
+  const [r, g, b] = m.frameFade('#d9f4ff').colors[1].match(/\d+/g).map(Number);
+  // Half-way over a gold card (#ffcf3b) the mix stays a warm cream: red and green high, no green cast.
+  const mix = [255, 207, 59].map((c, i) => (c + [r, g, b][i]) / 2);
+  assert.ok(mix[0] >= mix[1] && mix[0] > 240, `cream, not olive: ${mix}`);
+  assert.equal(m.gradientColorAt, undefined, 'no fade blends toward the backdrop any more');
+  assert.equal(m.pageEdgeFade, undefined);
+  // The arrow and fade show only while more is below.
+  assert.equal(m.moreBelow(800, 300, 0), true);
+  assert.equal(m.moreBelow(800, 300, 495), false, 'scrolled to the end: nothing covers the last line');
+  assert.equal(m.moreBelow(305, 300, 0), false, 'a page that just fits shows no arrow');
+  assert.equal(m.moreBelow(0, 300, 0), false, 'before layout nothing shows');
+  assert.equal(m.fadeHeight(400), 26); assert.equal(m.fadeHeight(80), 11, 'a short page gets a short fade'); assert.equal(m.fadeHeight(0), 26);
 });
 
-test('pages end above the rail in a fade, measured against the same backdrop the screen draws', () => {
+test('every LinePlay page is a framed window that stays put above the rail', () => {
   const screen = read(SCREEN);
-  assert.match(screen, /<View ref=\{pagesRef\} onLayout=\{measurePages\} collapsable=\{false\} style=\{styles\.pages\}>/);
-  assert.match(screen, /<LinearGradient pointerEvents="none" colors=\{pageEdgeFade\(backdrop, pagesEnd\)\}/);
+  assert.doesNotMatch(screen, /pageEdgeFade|pagesEnd|measurePages/, 'the screen no longer paints a fade in the water color');
   assert.match(screen, /<LinearGradient colors=\{backdrop\} style=\{StyleSheet\.absoluteFill\} \/>/);
-  // The fade sits inside the pages box, so the rail below is never covered.
-  const fade = screen.indexOf('pageEdgeFade(backdrop');
-  const rail = screen.indexOf('<ActivityPageRail');
-  assert.ok(fade > 0 && fade < rail);
+  const scroll = read('src/screens/LinePlay/components/PageScroll.tsx');
+  assert.match(scroll, /const fade = frameFade\(fill\);/, 'the fade is made from the frame fill');
+  assert.match(scroll, /<LinearGradient colors=\{fade\.colors\} locations=\{fade\.locations\}/);
+  assert.match(scroll, /overflow: 'hidden'/, 'content scrolls inside the frame, the frame itself never moves');
+  assert.match(scroll, /accessibilityLabel="More below\. Scroll down\."/);
+  for (const [file, fill] of [['ChapterCard', 'FRAME_FILL'], ['SignalCard', '"#d8f4ff"'], ['CrewRelayCard', '"#d9f4ff"'],
+    ['CrewPuzzleCard', '"#d9f4ff"'], ['CrewGridCard', '"#89d7fc"'], ['NavigationPanelCard', 'BRAND.cream'], ['ActivitySlot', 'CARD_FILL']]) {
+    const src = read(`src/screens/LinePlay/components/${file}.tsx`);
+    assert.ok(src.includes(`fill={${fill.replace(/"/g, '')}}`) || src.includes(`fill=${fill}`), `${file} uses PageScroll with its own fill`);
+    assert.doesNotMatch(src, /<ScrollView\s/, `${file}: no page scrolls its frame away`);
+  }
   assert.match(screen, /coinSize=\{fit\.coinSize\}/);
   assert.match(screen, /marginTop: fit\.activityGap/);
-  assert.match(screen, /\{!\(fit\.short && detailsOpen\) && groupPlay\.strip\}/, 'a short phone reading Details lends the crew row to the page');
-  assert.match(read('src/screens/LinePlay/components/WaitCard.tsx'), /onDetailsChangeRef\.current\?\.\(expanded\)/);
+  assert.match(screen, /compact=\{fit\.short\}/, 'a short phone gets the one-line mission header');
+  assert.match(screen, /\{!\(fit\.short && detailsOpen\) && <Reanimated\.View/, 'a short phone reading Details lends the crew row to the page');
+});
+
+test('on a short phone the chapter page puts PLAY NOW on screen: one-line header, slimmer clue card', () => {
+  const card = read('src/screens/LinePlay/components/ChapterCard.tsx');
+  assert.match(card, /compact && styles\.headerCompact/);
+  assert.match(card, /headerCompact: \{ minHeight: 0, height: 58 \}/);
+  assert.match(card, /compact && styles\.playNowCompact/);
+  assert.match(card, /\{!compact && <Text style=\{styles\.playNowHint\}>/);
+  assert.match(card, /\{compact \? <>\{playNow\}\{header\}<\/> : <>\{header\}\{playNow\}<\/>\}/, 'SE: the clue to play comes first');
+});
+
+test('Details opens smoothly: one commit, the crew row fades and the pages glide on the UI thread', () => {
+  const card = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.doesNotMatch(card, /LayoutAnimation/, 'LayoutAnimation does not animate on the new architecture');
+  assert.match(card, /setExpanded\(next\);\n\s*onDetailsChange\?\.\(next\);/, 'same event, same commit: no pop');
+  assert.equal((card.match(/onPress=\{toggleDetails\}/g) ?? []).length, 2);
+  assert.match(card, /entering=\{reducedMotion \? undefined : FadeIn\.delay\(100\)\.duration\(180\)\}/, 'the lines fade in as the page glides away from them');
+  const screen = read(SCREEN);
+  assert.match(screen, /exiting=\{reducedFx \? undefined : FadeOut\.duration\(140\)\}>\{groupPlay\.strip\}<\/Reanimated\.View>/);
+  assert.match(screen, /<Reanimated\.View layout=\{reducedFx \? undefined : LinearTransition\.duration\(220\)\} style=\{styles\.pages\}>/,
+    'only the page window glides; the rail under it never moves');
+  assert.match(screen, /pages: \{ flex: 1, overflow: 'hidden' \}/, 'while it glides it never slides under the rail');
 });
 
 test('the Welcome tip waits for its own tap and sits under the wait card, never on Details', () => {
@@ -74,4 +111,6 @@ test('Details reads like the card: big lines with a picture each, and a Marathon
   assert.match(card, /hitSlop=\{\{ top: 8, bottom: 8, left: 12, right: 12 \}\}/, 'Details is a big target');
   assert.match(card, /rotate: expanded \? '-90deg' : '90deg'/, 'an arrow shows it opens and closes');
   assert.doesNotMatch(card, /That is the ride sign/);
+  // The Marathon line uses the same 20 pt icon column as the other lines, caption first, badge after.
+  assert.match(card, /<GameIcon name=\{stampIcon\(stamp\.kind\)\} size=\{20\} \/>\n\s*<Text style=\{styles\.detailLineText\}>\{stampCaption\(stamp\.kind\)\}<\/Text>\n\s*<WaitStampBadge/);
 });

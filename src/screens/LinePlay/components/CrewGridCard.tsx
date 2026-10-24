@@ -5,6 +5,7 @@ import { buildCrewGrid, crewGridHasLine } from '../../../services/lineplay/crewG
 import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import * as Haptics from '../../../helpers/haptics';
 import { BRAND, GameIcon, type GameIconName } from '../../../ui';
+import PageScroll from './PageScroll';
 
 interface Props {
   readonly rideName: string;
@@ -64,7 +65,7 @@ export default function CrewGridCard({ rideName, chapterTitle, seed, marks, comp
     }
   };
 
-  return <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+  return <PageScroll ref={scrollRef} fill="#89d7fc" contentStyle={styles.scrollContent}>
     <ImageBackground source={require('../../../../assets/images/screens/leaderboard/standings-bg.png')}
       resizeMode="cover" style={styles.background} imageStyle={styles.backgroundImage}>
       <LinearGradient colors={['#087ddd', '#0065b8', '#00448d']} style={styles.hero}>
@@ -134,12 +135,11 @@ export default function CrewGridCard({ rideName, chapterTitle, seed, marks, comp
         <Text style={styles.rewardNote}>Play from your place in line. Your time near the ride earns Ride Parts.</Text>
       </View>
     </ImageBackground>
-  </ScrollView>;
+  </PageScroll>;
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: '#89d7fc' },
-  scrollContent: { flexGrow: 1 },
+  scrollContent: { flexGrow: 1, padding: 0, paddingBottom: 0 },
   background: { flex: 1, minHeight: '100%' },
   backgroundImage: { opacity: 0.78 },
   hero: { height: 90, paddingHorizontal: 20, paddingTop: 7, overflow: 'hidden',

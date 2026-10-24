@@ -72,17 +72,21 @@ export function emblemLayers(size: number) {
 
 /**
  * The compass at chip size: the map art turns into a gray-blue dot under 16 pt,
- * so the face gets a plain code-drawn needle instead (navy point up, green point
- * down), the one part of a compass a kid still reads at 9 pt. Not new art.
+ * so the face gets a plain code-drawn compass instead: a thin navy bezel ring, a
+ * slim needle tipped to one side (navy north, green south) and a white pivot.
+ * The ring and the tilt are what make it read as a compass and not a diamond at
+ * 9 pt. Not new art.
  */
 function Needle({ size }: { size: number }) {
-  const half = Math.max(2, Math.round(size * 0.28));
-  const tip = Math.max(3, Math.round(size * 0.46));
-  return <View style={{ alignItems: 'center' }}>
+  const half = Math.max(1.5, size * 0.2);
+  const tip = Math.max(3, Math.round(size * 0.44));
+  const pivot = Math.max(1.5, size * 0.18);
+  return <View style={{ alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '35deg' }] }}>
     <View style={{ width: 0, height: 0, borderLeftWidth: half, borderRightWidth: half, borderBottomWidth: tip,
       borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: NEEDLE_NORTH }} />
     <View style={{ width: 0, height: 0, borderLeftWidth: half, borderRightWidth: half, borderTopWidth: tip,
       borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: NEEDLE_SOUTH }} />
+    <View style={{ position: 'absolute', width: pivot, height: pivot, borderRadius: pivot, backgroundColor: '#ffffff' }} />
   </View>;
 }
 const NEEDLE_NORTH = '#073E79';
@@ -99,6 +103,7 @@ function Emblem({ icon, fill, size, left, top }: { icon: GameIconName; fill: str
       <View style={{
         width: l.face, height: l.face, borderRadius: l.face / 2, backgroundColor: FACE,
         borderTopWidth: l.shade, borderColor: 'rgba(5, 52, 110, 0.22)', alignItems: 'center', justifyContent: 'center',
+        ...(l.needle ? { borderWidth: 1, borderColor: NEEDLE_NORTH } : null),
       }}>
         {l.needle ? <Needle size={l.glyph} /> : <GameIcon name={icon} size={l.glyph} />}
       </View>

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { CrewPuzzleSummary } from '../../../api/endpoints/me/inline-timer/types';
 import { borderRadius, shadows, spacing } from '../../../design-system';
+import PageScroll from './PageScroll';
 import { BRAND, GameIcon, type GameIconName } from '../../../ui';
 
 /** Server symbols are indexes 0-3; the client draws them with his art. */
@@ -92,7 +93,7 @@ export default function CrewPuzzleCard({ puzzle, route, pending, retryPending, r
   };
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.card}>
+    <PageScroll fill="#d9f4ff">
       <View style={styles.hero}>
         <View style={styles.heroCopy}>
           <Text style={styles.kicker}>EVERY GUESS HELPS THE LINE</Text>
@@ -211,7 +212,7 @@ export default function CrewPuzzleCard({ puzzle, route, pending, retryPending, r
         </>
       )}
       {error && <Text style={styles.error}>{error}</Text>}
-    </ScrollView>
+    </PageScroll>
   );
 }
 
@@ -223,9 +224,6 @@ const styles = StyleSheet.create({
   seatName: { fontFamily: 'Knockout', fontSize: 11, color: '#083f7c', marginTop: 2 },
   echoTag: { fontFamily: 'Knockout', fontSize: 9, color: '#5f7f99', letterSpacing: 1 },
   liveCount: { fontFamily: 'Knockout', fontSize: 13, color: '#083f7c', marginLeft: 4 },
-  scroll: { flex: 1, backgroundColor: '#83d5f9' },
-  card: { margin: spacing.md, padding: spacing.md, borderRadius: borderRadius.xxl,
-    borderWidth: 3, borderColor: '#fff', backgroundColor: '#d9f4ff', ...shadows.lg },
   hero: { height: 110, flexDirection: 'row', alignItems: 'center', overflow: 'hidden',
     margin: -6, marginBottom: spacing.md, borderRadius: 16, paddingLeft: 14, backgroundColor: '#0875c9' },
   heroCopy: { flex: 1, zIndex: 1 },

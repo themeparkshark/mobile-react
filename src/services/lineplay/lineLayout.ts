@@ -4,8 +4,8 @@
  * The activity pages scroll inside the space between the wait card and the
  * STORY / Next rail. On a short phone (iPhone SE) that space was a sliver, so
  * the rail seemed to sit on the mission header. A short screen gets a smaller
- * coin and tighter gaps, and every page ends in a soft fade instead of a hard
- * cut through a line of text.
+ * coin and tighter gaps. Each page is a framed window (PageScroll) that stays
+ * put above the rail while its content scrolls inside.
  */
 
 /** Usable height (between the safe areas) under which the screen tightens up. iPhone SE is 647; the 17 Pro is 778. */
@@ -25,8 +25,14 @@ export function lineScreenFit(rootHeight: number, insetTop: number, insetBottom:
   return short ? { short, coinSize: 92, activityGap: 4 } : { short, coinSize: 120, activityGap: 16 };
 }
 
-/** Fade height at the bottom of every activity page, above the rail. */
-export const PAGE_EDGE_FADE = 22;
+/** Fade height at the bottom of a page's frame while more is below. */
+export const FRAME_FADE = 26;
+
+/** A short page (iPhone SE) gets a shorter fade, so it never pales the card a kid is about to tap. */
+export function fadeHeight(viewHeight: number): number {
+  if (!(viewHeight > 0)) return FRAME_FADE;
+  return Math.round(Math.max(10, Math.min(FRAME_FADE, viewHeight * 0.14)));
+}
 
 function rgb(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
@@ -36,24 +42,25 @@ function rgb(hex: string): [number, number, number] {
 }
 
 /**
- * The screen background color at a point, `fraction` of the way down a
- * top-to-bottom gradient with evenly spaced stops (LinearGradient's default).
- * The page fade ends in exactly this color, so it melts into the water behind it.
+ * The page's bottom fade: transparent, then solid over the last part, in a
+ * near-white "mist" made from the frame's own fill. A card scrolling under it
+ * just goes pale (yellow to cream, blue to sky). It never blends toward the dark
+ * water, and never mixes yellow with blue into an olive band. It melts into the
+ * frame's white rim right below it.
  */
-export function gradientColorAt(colors: readonly string[], fraction: number): [number, number, number] {
-  if (colors.length === 0) return [0, 0, 0];
-  if (colors.length === 1) return rgb(colors[0]);
-  const f = Math.min(1, Math.max(0, Number.isFinite(fraction) ? fraction : 1));
-  const span = f * (colors.length - 1);
-  const i = Math.min(colors.length - 2, Math.floor(span));
-  const t = span - i;
-  const a = rgb(colors[i]);
-  const b = rgb(colors[i + 1]);
-  return [0, 1, 2].map(k => Math.round(a[k] + (b[k] - a[k]) * t)) as [number, number, number];
+export function frameFade(fill: string): { colors: [string, string, string]; locations: [number, number, number] } {
+  const [r, g, b] = rgb(fill).map(c => Math.round(c + (255 - c) * FRAME_MIST)) as [number, number, number];
+  return {
+    colors: [`rgba(${r},${g},${b},0)`, `rgba(${r},${g},${b},1)`, `rgba(${r},${g},${b},1)`],
+    locations: [0, 0.62, 1],
+  };
 }
 
-/** Transparent to solid, in the background color where the page ends. */
-export function pageEdgeFade(colors: readonly string[], fraction: number): [string, string] {
-  const [r, g, b] = gradientColorAt(colors, fraction);
-  return [`rgba(${r},${g},${b},0)`, `rgba(${r},${g},${b},1)`];
+/** How far the fade's color moves from the frame fill toward white. */
+export const FRAME_MIST = 0.7;
+
+/** More content below the visible part of a page (a few points of slack, so a page that just fits shows no arrow). */
+export function moreBelow(contentHeight: number, viewHeight: number, scrollY: number): boolean {
+  if (!(contentHeight > 0) || !(viewHeight > 0)) return false;
+  return contentHeight - (Math.max(0, scrollY) + viewHeight) > 12;
 }

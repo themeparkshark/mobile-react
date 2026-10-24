@@ -8,16 +8,17 @@
  * Blocks rise in with a short stagger (reduced motion: they are just there).
  */
 import { useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import useUiReducedMotion from '../../../ui/useUiReducedMotion';
 import type { LinePlayChapter } from '../../../services/lineplay/chapters';
 import { crewRelayEpilogue, type CrewRelayProgress } from '../../../services/lineplay/crewRelay';
 import type { ChapterClue } from '../../../services/lineplay/chapterClue';
 import { chapterKicker } from '../../../services/lineplay/labels';
-import { borderRadius, shadows, spacing } from '../../../design-system';
+import { borderRadius, spacing } from '../../../design-system';
 import { BRAND, GameIcon } from '../../../ui';
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
+import PageScroll from './PageScroll';
 
 interface Props {
   readonly chapter: LinePlayChapter;
@@ -27,6 +28,11 @@ interface Props {
   readonly paused: boolean;
   readonly signalAvailable?: boolean;
   readonly onChooseMission: (id: string) => void;
+  /**
+   * A short phone (iPhone SE): a one-line mission header and a slimmer PLAY NOW,
+   * so the clue a kid taps next is fully on screen without scrolling.
+   */
+  readonly compact?: boolean;
 }
 
 // Reduced motion: no entering animation at all. (A springified entering
@@ -35,7 +41,7 @@ interface Props {
 const riseFor = (reduced: boolean) => (index: number) => reduced ? undefined
   : FadeInDown.delay(60 + index * 70).springify().damping(15);
 
-export default function ChapterCard({ chapter, completedIds, crewRelay, chapterClue = null, paused, signalAvailable = false, onChooseMission }: Props) {
+export default function ChapterCard({ chapter, completedIds, crewRelay, chapterClue = null, paused, signalAvailable = false, onChooseMission, compact = false }: Props) {
   const [storyOpen, setStoryOpen] = useState(false);
   const rise = riseFor(useUiReducedMotion());
   const epilogue = crewRelay ? crewRelayEpilogue(crewRelay, chapter.relay.epilogues) : null;
@@ -54,34 +60,42 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
   const nextName = nextMissionIndex >= 0 ? chapter.missionNames[nextMissionIndex]
     : relayDone ? 'Crew Prompts' : chapter.relay.title;
 
-  return (
-    // The extra bottom room lets the last row scroll clear of the sticky story bar.
-    <ScrollView style={styles.scroll} contentContainerStyle={[styles.card, { marginBottom: 96 }]}>
-      <Animated.View entering={rise(0)} style={styles.header}>
-        <View style={styles.headerCopy}>
-          <Text style={styles.kicker}>{chapterKicker(chapter)}</Text>
-          <Text style={styles.title}>{done === 3 ? chapter.completedTitle : chapter.title}</Text>
+  const header = (
+    <Animated.View entering={rise(compact ? 1 : 0)} style={[styles.header, compact && styles.headerCompact]}>
+      <View style={styles.headerCopy}>
+        <Text style={[styles.kicker, compact && styles.kickerCompact]} numberOfLines={1}
+          adjustsFontSizeToFit minimumFontScale={0.8}>{chapterKicker(chapter)}</Text>
+        <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={compact ? 1 : undefined}
+          adjustsFontSizeToFit={compact} minimumFontScale={0.8}>
+          {done === 3 ? chapter.completedTitle : chapter.title}
+        </Text>
+      </View>
+      <Image source={chapter.navigationPanel
+        ? SPACE_NAVIGATOR_ART
+        : require('../../../../assets/images/screens/pin-collections/shark.png')}
+        resizeMode="contain" style={[styles.shark, compact && styles.sharkCompact]} accessibilityLabel="Theme Park Shark mascot" />
+    </Animated.View>
+  );
+  const playNow = (
+    <Animated.View entering={rise(compact ? 0 : 1)} style={compact && styles.playFirst}>
+      <Pressable accessibilityRole="button"
+        accessibilityLabel={`${done === 3 ? 'Play' : 'Start'} ${nextName}`}
+        disabled={paused} onPress={() => onChooseMission(nextId)}
+        style={({ pressed }) => [styles.playNow, compact && styles.playNowCompact, paused && styles.missionPaused, pressed && styles.pressed]}>
+        <View style={styles.playNowCopy}>
+          <Text style={styles.playNowKicker}>{done === 3 ? 'KEEP THE WAIT FUN' : `CLUE ${done + 1} OF 3 · PLAY NOW`}</Text>
+          <Text style={styles.playNowTitle}>{nextName}</Text>
+          {!compact && <Text style={styles.playNowHint}>One phone · play solo or with your crew</Text>}
         </View>
-        <Image source={chapter.navigationPanel
-          ? SPACE_NAVIGATOR_ART
-          : require('../../../../assets/images/screens/pin-collections/shark.png')}
-          resizeMode="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
-      </Animated.View>
+        <GameIcon name="play" size={compact ? 48 : 56} />
+      </Pressable>
+    </Animated.View>
+  );
 
-      <Animated.View entering={rise(1)}>
-        <Pressable accessibilityRole="button"
-          accessibilityLabel={`${done === 3 ? 'Play' : 'Start'} ${nextName}`}
-          disabled={paused} onPress={() => onChooseMission(nextId)}
-          style={({ pressed }) => [styles.playNow, paused && styles.missionPaused, pressed && styles.pressed]}>
-          <View style={styles.playNowCopy}>
-            <Text style={styles.playNowKicker}>{done === 3 ? 'KEEP THE WAIT FUN' : `CLUE ${done + 1} OF 3 · PLAY NOW`}</Text>
-            <Text style={styles.playNowTitle}>{nextName}</Text>
-            <Text style={styles.playNowHint}>One phone · play solo or with your crew</Text>
-          </View>
-          <GameIcon name="play" size={56} />
-        </Pressable>
-      </Animated.View>
-
+  return (
+    <PageScroll fill={FRAME_FILL} contentStyle={compact && styles.contentCompact}>
+      {/* A short phone (iPhone SE) puts the clue to play first, fully on screen; the mission header follows. */}
+      {compact ? <>{playNow}{header}</> : <>{header}{playNow}</>}
       <Animated.View entering={rise(2)} style={styles.trail}
         accessibilityLabel={`${done} of 3 ${chapter.progressNoun}`}>
         {chapter.missionNames.map((name, index) => {
@@ -154,24 +168,31 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
           ? 'Keep playing as the line moves. The shark story is made up. The trivia is about parks in general.'
           : 'Keep playing as the line moves. The shark story is made up. We checked the ride facts on the park’s own website.'}
       </Text>
-    </ScrollView>
+    </PageScroll>
   );
 }
 
+/** The chapter page's light-blue frame (the fade above the rail ends in this color). */
+const FRAME_FILL = '#bcecff';
+
 const styles = StyleSheet.create({
-  scroll: { flex: 1 },
-  card: { margin: spacing.md, padding: spacing.md, borderRadius: borderRadius.xxl,
-    borderWidth: 3, borderColor: '#fff', backgroundColor: '#bcecff', ...shadows.lg },
   header: { flexDirection: 'row', minHeight: 100, alignItems: 'center', backgroundColor: BRAND.blueBright,
     borderRadius: 16, borderWidth: 3, borderColor: BRAND.navy, paddingLeft: 14, overflow: 'hidden' },
+  headerCompact: { minHeight: 0, height: 58 },
   headerCopy: { flex: 1, zIndex: 1 },
   shark: { width: 108, height: 108, marginRight: -14 },
+  sharkCompact: { width: 64, height: 64, marginRight: -8 },
   kicker: { color: '#d4f1ff', fontFamily: 'Knockout', fontSize: 13, letterSpacing: 1 },
+  kickerCompact: { fontSize: 12, letterSpacing: 0.6 },
   title: { color: '#fff', fontFamily: 'Shark', fontSize: 23, lineHeight: 27, marginTop: 4,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  titleCompact: { fontSize: 19, lineHeight: 22, marginTop: 1 },
   playNow: { flexDirection: 'row', alignItems: 'center', minHeight: 96, marginTop: spacing.md,
     paddingLeft: spacing.md, paddingRight: spacing.sm, paddingVertical: spacing.sm, borderRadius: borderRadius.lg,
     borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 6, backgroundColor: BRAND.gold },
+  playNowCompact: { minHeight: 64, marginTop: 0, paddingVertical: 6 },
+  playFirst: { marginTop: 0, marginBottom: spacing.sm },
+  contentCompact: { paddingTop: 6 },
   playNowCopy: { flex: 1, paddingRight: spacing.sm },
   playNowKicker: { color: '#7c4200', fontFamily: 'Knockout', fontSize: 14, letterSpacing: 0.8 },
   playNowTitle: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 21, lineHeight: 25, marginTop: 3 },
