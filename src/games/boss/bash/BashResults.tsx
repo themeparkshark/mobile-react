@@ -166,13 +166,14 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <View style={[styles.hpGold, { width: pct(startHp) }]} />
           <Animated.View style={[styles.hpRed, fill]} />
         </View>}
-        {/* Pictures, not a sentence: the bar is the HP, then a clock and the
-            sharks still fighting. The numbers are spoken in full. */}
+        {/* Pictures, not a sentence: the bar is the HP, then a clock and a fin
+            for the sharks still fighting (swords mean your attacks). The
+            numbers are spoken in full. */}
         {won ? <Text style={styles.raidLine} numberOfLines={1}>Boss down!</Text> : (
           <View style={styles.raidIcons} accessible
             accessibilityLabel={`${hpAfter.toLocaleString()} HP left${left ? `, ${left} minutes left` : ''}${fighters > 0 ? `, ${fighters} sharks fighting` : ''}`}>
             {left ? <View style={styles.raidIcon}><GameIcon name="timer" size={20} /><Text style={styles.raidNum}>{left}</Text><Text style={styles.raidUnit}>MIN</Text></View> : null}
-            {fighters > 0 ? <View style={styles.raidIcon}><GameIcon name="swords" size={20} /><Text style={styles.raidNum}>{fighters}</Text></View> : null}
+            {fighters > 0 ? <View style={styles.raidIcon}><GameIcon name="fin" size={20} /><Text style={styles.raidNum}>{fighters}</Text></View> : null}
           </View>
         )}
       </View>
@@ -191,7 +192,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       {receipt && !noHits && <View style={[styles.receipt, receipt === 'error' && styles.receiptErr]} accessibilityLiveRegion="polite">
         <GameIcon name={receipt === 'saved' ? 'check' : receipt === 'error' ? 'info' : 'timer'} size={18} />
         <Text style={styles.receiptText} maxFontSizeMultiplier={1.3}>
-          {receipt === 'saved' ? 'Saved! Your hits count for the team.' : receipt === 'saving' ? 'Sending your hits...' : receiptNote ?? 'Not saved yet. We will keep trying.'}</Text>
+          {receipt === 'saved' ? 'SAVED FOR THE TEAM!' : receipt === 'saving' ? 'SENDING...' : receiptNote ?? 'Not saved yet. We will keep trying.'}</Text>
       </View>}
       {/* Brags only, the shared chips: two at most, a zero is never a chip. */}
       {chips.length ? <View style={styles.chips}>

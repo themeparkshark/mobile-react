@@ -229,8 +229,11 @@ export function SharkySwim({
 
   // --- engine ---------------------------------------------------------------------
   const feelRef = useRef<ReturnType<typeof createSharkyFeel> | null>(null);
-  const autoplay = __DEV__ && (process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '1' || process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '2');
-  const autoCheap = __DEV__ && process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '2';
+  // Dev, or a release-JS capture build (EXPO_PUBLIC_PERF_CAPTURE=1, like the
+  // Boss raid autoplay): store builds set neither, so a kid always swims.
+  const captureBuild = __DEV__ || process.env.EXPO_PUBLIC_PERF_CAPTURE === '1';
+  const autoplay = captureBuild && (process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '1' || process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '2');
+  const autoCheap = captureBuild && process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '2';
   const autoSalt = autoplay ? ((process.env.EXPO_PUBLIC_SHARKY_NAME ?? '').length % 5) : 0;
   const engine = useSharkyEngine(cfg, (batch) => feelRef.current?.handle(batch), autoplay, autoSalt, autoCheap, reducedMotion);
   const walk = useWalkSense({ active: visible && !result });
@@ -695,6 +698,7 @@ export function SharkySwim({
       onChallenge={runMode === 'ride' || prog.runs < 1 ? undefined : onChallenge}
       challengeLabel="RACE GHOSTS"
       renderResults={renderResults}
+      ownCelebration
     >
       <GestureHandlerRootView style={styles.fill}>
         <GestureDetector gesture={gesture}>

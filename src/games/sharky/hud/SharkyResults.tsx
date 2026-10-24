@@ -10,7 +10,7 @@
  *           shared button rule: PLAY AGAIN leads unless a win's reward is
  *           still waiting (playAgainFirst false), then the claim leads.
  *           DONE sits right under it as a white button, never a text link
- *   300ms   hero stat 1 (under the stars, like the shared card): the score counts up over 1100ms (outQuart, 80ms steps), the last
+ *   300ms   hero stat 1 (under the stars, like the shared card): the score counts up over 1100ms on the UI thread (CountUpText), the last
  *           digit slams 1.3 to 1.0 with impact Medium; NEW BEST adds a burst
  *   1450ms  stars slam one at a time, 220ms apart, bass hit +0/+3/+7 st,
  *           Medium, Medium, Heavy
@@ -34,6 +34,7 @@ import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { FxStage, type FxStageHandle } from '../../../gamekit/fx/FxStage';
+import { CountUpText } from '../../../gamekit/fx/CountUpText';
 import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { playHaptic } from '../../../gamekit/Haptics';
 import GameIcon from '../../../ui/GameIcon';
@@ -99,32 +100,6 @@ export const PLAY_PULSES = 3;
 /** Height of the full shark-on-podium pose (podium step at 70 pt + a 160 pt shark). */
 const STAGE_POSE_PT = 230;
 
-/** One count-up step every this many ms (about 14 steps, not 66 re-renders). */
-const COUNT_STEP_MS = 80;
-
-function useCountUp(target: number, delayMs: number, durMs: number, reduced: boolean): number {
-  const [v, setV] = useState(reduced ? target : 0);
-  useEffect(() => {
-    if (reduced) {
-      setV(target);
-      return undefined;
-    }
-    let iv: ReturnType<typeof setInterval> | null = null;
-    const start = setTimeout(() => {
-      const t0 = Date.now();
-      iv = setInterval(() => {
-        const k = Math.min(1, (Date.now() - t0) / durMs);
-        setV(Math.round(target * (1 - Math.pow(1 - k, 4))));
-        if (k >= 1 && iv) clearInterval(iv);
-      }, COUNT_STEP_MS);
-    }, delayMs);
-    return () => {
-      clearTimeout(start);
-      if (iv) clearInterval(iv);
-    };
-  }, [target, delayMs, durMs, reduced]);
-  return v;
-}
 
 function Star({ on, index, delayMs, reduced, small = false }: { on: boolean; index: number; delayMs: number; reduced: boolean; small?: boolean }) {
   const sc = useSharedValue(on && !reduced ? 0 : 1);
@@ -154,7 +129,6 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   const fx = useRef<FxStageHandle>(null);
   const win = useWindowDimensions();
   const [box, setBox] = useState({ w: 390, h: 700 });
-  const shown = useCountUp(data.score, 300, 1100, reducedMotion);
   const [tapReady, setTapReady] = useState(false);
   // The below-the-fold rows keep their space from the start and fade in at
   // 2.4 s, so nothing jumps and the card never grows off a short screen.
@@ -190,17 +164,18 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
       slam.value = withSequence(withTiming(1.3, { duration: 1 }), withSpring(1, { damping: 10, stiffness: 300 }));
       playHaptic([{ at: 0, p: 'medium' }]);
       if (newBest) {
-        GameAudio.play(GameAudio.hasCue('sting_new_record') ? 'sting_new_record' : 'fx.reward');
+        GameAudio.play(GameAudio.hasCue('sting_new_record') ? 'sting_new_record' : 'fx.purchase');
         fx.current?.burst('confetti', box.w / 2, box.h * 0.42, { count: 24 });
       }
     }, 1400);
     if (!reducedMotion) belowIn.value = withDelay(2400, withTiming(1, { duration: 260 }));
-    // Confetti cannon from both stage corners (a win or TIME!): 2 bursts of 24, 120ms apart.
+    // Confetti cannon from both stage corners (a win or TIME!): 2 bursts of 16, 120ms apart.
+    // The only confetti on screen (the shell skips its own: ownCelebration).
     const cannons: ReturnType<typeof setTimeout>[] = [];
     if (cheer) {
       [0, 120].forEach((ms) => cannons.push(setTimeout(() => {
-        fx.current?.burst('confetti', box.w * 0.18, box.h * 0.3, { count: 24, angle: -60, spread: 40, speed: 1.4 });
-        fx.current?.burst('confetti', box.w * 0.82, box.h * 0.3, { count: 24, angle: -120, spread: 40, speed: 1.4 });
+        fx.current?.burst('confetti', box.w * 0.18, box.h * 0.3, { count: 16, angle: -60, spread: 40, speed: 1.4 });
+        fx.current?.burst('confetti', box.w * 0.82, box.h * 0.3, { count: 16, angle: -120, spread: 40, speed: 1.4 });
       }, ms)));
     }
     return () => {
@@ -271,7 +246,11 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
             {[0, 1, 2].map((i) => <Star key={i} index={i} on={i < data.stars} delayMs={1450 + i * 220} reduced={reducedMotion} small={short} />)}
           </View>
         )}
-        <Animated.Text style={[styles.score, short && styles.scoreShort, scoreStyle]}>{shown.toLocaleString()}</Animated.Text>
+        {/* The score counts up on the UI thread (no re-render of this card per step). */}
+        <Animated.View style={scoreStyle}>
+          <CountUpText value={data.score} from={0} delayMs={300} durationMs={1100} punch={1} reducedMotion={reducedMotion}
+            style={[styles.score, short && styles.scoreShort]} />
+        </Animated.View>
         {newBest ? (
           <View style={styles.newBest}>
             <GameIcon name="crown" size={22} />

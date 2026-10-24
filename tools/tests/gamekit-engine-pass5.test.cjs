@@ -432,6 +432,7 @@ function shell(extra = {}) {
     './theme': { GAME_COLORS: {}, COUNTDOWN: { stepMs: 600, goMs: 400 }, JUICE: {}, LINE_MOVING_TOAST: 'Moving' },
     './LinePlayMovementContext': { LinePlayMovementContext: { value: null }, shouldPauseForMovement: () => false },
     './RideChallengeContext': { RideChallengeContext: { value: false } },
+    './ShellFrameContext': { ShellFrameContext: { value: null } },
     './Haptics': { Haptic: new Proxy({}, { get: () => () => {} }) }, './SFX': { playSfx() {} },
     '../hooks/useReducedGameMotion': { default: () => false },
     '../ui/GameIcon': { default: 'GameIcon' },

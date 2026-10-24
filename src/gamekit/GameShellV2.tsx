@@ -59,6 +59,7 @@ import { Haptic } from './Haptics';
 import { playSfx } from './SFX';
 import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovementContext';
 import { RideChallengeContext } from './RideChallengeContext';
+import { ShellFrameContext } from './ShellFrameContext';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
 import { ResultsCard, type ResultStat, type ResultStarGoal } from './results/ResultsCard';
@@ -218,6 +219,12 @@ interface GameShellV2Props {
   resultsExtra?: React.ReactNode;
   /** Replace the whole results surface (card and actions). The shell still owns timing, confetti and the claim contract. */
   renderResults?: (args: ShellResultsArgs) => React.ReactNode;
+  /**
+   * The game's own results surface fires its own confetti (Sharky's corner
+   * cannons): the shell skips its star bursts, so a win has one celebration
+   * on screen, not two particle stages at once.
+   */
+  ownCelebration?: boolean;
   /** Game-specific settings in the hold sheet (Trivia Duel's Relaxed pace). */
   pauseExtras?: React.ReactNode;
   /** Hide the header score (the game draws its own, e.g. Trivia's rail). */
@@ -290,6 +297,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       resultCardFooter,
       resultAction,
       renderResults,
+      ownCelebration = false,
       pauseExtras,
       hideHeaderScore = false,
       headerScore,
@@ -309,6 +317,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const [phase, setPhase] = useState<ShellPhase>('countdown');
     const linePlayMovement = useContext(LinePlayMovementContext);
     const rideChallenge = useContext(RideChallengeContext);
+    const shellFrame = useContext(ShellFrameContext);
     const reducedMotion = useReducedGameMotion();
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
@@ -321,6 +330,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const [headsUp, setHeadsUp] = useState(false);
     // Safety net: once the results have had RESULTS_FALLBACK_MS to appear, show them with no fade.
     const [resultsSafe, setResultsSafe] = useState(false);
+    const ownCelebrationRef = useRef(ownCelebration);
+    ownCelebrationRef.current = ownCelebration && !!renderResults;
     /** A results surface (the game's own or the shared card) is on screen. */
     const surfaceShownRef = useRef(false);
     /** Counts finished runs, so the win streak counts each run once. */
@@ -512,7 +523,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           if (!sharedCardShownRef.current) burstBest();
         }, 1200));
       }
-      if (effectiveResult.stars > 0 && !reducedMotionRef.current) {
+      if (effectiveResult.stars > 0 && !reducedMotionRef.current && !ownCelebrationRef.current) {
         // Confetti bursts timed to the star stamps.
         celebrationTimers.current.push(setTimeout(() => {
           confettiRef.current?.burst({ x: SCREEN_W * 0.5, y: SCREEN_H * 0.32, preset: 'confetti', count: 40 });
@@ -1109,7 +1120,12 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     );
     return rideChallenge ? gameContent : (
       <Modal visible={visible} animationType={reducedMotion ? 'none' : 'fade'} transparent statusBarTranslucent onRequestClose={handleExit}>
-        {gameContent}
+        {shellFrame ? (
+          // Capture only: the shell at a smaller phone's exact size.
+          <View style={styles.frameBackdrop}>
+            <View style={{ width: shellFrame.width, height: shellFrame.height }}>{gameContent}</View>
+          </View>
+        ) : gameContent}
       </Modal>
     );
   },
@@ -1146,6 +1162,7 @@ function GoalMeter({ current, target, label, reducedMotion }: { current: number;
 }
 
 const styles = StyleSheet.create({
+  frameBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#05346e' },
   resultsShown: { opacity: 1 },
   resultsFill: { width: '100%', alignItems: 'center' },
   root: {

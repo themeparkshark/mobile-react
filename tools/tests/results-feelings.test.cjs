@@ -475,10 +475,11 @@ test('Sharky results fit a short phone: smaller stage, tight card, the bottom ro
   assert.match(sharky, /marginBottom: bottomPad/, 'the card clears the home bar');
   assert.match(sharky, /below: \{ width: '100%', flexDirection: 'row'/);
   assert.doesNotMatch(sharky, /requestAnimationFrame/, 'the count-up no longer re-renders every frame');
-  assert.match(sharky, /COUNT_STEP_MS = 80/);
-  assert.match(sharky, /useCountUp\(data\.score, 300, 1100, reducedMotion\)/);
+  // The score counts up on the UI thread: no re-render of the card per step.
+  assert.doesNotMatch(sharky, /setInterval|useCountUp/);
+  assert.match(sharky, /<CountUpText value=\{data\.score\} from=\{0\} delayMs=\{300\} durationMs=\{1100\}/);
   // The shared card's order: stars, then score.
-  assert.ok(sharky.indexOf('<View style={[styles.stars') < sharky.indexOf('<Animated.Text style={[styles.score'));
+  assert.ok(sharky.indexOf('<View style={[styles.stars') < sharky.indexOf('<CountUpText value={data.score}'));
 });
 
 test("game saves belong to the signed-in player, so a brother never sees his sister's BEST", async () => {
@@ -547,7 +548,7 @@ test('Boss results share the ribbon and read the raid in pictures, not a data li
   assert.doesNotMatch(bash, /styles\.bannerText/);
   assert.doesNotMatch(bash, /HP left\}\{left/, 'no "3,047 HP left · 18 min left · 6 fighting" line');
   assert.match(bash, /<GameIcon name="timer" size=\{20\} \/>/);
-  assert.match(bash, /<GameIcon name="swords" size=\{20\} \/>/);
+  assert.match(bash, /<GameIcon name="fin" size=\{20\} \/>/, 'a fin for the sharks fighting; swords mean your attacks');
   assert.match(bash, />ENERGY KEPT</);
   assert.doesNotMatch(bash, />No Energy was spent\.</);
 });
@@ -655,4 +656,19 @@ test('the legacy mini game shell has no emoji and never says SO CLOSE!', () => {
   const legacy = read('src/components/MiniGameShell.tsx');
   assert.doesNotMatch(legacy, /\p{Extended_Pictographic}/u);
   assert.doesNotMatch(legacy, /SO CLOSE/);
+});
+
+test('a Sharky win is cheap to reveal: one confetti stage, a resting game stage, a UI-thread count-up', () => {
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /if \(effectiveResult\.stars > 0 && !reducedMotionRef\.current && !ownCelebrationRef\.current\) \{/);
+  assert.match(read('src/games/sharky/SharkySwim.tsx'), /renderResults=\{renderResults\}\n\s+ownCelebration\n/);
+  const engine = read('src/games/sharky/useSharkyEngine.ts');
+  assert.match(engine, /if \(!running\.value && sv\.phase === PH_DONE\) \{\n\s+if \(doneFrames\.value >= DONE_SETTLE_FRAMES\) return;/);
+  assert.match(engine, /const DONE_SETTLE_FRAMES = 30;/);
+  const count = read('src/gamekit/fx/CountUpText.tsx');
+  assert.match(count, /const first = reducedMotion \? value : fromProp \?\? value;/, 'counts from 0 on a results card, lands at once under Reduce Motion');
+  assert.match(read('src/gamekit/results/ResultsCard.tsx'), /<CountUpText value=\{score\} from=\{0\}/);
+  // The shell frame and the Sharky autoplay exist for captures only.
+  assert.match(read('src/gamekit/ShellFrameContext.ts'), /createContext<\{ readonly width: number; readonly height: number \} \| null>\(null\)/);
+  assert.match(read('src/games/sharky/SharkySwim.tsx'), /const captureBuild = __DEV__ \|\| process\.env\.EXPO_PUBLIC_PERF_CAPTURE === '1';/);
 });

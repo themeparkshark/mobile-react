@@ -14,6 +14,7 @@ function shell(paid, reduced = false, extra = {}, movement = null) {
     './theme': { GAME_COLORS: {}, COUNTDOWN: { stepMs: 600, goMs: 400 }, JUICE: {}, LINE_MOVING_TOAST: 'Moving' },
     './LinePlayMovementContext': { LinePlayMovementContext: movementContext, shouldPauseForMovement: c => Boolean(c && c.moving && c.lineMovePolicy === 'pause') },
     './RideChallengeContext': { RideChallengeContext: { value: paid } },
+    './ShellFrameContext': { ShellFrameContext: { value: null } },
     './Haptics': { Haptic: haptic }, './SFX': { playSfx() {} },
     '../hooks/useReducedGameMotion': { default: () => preference.reduced },
     '../ui/GameIcon': { default: 'GameIcon' },

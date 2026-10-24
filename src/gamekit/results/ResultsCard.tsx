@@ -228,7 +228,7 @@ export function ResultsCard({
 
       {sendOff ? null : <>
         <Text style={styles.label}>SCORE</Text>
-        <CountUpText value={score} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
+        <CountUpText value={score} from={0} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
           onTick={() => GameAudio.play('fx.coin', { volume: 0.35 })} style={[styles.score, short && styles.scoreShort]} />
       </>}
 

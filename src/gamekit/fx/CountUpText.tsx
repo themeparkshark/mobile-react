@@ -30,6 +30,8 @@ const AnimatedInput = Animated.createAnimatedComponent(TextInput);
 
 export interface CountUpTextProps {
   value: number;
+  /** Where the first count starts (results cards count up from 0). Default: value (no count on mount). */
+  from?: number;
   /** Fixed duration; default scales with the jump (250-1200ms). */
   durationMs?: number;
   /** Delay before counting (results cards stagger). */
@@ -61,13 +63,14 @@ export function shortCount(value: number): string {
 }
 
 export function CountUpText({
-  value, durationMs, delayMs = 0, prefix = '', suffix = '', punch = 1.12, tickEvery = 0,
+  value, from: fromProp, durationMs, delayMs = 0, prefix = '', suffix = '', punch = 1.12, tickEvery = 0,
   onTick, onDone, reducedMotion = false, format = 'full', style,
 }: CountUpTextProps) {
-  const shown = useSharedValue(value);
+  const first = reducedMotion ? value : fromProp ?? value;
+  const shown = useSharedValue(first);
   const scale = useSharedValue(1);
-  const from = useRef(value);
-  const lastTick = useSharedValue(value);
+  const from = useRef(first);
+  const lastTick = useSharedValue(first);
 
   useEffect(() => {
     const start = from.current;
@@ -118,7 +121,7 @@ export function CountUpText({
       caretHidden
       pointerEvents="none"
       underlineColorAndroid="transparent"
-      defaultValue={prefix + (format === 'short' ? shortCount(value) : formatScore(value)) + suffix}
+      defaultValue={prefix + (format === 'short' ? shortCount(first) : formatScore(first)) + suffix}
       animatedProps={animatedProps}
       style={[styles.text, style, animatedStyle]}
     />
