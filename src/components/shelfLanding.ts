@@ -6,17 +6,27 @@
  * ride gets the full moment; a repeat drops straight in.
  */
 export const SHELF_LANDING = {
-  first: { dropAt: 500, dropMs: 500 },
-  repeat: { dropAt: 120, dropMs: 420 },
+  /** First coin of a ride: on screen at once, a short hover while the slot glows, the clink before 1 s. */
+  first: { dropAt: 300, dropMs: 480 },
+  repeat: { dropAt: 100, dropMs: 400 },
   /** Two gold glows on the empty slot (400 ms each). */
   pulseMs: 800,
+  /** The coin holds on the landing frame this long before the slot coin squashes (hit-stop). */
+  hitStopMs: 60,
   /** The sparkle puff and ring burst from the slot rim. */
-  puffMs: 700,
-  sparkles: 8,
-  /** Neighbours jiggle after the landing, one after another outward. */
-  jiggleAfterMs: 80,
+  puffMs: 760,
+  /** How far the sparkles fly, in slot widths. */
+  puffReach: 1.8,
+  sparkles: 10,
+  /** Neighbours tip as the slot coin squashes, one after another outward. */
+  jiggleAfterMs: 0,
   jiggleStepMs: 40,
-  jiggleDeg: 2,
+  /** The two nearest neighbours tip this far and hop; the rest tip less. */
+  jiggleDeg: 5,
+  jiggleFarDeg: 3,
+  hopPt: 4,
+  /** The shelf plank kicks down this far under the landing coin and springs back. */
+  kickPt: 2,
   /** A full row: a white shine sweeps across it. */
   shineAfterMs: 220,
   shineMs: 600,
@@ -30,6 +40,13 @@ export function jiggleDelay(distance: number): number | null {
 }
 
 /** Which way a neighbour tips: away from the coin that just landed. */
+/** How far a neighbour `distance` slots away tips (degrees) and hops (pt). */
+export function jiggleAmount(distance: number): { readonly deg: number; readonly hop: number } {
+  const d = Math.abs(Math.round(distance));
+  if (d === 0) return { deg: 0, hop: 0 };
+  return d === 1 ? { deg: SHELF_LANDING.jiggleDeg, hop: SHELF_LANDING.hopPt } : { deg: SHELF_LANDING.jiggleFarDeg, hop: SHELF_LANDING.hopPt / 2 };
+}
+
 export function jiggleDirection(distance: number): -1 | 1 {
   return distance < 0 ? -1 : 1;
 }

@@ -57,7 +57,7 @@ test('a slot that stays outside the viewport produces a retry, never a pretend d
 });
 test('arrival actions remain usable immediately; land feedback happens once and cleanup cancels motion',()=>{
  let lands=0,inspections=0;const view=runtime('src/components/CoinShelfArrival.tsx',{
-  './shelfLanding':shelfLanding,'../hooks/useReducedGameMotion':{default:()=>false,useReduceMotionPreference:()=>false},'../gamekit/SFX':{playSfx(){}}
+  './shelfLanding':shelfLanding,'../hooks/useReducedGameMotion':{default:()=>false,useReduceMotionPreference:()=>false},'../gamekit/audio/playMoment':{playMoment(){return 0;}},'../gamekit/Haptics':{queueHaptic(){}}
  },{target:{x:120,y:170,width:60,height:60,frameWidth:390,frameHeight:650},coinUrl:'coin',rideName:'Snowball',firstCollection:true,
  onLand(){lands++;},onInspect(){inspections++;},onClose(){}});
  const primary=view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='View coin mastery');
@@ -67,7 +67,7 @@ test('arrival actions remain usable immediately; land feedback happens once and 
 });
 test('reduced-motion arrival immediately marks its real slot with no entrance motion',()=>{
  let lands=0;const view=runtime('src/components/CoinShelfArrival.tsx',{
- './shelfLanding':shelfLanding,'../hooks/useReducedGameMotion':{default:()=>true,useReduceMotionPreference:()=>true},'../gamekit/SFX':{playSfx(){}}
+ './shelfLanding':shelfLanding,'../hooks/useReducedGameMotion':{default:()=>true,useReduceMotionPreference:()=>true},'../gamekit/audio/playMoment':{playMoment(){return 0;}},'../gamekit/Haptics':{queueHaptic(){}}
  },{target:{x:120,y:170,width:60,height:60,frameWidth:390,frameHeight:650},coinUrl:'coin',rideName:'Snowball',firstCollection:true,onLand(){lands++;},onInspect(){},onClose(){}});
  assert.equal(lands,1);assert.equal(view.motions.length,0);
  assert.ok(view.find(n=>n.props?.children==='ON YOUR SHELF'));assert.equal(view.timers.size,0);
@@ -91,12 +91,13 @@ test('explicit mastery opens once and cannot present a late response after its a
 test('the landing clink and light haptic fire exactly once, with and without reduced motion',()=>{
  for(const reduced of [false,true]){
   const sfx=[],haptics=[];const view=runtime('src/components/CoinShelfArrival.tsx',{
-   './shelfLanding':shelfLanding,'../hooks/useReducedGameMotion':{default:()=>reduced,useReduceMotionPreference:()=>reduced},'../gamekit/SFX':{playSfx:(...args)=>sfx.push(args)},
-   'expo-haptics':{impactAsync:style=>{haptics.push(style);return Promise.resolve();},ImpactFeedbackStyle:{Light:'light'}},
+   './shelfLanding':shelfLanding,'../hooks/useReducedGameMotion':{default:()=>reduced,useReduceMotionPreference:()=>reduced},
+   '../gamekit/audio/playMoment':{playMoment:(...args)=>{sfx.push(args);return 0;}},
+   '../gamekit/Haptics':{queueHaptic:intent=>{haptics.push(intent);}},
   },{target:{x:120,y:170,width:60,height:60,frameWidth:390,frameHeight:650},coinUrl:'coin',rideName:'Snowball',firstCollection:true,onLand(){},onInspect(){},onClose(){}});
   view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='View coin mastery')?.props.onPress();view.render();
   for(const fire of [...view.timers.values()])fire();
-  assert.deepEqual(sfx.map(([name])=>name),['coin'],`reduced=${reduced}`);assert.deepEqual(haptics,['light']);
+  assert.deepEqual(sfx.map(([name])=>name),['park.shelfLand'],`reduced=${reduced}`);assert.equal(haptics.length,1,`one haptic, reduced=${reduced}`);
   view.unmount();
  }
 });

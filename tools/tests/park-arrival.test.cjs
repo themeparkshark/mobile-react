@@ -65,19 +65,34 @@ test('once per park per day, and old days are dropped', () => {
   same(seen, { 2: day, 8: day });
 });
 
-test('the beat sheet: payoff inside 1.5 s, letters inside 400 ms, all gone inside 4.5 s', () => {
+test('the beat sheet: payoff inside 1.5 s, letters landed before the hit, a 70 ms hold, all gone inside 4.5 s', () => {
   const A = arrival.ARRIVAL;
   assert.ok(A.burstAt <= 1500 && A.cardsAt + 2 * A.cardStepMs <= 1500);
-  assert.ok(A.scrimOpacity <= 0.3, 'the map stays visible under the scrim');
+  assert.equal(A.burstAt - A.hitAt, 70, 'one held 70 ms frame between the hit and the burst');
+  assert.ok(A.lettersAt + A.letterSpanMs + 120 <= A.hitAt, 'every letter has landed before the hit');
+  assert.ok(A.scrimOpacity <= 0.45, 'the map stays visible under the veil');
+  assert.ok(A.handoffAt <= 2600, 'no long hold after the cards settle');
+  assert.ok(A.pointAt > A.cardsAt + 2 * A.cardStepMs && A.pointAt < A.handoffAt, 'a micro-beat fills the wait');
   for (const n of [1, 6, 13, 24]) {
     const delays = arrival.letterDelays(n);
     assert.equal(delays.length, n);
-    assert.ok(delays[n - 1] - delays[0] <= A.letterCapMs, `${n} letters fit in ${A.letterCapMs} ms`);
+    assert.ok(delays[n - 1] - delays[0] <= A.letterSpanMs, `${n} letters fit in ${A.letterSpanMs} ms`);
     for (let i = 1; i < n; i += 1) assert.ok(delays[i] - delays[i - 1] <= A.letterStepMs);
   }
   assert.ok(arrival.arrivalEndsAt(3) <= 4500, `ends at ${arrival.arrivalEndsAt(3)}`);
-  assert.ok(A.confetti <= 28 && A.sparkles <= 12, 'particle caps');
+  assert.ok(A.confetti <= 28 && A.confettiSecond <= 28 && A.sparkles <= 12, 'particle caps per burst');
   assert.ok(A.minTapAt < A.burstAt + 400, 'a tap can hand off soon after the name lands');
+});
+
+test('haptics and sound are cued from the beat sheet: the hit, one tick per card as it lands, the goal, the handoff', () => {
+  const A = arrival.ARRIVAL;
+  const cues = arrival.arrivalCues(3, true, false);
+  same(cues.map(c => c.kind), ['hit', 'card', 'card', 'card', 'goal', 'handoff']);
+  assert.equal(cues[0].at, A.hitAt);
+  assert.equal(cues[1].at, A.cardsAt + 120);
+  assert.equal(cues.at(-1).at, A.handoffAt);
+  for (let i = 1; i < cues.length; i += 1) assert.ok(cues[i].at > cues[i - 1].at, 'in order');
+  same(arrival.arrivalCues(2, false, true).map(c => c.kind), ['hit', 'handoff'], 'Reduce Motion keeps the haptic and the sound');
 });
 
 test('the ribbon title always fits on one line', () => {
@@ -96,7 +111,10 @@ test('the moment stays on the motion language, the power budget and kid-safe art
   assert.match(src, /flashPeak\(isDimFlashingLightsEnabled\(\)/);
   assert.match(src, /useAmbientLoop/, 'the coin spin is an ambient loop');
   assert.match(src, /useReduceMotionPreference/, 'never starts before Reduce Motion is known');
-  assert.doesNotMatch(src, /onLayout/, 'no layout callbacks on animated views');
+  assert.doesNotMatch(src, /<Animated\.View[^>]*onLayout/, 'no layout callbacks on animated views');
+  assert.match(src, /runOnJS\(fire\)/, 'haptic and sound fire from the UI clock');
+  assert.doesNotMatch(src, /setTimeout\([^\n]*playHaptic|setTimeout\([^\n]*playMoment/, 'no JS timers for beats');
+  assert.doesNotMatch(src, /GameIcon name="coins"/, 'coins still to find never use the wallet coin stack');
   assert.doesNotMatch(src, /from 'react-native-svg'/);
   assert.doesNotMatch(src, /\bdice\b|slot machine|\bbet\b/i);
   const hook = read('src/components/park/useParkArrival.tsx');

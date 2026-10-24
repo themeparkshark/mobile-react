@@ -12,7 +12,7 @@ import Loading from '../components/Loading';
 import ParkTrophyModal from '../components/ParkTrophyModal';
 import ParkShelfArtwork from '../components/ParkShelfArtwork';
 import CoinShelfArrival from '../components/CoinShelfArrival';
-import { RowShine, ShelfJiggle } from '../components/ShelfLandingFx';
+import { RowShine, ShelfJiggle, ShelfKick } from '../components/ShelfLandingFx';
 import { rowComplete } from '../components/shelfLanding';
 import useEarnedShelfArrival from '../hooks/useEarnedShelfArrival';
 import { isEarnedShelfArrival, resolveEarnedShelfSlot, type EarnedShelfArrival, type ShelfSection } from '../services/collection/earnedShelf';
@@ -28,6 +28,7 @@ import useCrumbs from '../hooks/useCrumbs';
 import useTripGoal from '../hooks/useTripGoal';
 import UnfoundCoinModal from '../components/UnfoundCoinModal';
 import ParkDayRecapCard from './ParkDayRecapCard';
+import { notifyRecapViewport } from '../components/park/ParkDayRecapBuild';
 import ParkCollectionHeader from './ParkCollectionHeader';
 import ParkRideDirectory from './ParkRideDirectory';
 import { nearbyUncollectedRide } from './parkRideSuggestion';
@@ -112,6 +113,11 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const arrival = useEarnedShelfArrival({ requestKey,
     enabled: isFocused && !!arrivalSlot && closedKey !== requestKey,
     slotRef, contentRef, frameRef, scrollRef });
+  // Decode the arriving coin while the shelf scrolls to its slot, so the landing's first frame already shows it.
+  const arrivingCoinUrl = arrivalSlot?.task.coin_url ?? null;
+  useEffect(() => {
+    if (arrivingCoinUrl) void Image.prefetch(arrivingCoinUrl, 'memory').catch(() => undefined);
+  }, [arrivingCoinUrl]);
   const matchesArrival = (section: ShelfSection, taskId: number) =>
     arrivalSlot?.section === section && arrivalSlot.task.id === taskId;
   const inspectionKey = (section: ShelfSection, taskId: number) =>
@@ -322,6 +328,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     const shine = landingKey && rowComplete(row.map(task => task.id), ownedIds) ? landingKey : null;
     return (
     <View key={rowIndex} style={{ paddingBottom: 14 }}>
+      <ShelfKick landingKey={landingKey}>
       <View style={{ position: 'relative', height: coinSize + 43 }}>
         <ParkShelfArtwork variant={shelfArt(section)} height={55} />
         {shine && <RowShine landingKey={shine} width={width - 40} />}
@@ -375,6 +382,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
           })}
         </View>
       </View>
+      </ShelfKick>
     </View>
     );
   });
@@ -430,7 +438,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
               </Text>
             </Pressable>}
             {currentPark && tasks && secretTasks && (
-              <ScrollView ref={scrollRef} scrollEnabled={!arrival.target} onContentSizeChange={arrival.notifyLayout}>
+              <ScrollView ref={scrollRef} scrollEnabled={!arrival.target} onContentSizeChange={arrival.notifyLayout}
+                onScroll={notifyRecapViewport} scrollEventThrottle={120} onMomentumScrollEnd={notifyRecapViewport}>
                 <View ref={contentRef} collapsable={false}>
                 <View style={{ paddingTop: 16, paddingHorizontal: 16, paddingBottom: 14 }}>
                   <ParkCollectionHeader

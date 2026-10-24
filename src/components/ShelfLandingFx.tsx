@@ -10,7 +10,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { EASE, SPRING } from '../ui/motionEasing';
-import { SHELF_LANDING, jiggleDelay, jiggleDirection } from './shelfLanding';
+import { SHELF_LANDING, jiggleAmount, jiggleDelay, jiggleDirection } from './shelfLanding';
 
 /** Wraps one shelf slot. `landingKey` changes when a coin lands in this row; `distance` is slots from it. */
 export function ShelfJiggle({ landingKey, distance, children }: {
@@ -18,18 +18,34 @@ export function ShelfJiggle({ landingKey, distance, children }: {
 }) {
   const reduced = useReducedGameMotion();
   const tip = useSharedValue(0);
+  const hop = useSharedValue(0);
   const delay = jiggleDelay(distance);
   useEffect(() => {
     if (!landingKey || delay === null || reduced) return undefined;
     const dir = jiggleDirection(distance);
+    const { deg, hop: lift } = jiggleAmount(distance);
     tip.value = withDelay(delay, withSequence(
-      withTiming(dir * SHELF_LANDING.jiggleDeg, { duration: 90, easing: EASE.out }),
+      withTiming(dir * deg, { duration: 90, easing: EASE.out }),
       withSpring(0, SPRING.stamp)));
-    return () => cancelAnimation(tip);
-  }, [landingKey, delay, distance, reduced, tip]);
+    hop.value = withDelay(delay, withSequence(withTiming(lift, { duration: 90, easing: EASE.out }), withSpring(0, SPRING.land)));
+    return () => { cancelAnimation(tip); cancelAnimation(hop); };
+  }, [landingKey, delay, distance, reduced, tip, hop]);
   const style = useAnimatedStyle(() => ({
-    transform: [{ translateY: -Math.abs(tip.value) * 1.2 }, { rotate: `${tip.value}deg` }],
+    transform: [{ translateY: -hop.value }, { rotate: `${tip.value}deg` }],
   }));
+  return <Animated.View style={style}>{children}</Animated.View>;
+}
+
+/** The shelf plank under a landing coin kicks down a couple of points and springs back (the weight of the coin). */
+export function ShelfKick({ landingKey, children }: { readonly landingKey?: string | null; readonly children: ReactNode }) {
+  const reduced = useReducedGameMotion();
+  const y = useSharedValue(0);
+  useEffect(() => {
+    if (!landingKey || reduced) return undefined;
+    y.value = withSequence(withTiming(SHELF_LANDING.kickPt, { duration: 50, easing: EASE.out }), withSpring(0, SPRING.stamp));
+    return () => cancelAnimation(y);
+  }, [landingKey, reduced, y]);
+  const style = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
   return <Animated.View style={style}>{children}</Animated.View>;
 }
 

@@ -123,6 +123,7 @@ import { mapTipReady, parkTipFor } from '../services/help/tipGate';
 import MapStatusStack, { TONES, type StatusEntry } from '../components/map/MapStatusStack';
 import { statusOrder, HUD_BOTTOM } from '../components/map/statusStack';
 import useParkArrival from '../components/park/useParkArrival';
+import useFirstCoinToday from '../components/park/useFirstCoinToday';
 import { EventStatusChip, EventHomeChip, EventSheet, EventGainToast, FrenzyBanner, FrenzySweep, EventRecapCard, useRecapDue, useLiveEvent, useStarRides } from '../components/liveEvents';
 import { openableKeys } from '../services/liveEvents/model';
 import NextUpRail, { useNextUp } from '../components/nextUp/NextUpRail';
@@ -362,6 +363,8 @@ function ExploreScreen() {
   const [parkTipShowing, setParkTipShowing] = useState(false);
   const [redeemFlowOpen, setRedeemFlowOpen] = useState(false);
 
+  // "First coin today!": the hook lives further down (it waits for the map to be free); the catch calls it here.
+  const firstCoinNote = useRef<() => void>(() => undefined);
   // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
   const mapProjector = useRef<MapProjector | null>(null);
   const avatarRef = useRef<View>(null);
@@ -445,13 +448,17 @@ function ExploreScreen() {
   const homeCatch = useMemo(() => (showPrepItemModal && homeLocationConfirmed && !isActive && activePrepItem &&
     activePrepItemPivotId ? { item: activePrepItem, pivotId: activePrepItemPivotId } : null),
   [showPrepItemModal, homeLocationConfirmed, isActive, activePrepItem, activePrepItemPivotId]);
+  // The catch that is on screen collected a real coin (the first coin of the day waits for it to finish).
+  const catchCollected = useRef(false);
   const onHomeCatchCollected = useCallback(() => {
+    catchCollected.current = true;
     collectedOnce.current = true;
     setCaughtThisSession(true);
     setHomeCollectionVersion((version) => version + 1);
   }, []);
   const onHomeCatchUnavailable = useCallback(() => setHomeCollectionVersion((version) => version + 1), []);
   const onHomeCatchDone = useCallback(() => {
+    if (catchCollected.current) { catchCollected.current = false; firstCoinNote.current(); }
     setShowPrepItemModal(false);
     setActivePrepItem(null);
     setActivePrepItemPivotId(null);
@@ -968,6 +975,12 @@ function ExploreScreen() {
       !retentionOccluding && !dailyGiftOccluded,
   });
   useEffect(() => { setArrivalBusy(arrival.showing || arrival.pending); }, [arrival.showing, arrival.pending]);
+  // The first real coin of the day gets its own ribbon once the catch or the coin's flight home is done.
+  const firstCoin = useFirstCoinToday({
+    playerId: player?.id,
+    free: mapFocused && mapFreeForMoment && !arrivalBusy && !retentionOccluding && !dailyGiftOccluded && !collectFlight && !pendingCollect,
+  });
+  firstCoinNote.current = firstCoin.noteCollected;
   const chestShowing = mapFocused && !!dailyGift && chestShouldShow({
     unclaimed: chestUnclaimed, autoReady: chestReady, screenFree: chestScreenFree,
     requested: chestRequested, dismissed: chestDismissed(dailyGift.id),
@@ -1480,6 +1493,7 @@ function ExploreScreen() {
         {/* One HUD row floats over the map (the map runs right up to the header). */}
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
         {arrival.layer}
+        {firstCoin.layer}
         {/* The "what now" rail: one row in the suggestion slot, only while no suggestion card holds it. */}
         {railShowing && <View pointerEvents="box-none" style={{ position: 'absolute', top: slotTop, left: 12, right: 12, zIndex: 38 }}>
           <NextUpRail item={nextUp.item} onAction={handleNextUp} />
@@ -1692,7 +1706,7 @@ function ExploreScreen() {
         {collectFlight && <CoinCollectFlight key={collectFlight.key} from={collectFlight.from} to={collectFlight.to}
           coinUrl={collectFlight.coinUrl} label={collectFlight.label} reducedMotion={reducedMotion}
           onLand={() => { avatarPop.value = reducedMotion ? 1 : withSequence(withTiming(1.22, { duration: 110 }), withSpring(1, { damping: 6, stiffness: 260 })); }}
-          onDone={() => setCollectFlight(null)} />}
+          onDone={() => { setCollectFlight(null); firstCoin.noteCollected(); }} />}
       </View>
       {/* Too Far Away: ribbon + blue card with a distance meter */}
       <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}

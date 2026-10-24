@@ -38,6 +38,8 @@ export interface StatusEntry {
   readonly node: ReactNode;
   /** Colours of this pill (the stack button matches the lead). */
   readonly tone?: StatusTone;
+  /** Nothing to act on (the park arrival's Today chip): the stack shows a small gold star, never a count. */
+  readonly quiet?: boolean;
 }
 
 export default function MapStatusStack({ entries, defaultOpen = false }: {
@@ -88,11 +90,15 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
                 accessibilityLabel={open ? 'Hide the other statuses' : `${rest.length} more: ${rest.map(entry => entry.label).join(', ')}`}
                 style={({ pressed }) => [styles.more, { backgroundColor: tone.fill, borderColor: tone.border }, pressed && styles.pressed]}>
                 {open ? <GameIcon name="close" size={22} /> : <StackGlyph ink={tone.ink} />}
-                {!open && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{rest.length}</Text>
+                {!open && (rest.every(entry => entry.quiet) ? (
+                  <View style={[styles.badge, styles.badgeQuiet]}>
+                    <GameIcon name="star" size={14} />
                   </View>
-                )}
+                ) : (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{rest.filter(entry => !entry.quiet).length}</Text>
+                  </View>
+                ))}
               </Pressable>
             </Animated.View>
           )}
@@ -138,4 +144,5 @@ const styles = StyleSheet.create({
   badge: { position: 'absolute', top: -7, right: -7, minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 5,
     alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy },
   badgeText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy },
+  badgeQuiet: { backgroundColor: BRAND.white, borderColor: BRAND.gold },
 });

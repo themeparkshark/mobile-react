@@ -10,24 +10,29 @@ const root = path.resolve(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const L = loadTs('src/components/shelfLanding.ts');
 
-test('the first coin lands at 1 s; a repeat drops straight in and is shorter', () => {
+test('the first coin lands before 1 s (payoff inside 1.2 s); a repeat drops straight in and is shorter', () => {
   const first = L.SHELF_LANDING.first.dropAt + L.SHELF_LANDING.first.dropMs;
   const repeat = L.SHELF_LANDING.repeat.dropAt + L.SHELF_LANDING.repeat.dropMs;
-  assert.equal(first, 1000);
+  assert.ok(first < 1000, `lands at ${first}`);
+  assert.ok(first + L.SHELF_LANDING.hitStopMs + 200 <= 1200, 'the puff is out inside 1.2 s');
+  assert.ok(L.SHELF_LANDING.hitStopMs >= 50 && L.SHELF_LANDING.hitStopMs <= 80, 'one held hit-stop frame');
   assert.ok(repeat < first, 'repeat moments are shorter than first-time ones');
-  assert.ok(L.SHELF_LANDING.pulseMs <= L.SHELF_LANDING.first.dropAt + L.SHELF_LANDING.first.dropMs, 'the slot glow finishes by the landing');
+  assert.ok(L.SHELF_LANDING.pulseMs <= L.SHELF_LANDING.first.dropAt + L.SHELF_LANDING.first.dropMs + 40, 'the slot glows twice by the landing');
   assert.ok(first + L.SHELF_LANDING.shineAfterMs + L.SHELF_LANDING.shineMs <= 2600, 'settled inside 2.6 s');
   assert.ok(L.SHELF_LANDING.sparkles <= 12);
 });
 
-test('neighbours jiggle outward like dominoes, 40 ms apart; the landing coin does not', () => {
+test('neighbours jiggle outward like dominoes, 40 ms apart, the nearest two tip and hop most; the landing coin does not', () => {
   assert.equal(L.jiggleDelay(0), null);
-  assert.equal(L.jiggleDelay(1), 80);
-  assert.equal(L.jiggleDelay(-1), 80);
-  assert.equal(L.jiggleDelay(3), 160);
+  assert.equal(L.jiggleDelay(1), 0);
+  assert.equal(L.jiggleDelay(-1), 0);
+  assert.equal(L.jiggleDelay(3), 80);
   assert.equal(L.jiggleDirection(-2), -1);
   assert.equal(L.jiggleDirection(2), 1);
-  assert.ok(L.SHELF_LANDING.jiggleDeg <= 3, 'a small tip, not a wobble');
+  assert.ok(L.jiggleAmount(1).deg >= 5 && L.jiggleAmount(1).hop > 0, 'the nearest neighbours visibly tip and hop');
+  assert.ok(L.jiggleAmount(2).deg < L.jiggleAmount(1).deg, 'further coins tip less');
+  assert.equal(L.jiggleAmount(0).deg, 0);
+  assert.ok(L.SHELF_LANDING.kickPt >= 2 && L.SHELF_LANDING.kickPt <= 4, 'a small plank kick');
 });
 
 test('a row shines only when every slot in it is owned', () => {
@@ -48,5 +53,8 @@ test('the landing stays on the UI thread, the budget and the motion language', (
   assert.match(fx, /useReducedGameMotion/);
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /<ShelfJiggle landingKey=\{landingKey\}/);
+  assert.match(park, /<ShelfKick landingKey=\{landingKey\}/);
+  assert.match(park, /Image\.prefetch\(arrivingCoinUrl/, 'the coin is decoded before the landing starts');
+  assert.match(arrival, /runOnJS\(onDropDone\)/, 'the clink fires from the UI clock on the landing frame');
   assert.match(park, /RowShine/);
 });

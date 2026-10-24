@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
-import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { playSfx } from '../gamekit/SFX';
+import { playMoment } from '../gamekit/audio/playMoment';
+import { queueHaptic } from '../gamekit/Haptics';
 import { useReduceMotionPreference } from '../hooks/useReducedGameMotion';
 import type { ShelfArrivalTarget } from '../hooks/useEarnedShelfArrival';
 import { usePowerBudget } from '../power';
@@ -20,6 +20,12 @@ import { SHELF_LANDING } from './shelfLanding';
  * ShelfJiggle) and the header count ticks. The "clink" and a light haptic land
  * on the same frame. A small caption chip replaces the old bottom-third card
  * so the shelf stays the hero. Tap anywhere to place the coin at once.
+ *
+ * The coin is on screen from the first frame (no dead start: the Reduce Motion
+ * answer is cached app-wide and the coin art is prefetched before the shelf
+ * opens). The landing holds one 60 ms frame (hit-stop) before the slot coin
+ * squashes, the shelf plank kicks 2 pt and the neighbours tip; the haptic and
+ * the clink fire from the UI clock on that frame.
  *
  * A repeat catch (not the first of this coin) skips the hover and drops
  * straight in. Reduce Motion: the coin is simply in its slot.
@@ -39,46 +45,72 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
   const pulse = useSharedValue(0);
   const glow = useSharedValue(0);
   const puff = useSharedValue(0);
+  const flash = useSharedValue(0);
   const chip = useSharedValue(0);
+  const hitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const landedSound = useRef(false);
   const [landed, setLanded] = useState(false);
   const alive = useRef(true), completed = useRef(false);
   const callbacks = useRef({ onLand, onInspect, onClose });
   callbacks.current = { onLand, onInspect, onClose };
   const sparkles = momentParticles(SHELF_LANDING.sparkles, budget, reduced);
+  const impact = () => {
+    if (!alive.current || completed.current) return;
+    // The clink and the buzz on the landing frame; the coin holds there one hit-stop frame before it settles.
+    playMoment('park.shelfLand');
+    queueHaptic(firstCollection ? 'hitMedium' : 'tapLight');
+    if (!reduced) {
+      flash.value = withSequence(withTiming(1, { duration: 40 }), withTiming(0, { duration: 220, easing: EASE.out }));
+      cancelAnimation(glow); glow.value = withTiming(0, { duration: 160, easing: EASE.in });
+    }
+    if (reduced) finish();
+    else hitTimer.current = setTimeout(finish, SHELF_LANDING.hitStopMs);
+  };
   const finish = () => {
     if (!alive.current || completed.current) return;
     completed.current = true; cancelAnimation(progress); progress.value = 1;
     setLanded(true); callbacks.current.onLand();
-    playSfx('coin', 0.8);
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     if (!reduced) {
-      // The puff and the ring burst start on the landing frame.
+      // The puff and the ring burst start as the slot coin squashes.
       puff.value = 0;
       puff.value = withTiming(1, { duration: SHELF_LANDING.puffMs, easing: Easing.linear });
-      cancelAnimation(glow); glow.value = withTiming(0, { duration: 160, easing: EASE.in });
     }
   };
+  // A tap places the coin at once (with its clink).
+  const placeNow = () => {
+    if (completed.current) return;
+    if (hitTimer.current) clearTimeout(hitTimer.current);
+    if (!landedSound.current) { landedSound.current = true; playMoment('park.shelfLand'); queueHaptic('tapLight'); }
+    finish();
+  };
+  const onDropDone = () => { landedSound.current = true; impact(); };
   useEffect(() => {
     alive.current = true;
-    return () => { alive.current = false; [progress, chip, hover, pulse, glow, puff].forEach(v => cancelAnimation(v)); };
-  }, [progress, chip, hover, pulse, glow, puff]);
+    return () => {
+      alive.current = false;
+      if (hitTimer.current) clearTimeout(hitTimer.current);
+      [progress, chip, hover, pulse, glow, puff, flash].forEach(v => cancelAnimation(v));
+    };
+  }, [progress, chip, hover, pulse, glow, puff, flash]);
   useEffect(() => {
     if (completed.current || !known) return;
-    if (reduced) { chip.value = 1; finish(); return; }
+    if (reduced) { chip.value = 1; landedSound.current = true; impact(); return; }
     // 1. The empty slot glows gold twice: this one is yours.
     pulse.value = withSequence(
-      withTiming(1, { duration: SHELF_LANDING.pulseMs / 2 }), withTiming(0.25, { duration: SHELF_LANDING.pulseMs / 2 }),
-      withTiming(1, { duration: SHELF_LANDING.pulseMs / 2 }), withTiming(0, { duration: SHELF_LANDING.pulseMs / 2 }));
-    // 2. The coin pops in big over a soft gold glow, then 3. drops into the slot, turning on its edge.
+      withTiming(1, { duration: SHELF_LANDING.pulseMs / 4 }), withTiming(0.25, { duration: SHELF_LANDING.pulseMs / 4 }),
+      withTiming(1, { duration: SHELF_LANDING.pulseMs / 4 }), withTiming(0, { duration: SHELF_LANDING.pulseMs / 4 }));
+    // 2. The coin pops in big over a gold glow on the first frame, then 3. drops into the slot, turning on its edge.
     hover.value = withSpring(1, SPRING.pop);
     // The glow lives where the coin hovers and fades as it drops (it never trails behind on the shelf).
-    glow.value = withSequence(withTiming(firstCollection ? 0.45 : 0.25, { duration: 260, easing: EASE.out }),
-      withDelay(Math.max(0, plan.dropAt - 260), withTiming(0, { duration: plan.dropMs * 0.6, easing: EASE.in })));
+    glow.value = withSequence(withTiming(firstCollection ? 0.6 : 0.3, { duration: 200, easing: EASE.out }),
+      withDelay(Math.max(0, plan.dropAt - 200), withTiming(0, { duration: plan.dropMs * 0.6, easing: EASE.in })));
     progress.value = withDelay(plan.dropAt, withTiming(1, { duration: plan.dropMs, easing: EASE.in },
-      ok => { if (ok) runOnJS(finish)(); }));
-    chip.value = withDelay(plan.dropAt + plan.dropMs, withSpring(1, SPRING.settle));
-    const fallback = setTimeout(finish, plan.dropAt + plan.dropMs + 300);
+      ok => { if (ok) runOnJS(onDropDone)(); }));
+    chip.value = withDelay(plan.dropAt + plan.dropMs + SHELF_LANDING.hitStopMs, withSpring(1, SPRING.settle));
+    const fallback = setTimeout(placeNow, plan.dropAt + plan.dropMs + 400);
     return () => { clearTimeout(fallback); cancelAnimation(progress); };
+    // Runs once the preference is known.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [known, reduced, firstCollection, progress, chip]);
 
   const size = Math.min(150, target.frameWidth * 0.4);
@@ -108,6 +140,7 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
     opacity: 0.3 + 0.6 * pulse.value,
     transform: [{ scale: 1 + 0.12 * pulse.value }],
   }));
+  const flashStyle = useAnimatedStyle(() => ({ opacity: 0.85 * flash.value, transform: [{ scale: 0.8 + 0.5 * flash.value }] }));
   const ringStyle = useAnimatedStyle(() => {
     const t = puff.value;
     return { opacity: t <= 0 || t >= 1 ? 0 : 1 - t, transform: [{ scale: 1 + 0.9 * t }] };
@@ -118,7 +151,8 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
   }));
 
   return <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-    {!landed && <Pressable style={StyleSheet.absoluteFill} onPress={finish}
+    {!known ? null : <>
+    {!landed && <Pressable style={StyleSheet.absoluteFill} onPress={placeNow}
       accessibilityRole="button" accessibilityLabel={`Place ${rideName} coin on its shelf now`}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
     </Pressable>}
@@ -131,13 +165,15 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
       <GoldBurst size={size * 2.1} amount={glow} spin={false} reduced={reduced} />
     </View>}
     {!landed && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: startX, top: startY, width: size, height: size }, coinStyle]}>
-      <Image source={coinUrl} contentFit="contain" onError={finish} style={{ width: size, height: size }} />
+      <Image source={coinUrl} contentFit="contain" onError={placeNow} style={{ width: size, height: size }} transition={0} />
     </Animated.View>}
-    {/* On the landing frame: a gold ring bursts out of the slot and 8 sparkles puff from its rim. */}
+    {/* On the landing frame: a white-gold flash in the slot, then a gold ring bursts out and sparkles puff wide. */}
     {!reduced && <View pointerEvents="none" style={[styles.at, { left: slotCenter.x, top: slotCenter.y }]}>
+      <Animated.View style={[styles.slotFlash, { width: target.width * 1.5, height: target.width * 1.5, borderRadius: target.width * 0.75,
+        left: -target.width * 0.75, top: -target.width * 0.75 }, flashStyle]} />
       <Animated.View style={[styles.burstRing, { width: target.width + 8, height: target.width + 8, borderRadius: (target.width + 8) / 2,
         left: -(target.width + 8) / 2, top: -(target.width + 8) / 2 }, ringStyle]} />
-      <SparkleBurst progress={puff} count={sparkles} radius={target.width * 1.05} />
+      <SparkleBurst progress={puff} count={sparkles} radius={target.width * SHELF_LANDING.puffReach} />
     </View>}
     <Animated.View style={[styles.chip, chipStyle]} accessibilityLiveRegion="polite">
       <View style={styles.chipBody}>
@@ -149,15 +185,16 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
         <Text style={styles.title} numberOfLines={1}>{rideName}</Text>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="View coin mastery" style={styles.primary}
-        onPress={() => { finish(); callbacks.current.onInspect(); }}>
+        onPress={() => { placeNow(); callbacks.current.onInspect(); }}>
         <Text style={styles.primaryText}>Mastery</Text>
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Keep exploring this shelf" hitSlop={8}
-        style={styles.close} onPress={() => { finish(); callbacks.current.onClose(); }}>
+        style={styles.close} onPress={() => { placeNow(); callbacks.current.onClose(); }}>
         <GameIcon name="close" size={28} />
       </Pressable>
       </View>
     </Animated.View>
+    </>}
   </View>;
 }
 
@@ -166,7 +203,8 @@ const styles = StyleSheet.create({
   slotRing: { position: 'absolute', borderWidth: 4, borderColor: GOLD_FX.rays,
     shadowColor: GOLD_FX.glow, shadowOpacity: 0.9, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
   at: { position: 'absolute', width: 0, height: 0 },
-  burstRing: { position: 'absolute', borderWidth: 4, borderColor: GOLD_FX.raysSoft },
+  burstRing: { position: 'absolute', borderWidth: 5, borderColor: GOLD_FX.raysSoft },
+  slotFlash: { position: 'absolute', backgroundColor: '#fff6cf' },
   // Outer layer carries position and shadow; the body carries the fill so the
   // cream always spans the full chip, close button included.
   chip: { position: 'absolute', bottom: 118, left: 14, right: 14, borderRadius: 18,

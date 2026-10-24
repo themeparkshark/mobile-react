@@ -36,3 +36,25 @@ test('the build is skippable, plays once per day, and waits for Reduce Motion', 
   assert.match(card, /onTouchStart=\{build\.instant \? undefined : build\.skip\}/, 'a tap skips to the full card');
   assert.match(card, /useRecapBuild\(recap && !selectedDay/, 'earlier days just show');
 });
+
+test('picture stats: small days stamp, bigger days count; a gold sunset, a Tomorrow step; no polling', () => {
+  assert.equal(R.statStamps(0), true);
+  assert.equal(R.statStamps(1), true);
+  assert.equal(R.statStamps(3), true);
+  assert.equal(R.statStamps(12), false);
+  assert.ok(R.RECAP_BUILD.tomorrowAt > R.RECAP_BUILD.stampAt, 'tomorrow comes after the closing stamp');
+  assert.ok(R.RECAP_BUILD.stampSparkles <= 12);
+  const src = read('src/components/park/ParkDayRecapBuild.tsx');
+  assert.doesNotMatch(src, /#ffb347/i, 'no orange in the sunset');
+  assert.doesNotMatch(src, /VISIBLE_POLL_MS|setTimeout\(check/, 'the build never polls while off screen');
+  assert.match(src, /export function notifyRecapViewport/);
+  assert.doesNotMatch(src, /setTimeout\(\(\) => \{\n\s+setShown/, 'stat ticks fire from the UI clock');
+  const card = read('src/screens/ParkDayRecapCard.tsx');
+  assert.match(card, /icon="ride"/);
+  assert.match(card, /icon="coin"/);
+  assert.match(card, /<RecapTomorrow build=\{build\} line=\{tomorrow\} \/>/);
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /onScroll=\{notifyRecapViewport\}/);
+  const tomorrow = read('src/components/park/useRecapTomorrow.ts');
+  assert.match(tomorrow, /tomorrowLine\(state\)/, 'an honest line from the real Daily 3 streak');
+});

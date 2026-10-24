@@ -136,38 +136,93 @@ export function arrivalCards({ tasks, nextBoss, parkNames, now }: {
 }
 
 /**
- * The arrival's beat sheet (ms from the start). Payoff (rays, confetti, the
- * park name done) inside 1.5 s; cards settled by about 1.4 s; the handoff to
- * the map at 3.5 s or on the first tap; everything gone inside 4.5 s.
+ * The arrival's beat sheet (ms from the first visible frame). Gather: the veil,
+ * the ribbon unfurl, the plaque and the letters (all landed by 540 ms). Hold:
+ * one 70 ms frame with the flash and the haptic. Burst at 610 ms: rays, sparkles,
+ * confetti. Settle: Finn, then the three cards 90 ms apart (landed by about
+ * 1.4 s). The micro-beat at 1.5 s (Finn points, the limited coin flips) keeps
+ * the stage alive until the handoff at 2.6 s or the first tap; everything is
+ * gone inside 3.6 s.
  */
 export const ARRIVAL = {
   scrimMs: 240,
-  scrimOpacity: 0.25,
-  ribbonMs: 300,
-  lettersAt: 150,
+  /** A light sky-blue veil (never navy): the map recedes so the gold reads. */
+  scrimOpacity: 0.42,
+  ribbonMs: 210,
+  welcomeAt: 100,
+  lettersAt: 120,
   letterStepMs: 25,
-  letterCapMs: 400,
-  burstAt: 450,
-  finnAt: 520,
-  cardsAt: 600,
+  /** The last letter starts by lettersAt + this, so every letter has landed before the hit. */
+  letterSpanMs: 300,
+  hitAt: 540,
+  burstAt: 610,
+  goldHold: 0.78,
+  finnAt: 650,
+  cardsAt: 700,
   cardStepMs: 90,
   cardDrop: 40,
+  /** Each card catches one white shine just after it lands. */
+  shineAfterMs: 240,
+  shineMs: 520,
+  confettiSecondAt: 900,
+  goalAt: 1250,
+  pointAt: 1500,
+  flipMs: 520,
   coinTurnMs: 4000,
-  handoffAt: 3500,
+  handoffAt: 2600,
+  /** The UI clock runs a little past the handoff. */
+  clockMs: 3000,
+  rainMs: 2200,
+  /** The longest the stage waits for its art to decode before it starts anyway. */
+  artWaitMs: 260,
+  /** While arming, the stage is drawn at this (invisible) opacity for armMs so iOS decodes it before frame 1. */
+  armOpacity: 0.012,
+  armMs: 90,
   /** A tap before this is ignored (a kid mashing through the moment still sees the park name land). */
   minTapAt: 700,
-  flyMs: 520,
-  flyStepMs: 70,
+  flyMs: 560,
+  flyStepMs: 90,
   shrinkMs: 380,
   confetti: 28,
+  /** A second, smaller shower as the cards land. */
+  confettiSecond: 12,
   sparkles: 12,
 } as const;
 
-/** When each letter of the park name stamps in: 25 ms apart, all inside 400 ms. */
+/** How long the Today chip stays in the map's HUD stack after the arrival (then the HUD is itself again). */
+export const TODAY_CHIP_MS = 30 * 60_000;
+
+export function todayChipFresh(endedAt: number, now: number): boolean {
+  return Number.isFinite(endedAt) && now >= endedAt && now - endedAt < TODAY_CHIP_MS;
+}
+
+/** Today's Daily 3 for the arrival and the Today chip: a flame, the streak and three pips. */
+export interface ArrivalGoal {
+  readonly done: number;
+  readonly total: number;
+  readonly streak: number;
+}
+
+export type ArrivalCueKind = 'hit' | 'card' | 'goal' | 'handoff';
+
+/** The JS side of the beats (haptics, the sound, the handoff), fired from the stage's UI clock. */
+export function arrivalCues(cardCount: number, hasGoal: boolean, reduced: boolean): { readonly at: number; readonly kind: ArrivalCueKind }[] {
+  if (reduced) return [{ at: 1, kind: 'hit' }, { at: ARRIVAL.handoffAt, kind: 'handoff' }];
+  const cues: { at: number; kind: ArrivalCueKind }[] = [{ at: ARRIVAL.hitAt, kind: 'hit' }];
+  for (let i = 0; i < Math.max(0, Math.min(3, cardCount)); i += 1) {
+    // The tick lands with the card (SPRING.land reaches the slot about 120 ms after it starts).
+    cues.push({ at: ARRIVAL.cardsAt + i * ARRIVAL.cardStepMs + 120, kind: 'card' });
+  }
+  if (hasGoal) cues.push({ at: ARRIVAL.goalAt + 80, kind: 'goal' });
+  cues.push({ at: ARRIVAL.handoffAt, kind: 'handoff' });
+  return cues;
+}
+
+/** When each letter of the park name stamps in: 25 ms apart, the whole name inside ARRIVAL.letterSpanMs. */
 export function letterDelays(count: number): number[] {
   const n = Math.max(0, Math.floor(count));
   if (n === 0) return [];
-  const step = n > 1 ? Math.min(ARRIVAL.letterStepMs, ARRIVAL.letterCapMs / (n - 1)) : 0;
+  const step = n > 1 ? Math.min(ARRIVAL.letterStepMs, ARRIVAL.letterSpanMs / (n - 1)) : 0;
   return Array.from({ length: n }, (_, i) => Math.round(ARRIVAL.lettersAt + i * step));
 }
 

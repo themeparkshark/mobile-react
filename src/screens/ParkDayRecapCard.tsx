@@ -8,7 +8,8 @@ import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day
 import { shareFlex } from '../share';
 import { parkDayFlexPayload } from '../share/parkDay';
 import * as RootNavigation from '../RootNavigation';
-import { RecapClosingStamp, RecapPolaroid, RecapSky, RecapStamp, RecapStat, useRecapBuild } from '../components/park/ParkDayRecapBuild';
+import { RecapClosingStamp, RecapPolaroid, RecapSky, RecapStamp, RecapStat, RecapTomorrow, useRecapBuild } from '../components/park/ParkDayRecapBuild';
+import useRecapTomorrow from '../components/park/useRecapTomorrow';
 import { RECAP_BUILD, bestCoin } from '../components/park/recapBuildPlan';
 
 interface Props {
@@ -29,6 +30,8 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   // Today's story builds itself once (stat by stat); an earlier day just shows.
   const cardRef = useRef<View>(null);
   const build = useRecapBuild(recap && !selectedDay && recap.moments.length > 0 ? `${parkId}:${recap.park_day}` : null, cardRef);
+  // Tomorrow's honest next step (the Daily 3 flame), only for today's card.
+  const tomorrow = useRecapTomorrow(!!recap && !selectedDay && recap.moments.length > 0);
   // The flex card (Share Studio): only coin counts and coin art cross over (parkDayFlexPayload).
   const shareDay = () => {
     if (recap) shareFlex('park_day', parkDayFlexPayload(recap), { surface: 'park_day' });
@@ -79,11 +82,12 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
     </View>
     {hasActivity ? <>
       <View style={styles.statStrip}>
-        <RecapStat build={build} index={0} value={recap.distinct_rides_won} label="RIDES WON" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
-        <RecapStat build={build} index={1} value={recap.new_coins} label="NEW COINS" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
-        <RecapStat build={build} index={2} value={recap.coin_upgrades} label="LEVEL UPS" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
+        <RecapStat build={build} index={0} icon="ride" value={recap.distinct_rides_won} label="RIDES WON" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
+        <RecapStat build={build} index={1} icon="coin" value={recap.new_coins} label="NEW COINS" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
+        <RecapStat build={build} index={2} icon="xp" value={recap.coin_upgrades} label="LEVEL UPS" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
       </View>
       {!selectedDay && <RecapClosingStamp build={build} parkName={recap.park_name} />}
+      {!selectedDay && <RecapTomorrow build={build} line={tomorrow} />}
       {recap.line_play_sessions > 0 && <GameRichText style={styles.copy}>
         {`[icon:queue] ${recap.eligible_line_minutes} minutes in line · [icon:parts] ${recap.ride_parts_earned} Ride Part${recap.ride_parts_earned === 1 ? '' : 's'}`}
       </GameRichText>}
