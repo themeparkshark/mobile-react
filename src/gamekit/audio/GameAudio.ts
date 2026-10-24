@@ -323,6 +323,7 @@ class GameAudioEngine {
       maxVoicesForCue: def.maxVoices ?? 3,
       cooldownMs: def.cooldownMs ?? 0,
       lastPlayedAt: this.lastPlayed.get(name) ?? -1e9,
+      at: now + (opts.delayMs ?? 0),
       group: def.group,
       groupCap: def.group ? this.groupCaps.get(def.group) ?? 0 : 0,
     }, this.globalVoices);
@@ -354,7 +355,7 @@ class GameAudioEngine {
     const id = this.nextId++;
     const len = def.durationMs ?? (durationMs || 1200);
     this.active.push({ id, token, cue: name, group: def.group, priority: def.priority ?? 1, startedAt: now, endsAt: now + (opts.delayMs ?? 0) + len });
-    this.lastPlayed.set(name, now);
+    this.lastPlayed.set(name, now + (opts.delayMs ?? 0));
     this.prune(now);
     if (def.duck) this.duck(def.duck.db, def.duck.attackMs ?? 60, def.duck.holdMs ?? len, def.duck.releaseMs ?? 300);
     this.onPlay?.(name, { voices: this.active.length, backend: backend.name });

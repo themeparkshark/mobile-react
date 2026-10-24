@@ -39,13 +39,17 @@ test('trace mode is dev only: a release build ignores EXPO_PUBLIC_STUDIO_TRACE',
   assert.match(read('src/gamekit/audio/GameAudio.ts'), /if \(this\.traceMode\) \{[\s\S]{0,200}new TraceBackend[\s\S]{0,120}return;/, 'no native backend is built in trace mode');
 });
 
-test('50 catches: the first of the day, quick repeats, a lucky shower every 12th, the full bell after a walk', async () => {
-  const { a } = await fiftyCatches();
+test('50 catches: the first of the day, quick repeats, a lucky shower on the day\'s own count, the full bell after a walk', async () => {
+  const { a, e } = await fiftyCatches();
   const bursts = a.perCatch.map((c) => c.burst);
   assert.equal(bursts[0], 'catch.firstOfDay');
   assert.equal(bursts[35], 'catch.firstOfDay', 'the next morning starts with the golden chord again');
-  for (const n of [12, 24, 48]) assert.equal(bursts[n - 1], 'catch.lucky', `catch #${n}`);
-  assert.equal(bursts[21], 'catch.burst', 'after a 6 minute walk the full bell comes back');
+  // Friday Oct 24 picks 11, Saturday Oct 25 picks 10 (catch 36 is Saturday's first).
+  assert.equal(e.Plan.luckyEvery('2026-10-24'), 11);
+  assert.equal(e.Plan.luckyEvery('2026-10-25'), 10);
+  const lucky = bursts.map((b, i) => (b === 'catch.lucky' ? i + 1 : 0)).filter(Boolean);
+  assert.deepEqual(lucky, [11, 22, 33, 45], 'every 11th coin on Friday, the 10th on Saturday');
+  assert.equal(bursts[20], 'catch.burst', 'after a 6 minute walk the full bell comes back');
   const repeats = bursts.filter((b) => b === 'catch.repeat').length;
   assert.ok(repeats >= 30, `most catches in a run are the short repeat (${repeats})`);
   for (const c of a.perCatch) assert.deepEqual(plain(c.legacy), [], `#${c.n}: the catch's own pop, chime and whoosh stay quiet (no double sounds)`);
@@ -80,7 +84,8 @@ test('a quick run gets hotter: the wobble and badge ticks climb one rung per qui
   }
   assert.ok(Number(c(7).badgeRungs[0].slice(1)) > Number(c(1).badgeRungs[0].slice(1)), 'the badge ticks climb with the run too');
   for (const x of a.perCatch) assert.equal(new Set(x.badgeRungs).size, x.badgeRungs.length, `#${x.n} badge ticks never repeat a rung (${x.badgeRungs.join(' ')})`);
-  assert.equal(c(7).sounds, c(2).sounds, 'hotter, never longer: the same number of catch sounds');
+  assert.equal(c(7).sounds, c(2).sounds + 1, 'hotter: the 7th quick catch adds only the bright hot layer');
+  assert.ok(670 + 60 + 540 < 1500, 'and it ends before the coin lands (burst 670 + 60 ms + 540 ms glock), so the catch is never longer');
 });
 
 test('the 25th coin of the day rings the rare milestone shower (the 50th and 100th too), never longer than the bell', async () => {

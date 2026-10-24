@@ -2,9 +2,9 @@ import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { createSfxLimiter } from '../../../audio/sfxLimiter';
 import { beatHaptic, queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { playMoment, studioMoment, studioReady } from '../../../gamekit/audio/playMoment';
+import { momentSaver, playMoment, preloadMoments, studioMoment, studioReady } from '../../../gamekit/audio/playMoment';
 import type { MomentName } from '../../../gamekit/audio/momentMap';
-import { burstMoment, CATCH_WOBBLE_TICKS_MS, catchHeat, decodeDay, EMPTY_RUN, encodeDay, HEAT_MAX, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
+import { burstMoment, CATCH_WOBBLE_TICKS_MS, catchHeat, decodeDay, EMPTY_RUN, encodeDay, HEAT_MAX, heatTier, HOT_LAYER_HEAT, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
 import { traceEvent } from '../../../gamekit/audio/studioTrace';
 
 /**
@@ -90,6 +90,19 @@ let ready: Promise<void> | null = null;
 const limiter = createSfxLimiter({ maxVoices: 4 });
 let stingerUntil = 0;
 
+/** The studio moments a map catch can play (decoded ahead so the first catch never waits on a file). */
+export const CATCH_MOMENTS: readonly MomentName[] = [
+  'catch.tap', 'catch.wobble', 'catch.burst', 'catch.repeat', 'catch.firstOfDay', 'catch.lucky', 'catch.milestone',
+  'catch.hot', 'catch.fly', 'catch.land', 'ui.counterTick', 'game.miss',
+];
+let momentsReady = false;
+/** Studio on: decode the catch moments once (a no-op with the switch off). Safe to call often. */
+function preloadCatchMoments(): void {
+  if (momentsReady || !studioReady('catch.tap')) return;
+  momentsReady = true;
+  void preloadMoments(CATCH_MOMENTS);
+}
+
 /** Load every catch sound once per session (called when a Ride Photo find appears). */
 export function preloadCatchAudio(): Promise<void> {
   if (ready) return ready;
@@ -98,6 +111,7 @@ export function preloadCatchAudio(): Promise<void> {
     GameAudio.registerBeds(BEDS as never);
     registered = true;
   }
+  preloadCatchMoments();
   ready = GameAudio.preload([...Object.keys(CUES), ...Object.values(HOUSE) as string[]]).catch(() => undefined);
   return ready;
 }
@@ -129,7 +143,15 @@ const DONE_TAIL_MS = 700;
  * thread together (a separate timer drifted 50 to 130 ms under load). No wobble haptics (Reduce Motion
  * skips the wobble) means no ticks.
  */
-let session: { until: number; wobbles: ReturnType<typeof setTimeout>[]; haptics: number; ticks: number; burst: boolean; heat: number; done?: boolean } | null = null;
+let session: {
+  until: number; wobbles: ReturnType<typeof setTimeout>[]; haptics: number; ticks: number; burst: boolean; heat: number; done?: boolean;
+  /** Highest counter rung played so far (-1 before the first): the counter only ever climbs. */
+  rung: number;
+  /** The roll after the stamp has played the rest of the ladder; later counter ticks are covered. */
+  rolled: boolean;
+  /** The burst's own haptic (the first one after the burst mark) has fired. */
+  burstBuzzed: boolean;
+} | null = null;
 const WOBBLE_INTENTS = new Set<HapticIntent>(['tickSelection', 'tapLight', 'hitMedium']);
 let run: CatchRunState = EMPTY_RUN;
 let primed = false;
@@ -146,6 +168,24 @@ const COUNTER_HEAT_MAX = 4;
  */
 const BEAT_WINDOW_MS = 1200;
 let beatUntil = 0;
+/**
+ * The counter roll (COUNT tokens in src/ui/motion.ts: at most 12 ticks, a final bump of 1.12): when the
+ * coin stamps into the badge, the rest of the counter ladder rolls up in ROLL_TICKS_MAX quick ticks
+ * ROLL_STEP_MS apart and lands on the top rung, so the count is over within 300 ms of the stamp. The
+ * badge cascade's later ticks (and the bar tick) are then covered by it, so a slow phone can never
+ * trickle ticks seconds after the catch has settled.
+ */
+/** Three ticks: inside the counter tick's 3-voice cap, so none steals another before it is heard. */
+const ROLL_TICKS_MAX = 3;
+const ROLL_STEP_MS = 70;
+const ROLL_VOLUME = 0.7;
+const ROLL_FINAL_BUMP = 1.12;
+/** Heat of the catch in progress (or the last one), for every player: wow-map can scale its rays with it. */
+let heatNow = 0;
+/** Wobble buzzes climb with heat (tier 1: one rung, tier 2: two), capped below the burst's heavy. */
+const WOBBLE_LADDER: readonly HapticIntent[] = ['tickSelection', 'tapLight', 'hitMedium'];
+/** At heat tier 2 the burst lands a second, crisper thump this long after the heavy one. */
+const HOT_THUMP_MS = 90;
 
 function primeCatchState(): void {
   if (primed) return;
@@ -170,20 +210,38 @@ function keepSession(): void {
   if (session && !session.done) session.until = Date.now() + SESSION_IDLE_MS;
 }
 
+/**
+ * How hot the current catch is (0 calm .. HEAT_MAX), known from the tap: every quick catch in a row
+ * adds one, a 2 minute pause resets it. The same number drives the sound and the buzz; wow-map can
+ * read it to give a hot run more rays or a brighter glow. Every player, switch on or off (it is a
+ * count, not a sound).
+ */
+export function currentCatchHeat(): number {
+  return heatNow;
+}
+
 function onCatchMark(name: string): void {
   // 'tap-repeat': a later catch this session (wow-map's short repeat: two wobbles, burst at 450 ms).
   if (name === 'tap' || name === 'tap-repeat') {
     beatUntil = Date.now() + BEAT_WINDOW_MS;
-    if (!studioReady('catch.tap')) return;
+    const now = Date.now();
+    heatNow = catchHeat(run, now);
+    if (!studioReady('catch.tap')) { endSession(); return; }
+    // The studio switch can turn on after the find appeared (the flag reads late): decode now at the latest.
+    preloadCatchMoments();
     primeCatchState();
     endSession();
-    const now = Date.now();
-    session = { until: now + SESSION_IDLE_MS, wobbles: [], haptics: 0, ticks: 0, burst: false, heat: catchHeat(run, now) };
+    session = { until: now + SESSION_IDLE_MS, wobbles: [], haptics: 0, ticks: 0, burst: false, heat: heatNow, rung: -1, rolled: false, burstBuzzed: false };
     if (session.heat > 0) traceEvent('mark', 'catch-heat', `+${session.heat}`);
     playMoment('catch.tap');
     return;
   }
   if (name === 'done' || name === 'miss') beatUntil = 0;
+  if (name === 'burst' && !sessionOpen()) {
+    // Switch off: the run still counts (heat for the visuals), nothing plays and nothing is stored.
+    run = burstMoment(run, Date.now()).state;
+    return;
+  }
   if (!sessionOpen()) return;
   keepSession();
   if (name === 'burst') {
@@ -195,6 +253,8 @@ function onCatchMark(name: string): void {
     run = next.state;
     traceEvent('mark', 'catch-run', `#${run.count} -> ${next.moment}`);
     playMoment(next.moment);
+    // A hot run (5 quick catches and up) adds a bright glockenspiel on the burst. Battery Saver: the burst alone.
+    if ((session?.heat ?? 0) >= HOT_LAYER_HEAT && !momentSaver()) playMoment('catch.hot', { delayMs: 60 });
   } else if (name === 'fly') {
     playMoment('catch.fly');
   } else if (name === 'miss') {
@@ -218,6 +278,8 @@ export function catchMark(name: string): void {
 export function resetCatchSoundForTests(): void {
   endSession();
   run = EMPTY_RUN;
+  heatNow = 0;
+  momentsReady = false;
   primed = true;
   beatUntil = 0;
 }
@@ -227,13 +289,46 @@ function sessionSound(name: CatchSound, opts: { volume?: number; pitch?: number 
   if (!sessionOpen() || !studioReady('catch.tap')) return false;
   keepSession();
   if (name === 'pop' || name === 'chime' || name === 'whoosh') return true; // the marks played these
-  if (name === 'badge') return studioMoment('catch.land', { volume: opts.volume });
+  const s = session;
+  if (!s) return false;
+  const lift = Math.round((s.heat * COUNTER_HEAT_MAX) / HEAT_MAX);
+  if (name === 'badge') {
+    const ok = studioMoment('catch.land', { volume: opts.volume });
+    if (ok && !s.rolled) rollCounter(s, lift);
+    return ok;
+  }
   if (name === 'tick') {
-    // The badge ticks (rungs 2..8) climb up to 4 rungs with the run, so the last one still lands on 12, never doubled.
-    const lift = Math.round(((session?.heat ?? 0) * COUNTER_HEAT_MAX) / HEAT_MAX);
-    return studioMoment('ui.counterTick', { volume: opts.volume, step: opts.pitch === undefined ? undefined : Math.min(COUNTER_TOP, opts.pitch + lift) });
+    // After the roll the counter is already full: the cascade's later ticks are covered by it.
+    if (s.rolled) return true;
+    // One rolling ladder: the coin-stream ticks climb up to 4 rungs with the run and never step back or repeat.
+    if (opts.pitch === undefined) return studioMoment('ui.counterTick', { volume: opts.volume });
+    if (s.rung >= COUNTER_TOP) return true;
+    const step = Math.min(COUNTER_TOP, Math.max(opts.pitch + lift, s.rung + 1));
+    s.rung = step;
+    return studioMoment('ui.counterTick', { volume: opts.volume, step });
   }
   return false;
+}
+
+/**
+ * The stamp starts the roll: the rest of the counter ladder in up to ROLL_TICKS_MAX ticks, ROLL_STEP_MS
+ * apart, ending on the top rung a touch louder (the count's final bump). Each tick is scheduled on the
+ * audio clock from this one call (delayMs), so a busy JS thread cannot spread them out. Battery Saver:
+ * just the top tick.
+ */
+function rollCounter(s: NonNullable<typeof session>, lift: number): void {
+  s.rolled = true;
+  const from = Math.min(COUNTER_TOP, Math.max(s.rung + 1, 2 + lift));
+  const span = COUNTER_TOP - from;
+  const n = momentSaver() ? 1 : Math.min(ROLL_TICKS_MAX, span + 1);
+  const rungs: number[] = [];
+  for (let i = 0; i < n; i++) rungs.push(n === 1 ? COUNTER_TOP : Math.round(from + (span * i) / (n - 1)));
+  traceEvent('mark', 'catch-roll', rungs.join(' '));
+  rungs.forEach((step, i) => {
+    const last = i === rungs.length - 1;
+    studioMoment('ui.counterTick', { step, delayMs: (i + 1) * ROLL_STEP_MS, volume: last ? Math.min(1, ROLL_VOLUME * ROLL_FINAL_BUMP) : ROLL_VOLUME });
+  });
+  s.rung = COUNTER_TOP;
 }
 
 /**
@@ -248,10 +343,26 @@ export function catchHaptic(intent: HapticIntent, priority = 2): void {
   try {
     if (sessionOpen() && studioReady('catch.tap')) {
       const s = session;
+      const tier = s ? heatTier(s.heat) : 0;
       // The held breath: the three wobble haptics each bring a rising tick, a rung higher in a quick run.
       if (s && !s.burst) {
         s.haptics += 1;
-        if (s.haptics > 1 && s.ticks < CATCH_WOBBLE_TICKS_MS.length && WOBBLE_INTENTS.has(intent)) playMoment('catch.wobble', { step: s.heat + s.ticks++ });
+        if (s.haptics > 1 && s.ticks < CATCH_WOBBLE_TICKS_MS.length && WOBBLE_INTENTS.has(intent)) {
+          playMoment('catch.wobble', { step: s.heat + s.ticks++ });
+          // Hotter runs buzz heavier too (light, then medium), never past the burst's heavy.
+          const at = WOBBLE_LADDER.indexOf(intent);
+          if (tier > 0 && at >= 0 && !momentSaver()) intent = WOBBLE_LADDER[Math.min(WOBBLE_LADDER.length - 1, at + tier)];
+        }
+      } else if (s && s.burst && !s.burstBuzzed && !s.done) {
+        // The burst's own buzz. At heat tier 2 a second, crisper thump follows it (Battery Saver: one pulse).
+        s.burstBuzzed = true;
+        if (tier >= 2 && Date.now() < beatUntil && !momentSaver()) {
+          traceEvent('mark', 'catch-thump', `+${s.heat}`);
+          setTimeout(() => { if (Date.now() < beatUntil) beatHaptic('hitRigid'); }, HOT_THUMP_MS);
+        }
+      } else if (s && s.rolled && intent === 'tickSelection') {
+        // The stamp's buzz carries the rolled count; a bar tick seconds later would buzz with no sound.
+        return;
       }
     }
   } catch { /* sound is decoration */ }

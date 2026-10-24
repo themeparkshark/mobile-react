@@ -38,7 +38,13 @@ export interface AllocRequest {
   now: number;
   maxVoicesForCue: number;
   cooldownMs: number;
+  /** When the last voice of this cue was scheduled to start. */
   lastPlayedAt: number;
+  /**
+   * When this voice is scheduled to start (now + its delay; defaults to now). The cooldown compares
+   * scheduled starts, so a roll of ticks queued in one call 55 ms apart is not merged into one.
+   */
+  at?: number;
   /** Voice group and its cap (0 / undefined = no group cap). */
   group?: string;
   groupCap?: number;
@@ -55,7 +61,7 @@ export type AllocDecision =
  * (steal the oldest voice of the lowest priority, if not higher than ours).
  */
 export function allocateVoice(active: readonly VoiceInfo[], req: AllocRequest, globalCap: number): AllocDecision {
-  if (req.cooldownMs > 0 && req.now - req.lastPlayedAt < req.cooldownMs) return { action: 'drop', why: 'cooldown' };
+  if (req.cooldownMs > 0 && Math.abs((req.at ?? req.now) - req.lastPlayedAt) < req.cooldownMs) return { action: 'drop', why: 'cooldown' };
   const live = active.filter((v) => v.endsAt === 0 || v.endsAt > req.now);
   const same = live.filter((v) => v.cue === req.cue);
   if (req.maxVoicesForCue > 0 && same.length >= req.maxVoicesForCue) {

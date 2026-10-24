@@ -38,7 +38,7 @@ const REQUIRED = [
   'park.arrival', 'park.shelfLand',
 ];
 /** Moments that deliberately leave the hand alone (ambient, calm timer, sheets, rolling numbers). */
-const SILENT_HAND = new Set(['coin.appear', 'game.lastSeconds', 'ui.sheetOpen', 'ui.sheetClose', 'ui.counterTick', 'catch.fly']);
+const SILENT_HAND = new Set(['coin.appear', 'game.lastSeconds', 'ui.sheetOpen', 'ui.sheetClose', 'ui.counterTick', 'catch.fly', 'catch.hot']);
 
 const exists = (rel) => !!rel && fs.existsSync(path.join(root, rel)) && fs.statSync(path.join(root, rel)).size > 1024;
 
@@ -175,6 +175,7 @@ function harness({ dev = false, sfx = true, muted = false, approved = false, nat
       hasNativeHaptics: () => native,
       setHapticTraceListener: () => undefined,
     },
+    '../../power/batterySaver': { isBatterySaverOn: () => false },
   }, { __DEV__: dev, process: { env } });
   return { calls, cues, haptics, sw, mm, pm };
 }

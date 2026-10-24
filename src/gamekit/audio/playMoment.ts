@@ -11,6 +11,10 @@
  * layers, ladder rung or round-robin file, trimmed to its loudness class,
  * capped at 3 voices, ducking the music on reveals and stings.
  *
+ * Battery Saver (and Low Power Mode, once a binary can read it: the same
+ * powerPolicy input) keeps every moment but makes it cheaper: the primary cue
+ * only (no layers), and one pulse on the beat instead of a shaped pattern.
+ *
  * Everything goes through GameAudio, so the player's Sound Effects setting,
  * the iOS silent switch (expo-av playsInSilentModeIOS false, audio-api
  * 'ambient' session) and the muted studio env all apply. Never throws.
@@ -44,6 +48,12 @@ import {
   type HapticStep,
 } from '../Haptics';
 import { studioTraceOn, traceEvent } from './studioTrace';
+import { isBatterySaverOn } from '../../power/batterySaver';
+
+/** Battery Saver: the primary sound and one pulse only. Never throws. */
+export function momentSaver(): boolean {
+  try { return isBatterySaverOn(); } catch { return false; }
+}
 
 export interface MomentOptions {
   /** 0..1 on top of the moment's trim. */
@@ -173,6 +183,14 @@ function fireHaptic(name: MomentName, opts: MomentOptions, leadMs: number): void
   const wait = Math.max(0, (opts.delayMs ?? 0) + lead);
   const later = (fn: () => void, at: number) => { if (at <= 0) fn(); else setTimeout(fn, at); };
   try {
+    // Battery Saver: one pulse on the beat (the pattern's first step), no shaped tail, no extra timers.
+    if (momentSaver()) {
+      const first = (HAPTIC_PATTERNS[pattern] as HapticStep[])[0];
+      if (!first) return;
+      trace(`haptic ${name} saver ${first.p} +${wait}ms`);
+      later(() => { if (game) playHaptic([{ ...first, at: 0 }], { alignToAudio: true }); else queueHaptic(PRIMITIVE_INTENT[first.p]); }, wait + (first.at ?? 0));
+      return;
+    }
     const shaped = def.ahap && !opts.walking && hasNativeHaptics() ? def.ahap : null;
     trace(`haptic ${name} ${shaped ? `ahap ${shaped}` : pattern} +${wait}ms`);
     if (shaped) {
@@ -232,7 +250,8 @@ function playSound(name: MomentName, def: MomentDef, opts: MomentOptions): { id:
     trace(`studio ${name} ${def.primary}`);
     id = GameAudio.play(k, { volume, delayMs });
   }
-  def.layers?.forEach((layer, i) => {
+  // Battery Saver: the primary alone carries the moment.
+  if (!momentSaver()) def.layers?.forEach((layer, i) => {
     if (!refPlayable(layer.ref)) return;
     const lk = ensureCue(name, `layer${i}`, layer.ref, layer.db ?? 0, false);
     if (!lk) return;
