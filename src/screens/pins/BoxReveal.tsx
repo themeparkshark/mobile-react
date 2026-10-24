@@ -308,6 +308,15 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
   const confetti = useMemo(() => pieces((pull?.id ?? 1) * 7919, goldStage), [pull?.id, goldStage]);
 
+  // The chaser's resting glint loops only while ambient motion is allowed: when the power budget drops
+  // (Battery Saver, idle) mid-show, the loop stops with the twinkles (nothing keeps redrawing the pin canvas).
+  const glintLooping = useRef(false);
+  useEffect(() => {
+    if (ambient || !glintLooping.current) return;
+    glintLooping.current = false;
+    cancelAnimation(shine); shine.value = 0;
+  }, [ambient, phase, shine]);
+
   const shownAt = useRef(0);
   const showPin = useCallback(() => {
     if (phaseRef.current === 'show' || phaseRef.current === 'summary') return; // already shown (UI-thread callback + a tap)
@@ -317,6 +326,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     const p = pulls[index];
     if (!still) {
       shine.value = 0;
+      glintLooping.current = !!p?.is_chaser && ambient;
       // The gold chaser keeps catching the light while it rests (a glint every couple of seconds, only while
       // the power budget allows ambient motion); every other pin gets one sweep.
       shine.value = p?.is_chaser && ambient
@@ -705,7 +715,12 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
           {/* The pin is mounted (and its art decoding) from the start, hidden until it rises. */}
           <Animated.View style={[styles.pin, { width: pinSize, height: pinSize, top: (boxSize - pinSize) / 2 }, pinStyle]}>
             <Animated.View style={[StyleSheet.absoluteFill, frontStyle]}>
-              {/* The chaser is the gold edition: the same art re-coloured gold, so "Gold" is what a kid sees. */}
+              {/* A warm gold light behind the chaser (static): with the thick foil rim, "the gold one" reads at a glance. */}
+              {pull.is_chaser && (
+                <Image source={SOFT} pointerEvents="none" contentFit="fill" transition={0} tintColor="#ffc93c"
+                  style={{ position: 'absolute', left: -pinSize * 0.22, top: -pinSize * 0.22, width: pinSize * 1.44, height: pinSize * 1.44, opacity: 0.9 }} />
+              )}
+              {/* The chaser is the gold edition: its own art in a thick polished gold foil rim, so "Gold" is what a kid sees. */}
               {pull.icon_url && <EnamelPin uri={pull.icon_url} size={pinSize} shine={still ? undefined : shine} lag={0} lagSpan={0} surface="panel"
                 tint={pull.is_chaser ? CHASER_GOLD : undefined} />}
               {/* A few gold twinkles keep winking around the chaser while it rests (ambient only, never with Reduce Motion). */}

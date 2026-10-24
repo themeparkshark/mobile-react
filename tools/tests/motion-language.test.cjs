@@ -63,7 +63,10 @@ test('the burst flash is capped and off with Dim Flashing Lights or Reduce Motio
 
 test('the level-up charge bar is never stuck and never fake-complete', () => {
   assert.equal(motion.chargeFill(0, 1000), 0);
-  assert.ok(Math.abs(motion.chargeFill(1000, 1000) - 0.85) < 1e-9, 'the charge ends at 85 percent');
+  assert.ok(Math.abs(motion.chargeFill(1000, 1000) - motion.CHARGE_REACH) < 1e-9, 'the charge ends at CHARGE_REACH');
+  for (let t = 100; t <= 1000; t += 100) {
+    assert.ok(motion.chargeFill(t, 1000) - motion.chargeFill(t - 100, 1000) > 0.08, `every 100 ms of the charge is visibly fuller (${t})`);
+  }
   let last = 0;
   for (let t = 0; t <= 12000; t += 250) {
     const v = motion.chargeFill(t, 1000);
@@ -303,7 +306,7 @@ test('coin reveal backdrop: a pre-softened small copy of the water world under a
 test('wave 3: no big moment waits on the network or reflows at its payoff', () => {
   const reveal = read('src/components/CoinCatchReveal.tsx');
   assert.ok(/placeholder=\{GENERIC_COIN\}/.test(reveal), 'a cold coin image shows the house coin from frame 1, then the real art fades in');
-  assert.ok(/withTiming\(0\.9, \{ duration: Math\.max\(0, T\.burst - 480 - 240\), easing: EASE\.charge \}\)/.test(reveal), 'the pre-burst hold is a visible wind-up');
+  assert.ok(/withTiming\(0\.95, \{ duration: windFor, easing: EASE\.charge \}\)/.test(reveal), 'the pre-burst hold is a visible wind-up');
   const win = read('src/components/PostWinRewardsModal.tsx');
   assert.ok(/Image\.prefetch\(\[taskCoinUrl\], 'memory-disk'\)/.test(win), 'the coin art is warmed while the game is played');
   const modal = read('src/components/CoinLevelingModal.tsx');
@@ -327,4 +330,58 @@ test('wave 3: the level-up card says each prize with a picture and a number, in 
   assert.equal(m.revealCard(fx.previewUnlocks(5), 60).line, 'More Parts when you play in line', 'no grown-up maths for a kid');
   const modal = read('src/components/CoinLevelingModal.tsx');
   assert.ok(/\{state !== 'success' && <View style=\{\{\s*flexDirection: 'row'/.test(modal), 'the success card does not repeat the tier a third time');
+});
+
+test('wave 3 round 2: a wind-up grows every frame, bigger and faster', () => {
+  const ms = 900;
+  const amp = (w0, w1) => { let m = 0; for (let w = w0; w < w1; w += 0.002) m = Math.max(m, Math.abs(motion.windupWobble(w, ms, 1.5, 6))); return m; };
+  assert.equal(motion.windupWobble(0, ms), 0, 'still before the charge');
+  assert.equal(motion.windupWobble(1, ms), 0, 'still once the burst lands');
+  assert.ok(amp(0.85, 0.99) > amp(0.01, 0.15) * 2.5, 'the wobble ends much bigger than it starts');
+  const crossings = (w0, w1) => { let n = 0, last = motion.windupWobble(w0 + 0.0005, ms); for (let w = w0 + 0.001; w < w1; w += 0.001) { const v = motion.windupWobble(w, ms); if (Math.sign(v) !== Math.sign(last) && v !== 0) n += 1; last = v; } return n; };
+  assert.ok(crossings(0.8, 1) > crossings(0, 0.2) * 1.8, 'and faster');
+  const burst = read('src/ui/GoldBurst.tsx');
+  assert.ok(burst.includes('export function GatherRings'), 'shared gold rings that close in on a charging prize (for the Wow lanes too)');
+});
+
+test('wave 3 round 2: the level-up card never empties, collapses or mounts the next tier on the burst', () => {
+  const modal = read('src/components/CoinLevelingModal.tsx');
+  assert.ok(!/scale: Math\.max\(0, successIn\.value\)/.test(modal), 'the success content is never scaled to nothing on its first frame');
+  assert.ok(modal.includes('scale: 0.84 + 0.16 * successIn.value'), 'it stamps in from a little small, already visible');
+  assert.ok(modal.includes("<View style={{ alignSelf: 'stretch', height: CTA_HEIGHT, justifyContent: 'center' }}>"), 'the charge bar takes the Level Up button\'s own spot');
+  assert.equal((modal.match(/<YellowButton/g) || []).length, 2, 'one CTA from Level Up! to Awesome! (never remounted), plus the max-level Nice!');
+  assert.ok(modal.includes("(state === 'preview' || state === 'confirm' || state === 'leveling') && !isMaxLevel"), 'the card body stays during the charge');
+  assert.ok(!modal.includes('LEVELING STATE'), 'no separate short charging card');
+  assert.ok(modal.includes('<OneTimeTip id="coin_card" ready={visible && (state === \'preview\' || state === \'leveling\')} compact instantExit'), 'the card tip leaves at once at the tap (no stray fading pill over the coin)');
+  assert.ok(read('src/components/help/CoachTip.tsx').includes('exiting={reduced || instantExit ? undefined') && read('src/components/help/CoachTip.tsx').includes('entering={reduced || instantExit ? undefined'), 'CoachTip can skip its layout animation');
+  assert.ok(modal.includes('setLockedHeight(contentHeight.current)') && modal.includes('minHeight: (state === \'leveling\' || state === \'success\') && lockedHeight > 0'), 'the card keeps its height through the success card');
+  assert.ok(/level=\{nextLevel\}[\s\S]{0,300}animate=\{state === 'success'\}/.test(modal), 'the next tier is mounted (still) before the burst');
+  assert.ok(modal.includes('windupWobble(windup.value, CHARGE_MS') && modal.includes('<GatherRings progress={gatherRing}'), 'the charge visibly builds');
+  assert.ok(/uiRepeat\(uiSequence\(uiTiming\(1\.25/.test(modal) && /uiRepeat\(uiSequence\(uiTiming\(0\.82/.test(modal), 'a slow server gets a humming coin and a pulsing glow');
+});
+
+test('wave 3 round 2: the coin reveal winds up, hands straight to the summary and shows where to tap', () => {
+  const reveal = read('src/components/CoinCatchReveal.tsx');
+  assert.ok(reveal.includes('<GatherRings progress={rings}') && reveal.includes('windupWobble(windup.value, WINDUP_MS'), 'rings close in, the wobble speeds up');
+  assert.ok(reveal.includes('callbacks.current.onExit?.()'), 'the summary is told when the coin starts to leave');
+  assert.ok(!reveal.includes('Tap to continue</Text>') && reveal.includes('styles.tapPill'), 'a big gold tap pill, not tiny text');
+  const win = read('src/components/PostWinRewardsModal.tsx');
+  assert.ok(win.includes('onExit={() => setHanding(true)}') && win.includes('opacity: revealed ? 1 : 0'), 'the summary fades in under the departing coin');
+});
+
+test('wave 3 round 2: the daily chest rattles while it waits, bursts on a non-coin day, one picture of the prize', () => {
+  const chest = read('src/components/DailyGiftModal.tsx');
+  assert.ok(/withRepeat\(withSequence\(\.\.\.\[8, -10, 10, -8, 0\]/.test(chest), 'it keeps rattling while the server answers');
+  assert.ok(chest.includes('seamStyle') && chest.includes('cancelAnimation(shake); shake.value = withTiming(0'), 'the rattle stops and the lid seam blazes on the pop');
+  assert.ok(chest.includes('{coinDay && <GameIcon name={PRIZE[kind].icon} size={56} />}'), 'no second energy picture');
+  assert.ok(chest.includes('<CountUpText') && !/setTimeout\(step, 32\)/.test(chest), 'the count runs on the UI thread');
+});
+
+test('wave 3 round 2: the gold chaser reads gold and stops its glint on Battery Saver', () => {
+  const pin = read('src/screens/pinTrading/EnamelPin.tsx');
+  assert.ok(Number((pin.match(/const FOIL_EDGE = ([0-9.]+);/) || [])[1]) >= 0.09, 'a thick foil rim');
+  assert.ok(pin.includes('BEVEL_LIGHT') && pin.includes('BEVEL_DEEP'), 'with a bevel');
+  const box = read('src/screens/pins/BoxReveal.tsx');
+  assert.ok(/if \(ambient \|\| !glintLooping\.current\) return;[\s\S]{0,80}cancelAnimation\(shine\)/.test(box), 'the looping glint stops when ambient motion is not allowed');
+  assert.ok(/pull\.is_chaser && \(\s*<Image source=\{SOFT\}[^>]*tintColor="#ffc93c"/.test(box), 'a warm gold backlight behind the chaser');
 });

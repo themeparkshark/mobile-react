@@ -6,6 +6,9 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '../..');
 const ts = require(path.join(root, 'node_modules/typescript'));
 const file = 'src/components/DailyGiftModal.tsx';
+// The main prize counts up on the UI thread (CountUpText): read its target the way it is drawn.
+const said = node => node.type === 'CountUpText' ? `${node.props.prefix}${node.props.value}${node.props.suffix}`
+  : node.type === 'Text' ? (Array.isArray(node.props.children) ? node.props.children.join('') : node.props.children) : undefined;
 const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
 }).outputText;
@@ -62,6 +65,7 @@ function chest({ reconciled = null, reduced = false } = {}) {
       if (name === './RewardBurst') return { default: 'RewardBurst' };
       if (name === '../helpers/shorten-number') return { default: value => String(value) };
       if (name === '../ui/GoldBurst') return { GoldBurst: 'GoldBurst' };
+      if (name === '../gamekit/fx/CountUpText') return { CountUpText: 'CountUpText' };
       if (name === '../ui/motionEasing') return { ...require('./helpers/ts-module.cjs').loadTs('src/ui/motion.ts'), EASE: {} };
       if (name === '../hooks/useReducedGameMotion') return { default: () => reduced };
       if (name === '../gamekit/SFX') return { playSfx: name => sounds.push(name) };
@@ -149,8 +153,8 @@ test('claiming disables dismissal, and the reveal uses the confirmed ladder rewa
     ladder: [{ day: 1, coins: 25, energy: 0, tickets: 0 }, { day: 2, coins: 0, energy: 20, tickets: 0 }] });
   await daily.settle(); daily.reveal();
   const text = node => Array.isArray(node.props.children) ? node.props.children.join('') : node.props.children;
-  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+20 energy'));
-  assert.equal(daily.find(node => node.type === 'Text' && text(node) === '+25 coins'), undefined);
+  assert.ok(daily.find(node => said(node) === '+20 energy'));
+  assert.equal(daily.find(node => said(node) === '+25 coins'), undefined);
 });
 test('turning on reduced motion during a claim prevents delayed spring celebration', async () => {
   const daily = chest(); daily.open();
@@ -168,7 +172,7 @@ test('the celebration shows exactly what the server granted and never a coin pil
   daily.updates[0].resolve({ ...gift, redeemed_at: '2026-09-30T00:12:00Z', day: 2, ladder, streak: 2,
     reward: { coins: 0, energy: 20, tickets: 0 }, granted: { coins: 0, energy: 5, tickets: 0 } });
   await daily.settle(); daily.reveal();
-  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+5 energy'), 'granted, not the ladder 20');
+  assert.ok(daily.find(node => said(node) === '+5 energy'), 'granted, not the ladder 20');
   const chestArt = daily.find(node => node.type === 'Image' && node.props.style?.width > 100);
   assert.match(chestArt.props.source, /chest-closed/, 'no pile of coins for an Energy prize');
   assert.ok(daily.find(node => node.type === 'Text' && text(node) === '2 day streak'));
@@ -182,8 +186,8 @@ test('day 7 punches a Park Ticket and lists its coins, then flies both to the he
     granted: { coins: 250, energy: 0, tickets: 2 }, milestone: { label: 'Two-week souvenir', coins: 150, energy: 0, tickets: 1 },
     next_milestone: { day: 30, days_away: 16, label: 'Monthly souvenir', coins: 300, energy: 0, tickets: 2 } });
   await daily.settle(); daily.reveal();
-  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+2 tickets'));
-  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+250 coins'));
+  assert.ok(daily.find(node => said(node) === '+2 tickets'));
+  assert.ok(daily.find(node => said(node) === '+250 coins'));
   assert.ok(daily.find(node => node.type === 'Text' && text(node) === 'Two-week souvenir bonus!'));
   assert.ok(daily.find(node => node.type === 'Text' && text(node) === '16 more days to your Monthly souvenir'));
   assert.ok(daily.find(node => node.type === 'Text' && text(node) === 'SEE YOU AT THE PARK!'));
@@ -205,7 +209,7 @@ test('the count-up never shows +0 and the prize reserves its own height', () => 
   assert.equal(countStart(0), 0);
   assert.ok(prizeBlockHeight(1, true, false) > prizeBlockHeight(0, false, false));
   const source = fs.readFileSync(path.join(root, file), 'utf8');
-  assert.match(source, /\+\{Math\.max\(shown, countStart\(amount\)\)\}/, 'the first open frame already shows at least 1');
+  assert.match(source, /<CountUpText value=\{Math\.max\(shown, countStart\(amount\)\)\} prefix="\+"/, 'the first open frame already shows at least 1');
   assert.match(source, /prizeSlot, \{ height: prizeBlockHeight\(/);
 });
 test('the day 7 punch is motion and GameIcon art only, and its timer is cleared on unmount', () => {

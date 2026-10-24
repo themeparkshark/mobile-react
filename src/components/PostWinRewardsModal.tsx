@@ -285,6 +285,10 @@ export default function PostWinRewardsModal({
   }, [taskCoinUrl]);
   // The coin catch plays first and hands its coin to the summary's hero slot.
   const [caught, setCaught] = useState(false);
+  // The catch has started handing its coin to the summary: the summary fades in under it from that moment,
+  // so there is never an empty frame between the reveal leaving and the card arriving.
+  const [handing, setHanding] = useState(false);
+  const revealed = caught || handing;
   // Standings: the weekly goal note lands on this screen right as the coin reveal ends.
   // It is drawn inside the modal (an app toast would sit under the native modal window).
   const [goalNote, setGoalNote] = useState<{ text: string; big: boolean } | null>(null);
@@ -320,7 +324,7 @@ export default function PostWinRewardsModal({
   const [handoff, setHandoff] = useState<CatchHandoff | null>(null);
   const heroRef = useRef<View>(null);
   useEffect(() => {
-    if (!visible) { setCaught(false); setHandoff(null); }
+    if (!visible) { setCaught(false); setHanding(false); setHandoff(null); }
     else if (!hasCoin) setCaught(true);
   }, [visible, hasCoin]);
 
@@ -340,7 +344,7 @@ export default function PostWinRewardsModal({
   const readyPop = useSharedValue(0);
   useEffect(() => {
     const values = [enter, heroSquash, burst, spin, partsFill, readyPop];
-    if (!visible || !caught) { values.forEach(value => cancelAnimation(value)); return undefined; }
+    if (!visible || !revealed) { values.forEach(value => cancelAnimation(value)); return undefined; }
     if (reducedMotion) {
       enter.value = 1; heroSquash.value = 1; burst.value = 0; spin.value = isNewCoin ? 0.6 : 0.35;
       partsFill.value = parts ? parts.after : 0; readyPop.value = upgradeReady ? 1 : 0;
@@ -348,8 +352,8 @@ export default function PostWinRewardsModal({
     }
     enter.value = 0;
     enter.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
-    // The coin arrives from the catch: land with a squash and settle.
-    heroSquash.value = withSequence(withTiming(0.88, { duration: 80 }), withSpring(1, SPRING.pop));
+    // The coin arrives from the catch: land with a squash and settle (when it lands: the hand-off is about 0.42 s).
+    heroSquash.value = withDelay(caught ? 0 : 400, withSequence(withTiming(0.88, { duration: 80 }), withSpring(1, SPRING.pop)));
     burst.value = 0;
     burst.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.quad) });
     // The same gold as the catch that handed the coin over (GoldBurst turns only while it shows and power allows).
@@ -376,7 +380,7 @@ export default function PostWinRewardsModal({
       }, 1100));
     }
     return () => { timers.forEach(clearTimeout); values.forEach(value => cancelAnimation(value)); };
-  }, [visible, caught, reducedMotion]);
+  }, [visible, revealed, reducedMotion]);
 
   const cardStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, enter.value * 4),
@@ -433,7 +437,7 @@ export default function PostWinRewardsModal({
       backdropOpacity={0.6}
     >
       {/* The summary is laid out under the catch (hidden) so its hero slot can be measured. */}
-      <View style={{ flex: 1, opacity: caught ? 1 : 0 }} pointerEvents={caught ? 'auto' : 'none'}>
+      <View style={{ flex: 1, opacity: revealed ? 1 : 0 }} pointerEvents={caught ? 'auto' : 'none'}>
       <ScrollView style={styles.scroll}
         contentContainerStyle={[styles.container, {
           paddingTop: Math.max(insets.top, 20) + 8,
@@ -457,7 +461,8 @@ export default function PostWinRewardsModal({
               {!reducedMotion && <View pointerEvents="none" style={{ position: 'absolute', width: HERO, height: HERO }}>
                 <RewardBurst progress={burst} x={HERO / 2} y={HERO / 2} />
               </View>}
-              <Animated.View style={heroStyle}>
+              {/* Hidden only while the caught coin is still flying into this slot (it lands, then this one shows). */}
+              <Animated.View style={[heroStyle, { opacity: caught || !hasCoin ? 1 : 0 }]}>
                 <View ref={heroRef} collapsable={false} onLayout={measureHero} style={{ width: HERO, height: HERO }}>
                   {hasCoin
                     ? coinSource
@@ -625,7 +630,7 @@ export default function PostWinRewardsModal({
       </View>
       {visible && hasCoin && !caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName}
         isNewCoin={isNewCoin} handoff={handoff}
-        onDone={() => setCaught(true)} />}
+        onExit={() => setHanding(true)} onDone={() => setCaught(true)} />}
     </Modal>
   );
 }
