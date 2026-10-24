@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
   // margin moves the card down by half of it, so Finn plus card sit mid-sea (short phones keep 0: no room).
   cardCentred: { marginTop: 80 },
   card: { width: '100%', maxWidth: 360, alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 26,
-    borderWidth: 4, borderColor: BRAND.white, paddingTop: 58, paddingHorizontal: 20, paddingBottom: 14, ...SHADOW.lifted },
+    borderWidth: 4, borderColor: BRAND.white, paddingTop: 68, paddingHorizontal: 20, paddingBottom: 14, ...SHADOW.lifted },
   saveFinnWrap: { position: 'absolute', top: -92, width: 112, height: 148 },
   saveFinn: { width: 112, height: 148 },
   title: { fontFamily: 'Shark', fontSize: 28, color: BRAND.navy, textAlign: 'center' },

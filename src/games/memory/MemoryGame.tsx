@@ -199,14 +199,15 @@ function WarmupSky({ g }: { g: BoothGeo }) {
   const top = Math.max(10, Math.min(floor - h - 6, floor * 0.42));
   const cloud = Math.min(96, floor * 0.34);
   // The cue sits centred above the bunting, between the big clouds.
-  const cueH = Math.max(34, Math.min(58, top - 14));
+  const cueH = Math.max(34, Math.min(64, top - 14));
   const cueW = cueH / MATCH_CUE_RATIO;
   const cueTop = Math.max(6, (top - cueH) / 2);
   const clouds: readonly { src: number; left?: number; right?: number; top: number; size: number; flip?: boolean }[] = [
     { src: SKY_CLOUD, left: g.W * 0.04, top: Math.max(6, top - cloud * 0.9), size: cloud },
     { src: SKY_CLOUD, right: g.W * 0.05, top: Math.max(4, top - cloud * 1.15), size: cloud * 0.72, flip: true },
     { src: SKY_CLOUD_SMALL, left: g.W * 0.27, top: Math.max(2, top - cloud * 1.2), size: cloud * 0.42 },
-    { src: SKY_CLOUD_SMALL, right: g.W * 0.24, top: top + h * 0.2, size: cloud * 0.5, flip: true },
+    // Under the bunting on the right, clear of the flags and of Finn on the left.
+    { src: SKY_CLOUD_SMALL, right: g.W * 0.12, top: Math.min(top + h + 12, floor - cloud * 0.5 * CLOUD_RATIO - 40), size: cloud * 0.5, flip: true },
   ];
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
