@@ -74,6 +74,11 @@ export function countStart(amount: number): number {
   return Math.min(1, Math.max(0, amount));
 }
 
+/** Width the counting number reserves (Shark 28): the "+" and every digit of the final amount. */
+export function countWidth(amount: number): number {
+  return 19 * (String(Math.max(0, Math.round(amount))).length + 1) + 4;
+}
+
 /** Height the prize block reserves, so nothing below it ever moves or overlaps. */
 export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, noIcon: boolean): number {
   return (noIcon ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
@@ -493,9 +498,14 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
             <Animated.View style={[styles.prize, prizeStyle]}>
               {/* One picture of the prize: on a non-coin day it already rests over the chest, so only coins repeat it here. */}
               {coinDay && <GameIcon name={PRIZE[kind].icon} size={56} />}
-              <CountUpText value={Math.max(shown, countStart(amount))} prefix="+" suffix={` ${prizeLabel(kind, amount)}`}
-                durationMs={DURATION.count} punch={1.08} reducedMotion={reducedMotion} style={styles.prizeText}
-                onDone={countedUp} />
+              {/* The number counts in its own box, sized for the final number (a growing count never clips), the word beside it. */}
+              <View style={styles.prizeRow} accessible accessibilityLabel={`+${amount} ${prizeLabel(kind, amount)}`}>
+                <CountUpText value={Math.max(shown, countStart(amount))} prefix="+"
+                  durationMs={DURATION.count} punch={1.08} reducedMotion={reducedMotion}
+                  style={[styles.prizeText, { minWidth: countWidth(amount), textAlign: 'right' }]}
+                  onDone={countedUp} />
+                <Text style={styles.prizeText}>{` ${prizeLabel(kind, amount)}`}</Text>
+              </View>
               {extras.map(k => (
                 <Text key={k} style={styles.prizeExtra}>+{amounts[k]} {prizeLabel(k, amounts[k])}</Text>
               ))}
@@ -687,6 +697,7 @@ const styles = StyleSheet.create({
   prizeSlot: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   hint: { fontFamily: 'Shark', fontSize: 20, color: BRAND.gold },
   prize: { alignItems: 'center' },
+  prizeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   prizeText: { fontFamily: 'Shark', fontSize: 28, color: BRAND.gold,
     textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   prizeExtra: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white },
