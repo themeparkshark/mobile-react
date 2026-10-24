@@ -112,7 +112,7 @@ test('Q9 battery: looping ambience is opt-in (default off, server ambience_defau
 
 test('Q10 the no-leader headline hides while the mode is ON and stays otherwise', () => {
   const bar = read('src/components/RideControlBar.tsx');
-  assert.match(bar, /hideAllOpen \? 'RIDE CONTROL' : NO_LEADER_HEADLINE/);
+  assert.match(bar, /const headline = hideAllOpen \? 'RIDE CONTROL'\s*: leader \? [^\n]*: NO_LEADER_HEADLINE;/);
   assert.doesNotMatch(bar, /EVERY RIDE IS OPEN/, 'never claim ride status on the team bar');
   assert.match(read('src/screens/ExploreScreen.tsx'), /hideAllOpen=\{(?:!redeemables \|\| |!everyRideTrulyOpen\(\{[^}]*\}\) \|\| )?hideEveryRideOpen\(/);
 });

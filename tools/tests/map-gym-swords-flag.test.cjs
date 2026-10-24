@@ -33,7 +33,7 @@ test('map_gym_swords off: Gym and Sword markers stay mounted but hidden, still a
   // The Community Center marker: always mounted too, parked with no center.
   assert.match(explore, /<CommunityCenterMarker center=\{communityCenter\}/);
   // The hidden swords pill frees its no-go space on the map.
-  assert.match(explore, /bottomRight: bottomRightColumnHeight\(mapFlags\.gymSwords\)/);
+  assert.match(explore, /bottomRight: bottomRightColumnHeight\(mapFlags\.gymSwords, ENERGY_GAP\)/);
   const marker = read('src/components/map/Marker.tsx');
   assert.match(marker, /pointerEvents=\{tappable \? 'auto' : 'none'\}/);
   assert.match(marker, /style=\{off \? HIDDEN : undefined\}/);

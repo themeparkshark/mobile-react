@@ -98,8 +98,9 @@ export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy
   map_compass: { title: 'Map spin', body: 'The map spins with you. Tap to keep it still.' },
   // One short line: it shows over the map on the first park frame, so a 7-year-old reads it at a glance.
   park_hud: { title: 'You\'re at the park!', body: 'Walk to a ride to win its coin.' },
-  coin_in_range: { title: 'A ride coin is in range',
-    body: 'Tap Play Ride! One Ticket gets you one try at a quick game. Win to add the coin to your shelf.' },
+  // Matches the button word for word (PLAY RIDE!); the card shows a ticket, an arrow and the coin
+  // instead of this line, which VoiceOver reads.
+  coin_in_range: { title: 'Tap PLAY RIDE!', body: 'One Ticket gets one try. Win the ride coin!' },
   ride_challenge: { title: 'How a ride challenge works',
     body: 'Spend a Ticket to start. The game picks itself. Win to get this coin and the prizes shown here.' },
   lineplay_intro: { title: 'Welcome to LinePlay',

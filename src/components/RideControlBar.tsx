@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { RideControlPark } from '../api/endpoints/parks/rideControl';
 import { applyTeamNames, TEAM_ORDER, TEAMS, teamName, teamShortName, type TeamId } from '../constants/teams';
 import { haptic } from '../gamekit/Haptics';
@@ -14,8 +14,6 @@ import { BRAND, GameButton, GameIcon } from '../ui';
 
 /** The bar's title before any team holds a ride (never a ride-status claim). */
 export const NO_LEADER_HEADLINE = 'NO TEAM HAS A RIDE YET';
-/** How long the bar's title stays blank waiting for today's standings before it says RIDE CONTROL. */
-const STANDINGS_WAIT_MS = 4000;
 
 /** One team's ride count: pops when it goes up, wears the crown while leading. */
 export function TeamChip({ team, count, yours, leading }: {
@@ -83,21 +81,19 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
 
   // Never "every ride is open": kids read that as ride status (Wait Times may say every ride is closed).
   // With no leader yet, say what it really means: no team has won a ride today.
-  const headline = !control ? 'RIDE CONTROL'
-    : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : hideAllOpen ? 'RIDE CONTROL' : NO_LEADER_HEADLINE;
-  // Until today's standings load, the title stays blank (its space kept) and then fades in,
-  // so the launch never shows one title and swaps it for another a second later.
-  // If the standings never come (offline), the plain RIDE CONTROL title fades in after a few seconds.
-  const titleIn = useSharedValue(control ? 1 : 0);
-  const [waitedOut, setWaitedOut] = useState(false);
+  // Before today's standings answer, the bar already says the plain no-leader line with three zero
+  // shields (so the HUD row is whole from the first map frame). If the standings then name a leader,
+  // the title cross-fades to it (out 140 ms, in 200 ms): never a blank strip, never a hard swap.
+  const headline = hideAllOpen ? 'RIDE CONTROL'
+    : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : NO_LEADER_HEADLINE;
+  const reduced = useReducedGameMotion();
+  const [shownHeadline, setShownHeadline] = useState(headline);
+  const titleIn = useSharedValue(1);
   useEffect(() => {
-    if (control) return;
-    const timer = setTimeout(() => setWaitedOut(true), STANDINGS_WAIT_MS);
-    return () => clearTimeout(timer);
-  }, [control]);
-  useEffect(() => {
-    if (control || waitedOut) titleIn.value = withTiming(1, { duration: 220 });
-  }, [control, waitedOut, titleIn]);
+    if (headline === shownHeadline) { titleIn.value = withTiming(1, { duration: 200 }); return; }
+    if (reduced) { setShownHeadline(headline); return; }
+    titleIn.value = withTiming(0, { duration: 140 }, done => { if (done) runOnJS(setShownHeadline)(headline); });
+  }, [headline, shownHeadline, reduced, titleIn]);
   const titleStyle = useAnimatedStyle(() => ({ opacity: titleIn.value }));
 
   return (
@@ -107,7 +103,7 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
         onPress={() => setOpen(true)} style={[styles.barWrap, compact && styles.barWrapCompact, inline && styles.inline]}>
         <LinearGradient colors={[BRAND.blueBright, BRAND.blue, BRAND.blueLip]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
           style={[styles.bar, compact && styles.barCompact]}>
-          {!compact && <Animated.Text style={[styles.kicker, titleStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{headline}</Animated.Text>}
+          {!compact && <Animated.Text style={[styles.kicker, titleStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shownHeadline}</Animated.Text>}
           <View style={styles.chips}>
             {TEAM_ORDER.map(team => <TeamChip key={team} team={team} count={held[team]} yours={yours === team} leading={leader === team} />)}
           </View>

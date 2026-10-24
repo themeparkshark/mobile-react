@@ -306,9 +306,35 @@ export function parkMapInsets({ hudBottom, left, right, bottomLeft, bottomRight 
 export function bottomLeftColumnHeight(stores: number): number {
   return 32 + 54 + 80 + Math.max(0, stores) * 83;
 }
-/** Bottom-right column: 32 pt margin, the energy pill (44) and the swords pill (44) when the gym and swords are on, the avatar (~96). */
-export function bottomRightColumnHeight(swords: boolean): number {
-  return 32 + (swords ? 88 : 44) + 96;
+/**
+ * PLAY RIDE (RedeemModal) rests 70 pt above the map's bottom edge (its wrapper sits 50 pt below it and
+ * the group rises 120), with the ride chip (about 22 pt) under a pill as wide as half the screen.
+ */
+export const PLAY_RIDE_REST = 70;
+export const PLAY_RIDE_CHIP = 22;
+const PLAY_RIDE_PILL_ASPECT = 3.8;
+/** The top of the PLAY RIDE pill, in points above the map's bottom edge, on a screen this wide. */
+export function playRideTop(screenWidth: number): number {
+  return PLAY_RIDE_REST + PLAY_RIDE_CHIP + screenWidth / 2 / PLAY_RIDE_PILL_ASPECT;
+}
+/** The right column: 32 pt from the bottom, the avatar (70), then Energy and Swords (36 pt rows, 30 pt pills). */
+const RIGHT_COLUMN_BOTTOM = 32;
+const AVATAR_LG = 70;
+const ENERGY_ROW_INSET = 3;
+/** Clear map between the Energy pill and the PLAY RIDE pill's top, on every phone. */
+export const ENERGY_PLAY_RIDE_CLEARANCE = 8;
+/**
+ * The gap between the avatar and the Energy pill above it: Energy sits high enough that its battery
+ * clears the top of the PLAY RIDE pill by 8 pt (the pill is half the screen wide, so on an iPhone SE
+ * and a 17 Pro its right end reaches under the Energy pill's column).
+ */
+export function energyGap(screenWidth: number): number {
+  return Math.max(12, Math.ceil(playRideTop(screenWidth) + ENERGY_PLAY_RIDE_CLEARANCE - ENERGY_ROW_INSET
+    - RIGHT_COLUMN_BOTTOM - AVATAR_LG));
+}
+/** Bottom-right column: 32 pt margin, the energy pill (44) and the swords pill (44) when the gym and swords are on, the avatar (~84) and the gap above it. */
+export function bottomRightColumnHeight(swords: boolean, gap = 12): number {
+  return 32 + (swords ? 88 : 44) + 84 + gap;
 }
 /** With both pills (previews and tests). */
 export const BOTTOM_RIGHT_COLUMN = bottomRightColumnHeight(true);

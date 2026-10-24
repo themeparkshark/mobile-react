@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
@@ -11,7 +11,7 @@ const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
  * A one-time Finn tip. Never a modal: it floats where the caller puts it, the
  * rest of the screen keeps working, a tap closes it, and it leaves on its own.
  */
-export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9000, compact = false }: {
+export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9000, compact = false, small = false, art, pointerLeft }: {
   readonly title: string;
   readonly body: string;
   readonly onDismiss: () => void;
@@ -19,6 +19,12 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
   readonly autoHideMs?: number;
   /** No Finn art, for tips inside cards and sheets. */
   readonly compact?: boolean;
+  /** A short phone: a smaller Finn. */
+  readonly small?: boolean;
+  /** A picture that says the body with no reading (shown in place of the body text; VoiceOver still reads it). */
+  readonly art?: ReactNode;
+  /** A little pointer under the card, this far from its left edge, aimed at what the tip is about. */
+  readonly pointerLeft?: number;
 }) {
   const reduced = useReducedGameMotion();
   useEffect(() => {
@@ -34,13 +40,14 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
       exiting={reduced ? undefined : FadeOut.duration(150)} style={style}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${body}`} accessibilityHint="Closes the tip"
         onPress={onDismiss} style={[styles.card, compact && styles.compactCard]}>
-        {!compact && <Image source={FINN} style={styles.finn} contentFit="contain" />}
+        {!compact && <Image source={FINN} style={[styles.finn, small && styles.finnSmall]} contentFit="contain" />}
         <View style={styles.copy}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.body}>{body}</Text>
+          <Text style={styles.title} numberOfLines={art ? 1 : undefined} adjustsFontSizeToFit={!!art} minimumFontScale={0.8}>{title}</Text>
+          {art ? <View style={styles.art}>{art}</View> : <Text style={styles.body}>{body}</Text>}
         </View>
         <Text style={styles.ok}>OK</Text>
       </Pressable>
+      {pointerLeft !== undefined && <View pointerEvents="none" style={[styles.pointer, { left: pointerLeft }]} />}
     </Animated.View>
   );
 }
@@ -52,6 +59,11 @@ const styles = StyleSheet.create({
   },
   compactCard: { paddingLeft: 12, borderColor: BRAND.gold },
   finn: { width: 58, height: 58, marginRight: 6 },
+  finnSmall: { width: 42, height: 42 },
+  art: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  // A cream triangle with the card's white rim, pointing down from the card's bottom edge.
+  pointer: { position: 'absolute', bottom: -11, width: 0, height: 0, borderLeftWidth: 11, borderRightWidth: 11, borderTopWidth: 12,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: BRAND.white },
   copy: { flex: 1 },
   title: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, marginBottom: 2 },
   body: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 19, color: BRAND.navySoft },

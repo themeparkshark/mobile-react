@@ -427,13 +427,18 @@ function TaskMarker({
     transform: [{ translateY: -lift.value * 8 }, { scale: 1 + lift.value * 0.15 }],
   }));
 
-  // First reveal: islands drop in one after another, bounce and settle.
-  const drop = useSharedValue(revealDelay === undefined || reducedMotion ? 1 : 0);
+  // First reveal: islands drop in one after another, bounce and settle. Ride slots are mounted empty
+  // (parked) before the park's rides load, so the drop runs when a slot first gets its ride, not at
+  // mount: an empty slot waits at 0 and a ride that lands after the cover lifts drops in on its
+  // stagger. A ride that lands under the cover (no delay) is simply there. UI thread; Reduce Motion skips.
+  const drop = useSharedValue(reducedMotion ? 1 : parked ? 0 : revealDelay === undefined ? 1 : 0);
   useEffect(() => {
+    if (parked) { if (!reducedMotion) drop.value = 0; return; }
     if (revealDelay === undefined || reducedMotion) { drop.value = 1; return; }
+    drop.value = 0;
     drop.value = withDelay(revealDelay, withSpring(1, { damping: 10, stiffness: 170 }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [parked]);
   const dropStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, drop.value * 2),
     transform: [{ translateY: (1 - drop.value) * -36 }, { scale: 0.7 + drop.value * 0.3 }],

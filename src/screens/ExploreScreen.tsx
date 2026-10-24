@@ -119,6 +119,7 @@ import { playSfx } from '../gamekit/SFX';
 import { AWAY_LINE, awayHeadline, awayMessage, stallAction } from '../components/fright/halloweenShop';
 import { useHelp } from '../components/help/HelpProvider';
 import OneTimeTip from '../components/help/OneTimeTip';
+import CoinTipPicture from '../components/help/CoinTipPicture';
 import HelpButton from '../components/help/HelpButton';
 import { mapTipReady, parkTipFor } from '../services/help/tipGate';
 // Map declutter: one HUD row, and every marker placed by priority (no overlaps).
@@ -136,22 +137,29 @@ import { limitedLabel } from '../services/collection/limitedCoins';
 import FindMarker from './ExploreScreen/FindMarker';
 import { SLOTS, useMarkerSlots } from '../components/map/markerSlots';
 import { PARKED } from '../components/map/Marker';
-import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, parkMapInsets, rideLayoutId, rideTagFor,
+import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, energyGap, parkMapInsets, rideLayoutId, rideTagFor,
   type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
 import { UpperText } from '../ui/upper';
 
 /** After the map cover lifts, Finn's park tips wait this long (the map, its pins and PLAY RIDE arrive first). */
 const MAP_CALM_MS = 5000;
+const WINDOW_WIDTH = Dimensions.get('window').width;
+/** Energy and Swords sit this far above the avatar, so the Energy pill always clears PLAY RIDE's top. */
+const ENERGY_GAP = energyGap(WINDOW_WIDTH);
 /**
- * Finn's "A ride coin is in range" card: a narrow card on the right, resting just above PLAY RIDE,
- * so it never covers the player's shark in the middle or the chest button under the compass. On a
- * short phone (iPhone SE) it drops Finn's picture and sits a little lower to stay clear of both.
+ * Finn's "Tap PLAY RIDE!" card: one line and a picture, on the left just above the help button,
+ * ending before the Energy pill on the right, with a pointer down at PLAY RIDE. It never covers the
+ * player's shark, the chest or the right column. On a short phone (iPhone SE) Finn is smaller.
  */
 const SHORT_MAP = Dimensions.get('window').height < 740;
-const COIN_TIP_STYLE = {
-  position: 'absolute', right: 12, width: Math.min(300, Dimensions.get('window').width - 24),
-  bottom: SHORT_MAP ? 162 : 196, zIndex: 40,
-} as const;
+const COIN_TIP_WIDTH = Math.min(300, WINDOW_WIDTH - 124);
+/** The pointer aims at PLAY RIDE (the pill spans the middle half of the screen), inside the card. */
+const COIN_TIP_POINTER = Math.round(Math.min(COIN_TIP_WIDTH - 36, WINDOW_WIDTH * 0.42 - 12));
+function coinTipStyle(stores: number) {
+  return { position: 'absolute', left: 12, width: COIN_TIP_WIDTH, bottom: bottomLeftColumnHeight(stores) + 6, zIndex: 40 } as const;
+}
+/** Finn's park welcome: under the adventure card, ending before the right-hand button column (VIP, chest). */
+const PARK_WELCOME_TIP_STYLE = { position: 'absolute', left: 12, right: 78, top: 132, zIndex: 40 } as const;
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -178,9 +186,6 @@ const PARKED_BOX = { width: 1, height: 1 } as const;
 const PARKED_TIME = '2000-01-01T00:00:00Z';
 // Friends drawn as ghost sharks at most (the closest).
 const GHOST_CAP = 5;
-
-/** How long the HUD row waits for its sources before it shows what it has. */
-const STATUS_ROW_WAIT_MS = 4000;
 
 function ExploreScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
@@ -326,7 +331,7 @@ function ExploreScreen() {
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted, isReady, isActive } = useTutorial();
-  const { explain, openHelpSheet } = useHelp();
+  const { explain, openHelpSheet, activeTip } = useHelp();
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
   const [adventureOccluded, setAdventureOccluded] = useState(false);
@@ -534,7 +539,7 @@ function ExploreScreen() {
   // Ride Control: poll the park's team map while at a park, and after wins.
   const { control: rideControl, refresh: refreshRideControl } = useRideControlMap({ playerId: player?.id ?? null, parkId: park?.id ?? null, focused: mapFocused, idle: mapIdle });
   // Boss raids: a co-op boss surfaces at a ride at set times each park day.
-  const { raid, loaded: raidLoaded, setState: setRaidState, link: raidLink, retryLink: retryRaidLink, refresh: refreshRaid } = useParkRaid(park?.id, { focused: mapFocused, idle: mapIdle });
+  const { raid, setState: setRaidState, link: raidLink, retryLink: retryRaidLink, refresh: refreshRaid } = useParkRaid(park?.id, { focused: mapFocused, idle: mapIdle });
   const [bossOpen, setBossOpen] = useState(false);
   const [bossOccluded, setBossOccluded] = useState(false);
   const bossMap = useBossMapMoment({ playerId: player?.id ?? null, parkId: park?.id ?? null, control: rideControl,
@@ -769,10 +774,11 @@ function ExploreScreen() {
   // First reveal of a park's islands: nearest drop in first.
   const revealRef = useRef<{ context: string; delays: globalThis.Map<number, number> } | null>(null);
   // Pins that land under the loading cover are simply there when it fades (no drop nobody sees);
-  // pins that arrive after it lift land together in one pop (no trickle across the map).
+  // pins that arrive after it lifts drop in nearest first, 40 ms apart, all landed within 0.4 s.
   if (redeemables && visibleTasks.length && revealRef.current?.context !== mapContext) {
     revealRef.current = { context: mapContext, delays: mapCovered ? new globalThis.Map<number, number>()
-      : revealDelays(visibleTasks.map(task => task.id), 0, 0) };
+      : revealDelays([...visibleTasks].sort((a, b) => (taskDistance.get(a.id) ?? 0) - (taskDistance.get(b.id) ?? 0))
+        .map(task => task.id), 40, 400) };
   }
   const [mapFocusRequest, setMapFocusRequest] = useState<{ latitude: number; longitude: number; zoom: number; requestId: number } | null>(null);
   // Dev-only stress for the MapLibre marker guard (EXPO_PUBLIC_FRIGHT_STRESS=1): pans and zooms
@@ -1176,22 +1182,13 @@ function ExploreScreen() {
     right: suggestionSlots.right === 'ride' || projectPillShown ? { top: slotTop, stub: suggestionSlots.rightStub } : null,
     bottomLeft: bottomLeftColumnHeight(park?.stores.length ?? 0),
     // With the gym and swords off, the hidden swords pill frees its space.
-    bottomRight: bottomRightColumnHeight(mapFlags.gymSwords),
+    bottomRight: bottomRightColumnHeight(mapFlags.gymSwords, ENERGY_GAP),
   }), [slotTop, suggestionSlots.left, suggestionSlots.leftStub, suggestionSlots.right, suggestionSlots.rightStub, projectPillShown, park?.stores.length, mapFlags.gymSwords]);
   const declutter = useMemo<MapDeclutterInput | null>(() => park ? { store: declutterStore, items: declutterItems, insets: declutterInsets } : null,
     [park, declutterStore, declutterItems, declutterInsets]);
 
-  // The HUD row shows once today's standings and the park's live events have both answered (or after
-  // a few seconds offline), so it never says one thing and swaps to another as the second one lands.
-  const statusSourcesIn = !!rideControl && raidLoaded;
-  const [statusWaitedOut, setStatusWaitedOut] = useState(false);
-  useEffect(() => {
-    setStatusWaitedOut(false);
-    if (!park?.id) return;
-    const timer = setTimeout(() => setStatusWaitedOut(true), STATUS_ROW_WAIT_MS);
-    return () => clearTimeout(timer);
-  }, [park?.id]);
-  const statusSettled = statusSourcesIn || statusWaitedOut;
+  // The HUD row is whole from the first map frame (the team bar says its plain no-leader line until
+  // today's standings answer); a later lead change cross-fades inside MapStatusStack.
   // The one HUD row: the most urgent status leads, the rest wait behind "+N".
   const statusEntries: StatusEntry[] = player && park ? statusOrder({
     live: busyLiveSlot, show: nightPill ? (nightShow.phase === 'live' ? 'live' : 'teaser') : null,
@@ -1347,7 +1344,8 @@ function ExploreScreen() {
       {!player && <GuestInvite />}
       
       {/* The park buttons never wait on the map data: a failed load keeps them and shows a retry note. */}
-      {park && !redeemables && mapLoadFailed && (
+      {/* While Finn's park tip is up, the retry note waits (one card at a time in the top half). */}
+      {park && !redeemables && mapLoadFailed && !(parkTip && activeTip === parkTip) && (
         <View pointerEvents="box-none" style={{ position: 'absolute', left: 16, right: 16, bottom: 250, zIndex: 11 }}>
           <ParkMapRetryCard retrying={mapRetry.retrying || mapRetry.calm} onRetry={mapRetry.retryNow} />
         </View>
@@ -1489,7 +1487,7 @@ function ExploreScreen() {
             }}
           >
             {/* Energy and Swords: bright pills in the header's Currency language. */}
-            <View style={{ marginBottom: 12, gap: 6, alignItems: 'flex-end' }}>
+            <View style={{ marginBottom: ENERGY_GAP, gap: 6, alignItems: 'flex-end' }}>
               {/* Trail Boxes (server flag trail_boxes): walk in the park to open them. */}
               <TrailHost active={mapFocused && !isActive} openRequest={trailOpenRequest} />
               <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0}
@@ -1523,13 +1521,13 @@ function ExploreScreen() {
         {/* One-time Finn tips: the park welcome, then the first ride coin in range. Never over a game or dialog. */}
         {player && parkTip && (
           <OneTimeTip key={parkTip} id={parkTip} ready={parkTipReady}
-            compact={parkTip === 'coin_in_range' && SHORT_MAP}
-            style={parkTip === 'coin_in_range'
-              ? COIN_TIP_STYLE
-              : { position: 'absolute', left: 12, right: 12, top: 132, zIndex: 40 }} />
+            small={parkTip === 'coin_in_range' && SHORT_MAP}
+            art={parkTip === 'coin_in_range' ? <CoinTipPicture /> : undefined}
+            pointerLeft={parkTip === 'coin_in_range' ? COIN_TIP_POINTER : undefined}
+            style={parkTip === 'coin_in_range' ? coinTipStyle(park.stores.length) : PARK_WELCOME_TIP_STYLE} />
         )}
         {/* One HUD row floats over the map (the map runs right up to the header). */}
-        {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} settled={statusSettled} />}
+        {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
         {/* The "what now" rail: one row in the suggestion slot, only while no suggestion card holds it. */}
         {railShowing && <View pointerEvents="box-none" style={{ position: 'absolute', top: slotTop, left: 12, right: 12, zIndex: 38 }}>
           <NextUpRail item={nextUp.item} onAction={handleNextUp} />

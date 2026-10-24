@@ -31,8 +31,8 @@ function mapChallenge(initial = task) {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name === 'react-native') return { Animated: {
-        View: 'AnimatedView', Value: class { setValue() {} stopAnimation() {} },
-        timing: () => ({ start() {} }),
+        View: 'AnimatedView', Value: class { setValue() {} stopAnimation() {} interpolate() { return 0; } },
+        timing: () => ({ start() {} }), spring: () => ({ start() {} }),
       } };
       if (name === '../hooks/useReducedGameMotion') return { default: () => false };
       if (name.endsWith('mapOpportunityTiming')) return timing.exports;

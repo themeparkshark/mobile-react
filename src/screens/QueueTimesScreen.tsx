@@ -78,7 +78,7 @@ function formatReturnTime(iso: string | null | undefined): string | null {
 
 function timeAgo(ts: number): string {
   const diff = Math.floor((Date.now() - ts) / 1000);
-  if (diff < 60) return 'Just now';
+  if (diff < 60) return 'just now';
   const mins = Math.floor(diff / 60);
   return `${mins} min ago`;
 }

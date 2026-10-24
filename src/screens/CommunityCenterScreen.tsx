@@ -976,8 +976,10 @@ export default function CommunityCenterScreen() {
             <Animated.View 
               style={[
                 styles.giftCountBadge,
-                // iPhone SE: a little lower, so the bubble clears the wallet pill above it.
-                SHORT_SCREEN && { top: 136 },
+                // iPhone SE: the bubble shares the wallet's row on the left (one short line), so it
+                // never sits on the gift-bag medallion or the wallet.
+                SHORT_SCREEN && styles.giftCountBadgeShort,
+                SHORT_SCREEN && { top: 60 + ART_SHIFT },
                 {
                   opacity: entranceAnim,
                   transform: [{ 
@@ -989,10 +991,11 @@ export default function CommunityCenterScreen() {
                 },
               ]}
             >
-              <Text style={styles.giftCountText}>
+              <Text style={styles.giftCountText} numberOfLines={SHORT_SCREEN ? 1 : undefined}
+                adjustsFontSizeToFit={SHORT_SCREEN} minimumFontScale={0.8}>
                 {(center?.available_gifts ?? 0) > 0
                   ? `${center?.available_gifts} gift${center?.available_gifts !== 1 ? 's' : ''} available`
-                  : 'No gifts yet. Leave the first one!'}
+                  : SHORT_SCREEN ? 'No gifts yet!' : 'No gifts yet. Leave the first one!'}
               </Text>
             </Animated.View>
             
@@ -1352,10 +1355,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 60,
     right: 20,
-    backgroundColor: 'rgba(5,52,110,0.6)',
+    backgroundColor: KIOSK_COLORS.face,
+    borderWidth: 3,
+    borderColor: KIOSK_COLORS.edge,
     borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
     zIndex: 100,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1363,7 +1368,7 @@ const styles = StyleSheet.create({
   currencyDivider: {
     width: 1,
     height: 16,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(5,52,110,0.25)',
     marginHorizontal: 12,
   },
   coinIcon: {
@@ -1374,7 +1379,7 @@ const styles = StyleSheet.create({
   coinText: {
     fontFamily: 'Shark',
     fontSize: 18,
-    color: '#fbbf24',
+    color: KIOSK_COLORS.ink,
   },
   ticketIcon: {
     width: 28,
@@ -1384,7 +1389,7 @@ const styles = StyleSheet.create({
   ticketText: {
     fontFamily: 'Shark',
     fontSize: 18,
-    color: '#f472b6',
+    color: KIOSK_COLORS.ink,
   },
   flyingTicket: {
     position: 'absolute',
@@ -1412,20 +1417,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // The game's light card (warm white, navy rim), like the LEAVE GIFT plaque: never a dark pill on the dark room.
   giftCountBadge: {
     position: 'absolute',
     top: 120,
     alignSelf: 'center',
-    backgroundColor: 'rgba(5,52,110,0.7)',
+    backgroundColor: KIOSK_COLORS.face,
+    borderWidth: 3,
+    borderColor: KIOSK_COLORS.edge,
     borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
     zIndex: 50,
+    ...SHADOW.card,
+  },
+  giftCountBadgeShort: {
+    left: 12,
+    alignSelf: 'flex-start',
+    maxWidth: 150,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
   giftCountText: {
     fontFamily: 'Shark',
     fontSize: 16,
-    color: '#fff',
+    color: KIOSK_COLORS.ink,
+    textAlign: 'center',
   },
   slotContainer: {
     position: 'absolute',

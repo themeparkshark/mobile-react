@@ -9,7 +9,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInUp, FadeOutUp, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeOutUp, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { NIGHT } from '../../services/fright/theme';
@@ -40,21 +40,26 @@ export interface StatusEntry {
   readonly tone?: StatusTone;
 }
 
-export default function MapStatusStack({ entries, defaultOpen = false, settled = true }: {
+export default function MapStatusStack({ entries, defaultOpen = false }: {
   readonly entries: readonly StatusEntry[];
-  /**
-   * The row's sources (today's standings, the park's live events) have answered. Until then the
-   * row keeps its space but stays hidden, then fades in once, so a kid never reads one title and
-   * sees it swapped for another a second later.
-   */
-  readonly settled?: boolean;
   /** Development previews: start expanded and stay open (captures). */
   readonly defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const reduced = useReducedGameMotion();
   const keys = entries.map(entry => entry.key).join('|');
+  // The row is whole from the first map frame. When a different status takes the lead (a live event
+  // answering after the standings, a Rush starting), the lead pill cross-fades: out 120 ms, in 180 ms.
   const lead = entries[0];
+  const [leadKey, setLeadKey] = useState(lead?.key);
+  const leadIn = useSharedValue(1);
+  useEffect(() => {
+    if (!lead || lead.key === leadKey) { leadIn.value = withTiming(1, { duration: 180 }); return; }
+    if (reduced || leadKey === undefined) { setLeadKey(lead.key); return; }
+    leadIn.value = withTiming(0, { duration: 120 }, done => { if (done) runOnJS(setLeadKey)(lead.key); });
+  }, [lead?.key, leadKey, reduced, leadIn]);
+  const leadStyle = useAnimatedStyle(() => ({ opacity: leadIn.value }));
+  const shownLead = entries.find(entry => entry.key === leadKey) ?? lead;
   const rest = entries.slice(1);
   // A different lead or set of statuses folds the stack (nothing moves under a finger for long).
   const lastKeys = useRef(keys);
@@ -75,23 +80,18 @@ export default function MapStatusStack({ entries, defaultOpen = false, settled =
     return () => clearTimeout(timer);
   }, [open, defaultOpen]);
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
-  const shown = useSharedValue(settled ? 1 : 0);
-  useEffect(() => {
-    if (settled) shown.value = reduced ? 1 : withTiming(1, { duration: 220 });
-  }, [settled, reduced, shown]);
-  const shownStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
   if (!lead) return null;
-  const tone = lead.tone ?? TONES.park;
+  const tone = (shownLead ?? lead).tone ?? TONES.park;
   const toggle = () => { haptic('tapLight'); setOpen(value => !value); };
   return (
     <>
       {open && <Pressable testID="status-stack-scrim" accessibilityLabel="Close the status list" onPress={() => setOpen(false)}
         style={styles.scrim} />}
-      <Animated.View style={[styles.wrap, shownStyle]} pointerEvents={settled ? 'box-none' : 'none'}>
+      <Animated.View style={styles.wrap} pointerEvents="box-none">
         {/* Open, the pills sit on one solid card: nothing on the map peeks between them. */}
         {open && <View pointerEvents="none" style={styles.backing} />}
         <View style={styles.row} pointerEvents="box-none">
-          <View style={styles.lead}>{lead.node}</View>
+          <Animated.View style={[styles.lead, leadStyle]}>{(shownLead ?? lead).node}</Animated.View>
           {rest.length > 0 && (
             <Animated.View style={pulseStyle}>
               <Pressable accessibilityRole="button" onPress={toggle} hitSlop={6}

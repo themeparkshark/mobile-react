@@ -52,8 +52,8 @@ test('while the rides have not loaded, the status bar never claims every ride is
   const bar = read('src/components/RideControlBar.tsx');
   assert.doesNotMatch(bar, /EVERY RIDE IS OPEN/);
   assert.match(read('src/screens/ExploreScreen.tsx'), /hideAllOpen=\{hideEveryRideOpen\(/);
-  // Before standings load the title is blank and fades in: no RIDE CONTROL -> NO TEAM swap at launch.
-  assert.match(bar, /const titleIn = useSharedValue\(control \? 1 : 0\)/);
+  // Before standings load the title already says the no-leader line; a leader then cross-fades in.
+  assert.match(bar, /const \[shownHeadline, setShownHeadline\] = useState\(headline\);/);
   assert.match(bar, /<Animated\.Text style=\{\[styles\.kicker, titleStyle\]\}/);
 });
 

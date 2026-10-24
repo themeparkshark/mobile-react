@@ -325,6 +325,22 @@ export class ExpoAvBackend implements AudioBackend {
     this.master = gain;
   }
 
+  /**
+   * Frees one cue's voices once any play in progress has finished (HybridBackend calls this after
+   * the cue moved to the audio-api graph, so it is never held in memory twice). Music sources stay.
+   */
+  unload(key: string): void {
+    const pool = this.pools.get(key);
+    if (!pool) return;
+    this.pools.delete(key);
+    const wait = Math.max(0, ...pool.map((v) => v.busyUntil - Date.now()));
+    setTimeout(() => pool.forEach((v) => {
+      if (v.stopTimer) clearTimeout(v.stopTimer);
+      if (v.token) this.tokens.delete(v.token);
+      v.sound.unloadAsync().catch(() => undefined);
+    }), wait + 50);
+  }
+
   async unloadAll(): Promise<void> {
     const all: Promise<unknown>[] = [];
     this.pools.forEach((pool) => pool.forEach((v) => all.push(v.sound.unloadAsync().catch(() => undefined))));
@@ -676,7 +692,12 @@ export class HybridBackend implements AudioBackend {
       if (ok) this.routes.set(key, this.av);
       void whenAudioMayStart()
         .then(() => this.api.load(key, src))
-        .then((up) => { if (up && this.routes.has(key)) this.routes.set(key, this.api); })
+        .then((up) => {
+          if (!up || !this.routes.has(key)) return;
+          this.routes.set(key, this.api);
+          // The expo-av copy is no longer played: free it (after any play in progress ends).
+          this.av.unload(key);
+        })
         .catch(() => undefined);
       return ok;
     }

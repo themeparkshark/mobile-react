@@ -21,14 +21,17 @@ export const PAINTED_PRICE = { left: 0.745, right: 0.94, top: 0.713, bottom: 0.7
 export const KIOSK_FACE = { left: 0.67, top: 0.706, bottom: 0.818 } as const;
 
 /**
- * The painted kiosk's dark face runs past the plaque to the art's edge. A strip in that same dark
- * paint, tucked under the plaque, hides the last bit of the painted green slot in the gutter, so
- * the gutter reads as the painted dark face running on, never a second green button.
+ * The painted kiosk's dark face runs past the plaque to the art's edge. A strip in the warm floor
+ * stone, tucked under the plaque, hides the last bit of the painted green slot in the gutter, so
+ * the gutter reads as stone, never a second green button and never a dark sliver.
  */
 export const KIOSK_CAP = { top: PAINTED_SLOT.top - 0.004, bottom: PAINTED_SLOT.bottom + 0.004, tuck: 10 } as const;
 
-/** The plaque's colors: warm-white card, navy rim and price, the dark paint of the side strip. Never dark slate on the plaque. */
-export const KIOSK_COLORS = { face: '#fff7e6', edge: '#05346e', ink: '#05346e', side: '#2b2f35' } as const;
+/**
+ * The plaque's colors: warm-white card, navy rim and price, and the side strip in the warm floor
+ * stone around the kiosk (a dark slate strip read as a dark sliver beside the plaque on an iPhone SE).
+ */
+export const KIOSK_COLORS = { face: '#fff7e6', edge: '#05346e', ink: '#05346e', side: '#9a8166' } as const;
 
 /**
  * The LEAVE GIFT art (842 x 375) and the share of its height we show: Alex's whole button (green

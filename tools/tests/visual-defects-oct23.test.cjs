@@ -545,9 +545,9 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   assert.match(explore, /<MapLaunchCover variant="sky" blockTouches style=\{\{ top: 70 \+ \(Constants\.statusBarHeight \?\? 0\), zIndex: 45 \}\} \/>/);
   assert.match(explore, /<\/Wrapper>\s*\{\/\*[^]*?\*\/\}\s*<MapLaunchCover variant="launch" armOnMount blockTouches style=\{\{ zIndex: 100 \}\} \/>\s*<\/>/);
   assert.match(store, /const launch = firstCover;/);
-  // The HUD row waits for both its sources, then fades in once (no title swap after the cover lifts).
-  assert.match(explore, /<MapStatusStack entries=\{statusEntries\} settled=\{statusSettled\} \/>/);
-  assert.match(explore, /const statusSourcesIn = !!rideControl && raidLoaded;/);
+  // The HUD row is whole from the first map frame; a later lead change cross-fades (MapStatusStack).
+  assert.match(explore, /<MapStatusStack entries=\{statusEntries\} \/>/);
+  assert.doesNotMatch(explore, /statusSettled|STATUS_ROW_WAIT_MS/);
   assert.match(explore, /<Map onPress=\{[^\n]*\n\s*coverHost="screen"/);
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /<Map coverHost="screen" /);
   // Tips, tutorials, the home intro and the adventure slam wait for the cover to lift.
@@ -647,9 +647,9 @@ test('PLAY RIDE is one piece: the pill, its label and the ride chip appear toget
   assert.match(button, /if \(reported\.current \|\| !artReady \|\| labelAreaHeight <= 0\) return;/, 'reports once, only when the art drew and the label has its size');
   assert.match(button, /setTimeout\(markArtReady, pillArtSeen \? 120 : 800\)/, 'a safety if the image never reports');
   const redeem = read('src/components/RedeemModal.tsx');
-  // The whole group (pill, label, chip) stays hidden and only slides up once the art is ready.
+  // The whole group (pill, label, chip) stays hidden and only rises once the art is ready.
   assert.match(redeem, /const shown = \(available && pillReady\) \|\| !!closedLabel;/);
-  assert.match(redeem, /opacity: pillReady \? 1 : 0,/);
+  assert.match(redeem, /<Animated\.View style=\{entrance\}>/);
   assert.match(redeem, /onArtReady=\{\(\) => setPillReady\(true\)\}/);
 });
 
@@ -699,7 +699,7 @@ test('first seconds on the map: pins arrive in the cover fade, late pins land in
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /const pinsPending = !!player && !!park && !redeemables && !mapLoadFailed;/);
   assert.match(explore, /useEffect\(\(\) => \{ holdMapCover\(coverHold\); \}, \[coverHold\]\);/);
-  assert.match(explore, /delays: mapCovered \? new globalThis\.Map<number, number>\(\)\s*: revealDelays\(visibleTasks\.map\(task => task\.id\), 0, 0\)/);
+  assert.match(explore, /delays: mapCovered \? new globalThis\.Map<number, number>\(\)\s*: revealDelays\(\[\.\.\.visibleTasks\]\.sort\([^]*?\.map\(task => task\.id\), 40, 400\)/);
   assert.match(explore, /const MAP_CALM_MS = 5000;/);
   assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && mapTipReady\(\{/);
   const map = read('src/components/Map.tsx');
@@ -818,11 +818,14 @@ test('a slow map shows the living sky (clouds and the bobbing shark), never a fl
   assert.match(sky, /\{bar && \(/);
 });
 
-test('SE fits: the coin-in-range card is narrow on the right above PLAY RIDE; the gifts bubble clears the wallet', () => {
+test('SE fits: the coin-in-range card sits left above the help button and ends before Energy; the gifts bubble shares the wallet row', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /position: 'absolute', right: 12, width: Math\.min\(300, Dimensions\.get\('window'\)\.width - 24\),/);
-  assert.match(explore, /compact=\{parkTip === 'coin_in_range' && SHORT_MAP\}/);
-  assert.match(read('src/screens/CommunityCenterScreen.tsx'), /SHORT_SCREEN && \{ top: 136 \},/);
+  assert.match(explore, /const COIN_TIP_WIDTH = Math\.min\(300, WINDOW_WIDTH - 124\);/);
+  assert.match(explore, /left: 12, width: COIN_TIP_WIDTH, bottom: bottomLeftColumnHeight\(stores\) \+ 6/);
+  assert.match(explore, /small=\{parkTip === 'coin_in_range' && SHORT_MAP\}/);
+  const cc = read('src/screens/CommunityCenterScreen.tsx');
+  assert.match(cc, /SHORT_SCREEN && styles\.giftCountBadgeShort,\s*SHORT_SCREEN && \{ top: 60 \+ ART_SHIFT \},/);
+  assert.match(cc, /SHORT_SCREEN \? 'No gifts yet!' : 'No gifts yet\. Leave the first one!'/);
 });
 
 test('favorites star: bigger staggered burst with a white ring flash, native driver, nothing with Reduce Motion', () => {
@@ -846,4 +849,102 @@ test('launch never strands a kid on the launch scene: Splash moves on only while
   assert.match(splash, /\}, Boolean\(isReady && crumbsLoaded && focused\)\);/);
   const loading = read('src/screens/LoadingScreen.tsx');
   assert.match(loading, /if \(!leftAfterNavigating\.current\) return;\s*leftAfterNavigating\.current = false;\s*hasNavigated\.current = false;\s*if \(isReady && hasUsername\) safeNavigate\(\);/);
+});
+
+// Wave 3 round 4.
+test('PLAY RIDE rises into place from above the footer: transparent at its start, never drawn over the compass', () => {
+  const redeem = read('src/components/RedeemModal.tsx');
+  assert.match(redeem, /const PLAY_RIDE_REST_Y = -120;/);
+  assert.match(redeem, /const PLAY_RIDE_ENTER_FROM = -96;/);
+  // Opacity follows the same value as the rise: 0 at the start spot, 1 at rest.
+  assert.match(redeem, /opacity: enter\.interpolate\(\{ inputRange: \[0, 1\], outputRange: \[0, 1\], extrapolate: 'clamp' \}\)/);
+  assert.match(redeem, /outputRange: \[PLAY_RIDE_ENTER_FROM, PLAY_RIDE_REST_Y\]/);
+  assert.match(redeem, /outputRange: \[0\.9, 1\]/);
+  assert.match(redeem, /Animated\.spring\(enter, \{ toValue: 1,[^}]*useNativeDriver: true \}\)/);
+  assert.match(redeem, /if \(reducedMotion\) enter\.setValue\(shown \? 1 : 0\);/);
+  // The closed-ride pill uses the same entrance (no slide over the footer either).
+  assert.equal((redeem.match(/style=\{entrance\}/g) ?? []).length, 2);
+  assert.doesNotMatch(redeem, /translateY: animated/);
+  // The wrapper sits 50 pt below the map's bottom edge: the start spot leaves 46 pt (the compass bulges about 38).
+  assert.ok(-96 + 50 < 0 && 96 - 50 >= 40);
+});
+
+test('the in-range cue lands with the PLAY RIDE pill, and the pill waits for its art again after it went away', () => {
+  const redeem = read('src/components/RedeemModal.tsx');
+  assert.match(redeem, /const pillShown = available && pillReady;/);
+  assert.match(redeem, /if \(pillShown && identity !== lastAnnounced\.current\) \{[^}]*in_redeem_zone\.mp3/);
+  assert.match(redeem, /useEffect\(\(\) => \{ if \(!available\) setPillReady\(false\); \}, \[available\]\);/);
+});
+
+test('Energy sits high enough that its battery clears the PLAY RIDE pill by 8 pt on the SE, the 17 Pro and the Pro Max', () => {
+  const layout = loadTs('src/screens/ExploreScreen/parkMapLayout.ts');
+  for (const width of [375, 402, 440]) {
+    const gap = layout.energyGap(width);
+    // Energy row bottom = 32 (column margin) + 70 (avatar) + gap; the pill inside the 36 pt row starts 3 pt up.
+    const energyPillBottom = 32 + 70 + gap + 3;
+    assert.ok(energyPillBottom - layout.playRideTop(width) >= 8, `${width}: ${energyPillBottom} vs ${layout.playRideTop(width)}`);
+    assert.ok(gap <= 60, `${width}: Energy stays near the avatar (${gap})`);
+  }
+  assert.equal(layout.bottomRightColumnHeight(true), 32 + 88 + 96, 'default gap keeps the old height');
+  assert.equal(layout.bottomRightColumnHeight(false, 45), 32 + 44 + 84 + 45);
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const ENERGY_GAP = energyGap\(WINDOW_WIDTH\);/);
+  assert.match(explore, /<View style=\{\{ marginBottom: ENERGY_GAP, gap: 6, alignItems: 'flex-end' \}\}>/);
+});
+
+test('ride pins drop in when their slot first gets a ride (slots mount empty), 40 ms apart, nearest first', () => {
+  const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
+  assert.match(marker, /const drop = useSharedValue\(reducedMotion \? 1 : parked \? 0 : revealDelay === undefined \? 1 : 0\);/);
+  assert.match(marker, /if \(parked\) \{ if \(!reducedMotion\) drop\.value = 0; return; \}/);
+  assert.match(marker, /drop\.value = withDelay\(revealDelay, withSpring\(1, \{ damping: 10, stiffness: 170 \}\)\);\s*\/\/ eslint-disable-next-line react-hooks\/exhaustive-deps\s*\}, \[parked\]\);/);
+  const { revealDelays } = loadTs('src/screens/ExploreScreen/mapMarkerPresentation.ts');
+  const delays = [...revealDelays([1, 2, 3, 20].concat(Array.from({ length: 12 }, (_, i) => 100 + i)), 40, 400).values()];
+  assert.equal(delays[0], 0);
+  assert.equal(delays[1], 40);
+  assert.equal(Math.max(...delays), 400, 'every pin has landed within 0.4 s');
+});
+
+test('Finn tips at the park: the welcome stops short of the right buttons, the coin tip is one line with a picture and a pointer', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const PARK_WELCOME_TIP_STYLE = \{ position: 'absolute', left: 12, right: 78, top: 132, zIndex: 40 \} as const;/);
+  assert.match(explore, /art=\{parkTip === 'coin_in_range' \? <CoinTipPicture \/> : undefined\}/);
+  assert.match(explore, /pointerLeft=\{parkTip === 'coin_in_range' \? COIN_TIP_POINTER : undefined\}/);
+  // The retry note waits while Finn's park tip is on screen (one card at a time).
+  assert.match(explore, /mapLoadFailed && !\(parkTip && activeTip === parkTip\) && \(/);
+  const { TIP_COPY } = loadTs('src/services/help/helpTopics.ts');
+  assert.equal(TIP_COPY.coin_in_range.title, 'Tap PLAY RIDE!', 'matches the button word for word');
+  const tip = read('src/components/help/CoachTip.tsx');
+  assert.match(tip, /\{art \? <View style=\{styles\.art\}>\{art\}<\/View> : <Text style=\{styles\.body\}>\{body\}<\/Text>\}/);
+  assert.match(tip, /accessibilityLabel=\{`\$\{title\}\. \$\{body\}`\}/, 'VoiceOver still reads the line');
+  const picture = read('src/components/help/CoinTipPicture.tsx');
+  assert.match(picture, /<GameIcon name="ticket"/);
+  assert.match(picture, /ride-coin\.png/);
+  assert.doesNotMatch(picture, /dice/);
+});
+
+test('the HUD row is whole from the first frame and cross-fades a lead or title change', () => {
+  const stack = read('src/components/map/MapStatusStack.tsx');
+  assert.doesNotMatch(stack, /settled/);
+  assert.match(stack, /leadIn\.value = withTiming\(0, \{ duration: 120 \}, done => \{ if \(done\) runOnJS\(setLeadKey\)\(lead\.key\); \}\);/);
+  const bar = read('src/components/RideControlBar.tsx');
+  assert.doesNotMatch(bar, /STANDINGS_WAIT_MS|waitedOut/);
+  assert.match(bar, /titleIn\.value = withTiming\(0, \{ duration: 140 \}, done => \{ if \(done\) runOnJS\(setShownHeadline\)\(headline\); \}\);/);
+  assert.match(bar, />\{shownHeadline\}<\/Animated\.Text>/);
+});
+
+test('small fixes: Wait Times says "Checked just now", the Community Center wallet and bubble are light cards, no dark sliver', () => {
+  assert.match(read('src/screens/QueueTimesScreen.tsx'), /if \(diff < 60\) return 'just now';/);
+  const kiosk = loadTs('src/screens/CommunityCenter/leaveGiftLayout.ts');
+  const hex = kiosk.KIOSK_COLORS.side.replace('#', '');
+  const lum = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16)).reduce((a, b) => a + b) / 3;
+  assert.ok(lum > 110, `side strip is warm stone, not dark slate (${kiosk.KIOSK_COLORS.side})`);
+  const cc = read('src/screens/CommunityCenterScreen.tsx');
+  assert.match(cc, /giftCountBadge: \{\s*position: 'absolute',\s*top: 120,\s*alignSelf: 'center',\s*backgroundColor: KIOSK_COLORS\.face,/);
+  assert.match(cc, /currencyDisplay: \{\s*position: 'absolute',\s*top: 60,\s*right: 20,\s*backgroundColor: KIOSK_COLORS\.face,/);
+});
+
+test('audio: once a cue moves to the graph, its expo-av copy is freed after any play in progress', () => {
+  const backends = read('src/gamekit/audio/backends.ts');
+  assert.match(backends, /this\.routes\.set\(key, this\.api\);\s*\/\/[^\n]*\n\s*this\.av\.unload\(key\);/);
+  assert.match(backends, /unload\(key: string\): void \{[^]*?const wait = Math\.max\(0, \.\.\.pool\.map\(\(v\) => v\.busyUntil - Date\.now\(\)\)\);/);
 });
