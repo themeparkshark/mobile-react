@@ -215,7 +215,13 @@ export default function CoinLevelingModal({
       setShowEditions(false);
       setFeatureError(false);
       setUpgradeError(null);
-      setFx(null); setUnlocks(null); setLevelXp(0); setSlowServer(false);
+      // The burst's plan is known when the card opens, so its views are mounted (idle) before the tap.
+      const opening = Math.min(rideCoin.current_level + 1, rideCoin.max_level);
+      setFx(rideCoin.current_level < rideCoin.max_level
+        ? levelUpFx(opening, rideCoin.parts_to_next_level, { reducedMotion: reducedMotionRef.current, dimFlashingLights: isDimFlashingLightsEnabled() })
+        : null);
+      setBurstKey(0); // 0 never plays: the burst waits for this card's own success
+      setUnlocks(null); setLevelXp(0); setSlowServer(false);
       stopUiShow(); charge.value = 0; gold.value = 0; bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0; bloomOut.value = 0; ringPulse.value = 0;
       windup.value = 0; gatherRing.value = 0; setAnchor(null); setLockedHeight(0);
       setFanScale(levelUpPayoff(Math.min(rideCoin.current_level + 1, rideCoin.max_level)).fanScale);
@@ -575,7 +581,8 @@ export default function CoinLevelingModal({
                   >
                     <View ref={coinRef} collapsable={false} onLayout={() => { if (!anchor) measureAnchor(); }} style={{ alignItems: 'center', justifyContent: 'center', marginTop: (state === 'success' ? nextLevel : currentLevel) >= 10 ? 26 : 0,
                       marginBottom: (state === 'success' ? nextLevel : currentLevel) >= 6 ? 14 : 0 }}>
-                      {(state === 'leveling' || state === 'success') && (
+                      {/* Mounted with the card (hidden at 0), like every burst layer: nothing new mounts on the tap. */}
+                      {state !== 'maxed' && (
                         <View pointerEvents="none" style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>
                           <GoldBurst size={250} amount={gold} bloom={bloom} reduced={reducedMotion} />
                         </View>
