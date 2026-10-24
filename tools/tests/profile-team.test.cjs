@@ -94,6 +94,10 @@ test('team badges never show the old mouse face or Earth globe (IP safety, round
     assert.ok(l.glyph / l.face >= 0.85, `glyph fills the face at ${size}`);
   }
   assert.ok(badge.emblemLayers(24).ring > 0, 'big badges keep the team ring');
+  // Wave 2: under SMALL_EMBLEM the compass art (a gray dot at 9pt) becomes a plain two-tone needle; big badges keep Alex's compass.
+  const badgeSrc = require('node:fs').readFileSync('src/components/TeamBadge.tsx', 'utf8');
+  assert.match(badgeSrc, /needle: icon === 'map' && size < SMALL_EMBLEM/);
+  assert.match(badgeSrc, /\{l\.needle \? <Needle size=\{l\.glyph\} \/> : <GameIcon name=\{icon\} size=\{l\.glyph\} \/>\}/);
   // The Green chip sits one step deeper than the shield's green, so the shield and compass stand out on it.
   const teamsMod = loadTs('src/constants/teams.ts');
   assert.notEqual(teamsMod.teamChipColor('globe'), teamsMod.TEAMS.globe.color);

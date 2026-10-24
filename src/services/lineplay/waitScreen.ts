@@ -66,11 +66,13 @@ export function waitCoinProgress(input: WaitCoinInput): WaitCoinProgress {
   const energyKnown = input.playerEnergy != null;
   const energyShort = energyKnown ? Math.max(0, Math.round(input.energyToNext) - Math.round(input.playerEnergy!)) : 0;
   const ready = partsReady && energyKnown && energyShort === 0;
-  // One Parts idea on the wait card: the ring and "2 of 4 Parts". The next look's
+  // One Parts idea on the wait card: the ring and "2 of 4 Parts to Level 3". The chip
+  // always counts toward the NEXT level, so right after a level up "0 of 6 Parts to
+  // Level 4" reads as a new goal, never as "you earned nothing". The next look's
   // name stays in the spoken label of the coin, not on the chip.
   const label = ready ? 'Ready to level up'
     : partsReady ? energyKnown ? `Parts ready · ${energyShort} more Energy` : 'Parts ready'
-      : `${banked} of ${need} Parts`;
+      : `${banked} of ${need} Parts to Level ${level + 1}`;
   return {
     fill, notches: need <= MAX_RING_NOTCHES ? need : 0, lit: Math.min(banked, need),
     maxed: false, partsReady, ready, energyShort, label,

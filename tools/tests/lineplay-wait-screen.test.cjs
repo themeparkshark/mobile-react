@@ -19,7 +19,9 @@ test('the ring has one notch per Part and lights as Parts land', () => {
   const p = m.waitCoinProgress({ level: 2, maxLevel: 10, partsBanked: 3, partsToNext: 4, energyToNext: 20, playerEnergy: 50,
     nextTierName: 'Gold' });
   assert.equal(p.notches, 4); assert.equal(p.lit, 3); assert.equal(p.fill, 0.75);
-  assert.equal(p.ready, false); assert.equal(p.label, '3 of 4 Parts', 'one Parts idea: no tier name on the chip');
+  assert.equal(p.ready, false); assert.equal(p.label, '3 of 4 Parts to Level 3', 'one Parts idea: no tier name on the chip');
+  assert.equal(m.waitCoinProgress({ level: 3, maxLevel: 10, partsBanked: 0, partsToNext: 6, energyToNext: 30, playerEnergy: 0 }).label,
+    '0 of 6 Parts to Level 4', 'right after a level up the chip reads as the next goal, not as nothing earned');
   const long = m.waitCoinProgress({ level: 9, maxLevel: 10, partsBanked: 10, partsToNext: 40, energyToNext: 260, playerEnergy: 0 });
   assert.equal(long.notches, 0, 'a 40 Part step draws a smooth arc'); assert.equal(long.fill, 0.25);
 });

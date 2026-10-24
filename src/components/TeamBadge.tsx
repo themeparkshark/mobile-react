@@ -70,8 +70,26 @@ export function emblemLayers(size: number) {
   return { rim, ring, face, glyph: Math.max(4, Math.round(face * (small ? 0.92 : 0.82))), shade: small ? 0 : Math.max(1, Math.round(face * 0.06)) };
 }
 
+/**
+ * The compass at chip size: the map art turns into a gray-blue dot under 16 pt,
+ * so the face gets a plain code-drawn needle instead (navy point up, green point
+ * down), the one part of a compass a kid still reads at 9 pt. Not new art.
+ */
+function Needle({ size }: { size: number }) {
+  const half = Math.max(2, Math.round(size * 0.28));
+  const tip = Math.max(3, Math.round(size * 0.46));
+  return <View style={{ alignItems: 'center' }}>
+    <View style={{ width: 0, height: 0, borderLeftWidth: half, borderRightWidth: half, borderBottomWidth: tip,
+      borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: NEEDLE_NORTH }} />
+    <View style={{ width: 0, height: 0, borderLeftWidth: half, borderRightWidth: half, borderTopWidth: tip,
+      borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: NEEDLE_SOUTH }} />
+  </View>;
+}
+const NEEDLE_NORTH = '#073E79';
+const NEEDLE_SOUTH = '#16A34A';
+
 function Emblem({ icon, fill, size, left, top }: { icon: GameIconName; fill: string; size: number; left: number; top: number }) {
-  const l = emblemLayers(size);
+  const l = { ...emblemLayers(size), needle: icon === 'map' && size < SMALL_EMBLEM };
   return (
     <View style={{
       position: 'absolute', left, top, width: size, height: size, borderRadius: size / 2, backgroundColor: fill,
@@ -82,7 +100,7 @@ function Emblem({ icon, fill, size, left, top }: { icon: GameIconName; fill: str
         width: l.face, height: l.face, borderRadius: l.face / 2, backgroundColor: FACE,
         borderTopWidth: l.shade, borderColor: 'rgba(5, 52, 110, 0.22)', alignItems: 'center', justifyContent: 'center',
       }}>
-        <GameIcon name={icon} size={l.glyph} />
+        {l.needle ? <Needle size={l.glyph} /> : <GameIcon name={icon} size={l.glyph} />}
       </View>
       <View style={{
         position: 'absolute', top: l.rim * 0.6, left: size * 0.2, width: size * 0.28, height: size * 0.12,
