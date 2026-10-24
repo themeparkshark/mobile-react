@@ -1,11 +1,12 @@
 import { Image } from 'expo-image';
-import { useContext, useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, StyleSheet, View } from 'react-native';
 import { useEffectOnceWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import { CrumbContext } from '../context/CrumbProvider';
+import { themeSplashUri } from '../utils/splashArt';
 
 // The binary's launch art. app.config.js `splash.image` points at this file and
 // Expo hashes it into the runtime fingerprint, so its bytes must never change in
@@ -25,6 +26,13 @@ export default function SplashScreen() {
   const hasNavigated = useRef(false);
   const artOpacity = useRef(new Animated.Value(0)).current;
   const faded = useRef(false);
+  // Pick the art once, when the splash mounts. A theme that resolves later
+  // never swaps the picture mid-fade, and the retired 1.7.3 server splash
+  // (light-sword, wizard hat, castle) never replaces the bundled art.
+  const [artSource, setArtSource] = useState(() => {
+    const uri = themeSplashUri(theme?.splash_screen_url);
+    return uri ? { uri } : SPLASH_ART;
+  });
 
   const fadeIn = () => {
     if (faded.current) return;
@@ -64,16 +72,19 @@ export default function SplashScreen() {
 
   return (
     // Same art and blue as the native launch screen, so the handoff from the
-    // launch storyboard is seamless. The current art (or a server theme
-    // splash) then fades in over it on the UI thread.
+    // launch storyboard is seamless. The current art (or an allowed server
+    // theme splash) then fades in over it on the UI thread.
     <View style={{ flex: 1, backgroundColor: '#0768B9' }}>
       <Image source={LAUNCH_ART} contentFit="cover" style={size} />
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: artOpacity }]}>
         <Image
-          source={theme?.splash_screen_url ? { uri: theme.splash_screen_url } : SPLASH_ART}
+          source={artSource}
           contentFit="cover"
           transition={0}
           onLoad={fadeIn}
+          // A server splash that fails to load falls back to the bundled art,
+          // so the old launch art underneath never shows through.
+          onError={() => setArtSource(SPLASH_ART)}
           style={size}
         />
       </Animated.View>

@@ -462,10 +462,16 @@ export default function DefendMiniGameModal({
               </Pressable>
 
               {/* Points and tier at bottom */}
+              {/* Light score plaque drawn in code: it sits right behind the
+                  score on every screen height and keeps the scene bright. */}
               <Animated.View style={[styles.defenseContainer, multiplierAnimStyle]}>
-                <Text style={styles.tapCountBig}>{totalPoints}</Text>
-                <Text style={styles.defenseLabel}>POINTS</Text>
-                <Text style={styles.tierLabel}>{getTierName(totalPoints)}</Text>
+                <View style={styles.scorePlaque}>
+                  <View style={styles.scorePlaqueInner}>
+                    <Text style={styles.tapCountBig}>{totalPoints}</Text>
+                    <Text style={styles.defenseLabel}>POINTS</Text>
+                    <Text style={styles.tierLabel}>{getTierName(totalPoints)}</Text>
+                  </View>
+                </View>
               </Animated.View>
             </View>
           )}
@@ -683,32 +689,47 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
   },
+  // Alex-style plaque: cream face, gold rim, thick navy outline, flat drop.
+  scorePlaque: {
+    borderRadius: 26,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    backgroundColor: '#F5B800',
+    padding: 4,
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 0,
+  },
+  scorePlaqueInner: {
+    minWidth: 190,
+    alignItems: 'center',
+    borderRadius: 21,
+    backgroundColor: '#FFF8E6',
+    paddingHorizontal: 26,
+    paddingTop: 2,
+    paddingBottom: 10,
+  },
   tapCountBig: {
-    fontSize: 80,
+    fontSize: 72,
     fontWeight: '900',
-    color: '#FFD700',
-    textShadowColor: '#FF6B00',
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 20,
+    color: '#0768B9',
+    textShadowColor: '#FFD700',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
   },
   defenseLabel: {
-    fontSize: 32,
+    fontSize: 26,
     fontWeight: '900',
-    color: '#FFD700',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
+    color: '#123A6B',
     marginTop: -8,
     letterSpacing: 4,
   },
   tierLabel: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
-    color: '#FF6B00',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
-    marginTop: 4,
+    color: '#B4400A',
+    marginTop: 2,
     letterSpacing: 2,
   },
   multiplierBanner: {

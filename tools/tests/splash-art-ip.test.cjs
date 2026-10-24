@@ -1,0 +1,34 @@
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const { loadTs, read } = require('./helpers/load-ts.cjs');
+
+const RETIRED = 'https://assets.themeparkshark.com/mobile/production/assets/PuwNJoYcQVIbyy487jU41dMfHc5gHUBlXeVzZ93N.png';
+
+// The 1.7.3 server splash still has a light-sword, a starred wizard hat, a
+// castle and a ringed globe. It must never replace the bundled splash art, on
+// any launch path: live theme, cached lastGood theme or the bundled fallback.
+test('the retired server splash never replaces the bundled art', () => {
+  const { themeSplashUri } = loadTs('src/utils/splashArt.ts');
+  assert.equal(themeSplashUri(RETIRED), null);
+  assert.equal(themeSplashUri(` ${RETIRED} `), null);
+  assert.equal(themeSplashUri(RETIRED.replace('.png', '.webp')), null);
+  assert.equal(themeSplashUri(null), null);
+  assert.equal(themeSplashUri(undefined), null);
+  assert.equal(themeSplashUri(''), null);
+  assert.equal(themeSplashUri('http://example.com/a.png'), null, 'only https art');
+  const fresh = 'https://assets.themeparkshark.com/mobile/production/assets/NewSplash123.png';
+  assert.equal(themeSplashUri(fresh), fresh, 'a new server splash still works without an app update');
+});
+
+test('the bundled theme fallback names no server splash', () => {
+  const theme = JSON.parse(read('src/api/defaults/theme.json'));
+  assert.equal(theme.splash_screen_url, null);
+});
+
+test('the splash picks its art once and falls back to the bundled art', () => {
+  const splash = read('src/screens/SplashScreen.tsx');
+  assert.match(splash, /themeSplashUri\(theme\?\.splash_screen_url\)/);
+  assert.match(splash, /useState\(\(\) => \{/, 'source is chosen once at mount, never swapped by a late theme');
+  assert.match(splash, /onError=\{\(\) => setArtSource\(SPLASH_ART\)\}/);
+  assert.doesNotMatch(splash, /\{ uri: theme\.splash_screen_url \}/, 'the raw theme URL is never used directly');
+});
