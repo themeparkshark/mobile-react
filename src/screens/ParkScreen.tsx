@@ -699,7 +699,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                 <Text style={{ fontFamily: 'Knockout', color: '#DFF6FF', fontSize: 15 }}>Keep exploring this park</Text>
               </Pressable>
             </View>}
-          <DevPerfHud top={120} />
+          <DevPerfHud top={330} />
         </View>
       )}
     </Wrapper>

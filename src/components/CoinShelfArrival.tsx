@@ -12,7 +12,8 @@ import type { ShelfArrivalTarget } from '../hooks/useEarnedShelfArrival';
 import { usePowerBudget } from '../power';
 import GameIcon from '../ui/GameIcon';
 import { GoldBurst } from '../ui/GoldBurst';
-import { EASE, GOLD_FX, SPRING, momentParticles } from '../ui/motionEasing';
+import { EASE, GOLD_FX, SPRING, flashPeak, momentParticles } from '../ui/motionEasing';
+import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 import BurstCanvas from './park/BurstCanvas';
 import { perfMark } from './park/momentPerf';
 import { SHELF_LANDING } from './shelfLanding';
@@ -71,6 +72,7 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
   const callbacks = useRef({ onLand, onInspect, onClose });
   callbacks.current = { onLand, onInspect, onClose };
   const sparkles = momentParticles(SHELF_LANDING.sparkles, budget, reduced);
+  const flashTop = flashPeak(isDimFlashingLightsEnabled(), reduced);
   const impact = () => {
     if (!alive.current || completed.current) return;
     perfMark('shelf.impact');
@@ -96,7 +98,8 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
     squash.value = 0;
     setLanded(true); callbacks.current.onLand();
     // The caption chip slips away after a while (the coin in its slot already says it all).
-    if (!reduced) chip.value = withDelay(3200, withTiming(0, { duration: 260, easing: EASE.in }));
+    // (One sequence: a separate fade would cancel the chip's own spring in and it would never show.)
+    if (!reduced) chip.value = withSequence(withSpring(1, SPRING.settle), withDelay(2600, withTiming(0, { duration: 260, easing: EASE.in })));
     perfMark('shelf.done');
     if (!reduced) {
       // The puff and the ring burst start as the slot coin squashes.
@@ -172,12 +175,15 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
   const trail = [0.07, 0.14, 0.21].map(lag => ({ lag, alpha: 0.5 - lag * 1.6 }));
   // The veil holds while the coin is in the air and lifts on the hit (the shelf brightens with the landing).
   const dimStyle = useAnimatedStyle(() => ({ opacity: 0.35 * (1 - lift.value) }));
-  const brightStyle = useAnimatedStyle(() => ({ opacity: 0.16 * flash.value }));
+  const brightStyle = useAnimatedStyle(() => ({ opacity: (flashTop > 0 ? 0.16 : 0) * flash.value }));
   const slotStyle = useAnimatedStyle(() => ({
     opacity: 0.3 + 0.6 * pulse.value,
     transform: [{ scale: 1 + 0.12 * pulse.value }],
   }));
-  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value, transform: [{ scale: 0.8 + 0.8 * flash.value }] }));
+  // The white flash in the slot stays at or under the shared cap (flashPeak: 0 with Dim Flashing Lights); the
+  // brightness comes from a gold glow that blooms on the hit (a glow, not a flash).
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flashTop * flash.value, transform: [{ scale: 0.8 + 0.8 * flash.value }] }));
+  const bloomStyle = useAnimatedStyle(() => ({ opacity: 0.95 * flash.value, transform: [{ scale: 0.7 + 0.9 * flash.value }] }));
   const chipStyle = useAnimatedStyle(() => ({
     opacity: chip.value,
     transform: [{ translateY: (1 - chip.value) * 30 }, { scale: 0.9 + chip.value * 0.1 }],
@@ -213,6 +219,10 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
     {!reduced && <View pointerEvents="none" style={[styles.at, { left: slotCenter.x, top: slotCenter.y }]}>
       {shiny && <GoldBurst size={target.width * 4.2} amount={rays} spin={false} reduced={reduced}
         style={[styles.raysAt, { left: -target.width * 2.1, top: -target.width * 2.1 }]} />}
+      <Animated.View style={[{ position: 'absolute', width: target.width * 2.6, height: target.width * 2.6,
+        left: -target.width * 1.3, top: -target.width * 1.3 }, bloomStyle]}>
+        <Image source={SOFT} tintColor={GOLD_FX.raysSoft} contentFit="fill" transition={0} style={StyleSheet.absoluteFill} />
+      </Animated.View>
       <Animated.View style={[styles.slotFlash, { width: target.width * 1.5, height: target.width * 1.5, borderRadius: target.width * 0.75,
         left: -target.width * 0.75, top: -target.width * 0.75 }, flashStyle]} />
     </View>}
