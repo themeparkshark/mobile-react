@@ -449,3 +449,17 @@ test('the Splash route keeps the launch art and framing (no server splash fading
   assert.doesNotMatch(read('src/api/defaults/theme.json'), /splash_screen_url/);
   assert.match(src, /source=\{SPLASH_ART\}/);
 });
+
+test('one coin rule: the coin stack is the coin you spend, the gold fin coin means ride coins only', () => {
+  // Spending and wallet rewards: the coin stack.
+  assert.match(read('src/screens/pins/BoxReveal.tsx'), /<GameIcon name="coins" size=\{30\} \/>/);
+  assert.match(read('src/screens/StoreScreen/shopUi.tsx'), /styles\.arcCoin, coin\]\}><GameIcon name="coins"/);
+  assert.match(read('src/components/liveEvents/ChestReveal.tsx'), /styles\.coin, style\]\}><GameIcon name="coins"/);
+  assert.match(read('src/services/help/helpSheets.ts'), /\{ icon: 'coins', text: 'Spend Coins on gear\.' \}/);
+  const hero = read('src/components/help/HelpHero.tsx');
+  assert.match(hero, /styles\.price[^\n]*\n\s*<GameIcon name="coins"/);
+  assert.match(read('src/screens/CommunityCenterScreen.tsx'), /icons\/game\/coins\.png'\)\} style=\{styles\.kioskCoin\}/);
+  // Ride coins: the fin coin.
+  assert.match(read('src/components/collection/CollectionSwitch.tsx'), /\['coins', 'Ride Coins', 'coin'\]/);
+  assert.match(read('src/screens/LeaderboardsScreen/homeHuntModel.ts'), /label: 'Ride Coins', icon: 'coin'/);
+});

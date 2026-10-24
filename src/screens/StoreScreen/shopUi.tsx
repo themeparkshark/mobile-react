@@ -389,7 +389,7 @@ function ArcCoin({ i, from, to }: { i: number; from: { x: number; y: number }; t
   return (
     <>
       <Animated.View style={[styles.spark, spark]} />
-      <Animated.View style={[styles.arcCoin, coin]}><GameIcon name="coin" size={22} /></Animated.View>
+      <Animated.View style={[styles.arcCoin, coin]}><GameIcon name="coins" size={22} /></Animated.View>
     </>
   );
 }

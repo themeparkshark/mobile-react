@@ -240,7 +240,7 @@ function SpentCoin({ from, to, delay, onLand }: { from: { x: number; y: number }
       { rotate: `${t.value * 300}deg` },
     ],
   }));
-  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0 }, style]}><GameIcon name="coin" size={30} /></Animated.View>;
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0 }, style]}><GameIcon name="coins" size={30} /></Animated.View>;
 }
 
 /** The white ring that bursts out on the pop. */
