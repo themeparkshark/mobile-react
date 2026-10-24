@@ -37,7 +37,7 @@ export const COIN_FLIGHT = {
   arcPt: 96,
   arcStepPt: 12,
   /** How wide the coins fan out around the arc (pt). */
-  spreadPt: 130,
+  spreadPt: 200,
   /** Mid-air pop past full size. */
   midScale: 1.22,
   /** Gold stars that pop where the last coin lands (gains only, through the power budget). */
@@ -106,6 +106,14 @@ export function measureCoinTarget(done: (p: Point | null, answer?: CoinTargetAns
   if (!top) { done(null); return; }
   top.measure(p => done(p, top));
 }
+/**
+ * Coins are about to be sent to the wallet chip on screen (a reward toast was just asked for): tell it
+ * now, synchronously, so a gain that lands in the same tap rolls under those coins instead of flying its own.
+ */
+export function announceIncomingCoins(ms: number): void {
+  targets[targets.length - 1]?.onIncoming?.(ms);
+}
+
 /** How long a flight of n coins takes from its first coin leaving to its last coin landing (ms). Pure. */
 export function flightMs(n: number): number {
   const k = Math.max(1, Math.min(COIN_FLIGHT.max, Math.floor(n)));

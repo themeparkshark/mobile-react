@@ -6,7 +6,7 @@ import { queueHaptic, type HapticIntent } from '../gamekit/Haptics';
 import { DURATION, EASE, SPRING } from '../ui/motionEasing';
 import SparkleBurst from '../ui/SparkleBurst';
 import GoldCheck from '../ui/GoldCheck';
-import { flightMs, flyCoins, measureCoinTarget, type CoinTargetAnswer, type Point } from '../ui/CoinFlight';
+import { announceIncomingCoins, flightMs, flyCoins, measureCoinTarget, type CoinTargetAnswer, type Point } from '../ui/CoinFlight';
 import { momentParticles } from '../ui/motion';
 import { usePowerBudget } from '../power/PowerProvider';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
@@ -48,6 +48,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback((toast: Omit<Toast, 'id'>) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    // A "+25 coins" toast: the wallet on screen hears about its coins right now (before this toast even
+    // mounts), so the gain that comes with it waits for these coins instead of flying a second set.
+    if (toastCoinCount(toast.message) > 0) announceIncomingCoins(TOAST_INCOMING_MS);
     setToasts((prev) => [...prev, { ...toast, id }]);
   }, []);
 
@@ -123,6 +126,9 @@ export function toastCoinAmount(message: string): number {
   const amount = Number(m[1].replace(/,/g, ''));
   return amount > 0 ? amount : 0;
 }
+
+/** How long a just-asked-for coin toast keeps the wallet waiting for its coins (it re-announces when it shows). */
+export const TOAST_INCOMING_MS = 1600;
 
 /** How many coins a toast's message is worth flying ("+25 coins" gives 5; no amount gives 0). Pure (unit tested). */
 export function toastCoinCount(message: string): number {

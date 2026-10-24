@@ -101,6 +101,8 @@ test('coin toasts: picture first (coin stack and a big gold amount), coins that 
   assert.ok(toast.TOAST_MOTION.amountPt >= 28, 'a big gold number');
   const src = read('src/components/Toast.tsx');
   assert.match(src, /answer\?\.onIncoming\?\.\(/, 'the wallet hears the coins are coming, so a gain rolls under them');
+  assert.match(src, /if \(toastCoinCount\(toast\.message\) > 0\) announceIncomingCoins\(TOAST_INCOMING_MS\);/,
+    'announced the moment the toast is asked for, before a gain in the same tap can fly its own coins');
   assert.match(src, /landed: answer\?\.landed/);
 });
 
