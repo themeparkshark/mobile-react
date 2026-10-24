@@ -74,6 +74,12 @@ test('the level-up charge bar is never stuck and never fake-complete', () => {
   assert.ok(motion.chargeFill(6000, 1000) > 0.9, 'still creeping while a slow server answers');
 });
 
+test('the photosensitivity cap is one number, local flashes included', () => {
+  const burst = read('src/ui/GoldBurst.tsx');
+  assert.ok(burst.includes('opacity: Math.min(FLASH_MAX_OPACITY, flash.value)'), 'RadialFlash never passes FLASH_MAX_OPACITY');
+  assert.ok(!burst.includes('FLASH_MAX_OPACITY * 2'), 'no doubled local cap');
+});
+
 test('springs and curves are shared values, not one-offs', () => {
   for (const key of ['pop', 'stamp', 'settle', 'land']) {
     const spring = motion.SPRING[key];
@@ -172,7 +178,14 @@ test('the chaser escalates past the Golden Box', () => {
   assert.ok(!src.includes('chaserRim'), 'no separate rim to sit off-centre on the art');
   assert.ok(!/rotateY|perspective/.test(src), 'a flat flip: no 3D turn to split the pin against the card');
   assert.ok(/pinBackGold/.test(src) && /pinBack: \{[^}]*borderColor: BRAND\.navy/.test(src), 'the pin back is outlined metal, never a grey disc');
-  assert.match(read('src/screens/pinTrading/EnamelPin.tsx'), /blendMode="color"/);
+  const pin = read('src/screens/pinTrading/EnamelPin.tsx');
+  assert.ok(!/blendMode="color"/.test(pin), 'no flat colour swap that turns the chaser into a plain gold disc');
+  assert.ok(/blendMode="overlay" opacity=\{TINT_OVERLAY\}/.test(pin) && /TINT_EDGE/.test(pin), 'a warm overlay plus a metal edge keep the art readable');
+  assert.ok(!/LIMITED \\u00b7 #/.test(src), 'the serial shows twice (stamp and badge), not three times');
+  // The serial stamp slams from oversize and never dips below its own size (no underdamped spring through an open interpolate).
+  assert.ok(!/stamp\.value = withDelay\(250, withSpring/.test(src), 'no spring on the stamp slam');
+  assert.ok(src.includes('[2.4, 1], Extrapolation.CLAMP'), 'the stamp scale is clamped');
+  assert.ok(motion.SLAM_SQUASH <= 0.08, 'the impact squash stays under 8 percent');
   assert.ok(src.includes('<RadialFlash flash={flash}'), 'the box flash pops on the box');
   assert.ok(!/StyleSheet\.absoluteFill, styles\.flash/.test(src), 'no full-screen white wash');
 });
@@ -206,4 +219,55 @@ test('Set Complete never shows an empty plinth', () => {
   const src = read('src/screens/StoreScreen/SetCompleteReveal.tsx');
   assert.ok(src.includes("?? previewLook(player?.inventory, [], 'player')"), 'falls back to the player look');
   assert.ok(src.includes('<Image source={MEDAL}'), 'then to the gold crown medal');
+});
+
+test('the coin art runs on one UI-thread clock, so a level change restarts nothing', () => {
+  const demo = read('src/components/CoinUpgradeDemo.tsx');
+  assert.ok(!/Animated\.loop|new Animated\.Value|useNativeDriver/.test(demo), 'no legacy Animated loops left in the coin art');
+  assert.ok(demo.includes('useFrameCallback') && demo.includes('frame.setActive(running)'), 'one frame clock, paused when still');
+  assert.ok(demo.includes('const running = animate && !reducedMotion && budget.ambient;'), 'stops with Reduce Motion, animate off, idle or background');
+  assert.ok(/on\.value === 0 \|\| local < 0/.test(demo), 'flares and bolts hide while the clock is paused, never frozen mid-flash');
+  const burst = read('src/components/coin/LevelUpBurst.tsx');
+  assert.ok(burst.includes("from 'react-native-reanimated'") && !burst.includes('useNativeDriver'), 'the burst ring and shards are Reanimated too');
+  assert.ok(burst.includes('t.value <= 0 ? 0'), 'shards stay hidden until the burst');
+  const modal = read('src/components/CoinLevelingModal.tsx');
+  assert.ok(modal.includes("{(state === 'leveling' || state === 'success') && !reducedMotion && (\n                        <>"), 'the coin sparkles and shine are mounted during the charge');
+  assert.ok(modal.includes("{anchor && (state === 'leveling' || state === 'success') && !reducedMotion && ("), 'the over-card sparkles and ring are mounted during the charge');
+});
+
+test('the level-up payoff grows with every tier, Legendary clearly the biggest', () => {
+  const fields = ['fanPeak', 'fanHold', 'ringReach', 'ringWidth', 'sparkleWaves', 'sparkles'];
+  let prev = null;
+  for (let level = 2; level <= 10; level += 1) {
+    const p = motion.levelUpPayoff(level);
+    if (prev) for (const f of fields) assert.ok(p[f] >= prev[f], `${f} never shrinks at level ${level}`);
+    prev = p;
+  }
+  const silver = motion.levelUpPayoff(2);
+  const legendary = motion.levelUpPayoff(5);
+  assert.equal(legendary.fanPeak, 1, 'Legendary fan at full strength');
+  assert.ok(legendary.fanHold >= 0.8, 'the fan stays lit behind the Legendary card');
+  assert.equal(legendary.sparkleWaves, 2, 'a second sparkle wave from Legendary');
+  assert.ok(legendary.ringReach > silver.ringReach + 0.3 && legendary.ringWidth > silver.ringWidth, 'a clearly bigger ring than Silver');
+  const modal = read('src/components/CoinLevelingModal.tsx');
+  assert.ok(modal.includes('uiTiming(payoff.fanPeak') && modal.includes('uiTiming(payoff.fanHold'), 'the big fan follows the ladder');
+  assert.ok(modal.includes('progress={sparkle2}'), 'the second wave is drawn');
+});
+
+test('the level-up card is readable without reading: tier chip first, bonuses as a picture and a number', () => {
+  const model = loadTs('src/components/coin/progressionModel.ts');
+  assert.deepEqual({ ...model.perkChip({ type: 'gym_points', value: 500, name: 'Gym bonus' }) }, { icon: 'trophy', label: '+500' });
+  assert.deepEqual({ ...model.perkChip({ type: 'bonus_parts', value: 3, name: 'Parts' }) }, { icon: 'parts', label: '+3' });
+  assert.equal(model.perkChip({ type: 'cosmetic', value: 0, name: 'Gold rim' }).label, 'Gold rim');
+  const modal = read('src/components/CoinLevelingModal.tsx');
+  assert.ok(!modal.includes('New Bonuses Unlocked'), 'no small-caps bonus header');
+  assert.ok(modal.indexOf('backgroundColor: coinTier(nextLevel).ring') < modal.lastIndexOf('{nextVisualReward}'), 'the tier chip comes first');
+  const tips = read('src/services/help/helpTopics.ts');
+  assert.ok(!tips.includes("body: 'There are 10 levels, all the way up to Shark Crown.'"), 'the first level-up tip never contradicts the dot row');
+});
+
+test('the daily chest wallet counts up from the balance before the claim', () => {
+  const src = read('src/components/DailyGiftModal.tsx');
+  assert.ok(src.includes('walletBefore.current = player?.coins ?? null;'), 'captured at the chest tap');
+  assert.ok(src.includes('start: Math.max(0, walletBefore.current ?? (player?.coins ?? 0))'), 'the chip starts from it');
 });

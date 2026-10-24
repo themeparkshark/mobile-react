@@ -207,6 +207,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const wrapRef = useRef<View>(null);
   const stageRef = useRef<View>(null);
   const flown = useRef(false);
+  // The balance before this claim, taken at the chest tap: the chip counts up from here even if
+  // something refreshes the player before the coins fly (it used to start 25 too high, then drop).
+  const walletBefore = useRef<number | null>(null);
   const flyToWallet = () => {
     if (flown.current || !mounted.current) return;
     flown.current = true;
@@ -216,7 +219,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     wrap.measureInWindow((wx, wy) => stageView.measureInWindow((sx, sy, sw, sh) => {
       if (![wx, wy, sx, sy, sw, sh].every(Number.isFinite) || !mounted.current) { settleWallet(); return; }
       setWalletFly({ from: { x: sx - wx + sw / 2, y: sy - wy + sh * 0.45 }, to: { x: target.x - wx, y: target.y - wy },
-        count: walletCoins(amount), start: Math.max(0, (player?.coins ?? 0)) });
+        count: walletCoins(amount), start: Math.max(0, walletBefore.current ?? (player?.coins ?? 0)) });
     }));
   };
   const onCoinLand = (i: number, count: number) => {
@@ -290,6 +293,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const open = async () => {
     if (claiming.current || phase !== 'closed') return;
     claiming.current = true;
+    walletBefore.current = player?.coins ?? null;
     setPhase('opening');
     const startedAt = Date.now();
     if (!reducedMotion) {

@@ -33,9 +33,9 @@ import PerkTrack from './coin/PerkTrack';
 import Reanimated, { cancelAnimation as cancelUi, useAnimatedStyle, useSharedValue, withDelay as uiDelay,
   withRepeat as uiRepeat, withSequence as uiSequence, withSpring as uiSpring, withTiming as uiTiming } from 'react-native-reanimated';
 import { GoldBurst, ShineSweep, SparkleBurst } from '../ui/GoldBurst';
-import { DURATION, EASE, PARTICLES, SLOW_SERVER_LABEL_MS, SPRING, momentParticles } from '../ui/motionEasing';
+import { DURATION, EASE, SLOW_SERVER_LABEL_MS, SPRING, levelUpPayoff, momentParticles } from '../ui/motionEasing';
 import { usePowerBudget } from '../power';
-import { LEVEL_UP_ACTS, levelRibbon, levelUpFx, revealCard, type LevelUpFx, type LevelUpUnlocks } from './coin/progressionModel';
+import { LEVEL_UP_ACTS, levelRibbon, levelUpFx, perkChip, revealCard, type LevelUpFx, type LevelUpUnlocks } from './coin/progressionModel';
 import type { CollectedRideCoin } from '../api/endpoints/me/ride-coins/show';
 
 const SHORT_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -153,11 +153,13 @@ export default function CoinLevelingModal({
   const gold = useSharedValue(0);
   const bloom = useSharedValue(0);
   const sparkle = useSharedValue(0);
+  // Legendary and up: a second, wider sparkle wave a beat after the first.
+  const sparkle2 = useSharedValue(0);
   const shine = useSharedValue(0);
   const bloomOut = useSharedValue(0);
   const budget = usePowerBudget();
   const [slowServer, setSlowServer] = useState(false);
-  const stopUiShow = () => { [charge, gold, bloom, sparkle, shine, ringPulse, bloomOut, slow, coinShake].forEach(value => cancelUi(value)); };
+  const stopUiShow = () => { [charge, gold, bloom, sparkle, sparkle2, shine, ringPulse, bloomOut, slow, coinShake].forEach(value => cancelUi(value)); };
   const chargeStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.001, charge.value) }] }));
   // 0 while charging, 1 once the server is slow (scheduled on the UI thread with the charge).
   const slow = useSharedValue(0);
@@ -169,9 +171,11 @@ export default function CoinLevelingModal({
   const coinRef = useRef<View>(null);
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
   const ringPulse = useSharedValue(0);
+  // How far the tier ring reaches grows with the tier (levelUpPayoff), so Legendary's ring is clearly the biggest.
+  const ringReach = useSharedValue(0.9);
   const ringPulseStyle = useAnimatedStyle(() => ({
     opacity: ringPulse.value <= 0 || ringPulse.value >= 1 ? 0 : 1 - ringPulse.value,
-    transform: [{ scale: 1 + ringPulse.value * 0.9 }],
+    transform: [{ scale: 1 + ringPulse.value * ringReach.value }],
   }));
   const measureAnchor = () => {
     const root = rootRef.current; const coin = coinRef.current;
@@ -194,7 +198,7 @@ export default function CoinLevelingModal({
       setFeatureError(false);
       setUpgradeError(null);
       setFx(null); setUnlocks(null); setLevelXp(0); setSlowServer(false);
-      stopUiShow(); charge.value = 0; gold.value = 0; bloom.value = 0; sparkle.value = 0; shine.value = 0; bloomOut.value = 0; ringPulse.value = 0; setAnchor(null);
+      stopUiShow(); charge.value = 0; gold.value = 0; bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0; bloomOut.value = 0; ringPulse.value = 0; setAnchor(null);
       const isMax = rideCoin.current_level >= rideCoin.max_level;
       setState(isMax ? 'maxed' : 'preview');
     }
@@ -260,6 +264,7 @@ export default function CoinLevelingModal({
   const tierName = TIER_NAMES[Math.min(currentLevel - 1, TOP_TIER)];
   const nextTierName = TIER_NAMES[Math.min(nextLevel - 1, TOP_TIER)];
   const nextVisualReward = TIER_VISUAL_REWARDS[Math.min(nextLevel - 1, TOP_TIER)];
+  const nextPayoff = levelUpPayoff(nextLevel);
 
   const reveal = state === 'success' ? revealCard(unlocks, levelXp) : null;
   const hasEnergy = playerEnergy >= rideCoin.energy_to_next_level;
@@ -281,6 +286,7 @@ export default function CoinLevelingModal({
     setUnlocks(null);
     setLevelXp(0);
     const plan = levelUpFx(nextLevel, rideCoin.parts_to_next_level, { reducedMotion, dimFlashingLights: isDimFlashingLightsEnabled() });
+    const payoff = levelUpPayoff(nextLevel);
     setFx(plan);
 
     // Phase 1: Coin shakes and charges up. The shake lasts exactly as long as the charge
@@ -289,7 +295,7 @@ export default function CoinLevelingModal({
     // The bar and the gold glow fill on the UI thread: a dark track with a bright gold fill that
     // eases to 85 percent over the charge, then creeps (never stuck) while a slow server answers.
     setSlowServer(false);
-    stopUiShow(); bloom.value = 0; sparkle.value = 0; shine.value = 0;
+    stopUiShow(); bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0;
     charge.value = 0;
     gold.value = 0;
     if (!reducedMotion) {
@@ -355,8 +361,12 @@ export default function CoinLevelingModal({
           gold.value = uiTiming(1, { duration: 180, easing: EASE.out });
           bloom.value = uiSequence(uiTiming(1, { duration: 140, easing: EASE.out }), uiTiming(0, { duration: DURATION.bloom, easing: EASE.out }));
           sparkle.value = uiTiming(1, { duration: DURATION.sparkle });
+          if (payoff.sparkleWaves === 2) sparkle2.value = uiDelay(240, uiTiming(1, { duration: DURATION.sparkle }));
           shine.value = uiDelay(380, uiTiming(1, { duration: 620, easing: EASE.inOut }));
-          bloomOut.value = uiSequence(uiTiming(1, { duration: 160, easing: EASE.out }), uiDelay(500, uiTiming(0.55, { duration: 700, easing: EASE.out })));
+          // The big fan peaks and then stays lit behind the card by tier: Legendary keeps most of it.
+          bloomOut.value = uiSequence(uiTiming(payoff.fanPeak, { duration: 160, easing: EASE.out }),
+            uiDelay(500, uiTiming(payoff.fanHold, { duration: 700, easing: EASE.out })));
+          ringReach.value = payoff.ringReach;
           ringPulse.value = 0;
           ringPulse.value = uiSequence(uiTiming(0.001, { duration: 60 }), uiTiming(1, { duration: 700, easing: EASE.out }));
         }
@@ -469,12 +479,16 @@ export default function CoinLevelingModal({
           </View>
         )}
         {/* Above the card: sparkles fly out over its edges and the new tier's ring pulses outward. */}
-        {anchor && state === 'success' && !reducedMotion && (
+        {/* Mounted from the start of the charge (hidden until the burst), so the success frame mounts nothing heavy. */}
+        {anchor && (state === 'leveling' || state === 'success') && !reducedMotion && (
           <View pointerEvents="none" style={{ position: 'absolute', left: anchor.x, top: anchor.y, width: 0, height: 0,
             alignItems: 'center', justifyContent: 'center', zIndex: 30 }}>
-            <Reanimated.View style={[{ position: 'absolute', width: 132, height: 132, borderRadius: 66, borderWidth: 6,
+            <Reanimated.View style={[{ position: 'absolute', width: 132, height: 132, borderRadius: 66, borderWidth: nextPayoff.ringWidth,
               borderColor: coinTier(nextLevel).ring }, ringPulseStyle]} />
-            <SparkleBurst progress={sparkle} radius={SCREEN_W * 0.46} count={momentParticles(PARTICLES.sparkles, budget, reducedMotion)} />
+            <SparkleBurst progress={sparkle} radius={SCREEN_W * 0.46} count={momentParticles(nextPayoff.sparkles, budget, reducedMotion)} />
+            {nextPayoff.sparkleWaves === 2 && (
+              <SparkleBurst progress={sparkle2} radius={SCREEN_W * 0.62} count={momentParticles(nextPayoff.sparkles, budget, reducedMotion)} />
+            )}
           </View>
         )}
         {/* Always a visible way out (the backdrop is a thin strip on small phones). */}
@@ -545,12 +559,12 @@ export default function CoinLevelingModal({
                       <TierRim level={state === 'success' ? nextLevel : currentLevel} size={120} />
                       <CoinStand level={state === 'success' ? nextLevel : currentLevel} size={120} layer="crown" />
                       <LevelUpBurst fx={fx} size={120} playKey={burstKey} />
-                      {state === 'success' && !reducedMotion && (
+                      {(state === 'leveling' || state === 'success') && !reducedMotion && (
                         <>
                           <View pointerEvents="none" style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>
                             <ShineSweep progress={shine} size={104} />
                           </View>
-                          <SparkleBurst progress={sparkle} radius={110} count={momentParticles(PARTICLES.sparkles, budget, reducedMotion)} />
+                          <SparkleBurst progress={sparkle} radius={110} count={momentParticles(nextPayoff.sparkles, budget, reducedMotion)} />
                         </>
                       )}
                     </View>
@@ -1002,25 +1016,21 @@ export default function CoinLevelingModal({
                       marginBottom: 16,
                       width: '100%',
                     }}>
-                      <Text style={{
-                        fontFamily: 'Shark', fontSize: 28,
-                        color: '#9D6300',
-                        textTransform: 'uppercase',
-                        textShadowColor: 'rgba(0,0,0,0.5)',
-                        textShadowOffset: { width: 2, height: 2 },
-                        textShadowRadius: 0,
-                      }}>
-                        {nextTierName}!
-                      </Text>
-                      <Text style={{
-                        fontFamily: 'Knockout', fontSize: 14,
-                        color: '#315D7B',
-                        marginTop: 4,
-                      }}>
-                        Your coin evolved to Level {nextLevel}
-                      </Text>
+                      {/* The tier first, as a big chip in the tier's own metal (silver, gold, water blue, orange):
+                          a kid who cannot read yet still sees which coin they made. */}
+                      <View accessibilityRole="header" accessibilityLabel={`${nextTierName}, Level ${nextLevel}`}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: coinTier(nextLevel).ring,
+                          borderColor: coinTier(nextLevel).ringDeep, borderWidth: 4, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 6 }}>
+                        <Text style={{ fontFamily: 'Shark', fontSize: 30, color: '#05346e', textTransform: 'uppercase', paddingTop: 3 }}>
+                          {nextTierName}
+                        </Text>
+                        <View style={{ backgroundColor: '#05346e', borderRadius: 14, minWidth: 34, height: 34, alignItems: 'center',
+                          justifyContent: 'center', paddingHorizontal: 6 }}>
+                          <Text style={{ fontFamily: 'Shark', fontSize: 20, color: '#ffffff', paddingTop: 2 }}>{nextLevel}</Text>
+                        </View>
+                      </View>
                       <Text style={{ fontFamily: 'Knockout', fontSize: 14,
-                        color: '#19496B', marginTop: 5, textAlign: 'center' }}>
+                        color: '#19496B', marginTop: 8, textAlign: 'center' }}>
                         {nextVisualReward}
                       </Text>
 
@@ -1037,26 +1047,21 @@ export default function CoinLevelingModal({
                         </View>
                       )}
 
-                      {/* New perks unlocked (legacy curve) */}
+                      {/* New bonuses (legacy curve): a picture and a big number each ("+500" with a trophy),
+                          the full sentence is read out by VoiceOver. */}
                       {!reveal && rideCoin.next_level_perks.length > 0 && (
-                        <View style={{ marginTop: 12, width: '100%' }}>
-                          <Text style={{
-                            fontFamily: 'Knockout', fontSize: 11,
-                            color: '#825414',
-                            textTransform: 'uppercase',
-                            letterSpacing: 1,
-                            marginBottom: 6,
-                          }}>
-                            New Bonuses Unlocked
-                          </Text>
-                          {rideCoin.next_level_perks.map((perk) => (
-                            <Text key={perk.id} style={{
-                              fontFamily: 'Knockout', fontSize: 14,
-                              color: '#19496B', marginBottom: 2,
-                            }}>
-                              {perk.description}
-                            </Text>
-                          ))}
+                        <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+                          {rideCoin.next_level_perks.map((perk) => {
+                            const chip = perkChip(perk);
+                            return (
+                              <View key={perk.id} accessible accessibilityLabel={`New bonus: ${perk.description}`}
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ffffff', borderRadius: 16,
+                                  borderWidth: 2, borderColor: '#ffcf3b', paddingHorizontal: 12, paddingVertical: 5 }}>
+                                <GameIcon name={chip.icon} size={26} />
+                                <Text style={{ fontFamily: 'Shark', fontSize: 20, color: '#05346e', paddingTop: 2 }}>{chip.label}</Text>
+                              </View>
+                            );
+                          })}
                         </View>
                       )}
                     </View>

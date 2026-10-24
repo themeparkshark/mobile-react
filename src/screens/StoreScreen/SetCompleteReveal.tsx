@@ -28,6 +28,7 @@
  * stays, still).
  */
 import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
+import { InlineBackContext } from './inlineBack';
 import * as Haptics from 'expo-haptics';
 import { memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Dimensions, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -361,6 +362,16 @@ function RevealLayer({ inline, onClose, onShown, children }: {
   const shown = useRef(onShown);
   shown.current = onShown;
   useEffect(() => { if (inline) shown.current?.(); }, [inline]);
+  // Inline: Android back reaches the host modal, which routes it here (see InlineBackContext).
+  const back = useContext(InlineBackContext);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    if (!inline || !back) return undefined;
+    const fn = () => close.current();
+    back.current = fn;
+    return () => { if (back.current === fn) back.current = null; };
+  }, [inline, back]);
   if (inline) return <View style={StyleSheet.absoluteFill}>{children}</View>;
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} onShow={onShown} statusBarTranslucent>

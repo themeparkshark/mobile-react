@@ -54,11 +54,17 @@ type Props = {
   /** Always a plain image (static tiles that gain nothing from light). */
   readonly flat?: boolean;
   /**
-   * Re-colours the enamel in this hue while keeping the art's own light and shade (Skia "color" blend
-   * of the pin with itself): the gold chaser edition reads gold, from the same art. Lit pins only.
+   * The gold (or other metal) edition of the same art, lit pins only: a metal edge in this colour
+   * around the die-cut shape, a warm overlay at 55 percent that keeps the art's own hues, outlines and
+   * detail (a full colour blend flattened it into a plain disc), and a warm shine band.
    */
   readonly tint?: string;
 };
+
+/** The metal edge around a tinted pin (fraction of its size, each side). */
+const TINT_EDGE = 0.045;
+/** How strong the warm overlay is on a tinted pin: enough to read gold, low enough that the art survives. */
+const TINT_OVERLAY = 0.55;
 
 /** Under this size the light and shadow are too small to see: a plain image (and no Skia canvas). */
 const FLAT_BELOW = 48;
@@ -125,10 +131,17 @@ function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surfac
             </Group>
           )}
           <Group layer>
+            {tint && (
+              // The metal edge: the pin's own silhouette in the tint, a little larger, behind the art.
+              <SkiaImage image={image} x={pad - size * TINT_EDGE} y={pad - size * TINT_EDGE}
+                width={size * (1 + TINT_EDGE * 2)} height={size * (1 + TINT_EDGE * 2)} fit="contain">
+                <BlendColor color={tint} mode="srcIn" />
+              </SkiaImage>
+            )}
             <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" />
             {tint && (
-              // The art again, painted in the tint and blended by colour: hue from the tint, light and shade from the art.
-              <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" blendMode="color">
+              // A warm overlay, not a colour swap: the art's light parts go gold, outlines and detail stay.
+              <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" blendMode="overlay" opacity={TINT_OVERLAY}>
                 <BlendColor color={tint} mode="srcIn" />
               </SkiaImage>
             )}
@@ -145,7 +158,7 @@ function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surfac
             {shine && (
               <Rect x={0} y={0} width={box} height={box} blendMode="srcATop" opacity={shineOn}>
                 <LinearGradient start={shineStart} end={shineEnd}
-                  colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']} positions={[0, 0.5, 1]} />
+                  colors={tint ? ['rgba(255,240,190,0)', 'rgba(255,240,190,0.6)', 'rgba(255,240,190,0)'] : ['rgba(255,255,255,0)', 'rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']} positions={[0, 0.5, 1]} />
               </Rect>
             )}
           </Group>

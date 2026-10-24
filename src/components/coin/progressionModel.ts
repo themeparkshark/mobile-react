@@ -270,3 +270,18 @@ export function clientMaxLevel(serverMax: number | null | undefined): number {
   const max = Math.round(Number(serverMax) || LEGENDARY_COIN_LEVEL);
   return Math.max(1, Math.min(MAX_COIN_LEVEL, max));
 }
+
+/** A level-up bonus as a picture plus a big number, for kids who do not read yet ("+500" with a trophy). */
+export function perkChip(perk: { readonly type: string; readonly value: number; readonly name: string }): {
+  readonly icon: 'trophy' | 'parts' | 'energy' | 'swords' | 'sparkle';
+  readonly label: string;
+} {
+  const value = Math.round(Number(perk.value) || 0);
+  switch (perk.type) {
+    case 'gym_points': return { icon: 'trophy', label: value > 0 ? `+${value}` : perk.name };
+    case 'bonus_parts': return { icon: 'parts', label: value > 0 ? `+${value}` : perk.name };
+    case 'energy_discount': return { icon: 'energy', label: perk.name };
+    case 'boss_access': return { icon: 'swords', label: perk.name };
+    default: return { icon: 'sparkle', label: perk.name };
+  }
+}

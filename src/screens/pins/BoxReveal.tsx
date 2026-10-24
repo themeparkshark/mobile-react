@@ -38,7 +38,7 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  Easing, ZoomIn, cancelAnimation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  Easing, Extrapolation, ZoomIn, cancelAnimation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -48,7 +48,7 @@ import { queueHaptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
 import EnamelPin from '../pinTrading/EnamelPin';
 import { GoldBurst, RadialFlash, SparkleBurst } from '../../ui/GoldBurst';
-import { PARTICLES, chaserRattles, flashPeak, momentBeats, momentParticles } from '../../ui/motion';
+import { DURATION, PARTICLES, SLAM_SQUASH, SPRING, chaserRattles, flashPeak, momentBeats, momentParticles } from '../../ui/motion';
 import { usePowerBudget } from '../../power';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { BOX_ART, PIN_ART, type BoxTone } from './PinArt';
@@ -149,6 +149,9 @@ function play(cue: typeof REVEAL_CUES[number], opts: { volume?: number; pitch?: 
 const CONFETTI = 22;
 const CONFETTI_COLORS = ['#ffcf3b', '#ffffff', '#7cc6f5', '#ffe07a', '#ef4a3c', '#3cb85c'];
 const GOLD_COLORS = ['#ffcf3b', '#ffe07a', '#ffffff', '#f2a900'];
+/** When the serial stamp (or the catch seal) hits the card: its delay plus the slam. */
+const STAMP_HIT = 250 + DURATION.slam;
+
 /** The chaser's enamel colour (EnamelPin tint): a warm coin gold. */
 const CHASER_GOLD = '#f2b72c';
 
@@ -286,6 +289,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const hint = useSharedValue(0);
   const seal = useSharedValue(0);
   const stamp = useSharedValue(0);
+  // The small squash when the stamp hits (0 rest, 1 full squash), separate from the slam so the size never dips.
+  const stampSquash = useSharedValue(0);
   const plusOne = useSharedValue(0);
   const wearFly = useSharedValue(0);
   const crown = useSharedValue(0);
@@ -319,18 +324,22 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       if (p?.is_chaser) {
         // The serial stamps in with its own hit-stop: the stage freezes a beat bigger, a gold flash
         // pops on the number, the heaviest buzz, then it springs home.
-        stamp.value = withDelay(250, withSpring(1, { damping: 9, stiffness: 220 }));
-        later(330, () => { play('fx.hit', { pitch: 0.7 }); queueHaptic('comboHeavy', 2); });
-        later(420, () => queueHaptic('success', 2));
-        punch.value = withDelay(330, withSequence(withTiming(1.06, { duration: 40 }), withTiming(1.06, { duration: 70 }),
+        // The stamp accelerates into the card and lands on a known frame (no spring, so it never shrinks
+        // back below its size); the hit, the punch, the flash and a small squash all fire on that frame.
+        stamp.value = withDelay(250, withTiming(1, { duration: DURATION.slam, easing: Easing.in(Easing.quad) }));
+        stampSquash.value = withDelay(STAMP_HIT, withSequence(withTiming(1, { duration: 45 }), withSpring(0, SPRING.settle)));
+        later(STAMP_HIT, () => { play('fx.hit', { pitch: 0.7 }); queueHaptic('comboHeavy', 2); });
+        later(STAMP_HIT + 90, () => queueHaptic('success', 2));
+        punch.value = withDelay(STAMP_HIT, withSequence(withTiming(1.06, { duration: 40 }), withTiming(1.06, { duration: 70 }),
           withSpring(1, { damping: 9, stiffness: 240 })));
-        stampFlash.value = withDelay(330, withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 40 }),
+        stampFlash.value = withDelay(STAMP_HIT, withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 40 }),
           withTiming(0, { duration: 320 })));
       } else if (isCatch) {
-        stamp.value = withDelay(250, withSpring(1, { damping: 9, stiffness: 220 }));
+        stamp.value = withDelay(250, withTiming(1, { duration: DURATION.slam, easing: Easing.in(Easing.quad) }));
+        stampSquash.value = withDelay(STAMP_HIT, withSequence(withTiming(1, { duration: 45 }), withSpring(0, SPRING.settle)));
         // The stamp lands with a thud you feel: the number is the flex.
-        later(330, () => { play('fx.hit', { pitch: 0.8 }); queueHaptic('hitMedium', 2); });
-        punch.value = withDelay(330, withSequence(withTiming(1.025, { duration: 50 }), withSpring(1, { damping: 10 })));
+        later(STAMP_HIT, () => { play('fx.hit', { pitch: 0.8 }); queueHaptic('hitMedium', 2); });
+        punch.value = withDelay(STAMP_HIT, withSequence(withTiming(1.025, { duration: 50 }), withSpring(1, { damping: 10 })));
       }
       // An extra: a "+1" token rises toward the traders count.
       if (p?.duplicate && !isCatch) {
@@ -483,7 +492,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (!pull) return;
     clearTimers();
     popped.current = false;
-    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, lift, plusOne, wearFly, foil, crown, leak, sparkle, sparkle2, stampFlash].forEach(v => { cancelAnimation(v); v.value = 0; });
+    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, stampSquash, lift, plusOne, wearFly, foil, crown, leak, sparkle, sparkle2, stampFlash].forEach(v => { cancelAnimation(v); v.value = 0; });
     punch.value = 1;
     setPhase('drop');
     if (noBox) {
@@ -574,7 +583,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       { translateY: -wearFly.value * height * 0.9 },
     ],
   }));
-  const stampStyle = useAnimatedStyle(() => ({ opacity: stamp.value > 0 ? 1 : 0, transform: [{ scale: interpolate(stamp.value, [0, 1], [2.4, 1]) }, { rotate: '-8deg' }] }));
+  const stampStyle = useAnimatedStyle(() => ({ opacity: stamp.value > 0 ? 1 : 0, transform: [{ scale: interpolate(stamp.value, [0, 1], [2.4, 1], Extrapolation.CLAMP) * (1 - SLAM_SQUASH * Math.max(0, Math.min(1, stampSquash.value))) }, { rotate: '-8deg' }] }));
   const foilStyle = useAnimatedStyle(() => ({ opacity: foil.value <= 0 || foil.value >= 1 ? 0 : 0.85, transform: [{ translateX: -pinSize * 0.9 + foil.value * pinSize * 2.4 }, { rotate: '20deg' }] }));
   const backerStyle = useAnimatedStyle(() => ({ opacity: settle.value * (1 - wearFly.value), transform: [{ scale: 0.9 + settle.value * 0.1 }] }));
   // The turn angle is (1 - flip) * 540: the front faces you when cos(angle) > 0.
@@ -682,7 +691,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               <View style={styles.backerHole} />
               {/* The best pin gets the best card: gold foil, limited edition, its number. */}
               {pull.is_chaser && <Animated.View pointerEvents="none" style={[styles.foilSheen, { height: pinSize * 1.8, top: -pinSize * 0.25 }, foilStyle]} />}
-              {pull.is_chaser && <Text maxFontSizeMultiplier={1} style={styles.backerFoilText}>{pull.serial ? `LIMITED \u00b7 #${pull.serial}` : 'LIMITED'}</Text>}
+              {/* The number already shows on the stamp and the GOLD CHASER badge: the card just says what it is. */}
+              {pull.is_chaser && <Text maxFontSizeMultiplier={1} style={styles.backerFoilText}>GOLD PIN</Text>}
             </Animated.View>
           )}
           {/* The pin is mounted (and its art decoding) from the start, hidden until it rises. */}

@@ -29,6 +29,8 @@ export const DURATION = {
   exit: 200,
   /** The held frame before a burst. */
   hitStop: 70,
+  /** A big label slamming down from oversize (a serial stamp): accelerates into the hit, lands on a known frame. */
+  slam: 120,
   /** The white flash on a burst (capped for photosensitivity). */
   flash: 220,
   /** The gold bloom swelling and easing back. */
@@ -64,6 +66,14 @@ export const SPRING = {
   /** A soft landing for big art (a shark dropping onto the stage). */
   land: { damping: 12, stiffness: 160, mass: 1 },
 } as const;
+
+/** How bouncy a spring is: 1 is critical (no overshoot), below about 0.5 visibly wobbles. */
+export function dampingRatio(spring: { readonly damping: number; readonly stiffness: number; readonly mass: number }): number {
+  return spring.damping / (2 * Math.sqrt(spring.stiffness * spring.mass));
+}
+
+/** The squash a slammed label shows on impact (fraction of its size). Kept small so it reads as weight, not a glitch. */
+export const SLAM_SQUASH = 0.07;
 
 /** The hit-stop flash: never brighter than this (the app's photosensitivity cap, progressionModel FLASH_CAP). */
 export const FLASH_MAX_OPACITY = 0.4;
@@ -195,4 +205,37 @@ export function chargeFill(elapsed: number, chargeMs: number): number {
   }
   const extra = elapsed - chargeMs;
   return Math.min(0.97, 0.85 + 0.12 * (1 - Math.exp(-extra / 1500)));
+}
+
+export interface LevelUpPayoff {
+  /** The big fan behind the card at the burst (GoldBurst amount). */
+  readonly fanPeak: number;
+  /** How much of that fan stays lit behind the card while the kid reads it. */
+  readonly fanHold: number;
+  /** How far the tier ring pulses out (1 + this, times its 132 pt start). */
+  readonly ringReach: number;
+  /** The tier ring's band width (pt). */
+  readonly ringWidth: number;
+  /** One sparkle wave, or a second wider one for the top tiers. */
+  readonly sparkleWaves: 1 | 2;
+  /** Sparkles per wave before the power budget (momentParticles caps it again). */
+  readonly sparkles: number;
+}
+
+/**
+ * The level-up payoff grows with the tier, so a kid can rank Silver, Gold, Prismatic and Legendary
+ * at a glance, with no reading: a bigger fan that stays lit, a wider and thicker ring, more sparkles,
+ * and from Legendary (Level 5) up a second sparkle wave. Every field only grows with the level (tested).
+ */
+export function levelUpPayoff(level: number): LevelUpPayoff {
+  const lv = Math.max(2, Math.min(10, Math.round(level)));
+  const top = lv >= 5;
+  return {
+    fanPeak: top ? 1 : 0.7 + 0.075 * (lv - 1),
+    fanHold: top ? 0.85 : 0.3 + 0.1 * (lv - 2),
+    ringReach: 0.6 + 0.15 * Math.min(lv, 6),
+    ringWidth: 4 + Math.min(lv, 7),
+    sparkleWaves: top ? 2 : 1,
+    sparkles: Math.round(PARTICLES.sparkles * (0.5 + 0.125 * Math.min(lv, 6))),
+  };
 }

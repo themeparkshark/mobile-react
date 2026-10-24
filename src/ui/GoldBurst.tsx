@@ -98,7 +98,8 @@ export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, s
  */
 export function RadialFlash({ flash, size }: { readonly flash: SharedValue<number>; readonly size: number }) {
   const style = useAnimatedStyle(() => ({
-    opacity: Math.min(FLASH_MAX_OPACITY * 2, flash.value * 2),
+    // One photosensitivity number for the whole app: the local flash never passes FLASH_MAX_OPACITY either.
+    opacity: Math.min(FLASH_MAX_OPACITY, flash.value),
     transform: [{ scale: 0.6 + 0.4 * Math.min(1, flash.value / FLASH_MAX_OPACITY) }],
   }));
   return (

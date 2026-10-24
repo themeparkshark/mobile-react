@@ -18,6 +18,7 @@
  * ever changes, so there is no blank button frame.
  */
 import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
+import { InlineBackContext } from './inlineBack';
 import * as Haptics from 'expo-haptics';
 import { openMembership } from '../../components/GrownUpGate';
 import { FxSceneBackdrop } from '../../fx/FxSolo';
@@ -337,6 +338,13 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   }, [still, leave, handOffNow]);
   const closeRef = useRef(closeAnimated);
   closeRef.current = closeAnimated;
+  // Android back: once the Set Complete reveal is handed off inside this modal, back closes the reveal
+  // (closeAnimated ignores it after the hand-off, so back used to do nothing).
+  const inlineBack = useRef<(() => void) | null>(null);
+  const onRequestClose = useCallback(() => {
+    if (handedOff.current) { inlineBack.current?.(); return; }
+    closeAnimated();
+  }, [closeAnimated]);
   const pan = Gesture.Pan().activeOffsetY(8)
     .onUpdate(e => { drag.value = Math.max(0, e.translationY); })
     .onEnd(e => {
@@ -529,7 +537,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const confirming = phase === 'confirm' || phase === 'buying' || phase === 'landing';
 
   return (
-    <Modal visible={!leaving} transparent animationType="none" onRequestClose={closeAnimated} onDismiss={finishClose} statusBarTranslucent>
+    <Modal visible={!leaving} transparent animationType="none" onRequestClose={onRequestClose} onDismiss={finishClose} statusBarTranslucent>
       <ModalLayerContext.Provider value>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.scrim}>
@@ -734,7 +742,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
             <CoinArc from={{ x: 60, y: 44 }} to={{ x: (SCREEN_W - 28) / 2 + 14, y: STAGE_TOP + stageH * 0.5 }} still={still} trigger={coins} />
           </Animated.View>
         </Animated.View>
-        {handOff}
+        <InlineBackContext.Provider value={inlineBack}>{handOff}</InlineBackContext.Provider>
       </GestureHandlerRootView>
       </ModalLayerContext.Provider>
     </Modal>

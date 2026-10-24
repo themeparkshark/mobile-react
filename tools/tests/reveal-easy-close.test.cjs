@@ -54,3 +54,18 @@ test('every reward reveal closes easily without wearing anything (Dustin: "tap o
   const claim = read('src/screens/SetCollection/SetHuntSections.tsx');
   assert.match(claim, /label="Close" variant="ghost"/, 'the book claim card has its own Close next to Wear it');
 });
+
+test('Android back closes the Set Complete reveal when it plays inline inside the try-on', () => {
+  const reveal = read('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  const tryOn = read('src/screens/StoreScreen/TryOnSheet.tsx');
+  // The inline reveal registers its close with the host modal.
+  assert.match(reveal, /const back = useContext\(InlineBackContext\)/);
+  assert.match(reveal, /if \(!inline \|\| !back\) return undefined;/);
+  assert.match(reveal, /back\.current = fn;/);
+  assert.match(reveal, /if \(back\.current === fn\) back\.current = null;/, 'unregisters only its own handler');
+  // The try-on's onRequestClose routes back to the reveal after the hand-off (closeAnimated ignores it then).
+  assert.match(tryOn, /onRequestClose=\{onRequestClose\}/);
+  assert.match(tryOn, /if \(handedOff\.current\) \{ inlineBack\.current\?\.\(\); return; \}/);
+  assert.match(tryOn, /<InlineBackContext\.Provider value=\{inlineBack\}>\{handOff\}<\/InlineBackContext\.Provider>/);
+  assert.match(tryOn, /const closeAnimated = useCallback\(\(\) => \{\n\s*if \(handedOff\.current\) return;/, 'the sheet itself stays put once handed off');
+});
