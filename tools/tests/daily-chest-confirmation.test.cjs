@@ -60,6 +60,8 @@ function chest({ reconciled = null, reduced = false } = {}) {
         GameIcon: 'GameIcon', ICON_SOURCES: { coins: 'icon:coins', energy: 'icon:energy', ticket: 'icon:ticket' },
         gameAlert(title) { alerts.push(title); } };
       if (name === './RewardBurst') return { default: 'RewardBurst' };
+      if (name === '../ui/GoldBurst') return { GoldBurst: 'GoldBurst' };
+      if (name === '../ui/motionEasing') return { ...require('./helpers/ts-module.cjs').loadTs('src/ui/motion.ts'), EASE: {} };
       if (name === '../hooks/useReducedGameMotion') return { default: () => reduced };
       if (name === '../gamekit/SFX') return { playSfx: name => sounds.push(name) };
       if (name === '../api/endpoints/daily-gifts/update') return { default: () => { const request = pending(); updates.push(request); return request.promise; } };

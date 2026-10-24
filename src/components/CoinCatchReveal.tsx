@@ -9,13 +9,17 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withRepeat,
   withSequence,
   withSpring,
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { playSfx } from '../gamekit/SFX';
+import { GoldBurst, ShineSweep, SparkleBurst } from '../ui/GoldBurst';
+import { DURATION, EASE, PARTICLES, SPRING, flashPeak, momentBeats, momentParticles } from '../ui/motionEasing';
+import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
+import StrokedText from './StrokedText';
+import { usePowerBudget } from '../power';
 
 /**
  * The ride-coin "catch" beat that plays before the rewards summary, shaped like a
@@ -26,8 +30,10 @@ import { playSfx } from '../gamekit/SFX';
  * to the burst (the payoff is never skipped); a tap after it continues.
  * Reduced motion shows the caught coin still, with the same feedback.
  *
- * Timings follow the reward-moment guidance: ~900 ms anticipation, ~80 ms
- * hit-stop, burst + settle ~700 ms. Sound, haptic and visual fire on one frame.
+ * Timings come from the shared motion language (ui/motion.ts, momentBeats
+ * 'coinReveal'): the gold glow gathers behind the coin while it wobbles, a
+ * 70 ms hit-stop flash, then the gold rays bloom, sparkles fly, a shine sweeps
+ * the coin and the title stamps in. Sound, haptic and visual fire on one frame.
  */
 /** Where the summary's hero coin sits, in window coordinates. */
 export interface CatchHandoff { readonly x: number; readonly y: number; readonly size: number }
@@ -74,14 +80,18 @@ export default function CoinCatchReveal({
   const lift = useSharedValue(0); // exit translateY
   const flash = useSharedValue(0);
   const rays = useSharedValue(0);
-  const raysSpin = useSharedValue(0);
   const title = useSharedValue(0);
   const backdrop = useSharedValue(0);
   const coinOpacity = useSharedValue(1);
   const confetti = useSharedValue(0);
+  const bloom = useSharedValue(0);
+  const sparkle = useSharedValue(0);
+  const shine = useSharedValue(0);
+  const budget = usePowerBudget();
+  const [reducedFx, setReducedFx] = useState(false);
 
   const stopVisuals = () => {
-    [flip, scale, wobble, lift, flash, rays, raysSpin, title, backdrop, coinOpacity, confetti, shiftX, exitScale]
+    [flip, scale, wobble, lift, flash, rays, title, backdrop, coinOpacity, confetti, shiftX, exitScale, bloom, sparkle, shine]
       .forEach(value => cancelAnimation(value));
   };
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
@@ -113,6 +123,7 @@ export default function CoinCatchReveal({
     const begin = (reduced: boolean) => {
       if (cancelled || finished.current) return;
       started = true;
+      setReducedFx(reduced);
       if (reduced) {
         clearTimers();
         stopVisuals();
@@ -123,7 +134,8 @@ export default function CoinCatchReveal({
         lift.value = 0;
         coinOpacity.value = 1;
         flash.value = 0;
-        rays.value = 0;
+        // A still gold glow (no turning, no sparkles): the moment still reads as gold.
+        rays.value = 1;
         confetti.value = 0;
         title.value = 1;
         setBurst(true);
@@ -158,6 +170,9 @@ export default function CoinCatchReveal({
         // A repeat is a quick deposit: one lift, one tactile beat, no long wobble.
         backdrop.value = withTiming(1, { duration: 100 });
         flip.value = 1; title.value = 1;
+        rays.value = withTiming(0.7, { duration: DURATION.quick });
+        bloom.value = withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 420, easing: EASE.out }));
+        sparkle.value = withTiming(1, { duration: DURATION.sparkle, easing: Easing.linear });
         scale.value = withSequence(withTiming(1.06, { duration: 160 }),
           withTiming(1, { duration: 140 }));
         at(160, () => { setBurst(true); success(); });
@@ -169,32 +184,36 @@ export default function CoinCatchReveal({
       // Every visual beat is scheduled up front on the UI thread (withDelay), so
       // a busy JS thread can't stall or skip the animation. Haptics and sound
       // ride JS timers at the same offsets; finish is driven by the last beat.
-      const T = { wobble: 540, stop: 1400, burst: 1480, lift: 2750, done: 3110 };
+      const beats = momentBeats('coinReveal', { reduced: false });
+      const T = { wobble: 420, burst: beats.burstAt, lift: beats.settledAt + 150, done: beats.settledAt + 510 };
       phase.current = 'anticipation';
 
       // 1. Anticipation: the coin spins in from edge-on, then wobbles three
       //    times with each wobble's haptic stronger than the last.
       playSfx('whoosh', 0.7);
-      flip.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
+      flip.value = withTiming(1, { duration: 480, easing: EASE.out });
       scale.value = withSequence(
-        withTiming(0.8, { duration: 520, easing: Easing.out(Easing.cubic) }),
-        withDelay(T.burst - 520, withTiming(1.28, { duration: 110, easing: Easing.out(Easing.quad) })),
-        withSpring(1, { damping: 7, stiffness: 180 }),
+        withTiming(0.8, { duration: 480, easing: EASE.out }),
+        // The coin draws in a little (the squash before the pop), then punches past full size.
+        withDelay(T.burst - 480 - 240, withTiming(0.72, { duration: 240, easing: EASE.in })),
+        withTiming(1.28, { duration: 110, easing: Easing.out(Easing.quad) }),
+        withSpring(1, SPRING.pop),
       );
+
       const wobbleOnce = (deg: number) => withSequence(
-        withTiming(deg, { duration: 70 }),
-        withTiming(-deg, { duration: 110 }),
-        withTiming(0, { duration: 70 }),
+        withTiming(deg, { duration: 60 }),
+        withTiming(-deg, { duration: 100 }),
+        withTiming(0, { duration: 60 }),
       );
       wobble.value = withDelay(T.wobble, withSequence(
-        wobbleOnce(14),
-        withDelay(90, wobbleOnce(19)),
-        withDelay(90, wobbleOnce(25)),
+        wobbleOnce(12),
+        withDelay(40, wobbleOnce(17)),
+        withDelay(40, wobbleOnce(23)),
       ));
       [
         [T.wobble, Haptics.ImpactFeedbackStyle.Light],
-        [T.wobble + 340, Haptics.ImpactFeedbackStyle.Medium],
-        [T.wobble + 680, Haptics.ImpactFeedbackStyle.Heavy],
+        [T.wobble + 260, Haptics.ImpactFeedbackStyle.Medium],
+        [T.wobble + 520, Haptics.ImpactFeedbackStyle.Heavy],
       ].forEach(([ms, style]) => at(ms as number, () => {
         void Haptics.impactAsync(style as Haptics.ImpactFeedbackStyle).catch(() => undefined);
         playSfx('tick', 0.8);
@@ -202,14 +221,24 @@ export default function CoinCatchReveal({
 
       // 2. Hit-stop flash, 3. burst, 4. exit, scheduled relative to `burstAt`.
       const scheduleBurst = (burstAt: number) => {
-        flash.value = withDelay(Math.max(0, burstAt - 80), withSequence(withTiming(1, { duration: 40 }), withTiming(0, { duration: 260 })));
-        rays.value = withDelay(burstAt, withTiming(1, { duration: 260 }));
+        // Hit-stop: one held white frame (capped well under the photosensitivity limit).
+        flash.value = withDelay(Math.max(0, burstAt - DURATION.hitStop), withSequence(
+          withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 40 }), withTiming(0, { duration: DURATION.flash })));
+        // The gold gathers behind the coin while it wobbles (a faint glow swelling), then blooms.
+        const gatherFrom = T.wobble;
+        rays.value = burstAt > gatherFrom + 200
+          ? withSequence(withDelay(gatherFrom, withTiming(0.4, { duration: burstAt - gatherFrom, easing: EASE.charge })),
+            withTiming(1, { duration: 200, easing: EASE.out }))
+          : withDelay(burstAt, withTiming(1, { duration: 200, easing: EASE.out }));
+        bloom.value = withDelay(burstAt, withSequence(withTiming(1, { duration: 140, easing: EASE.out }),
+          withTiming(0, { duration: DURATION.bloom, easing: EASE.out })));
+        sparkle.value = withDelay(burstAt, withTiming(1, { duration: DURATION.sparkle, easing: Easing.linear }));
+        shine.value = withDelay(burstAt + 260, withTiming(1, { duration: 620, easing: EASE.inOut }));
         confetti.value = withDelay(burstAt, withTiming(1, { duration: 1300, easing: Easing.out(Easing.quad) }));
-        raysSpin.value = withDelay(burstAt, withRepeat(withTiming(360, { duration: 9000, easing: Easing.linear }), -1));
         const exitAt = burstAt + (T.lift - T.burst);
         title.value = withDelay(burstAt + 120, withSequence(
-          withSpring(1, { damping: 10, stiffness: 160 }),
-          withDelay(exitAt - burstAt - 700, withTiming(0, { duration: 180 })),
+          withSpring(1, SPRING.stamp),
+          withDelay(Math.max(0, exitAt - burstAt - 520), withTiming(0, { duration: 160 })),
         ));
         at(burstAt, () => {
           phase.current = 'burst';
@@ -226,10 +255,10 @@ export default function CoinCatchReveal({
       fastForwardRef.current = () => {
         // A first tap during the anticipation goes straight to the payoff.
         clearTimers();
-        [flip, scale, wobble, flash, rays, raysSpin, title, confetti].forEach(value => cancelAnimation(value));
+        [flip, scale, wobble, flash, rays, title, confetti, bloom, sparkle, shine].forEach(value => cancelAnimation(value));
         flip.value = 1; wobble.value = 0;
         scale.value = withSequence(withTiming(1.28, { duration: 90, easing: Easing.out(Easing.quad) }),
-          withSpring(1, { damping: 7, stiffness: 180 }));
+          withSpring(1, SPRING.pop));
         scheduleBurst(80);
       };
     };
@@ -261,14 +290,15 @@ export default function CoinCatchReveal({
     ],
     opacity: coinOpacity.value,
   }));
+  // The gold fades as the coin lifts away to the summary.
   const raysStyle = useAnimatedStyle(() => ({
-    opacity: rays.value * (1 - Math.min(1, -lift.value / 120)),
-    transform: [{ rotate: `${raysSpin.value}deg` }, { scale: 0.6 + rays.value * 0.4 }],
+    opacity: 1 - Math.min(1, Math.abs(lift.value) / 140),
   }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+  // The title stamps down: big and light, then lands at full size.
   const titleStyle = useAnimatedStyle(() => ({
-    opacity: title.value,
-    transform: [{ scale: 0.6 + title.value * 0.4 }],
+    opacity: Math.min(1, title.value * 2),
+    transform: [{ scale: 1.5 - title.value * 0.5 }, { rotate: `${(1 - title.value) * -4}deg` }],
   }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdrop.value }));
 
@@ -299,24 +329,23 @@ export default function CoinCatchReveal({
       </Animated.View>
 
       <View style={[styles.stage, { top: height * 0.42 - coinSize / 2 }]} pointerEvents="none">
-        <Animated.View style={[styles.rays, { width: coinSize * 2.6, height: coinSize * 2.6 }, raysStyle]}>
-          {Array.from({ length: 12 }).map((_, i) => (
-            <View key={i} style={[styles.ray, {
-              height: coinSize * 1.3,
-              transform: [{ rotate: `${i * 30}deg` }, { translateY: -coinSize * 0.45 }],
-            }]} />
-          ))}
+        <Animated.View style={[styles.rays, raysStyle]}>
+          <GoldBurst size={coinSize * 2.9} amount={rays} bloom={bloom} reduced={reducedFx} />
         </Animated.View>
-        <Animated.View style={[{ width: coinSize, height: coinSize }, coinStyle]}>
+        <Animated.View style={[{ width: coinSize, height: coinSize, alignItems: 'center', justifyContent: 'center' }, coinStyle]}>
           {coinUrl && !artFailed
             ? <Image source={coinUrl} style={{ width: coinSize, height: coinSize }} contentFit="contain" onError={() => setArtFailed(true)} />
             : <Image source={require('../../assets/icons/game/coin.png')} style={{ width: coinSize, height: coinSize }} contentFit="contain" />}
+          {!reducedFx && <ShineSweep progress={shine} size={coinSize * 0.86} />}
         </Animated.View>
+        {!reducedFx && <SparkleBurst progress={sparkle} radius={coinSize * 0.95}
+          count={momentParticles(PARTICLES.sparkles, budget, reducedFx)} />}
       </View>
 
       <Animated.View style={[styles.titleWrap, { top: height * 0.42 + coinSize * 0.62 }, titleStyle]} pointerEvents="none">
-        <Text style={styles.kicker}>{isNewCoin ? 'NEW RIDE COIN!' : 'COIN ADDED!'}</Text>
-        <Text style={styles.ride} numberOfLines={2}>{rideName}</Text>
+        {/* Thick navy outline: the title sits on bright gold rays. */}
+        <StrokedText style={styles.kicker} strokeColor="#05346e">{isNewCoin ? 'NEW RIDE COIN!' : 'COIN ADDED!'}</StrokedText>
+        <StrokedText style={styles.ride} strokeColor="#05346e" numberOfLines={2}>{rideName}</StrokedText>
       </Animated.View>
 
       <Confetti progress={confetti} originY={height * 0.42} width={width} />
@@ -327,18 +356,15 @@ export default function CoinCatchReveal({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { backgroundColor: 'rgba(3, 38, 92, 0.55)' },
+  backdrop: { backgroundColor: 'rgba(3, 38, 92, 0.66)' },
   stage: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
   rays: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  ray: { position: 'absolute', width: 22, borderRadius: 11, backgroundColor: 'rgba(255, 244, 176, 0.5)' },
   titleWrap: { position: 'absolute', left: 24, right: 24, alignItems: 'center' },
   kicker: {
-    fontFamily: 'Shark', fontSize: 34, color: '#ffcf3b', textAlign: 'center',
-    textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0,
+    fontFamily: 'Shark', fontSize: 36, color: '#ffd84a', textAlign: 'center',
   },
   ride: {
-    fontFamily: 'Shark', fontSize: 24, color: '#ffffff', textAlign: 'center', marginTop: 6,
-    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1,
+    fontFamily: 'Shark', fontSize: 26, color: '#ffffff', textAlign: 'center', marginTop: 4,
   },
   flash: { backgroundColor: '#ffffff' },
   skip: {

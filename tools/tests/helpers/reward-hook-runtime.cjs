@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+let motionModule;
+const loadMotion = () => (motionModule ??= require('./ts-module.cjs').loadTs('src/ui/motion.ts'));
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -99,6 +101,14 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)power$/.test(name)) return { usePowerBudget: () => ({ level: 'full', ambient: true, animate: true,
         pollMultiplier: 1, particleScale: 1, gpsRest: false, compass: true, lowPower: false, idle: false }),
         useBudgetedPoll() {}, budgetedInterval: (ms, b) => (Number.isFinite(b.pollMultiplier) && ms > 0 ? ms * Math.max(1, b.pollMultiplier) : null), useBatterySaver: () => false, setBatterySaver() {} };
+      // The shared motion language (src/ui/motion.ts): real timings, stub curves; the gold art is a plain node.
+      if (/(^|\/)ui\/motionEasing$/.test(name) || /(^|\/)ui\/motion$/.test(name)) {
+        const motion = loadMotion();
+        return { ...motion, EASE: { out: native.Easing?.out, in: native.Easing?.in, inOut: native.Easing?.inOut, charge: native.Easing?.inOut } };
+      }
+      // iOS Dim Flashing Lights reads off unless a test stubs it.
+      if (/(^|\/)modules\/flash-safety$/.test(name)) return { isDimFlashingLightsEnabled: () => false };
+      if (/(^|\/)ui\/GoldBurst$/.test(name)) return { GoldBurst: 'GoldBurst', SparkleBurst: 'SparkleBurst', ShineSweep: 'ShineSweep' };
       // Money offers on reward sheets (money stream): no server multiplier, so the generic VIP line.
       if (/(^|\/)services\/money\/offers$/.test(name)) return { vipWinLine: () => null };
       if (/(^|\/)services\/money\/vipPerks$/.test(name)) return { warmVipPerks: async () => undefined, vipRideMultiplierNow: () => null };

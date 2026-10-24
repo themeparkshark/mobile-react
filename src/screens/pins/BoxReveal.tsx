@@ -42,11 +42,14 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Defs, G, Path, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
 import EnamelPin from '../pinTrading/EnamelPin';
+import { GoldBurst } from '../../ui/GoldBurst';
+import { flashPeak } from '../../ui/motion';
+import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { BOX_ART, PIN_ART, type BoxTone } from './PinArt';
 import { PINS_COPY, revealOrder, serialLabel, type Pull } from './pinsModel';
 
@@ -178,30 +181,6 @@ function ConfettiPiece({ p, burst }: { p: ReturnType<typeof pieces>[number]; bur
   );
 }
 
-/** Gold rays behind gold moments (one small SVG, turned on the UI thread). */
-function Rays({ size: full, spin, on }: { size: number; spin: SharedValue<number>; on: SharedValue<number> }) {
-  const size = Math.round(full / LOWRES);
-  const style = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ rotate: `${spin.value}deg` }, { scale: (0.8 + on.value * 0.2) * LOWRES }] }));
-  const r = size / 2;
-  const wedges = Array.from({ length: 12 }, (_, i) => {
-    const a0 = (i / 12) * Math.PI * 2; const a1 = a0 + Math.PI / 18;
-    return `M${r},${r} L${r + Math.cos(a0) * r},${r + Math.sin(a0) * r} L${r + Math.cos(a1) * r},${r + Math.sin(a1) * r} Z`;
-  }).join(' ');
-  return (
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size }, style]}>
-      <Svg width={size} height={size}>
-        <Defs>
-          <RadialGradient id="rayfade" cx="50%" cy="50%" r="50%">
-            <Stop offset="0.15" stopColor="#ffe07a" stopOpacity="0.85" />
-            <Stop offset="1" stopColor="#ffcf3b" stopOpacity="0" />
-          </RadialGradient>
-        </Defs>
-        <G><Path d={wedges} fill="url(#rayfade)" /></G>
-      </Svg>
-    </Animated.View>
-  );
-}
-
 /** Soft gradients are drawn at a third of their size and scaled up: same look, a ninth of the memory. */
 const LOWRES = 3;
 
@@ -287,7 +266,6 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const shake = useSharedValue(0);
   const glow = useSharedValue(0);
   const rays = useSharedValue(0);
-  const raySpin = useSharedValue(0);
   const opened = useSharedValue(0);
   const lid = useSharedValue(0);
   const flash = useSharedValue(0);
@@ -361,7 +339,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     dim.value = withTiming(0, { duration: 200 });
     // Reduce Motion: no full-screen gold flash on the Golden Box.
     // Golden Box: no full-screen wash (it read as a flat yellow screen); the gold glow and rays bloom on the box instead.
-    flash.value = golden ? 0 : withSequence(withTiming(1, { duration: 60 }), withTiming(0, { duration: 260 }));
+    // The flash is capped like every big moment (ui/motion.ts) and off with Dim Flashing Lights.
+    flash.value = golden ? 0 : withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), still), { duration: 60 }), withTiming(0, { duration: 260 }));
     ring.value = 0; ring.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
     opened.value = 1;
     if (still) {
@@ -490,13 +469,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     } else { cancelAnimation(hint); hint.value = 0; }
   }, [phase, still, ambient, hint]);
 
-  // Gold rays keep turning slowly while a gold moment is on screen.
-  useEffect(() => {
-    if (goldStage && !still && ambient && phase !== 'summary' && phase !== 'drop' && phase !== 'ready') {
-      raySpin.value = withRepeat(withTiming(360, { duration: 14000, easing: Easing.linear }), -1, false);
-    } else { cancelAnimation(raySpin); }
-    return () => cancelAnimation(raySpin);
-  }, [goldStage, still, ambient, phase, raySpin]);
+  // Gold rays (the shared GoldBurst) turn slowly on their own while the power budget allows.
 
   const next = useCallback(() => {
     play('ui.tap');
@@ -614,7 +587,11 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
         <Animated.View pointerEvents="none" style={[styles.stage, { top: centerY - boxSize / 2, width, height: boxSize }, stageStyle]}>
           <Glow size={boxSize * 2.3} color={glowColor} amount={glow} id={goldStage ? 'glowGold' : 'glowSky'} />
-          {goldStage && !still && <Rays size={boxSize * 2.6} spin={raySpin} on={rays} />}
+          {goldStage && !still && (
+            <View pointerEvents="none" style={styles.goldWrap}>
+              <GoldBurst size={boxSize * 2.7} amount={rays} reduced={still || !ambient} />
+            </View>
+          )}
           <Ring size={boxSize * 1.2} t={ring} />
           {!noBox && (
             <Animated.View style={[{ width: boxSize, height: boxSize }, boxStyle]}>
@@ -814,6 +791,7 @@ const styles = StyleSheet.create({
   serialStampText: { fontFamily: FONT.display, fontSize: 26, color: BRAND.gold, paddingTop: 3 },
   confettiOrigin: { position: 'absolute', alignSelf: 'center', width: 1, height: 1 },
   flash: { backgroundColor: '#ffffff' },
+  goldWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   // Golden Box: a warm gold flash (a white wash read as a dropped frame on the gold stage).
   flashGold: { backgroundColor: '#ffd75a' },
   dim: { backgroundColor: '#000814' },

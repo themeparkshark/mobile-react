@@ -49,6 +49,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'RideLogSuccessPreview', getComponent: () => require('./screens/RideLogSuccessPreviewScreen').default },
       { name: 'UiKitGym', getComponent: () => require('./ui/UiKitGym').default },
       { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
+      { name: 'BoxRevealPreview', getComponent: () => require('./screens/pins/BoxRevealPreviewScreen').default },
       { name: 'FrightIntroPreview', getComponent: () => require('./components/fright/tutorial/FrightIntroPreviewScreen').default },
       { name: 'SecretShopPreview', getComponent: () => require('./screens/StoreScreen/SecretShopPreviewScreen').default },
       { name: 'MoneyPreview', getComponent: () => require('./screens/MoneyPreviewScreen').default },

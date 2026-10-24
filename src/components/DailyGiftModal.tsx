@@ -19,6 +19,8 @@ import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../ui';
 import { ws7Preview } from '../dev/ws7Preview';
 import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
+import { GoldBurst } from '../ui/GoldBurst';
+import { DURATION, EASE, SPRING } from '../ui/motionEasing';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
@@ -136,6 +138,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const punch = useSharedValue(0);
   const cardShake = useSharedValue(0);
   const spark = useSharedValue(0);
+  // The shared gold (ui/GoldBurst): gathers while the chest shakes, blooms when the lid pops.
+  const gold = useSharedValue(0);
+  const goldBloom = useSharedValue(0);
 
   useEffect(() => {
     if (!dailyGift.redeemed_at && player?.username) setVisible(true);
@@ -154,12 +159,14 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     return () => { cancelAnimation(bob); cancelAnimation(glow); };
   }, [visible, phase, reducedMotion, bob, glow]);
   useEffect(() => () => {
-    [shake, pop, prize, stamp, burst, punch, cardShake, spark].forEach(cancelAnimation);
-  }, [shake, pop, prize, stamp, burst, punch, cardShake, spark]);
+    [shake, pop, prize, stamp, burst, punch, cardShake, spark, gold, goldBloom].forEach(cancelAnimation);
+  }, [shake, pop, prize, stamp, burst, punch, cardShake, spark, gold, goldBloom]);
   useEffect(() => {
     if (!reducedMotion) return;
     [shake, pop, prize, stamp, burst, punch, cardShake, spark].forEach(cancelAnimation);
     shake.value = 0; pop.value = 1; burst.value = 0; cardShake.value = 0; spark.value = 0;
+    cancelAnimation(gold); cancelAnimation(goldBloom); goldBloom.value = 0;
+    gold.value = phase === 'open' ? 0.8 : 0;
     prize.value = phase === 'open' ? 1 : 0;
     stamp.value = phase === 'open' ? 1 : 0;
     punch.value = phase === 'open' ? 1 : 0;
@@ -203,13 +210,16 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
 
   const celebrate = (isTicket: boolean) => {
     if (reducedMotionRef.current) {
-      shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1;
+      shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1; gold.value = 0.8;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       playSfx('win');
       return;
     }
     // Anticipation done: lid pops with overshoot, the prize rises, confetti bursts.
-    pop.value = withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 }));
+    pop.value = withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, SPRING.pop));
+    gold.value = withTiming(1, { duration: 200, easing: EASE.out });
+    goldBloom.value = withSequence(withTiming(1, { duration: 140, easing: EASE.out }),
+      withTiming(0, { duration: DURATION.bloom, easing: EASE.out }));
     burst.value = 0;
     burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) });
     prize.value = withDelay(120, withSpring(1, { damping: 9, stiffness: 150 }));
@@ -251,6 +261,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       shake.value = withSequence(
         ...[10, -12, 14, -16, 18, -18, 0].map(v => withTiming(v, { duration: 60 })),
       );
+      // Anticipation: the chest squashes down a little while the gold gathers behind it.
+      pop.value = withTiming(0.9, { duration: 400, easing: EASE.in });
+      gold.value = withTiming(0.45, { duration: 420, easing: EASE.charge });
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     }
     playSfx('tick', 0.8);
@@ -276,6 +289,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       if (!mounted.current) return;
       claiming.current = false;
       cancelAnimation(shake); shake.value = 0;
+      cancelAnimation(pop); pop.value = 1; cancelAnimation(gold); gold.value = 0;
       if (current?.id === dailyGift.id && current.redeemed_at) {
         setDailyGift(current);
         void refreshPlayer?.();
@@ -360,6 +374,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
             accessibilityLabel={phase === 'open' ? `Opened: ${amount} ${prizeLabel(kind, amount)}` : 'Open today’s chest'}
             style={[styles.stage, { height: chestSize + 12 }]}>
             <Animated.View style={[styles.glow, { width: chestSize * 1.3, height: chestSize * 1.3, borderRadius: chestSize }, glowStyle]} />
+            <View pointerEvents="none" style={styles.goldWrap}>
+              <GoldBurst size={chestSize * 1.45} amount={gold} bloom={goldBloom} reduced={reducedMotion} />
+            </View>
             <Animated.View style={chestStyle}>
               <Image source={phase === 'open' ? openArt : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
             </Animated.View>
@@ -451,6 +468,7 @@ const styles = StyleSheet.create({
   streakText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
   stage: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginTop: 6 },
   glow: { position: 'absolute', backgroundColor: 'rgba(255, 226, 92, 0.35)' },
+  goldWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   ticketPunch: { position: 'absolute', alignItems: 'center', justifyContent: 'center', top: 0 },
   spark: { position: 'absolute', right: '8%', top: '10%' },
   prizeSlot: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
