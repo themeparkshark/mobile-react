@@ -125,6 +125,8 @@ const DEV_STAGE = (__DEV__ ? process.env.EXPO_PUBLIC_RHYTHM_STAGE : undefined) a
 const DEV_DIFF = __DEV__ ? Number(process.env.EXPO_PUBLIC_RHYTHM_DIFF || 0) : 0;
 // Dev only: start from empty progress (First Parade, callouts) without touching saved data.
 const DEV_FRESH = __DEV__ && process.env.EXPO_PUBLIC_RHYTHM_FRESH === '1';
+// Dev only: start the round with this personal best, so a capture can show NEW BEST on a rough (Easy Beat) card.
+const DEV_PB = __DEV__ ? Number(process.env.EXPO_PUBLIC_RHYTHM_PB || 0) : 0;
 // Dev only: the engine's frame-time overlay (UI fps, p5, p95).
 const DEV_PERF = __DEV__ && process.env.EXPO_PUBLIC_RHYTHM_PERF === '1';
 
@@ -386,7 +388,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     let alive = true;
     roundId.current += 1;
     finished.current = false;
-    pbBefore.current = progressRef.current.pb[pbKey(plan.stage, plan.difficulty, plan.format === 'ride' ? 'ride' : 'stage')];
+    pbBefore.current = DEV_PB > 0 ? DEV_PB : progressRef.current.pb[pbKey(plan.stage, plan.difficulty, plan.format === 'ride' ? 'ride' : 'stage')];
     pauseSpans.current = [];
     pausedAt.current = null;
     setMarchLive(false);
