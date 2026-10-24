@@ -8,14 +8,16 @@ import { useOneTimeTip } from './HelpProvider';
  * Drop-in one-time tip. `ready` is the caller's "the player is free" signal:
  * false during a mini-game, a moving line, a dialog or a Finn lesson.
  */
-export default function OneTimeTip({ id, ready, style, compact }: {
+export default function OneTimeTip({ id, ready, style, compact, instantExit }: {
   readonly id: Exclude<TipId, `game:${string}`>;
   readonly ready: boolean;
   readonly style?: StyleProp<ViewStyle>;
   readonly compact?: boolean;
+  /** Leave at once (no fade), for a tip inside a card that reflows as it goes. */
+  readonly instantExit?: boolean;
 }) {
   const { visible, dismiss } = useOneTimeTip(id, ready);
   if (!visible) return null;
   const copy = TIP_COPY[id];
-  return <CoachTip title={copy.title} body={copy.body} onDismiss={dismiss} style={style} compact={compact} />;
+  return <CoachTip title={copy.title} body={copy.body} onDismiss={dismiss} style={style} compact={compact} instantExit={instantExit} />;
 }

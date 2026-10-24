@@ -965,7 +965,7 @@ export default function CoinLevelingModal({
                       </Text>
                     </View>}
                     {/* First look at a coin card: what leveling costs and does, once. */}
-                    <OneTimeTip id="coin_card" ready={visible && state === 'preview'} compact
+                    <OneTimeTip id="coin_card" ready={visible && state === 'preview'} compact instantExit
                       style={{ alignSelf: 'stretch', marginBottom: 8 }} />
                     {/* ── Level Up Button ── it turns into the charge bar in its own spot (same height), so nothing moves. */}
                     {state === 'leveling' ? (

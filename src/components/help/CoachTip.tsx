@@ -11,7 +11,7 @@ const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
  * A one-time Finn tip. Never a modal: it floats where the caller puts it, the
  * rest of the screen keeps working, a tap closes it, and it leaves on its own.
  */
-export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9000, compact = false }: {
+export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9000, compact = false, instantExit = false }: {
   readonly title: string;
   readonly body: string;
   readonly onDismiss: () => void;
@@ -19,6 +19,11 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
   readonly autoHideMs?: number;
   /** No Finn art, for tips inside cards and sheets. */
   readonly compact?: boolean;
+  /**
+   * Leave at once instead of fading: for a tip inside a card whose layout changes as it leaves (an iOS fade-out
+   * of a view whose siblings reflow is drawn at a stale spot, a white pill shrinking over the coin).
+   */
+  readonly instantExit?: boolean;
 }) {
   const reduced = useReducedGameMotion();
   useEffect(() => {
@@ -31,7 +36,7 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
   }, []);
   return (
     <Animated.View pointerEvents="box-none" entering={reduced ? undefined : FadeIn.duration(220)}
-      exiting={reduced ? undefined : FadeOut.duration(150)} style={style}>
+      exiting={reduced || instantExit ? undefined : FadeOut.duration(150)} style={style}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${body}`} accessibilityHint="Closes the tip"
         onPress={onDismiss} style={[styles.card, compact && styles.compactCard]}>
         {!compact && <Image source={FINN} style={styles.finn} contentFit="contain" />}
