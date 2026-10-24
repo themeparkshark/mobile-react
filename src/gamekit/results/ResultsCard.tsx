@@ -255,7 +255,7 @@ export function ResultsCard({
       {goal ? <NextStarBar goal={goal} delayMs={countDelay + 300} reducedMotion={reducedMotion}
         a11yLabel={starGoal ? starGoal.a11y ?? (goal.nextStar ? `Star ${goal.nextStar} is next` : 'All three stars') : undefined} /> : null}
 
-      {chips.length ? (
+      {chips.length && !sendOff ? (
         <View style={styles.stats}>
           {chips.map((s) => <ResultChip key={s.label} label={s.label} value={s.value} pips={s.pips} />)}
         </View>

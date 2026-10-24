@@ -448,6 +448,7 @@ test('a ride-up or left-line end is never a loss, even at 0 points', () => {
   assert.match(card, /const sendOff = wrapUp && stars === 0 && !saved && !\(score > 0\);/);
   assert.match(card, /\{sendOff \? null : <>\n\s+<Text style=\{styles\.label\}>SCORE<\/Text>/, 'no SCORE 0 on a send-off');
   assert.match(card, /wrapReason === 'boarding' \? 'HAVE FUN!' : 'SEE YOU SOON!'/);
+  assert.match(card, /\{chips\.length && !sendOff \? \(/, 'no brag chip (a lone burst dot) on a 0-point send-off');
 });
 
 test('one finish cue: Rhythm keeps its drum roll and the card owns the NEW BEST ding; the Drum-Off chip is only a win', () => {
@@ -545,4 +546,12 @@ test('Boss results share the ribbon and read the raid in pictures, not a data li
   assert.match(bash, /<GameIcon name="swords" size=\{20\} \/>/);
   assert.match(bash, />ENERGY KEPT</);
   assert.doesNotMatch(bash, />No Energy was spent\.</);
+});
+
+test('Whack plays no lose sting after the line ends the run, and its own sting replaces the shell sound', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /const onWrapUp = useCallback\(\(reason: string\): GameResult \| null => \{\n\s+wrappedRef\.current = true;/);
+  assert.match(whack, /const sting = !wrappedRef\.current && !\(ride && last\?\.result\.win\);/);
+  assert.match(whack, /meta\.ownFinishSfx = sting;/);
+  assert.equal((whack.match(/wrappedRef\.current = false;/g) ?? []).length, 2, 'reset at every new run');
 });

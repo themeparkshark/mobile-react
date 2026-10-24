@@ -252,6 +252,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const startWall = useRef(Date.now());
   const ghostRef = useRef<WhackGhost | null>(ghostProp ?? null);
   const finishing = useRef(false);
+  /** The line ended this run (ride's up, left the line): the shell's calm send-off is the only finish sound. */
+  const wrappedRef = useRef(false);
   // Each run gets a token; a finish timer from an earlier run (or after unmount) is ignored.
   const runToken = useRef(0);
   useEffect(() => () => { runToken.current += 1; }, []);
@@ -656,7 +658,12 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     })();
     void collect.catch(() => undefined).finally(() => {
       meta.cardsUnlocked = unlocked ? [unlocked] : [];
-      if (!(ride && last?.result.win)) GameAudio.play(stars > 0 ? cues.stingWin : cues.stingLose);
+      // One finish sound: Whack's own sting (the shell then adds only the
+      // haptic), and none at all when the line ended the run (no lose sting
+      // under a YOUR RIDE'S UP! card).
+      const sting = !wrappedRef.current && !(ride && last?.result.win);
+      if (sting) GameAudio.play(stars > 0 ? cues.stingWin : cues.stingLose);
+      meta.ownFinishSfx = sting;
       setResult({
         score: total,
         stars,
@@ -835,6 +842,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   // Shell lifecycle.
   const handleStart = useCallback(() => {
     finishing.current = false;
+    wrappedRef.current = false;
     runToken.current += 1;
     bankedRef.current = [];
     carryRef.current = NO_CARRY;
@@ -870,6 +878,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
 
   const handleRematch = useCallback(() => {
     finishing.current = false;
+    wrappedRef.current = false;
     runToken.current += 1;
     const nextRun = runIndex + 1;
     setRunIndex(nextRun);
@@ -891,6 +900,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     return () => clearInterval(iv);
   }, [visible, phase]);
   const onWrapUp = useCallback((reason: string): GameResult | null => {
+    wrappedRef.current = true;
     runtime.bank();
     finisher.cancel();
     const live = phase === 'play' ? wrapMirror.current?.score ?? Math.max(0, liveScoreRef.current) : 0;
