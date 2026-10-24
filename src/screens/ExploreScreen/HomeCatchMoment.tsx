@@ -1108,7 +1108,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // Round 4: this catch's burst (milestones only, never chance: every 5th stars, every 10th the beam, the 25th grand).
     const variant = burstVariant(sessionCatches + 1);
     const calmPower = power.level === 'calm';
-    const plan = catchPlan({ reduced: !motion, repeat: sessionCatches > 0, milestone: variant.milestone && motion, calm: calmPower });
+    // Round 5: a milestone (the 10th and every 25th) plays the full first-catch show (the long hold, the beam), so the
+    // rare big moment is the bright one; ordinary repeats stay snappy.
+    const plan = catchPlan({ reduced: !motion, repeat: sessionCatches > 0 && !variant.milestone, milestone: variant.milestone && motion, calm: calmPower });
     const off = offsetRef.current;
     // The stage keeps the whole inked burst on screen: below the header, above the tab bar, 12 pt from the
     // edges. A find already well placed just rises (the badge rises later, after the ink has faded).

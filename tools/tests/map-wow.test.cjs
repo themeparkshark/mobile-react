@@ -520,4 +520,5 @@ test('round 5: the gold is a hand-inked fan on a soft bloom, varied, and breathi
   assert.doesNotMatch(src, /<GoldBurst /, 'no image fan on the map catch');
   assert.match(src, /const breathe = 1 \+ 0\.03 \* Math\.sin/, 'a living hold');
   assert.match(src, /itemRim/, 'the find keeps a white sticker rim on the gold');
+  assert.match(src, /repeat: sessionCatches > 0 && !variant\.milestone/, 'a milestone plays the full show, never the snappy repeat');
 });
