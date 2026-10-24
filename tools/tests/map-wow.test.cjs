@@ -444,3 +444,11 @@ test('round 4: an honest badge and a goal after every catch; +N on the header bl
   const find = read('src/screens/ExploreScreen/PrepItem.tsx');
   assert.match(find, /const tick = live \? clock : still/, 'a far find stops reading the map clock');
 });
+
+test('round 4: nothing on the catch path re-renders mid-catch (the caught pin, the coins)', () => {
+  assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /cascadeOn && prepItem\.pivot_id !== catchingPivot/);
+  assert.match(read('src/screens/ExploreScreen/HomeCatchPreviewScreen.tsx'), /cascadeOn && item\.pivot_id !== request\?\.pivotId/);
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /const StreamCoin = memo\(/);
+  assert.match(src, /!badgeOn && styles\.gateOff/, 'a finished badge is gated off in the done commit');
+});

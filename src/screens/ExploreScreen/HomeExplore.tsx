@@ -707,7 +707,9 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
             animated={animatedPivots.has(prepItem.pivot_id)}
             hidden={caughtPivots.has(prepItem.pivot_id ?? -1) || findGroups.hidden.includes(prepItem.pivot_id ?? -1) || isRodeOff(prepItem)}
             count={findGroups.counts[prepItem.pivot_id ?? -1] ?? 1}
-            chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && underBanner(prepItem.pivot_id))}
+            // The find being caught never re-renders mid-catch (a re-render would push its pin's first-render
+            // style again for a frame on Fabric: the caught pin flashing back at its spot, wow-map r4).
+            chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && prepItem.pivot_id !== catchingPivot && underBanner(prepItem.pivot_id))}
             onTap={tapFind} onExpire={handlePrepItemExpire}
             fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} showFinger={prepItem.pivot_id === fingerPivot}
             pulseKey={pulse && pulse.pivot === prepItem.pivot_id ? pulse.key : null} />

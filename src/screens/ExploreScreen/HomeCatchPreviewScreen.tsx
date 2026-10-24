@@ -406,7 +406,7 @@ function HomeCatchPreview() {
           <HomeFindMarker key={item.pivot_id} item={item} distance={Math.round(Math.hypot(FIXTURES[index].north, FIXTURES[index].east) / 5) * 5} inRange={FIXTURES[index].inRange}
             animated={!STILL && index < 4} hidden={false} onTap={tapFind} onExpire={noop}
             fingerSide={sides[item.pivot_id!] ?? 'right'} showFinger={index === nearestInRange}
-            chromeless={BARE || cascadeOn && !!points.current.get(item.pivot_id!) && bannerCovers(points.current.get(item.pivot_id!)!, size, BOTTOM_SLOT)} />
+            chromeless={BARE || cascadeOn && item.pivot_id !== request?.pivotId && !!points.current.get(item.pivot_id!) && bannerCovers(points.current.get(item.pivot_id!)!, size, BOTTOM_SLOT)} />
         ))}
       </Map>
       {/* Same as the app: kept mounted, hidden and inert during a catch. */}

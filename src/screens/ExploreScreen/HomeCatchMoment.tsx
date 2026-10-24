@@ -306,8 +306,9 @@ function BurstRing({ index, frame, on, count, sx, sy }: { index: number; frame: 
 /**
  * One coin of the stream (Monopoly GO): out of the find on the burst, then a throw into the counter.
  * Always mounted and still (opacity 0) until a stream runs, so no catch mounts views on its burst frame.
+ * A memo (round 4): the catch layer's own re-renders never re-push a coin's first-render style mid-flight.
  */
-function StreamCoin({ index, t, count, geo, source }: {
+const StreamCoin = memo(function StreamCoin({ index, t, count, geo, source }: {
   index: number; t: SharedValue<number>; count: SharedValue<number>;
   geo: SharedValue<{ fx: number; fy: number; tx: number; ty: number }>; source: number;
 }) {
@@ -342,7 +343,7 @@ function StreamCoin({ index, t, count, geo, source }: {
       <RNImage source={source} style={styles.fxFill} resizeMode="contain" fadeDuration={0} />
     </Animated.View>
   </>;
-}
+});
 
 type BadgeStyles = Record<'badge' | 'kick' | 'landRing' | 'bar' | 'barGlow' | 'newPop' | 'grade' | 'ride' | 'countOld' | 'countNew' | 'coinStamp' | 'oneMore', ReturnType<typeof useAnimatedStyle<ViewStyle>>>;
 
