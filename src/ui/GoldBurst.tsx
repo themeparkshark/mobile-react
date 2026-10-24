@@ -188,6 +188,53 @@ export function ShineSweep({ progress, size }: { readonly progress: SharedValue<
   );
 }
 
+/** Where the resting twinkles sit around a gold pin: fixed, so they never wander (angle in degrees, distance as a share of `radius`, size). */
+const TWINKLE_SPOTS = [
+  { a: -50, r: 1, s: 30, d: 0 }, { a: 35, r: 0.92, s: 22, d: 0.3 }, { a: 150, r: 1.02, s: 26, d: 0.55 }, { a: 235, r: 0.9, s: 20, d: 0.8 },
+] as const;
+
+/**
+ * A few gold twinkles that keep winking around a gold pin while it is on screen (at most 4). One shared
+ * clock on the UI thread drives all of them; it runs only while `on` (the caller passes the power budget's
+ * ambient flag and Reduce Motion), and stops the moment the pin leaves.
+ */
+export function Twinkles({ radius, on, count = TWINKLE_SPOTS.length }: {
+  readonly radius: number;
+  readonly on: boolean;
+  readonly count?: number;
+}) {
+  const clock = useSharedValue(0);
+  useEffect(() => {
+    if (!on) { cancelAnimation(clock); clock.value = 0; return undefined; }
+    clock.value = 0;
+    clock.value = withRepeat(withTiming(1, { duration: DURATION.twinkle, easing: Easing.linear }), -1, false);
+    return () => cancelAnimation(clock);
+  }, [on, clock]);
+  const n = Math.max(0, Math.min(TWINKLE_SPOTS.length, count));
+  if (!on || n === 0) return null;
+  return (
+    <View pointerEvents="none" style={styles.origin}>
+      {TWINKLE_SPOTS.slice(0, n).map((spot, i) => <Twinkle key={i} spot={spot} radius={radius} clock={clock} />)}
+    </View>
+  );
+}
+
+function Twinkle({ spot, radius, clock }: { readonly spot: typeof TWINKLE_SPOTS[number]; readonly radius: number; readonly clock: SharedValue<number> }) {
+  const x = Math.cos((spot.a * Math.PI) / 180) * radius * spot.r;
+  const y = Math.sin((spot.a * Math.PI) / 180) * radius * spot.r;
+  const style = useAnimatedStyle(() => {
+    // Each star winks once per loop, in its own slot: a quick grow and turn, then it rests unseen.
+    const t = (clock.value + 1 - spot.d) % 1;
+    const w = t < 0.22 ? Math.sin((t / 0.22) * Math.PI) : 0;
+    return { opacity: w, transform: [{ scale: 0.3 + w * 0.8 }, { rotate: `${t * 90}deg` }] };
+  });
+  return (
+    <Animated.View style={[{ position: 'absolute', left: x - spot.s / 2, top: y - spot.s / 2, width: spot.s, height: spot.s }, style]}>
+      <Image source={TWINKLE} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
   origin: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },

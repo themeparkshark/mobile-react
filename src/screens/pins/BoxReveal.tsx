@@ -47,7 +47,7 @@ import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
 import EnamelPin from '../pinTrading/EnamelPin';
-import { GoldBurst, RadialFlash, SparkleBurst } from '../../ui/GoldBurst';
+import { GoldBurst, RadialFlash, SparkleBurst, Twinkles } from '../../ui/GoldBurst';
 import { DURATION, PARTICLES, SLAM_SQUASH, SPRING, chaserRattles, flashPeak, momentBeats, momentParticles } from '../../ui/motion';
 import { usePowerBudget } from '../../power';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
@@ -152,7 +152,7 @@ const GOLD_COLORS = ['#ffcf3b', '#ffe07a', '#ffffff', '#f2a900'];
 /** When the serial stamp (or the catch seal) hits the card: its delay plus the slam. */
 const STAMP_HIT = 250 + DURATION.slam;
 
-/** The chaser's enamel colour (EnamelPin tint): a warm coin gold. */
+/** The chaser's gold foil (EnamelPin tint): a polished rim and a warm glint around its own light-blue art. */
 const CHASER_GOLD = '#f2b72c';
 
 /** Seeded so a reveal looks the same frame to frame (no Math.random in worklets). */
@@ -317,7 +317,12 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     const p = pulls[index];
     if (!still) {
       shine.value = 0;
-      shine.value = withDelay(450, withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }));
+      // The gold chaser keeps catching the light while it rests (a glint every couple of seconds, only while
+      // the power budget allows ambient motion); every other pin gets one sweep.
+      shine.value = p?.is_chaser && ambient
+        ? withDelay(450, withRepeat(withSequence(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0, { duration: 0 }), withDelay(DURATION.glintGap, withTiming(0, { duration: 0 }))), -1, false))
+        : withDelay(450, withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }));
       // The gold-foil card catches the light once, just after the pin lands on it.
       foil.value = 0;
       if (p?.is_chaser) foil.value = withDelay(650, withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }));
@@ -353,7 +358,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (p) {
       AccessibilityInfo.announceForAccessibility(`You got ${p.name}. ${p.is_chaser ? 'The gold chaser! ' : ''}${p.duplicate ? 'An extra to trade.' : 'New!'}`);
     }
-  }, [index, pulls, still, isCatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [index, pulls, still, isCatch, ambient]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** The payoff: plays exactly once per pin, whether you waited or tapped through. */
   const pop = useCallback(() => {
@@ -685,14 +690,16 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               <Image source={PIN_ART.seal} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
             </Animated.View>
           )}
-          {/* A Disney-style pin card behind a regular pin once it lands (gold moments keep their rays). */}
-          {(!gold || pull.is_chaser) && (phase === 'show' || phase === 'pop') && (
-            <Animated.View style={[styles.backer, golden && !pull.is_chaser && styles.backerGolden, pull.is_chaser && styles.backerGold, { width: pinSize * 1.25, height: pinSize * 1.3, top: (boxSize - pinSize) / 2 - boxSize * 0.5 - pinSize * 0.14 }, backerStyle]}>
+          {/* Every pin lands on the same pin card, coloured by how special it is: cream for a box pin, a gold
+              frame for a Golden Box pin, a series Completer or a catch, blue in thick gold for the chaser. */}
+          {(phase === 'show' || phase === 'pop') && (
+            <Animated.View style={[styles.backer, !pull.is_chaser && (golden || gold) && styles.backerGolden, pull.is_chaser && styles.backerGold, { width: pinSize * 1.25, height: pinSize * 1.3, top: (boxSize - pinSize) / 2 - boxSize * 0.5 - pinSize * 0.14 }, backerStyle]}>
               <View style={styles.backerHole} />
               {/* The best pin gets the best card: gold foil, limited edition, its number. */}
               {pull.is_chaser && <Animated.View pointerEvents="none" style={[styles.foilSheen, { height: pinSize * 1.8, top: -pinSize * 0.25 }, foilStyle]} />}
               {/* The number already shows on the stamp and the GOLD CHASER badge: the card just says what it is. */}
-              {pull.is_chaser && <Text maxFontSizeMultiplier={1} style={styles.backerFoilText}>GOLD PIN</Text>}
+              {/* Every card says what it holds, so a kid sees "pin", never "coin". */}
+              <Text maxFontSizeMultiplier={1} style={pull.is_chaser ? styles.backerFoilText : styles.backerPinText}>{pull.is_chaser ? 'GOLD PIN' : 'PIN'}</Text>
             </Animated.View>
           )}
           {/* The pin is mounted (and its art decoding) from the start, hidden until it rises. */}
@@ -701,6 +708,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               {/* The chaser is the gold edition: the same art re-coloured gold, so "Gold" is what a kid sees. */}
               {pull.icon_url && <EnamelPin uri={pull.icon_url} size={pinSize} shine={still ? undefined : shine} lag={0} lagSpan={0} surface="panel"
                 tint={pull.is_chaser ? CHASER_GOLD : undefined} />}
+              {/* A few gold twinkles keep winking around the chaser while it rests (ambient only, never with Reduce Motion). */}
+              {pull.is_chaser && <Twinkles radius={pinSize * 0.58} on={phase === 'show' && !still && ambient} />}
             </Animated.View>
             {/* The back of the pin shows while it turns, never a mirrored front: a metal back (gold for the
                 chaser, silver for the rest) with a navy outline, a pressed ring and the pin post. */}
@@ -887,19 +896,20 @@ const styles = StyleSheet.create({
   guaranteedPill: { backgroundColor: BRAND.navy, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.gold, marginTop: 4 },
   guaranteed: { fontFamily: FONT.display, fontSize: 20, color: BRAND.gold, paddingTop: 2 },
   name: { fontFamily: FONT.display, fontSize: 32, color: BRAND.white, textAlign: 'center', textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
-  subtitle: { fontFamily: FONT.body, fontSize: 18, color: '#cfeaff' },
+  subtitle: { fontFamily: FONT.display, fontSize: 19, color: BRAND.white, paddingTop: 2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   ticket: {
     flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.cream, borderColor: BRAND.goldLip, borderWidth: 3, borderStyle: 'dashed',
     borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, maxWidth: '96%',
   },
-  ticketText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 3, flexShrink: 1 },
-  backer: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center' },
+  ticketText: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy, paddingTop: 3, flexShrink: 1 },
+  backer: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'space-between', paddingBottom: 8 },
   // The chaser card is blue with a thick gold frame, so the gold pin stands out on it (gold on gold blended).
   backerGold: { backgroundColor: BRAND.blue, borderColor: BRAND.gold, borderWidth: 6, justifyContent: 'space-between', paddingBottom: 8, overflow: 'hidden' },
   // A Golden Box pin sits on a cream card with a gold edge (the chaser's card is all gold).
   backerGolden: { borderColor: BRAND.gold, borderWidth: 5 },
   foilSheen: { position: 'absolute', left: 0, width: 26, backgroundColor: 'rgba(255,255,255,0.75)' },
   backerFoilText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.gold, letterSpacing: 1 },
+  backerPinText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy, letterSpacing: 2 },
   backerHole: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#021a45', marginTop: 10 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 3, paddingHorizontal: 14, paddingVertical: 4 },
   tagNew: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },

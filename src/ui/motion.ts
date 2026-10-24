@@ -41,6 +41,10 @@ export const DURATION = {
   count: 650,
   /** One full turn of the slow gold rays. */
   raySpin: 16000,
+  /** One loop of the resting twinkles around a gold pin (each star winks once per loop). */
+  twinkle: 2400,
+  /** The gap between glints sweeping a gold pin while it rests on screen. */
+  glintGap: 1600,
 } as const;
 
 /** Cubic bezier control points (x1, y1, x2, y2). */
