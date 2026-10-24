@@ -165,6 +165,8 @@ let session: {
   wobbleVoices: { id: number; at: number; step: number }[];
   /** Counter ticks laid on the audio clock (bunched coins wait COIN_TICK_GAP_MS): merged at 'done'. */
   counterVoices: { id: number; at: number; step: number }[];
+  /** The coin ticks' own volume (wow-map plays them at 0.45), so the merged final tick matches them. */
+  tickVolume?: number;
   /** Highest counter rung played so far (-1 before the first): the counter only ever climbs. */
   rung: number;
   /** When the last coin tick into the counter starts (audio clock, ms): the next one waits COIN_TICK_GAP_MS. */
@@ -304,20 +306,25 @@ function pullWobbles(): void {
 function mergeCounterAtDone(s: NonNullable<typeof session>): void {
   const now = Date.now();
   let top = -1;
+  let started = -Infinity;
   for (const v of s.counterVoices) {
     if (v.at > now) {
       try { GameAudio.stop(v.id); } catch { /* optional */ }
       top = Math.max(top, v.step);
-    }
+    } else started = Math.max(started, v.at);
   }
   s.counterVoices = [];
-  // The stream was still landing when the badge left (a tick just before 'done', or one still waiting).
-  const streaming = top >= 0 || (s.rung >= 0 && now - s.lastTickAt < 2 * COIN_TICK_GAP_MS);
-  if (!streaming || s.rung >= COUNTER_TOP) return;
+  if (s.rung < 0 || s.rung >= COUNTER_TOP && top < 0) return;
+  // The stream was still landing when the badge left: a tick still waiting (cut above), or the last one
+  // just before 'done'. Otherwise the counter already finished: nothing to add.
+  const sinceLast = now - started;
+  if (top < 0 && sinceLast >= 2 * COIN_TICK_GAP_MS) return;
   const step = Math.min(COUNTER_TOP, Math.max(top, s.rung + 1));
+  // Never under COIN_TICK_GAP_MS after the tick before it (at most one gap past the done frame).
+  const at = Math.max(now, started + COIN_TICK_GAP_MS);
   s.rung = COUNTER_TOP;
-  traceEvent('mark', 'catch-counter-merged', `l${step}`);
-  studioMoment('ui.counterTick', { step });
+  traceEvent('mark', 'catch-counter-merged', `l${step}${at > now ? ` +${at - now} ms` : ''}`);
+  studioMoment('ui.counterTick', { step, volume: s.tickVolume, delayMs: at - now });
 }
 
 /** When the last catch settled ('done'), every player: coin buzzes after it are covered by the settle. */
@@ -484,8 +491,9 @@ function sessionSound(name: CatchSound, opts: { volume?: number; pitch?: number 
     const step = Math.min(COUNTER_TOP, Math.max(opts.pitch + lift, s.rung + 1));
     s.rung = step;
     s.lastTickAt = at;
+    s.tickVolume = opts.volume;
     const id = playMoment('ui.counterTick', { volume: opts.volume, step, delayMs: at - now });
-    if (id > 0 && at > now) s.counterVoices.push({ id, at, step });
+    if (id > 0) s.counterVoices.push({ id, at, step });
     return true;
   }
   return false;

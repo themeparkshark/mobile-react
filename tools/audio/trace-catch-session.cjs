@@ -102,7 +102,9 @@ function analyse(e, catchesAt) {
       afterDone: (() => {
         const done = marks.find((m) => inside(m) && m.name === 'catch done');
         if (!done) return [];
-        return [...sounds.filter((s) => inside(s) && s.t > done.t + 25 && s.t < done.t + 1500 && s.name.startsWith('moment:') && !s.name.startsWith('moment:catch.count:')).map((s) => `${s.name}@${rel(s)}`),
+        return [...sounds.filter((s) => inside(s) && s.t > done.t + 25 && s.t < done.t + 1500 && s.name.startsWith('moment:') && !s.name.startsWith('moment:catch.count:')
+          // The merged final counter tick may trail done by one coin gap (70 ms) plus the output (20 ms).
+          && !(s.name.startsWith('moment:ui.counterTick:') && s.t <= done.t + 90)).map((s) => `${s.name}@${rel(s)}`),
           ...haptics.filter((h) => inside(h) && h.t > done.t + 5 && h.t < done.t + 1500).map((h) => `${h.intent}@${rel(h)}`)];
       })(),
       doneMs: (() => { const d = marks.find((m) => inside(m) && m.name === 'catch done'); return d ? rel(d) : null; })(),

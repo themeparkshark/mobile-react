@@ -56,6 +56,9 @@ export type BackendChoice = 'auto' | 'audio-api' | 'expo-av';
 
 interface ActiveVoice extends VoiceInfo {
   token: number;
+  /** When it starts (ms, delay included) and the cue's previous scheduled start, so stopping it before it plays undoes its cooldown. */
+  startsAt?: number;
+  prevLastPlayed?: number;
 }
 
 interface Duck {
@@ -354,8 +357,9 @@ class GameAudioEngine {
     if (!token) return 0;
     const id = this.nextId++;
     const len = def.durationMs ?? (durationMs || 1200);
-    this.active.push({ id, token, cue: name, group: def.group, priority: def.priority ?? 1, startedAt: now, endsAt: now + (opts.delayMs ?? 0) + len });
-    this.lastPlayed.set(name, now + (opts.delayMs ?? 0));
+    const startsAt = now + (opts.delayMs ?? 0);
+    this.active.push({ id, token, cue: name, group: def.group, priority: def.priority ?? 1, startedAt: now, endsAt: startsAt + len, startsAt, prevLastPlayed: this.lastPlayed.get(name) });
+    this.lastPlayed.set(name, startsAt);
     this.prune(now);
     if (def.duck) this.duck(def.duck.db, def.duck.attackMs ?? 60, def.duck.holdMs ?? len, def.duck.releaseMs ?? 300);
     this.onPlay?.(name, { voices: this.active.length, backend: backend.name });
@@ -392,8 +396,14 @@ class GameAudioEngine {
   stop(id: number): void {
     const i = this.active.findIndex((v) => v.id === id);
     if (i < 0) return;
-    this.backend?.stop(this.active[i].token);
+    const v = this.active[i];
+    this.backend?.stop(v.token);
     this.active.splice(i, 1);
+    // A voice stopped before it was heard never played: it must not merge the next play by cooldown.
+    if (v.startsAt !== undefined && v.startsAt > Date.now() && this.lastPlayed.get(v.cue) === v.startsAt) {
+      if (v.prevLastPlayed === undefined) this.lastPlayed.delete(v.cue);
+      else this.lastPlayed.set(v.cue, v.prevLastPlayed);
+    }
   }
 
   stopAll(): void {

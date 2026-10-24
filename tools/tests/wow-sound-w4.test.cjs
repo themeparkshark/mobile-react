@@ -114,12 +114,15 @@ test('fix 5: nothing sounds or buzzes after the settle; the counter merges its l
   for (const x of a.perCatch) assert.deepEqual(plain(x.afterDone), [], `#${x.n} after done: ${x.afterDone.join(', ')}`);
   const short = a.perCatch[1];
   assert.equal(short.doneMs, 1290);
-  assert.ok(short.counterMs.every((t) => t <= short.doneMs + 20), `every counter tick by the done frame (${short.counterMs.join(', ')})`);
+  assert.ok(short.counterMs.every((t) => t <= short.doneMs + 90), `every counter tick by the done frame, the merged one at most a coin gap after (${short.counterMs.join(', ')})`);
+  assert.ok(short.counterMs.length >= 3, 'the short show ends its count with the merged tick');
   // A frozen screen: the coin beats come bunched just before done; the waiting ticks merge into one.
   const { v, r } = await hotCatch(2, { stalls: [{ at: 1140, ms: 140 }] });
   const done = r.delivered.find((d) => d.name === 'done').at;
   const late = v.sounds.filter((s) => s.t > done + 25 && s.name.startsWith('moment:'));
-  assert.deepEqual(plain(late), [], 'no sound after done');
+  // Only the merged final tick may trail the done frame, by at most one coin gap (so it never flams the tick before it).
+  assert.ok(late.length <= 1 && late.every((s) => s.name.startsWith('moment:ui.counterTick') && s.t <= done + 70 + 20),
+    `nothing after done but the merged tick (${late.map((s) => `${s.name}@${s.t}`).join(' ')})`);
   assert.ok(v.marks.some((m) => m.name === 'catch-counter-merged'), 'the bunched ticks were merged');
   assert.ok(!v.haptics.some((h) => h.t > done + 5), 'no buzz after done');
 });
@@ -158,4 +161,29 @@ test('live at load 265: wobble beats that come 1.4 s late still tick, the beam s
   assert.ok(v.haptics.some((h) => h.intent === 'comboHeavy'), 'with its heavy buzz');
   const done = got.done;
   assert.deepEqual(plain(v.haptics.filter((h) => h.t > done + 5)), [], 'nothing buzzes after done');
+});
+
+test('live heat-5 settle (perf sim, load 690): land, coins-land and done in one turn: the merged tick matches the coin ticks and never flams the one just played', async () => {
+  const e = await engine();
+  const C = e.Catch;
+  const flush = async () => { for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r)); };
+  C.catchMark('tap'); C.catchHaptic('tapLight', 3);
+  await flush();
+  e.clock.advance(700); C.catchMark('burst');
+  await flush();
+  e.clock.advance(900);
+  // One JS turn: the stamp, the first coin (tick l5) and the second (l7, which waits a gap), then done.
+  C.catchMark('land'); C.catchSound('badge'); C.catchHaptic('tapLight', 2);
+  C.catchMark('coins-land'); C.catchSound('tick', { pitch: 2, volume: 0.45 });
+  e.clock.advance(9);
+  C.catchSound('tick', { pitch: 4, volume: 0.45 });
+  C.catchMark('done');
+  await flush();
+  e.clock.advance(400);
+  await flush();
+  const ticks = e.Trace.traceEvents().filter((x) => x.kind === 'sound' && x.name.startsWith('moment:ui.counterTick')).sort((a, b) => a.t - b.t);
+  assert.equal(ticks.length, 2, ticks.map((t) => `${t.name}@${t.t}`).join(' '));
+  assert.ok(ticks[1].t - ticks[0].t >= 70, `the merged tick keeps the gap (${ticks[1].t - ticks[0].t} ms)`);
+  const gain = (t) => Number(/gain (-?[\d.]+) dB/.exec(t.detail)[1]);
+  assert.equal(gain(ticks[1]), gain(ticks[0]), 'same level as the coin ticks');
 });
