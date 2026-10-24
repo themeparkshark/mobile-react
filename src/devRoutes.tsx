@@ -61,14 +61,27 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
   // so this branch folds away like the dev list.
   : process.env.EXPO_PUBLIC_PERF_CAPTURE === '1'
     ? [{ name: 'BossMapPreview', getComponent: () => require('./screens/BossMapPreviewScreen').default }]
-    : [];
+    // Release-mode captures of the big moments (EXPO_PUBLIC_MOTION_CAPTURE=<route> with `expo start --no-dev`), so a
+    // reveal can be recorded in release-like JS when the scratch server cannot reach it for real. Store builds never
+    // set it, so this folds away like the dev list.
+    : process.env.EXPO_PUBLIC_MOTION_CAPTURE
+      ? [
+          { name: 'BoxRevealPreview', getComponent: () => require('./screens/pins/BoxRevealPreviewScreen').default },
+          { name: 'PostWinRewardsPreview', getComponent: () => require('./screens/PostWinRewardsPreviewScreen').default },
+          { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
+        ]
+      : [];
 
 /**
  * First matching EXPO_PUBLIC_*_PREVIEW flag wins; order matches the original
  * Root chain. Each flag is a literal process.env access so Expo inlines it.
  */
 export function devInitialRoute(): string | null {
-  if (!__DEV__) return process.env.EXPO_PUBLIC_PERF_CAPTURE === '1' ? 'BossMapPreview' : null;
+  if (!__DEV__) {
+    if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') return 'BossMapPreview';
+    const motion = process.env.EXPO_PUBLIC_MOTION_CAPTURE;
+    return motion === 'BoxRevealPreview' || motion === 'PostWinRewardsPreview' || motion === 'SetRevealPreview' ? motion : null;
+  }
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
     [!!process.env.EXPO_PUBLIC_SHOP_TABS_PREVIEW, 'ShopTabsPreview'],

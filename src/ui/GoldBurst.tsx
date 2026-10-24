@@ -1,28 +1,31 @@
 /**
  * The gold of every big moment, drawn from the house reveal art (no new art):
- * a warm glow, two tinted ray fans turning against each other, a white-hot core,
- * a sparkle burst and a shine sweep. Used by the ride-coin reveal, the coin
+ * a warm glow, one bold ray fan that fades out softly (rays-gold-fade, the
+ * 18-ray reveal fan with a radial falloff baked in, so it never tiles the
+ * screen or bands against a second fan), a white-hot core, a sparkle burst and
+ * a shine sweep. Used by the ride-coin reveal, the coin
  * level-up, Set Complete and the chest and box openings, so they all glow the
  * same way.
  *
  * Cheap: images only (no SVG, no layout callbacks), every frame on the UI
  * thread from shared values the moment already owns. The slow ray turn runs
- * only while the power budget allows ambient loops (not idle, not Battery
- * Saver idle, not in the background) and never with Reduce Motion.
+ * only while the gold is actually visible (amount above RAY_TURN_FROM, watched
+ * on the UI thread) and the power budget allows ambient loops (not idle, not
+ * Battery Saver idle, not in the background), never with Reduce Motion. So a
+ * closed chest or a moment still setting up costs nothing per frame.
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
-  Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming, type SharedValue,
+  Easing, cancelAnimation, useAnimatedReaction, useAnimatedStyle, useSharedValue, withRepeat, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { usePowerBudget } from '../power';
-import { DURATION, GOLD_FX, raysMayTurn } from './motion';
+import { DURATION, FLASH_MAX_OPACITY, GOLD_FX, RAY_TURN_FROM, raysMayTurn } from './motion';
 
 const SOFT = require('../../assets/images/reveal/soft-spot.webp');
-const RAYS = require('../../assets/images/reveal/rays-tint.webp');
-const RAYS_18 = require('../../assets/images/reveal/rays-tint-18.webp');
+const RAYS = require('../../assets/images/reveal/rays-gold-fade.webp');
 const SPARK = require('../../assets/fx/spark.webp');
 const TWINKLE = require('../../assets/fx/star-twinkle.webp');
 
@@ -40,12 +43,19 @@ export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, s
 }) {
   const budget = usePowerBudget();
   const turn = useSharedValue(0);
-  const turning = spin && raysMayTurn(budget, reduced);
-  useEffect(() => {
-    if (!turning) { cancelAnimation(turn); return undefined; }
-    turn.value = withRepeat(withTiming(turn.value + 360, { duration: DURATION.raySpin, easing: Easing.linear }), -1, false);
-    return () => cancelAnimation(turn);
-  }, [turning, turn]);
+  const allowed = useSharedValue(spin && raysMayTurn(budget, reduced));
+  allowed.value = spin && raysMayTurn(budget, reduced);
+  // The turn starts only once the gold shows and stops when it fades or turning is not allowed,
+  // all on the UI thread (no JS timers, nothing spinning behind a closed chest).
+  useAnimatedReaction(
+    () => allowed.value && amount.value > RAY_TURN_FROM,
+    (on, was) => {
+      if (on === was) return;
+      if (on) turn.value = withRepeat(withTiming(turn.value + 360, { duration: DURATION.raySpin, easing: Easing.linear }), -1, false);
+      else cancelAnimation(turn);
+    },
+  );
+  useEffect(() => () => cancelAnimation(turn), [turn]);
 
   const glowStyle = useAnimatedStyle(() => {
     const a = amount.value;
@@ -55,11 +65,7 @@ export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, s
   const raysStyle = useAnimatedStyle(() => {
     const a = amount.value;
     const b = bloom ? bloom.value : 0;
-    return { opacity: 0.95 * a, transform: [{ rotate: `${turn.value}deg` }, { scale: 0.55 + 0.45 * a + 0.12 * b }] };
-  });
-  const softRaysStyle = useAnimatedStyle(() => {
-    const a = amount.value;
-    return { opacity: 0.7 * a, transform: [{ rotate: `${9 - turn.value * 0.6}deg` }, { scale: 0.45 + 0.35 * a }] };
+    return { opacity: Math.min(1, 0.95 * a + 0.1 * b), transform: [{ rotate: `${turn.value}deg` }, { scale: 0.5 + 0.5 * a + 0.14 * b }] };
   });
   const coreStyle = useAnimatedStyle(() => {
     const a = amount.value;
@@ -74,16 +80,29 @@ export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, s
       <Animated.View style={[StyleSheet.absoluteFill, glowStyle]}>
         <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor={GOLD_FX.glow} />
       </Animated.View>
-      <Animated.View style={[StyleSheet.absoluteFill, softRaysStyle]}>
-        <Image source={RAYS} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor={GOLD_FX.raysSoft} />
-      </Animated.View>
       <Animated.View style={[StyleSheet.absoluteFill, raysStyle]}>
-        <Image source={RAYS_18} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor={GOLD_FX.rays} />
+        <Image source={RAYS} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor={GOLD_FX.rays} />
       </Animated.View>
       <Animated.View style={[{ position: 'absolute', width: core, height: core }, coreStyle]}>
         <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor={GOLD_FX.core} />
       </Animated.View>
     </View>
+  );
+}
+
+/**
+ * The hit-stop flash, centred on the prize instead of washing the whole screen:
+ * a soft white disc that pops to `peak` (already capped by flashPeak) and fades.
+ */
+export function RadialFlash({ flash, size }: { readonly flash: SharedValue<number>; readonly size: number }) {
+  const style = useAnimatedStyle(() => ({
+    opacity: Math.min(FLASH_MAX_OPACITY * 2, flash.value * 2),
+    transform: [{ scale: 0.6 + 0.4 * Math.min(1, flash.value / FLASH_MAX_OPACITY) }],
+  }));
+  return (
+    <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size }, style]}>
+      <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#ffffff" />
+    </Animated.View>
   );
 }
 

@@ -17,6 +17,13 @@ test('a release-mode perf capture (EXPO_PUBLIC_PERF_CAPTURE=1, never set in stor
   assert.equal(routes.devInitialRoute(), 'BossMapPreview');
 });
 
+test('a release-mode motion capture (EXPO_PUBLIC_MOTION_CAPTURE=<route>, never set in store builds) exposes only the reveal galleries', () => {
+  const routes = load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'BoxRevealPreview' });
+  assert.equal(routes.DEV_SCREENS.map(screen => screen.name).join(','), 'BoxRevealPreview,PostWinRewardsPreview,SetRevealPreview');
+  assert.equal(routes.devInitialRoute(), 'BoxRevealPreview');
+  assert.equal(load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'MiniGameTester' }).devInitialRoute(), null, 'only the reveal galleries');
+});
+
 test('development keeps every preview route and the original flag priority', () => {
   const dev = load(true);
   const names = dev.DEV_SCREENS.map(screen => screen.name);

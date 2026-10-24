@@ -15,7 +15,8 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { playSfx } from '../gamekit/SFX';
-import { GoldBurst, ShineSweep, SparkleBurst } from '../ui/GoldBurst';
+import { LinearGradient } from 'expo-linear-gradient';
+import { GoldBurst, RadialFlash, ShineSweep, SparkleBurst } from '../ui/GoldBurst';
 import { DURATION, EASE, PARTICLES, SPRING, flashPeak, momentBeats, momentParticles } from '../ui/motionEasing';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 import StrokedText from './StrokedText';
@@ -294,7 +295,6 @@ export default function CoinCatchReveal({
   const raysStyle = useAnimatedStyle(() => ({
     opacity: 1 - Math.min(1, Math.abs(lift.value) / 140),
   }));
-  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
   // The title stamps down: big and light, then lands at full size.
   const titleStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, title.value * 2),
@@ -323,9 +323,12 @@ export default function CoinCatchReveal({
       accessibilityRole="button"
       accessibilityLabel={`${isNewCoin ? 'New ride coin' : 'Ride coin'} collected: ${rideName}. Tap to continue.`}
     >
+      {/* A clean deep-water stage (no props behind the money shot), lit softly where the coin lands. */}
       <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
-        <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <View style={[StyleSheet.absoluteFill, styles.backdrop]} />
+        <LinearGradient colors={BACKDROP} locations={[0, 0.42, 1]} style={StyleSheet.absoluteFill} />
+        <Image source={require('../../assets/images/reveal/soft-spot.webp')} tintColor="#5fb4ff" transition={0} contentFit="fill"
+          style={{ position: 'absolute', opacity: 0.45, width: width * 1.5, height: width * 1.5,
+            left: -width * 0.25, top: height * 0.42 - width * 0.75 }} />
       </Animated.View>
 
       <View style={[styles.stage, { top: height * 0.42 - coinSize / 2 }]} pointerEvents="none">
@@ -340,6 +343,8 @@ export default function CoinCatchReveal({
         </Animated.View>
         {!reducedFx && <SparkleBurst progress={sparkle} radius={coinSize * 0.95}
           count={momentParticles(PARTICLES.sparkles, budget, reducedFx)} />}
+        {/* The hit-stop flash pops on the coin, not over the whole screen. */}
+        <RadialFlash flash={flash} size={coinSize * 1.5} />
       </View>
 
       <Animated.View style={[styles.titleWrap, { top: height * 0.42 + coinSize * 0.62 }, titleStyle]} pointerEvents="none">
@@ -349,14 +354,12 @@ export default function CoinCatchReveal({
       </Animated.View>
 
       <Confetti progress={confetti} originY={height * 0.42} width={width} />
-      <Animated.View style={[StyleSheet.absoluteFill, styles.flash, flashStyle]} pointerEvents="none" />
       {burst && <Text style={styles.skip}>Tap to continue</Text>}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { backgroundColor: 'rgba(3, 38, 92, 0.66)' },
   stage: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
   rays: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   titleWrap: { position: 'absolute', left: 24, right: 24, alignItems: 'center' },
@@ -366,12 +369,13 @@ const styles = StyleSheet.create({
   ride: {
     fontFamily: 'Shark', fontSize: 26, color: '#ffffff', textAlign: 'center', marginTop: 4,
   },
-  flash: { backgroundColor: '#ffffff' },
   skip: {
     position: 'absolute', bottom: 60, alignSelf: 'center', fontFamily: 'Shark',
     fontSize: 17, color: '#ffffff', textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1,
   },
 });
+
+const BACKDROP = ['#0d5bb0', '#08408c', '#042a62'] as const;
 
 const CONFETTI_COLORS = ['#ffcf3b', '#ffffff', '#38bdf8', '#fb923c', '#ffe27a'];
 const PIECES = Array.from({ length: 28 }, (_, i) => {

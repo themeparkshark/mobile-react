@@ -32,11 +32,14 @@ interface CurrencyFlyContextType {
     targetPosition?: string;
   }) => void;
   registerTarget: (name: string, x: number, y: number) => void;
+  /** Where a counter sits on screen (window coordinates), once its chip has measured itself. */
+  getTarget: (name: string) => { x: number; y: number } | null;
 }
 
 export const CurrencyFlyContext = createContext<CurrencyFlyContextType>({
   triggerFly: () => {},
   registerTarget: () => {},
+  getTarget: () => null,
 });
 
 export function useCurrencyFly() {
@@ -69,6 +72,7 @@ export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderPro
   const registerTarget = useCallback((name: string, x: number, y: number) => {
     targets.current[name] = { x, y };
   }, []);
+  const getTarget = useCallback((name: string) => targets.current[name] ?? null, []);
 
   // Play coin landing sound
   const playCoinSound = useCallback(() => {
@@ -147,7 +151,7 @@ export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderPro
   }, [playCoinSound]);
 
   return (
-    <CurrencyFlyContext.Provider value={{ triggerFly, registerTarget }}>
+    <CurrencyFlyContext.Provider value={{ triggerFly, registerTarget, getTarget }}>
       {children}
       
       {/* Flying coins overlay */}

@@ -33,6 +33,7 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import Animated, {
   Easing, FadeIn, Keyframe, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
+import { DURATION, EASE, SPRING } from '../../ui/motionEasing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import purchase from '../../api/endpoints/me/inventory/purchase-item';
@@ -273,7 +274,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       { scale: stageScale.value * (1 + 0.04 * Math.sin(Math.PI * Math.min(1, k))) },
     ] };
   });
-  const wiggle = () => { if (!still) stageScale.value = withSequence(withTiming(1.05, { duration: 90 }), withSpring(1, { damping: 7 })); };
+  const wiggle = () => { if (!still) stageScale.value = withSequence(withTiming(1.05, { duration: DURATION.tap }), withSpring(1, SPRING.pop)); };
 
   // Every exit slides the sheet away first (close, scrim, Keep shopping, swipe), then hides the
   // modal and reports closed only once iOS has finished dismissing it (onDismiss), so the shelf
@@ -311,7 +312,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const closeAnimated = useCallback(() => {
     if (rewardPendingRef.current) dusk.value = withTiming(1, { duration: still ? 0 : 200 });
     if (still) { leave(); return; }
-    drag.value = withTiming(SHEET_H, { duration: 200, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(leave)(); });
+    drag.value = withTiming(SHEET_H, { duration: DURATION.exit, easing: EASE.in }, done => { if (done) runOnJS(leave)(); });
   }, [still, leave]);
   const closeRef = useRef(closeAnimated);
   closeRef.current = closeAnimated;
@@ -319,7 +320,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     .onUpdate(e => { drag.value = Math.max(0, e.translationY); })
     .onEnd(e => {
       if (e.translationY > 120 || e.velocityY > 900) drag.value = withTiming(SHEET_H, { duration: 180 }, () => runOnJS(leave)());
-      else drag.value = withSpring(0, { damping: 18 });
+      else drag.value = withSpring(0, SPRING.settle);
     });
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: drag.value }] }));
 
@@ -424,7 +425,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
         setCoins(c => c + 1);
         playSound(require('../../../assets/sounds/coin.mp3'));
         // The stage pops as the first coins hit and the piece lands with them: one beat inside 400 ms.
-        later(() => { stageScale.value = withSequence(withTiming(1.06, { duration: 80 }), withSpring(1, { damping: 8 })); }, 340);
+        later(() => { stageScale.value = withSequence(withTiming(1.06, { duration: 80 }), withSpring(1, SPRING.pop)); }, 340);
         later(land, 390);
       }
       void refreshPlayer();
@@ -513,7 +514,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
         <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.scrim}>
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }, duskStyle]} />
           <Pressable style={StyleSheet.absoluteFill} onPress={closeAnimated} accessibilityLabel="Close try-on" />
-          <Animated.View entering={still ? undefined : SlideInDown.springify().damping(18).stiffness(180)}
+          <Animated.View entering={still ? undefined : SlideInDown.springify().damping(SPRING.settle.damping).stiffness(SPRING.settle.stiffness)}
             style={[styles.sheet, secret && { backgroundColor: SECRET_THEME.panel, borderColor: 'rgba(255,255,255,0.35)' },
               { height: SHEET_H, paddingBottom: Math.max(16, insets.bottom + 8) }, sheetStyle]}>
             <GestureDetector gesture={pan}>

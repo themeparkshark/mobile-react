@@ -14,4 +14,5 @@ export const EASE = {
   charge: bezier(BEZIER.charge),
 } as const;
 
-export { DURATION, SPRING, PARTICLES, GOLD_FX, momentBeats, momentParticles, raysMayTurn, chargeFill, flashPeak, FLASH_MAX_OPACITY } from './motion';
+export { DURATION, SPRING, PARTICLES, GOLD_FX, momentBeats, momentParticles, raysMayTurn, chargeFill, flashPeak, FLASH_MAX_OPACITY,
+  RAY_TURN_FROM, pieceSnapTimes, chaserRattles, SLOW_SERVER_LABEL_MS } from './motion';

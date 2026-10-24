@@ -4,7 +4,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Modal from 'react-native-modal';
 import Animated, {
-  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import update from '../api/endpoints/daily-gifts/update';
@@ -24,6 +24,7 @@ import { DURATION, EASE, SPRING } from '../ui/motionEasing';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
+const WALLET_GLOW = require('../../assets/images/reveal/soft-spot.webp');
 
 type PrizeKind = 'coins' | 'energy' | 'tickets';
 const PRIZE: Record<PrizeKind, { icon: 'coins' | 'energy' | 'ticket'; one: string; many: string; fly: string }> = {
@@ -87,7 +88,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const closed = useRef(onClosed); closed.current = onClosed;
   useEffect(() => () => { occlusion.current?.(false); }, []);
   const { player, refreshPlayer } = useContext(AuthContext);
-  const { triggerFly } = useCurrencyFly();
+  const currencyFly = useCurrencyFly();
+  const { triggerFly } = currencyFly;
+  const getTarget = currencyFly.getTarget ?? (() => null);
   const dims = useWindowDimensions();
   const width = dims.width;
   const height = dims.height ?? 800;
@@ -131,7 +134,6 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
   const pop = useSharedValue(1);
-  const glow = useSharedValue(0);
   const prize = useSharedValue(0);
   const stamp = useSharedValue(0);
   const burst = useSharedValue(0);
@@ -148,16 +150,14 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
 
   useEffect(() => {
     bob.value = 0;
-    glow.value = 0;
     if (visible && phase === 'closed' && !reducedMotion) {
       bob.value = withRepeat(withSequence(
         withTiming(-8, { duration: 900, easing: Easing.inOut(Easing.sin) }),
         withTiming(0, { duration: 900, easing: Easing.inOut(Easing.sin) }),
       ), -1);
-      glow.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true);
     }
-    return () => { cancelAnimation(bob); cancelAnimation(glow); };
-  }, [visible, phase, reducedMotion, bob, glow]);
+    return () => { cancelAnimation(bob); };
+  }, [visible, phase, reducedMotion, bob]);
   useEffect(() => () => {
     [shake, pop, prize, stamp, burst, punch, cardShake, spark, gold, goldBloom].forEach(cancelAnimation);
   }, [shake, pop, prize, stamp, burst, punch, cardShake, spark, gold, goldBloom]);
@@ -176,7 +176,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   useEffect(() => {
     if (phase !== 'open') { setShown(0); return; }
     setShown(countStart(amount));
-    if (reducedMotion || amount <= 1) { setShown(amount); return; }
+    if (reducedMotion || amount <= 1) { setShown(amount); flyToWallet(); return; }
     // ~650 ms in 20 frames; frame-counted so a stalled JS thread never skips the end.
     const frames = 20;
     let frame = 0;
@@ -187,19 +187,51 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       const eased = 1 - Math.pow(1 - t, 3);
       setShown(t >= 1 ? amount : Math.max(1, Math.round(amount * eased)));
       if (t < 1) countTimer.current = setTimeout(step, 32);
-      else void Haptics.selectionAsync?.().catch(() => undefined);
+      else { void Haptics.selectionAsync?.().catch(() => undefined); flyToWallet(); }
     };
     countTimer.current = setTimeout(step, 260);
     return () => { if (countTimer.current) clearTimeout(countTimer.current); };
   }, [phase, amount, reducedMotion]);
 
+  // The wallet only changes when the coins land in it: the player refresh waits for the
+  // count-up, then 3 to 5 coins fly from the pile to the coin chip, a tick each, and the chip bumps.
+  const refreshed = useRef(false);
+  const settleWallet = () => {
+    if (refreshed.current || !acknowledgedGift.current) return;
+    refreshed.current = true;
+    void refreshPlayer?.();
+  };
+  const [walletFly, setWalletFly] = useState<{ from: { x: number; y: number }; to: { x: number; y: number }; count: number } | null>(null);
+  const wrapRef = useRef<View>(null);
+  const stageRef = useRef<View>(null);
+  const flown = useRef(false);
+  const flyToWallet = () => {
+    if (flown.current || !mounted.current) return;
+    flown.current = true;
+    const target = kind === 'coins' ? getTarget('coins') : null;
+    const wrap = wrapRef.current; const stageView = stageRef.current;
+    if (!target || !wrap || !stageView || reducedMotionRef.current) { settleWallet(); return; }
+    wrap.measureInWindow((wx, wy) => stageView.measureInWindow((sx, sy, sw, sh) => {
+      if (![wx, wy, sx, sy, sw, sh].every(Number.isFinite) || !mounted.current) { settleWallet(); return; }
+      setWalletFly({ from: { x: sx - wx + sw / 2, y: sy - wy + sh * 0.45 }, to: { x: target.x - wx, y: target.y - wy },
+        count: walletCoins(amount) });
+    }));
+  };
+  const onCoinLand = (i: number, count: number) => {
+    playSfx('tick', 0.7 + i * 0.05);
+    void Haptics.selectionAsync?.().catch(() => undefined);
+    if (i === count - 1) settleWallet();
+  };
+
   const dismiss = () => {
     setVisible(false);
+    settleWallet();
     if (acknowledgedGift.current) {
-      // The reward lands in its counter, drawn with the same art as the prize.
+      // The reward lands in its counter, drawn with the same art as the prize
+      // (coins that already flew from the pile are not sent twice).
       const paid = chestAmounts(acknowledgedGift.current, today);
       (['coins', 'tickets', 'energy'] as PrizeKind[]).forEach(k => {
-        if (paid[k] > 0) {
+        if (paid[k] > 0 && !(k === 'coins' && walletFly)) {
           triggerFly({ imageSource: ICON_SOURCES[PRIZE[k].icon],
             amount: Math.min(8, paid[k]), startX: width / 2, startY: height * 0.55, targetPosition: PRIZE[k].fly });
         }
@@ -261,8 +293,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       shake.value = withSequence(
         ...[10, -12, 14, -16, 18, -18, 0].map(v => withTiming(v, { duration: 60 })),
       );
-      // Anticipation: the chest squashes down a little while the gold gathers behind it.
-      pop.value = withTiming(0.9, { duration: 400, easing: EASE.in });
+      // Anticipation: the chest squashes down (and holds two frames) while the gold gathers behind it.
+      pop.value = withSequence(withTiming(0.85, { duration: 340, easing: EASE.in }), withTiming(0.85, { duration: 40 }));
       gold.value = withTiming(0.45, { duration: 420, easing: EASE.charge });
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     }
@@ -271,8 +303,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       const confirmed = await update(dailyGift.id);
       if (!confirmed.redeemed_at) throw new Error('Chest was not confirmed');
       acknowledgedGift.current = confirmed;
-      void refreshPlayer?.();
-      if (!mounted.current) { setDailyGift(confirmed); return; }
+      // The wallet refresh waits for the coins to land (flyToWallet); a closed screen refreshes now.
+      if (!mounted.current) { void refreshPlayer?.(); setDailyGift(confirmed); return; }
       setConfirmedGift(confirmed);
       const confirmedLadder = confirmed.ladder?.length ? confirmed.ladder : fallbackLadder(confirmed);
       const confirmedToday = confirmedLadder[Math.min(confirmedLadder.length, Math.max(1, confirmed.day ?? 1)) - 1];
@@ -313,7 +345,6 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const chestStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: phase === 'closed' ? bob.value : 0 }, { rotate: `${shake.value}deg` }, { scale: pop.value }],
   }));
-  const glowStyle = useAnimatedStyle(() => ({ opacity: 0.35 + glow.value * 0.4, transform: [{ scale: 0.9 + glow.value * 0.15 }] }));
   // The prize rises out of the chest (from above), so it never slides into the lines below it.
   const prizeStyle = useAnimatedStyle(() => ({
     opacity: prize.value, transform: [{ translateY: (1 - prize.value) * -36 }, { scale: 0.5 + prize.value * 0.5 }],
@@ -351,7 +382,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       backdropColor={BRAND.navy}
       backdropOpacity={0.55} onBackdropPress={phase !== 'opening' ? dismiss : undefined}
       onBackButtonPress={phase !== 'opening' ? dismiss : undefined}>
-      <Animated.View style={[styles.wrap, cardStyle]}>
+      <Animated.View ref={wrapRef} collapsable={false} style={[styles.wrap, cardStyle]}>
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
           <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Today’s chest: day ${day} of ${ladder.length}`}</Text>
@@ -369,11 +400,10 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
             </View>
           )}
 
-          <Pressable onPress={onChestPress} disabled={phase !== 'closed'} accessibilityRole="button"
+          <Pressable ref={stageRef} collapsable={false} onPress={onChestPress} disabled={phase !== 'closed'} accessibilityRole="button"
             accessibilityState={{ disabled: phase !== 'closed', busy: phase === 'opening' }}
             accessibilityLabel={phase === 'open' ? `Opened: ${amount} ${prizeLabel(kind, amount)}` : 'Open today’s chest'}
             style={[styles.stage, { height: chestSize + 12 }]}>
-            <Animated.View style={[styles.glow, { width: chestSize * 1.3, height: chestSize * 1.3, borderRadius: chestSize }, glowStyle]} />
             <View pointerEvents="none" style={styles.goldWrap}>
               <GoldBurst size={chestSize * 1.45} amount={gold} bloom={goldBloom} reduced={reducedMotion} />
             </View>
@@ -420,8 +450,66 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
           </Pressable>}
         </View>
         <RewardBurst progress={burst} x={width * 0.47} y={height * 0.36} />
+        {walletFly && Array.from({ length: walletFly.count }, (_, i) => (
+          <WalletCoin key={i} index={i} from={walletFly.from} to={walletFly.to} onLand={() => onCoinLand(i, walletFly.count)} />
+        ))}
+        {walletFly && <WalletBump at={walletFly.to} count={walletFly.count} />}
       </Animated.View>
     </Modal>
+  );
+}
+
+/** How many coins fly from the pile to the wallet: 3 for a small prize, up to 5. */
+export function walletCoins(amount: number): number {
+  return amount >= 50 ? 5 : amount >= 20 ? 4 : 3;
+}
+
+const WALLET_COIN = 34;
+const WALLET_STAGGER = 110;
+const WALLET_FLIGHT = 520;
+
+/** One coin hopping out of the pile and arcing into the wallet chip (UI thread). */
+function WalletCoin({ index, from, to, onLand }: {
+  readonly index: number; readonly from: { x: number; y: number }; readonly to: { x: number; y: number }; readonly onLand: () => void;
+}) {
+  const t = useSharedValue(0);
+  const land = useRef(onLand); land.current = onLand;
+  useEffect(() => {
+    t.value = withDelay(index * WALLET_STAGGER, withTiming(1, { duration: WALLET_FLIGHT, easing: Easing.in(Easing.quad) }));
+    const timer = setTimeout(() => land.current(), index * WALLET_STAGGER + WALLET_FLIGHT);
+    return () => { clearTimeout(timer); cancelAnimation(t); };
+  }, [index, t]);
+  const spread = (index - 2) * 14;
+  const style = useAnimatedStyle(() => {
+    const k = t.value;
+    const x = from.x + spread * (1 - k) + (to.x - from.x) * k;
+    // A hop up out of the pile, then a smooth arc into the chip.
+    const y = from.y + (to.y - from.y) * k - Math.sin(Math.PI * Math.min(1, k * 1.1)) * 70;
+    return {
+      opacity: k <= 0 || k >= 1 ? 0 : 1,
+      transform: [{ translateX: x - WALLET_COIN / 2 }, { translateY: y - WALLET_COIN / 2 }, { scale: interpolate(k, [0, 0.2, 1], [0.6, 1.15, 0.7]) }],
+    };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[styles.walletCoin, style]}>
+      <Image source={ICON_SOURCES.coins} style={{ width: WALLET_COIN, height: WALLET_COIN }} contentFit="contain" transition={0} />
+    </Animated.View>
+  );
+}
+
+/** A gold pop on the wallet chip, once per landing coin. */
+function WalletBump({ at, count }: { readonly at: { x: number; y: number }; readonly count: number }) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    const beats = Array.from({ length: count }, () => withSequence(withTiming(1, { duration: 70 }), withTiming(0, { duration: WALLET_STAGGER - 70 })));
+    t.value = withDelay(WALLET_FLIGHT, withSequence(...beats));
+    return () => cancelAnimation(t);
+  }, [count, t]);
+  const style = useAnimatedStyle(() => ({ opacity: t.value * 0.9, transform: [{ scale: 0.7 + t.value * 0.5 }] }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.walletBump, { left: at.x - 40, top: at.y - 40 }, style]}>
+      <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor={BRAND.gold} />
+    </Animated.View>
   );
 }
 
@@ -467,8 +555,9 @@ const styles = StyleSheet.create({
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
   streakText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
   stage: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginTop: 6 },
-  glow: { position: 'absolute', backgroundColor: 'rgba(255, 226, 92, 0.35)' },
   goldWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  walletCoin: { position: 'absolute', left: 0, top: 0 },
+  walletBump: { position: 'absolute', width: 80, height: 80 },
   ticketPunch: { position: 'absolute', alignItems: 'center', justifyContent: 'center', top: 0 },
   spark: { position: 'absolute', right: '8%', top: '10%' },
   prizeSlot: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },

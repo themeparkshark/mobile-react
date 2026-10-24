@@ -47,8 +47,9 @@ import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
 import EnamelPin from '../pinTrading/EnamelPin';
-import { GoldBurst } from '../../ui/GoldBurst';
-import { flashPeak } from '../../ui/motion';
+import { GoldBurst, RadialFlash, SparkleBurst } from '../../ui/GoldBurst';
+import { PARTICLES, chaserRattles, flashPeak, momentBeats, momentParticles } from '../../ui/motion';
+import { usePowerBudget } from '../../power';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { BOX_ART, PIN_ART, type BoxTone } from './PinArt';
 import { PINS_COPY, revealOrder, serialLabel, type Pull } from './pinsModel';
@@ -183,6 +184,7 @@ function ConfettiPiece({ p, burst }: { p: ReturnType<typeof pieces>[number]; bur
 
 /** Soft gradients are drawn at a third of their size and scaled up: same look, a ninth of the memory. */
 const LOWRES = 3;
+const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
 
 function Glow({ size: full, color, amount, id }: { size: number; color: string; amount: SharedValue<number>; id: string }) {
   const size = Math.round(full / LOWRES);
@@ -285,6 +287,12 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const plusOne = useSharedValue(0);
   const wearFly = useSharedValue(0);
   const crown = useSharedValue(0);
+  // The chaser's escalation: light leaking from the lid, a second sparkle wave, the serial's own hit-stop.
+  const leak = useSharedValue(0);
+  const sparkle = useSharedValue(0);
+  const sparkle2 = useSharedValue(0);
+  const stampFlash = useSharedValue(0);
+  const budget = usePowerBudget();
   const popped = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = (ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); };
@@ -306,7 +314,17 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       // The gold-foil card catches the light once, just after the pin lands on it.
       foil.value = 0;
       if (p?.is_chaser) foil.value = withDelay(650, withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }));
-      if (p?.is_chaser || isCatch) {
+      if (p?.is_chaser) {
+        // The serial stamps in with its own hit-stop: the stage freezes a beat bigger, a gold flash
+        // pops on the number, the heaviest buzz, then it springs home.
+        stamp.value = withDelay(250, withSpring(1, { damping: 9, stiffness: 220 }));
+        later(330, () => { play('fx.hit', { pitch: 0.7 }); queueHaptic('comboHeavy', 2); });
+        later(420, () => queueHaptic('success', 2));
+        punch.value = withDelay(330, withSequence(withTiming(1.06, { duration: 40 }), withTiming(1.06, { duration: 70 }),
+          withSpring(1, { damping: 9, stiffness: 240 })));
+        stampFlash.value = withDelay(330, withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 40 }),
+          withTiming(0, { duration: 320 })));
+      } else if (isCatch) {
         stamp.value = withDelay(250, withSpring(1, { damping: 9, stiffness: 220 }));
         // The stamp lands with a thud you feel: the number is the flex.
         later(330, () => { play('fx.hit', { pitch: 0.8 }); queueHaptic('hitMedium', 2); });
@@ -355,7 +373,13 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       settle.value = withDelay(380, withSpring(1, { damping: 14, stiffness: 180 }));
       burst.value = 0; burst.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.quad) });
       glow.value = withTiming(isGold || golden ? 1 : 0.65, { duration: 200 });
-      if (isGold || golden) rays.value = withTiming(1, { duration: 300 });
+      if (isGold || golden) {
+        rays.value = withTiming(1, { duration: 300 });
+        sparkle.value = 0; sparkle.value = withTiming(1, { duration: 900 });
+        leak.value = withTiming(0, { duration: 200 });
+      }
+      // The chaser gets a second, wider sparkle wave.
+      if (p?.is_chaser) { sparkle2.value = 0; sparkle2.value = withDelay(380, withTiming(1, { duration: 1000 })); }
       if (golden) {
         if (!isGold) punch.value = withSequence(withTiming(1.05, { duration: 70 }), withSpring(1, { damping: 8, stiffness: 240 }));
         crown.value = 0; crown.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.quad) });
@@ -414,6 +438,25 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (still) { play('fx.whooshRev', { volume: 0.6 }); pop(); return; }
     setPhase('shake');
     play('fx.whooshRev', { volume: 0.9 });
+    if (p?.is_chaser && !golden) {
+      // The rarest pull: three rattles, each stronger, a held beat between them, light leaking
+      // brighter from the lid each time. Then the held breath and the pop.
+      const rattles = chaserRattles(momentBeats('chaser', { reduced: false }));
+      const swing = (deg: number) => [withTiming(-deg, { duration: 45 }), withTiming(deg, { duration: 45 }),
+        withTiming(-deg * 0.7, { duration: 45 }), withTiming(0, { duration: 45 })];
+      const gap = rattles.length > 1 ? rattles[1].at - rattles[0].at : 380;
+      shake.value = withSequence(...rattles.flatMap((r, i) => (i === 0 ? swing(r.deg) : [withDelay(gap - 180, swing(r.deg)[0]), ...swing(r.deg).slice(1)])),
+        withDelay(160, withTiming(0, { duration: 40 }, done => { if (done) runOnJS(afterShake)(); })));
+      leak.value = withSequence(...rattles.map((_, i) => withDelay(i === 0 ? 60 : gap - 200, withTiming(0.35 + i * 0.33, { duration: 200 }))));
+      glow.value = withTiming(0.95, { duration: rattles.length * gap });
+      rays.value = withDelay(gap, withTiming(0.5, { duration: rattles.length * gap - gap }));
+      rattles.forEach((r, i) => later(r.at, () => {
+        play('fx.coinTick', { pitch: 0.8 + i * 0.2, volume: 0.9 });
+        play('fx.hit', { pitch: 0.55 + i * 0.08, volume: 0.6 + i * 0.15 });
+        queueHaptic(i === 2 ? 'comboHeavy' : 'hitMedium', 2);
+      }));
+      return;
+    }
     // Golden Box: the heaviest shake in the game, every time (the chaser still gets its held breath after).
     const beats = golden ? [8, 11, 14, 17, 21] : isGold ? [6, 8, 10, 12, 15] : [5, 7, 10];
     const step = golden ? 200 : isGold ? 190 : 175;
@@ -438,7 +481,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (!pull) return;
     clearTimers();
     popped.current = false;
-    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, lift, plusOne, wearFly, foil, crown].forEach(v => { cancelAnimation(v); v.value = 0; });
+    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, lift, plusOne, wearFly, foil, crown, leak, sparkle, sparkle2, stampFlash].forEach(v => { cancelAnimation(v); v.value = 0; });
     punch.value = 1;
     setPhase('drop');
     if (noBox) {
@@ -544,6 +587,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value * 0.55 }));
   const infoStyle = useAnimatedStyle(() => ({ opacity: settle.value, transform: [{ translateY: (1 - settle.value) * 16 }] }));
   const hintStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -hint.value * 8 }, { scale: 1 + hint.value * 0.05 }] }));
+  const leakStyle = useAnimatedStyle(() => ({ opacity: leak.value * (1 - lid.value), transform: [{ scaleX: 0.7 + leak.value * 0.4 }] }));
   const spotStyle = useAnimatedStyle(() => ({ opacity: 0.55 + settle.value * 0.45, transform: [{ scale: LOWRES }] }));
 
   if (!pull) return null;
@@ -605,6 +649,13 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               <Animated.View style={[tone === 'gold' ? { position: 'absolute', left: 0, top: 0, width: boxSize, height: boxSize } : { position: 'absolute', left: boxSize * 0.044, top: -boxSize * 0.146, width: boxSize * 0.915, height: boxSize * 0.915 }, lidStyle]}>
                 <Image source={art.lid} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
               </Animated.View>
+              {pull.is_chaser && !still && (
+                // Light leaking out of the lid seam while the chaser box rattles.
+                <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: boxSize * 0.02, width: boxSize * 0.96,
+                  top: boxSize * 0.24, height: boxSize * 0.26 }, leakStyle]}>
+                  <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff2b0" />
+                </Animated.View>
+              )}
             </Animated.View>
           )}
           {variant === 'pick' && pull.icon_url && (
@@ -639,6 +690,18 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             <Animated.View style={[styles.pinBack, { width: pinSize * 0.7, height: pinSize * 0.7, borderRadius: pinSize * 0.35, left: pinSize * 0.15, top: pinSize * 0.15 }, backStyle]}>
               <View style={[styles.pinBackPost, { width: pinSize * 0.16, height: pinSize * 0.16, borderRadius: pinSize * 0.08 }]} />
             </Animated.View>
+            {pull.is_chaser && (
+              // The chaser is the gold edition: a thick gold rim around the pin, unmistakable at a glance.
+              <View pointerEvents="none" style={[styles.chaserRim, { width: pinSize * 0.92, height: pinSize * 0.92, borderRadius: pinSize * 0.46,
+                left: pinSize * 0.04, top: pinSize * 0.04 }]}>
+                <View style={[styles.chaserRimInner, { borderRadius: pinSize * 0.46 }]} />
+              </View>
+            )}
+            {pull.is_chaser && !still && (
+              <View pointerEvents="none" style={[styles.stamp, { right: -30, bottom: -26, width: 120, height: 90, alignItems: 'center', justifyContent: 'center' }]}>
+                <RadialFlash flash={stampFlash} size={120} />
+              </View>
+            )}
             {(pull.is_chaser || isCatch) && (
               <Animated.View style={[styles.stamp, stampStyle]}>
                 {pull.is_chaser
@@ -648,6 +711,12 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             )}
           </Animated.View>
           {golden && !still && !noBox && <CrownBurst t={crown} size={boxSize} />}
+          {goldStage && !still && (
+            <SparkleBurst progress={sparkle} radius={boxSize * 0.95} count={momentParticles(PARTICLES.sparkles, budget, still)} />
+          )}
+          {pull.is_chaser && !still && (
+            <SparkleBurst progress={sparkle2} radius={boxSize * 1.35} count={momentParticles(PARTICLES.sparkles, budget, still)} />
+          )}
           <View style={[styles.confettiOrigin, { top: boxSize * 0.2 }]}>
             {!still && phase !== 'summary' && confetti.map((p, i) => <ConfettiPiece key={i} p={p} burst={burst} />)}
           </View>
@@ -813,7 +882,9 @@ const styles = StyleSheet.create({
   },
   ticketText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 3, flexShrink: 1 },
   backer: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center' },
-  backerGold: { backgroundColor: '#f6d77a', borderColor: '#8a5a12', justifyContent: 'space-between', paddingBottom: 8, overflow: 'hidden' },
+  backerGold: { backgroundColor: BRAND.gold, borderColor: BRAND.white, borderWidth: 5, justifyContent: 'space-between', paddingBottom: 8, overflow: 'hidden' },
+  chaserRim: { position: 'absolute', borderWidth: 4, borderColor: '#d99a00', alignItems: 'center', justifyContent: 'center' },
+  chaserRimInner: { ...StyleSheet.absoluteFillObject, borderWidth: 5, borderColor: '#ffe27a' },
   foilSheen: { position: 'absolute', left: 0, width: 26, backgroundColor: 'rgba(255,255,255,0.75)' },
   backerFoilText: { fontFamily: FONT.display, fontSize: 14, color: '#5a3a08', letterSpacing: 1 },
   backerHole: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#021a45', marginTop: 10 },

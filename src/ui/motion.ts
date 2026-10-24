@@ -73,6 +73,9 @@ export function flashPeak(dimFlashingLights: boolean, reduced: boolean): number 
   return dimFlashingLights || reduced ? 0 : FLASH_MAX_OPACITY;
 }
 
+/** The slow ray turn starts only once the gold is at least this visible (and stops below it). */
+export const RAY_TURN_FROM = 0.05;
+
 /** Particle caps. Budgeted further by the power policy (particleScale). */
 export const PARTICLES = {
   /** Gold sparkles in a burst. */
@@ -89,7 +92,7 @@ export const GOLD_FX = {
   core: '#FFFBEA',
 } as const;
 
-export type MomentKind = 'coinReveal' | 'coinRepeat' | 'levelUp' | 'setComplete' | 'chest' | 'box';
+export type MomentKind = 'coinReveal' | 'coinRepeat' | 'levelUp' | 'setComplete' | 'chest' | 'box' | 'chaser';
 
 export interface MomentBeats {
   /** When the burst lands (ms from the start). 0 when reduced. */
@@ -124,9 +127,12 @@ const ANTICIPATION: Readonly<Record<MomentKind, number>> = {
   coinReveal: 1150,
   coinRepeat: 160,
   levelUp: 1000,
-  setComplete: 380,
+  // The stage pops, then each set piece snaps onto the shark before the bloom.
+  setComplete: 900,
   chest: 420,
   box: 900,
+  // The rarest pull waits longest: three rattles with light leaking from the lid.
+  chaser: 1350,
 };
 
 const SETTLE: Readonly<Record<MomentKind, number>> = {
@@ -136,7 +142,31 @@ const SETTLE: Readonly<Record<MomentKind, number>> = {
   setComplete: 1100,
   chest: 900,
   box: 900,
+  chaser: 1100,
 };
+
+/**
+ * When each set piece snaps onto the shark during the Set Complete anticipation (ms from the start).
+ * The first lands after the stage pop, the last a beat before the burst; at most 6 get their own snap.
+ */
+export function pieceSnapTimes(count: number, beats: Pick<MomentBeats, 'anticipation' | 'fx'>): number[] {
+  const n = Math.max(0, Math.min(6, Math.floor(count)));
+  if (n === 0 || !beats.fx) return [];
+  const first = 260;
+  const last = Math.max(first, beats.anticipation - 140);
+  if (n === 1) return [Math.round((first + last) / 2)];
+  return Array.from({ length: n }, (_, i) => Math.round(first + ((last - first) * i) / (n - 1)));
+}
+
+/**
+ * The chaser's three rattles before the lid gives (ms from the start, each one stronger).
+ * Fits inside the chaser anticipation with a held beat before the burst.
+ */
+export function chaserRattles(beats: Pick<MomentBeats, 'anticipation' | 'fx'>): readonly { readonly at: number; readonly deg: number }[] {
+  if (!beats.fx) return [];
+  const gap = Math.round((beats.anticipation - 200) / 3);
+  return [0, 1, 2].map(i => ({ at: i * gap, deg: 8 + i * 5 }));
+}
 
 /** Particle count under the power budget: never zero in the foreground, zero when reduced or asleep. */
 export function momentParticles(base: number, budget: { readonly particleScale: number; readonly animate: boolean },
@@ -149,6 +179,9 @@ export function momentParticles(base: number, budget: { readonly particleScale: 
 export function raysMayTurn(budget: { readonly ambient: boolean; readonly animate: boolean }, reduced: boolean): boolean {
   return !reduced && budget.animate && budget.ambient;
 }
+
+/** A slow server: the level-up label switches to "Almost there!" this long after the tap (the charge ends at 0.9 s). */
+export const SLOW_SERVER_LABEL_MS = 1600;
 
 /**
  * The level-up charge bar: how full it looks at `elapsed` ms. It eases to 85 percent over the charge,

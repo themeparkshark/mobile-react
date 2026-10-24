@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const motion = loadTs('src/ui/motion.ts');
 
-const KINDS = ['coinReveal', 'coinRepeat', 'levelUp', 'setComplete', 'chest', 'box'];
+const KINDS = ['coinReveal', 'coinRepeat', 'levelUp', 'setComplete', 'chest', 'box', 'chaser'];
 
 test('every big moment bursts inside 1.5 s and settles inside 2.6 s (no gray waits)', () => {
   for (const kind of KINDS) {
@@ -106,6 +106,90 @@ test('GoldBurst is cheap: images only, no SVG, no layout callbacks, rays rest wh
   assert.ok(!/onLayout/.test(src), 'no layout callbacks');
   assert.ok(src.includes('raysMayTurn(budget, reduced)'), 'the turn follows the power budget');
   assert.ok(src.includes('cancelAnimation(turn)'), 'the turn stops when not allowed and on unmount');
+});
+
+test('GoldBurst turns nothing while the gold is invisible (closed chest, setup frames)', () => {
+  const src = read('src/ui/GoldBurst.tsx');
+  assert.ok(motion.RAY_TURN_FROM > 0 && motion.RAY_TURN_FROM <= 0.1, 'a small visibility threshold');
+  assert.ok(src.includes('useAnimatedReaction('), 'watched on the UI thread');
+  assert.ok(src.includes('amount.value > RAY_TURN_FROM'), 'the turn waits for the gold to show');
+  // No mount-time endless loop: withRepeat lives only inside the reaction.
+  const effectStart = src.indexOf('useEffect(');
+  const effectBody = src.slice(effectStart, src.indexOf(';', src.indexOf('[turn]', effectStart)));
+  assert.ok(!effectBody.includes('withRepeat'), 'the mount effect only cancels');
+});
+
+test('GoldBurst draws one fan with a soft falloff (no counter-rotating second fan, no moire)', () => {
+  const src = read('src/ui/GoldBurst.tsx');
+  assert.ok(src.includes('rays-gold-fade.webp'), 'the faded fan');
+  assert.ok(!src.includes('rays-tint.webp') && !src.includes('rays-tint-18.webp'), 'no hard-edged fans');
+  assert.ok(!/softRaysStyle|9 - turn\.value/.test(src), 'no second fan turning the other way');
+  assert.ok(fs.existsSync(path.join(root, 'assets/images/reveal/rays-gold-fade.webp')), 'asset ships with the bundle');
+});
+
+test('every big-moment and reward file speaks the shared motion language', () => {
+  const files = [
+    'src/components/CoinCatchReveal.tsx', 'src/components/CoinLevelingModal.tsx', 'src/components/DailyGiftModal.tsx',
+    'src/screens/StoreScreen/SetCompleteReveal.tsx', 'src/screens/pins/BoxReveal.tsx', 'src/components/PostWinRewardsModal.tsx',
+    'src/gamekit/results/ResultsCard.tsx', 'src/screens/StoreScreen/TryOnSheet.tsx', 'src/screens/StoreScreen/ShopTile.tsx',
+  ];
+  for (const file of files) {
+    const src = read(file);
+    assert.ok(/from '(\.\.\/)+ui\/motion(Easing)?'/.test(src), `${file} imports ui/motion`);
+  }
+  // Gold moments use the shared gold, not a one-off starburst.
+  assert.ok(read('src/components/PostWinRewardsModal.tsx').includes('<GoldBurst'), 'the Coin Caught card glows the same gold');
+  assert.ok(!read('src/components/PostWinRewardsModal.tsx').includes('duration: 14000'), 'no private ray spin');
+});
+
+test('Set Complete: pieces snap on before the bloom, and the XP counts on the UI thread', () => {
+  const beats = motion.momentBeats('setComplete', { reduced: false });
+  const snaps = motion.pieceSnapTimes(4, beats);
+  assert.equal(snaps.length, 4);
+  for (let i = 1; i < snaps.length; i += 1) assert.ok(snaps[i] > snaps[i - 1], 'one at a time');
+  assert.ok(snaps[snaps.length - 1] < beats.burstAt, 'the last piece lands before the burst');
+  assert.ok(snaps[0] >= 200, 'after the stage pops');
+  assert.equal(motion.pieceSnapTimes(12, beats).length, 6, 'capped');
+  assert.equal(motion.pieceSnapTimes(3, motion.momentBeats('setComplete', { reduced: true })).length, 0, 'Reduce Motion: all at once');
+  const src = read('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  assert.ok(src.includes('useAnimatedProps') && src.includes('XpCount'), 'count on the UI thread');
+  assert.ok(!src.includes('setXpShown'), 'no setState per count step');
+  assert.ok(src.includes('Math.max(1, Math.round(shown.value))'), 'never +0 XP');
+});
+
+test('the chaser escalates past the Golden Box', () => {
+  const chaser = motion.momentBeats('chaser', { reduced: false });
+  const box = motion.momentBeats('box', { reduced: false });
+  assert.ok(chaser.anticipation > box.anticipation, 'a longer build');
+  const rattles = motion.chaserRattles(chaser);
+  assert.equal(rattles.length, 3, 'three rattles');
+  assert.ok(rattles[2].deg > rattles[0].deg, 'each one stronger');
+  assert.ok(rattles[2].at < chaser.anticipation, 'inside the build');
+  const src = read('src/screens/pins/BoxReveal.tsx');
+  assert.ok(src.includes('sparkle2'), 'a second sparkle wave');
+  assert.ok(src.includes('stampFlash'), 'the serial gets its own hit-stop flash');
+  assert.ok(src.includes('chaserRim'), 'a gold rim marks the gold edition');
+});
+
+test('daily chest: the wallet changes only when the coins land, and the old glow is gone', () => {
+  const src = read('src/components/DailyGiftModal.tsx');
+  const confirmAt = src.indexOf('acknowledgedGift.current = confirmed;');
+  const afterConfirm = src.slice(confirmAt, confirmAt + 220);
+  assert.ok(!/\n\s*void refreshPlayer\?\.\(\);\n/.test(afterConfirm), 'no wallet refresh at the lid pop');
+  assert.ok(src.includes('settleWallet()'), 'refresh after the coins land');
+  assert.ok(src.includes('<WalletCoin'), 'coins fly to the wallet');
+  assert.ok(!src.includes('styles.glow'), 'the old glow View is gone');
+  assert.ok(src.includes('withTiming(0.85, { duration: 40 })'), 'a visible squash with a held beat');
+});
+
+test('the level-up payoff is bigger than the card and the tier is unmistakable', () => {
+  const src = read('src/components/CoinLevelingModal.tsx');
+  assert.ok(src.includes('measureAnchor()'), 'the burst is anchored on the coin');
+  assert.ok(src.includes('zIndex: 30') && src.includes('<SparkleBurst progress={sparkle} radius={SCREEN_W * 0.46}'), 'sparkles fly over the card edges');
+  assert.ok(src.includes("toValue: 1.35"), 'the new coin pops to 1.35x');
+  assert.ok(src.includes('<TierRim'), 'a tier-coloured rim');
+  assert.ok(src.includes('SLOW_SERVER_LABEL_MS'), 'Almost there! comes in time for a slow server');
+  assert.ok(motion.SLOW_SERVER_LABEL_MS < 2000 && motion.SLOW_SERVER_LABEL_MS > 900, 'after the charge, before 2 s');
 });
 
 test('Set Complete never shows an empty plinth', () => {

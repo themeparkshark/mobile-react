@@ -29,10 +29,10 @@
  */
 import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
 import * as Haptics from 'expo-haptics';
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Dimensions, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
-  Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  Easing, FadeIn, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { equipShopTitle } from '../../api/endpoints/me/shop-sets';
@@ -49,7 +49,7 @@ import { MAX_FONT, REVEAL_NAVY, SHOP_SURFACE, ShopCta, ShopStage } from './shopU
 import { wearItem } from './inventoryQueue';
 import { Image } from 'expo-image';
 import { GoldBurst, SparkleBurst } from '../../ui/GoldBurst';
-import { DURATION, EASE, GOLD_FX, PARTICLES, SPRING, momentBeats, momentParticles } from '../../ui/motionEasing';
+import { DURATION, EASE, GOLD_FX, PARTICLES, SPRING, momentBeats, momentParticles, pieceSnapTimes } from '../../ui/motionEasing';
 import { usePowerBudget } from '../../power';
 
 const MEDAL = require('../../../assets/images/alex-ui/medal-gold.webp');
@@ -63,6 +63,9 @@ const CARD = stageCard(STAGE - 8, STAGE - 8, HOP + 6);
 const CARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 
 type Busy = 'idle' | 'busy' | 'done' | 'failed';
+
+/** The XP bar and its count start this long after the burst (together). */
+const XP_AFTER_BURST = 150;
 
 /** A tap or swipe this soon after the reveal opens is the buy tap carrying over: ignored. */
 export const REVEAL_GUARD_MS = 900;
@@ -107,19 +110,22 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
 
   const pieceIds = reward?.item_ids ?? set?.item_ids ?? [];
   const pieces = useMemo(() => (set?.pieces ?? []).filter(p => pieceIds.includes(p.id)), [set, pieceIds.join(',')]);
+  const beats = momentBeats('setComplete', { reduced: still });
+  // The backdrop lands first, then each piece snaps onto the shark, one beat each, before the bloom.
+  const snapOrder = useMemo(() => [...pieces].sort((a, b) => Number(isBackdrop(b)) - Number(isBackdrop(a))), [pieces]);
+  const snapTimes = useMemo(() => pieceSnapTimes(snapOrder.length, beats), [snapOrder.length, beats.fx]);
+  const [snapped, setSnapped] = useState(() => (snapTimes.length ? 0 : snapOrder.length));
   // Only this set's pieces, on the shark's own skin; the set's backdrop becomes the stage.
   // Never an empty plinth: no set look (no skin art yet) falls back to the player's own look.
-  const stage = useMemo(() => previewLook(player?.inventory, pieces.map(asWearable), 'base')
-    ?? previewLook(player?.inventory, [], 'player'), [player?.inventory?.skin_item?.id, pieces]);
+  const stage = useMemo(() => previewLook(player?.inventory, snapOrder.slice(0, snapped).map(asWearable), 'base')
+    ?? previewLook(player?.inventory, [], 'player'), [player?.inventory?.skin_item?.id, snapOrder, snapped]);
   const budget = usePowerBudget();
-  const beats = momentBeats('setComplete', { reduced: still });
+  const snap = useSharedValue(1);
   const gold = useSharedValue(still ? 1 : 0);
   const bloom = useSharedValue(0);
   const sparkle = useSharedValue(0);
   const pop = useSharedValue(still ? 1 : 0.82);
   const drop = useSharedValue(still ? 1 : 0);
-  // The count starts a little above zero so the caption never reads "+0 XP".
-  const [xpShown, setXpShown] = useState(still ? reward?.xp ?? 0 : Math.max(1, Math.round((reward?.xp ?? 0) * 0.1)));
 
   const stamp = useSharedValue(still ? 1 : 1.7);
   const stampOpacity = useSharedValue(still ? 1 : 0);
@@ -132,7 +138,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   useEffect(() => {
     if (!reward) return;
     playSound(require('../../../assets/sounds/reward.mp3'));
-    if (still) { setShownLevel(xp?.level ?? null); setXpShown(reward.xp); return; }
+    if (still) { setShownLevel(xp?.level ?? null); setSnapped(snapOrder.length); return; }
     // 1. Anticipation: the stage pops up and the gold gathers behind it; the shark drops in.
     pop.value = withSpring(1, SPRING.pop);
     gold.value = withSequence(withTiming(0.4, { duration: beats.anticipation, easing: EASE.charge }),
@@ -147,16 +153,16 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
     const timers = [
       setTimeout(() => { setBurst(true); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined); }, beats.burstAt),
     ];
-    // 4. The XP counts up with the bar (frame-counted, so a busy JS thread never skips the end).
-    if (reward.xp > 0) {
-      const frames = 20;
-      for (let f = 1; f <= frames; f += 1) {
-        const t = f / frames;
-        timers.push(setTimeout(() => setXpShown(Math.max(1, Math.round(reward.xp * (0.1 + 0.9 * (1 - Math.pow(1 - t, 3)))))), 900 + f * (DURATION.count / frames)));
-      }
-    }
+    // Each piece snaps on with a squash and a light tap (the last one a medium tap).
+    snapTimes.forEach((ms, i) => timers.push(setTimeout(() => {
+      setSnapped(i + 1);
+      snap.value = withSequence(withTiming(1.07, { duration: 70, easing: EASE.out }), withSpring(1, SPRING.stamp));
+      void Haptics.impactAsync(i === snapTimes.length - 1 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light)
+        .catch(() => undefined);
+    }, ms)));
+    // 4. The XP counts up with the bar on the UI thread (XpCount), so nothing re-renders on the burst frame.
     if (xp) {
-      bar.value = withDelay(900, withTiming(xp.levelUp ? 1 : xp.to, { duration: 700, easing: Easing.out(Easing.cubic) }));
+      bar.value = withDelay(beats.burstAt + XP_AFTER_BURST, withTiming(xp.levelUp ? 1 : xp.to, { duration: 700, easing: Easing.out(Easing.cubic) }));
       if (xp.levelUp) {
         // Fill to the top, roll to the new level with a pop, then fill to where the player is now.
         timers.push(setTimeout(() => {
@@ -165,7 +171,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
           levelPulse.value = withSequence(withTiming(1.45, { duration: 160 }), withSpring(1, { damping: 6 }));
           bar.value = 0;
           bar.value = withTiming(xp.to, { duration: 500, easing: Easing.out(Easing.cubic) });
-        }, 1650));
+        }, beats.burstAt + XP_AFTER_BURST + 750));
       }
     }
     return () => timers.forEach(clearTimeout);
@@ -174,6 +180,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   const barStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.001, bar.value) }] }));
   const levelStyle = useAnimatedStyle(() => ({ transform: [{ scale: levelPulse.value }] }));
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const snapStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: 2 - snap.value }, { scaleY: snap.value }] }));
   const dropStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, drop.value * 3),
     transform: [{ translateY: (1 - drop.value) * -60 }, { scaleY: 0.9 + 0.1 * Math.min(1, drop.value) }],
@@ -265,11 +272,12 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
           <Animated.View style={[{ width: STAGE, height: STAGE, alignItems: 'center', justifyContent: 'center' }, popStyle]}>
           {/* The gold blooms around the stage frame (behind it). */}
           <View pointerEvents="none" style={styles.burstWrap}>
-            <GoldBurst size={STAGE * 1.75} amount={gold} bloom={bloom} reduced={still} />
+            <GoldBurst size={STAGE * 2.3} amount={gold} bloom={bloom} reduced={still} />
           </View>
           <View style={[styles.stage, { width: STAGE, height: STAGE, borderColor: color }]}>
             <ShopStage rim={color} backdropUrl={stage?.backdrop} tone="night" rays={GOLD_FX.rays} still={still}>
               <Animated.View style={[StyleSheet.absoluteFill, dropStyle]}>
+              <Animated.View style={[StyleSheet.absoluteFill, snapStyle]}>
               <Animated.View style={[StyleSheet.absoluteFill, hopStyle]}>
                 {stage
                   ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={CARD.shadow} liftRoom={CARD.box.top} style={CARD_STYLE} />
@@ -279,6 +287,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
                       <View style={styles.medalCrown}><GameIcon name="crown" size={STAGE * 0.2} /></View>
                     </View>
                   )}
+              </Animated.View>
               </Animated.View>
               </Animated.View>
             </ShopStage>
@@ -310,8 +319,9 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
               <View style={{ flex: 1, gap: 4 }}>
                 <View style={styles.xpTrack}><Animated.View style={[styles.xpFill, barStyle]} /></View>
                 {/* The caption follows the badge: "+160 XP" until the level rolls, then "Level up!". */}
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.xpCaption}>
-                  {xp?.levelUp && shownLevel === xp.level ? xp.caption : `+${xpShown} XP`}</Text>
+                {xp?.levelUp && shownLevel === xp.level
+                  ? <Text maxFontSizeMultiplier={MAX_FONT} style={styles.xpCaption}>{xp.caption}</Text>
+                  : <XpCount xp={reward.xp} still={still} delay={beats.burstAt + XP_AFTER_BURST} />}
               </View>
             </View>
           )}
@@ -342,6 +352,30 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
     </Modal>
   );
 }
+
+function isBackdrop(piece: { item_type_id?: number | null }): boolean {
+  return slotForItem({ item_type: { id: piece.item_type_id } } as never) === 'background_item';
+}
+
+const AnimatedInput = Animated.createAnimatedComponent(TextInput);
+
+/**
+ * "+160 XP", counted up on the UI thread from the moment the bar starts (no React render per
+ * step, so the burst frame stays free). Starts a little above zero: never "+0 XP".
+ */
+export const XpCount = memo(function XpCount({ xp, still, delay }: { readonly xp: number; readonly still: boolean; readonly delay: number }) {
+  const floor = Math.max(1, Math.round(xp * 0.1));
+  const shown = useSharedValue(still ? xp : floor);
+  useEffect(() => {
+    shown.value = still ? xp : withDelay(delay, withTiming(xp, { duration: 700, easing: Easing.out(Easing.cubic) }));
+  }, [xp, still, delay]);
+  const props = useAnimatedProps(() => {
+    const text = `+${Math.max(1, Math.round(shown.value))} XP`;
+    return { text, defaultValue: text } as never;
+  });
+  return <AnimatedInput editable={false} underlineColorAndroid="transparent" animatedProps={props} pointerEvents="none"
+    defaultValue={`+${still ? xp : floor} XP`} maxFontSizeMultiplier={MAX_FONT} style={[styles.xpCaption, styles.xpInput]} />;
+});
 
 /** 64 pieces burst from behind the title plate, then fall (one pass, nothing keeps running). */
 function Confetti({ color, originY }: { color: string; originY: number }) {
@@ -398,6 +432,7 @@ const styles = StyleSheet.create({
   xpTrack: { height: 14, borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
   xpFill: { height: 14, width: '100%', borderRadius: 7, backgroundColor: BRAND.gold, transformOrigin: 'left' },
   xpCaption: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
+  xpInput: { padding: 0, margin: 0 },
   alert: { backgroundColor: SHOP_SURFACE.alert, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 2, borderColor: BRAND.white, marginBottom: 6 },
   alertText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, textAlign: 'center' },
   buttons: { width: '100%', alignItems: 'center', gap: 4, marginTop: 'auto' },
