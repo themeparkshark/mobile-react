@@ -30,3 +30,11 @@ test('motion only, UI thread, one tick for a join and never a buzz for another p
   assert.match(strip, /<CrewBadgeFx joinOrder=\{joinOrder\} starsKey=\{stars\.get\(id\) \?\? 0\} reduced=\{reduced\}>/);
   assert.match(strip, /useEffect\(\(\) => \{ seen\.current = new Set/, 'the crew is remembered after each draw, never during render');
 });
+
+test('round 5: the +1 and the hearts read at a glance and the bubble never wraps on a 28 pt badge', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/LinePlay/group/CrewBadgeFx.tsx'), 'utf8');
+  assert.match(src, /float: \{ position: 'absolute', left: -30, right: -30/, 'the float layer is wider than the badge');
+  assert.match(src, /minHeight: 28, minWidth: 40/, 'a +1 bubble at least 28 pt tall and 40 pt wide');
+  assert.ok(Number(/PLUS_FONT = (\d+)/.exec(src)[1]) >= 20);
+  assert.ok(Number(/HEART_SIZE = (\d+)/.exec(src)[1]) >= 22);
+});

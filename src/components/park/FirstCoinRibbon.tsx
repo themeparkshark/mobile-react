@@ -263,7 +263,8 @@ const styles = StyleSheet.create({
   coin: { width: COIN, height: COIN },
   crown: { position: 'absolute', top: -26, alignSelf: 'center' },
   text: { flex: 1, fontFamily: 'Shark', fontSize: 23, color: BRAND.navy, letterSpacing: 0.5 },
-  finn: { position: 'absolute', right: -14, top: 52 },
+  // Finn cheers under the ribbon's right end, clear of the map's right rail.
+  finn: { position: 'absolute', right: 4, top: 52 },
   flyer: { position: 'absolute', left: 0, top: 0, width: COIN, height: COIN },
   dot: { position: 'absolute', left: 0, top: 0, width: 18, height: 18, borderRadius: 9, backgroundColor: '#ffd65a',
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)' },

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute } from '@react-navigation/native';
 import {
   createLineGroup, currentTurn, groupRecap, kidRoundNote, lastRound, recordGroupTurn, roundPodium,
   startGroupRound, waitLine, type LineGroup,
@@ -57,7 +58,9 @@ function CrewJoinDemo() {
 }
 
 export default function LineGroupPreviewScreen() {
-  const fixed = process.env.EXPO_PUBLIC_LINE_GROUP_STAGE;
+  // Dev QA: a stage from the env or from the route (lane.sh nav LineGroupPreview '{"stage":"crew"}').
+  const route = useRoute<{ key: string; name: string; params?: { stage?: string } }>();
+  const fixed = route.params?.stage ?? process.env.EXPO_PUBLIC_LINE_GROUP_STAGE;
   const [index, setIndex] = useState(() => Math.max(0, STAGES.indexOf(fixed as typeof STAGES[number])));
   useEffect(() => {
     if (fixed) return;

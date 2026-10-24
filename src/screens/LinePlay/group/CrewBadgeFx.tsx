@@ -125,8 +125,9 @@ export const HEART_SIZE = 22;
 export const PLUS_FONT = 20;
 
 const styles = StyleSheet.create({
-  float: { position: 'absolute', left: 0, right: 0, top: -4, alignItems: 'center' },
-  plus: { position: 'absolute', top: -26, minHeight: 28, justifyContent: 'center', backgroundColor: BRAND.gold, borderRadius: 14,
+  // Wider than the 28 pt badge, so the +1 bubble never wraps into a sliver; centred on the badge.
+  float: { position: 'absolute', left: -30, right: -30, top: -4, alignItems: 'center' },
+  plus: { position: 'absolute', top: -26, minHeight: 28, minWidth: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.gold, borderRadius: 14,
     borderWidth: 2.5, borderColor: BRAND.white, paddingHorizontal: 7,
     shadowColor: BRAND.navy, shadowOpacity: 0.35, shadowOffset: { width: 0, height: 2 }, shadowRadius: 0 },
   plusText: { fontFamily: 'Shark', fontSize: PLUS_FONT, lineHeight: 23, color: BRAND.navy },

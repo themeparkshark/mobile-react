@@ -98,3 +98,9 @@ test('round 5: the landing is one Skia canvas and the row shine mounts early, on
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /armed=\{shineArmed\}/, 'the shine mounts with the shelf, not on the landing frame');
 });
+
+test('round 5: the shared burst worklet is declared before the worklet that calls it (a worklet captures its callees when created)', () => {
+  const src = read('src/components/park/BurstCanvas.tsx');
+  assert.ok(src.indexOf('function drawBurstAtOrigin(') < src.indexOf('export function drawBurst('),
+    'drawBurstAtOrigin must exist before drawBurst is created, or the landing canvas throws on the UI thread');
+});

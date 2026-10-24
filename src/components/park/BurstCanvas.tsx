@@ -25,19 +25,7 @@ export function burstStars(count: number, starSize: number, delayed = 0): BurstS
   });
 }
 
-/**
- * Draws one burst (ring plus stars) centred on (cx, cy) at progress `raw` (0..1) into a Skia
- * canvas. A worklet, so a moment can draw several bursts and its other layers into one canvas.
- */
-export function drawBurst(canvas: SkCanvas, raw: number, cx: number, cy: number, stars: readonly BurstStar[],
-  radius: number, ring: number, delayed: number): void {
-  'worklet';
-  canvas.save();
-  canvas.translate(cx, cy);
-  drawBurstAtOrigin(canvas, raw, 0, stars, radius, ring, delayed);
-  canvas.restore();
-}
-
+/** The burst drawn around (c, c). Declared before drawBurst: a worklet captures what it calls when it is created. */
 function drawBurstAtOrigin(canvas: SkCanvas, raw: number, c: number, stars: readonly BurstStar[],
   radius: number, ring: number, delayed: number): void {
   'worklet';
@@ -83,6 +71,19 @@ function drawBurstAtOrigin(canvas: SkCanvas, raw: number, c: number, stars: read
       canvas.drawPath(star, paint);
       canvas.restore();
     }
+}
+
+/**
+ * Draws one burst (ring plus stars) centred on (cx, cy) at progress `raw` (0..1) into a Skia
+ * canvas. A worklet, so a moment can draw several bursts and its other layers into one canvas.
+ */
+export function drawBurst(canvas: SkCanvas, raw: number, cx: number, cy: number, stars: readonly BurstStar[],
+  radius: number, ring: number, delayed: number): void {
+  'worklet';
+  canvas.save();
+  canvas.translate(cx, cy);
+  drawBurstAtOrigin(canvas, raw, 0, stars, radius, ring, delayed);
+  canvas.restore();
 }
 
 function BurstCanvas({ progress, count, radius, ring = 0, starSize = 12, x, y, delayed = 0 }: {
