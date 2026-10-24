@@ -219,7 +219,9 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
       // Reduce Motion: one 160 ms fade in, no travel.
       const fade = { duration: DURATION.quick, reduceMotion: ReduceMotion.Never };
       scrim.value = withTiming(1, fade);
-      ribbon.value = withTiming(1, fade);
+      // The ribbon is simply there (no unfurl): the whole stage fades as one (rootStyle is at 1, the fade is
+      // carried by each layer's opacity).
+      ribbon.value = 1;
       banner.value = withTiming(1, fade);
       finn.value = withTiming(1, fade);
       goalIn.value = withTiming(1, fade);
