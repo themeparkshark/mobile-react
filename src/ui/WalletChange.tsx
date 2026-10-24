@@ -48,6 +48,8 @@ export const WALLET_FX = {
   nearPt: 40,
   /** The pill's squash on each coin hit. */
   hitSquash: 0.13,
+  /** A gain this soon after a reward toast's coins landed in the chip just rolls (no second flight, ms). */
+  arrivedMs: 4000,
 } as const;
 
 /** Where the coins fly: from the tap to the chip (gain) or the chip to the tap (spend), or null to fan locally. Pure. */
@@ -128,10 +130,18 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
     if (!node) { done(null); return; }
     node.measureInWindow((x, y, w, h) => done(Number.isFinite(x) && w > 0 ? { x: x + w / 2, y: y + h / 2 } : null));
   };
-  // Reward toasts send their coins here while this screen is focused.
+  // Reward toasts send their coins here while this screen is focused: each one squashes the pill as it
+  // lands, and the gain that follows within WALLET_FX.arrivedMs just rolls (the coins are already home).
+  const arrivedAt = useRef(0);
+  const onCoinHit = () => {
+    arrivedAt.current = Date.now();
+    cancelAnimation(squash);
+    squash.value = withSequence(withTiming(1, { duration: 40, easing: EASE.out }), withSpring(0, HUD_BUMP.spring));
+  };
   useEffect(() => {
     if (!focused) return undefined;
-    return registerCoinTarget('wallet', measureChip);
+    return registerCoinTarget('wallet', measureChip, onCoinHit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focused]);
 
   useEffect(() => {
@@ -145,6 +155,14 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
     cancelAnimation(fly); cancelAnimation(bump); cancelAnimation(squash);
     fly.value = 0;
     const touch = freshTouch(lastTouch(), Date.now(), WALLET_FX.touchFreshMs);
+    // Coins that a reward toast already flew in: no second flight, the digits roll and the pill lands.
+    if (!spend && Date.now() - arrivedAt.current < WALLET_FX.arrivedMs) {
+      lead.current = 0;
+      setReleased(value);
+      bump.value = withDelay(COUNT.ms - 40, withSequence(
+        withTiming(COUNT.finalBump, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring)));
+      return;
+    }
     const playLocal = () => {
       setLocal(true);
       fly.value = withDelay(wait, withTiming(1, { duration: WALLET_FX.flyMs + 5 * 45, easing: EASE.out }));

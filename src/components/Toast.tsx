@@ -216,11 +216,12 @@ function ToastItem({
       const coins = Math.min(toastCoinCount(toast.message), momentParticles(TOAST_MOTION.coinFlyMax, budget, reduced));
       if (coins > 0) {
         coinTimer = setTimeout(() => {
-          measureCoinTarget(target => {
+          measureCoinTarget((target, onHit) => {
             if (!target || !iconRef.current) return;
             iconRef.current.measureInWindow((x, y, w, h) => {
               if (!Number.isFinite(x) || !(w > 0)) return;
-              flyCoins({ from: { x: x + w / 2, y: y + h / 2 }, to: target, count: coins });
+              // The chip answers each coin with a squash, and knows these coins are already home.
+              flyCoins({ from: { x: x + w / 2, y: y + h / 2 }, to: target, count: coins, onLand: onHit });
             });
           });
         }, TOAST_MOTION.coinFlyAt);

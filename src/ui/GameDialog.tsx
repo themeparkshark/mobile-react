@@ -101,8 +101,8 @@ export const RIBBON_AT = 0;
 /** Where the ribbon's tails are (the ribbon spans the card's width, 85% of the screen up to 380 pt). */
 const CARD_W = Math.min(380, Dimensions.get('window').width * 0.85);
 const RIBBON_TAIL = { left: CARD_W * 0.06, right: CARD_W * 0.94, y: 30 } as const;
-/** The backdrop: navy at 0.45 (the brief's backdrop), never black, no blur pass. */
-export const DIALOG_SCRIM = 'rgba(8,56,128,0.45)';
+/** The backdrop: a clear brand blue near the brief's 0.45, never black or grey, no blur pass. */
+export const DIALOG_SCRIM = 'rgba(0,88,196,0.42)';
 /** Message copy on the card, as in UnfoundCoinModal. */
 export const DIALOG_COPY = '#e2f6ff';
 

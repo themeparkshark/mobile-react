@@ -107,7 +107,7 @@ test('dialog: parts are fully opaque from the first frame and only move; the ico
   assert.match(src, /export const ICON_STAMP = \{ at: 110, from: 0\.4, peak: 1\.22 \}/);
   assert.match(src, /celebrates && <SparkleBurst progress=\{iconSpark\}/);
   assert.doesNotMatch(src, /BlurView/);
-  assert.match(src, /DIALOG_SCRIM = 'rgba\(8,56,128,0\.45\)'/, 'the brief backdrop: navy at 0.45');
+  assert.match(src, /DIALOG_SCRIM = 'rgba\(0,88,196,0\.42\)'/, 'a clear blue backdrop near 0.45, never a grey wash');
 });
 
 test('footer: every pick squashes first, a gold disc and ring pulse under it, the rare compass pick is one big burst', () => {
@@ -157,7 +157,9 @@ test('coins fly to where they live: an arc from the tap into the wallet, a squas
   assert.equal(wallet.walletFlight(chip, null, false), null);
   assert.ok(wallet.WALLET_FX.flightCoins >= 3 && wallet.WALLET_FX.flightCoins <= 5);
   const src = read('src/ui/WalletChange.tsx');
-  assert.match(src, /registerCoinTarget\('wallet', measureChip\)/, 'reward toasts can send coins to the chip');
+  assert.match(src, /registerCoinTarget\('wallet', measureChip, onCoinHit\)/, 'reward toasts can send coins to the chip, which squashes on each');
+  assert.match(src, /Date\.now\(\) - arrivedAt\.current < WALLET_FX\.arrivedMs/, 'coins a toast already flew in never fly twice');
+  assert.match(read('src/components/Toast.tsx'), /count: coins, onLand: onHit \}\)/);
   assert.match(read('src/Root.tsx'), /<CoinFlightHost \/>/);
 });
 

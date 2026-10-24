@@ -70,19 +70,20 @@ export function flyCoins(f: Omit<Flight, 'id' | 'size'> & { readonly size?: numb
   return true;
 }
 
-/** Wallet chips coins can fly into (the newest focused one wins). */
+/** Wallet chips coins can fly into (the newest focused one wins). `onHit` runs as each coin lands in it. */
 type Measure = (done: (p: Point | null) => void) => void;
-const targets: { id: string; measure: Measure }[] = [];
-export function registerCoinTarget(id: string, measure: Measure): () => void {
-  const entry = { id, measure };
+type Target = { id: string; measure: Measure; onHit?: (i: number) => void };
+const targets: Target[] = [];
+export function registerCoinTarget(id: string, measure: Measure, onHit?: (i: number) => void): () => void {
+  const entry: Target = { id, measure, onHit };
   targets.push(entry);
   return () => { const i = targets.indexOf(entry); if (i >= 0) targets.splice(i, 1); };
 }
-/** Where coins should land right now (the newest registered wallet chip), or null. */
-export function measureCoinTarget(done: (p: Point | null) => void): void {
+/** Where coins should land right now (the newest registered wallet chip), or null, with its hit answer. */
+export function measureCoinTarget(done: (p: Point | null, onHit?: (i: number) => void) => void): void {
   const top = targets[targets.length - 1];
   if (!top) { done(null); return; }
-  top.measure(done);
+  top.measure(p => done(p, top.onHit));
 }
 
 export function CoinFlightHost() {
