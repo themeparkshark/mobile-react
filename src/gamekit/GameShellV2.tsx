@@ -62,7 +62,7 @@ import { RideChallengeContext } from './RideChallengeContext';
 import { ShellFrameContext } from './ShellFrameContext';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
-import { ResultsCard, type ResultStat, type ResultStarGoal } from './results/ResultsCard';
+import { ResultsCard, SHORT_PHONE_PT, type ResultStat, type ResultStarGoal } from './results/ResultsCard';
 import { ResultsPodium } from './results/ResultsPodium';
 import { initialWindowMetrics } from 'react-native-safe-area-context';
 import { endFeel } from './results/feelings';
@@ -344,6 +344,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const [headsUp, setHeadsUp] = useState(false);
     // Safety net: once the results have had RESULTS_FALLBACK_MS to appear, show them with no fade.
     const [resultsSafe, setResultsSafe] = useState(false);
+    // The cheering shark's peek over a tall shared card (0 = none), measured by the podium zone.
+    const [peekK, setPeekK] = useState(0);
     /**
      * The same "safe" flag without a re-render: set when the fade landed on a
      * mounted surface (so the tree is not rebuilt for nothing). A game surface
@@ -897,6 +899,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       return () => back.remove();
     }, [visible, rideChallenge, handleExit]);
 
+    // Reduce Motion shows the results card with a plain still style, never the
+    // animated one (first-session's fix): a 0 -> 1 jump that lands between the
+    // card's first frame and the style's UI-thread hookup was never applied,
+    // and the card stayed at opacity 0 over a cleared board.
     const resultsFadeStyle = useAnimatedStyle(() => ({ opacity: resultsOpacity.value }));
     const resultsScaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: resultsScale.value }] }));
     const countStyle = useAnimatedStyle(() => ({
@@ -949,6 +955,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
     // The HUD steps back behind any results card: the shell's own, or one the game draws itself.
     const hudBack = phase === 'results' || !!ownResultsDone;
+    // On a short phone (iPhone SE) the shared card's ribbon reaches the
+    // header: the X would sit half under the ribbon's left tail. DONE is
+    // inside the card there, so the X steps out entirely (no half-covered
+    // button), and the card is the only way on.
+    const xGone = showSharedCard && SCREEN_H < SHORT_PHONE_PT;
 
     const gameContent = (
         <View style={styles.root}>
@@ -958,8 +969,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               works, a safe way out if a card ever stalls). */}
           <View style={styles.header}>
             <TouchableOpacity
-              style={[styles.iconBtn, hudBack && styles.headerDim]}
+              style={[styles.iconBtn, hudBack && styles.headerDim, xGone && styles.headerGone]}
               onPress={handleExit}
+              disabled={xGone}
+              importantForAccessibility={xGone ? 'no-hide-descendants' : 'auto'}
+              accessibilityElementsHidden={xGone}
               hitSlop={12}
               accessibilityRole="button"
               accessibilityLabel={phase === 'playing' && !hudBack ? 'Pause' : 'Close'}
@@ -1066,8 +1080,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               net (opacity only); the settle spring keeps its own scale. */}
           {gameResults != null ? (
             <View style={[styles.overlay, resultsScrim === 'light' ? styles.scrimLight : resultsScrim === 'none' ? styles.scrimNone : null]} pointerEvents="box-none">
-              <Animated.View style={[styles.resultsFill, resultsSafe ? styles.resultsShown : resultsFadeStyle]}>
-                <Animated.View style={[styles.resultsFill, resultsScaleStyle]}>
+              <Animated.View style={[styles.resultsFill, resultsSafe || reducedMotion ? styles.resultsShown : resultsFadeStyle]}>
+                <Animated.View style={[styles.resultsFill, reducedMotion ? styles.resultsStill : resultsScaleStyle]}>
                   {gameResults}
                 </Animated.View>
               </Animated.View>
@@ -1079,9 +1093,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             // sits at the bottom with its buttons inside, like Sharky, the
             // Duel and the Boss.
             <View style={[styles.overlay, styles.sharedStage]} pointerEvents="box-none">
-              <ResultsPodium cheer={stars > 0 || (!saved && compareBest(effectiveResult?.score ?? score, personalBest).isNewBest)} reducedMotion={reducedMotion} />
-              <Animated.View style={[{ width: '90%' }, resultsSafe ? styles.resultsShown : resultsFadeStyle]}>
-                <Animated.View style={resultsScaleStyle}>
+              <ResultsPodium cheer={stars > 0 || (!saved && compareBest(effectiveResult?.score ?? score, personalBest).isNewBest)} reducedMotion={reducedMotion}
+                onPeek={setPeekK} />
+              <Animated.View style={[{ width: '90%' }, resultsSafe || reducedMotion ? styles.resultsShown : resultsFadeStyle]}>
+                <Animated.View style={reducedMotion ? styles.resultsStill : resultsScaleStyle}>
                   <ResultsCard
                     score={effectiveResult?.score ?? score}
                     stars={stars}
@@ -1104,6 +1119,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                     wrapUp={wrap != null}
                     wrapReason={wrap?.reason ?? null}
                     reducedMotion={reducedMotion}
+                    peek={peekK}
+                    extras={resultExtras ?? resultsExtra ?? undefined}
                   >
                   <View style={styles.actions}>
                     <TouchableOpacity
@@ -1145,7 +1162,6 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                     ) : null}
                   </View>
                   </ResultsCard>
-                  {resultExtras ?? resultsExtra ?? null}
                 </Animated.View>
               </Animated.View>
             </View>
@@ -1209,6 +1225,8 @@ const styles = StyleSheet.create({
   headerHidden: { opacity: 0 },
   frameBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#05346e' },
   resultsShown: { opacity: 1 },
+  resultsStill: { opacity: 1, transform: [{ scale: 1 }] },
+  headerGone: { opacity: 0 },
   resultsFill: { width: '100%', alignItems: 'center' },
   root: {
     flex: 1,

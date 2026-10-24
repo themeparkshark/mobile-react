@@ -202,9 +202,9 @@ test('the shell never ends on a dark screen: fallback timer, shared card, no-sta
   assert.match(shell, /RESULTS_FALLBACK_MS = 600/);
   assert.match(shell, /showSharedCard = phase === 'results' && \(!renderResults \|\| !effectiveResult \|\| \(gameResults == null && \(resultsSafe \|\| resultsSafeRef\.current \|\| wrap != null\)\)\)/);
   // The safety net snaps only the fade; the settle spring keeps its own scale (no pop at 600 ms).
-  assert.match(shell, /resultsSafe \? styles\.resultsShown : resultsFadeStyle/);
+  assert.match(shell, /resultsSafe \|\| reducedMotion \? styles\.resultsShown : resultsFadeStyle/);
   assert.match(shell, /resultsShown: \{ opacity: 1 \}/);
-  assert.match(shell, /<Animated\.View style=\{resultsScaleStyle\}>/);
+  assert.match(shell, /<Animated\.View style=\{reducedMotion \? styles\.resultsStill : resultsScaleStyle\}>/);
   assert.match(shell, /if \(visible && queueEnded\) wrapUp\(queueEnded\)/);
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /feelingChips\(stats, maxCombo, plain \? 1 : undefined\)/);
@@ -452,7 +452,7 @@ test('a ride-up or left-line end is never a loss, even at 0 points', () => {
   assert.match(shell, /wrapReason=\{wrap\?\.reason \?\? null\}/);
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /const sendOff = wrapUp && stars === 0 && !saved && !\(score > 0\);/);
-  assert.match(card, /\{sendOff \? null : <View accessible accessibilityLabel=\{`Score \$\{formatScore\(score\)\}`\}/, 'no score 0 on a send-off');
+  assert.match(card, /\{sendOff \? null : <View accessible accessibilityLabel=\{nBuckets/, 'no score 0 on a send-off');
   assert.match(card, /wrapReason === 'boarding' \? 'HAVE FUN!' : 'SEE YOU SOON!'/);
   assert.match(card, /\{chips\.length && !sendOff \? \(/, 'no brag chip (a lone burst dot) on a 0-point send-off');
 });
@@ -779,13 +779,14 @@ test('a kids quiz never uses betting words: the Big Final picks points, it is no
 
 test('a NEW BEST never feels like a loss: no SO CLOSE!, GOOD TRY! or NICE TRY! next to it, at any star count', () => {
   assert.equal(feelings.feelingTitle(2, true, true), 'GREAT!', 'two stars and a best is GREAT!, not SO CLOSE!');
-  assert.equal(feelings.feelingTitle(2, true, false), 'SO CLOSE!');
+  assert.equal(feelings.feelingTitle(2, true, false), 'GREAT!', 'two stars near star 3 is still GREAT! (titles follow stars)');
   assert.equal(feelings.bestAwareTitle('SO CLOSE!', 2, true), 'GREAT!');
   assert.equal(feelings.bestAwareTitle('NICE TRY!', 1, true), 'NICE!');
   assert.equal(feelings.bestAwareTitle('GOOD START!', 0, true), 'YOUR BEST YET!');
   assert.equal(feelings.bestAwareTitle('STILL FIGHTING!', 2, true), 'GREAT!');
   assert.equal(feelings.bestAwareTitle('STILL FIGHTING!', 0, true), 'YOUR BEST YET!');
-  assert.equal(feelings.bestAwareTitle('SO CLOSE!', 2, false), 'SO CLOSE!', 'no best: the title stays');
+  assert.equal(feelings.bestAwareTitle('SO CLOSE!', 2, false), 'GREAT!', 'two stars never read SO CLOSE!');
+  assert.equal(feelings.bestAwareTitle('SO CLOSE!', 0, false), 'SO CLOSE!', 'no stars and no best: the title stays');
   assert.equal(feelings.bestAwareTitle('TIME!', 0, true), 'TIME!', 'finish words stay');
   assert.equal(feelings.bestAwareTitle('INCREDIBLE!', 3, true), 'INCREDIBLE!');
   assert.equal(feelings.endFeel({ stars: 0, isNewBest: true, saved: false }), 'best', 'a 0-star best sounds like a win');

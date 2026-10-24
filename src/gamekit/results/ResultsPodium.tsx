@@ -11,8 +11,10 @@
  * The shark and podium scale with the room the card leaves (like Sharky).
  * A tall card (a big Whack win) leaves no room for the podium, so the
  * cheering shark peeks up from behind the ribbon's right end instead (clear of
- * the close button on the left): the
- * best runs never lose their moment. A run with no star and no room shows
+ * the close button on the left): the best runs never lose their moment. The
+ * peek is drawn by the card itself (ResultsCard `peek`), so it is anchored to
+ * the card's real top edge; this zone only measures the room and reports the
+ * peek's size through `onPeek`. A run with no star and no room shows
  * nothing. All motion is Reanimated on the UI thread; Reduce Motion shows the
  * pose with no hop.
  */
@@ -66,10 +68,20 @@ export function podiumScale(h: number): number {
   return Math.max(0.42, Math.min(1, h / PODIUM_POSE_PT));
 }
 
-export function ResultsPodium({ cheer, reducedMotion = false, delayMs = 120 }: { cheer: boolean; reducedMotion?: boolean; delayMs?: number }) {
+export function ResultsPodium({ cheer, reducedMotion = false, delayMs = 120, onPeek }: {
+  cheer: boolean;
+  reducedMotion?: boolean;
+  delayMs?: number;
+  /** The peek's scale when the card should draw it (0 = no peek): the card anchors it to its ribbon. */
+  onPeek?: (scale: number) => void;
+}) {
   const [zoneH, setZoneH] = useState(-1);
   const mode = zoneH < 0 ? 'none' : podiumMode(zoneH, cheer);
-  const k = mode === 'podium' ? podiumScale(zoneH) : mode === 'peek' ? peekScale(zoneH) : 0;
+  const peekK = mode === 'peek' ? peekScale(zoneH) : 0;
+  const k = mode === 'podium' ? podiumScale(zoneH) : 0;
+  const onPeekRef = React.useRef(onPeek);
+  onPeekRef.current = onPeek;
+  useEffect(() => { onPeekRef.current?.(peekK); }, [peekK]);
   const rise = useSharedValue(reducedMotion ? 0 : 40);
   const o = useSharedValue(reducedMotion ? 1 : 0);
   const hop = useSharedValue(0);
@@ -90,14 +102,7 @@ export function ResultsPodium({ cheer, reducedMotion = false, delayMs = 120 }: {
   const onLayout = (e: LayoutChangeEvent) => setZoneH(Math.round(e.nativeEvent.layout.height));
   return (
     <View style={styles.zone} onLayout={onLayout} pointerEvents="none" importantForAccessibility="no-hide-descendants">
-      {mode === 'peek' ? (
-        // Peeks up from behind the ribbon's right end (the card draws over its feet; the X stays clear).
-        <Animated.View style={[styles.peek, sceneSt]}>
-          <Animated.View style={sharkSt}>
-            <Image source={ART.cheer} style={{ width: 130 * k, height: 160 * k }} resizeMode="contain" />
-          </Animated.View>
-        </Animated.View>
-      ) : k > 0 ? (
+      {k > 0 ? (
         <Animated.View style={[styles.scene, { width: 210 * k, height: cheer ? 110 * k : 150 * k }, sceneSt]}>
           <Animated.View style={[styles.shark, { bottom: (cheer ? 70 : 18) * k }, sharkSt]}>
             <Image source={cheer ? ART.cheer : ART.swim} style={cheer ? { width: 130 * k, height: 160 * k } : { width: 190 * k, height: 130 * k }} resizeMode="contain" />
@@ -114,5 +119,4 @@ const styles = StyleSheet.create({
   zone: { flex: 1, width: '100%', justifyContent: 'flex-end', alignItems: 'center', minHeight: 0, marginBottom: 22 },
   scene: { alignItems: 'center', justifyContent: 'flex-end' },
   shark: { position: 'absolute', alignSelf: 'center' },
-  peek: { position: 'absolute', right: '7%', bottom: -10 },
 });

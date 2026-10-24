@@ -118,6 +118,18 @@ export interface ResultsCardProps {
   /** Fired once when the NEW BEST badge slams in (the shell bursts confetti). */
   onNewBestLanded?: () => void;
   /**
+   * A game's own extra row (Rhythm's TRY TWO THUMBS? offer, Banana Basket's
+   * ribbons), drawn inside the card on a cream panel just above the buttons,
+   * so the decision buttons are always the card's bottom row.
+   */
+  extras?: React.ReactNode;
+  /**
+   * The cheering shark peeks up from behind the ribbon's right end at this
+   * scale (0 = no peek): the shell passes it when a tall card leaves no room
+   * for the podium scene above, so a big win never loses its moment.
+   */
+  peek?: number;
+  /**
    * The decision buttons (PLAY AGAIN, DONE), drawn inside the card at the
    * bottom like Sharky, the Duel and the Boss, so every game's card is one
    * piece. Passed as children.
@@ -140,7 +152,7 @@ export function defaultMessage(stars: number, near: boolean, newBest = false): s
 
 export function ResultsCard({
   score, stars, message, thresholds, personalBest, maxCombo, stats, note, reducedMotion = false, onRevealed, rival,
-  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer, onNewBestLanded, wrapUp = false, starGoal, wrapReason = null, children: actions,
+  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer, onNewBestLanded, wrapUp = false, starGoal, wrapReason = null, extras, peek = 0, children: actions,
 }: ResultsCardProps) {
   // The ride came up (or the kid left the line) before any points: a happy
   // send-off (HAVE FUN! stamp), never three empty stars and a big 0.
@@ -162,14 +174,19 @@ export function ResultsCard({
   const near = useMemo(() => nearMissLine({ score, thresholds, best: personalBest, rival }), [score, thresholds, personalBest, rival]);
   // Wins in a row for this game (counted once per run, at mount).
   const [streak] = useState(() => (streakKey ? noteRun(streakKey, runToken ?? `${score}:${stars}`, stars > 0) : 0));
-  const feeling = useMemo(() => feelingLine({ streak, near: best.isNewBest ? null : near }), [streak, near, best.isNewBest]);
+  // Say each idea once: when the next-star bar shows, the bar (its word and
+  // its star) already says "close to the next star", so the pill never
+  // repeats it with a number to read ("JUST 2,105 FROM STAR 3").
+  const nearForPill = best.isNewBest || (goal && near.kind === 'nearStar') ? null : near;
+  const feeling = useMemo(() => feelingLine({ streak, near: nearForPill }), [streak, nearForPill]);
   const showNear = !!feeling.text;
   // A 0-star run (or a saved one) reads in one glance: stars or the stamp,
   // the score, the bar and the big button. The quiet BEST shows only when the
   // run came near it, one brag chip at most, and no share chip (a NEW BEST
   // still gets the full card).
   const plain = stars === 0 && !best.isNewBest;
-  const showBest = !!personalBest && (!plain || nearBest(score, personalBest));
+  // The quiet BEST shows only when no feeling pill does (one line under the score, never two).
+  const showBest = !!personalBest && !showNear && (!plain || nearBest(score, personalBest));
   const chips = useMemo(() => feelingChips(stats, maxCombo, plain ? 1 : undefined), [stats, maxCombo, plain]);
   // Short phones (iPhone SE) get a tighter card so the ribbon and the buttons
   // both stay on screen: no tally buckets (the score already says it all) and
@@ -211,6 +228,8 @@ export function ResultsCard({
 
   return (
     <View style={[styles.card, short && styles.cardShort]}>
+      {/* Drawn before the ribbon, so the ribbon covers the shark's feet. */}
+      {peek > 0 && !sendOff ? <PodiumPeek scale={peek} reducedMotion={reducedMotion} /> : null}
       <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} />
 
       {saved || sendOff ? (
@@ -233,19 +252,29 @@ export function ResultsCard({
         </View>
       )}
 
-      {nBuckets ? (
-        <View style={styles.buckets}>
-          {buckets!.map((b, i) => (
-            <BucketTally key={b.label} label={b.label} text={b.value} value={bucketValues?.[i]}
-              delayMs={reducedMotion ? 0 : bucketStart + i * (BUCKET_MS + BUCKET_GAP)} reducedMotion={reducedMotion} />
-          ))}
-        </View>
-      ) : null}
-
-      {/* The score is the gold hero number every card uses (Sharky, Boss): no SCORE word over it. */}
-      {sendOff ? null : <View accessible accessibilityLabel={`Score ${formatScore(score)}`} style={styles.scoreWrap}>
-        <CountUpText value={score} from={0} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
-          onTick={() => GameAudio.play(SCORE_TICK_CUE, { volume: 0.3 })} style={[styles.score, short && styles.scoreShort]} />
+      {/* The score is the gold hero number every card uses (Sharky, Boss): no SCORE word over it.
+          A star run's tally (POINTS, COMBO, BONUS) pops in on the score's own
+          spot, then folds into it as the total counts up: the drama of the
+          add-up, and a settled card that shows one number, not four. */}
+      {sendOff ? null : <View accessible accessibilityLabel={nBuckets
+        ? `Score ${formatScore(score)}. ${buckets!.map((b) => `${b.label} ${b.value}`).join(', ')}` : `Score ${formatScore(score)}`} style={styles.scoreWrap}>
+        {nBuckets ? (
+          <TallyFold foldAt={countDelay} reducedMotion={reducedMotion}>
+            <CountUpText value={score} from={0} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
+              onTick={() => GameAudio.play(SCORE_TICK_CUE, { volume: 0.3 })} style={[styles.score, short && styles.scoreShort]} />
+          </TallyFold>
+        ) : (
+          <CountUpText value={score} from={0} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
+            onTick={() => GameAudio.play(SCORE_TICK_CUE, { volume: 0.3 })} style={[styles.score, short && styles.scoreShort]} />
+        )}
+        {nBuckets && !reducedMotion ? (
+          <View style={styles.buckets} pointerEvents="none" importantForAccessibility="no-hide-descendants">
+            {buckets!.map((b, i) => (
+              <BucketTally key={b.label} label={b.label} text={b.value} value={bucketValues?.[i]}
+                delayMs={bucketStart + i * (BUCKET_MS + BUCKET_GAP)} foldAt={countDelay} reducedMotion={reducedMotion} />
+            ))}
+          </View>
+        ) : null}
       </View>}
 
       {/* The row keeps its height only when something will land in it (no empty gap on a plain card). */}
@@ -286,6 +315,8 @@ export function ResultsCard({
 
       {note && !sendOff ? <Text style={styles.note}>{note}</Text> : null}
 
+      {extras ? <View style={styles.extras}>{extras}</View> : null}
+
       {actions ? <View style={styles.actions}>{actions}</View> : null}
     </View>
   );
@@ -318,14 +349,35 @@ export function ResultChip({ label, value, pips, icon, iconRow }: ResultStat) {
 }
 
 /** One bucket: counts up from 0 with accelerating, rising coin ticks, then pops. */
-function BucketTally({ label, text, value, delayMs, reducedMotion }: {
+/** How long the tally takes to fold into the score (ms). */
+export const TALLY_FOLD_MS = 220;
+
+/** The score waits, hidden, while the tally sits on its spot, then grows in as the tally folds into it. */
+function TallyFold({ foldAt, reducedMotion, children }: { foldAt: number; reducedMotion: boolean; children: React.ReactNode }) {
+  const t = useSharedValue(reducedMotion ? 1 : 0);
+  useEffect(() => {
+    if (reducedMotion) { t.value = 1; return undefined; }
+    t.value = withDelay(Math.max(0, foldAt - 40), withSequence(
+      withTiming(1.12, { duration: TALLY_FOLD_MS, easing: Easing.out(Easing.quad) }),
+      withSpring(1, { damping: 10, stiffness: 300 }),
+    ));
+    return () => cancelAnimation(t);
+  }, [foldAt, reducedMotion, t]);
+  const st = useAnimatedStyle(() => ({ opacity: Math.min(1, t.value * 1.5), transform: [{ scale: 0.6 + Math.min(1.12, t.value) * 0.4 }] }));
+  return <Animated.View style={st}>{children}</Animated.View>;
+}
+
+function BucketTally({ label, text, value, delayMs, foldAt, reducedMotion }: {
   label: string;
   text: string;
   value?: number;
   delayMs: number;
+  /** When the bucket folds into the total (shrinks to the score's middle and fades). */
+  foldAt: number;
   reducedMotion: boolean;
 }) {
   const pop = useSharedValue(reducedMotion ? 1 : 0);
+  const fold = useSharedValue(0);
   const [shown, setShown] = useState(reducedMotion || value === undefined ? value ?? 0 : 0);
   useEffect(() => {
     if (reducedMotion) {
@@ -336,6 +388,7 @@ function BucketTally({ label, text, value, delayMs, reducedMotion }: {
       withTiming(1.15, { duration: 90, easing: Easing.out(Easing.back(1.6)) }),
       withSpring(1, { damping: 10, stiffness: 300 }),
     ));
+    fold.value = withDelay(foldAt, withTiming(1, { duration: TALLY_FOLD_MS, easing: Easing.in(Easing.quad) }));
     const n = value !== undefined ? tallyTickCount(value) : 0;
     const plan = tallySchedule(n, BUCKET_MS);
     const timers = plan.at.map((t, k) => setTimeout(() => {
@@ -343,9 +396,12 @@ function BucketTally({ label, text, value, delayMs, reducedMotion }: {
       if (k === n - 1) playHaptic('tick');
     }, delayMs + t));
     timers.push(setTimeout(() => setShown(value ?? 0), delayMs));
-    return () => { timers.forEach(clearTimeout); cancelAnimation(pop); };
-  }, [delayMs, value, reducedMotion, pop]);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }], opacity: pop.value > 0.02 ? 1 : 0 }));
+    return () => { timers.forEach(clearTimeout); cancelAnimation(pop); cancelAnimation(fold); };
+  }, [delayMs, foldAt, value, reducedMotion, pop, fold]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: pop.value * (1 - fold.value * 0.7) }],
+    opacity: pop.value > 0.02 ? 1 - fold.value : 0,
+  }));
   return (
     <Animated.View style={style}>
       <View style={styles.bucket}>
@@ -410,6 +466,48 @@ function StarSlot({ index, earned, close, reducedMotion, stepMs, small = false, 
   );
 }
 
+const PEEK_ART = require('../../assets/games/sharky/tide/shark_cheer.png');
+
+/**
+ * The cheering shark peeking from behind the ribbon's right end. It lives in
+ * the card, so it is always anchored to the card's real top edge (never
+ * floating over the dimmed HUD), and a clip just under the ribbon's middle
+ * hides its feet, so it truly rises from behind the ribbon. It hops a few
+ * times, then rests. UI thread only; Reduce Motion shows it still.
+ */
+function PodiumPeek({ scale, reducedMotion }: { scale: number; reducedMotion: boolean }) {
+  const w = 130 * scale;
+  const h = 160 * scale;
+  const rise = useSharedValue(reducedMotion ? 0 : h);
+  const hop = useSharedValue(0);
+  useEffect(() => {
+    if (reducedMotion) return undefined;
+    rise.value = withDelay(PEEK_DELAY_MS, withSpring(0, { damping: 12, stiffness: 190 }));
+    hop.value = withDelay(PEEK_DELAY_MS + 420, withRepeat(withSequence(
+      withTiming(-12, { duration: 220, easing: Easing.out(Easing.quad) }),
+      withTiming(0, { duration: 220, easing: Easing.in(Easing.quad) }),
+    ), PEEK_HOPS));
+    return () => { cancelAnimation(rise); cancelAnimation(hop); };
+  }, [reducedMotion, rise, hop]);
+  const st = useAnimatedStyle(() => ({ transform: [{ translateY: rise.value + hop.value }] }));
+  return (
+    <View style={styles.peekClip} pointerEvents="none" importantForAccessibility="no-hide-descendants">
+      <Animated.Image source={PEEK_ART} style={[{ width: w, height: h }, st]} resizeMode="contain" />
+    </View>
+  );
+}
+
+/**
+ * Where the peeking shark's feet stand, in points below the card's top edge.
+ * The ribbon band runs from about 22 pt above the card's top to about 28 pt
+ * below it, so feet at +5 hide the shark's lower third behind the band.
+ */
+export const PEEK_FOOT_PT = 5;
+/** The peek rises once the ribbon has slammed. */
+const PEEK_DELAY_MS = 360;
+/** It hops this many times, then rests. */
+const PEEK_HOPS = 3;
+
 const styles = StyleSheet.create({
   card: {
     width: '100%',
@@ -433,7 +531,7 @@ const styles = StyleSheet.create({
   starRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4, marginBottom: 6 },
   star: { marginHorizontal: 6 },
   starMiddle: { marginBottom: 10 },
-  scoreWrap: { marginTop: 2 },
+  scoreWrap: { marginTop: 2, alignItems: 'center', justifyContent: 'center', minHeight: 58 },
   score: { fontFamily: 'Shark', fontSize: 50, lineHeight: 58, minWidth: 180, color: '#ffcf3b',
     textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 0 },
   bestRow: { height: 34, justifyContent: 'center', alignItems: 'center' },
@@ -446,7 +544,14 @@ const styles = StyleSheet.create({
   pips: { flexDirection: 'row', height: 24, alignItems: 'center' },
   pip: { width: 14, height: 14, borderRadius: 7, marginHorizontal: 2, borderWidth: 2, borderColor: '#05346e', backgroundColor: '#ffffff' },
   pipOn: { backgroundColor: '#ffcf3b' },
-  buckets: { flexDirection: 'row', justifyContent: 'center', marginBottom: 4 },
+  // The tally sits on the score's spot (no row of its own), then folds into it.
+  buckets: { position: 'absolute', left: -60, right: -60, top: 0, bottom: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  extras: { width: '100%', marginTop: 10, backgroundColor: '#fff8e4', borderRadius: 16, borderWidth: 3, borderColor: '#05346e',
+    paddingVertical: 6, paddingHorizontal: 8, alignItems: 'center' },
+  // The clip's bottom edge sits a few points under the card's top edge, about a
+  // third of the way down the ribbon band: the shark stands behind the band's
+  // right end with its lower third hidden, and rises from there.
+  peekClip: { position: 'absolute', top: -220, right: 20, width: 140, height: 220 + PEEK_FOOT_PT, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end' },
   bucket: { backgroundColor: '#3d9be6', borderRadius: 14, borderWidth: 3, borderColor: '#05346e', paddingHorizontal: 10,
     paddingVertical: 3, marginHorizontal: 4, alignItems: 'center', minWidth: 78 },
   bucketValue: { fontFamily: 'Shark', fontSize: 22, height: 30, color: '#ffffff', minWidth: 60, textAlign: 'center',

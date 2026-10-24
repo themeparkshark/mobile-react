@@ -31,7 +31,7 @@ export function takeoverDrop({ H, cardH, stageTop, band, full }: TakeoverInput):
 }
 
 /** The most a short results card zooms the scene (the sharks stay inside the screen edges). */
-export const TAKEOVER_ZOOM_MAX = 1.2;
+export const TAKEOVER_ZOOM_MAX = 1.16;
 /** Sky the dropped scene may leave above it, as a share of the field height, before it zooms. */
 export const TAKEOVER_SKY_OK = 0.1;
 /** Where the scene zooms from (Stage's camera origin, as a share of the band height). */

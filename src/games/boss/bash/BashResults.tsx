@@ -7,7 +7,8 @@ import { Image } from 'expo-image';
 // Saves belong to the signed-in player, not the phone.
 import AsyncStorage from '../../../gamekit/core/playerStorage';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { initialWindowMetrics } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { BossId } from '../../../api/endpoints/parks/raid';
 import { BOSS_ART } from '../../../components/boss/bossArt';
@@ -93,6 +94,9 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   const won = hpAfter === 0;
   const n = nextAttack(next);
   const noHits = damage <= 0;
+  // One KO mark per card: the finisher's crown in the third star slot, or
+  // (a 3-star finish, or a team win) the KO! pill, never both.
+  const koInStars = ko && stars < 3 && !noHits;
   const drain = useSharedValue(0);
   const starsIn = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
   const pressed = useRef(false);
@@ -124,6 +128,9 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   const once = (f?: () => void) => () => { if (pressed.current || !f) return; pressed.current = true; f(); };
 
   return (
+    // Bottom-anchored like the Duel, Sharky and the shared card: the arena
+    // stays above it as the scene, never sky under a floating card.
+    <View style={[styles.stage, { height: Dimensions.get('window').height }]} pointerEvents="box-none">
     <View style={styles.card} accessibilityViewIsModal>
       {/* The one results title every game shares: Alex's ribbon over the card's top edge. */}
       {/* The star word waits for the last star (no spoilers); a won raid's stars are simply there. */}
@@ -156,7 +163,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       </View>
 
       {!noHits && <View style={styles.stars}>
-        {[s0, s1, s2].map((st, i) => (ko && i === 2 && stars < 3)
+        {[s0, s1, s2].map((st, i) => (koInStars && i === 2)
           // The finisher's card: a gold KO crown where a grey third star would sit.
           ? <View key={i} style={styles.starSlot} accessible accessibilityLabel="Knockout crown: you finished the boss">
             <GameIcon name="crown" size={38} /><Text style={styles.koTag} maxFontSizeMultiplier={1}>KO</Text></View>
@@ -193,7 +200,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
         </View>}
         {/* Won: the KO crown pill, the same picture as the finisher's star slot
             and the loot strip (no sentence to read). */}
-        {won ? <View style={styles.koPill} accessible accessibilityLabel="Boss knocked out">
+        {won && !koInStars ? <View style={styles.koPill} accessible accessibilityLabel="Boss knocked out">
           <View style={styles.lootKo}><GameIcon name="crown" size={26} /><Text style={styles.koTag} maxFontSizeMultiplier={1}>KO</Text></View>
           <Text style={styles.koPillText} maxFontSizeMultiplier={1}>KO!</Text>
         </View> : null}
@@ -256,6 +263,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       </>}
       {perfLine ? <Text style={styles.perf}>{perfLine}</Text> : null}
     </View>
+    </View>
   );
 }
 
@@ -271,6 +279,8 @@ function Loot({ icon, n, count = false, reduced = false, small = false }: { icon
 
 const styles = StyleSheet.create({
   // The one results surface every game shares: the blue card with a white border.
+  stage: { width: '100%', alignItems: 'center', justifyContent: 'flex-end',
+    paddingTop: (initialWindowMetrics?.insets.top ?? 20) + 56, paddingBottom: Math.max(10, initialWindowMetrics?.insets.bottom ?? 0) + 6 },
   card: { width: '92%', backgroundColor: BRAND.blue, borderRadius: 26, borderWidth: 4, borderColor: BRAND.white, padding: 16, paddingTop: 44, marginTop: 30,
     shadowColor: BRAND.navy, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 18 },
   ribbonWrap: { position: 'absolute', top: -36, left: -14, right: -14 },

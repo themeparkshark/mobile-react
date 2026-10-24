@@ -2350,6 +2350,9 @@ export default function MemoryGame({
       // MemoryResults draws its own navy scrim; the shell's would flash first for a frame.
       resultsScrim={resultData ? 'none' : undefined}
       renderResults={resultData ? (args) => { shellClaim.current = args.claim; return renderResults(args); } : undefined}
+      // The try card is a results card drawn in the field: the HUD steps back
+      // (no live pause button, no title over it) and the X does what DONE does.
+      ownResultsDone={tryScreen ? giveUp : null}
     >
       <View style={styles.field} onLayout={onFieldLayout}>
         <LinearGradient colors={['#0b80c4', '#35a8e6', '#bfe5ff']} style={StyleSheet.absoluteFill} />

@@ -1,18 +1,25 @@
 /**
  * TryCard.tsx: the end of a Memory Match try (Ride Challenge).
  *
+ * It wears the one results look every game shares: the blue card with a
+ * white border, Alex's ribbon over its top edge, the gold TRY AGAIN and a
+ * white DONE inside the card. Pictures, not sentences: the pair coins say how
+ * far you got (the words are spoken), and the tries left are small retry
+ * marks under TRY AGAIN (no "tries on this Ticket" sentence next to the ride's
+ * own Ticket card).
+ *
  * A short, sequenced moment on the 232ms grid the results card uses:
  *   0      card rises (opacity + lift only: a scaled, shadowed layer smears on iOS)
- *   0      gold ribbon slams in with the title, white impact, a hit + haptic
+ *   0      Alex's ribbon slams in with the title, a hit + haptic
  *   +232   pair pips fill one by one, each a pop, a rising twinkle and a tick;
  *          the last found pip throws a small capped star puff
- *   +232   the line fades in, then TRY AGAIN lands and starts a slow breathe
+ *   +232   TRY AGAIN lands (with a retry mark per try left) and starts a slow breathe
  * Everything runs on the UI thread; Reduce Motion shows the final state at
  * once with no sound ladder. Nothing loops once the card is gone.
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -29,8 +36,8 @@ import { GameAudio, Haptic } from '../../gamekit';
 import GameIcon from '../../ui/GameIcon';
 import { triesLeftLine } from './lossCopy';
 import { MM } from './theme';
+import { ResultsRibbon } from '../../gamekit/results/ResultsRibbon';
 
-const BANNER = require('../../assets/games/memory/v8/results_banner.png');
 const STAR = require('../../assets/games/memory/studio/coin_alex.png');
 
 export const TRY_BEAT_MS = 232;
@@ -68,9 +75,6 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
 }) {
   const canRetry = left > 0;
   const sched = tryCardSchedule(pairs);
-  const banner = useSharedValue(reducedMotion ? 1 : 0);
-  const impact = useSharedValue(0);
-  const line = useSharedValue(reducedMotion ? 1 : 0);
   const button = useSharedValue(reducedMotion ? 1 : 0);
   const breathe = useSharedValue(0);
   // Press and hold the card to peek at the board behind it.
@@ -80,8 +84,7 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
   useEffect(() => {
     if (reducedMotion) return undefined;
     const at = (ms: number, fn: () => void) => timers.current.push(setTimeout(fn, ms));
-    banner.value = withSequence(withTiming(1.12, { duration: 150, easing: Easing.in(Easing.quad) }), withSpring(1, { damping: 9, stiffness: 260 }));
-    impact.value = withDelay(150, withSequence(withTiming(1, { duration: 16 }), withTiming(0, { duration: 160 })));
+    // The ribbon slams on its own (ResultsRibbon); the hit lands with it.
     at(150, () => { Haptic.hitMedium(); GameAudio.play('fx.hit', { volume: 0.5 }); });
     // Every coin that fills is a small reward; the last one lands with the match chime.
     sched.pips.forEach((ms, i) => at(ms, () => {
@@ -89,7 +92,6 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
       GameAudio.playLadder('mm_sharp_twinkle', 2 + i, { volume: 0.6 });
     }));
     if (sched.puff !== null) at(sched.puff, () => { Haptic.hitSoft(); GameAudio.playLadder('mm_match', Math.min(7, 2 + pairs), { volume: 0.7 }); });
-    line.value = withDelay(sched.line, withTiming(1, { duration: 200 }));
     button.value = withDelay(sched.button, withSpring(1, { damping: 10, stiffness: 220 }));
     if (canRetry) {
       breathe.value = withDelay(sched.button + 500, withRepeat(withSequence(
@@ -106,12 +108,6 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
   }, []);
 
   const cardSt = useAnimatedStyle(() => ({ opacity: Math.min(1, enter.value * 1.6) * (1 - peek.value * 0.85), transform: [{ translateY: (1 - enter.value) * 28 }] }));
-  const bannerSt = useAnimatedStyle(() => ({
-    opacity: banner.value > 0 ? 1 : 0,
-    transform: [{ translateY: (1 - Math.min(1, banner.value)) * -34 }, { scale: banner.value || 1 }],
-  }));
-  const flashSt = useAnimatedStyle(() => ({ opacity: impact.value * 0.85 }));
-  const lineSt = useAnimatedStyle(() => ({ opacity: line.value, transform: [{ translateY: (1 - line.value) * 6 }] }));
   const buttonSt = useAnimatedStyle(() => ({
     opacity: Math.min(1, button.value * 1.5),
     transform: [{ scale: (0.7 + button.value * 0.3) * (1 + breathe.value * 0.035) }],
@@ -123,18 +119,13 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
         onLongPress={() => { peek.value = withTiming(1, { duration: 140 }); Haptic.tickSelection(); }}
         onPressOut={() => { peek.value = withTiming(0, { duration: 180 }); }}
         accessibilityHint="Press and hold to see the board">
-        <Animated.View style={[styles.banner, bannerSt]}>
-          <Image source={BANNER} style={styles.bannerImg} resizeMode="stretch" />
-          <Animated.View style={[styles.bannerFlash, flashSt]} />
-          <Text style={styles.bannerText} numberOfLines={1} adjustsFontSizeToFit accessibilityRole="header">{copy.title}</Text>
-        </Animated.View>
-        <View style={styles.pips} accessible accessibilityLabel={`${pairs} of ${total} pairs found`}>
+        <ResultsRibbon title={copy.title} reducedMotion={reducedMotion} style={styles.ribbon} />
+        <View style={styles.pips} accessible accessibilityLabel={`${pairs} of ${total} pairs found. ${copy.line}`}>
           {Array.from({ length: total }, (_, i) => (
             <Pip key={i} on={i < pairs} delay={sched.pips[i] ?? 0} sparks={i === pairs - 1 ? LAST_PUFF_STARS : PUFF_STARS}
               reducedMotion={reducedMotion} />
           ))}
         </View>
-        <Animated.Text style={[styles.line, compact && styles.lineCompact, lineSt]}>{copy.line}</Animated.Text>
         <Animated.View style={[styles.actions, buttonSt]}>
           {canRetry ? (
             <Pressable onPress={onTryAgain} style={({ pressed }) => [styles.btn, compact && styles.btnCompact, pressed && styles.down]}
@@ -143,10 +134,14 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
               <Text style={styles.btnText}>TRY AGAIN</Text>
             </Pressable>
           ) : null}
-          <View style={[styles.leftRow, compact && styles.leftRowCompact]}>
-            <GameIcon name="ticket" size={24} />
-            <Text style={styles.leftText}>{triesLeftLine(left)}</Text>
-          </View>
+          {canRetry ? (
+            // Tries left as pictures: one small retry mark per try (the words are spoken on TRY AGAIN).
+            <View style={[styles.leftRow, compact && styles.leftRowCompact]} importantForAccessibility="no-hide-descendants">
+              {Array.from({ length: left }, (_, i) => (
+                <View key={i} style={styles.tryMark}><GameIcon name="retry" size={16} /></View>
+              ))}
+            </View>
+          ) : null}
           <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? [styles.done, compact && styles.doneCompact] : styles.btn, pressed && styles.down]}
             accessibilityRole="button" accessibilityLabel="Done">
             <Text style={canRetry ? styles.doneText : styles.btnText}>DONE</Text>
@@ -186,33 +181,29 @@ function Spark({ k, n, t }: { k: number; n: number; t: SharedValue<number> }) {
 
 const styles = StyleSheet.create({
   pos: { position: 'absolute', left: 22, right: 22 },
-  card: { alignItems: 'center', backgroundColor: '#fffdf4', borderRadius: 24, borderWidth: 3, borderBottomWidth: 6,
-    borderColor: MM.ink, paddingTop: 0, paddingBottom: 16, paddingHorizontal: 16, marginTop: 26 },
-  banner: { width: '112%', height: 82, marginTop: -30, alignItems: 'center', justifyContent: 'center' },
-  bannerImg: { position: 'absolute', width: '100%', height: '100%' },
-  bannerFlash: { position: 'absolute', width: '70%', height: '50%', backgroundColor: '#ffffff', borderRadius: 30 },
-  bannerText: { fontFamily: 'Shark', fontSize: 32, color: '#ffffff', marginTop: -10, paddingHorizontal: 58,
-    textShadowColor: MM.ink, textShadowOffset: { width: 2, height: 3 }, textShadowRadius: 1 },
-  pips: { flexDirection: 'row', gap: 5, marginTop: 4, marginBottom: 8 },
+  // The shared results card: blue, white border, the ribbon over its top edge.
+  card: { alignItems: 'center', backgroundColor: '#0768b9', borderRadius: 24, borderWidth: 4,
+    borderColor: '#ffffff', paddingTop: 46, paddingBottom: 16, paddingHorizontal: 16, marginTop: 34 },
+  ribbon: { position: 'absolute', top: -34, left: -14, right: -14 },
+  pips: { flexDirection: 'row', gap: 5, marginTop: 4, marginBottom: 14 },
   pip: { width: 26, height: 26, borderRadius: 13, borderWidth: 2.5, borderColor: '#9cc3e4', backgroundColor: '#e3eff9',
     alignItems: 'center', justifyContent: 'center' },
   pipCoin: { position: 'absolute', width: 30, height: 30 },
   spark: { position: 'absolute', width: 7, height: 7, borderRadius: 4, backgroundColor: MM.gold, borderWidth: 1.5, borderColor: '#ffffff' },
   cardCompact: { paddingBottom: 10 },
-  lineCompact: { fontSize: 17, lineHeight: 20, marginBottom: 8 },
   btnCompact: { paddingVertical: 9 },
   leftRowCompact: { marginTop: 6 },
   doneCompact: { marginTop: 6 },
-  line: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: MM.navyText, textAlign: 'center', marginBottom: 12 },
   actions: { alignItems: 'center', alignSelf: 'stretch' },
-  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: MM.gold, borderRadius: 18,
-    paddingHorizontal: 28, paddingVertical: 13, borderWidth: 3, borderColor: MM.ink, borderBottomWidth: 6,
-    borderBottomColor: MM.goldDeep, minWidth: 220 },
+  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ffcf3b', borderRadius: 14,
+    paddingHorizontal: 28, paddingVertical: 14, borderWidth: 3, borderColor: '#05346e', borderBottomWidth: 6,
+    alignSelf: 'stretch' },
   down: { transform: [{ translateY: 2 }, { scale: 0.97 }] },
-  btnText: { fontFamily: 'Shark', fontSize: 26, color: '#075083' },
-  leftRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
-  leftText: { fontFamily: 'Knockout', fontSize: 16, color: MM.navyText },
-  done: { marginTop: 10, minWidth: 160, minHeight: 44, borderRadius: 14, borderWidth: 2.5, borderColor: MM.ink,
+  btnText: { fontFamily: 'Shark', fontSize: 24, color: '#05346e' },
+  leftRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  tryMark: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: '#05346e',
+    alignItems: 'center', justifyContent: 'center' },
+  done: { marginTop: 10, alignSelf: 'stretch', minHeight: 48, borderRadius: 14, borderWidth: 3, borderColor: '#05346e', borderBottomWidth: 5,
     backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  doneText: { fontFamily: 'Shark', fontSize: 20, color: MM.navyText },
+  doneText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
 });

@@ -1046,8 +1046,9 @@ interface ResultsExtras {
 function ResultsRows({ x }: { x: ResultsExtras }) {
   return (
     <View style={styles.rows}>
-      <View style={styles.shareRow}>
-        <Text style={styles.rowLabel}>BALL {x.share}%</Text>
+      {/* The bar is the picture; the percent is spoken, never drawn (no percentages on a results card). */}
+      <View style={styles.shareRow} accessible accessibilityLabel={`Your ball share, ${x.share} percent`}>
+        <Text style={styles.rowLabel}>BALL</Text>
         <View style={styles.shareBar}>
           <View style={[styles.shareFill, { width: `${Math.max(2, Math.min(100, x.share))}%` }]} />
         </View>
@@ -1084,7 +1085,7 @@ const styles = StyleSheet.create({
   count: { fontFamily: 'Shark', fontSize: 96, color: '#ffffff', textShadowColor: '#23263a', textShadowRadius: 6, textShadowOffset: { width: 0, height: 3 } },
   rows: { width: '100%', paddingHorizontal: 8, marginTop: 6 },
   shareRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  rowLabel: { fontFamily: 'Shark', fontSize: 16, color: '#23263a', width: 92 },
+  rowLabel: { fontFamily: 'Shark', fontSize: 16, color: '#23263a', width: 56 },
   shareBar: { flex: 1, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#23263a', backgroundColor: '#ffffff', overflow: 'hidden' },
   shareFill: { height: '100%', backgroundColor: '#2d9cff' },
   rowText: { fontFamily: 'Shark', fontSize: 15, color: '#23263a', marginBottom: 4 },

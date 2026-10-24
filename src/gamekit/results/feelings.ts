@@ -127,8 +127,9 @@ export function feelingLine(input: {
 /** The big title when a game did not pick one. Never "you lost". */
 export function feelingTitle(stars: number, near: boolean, newBest = false): string {
   if (stars >= 3) return 'INCREDIBLE!';
-  // A personal best is never "so close": it is a win.
-  if (stars === 2) return near && !newBest ? 'SO CLOSE!' : 'GREAT!';
+  // Two stars is always a win, near star 3 or not: the bar and its star say
+  // how close the third one is. SO CLOSE! is only for a 0-star run.
+  if (stars === 2) return 'GREAT!';
   if (stars === 1) return 'NICE!';
   if (newBest) return BEST_YET_TITLE;
   return near ? 'SO CLOSE!' : 'GOOD TRY!';
@@ -152,6 +153,9 @@ export function isSoftTryTitle(title: string | undefined): boolean {
  * INCREDIBLE!). Real info titles (YOUR RIDE'S UP!, TIME!, NEW FINN) are kept.
  */
 export function bestAwareTitle(title: string | undefined, stars: number, isNewBest: boolean): string | undefined {
+  // Titles follow the stars: two or three lit stars never sit under a soft
+  // "try again" word (SO CLOSE! over two gold stars read as a near-loss).
+  if (stars >= 2 && title && isSoftTryTitle(title)) return feelingTitle(stars, false, isNewBest);
   if (!isNewBest) return title;
   if (stars > 0) return title && isSoftTryTitle(title) ? feelingTitle(stars, false, true) : title;
   if (!title || isSoftTryTitle(title)) return BEST_YET_TITLE;
