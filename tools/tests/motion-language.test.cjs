@@ -288,3 +288,12 @@ test('the gold chaser is a contrast-stretched gold duotone: dark outlines stay d
   assert.ok(outline.every((v, i) => v < face[i] - 0.4), 'outlines stay dark, so every line of the art survives');
   assert.equal(m.slice(15).join(','), '0,0,0,1,0', 'alpha untouched: the die-cut shape stays');
 });
+
+test('coin reveal backdrop: a pre-softened small copy of the water world under a strong veil, no runtime blur', () => {
+  const src = read('src/components/CoinCatchReveal.tsx');
+  assert.ok(src.includes("reveal/water-soft.webp"), 'the softened world copy');
+  assert.ok(!/blurRadius=/.test(src), 'no runtime blur of a full-size image on the reveal frame');
+  const veil = Number((src.match(/const WORLD_VEIL = ([0-9.]+);/) || [])[1]);
+  assert.ok(veil >= 0.88 && veil < 1, `props stop reading as shapes, the water tint stays (${veil})`);
+  assert.ok(fs.statSync(path.join(root, 'assets/images/reveal/water-soft.webp')).size < 8000, 'tiny asset');
+});
