@@ -571,7 +571,7 @@ test('wave 4: every tier climbs: the 5th holds its stars 250+ ms, the 25th is 1.
   assert.equal(wow.confettiAt(p.burstAt + wow.CONFETTI.ms, p, 0, 10), null);
   assert.equal(wow.confettiAt(p.burstAt + 100, wow.catchPlan({ reduced: true }), 0, 10), null, 'no confetti in Reduce Motion');
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
-  assert.match(src, /momentParticles\(CONFETTI\.max, power, reducedMotion\)/, 'confetti goes through the power budget');
+  assert.match(src, /motionFx && grandCatch \? momentParticles\(CONFETTI\.max, power, reducedMotion\) : 0/, 'confetti goes through the power budget, and mounts only on the grand catch');
   assert.match(src, /treat: variant\.treat/);
 });
 

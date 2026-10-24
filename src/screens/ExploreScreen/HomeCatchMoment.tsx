@@ -575,6 +575,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const [layer, setLayer] = useState({ width: 0, height: 0 });
   const [summary, setSummary] = useState<CatchSummary | null>(null);
   const [showing, setShowing] = useState<CatchRequest | null>(null);
+  /** Wave 4: the confetti pieces mount only for the grand catch (the same commit as the catch's own art). */
+  const [grandCatch, setGrandCatch] = useState(false);
   const [ride, setRide] = useState<{ key: number; closing: boolean; hint: boolean; flyTo: { x: number; y: number } | null } | null>(null);
   const [rideItem, setRideItem] = useState<PrepItemType | null>(null);
   // The map's mounted stage only ever swaps to a find whose stage is already built (idle prebuild), so
@@ -1142,6 +1144,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // before the server answers), so they are set here, before the clock starts, and kept as JS flags.
     const beam = motion && variant.beam;
     const grand = motion && variant.grand;
+    setGrandCatch(grand);
     const off = offsetRef.current;
     // The stage keeps the whole inked burst on screen: below the header, above the tab bar, 12 pt from the
     // edges. A find already well placed just rises (the badge rises later, after the ink has faded).
@@ -1690,7 +1693,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const stars = motionFx ? momentParticles(BURST_STARS_MAX, power, reducedMotion) : 0;
   const gatherCount = motionFx ? momentParticles(8, power, reducedMotion) : 0;
   // The grand catch's confetti (capped, thinner on Battery Saver, none in Reduce Motion).
-  const confetti = motionFx ? momentParticles(CONFETTI.max, power, reducedMotion) : 0;
+  const confetti = motionFx && grandCatch ? momentParticles(CONFETTI.max, power, reducedMotion) : 0;
   const name = item ? findDisplayName(item.name, item.set_name) : '';
   const stageFor = rideItem ?? primed?.item ?? readyItem;
   const sceneArt = useRideArt();
