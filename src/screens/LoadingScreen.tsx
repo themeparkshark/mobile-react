@@ -59,6 +59,21 @@ export default function LoadingScreen() {
     require('../services/push').openColdStartPush();
   };
 
+  // Brought back on top after it already opened the map (a late "go to Loading" from the launch,
+  // or an account link): go on to the map again, never sit on the launch scene with a full bar.
+  const leftAfterNavigating = useRef(false);
+  useEffect(() => {
+    if (!focused) {
+      if (hasNavigated.current) leftAfterNavigating.current = true;
+      return;
+    }
+    if (!leftAfterNavigating.current) return;
+    leftAfterNavigating.current = false;
+    hasNavigated.current = false;
+    if (isReady && hasUsername) safeNavigate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused]);
+
   useEffectOnceWhen(() => {
     RootNavigation.navigate('Welcome');
   }, Boolean(isReady && !hasUsername));

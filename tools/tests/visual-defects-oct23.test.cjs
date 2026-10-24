@@ -836,3 +836,10 @@ test('audio: a cue asked for before launch is over loads on expo-av at once and 
   const backends = read('src/gamekit/audio/backends.ts');
   assert.match(backends, /if \(!AV_ONLY_TYPES\.has\(assetType\(src\)\) && !audioStartOpen\(\)\) \{[^]*?const ok = await this\.av\.load\(key, src, voices\);[^]*?whenAudioMayStart\(\)\s*\.then\(\(\) => this\.api\.load\(key, src\)\)/);
 });
+
+test('launch never strands a kid on the launch scene: Splash moves on only while on top, Loading goes on to the map if brought back', () => {
+  const splash = read('src/screens/SplashScreen.tsx');
+  assert.match(splash, /\}, Boolean\(isReady && crumbsLoaded && focused\)\);/);
+  const loading = read('src/screens/LoadingScreen.tsx');
+  assert.match(loading, /if \(!leftAfterNavigating\.current\) return;\s*leftAfterNavigating\.current = false;\s*hasNavigated\.current = false;\s*if \(isReady && hasUsername\) safeNavigate\(\);/);
+});
