@@ -154,6 +154,8 @@ export interface RhythmTapGameProps {
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
   onQuit?: (resume: () => void) => void;
+  /** Capture only (dev results check): always offer TRY TWO THUMBS? on the card, so its place in the card can be checked. */
+  captureOfferTwo?: boolean;
 }
 
 interface RoundPlan {
@@ -908,7 +910,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     if (plan.format === 'queue' && plan.difficulty === 2 && !plan.easy && sum.cleared && sum.marchBars.length === 0) {
       next.d2CleanClears = (next.d2CleanClears ?? 0) + 1;
     }
-    setOfferTwo(!next.twoThumbsAsked && (next.d2CleanClears ?? 0) >= 3 && plan.chart.kind.includes(K_RIM));
+    setOfferTwo((__DEV__ && !!props.captureOfferTwo) || (!next.twoThumbsAsked && (next.d2CleanClears ?? 0) >= 3 && plan.chart.kind.includes(K_RIM)));
     const tuned = autoTuneOffset(offset.value, s);
     next.offsets = { ...next.offsets, speaker: tuned };
     if (newPb && !plan.ftue && sum.cleared) {

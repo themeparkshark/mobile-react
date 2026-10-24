@@ -46,6 +46,8 @@ import { CUE_LOG_CAP, cueName, finishCueLine, finishCues } from '../../gamekit/r
 import { WhackAShark } from '../../games/whack';
 import { SharkySwim } from '../../games/sharky';
 import { RhythmTapGame } from '../../games/rhythm';
+import { BananaBasketGame } from '../../games/banana-basket/BananaBasketGame';
+import { MemoryGame } from '../../games/memory';
 import { CurrentQuestQueueGame } from '../../games/current-quest';
 import { TriviaGame, createLinePlayTriviaSource } from '../../games/trivia';
 import { TriviaDuel } from '../../games/trivia-duel';
@@ -54,7 +56,7 @@ import { lostTryCopy, lostTryHasRetry } from '../../components/rewards/lostTryCa
 import { DuelResults, type ResultsModel } from '../../games/trivia-duel/ui/DuelResults';
 
 type Run = {
-  game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel' | 'duelWin' | 'duelPart' | 'rideMiss'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number;
+  game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel' | 'duelWin' | 'duelPart' | 'rideMiss' | 'timingTwo' | 'banana' | 'memoryRide'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number;
   /** RIDE MISS: what the server said about the lost try (a ticket and coin fixture). */
   miss?: { ticketBack: boolean; ticketCost: number };
   /** Whack plays itself (the game's own scripted player), so a release check can show a star run and a win streak. */
@@ -73,6 +75,11 @@ const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'SHARKY, RIDE UP AT 1 S', run: { game: 'shark', groupTurn: false, rideUpAfterMs: 1000 } },
   { label: 'SHARKY GROUP TURN', run: { game: 'shark', groupTurn: true, rideUpAfterMs: null } },
   { label: 'RHYTHM IN LINE', run: { game: 'timing', groupTurn: false, rideUpAfterMs: null } },
+  // The card with a game's own extra row inside it, above DONE: Rhythm's TRY TWO THUMBS? offer and Banana Basket's rows.
+  { label: 'RHYTHM, TWO THUMBS OFFER', run: { game: 'timingTwo', groupTurn: false, rideUpAfterMs: null } },
+  { label: 'BANANA BASKET IN LINE', run: { game: 'banana', groupTurn: false, rideUpAfterMs: null } },
+  // Memory Match's ride try card (TIME'S UP!, TRY AGAIN with tries left, DONE): play it and let the clock run out.
+  { label: 'MEMORY RIDE TRY CARD', run: { game: 'memoryRide', groupTurn: false, rideUpAfterMs: null } },
   { label: 'CURRENT QUEST IN LINE', run: { game: 'current', groupTurn: false, rideUpAfterMs: null } },
   { label: 'CURRENT QUEST, RIDE UP IN 6 S', run: { game: 'current', groupTurn: false, rideUpAfterMs: 6000 } },
   { label: 'LINE TRIVIA', run: { game: 'trivia', groupTurn: false, rideUpAfterMs: null } },
@@ -332,6 +339,9 @@ export default function QueueResultsCaptureScreen() {
         {run && common && run.game === 'tap' ? <WhackAShark key={run.key} {...common} difficulty={2} taskName="Space Mountain" autoplay={run.autoplay} /> : null}
         {run && common && run.game === 'shark' ? <SharkySwim key={run.key} {...common} difficulty={2} /> : null}
         {run && common && run.game === 'timing' ? <RhythmTapGame key={run.key} {...common} /> : null}
+        {run && common && run.game === 'timingTwo' ? <RhythmTapGame key={run.key} {...common} captureOfferTwo /> : null}
+        {run && common && run.game === 'banana' ? <BananaBasketGame key={run.key} {...common} mode="queue" /> : null}
+        {run && common && run.game === 'memoryRide' ? <MemoryGame key={run.key} {...common} mode="ride" difficulty={1} menu={false} taskName="Space Mountain" /> : null}
         {run && common && run.game === 'current' ? <CurrentQuestQueueGame key={run.key} {...common} taskName="Space Mountain" /> : null}
         {run && common && run.game === 'trivia' ? (
           <TriviaGame key={run.key} visible title="Line Trivia" seed={run.key}
