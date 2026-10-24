@@ -529,11 +529,14 @@ function DivingCheck({ v, dive, index, diveY }: { readonly v: SharedValue<number
   return <Animated.View style={style}><GoldCheckCoin size={40} /></Animated.View>;
 }
 
-/** The preview of what is inside rises in softly while the chest gathers. */
+/** The preview of what is inside rises in softly while the chest gathers (mounted at rest, so it never flickers). */
 function PreviewIn({ children, delayMs = 0 }: { readonly children: React.ReactNode; readonly delayMs?: number }) {
-  const a = useSharedValue(0);
-  useEffect(() => { a.value = withDelay(delayMs, withTiming(1, { duration: DURATION.enter, easing: EASE.out })); }, [a]); // eslint-disable-line react-hooks/exhaustive-deps
-  const style = useAnimatedStyle(() => ({ opacity: 0.9 * a.value, transform: [{ translateY: (1 - a.value) * 10 }] }));
+  // It mounts at rest (a later render of the card can never draw a frame of it hidden) and gives a small rise.
+  const a = useSharedValue(1);
+  useEffect(() => {
+    a.value = withDelay(delayMs, withSequence(withTiming(0.85, { duration: 1 }), withTiming(1, { duration: DURATION.enter, easing: EASE.out })));
+  }, [a]); // eslint-disable-line react-hooks/exhaustive-deps
+  const style = useAnimatedStyle(() => ({ opacity: 0.9, transform: [{ translateY: (1 - a.value) * 40 }] }));
   return <Animated.View style={[{ alignItems: 'center', gap: 6 }, style]}>{children}</Animated.View>;
 }
 
