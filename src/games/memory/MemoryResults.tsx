@@ -265,6 +265,11 @@ const FIRST_WIN_RIDE = require('../../../assets/icons/game/ride.png');
 const FIRST_WIN_BACKDROP = require('../../../assets/images/screens/park/background-new.png');
 const SHOWER_BUBBLE = require('../../../assets/images/map/fx/bubble.png');
 const SHOWER_SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
+/**
+ * Every picture on the first-win card. Finn's warm-up mounts them (invisible) while the kid plays, so the card's
+ * first frame already has Finn, the ribbon, the ride car and the coin (no empty cream or blank sea while they load).
+ */
+export const FIRST_WIN_ART = [FINN_CHEER, FIRST_WIN_COIN, FIRST_WIN_RIDE, FIRST_WIN_BACKDROP, BANNER, SHOWER_BUBBLE, SHOWER_SPARKLE] as const;
 /** When each beat lands, in ms from the card's first frame. */
 // Every part of the card is on it from the first frame (no empty cream while a
 // kid looks); the ribbon unfurls and the rows settle on their beats. CONTINUE

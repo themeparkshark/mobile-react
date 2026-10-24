@@ -108,7 +108,7 @@ import { SharkStage, type SharkStageHandle } from './SharkStage';
 import { BoardFxOver, BoardFxUnder, NO_ARC, type ArcState, type FlashRects, type RippleState, type RopeState } from './BoardFx';
 import { AwningCallouts, BoothFront, marqueeChain, marqueeFizzle, marqueeFlash, useMarquee, type AwningCalloutsHandle, type PrizeEntry } from './MemoryBooth';
 import { FlightLayer, type FlightLayerHandle } from './FlightLayer';
-import { MemoryResults, type MemoryResultsData, type ResultsNumber } from './MemoryResults';
+import { FIRST_WIN_ART, MemoryResults, type MemoryResultsData, type ResultsNumber } from './MemoryResults';
 import { FLIP_MS, FLIP_SHOWTIME_MS, MM, hitStopFor, ladderStep, starsFor as tierStars } from './theme';
 import { boothGeo, hitSlot as geoHitSlot, slotCenter, slotXY, waveStep, type BoothGeo } from './layout';
 import {
@@ -2521,6 +2521,12 @@ export default function MemoryGame({
         {g ? (
           <>
             {mode === 'warmup' ? <WarmupSky g={g} /> : null}
+            {/* The first-win card's pictures, drawn invisibly while the kid plays, so the card is whole on frame one. */}
+            {mode === 'warmup' ? (
+              <View style={styles.preload} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                {FIRST_WIN_ART.map((src, i) => <Image key={i} source={src} style={styles.preloadImg} />)}
+              </View>
+            ) : null}
             {/* Scene layer: backdrop rays and the booth front take camera beats; the board never does. */}
             <Animated.View style={[StyleSheet.absoluteFill, camera.style]} pointerEvents="none">
               <Rays cx={g.W / 2} cy={g.grid.y + g.grid.h / 2} r={Math.max(g.W, g.H)} amount={rays} still={reducedMotion} />
@@ -2720,6 +2726,8 @@ function ArrowGlyph({ dir }: { dir: 'h' | 'v' }) {
 }
 
 const styles = StyleSheet.create({
+  preload: { position: 'absolute', left: 0, top: 0, width: 24, height: 24, opacity: 0, overflow: 'hidden' },
+  preloadImg: { position: 'absolute', width: 24, height: 24 },
   field: { flex: 1, overflow: 'hidden' },
   abs: { position: 'absolute', left: 0, top: 0 },
   hud: { position: 'absolute', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },

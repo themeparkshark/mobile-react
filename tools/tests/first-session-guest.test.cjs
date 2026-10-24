@@ -719,3 +719,11 @@ test('first hunt map: no Trail Box pill or badge, no chest buttons during the 30
   assert.match(home, /firstHunt && styles\.hudDim/);
   assert.match(read('src/components/Map.tsx'), /<TrailBoxBadge trail=\{trailHidden \? null : liveTrail\} live=\{lifeOn\} \/>/);
 });
+
+test('first-win card: its pictures are mounted (invisible) during the warm-up, so frame one is whole', () => {
+  const results = read('src/games/memory/MemoryResults.tsx');
+  assert.match(results, /export const FIRST_WIN_ART = \[FINN_CHEER, FIRST_WIN_COIN, FIRST_WIN_RIDE, FIRST_WIN_BACKDROP, BANNER, SHOWER_BUBBLE, SHOWER_SPARKLE\] as const;/);
+  const game = read('src/games/memory/MemoryGame.tsx');
+  assert.match(game, /\{mode === 'warmup' \? \(\s*<View style=\{styles\.preload\}[^>]*>\s*\{FIRST_WIN_ART\.map/);
+  assert.match(game, /preload: \{ position: 'absolute', left: 0, top: 0, width: 24, height: 24, opacity: 0/);
+});
