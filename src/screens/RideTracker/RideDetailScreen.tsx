@@ -308,7 +308,8 @@ export default function RideDetailScreen() {
                 </View>
                 <Text style={s.statLabel}>Your sharks</Text>
               </View>
-              {community?.avg_rating != null && (
+              {/* The same three tiles on every ride: with no ratings yet, Rider sharks says "?" (never a missing tile). */}
+              {community?.avg_rating != null ? (
                 <View style={s.statCard} accessible
                   accessibilityLabel={`Rider sharks: ${scoreText(community.avg_rating)}, ${riderSharksCaption(community)}`}>
                   <View style={s.statValRow}>
@@ -316,7 +317,15 @@ export default function RideDetailScreen() {
                     <Text style={s.statVal}>{scoreText(community.avg_rating)}</Text>
                   </View>
                   <Text style={s.statLabel}>Rider sharks</Text>
-                  <Text style={s.statCaption}>{withNumberFont(riderSharksCaption(community))}</Text>
+                  <Text style={s.statCaption} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{withNumberFont(riderSharksCaption(community))}</Text>
+                </View>
+              ) : (
+                <View style={s.statCard} accessible accessibilityLabel="Rider sharks: none yet">
+                  <View style={s.statValRow}>
+                    <View style={[s.statIcon, s.statIconEmpty]}><GameIcon name="shark" size={20} /></View>
+                    <Text style={[s.statVal, s.statValEmpty]}>?</Text>
+                  </View>
+                  <Text style={s.statLabel}>Rider sharks</Text>
                 </View>
               )}
             </View>
@@ -355,7 +364,7 @@ export default function RideDetailScreen() {
             {/* An arrow up at LOG THIS RIDE, then the shark: the empty page says what to do without reading. */}
             <LogPointer />
             <Text style={s.emptyTitle}>You haven't ridden this yet!</Text>
-            <Text style={s.emptyHint}>Rode it? Tap Log this ride.</Text>
+            <Text style={s.emptyHint}>Rode it? Tap LOG THIS RIDE.</Text>
             {/* The shark waits by the ride, so the empty page is not a blank sheet (the riders' chart fills it otherwise). */}
             {!(community && ratingCount(community.rating_distribution) >= COMPACT_COMMUNITY_LOGS) &&
               <View style={s.emptyArt} accessible={false}><GameIcon name="shark" size={130} /></View>}

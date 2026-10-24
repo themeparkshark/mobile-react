@@ -391,7 +391,7 @@ test('Ride Detail title fits by measured width; scores read as numbers with a sh
   assert.match(src, /<View style=\{s\.toastPoint\} \/>/);
   // One heading face app-wide (navy Shark, like Settings), one tile icon treatment, the game's own toast.
   assert.match(src, /sectionTitle: \{[^}]*color: B\.navy, fontSize: 17,[^}]*fontFamily: 'Shark'/s);
-  assert.equal((src.match(/<View style=\{\[?s\.statIcon/g) || []).length, 3);
+  assert.equal((src.match(/<View style=\{\[?s\.statIcon/g) || []).length, 4, "three tiles, the third has a filled and an empty form");
   assert.match(src, /toast: \{[^}]*backgroundColor: B\.white,[^}]*borderColor: B\.navy/s);
   assert.match(src, /'SAVED TO FAVORITES' : 'TAKEN OFF FAVORITES'/);
   assert.match(src, /withNumberFont\(date\.toLocaleDateString/);
@@ -645,4 +645,12 @@ test('PLAY RIDE is one piece: the pill, its label and the ride chip appear toget
   assert.match(redeem, /const shown = \(available && pillReady\) \|\| !!closedLabel;/);
   assert.match(redeem, /opacity: pillReady \? 1 : 0,/);
   assert.match(redeem, /onArtReady=\{\(\) => setPillReady\(true\)\}/);
+});
+
+test('Ride Detail keeps the same three tiles on every ride and its hint names the button as it reads', () => {
+  const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
+  assert.match(src, /accessibilityLabel="Rider sharks: none yet"/);
+  assert.match(src, /<Text style=\{\[s\.statVal, s\.statValEmpty\]\}>\?<\/Text>/);
+  assert.match(src, /Rode it\? Tap LOG THIS RIDE\./);
+  assert.match(src, /numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.8\}>\{withNumberFont\(riderSharksCaption/);
 });
