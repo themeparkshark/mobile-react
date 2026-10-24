@@ -43,9 +43,13 @@ export const PEEK_MIN_SCALE = 0.3;
  * status bar.
  */
 export const PEEK_HEADROOM_PT = 48;
+/** The zone must keep at least this much room for the peek to show. */
+export const PEEK_MIN_ROOM_PT = 12;
 
 /** How big the peeking shark draws in a zone of height h (0 = no peek): it never climbs past the safe top. */
 export function peekScale(h: number): number {
+  // No room at all (the card already reaches the top padding, as on an SE): no peek.
+  if (!(h >= PEEK_MIN_ROOM_PT)) return 0;
   const k = Math.min(PEEK_SCALE, (Math.max(0, h) + PEEK_HEADROOM_PT) / 160);
   return k >= PEEK_MIN_SCALE ? Math.round(k * 100) / 100 : 0;
 }

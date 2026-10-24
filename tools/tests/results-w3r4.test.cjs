@@ -96,8 +96,10 @@ test('the shared card speaks the family language: buttons inside, gold score wit
   assert.equal(podium.podiumMode(40, false), 'none', 'no star and no room: nothing');
   // The peek never climbs into the status bar: an SE with a tall card gets a smaller shark.
   assert.equal(podium.peekScale(60), 0.5);
-  assert.ok(podium.peekScale(2) > 0.3 && podium.peekScale(2) < 0.5, 'SE: smaller peek');
-  assert.ok(podium.peekScale(2) * 160 <= 2 + podium.PEEK_HEADROOM_PT, 'its top stays under the safe top');
+  assert.ok(podium.peekScale(20) > 0.3 && podium.peekScale(20) < 0.5, 'a little room: a smaller peek');
+  assert.ok(podium.peekScale(20) * 160 <= 20 + podium.PEEK_HEADROOM_PT, 'its top stays under the safe top');
+  assert.equal(podium.peekScale(0), 0, 'SE with a card that already reaches the top: no peek');
+  assert.equal(podium.podiumMode(0, true), 'none');
   const src = read('src/gamekit/results/ResultsPodium.tsx');
   assert.match(src, /withRepeat\(withSequence\([\s\S]*?\), PODIUM_HOPS\)/, 'the hop rests after a few beats');
   assert.match(src, /if \(reducedMotion \|\| k === 0\) return undefined;/);
