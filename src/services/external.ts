@@ -89,14 +89,16 @@ const SHARE_DIR = 'share-card/';
 /** The capture copied under a readable name. The original uri when the copy cannot be made. */
 async function namedShareCopy(uri: string, name: string | undefined): Promise<string> {
   const cache = FileSystem.cacheDirectory;
-  if (!name || !cache || !/^file:/i.test(uri)) return uri;
-  const ext = (/\.([A-Za-z0-9]{2,5})(?:[?#].*)?$/.exec(uri)?.[1] ?? 'png').toLowerCase();
+  // view-shot hands back a bare path on iOS ("/private/var/.../UUID.png"); expo-file-system wants file://.
+  const from = uri.startsWith('/') ? `file://${uri}` : uri;
+  if (!name || !cache || !/^file:/i.test(from)) return uri;
+  const ext = (/\.([A-Za-z0-9]{2,5})(?:[?#].*)?$/.exec(from)?.[1] ?? 'png').toLowerCase();
   const dir = `${cache}${SHARE_DIR}`;
   try {
     await FileSystem.deleteAsync(dir, { idempotent: true });
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
     const to = `${dir}${shareFileName(name, ext)}`;
-    await FileSystem.copyAsync({ from: uri, to });
+    await FileSystem.copyAsync({ from, to });
     return to;
   } catch {
     return uri;
