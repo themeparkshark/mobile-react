@@ -1,4 +1,5 @@
 import { PARK_WIKI_IDS } from '../../../../constants/parkWaitTimes';
+import { withPlainNames } from '../../../../helpers/plainRideName';
 
 export interface WikiLiveEntry {
   id: string;
@@ -23,5 +24,6 @@ export default async function getWikiTimes(parkId: number, signal?: AbortSignal)
   if (!res.ok) throw new Error(`Failed to fetch wait times: ${res.status}`);
 
   const data: WikiLiveResponse = await res.json();
-  return data.liveData.filter((e) => e.entityType === 'ATTRACTION');
+  // Plain names (no TM or (R) marks): what Wait Times shows, and what matches the ride catalog.
+  return withPlainNames(data.liveData.filter((e) => e.entityType === 'ATTRACTION'));
 }

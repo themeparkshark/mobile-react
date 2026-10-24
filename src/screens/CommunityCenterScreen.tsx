@@ -30,7 +30,7 @@ import { LocationContext } from '../context/LocationProvider';
 import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import api from '../api/client';
 import * as Haptics from '../helpers/haptics';
-import { GameIcon, SharkLoader } from '../ui';
+import { GameIcon, SHADOW, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { kioskLayout, KIOSK_COLORS } from './CommunityCenter/leaveGiftLayout';
 import { ticketLabel, ticketsEarnedFrom } from './CommunityCenter/communityCenterRewards';
@@ -104,6 +104,8 @@ const SHORT_SCREEN = ART_OVERFLOW > 60;
 const BOTTOM_GAP = 16;
 /** The painted plinth under LEAVE GIFT ends at about 0.815 of the art's height. */
 const LEAVE_GIFT_PLINTH_BOTTOM_RATIO = 0.815;
+/** The LEAVE GIFT art is taller than the pill we show (its stone foot and gem are cropped off). */
+const LEAVE_GIFT_ART_H = KIOSK.button.artHeight;
 const ART_SHIFT = SHORT_SCREEN
   ? Math.round(Math.min(ART_OVERFLOW, Math.max(0, SCALED_HEIGHT * LEAVE_GIFT_PLINTH_BOTTOM_RATIO - (SCREEN_HEIGHT - BOTTOM_GAP))))
   : 0;
@@ -998,9 +1000,7 @@ export default function CommunityCenterScreen() {
             {/* The drawn kiosk face over the painted price and slot: our price with the coin stack
                 (the coin you spend everywhere) and LEAVE GIFT 16 pt from the screen edge. */}
             <View pointerEvents="none" style={[styles.kioskFace, {
-              left: KIOSK.face.left, top: KIOSK.face.top + KIOSK_NUDGE, width: KIOSK.face.width, height: KIOSK.face.height }]}>
-              <View style={styles.kioskLight} />
-            </View>
+              left: KIOSK.face.left, top: KIOSK.face.top + KIOSK_NUDGE, width: KIOSK.face.width, height: KIOSK.face.height }]} />
             <View pointerEvents="none" accessible accessibilityLabel={`A gift costs ${GIFT_COST} coins`}
               style={[styles.kioskPrice, { left: KIOSK.price.left, top: KIOSK.price.top + KIOSK_NUDGE, width: KIOSK.price.width, height: KIOSK.price.height }]}>
               <Image source={require('../../assets/icons/game/coins.png')} style={styles.kioskCoin} contentFit="contain" />
@@ -1028,19 +1028,22 @@ export default function CommunityCenterScreen() {
                 disabled={giving}
                 activeOpacity={0.8}
               >
-                <Image
-                  source={require('../../assets/images/screens/community-center-leave-gift.png')}
-                  style={styles.leaveGiftImage}
-                  contentFit="contain"
-                />
-                <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: pulseAnim }]}>
+                {/* Just the green pill: the art's stone foot and its gem are cropped off on the plaque. */}
+                <View style={styles.leaveGiftCrop}>
                   <Image
                     source={require('../../assets/images/screens/community-center-leave-gift.png')}
                     style={styles.leaveGiftImage}
                     contentFit="contain"
-                    tintColor="#ffffff"
                   />
-                </Animated.View>
+                  <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: pulseAnim }]}>
+                    <Image
+                      source={require('../../assets/images/screens/community-center-leave-gift.png')}
+                      style={styles.leaveGiftImage}
+                      contentFit="contain"
+                      tintColor="#ffffff"
+                    />
+                  </Animated.View>
+                </View>
                 {giving && (
                   <View style={styles.leaveGiftSpinner}>
                     <SharkLoaderDot />
@@ -1488,11 +1491,7 @@ const styles = StyleSheet.create({
     borderColor: KIOSK_COLORS.edge,
     borderWidth: 3,
     borderRadius: 14,
-    overflow: 'hidden',
-  },
-  kioskLight: {
-    position: 'absolute', left: 4, right: 4, top: 2, height: 3, borderRadius: 2,
-    backgroundColor: KIOSK_COLORS.light,
+    ...SHADOW.card,
   },
   kioskPrice: {
     position: 'absolute',
@@ -1508,19 +1507,21 @@ const styles = StyleSheet.create({
   kioskPriceText: {
     fontFamily: 'Shark',
     fontSize: 20,
-    color: '#fec90e',
-    textShadowColor: '#1f2226',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 0,
+    color: KIOSK_COLORS.ink,
   },
   leaveGiftButton: {
     position: 'absolute',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  leaveGiftImage: {
+  leaveGiftCrop: {
     width: LEAVE_GIFT_W,
     height: LEAVE_GIFT_H,
+    overflow: 'hidden',
+  },
+  leaveGiftImage: {
+    width: LEAVE_GIFT_W,
+    height: LEAVE_GIFT_ART_H,
   },
   leaveGiftSpinner: {
     position: 'absolute',

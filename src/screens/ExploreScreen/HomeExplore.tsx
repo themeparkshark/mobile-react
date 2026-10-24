@@ -668,7 +668,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
         setContainerSize(current => (current.width === width && current.height === height ? current : { width, height }));
       }}>
       {/* Map with prep items - player marker is handled by Map component */}
-      <Map controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled} focusCoordinate={findFocus}
+      <Map coverHost="screen" controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled} focusCoordinate={findFocus}
         extraControls={chestButton} extraControlsCount={chestButtonCount} ambientFrozen={catchOpen} chromeHidden={catchOpen} onUserPan={onUserPan}
         hintReady={compassHintReady && !catchOpen && introSeen === true}>
         {homeLocationConfirmed && allPlaced.map(({ item: prepItem, distance, inRange }) => (

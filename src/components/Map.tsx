@@ -1,6 +1,6 @@
 import { openExternal } from '../services/external';
-import MapCoverSky from './map/MapCoverSky';
-import { COVER_MAX_MS } from '../constants/launchHandoff';
+import MapLaunchCover from './map/MapLaunchCover';
+import { beginMapCover, mapCoverDrawn, releaseMapCover, useMapCovered } from './map/mapCover';
 import { Image } from 'expo-image';
 import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
@@ -80,7 +80,7 @@ const SHARK_TAP_SOUND = require('../../assets/sounds/inventory_item_tap.mp3');
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const FOLLOW_ZOOM = 17.6;
 /** The cover color while park tiles load: the game's light sky blue, never a dark scene. */
-export const MAP_COVER_SKY = '#dcefff';
+export { MAP_COVER_SKY } from './map/MapCoverSky';
 
 // Radial falloff texture: soft round shadows and light pools with no hard edge.
 const GROUND_GLOW = require('../../assets/images/map/fx/glow.png');
@@ -122,7 +122,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
 /** Stable empty data for always-mounted sources that are off (never a new object per render). */
 const NO_FEATURES: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, chromeHidden = false, fright = null, onUserPan, declutter = null }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self' }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -158,6 +158,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly onUserPan?: () => void;
   /** The screen says the player is free (no dialog, chest, lesson or game): the compass may show its one-time hint. */
   readonly hintReady?: boolean;
+  /** Who draws the loading cover: the map itself, or the screen above its HUD (MapLaunchCover). */
+  readonly coverHost?: 'self' | 'screen';
   /** Something to catch right here (a ride coin in range): the shark perks up and cheers now and then. */
   readonly sharkCheer?: boolean;
   /** Trail Boxes (steps stream): the box filling as you walk rides on the shark; it hops when one is ready. */
@@ -353,26 +355,16 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   }, [location?.latitude, location?.longitude]);
 
   // A light sky cover hides the blank map while tiles stream in. Its bar continues the
-  // splash's bar; once the map has fully drawn (or after COVER_MAX_MS, whatever happens)
-  // the bar fills and the cover lifts away.
-  const cover = useRef(new Animated.Value(1)).current;
-  const [covered, setCovered] = useState(true);
-  const [coverDone, setCoverDone] = useState(false);
-  const revealed = useRef(false);
-  const revealMap = () => {
-    if (revealed.current) return;
-    revealed.current = true;
-    setCoverDone(true);
-    cover.stopAnimation();
-    Animated.timing(cover, { toValue: 0, delay: 180, duration: 420, easing: Easing.out(Easing.quad), useNativeDriver: true })
-      .start(() => setCovered(false));
-  };
+  // splash's bar; once the map has fully drawn (or at the cover's deadline, scheduled on the UI
+  // thread so busy JS cannot hold it) the bar fills and the cover lifts away. The map screen
+  // draws the cover above its HUD (coverHost "screen"); preview screens let the map draw it.
+  const covered = useMapCovered();
+  const coverToken = useRef(0);
+  const revealMap = () => mapCoverDrawn(coverToken.current);
   useEffect(() => {
-    // The fallback lift is scheduled natively at mount (a delayed native-driver fade), so the cover
-    // never outlives COVER_MAX_MS even while the map screen's JS is still busy mounting.
-    Animated.timing(cover, { toValue: 0, delay: COVER_MAX_MS, duration: 420, easing: Easing.out(Easing.quad), useNativeDriver: true })
-      .start(({ finished }) => { if (finished && !revealed.current) { revealed.current = true; setCovered(false); } });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const tok = beginMapCover();
+    coverToken.current = tok;
+    return () => releaseMapCover(tok);
   }, []);
   const mapViewRef = useRef<MapViewRef>(null);
   const rootRef = useRef<View>(null);
@@ -993,14 +985,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <Text style={styles.attributionText}>© OpenStreetMap</Text>
         </Pressable>
       </Reanimated.View>
-      {covered && (
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, {
-          opacity: cover, transform: [{ scale: cover.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }] }]}>
-          {/* The light sky with Alex's drawn clouds and a bobbing shark while the park tiles stream in
-              (the old underwater scene read dark, and a flat sheet read blank). */}
-          <MapCoverSky done={coverDone} />
-        </Animated.View>
-      )}
+      {/* The light sky with Alex's drawn clouds and a bobbing shark while the park tiles stream in
+          (the old underwater scene read dark, and a flat sheet read blank). */}
+      {coverHost === 'self' && <MapLaunchCover style={styles.cover} />}
       {__DEV__ && MOTION_PROBE && <MotionProbeFrames />}
       {location && (
         <View pointerEvents={focusedOnPlayer ? 'box-none' : 'none'} style={[styles.centerOverlay, { opacity: focusedOnPlayer ? 1 : 0 }]}>
@@ -1088,7 +1075,7 @@ const styles = StyleSheet.create({
   attribution: { position: 'absolute', left: 8, bottom: 6, zIndex: 4, paddingHorizontal: 6, paddingVertical: 2,
     borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.7)' },
   attributionText: { fontFamily: 'Knockout', fontSize: 10, color: BRAND.navySoft },
-  cover: { zIndex: 5, backgroundColor: MAP_COVER_SKY },
+  cover: { zIndex: 5 },
   centerOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',

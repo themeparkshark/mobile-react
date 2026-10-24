@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet,
-  RefreshControl, Animated, useWindowDimensions,
+  RefreshControl, Animated, Easing,
 } from 'react-native';
 import RideTrackerFrame from './RideTrackerFrame';
 import { FOOTER_CLEARANCE } from '../../components/Wrapper';
@@ -20,9 +20,10 @@ import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { GameButton, GameIcon, gameAlert, SharkLoader } from '../../ui';
 import { withNumberFont, NUMBER_FONT } from '../../ui/numberText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { titleFitsHeader, scoreText, riderWords, COMPACT_COMMUNITY_LOGS } from './rideDetailModel';
+import { scoreText, riderWords, COMPACT_COMMUNITY_LOGS, RIDE_DETAIL_HEADER } from './rideDetailModel';
+import { plainRideName } from '../../helpers/plainRideName';
 
-export { HEADER_TITLE_MAX, titleFitsHeader, scoreText, COMPACT_COMMUNITY_LOGS } from './rideDetailModel';
+export { scoreText, COMPACT_COMMUNITY_LOGS, RIDE_DETAIL_HEADER } from './rideDetailModel';
 
 const PARK_NAME_MAP: Record<number, string> = Object.fromEntries(
   PARK_DISPLAY_ORDER.map(p => [p.id, p.name])
@@ -128,6 +129,27 @@ const FavoriteStar: React.FC<{ on: boolean; size: number }> = React.memo(({ on, 
 });
 FavoriteStar.displayName = 'FavoriteStar';
 
+// ─── Empty page pointer ───
+/** A round blue arrow under LOG THIS RIDE, pointing up at it with a slow bob (still with Reduce Motion). */
+function LogPointer() {
+  const reducedMotion = useReducedGameMotion();
+  const bob = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reducedMotion) { bob.setValue(0); return; }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(bob, { toValue: 1, duration: 650, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(bob, { toValue: 0, duration: 650, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [reducedMotion, bob]);
+  return (
+    <Animated.View accessible={false} style={{ transform: [{ translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) }] }}>
+      <View style={s.pointer}><GameIcon name="arrow" size={44} /></View>
+    </Animated.View>
+  );
+}
+
 // ─── Main ───
 export default function RideDetailScreen() {
   const navigation = useNavigation<any>();
@@ -212,27 +234,14 @@ export default function RideDetailScreen() {
   const maxDistCount = community ? Math.max(...Object.values(community.rating_distribution), 1) : 1;
   const hasImage = ride?.image_url && ride.image_url.startsWith('http') && !imageError;
 
-  const name = rideName || ride?.name || 'Ride';
-  const { width: screenWidth } = useWindowDimensions();
-  // Measured in the header's own font: wide letters (WEB SLINGERS) move to the card instead of shrinking tiny.
-  const [titleWidth, setTitleWidth] = useState<number | null>(null);
-  // Until the probe measures it (one frame), the header title stays blank and the card holds no
-  // name, so a long name never shows in the header and then jumps to the card.
-  const measured = titleWidth != null;
-  const shortName = measured ? titleFitsHeader(titleWidth, screenWidth) : true;
-  const titleProbe = (
-    <Text style={s.titleProbe} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-      maxFontSizeMultiplier={1.2}
-      onTextLayout={e => { const w = e.nativeEvent.lines[0]?.width; if (w) setTitleWidth(w); }}>
-      {name.toUpperCase()}
-    </Text>
-  );
-  const headerTitle = !measured ? '' : shortName ? name : 'Ride';
+  const name = plainRideName(rideName || ride?.name || 'Ride');
+  // One layout for every ride: the header always says RIDE TRACKER and the ride's name always
+  // leads the white ride card (two lines for long names), so short and long names open the same way.
+  const headerTitle = RIDE_DETAIL_HEADER;
 
   if (loading || loadError) {
     return (
       <RideTrackerFrame title={headerTitle} style={s.container}>
-        {titleProbe}
         {loadError
           ? <SharkLoader state="error" onRetry={() => { setLoadError(false); setLoading(true); void fetchData().finally(() => setLoading(false)); }} />
           : <SharkLoader />}
@@ -249,18 +258,16 @@ export default function RideDetailScreen() {
   );
   const meta = ride?.metadata;
   const hasFacts = !!(meta?.year_opened || meta?.speed || meta?.manufacturer || meta?.inversions);
-  // The ride card: its photo (when there is one), then the name, park and facts on white.
-  // With only the park to say, it is one line under the header instead of a mostly empty card.
-  const rideCard = !hasImage && shortName && !hasFacts ? (
-    !!parkName && <Text style={s.parkLine} maxFontSizeMultiplier={1.3}>{parkName}</Text>
-  ) : (
+  // The ride card, the same on every ride: its photo (when there is one), then the name, park and facts on white.
+  const rideCard = (
     <View style={s.rideCard}><View style={s.rideCardClip}>
       {hasImage && (
         <Image source={{ uri: ride!.image_url! }} style={s.rideImage} contentFit="cover"
           onError={() => setImageError(true)} accessible={false} />
       )}
       <View style={s.rideBody}>
-        {!shortName && <Text style={s.rideTitle} numberOfLines={2} maxFontSizeMultiplier={1.3}>{name}</Text>}
+        <Text style={s.rideTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}
+          maxFontSizeMultiplier={1.3} accessibilityRole="header">{name}</Text>
         {!!parkName && <Text style={s.ridePark} maxFontSizeMultiplier={1.3}>{parkName}</Text>}
         <View style={s.metaRow}>
           {ride?.metadata?.year_opened && <MetaPill label={`Opened ${ride.metadata.year_opened}`} />}
@@ -274,12 +281,11 @@ export default function RideDetailScreen() {
 
   return (
     <RideTrackerFrame title={headerTitle} right={starButton} style={s.container}>
-      {titleProbe}
       <FlatList
         data={history}
         keyExtractor={item => item.id.toString()}
         renderItem={({ item }) => <HistoryEntry entry={item} onShare={setShareEntry} />}
-        contentContainerStyle={s.listContent}
+        contentContainerStyle={[s.listContent, history.length === 0 && s.listContentEmpty]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={B.skyDark} />}
         ListHeaderComponent={
           <View>
@@ -346,9 +352,12 @@ export default function RideDetailScreen() {
         }
         ListEmptyComponent={
           <View style={s.emptyWrap}>
+            {/* An arrow up at LOG THIS RIDE, then the shark: the empty page says what to do without reading. */}
+            <LogPointer />
             <Text style={s.emptyTitle}>You haven't ridden this yet!</Text>
+            <Text style={s.emptyHint}>Rode it? Tap Log this ride.</Text>
             {/* The shark waits by the ride, so the empty page is not a blank sheet. */}
-            <View style={s.emptyArt} accessible={false}><GameIcon name="shark" size={110} /></View>
+            <View style={s.emptyArt} accessible={false}><GameIcon name="shark" size={130} /></View>
           </View>
         }
       />
@@ -393,13 +402,7 @@ const s = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
   },
   rideCardClip: { borderRadius: 22, overflow: 'hidden' },
-  // Off-screen copy of the header title, to measure its natural width in the header font.
-  titleProbe: {
-    position: 'absolute', left: -5000, top: 0, width: 4000, opacity: 0, textAlign: 'left',
-    fontSize: 32, fontFamily: 'Shark', letterSpacing: 1.5,
-  },
   rideImage: { width: '100%', height: 170 },
-  parkLine: { color: '#05346e', fontSize: 18, fontFamily: 'Knockout', textAlign: 'center', marginTop: 16 },
   rideBody: { paddingHorizontal: 16, paddingVertical: 14 },
   rideTitle: { color: '#05346e', fontSize: 26, fontFamily: 'Shark', marginBottom: 2 },
   ridePark: { color: '#2c5a85', fontSize: 16, fontFamily: 'Knockout', marginBottom: 8 },
@@ -414,6 +417,8 @@ const s = StyleSheet.create({
 
   // ─── Content ───
   listContent: { paddingBottom: FOOTER_CLEARANCE },
+  // No rides yet: the empty page fills the space under the button and centers in it (no blank third).
+  listContentEmpty: { flexGrow: 1 },
 
   // ─── Stats Row ───
   statsRow: {
@@ -485,9 +490,11 @@ const s = StyleSheet.create({
   entryShareIcon: { color: B.skyDark, fontSize: 11, fontFamily: 'Knockout' },
 
   // ─── Empty ───
-  emptyWrap: { alignItems: 'center', paddingTop: 4, paddingBottom: 12 },
-  emptyArt: { marginTop: 18, opacity: 0.9 },
-  emptyTitle: { color: '#05346e', fontSize: 18, fontFamily: 'Shark' },
+  emptyWrap: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 0, paddingBottom: 12 },
+  emptyArt: { marginTop: 14, opacity: 0.95 },
+  emptyTitle: { color: '#05346e', fontSize: 18, fontFamily: 'Shark', marginTop: 8 },
+  emptyHint: { color: B.textMid, fontSize: 15, fontFamily: 'Knockout', marginTop: 4 },
+  pointer: { transform: [{ rotate: '-90deg' }] },
 
   // ─── Share modal ───
   modalOverlay: { flex: 1, backgroundColor: 'rgba(5,52,110,0.6)', justifyContent: 'center', padding: 20 },

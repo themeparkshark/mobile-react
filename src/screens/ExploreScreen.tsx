@@ -26,6 +26,8 @@ import Currency from '../components/Topbar/Currency';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import UsernameBanner from '../components/Topbar/UsernameBanner';
 import Wrapper from '../components/Wrapper';
+import MapLaunchCover from '../components/map/MapLaunchCover';
+import { holdMapCover, useMapCovered } from '../components/map/mapCover';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import { LocationContext } from '../context/LocationProvider';
@@ -276,6 +278,13 @@ function ExploreScreen() {
   const homeLocationConfirmed = !park && (isConfirmedOutsidePark(location, parkLookupRecord) ||
     isHomeMapConfirmed(location, homeAnchorRef.current));
 
+  // The map's loading cover is up: tips, tutorials and slams wait for the map to arrive.
+  const mapCovered = useMapCovered();
+  // At launch the home map can show for a moment before the park check settles and swaps in the
+  // park map. Hold the one cover (never past its deadline) until the screen knows which map it is.
+  const mapChoicePending = !!player && permissionGranted && !park && !homeLocationConfirmed;
+  useEffect(() => { holdMapCover(mapChoicePending); }, [mapChoicePending]);
+  useEffect(() => () => holdMapCover(false), []);
   useEffect(() => {
     if (homeLocationConfirmed) return;
     setShowPrepItemModal(false);
@@ -334,22 +343,22 @@ function ExploreScreen() {
   const [frightIntroOwns, setFrightIntroOwns] = useState(false);
   // Trigger onboarding tutorial on first visit
   useEffect(() => {
-    if (mapFocused && player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding') && !frightIntroOwns) {
+    if (mapFocused && !mapCovered && player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding') && !frightIntroOwns) {
       const timer = setTimeout(() => {
         startTutorial('onboarding', { inPark: !!park });
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
+  }, [mapFocused, mapCovered, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
 
   // A player who learned the home hunt should meet the park loop when they
   // actually arrive. Park-first players already saw these steps in onboarding.
   useEffect(() => {
-    if (!mapFocused || !player || !isReady || !parkLoaded || !permissionGranted || !park || isActive ||
+    if (!mapFocused || mapCovered || !player || !isReady || !parkLoaded || !permissionGranted || !park || isActive ||
       !hasCompleted('onboarding') || hasCompleted('park_arrival') || frightIntroOwns) return;
     const timer = setTimeout(() => startTutorial('park_arrival'), 1500);
     return () => clearTimeout(timer);
-  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
+  }, [mapFocused, mapCovered, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
   
   // One overlay at a time: a find that shows up during a tutorial waits for it.
   const [pendingFind, setPendingFind] = useState<{ item: PrepItemType; pivotId: number } | null>(null);
@@ -1033,7 +1042,7 @@ function ExploreScreen() {
       rideCoinInRange: openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task' });
   const parkOfferSlot = !!player && !!park && !railShowing && suggestionSlots.left == null && suggestionSlots.right == null
     && !parkTip && !isActive && !liveEvt.event;
-  const parkTipReady = mapTipReady({
+  const parkTipReady = !mapCovered && mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
     dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
     bossOrChest: bossOpen || bossOccluded || dailyGiftOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
@@ -1272,7 +1281,7 @@ function ExploreScreen() {
           catching={homeCatch} onCatchCollected={onHomeCatchCollected} onCatchDone={onHomeCatchDone}
           onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
-          introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
+          introAllowed={mapFocused && !mapCovered && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
           onIntroOpenChange={setHomeIntroOpen} chestButton={mapControls} chestButtonCount={mapControlsCount} compassHintReady={parkTipReady} highlightNearestFind={highlightNearestFind}
           parkStory={activeParkProject ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null}
@@ -1502,7 +1511,7 @@ function ExploreScreen() {
         {adventure && suggestionSlots.left === 'adventure' && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
           ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
           closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={slotTop} collapsed={suggestionSlots.leftStub}
-          slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
+          slam={mapCovered ? undefined : adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
           onOcclusionChange={setAdventureOccluded} onRefresh={refreshTripGoal}
           onSelect={selectAdventureRide} onDismiss={dismissAdventure}
           onCelebrate={() => celebrateTicket(adventure.id)}
@@ -1576,6 +1585,7 @@ function ExploreScreen() {
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
+          coverHost="screen"
           hintReady={parkTipReady && !parkTipShowing}
           sharkCheer={openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task'}
           projector={mapProjector}
@@ -1665,7 +1675,10 @@ function ExploreScreen() {
         </Map>
       </View>
       )}
-      
+      {/* The map's loading sky sits above every map button, card and tip (under the header and
+          footer), so a kid sees one loading bar finish, then the map and its buttons in one fade. */}
+      <MapLaunchCover blockTouches style={{ top: 70 + (Constants.statusBarHeight ?? 0), zIndex: 45 }} />
+
       {/* Community Center Modal */}
       <CommunityCenterModal
         visible={showCommunityCenterModal}

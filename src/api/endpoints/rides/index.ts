@@ -1,4 +1,5 @@
 import client from '../../client';
+import { plainRideName, withPlainNames } from '../../../helpers/plainRideName';
 
 export interface RideType {
   id: number;
@@ -30,10 +31,11 @@ export interface RideType {
 export async function getRides(parkId?: number, timeoutMs?: number): Promise<RideType[]> {
   const params = parkId ? { park_id: parkId } : {};
   const { data } = await client.get('/rides', { params, timeout: timeoutMs });
-  return data.data;
+  return Array.isArray(data.data) ? withPlainNames(data.data as RideType[]) : data.data;
 }
 
 export async function getRide(rideId: number): Promise<RideType> {
   const { data } = await client.get(`/rides/${rideId}`);
-  return data.data;
+  const ride = data.data as RideType;
+  return ride && typeof ride.name === 'string' ? { ...ride, name: plainRideName(ride.name) } : ride;
 }
