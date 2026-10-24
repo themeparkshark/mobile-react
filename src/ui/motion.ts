@@ -262,3 +262,21 @@ export function levelUpPayoff(level: number): LevelUpPayoff {
     sparkles: Math.round(PARTICLES.sparkles * (0.5 + 0.125 * Math.min(lv, 6))),
   };
 }
+
+/**
+ * Held values survive a React commit (the new architecture). A React render while a moment plays can put a view
+ * back to the props React last drew, and Reanimated only resends a style key when its value changes, so a held
+ * value (a lid hanging open, a glow at full) would stay wrong until it moved again. A style that reads a `resync`
+ * shared value (flipped after each commit while the moment plays) passes its keys through these, which change
+ * them by an amount nobody can see, so they are sent again on the next UI frame.
+ */
+export function resyncOpacity(value: number, resync: number): number {
+  'worklet';
+  const v = Math.max(0, Math.min(1, value));
+  return resync ? (v > 0.5 ? v - 0.0001 : v + 0.0001) : v;
+}
+/** A sub-pixel shift for a transform list, so the whole transform is sent again after a commit (see resyncOpacity). */
+export function resyncShift(resync: number): number {
+  'worklet';
+  return resync ? 0.001 : 0;
+}

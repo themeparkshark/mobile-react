@@ -22,14 +22,14 @@ import Animated, {
   Easing, cancelAnimation, useAnimatedReaction, useAnimatedStyle, useSharedValue, withRepeat, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { usePowerBudget } from '../power';
-import { DURATION, FLASH_MAX_OPACITY, GOLD_FX, RAY_TURN_FROM, raysMayTurn } from './motion';
+import { DURATION, FLASH_MAX_OPACITY, GOLD_FX, RAY_TURN_FROM, raysMayTurn, resyncOpacity, resyncShift } from './motion';
 
 const SOFT = require('../../assets/images/reveal/soft-spot.webp');
 const RAYS = require('../../assets/images/reveal/rays-gold-fade.webp');
 const SPARK = require('../../assets/fx/spark.webp');
 const TWINKLE = require('../../assets/fx/star-twinkle.webp');
 
-export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, style }: {
+export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, style, resync }: {
   /** Diameter of the ray fan. The glow fills about the same circle. */
   readonly size: number;
   /** 0 hidden, about 0.35 while gathering, 1 at full glow. */
@@ -40,6 +40,8 @@ export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, s
   readonly spin?: boolean;
   readonly reduced?: boolean;
   readonly style?: StyleProp<ViewStyle>;
+  /** Optional: flipped after each React commit while the moment plays, so a held glow is sent again (motion.ts resyncOpacity). */
+  readonly resync?: SharedValue<number>;
 }) {
   const budget = usePowerBudget();
   const turn = useSharedValue(0);
@@ -62,17 +64,20 @@ export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, s
   const glowStyle = useAnimatedStyle(() => {
     const a = amount.value;
     const b = bloom ? bloom.value : 0;
-    return { opacity: Math.min(1, 0.85 * a + 0.15 * b), transform: [{ scale: 0.55 + 0.45 * a + 0.3 * b }] };
+    const r = resync ? resync.value : 0;
+    return { opacity: resyncOpacity(0.85 * a + 0.15 * b, r), transform: [{ translateX: resyncShift(r) }, { scale: 0.55 + 0.45 * a + 0.3 * b }] };
   });
   const raysStyle = useAnimatedStyle(() => {
     const a = amount.value;
     const b = bloom ? bloom.value : 0;
-    return { opacity: Math.min(1, 0.95 * a + 0.1 * b), transform: [{ rotate: `${turn.value}deg` }, { scale: 0.5 + 0.5 * a + 0.14 * b }] };
+    const r = resync ? resync.value : 0;
+    return { opacity: resyncOpacity(0.95 * a + 0.1 * b, r), transform: [{ translateX: resyncShift(r) }, { rotate: `${turn.value}deg` }, { scale: 0.5 + 0.5 * a + 0.14 * b }] };
   });
   const coreStyle = useAnimatedStyle(() => {
     const a = amount.value;
     const b = bloom ? bloom.value : 0;
-    return { opacity: Math.min(1, 0.55 * a + 0.6 * b), transform: [{ scale: 0.8 + 0.5 * b }] };
+    const r = resync ? resync.value : 0;
+    return { opacity: resyncOpacity(0.55 * a + 0.6 * b, r), transform: [{ translateX: resyncShift(r) }, { scale: 0.8 + 0.5 * b }] };
   });
 
   const box = { width: size, height: size };

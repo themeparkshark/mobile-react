@@ -463,7 +463,7 @@ test('wave 3 round 3: on a short phone the success card keeps Awesome! on screen
 test('wave 3 round 4: the energy-day chest pops its lid and lands shut, whole art at rest (no cut edge, no slab)', () => {
   const chest = read('src/components/DailyGiftModal.tsx');
   assert.ok(!/chestInside/.test(chest), 'no flat dark inside slab');
-  assert.ok(/const wholeChestStyle = useAnimatedStyle\(\(\) => \(\{ opacity: lid\.value > LID_AT_REST \? 0 : 1 \}\)\)/.test(chest), 'at rest the chest is one whole picture');
+  assert.ok(/const wholeChestStyle = useAnimatedStyle\(\(\) => \(\{ opacity: resyncOpacity\(lid\.value > LID_AT_REST \? 0 : 1, resync\.value\) \}\)\)/.test(chest), 'at rest the chest is one whole picture');
   assert.ok(/const lidStyle = useAnimatedStyle\(\(\) => \(\{\s*transform:/.test(chest), 'the lid copy is always drawn (it sits over the whole picture at rest), so the first popped frame has its lid');
   const celebrate = chest.slice(chest.indexOf('const celebrate = '), chest.indexOf('const open = async'));
   const lidLine = celebrate.slice(celebrate.indexOf('lid.value = withSequence('), celebrate.indexOf('pop.value = withSequence('));
@@ -533,4 +533,22 @@ test('wave 3 rerun round 2: the chest light and prize views mount at the tap, so
   assert.ok(/\{phase !== 'closed' && !coinDay && \(\s*\/\/ Light bursting out/.test(chest), 'the light behind the chest is mounted from the tap (hidden at 0)');
   assert.ok(/\{phase !== 'closed' && \(\s*\/\/ The light fills the open gap/.test(chest), 'the gap light too');
   assert.ok(/\{phase !== 'closed' && !coinDay && !ticketDay && \(\s*\/\/ The prize rises/.test(chest), 'and the rising prize');
+});
+
+test('wave 3 rerun round 2: a React commit mid-pop can never leave the chest shut or the glow off', () => {
+  const m = loadTs('src/ui/motion.ts');
+  for (const v of [0, 0.3, 0.5, 0.9, 1]) {
+    assert.notEqual(m.resyncOpacity(v, 1), m.resyncOpacity(v, 0), `opacity ${v} is sent again after a flip`);
+    assert.ok(Math.abs(m.resyncOpacity(v, 1) - v) <= 0.0001 && m.resyncOpacity(v, 1) >= 0 && m.resyncOpacity(v, 1) <= 1, 'by an amount nobody can see');
+  }
+  assert.ok(m.resyncShift(1) !== m.resyncShift(0) && m.resyncShift(1) < 0.01, 'transforms move a sub-pixel');
+  const chest = read('src/components/DailyGiftModal.tsx');
+  assert.ok(/useEffect\(\(\) => \{\s*if \(phase === 'closed'\) return undefined;\s*const flip = \(\) => \{ resync\.value = resync\.value \? 0 : 1; \};/.test(chest), 'flipped after every commit while the chest opens');
+  for (const name of ['chestStyle', 'prizeStyle', 'mouthStyle', 'seamStyle', 'lidStyle', 'wholeChestStyle', 'riseStyle', 'ticketStyle', 'sparkStyle']) {
+    const at = chest.indexOf(`const ${name} = useAnimatedStyle(`);
+    assert.ok(at > 0 && /resync\.value/.test(chest.slice(at, chest.indexOf('}));', at) + 4) || chest.slice(at, at + 600).includes('resync.value')), `${name} reads resync`);
+  }
+  assert.ok(/<GoldBurst [^>]*resync=\{resync\} \/>/.test(chest), 'the gold behind the chest too');
+  const burst = read('src/ui/GoldBurst.tsx');
+  assert.equal((burst.match(/resyncOpacity\(/g) || []).length, 3, 'glow, rays and core resend their opacity');
 });

@@ -21,7 +21,7 @@ import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
 import { GoldBurst } from '../ui/GoldBurst';
 import shortenNumber from '../helpers/shorten-number';
-import { DURATION, EASE, SPRING } from '../ui/motionEasing';
+import { DURATION, EASE, SPRING, resyncOpacity, resyncShift } from '../ui/motionEasing';
 import { CountUpText } from '../gamekit/fx/CountUpText';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
@@ -389,54 +389,64 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpen, visible, phase]);
 
+  // Flipped after every React commit while the chest opens, so the held lid, light and prize are sent again
+  // (a commit mid-pop could put them back to the shut chest for several frames; motion.ts resyncOpacity).
+  const resync = useSharedValue(0);
+  useEffect(() => {
+    if (phase === 'closed') return undefined;
+    const flip = () => { resync.value = resync.value ? 0 : 1; };
+    flip();
+    const again = setTimeout(flip, 40); // and once more after the native mount has landed
+    return () => clearTimeout(again);
+  });
   const lidLift = LID_LIFT * Math.min(width * 0.52, 230);
   const chestStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: phase === 'closed' ? bob.value : hop.value }, { rotate: `${shake.value}deg` }, { scale: pop.value },
+    transform: [{ translateX: resyncShift(resync.value) }, { translateY: phase === 'closed' ? bob.value : hop.value }, { rotate: `${shake.value}deg` }, { scale: pop.value },
       // The landing squash: wider and shorter while it sits below rest.
       { scaleY: 1 - Math.max(0, hop.value) * 0.025 }, { scaleX: 1 + Math.max(0, hop.value) * 0.02 }],
   }));
   // The prize rises out of the chest (from above), so it never slides into the lines below it.
   const prizeStyle = useAnimatedStyle(() => ({
-    opacity: prize.value, transform: [{ translateY: (1 - prize.value) * -36 }, { scale: 0.5 + prize.value * 0.5 }],
+    opacity: resyncOpacity(prize.value, resync.value), transform: [{ translateX: resyncShift(resync.value) }, { translateY: (1 - prize.value) * -36 }, { scale: 0.5 + prize.value * 0.5 }],
   }));
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }] }));
   const hintStyle = useAnimatedStyle(() => ({ opacity: 1 - hintOut.value }));
   // Light pours out of the open chest with the lid pop (bright over the pile on a non-coin day).
   const mouthStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, prize.value * 1.4) * (kind === 'coins' ? 0.55 : 0.9),
-    transform: [{ scaleY: 0.6 + Math.min(1.1, prize.value) * 0.4 }],
+    opacity: resyncOpacity(Math.min(1, prize.value * 1.4) * (kind === 'coins' ? 0.55 : 0.9), resync.value),
+    transform: [{ translateX: resyncShift(resync.value) }, { scaleY: 0.6 + Math.min(1.1, prize.value) * 0.4 }],
   }));
   // Light pouring out of the gap while the lid is up (it covers the gap, so no inside of the chest is ever drawn).
-  const seamStyle = useAnimatedStyle(() => ({ opacity: seam.value, transform: [{ scaleX: 0.6 + 0.5 * Math.min(1, seam.value) }, { scaleY: 0.7 + 0.5 * seam.value }] }));
+  const seamStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(seam.value, resync.value), transform: [{ translateX: resyncShift(resync.value) }, { scaleX: 0.6 + 0.5 * Math.min(1, seam.value) }, { scaleY: 0.7 + 0.5 * seam.value }] }));
   // The lid hinges back at its top edge and lifts, opening a gap at the seam that the light pours out of.
   // The lid and body copies are always drawn (an iOS image under a hidden parent drew a few frames late once shown,
   // so the first popped frame showed the body with no lid). At rest they sit exactly over the whole picture.
   const lidStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -lidLift * lid.value }, { perspective: 600 },
+    transform: [{ translateY: -lidLift * lid.value + resyncShift(resync.value) }, { perspective: 600 },
       { rotateX: `${LID_HINGE_DEG * lid.value}deg` }, { rotate: `${-LID_TILT_DEG * lid.value}deg` }],
   }));
   // The prize climbs out of the chest mouth with a springy overshoot, then rests just above it.
   // Under the two copies the whole picture shows at rest (it covers any seam line), and steps aside while the lid is up.
-  const wholeChestStyle = useAnimatedStyle(() => ({ opacity: lid.value > LID_AT_REST ? 0 : 1 }));
+  const wholeChestStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(lid.value > LID_AT_REST ? 0 : 1, resync.value) }));
   const riseStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, prize.value * 2),
-    transform: [{ translateY: (1 - prize.value) * 40 }, { scale: 0.4 + prize.value * 0.6 }],
+    opacity: resyncOpacity(Math.min(1, prize.value * 2), resync.value),
+    transform: [{ translateX: resyncShift(resync.value) }, { translateY: (1 - prize.value) * 40 }, { scale: 0.4 + prize.value * 0.6 }],
   }));
   // The Ticket falls from above tilted, squashes on impact, then settles.
   const ticketStyle = useAnimatedStyle(() => {
     const p = punch.value;
     return {
-      opacity: p === 0 ? 0 : 1,
+      opacity: resyncOpacity(p === 0 ? 0 : 1, resync.value),
       transform: [
-        { translateY: p < 0.55 ? -160 * (1 - p / 0.55) : 0 },
+        { translateY: (p < 0.55 ? -160 * (1 - p / 0.55) : 0) + resyncShift(resync.value) },
         { rotate: `${p < 0.55 ? -22 * (1 - p / 0.55) : -6 * (1 - p)}deg` },
         { scaleY: p >= 0.55 && p < 0.7 ? 0.82 : 1 },
       ],
     };
   });
   const sparkStyle = useAnimatedStyle(() => ({
-    opacity: spark.value,
-    transform: [{ scale: 0.6 + spark.value * 0.7 }, { rotate: `${spark.value * 25}deg` }],
+    opacity: resyncOpacity(spark.value, resync.value),
+    transform: [{ translateX: resyncShift(resync.value) }, { scale: 0.6 + spark.value * 0.7 }, { rotate: `${spark.value * 25}deg` }],
   }));
 
   const chestSize = Math.min(width * 0.52, 230);
@@ -480,7 +490,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
             <View pointerEvents="none" style={styles.goldWrap}>
               {/* Big enough that the rays clear the chest by 40 pt or more on every side (they fade out by
                   about 74% of the radius); it overflows the stage and sits under the ladder. */}
-              <GoldBurst size={chestSize * CHEST_GOLD_SCALE} amount={gold} bloom={goldBloom} reduced={reducedMotion} />
+              <GoldBurst size={chestSize * CHEST_GOLD_SCALE} amount={gold} bloom={goldBloom} reduced={reducedMotion} resync={resync} />
             </View>
             <Animated.View style={chestStyle}>
               {phase !== 'closed' && !coinDay && (
