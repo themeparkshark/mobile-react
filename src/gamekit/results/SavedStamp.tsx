@@ -2,7 +2,7 @@
  * SavedStamp: the gold RUN SAVED stamp every results card shares.
  *
  * A queue event (the ride came up) saved this run before its first star. The
- * stamp thumps in where the stars would be, with one haptic, so the run never
+ * stamp thumps in where the stars would be, with one soft haptic, so the run never
  * shows a fake lit star. Reduced motion: it simply appears.
  */
 
@@ -23,7 +23,8 @@ export function SavedStamp({ reducedMotion, delayMs = 260, label = 'RUN SAVED' }
       withTiming(0.92, { duration: 130, easing: Easing.in(Easing.quad) }),
       withSpring(1, { damping: 9, stiffness: 320 }),
     ));
-    const t = setTimeout(() => playHaptic('starSlam'), delayMs + 120);
+    // Every saved end is calm (RUN SAVED, HAVE FUN!, SEE YOU SOON!): a soft tap, not a star slam.
+    const t = setTimeout(() => playHaptic('lateHit'), delayMs + 120);
     return () => { clearTimeout(t); cancelAnimation(scale); };
   }, [reducedMotion, delayMs, scale]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }, { rotate: '-4deg' }], opacity: scale.value > 0.02 ? 1 : 0 }));

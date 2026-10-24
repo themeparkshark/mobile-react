@@ -334,7 +334,11 @@ test('a personal best always feels like a win, even with 0 stars', () => {
   assert.equal(feelings.endFeel({ stars: 0, isNewBest: false, saved: false }), 'try');
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.match(shell, /if \(feel === 'win' \|\| feel === 'best'\) \{\n\s+Haptic\.success\(\);\n\s+if \(!ownSfx\) playSfx\('win'\);/);
-  assert.match(shell, /\} else if \(feel === 'try'\) \{\n\s+Haptic\.failBuzz\(\);\n\s+if \(!ownSfx\) playSfx\('lose'\);/);
+  // A plain 0-star finish is soft: no fail buzz and no lose sound for a kid.
+  const tryBranch = shell.slice(shell.indexOf("} else if (feel === 'try') {"), shell.indexOf('} else {', shell.indexOf("} else if (feel === 'try') {")));
+  assert.match(tryBranch, /Haptic\.softBump\(\);/);
+  assert.match(tryBranch, /playSfx\('fx\.whoosh', 0\.6\)/);
+  assert.doesNotMatch(tryBranch, /failBuzz|'lose'/);
   assert.doesNotMatch(shell, /Haptic\[effectiveResult\.stars > 0 \? 'success' : 'failBuzz'\]/, 'sound and haptic no longer key on stars alone');
   assert.match(shell, /onNewBestLanded=\{stars === 0 \? burstBest : undefined\}/, 'one small confetti burst when the badge lands');
   const card = read('src/gamekit/results/ResultsCard.tsx');
@@ -554,4 +558,101 @@ test('Whack plays no lose sting after the line ends the run, and its own sting r
   assert.match(whack, /const sting = !wrappedRef\.current && !\(ride && last\?\.result\.win\);/);
   assert.match(whack, /meta\.ownFinishSfx = sting;/);
   assert.equal((whack.match(/wrappedRef\.current = false;/g) ?? []).length, 2, 'reset at every new run');
+});
+
+// -- Wave 2, round 2 (results lane) -------------------------------------------
+
+test('the ride try card never claims SO CLOSE!: GOOD TRY! with a ticket picture, every case', () => {
+  const lost = load('src/components/rewards/lostTryCard.ts');
+  const base = { usedRescuePass: false, rescueRetryAvailable: false, firstCoinTicketReturned: false, lostTicketCost: 0 };
+  const cases = [
+    [{ ...base, lostTicketCost: 1 }, '1 Ticket used.', -1],
+    [{ ...base, lostTicketCost: 2 }, '2 Tickets used.', -2],
+    [{ ...base, firstCoinTicketReturned: true }, 'Your Ticket came back. Try again!', 1],
+    [{ ...base, usedRescuePass: true, rescueRetryAvailable: true }, 'No Ticket spent. One more try today!', 0],
+    [base, 'No Ticket spent.', 0],
+  ];
+  for (const [input, message, ticket] of cases) {
+    const copy = lost.lostTryCopy(input);
+    assert.equal(copy.title, 'Good Try!');
+    assert.equal(copy.message, message);
+    assert.equal(copy.ticket, ticket);
+    assert.ok(copy.message.split(' ').length <= 7, 'one short line');
+  }
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.doesNotMatch(modal, /title="So Close!"/);
+  assert.match(modal, /<ChallengeStatusCard title=\{lostCopy\.title\} art="soClose" message=\{lostCopy\.message\} ticket=\{lostCopy\.ticket\}/);
+  const capture = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
+  assert.match(capture, /\{\.\.\.lostTryCopy\(/, 'the capture shows the exact words the modal shows');
+  const card = read('src/components/rewards/ChallengeStatusCard.tsx');
+  assert.doesNotMatch(card, /YellowButton/, 'the shared gold results button, navy text');
+  assert.ok(card.indexOf('<ResultPrimaryButton') < card.indexOf('{quiet && <ResultSecondaryButton'), 'gold first, the safe action under it');
+});
+
+test('Boss hit card: shared chips (two at most, singular 1 PERFECT), shared stars, DONE is a real button, pictures not sentences', () => {
+  const bash = load('src/games/boss/bash/bashChips.ts');
+  const chips = (meta) => [...bash.bashChips(meta)].map((c) => `${c.value} ${c.label}`);
+  assert.deepEqual(chips({ bonks: 12, smashes: 5, perfects: 1 }), ['12 BONKS', '5 SMASHES']);
+  assert.deepEqual(chips({ bonks: 0, smashes: 1, perfects: 1 }), ['1 SMASH', '1 PERFECT']);
+  assert.deepEqual(chips({ blocks: 2, perfects: 3 }), ['2 BLOCKS']);
+  assert.deepEqual(chips({}), []);
+  const src = read('src/games/boss/bash/BashResults.tsx');
+  assert.match(src, /<ResultSecondaryButton label="DONE"/);
+  assert.doesNotMatch(src, /textDecorationLine: 'underline'/);
+  assert.doesNotMatch(src, />You \{damage|You have <Text/, 'no "You 268 · Team 3,874" or "You have 110 Energy · 4 attacks left" lines');
+  assert.match(src, /accessibilityLabel=\{`You have \$\{n\.energyAfter\} Energy and/);
+  assert.match(src, /<GameIcon name="star" size=\{46\} mono="#9cc9ec" \/>/);
+  assert.match(src, />MIN</, 'the raid clock says minutes');
+  assert.doesNotMatch(src, /% power<\/Text>|Perfects/);
+});
+
+test('Sharky ribbon reads like every game for the same stars; TIME! only names a 0-star finish', () => {
+  const src = read('src/games/sharky/SharkySwim.tsx');
+  const body = src.slice(src.indexOf('export function sharkyHeadline'), src.indexOf('export function SharkySwim'));
+  assert.ok(body.indexOf('if (stars > 0) return feelingTitle(stars, near);') < body.indexOf("return 'TIME!'"));
+  assert.equal(feelings.feelingTitle(2, false), 'GREAT!');
+  assert.equal(feelings.feelingTitle(1, false), 'NICE!');
+});
+
+test('duel numbers agree: a missed Final bet is named, no idioms, and the Fin rank bar has hats', () => {
+  const nm = load('src/games/trivia-duel/engine/nearMiss.ts', { './config': { POINTS: { base: 100 } }, './scoring': { streakMult: () => 1 } });
+  const plan = { rounds: [{ spec: { type: 'quick' } }, { spec: { type: 'quick' } }, { spec: { type: 'final' } }] };
+  assert.equal(nm.finalBetLost(plan, [{ me: { correct: true } }, { me: { correct: true } }, { me: { correct: false, stake: 420 } }]), 420);
+  assert.equal(nm.finalBetLost(plan, [{ me: { correct: true } }, { me: { correct: true } }, { me: { correct: true, stake: 420 } }]), 0);
+  assert.equal(nm.finalBetLost(plan, [{ me: { correct: false } }, { me: { correct: false } }, { me: { correct: false, stake: 0 } }]), 0);
+  const src = read('src/games/trivia-duel/engine/nearMiss.ts');
+  assert.doesNotMatch(src, /A game|You have got this/);
+  const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
+  assert.match(duel, /FINAL BET  -\$\{lostBet\.toLocaleString\(\)\}/);
+  assert.match(duel, /<CoinGoal right=\{rideGoal\.right\} need=\{rideGoal\.need\}/, 'two coin dots, not a sentence');
+  assert.match(duel, /<RankHat stripes=/);
+  assert.doesNotMatch(duel, /numberOfLines=\{2\}>\{card\.fact\}/, 'a fact is never cut mid-word');
+  assert.doesNotMatch(duel, /fill=\{on \? C\.gold : '#ffffff'\}/, 'the shared star art, not white outlined stars');
+  const game = read('src/games/trivia-duel/TriviaDuel.tsx');
+  assert.match(game, /lostBet: finalBetLost\(p, resultsLog\.current\)/);
+  assert.match(game, /ride: \{ won, right: t\.me\.correct, need: 2 \}/);
+});
+
+test('no end feels like punishment, and the capture log hears every cue', () => {
+  const stamp = read('src/gamekit/results/SavedStamp.tsx');
+  assert.match(stamp, /playHaptic\('lateHit'\)/);
+  assert.doesNotMatch(stamp, /starSlam/);
+  const haptics = read('src/gamekit/Haptics.ts');
+  assert.match(haptics, /if \(hapticTrace\.listener && typeof pattern === 'string'\) hapticTrace\.listener\(pattern\);/);
+  const capture = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
+  assert.match(capture, /hapticTrace\.listener = \(name\) =>/);
+  assert.match(capture, /hapticTrace\.listener = null;/);
+});
+
+test('the results tree does not re-render after it lands', () => {
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /const ownSurface = useMemo\(\(\) => \(phase === 'results' && renderResults && effectiveResult \? renderResults\(/);
+  assert.ok(shell.indexOf('const ownSurface = useMemo') < shell.indexOf('if (!visible) return null;'), 'hooks before the early return');
+  assert.match(shell, /if \(surfaceAtFade && surfaceShownRef\.current && resultsOpacity\.value >= 0\.999 && resultsScale\.value > 0\.98\) return;/);
+});
+
+test('the legacy mini game shell has no emoji and never says SO CLOSE!', () => {
+  const legacy = read('src/components/MiniGameShell.tsx');
+  assert.doesNotMatch(legacy, /\p{Extended_Pictographic}/u);
+  assert.doesNotMatch(legacy, /SO CLOSE/);
 });

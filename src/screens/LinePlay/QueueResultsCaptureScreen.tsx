@@ -12,7 +12,7 @@
  *   - SHARKY IN LINE: Sharky's own results card.
  *   - RHYTHM / CURRENT QUEST IN LINE: the other queue games' cards.
  *   - LINE TRIVIA / TRIVIA DUEL: the duel's own results card.
- *   - RIDE TRY CARD: the map ride challenge's "So Close!" card with the same
+ *   - RIDE TRY CARD: the map ride challenge's GOOD TRY! card with the same
  *     words and buttons RedeemRedeemableModal passes (ticket back, ticket
  *     spent), since a live miss needs a ticket and a coin in dev.
  *   - SHORT PHONE: makes the window report 375 x 667 (iPhone SE) so cards
@@ -33,7 +33,7 @@ import { LinePlayMovementContext, type LinePlayMovement } from '../../gamekit/Li
 import type { WrapUpReason } from '../../gamekit/core/session';
 import { SFX } from '../../gamekit/SFX';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
-import { Haptic } from '../../gamekit/Haptics';
+import { Haptic, hapticTrace } from '../../gamekit/Haptics';
 import { WhackAShark } from '../../games/whack';
 import { SharkySwim } from '../../games/sharky';
 import { RhythmTapGame } from '../../games/rhythm';
@@ -41,6 +41,7 @@ import { CurrentQuestQueueGame } from '../../games/current-quest';
 import { TriviaGame, createLinePlayTriviaSource } from '../../games/trivia';
 import { TriviaDuel } from '../../games/trivia-duel';
 import ChallengeStatusCard from '../../components/rewards/ChallengeStatusCard';
+import { lostTryCopy } from '../../components/rewards/lostTryCard';
 
 type Run = { game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number };
 
@@ -94,13 +95,16 @@ export default function QueueResultsCaptureScreen() {
       return play.call(GameAudio, name, opts);
     };
     const feel = { ...Haptic };
-    (['success', 'failBuzz', 'hitSoft'] as const).forEach((k) => {
+    (['success', 'failBuzz', 'hitSoft', 'softBump'] as const).forEach((k) => {
       Haptic[k] = () => { cues.current = [...cues.current, `haptic ${k}`].slice(-12); feel[k](); };
     });
+    // Named patterns too (the star slams, the RUN SAVED stamp's tap).
+    hapticTrace.listener = (name) => { cues.current = [...cues.current, `pattern ${name}`].slice(-12); };
     return () => {
       SFX.setMasterVolume(1);
       GameAudio.play = play;
       Object.assign(Haptic, feel);
+      hapticTrace.listener = null;
     };
   }, []);
 
@@ -126,7 +130,7 @@ export default function QueueResultsCaptureScreen() {
 
   const end = (line: string) => {
     // The last few cues are the finish: what the results card sounded like.
-    note(`End: ${cues.current.slice(-5).join(', ') || 'silent'}`);
+    note(`End: ${cues.current.slice(-6).join(', ') || 'silent'}`);
     note(line);
     setRun(null);
     setQueueEnded(null);
@@ -163,9 +167,9 @@ export default function QueueResultsCaptureScreen() {
       </ScrollView>
       {tryCard ? (
         <View style={styles.tryScrim}>
-          {/* The same props RedeemRedeemableModal passes on a miss. */}
-          <ChallengeStatusCard title="So Close!" art="soClose"
-            message={tryCard === 'back' ? 'Your Ticket came back. Try again!' : 'This one got away. 1 Ticket spent.'}
+          {/* The same words and props RedeemRedeemableModal passes on a miss. */}
+          <ChallengeStatusCard art="soClose" {...lostTryCopy({ usedRescuePass: false, rescueRetryAvailable: false,
+            firstCoinTicketReturned: tryCard === 'back', lostTicketCost: tryCard === 'back' ? 0 : 1 })}
             primary={tryCard === 'back'
               ? { label: 'Try Again', onPress: () => { note('Try card: Try Again'); setTryCard(null); } }
               : { label: 'Continue', onPress: () => { note('Try card: Continue'); setTryCard(null); } }}

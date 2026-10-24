@@ -1,16 +1,18 @@
 /**
  * One bright card for every ride challenge status (checking, not started,
  * pending, expired, missed). Dustin's modal template: the ribbon title over the
- * blue card with a white border and his yellow button, never the old dark card
- * with a red X. A miss shows the drawn "so close" shark; waiting states show
- * the TPS shark loader.
+ * blue card with a white border and the gold button, never the old dark card
+ * with a red X. A miss shows the drawn shark (GOOD TRY!) and a ticket picture
+ * (-1, +1); waiting states show the TPS shark loader. Buttons are the shared
+ * results buttons: gold first, white under it.
  */
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import Ribbon from '../Ribbon';
-import YellowButton from '../YellowButton';
+import GameIcon from '../../ui/GameIcon';
+import { ResultPrimaryButton, ResultSecondaryButton } from '../../gamekit/results/ResultButtons';
 import SharkLoader from '../../ui/SharkLoader';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 
@@ -36,19 +38,22 @@ export function capsAction<T extends ChallengeStatusAction | undefined>(action: 
   return (action ? { ...action, label: action.label.toUpperCase() } : action) as T;
 }
 
-export default function ChallengeStatusCard({ title, message, art = 'none', primary: primaryIn, secondary: secondaryIn, quiet: quietIn, guardRetry = false }: {
+export default function ChallengeStatusCard({ title, message, art = 'none', primary: primaryIn, secondary: secondaryIn, quiet: quietIn, guardRetry = false, ticket }: {
   readonly title: string;
   readonly message: string;
   readonly art?: ChallengeStatusArt;
   readonly primary?: ChallengeStatusAction;
   readonly secondary?: ChallengeStatusAction;
-  /** A quiet text action at the bottom ("Return to map"). */
+  /** The safe way out ("Return to map", DONE): a white button under the big one. */
   readonly quiet?: ChallengeStatusAction;
   /**
-   * The primary spends a Ticket or a retry: put the quiet action above it and
-   * ignore the primary for RETRY_TAP_GUARD_MS after the card appears.
+   * The primary spends a Ticket or a retry: it ignores taps for
+   * RETRY_TAP_GUARD_MS after the card appears, so a second tap on the game's
+   * own Close never starts (and pays for) a new try.
    */
   readonly guardRetry?: boolean;
+  /** Tickets this try changed, as a picture: -1 spent, +1 came back, 0 none spent. */
+  readonly ticket?: number;
 }) {
   const primary = capsAction(primaryIn);
   const secondary = capsAction(secondaryIn);
@@ -61,32 +66,26 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
     const timer = setTimeout(() => setArmed(true), RETRY_TAP_GUARD_MS);
     return () => clearTimeout(timer);
   }, [guardRetry]);
-  // With a paid retry the safe action is a full white button (DONE), not a
-  // small text link, and it holds the old Close spot above the retry.
-  const quietAction = quiet && (guardRetry ? <Pressable accessibilityRole="button" onPress={quiet.onPress}
-    style={({ pressed }) => [styles.secondary, styles.safeAbove, pressed && styles.pressed]}>
-    <Text style={styles.secondaryText}>{quiet.label}</Text>
-  </Pressable> : <Pressable accessibilityRole="button" onPress={quiet.onPress} style={styles.quiet} hitSlop={8}>
-    <Text style={styles.quietText}>{quiet.label}</Text>
-  </Pressable>);
+  // One button system with every results card: the big gold button first,
+  // then white buttons under it (never a small text link, never above it).
   return (
     <Animated.View entering={reduced ? FadeIn.duration(120) : ZoomIn.springify().damping(14).stiffness(220)}
       style={styles.wrap} accessibilityRole="alert">
       <View style={styles.ribbon}><Ribbon text={title} /></View>
       <View style={styles.card}>
         {art === 'soClose' && <Image source={SO_CLOSE_SHARK} contentFit="contain" style={styles.shark}
-          accessibilityLabel="The shark just missed the coin" />}
+          accessibilityLabel="The shark missed the coin this time" />}
         {art === 'loading' && <View style={styles.loader}><SharkLoader compact tone="onBlue" /></View>}
+        {ticket != null ? <View style={styles.ticket} importantForAccessibility="no-hide-descendants">
+          <GameIcon name="ticket" size={30} />
+          <Text style={styles.ticketText}>{ticket > 0 ? `+${ticket}` : ticket < 0 ? `${ticket}` : '0'}</Text>
+        </View> : null}
         <Text style={styles.message}>{message}</Text>
-        {guardRetry && quietAction}
-        {primary && <View style={styles.primary}>
-          <YellowButton text={primary.label} onPress={primary.onPress} disabled={primary.disabled || !armed} />
-        </View>}
-        {secondary && <Pressable accessibilityRole="button" onPress={secondary.onPress} disabled={secondary.disabled}
-          style={[styles.secondary, secondary.disabled && { opacity: 0.5 }]}>
-          <Text style={styles.secondaryText}>{secondary.label}</Text>
-        </Pressable>}
-        {!guardRetry && quietAction}
+        {primary && <ResultPrimaryButton label={primary.label} onPress={primary.onPress}
+          disabled={primary.disabled || !armed} style={[styles.primary, primary.disabled && styles.dim]} />}
+        {secondary && <ResultSecondaryButton label={secondary.label} onPress={secondary.disabled ? undefined : secondary.onPress}
+          style={[styles.secondary, secondary.disabled && styles.dim]} />}
+        {quiet && <ResultSecondaryButton label={quiet.label} onPress={quiet.onPress} style={styles.secondary} />}
       </View>
     </Animated.View>
   );
@@ -102,12 +101,10 @@ const styles = StyleSheet.create({
   loader: { height: 110, alignSelf: 'stretch', justifyContent: 'center' },
   message: { fontFamily: 'Knockout', fontSize: 18, lineHeight: 23, color: '#ffffff', textAlign: 'center',
     marginBottom: 12 },
-  primary: { alignSelf: 'stretch', alignItems: 'center' },
-  secondary: { alignSelf: 'stretch', alignItems: 'center', backgroundColor: '#e4f7ff', borderWidth: 2, borderColor: '#ffffff',
-    borderBottomWidth: 4, borderBottomColor: '#9ccbe9', borderRadius: 14, paddingVertical: 11, marginTop: 8 },
-  secondaryText: { fontFamily: 'Shark', fontSize: 17, color: '#05346e' },
-  quiet: { minHeight: 44, justifyContent: 'center', alignItems: 'center', marginTop: 4 },
-  safeAbove: { minHeight: 52, justifyContent: 'center', marginTop: 0, marginBottom: 12 },
-  pressed: { transform: [{ translateY: 2 }] },
-  quietText: { fontFamily: 'Shark', fontSize: 16, color: '#dff4ff' },
+  primary: { marginTop: 4 },
+  secondary: { flex: 0, minHeight: 52 },
+  dim: { opacity: 0.5 },
+  ticket: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 3, borderColor: '#05346e',
+    paddingHorizontal: 12, paddingVertical: 2, marginBottom: 8 },
+  ticketText: { fontFamily: 'Shark', fontSize: 22, color: '#05346e' },
 });

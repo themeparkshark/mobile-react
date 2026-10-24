@@ -31,6 +31,7 @@ import * as RootNavigation from '../RootNavigation';
 import TicketPunch from './TicketPunch';
 import { serverPerkChips, type PerkChipData } from './coin/progressionModel';
 import ChallengeStatusCard from './rewards/ChallengeStatusCard';
+import { lostTryCopy } from './rewards/lostTryCard';
 import { markStandingsStale } from '../screens/LeaderboardsScreen/standingsCache';
 import { challengeRibbon, outOfTicketsCopy, type TicketSources } from './rewards/challengeCopy';
 import { prefetchParkShelf } from '../services/collection/parkShelfPrefetch';
@@ -567,6 +568,8 @@ export default function RedeemRedeemableModal({
   // that cost a Ticket; never during the game itself.
   const canOfferRetry = retryOffered && taskType !== null && lostTicketCost > 0 && !usedRescuePass
     && !firstCoinTicketReturned && !rescueRetryAvailable && (vip || adsAvailable());
+  // The try card's title, line and ticket picture (GOOD TRY!, never a made-up SO CLOSE!).
+  const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost });
   const handleAdRetry = useCallback(async () => {
     const attemptId = attemptRef.current?.id;
     if (adBusy || !attemptId) return;
@@ -866,15 +869,7 @@ export default function RedeemRedeemableModal({
               } else if (outcomeRef.current) resolveAttempt(outcomeRef.current);
             } }}
             quiet={{ label: 'Return to map', onPress: handleLostClose }} />}
-          {flowState === 'lost' && <ChallengeStatusCard title="So Close!" art="soClose"
-            message={usedRescuePass
-              ? rescueRetryAvailable
-                ? 'No Ticket spent. One more try today!'
-                : 'Your Rescue Pass tries are used up. No Ticket was spent.'
-              : firstCoinTicketReturned
-              ? 'Your Ticket came back. Try again!'
-              : lostTicketCost > 0 ? `This one got away. ${lostTicketCost} Ticket${lostTicketCost === 1 ? '' : 's'} spent.`
-              : 'This one got away. No Ticket was spent.'}
+          {flowState === 'lost' && <ChallengeStatusCard title={lostCopy.title} art="soClose" message={lostCopy.message} ticket={lostCopy.ticket}
             primary={firstCoinTicketReturned || rescueRetryAvailable
               ? { label: location ? 'Try Again' : 'Finding You', onPress: handleProtectedRetry, disabled: !location }
               : canOfferRetry

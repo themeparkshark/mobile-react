@@ -53,7 +53,8 @@ export function nearMiss(plan: MatchPlan, tally: MatchTally, results: readonly R
   if (results.some((r) => !r.me.correct) && POINTS.base * 1.5 >= need) {
     return { gap, kind: 'miss', line: `Lost by ${gap}. One more right answer wins it.` };
   }
-  if (gap > 300) return { gap, kind: 'miss', line: 'Fin brought his A game. Rematch and take him down!' };
+  // A big gap is not "so close": one short line, no idioms.
+  if (gap > 300) return { gap, kind: 'miss', line: 'Fin won this one. Rematch!' };
   return { gap, kind: 'miss', line: `Lost by ${gap}. So close! Rematch?` };
 }
 
@@ -66,5 +67,15 @@ export function rideNearMiss(results: readonly { me: { correct: boolean } }[], n
   if (right >= need) return '';
   const firstMiss = results.findIndex((r) => !r.me.correct);
   if (need - right === 1 && firstMiss >= 0) return `A right answer on Q${firstMiss + 1} wins the coin.`;
-  return 'Two right answers win the coin. You have got this.';
+  return 'Two right answers win the coin.';
+}
+
+/**
+ * Points a wrong Final took away (the stake), or 0. A duel can end with right
+ * answers and a low score only this way, so the card names it.
+ */
+export function finalBetLost(plan: { rounds: readonly { spec: { type: string } }[] }, results: readonly { me: { correct: boolean; stake?: number } }[]): number {
+  const fi = plan.rounds.findIndex((r) => r.spec.type === 'final');
+  const fr = fi >= 0 ? results[fi] : undefined;
+  return fr && !fr.me.correct && (fr.me.stake ?? 0) > 0 ? Math.round(fr.me.stake ?? 0) : 0;
 }

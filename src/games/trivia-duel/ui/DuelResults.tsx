@@ -18,7 +18,7 @@ import type { FactCard } from '../store';
 import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
 import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { feelingChips, type FeelingStat } from '../../../gamekit/results/feelings';
-import Svg, { Path as SvgPath } from 'react-native-svg';
+import GameIcon from '../../../ui/GameIcon';
 
 /**
  * The duel's stat rows as the shared brag chips: right answers as gold dots
@@ -62,11 +62,13 @@ export interface ResultsModel {
   stars: number;
   practice: boolean;
   /** Fin rank bar: label and progress toward the next rank (0..1), or null vs a ghost. */
-  rank?: { label: string; progress: number; next: string | null } | null;
+  rank?: { label: string; progress: number; next: string | null; stripes?: number; nextStripes?: number | null } | null;
+  /** Points a wrong Final bet took away (shown so right answers and a low score agree). */
+  lostBet?: number;
   /** Best Moment: the fastest correct lock. */
   best?: { label: string } | null;
   /** Ride challenge: the coin line instead of the duel title. */
-  ride?: { won: boolean } | null;
+  ride?: { won: boolean; right?: number; need?: number } | null;
 }
 
 interface Props {
@@ -113,7 +115,10 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const gapStyle = useAnimatedStyle(() => ({ backgroundColor: gap.value > 0.5 ? C.gold : C.coral }));
   // Drops in centre for 1.5s, then pops away (never parked over the card's words).
   const polStyle = useAnimatedStyle(() => ({ opacity: polS.value > 0.02 ? 1 : 0, transform: [{ translateY: polY.value }, { scale: polS.value }, { rotate: '-6deg' }] }));
-  const chips = duelChips(model.rows);
+  // A lost ride challenge shows its right answers on the coin goal row instead.
+  const rideGoal = model.ride && !model.ride.won && model.ride.need ? { right: Math.min(model.ride.right ?? 0, model.ride.need), need: model.ride.need } : null;
+  const chips = duelChips(model.rows).filter((c) => !(rideGoal && c.label === 'RIGHT ANSWERS'));
+  const lostBet = model.lostBet && model.lostBet > 0 ? model.lostBet : 0;
 
   const total = Math.max(1, model.myScore + model.oppScore);
   const fact = model.facts[0];
@@ -131,6 +136,13 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             <Text style={styles.scoreOpp}>{model.oppScore}</Text>
           </View>
         </View>
+        {/* Right answers and a low score agree: the Final bet that missed is right there. */}
+        {lostBet ? (
+          <View style={styles.betLost} accessible accessibilityLabel={`Your Final bet missed, so ${lostBet} points went away`}>
+            <GameIcon name="dice" size={20} />
+            <Text style={styles.betLostText}>{`FINAL BET  -${lostBet.toLocaleString()}`}</Text>
+          </View>
+        ) : null}
         {model.ride ? (
           <View style={styles.starRow}>
             {[1, 2, 3].map((k) => <StarPip key={k} on={k <= model.stars} i={k} reducedMotion={reducedMotion} />)}
@@ -148,19 +160,22 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             {model.banners.map((b, i) => <Banner key={b} text={b} i={i} reducedMotion={reducedMotion} />)}
           </View>
         ) : null}
-        {(model.ride ? !model.ride.won : !model.won) && model.nearMiss ? (
-          <Text style={styles.near} numberOfLines={1} adjustsFontSizeToFit>{model.nearMiss}</Text>
-        ) : null}
+        {rideGoal ? <CoinGoal right={rideGoal.right} need={rideGoal.need} reducedMotion={reducedMotion} />
+          : (model.ride ? !model.ride.won : !model.won) && model.nearMiss ? (
+            <Text style={styles.near} numberOfLines={1} adjustsFontSizeToFit>{model.nearMiss}</Text>
+          ) : null}
         {chips.length ? (
           <View style={styles.rows}>
             {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} pips={c.pips} />)}
           </View>
         ) : null}
         {model.rank ? (
-          <View style={styles.rankRow}>
-            <Text style={styles.rankLabel}>{model.rank.label}</Text>
+          // Fin's hat at each end (more gold stripes = a tougher Fin), so the bar reads without the words.
+          <View style={styles.rankRow} accessible
+            accessibilityLabel={model.rank.next ? `${model.rank.label} now. Win more to face ${model.rank.next}` : `${model.rank.label}, the top rank`}>
+            <RankHat stripes={model.rank.stripes ?? 0} />
             <View style={styles.rankTrack}><View style={[styles.rankFill, { width: `${Math.round(model.rank.progress * 100)}%` }]} /></View>
-            <Text style={styles.rankNext}>{model.rank.next ?? 'TOP'}</Text>
+            {model.rank.next ? <RankHat stripes={model.rank.nextStripes ?? (model.rank.stripes ?? 0) + 1} /> : <GameIcon name="crown" size={30} />}
           </View>
         ) : null}
         {fact ? <FactRow card={fact} /> : null}
@@ -205,24 +220,53 @@ function StarPip({ on, i, reducedMotion }: { on: boolean; i: number; reducedMoti
     s.value = withDelay(500 + i * 220, withSequence(withTiming(1.35, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 300 })));
   }, [on, i, s, reducedMotion]);
   const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  // The same star every results card draws: pale blue until it is earned.
   return (
-    <Animated.View style={st}>
-      <Svg width={38} height={38}>
-        <SvgPath d={STAR_D} fill={on ? C.gold : '#ffffff'} stroke={C.ink} strokeWidth={3} strokeLinejoin="round" />
-      </Svg>
+    <Animated.View style={[styles.starPip, st]}>
+      <GameIcon name="star" size={i === 2 ? 46 : 38} mono={on ? undefined : '#9cc9ec'} />
     </Animated.View>
   );
 }
 
-const STAR_D = (() => {
-  let d = '';
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const r = i % 2 ? 8 : 17;
-    d += `${i ? 'L' : 'M'} ${(19 + Math.cos(a) * r).toFixed(1)} ${(20 + Math.sin(a) * r).toFixed(1)} `;
-  }
-  return `${d}Z`;
-})();
+/**
+ * Two right answers win the coin, as pictures: one dot per answer needed
+ * (gold for each right one) and the coin at the end, then TRY AGAIN!. The
+ * dots pop in one by one, a small beat when the card lands.
+ */
+function CoinGoal({ right, need, reducedMotion }: { right: number; need: number; reducedMotion: boolean }) {
+  return (
+    <View style={styles.goal} accessible accessibilityLabel={`${right} of ${need} right answers. ${need} right answers win the coin. Try again!`}>
+      <View style={styles.goalRow}>
+        {Array.from({ length: need }, (_, k) => <GoalDot key={k} on={k < right} k={k} reducedMotion={reducedMotion} />)}
+        <Text style={styles.goalEq}>=</Text>
+        <Image source={ART.coin} style={styles.goalCoin} resizeMode="contain" />
+      </View>
+      <Text style={styles.goalText}>TRY AGAIN!</Text>
+    </View>
+  );
+}
+
+function GoalDot({ on, k, reducedMotion }: { on: boolean; k: number; reducedMotion: boolean }) {
+  const s = useSharedValue(reducedMotion ? 1 : 0);
+  useEffect(() => {
+    if (reducedMotion) return;
+    s.value = withDelay(450 + k * 180, withSequence(withTiming(1.3, { duration: 110 }), withSpring(1, { damping: 8, stiffness: 300 })));
+  }, [s, k, reducedMotion]);
+  const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  return <Animated.View style={[styles.goalDot, on && styles.goalDotOn, st]} />;
+}
+
+/** Fin's captain hat with his rank's gold stripes under it. */
+function RankHat({ stripes }: { stripes: number }) {
+  return (
+    <View style={styles.rankHat}>
+      <Image source={ART.hat} style={styles.rankHatImg} resizeMode="contain" />
+      <View style={styles.rankStripes}>
+        {Array.from({ length: Math.max(0, Math.min(3, stripes)) }, (_, k) => <View key={k} style={styles.rankStripe} />)}
+      </View>
+    </View>
+  );
+}
 
 function Banner({ text, i, reducedMotion }: { text: string; i: number; reducedMotion: boolean }) {
   const sx = useSharedValue(reducedMotion ? 1 : 0);
@@ -242,7 +286,8 @@ function Banner({ text, i, reducedMotion }: { text: string; i: number; reducedMo
 function FactRow({ card }: { card: FactCard & { isNew: boolean } }) {
   return (
     <View style={styles.fact}>
-      <Text style={styles.factText} numberOfLines={2}>{card.fact}</Text>
+      {/* Wraps to as many lines as it needs (shrinking a little first): a fact is never cut mid-word. */}
+      <Text style={[styles.factText, card.fact.length > 90 && styles.factLong]} numberOfLines={4} adjustsFontSizeToFit minimumFontScale={0.8}>{card.fact}</Text>
       {card.tpsArticleUrl ? (
         <Pressable
           onPress={() => { void openExternal(`${card.tpsArticleUrl}${card.tpsArticleUrl!.includes('?') ? '&' : '?'}utm_source=app&utm_medium=trivia`); }}
@@ -274,14 +319,28 @@ const styles = StyleSheet.create({
   bannerText: { fontFamily: 'Shark', fontSize: 18, color: C.navy },
   near: { fontFamily: 'Knockout', fontSize: 18, color: C.navy, textAlign: 'center', marginTop: 6 },
   rows: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 },
-  starRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 4 },
+  starRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginTop: 4 },
   rankRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  rankLabel: { fontFamily: 'Knockout', fontSize: 15, color: C.navy, width: 110 },
-  rankTrack: { flex: 1, height: 12, borderRadius: 6, borderWidth: 2.5, borderColor: C.ink, backgroundColor: '#ffffff', overflow: 'hidden' },
+  rankTrack: { flex: 1, marginHorizontal: 6, height: 12, borderRadius: 6, borderWidth: 2.5, borderColor: C.ink, backgroundColor: '#ffffff', overflow: 'hidden' },
   rankFill: { height: '100%', backgroundColor: C.blue },
-  rankNext: { fontFamily: 'Knockout', fontSize: 13, color: C.navy, opacity: 0.6, marginLeft: 8, width: 82, textAlign: 'right' },
   fact: { flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 10, paddingVertical: 6 },
   factText: { flex: 1, fontSize: 15, fontWeight: '700', color: C.navy },
+  factLong: { fontSize: 14 },
+  starPip: { marginHorizontal: 3, justifyContent: 'flex-end' },
+  betLost: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, marginTop: 4, backgroundColor: '#ffffff', borderRadius: 12,
+    borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 10, paddingVertical: 2 },
+  betLostText: { fontFamily: 'Shark', fontSize: 16, color: C.navy },
+  goal: { alignItems: 'center', marginTop: 6 },
+  goalRow: { flexDirection: 'row', alignItems: 'center' },
+  goalDot: { width: 24, height: 24, borderRadius: 12, borderWidth: 3, borderColor: C.ink, backgroundColor: '#ffffff', marginHorizontal: 4 },
+  goalDotOn: { backgroundColor: C.gold },
+  goalEq: { fontFamily: 'Shark', fontSize: 24, color: C.navy, marginHorizontal: 6 },
+  goalCoin: { width: 36, height: 36 },
+  goalText: { fontFamily: 'Shark', fontSize: 20, color: C.navy, marginTop: 2 },
+  rankHat: { width: 44, alignItems: 'center' },
+  rankHatImg: { width: 40, height: 28 },
+  rankStripes: { flexDirection: 'row', gap: 2, height: 5, marginTop: 1 },
+  rankStripe: { width: 8, height: 4, borderRadius: 2, backgroundColor: C.gold, borderWidth: 1, borderColor: C.ink },
   readBtn: { marginLeft: 8, backgroundColor: C.blue, borderRadius: 8, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 8, paddingVertical: 3 },
   readText: { fontFamily: 'Knockout', fontSize: 13, color: '#ffffff' },
   buttons: { marginTop: 4 },

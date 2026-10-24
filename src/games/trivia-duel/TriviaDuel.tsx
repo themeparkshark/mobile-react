@@ -59,7 +59,7 @@ import {
   suddenDeathRound,
   type GhostRecord, type MatchPlan, type MatchTally, type PlannedRound, type RoundResult, type SideInput,
 } from './engine/match';
-import { nearMiss, rideNearMiss } from './engine/nearMiss';
+import { finalBetLost, nearMiss, rideNearMiss } from './engine/nearMiss';
 import {
   bellValue, duelStars, flameTier, rideStars, rideWon, speedPoints, streakMult, suggestWager, wagerStakes,
 } from './engine/scoring';
@@ -1463,7 +1463,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
           { label: 'Fastest', value: fastest },
           { label: 'Fastest answer', value: TIER_TEXT[t.me.bestTier].replace('!', '') || 'NONE' },
         ],
-        facts: facts.slice(0, 1).map((f) => ({ ...f, isNew: true })), stars, practice: false, rank: null, best: null, ride: { won },
+        facts: facts.slice(0, 1).map((f) => ({ ...f, isNew: true })), stars, practice: false, rank: null, best: null, ride: { won, right: t.me.correct, need: 2 },
       });
       const result: GameResult = {
         score: t.me.score,
@@ -1554,7 +1554,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setResults({
       won, tie: t.me.score === t.opp.score, myScore: t.me.score, oppScore: t.opp.score, oppName,
       banners, nearMiss: nm.line, rows, facts: newCards.slice(0, 1), stars, practice: mode === 'practice',
-      rank: ghost ? null : { label: FIN_RANKS[rk.rank].label, progress: nextRank ? Math.min(1, rk.winsAtRank / FIN_RANKS[rk.rank].promoteAfter) : 1, next: nextRank },
+      rank: ghost ? null : {
+        label: FIN_RANKS[rk.rank].label, progress: nextRank ? Math.min(1, rk.winsAtRank / FIN_RANKS[rk.rank].promoteAfter) : 1, next: nextRank,
+        stripes: FIN_RANKS[rk.rank].stripes, nextStripes: ri < FIN_RANK_ORDER.length - 1 ? FIN_RANKS[FIN_RANK_ORDER[ri + 1]].stripes : null,
+      },
+      // A missed Final bet is why right answers can still end on a low score:
+      // the card shows it, so every number agrees with every other number.
+      lostBet: finalBetLost(p, resultsLog.current),
       best: t.me.fastestMs >= 0 ? { label: `${fastest} on Q${Math.max(0, fastestIdx) + 1}` } : null,
     });
     later(beatMs() * 2, () => setPhase('results'));

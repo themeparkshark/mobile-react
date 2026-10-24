@@ -17,6 +17,10 @@ import { BRAND } from '../../../ui/tokens';
 import GameIcon from '../../../ui/GameIcon';
 import { BASH_ART } from './art';
 import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
+import { ResultChip } from '../../../gamekit/results/ResultsCard';
+import { ResultSecondaryButton } from '../../../gamekit/results/ResultButtons';
+
+import { bashChips } from './bashChips';
 
 const CHEST_OPEN = require('../../../../assets/images/daily/chest-open.png');
 
@@ -114,6 +118,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   const s1 = useAnimatedStyle(() => ({ transform: [{ scale: starsIn[1].value }], opacity: starsIn[1].value > 0 ? 1 : 0 }));
   const s2 = useAnimatedStyle(() => ({ transform: [{ scale: starsIn[2].value }], opacity: starsIn[2].value > 0 ? 1 : 0 }));
   const left = raidMinutesLeft(endsAt, Date.now());
+  const chips = bashChips(meta);
   const once = (f?: () => void) => () => { if (pressed.current || !f) return; pressed.current = true; f(); };
 
   return (
@@ -131,10 +136,15 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <Text style={styles.kicker}>{noHits ? 'NO HITS THIS TIME' : `YOU HIT ${bossName.toUpperCase()} FOR`}</Text>
           {noHits ? <View style={styles.kept} accessible accessibilityLabel="No Energy was spent">
             <GameIcon name="energy" size={24} /><Text style={styles.zero}>ENERGY KEPT</Text></View>
-            : <CountUpText value={damage} delayMs={reduced ? 0 : 200} durationMs={reduced ? 1 : 700} style={styles.dmg} />}
-          {rate < 1 && !noHits && <Text style={styles.rate}>From home, {Math.round(rate * 100)}% power</Text>}
-          {!noHits && teamDamage > 0 && <Text style={styles.rate}>You {damage.toLocaleString()}  ·  Team {(teamDamage + damage).toLocaleString()}</Text>}
-          {capped && <Text style={styles.rate}>That hits the most one shark can do to this boss.</Text>}
+            : <View accessible accessibilityLabel={`You hit ${bossName} for ${damage.toLocaleString()}${teamDamage > 0 ? `. Your team has done ${(teamDamage + damage).toLocaleString()}` : ''}${rate < 1 ? `. From home you hit at ${Math.round(rate * 100)} percent power` : ''}${capped ? '. That is the most one shark can do to this boss' : ''}`}>
+              <CountUpText value={damage} delayMs={reduced ? 0 : 200} durationMs={reduced ? 1 : 700} style={styles.dmg} />
+            </View>}
+          {/* Pictures, not sentences: a pin for a hit from home, a lock when this
+              shark hit the most it can. The full words are spoken. */}
+          {!noHits && (rate < 1 || capped) ? <View style={styles.tags} importantForAccessibility="no-hide-descendants">
+            {rate < 1 ? <View style={styles.tag}><GameIcon name="pin" size={16} /><Text style={styles.tagText}>FROM HOME</Text></View> : null}
+            {capped ? <View style={styles.tag}><GameIcon name="lock" size={16} /><Text style={styles.tagText}>MAX HIT</Text></View> : null}
+          </View> : null}
         </View>
       </View>
 
@@ -143,9 +153,10 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           // The finisher's card: a gold KO crown where a grey third star would sit.
           ? <View key={i} style={styles.starSlot} accessible accessibilityLabel="Knockout crown: you finished the boss">
             <GameIcon name="crown" size={38} /><Text style={styles.koTag} maxFontSizeMultiplier={1}>KO</Text></View>
+          // The same star every results card draws: pale blue until it lands gold.
           : <View key={i} style={styles.starSlot}>
-          <Image source={BASH_ART.star} style={[StyleSheet.absoluteFill, { opacity: 0.18 }]} contentFit="contain" tintColor={BRAND.navy} />
-          <Animated.View style={[StyleSheet.absoluteFill, st]}><Image source={BASH_ART.star} style={StyleSheet.absoluteFill} contentFit="contain" /></Animated.View>
+          <View style={StyleSheet.absoluteFill}><GameIcon name="star" size={46} mono="#9cc9ec" /></View>
+          <Animated.View style={[StyleSheet.absoluteFill, st]}><GameIcon name="star" size={46} /></Animated.View>
         </View>)}
       </View>}
 
@@ -160,7 +171,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
         {won ? <Text style={styles.raidLine} numberOfLines={1}>Boss down!</Text> : (
           <View style={styles.raidIcons} accessible
             accessibilityLabel={`${hpAfter.toLocaleString()} HP left${left ? `, ${left} minutes left` : ''}${fighters > 0 ? `, ${fighters} sharks fighting` : ''}`}>
-            {left ? <View style={styles.raidIcon}><GameIcon name="timer" size={20} /><Text style={styles.raidNum}>{left}</Text></View> : null}
+            {left ? <View style={styles.raidIcon}><GameIcon name="timer" size={20} /><Text style={styles.raidNum}>{left}</Text><Text style={styles.raidUnit}>MIN</Text></View> : null}
             {fighters > 0 ? <View style={styles.raidIcon}><GameIcon name="swords" size={20} /><Text style={styles.raidNum}>{fighters}</Text></View> : null}
           </View>
         )}
@@ -182,13 +193,10 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
         <Text style={styles.receiptText} maxFontSizeMultiplier={1.3}>
           {receipt === 'saved' ? 'Saved! Your hits count for the team.' : receipt === 'saving' ? 'Sending your hits...' : receiptNote ?? 'Not saved yet. We will keep trying.'}</Text>
       </View>}
-      <View style={styles.chips}>
-        {/* Brags only: a zero is not a chip. */}
-        {Number(meta.bonks ?? 0) > 0 ? <Chip label="Bonks" value={Number(meta.bonks)} /> : null}
-        {Number(meta.smashes ?? 0) > 0 ? <Chip label="Smashes" value={Number(meta.smashes)} /> : null}
-        {Number(meta.blocks ?? 0) > 0 ? <Chip label="Blocks" value={Number(meta.blocks)} />
-          : Number(meta.perfects ?? 0) > 0 ? <Chip label="Perfects" value={Number(meta.perfects)} /> : null}
-      </View>
+      {/* Brags only, the shared chips: two at most, a zero is never a chip. */}
+      {chips.length ? <View style={styles.chips}>
+        {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} />)}
+      </View> : null}
 
       {!won && !noHits && n.can && onAgain && warmNext && <View style={styles.warm} accessible accessibilityLabel="Head start earned: your next attack starts with a free fin">
         <Image source={BASH_ART.finFull} style={{ width: 20, height: 20 }} contentFit="contain" />
@@ -201,8 +209,13 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <Text style={styles.againText}>ATTACK AGAIN</Text>
           <View style={styles.cost}><GameIcon name="energy" size={22} /><Text style={styles.costText}>{next?.energyCost}</Text></View>
         </Pressable>
-        <Text style={styles.wallet}>You have <Text style={styles.walletNum}>{n.energyAfter}</Text> Energy  ·  {n.attacksAfter} {n.attacksAfter === 1 ? 'attack' : 'attacks'} left</Text>
-        <Pressable accessibilityRole="button" onPress={once(claim)} style={styles.done} hitSlop={8}><Text style={styles.doneText}>DONE</Text></Pressable>
+        {/* Your Energy and the attacks left as pictures; the sentence is spoken. */}
+        <View style={styles.walletRow} accessible
+          accessibilityLabel={`You have ${n.energyAfter} Energy and ${n.attacksAfter} ${n.attacksAfter === 1 ? 'attack' : 'attacks'} left`}>
+          <View style={styles.tag}><GameIcon name="energy" size={18} /><Text style={styles.walletNum}>{n.energyAfter}</Text></View>
+          <View style={styles.tag}><GameIcon name="swords" size={18} /><Text style={styles.walletNum}>{n.attacksAfter}</Text></View>
+        </View>
+        <ResultSecondaryButton label="DONE" onPress={once(claim)} style={styles.doneBtn} />
       </> : <>
         {!noHits && n.reason && <Text style={styles.wallet}>{n.reason}</Text>}
         <Pressable accessibilityRole="button" onPress={once(claim)} style={[styles.again, styles.doneBig]}>
@@ -221,9 +234,6 @@ function Loot({ icon, n, count = false, reduced = false }: { icon: 'coins' | 'xp
     {count ? <CountUpText value={n} delayMs={reduced ? 0 : 1000} durationMs={reduced ? 1 : 650} suffix={word} reducedMotion={reduced} style={styles.lootNum} />
       : <Text style={styles.lootNum}>{n}{word}</Text>}</View>;
 }
-function Chip({ label, value }: { label: string; value: number | string }) {
-  return <View style={styles.chip}><Text style={styles.chipNum}>{value}</Text><Text style={styles.chipLabel}>{label}</Text></View>;
-}
 
 const styles = StyleSheet.create({
   card: { width: '92%', backgroundColor: BRAND.cream, borderRadius: 26, borderWidth: 4, borderColor: BRAND.navy, padding: 16, paddingTop: 44, marginTop: 30 },
@@ -232,6 +242,7 @@ const styles = StyleSheet.create({
   raidIcons: { flexDirection: 'row', justifyContent: 'center', gap: 18, marginTop: 6 },
   raidIcon: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   raidNum: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
+  raidUnit: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navySoft, marginLeft: 1, marginTop: 4 },
   best: { position: 'absolute', right: 12, top: 36, backgroundColor: BRAND.red, borderRadius: 10, borderWidth: 2, borderColor: BRAND.white,
     paddingHorizontal: 8, paddingVertical: 2, transform: [{ rotate: '8deg' }] },
   bestText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
@@ -246,7 +257,6 @@ const styles = StyleSheet.create({
   kicker: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, letterSpacing: 0.4 },
   dmg: { alignSelf: 'stretch', textAlign: 'left', fontFamily: 'Shark', fontSize: 48, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0, padding: 0 },
   zero: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 4 },
-  rate: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   stars: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 4 },
   starSlot: { width: 46, height: 46 },
   raid: { marginTop: 10 },
@@ -268,9 +278,12 @@ const styles = StyleSheet.create({
   receiptErr: { backgroundColor: '#ffe3df', borderRadius: 10, padding: 4 },
   receiptText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, flexShrink: 1, textAlign: 'center' },
   chips: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 10 },
-  chip: { flex: 1, alignItems: 'center', backgroundColor: BRAND.sky, borderRadius: 12, paddingVertical: 4 },
-  chipNum: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
-  chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.navySoft },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
+  tag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.sky,
+    paddingHorizontal: 8, paddingVertical: 2 },
+  tagText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
+  walletRow: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 8 },
+  doneBtn: { flex: 0, minHeight: 52, marginTop: 10 },
   again: { marginTop: 14, minHeight: 64, borderRadius: 20, backgroundColor: BRAND.red, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 7,
     borderBottomColor: BRAND.redLip, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
   doneBig: { backgroundColor: BRAND.gold, borderBottomColor: BRAND.goldLip },
@@ -279,8 +292,6 @@ const styles = StyleSheet.create({
   costText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
   wallet: { marginTop: 6, fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy, textAlign: 'center' },
   walletNum: { fontFamily: 'Shark', color: BRAND.navy },
-  done: { alignSelf: 'center', marginTop: 6, minHeight: 44, minWidth: 120, alignItems: 'center', justifyContent: 'center' },
-  doneText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navySoft, textDecorationLine: 'underline' },
 });
 
 /** Team win: the loot chest pops open over the loot row (a reason to come back to the next raid). The shell's own

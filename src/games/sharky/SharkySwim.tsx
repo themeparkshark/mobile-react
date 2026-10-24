@@ -131,11 +131,14 @@ function gateProgress(s: SimState, mode: number): number | null {
 }
 
 /** One title rule for every results card: a finish word, or the shared feeling title (never WIPEOUT!). */
-function sharkyHeadline(reason: number, mode: number, score: number, stars: number): string {
+export function sharkyHeadline(reason: number, mode: number, score: number, stars: number): string {
+  const near = mode !== MODE_RIDE && nextStarGoal(score, QUEUE_STARS).near;
+  // A run with stars reads like every other game's card (NICE!, GREAT!,
+  // INCREDIBLE!); the finish words only name a run that ended with none.
+  if (stars > 0) return feelingTitle(stars, near);
   if (reason === END_TIME) return 'TIME!';
   if (reason === END_GATE) return 'RIDE GATE!';
   if (reason === END_FINISH) return 'FINISH!';
-  const near = mode !== MODE_RIDE && nextStarGoal(score, QUEUE_STARS).near;
   return feelingTitle(stars, near);
 }
 

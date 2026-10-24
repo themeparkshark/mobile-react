@@ -321,6 +321,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const [headsUp, setHeadsUp] = useState(false);
     // Safety net: once the results have had RESULTS_FALLBACK_MS to appear, show them with no fade.
     const [resultsSafe, setResultsSafe] = useState(false);
+    /** A results surface (the game's own or the shared card) is on screen. */
+    const surfaceShownRef = useRef(false);
     /** Counts finished runs, so the win streak counts each run once. */
     const resultsRunRef = useRef(0);
     const confettiRef = useRef<ParticleHandle>(null);
@@ -492,8 +494,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         Haptic.success();
         if (!ownSfx) playSfx('win');
       } else if (feel === 'try') {
-        Haptic.failBuzz();
-        if (!ownSfx) playSfx('lose');
+        // A plain 0-star finish is a "go again", never a punishment: one soft
+        // bump and a light swish as the card arrives (no fail buzz, no nope).
+        Haptic.softBump();
+        if (!ownSfx) playSfx('fx.whoosh', 0.6);
       } else {
         // Calm send-off: a soft tap and a small happy chime, never the lose sound.
         Haptic.hitSoft();
@@ -553,7 +557,12 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         setResultsSafe(true);
         return undefined;
       }
+      // The results view that was on screen when the fade started.
+      const surfaceAtFade = surfaceShownRef.current;
       const t = setTimeout(() => {
+        // The fade finished on a view that was already mounted: the card is
+        // solid, so skip the extra re-render of the whole results tree.
+        if (surfaceAtFade && surfaceShownRef.current && resultsOpacity.value >= 0.999 && resultsScale.value > 0.98) return;
         // Land the fade on its end values too, so the card is solid either way.
         cancelAnimation(resultsOpacity);
         cancelAnimation(resultsScale);
@@ -859,8 +868,6 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const stars = effectiveResult?.stars ?? 0;
     const won = stars > 0;
 
-    if (!visible) return null;
-
     // One button rule for every results card: PLAY AGAIN is the big button,
     // unless a win's reward is still waiting and a replay would skip it.
     // A pass-and-play group turn is one try per kid: DONE is the only button.
@@ -873,22 +880,30 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
     // A game-owned results surface, when the game has one and it rendered.
     // Nothing rendered by the time the fallback fires: the shared card shows.
-    const ownSurface = phase === 'results' && renderResults && effectiveResult ? renderResults({
+    // Memoized: shell-only re-renders (the fade's safety net, heads-up flags)
+    // never rebuild the game's results tree; a game re-render passes a new
+    // renderResults and rebuilds it.
+    const wrapReason = wrap?.reason ?? null;
+    const ownSurface = useMemo(() => (phase === 'results' && renderResults && effectiveResult ? renderResults({
       result: effectiveResult,
       stars,
       won,
-      wrapReason: wrap?.reason ?? null,
+      wrapReason,
       claim: handleClaim,
       rematch: rematchOffered ? rematchRun : undefined,
       challenge: challengeOffered,
       playAgainFirst,
       saved,
       reducedMotion,
-    }) : null;
+    }) : null), [phase, renderResults, effectiveResult, stars, won, wrapReason, handleClaim, rematchOffered, rematchRun, challengeOffered, playAgainFirst, saved, reducedMotion]);
     const gameResults = isEmptyResultsNode(ownSurface) ? null : ownSurface;
     // A wrap-up (ride's up) has no game surface to wait for: the shared card shows at once.
     const showSharedCard = phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || wrap != null)));
     sharedCardShownRef.current = showSharedCard;
+    surfaceShownRef.current = gameResults != null || showSharedCard;
+
+    if (!visible) return null;
+
 
     const gameContent = (
         <View style={styles.root}>

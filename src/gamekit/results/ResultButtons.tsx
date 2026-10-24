@@ -23,7 +23,7 @@ export function ResultPrimaryButton({ label, icon, onPress, disabled, style }: {
     <TouchableOpacity accessibilityRole="button" accessibilityLabel={label} style={[styles.btn, styles.primary, style]}
       onPress={onPress} disabled={disabled}>
       {icon ? <GameIcon name={icon} size={26} /> : null}
-      <Text style={[styles.primaryText, icon && styles.gap]}>{label.toUpperCase()}</Text>
+      <Text style={[styles.primaryText, icon && styles.gap]} numberOfLines={1} adjustsFontSizeToFit>{label.toUpperCase()}</Text>
     </TouchableOpacity>
   );
 }
