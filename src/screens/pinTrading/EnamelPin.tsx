@@ -19,7 +19,7 @@
  * the shared value rests (the screen sets it once per sweep, not every frame), nothing redraws.
  */
 import {
-  BlendColor, Blur, Canvas, Circle, Group, Image as SkiaImage, LinearGradient, RadialGradient, Rect, vec,
+  BlendColor, Blur, Canvas, Circle, ColorMatrix, Group, Image as SkiaImage, LinearGradient, RadialGradient, Rect, vec,
 } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { memo } from 'react';
@@ -55,16 +55,37 @@ type Props = {
   readonly flat?: boolean;
   /**
    * The gold (or other metal) edition of the same art, lit pins only: a metal edge in this colour
-   * around the die-cut shape, a warm overlay at 55 percent that keeps the art's own hues, outlines and
-   * detail (a full colour blend flattened it into a plain disc), and a warm shine band.
+   * around the die-cut shape, the art itself as a contrast-stretched duotone of this metal (deep outlines,
+   * bright faces, so it reads as a gold pin and keeps every detail), and a warm shine band.
    */
   readonly tint?: string;
 };
 
 /** The metal edge around a tinted pin (fraction of its size, each side). */
 const TINT_EDGE = 0.045;
-/** How strong the warm overlay is on a tinted pin: enough to read gold, low enough that the art survives. */
-const TINT_OVERLAY = 0.55;
+/** How hard the metal edition stretches the art's light and dark (pale art would read flat otherwise). */
+const METAL_CONTRAST = 1.6;
+
+/**
+ * The metal edition of a pin's art as one colour matrix (a duotone): each pixel's brightness, contrast
+ * stretched, picks a colour between a deep shade and a pale shine of the metal. Outlines go deep, faces go
+ * bright, every line and detail of the art stays, and the whole pin reads as solid metal (gold, not blue).
+ * Offsets are 0..1 (Skia colour matrix). Pure, so it is tested.
+ */
+export function metalMatrix(hex: string, contrast = METAL_CONTRAST): number[] {
+  const n = parseInt(hex.replace('#', '').slice(0, 6), 16);
+  const base = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => v / 255);
+  const dark = base.map(v => v * 0.45);
+  const light = base.map(v => v * 0.55 + 0.45);
+  const w = [0.2126, 0.7152, 0.0722];
+  const rows: number[] = [];
+  for (let ch = 0; ch < 3; ch++) {
+    const span = light[ch] - dark[ch];
+    rows.push(span * contrast * w[0], span * contrast * w[1], span * contrast * w[2], 0, dark[ch] + span * (0.5 - 0.5 * contrast));
+  }
+  rows.push(0, 0, 0, 1, 0);
+  return rows;
+}
 
 /** Under this size the light and shadow are too small to see: a plain image (and no Skia canvas). */
 const FLAT_BELOW = 48;
@@ -138,13 +159,10 @@ function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surfac
                 <BlendColor color={tint} mode="srcIn" />
               </SkiaImage>
             )}
-            <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" />
-            {tint && (
-              // A warm overlay, not a colour swap: the art's light parts go gold, outlines and detail stay.
-              <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" blendMode="overlay" opacity={TINT_OVERLAY}>
-                <BlendColor color={tint} mode="srcIn" />
-              </SkiaImage>
-            )}
+            <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain">
+              {/* The metal edition: the same art as a gold duotone (deep outlines, bright faces, every detail kept). */}
+              {tint ? <ColorMatrix matrix={metalMatrix(tint)} /> : null}
+            </SkiaImage>
             {/* Resting gloss: a long soft falloff from the upper-left face. */}
             <Rect x={0} y={0} width={box} height={box} blendMode="srcATop">
               <LinearGradient start={vec(pad, pad)} end={vec(pad + size * 0.62, pad + size * 0.62)}

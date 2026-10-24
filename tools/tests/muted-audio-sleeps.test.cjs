@@ -45,5 +45,12 @@ test('loadKey never dereferences a missing backend', () => {
 
 test('the app music setting reaches the studio engine', () => {
   const src = read('src/context/SoundEffectProvider.tsx');
-  assert.match(src, /GameAudio\.setMusicEnabled\(!\(isReady && !player\?\.enabled_music\)\)/);
+  assert.match(src, /GameAudio\.setMusicEnabled\(isReady && !!player\?\.enabled_music\)/);
+  assert.match(src, /SFX\.setEnabled\(isReady && !!player\?\.enabled_sound_effects\)/);
+});
+
+test('sound starts off until the player setting is known', () => {
+  const src = read('src/gamekit/audio/GameAudio.ts');
+  assert.match(src, /private sfxEnabled = false;/);
+  assert.match(src, /private musicEnabled = false;/);
 });

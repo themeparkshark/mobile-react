@@ -19,7 +19,8 @@ test('a release-mode perf capture (EXPO_PUBLIC_PERF_CAPTURE=1, never set in stor
 
 test('a release-mode motion capture (EXPO_PUBLIC_MOTION_CAPTURE=<route>, never set in store builds) exposes only the reveal galleries', () => {
   const routes = load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'BoxRevealPreview' });
-  assert.equal(routes.DEV_SCREENS.map(screen => screen.name).join(','), 'BoxRevealPreview,PostWinRewardsPreview,SetRevealPreview');
+  assert.equal(routes.DEV_SCREENS.map(screen => screen.name).join(','), 'BoxRevealPreview,PostWinRewardsPreview,SetRevealPreview,CoinLevelingPreview');
+  assert.equal(load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'CoinLevelingPreview' }).devInitialRoute(), 'CoinLevelingPreview');
   assert.equal(routes.devInitialRoute(), 'BoxRevealPreview');
   assert.equal(load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'MiniGameTester' }).devInitialRoute(), null, 'only the reveal galleries');
 });
