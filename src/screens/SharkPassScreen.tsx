@@ -870,7 +870,7 @@ export default function SharkPassScreen() {
         </Pressable>
       )}
       {landed && landedChoice ? (
-        // A wearable piece asks first ("Wear it now" or "Keep my look"); Share shows only after that choice,
+        // A wearable piece asks first ("Wear it now" or "Not now"); Share shows only after that choice,
         // so bragging never skips the wear (WearFirstReward, tested in sharkPassModel).
         <WearFirstReward resetOn={landed} title={landed.title} picture={landedPicture} wornPicture={landedWornPicture} footer={landedFooter}
           caption={landed.caption ?? rewardWords(landed.reward)} wear={landedWear!} frame={landed.reward.type === 'frame'}

@@ -5,7 +5,8 @@
  * With the route param { rideCard: true }: the real ride card outside a park (the story picture and its Share).
  * With the route param { box: true }: the real box reveal with one golden chaser pull, a
  * "Wear it" that saves after a beat (nothing is sent), to check the footer and Share placement.
- * Add { wear: 'fails' | 'hangs' } for a save that fails or never answers, { full: true } for a full lanyard.
+ * Add { wear: 'fails' | 'hangs' | 'late' } for a save that fails, never answers, or lands after the 8 s timeout;
+ * { full: true } for a full lanyard.
  */
 import { useRoute } from '@react-navigation/native';
 import { ScrollView, Text, View } from 'react-native';
@@ -28,7 +29,7 @@ const RIDE: PlayerRideType = { id: 1, ride_id: 580, ride_name: 'Indiana Jones Ad
   photo_url: null, rode_at: '2026-10-22T11:43:00Z', weather: null };
 
 export default function SharePicturesPreviewScreen() {
-  const params = useRoute().params as { box?: boolean; rideCard?: boolean; wear?: 'fails' | 'hangs'; full?: boolean } | undefined;
+  const params = useRoute().params as { box?: boolean; rideCard?: boolean; wear?: 'fails' | 'hangs' | 'late'; full?: boolean } | undefined;
   if (params?.rideCard) {
     return (
       <LocationStatusContext.Provider value={{ park: null } as never}>
@@ -44,7 +45,7 @@ export default function SharePicturesPreviewScreen() {
         <BoxReveal pulls={[CHASER]} tone="gold" golden still={false} onDone={() => undefined} canWear={() => true}
           onWear={() => new Promise(resolve => {
             if (params.wear === 'hangs') return;
-            setTimeout(() => resolve({ ok: params.wear !== 'fails' }), 800);
+            setTimeout(() => resolve({ ok: params.wear !== 'fails' }), params.wear === 'late' ? 11000 : 800);
           })}
           lanyard={params.full ? Array.from({ length: 6 }, (_, i) => ({ item_id: 100 + i, name: `Pin ${i + 1}`, icon_url: CHASER.icon_url })) : []} />
       </View>

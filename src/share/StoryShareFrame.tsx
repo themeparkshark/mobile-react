@@ -8,7 +8,7 @@
 import { forwardRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { QR_BY_CAMPAIGN, type ShareCampaign } from './campaignQr';
-import { CardFooter, Ribbon, STORY_SAFE, StoryChrome } from './FlexCard';
+import { CardFooter, Ribbon, STORY_FOOTER_BOTTOM, STORY_SAFE, StoryChrome } from './FlexCard';
 import { FLEX_SIZE } from './formats';
 import { FRAMES } from './frames';
 
@@ -40,6 +40,9 @@ export const StoryShareFrame = forwardRef<View, StoryShareFrameProps>(function S
         <View style={styles.slot} onLayout={e => setRoom(e.nativeEvent.layout.height)}>
           <View onLayout={e => setTall(e.nativeEvent.layout.height)} style={scale < 1 ? { transform: [{ scale }] } : undefined}>{children}</View>
         </View>
+      </View>
+      {/* The footer sits in the bottom band, like every Flex card: the picture gets the room. */}
+      <View style={styles.footer}>
         <CardFooter cta={cta} qrArt={QR_BY_CAMPAIGN[campaign]} frame={FRAME} logoWidth={120} qr={56} />
       </View>
     </View>
@@ -52,6 +55,7 @@ export const OFFSCREEN = { position: 'absolute', left: -4000, top: 0 } as const;
 const styles = StyleSheet.create({
   frame: { ...FLEX_SIZE.story, overflow: 'hidden' },
   body: { flex: 1, alignItems: 'center', paddingTop: STORY_SAFE.top, paddingBottom: STORY_SAFE.bottom, paddingHorizontal: 20 },
+  footer: { position: 'absolute', left: 20, right: 20, bottom: STORY_FOOTER_BOTTOM },
   // The card sits centered in the space between the ribbon and the footer.
   slot: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, overflow: 'visible' },
 });

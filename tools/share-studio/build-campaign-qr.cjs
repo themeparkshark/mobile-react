@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * QR codes for share pictures outside the Share Studio kinds (crew card, ride log card,
- * mini-game results, the Closet look, the Friends invite). Same look as build-qr.py
+ * mini-game results, the Closet look, the Friends invite, and the Shark Pass and member prize cards). Same look as build-qr.py
  * (navy on white, error level M, 10 px modules, 1 module border), no Python needed:
  * the encoder is the one bundled with qrcode-terminal, the PNG is written by hand.
  *
@@ -15,7 +15,7 @@ const QRCode = require('qrcode-terminal/vendor/QRCode');
 const Level = require('qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel');
 
 const root = path.resolve(__dirname, '../..');
-const CAMPAIGNS = ['invite', 'crew', 'ride_log', 'whack', 'memory', 'look'];
+const CAMPAIGNS = ['invite', 'crew', 'ride_log', 'whack', 'memory', 'look', 'sharkpass', 'member'];
 const out = path.join(root, 'assets/images/share/qr');
 const NAVY = [5, 52, 110];
 const WHITE = [255, 255, 255];

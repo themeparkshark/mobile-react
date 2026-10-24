@@ -1,5 +1,5 @@
 /**
- * A reward card that asks "Wear it now" or "Keep my look" before it offers Share, so a kid who
+ * A reward card that asks "Wear it now" or "Not now" before it offers Share, so a kid who
  * taps Share first never loses the wear. Used by the Shark Pass reward card and its dev preview.
  * The order and words come from wearFirstButtons and wearFirstCaption (unit tested).
  */
@@ -12,6 +12,9 @@ import type { InventoryType } from '../../models/inventory-type';
 import { BRAND } from '../../ui';
 import { GotIt } from './moneyUi';
 import { wearFirstButtons, wearFirstCaption, wearThenRefresh, type WearChoice } from '../../services/money/sharkPassModel';
+
+/** The Wear button's icon on a Shark Pass reward: the kid's shark. */
+export const WEAR_ICON = 'shark' as const;
 
 export type WearAction = {
   readonly label: string;
@@ -50,7 +53,9 @@ export default function WearFirstReward({ title, picture, wornPicture, footer, c
     setChosen('saving');
     // Wait (a little) for the fresh look, so the share picture shows the shark wearing it. A slow
     // refresh never shows "That didn't work" for a wear that saved.
-    void wearThenRefresh(wear.run, wear.refresh)
+    // A save that lands after the 8 s timeout flips Try again to worn (only if nothing newer started).
+    const late = () => { if (live.current && run.current === mine) setChosen(c => (c === 'failed' ? 'worn' : c)); };
+    void wearThenRefresh(wear.run, wear.refresh, undefined, undefined, late)
       .then(result => { if (live.current && run.current === mine) setChosen(result); });
   }, [wear]);
 
@@ -60,8 +65,9 @@ export default function WearFirstReward({ title, picture, wornPicture, footer, c
   return (
     <GotIt grants={{}} art="gift" title={title} picture={shown} footer={chosen ? undefined : footer}
       caption={wearFirstCaption(chosen, caption, frame)}
-      busyLabel={b.busy ? 'Putting it on...' : undefined}
-      action={b.action ? { label: b.action === 'retry' ? 'Try again' : wear.label, icon: b.action === 'retry' ? 'retry' : 'pin', onPress: putOn } : undefined}
+      busyLabel={b.busy ? 'Putting it on...' : undefined} busyIcon={WEAR_ICON} wide
+      // The shark icon says "put it on your shark" (the red map pin read as "go to the map").
+      action={b.action ? { label: b.action === 'retry' ? 'Try again' : wear.label, icon: b.action === 'retry' ? 'retry' : WEAR_ICON, onPress: putOn } : undefined}
       doneLabel={b.doneLabel}
       onDone={b.doneKeeps ? () => setChosen('kept') : onDone}
       share={b.share ? pill : undefined} />

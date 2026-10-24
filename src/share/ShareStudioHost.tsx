@@ -36,7 +36,7 @@ import { CARD_CHROME, FLEX_SIZE, FlexCard } from './FlexCard';
 import { HERO_ART } from './FlexHero';
 import { PROP_ART } from './FlexShark';
 import { FRAMES } from './frames';
-import { shareUrl } from './link';
+import { flexShareUrl } from './link';
 import { QR_BY_KIND } from './qr';
 import { resolveFlexPayload, RESOLVE_BUDGET_MS } from './resolve';
 import {
@@ -190,9 +190,9 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
     busyRef.current = true;
     setBusy(true);
     try {
-      // The link (with its per-kind campaign, never a player id) goes on the clipboard,
+      // The link (with its per-kind or prize campaign, never a player id) goes on the clipboard,
       // so it can be pasted as an Instagram link sticker.
-      void Clipboard.setStringAsync(shareUrl(request.kind)).then(() => setLinkCopied(true)).catch(() => undefined);
+      void Clipboard.setStringAsync(flexShareUrl(request.kind, request.payload)).then(() => setLinkCopied(true)).catch(() => undefined);
       for (let i = 0; i < 30 && !readyRef.current; i++) await new Promise(r => setTimeout(r, 100));
       const uri = await captureFlex(cardRef, format);
       // The picture is made: fade the sheet out so the grown-up gate can present (HANDOFF_MS).

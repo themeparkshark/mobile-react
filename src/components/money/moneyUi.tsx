@@ -213,7 +213,7 @@ function TitleCount({ title, still }: { title: string; still: boolean }) {
     tickEvery={1} onTick={() => haptic('tickSelection')} style={s.gotTitle} />;
 }
 
-export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption, action, footer, share, doneLabel, busyLabel }: {
+export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption, action, footer, share, doneLabel, busyLabel, busyIcon, wide = false }: {
   grants: ShopGrants | null; art: PackArtKey; title?: string; onDone: () => void;
   /** The closing button's words when it does the next thing (e.g. "Open your box"). */
   doneLabel?: string;
@@ -223,6 +223,10 @@ export function GotIt({ grants, art, title = 'You got it!', onDone, picture, cap
   action?: { label: string; onPress: () => void; icon?: GameIconName };
   /** While something saves ("Putting it on..."): one busy button, no close, and a tap outside does nothing. */
   busyLabel?: string;
+  /** The busy button's icon (the action's own icon, so nothing swaps mid-save). */
+  busyIcon?: GameIconName;
+  /** Full-width buttons, the same width as the box reveal's (a wear-first reward card). */
+  wide?: boolean;
   /** Shown under the caption (e.g. the locked Shark Pass rewards). */
   footer?: ReactNode;
   /** A Share button (FlexShareButton size "reveal"): always directly under the main button, like every reveal. */
@@ -266,13 +270,22 @@ export function GotIt({ grants, art, title = 'You got it!', onDone, picture, cap
           {caption ? <Text maxFontSizeMultiplier={MAX_FONT} style={s.gotCaption} numberOfLines={2}>{caption}</Text> : <Contents grants={grants} />}
           {footer}
         </Animated.View>
-        <Animated.View entering={still ? undefined : FadeIn.delay(700)} style={{ marginTop: 18, width: 240, gap: 8 }}>
+        <Animated.View entering={still ? undefined : FadeIn.delay(700)} style={wide ? s.gotButtonsWide : s.gotButtons}>
           {/* One order on every reveal: the yellow button, Share right under it, the quiet close last. */}
-          {busyLabel ? <GameButton label={busyLabel} icon="pin" loading accessibilityLabel={busyLabel} /> : (
+          {busyLabel ? (
+            <>
+              <GameButton label={busyLabel} icon={busyIcon ?? 'pin'} loading accessibilityLabel={busyLabel} />
+              {/* The quiet button's slot stays while it saves, so the busy button never jumps. */}
+              <View style={{ opacity: 0 }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                <GameButton label={doneLabel ?? 'Later'} variant="ghost" tone="onBlue" onPress={() => undefined} />
+              </View>
+            </>
+          ) : (
             <>
               {action && <GameButton label={action.label} icon={action.icon ?? 'pin'} onPress={action.onPress} />}
               {action && share && <View style={{ alignItems: 'center' }}>{share}</View>}
-              <GameButton label={doneLabel ?? (action ? 'Later' : 'Awesome')} variant={action ? 'ghost' : 'primary'} tone="onBlue" onPress={onDone} />
+              <GameButton label={doneLabel ?? (action ? 'Later' : 'Awesome')} variant={action ? 'ghost' : 'primary'} tone="onBlue" onPress={onDone}
+                icon={wide && !action ? 'check' : undefined} />
               {!action && share && <View style={{ alignItems: 'center' }}>{share}</View>}
             </>
           )}
@@ -313,6 +326,8 @@ const s = StyleSheet.create({
   chipText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   chipTextSmall: { fontSize: 13 },
   chipTextLight: { color: BRAND.navy },
+  gotButtons: { marginTop: 18, width: 240, gap: 8 },
+  gotButtonsWide: { marginTop: 18, alignSelf: 'stretch', gap: 8 },
   gotScrim: { flex: 1, backgroundColor: 'rgba(5,40,96,0.86)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
   gotStage: { width: 280, height: 240, alignItems: 'center', justifyContent: 'center' },
   gotRays: { position: 'absolute', width: 420, height: 420, opacity: 0.55 },

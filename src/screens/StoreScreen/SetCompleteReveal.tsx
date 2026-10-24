@@ -241,10 +241,13 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
       <Animated.View entering={still || bridged ? undefined : FadeIn.duration(260)} style={styles.fill} {...swipe.panHandlers}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
-        <Pressable onPress={() => leave(false)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close"
-          style={[styles.close, { top: insets.top + 10 }]}>
-          <GameIcon name="close" size={40} />
-        </Pressable>
+        {/* Once it is all on, Done is the one way out (with Share under it), like the box and Shark Pass. */}
+        {all !== 'done' && (
+          <Pressable onPress={() => leave(false)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close"
+            style={[styles.close, { top: insets.top + 10 }]}>
+            <GameIcon name="close" size={40} />
+          </Pressable>
+        )}
         <View style={[styles.content, { paddingTop: insets.top + (SHORT ? 12 : 20), paddingBottom: insets.bottom + 12 }, SHORT && { gap: 6 }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.kicker}>SET COMPLETE</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setName}>{reward.name}</Text>
@@ -295,17 +298,29 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
             {allCopy.note && (
               <View style={styles.alert} accessibilityLiveRegion="polite"><Text maxFontSizeMultiplier={MAX_FONT} style={styles.alertText}>{allCopy.note}</Text></View>
             )}
-            <ShopCta label={allCopy.label} icon="crown" width={Math.min(320, W - 48)}
-              onPress={() => void wearAll()} done={all === 'done'} still={still}
-              accessibilityHint="Puts on the title and every piece of the set" />
-            {/* Show it off once it is on: the set's name, its pieces and the count (see the header). */}
+            {all !== 'done' && (
+              <ShopCta label={allCopy.label} icon="crown" width={Math.min(320, W - 48)}
+                onPress={() => void wearAll()} done={false} still={still}
+                accessibilityHint="Puts on the title and every piece of the set" />
+            )}
+            {/* All on: the same after-choice stack as the box and Shark Pass reveals. A status chip (not a
+                button), the yellow Done, then Share right under it, and nothing else. */}
             {all === 'done' && (
-              <FlexShareButton kind="set_complete" surface="shop_set" size="reveal" handoff={shareHandoff} disabled={savingNow > 0}
-                style={{ marginTop: 6 }}
-                payload={{ setName: reward.name, badgeUrl: pieces[0]?.icon_thumb_url ?? pieces[0]?.icon_url ?? HERO_ART.trophy,
-                  artUrls: pieces.map(p => p.icon_thumb_url ?? p.icon_url).filter((u): u is string => !!u).slice(0, 5),
-                  found: set?.total ?? pieces.length, total: set?.total ?? pieces.length, title: reward.title ?? undefined, source: 'shop',
-                  inventory: shareLook ?? undefined }} />
+              <>
+                <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.allOnChip} accessibilityLiveRegion="polite">
+                  <GameIcon name="check" size={20} />
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.allOnText}>All on!</Text>
+                </Animated.View>
+                <GameButton label={waiting ? 'Saving...' : 'Done'} icon="check" onPress={() => leave(true)} disabled={waiting}
+                  style={{ width: Math.min(320, W - 48) }} accessibilityHint="Closes the reveal" />
+                {/* Show it off once it is on: the set's name, its pieces and the count (see the header). */}
+                <FlexShareButton kind="set_complete" surface="shop_set" size="reveal" handoff={shareHandoff} disabled={savingNow > 0}
+                  style={{ marginTop: 6 }}
+                  payload={{ setName: reward.name, badgeUrl: pieces[0]?.icon_thumb_url ?? pieces[0]?.icon_url ?? HERO_ART.trophy,
+                    artUrls: pieces.map(p => p.icon_thumb_url ?? p.icon_url).filter((u): u is string => !!u).slice(0, 5),
+                    found: set?.total ?? pieces.length, total: set?.total ?? pieces.length, title: reward.title ?? undefined, source: 'shop',
+                    inventory: shareLook ?? undefined }} />
+              </>
             )}
             {reward.title && all !== 'done' && (
               <Pressable onPress={() => void justTitle()} accessibilityRole="button" style={styles.textButton}>
@@ -314,11 +329,13 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
                 </Text>
               </Pressable>
             )}
-            {/* Leave without wearing anything: the same quiet ghost button as every reveal's "keep" choice
-                (Shark Pass "Keep my look", the box's "Keep my lanyard"), full-size hit area. */}
-            <GameButton label={waiting ? 'Saving...' : leaveLabel(all === 'done', titleOnly === 'done')} variant="ghost" tone="onBlue"
-              onPress={() => leave(true)} disabled={waiting} style={{ width: Math.min(320, W - 48) }}
-              accessibilityHint={all === 'done' || titleOnly === 'done' ? 'Closes the reveal' : 'Closes without wearing anything'} />
+            {/* Leave without wearing anything: the same quiet ghost button as every reveal's "Not now"
+                (the box and the Shark Pass card), full-size hit area. */}
+            {all !== 'done' && (
+              <GameButton label={waiting ? 'Saving...' : leaveLabel(false, titleOnly === 'done')} variant="ghost" tone="onBlue"
+                onPress={() => leave(true)} disabled={waiting} style={{ width: Math.min(320, W - 48) }}
+                accessibilityHint={titleOnly === 'done' ? 'Closes the reveal' : 'Closes without wearing anything'} />
+            )}
           </View>
         </View>
       </Animated.View>
@@ -382,6 +399,9 @@ const styles = StyleSheet.create({
   xpCaption: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
   alert: { backgroundColor: SHOP_SURFACE.alert, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 2, borderColor: BRAND.white, marginBottom: 6 },
   alertText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, textAlign: 'center' },
+  allOnChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3,
+    borderRadius: 999, paddingHorizontal: 14, paddingVertical: 4, marginBottom: 6 },
+  allOnText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.navy, paddingTop: 2 },
   buttons: { width: '100%', alignItems: 'center', gap: 4, marginTop: 'auto' },
   close: { position: 'absolute', right: 14, zIndex: 3 },
   textButton: { minHeight: 44, minWidth: 120, alignItems: 'center', justifyContent: 'center' },

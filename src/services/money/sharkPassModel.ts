@@ -191,7 +191,8 @@ export function wearFirstButtons(chosen: WearChoice): {
   readonly doneKeeps: boolean;
 } {
   switch (chosen) {
-    case null: return { action: 'wear', busy: false, share: false, doneLabel: 'Keep my look', doneKeeps: true };
+    // "Not now" on every reveal (box, Shark Pass, Set Complete): "Keep my ..." read as "keep it on".
+    case null: return { action: 'wear', busy: false, share: false, doneLabel: 'Not now', doneKeeps: true };
     case 'saving': return { action: null, busy: true, share: false, doneLabel: 'Done', doneKeeps: false };
     case 'failed': return { action: 'retry', busy: false, share: true, doneLabel: 'Done', doneKeeps: false };
     default: return { action: null, busy: false, share: true, doneLabel: 'Done', doneKeeps: false };
@@ -215,25 +216,39 @@ export const WEAR_REFRESH_MS = 4000;
 /**
  * Put it on, then fetch the fresh look. Only the save can fail: it times out after wearMs. The
  * refresh is raced against refreshMs and never turns a wear that saved into "That didn't work".
+ * A save that lands after the timeout calls onLateWorn (after a refresh try), so the card can
+ * switch from Try again to worn: the screen never says "failed" for a wear that saved.
  */
 export async function wearThenRefresh(save: () => Promise<unknown>, refresh?: (() => unknown) | null,
-  wearMs = WEAR_TIMEOUT_MS, refreshMs = WEAR_REFRESH_MS): Promise<'worn' | 'failed'> {
-  try { await withWearTimeout(Promise.resolve().then(save), wearMs); } catch { return 'failed'; }
-  if (refresh) {
+  wearMs = WEAR_TIMEOUT_MS, refreshMs = WEAR_REFRESH_MS, onLateWorn?: () => void): Promise<'worn' | 'failed'> {
+  const settle = async () => {
+    if (!refresh) return;
     let t: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
       Promise.resolve().then(refresh).catch(() => undefined),
       new Promise<void>(r => { t = setTimeout(r, refreshMs); }),
     ]);
     if (t) clearTimeout(t);
-  }
+  };
+  try {
+    await withWearTimeout(Promise.resolve().then(save), wearMs,
+      onLateWorn ? () => { void settle().then(onLateWorn); } : undefined);
+  } catch { return 'failed'; }
+  await settle();
   return 'worn';
 }
 
-/** A wear call that hangs (park Wi-Fi) fails after WEAR_TIMEOUT_MS instead of spinning forever. */
-export function withWearTimeout<T>(run: Promise<T>, ms = WEAR_TIMEOUT_MS): Promise<T> {
+/**
+ * A wear call that hangs (park Wi-Fi) fails after WEAR_TIMEOUT_MS instead of spinning forever.
+ * If the call then finishes after all, onLate gets its value (the save went through late).
+ */
+export function withWearTimeout<T>(run: Promise<T>, ms = WEAR_TIMEOUT_MS, onLate?: (value: T) => void): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('wear timed out')), ms);
-    run.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
+    let timedOut = false;
+    const t = setTimeout(() => { timedOut = true; reject(new Error('wear timed out')); }, ms);
+    run.then(v => {
+      clearTimeout(t);
+      if (timedOut) onLate?.(v); else resolve(v);
+    }, e => { clearTimeout(t); reject(e); });
   });
 }

@@ -47,8 +47,13 @@ const PROP_SPOT: Readonly<Record<PropKey, { x: number; y: number; w: number; h: 
   photos: { x: -0.22, y: 0.4, w: 0.48, h: 0.38, rotate: -8 },
 };
 
-/** The chest pin spot (Playercard's body anchor), a little bigger so it reads on a picture. */
-const CHEST_PIN = { x: 0.45, y: 0.5, w: 0.15 } as const;
+/**
+ * The worn prize pin on the shark's belly, as a badge: a white disc with a gold ring, about a
+ * quarter of the shark's width, so a story thumbnail still shows the shark wearing it. It sits
+ * low on the belly (below the harness and hose of most outfits) and is drawn after every layer
+ * and prop, so nothing covers it. Exported for tests.
+ */
+export const CHEST_PIN = { x: 0.47, y: 0.56, w: 0.26 } as const;
 
 export const FlexShark = memo(function FlexShark({ inventory, height, flip = false, prop = null, pin = false, style }: {
   readonly inventory: InventoryType | null | undefined;
@@ -84,12 +89,14 @@ export const FlexShark = memo(function FlexShark({ inventory, height, flip = fal
             style={StyleSheet.absoluteFill} />
         ))}
       </View>
-      {pin && !!inventory?.pin_item?.icon_url && (
-        <FlexArtwork id="chest-pin" art={inventory.pin_item.icon_url} fallback={TRANSPARENT}
-          style={{ position: 'absolute', width: width * CHEST_PIN.w, height: width * CHEST_PIN.w, top: height * CHEST_PIN.y,
-            left: flip ? width * (1 - CHEST_PIN.x - CHEST_PIN.w) : width * CHEST_PIN.x }} />
-      )}
       {!spot?.behind && propView}
+      {pin && !!inventory?.pin_item?.icon_url && (
+        <View style={[styles.badge, { width: width * CHEST_PIN.w, height: width * CHEST_PIN.w, borderRadius: width * CHEST_PIN.w,
+          top: height * CHEST_PIN.y, left: flip ? width * (1 - CHEST_PIN.x - CHEST_PIN.w) : width * CHEST_PIN.x }]}>
+          <FlexArtwork id="chest-pin" art={inventory.pin_item.icon_url} fallback={TRANSPARENT}
+            style={{ width: width * CHEST_PIN.w * 0.8, height: width * CHEST_PIN.w * 0.8 }} />
+        </View>
+      )}
     </View>
   );
 });
@@ -100,4 +107,7 @@ const TRANSPARENT = require('../../assets/images/share/clear.png');
 const styles = StyleSheet.create({
   flip: { transform: [{ scaleX: -1 }] },
   shadow: { position: 'absolute', backgroundColor: 'rgba(5,52,110,0.22)' },
+  // White disc, gold ring and a soft gold glow: the pin reads as "worn" on any outfit color.
+  badge: { position: 'absolute', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: '#ffcf3b',
+    shadowColor: '#ffcf3b', shadowOpacity: 0.9, shadowRadius: 5, shadowOffset: { width: 0, height: 0 } },
 });

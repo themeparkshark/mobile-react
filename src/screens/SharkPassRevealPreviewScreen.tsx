@@ -13,11 +13,13 @@ import { AuthContext } from '../context/AuthProvider';
 import type { InventoryType } from '../models/inventory-type';
 import { withSeasonPin } from './SharkPassScreen';
 
-/** works, fails, hangs (the save), or slowRefresh (the save works, the fresh look never comes). */
-type Mode = 'works' | 'fails' | 'hangs' | 'slowRefresh';
+/** works, fails, hangs (the save), slowRefresh (the save works, the fresh look never comes), or late (the save lands after the 8 s timeout). */
+type Mode = 'works' | 'fails' | 'hangs' | 'slowRefresh' | 'late';
 const REWARD = { type: 'item', name: 'Snowflake Beanie', slot: 'pin', art: 'snowflake-beanie', icon_url: null, ready: true } as const;
 const ART = require('../../assets/images/sharkpass/snowflake-beanie.webp');
 const STUB_MS = 3000;
+/** Past WEAR_TIMEOUT_MS: the card shows Try again, then the late save turns it to worn. */
+const LATE_MS = 11000;
 
 export default function SharkPassRevealPreviewScreen({ route }: { route?: { params?: { mode?: Mode } } }) {
   const [mode, setMode] = useState<Mode>(route?.params?.mode ?? 'works');
@@ -30,7 +32,7 @@ export default function SharkPassRevealPreviewScreen({ route }: { route?: { para
     label: 'Wear it now',
     run: () => new Promise<void>((resolve, reject) => {
       if (mode === 'hangs') return;
-      setTimeout(() => (mode === 'fails' ? reject(new Error('stub')) : resolve()), STUB_MS);
+      setTimeout(() => (mode === 'fails' ? reject(new Error('stub')) : resolve()), mode === 'late' ? LATE_MS : STUB_MS);
     }),
     // slowRefresh: the refresh never answers; the card still says worn after WEAR_REFRESH_MS.
     refresh: () => (mode === 'slowRefresh' ? new Promise<void>(() => undefined) : Promise.resolve()),
@@ -39,7 +41,7 @@ export default function SharkPassRevealPreviewScreen({ route }: { route?: { para
     <View style={{ flex: 1, backgroundColor: '#0a4f96', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
       {open === 0 && <Text style={{ color: '#fff', fontSize: 18 }}>DEV: Shark Pass reward card</Text>}
       {/* The dev buttons hide while the card is up, so captures show only the card. */}
-      {open === 0 && (['works', 'fails', 'hangs', 'slowRefresh'] as const).map(m => (
+      {open === 0 && (['works', 'fails', 'hangs', 'slowRefresh', 'late'] as const).map(m => (
         <Pressable key={m} accessibilityRole="button" accessibilityLabel={`Open, wear ${m}`} onPress={() => { setMode(m); setOpen(n => n + 1); }}
           style={{ backgroundColor: m === mode ? '#ffcf3b' : '#ffffff', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 18 }}>
           <Text style={{ color: '#05346e', fontSize: 16 }}>{`Open (wear ${m})`}</Text>

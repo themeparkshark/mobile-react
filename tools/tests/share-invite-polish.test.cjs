@@ -50,7 +50,7 @@ test('a shared ride card never prints the typed note, and is story size with the
   assert.match(frame, /<CardFooter cta=\{cta\} qrArt=\{QR_BY_CAMPAIGN\[campaign\]\}/);
   const flexCard = src('src/share/FlexCard.tsx');
   assert.match(flexCard, /\{SHARE_LINK_DISPLAY\}/);
-  assert.match(flexCard, /return <CardFooter cta=\{copy\.cta\} qrArt=\{QR_BY_KIND\[kind\]\}/, 'Flex cards use the same footer');
+  assert.match(flexCard, /return <CardFooter cta=\{copy\.cta\} qrArt=\{flexQr\(kind, payload\)\}/, 'Flex cards use the same footer');
 });
 
 test('Whack and Memory results share a story-size picture with the link and QR, and no ride name', () => {
@@ -363,7 +363,7 @@ test('a tall card shrinks to fit between the ribbon and the footer, never grows'
   const { fitScale } = loadTs('src/share/StoryShareFrame.tsx', {
     react: { forwardRef: f => f, useState: v => [v, () => {}] }, 'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; } },
     'react-native': { StyleSheet: { create: s => s }, View: 'View' }, './campaignQr': { QR_BY_CAMPAIGN: {} },
-    './FlexCard': { STORY_SAFE: { top: 84, bottom: 114 } }, './formats': { FLEX_SIZE: { story: { width: 360, height: 640 } } }, './frames': { FRAMES: { common: { bg: ['#1aa3f0', '#0768b9'] } } },
+    './FlexCard': { STORY_SAFE: { top: 84, bottom: 114 }, STORY_FOOTER_BOTTOM: 34 }, './formats': { FLEX_SIZE: { story: { width: 360, height: 640 } } }, './frames': { FRAMES: { common: { bg: ['#1aa3f0', '#0768b9'] } } },
   });
   assert.equal(fitScale(300, 350), 300 / 350);
   assert.equal(fitScale(300, 200), 1);
@@ -376,14 +376,16 @@ test('a tall card shrinks to fit between the ribbon and the footer, never grows'
 test('Set Complete and the box reveal offer Share only after the wear choice, and wait for iOS to let go', () => {
   const set = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
   // Share is the gold-rimmed pill right under WEAR IT ALL, once it is on, and waits while that save runs.
-  assert.match(set, /accessibilityHint="Puts on the title and every piece of the set" \/>\s*\{\/\*[^*]*\*\/\}\s*\{all === 'done' && \(\s*<FlexShareButton kind="set_complete" surface="shop_set" size="reveal" handoff=\{shareHandoff\} disabled=\{savingNow > 0\}/);
+  // Once it is all on: the All on! chip, the yellow Done, then Share right under it (waits while the save runs).
+  assert.match(set, /\{all === 'done' && \(\s*<>\s*<Animated\.View[^>]*style=\{styles\.allOnChip\}/);
+  assert.match(set, /<GameButton label=\{waiting \? 'Saving\.\.\.' : 'Done'\} icon="check" onPress=\{\(\) => leave\(true\)\}[^\n]*\n[^\n]*\/>\s*\{\/\*[^*]*\*\/\}\s*<FlexShareButton kind="set_complete" surface="shop_set" size="reveal" handoff=\{shareHandoff\} disabled=\{savingNow > 0\}/);
   // The handoff hides the Modal and resolves on its onDismiss (not a bare timer), then leaves.
   assert.match(set, /<Modal visible=\{!hidden\}[\s\S]{0,200}onDismiss=\{modal\.onDismiss\}/);
   assert.match(set, /const modal = useModalHandoff\(useCallback\(\(\) => setHidden\(true\), \[\]\)\);/);
   assert.match(set, /await modal\.handoff\(\);\s*doneRef\.current\(\);/);
   assert.doesNotMatch(set, /MODAL_HANDOFF_MS/);
   const box = src('src/screens/pins/BoxReveal.tsx');
-  assert.match(box, /brag\(pull\) && \(!wearable \|\| kept\.has\(pull\.item_id\) \|\| wearFailed\) && !wearing \? pull : null;/, 'a wearable pin waits for Wear it or Keep my lanyard');
+  assert.match(box, /brag\(pull\) && \(!wearable \|\| kept\.has\(pull\.item_id\) \|\| wearFailed\) && !wearing \? pull : null;/, 'a wearable pin waits for Wear it or Not now');
   assert.match(box, /setChoosing\(false\); setKept\(k => new Set\(k\)\.add\(pull\.item_id\)\);/);
   assert.match(box, /<Modal transparent visible=\{!hidden\} animationType="fade" statusBarTranslucent onDismiss=\{modal\.onDismiss\}/);
   assert.match(box, /const shareHandoff = async \(\) => \{ await modal\.handoff\(\); onDone\(pulls\); \};/);
@@ -403,7 +405,7 @@ test('every full-screen reveal uses the one share pill, under its main button', 
   ]) assert.match(src(file), re, file);
   const gotIt = src('src/components/money/moneyUi.tsx');
   assert.match(gotIt, /\{action && <GameButton label=\{action\.label\}[^\n]*\n\s*\{action && share && /);
-  assert.match(gotIt, /onPress=\{onDone\} \/>\n\s*\{!action && share && /);
+  assert.match(gotIt, /onPress=\{onDone\}\s*icon=\{wide && !action \? 'check' : undefined\} \/>\n\s*\{!action && share && /);
   // The Closet look and the ride card use the same face, not a copy of its styles.
   assert.match(src('src/share/LookShareButton.tsx'), /<ShareFace size="sm" caption/);
   assert.doesNotMatch(src('src/share/LookShareButton.tsx'), /round: \{/);
@@ -459,15 +461,16 @@ test('Shark Pass: Share shows only after the wear choice, and wearing waits for 
   assert.match(pass, /run: \(\) => wearItem\(\{ id: landed\.itemId! \}\), refresh: \(\) => refreshPlayer\?\.\(\)/);
   assert.match(pass, /run: \(\) => wearFrame\(landed\.frameKey!\), refresh: \(\) => load\(\)/);
   const card = src('src/components/money/WearFirstReward.tsx');
-  assert.match(card, /void wearThenRefresh\(wear\.run, wear\.refresh\)/, 'a hung save turns into Try again');
-  assert.match(card, /onDone=\{b\.doneKeeps \? \(\) => setChosen\('kept'\) : onDone\}/, '"Keep my look" is a choice, not a close');
+  assert.match(card, /void wearThenRefresh\(wear\.run, wear\.refresh, undefined, undefined, late\)/, 'a hung save turns into Try again, and a late save turns it to worn');
+  assert.match(card, /setChosen\(c => \(c === 'failed' \? 'worn' : c\)\)/);
+  assert.match(card, /onDone=\{b\.doneKeeps \? \(\) => setChosen\('kept'\) : onDone\}/, '"Not now" is a choice, not a close');
   assert.match(card, /share=\{b\.share \? pill : undefined\}/);
 });
 
-test('wear-first buttons: Wear it now is yellow, Keep my look is quiet, Share comes only after the choice', () => {
+test('wear-first buttons: Wear it now is yellow, Not now is quiet, Share comes only after the choice', () => {
   const model = loadTs('src/services/money/sharkPassModel.ts', {});
   const ask = model.wearFirstButtons(null);
-  assert.deepEqual({ ...ask }, { action: 'wear', busy: false, share: false, doneLabel: 'Keep my look', doneKeeps: true });
+  assert.deepEqual({ ...ask }, { action: 'wear', busy: false, share: false, doneLabel: 'Not now', doneKeeps: true });
   const saving = model.wearFirstButtons('saving');
   assert.equal(saving.busy, true);
   assert.equal(saving.share, false);
@@ -490,7 +493,9 @@ test('wear-first buttons: Wear it now is yellow, Keep my look is quiet, Share co
   assert.match(got, /const close = busyLabel \? \(\) => undefined : onDone;/);
   assert.match(got, /<Modal visible transparent animationType="fade" onRequestClose=\{close\}/);
   assert.match(got, /<Pressable style=\{s\.gotScrim\} onPress=\{close\}/);
-  assert.match(got, /\{busyLabel \? <GameButton label=\{busyLabel\} icon="pin" loading/);
+  assert.match(got, /<GameButton label=\{busyLabel\} icon=\{busyIcon \?\? 'pin'\} loading/);
+  // The quiet button's slot stays (invisible) while it saves, so the busy button never jumps.
+  assert.match(got, /<View style=\{\{ opacity: 0 \}\} pointerEvents="none"[^>]*>\s*<GameButton label=\{doneLabel \?\? 'Later'\} variant="ghost"/);
   // With a yellow action the close word is always the quiet ghost under Share.
   assert.match(got, /variant=\{action \? 'ghost' : 'primary'\}/);
 });
@@ -580,27 +585,28 @@ test('Shark Pass worn: the kid\'s shark wears the piece on the card and on the s
   assert.match(pass, /inventory: worn && wornLook\?\.skin_item \? wornLook : undefined/, 'kept: the live look, worn: the look with the piece');
 });
 
-test('box reveal: a gold chaser or Golden Box pin asks Wear it or Keep my lanyard, then Done and Share', () => {
+test('box reveal: a gold chaser or Golden Box pin asks Wear it or Not now, then Done and Share', () => {
   const box = src('src/screens/pins/BoxReveal.tsx');
   assert.match(box, /const wearFirst = phase === 'show' && pulls\.length === 1 && brag\(pull\) && wearable && !kept\.has\(pull\.item_id\);/);
-  // Choice: the yellow Wear it, then the quiet Keep my lanyard (always there, not only on a full lanyard).
+  // Choice: the yellow Wear it, then the quiet Not now (always there, not only on a full lanyard).
   const wear = box.indexOf("label={wearing ? 'Putting it on...' : wearFailed ? 'Try again' : 'Wear it'}");
   const share = box.indexOf('{sharePull && !choosing && (');
-  const keep = box.indexOf("label={wearFailed ? 'Done' : 'Keep my lanyard'} variant=\"ghost\" tone=\"onBlue\"");
+  const keep = box.indexOf("label={wearFailed ? 'Done' : 'Not now'} variant=\"ghost\" tone=\"onBlue\"");
   assert.ok(wear > 0 && wear < share && share < keep, 'yellow, then Share, then the quiet choice');
   assert.match(box, /\{!wearFirst && \(\s*<GameButton label=\{index < pulls\.length - 1/, 'no yellow Done while the choice is open');
   // A hung save becomes Try again; a stray tap or back never closes while saving.
-  assert.match(box, /void withWearTimeout\(onWear\(pull, removeId\)\)/);
+  assert.match(box, /void withWearTimeout\(onWear\(pull, removeId\), undefined, late\)/);
   assert.match(box, /!isGold && !wearing && Date\.now\(\)/);
   assert.match(box, /\(phase === 'show' \|\| phase === 'summary'\) && !wearing && next\(\)/);
-  // The lanyard-full chooser uses the same quiet ghost for Keep my lanyard.
-  assert.match(box, /<GameButton label="Keep my lanyard" variant="ghost" tone="onBlue"/);
+  // The lanyard-full chooser uses the same quiet ghost, with the same words.
+  assert.match(box, /<GameButton label="Not now" variant="ghost" tone="onBlue"/);
+  assert.doesNotMatch(box, /Keep my lanyard'|"Keep my lanyard"/);
   assert.doesNotMatch(box, /offPickKeep/);
 });
 
 test('every wear choice uses one look: yellow primary, quiet ghost secondary', () => {
   const set = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
-  assert.match(set, /leaveLabel\(all === 'done', titleOnly === 'done'\)\} variant="ghost" tone="onBlue"/);
+  assert.match(set, /leaveLabel\(false, titleOnly === 'done'\)\} variant="ghost" tone="onBlue"/);
   assert.doesNotMatch(set, /styles\.leaveText/);
   const got = src('src/components/money/moneyUi.tsx');
   assert.match(got, /variant=\{action \? 'ghost' : 'primary'\} tone="onBlue"/);
@@ -611,9 +617,10 @@ test('square look card: the dressed shark is the hero, at most 3 tiles, words ce
   assert.match(card, /export const SQUARE_LOOK_SHARK_H = 196;/);
   assert.match(card, /sharkH=\{SQUARE_LOOK_SHARK_H\} tile=\{30\} maxTiles=\{3\}/);
   assert.match(card, /\.slice\(0, maxTiles\)/);
-  assert.match(card, /<View style=\{\[styles\.squareWordsRow, look && styles\.squareWordsLook\]\}>/);
+  assert.match(card, /<View style=\{\[styles\.squareWordsRow, centered && styles\.squareWordsLook\]\}>/);
+  assert.match(card, /const centered = look \|\| !big;/);
   assert.match(card, /squareWordsLook: \{ justifyContent: 'center', marginTop: 12 \}/);
-  assert.match(card, /\{!look && <StatPlate copy=\{copy\} frame=\{frame\} compact \/>\}/);
+  assert.match(card, /\{!look && <StatPlate copy=\{copy\} frame=\{frame\} compact center=\{centered\} \/>\}/);
   assert.match(card, /squareStageLook: \{ flex: 2\.6 \}/);
   // Story: the hat clears the ribbon, and the plate's room goes to the shark.
   assert.match(card, /\{!look && <StatPlate copy=\{copy\} frame=\{frame\} compact=\{false\} \/>\}/);
@@ -707,29 +714,103 @@ test('one share order on every reveal: the yellow button, Share right under it, 
   // Box: the one yellow button (Next box / Done), then Share.
   const box = src('src/screens/pins/BoxReveal.tsx');
   assert.match(box, /icon=\{index < pulls\.length - 1 \? 'gift' : 'check'\} onPress=\{next\} \/>\s*\)\}\s*\{sharePull && !choosing && \(\s*<FlexShareButton/);
-  // Set Complete: WEAR IT ALL, then Share, then the leave button.
+  // Set Complete, once it is all on: the yellow Done, then Share (WEAR IT ALL and Not now are gone).
   const set = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
-  const cta = set.indexOf('<ShopCta label={allCopy.label}');
+  const done = set.indexOf("<GameButton label={waiting ? 'Saving...' : 'Done'} icon=\"check\"");
   const share = set.indexOf('<FlexShareButton kind="set_complete"');
-  const leave = set.indexOf('onPress={() => leave(true)}');
-  assert.ok(cta > 0 && cta < share && share < leave, 'Set Complete order');
+  assert.ok(done > 0 && done < share, 'Set Complete order');
   // Coin: Awesome!, then Share.
   const coin = src('src/components/CoinLevelingModal.tsx');
   assert.ok(coin.indexOf('<YellowButton text="Awesome!"') < coin.indexOf('<FlexShareButton kind="coin_level"'));
   // GotIt (Shark Pass, VIP gift): the action, Share, the close; or the close, then Share.
   const got = src('src/components/money/moneyUi.tsx');
   assert.match(got, /\{action && <GameButton[^\n]*\/>\}\s*\{action && share && <View style=\{\{ alignItems: 'center' \}\}>\{share\}<\/View>\}\s*<GameButton label=\{doneLabel/);
-  assert.match(got, /onPress=\{onDone\} \/>\s*\{!action && share && <View/);
+  assert.match(got, /onPress=\{onDone\}\s*icon=\{wide && !action \? 'check' : undefined\} \/>\s*\{!action && share && <View/);
 });
 
 test('the shop set picture is the dressed shark, no prop and no medallion', () => {
   const card = src('src/share/FlexCard.tsx');
   assert.match(card, /look: isLookSet\(kind, payload\) && !!shark\?\.skin_item/);
-  assert.match(card, /export const LOOK_SHARK_H = 250;/);
+  assert.match(card, /export const LOOK_SHARK_H = 274;/);
   assert.match(card, /<FlexShark inventory=\{inventory\} height=\{sharkH\} prop=\{null\} \/>/);
   assert.match(card, /\{look \? <LookHero[^\n]*sharkH=\{LOOK_SHARK_H\}/);
   const { flexCopy } = loadTs('src/share/copy.ts', {});
   const set = flexCopy('set_complete', { setName: 'Spooky Squad', badgeUrl: 'x', found: 3, total: 3, source: 'shop' });
   assert.equal(set.prop, null, 'no treasure chest beside the look');
   assert.equal(set.kicker, 'My Complete Look');
+});
+
+/* ------------------------------------------------------------------ wave 2 round 3 */
+
+test('a wear that saves after the timeout turns Try again into worn', async () => {
+  const model = loadTs('src/services/money/sharkPassModel.ts', {});
+  let late = null;
+  const slow = new Promise(r => setTimeout(() => r('ok'), 40));
+  await assert.rejects(model.withWearTimeout(slow, 10, v => { late = v; }), /timed out/);
+  await new Promise(r => setTimeout(r, 60));
+  assert.equal(late, 'ok', 'the late value still arrives');
+  let lateWorn = 0;
+  let refreshed = 0;
+  const result = await model.wearThenRefresh(() => new Promise(r => setTimeout(r, 40)), () => { refreshed += 1; }, 10, 20, () => { lateWorn += 1; });
+  assert.equal(result, 'failed', 'the card first says Try again');
+  await new Promise(r => setTimeout(r, 80));
+  assert.equal(lateWorn, 1, 'then the late save flips it to worn');
+  assert.equal(refreshed, 1, 'and fetches the fresh look');
+  let never = 0;
+  await model.wearThenRefresh(() => new Promise((_, no) => setTimeout(() => no(new Error('x')), 40)), null, 10, 20, () => { never += 1; });
+  await new Promise(r => setTimeout(r, 80));
+  assert.equal(never, 0, 'a late failure stays failed');
+  const box = src('src/screens/pins/BoxReveal.tsx');
+  assert.match(box, /if \(!live\.current \|\| !r\.ok \|\| wearingRef\.current\) return;\s*putOn\(r\.removed\);/);
+});
+
+test('Shark Pass and member prize cards have their own campaign link and QR', () => {
+  const link = loadTs('src/share/link.ts', {});
+  assert.equal(link.flexShareUrl('find', { itemName: 'x', artUrl: 'x', prize: 'pass' }), 'https://themeparkshark.com/app?c=flex_sharkpass');
+  assert.equal(link.flexShareUrl('find', { itemName: 'x', artUrl: 'x', prize: 'member' }), 'https://themeparkshark.com/app?c=flex_member');
+  assert.equal(link.flexShareUrl('find', { itemName: 'x', artUrl: 'x', rarity: 3 }), 'https://themeparkshark.com/app?c=flex_find');
+  assert.equal(link.prizeCampaign('stamp', { prize: 'pass' }), null, 'only a find card can be a prize');
+  const qr = src('src/share/campaignQr.ts');
+  for (const c of ['sharkpass', 'member']) {
+    assert.match(qr, new RegExp(`  ${c}: require\\('../../assets/images/share/qr/campaign-${c}.png'\\)`));
+    assert.ok(fs.existsSync(path.join(root, `assets/images/share/qr/campaign-${c}.png`)));
+  }
+  assert.match(src('src/share/ShareStudioHost.tsx'), /Clipboard\.setStringAsync\(flexShareUrl\(request\.kind, request\.payload\)\)/);
+  assert.match(src('src/share/FlexCard.tsx'), /return campaign \? QR_BY_CAMPAIGN\[campaign\] : QR_BY_KIND\[kind\];/);
+});
+
+test('the worn prize pin is a big badge drawn over every layer and prop', () => {
+  const shark = src('src/share/FlexShark.tsx');
+  assert.match(shark, /export const CHEST_PIN = \{ x: 0\.47, y: 0\.56, w: 0\.26 \} as const;/);
+  // After the prop, so no hose or prop covers it.
+  assert.ok(shark.indexOf('{!spot?.behind && propView}') < shark.indexOf('{pin && !!inventory?.pin_item?.icon_url && ('));
+  assert.match(shark, /badge: \{[^}]*borderColor: '#ffcf3b'/);
+});
+
+test('story cards: the footer sits in the bottom band, so the card reads full', () => {
+  const card = src('src/share/FlexCard.tsx');
+  assert.match(card, /export const STORY_FOOTER_BOTTOM = 34;/);
+  assert.match(card, /storyFooter: \{ position: 'absolute', left: 20, right: 20, bottom: STORY_FOOTER_BOTTOM \}/);
+  assert.match(card, /export const STORY_HERO = 160;/);
+  assert.match(card, /export const STORY_SHARK_H = 190;/);
+  // The brag stays in the safe zone: the body still pads the bottom band.
+  assert.match(card, /storyBody: \{[^}]*paddingBottom: STORY_SAFE\.bottom/);
+});
+
+test('one wear choice on every reveal: same words, same icons that say "put it on", no #12 twice', () => {
+  const box = src('src/screens/pins/BoxReveal.tsx');
+  assert.match(box, /icon=\{wearFailed \? 'retry' : 'sparkle'\}/, 'the box Wear it shows a sparkle, not the map pin');
+  assert.match(box, /Saved in My Pins/);
+  assert.match(box, /<View style=\{wearing && styles\.slotHold\} pointerEvents=\{wearing \? 'none' : 'auto'\}/, 'Not now keeps its slot while saving');
+  assert.doesNotMatch(box, /serialStamp/, 'the number is on the GOLD CHASER ribbon only');
+  const card = src('src/components/money/WearFirstReward.tsx');
+  assert.match(card, /export const WEAR_ICON = 'shark' as const;/);
+  assert.match(card, /busyIcon=\{WEAR_ICON\} wide/);
+  const set = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  assert.match(set, /\{all !== 'done' && \(\s*<Pressable onPress=\{\(\) => leave\(false\)\}[^>]*accessibilityLabel="Close"/, 'no X once it is all on');
+  assert.match(set, /All on!/);
+  assert.doesNotMatch(set, /done=\{all === 'done'\}/, 'no green ALL ON! slab button');
+  for (const f of ['src/screens/pins/BoxReveal.tsx', 'src/components/money/WearFirstReward.tsx', 'src/screens/StoreScreen/SetCompleteReveal.tsx', 'src/share/FlexCard.tsx', 'src/share/FlexShark.tsx']) {
+    assert.doesNotMatch(src(f), new RegExp(String.fromCharCode(0x2014)), `${f}: no em dashes`);
+  }
 });
