@@ -18,6 +18,7 @@ import {
 } from '../../services/retention/logic';
 import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 import { useAmbient } from './power';
+import CardSurface from './CardSurface';
 
 const DAILY_CHEST = require('../../../assets/images/daily/chest-closed.png');
 const SNACK = require('../../../assets/images/social/topic_snacks.png');
@@ -88,6 +89,7 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
   const order = settled ? sorted : before;
   return (
     <View style={styles.card}>
+      <CardSurface />
       <View style={styles.hero}>
         <Flame days={s.days} reducedMotion={reducedMotion} />
         <View style={styles.heroText}>

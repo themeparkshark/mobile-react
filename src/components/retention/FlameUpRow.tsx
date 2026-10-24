@@ -9,7 +9,7 @@ import { BRAND } from '../../ui';
 import { SparkleBurst } from '../../ui/GoldBurst';
 import { DURATION, SPRING, momentParticles } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
-import FlameArt from './FlameArt';
+import FlameArt, { NextFlameGoal } from './FlameArt';
 
 /**
  * The daily +1, inside the chest card (no extra card on a normal day): the
@@ -62,7 +62,7 @@ export default function FlameUpRow({ from, to, grow, reducedMotion }: {
       </View>
       <Animated.View style={[styles.words, textStyle]}>
         <Text style={styles.big} numberOfLines={1} adjustsFontSizeToFit>{to === 1 ? 'Your flame is lit!' : `${to} days in a row!`}</Text>
-        {line ? <Text style={styles.small} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{line}</Text> : null}
+        {line ? <NextFlameGoal days={to} size={20} textStyle={styles.small} /> : null}
       </Animated.View>
     </View>
   );

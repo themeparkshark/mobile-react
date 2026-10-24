@@ -1,8 +1,8 @@
 import { Image, type ImageSource } from 'expo-image';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import type { PaidRewards } from '../../api/endpoints/retention';
@@ -11,7 +11,9 @@ import { haptic, playHaptic, queueHaptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { usePowerBudget } from '../../power';
 import { doneDelay, isBigReward, rewardRows, rowSchedule, type RewardRow } from '../../services/retention/logic';
-import { FULL_SET, LEVEL_CHEST, LOOP_CUES, REVEAL_ROWS, countStart, rowCountMs } from '../../services/retention/loopMotion';
+import { FULL_SET, LEVEL_CHEST, LOOP_CUES, REPEAT_CHEST, REVEAL_ROWS, countStart, rowCountMs } from '../../services/retention/loopMotion';
+import CardSurface from './CardSurface';
+import type { Point } from './PrizeFlight';
 import GoldCheckCoin from './GoldCheckCoin';
 import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 import { GoldBurst, RadialFlash, SparkleBurst } from '../../ui/GoldBurst';
@@ -29,6 +31,13 @@ function rowsFor(small: number, big: number): number {
 }
 const FREEZE = require('../../../assets/images/retention/freeze.png');
 const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
+const RAYS = require('../../../assets/images/reveal/rays-gold-fade.webp');
+
+Animated.addWhitelistedNativeProps({ text: true });
+const AnimatedInput = Animated.createAnimatedComponent(TextInput);
+
+/** Where each prize row's icon sits on screen when AWESOME is tapped (the prizes fly home from there). */
+export interface PrizeOrigin extends Point { readonly kind: RewardRow['kind']; readonly amount: number }
 
 /** After this long the shake settles into a calm "Still opening..." (the request has its own 6 s timeout). */
 const STALL_MS = 6000;
@@ -44,7 +53,7 @@ const STALL_MS = 6000;
  * shows a tap ring, and opens by itself after 2 s. Shows only what the server paid.
  */
 export default function RewardReveal({ subtitle, closedArt, openArt, rewards, opening, onOpen, onDone, onWear, onPins,
-  reducedMotion, doneLabel, footer, dropIn = false, autoOpen = false, expectRows, preview, fullSet = false }: {
+  reducedMotion, doneLabel, footer, dropIn = false, autoOpen = false, expectRows, preview, fullSet = false, repeat = false, rare = false, onArrive }: {
   readonly subtitle: string;
   readonly closedArt: ImageSource | number;
   readonly openArt: ImageSource | number;
@@ -52,7 +61,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   readonly rewards: PaidRewards | null;
   readonly opening: boolean;
   readonly onOpen: () => void;
-  readonly onDone: () => void;
+  /** AWESOME: hands over where each prize row sits, so the prizes fly home from their own rows. */
+  readonly onDone: (origins: readonly PrizeOrigin[]) => void;
   readonly onWear?: () => void;
   readonly onPins?: () => void;
   readonly reducedMotion: boolean;
@@ -69,6 +79,12 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   readonly preview?: React.ReactNode;
   /** The full Daily 3 set: three gold checks bounce in a row, then dive into the chest as it gathers. */
   readonly fullSet?: boolean;
+  /** A repeat day (this phone has opened 3+ daily chests): a shorter gather and quicker rows, same four beats. */
+  readonly repeat?: boolean;
+  /** A rare chest (about 1 in 10): a gold beam rises behind the lid and extra coins spill out. */
+  readonly rare?: boolean;
+  /** A level chest landed: its claim can start now so the lid pops on the beat. */
+  readonly onArrive?: () => void;
 }) {
   const ambient = useAmbient();
   const budget = usePowerBudget();
@@ -85,6 +101,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     ? Math.max(compact ? 96 : 120, Math.min(width * 0.5, 210, height - CHROME_KNOWN - expectedRowsH))
     : Math.min(width * 0.44, height * (compact ? 0.17 : 0.21), 190);
   const stageH = size + (known ? 22 : 8);
+  // The chest starts big and centred in the whole card on its own gold glow (never a small chest atop an empty
+  // panel), then glides up into its slot as the prizes land.
+  const cardW = width * 0.9 * 0.94;
+  const heroScale = reducedMotion ? 1 : Math.max(1, Math.min(2, (cardW * 0.7) / size));
   // Rows get a fixed area (scrolls only on small phones), so the card never changes height.
   const baseRows = compact ? Math.max(200, height - size - 300) : Math.max(200, Math.min(300, height - size - 380));
   // Sized to the prizes coming; if the server pays more rows than the preview said (a milestone gear), it grows to fit
@@ -99,6 +119,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const burst = useSharedValue(0);
   const sparkle = useSharedValue(0);
   const leak = useSharedValue(0);
+  const lift = useSharedValue(reducedMotion ? 0 : 1);
+  const beam = useSharedValue(0);
   const tapRing = useSharedValue(0);
   const drop = useSharedValue(dropIn && !reducedMotion ? 1 : 0);
   const dust = useSharedValue(0);
@@ -120,8 +142,15 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   // More prizes than the preview promised (rare): the list scrolls so the hero card is always seen.
   const overflow = known && !!expectRows && revealed
     && rowsFor(rows.filter(r => !isBigReward(r.kind)).length, rows.filter(r => isBigReward(r.kind)).length) > rowsHeight;
+  // Centre the big chest (and the chips under it) in the stage plus rows area.
+  const previewH = preview ? 96 : 0;
+  const heroH = size * heroScale;
+  const groupTop = Math.max(0, (stageH + rowsHeight - heroH - previewH) / 2);
+  const heroDY = reducedMotion ? 0 : Math.max(0, groupTop + heroH / 2 - stageH / 2);
+  const previewTop = Math.max(0, groupTop + heroH + 6 - stageH);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scroll = useRef<ScrollView>(null);
+  const rowRefs = useRef<(View | null)[]>([]);
   const overflowRef = useRef(false);
   overflowRef.current = overflow;
   const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
@@ -130,28 +159,33 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const asked = useRef(false);
   const requestOpen = () => { if (asked.current || revealed) return; asked.current = true; onOpen(); };
   const sparks = useMemo(() => momentParticles(PARTICLES.sparkles, budget, reducedMotion), [budget, reducedMotion]);
-  const coins = useMemo(() => momentParticles(8, budget, reducedMotion), [budget, reducedMotion]);
-  const schedule = useMemo(() => rowSchedule(rows, dropIn ? LEVEL_CHEST.rowBeat : REVEAL_ROWS.beat, REVEAL_ROWS.hold, REVEAL_ROWS.first),
-    [rows.length, dropIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  const coins = useMemo(() => momentParticles(rare ? PARTICLES.sparkles : 8, budget, reducedMotion), [budget, reducedMotion, rare]);
+  const schedule = useMemo(() => rowSchedule(rows, dropIn ? LEVEL_CHEST.rowBeat : repeat ? REPEAT_CHEST.rowBeat : REVEAL_ROWS.beat,
+    REVEAL_ROWS.hold, repeat ? REPEAT_CHEST.first : REVEAL_ROWS.first),
+    [rows.length, dropIn, repeat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A level chest: it drops in with a dust ring, rattles three times (each harder) while light leaks
   // from the lid, a tap ring shows, and it opens by itself 2 s after landing if nobody taps.
   useEffect(() => {
-    if (!dropIn || reducedMotion) return;
+    if (dropIn) onArrive?.();
+    if (!dropIn) return;
+    // Reduce Motion: no drop or rattles, but it still opens by itself on the same mark.
+    if (reducedMotion) { later(() => requestOpen(), LEVEL_CHEST.autoOpenAt); return; }
     drop.value = withSpring(0, SPRING.land);
     dust.value = withDelay(260, withTiming(1, { duration: 520, easing: EASE.out }));
     later(() => { queueHaptic('hitMedium'); playSfx('fx.hit', 0.8); }, 260);
     const L = LEVEL_CHEST.landMs;
     const rattleHaptics = ['tickSelection', 'tapLight', 'hitMedium'] as const;
+    // Three rattles, each harder (a quick left-right-left of 200 ms), all inside 900 ms of the card opening.
     shake.value = withSequence(...LEVEL_CHEST.rattles.map((r, i) => withDelay(i === 0 ? L : r.at - LEVEL_CHEST.rattles[i - 1].at - LEVEL_CHEST.rattleMs,
-      withSequence(withTiming(r.deg, { duration: 60, easing: EASE.out }), withTiming(-r.deg, { duration: 80 }),
-        withTiming(r.deg * 0.5, { duration: 50 }), withTiming(0, { duration: 50 })))));
+      withSequence(withTiming(r.deg, { duration: 50, easing: EASE.out }), withTiming(-r.deg, { duration: 70 }),
+        withTiming(r.deg * 0.5, { duration: 40 }), withTiming(0, { duration: 40 })))));
     leak.value = withDelay(L, withTiming(1, { duration: LEVEL_CHEST.rattles[2].at + LEVEL_CHEST.rattleMs, easing: EASE.charge }));
     gold.value = withDelay(L, withTiming(0.45, { duration: LEVEL_CHEST.rattles[2].at + LEVEL_CHEST.rattleMs, easing: EASE.charge }));
     LEVEL_CHEST.rattles.forEach((r, i) => later(() => { queueHaptic(rattleHaptics[i]); playSfx('ui.button', 0.5 + i * 0.2); }, L + r.at));
-    later(() => setShowTap(true), L + LEVEL_CHEST.handAt);
-    tapRing.value = withDelay(L + LEVEL_CHEST.handAt, withRepeat(withTiming(1, { duration: 900, easing: EASE.out }), 3, false));
-    later(() => requestOpen(), L + LEVEL_CHEST.autoOpenAt);
+    later(() => setShowTap(true), LEVEL_CHEST.handAt);
+    tapRing.value = withDelay(LEVEL_CHEST.handAt, withRepeat(withTiming(1, { duration: 700, easing: EASE.out }), 2, false));
+    later(() => requestOpen(), LEVEL_CHEST.autoOpenAt);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The full set hands straight into the chest: it starts opening on the first frame.
@@ -183,7 +217,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         ...[4, -4, 7, -7, 10, -10].map(v => withTiming(v, { duration: 55 })),
         withRepeat(withSequence(withTiming(12, { duration: 55 }), withTiming(-12, { duration: 55 })), 50, true),
       );
-      gold.value = withSequence(withTiming(0.42, { duration: beats.anticipation, easing: EASE.charge }),
+      gold.value = withSequence(withTiming(0.42, { duration: repeat ? REPEAT_CHEST.gatherMs : beats.anticipation, easing: EASE.charge }),
         withRepeat(withSequence(withTiming(0.55, { duration: 320 }), withTiming(0.42, { duration: 320 })), -1));
       squash.value = withTiming(0.94, { duration: beats.anticipation, easing: EASE.charge });
       // Rising ticks while it gathers (at most 8, each a step higher).
@@ -205,6 +239,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     setShowTap(false);
     if (reducedMotion) {
       setSwapped(true);
+      lift.value = 0;
       gold.value = withTiming(0.6, { duration: DURATION.quick });
       haptic('success'); playSfx('fx.reward');
       rows.forEach((row, i) => later(() => {
@@ -231,6 +266,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     sparkle.value = 0;
     sparkle.value = withDelay(H, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
     later(() => { playHaptic('golden'); playSfx('fx.reward'); }, H);
+    // Settle: the chest glides up into its slot as the first prize lands (the eye follows it to the rows).
+    lift.value = withDelay(H + Math.max(120, schedule[0] - 140), withSpring(0, SPRING.settle));
+    // A rare chest: a gold beam rises out of the lid and lingers while the rows land.
+    if (rare) beam.value = withDelay(H, withSequence(withTiming(1, { duration: 180, easing: EASE.out }), withDelay(700, withTiming(0, { duration: 700 }))));
     later(() => setButtonReady(true), (schedule[schedule.length - 1] ?? 400) + doneDelay(rows));
     schedule.forEach((ms, i) => later(() => {
       setLanded(n => Math.max(n, i + 1));
@@ -246,6 +285,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
 
   // The chest glow flares again when a hero card lands.
   const pulseGlow = () => { if (!reducedMotion) bloom.value = withSequence(withTiming(0.8, { duration: 120 }), withTiming(0, { duration: 400 })); };
+  const heroStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: heroDY * lift.value }, { scale: 1 + (heroScale - 1) * lift.value }],
+  }));
+  const beamStyle = useAnimatedStyle(() => ({ opacity: beam.value, transform: [{ scaleY: 0.4 + 0.6 * beam.value }] }));
   const chestStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: bob.value - drop.value * 160 }, { rotate: `${shake.value}deg` }, { scale: pop.value },
       { scaleY: squash.value }, { scaleX: 2 - squash.value }],
@@ -269,13 +312,38 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     later(() => setButtonReady(true), 400);
   };
   const hint = stalled ? 'Still opening...' : opening || autoOpen || dropIn ? null : 'Tap to open!';
+  // AWESOME: measure where each prize row's icon sits, then hand over (a slow measure never holds the button).
+  const done = () => {
+    let sent = false;
+    const send = (o: PrizeOrigin[]) => { if (!sent) { sent = true; onDone(o); } };
+    setTimeout(() => send([]), 120);
+    const out: PrizeOrigin[] = [];
+    let left = rows.length;
+    if (!left) { send(out); return; }
+    rows.forEach((row, i) => {
+      const ref = rowRefs.current[i];
+      if (!ref) { left -= 1; if (!left) send(out); return; }
+      ref.measureInWindow((x, y, w, h) => {
+        if (Number.isFinite(x) && w > 0) out.push({ kind: row.kind, amount: row.amount, x: x + w / 2, y: y + h / 2 });
+        left -= 1;
+        if (!left) send(out);
+      });
+    });
+  };
 
   return (
     <View style={styles.card}>
-      {fullSet ? <FullSetChecks reducedMotion={reducedMotion} /> : <Text style={styles.subtitle}>{subtitle}</Text>}
+      <CardSurface />
+      {fullSet ? <FullSetChecks reducedMotion={reducedMotion} diveY={stageH / 2 + heroDY} /> : <Text style={styles.subtitle}>{subtitle}</Text>}
       <Pressable onPress={!revealed && !opening ? requestOpen : skip} disabled={opening && !revealed} accessibilityRole="button"
         accessibilityLabel={revealed ? 'Opened' : 'Tap to open'} style={[styles.stage, { height: stageH }]}
         onLayout={e => setStage({ x: e.nativeEvent.layout.x + e.nativeEvent.layout.width / 2, y: e.nativeEvent.layout.y + e.nativeEvent.layout.height / 2 })}>
+        <Animated.View pointerEvents="none" style={[styles.hero, heroStyle]}>
+        {rare && (
+          <Animated.View pointerEvents="none" style={[styles.beam, { width: size * 0.9, height: size * 3.2, top: -size * 2.2 }, beamStyle]}>
+            <Image source={RAYS} style={StyleSheet.absoluteFill} contentFit="cover" tintColor={'#FFF1B8'} transition={0} />
+          </Animated.View>
+        )}
         <GoldBurst size={size * 2.3} amount={gold} bloom={bloom} reduced={reducedMotion} style={styles.abs} />
         <RadialFlash flash={flash} size={size * 1.5} />
         <Animated.View pointerEvents="none" style={[styles.dust, { width: size * 1.1, height: size * 0.28, top: stageH / 2 + size * 0.36 }, dustStyle]}>
@@ -293,18 +361,19 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         </Animated.View>
         <View style={styles.center} pointerEvents="none">
           <SparkleBurst progress={sparkle} count={sparks} radius={size * 0.95} />
-          <CoinFountain progress={burst} count={coins} spread={size * 0.9} />
+          <CoinFountain progress={burst} count={coins} spread={size * (rare ? 1.15 : 0.9)} />
         </View>
+        </Animated.View>
       </Pressable>
-      <Pressable onPress={skip} disabled={!revealed || allIn} accessible={false} style={{ alignSelf: 'stretch' }}>
+      <Pressable onPress={!revealed && !opening ? requestOpen : skip} disabled={allIn || (opening && !revealed)} accessible={false} style={{ alignSelf: 'stretch' }}>
         <ScrollView ref={scroll} style={{ height: rowsHeight }} contentContainerStyle={styles.rows} scrollEnabled={revealed}
           showsVerticalScrollIndicator={false}>
           {!revealed ? (
-            <View style={[styles.hintBox, { height: rowsHeight - 8 }]}>
+            <View style={[styles.hintBox, { height: rowsHeight - 8 }, !hint && !reducedMotion && { justifyContent: 'flex-start', paddingTop: previewTop }]}>
               {hint ? <Text style={styles.hint}>{hint}</Text> : preview && !stalled ? <PreviewIn>{preview}</PreviewIn> : null}
             </View>
           ) : rows.map((row, i) => (
-            <Row key={row.kind} row={row} shown={i < landed} reducedMotion={reducedMotion} compact={compact}
+            <Row key={row.kind} iconRef={r => { rowRefs.current[i] = r; }} row={row} shown={i < landed} reducedMotion={reducedMotion} compact={compact}
               countMs={rowCountMs(schedule[i] ?? 0, COUNT.ms)}
               slamKey={i === rows.length - 1 ? replay : 0} onLand={isBigReward(row.kind) ? pulseGlow : undefined}
               onWear={row.kind === 'item' ? onWear : undefined} onPins={row.kind === 'mystery_boxes' ? onPins : undefined} />
@@ -312,9 +381,9 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         </ScrollView>
       </Pressable>
       <View style={[styles.bottom, known && styles.bottomKnown]}>
-        {allIn ? <DoneArea footer={footer} label={doneLabel ?? 'AWESOME!'} onDone={onDone} reducedMotion={reducedMotion} /> : null}
+        {allIn ? <DoneArea footer={footer} label={doneLabel ?? 'AWESOME!'} onDone={done} reducedMotion={reducedMotion} /> : null}
       </View>
-      {stage && budget.animate && budget.particleScale >= 0.5 && <RewardBurst progress={burst} x={stage.x} y={stage.y} />}
+      {stage && budget.animate && budget.particleScale >= 0.5 && <RewardBurst progress={burst} x={stage.x} y={stage.y + heroDY} />}
     </View>
   );
 }
@@ -323,7 +392,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
  * The full set's three gold checks: they bounce one after another (120 ms apart, rising ticks), then
  * dive into the chest as it starts to gather (the goals you finished charge the chest).
  */
-function FullSetChecks({ reducedMotion }: { readonly reducedMotion: boolean }) {
+function FullSetChecks({ reducedMotion, diveY }: { readonly reducedMotion: boolean; readonly diveY: number }) {
   const a = useSharedValue(reducedMotion ? 1 : 0);
   const b = useSharedValue(reducedMotion ? 1 : 0);
   const c = useSharedValue(reducedMotion ? 1 : 0);
@@ -343,15 +412,15 @@ function FullSetChecks({ reducedMotion }: { readonly reducedMotion: boolean }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={styles.checks} accessibilityLabel="All three goals done">
-      {vals.map((v, i) => <DivingCheck key={i} v={v} dive={dive} index={i} />)}
+      {vals.map((v, i) => <DivingCheck key={i} v={v} dive={dive} index={i} diveY={diveY} />)}
     </View>
   );
 }
 
-function DivingCheck({ v, dive, index }: { readonly v: SharedValue<number>; readonly dive: SharedValue<number>; readonly index: number }) {
+function DivingCheck({ v, dive, index, diveY }: { readonly v: SharedValue<number>; readonly dive: SharedValue<number>; readonly index: number; readonly diveY: number }) {
   const style = useAnimatedStyle(() => ({
-    opacity: Math.min(1, v.value * 2) * (1 - dive.value),
-    transform: [{ translateX: (1 - index) * 52 * dive.value }, { translateY: 90 * dive.value }, { scale: v.value * (1 - 0.6 * dive.value) }],
+    opacity: Math.min(1, v.value * 2) * (1 - dive.value * dive.value),
+    transform: [{ translateX: (1 - index) * 52 * dive.value }, { translateY: diveY * dive.value }, { scale: v.value * (1 - 0.6 * dive.value) }],
   }));
   return <Animated.View style={style}><GoldCheckCoin size={40} /></Animated.View>;
 }
@@ -428,30 +497,33 @@ function rowIcon(row: RewardRow) {
 }
 
 /**
- * Counts a number up once it is shown: starts a third of the way (never "+0"), eases out over `ms`
- * (at most COUNT.ms), and lands on the exact number. Instant when motion is reduced.
+ * "+N", rolled up on the UI thread once its row lands (no React render per step): starts a third of the
+ * way (never "+0"), eases out over `ms` (at most COUNT.ms) and lands on the exact number. Instant when
+ * motion is reduced.
  */
-function useCountUp(target: number, run: boolean, instant: boolean, ms: number): number {
-  const [n, setN] = useState(instant ? target : countStart(target));
+function RollNumber({ target, run, instant, ms }: { readonly target: number; readonly run: boolean; readonly instant: boolean; readonly ms: number }) {
+  const v = useSharedValue(instant ? target : countStart(target));
   useEffect(() => {
     if (!run) return;
-    if (instant || target <= 1) { setN(target); return; }
-    const start = countStart(target);
-    setN(start);
-    const steps = Math.max(4, Math.min(COUNT.maxTicks, Math.round(ms / 50)));
-    let f = 0;
-    const id = setInterval(() => {
-      f += 1;
-      const t = 1 - Math.pow(1 - f / steps, 3);
-      setN(f >= steps ? target : Math.max(start, Math.round(start + (target - start) * t)));
-      if (f >= steps) clearInterval(id);
-    }, ms / steps);
-    return () => clearInterval(id);
-  }, [run, target, instant, ms]);
-  return n;
+    cancelAnimation(v);
+    if (instant || target <= 1) { v.value = target; return; }
+    v.value = countStart(target);
+    v.value = withTiming(target, { duration: ms, easing: Easing.out(Easing.cubic) });
+  }, [run, target, instant, ms, v]);
+  const props = useAnimatedProps(() => {
+    const text = `+${Math.round(v.value)}`;
+    return { text, defaultValue: text } as never;
+  });
+  const first = `+${instant ? target : countStart(target)}`;
+  return (
+    <AnimatedInput editable={false} caretHidden underlineColorAndroid="transparent" pointerEvents="none" allowFontScaling={false}
+      defaultValue={first} animatedProps={props}
+      style={[styles.rowAmount, styles.rollInput, { width: 14 * (String(target).length + 1) + 6 }]} />
+  );
 }
 
-function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamKey = 0, onLand, countMs }: {
+function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamKey = 0, onLand, countMs, iconRef }: {
+  readonly iconRef?: (v: View | null) => void;
   readonly row: RewardRow; readonly shown: boolean; readonly reducedMotion: boolean; readonly compact?: boolean;
   readonly slamKey?: number; readonly onLand?: () => void; readonly countMs: number;
   readonly onWear?: () => void; readonly onPins?: () => void;
@@ -484,13 +556,12 @@ function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamK
   }));
   const beamStyle = useAnimatedStyle(() => ({ opacity: beam.value }));
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
-  const amount = useCountUp(row.amount, shown, reducedMotion, countMs);
   return (
     // Laid out from the start (no jump); the face is a plain View (iOS clips a scaled bordered background).
     <Animated.View style={style}>
-      {big && <Animated.View pointerEvents="none" style={[styles.beam, beamStyle]} />}
+      {big && <Animated.View pointerEvents="none" style={[styles.rowBeam, beamStyle]} />}
       <View style={[styles.row, big && styles.rowBig, compact && styles.rowCompact]}>
-        <View style={[styles.rowIcon, big && styles.rowIconBig]}>{rowIcon(row)}</View>
+        <View ref={iconRef} collapsable={false} style={[styles.rowIcon, big && styles.rowIconBig]}>{rowIcon(row)}</View>
         {big ? (
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={styles.bigKicker}>{row.kind === 'item' ? 'NEW GEAR' : row.kind === 'freezes' ? 'STREAK FREEZE' : 'FREE MYSTERY BOX'}</Text>
@@ -504,10 +575,9 @@ function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamK
             )}
           </View>
         ) : (
-          <Animated.View style={[{ flex: 1 }, bumpStyle]}>
-            <Text style={styles.rowText} numberOfLines={1}>
-              <Text style={styles.rowAmount}>{`+${amount} `}</Text>{row.label}
-            </Text>
+          <Animated.View style={[styles.rowLine, bumpStyle]}>
+            <RollNumber target={row.amount} run={shown} instant={reducedMotion} ms={countMs} />
+            <Text style={styles.rowText} numberOfLines={1}>{row.label}</Text>
           </Animated.View>
         )}
       </View>
@@ -536,9 +606,13 @@ const styles = StyleSheet.create({
   rowBig: { backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold, paddingVertical: 8 },
   rowIcon: { width: 58, alignItems: 'center' },
   rowIconBig: { width: 84 },
-  beam: { position: 'absolute', left: -8, right: -8, top: -6, bottom: -6, borderRadius: 18, backgroundColor: 'rgba(255, 226, 92, 0.55)' },
-  rowText: { flex: 1, fontFamily: 'Shark', fontSize: 18, color: BRAND.white },
-  rowAmount: { color: BRAND.gold, fontSize: 22 },
+  beam: { position: 'absolute' },
+  rowBeam: { position: 'absolute', left: -8, right: -8, top: -6, bottom: -6, borderRadius: 18, backgroundColor: 'rgba(255, 226, 92, 0.55)' },
+  rowLine: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2 },
+  rowText: { flex: 1, fontFamily: 'Shark', fontSize: 18, color: BRAND.white, marginTop: 2 },
+  rowAmount: { fontFamily: 'Shark', color: BRAND.gold, fontSize: 22 },
+  rollInput: { padding: 0, margin: 0, textAlign: 'left' },
+  hero: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   bigKicker: { fontFamily: 'Shark', fontSize: 13, color: BRAND.goldLip },
   bigName: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
   smallBtn: { alignSelf: 'flex-start', backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 5,

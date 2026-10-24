@@ -16,7 +16,8 @@ import { GoldBurst, RadialFlash, SparkleBurst } from '../../ui/GoldBurst';
 import { DURATION, PARTICLES, SLAM_SQUASH, SPRING, flashPeak, momentBeats, momentParticles } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import RewardBurst from '../RewardBurst';
-import FlameArt from './FlameArt';
+import CardSurface from './CardSurface';
+import FlameArt, { NextFlameGoal } from './FlameArt';
 
 const FINN_WAVE = require('../../assets/games/banana-basket/v2/shark_cheer.png');
 
@@ -129,6 +130,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
 
   return (
     <Pressable onPress={ready ? onDone : undefined} style={styles.card} accessibilityLabel={`${to} day flame`}>
+      <CardSurface />
       <View style={[styles.stage, big && styles.stageBig]}>
         <GoldBurst size={big ? 330 : 220} amount={gold} bloom={bloom} reduced={reducedMotion} style={styles.abs} />
         <RadialFlash flash={flash} size={260} />
@@ -170,7 +172,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
       ) : (
         <Animated.Text style={[styles.plusText, plusTextStyle]}>{to === 1 ? 'Your flame is lit!' : `${to} days in a row!`}</Animated.Text>
       )}
-      {line ? <View style={styles.next}><GameIcon name="streak" size={20} /><Text style={styles.nextText}>{line}</Text></View> : null}
+      {line ? <View style={styles.next}><NextFlameGoal days={to} size={26} /></View> : null}
       {/* Finn stands beside the button, never over the words. */}
       <View style={styles.bottom}>
         {big && (

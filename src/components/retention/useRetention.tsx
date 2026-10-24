@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Modal from 'react-native-modal';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import {
   buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
   type DailyThreeState, type LevelChest, type PaidRewards,
@@ -19,8 +19,12 @@ import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
 import {
-  FULL_SET, STREAK_MILESTONES, WELCOME_FX, dailyChain, daysAway, flameMomentFor, mayAskAfterChain, tomorrowPrize, welcomeCards, type FlameMoment, type WelcomeCard,
+  FULL_SET, LEVEL_CHEST as LEVEL_FX, PRIZE_FLIGHT, REPEAT_CHEST, STREAK_MILESTONES, WELCOME_FX, dailyChain, daysAway, flameMomentFor, flightDoneMs, flightPlan,
+  flightTarget, isRareChest, isRepeatChest, mayAskAfterChain, tomorrowPrize, welcomeCards, type FlameMoment, type WelcomeCard,
 } from '../../services/retention/loopMotion';
+import { DURATION, SPRING } from '../../ui/motion';
+import { EASE } from '../../ui/motionEasing';
+import PrizeFlight, { type FlightSpec } from './PrizeFlight';
 import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
 import { useModalLayer } from '../../ui/modalLayers';
@@ -32,7 +36,8 @@ import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
 import FlameUpRow from './FlameUpRow';
 import { EmberCard, FreezeSavedCard } from './FreezeMoments';
 import WelcomeBack from './WelcomeBack';
-import RewardReveal from './RewardReveal';
+import RewardReveal, { type PrizeOrigin } from './RewardReveal';
+import CardSurface from './CardSurface';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
@@ -52,8 +57,8 @@ const COACH_KEY = 'tps.retention.coach.v1';
 const FLAME_SEEN_KEY = 'tps.retention.flameSeen.v1';
 /** This phone has shown the "come back tomorrow" card (per player): after that it shows only before gear or a milestone. */
 const TOMORROW_SEEN_KEY = 'tps.retention.tomorrowSeen.v1';
-/** The modal steps aside while the chest's prizes fly into the HUD in plain sight, then the next card (if any). */
-const FLY_GAP_MS = 950;
+/** How many Daily 3 chests this phone has opened (per player): after three, the chest plays its shorter repeat version. */
+const CHEST_OPENS_KEY = 'tps.retention.chestOpens.v1';
 /** When this phone last opened the map for this player (for the welcome back). */
 const LAST_OPEN_KEY = 'tps.retention.lastOpen.v1';
 
@@ -62,9 +67,9 @@ type View_ =
   | { k: 'flame'; moment: Exclude<FlameMoment, { kind: 'none' }> }
   | { k: 'tomorrow' }
   | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean;
-      auto?: boolean; state?: DailyThreeState | null; moment?: FlameMoment }
-  /** Between cards: the modal is away so the prizes fly into the HUD where the kid can see them land. */
-  | { k: 'flying' }
+      auto?: boolean; state?: DailyThreeState | null; moment?: FlameMoment; repeat?: boolean; rare?: boolean }
+  /** Between cards: the card steps aside and the prizes fly from their rows into the HUD where the kid can see them land. */
+  | { k: 'flying'; legs: readonly FlightSpec[] }
   | { k: 'freeze' }
   | { k: 'freezeSaved'; days: number; streak: number }
   /** The streak ended: the flame settles into a warm ember, once. */
@@ -100,7 +105,7 @@ export interface RetentionOptions {
  */
 export default function useRetention(o: RetentionOptions): { button: ReactNode | null; overlay: ReactNode; occluding: boolean } {
   const { player, refreshPlayer } = useContext(AuthContext);
-  const { triggerFly } = useCurrencyFly();
+  const { triggerFly, getTarget } = useCurrencyFly();
   const reducedMotion = useReducedGameMotion();
   const { width, height } = useWindowDimensions();
   const [flags, setFlags] = useState<RetentionFlags | null>(null);
@@ -119,6 +124,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   /** The full set starts its claim when the third check lands, so the chest never waits on the server. */
   const claimAhead = useRef<Promise<{ rewards: PaidRewards; state: DailyThreeState }> | null>(null);
   const chainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** A level chest's claim starts when its card lands, so it opens on time (1.1 s) even on a slow server. */
+  const levelAhead = useRef<{ level: number; p: Promise<{ rewards: PaidRewards }> } | null>(null);
+  /** Daily 3 chests this phone has opened (the repeat version plays after three). */
+  const chestOpens = useRef(0);
   useEffect(() => () => { if (chainTimer.current) clearTimeout(chainTimer.current); }, []);
   const mounted = useRef(true);
   const viewRef = useRef<View_ | null>(null);
@@ -147,6 +156,15 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     if (player?.id) attempt();
     return () => { live = false; if (timer) clearTimeout(timer); };
   }, [o.enabled, o.mapFocused, o.refreshKey, flags, player?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!player?.id) return;
+    void AsyncStorage.getItem(`${CHEST_OPENS_KEY}:${player.id}`).then(v => { chestOpens.current = Number(v) || 0; }).catch(() => undefined);
+  }, [player?.id]);
+  const noteChestOpen = () => {
+    chestOpens.current += 1;
+    if (player?.id) void AsyncStorage.setItem(`${CHEST_OPENS_KEY}:${player.id}`, String(chestOpens.current)).catch(() => undefined);
+  };
 
   // Warm the art once the features are on, so the first reveal never pops in.
   useEffect(() => {
@@ -302,19 +320,29 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const tomorrowKey = `${TOMORROW_SEEN_KEY}:${player?.id ?? 0}`;
 
   /**
-   * After a chest: the modal steps aside and the prizes fly into the HUD in plain sight (one celebration at a time),
-   * then, for the Daily 3 chest, the big flame (3, 7, 30, 100 only) and the tomorrow card (first time, or before gear
-   * or a milestone). A normal day ends right here: one tap after the chest.
+   * After a chest: the card and its ribbon shrink away together and every prize flies from its own row into its
+   * HUD counter in plain sight (coins first, then tickets, then energy), bumping it on each landing. 300 ms after
+   * the last landing the next card starts (for the Daily 3 chest: the big flame at 3, 7, 30, 100 and the tomorrow
+   * card the first time, or before gear or a milestone). A normal day ends right here: one tap after the chest.
+   * The balance is read at once so the counters roll while the icons land; nothing ever waits on it.
    */
-  const finishReveal = (paid: PaidRewards | null, src: 'daily' | 'weekly' | 'level', state: DailyThreeState | null, moment: FlameMoment | undefined) => {
-    setView({ k: 'flying' });
-    if (paid) chainTimer.current = setTimeout(() => fly(paid), 160);
-    // The HUD counters roll up while the map is in sight: read the new balance now, and the next card waits for it
-    // (at most 1.4 s more), so the numbers never change behind a card.
-    const balance = Promise.resolve(refreshPlayer?.()).catch(() => undefined);
+  const finishReveal = (paid: PaidRewards | null, src: 'daily' | 'weekly' | 'level', state: DailyThreeState | null, moment: FlameMoment | undefined,
+    origins: readonly PrizeOrigin[] = []) => {
+    if (src === 'daily') noteChestOpen();
+    const fallback = { x: width / 2, y: height * 0.45 };
+    const rows = origins.length ? origins : paid ? paidRows(paid) : [];
+    const plan = flightPlan(rows, t => !!getTarget(t));
+    const legs: FlightSpec[] = [];
+    for (const leg of plan) {
+      const to = getTarget(leg.target);
+      if (!to) continue;
+      const row = origins.find(o => flightTarget(o.kind) === leg.target);
+      legs.push({ ...leg, from: row ?? fallback, to });
+    }
+    setView({ k: 'flying', legs });
+    void Promise.resolve(refreshPlayer?.()).catch(() => undefined);
     const next = async () => {
       chainTimer.current = null;
-      await Promise.race([balance, new Promise(r => setTimeout(r, 1400))]);
       if (src !== 'daily') void refresh(true);
       if (!mounted.current) return;
       let chain: ('flame' | 'tomorrow')[] = [];
@@ -332,7 +360,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       if (src === 'daily' && mayAskAfterChain(chain) && await mayAskForPush()) { setView({ k: 'push' }); return; }
       setView(null);
     };
-    chainTimer.current = setTimeout(() => { void next(); }, paid ? FLY_GAP_MS : 200);
+    chainTimer.current = setTimeout(() => { void next(); }, reducedMotion ? 420 : flightDoneMs(plan));
   };
 
   /** The rest of the daily chain, one card at a time. */
@@ -353,20 +381,22 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const afterTomorrow = () => { showChain(); };
 
   /** A claim whose answer was lost: read back what the server paid for that exact chest. */
-  const recoverPaid = async (src: 'daily' | 'weekly' | 'level', level_: number, claimDate: string | null | undefined, timeoutMs = 6000): Promise<PaidRewards | null> => {
+  const recoverPaid = async (src: 'daily' | 'weekly' | 'level', level_: number, claimDate: string | null | undefined, timeoutMs = 6000):
+    Promise<{ rewards: PaidRewards; state?: DailyThreeState } | null> => {
     try {
       if (src === 'level') {
         const c = await getLevelChests(timeoutMs);
         const chest = c.enabled ? c.chests.find(x => x.level === level_) : undefined;
         if (c.enabled) setChests(c.chests);
-        return chest?.opened && chest.rewards ? chest.rewards : null;
+        return chest?.opened && chest.rewards ? { rewards: chest.rewards } : null;
       }
       const d = await getDailyThree(timeoutMs);
       if (!d.enabled) return null;
       applyDaily(d);
-      if (src === 'weekly') return d.week.claimed ? d.week.claimed_rewards ?? null : null;
+      if (src === 'weekly') return d.week.claimed && d.week.claimed_rewards ? { rewards: d.week.claimed_rewards } : null;
       const last = d.claimed_rewards;
-      return last && claimDate && last.date === claimDate ? last : null;
+      // The read-back state drives the same flame row and next cards as a normal claim (never the fallback footer).
+      return last && claimDate && last.date === claimDate ? { rewards: last, state: d } : null;
     } catch {
       return null;
     }
@@ -382,9 +412,12 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       const seenP = current.src === 'daily' ? readSeen() : Promise.resolve(null);
       const ahead = current.src === 'daily' ? claimAhead.current : null;
       claimAhead.current = null;
+      const ahead_ = levelAhead.current;
+      const levelP = current.src === 'level' && ahead_ && ahead_.level === current.level ? ahead_.p : null;
+      if (current.src === 'level') levelAhead.current = null;
       const result: { rewards: PaidRewards; state?: DailyThreeState } = current.src === 'daily' ? await (ahead ?? claimDailyThree())
         : current.src === 'weekly' ? await claimWeeklyBox()
-        : await openLevelChest(current.level ?? 0);
+        : await (levelP ?? openLevelChest(current.level ?? 0));
       // The flame moment comes from the claim's own answer (no second read before the next card).
       let moment: FlameMoment | undefined;
       if (current.src === 'daily' && result.state) {
@@ -396,7 +429,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       // The Weekly Box shakes longest (900 ms): the week's biggest moment earns the longest wind-up.
       // The Daily 3 chest follows the chest beats (420 ms of shake, then the held frame); the Weekly Box winds up longest.
       // The full set holds the lid until its checks have dived in (chestAt), then the chest's own 420 ms gather.
-      const hold = current.src === 'weekly' ? 900 : current.src === 'daily' ? (current.auto ? FULL_SET.chestAt + 420 : 420) : 300;
+      const gather = current.repeat ? REPEAT_CHEST.gatherMs : 420;
+      const hold = current.src === 'weekly' ? 900 : current.src === 'daily' ? (current.auto ? FULL_SET.chestAt + gather : gather) : LEVEL_FX.holdMs;
       const wait = reducedMotion ? 0 : Math.max(0, hold - (Date.now() - started));
       setTimeout(() => {
         if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards, state: result.state ?? null, moment });
@@ -405,7 +439,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       if (current.src === 'level') setChests(cs => cs.map(c => (c.level === current.level ? { ...c, opened: true, rewards: result.rewards } : c)));
     } catch {
       // The claim may still be committing: read back up to 3 times, 1.5 s apart (the card says "Still opening...").
-      let paid: PaidRewards | null = null;
+      let paid: { rewards: PaidRewards; state?: DailyThreeState } | null = null;
       const giveUp = Date.now() + 12000; // never more than ~12 s of "Still opening..."
       for (let i = 0; i < 3 && !paid && mounted.current && Date.now() < giveUp; i++) {
         if (i > 0) await new Promise(r => setTimeout(r, 1500));
@@ -414,7 +448,16 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         paid = await recoverPaid(current.src, current.level ?? 0, current.claimDate, Math.min(6000, left));
       }
       if (!mounted.current) return;
-      if (paid) { setView({ ...current, opening: false, rewards: paid }); return; }
+      if (paid) {
+        let moment: FlameMoment | undefined;
+        if (current.src === 'daily' && paid.state) {
+          moment = flameMomentFor(await readSeen(), paid.state.streak.days, paid.state.streak.counted_today);
+          if (paid.state.streak.counted_today) writeSeen(paid.state.streak.days);
+          flameRef.current = moment.kind === 'milestone' ? moment : null;
+        }
+        setView({ ...current, opening: false, rewards: paid.rewards, state: paid.state ?? null, moment });
+        return;
+      }
       setView(null);
       void refresh(true);
       gameAlert('Could not open it yet', 'Your reward is safe. Check your internet and try again.');
@@ -466,8 +509,12 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     claimAhead.current.catch(() => undefined);
     // Straight into the chest card (one card, no sheet in between): the checks bounce, dive in, the lid pops.
     setCelebrate([]);
-    setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false, auto: true });
+    setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false, auto: true, ...dailyFlavor(daily.claimable_date) });
   };
+  /** The repeat version after three chests on this phone, and about one rare chest in ten (stable per claim date). */
+  const dailyFlavor = (claimDate: string | null | undefined) => ({
+    repeat: isRepeatChest(chestOpens.current), rare: isRareChest(claimDate, player?.id ?? 0),
+  });
 
   // Dev only: drive the loop moments from the lane tools (CDP) on the live scratch data.
   useEffect(() => {
@@ -505,8 +552,37 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     setView(null);
   };
 
-  const visible = !!view;
+  // The modal stays up through a card's exit and the prize flight (the map shows through), then closes.
+  const [present, setPresent] = useState(false);
+  const visible = !!view || present;
   const front = useModalLayer(visible, 'wait');
+  const showing = !!view && view.k !== 'flying' && front;
+  const dim = useSharedValue(0);
+  const cardT = useSharedValue(0);
+  const cardUp = useRef(false);
+  useEffect(() => {
+    if (view) setPresent(true);
+    if (showing) {
+      if (!cardUp.current) {
+        cardUp.current = true;
+        cardT.value = reducedMotion ? withTiming(1, { duration: DURATION.quick }) : withSpring(1, SPRING.settle);
+        dim.value = withTiming(0.55, { duration: DURATION.enter, easing: EASE.out });
+      }
+      return;
+    }
+    if (cardUp.current) {
+      // Exits are faster than entrances: the card and its ribbon leave together, the map comes back into view.
+      cardUp.current = false;
+      cardT.value = withTiming(0, { duration: reducedMotion ? DURATION.quick : PRIZE_FLIGHT.exitMs, easing: EASE.in });
+      dim.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
+    }
+    if (!view) {
+      const t = setTimeout(() => { if (!viewRef.current) setPresent(false); }, DURATION.exit + 40);
+      return () => clearTimeout(t);
+    }
+  }, [showing, !!view]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
+  const cardStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, cardT.value * 1.6), transform: [{ scale: 0.86 + 0.14 * cardT.value }] }));
 
   let button: ReactNode | null = null;
   if (flags?.dailyThree && daily) {
@@ -550,11 +626,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         celebrateAll={!!view.all} freezeArrive={view.freezeArrive ?? 0} onAutoClaim={() => {
           if (!daily.claimable) return;
           setCelebrate([]);
-          setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false, auto: true });
+          setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false, auto: true, ...dailyFlavor(daily.claimable_date) });
         }}
         reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone}
         onReminders={on => { void toggleReminders(on); }}
-        onClaim={() => setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false })}
+        onClaim={() => setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false, ...dailyFlavor(daily.claimable_date) })}
         onClaimWeekly={() => setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false })}
         onBuyFreeze={() => setView({ k: 'freeze' })} />
     );
@@ -585,12 +661,20 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
           : r.src === 'weekly' ? 'A whole week of flames. Tap the box!' : r.auto ? 'All three goals done!' : 'All three goals done. Tap your chest!'}
         closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? WEEKLY : ICON_SOURCES.chest}
         openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? WEEKLY_OPEN : ICON_SOURCES.chestOpen}
-        autoOpen={!!r.auto} fullSet={!!r.auto}
+        autoOpen={!!r.auto} fullSet={!!r.auto} repeat={!!r.repeat} rare={!!r.rare}
+        onArrive={r.src === 'level' ? () => {
+          // The level chest's claim starts as it lands, so its lid pops on the beat even on a slow server.
+          if (r.level && !levelAhead.current) {
+            const p = openLevelChest(r.level);
+            p.catch(() => { if (levelAhead.current?.p === p) levelAhead.current = null; });
+            levelAhead.current = { level: r.level, p };
+          }
+        } : undefined}
         expectRows={r.src === 'daily' && daily ? dailyRowCount(daily) : levelPreview ? levelRowCount(levelPreview) : undefined}
         preview={r.src === 'daily' && daily ? <DailyPreview state={daily} /> : levelPreview ? <LevelPreview p={levelPreview} /> : undefined}
         onWear={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('Inventory'); }}
         onPins={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('PinCollections'); }}
-        onOpen={() => { void openReveal(); }} onDone={() => finishReveal(r.rewards, r.src, r.state ?? null, r.moment)} />
+        onOpen={() => { void openReveal(); }} onDone={origins => finishReveal(r.rewards, r.src, r.state ?? null, r.moment, origins)} />
     );
   } else if (view?.k === 'flame') {
     title = view.moment.kind === 'milestone' ? 'Big flame!' : 'Flame up!';
@@ -602,6 +686,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     title = 'Streak Freeze';
     content = (
       <View style={styles.card}>
+        <CardSurface />
         <Image source={FREEZE} style={styles.bigArt} contentFit="contain" />
         <Text style={styles.lead}>Miss a day? A freeze keeps your flame safe.</Text>
         <Text style={styles.small}>{`You have ${daily.streak.freezes} of ${daily.streak.freeze_cap}. It works by itself.`}</Text>
@@ -630,6 +715,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     title = 'Reminders';
     content = (
       <View style={styles.card}>
+        <CardSurface />
         <GameIcon name="bell" size={86} />
         <Text style={styles.lead}>Want a friendly reminder each day?</Text>
         <Text style={styles.small}>One a day, never at night. Turn it off anytime.</Text>
@@ -646,15 +732,28 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
 
   // Moments that must finish (a chest mid-open, the flame) ignore backdrop taps; their button moves on.
   const revealing = view?.k === 'reveal' || view?.k === 'flame' || view?.k === 'flying' || (view?.k === 'sheet' && !!view.all);
+  // The last card stays mounted (same title, same content) while it shrinks away, so the ribbon never shows
+  // another word and the card never vanishes in one frame.
+  const lastCard = useRef<{ title: string; content: ReactNode } | null>(null);
+  if (content && view && view.k !== 'flying') lastCard.current = { title, content };
+  const shownTitle = showing || !lastCard.current ? title : lastCard.current.title;
+  const shownContent = showing ? content : lastCard.current?.content ?? null;
+  if (!view && !present) lastCard.current = null;
   const overlay = (
-    <Modal isVisible={visible && front && !!content} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
-      animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'} animationInTiming={reducedMotion ? 120 : 240}
-      animationOutTiming={reducedMotion ? 120 : 180} backdropColor={BRAND.navy} backdropOpacity={0.55}
-      onBackdropPress={revealing ? undefined : close} onBackButtonPress={revealing ? undefined : close}
-      useNativeDriver useNativeDriverForBackdrop hideModalContentWhileAnimating={false}>
-      <View style={styles.wrap}>
-        <StampRibbon text={title} reducedMotion={reducedMotion} />
-        {content}
+    <Modal isVisible={visible && front} style={styles.modal} hasBackdrop={false} coverScreen
+      animationIn="fadeIn" animationOut="fadeOut" animationInTiming={60} animationOutTiming={60}
+      onBackButtonPress={revealing ? undefined : close} useNativeDriver hideModalContentWhileAnimating={false}>
+      <View style={StyleSheet.absoluteFill}>
+        <Animated.View style={[StyleSheet.absoluteFill, styles.dim, dimStyle]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={revealing || !showing ? undefined : close} accessible={false} />
+        </Animated.View>
+        <View style={[StyleSheet.absoluteFill, styles.center, { paddingHorizontal: width * 0.05 }]} pointerEvents="box-none">
+          <Animated.View style={[styles.wrap, cardStyle]} pointerEvents={showing ? 'box-none' : 'none'}>
+            <StampRibbon text={shownTitle} reducedMotion={reducedMotion} />
+            {shownContent}
+          </Animated.View>
+        </View>
+        {view?.k === 'flying' && view.legs.length > 0 && <PrizeFlight legs={view.legs} origin={{ x: 0, y: 0 }} reducedMotion={reducedMotion} />}
       </View>
     </Modal>
   );
@@ -731,8 +830,17 @@ function XpBar({ pct, reducedMotion }: { readonly pct: number; readonly reducedM
   );
 }
 
+/** Prize rows from what the server paid (for a flight with no measured rows). */
+function paidRows(p: PaidRewards): { kind: string; amount: number }[] {
+  return [['coins', p.coins], ['bonus_coins', p.bonus_coins], ['tickets', p.tickets], ['energy', p.energy]]
+    .map(([kind, n]) => ({ kind: kind as string, amount: Number(n) || 0 })).filter(r => r.amount > 0);
+}
+
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center' },
+  modal: { margin: 0 },
+  dim: { backgroundColor: BRAND.navy },
+  center: { alignItems: 'center', justifyContent: 'center' },
+  wrap: { alignItems: 'center', alignSelf: 'stretch' },
   nextBlock: { gap: 6 },
   pips: { flexDirection: 'row', gap: 3 },
   pip: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: BRAND.gold },

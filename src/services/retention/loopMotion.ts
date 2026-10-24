@@ -77,13 +77,17 @@ export interface FlameLook {
  */
 export function flameLook(days: number): FlameLook {
   const d = Math.max(0, Math.floor(Number(days) || 0));
-  if (d <= 0) return { tier: 'ember', scale: 0.72, sparks: 0, core: false, crown: false, halo: 0.18 };
-  if (d < 3) return { tier: 'small', scale: 0.84, sparks: 0, core: false, crown: false, halo: 0.3 };
-  if (d < 7) return { tier: 'medium', scale: 0.96, sparks: 1, core: false, crown: false, halo: 0.42 };
-  if (d < 30) return { tier: 'big', scale: 1.08, sparks: 3, core: false, crown: false, halo: 0.55 };
-  if (d < 100) return { tier: 'core', scale: 1.16, sparks: 4, core: true, crown: false, halo: 0.68 };
-  return { tier: 'crown', scale: 1.22, sparks: 5, core: true, crown: true, halo: 0.8 };
+  // A clear size ladder a kid can read across the room: 0.55, 0.7, 0.85, 1.0, 1.1, 1.2.
+  if (d <= 0) return { tier: 'ember', scale: 0.55, sparks: 1, core: false, crown: false, halo: 0.22 };
+  if (d < 3) return { tier: 'small', scale: 0.7, sparks: 1, core: false, crown: false, halo: 0.3 };
+  if (d < 7) return { tier: 'medium', scale: 0.85, sparks: 2, core: false, crown: false, halo: 0.42 };
+  if (d < 30) return { tier: 'big', scale: 1.0, sparks: 3, core: false, crown: false, halo: 0.55 };
+  if (d < 100) return { tier: 'core', scale: 1.1, sparks: 4, core: true, crown: false, halo: 0.7 };
+  return { tier: 'crown', scale: 1.2, sparks: 5, core: true, crown: true, halo: 0.82 };
 }
+
+/** The streak day each tier starts on (0 is the ember). */
+export const FLAME_TIER_DAY: Readonly<Record<FlameTier, number>> = { ember: 0, small: 1, medium: 3, big: 7, core: 30, crown: 100 };
 
 /** The next flame size up and how many days away it is, or null past 100. */
 export function nextFlameSize(days: number): { readonly day: number; readonly away: number; readonly name: string } | null {
@@ -226,19 +230,34 @@ export function nextUpTease(pct: number): 'far' | 'close' | 'veryClose' {
 /** Welcome back after time away (ms): splash at 0, Finn at 200, cards from 500, 90 ms apart. */
 export const WELCOME_FX = {
   minDaysAway: 3,
-  finnAt: 200,
+  /** Finn is on the first frame (art warmed with the loop art); he swims the last stretch in. */
+  finnAt: 0,
+  /** The flame ticks up one size step as a little welcome gift. */
+  giftAt: 360,
   cardsAt: 500,
   cardStep: 90,
   cue: 'fx.reward',
 } as const;
 
 export type WelcomeCard =
-  | { readonly kind: 'goals'; readonly text: string }
+  | { readonly kind: 'goals'; readonly text: string; readonly open: number; readonly done: number }
   | { readonly kind: 'chest'; readonly text: string }
-  | { readonly kind: 'levelChest'; readonly text: string }
-  | { readonly kind: 'saved'; readonly text: string }
+  | { readonly kind: 'levelChest'; readonly text: string; readonly level: number }
+  | { readonly kind: 'saved'; readonly text: string; readonly n: number }
   | { readonly kind: 'flame'; readonly n: number; readonly text: string }
   | { readonly kind: 'ember'; readonly text: string };
+
+/** The big word under each welcome picture (a number or one short word, zero reading needed). */
+export function welcomeTileLabel(c: WelcomeCard): string {
+  switch (c.kind) {
+    case 'goals': return `${c.done} of 3`;
+    case 'flame': return String(c.n);
+    case 'saved': return String(c.n);
+    case 'ember': return 'New!';
+    case 'levelChest': return `Lv ${c.level}`;
+    case 'chest': return 'Open!';
+  }
+}
 
 /** Whole local days between two moments (calendar days on this phone), never negative. */
 export function daysAway(lastOpenMs: number | null, nowMs: number): number {
@@ -258,12 +277,12 @@ export function welcomeCards(s: Pick<DailyThreeState, 'goals' | 'streak'> | null
   const out: WelcomeCard[] = [];
   if (!s) return out;
   const open = s.goals.filter(g => !g.done).length;
-  if (open > 0) out.push({ kind: 'goals', text: open === 3 ? '3 new goals for today!' : `${open} goals left today!` });
+  if (open > 0) out.push({ kind: 'goals', open, done: s.goals.length - open, text: open === 3 ? '3 new goals for today!' : `${open} goals left today!` });
   const days = Math.max(0, Number(s.streak?.days) || 0);
-  if ((s.streak?.freeze_saved ?? 0) > 0 && days > 0) out.push({ kind: 'saved', text: `A freeze kept your ${days}-day flame!` });
+  if ((s.streak?.freeze_saved ?? 0) > 0 && days > 0) out.push({ kind: 'saved', n: days, text: `A freeze kept your ${days}-day flame!` });
   else if (days > 0) out.push({ kind: 'flame', n: days, text: `Your flame is at ${days}. Keep it growing!` });
   else out.push({ kind: 'ember', text: 'Light a new flame today!' });
-  if (extra.levelChest) out.push({ kind: 'levelChest', text: `Your Level ${extra.levelChest} chest is waiting!` });
+  if (extra.levelChest) out.push({ kind: 'levelChest', level: extra.levelChest, text: `Your Level ${extra.levelChest} chest is waiting!` });
   else if (s.goals.some(g => g.kind === 'chest' && !g.done)) out.push({ kind: 'chest', text: 'Your daily chest is waiting!' });
   return out.slice(0, 3);
 }
@@ -291,23 +310,117 @@ export function countStart(target: number): number {
 }
 
 /**
- * The level chest's anticipation (ms after it lands): three rattles that grow
- * (8, 13, 18 deg), light leaking from the lid seam, then a tap hand. It opens
- * by itself 2 s after landing if the kid does not tap.
+ * The level chest's anticipation (ms after the card opens): it drops in and
+ * lands, three rattles that grow (8, 13, 18 deg) all inside 900 ms, light
+ * leaking from the lid seam, a tap hand at 900 ms, and it opens by itself at
+ * 1100 ms (its claim starts when the card opens), so the burst lands inside
+ * 1.5 s even when nobody taps.
  */
 export const LEVEL_CHEST = {
   /** Lands on SPRING.land, then the rattles start. */
-  landMs: 420,
-  rattles: [{ at: 0, deg: 8 }, { at: 380, deg: 13 }, { at: 760, deg: 18 }] as const,
+  landMs: 260,
+  rattles: [{ at: 0, deg: 8 }, { at: 220, deg: 13 }, { at: 440, deg: 18 }] as const,
   /** One rattle (a quick left-right-left). */
-  rattleMs: 240,
-  /** The hand appears after the last rattle. */
-  handAt: 1000,
-  /** Opens by itself this long after landing. */
-  autoOpenAt: 2000,
+  rattleMs: 200,
+  /** The tap ring appears (ms after the card opens). */
+  handAt: 900,
+  /** Opens by itself (ms after the card opens). */
+  autoOpenAt: 1100,
+  /** The lid's last held beat after the claim answers (ms). */
+  holdMs: 200,
   /** Prize rows 180 ms apart. */
   rowBeat: 180,
 } as const;
+
+/**
+ * After AWESOME: the card steps aside and every prize flies home in plain
+ * sight. Each icon lifts off its own row and arcs to its HUD counter (coins
+ * first, tickets 80 ms later, energy 160 ms later), 6 to 8 icons a kind, and
+ * each landing bumps the counter with a tick. The next card waits only 300 ms
+ * after the last landing (never the server).
+ */
+export const PRIZE_FLIGHT = {
+  /** The card and ribbon shrink away together (EASE.in, exits faster than entrances). */
+  exitMs: 180,
+  /** Icons lift off their rows as the card starts to leave. */
+  liftAt: 30,
+  /** One icon's arc (EASE.inOut). */
+  flyMs: 520,
+  /** Between icons of one kind. */
+  stepMs: 45,
+  /** Coins first, then tickets, then energy. */
+  kindGapMs: 80,
+  /** The next card starts this long after the last icon lands. */
+  nextAfterMs: 300,
+  maxIcons: 8,
+} as const;
+
+export type FlightTarget = 'coins' | 'tickets' | 'energy';
+
+/** Where a prize row lives on the HUD (XP, gear, boxes and freezes have their own homes). */
+export function flightTarget(kind: string): FlightTarget | null {
+  if (kind === 'coins' || kind === 'bonus_coins') return 'coins';
+  if (kind === 'tickets') return 'tickets';
+  if (kind === 'energy') return 'energy';
+  return null;
+}
+
+/** How many icons fly for a prize: coins 8, energy 6, tickets one each (2 to 4). */
+export function flightIcons(target: FlightTarget, amount: number): number {
+  const n = Math.max(0, Math.floor(Number(amount) || 0));
+  if (n <= 0) return 0;
+  if (target === 'coins') return Math.min(PRIZE_FLIGHT.maxIcons, Math.max(4, n));
+  if (target === 'energy') return Math.min(6, Math.max(3, n));
+  return Math.min(4, Math.max(2, n));
+}
+
+export interface FlightLeg { readonly target: FlightTarget; readonly icons: number; readonly amount: number; readonly delay: number; readonly lastLand: number }
+
+/** The flight plan for what the chest paid (merged per counter, in counter order), and when each lands. */
+export function flightPlan(rows: readonly { readonly kind: string; readonly amount: number }[], has: (t: FlightTarget) => boolean): FlightLeg[] {
+  const sums = new Map<FlightTarget, number>();
+  for (const r of rows) {
+    const t = flightTarget(r.kind);
+    if (t && has(t)) sums.set(t, (sums.get(t) ?? 0) + Math.max(0, Number(r.amount) || 0));
+  }
+  const order: FlightTarget[] = ['coins', 'tickets', 'energy'];
+  const out: FlightLeg[] = [];
+  for (const t of order) {
+    const amount = sums.get(t) ?? 0;
+    const icons = flightIcons(t, amount);
+    if (!icons) continue;
+    const delay = PRIZE_FLIGHT.liftAt + out.length * PRIZE_FLIGHT.kindGapMs;
+    out.push({ target: t, icons, amount, delay, lastLand: delay + (icons - 1) * PRIZE_FLIGHT.stepMs + PRIZE_FLIGHT.flyMs });
+  }
+  return out;
+}
+
+/** When the next card may start (ms after AWESOME): 300 ms after the last landing, or right after the exit. */
+export function flightDoneMs(plan: readonly FlightLeg[]): number {
+  const last = plan.reduce((m, l) => Math.max(m, l.lastLand), 0);
+  return last > 0 ? last + PRIZE_FLIGHT.nextAfterMs : PRIZE_FLIGHT.exitMs + 120;
+}
+
+/**
+ * The Daily 3 chest on repeat days: after the first three opens on this phone
+ * the chest gathers for a shorter beat and rows land faster (still the same
+ * four beats). About one chest in ten is a rare one: a gold beam and an extra
+ * coin spill, picked from the claim date so it never changes on a reload.
+ */
+export const REPEAT_CHEST = { afterOpens: 3, gatherMs: 240, rowBeat: 110, first: 180, rareOneIn: 10 } as const;
+
+export function isRepeatChest(opensOnThisPhone: number): boolean {
+  return (Number(opensOnThisPhone) || 0) >= REPEAT_CHEST.afterOpens;
+}
+
+/** A small stable hash of the claim date and player: about 1 in 10 chests is rare. */
+export function isRareChest(claimDate: string | null | undefined, playerId: number | string | null | undefined): boolean {
+  if (!claimDate) return false;
+  const key = `${claimDate}:${playerId ?? 0}`;
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % REPEAT_CHEST.rareOneIn) === 0;
+}
 
 /**
  * After the Daily 3 chest: what plays next. The +1 lives inside the chest card

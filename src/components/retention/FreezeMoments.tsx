@@ -15,6 +15,7 @@ import { BRAND } from '../../ui';
 import { SPRING, momentParticles } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import FlameArt from './FlameArt';
+import CardSurface from './CardSurface';
 
 const FREEZE = require('../../../assets/images/retention/freeze.png');
 const FINN = require('../../assets/games/banana-basket/v2/shark_cheer.png');
@@ -184,6 +185,7 @@ export function FreezeSavedCard({ streak, days, reducedMotion, onDone }: {
   const btnStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   return (
     <View style={styles.card}>
+      <CardSurface />
       <View style={styles.stage}>
         <Animated.View style={[styles.glow, glowStyle]}>
           <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#FFD54A" transition={0} />
@@ -251,6 +253,7 @@ export function EmberCard({ was, reducedMotion, onDone }: {
   const btnStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   return (
     <View style={styles.card}>
+      <CardSurface />
       <View style={styles.stage}>
         <Animated.View style={flameStyle}><FlameArt days={0} size={120} reducedMotion={reducedMotion} /></Animated.View>
       </View>

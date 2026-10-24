@@ -12,6 +12,7 @@ import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 import { GOLD_FX, SPRING } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import FlameArt from './FlameArt';
+import CardSurface from './CardSurface';
 
 const FINN_WAVE = require('../../assets/games/banana-basket/v2/shark_cheer.png');
 const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
@@ -64,6 +65,7 @@ export default function TomorrowCard({ prize, reducedMotion, onDone }: {
 
   return (
     <Animated.View style={[styles.card, cardStyle]}>
+      <CardSurface />
       {/* The night window: friendly blue, a gold moon rising, the prize waiting under it. */}
       <View style={styles.night} accessibilityLabel="Tomorrow">
         <Animated.View style={[styles.moonGlow, moonGlow]}>
