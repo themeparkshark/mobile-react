@@ -133,3 +133,9 @@ test('standings: your own row glows gold once, half a second in', () => {
   assert.match(src, /MY_ROW_GLOW = \{ atMs: 500/);
   assert.match(src, /row\.isMe && enter != null && <MyRowGlow/, 'first paint only (recycled rows never glow again)');
 });
+
+test('offline banner: a flaky offline-online-offline-online run never leaves Back online stuck on screen', () => {
+  const src = read('src/components/OfflineBanner.tsx');
+  assert.match(src, /else if \(phaseRef\.current !== 'hidden'\)/, 'every online call that finds the banner up schedules its hide');
+  assert.match(src, /if \(hideTimer\.current\) clearTimeout\(hideTimer\.current\);\n\s+hideTimer\.current = setTimeout\(\(\) => setPhase\('hidden'\)/);
+});

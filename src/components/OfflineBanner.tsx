@@ -121,9 +121,15 @@ export default function OfflineBanner() {
       if (offline) {
         if (hideTimer.current) clearTimeout(hideTimer.current);
         showTimer.current = setTimeout(() => setPhase('offline'), OFFLINE_SHOW_DELAY_MS);
-      } else if (phaseRef.current === 'offline') {
-        setPhase('back');
-        Haptics.notificationAsync('success');
+      } else if (phaseRef.current !== 'hidden') {
+        // Online again. A blip while "Back online" was showing cleared its hide timer above (via the
+        // offline call), so every online call that finds the banner up schedules the hide again:
+        // the banner can never get stuck on screen after a flaky offline-online-offline-online run.
+        if (phaseRef.current === 'offline') {
+          setPhase('back');
+          Haptics.notificationAsync('success');
+        }
+        if (hideTimer.current) clearTimeout(hideTimer.current);
         hideTimer.current = setTimeout(() => setPhase('hidden'), BACK_ONLINE_HOLD_MS);
       }
     };
