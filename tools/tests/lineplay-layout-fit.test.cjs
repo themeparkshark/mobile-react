@@ -686,3 +686,8 @@ test('a one-time tip waits while the page window has stepped aside, so it never 
   assert.match(screen, /<OneTimeTip id="lineplay_intro" ready=\{lineTipReady && pagesShown && waitCardBottom != null\}/);
   assert.match(screen, /<OneTimeTip id="first_ride_part" ready=\{lineTipReady && partTipPending && pagesShown && waitCardBottom != null\}/);
 });
+
+test('the resume countdown always opens on 3, never on the last run\'s 1', () => {
+  const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
+  assert.match(countdown, /useEffect\(\(\) => \{\n\s+if \(!active\) setCount\(3\);\n\s+\}, \[active\]\);/);
+});

@@ -30,6 +30,11 @@ export default function ResumeCountdown({ active, onDone }: { active: boolean; o
     onDone();
   };
 
+  // Back to 3 as soon as it hides, so the next countdown never opens on the last run's 1.
+  useEffect(() => {
+    if (!active) setCount(3);
+  }, [active]);
+
   useEffect(() => {
     if (!active) return;
     finished.current = false;
