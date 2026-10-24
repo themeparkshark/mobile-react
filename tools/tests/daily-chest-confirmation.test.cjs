@@ -48,7 +48,7 @@ function chest({ reconciled = null, reduced = false } = {}) {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name === 'react-native') return native;
       if (name === 'react-native-reanimated') return {
-        default: { View: 'AnimatedView' }, useSharedValue: value => react.useRef({ value }).current,
+        default: { View: 'AnimatedView', Text: 'Text' }, useSharedValue: value => react.useRef({ value }).current,
         useAnimatedStyle: fn => fn(),
         cancelAnimation() {}, withTiming: value => value, Easing: { inOut: value => value, sin: 1, out: value => value, in: value => value, quad: 1 }, withDelay: (ms, value) => value,
         withSequence: (...values) => values.at(-1), withRepeat: value => value,
@@ -209,7 +209,7 @@ test('the count-up never shows +0 and the prize reserves its own height', () => 
   assert.equal(countStart(0), 0);
   assert.ok(prizeBlockHeight(1, true, false) > prizeBlockHeight(0, false, false));
   const source = fs.readFileSync(path.join(root, file), 'utf8');
-  assert.match(source, /<CountUpText value=\{Math\.max\(shown, countStart\(amount\)\)\} prefix="\+"/, 'the first open frame already shows at least 1');
+  assert.match(source, /<CountUpText value=\{phase === 'open' \? amount : countStart\(amount\)\} prefix="\+"/, 'the first open frame already shows at least 1');
   assert.match(source, /prizeSlot, \{ height: prizeBlockHeight\(/);
 });
 test('the day 7 punch is motion and GameIcon art only, and its timer is cleared on unmount', () => {

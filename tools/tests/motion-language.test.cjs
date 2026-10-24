@@ -513,19 +513,22 @@ test('wave 3 rerun round 2: the box reveal footer fades in, so Done never shows 
 test('wave 3 rerun round 2: the daily chest card keeps one height from the tap to the prize', () => {
   const chest = read('src/components/DailyGiftModal.tsx');
   assert.ok(!/bodyBandStyle/.test(chest), 'the body copy is never hidden, so it never draws late');
-  assert.ok(/<View style=\{styles\.footerSlot\}>\s*<Pressable onPress=\{dismiss\} disabled=\{phase !== 'open'\}/.test(chest), 'Awesome! is laid out from the start');
-  assert.ok(/style=\{\[styles\.button, phase !== 'open' && styles\.waiting\]\}/.test(chest), 'it stays hidden until the chest opens');
+  assert.ok(/<View style=\{styles\.footerSlot\}>\s*<Animated\.View[^>]*>\s*<Pressable onPress=\{dismiss\} disabled=\{phase !== 'open'\}/.test(chest), 'Awesome! is laid out from the start');
+  assert.ok(/<Animated\.View style=\{phase === 'open' \? revealInStyle : styles\.waiting\}>\s*<Pressable onPress=\{dismiss\}/.test(chest), 'it stays hidden until the lid pops');
   assert.ok(/styles\.laterButton, styles\.laterInSlot/.test(chest), 'Back to map sits in the same spot while the chest is shut');
   assert.ok(!/\{phase === 'open' && \(\s*<Pressable onPress=\{dismiss\}/.test(chest), 'no button mounts at the payoff');
 });
 
-test('wave 3 rerun round 2: "Opening your chest" fades on the UI thread as the lid pops', () => {
+test('wave 3 rerun round 2: the open card commits hidden a frame before the lid pops, so no React update lands mid-pop', () => {
   const chest = read('src/components/DailyGiftModal.tsx');
-  assert.ok(/<Animated\.Text style=\{\[styles\.hint, hintStyle\]\}>/.test(chest), 'the hint is driven by a shared value');
-  const celebrate = chest.slice(chest.indexOf('const celebrate = '), chest.indexOf('const open = async'));
-  assert.ok(/hintOut\.value = withTiming\(1, \{ duration: 90 \}\);/.test(celebrate), 'it fades with the pop');
-  assert.ok(/cancelAnimation\(hintOut\); hintOut\.value = 0;\s*setPhase\('opening'\);/.test(chest), 'every claim starts with the words showing');
-  assert.ok(!/useLayoutEffect/.test(chest), 'the pop still starts at once on the UI thread');
+  assert.ok(/pendingCelebrate\.current = isTicket;\s*setPhase\('open'\);/.test(chest), 'the server answer only commits the (hidden) open card');
+  assert.ok(/celebrateRef\.current\(isTicket\); \}, reducedMotionRef\.current \? 0 : POP_AFTER_COMMIT_MS\);/.test(chest), 'the pop starts a frame after that commit');
+  const celebrate = chest.slice(chest.indexOf('const celebrate = '), chest.indexOf('const pendingCelebrate'));
+  assert.ok(/hintOut\.value = withTiming\(1, \{ duration: 90 \}\);\s*reveal\.value = withTiming\(1,/.test(celebrate), '"Opening your chest" fades and the open words fade in with the pop, on the UI thread');
+  assert.ok(/hintOut\.value = 1; reveal\.value = 1;/.test(celebrate), 'reduced motion shows them at once');
+  assert.ok(/<CountUpText value=\{phase === 'open' \? amount : countStart\(amount\)\} prefix="\+"\s*delayMs=\{phase === 'open' && !reducedMotion \? COUNT_DELAY_MS : 0\}/.test(chest), 'the count waits on its own delay (no React update to start it)');
+  assert.ok(!/setShown\(/.test(chest), 'no count state updates during the pop');
+  assert.ok(/\{phase !== 'closed' && \(\s*<Animated\.View style=\{\[styles\.prize, prizeStyle\]\}/.test(chest), 'the prize words are laid out from the tap, hidden');
 });
 
 test('wave 3 rerun round 2: the chest light and prize views mount at the tap, so the reveal commit never resets the popping chest', () => {

@@ -105,7 +105,6 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const [visible, setVisible] = useState(false);
   const [phase, setPhase] = useState<'closed' | 'opening' | 'open'>('closed');
   const [confirmedGift, setConfirmedGift] = useState<DailyGiftType | null>(null);
-  const [shown, setShown] = useState(0);
   const { setDailyGift } = useContext(DailyGiftContext);
   const reducedMotion = useReducedGameMotion();
   const reducedMotionRef = useRef(reducedMotion);
@@ -114,14 +113,12 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const acknowledgedGift = useRef<DailyGiftType | null>(null);
   const mounted = useRef(true);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const countTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const punchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (revealTimer.current) clearTimeout(revealTimer.current);
-      if (countTimer.current) clearTimeout(countTimer.current);
       if (punchTimer.current) clearTimeout(punchTimer.current);
     };
   }, []);
@@ -145,8 +142,10 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const prize = useSharedValue(0);
   const stamp = useSharedValue(0);
   const burst = useSharedValue(0);
-  // 1 once the lid pops: the "Opening your chest" words fade on the UI thread before React swaps in the prize.
+  // 1 once the lid pops: the "Opening your chest" words fade, and the open card's words and Awesome! fade in, all on
+  // the UI thread (the open card is committed a frame before the pop, hidden, so no React update lands mid-pop).
   const hintOut = useSharedValue(0);
+  const reveal = useSharedValue(0);
   const punch = useSharedValue(0);
   const cardShake = useSharedValue(0);
   const spark = useSharedValue(0);
@@ -201,14 +200,14 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   };
   // Stable, so a re-render mid-count never restarts or snaps the count (CountUpText re-runs on a new onDone).
   const countedUp = useRef(() => countedUpNow.current()).current;
+  // The count's target is set in the same React update that opens the card (before the lid pops), and the count
+  // itself waits on its own delay, so no React update has to land while the lid is up.
   useEffect(() => {
-    if (phase !== 'open') { setShown(0); return; }
-    setShown(countStart(amount));
-    if (reducedMotion || amount <= 1) { setShown(amount); flyToWallet(); return; }
-    countTimer.current = setTimeout(() => { if (mounted.current) setShown(amount); }, 260);
+    if (phase !== 'open') return undefined;
+    if (reducedMotion || amount <= 1) { flyToWallet(); return undefined; }
     // The wallet never waits on the UI thread's callback alone: if it is dropped, this lands the coins anyway.
-    const backstop = setTimeout(() => countedUp(), 260 + DURATION.count + 250);
-    return () => { if (countTimer.current) clearTimeout(countTimer.current); clearTimeout(backstop); };
+    const backstop = setTimeout(() => countedUp(), COUNT_DELAY_MS + DURATION.count + 250);
+    return () => clearTimeout(backstop);
   }, [phase, amount, reducedMotion]);
 
   // The wallet only changes when the coins land in it: the player refresh waits for the
@@ -266,6 +265,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const celebrate = (isTicket: boolean) => {
     if (reducedMotionRef.current) {
       shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1; gold.value = 0.8; hop.value = 0; seam.value = 0; lid.value = 0;
+      hintOut.value = 1; reveal.value = 1;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       playSfx('win');
       return;
@@ -292,6 +292,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     burst.value = 0;
     burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) });
     hintOut.value = withTiming(1, { duration: 90 });
+    reveal.value = withTiming(1, { duration: 140, easing: EASE.out });
     prize.value = withDelay(120, withSpring(1, { damping: 9, stiffness: 150 }));
     stamp.value = withDelay(650, withSpring(1, { damping: 8, stiffness: 220 }));
     if (isTicket) {
@@ -322,11 +323,22 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     playSfx('win'); playSfx('coin', 0.9);
   };
 
+  const pendingCelebrate = useRef<boolean | null>(null);
+  const celebrateRef = useRef(celebrate);
+  celebrateRef.current = celebrate;
+  useEffect(() => {
+    if (phase !== 'open' || pendingCelebrate.current === null) return undefined;
+    const isTicket = pendingCelebrate.current;
+    pendingCelebrate.current = null;
+    const t = setTimeout(() => { if (mounted.current) celebrateRef.current(isTicket); }, reducedMotionRef.current ? 0 : POP_AFTER_COMMIT_MS);
+    return () => clearTimeout(t);
+  }, [phase]);
+
   const open = async () => {
     if (claiming.current || phase !== 'closed') return;
     claiming.current = true;
     walletBefore.current = player?.coins ?? null;
-    cancelAnimation(hintOut); hintOut.value = 0;
+    cancelAnimation(hintOut); hintOut.value = 0; cancelAnimation(reveal); reveal.value = 0;
     setPhase('opening');
     const startedAt = Date.now();
     if (!reducedMotion) {
@@ -358,8 +370,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       const isTicket = mainKind(chestAmounts(confirmed, confirmedToday)) === 'tickets';
       revealTimer.current = setTimeout(() => {
         if (!mounted.current) return;
+        // The open card commits first (hidden, the chest still rattling), then the lid pops a frame later.
+        pendingCelebrate.current = isTicket;
         setPhase('open');
-        celebrate(isTicket);
       }, reducedMotion ? 0 : Math.max(0, 440 - (Date.now() - startedAt)));
     } catch {
       // A previous successful claim can outlive this screen. Reconcile before retrying.
@@ -410,7 +423,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     opacity: resyncOpacity(prize.value, resync.value), transform: [{ translateX: resyncShift(resync.value) }, { translateY: (1 - prize.value) * -36 }, { scale: 0.5 + prize.value * 0.5 }],
   }));
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }] }));
-  const hintStyle = useAnimatedStyle(() => ({ opacity: 1 - hintOut.value }));
+  const hintStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(1 - hintOut.value, resync.value) }));
+  const revealInStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(reveal.value, resync.value) }));
+  const revealOutStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(1 - reveal.value, resync.value) }));
   // Light pours out of the open chest with the lid pop (bright over the pile on a non-coin day).
   const mouthStyle = useAnimatedStyle(() => ({
     opacity: resyncOpacity(Math.min(1, prize.value * 1.4) * (kind === 'coins' ? 0.55 : 0.9), resync.value),
@@ -468,7 +483,16 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       <Animated.View ref={wrapRef} collapsable={false} style={[styles.wrap, cardStyle]}>
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
-          <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Today’s chest: day ${day} of ${ladder.length}`}</Text>
+          <View>
+            <Animated.Text style={[styles.subtitle, phase === 'open' && revealInStyle]}>
+              {phase === 'open' ? `Day ${day} collected!` : `Today’s chest: day ${day} of ${ladder.length}`}
+            </Animated.Text>
+            {phase === 'open' && (
+              <Animated.Text style={[styles.subtitle, styles.over, revealOutStyle]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                {`Today’s chest: day ${day} of ${ladder.length}`}
+              </Animated.Text>
+            )}
+          </View>
 
           <View style={[styles.ladder, styles.aboveGold]}>
             {ladder.map((r) => (
@@ -552,13 +576,15 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
           </Pressable>
 
           <View style={[styles.prizeSlot, { height: prizeBlockHeight(extras.length, !!milestone, !coinDay) }]}>
-          {phase === 'open' ? (
-            <Animated.View style={[styles.prize, prizeStyle]}>
+          {phase !== 'closed' && (
+            <Animated.View style={[styles.prize, prizeStyle]} accessibilityElementsHidden={phase !== 'open'}
+              importantForAccessibility={phase === 'open' ? 'auto' : 'no-hide-descendants'}>
               {/* One picture of the prize: on a non-coin day it already rests over the chest, so only coins repeat it here. */}
               {coinDay && <GameIcon name={PRIZE[kind].icon} size={56} />}
               {/* The number counts in its own box, sized for the final number (a growing count never clips), the word beside it. */}
               <View style={styles.prizeRow} accessible accessibilityLabel={`+${amount} ${prizeLabel(kind, amount)}`}>
-                <CountUpText value={Math.max(shown, countStart(amount))} prefix="+"
+                <CountUpText value={phase === 'open' ? amount : countStart(amount)} prefix="+"
+                  delayMs={phase === 'open' && !reducedMotion ? COUNT_DELAY_MS : 0}
                   durationMs={DURATION.count} punch={1.08} reducedMotion={reducedMotion}
                   // The box grows with the player's text size (Dynamic Type), so a large setting never clips the number.
                   style={[styles.prizeText, { width: countWidth(amount, fontScale), flexShrink: 0, textAlign: 'right' }]}
@@ -571,28 +597,32 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               ))}
               {milestone && <Text style={styles.milestone}>{`${milestone.label} bonus!`}</Text>}
             </Animated.View>
-          ) : (
-            // "Opening your chest" fades on the UI thread the moment the lid pops (the burst starts before React swaps
-            // in the prize), so the words never sit under the burst.
-            <Animated.Text style={[styles.hint, hintStyle]}>{phase === 'opening' ? 'Opening your chest…' : 'Tap the chest to open it!'}</Animated.Text>
           )}
+          {/* "Opening your chest" stays until the lid pops, then fades on the UI thread as the prize rises. */}
+          {phase !== 'closed' && (
+            <Animated.Text style={[styles.hint, styles.over, hintStyle]} accessibilityElementsHidden={phase === 'open'}
+              importantForAccessibility={phase === 'open' ? 'no-hide-descendants' : 'auto'}>Opening your chest…</Animated.Text>
+          )}
+          {phase === 'closed' && <Text style={styles.hint}>Tap the chest to open it!</Text>}
           </View>
 
           {/* The card keeps one height from the tap to the settled prize (the chest never jumps at its payoff): the next
               milestone line and Awesome! are laid out from the start, shown once the chest is open, and Back to map sits
               in Awesome!'s spot while the chest is shut. */}
           {next && (
-            <Text style={[styles.next, phase !== 'open' && styles.waiting]} accessibilityElementsHidden={phase !== 'open'}
+            <Animated.Text style={[styles.next, phase === 'open' ? revealInStyle : styles.waiting]} accessibilityElementsHidden={phase !== 'open'}
               importantForAccessibility={phase === 'open' ? 'auto' : 'no-hide-descendants'}>
               {`${next.days_away} more day${next.days_away === 1 ? '' : 's'} to your ${next.label}`}
-            </Text>
+            </Animated.Text>
           )}
           <View style={styles.footerSlot}>
-            <Pressable onPress={dismiss} disabled={phase !== 'open'} pointerEvents={phase === 'open' ? 'auto' : 'none'}
-              accessibilityElementsHidden={phase !== 'open'} importantForAccessibility={phase === 'open' ? 'auto' : 'no-hide-descendants'}
-              accessibilityRole="button" style={[styles.button, phase !== 'open' && styles.waiting]}>
-              <Text style={styles.buttonText}>{ticketDay ? 'SEE YOU AT THE PARK!' : 'AWESOME!'}</Text>
-            </Pressable>
+            <Animated.View style={phase === 'open' ? revealInStyle : styles.waiting}>
+              <Pressable onPress={dismiss} disabled={phase !== 'open'} pointerEvents={phase === 'open' ? 'auto' : 'none'}
+                accessibilityElementsHidden={phase !== 'open'} importantForAccessibility={phase === 'open' ? 'auto' : 'no-hide-descendants'}
+                accessibilityRole="button" style={styles.button}>
+                <Text style={styles.buttonText}>{ticketDay ? 'SEE YOU AT THE PARK!' : 'AWESOME!'}</Text>
+              </Pressable>
+            </Animated.View>
             {phase === 'closed' && <Pressable onPress={dismiss} accessibilityRole="button"
               accessibilityLabel="Back to map without opening this chest" style={[styles.laterButton, styles.laterInSlot]}>
               <Text style={styles.laterText}>BACK TO MAP</Text>
@@ -622,6 +652,10 @@ export const LID_CUT = 0.46;
 export const LID_HINGE_DEG = 25;
 /** How long the popped lid hangs open (ms) before it slams shut, and the little bounce it lands with. */
 export const LID_POP_HOLD = 260;
+/** The lid pops this long after the open card is committed (one frame), so no React update lands while it is up. */
+export const POP_AFTER_COMMIT_MS = 34;
+/** The count starts this long after the open card is committed (the prize has risen by then). */
+export const COUNT_DELAY_MS = POP_AFTER_COMMIT_MS + 260;
 const LID_BOUNCE = 0.14;
 /** Below this the lid counts as shut, and the whole chest picture is drawn instead of the two cut copies. */
 const LID_AT_REST = 0.004;
@@ -794,4 +828,5 @@ const styles = StyleSheet.create({
   footerSlot: { alignSelf: 'stretch' },
   laterInSlot: { position: 'absolute', left: 0, right: 0, top: 14, bottom: 0, marginTop: 0 },
   waiting: { opacity: 0 },
+  over: { position: 'absolute', left: 0, right: 0, textAlign: 'center' },
 });
