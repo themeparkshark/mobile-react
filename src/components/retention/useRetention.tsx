@@ -2,8 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Asset } from 'expo-asset';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Modal from 'react-native-modal';
+import { AppState, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import {
   buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
@@ -766,9 +765,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const shownContent = showing ? content : lastCard.current?.content ?? null;
   if (!view && !present) lastCard.current = null;
   const overlay = (
-    <Modal isVisible={visible && front} style={styles.modal} hasBackdrop={false} coverScreen
-      animationIn="fadeIn" animationOut="fadeOut" animationInTiming={60} animationOutTiming={60}
-      onBackButtonPress={revealing ? undefined : close} useNativeDriver hideModalContentWhileAnimating={false}>
+    // A plain RN Modal: visible is declarative (no inner open/close state machine that can miss a quick re-open);
+    // every entrance and exit is our own UI-thread animation inside it.
+    <Modal visible={visible && front} transparent animationType="none" statusBarTranslucent
+      onRequestClose={revealing ? () => undefined : close}>
       <View style={StyleSheet.absoluteFill}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.dim, dimStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={revealing || !showing ? undefined : close} accessible={false} />
@@ -863,7 +863,6 @@ function paidRows(p: PaidRewards): { kind: string; amount: number }[] {
 }
 
 const styles = StyleSheet.create({
-  modal: { margin: 0 },
   dim: { backgroundColor: BRAND.navy },
   center: { alignItems: 'center', justifyContent: 'center' },
   wrap: { alignItems: 'center', alignSelf: 'stretch' },
