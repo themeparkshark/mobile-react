@@ -8,6 +8,8 @@ import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day
 import { shareFlex } from '../share';
 import { parkDayFlexPayload } from '../share/parkDay';
 import * as RootNavigation from '../RootNavigation';
+import { RecapClosingStamp, RecapPolaroid, RecapSky, RecapStamp, RecapStat, useRecapBuild } from '../components/park/ParkDayRecapBuild';
+import { RECAP_BUILD, bestCoin } from '../components/park/recapBuildPlan';
 
 interface Props {
   readonly parkId: number;
@@ -24,6 +26,8 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [retry, setRetry] = useState(0);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // Today's story builds itself once (stat by stat); an earlier day just shows.
+  const build = useRecapBuild(recap && !selectedDay && recap.moments.length > 0 ? `${parkId}:${recap.park_day}` : null);
   // The flex card (Share Studio): only coin counts and coin art cross over (parkDayFlexPayload).
   const shareDay = () => {
     if (recap) shareFlex('park_day', parkDayFlexPayload(recap), { surface: 'park_day' });
@@ -57,21 +61,28 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
     setSelectedDay(day);
   };
 
-  return <View style={styles.card}>
+  const polaroid = hasActivity ? bestCoin(recap.coins) : null;
+  // A tap anywhere on a building card jumps to the finished card (buttons still work).
+  return <View style={styles.card} onTouchStart={build.instant ? undefined : build.skip}>
     <View style={styles.header}>
+      {hasActivity && <RecapSky build={build} />}
       <View style={styles.headerCopy}>
         <Text style={styles.kicker}>{parkDayLabel(recap.park_day)} · {recap.park_name}</Text>
-        <Text style={styles.title}>{selectedDay ? 'PARK DAY STORY' : "TODAY'S PARK STORY"}</Text>
+        <RecapStamp build={build} at={RECAP_BUILD.titleAt}>
+          <Text style={styles.title}>{selectedDay ? 'PARK DAY STORY' : "TODAY'S PARK STORY"}</Text>
+        </RecapStamp>
       </View>
       <Image source={require('../../assets/images/screens/pin-collections/shark.png')}
-        resizeMode="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
+        resizeMode="contain" style={[styles.shark, polaroid ? styles.sharkWithPhoto : null]} accessibilityLabel="Theme Park Shark mascot" />
+      {polaroid?.coin_url && <RecapPolaroid build={build} coinUrl={polaroid.coin_url} isNew={!!polaroid.new} />}
     </View>
     {hasActivity ? <>
       <View style={styles.statStrip}>
-        <View style={styles.stat}><Text style={styles.statValue}>{recap.distinct_rides_won}</Text><Text style={styles.statLabel}>RIDES WON</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{recap.new_coins}</Text><Text style={styles.statLabel}>NEW COINS</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{recap.coin_upgrades}</Text><Text style={styles.statLabel}>LEVEL UPS</Text></View>
+        <RecapStat build={build} index={0} value={recap.distinct_rides_won} label="RIDES WON" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
+        <RecapStat build={build} index={1} value={recap.new_coins} label="NEW COINS" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
+        <RecapStat build={build} index={2} value={recap.coin_upgrades} label="LEVEL UPS" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
       </View>
+      {!selectedDay && <RecapClosingStamp build={build} parkName={recap.park_name} />}
       {recap.line_play_sessions > 0 && <GameRichText style={styles.copy}>
         {`[icon:queue] ${recap.eligible_line_minutes} minutes in line · [icon:parts] ${recap.ride_parts_earned} Ride Part${recap.ride_parts_earned === 1 ? '' : 's'}`}
       </GameRichText>}
@@ -136,6 +147,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', overflow: 'hidden', paddingLeft: 12 },
   headerCopy: { flex: 1, zIndex: 1 },
   shark: { width: 90, height: 90, marginRight: -10 },
+  // The polaroid takes the right of the header; the shark peeks in beside it.
+  sharkWithPhoto: { marginRight: 62 },
   kicker: { color: '#c2ecff', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.4 },
   title: { color: '#fff', fontFamily: 'Shark', fontSize: 20, marginTop: 3,
     textShadowColor: '#034471', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },

@@ -48,7 +48,7 @@ test('R2-5 park tip: suppressed while Fin-ister is on or its recap is up; the in
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /blocked: !isReady \|\| isActive \|\| homeIntroOpen \|\| parkTipShowing/);
   assert.match(explore, /!hasCompleted\('onboarding'\) && !frightIntroOwns/, 'Finn onboarding waits for the Fin-ister intro');
-  assert.match(explore, /hasCompleted\('park_arrival'\) \|\| frightIntroOwns\) return;/);
+  assert.match(explore, /hasCompleted\('park_arrival'\) \|\| frightIntroOwns( \|\| arrivalBusy)?\) return;/);
   const engine = loadTs('src/components/fright/useFrightEngine.ts', {
     'expo-location': {}, react: {}, '../../api/endpoints/fright': {}, '../../services/fright/copy': { COPY: {} },
     '../../services/fright/storage': {}, '../../services/fright/art': {},

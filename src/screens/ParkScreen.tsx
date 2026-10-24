@@ -12,6 +12,8 @@ import Loading from '../components/Loading';
 import ParkTrophyModal from '../components/ParkTrophyModal';
 import ParkShelfArtwork from '../components/ParkShelfArtwork';
 import CoinShelfArrival from '../components/CoinShelfArrival';
+import { RowShine, ShelfJiggle } from '../components/ShelfLandingFx';
+import { rowComplete } from '../components/shelfLanding';
 import useEarnedShelfArrival from '../hooks/useEarnedShelfArrival';
 import { isEarnedShelfArrival, resolveEarnedShelfSlot, type EarnedShelfArrival, type ShelfSection } from '../services/collection/earnedShelf';
 import TaskCoinModal from '../components/TaskCoinModal';
@@ -312,10 +314,17 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const shelfArt = (section: ShelfSection) => section === 'limited' ? 'normal' : section;
   const rideKind = (taskId: number): 'ride' | 'coin' | undefined => currentPark?.ride_passport_task_ids?.length
     ? currentPark.ride_passport_task_ids.includes(taskId) ? 'ride' : 'coin' : undefined;
-  const shelfRows = (section: ShelfSection, list: ReadonlyArray<TaskType | SecretTaskType>) => chunk(list, 5).map((row, rowIndex) => (
+  const shelfRows = (section: ShelfSection, list: ReadonlyArray<TaskType | SecretTaskType>) => chunk(list, 5).map((row, rowIndex) => {
+    // The coin that just landed in this row: its neighbours jiggle, and a full row shines once.
+    const landingColumn = landedKey && landedKey === requestKey ? row.findIndex(task => matchesArrival(section, task.id)) : -1;
+    const landingKey = landingColumn >= 0 ? landedKey : null;
+    const ownedIds = new Set(completedFor(section).map(done => done.id));
+    const shine = landingKey && rowComplete(row.map(task => task.id), ownedIds) ? landingKey : null;
+    return (
     <View key={rowIndex} style={{ paddingBottom: 14 }}>
       <View style={{ position: 'relative', height: coinSize + 43 }}>
         <ParkShelfArtwork variant={shelfArt(section)} height={55} />
+        {shine && <RowShine landingKey={shine} width={width - 40} />}
         <View style={{ flexDirection: 'row', justifyContent: 'center', position: 'absolute', top: 4, width: '100%' }}>
           {row.map((task, index) => {
             const owned = completedFor(section).find(done => done.id === task.id);
@@ -323,6 +332,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
             const hidden = arriving && !!arrival.target && landedKey !== requestKey;
             const focused = focusSlot?.section === section && focusSlot.task.id === task.id;
             return <View key={task.id} style={{ paddingLeft: index === 0 ? 0 : 7 }}>
+              <ShelfJiggle landingKey={landingKey} distance={landingColumn >= 0 ? index - landingColumn : 0}>
               {owned ? (
                 <View collapsable={false}
                   ref={arriving ? slotRef : focused ? focusSlotRef : undefined}
@@ -360,12 +370,14 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                 <UnfoundCoinModal task={task} size={coinSize} isSecret={section === 'secret'}
                   isArchived={section === 'archived'} />
               )}
+              </ShelfJiggle>
             </View>;
           })}
         </View>
       </View>
     </View>
-  ));
+    );
+  });
 
   return (
     <Wrapper>

@@ -122,6 +122,7 @@ import { mapTipReady, parkTipFor } from '../services/help/tipGate';
 // Map declutter: one HUD row, and every marker placed by priority (no overlaps).
 import MapStatusStack, { TONES, type StatusEntry } from '../components/map/MapStatusStack';
 import { statusOrder, HUD_BOTTOM } from '../components/map/statusStack';
+import useParkArrival from '../components/park/useParkArrival';
 import { EventStatusChip, EventHomeChip, EventSheet, EventGainToast, FrenzyBanner, FrenzySweep, EventRecapCard, useRecapDue, useLiveEvent, useStarRides } from '../components/liveEvents';
 import { openableKeys } from '../services/liveEvents/model';
 import NextUpRail, { useNextUp } from '../components/nextUp/NextUpRail';
@@ -288,6 +289,8 @@ function ExploreScreen() {
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
   const [adventureOccluded, setAdventureOccluded] = useState(false);
+  // "Welcome to the park!" is due or playing: the park lesson, the daily chest and Finn's tips wait for it.
+  const [arrivalBusy, setArrivalBusy] = useState(false);
   const { data: tripGoalData, stale: tripGoalStale, refresh: refreshTripGoal, celebrate: celebrateTicket,
     select: selectAdventureRide, dismiss: dismissAdventure } = useTripGoal(tripGoalVersion, !!player);
   const tripGoal = tripGoalData?.goal;
@@ -345,10 +348,10 @@ function ExploreScreen() {
   // actually arrive. Park-first players already saw these steps in onboarding.
   useEffect(() => {
     if (!mapFocused || !player || !isReady || !parkLoaded || !permissionGranted || !park || isActive ||
-      !hasCompleted('onboarding') || hasCompleted('park_arrival') || frightIntroOwns) return;
+      !hasCompleted('onboarding') || hasCompleted('park_arrival') || frightIntroOwns || arrivalBusy) return;
     const timer = setTimeout(() => startTutorial('park_arrival'), 1500);
     return () => clearTimeout(timer);
-  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
+  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns, arrivalBusy]);
   
   // One overlay at a time: a find that shows up during a tutorial waits for it.
   const [pendingFind, setPendingFind] = useState<{ item: PrepItemType; pivotId: number } | null>(null);
@@ -943,7 +946,7 @@ function ExploreScreen() {
     firstCatchDone: hasFirstCatch(player, hasCompleted('home_first_find'), caughtThisSession),
     boss: bossOpen || bossOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
     rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
-    otherModalOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || retentionOccluding,
+    otherModalOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || retentionOccluding || arrivalBusy,
   });
   // The daily chest presents itself once; "Back to map" puts it away until the
   // next app open or the next day, and the map's chest button reopens it.
@@ -951,12 +954,20 @@ function ExploreScreen() {
   const [, setChestDismissals] = useState(0);
   const chestUnclaimed = !!player && permissionGranted && !!dailyGift && dailyGift.redeemed_at === null
     && hasCompleted('onboarding');
-  const chestScreenFree = chestMayPresent({
+  const mapFreeForMoment = chestMayPresent({
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind, firstCatchDone: true,
     boss: bossOpen || bossOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
     rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
     otherModalOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
   });
+  const chestScreenFree = mapFreeForMoment && !arrivalBusy;
+  // Walking into a park: the ribbon, the park name and today's three cards (once per park per day).
+  const arrival = useParkArrival({
+    playerId: player?.id, park, tasks: redeemables ? redeemables.tasks ?? [] : null, projector: mapProjector,
+    ready: mapFocused && !!park && permissionGranted && isReady && hasCompleted('onboarding') && mapFreeForMoment &&
+      !retentionOccluding && !dailyGiftOccluded,
+  });
+  useEffect(() => { setArrivalBusy(arrival.showing || arrival.pending); }, [arrival.showing, arrival.pending]);
   const chestShowing = mapFocused && !!dailyGift && chestShouldShow({
     unclaimed: chestUnclaimed, autoReady: chestReady, screenFree: chestScreenFree,
     requested: chestRequested, dismissed: chestDismissed(dailyGift.id),
@@ -1034,7 +1045,7 @@ function ExploreScreen() {
     && !parkTip && !isActive && !liveEvt.event;
   const parkTipReady = mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
-    dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
+    dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial || arrivalBusy,
     bossOrChest: bossOpen || bossOccluded || dailyGiftOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
     adventureOpen: adventureOccluded, coinFlying: !!pendingCollect || !!collectFlight,
   });
@@ -1159,6 +1170,7 @@ function ExploreScreen() {
       hideAllOpen={!everyRideTrulyOpen({ loaded: !!redeemables, restingCount: restingTasks.length, liveStatuses: visibleTasks.map(task => liveByTask.get(task.id)?.status) }) || hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
       onFocusTask={(task) => setSelectedTask(task)} /> };
   }) : [];
+  if (arrival.todayEntry) statusEntries.push(arrival.todayEntry);
 
   return (
     <Wrapper>
@@ -1467,6 +1479,7 @@ function ExploreScreen() {
         )}
         {/* One HUD row floats over the map (the map runs right up to the header). */}
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
+        {arrival.layer}
         {/* The "what now" rail: one row in the suggestion slot, only while no suggestion card holds it. */}
         {railShowing && <View pointerEvents="box-none" style={{ position: 'absolute', top: slotTop, left: 12, right: 12, zIndex: 38 }}>
           <NextUpRail item={nextUp.item} onAction={handleNextUp} />
