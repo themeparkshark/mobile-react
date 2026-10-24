@@ -337,3 +337,14 @@ test('a grown-up no shares nothing and copies nothing', async () => {
   assert.equal(calls.share.length, 0);
   assert.equal(calls.copy.length, 0);
 });
+
+test('the ride card share sheets keep their buttons reachable: the backdrop and panel are not one big accessible element', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  for (const file of ['src/screens/RideTracker/RideDetailScreen.tsx', 'src/screens/RideTracker/RideHistoryScreen.tsx']) {
+    const code = fs.readFileSync(path.join(__dirname, '..', '..', file), 'utf8');
+    assert.match(code, /style=\{\w+\.modalOverlay\} onPress=\{\(\) => set\w+\(null\)\} accessible=\{false\}>/, file);
+    assert.match(code, /style=\{\w+\.modalContent\} onPress=\{\(\) => \{\}\} accessible=\{false\}>/, file);
+    assert.match(code, /style=\{\w+\.modalClose\} accessibilityRole="button" accessibilityLabel="Close">/, file);
+  }
+});

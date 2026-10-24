@@ -325,13 +325,14 @@ export default function RideDetailScreen() {
       />
 
       {/* Share Modal */}
-      <Modal visible={!!shareEntry} animationType="slide" transparent>
-        <Pressable style={s.modalOverlay} onPress={() => setShareEntry(null)}>
-          <Pressable style={s.modalContent} onPress={() => {}}>
+      <Modal visible={!!shareEntry} animationType="slide" transparent onRequestClose={() => setShareEntry(null)}>
+        {/* Not accessible themselves, so VoiceOver reaches Share Ride Card and Close one by one. */}
+        <Pressable style={s.modalOverlay} onPress={() => setShareEntry(null)} accessible={false}>
+          <Pressable style={s.modalContent} onPress={() => {}} accessible={false}>
             {shareEntry && (
               <>
                 <ShareableRideCard ride={shareEntry} rideCount={totalRides} onShare={() => setShareEntry(null)} />
-                <Pressable onPress={() => setShareEntry(null)} style={s.modalClose}>
+                <Pressable onPress={() => setShareEntry(null)} style={s.modalClose} accessibilityRole="button" accessibilityLabel="Close">
                   <Text style={s.modalCloseText}>Close</Text>
                 </Pressable>
               </>

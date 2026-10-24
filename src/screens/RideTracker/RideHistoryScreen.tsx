@@ -275,12 +275,13 @@ export default function RideHistoryScreen() {
       {/* Share Modal */}
       <Modal visible={!!shareRide} animationType={reducedMotion ? 'fade' : 'slide'} transparent
         onRequestClose={() => setShareRide(null)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShareRide(null)}>
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+        {/* Not accessible themselves, so VoiceOver reaches Share Ride Card and Close one by one. */}
+        <Pressable style={styles.modalOverlay} onPress={() => setShareRide(null)} accessible={false}>
+          <Pressable style={styles.modalContent} onPress={() => {}} accessible={false}>
             {shareRide && (
               <>
                 <ShareableRideCard ride={shareRide} onShare={() => setShareRide(null)} />
-                <Pressable onPress={() => setShareRide(null)} style={styles.modalClose}>
+                <Pressable onPress={() => setShareRide(null)} style={styles.modalClose} accessibilityRole="button" accessibilityLabel="Close">
                   <Text style={styles.modalCloseText}>Close</Text>
                 </Pressable>
               </>
