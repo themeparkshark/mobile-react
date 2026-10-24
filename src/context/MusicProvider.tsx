@@ -35,7 +35,7 @@ function pickRandom(lastIndex: number): number {
 }
 
 export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { player } = useContext(AuthContext);
+  const { player, isReady } = useContext(AuthContext);
   const soundRef = useRef<Audio.Sound | null>(null);
   const isPlayingRef = useRef(false);
   const initializedRef = useRef(false);
@@ -220,6 +220,10 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useAsyncEffect(async () => {
     try {
       if (!player) {
+        // Sign-in is still loading (every launch starts here): no login music yet. A returning player
+        // with music off never hears it, and the launch never wakes the audio hardware while the
+        // splash is up. It starts only once we know nobody is signed in.
+        if (!isReady) return;
         // Guard: if already playing/starting login music, don't double-start
         if (loginMusicRef.current) return;
         loginMusicRef.current = true; // Claim immediately before any await
@@ -273,7 +277,7 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (e) {
       console.warn('Music state error (suppressed):', e);
     }
-  }, [player, player?.enabled_music]);
+  }, [player, player?.enabled_music, isReady]);
 
   // Full stop: fade out and reset so music can re-initialize later
   const stopMusic = useCallback(() => withLock(async () => {

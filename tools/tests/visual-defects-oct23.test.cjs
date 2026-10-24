@@ -1121,3 +1121,10 @@ test('the launch fact shows with the bar from the Splash route on (picked once, 
   const scene = read('src/components/launch/LaunchScene.tsx');
   assert.match(scene, /if \(!launchFact && fact\) launchFact = fact;/, 'the first pick wins for the whole launch');
 });
+
+test('launch never starts the login music while sign-in is still loading (no audio wake under the splash)', () => {
+  const music = read('src/context/MusicProvider.tsx');
+  assert.match(music, /const \{ player, isReady \} = useContext\(AuthContext\);/);
+  assert.match(music, /if \(!player\) \{[\s\S]{0,400}if \(!isReady\) return;/);
+  assert.match(music, /\}, \[player, player\?\.enabled_music, isReady\]\);/);
+});
