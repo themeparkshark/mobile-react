@@ -168,6 +168,7 @@ export default function LinePlayScreen() {
   const route = useRoute<any>();
   const ride: RideContext | undefined = route.params?.ride;
 
+  if (__DEV__) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.('lp-render');
   const { session, snapshot } = useLinePlaySession();
   const diveSettled = useDiveSettled();
   // The dive covers the way in (an instant push); the way out is a soft fade.
@@ -180,15 +181,18 @@ export default function LinePlayScreen() {
   const laidOut = useRef(false);
   const readyCap = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onRootLayout = useCallback(() => {
+    if (__DEV__) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.(`lp-layout ready=${diveReady}`);
     if (diveReady) { notifyDiveLanded(); return; }
     if (!laidOut.current) readyCap.current = setTimeout(notifyDiveLanded, DIVE_READY_CAP_MS);
     laidOut.current = true;
   }, [diveReady]);
   useEffect(() => {
+    if (__DEV__ && diveReady) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.('lp-ready');
     if (!diveReady || !laidOut.current) return undefined;
     if (readyCap.current) clearTimeout(readyCap.current);
-    const raf = requestAnimationFrame(notifyDiveLanded);
-    return () => cancelAnimationFrame(raf);
+    // Straight away (no frame wait on a busy JS thread): the water itself waits a few UI frames before it opens.
+    notifyDiveLanded();
+    return undefined;
   }, [diveReady]);
   useEffect(() => () => { if (readyCap.current) clearTimeout(readyCap.current); }, []);
   const { latestLocationSampleRef } = useContext(LocationStatusContext);

@@ -70,6 +70,8 @@ export const DIVE = {
    * already in the stack (so it never lays out again) opens now; a fresh one keeps the water up.
    */
   safetyMs: 2500,
+  /** The open always waits at least this long (UI thread) after the landing signal, so the screen has drawn. */
+  drawMs: 50,
   /** How often the water re-checks after safetyMs (ms). */
   recheckMs: 400,
   /** The water's patience: a game screen that never lands by now gets a plain fade, not the iris (ms). */
@@ -247,7 +249,10 @@ function mark(what: string, at: number = Date.now()): void {
   devLog.push({ at: at - devT0, what });
   if (devLog.length > 60) devLog.splice(0, devLog.length - 60);
 }
-if (typeof __DEV__ !== 'undefined' && __DEV__) (globalThis as { __diveLog?: typeof devLog }).__diveLog = devLog;
+if (typeof __DEV__ !== 'undefined' && __DEV__) {
+  (globalThis as { __diveLog?: typeof devLog }).__diveLog = devLog;
+  (globalThis as { __diveMark?: (what: string) => void }).__diveMark = (what: string) => mark(what);
+}
 
 /** Bubble i of n: where it starts on the bottom edge, its size and how far behind the others it rises. */
 export function diveBubble(i: number, n: number, w: number): { x: number; r: number; lag: number } {
@@ -342,17 +347,19 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
         fade.value = withTiming(0, { duration: DURATION.base, easing: EASE.in }, done => { if (done) runOnJS(finishDive)(); });
         return;
       }
-      openNow(skipHold ? 0 : Math.max(0, T.holdMs - (Date.now() - coveredAt)));
+      openNow(Math.max(DIVE.drawMs, skipHold ? 0 : T.holdMs - (Date.now() - coveredAt)));
     };
     skipRef.current = () => {
       skipHold = true;
-      if (decided && open.value === 0) openNow(0);
+      if (decided && open.value === 0) openNow(DIVE.drawMs);
     };
     const onLanded = () => {
       if (landed) return;
       mark('landed');
-      // One frame after the native layout, so the screen has drawn before the water opens on it.
-      requestAnimationFrame(() => { landed = true; decide('landing'); });
+      // Decide now; the open itself waits DIVE.drawMs on the UI thread so the screen has drawn under the
+      // water (a frame wait on the JS thread could sit for seconds behind a busy render).
+      landed = true;
+      decide('landing');
     };
     const onCovered = (uiAt: number) => {
       if (!alive) return;
