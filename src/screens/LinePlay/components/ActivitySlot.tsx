@@ -56,6 +56,8 @@ export interface ActivitySlotProps {
   readonly onNavigationMakeRoom?: () => void;
   /** The chapter's name for its board mission ("Fix the signal"), so PLAY NOW, the rail and the board say one phrase. */
   readonly navigationTitle?: string;
+  /** The board page's height once the crew row lends its room (an iPhone SE), so the board starts at its final size. */
+  readonly navigationTargetHeight?: number;
   /** Ride-themed dressing for free-play circuit rounds. */
   readonly circuitTheme?: CircuitTheme;
   /** Name of the page after this one, for a circuit's next button. */
@@ -122,6 +124,7 @@ export default function ActivitySlot({
   onNavigationNext,
   onNavigationMakeRoom,
   navigationTitle,
+  navigationTargetHeight,
   circuitTheme,
   nextLabel,
   bestStars,
@@ -133,11 +136,13 @@ export default function ActivitySlot({
     case 'circuit':
       if (!onNavigationTurn || !onNavigationReplay || !onNavigationNext) return null;
       return <NavigationPanelCard mode="free" theme={circuitTheme} nextLabel={nextLabel} seed={item.seed}
+        targetHeight={navigationTargetHeight}
         progress={navigationProgress} completed={completed} paused={paused}
         onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} onMakeRoom={onNavigationMakeRoom} />;
     case 'trivia':
       if (navigationPanel && item.id === `${chapterId}-trivia` && onNavigationTurn && onNavigationReplay && onNavigationNext)
-        return <NavigationPanelCard seed={item.seed} title={navigationTitle} progress={navigationProgress} completed={completed} paused={paused}
+        return <NavigationPanelCard seed={item.seed} title={navigationTitle} targetHeight={navigationTargetHeight}
+          progress={navigationProgress} completed={completed} paused={paused}
           onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} onMakeRoom={onNavigationMakeRoom} />;
       return <TriviaSlot rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed} completed={completed} paused={paused} onAnswered={() => onActivityCompleted(item.id)} />;
     case 'lore':

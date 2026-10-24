@@ -157,7 +157,7 @@ test('Details opens smoothly: one commit, the crew row fades and the page window
   const scroll = read('src/screens/LinePlay/components/PageScroll.tsx');
   assert.match(scroll, /clip: \{ flex: 1, borderRadius: borderRadius\.xxl - RIM, overflow: 'hidden' \}/,
     'the dimmed page is clipped by its own rounded frame, never a square edge');
-  assert.match(screen, /onLayout=\{event => \{ setPagesHeight\(Math\.round\(event\.nativeEvent\.layout\.height\)\); revealPages\(\); \}\}/);
+  assert.match(screen, /setPagesHeight\(Math\.round\(event\.nativeEvent\.layout\.height\)\);\n\s*setPagesMeasuredLent\(lentAtCommit\.current\);\n\s*revealPages\(\);/);
   assert.match(screen, /pages: \{ flex: 1 \}/, 'no square overflow clip on the page window');
   assert.match(screen, /onDetailsChange=\{onDetailsChange\}/);
 });
@@ -311,7 +311,7 @@ test('an iPhone SE navigation page: the whole board fits BESIDE its header, no s
   const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
   assert.match(card, /if \(beside\) \{/);
   assert.match(card, /contentStyle=\{\[styles\.cardBeside, \{ paddingTop: besideTop \}\]\}/);
-  assert.match(card, /navBoardLayout\(viewport, headerHeight \|\| HEADER_GUESS, !!onMakeRoom\)/, 'the first frame already picks the right layout');
+  assert.match(card, /navBoardLayout\(room, headerHeight \|\| HEADER_GUESS, !!onMakeRoom\)/, 'the first frame already picks the right layout');
   assert.match(card, /\{!tight && <Text style=\{styles\.footer\}>/, 'a tight page ends on the board: no arrow pointing at padding');
 });
 
@@ -440,7 +440,7 @@ test('roomy beside boards put "Tap a tile to turn it." on its own line; the SE k
   assert.ok(pro + m.BESIDE_V + m.BESIDE_STATUS_ROW <= 227, 'the status line and the whole board fit');
   assert.ok(m.besideTileSide(pro) >= 50, `17 Pro tiles ${m.besideTileSide(pro)}`);
   const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
-  assert.match(card, /const statusRow = beside && besideStatusRow\(viewport\);/);
+  assert.match(card, /const statusRow = beside && besideStatusRow\(room\);/);
   assert.match(card, /\{statusRow && statusLine\}/);
   assert.match(card, /const titleLines = besideTitle\.length <= 15 \? 1 : 2;/);
   assert.match(card, /hitSlop=\{tileSlop\}/);
@@ -456,7 +456,7 @@ test('an SE board page sliding in shows no small board: it stays unseen until it
   assert.ok(m.NAV_SETTLE_FADE_MS <= 150 && m.NAV_SETTLE_MAX_MS <= 400);
   const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
   assert.match(card, /const hideBoard = settling && !settleWaited;/);
-  assert.match(card, /<PageScroll ref=\{scroll\} fill=\{BRAND\.cream\} still=\{hideBoard\}/, 'no more-below arrow while it settles');
+  assert.match(card, /<PageScroll ref=\{scroll\} fill=\{BRAND\.cream\} still=\{hideBoard \|\| growing\}/, 'no more-below arrow while it settles');
   assert.match(card, /settleFade\.value = reducedMotion \? 1 : withTiming\(1, \{ duration: NAV_SETTLE_FADE_MS \}\);/);
 });
 
@@ -478,4 +478,22 @@ test('the closed SE chapter page fills its window: the 1 2 3 bubbles sit under t
   assert.match(chapter, /const withTrail = stripTrailFits\(viewHeight\);/);
   assert.match(chapter, /\{withTrail && <View style=\{styles\.stripTrail\}/);
   assert.match(chapter, /done === 3 \|\| withTrail \? 'PLAY' : 'CLUE '/, 'the bubbles own the count');
+});
+
+test('an SE board page is drawn for its lent height from the first frame (no small board, no pop)', () => {
+  const m = layout();
+  // Measured before the crew row left (window 167, row 44): the board page will be 167 + 44 - 16.
+  assert.equal(m.lentBoardViewport(true, false, 167, false, 44), 195);
+  // Measured after: the window already has the room.
+  assert.equal(m.lentBoardViewport(true, false, 211, true, 44), 195);
+  assert.equal(m.lentBoardViewport(false, false, 211, false, 44), undefined, 'a tall phone never lends');
+  assert.equal(m.lentBoardViewport(true, true, 211, true, 44), undefined, 'Details open: the page is what it is');
+  assert.equal(m.lentBoardViewport(true, false, 0, false, 44), undefined);
+  const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
+  assert.match(card, /const growing = targetHeight != null && viewport\.height > 0 && targetHeight > viewport\.height \+ 1;/);
+  assert.match(card, /const layout = navBoardLayout\(room, headerHeight \|\| HEADER_GUESS, !!onMakeRoom\);/);
+  assert.match(card, /still=\{hideBoard \|\| growing\}/, 'no stale more-below arrow while the window grows');
+  const screen = read(SCREEN);
+  assert.match(screen, /navigationTargetHeight=\{boardTargetHeight\}/);
+  assert.match(screen, /setPagesMeasuredLent\(lentAtCommit\.current\);/);
 });

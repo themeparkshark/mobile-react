@@ -286,6 +286,21 @@ export function crewRowLent(shortScreen: boolean, detailsOpen: boolean, boardPag
   return shortScreen && (detailsOpen || boardPage);
 }
 
+/** The page frame around a page's scroll view: its bottom margin (10) and white rims (3 top, 3 bottom). */
+export const PAGE_FRAME_V = 10 + 3 * 2;
+
+/**
+ * The board page's scroll height once the crew row has lent its room on a short phone with Details
+ * closed, from the last window measurement (taken lent or not) and the row's height. Undefined when
+ * no lending is coming (a tall phone, Details open) or nothing is measured yet.
+ */
+export function lentBoardViewport(shortScreen: boolean, detailsOpen: boolean, pagesHeight: number,
+  measuredLent: boolean, crewRowHeight: number): number | undefined {
+  if (!shortScreen || detailsOpen || !(pagesHeight > 0)) return undefined;
+  if (!measuredLent && !(crewRowHeight > 0)) return undefined;
+  return pagesHeight + (measuredLent ? 0 : crewRowHeight) - PAGE_FRAME_V;
+}
+
 /**
  * The page window stepped aside (Details open on a short phone): the rail stays
  * at its usual bottom spot, so a thumb finds "Back to games" where Next was, and

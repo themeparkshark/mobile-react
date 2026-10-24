@@ -54,6 +54,12 @@ interface Props {
    * strip instead of a board with a row peeking under the fade; the tap closes Details.
    */
   readonly onMakeRoom?: () => void;
+  /**
+   * The page height this board will have once the screen's crew row has lent its room (an iPhone SE
+   * sliding to this page). The board is drawn for it from the first frame, so it slides in at its
+   * final size while the window grows around it, never a small board that pops.
+   */
+  readonly targetHeight?: number;
 }
 
 const SPACE_SHARK = SPACE_NAVIGATOR_ART;
@@ -145,7 +151,7 @@ function TurnTileGlyph({ size = 22 }: { size?: number }) {
 
 /** A short original fiction puzzle; the server's verified wait still owns every reward. */
 export default function NavigationPanelCard({ seed, progress: saved, completed, paused, onTurn, onNewRound, onNext,
-  mode = 'mission', theme, title: missionTitle, nextLabel, onMakeRoom }: Props) {
+  mode = 'mission', theme, title: missionTitle, nextLabel, onMakeRoom, targetHeight }: Props) {
   const baseLook = theme ?? circuitThemeFor(undefined, true);
   const look = missionTitle ? { ...baseLook, repairTitle: missionTitle } : baseLook;
   const progress = useMemo(() => saved ?? createNavigationPanelProgress(seed, 0, completed), [seed, saved, completed]);
@@ -237,10 +243,13 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   // One thumb, one glance: the whole board and both ports fit above the
   // chapter rail. Size the tiles from the height this page really has.
   // Before the header is measured, assume its usual height, so the first frame already picks the right layout.
-  const layout = navBoardLayout(viewport, headerHeight || HEADER_GUESS, !!onMakeRoom);
+  // The room the board is sized for: the page's own size, or the bigger size it is about to grow to.
+  const growing = targetHeight != null && viewport.height > 0 && targetHeight > viewport.height + 1;
+  const room = growing ? { width: viewport.width, height: targetHeight as number } : viewport;
+  const layout = navBoardLayout(room, headerHeight || HEADER_GUESS, !!onMakeRoom);
   const beside = layout === 'beside';
-  const tight = beside || boardTight(viewport.height);
-  const boardSide = beside ? boardBesideDrawn(viewport) : boardSideFor(viewport, headerHeight);
+  const tight = beside || boardTight(room.height);
+  const boardSide = beside ? boardBesideDrawn(room) : boardSideFor(room, headerHeight);
   // A tight page says what to do in the header's top line (the rail already counts the clue),
   // so nothing is left under the board for the fade to cut.
   const statusOnTop = tight && !trace.solved;
@@ -248,10 +257,10 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   const firstTap = !paused && !trace.solved && hint == null && trace.signals === 0 && progress.taps === 0;
   // A beside page has height to spare (a 17 Pro, a Pro Max): what to do gets its own line across the
   // top, so the column only holds the title and neither one wraps.
-  const statusRow = beside && besideStatusRow(viewport);
+  const statusRow = beside && besideStatusRow(room);
   // An iPhone SE sliding to this page: the crew row's room arrives a frame or two later. The board
   // stays unseen until it has its final size, then fades in (no small board, no stale arrow).
-  const settling = navBoardSettling(layout, viewport, !!onMakeRoom);
+  const settling = navBoardSettling(layout, room, !!onMakeRoom);
   const [settleWaited, setSettleWaited] = useState(false);
   useEffect(() => {
     if (!settling) return undefined;
@@ -391,7 +400,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
     // Centered: a page taller than the board keeps even room above and below it.
     const rowAbove = statusRow ? BESIDE_STATUS_ROW : 0;
     const besideTop = Math.max(BESIDE_CARD_PAD_V,
-      Math.floor((viewport.height - rowAbove - (boardSide ?? 0) - BESIDE_V) / 2) + BESIDE_CARD_PAD_V);
+      Math.floor((room.height - rowAbove - (boardSide ?? 0) - BESIDE_V) / 2) + BESIDE_CARD_PAD_V);
     const besideTitle = trace.solved ? look.solvedTitle : look.repairTitle;
     // A short title ("Fix the signal") stays on one line; a long one may take two.
     const titleLines = besideTitle.length <= 15 ? 1 : 2;
@@ -403,7 +412,8 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
         numberOfLines={statusRow ? 1 : 2} adjustsFontSizeToFit={statusRow} minimumFontScale={0.85}>
         {trace.solved ? kickerText : statusRow ? status : columnStatus}</KidText>
     </View>;
-    return <PageScroll ref={scroll} fill={BRAND.cream} still={hideBoard}
+    // While the window grows to the board, no "more below" arrow points at the part still arriving.
+    return <PageScroll ref={scroll} fill={BRAND.cream} still={hideBoard || growing}
       contentStyle={[styles.cardBeside, { paddingTop: besideTop }]} onLayout={onLayout}
       onContentSizeChange={scrollPayoff}>
       <View style={hideBoard && styles.unmeasured}>

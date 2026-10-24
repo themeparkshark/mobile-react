@@ -161,7 +161,7 @@ import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLive
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { linePlayTipReady } from '../../services/help/tipGate';
-import { chapterPlayNow, crewRowInBand, crewRowLent, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIP_MS, PAGES_DIP_OPACITY,
+import { chapterPlayNow, crewRowInBand, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIP_MS, PAGES_DIP_OPACITY,
   PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
@@ -204,6 +204,9 @@ export default function LinePlayScreen() {
   // window is not drawn (kept mounted, so its page and scroll spot stay put) and the rail
   // becomes one "Back to games" button, so no button ever acts on a page nobody can see.
   const [pagesHeight, setPagesHeight] = useState(0);
+  // Whether the crew row was lent when the page window was last measured (so the lent height is known before it arrives).
+  const [pagesMeasuredLent, setPagesMeasuredLent] = useState(false);
+  const lentAtCommit = useRef(false);
   const pagesShown = pageWindowShown(pagesHeight, detailsOpen);
   const railMode = pageRailMode(pagesShown);
   /** The rail's height with its bottom margin: a stepped-aside window sits under it, out of the way. */
@@ -965,6 +968,10 @@ export default function LinePlayScreen() {
   // It goes in the same render as the page change, while the page slides in: the row fades out
   // and the board page lays out once, at its final size (no dimmed in-between frame).
   const crewLent = crewRowLent(fit.short, detailsOpen, boardPage);
+  lentAtCommit.current = crewLent;
+  // An iPhone SE board page's height once the crew row has lent its room: known before the row leaves,
+  // so the board slides in already at its final size (the window grows around it, nothing pops).
+  const boardTargetHeight = lentBoardViewport(fit.short, detailsOpen, pagesHeight, pagesMeasuredLent, crewRowHeight);
   // One gold button per screen: the chapter page has PLAY NOW and the board page is the game itself
   // (its "Tap to play" and "Next signal" are gold), so there the rail's Next is a quiet white button.
   const railQuiet = visibleItem?.kind === 'chapter_intro' || boardPage;
@@ -1221,7 +1228,11 @@ export default function LinePlayScreen() {
                 When Details opens or closes, the window takes its new size unseen and fades back in; the rail never moves. */}
             <Reanimated.View style={[styles.pages, pagesFadeStyle, !pagesShown && [styles.pagesAside, { bottom: railBlock }]]}
               pointerEvents={pagesShown ? 'auto' : 'none'}
-              onLayout={event => { setPagesHeight(Math.round(event.nativeEvent.layout.height)); revealPages(); }}>
+              onLayout={event => {
+                setPagesHeight(Math.round(event.nativeEvent.layout.height));
+                setPagesMeasuredLent(lentAtCommit.current);
+                revealPages();
+              }}>
             <View style={[styles.pagesInner, !pagesShown && styles.pagesHidden]}
               accessibilityElementsHidden={!pagesShown} importantForAccessibility={pagesShown ? 'auto' : 'no-hide-descendants'}>
             <FlatList
@@ -1296,6 +1307,7 @@ export default function LinePlayScreen() {
                       onNavigationReplay={() => session.startNextNavigationRound(item.id)}
                       onNavigationMakeRoom={detailsOpen ? closeDetails : undefined}
                       navigationTitle={snapshot.chapter?.navigationPanel ? snapshot.chapter.missionNames[0] : undefined}
+                      navigationTargetHeight={boardTargetHeight}
                       onNavigationNext={() => item.kind === 'circuit'
                         ? jumpToPage(index + 1 < activityPages.length ? index + 1 : 0)
                         : jumpToPage(activityPages.findIndex(page => page.id === `${snapshot.chapter?.id}-field-note`))}
