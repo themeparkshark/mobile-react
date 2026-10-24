@@ -74,6 +74,11 @@ export function countStart(amount: number): number {
   return Math.min(1, Math.max(0, amount));
 }
 
+/** Width the counting number reserves (Shark 28): the "+" and every digit of the final amount. */
+export function countWidth(amount: number, fontScale = 1): number {
+  return Math.ceil((19 * (String(Math.max(0, Math.round(amount))).length + 1) + 4) * Math.max(1, fontScale));
+}
+
 /** Height the prize block reserves, so nothing below it ever moves or overlaps. */
 export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, noIcon: boolean): number {
   return (noIcon ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
@@ -95,6 +100,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const getTarget = currencyFly.getTarget ?? (() => null);
   const dims = useWindowDimensions();
   const width = dims.width;
+  const fontScale = dims.fontScale ?? 1;
   const height = dims.height ?? 800;
   const [visible, setVisible] = useState(false);
   const [phase, setPhase] = useState<'closed' | 'opening' | 'open'>('closed');
@@ -148,6 +154,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   // The chest hops on the tap and keeps rattling (little hops) while the server answers; the lid seam glows on the pop.
   const hop = useSharedValue(0);
   const seam = useSharedValue(0);
+  // 0 shut, 1 open: on a non-coin day the lid (a clipped band of the same chest art) hinges back on the pop.
+  const lid = useSharedValue(0);
 
   useEffect(() => {
     if (!dailyGift.redeemed_at && player?.username) setVisible(true);
@@ -164,13 +172,14 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     return () => { cancelAnimation(bob); };
   }, [visible, phase, reducedMotion, bob]);
   useEffect(() => () => {
-    [shake, pop, prize, stamp, burst, punch, cardShake, spark, gold, goldBloom, hop, seam].forEach(cancelAnimation);
-  }, [shake, pop, prize, stamp, burst, punch, cardShake, spark, gold, goldBloom, hop, seam]);
+    [shake, pop, prize, stamp, burst, punch, cardShake, spark, gold, goldBloom, hop, seam, lid].forEach(cancelAnimation);
+  }, [shake, pop, prize, stamp, burst, punch, cardShake, spark, gold, goldBloom, hop, seam, lid]);
   useEffect(() => {
     if (!reducedMotion) return;
-    [shake, pop, prize, stamp, burst, punch, cardShake, spark, hop, seam].forEach(cancelAnimation);
+    [shake, pop, prize, stamp, burst, punch, cardShake, spark, hop, seam, lid].forEach(cancelAnimation);
     shake.value = 0; pop.value = 1; burst.value = 0; cardShake.value = 0; spark.value = 0; hop.value = 0;
     seam.value = phase === 'open' ? 0.7 : 0;
+    lid.value = phase === 'open' ? 1 : 0;
     cancelAnimation(gold); cancelAnimation(goldBloom); goldBloom.value = 0;
     gold.value = phase === 'open' ? 0.8 : 0;
     prize.value = phase === 'open' ? 1 : 0;
@@ -253,7 +262,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
 
   const celebrate = (isTicket: boolean) => {
     if (reducedMotionRef.current) {
-      shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1; gold.value = 0.8; hop.value = 0; seam.value = 0.7;
+      shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1; gold.value = 0.8; hop.value = 0; seam.value = 0.7; lid.value = 1;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       playSfx('win');
       return;
@@ -265,6 +274,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     hop.value = withSequence(withTiming(-26, { duration: 150, easing: EASE.out }), withTiming(0, { duration: 140, easing: EASE.in }),
       withTiming(4, { duration: 50 }), withSpring(0, SPRING.settle));
     seam.value = withSequence(withTiming(1, { duration: 120, easing: EASE.out }), withTiming(0.7, { duration: 700, easing: EASE.out }));
+    // The lid flies open past its rest, then settles open (it stays open: the settled card shows an opened chest).
+    cancelAnimation(lid); lid.value = 0;
+    lid.value = withSequence(withTiming(1.18, { duration: 130, easing: EASE.out }), withSpring(1, SPRING.pop));
     pop.value = withSequence(withTiming(1.25, { duration: 110 }), withTiming(0.9, { duration: 120 }), withSpring(1, SPRING.pop));
     gold.value = withTiming(1, { duration: 200, easing: EASE.out });
     goldBloom.value = withSequence(withTiming(1, { duration: 140, easing: EASE.out }),
@@ -367,6 +379,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpen, visible, phase]);
 
+  const lidLift = LID_LIFT * Math.min(width * 0.52, 230);
   const chestStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: phase === 'closed' ? bob.value : hop.value }, { rotate: `${shake.value}deg` }, { scale: pop.value },
       // The landing squash: wider and shorter while it sits below rest.
@@ -384,6 +397,11 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   }));
   // Light pouring out of the lid seam (a non-coin day keeps the closed art: the light says it opened).
   const seamStyle = useAnimatedStyle(() => ({ opacity: seam.value, transform: [{ scaleX: 0.6 + 0.5 * Math.min(1, seam.value) }, { scaleY: 0.7 + 0.5 * seam.value }] }));
+  // The lid hinges back at its top edge and lifts, opening a gap at the seam that the light pours out of.
+  const lidStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -lidLift * lid.value }, { perspective: 600 },
+      { rotateX: `${LID_HINGE_DEG * lid.value}deg` }, { rotate: `${-LID_TILT_DEG * lid.value}deg` }],
+  }));
   // The prize climbs out of the chest mouth with a springy overshoot, then rests just above it.
   const riseStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, prize.value * 2),
@@ -457,14 +475,35 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                   <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff3b0" />
                 </Animated.View>
               )}
-              <Image source={phase === 'open' && coinDay ? CHEST_OPEN : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
-              {phase === 'open' && !coinDay && (
-                // The lid seam blazes on the pop and keeps glowing: the chest has burst open and light pours out.
-                <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 1.05, height: chestSize * 0.34,
-                  left: -chestSize * 0.025, top: chestSize * 0.2 }, seamStyle]}>
-                  <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff7cf" />
-                </Animated.View>
-              )}
+              {phase === 'open' && coinDay
+                ? <Image source={CHEST_OPEN} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
+                : (
+                  // The same chest art cut into its body and its lid (two clipped copies, no new art), so on a non-coin
+                  // day the lid really opens: it hinges back on the pop and light pours out of the gap.
+                  <View style={{ width: chestSize, height: chestSize }}>
+                    <View style={[styles.chestBand, { top: chestSize * LID_CUT, width: chestSize, height: chestSize * (1 - LID_CUT) }]}>
+                      <Image source={CHEST_CLOSED} style={{ position: 'absolute', top: -chestSize * LID_CUT, width: chestSize, height: chestSize }}
+                        contentFit="contain" transition={0} />
+                    </View>
+                    {phase === 'open' && (
+                      <>
+                        {/* The dark inside of the chest, seen through the open gap. */}
+                        <View pointerEvents="none" style={[styles.chestInside, { left: chestSize * 0.16, width: chestSize * 0.6,
+                          top: chestSize * (LID_CUT - 0.05), height: chestSize * 0.1, borderRadius: chestSize * 0.05 }]} />
+                        {/* The seam blazes on the pop and keeps glowing: light pours out of the open chest. */}
+                        <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 1.05, height: chestSize * 0.34,
+                          left: -chestSize * 0.025, top: chestSize * (LID_CUT - 0.2) }, seamStyle]}>
+                          <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff7cf" />
+                        </Animated.View>
+                      </>
+                    )}
+                    <Animated.View style={[styles.chestBand, { top: 0, width: chestSize, height: chestSize * LID_CUT,
+                      transformOrigin: 'top' }, lidStyle]}>
+                      <Image source={CHEST_CLOSED} style={{ position: 'absolute', top: 0, width: chestSize, height: chestSize }}
+                        contentFit="contain" transition={0} />
+                    </Animated.View>
+                  </View>
+                )}
               {phase === 'open' && coinDay && (
                 <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 0.8, height: chestSize * 0.42,
                   left: chestSize * 0.12, top: chestSize * 0.1 }, mouthStyle]}>
@@ -493,9 +532,16 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
             <Animated.View style={[styles.prize, prizeStyle]}>
               {/* One picture of the prize: on a non-coin day it already rests over the chest, so only coins repeat it here. */}
               {coinDay && <GameIcon name={PRIZE[kind].icon} size={56} />}
-              <CountUpText value={Math.max(shown, countStart(amount))} prefix="+" suffix={` ${prizeLabel(kind, amount)}`}
-                durationMs={DURATION.count} punch={1.08} reducedMotion={reducedMotion} style={styles.prizeText}
-                onDone={countedUp} />
+              {/* The number counts in its own box, sized for the final number (a growing count never clips), the word beside it. */}
+              <View style={styles.prizeRow} accessible accessibilityLabel={`+${amount} ${prizeLabel(kind, amount)}`}>
+                <CountUpText value={Math.max(shown, countStart(amount))} prefix="+"
+                  durationMs={DURATION.count} punch={1.08} reducedMotion={reducedMotion}
+                  // The box grows with the player's text size (Dynamic Type), so a large setting never clips the number.
+                  style={[styles.prizeText, { width: countWidth(amount, fontScale), flexShrink: 0, textAlign: 'right' }]}
+                  onDone={countedUp} />
+                {/* Never squeezed: a text field can report a wider size than it draws while its digits change. */}
+                <Text style={[styles.prizeText, { flexShrink: 0 }]}>{` ${prizeLabel(kind, amount)}`}</Text>
+              </View>
               {extras.map(k => (
                 <Text key={k} style={styles.prizeExtra}>+{amounts[k]} {prizeLabel(k, amounts[k])}</Text>
               ))}
@@ -537,6 +583,12 @@ export function walletCoins(amount: number): number {
   return amount >= 50 ? 5 : amount >= 20 ? 4 : 3;
 }
 
+/** Where the chest art is cut into lid and body (a share of its height, through the gold band and the lock). */
+export const LID_CUT = 0.46;
+/** How far the lid hinges back (degrees around its top edge), lifts (chest sizes) and tilts when it opens. */
+export const LID_HINGE_DEG = 25;
+const LID_LIFT = 0.1;
+const LID_TILT_DEG = 5;
 /** The chest gold fan, as a multiple of the chest art (rays visible to about 0.74 x half of this). */
 export const CHEST_GOLD_SCALE = 2.4;
 const WALLET_COIN = 42;
@@ -675,6 +727,8 @@ const styles = StyleSheet.create({
   stage: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginTop: 6 },
   goldWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   mouthGlow: { position: 'absolute' },
+  chestBand: { position: 'absolute', left: 0, overflow: 'hidden' },
+  chestInside: { position: 'absolute', backgroundColor: '#0b3a66' },
   risePrize: { position: 'absolute', alignSelf: 'center', alignItems: 'center' },
   walletCoin: { position: 'absolute', left: 0, top: 0 },
   walletBump: { position: 'absolute', width: 80, height: 80 },
@@ -687,6 +741,7 @@ const styles = StyleSheet.create({
   prizeSlot: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   hint: { fontFamily: 'Shark', fontSize: 20, color: BRAND.gold },
   prize: { alignItems: 'center' },
+  prizeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   prizeText: { fontFamily: 'Shark', fontSize: 28, color: BRAND.gold,
     textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   prizeExtra: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white },

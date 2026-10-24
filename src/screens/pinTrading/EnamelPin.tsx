@@ -72,6 +72,13 @@ const BEVEL_DEEP = '#8a5a00';
 const FOIL_LIP = 0.022;
 /** The pale shine of the foil lip. */
 const FOIL_LIGHT = '#fff1b8';
+/**
+ * How far the foil also reaches over the art's own outer edge (fraction of its size, each side). A coin-shaped
+ * pin drawn with its thickness showing (a blue edge on one side) would otherwise show that edge outside the gold:
+ * the foil band covers it, so the art reads as sitting inside the gold rim. Its inner edge gets the pale lip.
+ */
+export const FOIL_INSET = 0.055;
+const FOIL_INNER_LIP = 0.016;
 
 /**
  * The foil rim's metal, light to dark across the pin (top-left catches the light): a bright face, the
@@ -182,6 +189,29 @@ function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surfac
             )}
             {/* The art itself, untouched (the gold edition keeps its own colours inside the foil). */}
             <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" />
+            {tint && (
+              // The foil laps over the art's outer edge (the art's silhouette minus a smaller copy of it), so the art
+              // sits inside the gold ring: nothing of its own edge shows outside the rim.
+              <Group layer>
+                <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" />
+                <Rect x={0} y={0} width={box} height={box} blendMode="srcIn">
+                  <LinearGradient start={vec(pad, pad)} end={vec(pad + size, pad + size)} colors={foilStops(tint)} positions={[0, 0.35, 0.72, 1]} />
+                </Rect>
+                <SkiaImage image={image} x={pad + size * FOIL_INSET} y={pad + size * FOIL_INSET}
+                  width={size * (1 - FOIL_INSET * 2)} height={size * (1 - FOIL_INSET * 2)} fit="contain" blendMode="dstOut" />
+              </Group>
+            )}
+            {tint && (
+              // The pale inner lip where that foil band meets the art.
+              <Group layer>
+                <SkiaImage image={image} x={pad + size * FOIL_INSET} y={pad + size * FOIL_INSET}
+                  width={size * (1 - FOIL_INSET * 2)} height={size * (1 - FOIL_INSET * 2)} fit="contain">
+                  <BlendColor color={FOIL_LIGHT} mode="srcIn" />
+                </SkiaImage>
+                <SkiaImage image={image} x={pad + size * (FOIL_INSET + FOIL_INNER_LIP)} y={pad + size * (FOIL_INSET + FOIL_INNER_LIP)}
+                  width={size * (1 - (FOIL_INSET + FOIL_INNER_LIP) * 2)} height={size * (1 - (FOIL_INSET + FOIL_INNER_LIP) * 2)} fit="contain" blendMode="dstOut" />
+              </Group>
+            )}
             {/* Resting gloss: a long soft falloff from the upper-left face. */}
             <Rect x={0} y={0} width={box} height={box} blendMode="srcATop">
               <LinearGradient start={vec(pad, pad)} end={vec(pad + size * 0.62, pad + size * 0.62)}

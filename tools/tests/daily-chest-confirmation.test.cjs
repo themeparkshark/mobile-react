@@ -7,7 +7,9 @@ const root = path.resolve(__dirname, '../..');
 const ts = require(path.join(root, 'node_modules/typescript'));
 const file = 'src/components/DailyGiftModal.tsx';
 // The main prize counts up on the UI thread (CountUpText): read its target the way it is drawn.
-const said = node => node.type === 'CountUpText' ? `${node.props.prefix}${node.props.value}${node.props.suffix}`
+// The count and its word sit in one row that reads the whole prize out (its accessibilityLabel).
+const said = node => node.type === 'View' && typeof node.props?.accessibilityLabel === 'string' && node.props.accessibilityLabel.startsWith('+')
+  ? node.props.accessibilityLabel
   : node.type === 'Text' ? (Array.isArray(node.props.children) ? node.props.children.join('') : node.props.children) : undefined;
 const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
