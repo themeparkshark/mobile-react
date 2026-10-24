@@ -1060,11 +1060,12 @@ export function TriviaDuel(props: TriviaDuelProps) {
       });
       // The buzzer's answer badge lands on their clock (the pick stays hidden until the reveal).
       const ans = ghost ? Math.max(600, Math.min(BUZZ.answerMs - 200, (o.stealMs ?? 1600))) : (plan && round ? finBellAnswerMs(plan, round) : 1600);
-      later(ans, () => resolveOppShown(buzzAt));
+      // A steal locked before Fin's answer lands reveals the moment it does (never a stuck board).
+      later(ans, () => { resolveOppShown(buzzAt); maybeReveal(); });
     } else {
       // Fin/ghost steal pick: tiles flip 1.0s after your buzz, he picks at stealMs from that flip.
       const sm = o.stealMs ?? -1;
-      if (o.stealChoice != null && o.stealChoice >= 0 && sm >= 0) later(BUZZ.stealFlipMs + sm, () => resolveOppShown(sm));
+      if (o.stealChoice != null && o.stealChoice >= 0 && sm >= 0) later(BUZZ.stealFlipMs + sm, () => { resolveOppShown(sm); maybeReveal(); });
       else later(BUZZ.stealFlipMs + BUZZ.answerMs, () => { resolved.current.opp = true; maybeReveal(); });
       later(BUZZ.stealFlipMs + Math.max(0, sm) + 5, () => maybeReveal());
     }
@@ -1149,7 +1150,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
           oppIn.current = { choice: pick, lockMs: pick >= 0 ? at : -1, buzzMs: -1 };
           setSubMode('open');
           setClock({ phase: PH_SUB, sub: 0, subLimit: BUZZ.openPhaseMs, urgent: 0, lastBeat: -1 });
-          if (pick >= 0) later(at, () => resolveOppShown(at));
+          // Open tiles: if you locked first, the reveal runs when Fin locks (it froze the board before).
+          if (pick >= 0) later(at, () => { resolveOppShown(at); maybeReveal(); });
           else resolved.current.opp = true;
           return;
         }

@@ -1002,3 +1002,11 @@ test('a ride miss with no retry is one card: the modal and the capture share los
   assert.match(duel, /const CAPTURE_OK = __DEV__ \|\| process\.env\.EXPO_PUBLIC_PERF_CAPTURE === '1';/);
   assert.match(duel, /const autoWin = CAPTURE_OK && props\.captureAutoplay === 'win';/);
 });
+
+test('the Duel board never freezes: every late Fin lock checks for the reveal', () => {
+  const duel = read('src/games/trivia-duel/TriviaDuel.tsx');
+  // Open tiles (nobody rang): you lock first, Fin locks later, the reveal must follow.
+  assert.match(duel, /if \(pick >= 0\) later\(at, \(\) => \{ resolveOppShown\(at\); maybeReveal\(\); \}\);/);
+  assert.match(duel, /later\(ans, \(\) => \{ resolveOppShown\(buzzAt\); maybeReveal\(\); \}\);/);
+  for (const line of duel.split('\n').filter((l) => /later\(.*resolveOppShown\(/.test(l))) assert.match(line, /maybeReveal\(\)/, line);
+});
