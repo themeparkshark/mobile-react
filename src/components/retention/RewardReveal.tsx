@@ -76,8 +76,9 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const stageH = size + (known ? 70 : 8);
   // Rows get a fixed area (scrolls only on small phones), so the card never changes height.
   const baseRows = compact ? Math.max(200, height - size - 300) : Math.max(200, Math.min(300, height - size - 380));
-  const rowsHeight = known && expectRows
-    ? Math.min(baseRows + 60, expectRows.small * (compact ? 50 : 54) + expectRows.big * 104 + 18) : baseRows;
+  // Sized to the prizes coming; if the server pays more rows than the preview said (a milestone gear), it grows to fit
+  // them all at the burst (never a row cut off at the top).
+  const rowsFor = (small: number, big: number) => small * (compact ? 50 : 54) + big * 104 + 18;
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
   const pop = useSharedValue(1);
@@ -102,6 +103,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const [stage, setStage] = useState<{ x: number; y: number } | null>(null);
   const rows = rewards ? rewardRows(rewards) : [];
   const revealed = !!rewards;
+  const rowsHeight = known && expectRows
+    ? Math.min(baseRows + 120, Math.max(rowsFor(expectRows.small, expectRows.big),
+      revealed ? rowsFor(rows.filter(r => !isBigReward(r.kind)).length, rows.filter(r => isBigReward(r.kind)).length) : 0))
+    : baseRows;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scroll = useRef<ScrollView>(null);
   const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };

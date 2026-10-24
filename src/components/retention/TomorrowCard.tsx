@@ -120,8 +120,9 @@ const styles = StyleSheet.create({
   moonGlow: { position: 'absolute', left: 0, top: -16, width: 150, height: 150 },
   moon: { position: 'absolute', left: 40, top: 22 },
   star: { position: 'absolute' },
-  hillBack: { position: 'absolute', right: -50, bottom: -64, width: 280, height: 130, borderRadius: 140, backgroundColor: '#4ea6e8' },
-  hill: { position: 'absolute', left: -70, bottom: -96, width: 380, height: 160, borderRadius: 190, backgroundColor: '#6cc0f3' },
+  // Two round hills (circles peeking up), so the night reads as a little landscape.
+  hillBack: { position: 'absolute', right: -70, bottom: -190, width: 260, height: 260, borderRadius: 130, backgroundColor: '#4ea6e8' },
+  hill: { position: 'absolute', left: -50, bottom: -230, width: 320, height: 320, borderRadius: 160, backgroundColor: '#6cc0f3' },
   stageRow: { position: 'absolute', left: 0, right: 0, bottom: 4, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'flex-end',
     gap: 14, paddingRight: 18 },
   prize: { width: 118, height: 118, alignItems: 'center', justifyContent: 'center' },

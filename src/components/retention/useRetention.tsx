@@ -293,9 +293,12 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const finishReveal = (paid: PaidRewards | null, src: 'daily' | 'weekly' | 'level', state: DailyThreeState | null, moment: FlameMoment | undefined) => {
     setView({ k: 'flying' });
     if (paid) chainTimer.current = setTimeout(() => fly(paid), 160);
+    // The HUD counters roll up while the map is in sight: read the new balance now, and the next card waits for it
+    // (at most 1.4 s more), so the numbers never change behind a card.
+    const balance = Promise.resolve(refreshPlayer?.()).catch(() => undefined);
     const next = async () => {
       chainTimer.current = null;
-      void refreshPlayer?.();
+      await Promise.race([balance, new Promise(r => setTimeout(r, 1400))]);
       if (src !== 'daily') void refresh(true);
       if (!mounted.current) return;
       let chain: ('flame' | 'tomorrow')[] = [];
