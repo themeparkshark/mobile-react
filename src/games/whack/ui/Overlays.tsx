@@ -96,7 +96,7 @@ export interface BreatherProps {
   onBank: () => void;
   canBank: boolean;
   duelLine?: string | null;
-  /** Split vs your best (Mario Kart ghost splits): "+340 AHEAD OF YOUR BEST" / "-120 BEHIND YOUR BEST". */
+  /** Split vs your best (Mario Kart ghost splits): "+340 AHEAD OF YOUR BEST" in gold, or the best to chase, never a red minus. */
   split?: { text: string; ahead: boolean } | null;
 }
 
@@ -130,8 +130,8 @@ export function Breather(p: BreatherProps) {
         </View>
         {p.duelLine ? <Text style={styles.duelLine}>{p.duelLine}</Text> : null}
         {p.split ? (
-          <View style={[styles.splitChip, { backgroundColor: p.split.ahead ? '#dff6e6' : '#ffe4de' }]}>
-            <Text style={[styles.splitText, { color: p.split.ahead ? '#11823b' : '#c2412f' }]}>{p.split.text}</Text>
+          <View style={[styles.splitChip, { backgroundColor: p.split.ahead ? '#FFE79A' : '#fff8e4' }]}>
+            <Text style={[styles.splitText, { color: p.split.ahead ? '#5a3200' : '#05346e' }]}>{p.split.text}</Text>
           </View>
         ) : null}
         {p.goal ? <Text style={styles.goal}>{p.goal}</Text> : null}

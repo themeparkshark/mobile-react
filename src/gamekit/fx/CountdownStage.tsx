@@ -15,10 +15,10 @@
 
 import React, { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
-import { BlurMask, Canvas, Circle, Group, Path, Skia, Text as SkText, type SkFont } from '@shopify/react-native-skia';
+import { BlurMask, Canvas, Circle, Group, Path, RoundedRect, Skia, Text as SkText, type SkFont } from '@shopify/react-native-skia';
 import { useDisplayFont } from './displayFont';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
-import { COUNT_STEPS, GO_SPARKLES, countPose, goSparkle, type CountStep } from '../core/gameMoments';
+import { CONFETTI_COLORS, COUNT_STEPS, PARTICLE_MAX_CONFETTI, RARE_GO_SPARKLES, countPose, goConfetti, goSparkle, type CountStep } from '../core/gameMoments';
 import { GOLD_FX } from '../../ui/motion';
 
 const NUM_PX = 150;
@@ -36,6 +36,10 @@ export interface CountdownStageProps {
   calm: boolean;
   /** Sparkles on GO after the power budget (0 draws none). */
   sparkles?: number;
+  /** A rare GO: a second gold ring and a confetti pop. */
+  rare?: boolean;
+  /** Confetti pieces on a rare GO after the power budget. */
+  confetti?: number;
 }
 
 /** A 4-point cartoon sparkle centred on 0,0 with radius 1 (scaled per sparkle). */
@@ -52,18 +56,25 @@ function sparklePath() {
   return p;
 }
 
-export const CountdownStage = React.memo(function CountdownStage({ clock, width, height, centerY, reduced, calm, sparkles = GO_SPARKLES }: CountdownStageProps) {
+export const CountdownStage = React.memo(function CountdownStage({ clock, width, height, centerY, reduced, calm, sparkles = 8, rare = false, confetti = 0 }: CountdownStageProps) {
   const numFont = useDisplayFont(NUM_PX);
   const goFont = useDisplayFont(GO_PX);
   const pose = useDerivedValue(() => countPose(clock.value, reduced, calm));
   const star = useMemo(sparklePath, []);
   const cx = width / 2;
-  const n = Math.max(0, Math.min(GO_SPARKLES, Math.round(sparkles)));
+  const n = Math.max(0, Math.min(RARE_GO_SPARKLES, Math.round(sparkles)));
+  const nc = rare && !reduced ? Math.max(0, Math.min(PARTICLE_MAX_CONFETTI, Math.round(confetti))) : 0;
+  const rareRingR = useDerivedValue(() => (pose.value.index === 3 ? GO_PX * 0.55 * (0.4 + 2.4 * Math.min(1, pose.value.sparkle * 1.4)) : 0));
+  const rareRingA = useDerivedValue(() => (pose.value.index === 3 ? 0.8 * (1 - Math.min(1, pose.value.sparkle * 1.4)) : 0));
   return (
     <Canvas style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
       {COUNT_STEPS.map((step, i) => (
         <CountGlyph key={step.label} step={step} index={i} font={i === 3 ? goFont : numFont} px={i === 3 ? GO_PX : NUM_PX}
           pose={pose} cx={cx} cy={centerY} />
+      ))}
+      {rare && !reduced ? <Circle cx={cx} cy={centerY} r={rareRingR} color={GOLD_FX.rays} style="stroke" strokeWidth={6} opacity={rareRingA} /> : null}
+      {Array.from({ length: nc }, (_, k) => (
+        <GoConfettiPiece key={`c${k}`} k={k} n={nc} pose={pose} cx={cx} cy={centerY} />
       ))}
       {Array.from({ length: n }, (_, k) => (
         <GoSparkle key={k} k={k} n={n} pose={pose} cx={cx} cy={centerY} star={star} />
@@ -87,6 +98,7 @@ function CountGlyph({ step, index, font, px, pose, cx, cy }: {
     const s = on ? p.scale : 1;
     return [
       { translateX: cx }, { translateY: cy },
+      { rotate: on ? p.rot : 0 },
       { scaleX: s * (on ? p.sx : 1) }, { scaleY: s * (on ? p.sy : 1) },
       { translateX: -w / 2 }, { translateY: px * 0.36 },
     ];
@@ -129,6 +141,22 @@ function GoSparkle({ k, n, pose, cx, cy, star }: {
   return (
     <Group transform={transform} opacity={opacity}>
       <Path path={star} color={k % 3 === 0 ? '#ffffff' : GOLD_FX.rays} />
+    </Group>
+  );
+}
+
+function GoConfettiPiece({ k, n, pose, cx, cy }: {
+  k: number; n: number; pose: SharedValue<ReturnType<typeof countPose>>; cx: number; cy: number;
+}) {
+  const c = useDerivedValue(() => goConfetti(k, n, pose.value.sparkle));
+  const opacity = useDerivedValue(() => (pose.value.index === 3 ? c.value.alpha : 0));
+  const transform = useDerivedValue(() => [
+    { translateX: cx + c.value.x }, { translateY: cy + c.value.y }, { rotate: c.value.rot },
+  ]);
+  const w = 7 + (k % 3) * 2;
+  return (
+    <Group transform={transform} opacity={opacity}>
+      <RoundedRect x={-w / 2} y={-3} width={w} height={6} r={2} color={CONFETTI_COLORS[k % 3]} />
     </Group>
   );
 }

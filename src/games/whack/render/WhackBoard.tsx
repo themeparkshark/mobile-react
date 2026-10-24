@@ -350,36 +350,37 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
   });
   const tierColor = useDerivedValue(() => comboTierStyle(medMult.value).fill);
   const medCore = useDerivedValue(() => (comboTierStyle(medMult.value).core ? 0.9 : 0));
-  const flamePath = useDerivedValue(() => {
+  // Fever flame: three cartoon tongues built once; only their transforms flicker (no per-frame path).
+  const tongue = useMemo(() => {
     const p = Skia.Path.Make();
-    if (comboTierRank(medMult.value) < 3) return p;
-    const t = rs.value.tick * 0.11;
-    // Three flickering tongues over the medallion (cartoon flame, code-drawn, gold and white).
-    for (let k = 0; k < 3; k++) {
-      const a = -Math.PI / 2 + (k - 1) * 0.62;
-      const h = mr * (0.62 + 0.18 * Math.sin(t * (1.3 + k * 0.4) + k * 2.1)) * (k === 1 ? 1.25 : 1);
-      const bx = Math.cos(a) * (mr + 1);
-      const by = Math.sin(a) * (mr + 1);
-      const tx = Math.cos(a) * (mr + h) + Math.sin(t * 1.7 + k) * 3;
-      const ty = Math.sin(a) * (mr + h);
-      const nx = -Math.sin(a) * 9;
-      const ny = Math.cos(a) * 9;
-      p.moveTo(bx + nx, by + ny);
-      p.quadTo((bx + tx) / 2 + nx * 1.1, (by + ty) / 2 + ny * 1.1, tx, ty);
-      p.quadTo((bx + tx) / 2 - nx * 1.1, (by + ty) / 2 - ny * 1.1, bx - nx, by - ny);
-      p.close();
-    }
+    const H = mr * 0.7;
+    p.moveTo(9, 0);
+    p.quadTo(9.9, -H / 2, 0, -H);
+    p.quadTo(-9.9, -H / 2, -9, 0);
+    p.close();
     return p;
-  });
+  }, [mr]);
+  const flameOn = useDerivedValue(() => (comboTierRank(medMult.value) >= 3 ? 1 : 0));
   const streakText = useDerivedValue(() => (tick.value, `${sim.value.streak}`));
   const streakX = useDerivedValue(() => -(fontL ? fontL.measureText(streakText.value).width / 2 : 10));
-  const multText = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    const m = Math.min(MULT_CAP, TIER_MULT[s.tier] * (s.fever ? 2 : 1));
-    return `x${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}`;
+  // The multiplier: the small display font drops the decimal point (x2.5 read as x25), so the point
+  // is a drawn dot between the whole and the half: x2 . 5.
+  const multInt = useDerivedValue(() => `x${Math.floor(medMult.value)}`);
+  const multFrac = useDerivedValue(() => {
+    const f = Math.round((medMult.value % 1) * 10);
+    return f > 0 ? `${f}` : '';
   });
-  const multX = useDerivedValue(() => -(fontS ? fontS.measureText(multText.value).width / 2 : 8));
+  const multGeo = useDerivedValue(() => {
+    const wi = fontS ? fontS.measureText(multInt.value).width : 14;
+    const wf = multFrac.value && fontS ? fontS.measureText(multFrac.value).width : 0;
+    const dot = multFrac.value ? 6 : 0;
+    const total = wi + dot + wf;
+    return { x0: -total / 2, dotX: -total / 2 + wi + dot / 2, fx: -total / 2 + wi + dot };
+  });
+  const multX = useDerivedValue(() => multGeo.value.x0);
+  const multDotX = useDerivedValue(() => multGeo.value.dotX);
+  const multFracX = useDerivedValue(() => multGeo.value.fx);
+  const multDotA = useDerivedValue(() => (multFrac.value ? 1 : 0));
   const medText = useDerivedValue(() => comboTierStyle(medMult.value).text);
   const readyGlow = useDerivedValue(() => {
     tick.value;
@@ -431,14 +432,17 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
         </Group>
       )}
       <Group transform={medT}>
-        <Path path={flamePath} color={GOLD} />
-        <Path path={flamePath} color="#ffffff" style="stroke" strokeWidth={2} opacity={0.85} />
+        <Group opacity={flameOn}>
+          {[0, 1, 2].map((k) => <FlameTongue key={k} k={k} mr={mr} tongue={tongue} rs={rs} tick={tick} />)}
+        </Group>
         <Circle cx={0} cy={0} r={mr + 7} color={GOLD} opacity={readyGlow} />
         <Circle cx={0} cy={0} r={mr + 3} color={NAVY} />
         <Circle cx={0} cy={0} r={mr} color={tierColor} />
         <Circle cx={0} cy={-3} r={mr * 0.55} color="#fffbea" opacity={medCore} />
         {fontL ? <Text x={streakX} y={5} text={streakText} font={fontL} color={medText} /> : null}
-        {fontS ? <Text x={multX} y={19} text={multText} font={fontS} color={medText} /> : null}
+        {fontS ? <Text x={multX} y={19} text={multInt} font={fontS} color={medText} /> : null}
+        <Circle cx={multDotX} cy={17} r={1.9} color={medText} opacity={multDotA} />
+        {fontS ? <Text x={multFracX} y={19} text={multFrac} font={fontS} color={medText} /> : null}
       </Group>
       {showMeter ? (
         <Group>
@@ -469,18 +473,21 @@ function StagePrompts({ L, rs, tick, fontS, fontM, pace, showPace, paceLabel }: 
     return [{ translateX: W / 2 }, { translateY: midY }, { scale: sc }];
   });
   const promptW = fontM ? fontM.measureText('TAP TO KEEP BONKING').width : 200;
+  // Kid-safe pace: ahead is a gold pill with the lead; behind is a calm cream pill that only names the
+  // chase (no minus number, never red).
   const paceText = useDerivedValue(() => {
     const d = Math.round(pace.value);
-    return d >= 0 ? `+${d} ${paceLabel}` : `${d} ${paceLabel}`;
+    return d > 0 ? `+${d} ${paceLabel}` : paceLabel;
   });
-  const paceColor = useDerivedValue(() => (pace.value >= 0 ? '#11823b' : '#c2412f'));
+  const paceColor = useDerivedValue(() => (pace.value > 0 ? '#5a3200' : NAVY));
+  const paceFill = useDerivedValue(() => (pace.value > 0 ? '#FFD54A' : CREAM));
   const paceW = useDerivedValue(() => (fontS ? fontS.measureText(paceText.value).width + 18 : 120));
   const py = L.hudH + 8;
   return (
     <Group>
       {showPace && fontS ? (
         <Group>
-          <RoundedRect x={10} y={py} width={paceW} height={22} r={11} color={CREAM} />
+          <RoundedRect x={10} y={py} width={paceW} height={22} r={11} color={paceFill} />
           <RoundedRect x={10} y={py} width={paceW} height={22} r={11} color={NAVY} style="stroke" strokeWidth={2} />
           <Text x={19} y={py + 16} text={paceText} font={fontS} color={paceColor} />
         </Group>
@@ -491,6 +498,27 @@ function StagePrompts({ L, rs, tick, fontS, fontM, pace, showPace, paceLabel }: 
           <Text x={-promptW / 2} y={3} text="TAP TO KEEP BONKING" font={fontM} color="#ffffff" />
         </Group>
       ) : null}
+    </Group>
+  );
+}
+
+/** One flame tongue on the fever medallion: a static path, flickering through its transform only. */
+function FlameTongue({ k, mr, tongue, rs, tick }: {
+  k: number; mr: number; tongue: ReturnType<typeof Skia.Path.Make>; rs: SharedValue<RenderState>; tick: SharedValue<number>;
+}) {
+  const a = -Math.PI / 2 + (k - 1) * 0.62;
+  const bx = Math.cos(a) * (mr + 1);
+  const by = Math.sin(a) * (mr + 1);
+  const transform = useDerivedValue(() => {
+    tick.value;
+    const t = rs.value.tick * 0.11;
+    const h = (0.62 + 0.18 * Math.sin(t * (1.3 + k * 0.4) + k * 2.1)) * (k === 1 ? 1.25 : 1) / 0.7;
+    return [{ translateX: bx }, { translateY: by }, { rotate: a + Math.PI / 2 + 0.08 * Math.sin(t * 1.7 + k) }, { scaleY: h }];
+  });
+  return (
+    <Group transform={transform}>
+      <Path path={tongue} color={GOLD} />
+      <Path path={tongue} color="#ffffff" style="stroke" strokeWidth={2} opacity={0.85} />
     </Group>
   );
 }

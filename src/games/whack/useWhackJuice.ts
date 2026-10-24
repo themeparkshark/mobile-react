@@ -40,6 +40,7 @@ import { G_CRIT, G_GOOD, G_QUICK, K_ANGLER, K_BRUISER, K_FINN, K_GOLDEN, K_HELME
 import type { BoardLayout } from './render/layout';
 import type { WhackRuntime } from './useWhackRuntime';
 import { calloutAdmit, comboTierRank, comboTierStyle, createCalloutGate } from '../../gamekit/core/gameMoments';
+import { KICK } from '../../ui/motion';
 
 const GOLD = '#ffcf3b';
 const CORAL = '#ff6b5c';
@@ -239,11 +240,20 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     return { x: G.cx[h], y: G.my[h] - G.spriteH[h] * 0.7 };
   }, [layout]);
 
+  const lastKick = useRef(0);
   const fireHit = (name: string, h: number, text: string | undefined, step: number) => {
     const p = holeXY(h);
     const clock = runtime.clock;
     const def = table[name];
     feel(name as never, { ...p, slot: h, step, text, magnetTo: hud, dx: 0, dy: -1, input: true });
+    // Hot hands hit harder: from x3 every bonk kicks the board down 2 pt (3 pt in fever), one kick per
+    // KICK.ms at most; never while walking, with Reduce Motion or on a shared party board.
+    const rank = comboTierRank(multNow());
+    const nowMs = Date.now();
+    if (rank >= 2 && camera && !reducedMotion && !walking && !party && nowMs - lastKick.current >= KICK.ms) {
+      lastKick.current = nowMs;
+      camera.kick(0, rank >= 3 ? KICK.maxPt - 1 : 2);
+    }
     // Local hit-stop and global freezes go straight to the Bonk Rush clock.
     if (clock && def) {
       if (def.localStop) clock.localStop(h, reducedMotion ? Math.min(40, def.localStop) : def.localStop);
@@ -312,7 +322,8 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         busy.current.delete(h);
         liveScore.current += pts;
         streak.current += 1;
-        const step = Math.max(0, streak.current - TIER_AT[tier.current]) % 8;
+        // The bonk pitch climbs inside a tier and starts higher at each tier (x1 0-7, x2 2-9, x3 4-11, x5 6-12).
+        const step = Math.min(12, (Math.max(0, streak.current - TIER_AT[tier.current]) % 8) + comboTierRank(multNow()) * 2);
         const fl = flurryHit(flurry.current, now, pts);
         const quiet = fl === FLURRY_GROW || (fl === FLURRY_START && flurry.current.hits > 2);
         const crowded = busy.current.size >= 3;
@@ -424,6 +435,11 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         // The buzz grows with the tier; walking drops it one rung.
         const rank = comboTierRank(multNow());
         const buzz = rank > before ? look.haptic : 'tap';
+        // A real tier-up holds one beat (55 ms, through the governor) so the stamp lands with weight.
+        if (rank > before && runtime.clock && !party) {
+          const ms = govHitStop(governor, Date.now(), reducedMotion ? 30 : 55, 3, false);
+          if (ms > 0) runtime.clock.hitStop(ms, {});
+        }
         playHaptic(walking && buzz !== 'tap' ? (buzz === 'feverStart' ? 'crit' : buzz === 'crit' ? 'goodHit' : 'tap') : buzz);
         syncLayers();
         return true;
@@ -488,8 +504,8 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
       if (flurryResolve(flurry.current, Date.now()) && hits >= 3) {
         const at = lastHit.current;
         const m = at.mult;
-        const label = `${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}`;
-        feel('combo', { x: at.x, y: at.y - 20, stamp: `x${label} COMBO +${pts}` });
+        // The bubble font has no decimal point (x1.5 read as x15): a half multiplier just says COMBO.
+        feel('combo', { x: at.x, y: at.y - 20, stamp: m % 1 === 0 && m > 1 ? `x${m.toFixed(0)} COMBO +${pts}` : `COMBO +${pts}` });
       }
     }, 100);
     return () => clearInterval(iv);

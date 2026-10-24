@@ -98,9 +98,13 @@ export const StampLayer = React.memo(forwardRef<StampLayerHandle, StampLayerProp
     const style = reducedRef.current ? { ...item.style, from: 1, back: 0, squash: false, rise: 0, fromAlpha: 0 } : item.style;
     const total = style.inMs + style.holdMs + style.outMs;
     slotEnds.current[slot] = now + total;
-    const k = Math.max(22, item.size) / FONT_PX * 1.35;
-    const w = measure(font, item.text) * k;
-    const x = Math.max(w / 2 + 8, Math.min(width - w / 2 - 8, item.x));
+    // Never cut off: a long stamp shrinks to fit, and the clamp leaves room for the overshoot,
+    // the tilt and the outline (a combo slab used to run off the right edge).
+    const raw = measure(font, item.text);
+    const k = Math.min(Math.max(22, item.size) / FONT_PX * 1.35, (width - 28) / Math.max(1, raw * 1.22));
+    const w = raw * k;
+    const half = w * 0.61 + 10;
+    const x = width <= half * 2 ? width / 2 : Math.max(half, Math.min(width - half, item.x));
     const y = Math.max(minY + FONT_PX * k, Math.min(maxY ?? height - 20, item.y));
     setSlots((prev) => prev.map((s, i) => (i === slot ? { text: item.text, color: item.color } : s)));
     const startAt = clock.value;

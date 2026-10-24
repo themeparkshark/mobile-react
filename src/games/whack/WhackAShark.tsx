@@ -23,7 +23,7 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { LogBox, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, type SharedValue } from 'react-native-reanimated';
+import Animated, { useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deckIdForRideName } from '../../services/rideTheme';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
@@ -216,6 +216,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const [fever, setFever] = useState(false);
   const [shellScore, setShellScore] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const lastLeftRef = useRef<number | null>(null);
   const [result, setResult] = useState<GameResult | null>(null);
   const [banner, setBanner] = useState<{ text: string | null; sub?: string | null; color?: string; stamp: number }>({ text: null, stamp: 0 });
   const [breather, setBreather] = useState<null | {
@@ -439,6 +440,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         }
         case E_END:
           // Whack's own gold FINISH! is the end beat (one callout at a time): the shell's last-5 layer clears.
+          lastLeftRef.current = null;
           setSecondsLeft(null);
           void onBurstEnd(a === 1);
           break;
@@ -466,10 +468,12 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         if (!t || m.ended) return;
         const left = Math.ceil((t.lengthMs - m.t) / 1000);
         // The shell draws the last 5 (gold edge, stamped seconds, TIME!); the game keeps its own ticks.
-        setSecondsLeft((prev) => {
-          const next = left <= 5 && left >= 0 ? left : null;
-          return prev === next ? prev : next;
-        });
+        // Only a change crosses to React (no state write on the other 249 ms ticks).
+        const nextLeft = left <= 5 && left >= 0 ? left : null;
+        if (nextLeft !== lastLeftRef.current) {
+          lastLeftRef.current = nextLeft;
+          setSecondsLeft(nextLeft);
+        }
         if (left <= 5 && left >= 1 && left !== lastPip && !m.frozen) {
           lastPip = left;
           GameAudio.play(cues.tick, { volume: 0.6 });
@@ -814,7 +818,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         boost: pendingBoost.current === 'golden',
         split: !ride && format !== 'duel' && splitRef.current.known && splitRef.current.best > 0 ? (() => {
           const d = splitRef.current.mine - splitRef.current.best;
-          return { text: d >= 0 ? `+${d.toLocaleString()} AHEAD OF YOUR BEST` : `${d.toLocaleString()} BEHIND YOUR BEST`, ahead: d >= 0 };
+          // Kid-safe: ahead celebrates in gold; behind just shows the best to chase (no minus, no red).
+          return { text: d >= 0 ? `+${d.toLocaleString()} AHEAD OF YOUR BEST` : `YOUR BEST HERE ${splitRef.current.best.toLocaleString()}`, ahead: d >= 0 };
         })() : null,
       });
       setReadyOn(false);
@@ -933,6 +938,14 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   // ---------------------------------------------------------------- render
   const bossSrc = tl?.boss ? BOSS_ART[tl.bossKind].src : null;
   const images = useBoardImages(theme, bossSrc);
+  // The last-5 stamps read the sim clock on the UI thread (the same clock as the timer ring), so the
+  // big gold number and the HUD timer never disagree on a busy phone. Hidden outside a live burst.
+  const playingSv = useSharedValue(0);
+  useEffect(() => { playingSv.value = phase === 'play' ? 1 : 0; }, [phase, playingSv]);
+  const remainingMs = useDerivedValue(() => {
+    const sm = runtime.sim.value;
+    return playingSv.value && sm.len > 0 ? sm.len - sm.t : 1e9;
+  });
   const hud = useMemo(() => ({
     burstLabel: ride ? 'RIDE' : format === 'raid' ? 'RAID' : `BURST ${burstIdx + 1}/${totalBursts}`,
     ride,
@@ -974,6 +987,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       onWrapUp={onWrapUp as never}
       secondsLeft={secondsLeft}
       finalSecondsFeedback={false}
+      // The count waits for the board art (never 3-2-1 over a blank stage); the last 5 land in the sky band.
+      stageReady={!!L && !!images.bg && !!images.peek && !!images.rim && !!images.deck}
+      remainingMs={remainingMs}
+      finalTimeStamp={false}
+      finalStampFieldY={L ? L.hudH + (L.deckTop - L.hudH) * 0.52 : undefined}
       onStart={handleStart}
       onPause={handlePause}
       onResume={handleResume}

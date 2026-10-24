@@ -662,6 +662,8 @@ export default function MemoryGame({
   }, [later, reducedMotion]);
 
   const dealtKey = useRef(-1);
+  // The 3-2-1 waits for the deal to land (never counts over empty card slots).
+  const [stageDealt, setStageDealt] = useState(false);
   useEffect(() => {
     if (!geo || !runRef.current || dealtKey.current === boardKey) return;
     const key = boardKey;
@@ -669,9 +671,11 @@ export default function MemoryGame({
       if (dealtKey.current === key) return;
       dealtKey.current = key;
       dealCards(false);
+      const n = geo.cols * geo.rows;
+      later(reducedMotion ? 60 : n * 38 + 240, () => setStageDealt(true));
     }, 30);
     return () => clearTimeout(t);
-  }, [geo, boardKey, dealCards]);
+  }, [geo, boardKey, dealCards, later, reducedMotion]);
 
   // Keep card positions right if the layout changes (first layout, rotation).
   useEffect(() => {
@@ -1873,7 +1877,8 @@ export default function MemoryGame({
           if (ev.left <= 5 && ev.left > 0 && e.cfg.clockMs != null) {
             GameAudio.play('mm_clock_tick');
             Haptic.tickSelection();
-            if (ev.left === 5) stage.current?.pose('gasp');
+            // The barker cheers the kid on through the last 5 (no sweating shark, no pressure).
+            if (ev.left === 5) stage.current?.pose('fist');
           }
           syncHud();
           break;
@@ -2345,6 +2350,7 @@ export default function MemoryGame({
       secondsLeft={finalLeft}
       finalSecondsFeedback={false}
       countdownY={0.62}
+      stageReady={stageDealt}
       objective={mode === 'ride' ? (r?.signal ? 'Low signal: clear in 24 turns' : 'Clear the board') : mode === 'daily' ? 'Two slips and you are out' : mode === 'race' ? 'Same board, four sharks. First to clear wins.' : mode === 'warmup' ? 'Find the pairs. Remember where you saw them.' : 'Find the pairs. Beat the clock!'}
       result={result}
       gameId="memory"

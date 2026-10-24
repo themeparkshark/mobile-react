@@ -1,29 +1,41 @@
 /**
  * FinalSeconds: the last 5 seconds of a timed mini-game (wow-games lane).
  *
- * Tension without fear: a soft gold edge breathes once a second (never red),
- * each second stamps in from 1.4 near the top of the play field, and at 0 a
- * gold TIME! slams down with a squash. The shell plays the tick, the haptic
- * and the whistle (core/gameMoments finalSecondsBeat); this layer only draws,
- * on the UI thread, from one clock that restarts each second.
+ * A gold drumroll, never a threat: a soft gold edge breathes once a second
+ * (never red), each second slams into the open play space at 110 pt with a
+ * squash and a hand-drawn rock, a gold ring around it closes like a clock
+ * hand over that second, and at 0 a gold TIME! slams down. The 1 holds at full
+ * strength until TIME! replaces it. The shell plays the tick, the haptic and
+ * the whistle (core/gameMoments finalSecondsBeat); this layer only draws, on
+ * the UI thread, from one clock that restarts each second.
  *
  * Reduced motion: no breathing and no stamp travel; the number and TIME!
- * simply appear, the colour shift and the sound stay.
+ * simply appear, the colour shift and the sound stay. Battery Saver (calm
+ * with no ambient budget) drops the breathing edge, keeps the numbers.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { StyleSheet } from 'react-native';
-import { Canvas, Group, Rect, RadialGradient, Text as SkText, vec } from '@shopify/react-native-skia';
+import { Canvas, Circle, Group, Path, Rect, RadialGradient, Skia, Text as SkText, vec } from '@shopify/react-native-skia';
 import { useDisplayFont } from './displayFont';
-import { cancelAnimation, Easing, ReduceMotion, useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
-import { FINAL_COLOR, FINAL_SECONDS, clamp01, finalVignette, springAt } from '../core/gameMoments';
-import { GOLD_FX, SLAM_SQUASH, SPRING } from '../../ui/motion';
+import { cancelAnimation, Easing, ReduceMotion, useDerivedValue, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import { FINAL_COLOR, FINAL_SECONDS, finalStampPose, finalVignette } from '../core/gameMoments';
+import { GOLD_FX } from '../../ui/motion';
 
-const NUM_PX = 72;
-const TIME_PX = 96;
+const NUM_PX = 110;
+const TIME_PX = 104;
+const RING_R = 70;
 
 export interface FinalSecondsProps {
   secondsLeft: number | null | undefined;
+  /**
+   * Optional UI-thread clock: ms left on the round. When given, the stamps are drawn straight from
+   * it (frame-exact with a timer drawn on the UI thread, no JS lag on a busy phone); secondsLeft
+   * still drives the shell's sound and haptics.
+   */
+  remainingMs?: SharedValue<number> | null;
+  /** Draw TIME! at 0 (false when the game ends on its own banner). Default true. */
+  timeStamp?: boolean;
   width: number;
   height: number;
   /** Where the second stamps (pt from the top). */
@@ -31,67 +43,102 @@ export interface FinalSecondsProps {
   reduced: boolean;
   /** Hide everything (paused, results). */
   active: boolean;
+  /** The breathing gold edge may draw (power budget). Default true. */
+  edge?: boolean;
 }
 
-export const FinalSeconds = React.memo(function FinalSeconds({ secondsLeft, width, height, stampY, reduced, active }: FinalSecondsProps) {
+export const FinalSeconds = React.memo(function FinalSeconds({ secondsLeft, remainingMs, timeStamp = true, width, height, stampY, reduced, active, edge: edgeOn = true }: FinalSecondsProps) {
   const font = useDisplayFont(NUM_PX);
   const timeFont = useDisplayFont(TIME_PX);
   const ms = useSharedValue(-1);
+  const sJs = useSharedValue(-1);
   const s = secondsLeft == null ? null : Math.floor(secondsLeft);
-  const inWindow = active && s != null && s >= 0 && s <= FINAL_SECONDS;
-  const [label, setLabel] = useState('');
+  const ui = !!remainingMs;
+  const inWindowJs = active && s != null && s >= 0 && s <= FINAL_SECONDS;
   useEffect(() => {
-    if (!inWindow || s == null) {
+    if (ui) return;
+    if (!inWindowJs || s == null) {
       cancelAnimation(ms);
       ms.value = -1;
+      sJs.value = -1;
       return;
     }
-    setLabel(s === 0 ? 'TIME!' : `${s}`);
+    sJs.value = s;
     cancelAnimation(ms);
     ms.value = 0;
     // Always run the clock: Reduce Motion is handled in the drawing (no breathing, no stamp travel).
     ms.value = withTiming(s === 0 ? 1400 : 1000, { duration: s === 0 ? 1400 : 1000, easing: Easing.linear, reduceMotion: ReduceMotion.Never });
-  }, [inWindow, s, ms]);
+  }, [ui, inWindowJs, s, ms, sJs]);
   useEffect(() => () => cancelAnimation(ms), [ms]);
+  const activeSv = useSharedValue(active ? 1 : 0);
+  useEffect(() => { activeSv.value = active ? 1 : 0; }, [active, activeSv]);
 
-  const isTime = s === 0;
-  const f = isTime ? timeFont : font;
-  const px = isTime ? TIME_PX : NUM_PX;
-  const w = useMemo(() => {
-    if (!f || !label) return 0;
-    try { return f.measureText(label).width; } catch { return label.length * px * 0.6; }
-  }, [f, label, px]);
-
-  const edge = useDerivedValue(() => {
-    if (ms.value < 0 || isTime) return 0;
-    return reduced ? 0.08 : finalVignette(ms.value, 0.12) / 0.12;
-  });
-  const stampOpacity = useDerivedValue(() => {
-    const t = ms.value;
-    if (t < 0) return 0;
-    if (isTime) return t > 1100 ? 1 - clamp01((t - 1100) / 300) : 1;
-    return reduced ? (t < 800 ? 0.9 : 0.9 * (1 - clamp01((t - 800) / 160))) : 0.92 * (1 - clamp01((t - 620) / 260));
-  });
-  const transform = useDerivedValue(() => {
-    const t = ms.value;
-    let sc = 1;
-    let sx = 1;
-    let sy = 1;
-    if (!reduced && t >= 0) {
-      if (isTime) {
-        sc = t < 120 ? 1.8 - 0.8 * (t / 120) * (t / 120) * (t / 120) : springAt(t - 120, SPRING.stamp, 1, 1);
-        if (t >= 120 && t < 170) { sx = 1 + SLAM_SQUASH; sy = 1 - SLAM_SQUASH; }
-      } else {
-        sc = springAt(t, SPRING.stamp, 1.4, 1);
-      }
+  // The second on show and ms into it, from whichever clock drives this game (-1 when hidden).
+  const beat = useDerivedValue(() => {
+    if (remainingMs) {
+      const rem = remainingMs.value;
+      if (!activeSv.value || rem > FINAL_SECONDS * 1000 || rem <= -1400 || (rem <= 0 && !timeStamp)) return { sec: -1, t: -1 };
+      if (rem <= 0) return { sec: 0, t: -rem };
+      const sec = Math.ceil(rem / 1000);
+      return { sec, t: sec * 1000 - rem };
     }
+    return { sec: ms.value < 0 ? -1 : sJs.value, t: ms.value };
+  });
+  const numMetrics = useMemo(() => {
+    const out: number[] = [];
+    for (let k = 0; k <= FINAL_SECONDS; k++) {
+      try { out.push(font ? font.measureText(`${k}`).width : NUM_PX * 0.6); } catch { out.push(NUM_PX * 0.6); }
+    }
+    return out;
+  }, [font]);
+  const timeW = useMemo(() => {
+    try { return timeFont ? timeFont.measureText('TIME!').width : TIME_PX * 3; } catch { return TIME_PX * 3; }
+  }, [timeFont]);
+  const cx = width / 2;
+  const timeCx = Math.max(timeW / 2 + 12, Math.min(width - timeW / 2 - 12, width / 2));
+  const ring = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.addCircle(cx, stampY, RING_R);
+    return p;
+  }, [cx, stampY]);
+
+  const pose = useDerivedValue(() => {
+    const b = beat.value;
+    return finalStampPose(b.sec < 0 ? -1 : b.t, b.sec === 0, b.sec === 1, reduced);
+  });
+  const edge = useDerivedValue(() => {
+    const b = beat.value;
+    if (!edgeOn || b.sec <= 0) return 0;
+    return reduced ? 0.08 : finalVignette(b.t, 0.12) / 0.12;
+  });
+  const numText = useDerivedValue(() => (beat.value.sec > 0 ? `${beat.value.sec}` : ''));
+  const numOpacity = useDerivedValue(() => (beat.value.sec > 0 ? pose.value.alpha : 0));
+  const timeOpacity = useDerivedValue(() => (beat.value.sec === 0 ? pose.value.alpha : 0));
+  // The ring closes over the second like a clock hand (gold, starting at 12 o'clock).
+  const ringEnd = useDerivedValue(() => (beat.value.sec > 0 ? pose.value.ring : 0));
+  const ringOpacity = useDerivedValue(() => (beat.value.sec > 0 ? pose.value.alpha * 0.95 : 0));
+  const numT = useDerivedValue(() => {
+    const p = pose.value;
+    const sec = beat.value.sec;
+    const w = numMetrics[sec > 0 && sec <= FINAL_SECONDS ? sec : 0];
     return [
-      { translateX: width / 2 }, { translateY: stampY },
-      { scaleX: sc * sx }, { scaleY: sc * sy },
-      { translateX: -w / 2 }, { translateY: px * 0.36 },
+      { translateX: cx }, { translateY: stampY },
+      { rotate: p.rot },
+      { scaleX: p.scale * p.sx }, { scaleY: p.scale * p.sy },
+      { translateX: -w / 2 }, { translateY: NUM_PX * 0.36 },
     ];
   });
-  if (!inWindow) return null;
+  const timeT = useDerivedValue(() => {
+    const p = pose.value;
+    return [
+      { translateX: timeCx }, { translateY: stampY },
+      { rotate: p.rot },
+      { scaleX: p.scale * p.sx }, { scaleY: p.scale * p.sy },
+      { translateX: -timeW / 2 }, { translateY: TIME_PX * 0.36 },
+    ];
+  });
+  const ringT = useMemo(() => [{ translateX: cx }, { translateY: stampY }, { rotate: -Math.PI / 2 }, { translateX: -cx }, { translateY: -stampY }], [cx, stampY]);
+  if (!active || (!ui && !inWindowJs)) return null;
   const r = Math.hypot(width, height) * 0.62;
   return (
     <Canvas style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
@@ -102,11 +149,25 @@ export const FinalSeconds = React.memo(function FinalSeconds({ secondsLeft, widt
             positions={[0, 0.55, 0.8, 1]} />
         </Rect>
       </Group>
-      {f && label ? (
-        <Group transform={transform} opacity={stampOpacity}>
-          <SkText x={0} y={5} text={label} font={f} color="#05346e" style="stroke" strokeWidth={11} strokeJoin="round" opacity={0.5} />
-          <SkText x={0} y={0} text={label} font={f} color={isTime ? '#7a4300' : '#05346e'} style="stroke" strokeWidth={11} strokeJoin="round" />
-          <SkText x={0} y={0} text={label} font={f} color={isTime ? GOLD_FX.rays : FINAL_COLOR.hot} />
+      <Group opacity={ringOpacity}>
+        <Circle cx={cx} cy={stampY} r={RING_R} color="rgba(5,52,110,0.28)" />
+        <Circle cx={cx} cy={stampY} r={RING_R} color="#ffffff" style="stroke" strokeWidth={9} opacity={0.75} />
+        <Group transform={ringT}>
+          <Path path={ring} color={GOLD_FX.rays} style="stroke" strokeWidth={9} strokeCap="round" start={0} end={ringEnd} />
+        </Group>
+      </Group>
+      {font ? (
+        <Group transform={numT} opacity={numOpacity}>
+          <SkText x={0} y={6} text={numText} font={font} color="#05346e" style="stroke" strokeWidth={14} strokeJoin="round" opacity={0.5} />
+          <SkText x={0} y={0} text={numText} font={font} color="#05346e" style="stroke" strokeWidth={14} strokeJoin="round" />
+          <SkText x={0} y={0} text={numText} font={font} color={FINAL_COLOR.hot} />
+        </Group>
+      ) : null}
+      {timeFont && timeStamp ? (
+        <Group transform={timeT} opacity={timeOpacity}>
+          <SkText x={0} y={6} text="TIME!" font={timeFont} color="#05346e" style="stroke" strokeWidth={14} strokeJoin="round" opacity={0.5} />
+          <SkText x={0} y={0} text="TIME!" font={timeFont} color="#7a4300" style="stroke" strokeWidth={14} strokeJoin="round" />
+          <SkText x={0} y={0} text="TIME!" font={timeFont} color={GOLD_FX.rays} />
         </Group>
       ) : null}
     </Canvas>

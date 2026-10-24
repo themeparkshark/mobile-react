@@ -100,11 +100,37 @@ export const COUNT_STEPS: readonly CountStep[] = [
   { label: 'GO!', at: GO_AT_MS, fill: GOLD_FX.rays, stroke: '#7a4300', ink: '#05346e', ring: GOLD_FX.core, haptic: 'incoming', cue: 'sh_go_horn', variant: 'sh_whistle', sfx: 'go' },
 ];
 
-/** Steps for a count style: the full 3-2-1-GO or a single GO. */
-export function countSteps(style: 'full' | 'go' | 'none'): readonly CountStep[] {
+/**
+ * Steps for a count style: the full 3-2-1-GO or a single GO. A repeat start
+ * (quick) skips the 3: 2-1-GO in 1.4 s, the same clock, the same GO.
+ */
+export function countSteps(style: 'full' | 'go' | 'none', quick = false): readonly CountStep[] {
   if (style === 'none') return [];
-  return style === 'go' ? COUNT_STEPS.slice(3) : COUNT_STEPS;
+  if (style === 'go') return COUNT_STEPS.slice(3);
+  return quick ? COUNT_STEPS.slice(1) : COUNT_STEPS;
 }
+
+/** The count waits for the stage to draw, but never longer than this. */
+export const STAGE_READY_MAX_MS = 4000;
+
+const countStarts: Record<string, number> = {};
+/** Count one start of a game this app session; returns how many starts it has had (1 = the first). */
+export function noteCountStart(gameId: string): number {
+  countStarts[gameId] = (countStarts[gameId] ?? 0) + 1;
+  return countStarts[gameId];
+}
+/** Test hook. */
+export function resetCountStarts(): void {
+  for (const k of Object.keys(countStarts)) delete countStarts[k];
+}
+
+/** About one start in eight throws a gold confetti GO; never the first play (that one teaches the rhythm). */
+export const RARE_GO_CHANCE = 0.125;
+export function isRareGo(startNo: number, rand: number): boolean {
+  return startNo > 1 && rand < RARE_GO_CHANCE;
+}
+/** A rare GO throws more sparkles (still within PARTICLES.sparkles). */
+export const RARE_GO_SPARKLES = 12;
 
 export interface CountPose {
   /** Which step is on screen (index into COUNT_STEPS), -1 for none. */
@@ -122,9 +148,13 @@ export interface CountPose {
   readonly kick: number;
   /** The countdown scrim (1 until GO, then gone). */
   readonly scrim: number;
+  /** A hand-drawn wobble (radians): each number swings in tilted and rocks once as it lands. */
+  readonly rot: number;
 }
 
-const NONE: CountPose = { index: -1, scale: 1, sx: 1, sy: 1, alpha: 0, ringScale: 1, ringAlpha: 0, sparkle: 0, kick: 0, scrim: 0 };
+const NONE: CountPose = { index: -1, scale: 1, sx: 1, sy: 1, alpha: 0, ringScale: 1, ringAlpha: 0, sparkle: 0, kick: 0, scrim: 0, rot: 0 };
+/** How far a number tilts as it swings in (radians, about 7 degrees); 3 and 1 lean left, 2 and GO right. */
+export const COUNT_TILT = 0.12;
 
 /**
  * The whole countdown as a pure function of one clock (ms since the 3 landed).
@@ -144,8 +174,9 @@ export function countPose(t: number, reduced: boolean, calm: boolean): CountPose
   if (reduced) {
     const life = index === 3 ? COUNT_END_MS - GO_AT_MS : COUNT_STEP_MS;
     const a = Math.min(clamp01(local / DURATION.quick), clamp01((life - local) / DURATION.quick));
-    return { index, scale: 1, sx: 1, sy: 1, alpha: a, ringScale: 1, ringAlpha: 0, sparkle: 0, kick: 0, scrim };
+    return { index, scale: 1, sx: 1, sy: 1, alpha: a, ringScale: 1, ringAlpha: 0, sparkle: 0, kick: 0, scrim, rot: 0 };
   }
+  const dir = index % 2 === 0 ? -1 : 1;
   if (index < 3) {
     let scale = 1;
     let alpha = 1;
@@ -170,7 +201,11 @@ export function countPose(t: number, reduced: boolean, calm: boolean): CountPose
     const rp = clamp01((local - DURATION.slam) / 400);
     const ringScale = 0.6 + 1.2 * easeOutCubic(rp);
     const ringAlpha = local < DURATION.slam ? 0 : 0.85 * (1 - rp);
-    return { index, scale, sx, sy, alpha, ringScale, ringAlpha, sparkle: 0, kick: 0, scrim };
+    // Tilted on the way in, then one rock past level and back (SPRING.pop), like a hand-drawn card.
+    const rot = local < DURATION.slam
+      ? dir * COUNT_TILT * (1 - easeInCubic(local / DURATION.slam) * 0.6)
+      : springAt(local - DURATION.slam, SPRING.pop, dir * COUNT_TILT * 0.4, 0);
+    return { index, scale, sx, sy, alpha, ringScale, ringAlpha, sparkle: 0, kick: 0, scrim, rot };
   }
   // GO.
   const exitFrom = COUNT_END_MS - GO_AT_MS - 150;
@@ -185,7 +220,8 @@ export function countPose(t: number, reduced: boolean, calm: boolean): CountPose
   const kp = local / KICK.ms;
   const kick = calm || kp >= 1 ? 0 : KICK.maxPt * Math.sin(Math.PI * clamp01(kp)) * (1 - clamp01(kp) * 0.5);
   const rp = clamp01(local / 420);
-  return { index, scale, sx: 1, sy: 1, alpha, ringScale: 0.6 + 1.6 * easeOutCubic(rp), ringAlpha: 0.9 * (1 - rp), sparkle, kick, scrim };
+  const rot = springAt(local, SPRING.pop, dir * COUNT_TILT, 0);
+  return { index, scale, sx: 1, sy: 1, alpha, ringScale: 0.6 + 1.6 * easeOutCubic(rp), ringAlpha: 0.9 * (1 - rp), sparkle, kick, scrim, rot };
 }
 
 /** Where sparkle k of n sits at progress p of GO's burst (offset from the GO centre, pt) and its opacity. */
@@ -201,6 +237,30 @@ export function goSparkle(k: number, n: number, p: number): { x: number; y: numb
     scale: 0.6 + 0.6 * (1 - p),
   };
 }
+
+/**
+ * Confetti piece k of n on a rare GO at progress p (0..1 over the GO tail): it
+ * pops up and out from the GO, gravity pulls it down, it spins and fades.
+ * Gold, white and brand blue only.
+ */
+export function goConfetti(k: number, n: number, p: number): { x: number; y: number; alpha: number; rot: number; color: number } {
+  'worklet';
+  const ang = -Math.PI / 2 + ((k / Math.max(1, n)) - 0.5) * Math.PI * 1.5;
+  const speed = 210 + ((k * 37) % 7) * 18;
+  const q = clamp01(p);
+  const x = Math.cos(ang) * speed * q * 0.9;
+  const y = Math.sin(ang) * speed * q + 300 * q * q;
+  return {
+    x,
+    y,
+    alpha: q <= 0 ? 0 : q < 0.1 ? q / 0.1 : 1 - clamp01((q - 0.55) / 0.45),
+    rot: (k % 2 ? 1 : -1) * q * 9 + k,
+    color: k % 3,
+  };
+}
+export const CONFETTI_COLORS = [GOLD_FX.rays, '#ffffff', '#2aa9f5'] as const;
+/** Confetti cap per burst (motion PARTICLES.confetti). */
+export const PARTICLE_MAX_CONFETTI = 28;
 
 /** Sparkles on GO before the power budget (momentParticles scales them again). */
 export const GO_SPARKLES = 8;
@@ -244,6 +304,56 @@ export function finalVignette(msIntoSecond: number, peak: number): number {
   'worklet';
   const p = clamp01(msIntoSecond / 1000);
   return peak * Math.sin(Math.PI * p);
+}
+
+export interface FinalStampPose {
+  readonly scale: number;
+  readonly sx: number;
+  readonly sy: number;
+  readonly rot: number;
+  readonly alpha: number;
+  /** The gold ring left on the clock (1 full at the start of the second, 0 closed). */
+  readonly ring: number;
+}
+
+/**
+ * The last-5 stamp at `t` ms into its second: it slams from 1.6 in
+ * DURATION.slam on an ease-in, squashes SLAM_SQUASH for 50 ms, rocks once
+ * (SPRING.pop), then holds. 5 to 2 dim a little at the end of their second
+ * (the next one replaces them); the 1 stays at full strength until TIME!.
+ * TIME! slams from 1.8 and holds 1.1 s, then fades.
+ */
+export function finalStampPose(t: number, isTime: boolean, isLast: boolean, reduced: boolean): FinalStampPose {
+  'worklet';
+  if (t < 0) return { scale: 1, sx: 1, sy: 1, rot: 0, alpha: 0, ring: 0 };
+  const ring = 1 - clamp01(t / 1000);
+  if (reduced) {
+    const a = isTime ? (t > 1100 ? 1 - clamp01((t - 1100) / 300) : 1) : isLast ? 1 : t < 800 ? 0.95 : 0.95 * (1 - clamp01((t - 800) / 160) * 0.5);
+    return { scale: 1, sx: 1, sy: 1, rot: 0, alpha: a, ring };
+  }
+  const from = isTime ? 1.8 : 1.6;
+  const dir = isTime ? -1 : 1;
+  let scale = 1;
+  let sx = 1;
+  let sy = 1;
+  let rot = 0;
+  if (t < DURATION.slam) {
+    const p = easeInCubic(t / DURATION.slam);
+    scale = from - (from - 1) * p;
+    rot = dir * COUNT_TILT * (1 - p * 0.6);
+  } else {
+    if (t < DURATION.slam + 50) { sx = 1 + SLAM_SQUASH; sy = 1 - SLAM_SQUASH; } else if (t < DURATION.slam + 130) {
+      const q = easeOutCubic((t - DURATION.slam - 50) / 80);
+      sx = 1 + SLAM_SQUASH * (1 - q);
+      sy = 1 - SLAM_SQUASH * (1 - q);
+    }
+    rot = springAt(t - DURATION.slam, SPRING.pop, dir * COUNT_TILT * 0.4, 0);
+  }
+  const enter = clamp01(t / (DURATION.slam * 0.6));
+  let alpha = enter;
+  if (isTime) alpha = t > 1100 ? 1 - clamp01((t - 1100) / 300) : enter;
+  else if (!isLast) alpha = enter * (1 - 0.35 * clamp01((t - 760) / 240));
+  return { scale, sx, sy, rot, alpha, ring };
 }
 
 /** Final-seconds colour: white turns gold (never red). */

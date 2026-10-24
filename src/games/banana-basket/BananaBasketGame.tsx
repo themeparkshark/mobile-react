@@ -988,6 +988,8 @@ function BananaRun({
       secondsLeft={finalLeft}
       finalSecondsFeedback={false}
       countdownY={0.4}
+      // The count waits for the shark, basket and cart art (never over an empty court).
+      stageReady={!!(layout && images.poseIdle && images.basket && images.cart)}
       resumeStyle="countdown"
       countdownStyle={mode === 'heat' ? 'none' : undefined}
       resultExtras={extras ? <ResultsRows x={extras} /> : undefined}
