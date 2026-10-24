@@ -491,6 +491,7 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
     'react-native-reanimated': { default: { View: 'View' }, Easing: {}, cancelAnimation() {}, useAnimatedStyle() {}, useSharedValue() {}, withRepeat() {}, withSequence() {}, withTiming() {} },
     '../../config': { default: { primary: '#09268f' } },
     '../../ui/useUiReducedMotion': { default: () => false },
+    '../../power/batterySaver': { useBatterySaver: () => false },
     'react/jsx-runtime': { jsx() {}, jsxs() {} },
   }).COVER_CLOUDS;
   // Each cloud drifts on its own slow clock (not the shark's 1.3 s bob), starting at its own point.
@@ -529,7 +530,7 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   // The launch map comes from the phone's recent fix when there is one (a fresh fix can take seconds).
   assert.match(read('src/context/LocationProvider.tsx'), /getLastKnownPositionAsync\(\{ maxAge: 5 \* 60 \* 1000, requiredAccuracy: 200 \}\)/);
   // PLAY RIDE and its ride chip wait for the cover to lift (their wrapper can draw above the cover on iOS).
-  assert.match(read('src/screens/ExploreScreen.tsx'), /redeemable=\{mapFocused && !mapCovered \? activeRedeemable : undefined\}/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /redeemable=\{mapFocused && !mapCovered && !isActive \? activeRedeemable : undefined\}/);
   // The header coin, key and ticket and the five footer icons are decoded into memory before the hand-off.
   const warmSrc = read('src/helpers/launchArt.ts');
   assert.match(warmSrc, /Image\.prefetch\(bundled, 'memory-disk'\)/);
@@ -716,7 +717,9 @@ test('buttons and the map on small and busy screens: GameButton art waits for it
   const button = read('src/ui/GameButton.tsx');
   assert.match(button, /style=\{\{ width: '100%', aspectRatio: BUTTON\.aspectRatio, opacity: labelAreaHeight > 0 \? 1 : 0 \}\}>/);
   const detail = read('src/screens/RideTracker/RideDetailScreen.tsx');
-  assert.match(detail, /const emptySharkSize = screenHeight < 700 \? 0 : screenHeight < 740 \? 84 : 130;/);
+  assert.match(detail, /const emptySharkSize = emptySharkFor\(screenHeight, emptyRoom, emptyWordsHeight\);/);
+  assert.match(detail, /if \(screenHeight < 700 \|\| room <= 0 \|\| words <= 0\) return 0;/, 'no shark on the SE, and none before the room is measured');
+  assert.match(detail, /return left >= 72 \? Math\.min\(170, left\) : 0;/, 'the shark grows into the room left (no dead band on a Pro Max), capped');
   assert.match(detail, /\{emptySharkSize > 0 && !\(community/);
   assert.match(detail, /<GameIcon name="shark" size=\{emptySharkSize\} \/>/);
   const map = read('src/components/Map.tsx');
@@ -1077,4 +1080,19 @@ test('splash bar keeps creeping through a slow sign-in, below the Loading screen
   const splash = read('src/screens/SplashScreen.tsx');
   assert.match(splash, /withTiming\(SPLASH_LONG_SHARE, \{ duration: SPLASH_LONG_CREEP_MS, easing: Easing\.linear \}\)/);
   assert.match(splash, /if \(launchFill\.value >= SPLASH_ROUTE_SHARE\) return;/, 'never moves the bar back');
+});
+
+test('wave 3 round 2: PLAY RIDE waits for Finn, Battery Saver stills the launch, the pill press always springs back', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /redeemable=\{mapFocused && !mapCovered && !isActive \? activeRedeemable : undefined\}/,
+    'PLAY RIDE and its chip stay hidden while the map cover or a Finn card is up');
+  const scene = read('src/components/launch/LaunchScene.tsx');
+  assert.match(scene, /const saver = useBatterySaver\(\);/);
+  assert.match(scene, /const still = reduced \|\| saver \|\| !active;/);
+  const sky = read('src/components/map/MapCoverSky.tsx');
+  assert.match(sky, /const reduced = useUiReducedMotion\(\) \|\| saver;/);
+  const pill = read('src/components/YellowButton.tsx');
+  assert.match(pill, /if \(disabled \|\| reducedMotion\) \{ animated\.stopAnimation\(\); animated\.setValue\(1\); \}\s*return \(\) => animated\.stopAnimation\(\);/);
+  assert.match(pill, /opacity: ready \? 1 : 0,/, 'pill and words share one opacity');
+  assert.doesNotMatch(pill, /const markArtReady = \(\) => \{[^}]*pillArtSeen = true/, 'the safety timer never marks the art as seen');
 });

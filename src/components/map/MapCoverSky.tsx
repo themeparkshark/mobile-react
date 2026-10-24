@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import config from '../../config';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { useBatterySaver } from '../../power/batterySaver';
 import { COVER_MAX_MS, LAUNCH_HANDOFF_SHARE } from '../../constants/launchHandoff';
 
 /** The cover color while park tiles load: the game's light sky blue, never a dark scene. */
@@ -43,7 +44,9 @@ function MapCoverSky({ done = false, fill: drivenFill, bar = true }: {
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
   const width = box?.width ?? window.width;
   const height = box?.height ?? window.height;
-  const reduced = useUiReducedMotion();
+  // Battery Saver keeps the sky still too (the bar still fills).
+  const saver = useBatterySaver();
+  const reduced = useUiReducedMotion() || saver;
   const t = useSharedValue(0);
   const ownFill = useSharedValue(LAUNCH_HANDOFF_SHARE);
   const fill = drivenFill ?? ownFill;

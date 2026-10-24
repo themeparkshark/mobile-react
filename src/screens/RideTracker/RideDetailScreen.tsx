@@ -204,6 +204,16 @@ function LogPointer() {
   );
 }
 
+/** Space above the waiting shark, and kept free under it inside the empty page. */
+const EMPTY_ART_GAP = 14;
+const EMPTY_BOTTOM = 12;
+/** The waiting shark's size: the room left under the words (never bigger than 170, never under 72). */
+export function emptySharkFor(screenHeight: number, room: number, words: number): number {
+  if (screenHeight < 700 || room <= 0 || words <= 0) return 0;
+  const left = Math.floor(room - words - EMPTY_ART_GAP - EMPTY_BOTTOM - 8);
+  return left >= 72 ? Math.min(170, left) : 0;
+}
+
 // ─── Main ───
 export default function RideDetailScreen() {
   const navigation = useNavigation<any>();
@@ -272,10 +282,13 @@ export default function RideDetailScreen() {
   const name = plainRideName(rideName || ride?.name || 'Ride');
   // A short phone (iPhone SE, 667 pt) gets a smaller waiting shark, so it never slides under the footer.
   const { height: screenHeight } = useWindowDimensions();
-  // The waiting shark fills a tall empty page. On a 667 pt phone (iPhone SE) there is no room for it
-  // between LOG THIS RIDE and the footer compass (even at 84 pt it slid under the compass), so the
-  // arrow and the two lines carry the page there.
-  const emptySharkSize = screenHeight < 700 ? 0 : screenHeight < 740 ? 84 : 130;
+  // The waiting shark fills a tall empty page: it grows into the room left under the arrow and the
+  // two lines (measured), so a Pro Max has no dead band above the footer. On a 667 pt phone (iPhone
+  // SE) there is no room for it between LOG THIS RIDE and the footer compass (even at 84 pt it slid
+  // under the compass), so the arrow and the two lines carry the page there.
+  const [emptyRoom, setEmptyRoom] = useState(0);
+  const [emptyWordsHeight, setEmptyWordsHeight] = useState(0);
+  const emptySharkSize = emptySharkFor(screenHeight, emptyRoom, emptyWordsHeight);
   // One layout for every ride: the header always says RIDE TRACKER and the ride's name always
   // leads the white ride card (two lines for long names), so short and long names open the same way.
   const headerTitle = RIDE_DETAIL_HEADER;
@@ -401,11 +414,19 @@ export default function RideDetailScreen() {
           </View>
         }
         ListEmptyComponent={
-          <View style={s.emptyWrap}>
+          <View style={s.emptyWrap} onLayout={e => {
+            const h = Math.round(e.nativeEvent.layout.height);
+            setEmptyRoom(prev => (Math.abs(prev - h) > 1 ? h : prev));
+          }}>
             {/* An arrow up at LOG THIS RIDE, then the shark: the empty page says what to do without reading. */}
-            <LogPointer />
-            <Text style={s.emptyTitle}>You haven't ridden this yet!</Text>
-            <Text style={s.emptyHint}>Rode it? Tap LOG THIS RIDE.</Text>
+            <View style={s.emptyWords} onLayout={e => {
+              const h = Math.round(e.nativeEvent.layout.height);
+              setEmptyWordsHeight(prev => (Math.abs(prev - h) > 1 ? h : prev));
+            }}>
+              <LogPointer />
+              <Text style={s.emptyTitle}>You haven't ridden this yet!</Text>
+              <Text style={s.emptyHint}>Rode it? Tap LOG THIS RIDE.</Text>
+            </View>
             {/* The shark waits by the ride, so the empty page is not a blank sheet (the riders' chart fills it otherwise). */}
             {emptySharkSize > 0 && !(community && ratingCount(community.rating_distribution) >= COMPACT_COMMUNITY_LOGS) &&
               <View style={s.emptyArt} accessible={false}><GameIcon name="shark" size={emptySharkSize} /></View>}
@@ -533,8 +554,9 @@ const s = StyleSheet.create({
   entryShareIcon: { color: B.skyDark, fontSize: 11, fontFamily: 'Knockout' },
 
   // ─── Empty ───
-  emptyWrap: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 0, paddingBottom: 12 },
-  emptyArt: { marginTop: 14, opacity: 0.95 },
+  emptyWrap: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 0, paddingBottom: EMPTY_BOTTOM },
+  emptyWords: { alignItems: 'center' },
+  emptyArt: { marginTop: EMPTY_ART_GAP, opacity: 0.95 },
   emptyTitle: { color: '#05346e', fontSize: 18, fontFamily: 'Shark', marginTop: 8 },
   emptyHint: { color: B.textMid, fontSize: 15, fontFamily: 'Knockout', marginTop: 4 },
   pointer: { transform: [{ rotate: '-90deg' }] },

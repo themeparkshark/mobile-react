@@ -1450,9 +1450,10 @@ function ExploreScreen() {
             }}
           >
             {/* PLAY RIDE and its ride chip slide up only after the loading cover lifts: on iOS this
-                wrapper's native slide can draw above the cover, so it waits for the map. */}
+                wrapper's native slide can draw above the cover, so it waits for the map. They also
+                wait while Finn's card is up (his first adventure dims the map): one thing at a time. */}
             <RedeemModal
-              redeemable={mapFocused && !mapCovered ? activeRedeemable : undefined}
+              redeemable={mapFocused && !mapCovered && !isActive ? activeRedeemable : undefined}
               park={park}
               selectedTaskId={selectedTask?.id ?? null}
               liveStatus={activeLiveStatus}

@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import config from '../../config';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { useBatterySaver } from '../../power/batterySaver';
 
 /**
  * Alex's launch art: the same picture as the native launch screen (ios SplashScreen.storyboard draws
@@ -89,6 +90,8 @@ function LaunchScene({ active = true, fact: givenFact }: {
 }) {
   const { width, height } = Dimensions.get('window');
   const reduced = useUiReducedMotion();
+  // Battery Saver keeps the scene still too (no rising bubbles, no bar shine): light on battery and heat.
+  const saver = useBatterySaver();
   const fact = givenFact ?? getLaunchFact();
   // The fact fades in once, the first time it shows; a later screen shows it at once (no swap, no blink).
   const factIn = useSharedValue(fact ? 1 : 0);
@@ -98,7 +101,7 @@ function LaunchScene({ active = true, fact: givenFact }: {
   }, [fact, reduced, factIn]);
   const factStyle = useAnimatedStyle(() => ({ opacity: factIn.value }));
   const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0, Math.min(1, launchFill.value)) }] }));
-  const still = reduced || !active;
+  const still = reduced || saver || !active;
   // Until the art has drawn, the scene is only the native splash's own blue: the bar, the fact and
   // the bubbles wait for the picture, so a slow decode can never show an empty bar on a flat screen.
   // The bar keeps filling underneath, so it appears already moving.

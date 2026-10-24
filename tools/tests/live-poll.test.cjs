@@ -146,7 +146,7 @@ test('entry screens left under the map stop their video and loops', () => {
   // The launch scene's bubbles run only while the screen is on top, and stop on unmount.
   assert.match(loading, /<LaunchScene active=\{focused\} fact=\{fact\} \/>/);
   const scene = read('src/components/launch/LaunchScene.tsx');
-  assert.match(scene, /const still = reduced \|\| !active;/);
+  assert.match(scene, /const still = reduced \|\| saver \|\| !active;/);
   assert.match(scene, /\{artIn && !still && LAUNCH_BUBBLES\.map/);
   assert.match(scene, /return \(\) => cancelAnimation\(p\);/, 'bubbles stop their loops on unmount');
   const login = read('src/screens/Auth/LoginScreen.tsx');
