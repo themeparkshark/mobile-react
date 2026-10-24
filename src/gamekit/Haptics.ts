@@ -445,8 +445,40 @@ export function setNativeHapticPlayer(player: NativeHapticPlayer | null): void {
   nativePlayer = player;
 }
 
+/**
+ * The Core Haptics module a future binary ships (NATIVE_QUEUE, wow-sound round 3):
+ * an Expo module named TpsCoreHaptics wrapping CHHapticEngine, with
+ * playPattern(ahapJson: string, delayMs: number): void and isSupported(): boolean.
+ * When it is present it registers itself here on first use, so the shaped catch,
+ * combo, fever, flame, chest and park patterns turn on with no JS change; until
+ * then every pattern keeps its expo-haptics fallback. Never throws.
+ */
+export const NATIVE_HAPTICS_MODULE = 'TpsCoreHaptics';
+let nativeChecked = false;
+function detectNativeHaptics(): void {
+  if (nativeChecked || nativePlayer) return;
+  nativeChecked = true;
+  try {
+    const mod = (globalThis as unknown as { expo?: { modules?: Record<string, { playPattern?: (json: string, delayMs: number) => void; isSupported?: () => boolean } | undefined> } })
+      .expo?.modules?.[NATIVE_HAPTICS_MODULE];
+    if (!mod || typeof mod.playPattern !== 'function') return;
+    if (typeof mod.isSupported === 'function' && !mod.isSupported()) return;
+    const play = mod.playPattern.bind(mod);
+    nativePlayer = { play: (ahap, delayMs) => { try { play(JSON.stringify(ahap), delayMs); } catch { /* the fallback is fine */ } } };
+  } catch {
+    // No module in this binary: expo-haptics fallbacks.
+  }
+}
+
 export function hasNativeHaptics(): boolean {
+  detectNativeHaptics();
   return nativePlayer !== null;
+}
+
+/** Tests only. */
+export function resetNativeHapticsForTests(): void {
+  nativePlayer = null;
+  nativeChecked = false;
 }
 
 /**
@@ -464,6 +496,7 @@ export function playPattern(
   if (!def || def.length === 0) return false;
   const priority = opts.priority ?? (opts.tell ? HP.telegraph : HP.own);
   const lead = opts.alignToAudio ? offsetMs : 0;
+  detectNativeHaptics();
   return offerToBus(priority, patternBusStrength(def), opts, () => {
     const player = nativePlayer;
     if (player) {

@@ -127,3 +127,23 @@ test('HUD frame window: p5 fps is the 95th percentile frame time', () => {
   assert.equal(w.jankPct, 5);
   assert.equal(perfWindow(Array(60).fill(16.7)).fpsP5, 59.9);
 });
+
+test('Core Haptics: a binary with the TpsCoreHaptics module turns the shaped patterns on with no JS change', () => {
+  const stubs = { 'expo-haptics': new Proxy({}, { get: (_t, k) => (typeof k === 'string' && /Async$/.test(k) ? async () => undefined : {}) }) };
+  const without = loadTs('src/gamekit/Haptics.ts', stubs, {});
+  assert.equal(without.hasNativeHaptics(), false, 'no module in this binary: expo-haptics fallbacks');
+  const played = [];
+  const expo = { modules: { TpsCoreHaptics: { isSupported: () => true, playPattern: (json, delay) => played.push({ ahap: JSON.parse(json), delay }) } } };
+  const withMod = loadTs('src/gamekit/Haptics.ts', stubs, { expo });
+  // vm contexts expose their globals on globalThis; the module looks for globalThis.expo.modules.TpsCoreHaptics.
+  assert.equal(withMod.hasNativeHaptics(), true, 'the module registers itself on first use');
+  assert.equal(withMod.playPattern('momentCatch'), true);
+  assert.equal(played.length, 1, 'the catch pattern went to Core Haptics');
+  assert.equal(played[0].ahap.Pattern[0].Event.Time, 0, 'the burst is t = 0');
+  const off = loadTs('src/gamekit/Haptics.ts', stubs, { expo: { modules: { TpsCoreHaptics: { isSupported: () => false, playPattern: () => { throw new Error('never'); } } } } });
+  assert.equal(off.hasNativeHaptics(), false, 'a phone without Core Haptics keeps the fallbacks');
+  for (const name of ['momentCatch', 'momentCatchGather', 'momentComboTier', 'momentFeverStart', 'momentStreakIgnite', 'momentChestOpen', 'momentParkArrival']) {
+    const ahap = JSON.parse(read(`assets/haptics/${name}.ahap`));
+    assert.ok(Array.isArray(ahap.Pattern) && ahap.Pattern.length > 0, `${name}.ahap is a playable pattern`);
+  }
+});
