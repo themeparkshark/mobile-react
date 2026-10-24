@@ -4,7 +4,8 @@
  * Energy right on the button. Numbers are the server's formula (home rate in).
  */
 import { Image } from 'expo-image';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../../gamekit/core/playerStorage';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';

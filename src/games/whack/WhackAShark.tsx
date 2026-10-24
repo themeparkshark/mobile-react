@@ -24,7 +24,8 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo
 import { LogBox, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, type SharedValue } from 'react-native-reanimated';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../gamekit/core/playerStorage';
 import { deckIdForRideName } from '../../services/rideTheme';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';

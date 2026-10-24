@@ -8,7 +8,8 @@
  * Best is keyed by difficulty so ride and queue boards keep separate records.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../gamekit/core/playerStorage';
 import { parseAlbum, type Album } from './modes/album';
 import { EMPTY_STREAK, type StreakState } from './modes/daily';
 import { EMPTY_LEDGER, NO_HEAT, type HeatToggles, type UnlockLedger } from './modes/unlocks';

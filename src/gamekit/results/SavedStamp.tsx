@@ -14,7 +14,7 @@ import Animated, {
 import GameIcon from '../../ui/GameIcon';
 import { playHaptic } from '../Haptics';
 
-export function SavedStamp({ reducedMotion, delayMs = 260 }: { reducedMotion: boolean; delayMs?: number }) {
+export function SavedStamp({ reducedMotion, delayMs = 260, label = 'RUN SAVED' }: { reducedMotion: boolean; delayMs?: number; label?: string }) {
   const scale = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
     if (reducedMotion) return undefined;
@@ -28,10 +28,10 @@ export function SavedStamp({ reducedMotion, delayMs = 260 }: { reducedMotion: bo
   }, [reducedMotion, delayMs, scale]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }, { rotate: '-4deg' }], opacity: scale.value > 0.02 ? 1 : 0 }));
   return (
-    <Animated.View style={[styles.wrap, style]} accessible accessibilityLabel="Run saved">
+    <Animated.View style={[styles.wrap, style]} accessible accessibilityLabel={label.toLowerCase()}>
       <View style={styles.stamp}>
         <GameIcon name="ride" size={30} />
-        <Text style={styles.text}>RUN SAVED</Text>
+        <Text style={styles.text}>{label}</Text>
       </View>
     </Animated.View>
   );

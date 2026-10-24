@@ -54,7 +54,7 @@ test('chips are brags, never data: no %, ms, zero counts, sentences; at most two
 
 test('counts a kid cannot read become dots; the next-star read is one word and a bar', () => {
   const [pips] = feelings.feelingChips([{ label: 'Bursts', value: '3/4', pips: [3, 4] }]);
-  assert.deepEqual([...pips.pips], [3, 4]);
+  assert.deepEqual([...pips.pips], [3, 3], 'brag dots show only what was earned, never the empty slots');
   assert.equal(feelings.feelingChips([{ label: 'Bursts', value: '0/4', pips: [0, 4] }]).length, 0, 'no dots, no chip');
   assert.equal(feelings.nextStarWord({ nextStar: 1, progress: 0.12, near: false }), 'KEEP GOING');
   assert.equal(feelings.nextStarWord({ nextStar: 1, progress: 0.6, near: false }), 'HALFWAY THERE');
@@ -124,7 +124,7 @@ test('a queue event never throws the run away (RUN SAVED, never a fake star), bu
   assert.equal(session.isEmptyResultsNode(''), true);
   assert.equal(session.isEmptyResultsNode({ type: 'View' }), false);
   const card = read('src/gamekit/results/ResultsCard.tsx');
-  assert.match(card, /\{saved \? \(\n\s+<SavedStamp/, 'RUN SAVED stamps in where the stars would be');
+  assert.match(card, /\{saved \|\| sendOff \? \(\n\s+<SavedStamp/, 'RUN SAVED stamps in where the stars would be');
   assert.match(card, /if \(saved \|\| wrapUp\) return null;/, 'a saved run has no next-star bar to disagree with');
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
   assert.match(screen, /if \(!partial\) session\.recordGameResult\(game\.gameId, stars\);\n\s+session\.markActivityCompleted\(game\.id\);/,
@@ -333,8 +333,8 @@ test('a personal best always feels like a win, even with 0 stars', () => {
   assert.equal(feelings.endFeel({ stars: 0, isNewBest: true, saved: true }), 'saved', 'a saved run never sets a best, so it never claims one');
   assert.equal(feelings.endFeel({ stars: 0, isNewBest: false, saved: false }), 'try');
   const shell = read('src/gamekit/GameShellV2.tsx');
-  assert.match(shell, /if \(feel === 'win' \|\| feel === 'best'\) \{\n\s+Haptic\.success\(\);\n\s+playSfx\('win'\);/);
-  assert.match(shell, /\} else if \(feel === 'try'\) \{\n\s+Haptic\.failBuzz\(\);\n\s+playSfx\('lose'\);/);
+  assert.match(shell, /if \(feel === 'win' \|\| feel === 'best'\) \{\n\s+Haptic\.success\(\);\n\s+if \(!ownSfx\) playSfx\('win'\);/);
+  assert.match(shell, /\} else if \(feel === 'try'\) \{\n\s+Haptic\.failBuzz\(\);\n\s+if \(!ownSfx\) playSfx\('lose'\);/);
   assert.doesNotMatch(shell, /Haptic\[effectiveResult\.stars > 0 \? 'success' : 'failBuzz'\]/, 'sound and haptic no longer key on stars alone');
   assert.match(shell, /onNewBestLanded=\{stars === 0 \? burstBest : undefined\}/, 'one small confetti burst when the badge lands');
   const card = read('src/gamekit/results/ResultsCard.tsx');
@@ -426,4 +426,90 @@ test('one button voice on try cards, a calm CQ board under its card, no endless 
   assert.match(duel, /GAP_BEATS = 4/);
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.doesNotMatch(whack, /% TO GO/, 'no percent in a Whack title');
+});
+
+// -- Wave 2 round 1 ------------------------------------------------------------
+
+test('a ride-up or left-line end is never a loss, even at 0 points', () => {
+  assert.equal(feelings.endFeel({ stars: 0, isNewBest: false, saved: false, wrapped: true }), 'saved', '0-point ride-up is calm');
+  assert.equal(feelings.endFeel({ stars: 0, isNewBest: true, saved: false, wrapped: true }), 'saved', 'a ride-up never claims a best');
+  assert.equal(feelings.endFeel({ stars: 2, isNewBest: false, saved: false, wrapped: true }), 'win');
+  assert.equal(feelings.endFeel({ stars: 0, isNewBest: false, saved: false, wrapped: false }), 'try');
+  // A 0-point boarding wrap: creditWrapResult adds no partial flag, but wrapUp is set, so the shell sees a wrap.
+  const zero = session.creditWrapResult({ score: 0, stars: 0 }, 'boarding', false);
+  assert.equal(zero.meta.partial, undefined);
+  assert.equal(zero.meta.wrapUp, 'boarding');
+  assert.equal(feelings.endFeel({ stars: zero.stars, isNewBest: false, saved: zero.meta.partial === true, wrapped: zero.meta.wrapUp != null }), 'saved');
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /wrapped: wrap != null \|\| effectiveResult\.meta\?\.wrapUp != null,/);
+  assert.match(shell, /Haptic\.hitSoft\(\);\n\s+if \(!ownSfx\) playSfx\('ui\.confirm', 0\.7\);/, 'a calm send-off chime, never the lose sound');
+  assert.match(shell, /wrapReason=\{wrap\?\.reason \?\? null\}/);
+  const card = read('src/gamekit/results/ResultsCard.tsx');
+  assert.match(card, /const sendOff = wrapUp && stars === 0 && !saved && !\(score > 0\);/);
+  assert.match(card, /\{sendOff \? null : <>\n\s+<Text style=\{styles\.label\}>SCORE<\/Text>/, 'no SCORE 0 on a send-off');
+  assert.match(card, /wrapReason === 'boarding' \? 'HAVE FUN!' : 'SEE YOU SOON!'/);
+});
+
+test('one finish cue: Rhythm keeps its drum roll and the card owns the NEW BEST ding; the Drum-Off chip is only a win', () => {
+  const rhythm = read('src/games/rhythm/RhythmTapGame.tsx');
+  assert.match(rhythm, /const ownFinishSfx = reason === 'stall' \|\| win;/);
+  assert.match(rhythm, /\n\s+ownFinishSfx,\n\s+rhythmProof: proof,/);
+  assert.doesNotMatch(rhythm, /GameAudio\.play\('fx\.purchase'/, 'no second NEW BEST ding from the game');
+  assert.doesNotMatch(rhythm, /'3RD'|'4TH'|placeText\(/, 'no chip says the kid came 3rd or 4th');
+  assert.match(rhythm, /drumOffPlace\(sum\.accuracy, rivals\.current\) === 1 \? \[\{ label: 'DRUM-OFF', value: 'WON!' \}\]/);
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /const ownSfx = effectiveResult\.meta\?\.ownFinishSfx === true;/);
+});
+
+test('Sharky results fit a short phone: smaller stage, tight card, the bottom rows keep their space from the start', () => {
+  const sharky = read('src/games/sharky/hud/SharkyResults.tsx');
+  assert.doesNotMatch(sharky, /setBelow\(true\)/, 'the below rows never pop in and push the card off screen');
+  assert.match(sharky, /belowIn\.value = withDelay\(2400, withTiming\(1/);
+  assert.match(sharky, /stageShort: \{ height: 140, marginTop: 96 \}/);
+  assert.match(sharky, /belowShort: \{ flexDirection: 'row'/);
+  assert.doesNotMatch(sharky, /requestAnimationFrame/, 'the count-up no longer re-renders every frame');
+  assert.match(sharky, /COUNT_STEP_MS = 80/);
+  assert.match(sharky, /useCountUp\(data\.score, 300, 1100, reducedMotion\)/);
+  // The shared card's order: stars, then score.
+  assert.ok(sharky.indexOf('<View style={[styles.stars') < sharky.indexOf('<Animated.Text style={[styles.score'));
+});
+
+test("game saves belong to the signed-in player, so a brother never sees his sister's BEST", async () => {
+  const mem = new Map();
+  const store = {
+    getItem: async (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: async (k, v) => { mem.set(k, v); },
+    removeItem: async (k) => { mem.delete(k); },
+    getAllKeys: async () => [...mem.keys()],
+    multiGet: async (ks) => ks.map((k) => [k, mem.has(k) ? mem.get(k) : null]),
+    multiSet: async (pairs) => { for (const [k, v] of pairs) mem.set(k, v); },
+  };
+  const ps = load('src/gamekit/core/playerStorage.ts', { '@react-native-async-storage/async-storage': { default: store } });
+  const S = ps.default;
+  // Before the update: one player's Whack best on the phone.
+  mem.set('@whack_a_shark/ride_best', '2320');
+  mem.set('calibration.offset', '12');
+  ps.setGameSavesPlayer(21);
+  assert.equal(await S.getItem('@whack_a_shark/ride_best'), '2320', 'the first player keeps the old saves');
+  assert.equal(mem.get('@tps/game_saves_owner'), '21');
+  assert.equal(mem.has('calibration.offset@p21'), false, 'device settings are not game saves');
+  ps.setGameSavesPlayer(28);
+  assert.equal(await S.getItem('@whack_a_shark/ride_best'), null, 'a second player starts fresh');
+  await S.setItem('@whack_a_shark/ride_best', '400');
+  ps.setGameSavesPlayer(21);
+  assert.equal(await S.getItem('@whack_a_shark/ride_best'), '2320', "21's best is untouched by 28's run");
+  assert.equal(S.owner(), '21');
+  ps.setGameSavesPlayer(null);
+  assert.equal(await S.getItem('@whack_a_shark/ride_best'), null, 'signed out sees no one');
+  assert.equal(ps.isLegacyGameKey('@whack/ghost/daily/123/0'), true);
+  assert.equal(ps.isLegacyGameKey('@whack/ghost/daily/123/0@p21'), false);
+  for (const f of ['src/games/whack/WhackAShark.tsx', 'src/games/memory/storage.ts', 'src/games/sharky/meta/progress.ts', 'src/games/rhythm/meta/progress.ts',
+    'src/games/current-quest/progress.ts', 'src/games/banana-basket/progress.ts', 'src/games/boss/BossBrawl.tsx', 'src/games/boss/bash/BossBash.tsx',
+    'src/games/boss/bash/BashResults.tsx', 'src/games/boss/multiplayer/ghostStore.ts', 'src/games/trivia-duel/store.ts', 'src/gamekit/session/snapshotStore.ts']) {
+    assert.match(read(f), /import AsyncStorage from '[./]+(gamekit\/)?core\/playerStorage';/, `${f} saves per player`);
+    assert.doesNotMatch(read(f), /@react-native-async-storage\/async-storage/, `${f} has no phone-wide saves left`);
+  }
+  assert.match(read('src/context/AuthProvider.tsx'), /setGameSavesPlayer\(player\?\.id \?\? null\)/);
+  assert.match(read('src/games/trivia-duel/store.ts'), /if \(cache && cacheOwner === savesOwner\(\)\) return cache;/);
+  assert.match(read('src/games/current-quest/progress.ts'), /if \(cache && cacheOwner === savesOwner\(\)\) return cache;/);
 });

@@ -63,7 +63,8 @@ export function feelingChips(stats: readonly FeelingStat[] | undefined, maxCombo
     const key = stat.label.trim().toUpperCase();
     if (seen.has(key) || out.length >= limit) return;
     seen.add(key);
-    out.push({ label: key, value: stat.value.trim(), ...(stat.pips ? { pips: stat.pips } : {}) });
+    // Pips show only what was earned: lit dots, never the empty ones still missing.
+    out.push({ label: key, value: stat.value.trim(), ...(stat.pips ? { pips: [stat.pips[0], stat.pips[0]] as const } : {}) });
   };
   if (maxCombo && maxCombo >= BEST_COMBO_MIN) push({ label: 'BEST COMBO', value: `x${maxCombo}` });
   for (const stat of stats ?? []) {
@@ -153,15 +154,16 @@ export type EndFeel = 'win' | 'best' | 'saved' | 'try';
 
 /**
  * How the end of a run sounds and buzzes. Stars or a personal best are a win
- * (success haptic, win sound, confetti). A run the line saved is calm (no
- * fail buzz, no lose sound, and no best: saved runs never set one). Only a
- * plain 0-star run gets the soft try sound.
+ * (success haptic, win sound, confetti). A run the line ended (the ride came
+ * up or the kid left the line, with or without points) is calm: no fail buzz,
+ * no lose sound, and no best (saved runs never set one). Only a plain 0-star
+ * run the kid played to the end gets the soft try sound.
  */
-export function endFeel(input: { stars: number; isNewBest: boolean; saved: boolean }): EndFeel {
+export function endFeel(input: { stars: number; isNewBest: boolean; saved: boolean; wrapped?: boolean }): EndFeel {
   if (input.stars > 0) return 'win';
   // A saved run never writes a best (it is not a real finished run), so it
-  // never claims one either.
-  if (input.saved) return 'saved';
+  // never claims one either. A 0-point ride-up is a send-off, not a loss.
+  if (input.saved || input.wrapped) return 'saved';
   if (input.isNewBest) return 'best';
   return 'try';
 }

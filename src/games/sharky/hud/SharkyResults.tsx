@@ -10,7 +10,7 @@
  *           shared button rule: PLAY AGAIN leads unless a win's reward is
  *           still waiting (playAgainFirst false), then the claim leads.
  *           DONE sits right under it as a white button, never a text link
- *   300ms   hero stat 1: the score counts up over 1100ms (outQuart), the last
+ *   300ms   hero stat 1 (under the stars, like the shared card): the score counts up over 1100ms (outQuart, 80ms steps), the last
  *           digit slams 1.3 to 1.0 with impact Medium; NEW BEST adds a burst
  *   1450ms  stars slam one at a time, 220ms apart, bass hit +0/+3/+7 st,
  *           Medium, Medium, Heavy
@@ -21,7 +21,7 @@
  * SO CLOSE TO YOUR BEST!. A ride run that missed the gate gets the shared bar
  * with a word (ALMOST AT THE GATE!), never a percent. A saved run gets the
  * shared gold RUN SAVED stamp.
- * Below the fold (rises at 2.4s): the green ahead bars, mission slots with a
+ * Below the fold (its space is kept from the start; it fades in at 2.4s): the green ahead bars, mission slots with a
  * slot-machine reel on completion, Tokens at this ride, the Full Clear medal,
  * the NEW! unlock card. The surface is a sky-to-white gradient; no dark slab.
  */
@@ -95,29 +95,34 @@ export const CHEER_HOPS = 8;
 /** PLAY AGAIN pulses this many times, then rests. */
 export const PLAY_PULSES = 3;
 
-function useCountUp(target: number, delayMs: number, durMs: number): number {
-  const [v, setV] = useState(0);
+/** One count-up step every this many ms (about 14 steps, not 66 re-renders). */
+const COUNT_STEP_MS = 80;
+
+function useCountUp(target: number, delayMs: number, durMs: number, reduced: boolean): number {
+  const [v, setV] = useState(reduced ? target : 0);
   useEffect(() => {
-    let raf = 0;
-    const t0 = Date.now() + delayMs;
-    const loop = () => {
-      const t = Date.now() - t0;
-      if (t < 0) {
-        raf = requestAnimationFrame(loop);
-        return;
-      }
-      const k = Math.min(1, t / durMs);
-      const e = 1 - Math.pow(1 - k, 4);
-      setV(Math.round(target * e));
-      if (k < 1) raf = requestAnimationFrame(loop);
+    if (reduced) {
+      setV(target);
+      return undefined;
+    }
+    let iv: ReturnType<typeof setInterval> | null = null;
+    const start = setTimeout(() => {
+      const t0 = Date.now();
+      iv = setInterval(() => {
+        const k = Math.min(1, (Date.now() - t0) / durMs);
+        setV(Math.round(target * (1 - Math.pow(1 - k, 4))));
+        if (k >= 1 && iv) clearInterval(iv);
+      }, COUNT_STEP_MS);
+    }, delayMs);
+    return () => {
+      clearTimeout(start);
+      if (iv) clearInterval(iv);
     };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [target, delayMs, durMs]);
+  }, [target, delayMs, durMs, reduced]);
   return v;
 }
 
-function Star({ on, index, delayMs, reduced }: { on: boolean; index: number; delayMs: number; reduced: boolean }) {
+function Star({ on, index, delayMs, reduced, small = false }: { on: boolean; index: number; delayMs: number; reduced: boolean; small?: boolean }) {
   const sc = useSharedValue(on && !reduced ? 0 : 1);
   useEffect(() => {
     if (!on) return undefined;
@@ -136,7 +141,7 @@ function Star({ on, index, delayMs, reduced }: { on: boolean; index: number; del
   const st = useAnimatedStyle(() => ({ transform: [{ scale: sc.value }] }));
   return (
     <Animated.View style={[styles.star, st]}>
-      <GameIcon name="star" size={index === 1 ? 62 : 52} mono={on ? undefined : '#9cc9ec'} />
+      <GameIcon name="star" size={(index === 1 ? 62 : 52) - (small ? 12 : 0)} mono={on ? undefined : '#9cc9ec'} />
     </Animated.View>
   );
 }
@@ -145,9 +150,11 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   const fx = useRef<FxStageHandle>(null);
   const win = useWindowDimensions();
   const [box, setBox] = useState({ w: 390, h: 700 });
-  const shown = useCountUp(data.score, 300, 1100);
+  const shown = useCountUp(data.score, 300, 1100, reducedMotion);
   const [tapReady, setTapReady] = useState(false);
-  const [below, setBelow] = useState(false);
+  // The below-the-fold rows keep their space from the start and fade in at
+  // 2.4 s, so nothing jumps and the card never grows off a short screen.
+  const belowIn = useSharedValue(reducedMotion ? 1 : 0);
   const bounce = useSharedValue(0);
   const pulse = useSharedValue(1);
   const slam = useSharedValue(1);
@@ -175,7 +182,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
         fx.current?.burst('confetti', box.w / 2, box.h * 0.42, { count: 24 });
       }
     }, 1400);
-    const t3 = setTimeout(() => setBelow(true), 2400);
+    if (!reducedMotion) belowIn.value = withDelay(2400, withTiming(1, { duration: 260 }));
     // Confetti cannon from both stage corners (a win or TIME!): 2 bursts of 24, 120ms apart.
     const cannons: ReturnType<typeof setTimeout>[] = [];
     if (cheer) {
@@ -187,7 +194,6 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
-      clearTimeout(t3);
       cannons.forEach(clearTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -198,6 +204,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   const btnStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   const scoreStyle = useAnimatedStyle(() => ({ transform: [{ scale: slam.value }] }));
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateY: card.value }] }));
+  const belowStyle = useAnimatedStyle(() => ({ opacity: belowIn.value }));
   const againFirst = !!playAgain && playAgainFirst;
   const primary = againFirst ? playAgain : claim;
   const primaryLabel = againFirst ? 'PLAY AGAIN' : claimLabel;
@@ -216,6 +223,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   const feeling = ahead ? 'AHEAD OF YOUR BEST!' : data.nearMiss ? data.nearMiss.toUpperCase() : '';
   const gate = data.gateProgress != null && !saved && !wrapTitle ? data.gateProgress : null;
   const splitMax = useMemo(() => Math.max(1, ...bars), [bars]);
+  const hasBelow = !!data.newCard || (ahead && bars.length > 0) || (!!data.missions && !data.newCard) || data.tokensAtRide !== null || data.fullClear;
 
   return (
     <View style={[styles.root, { height: win.height }]} onLayout={onLayout}>
@@ -235,19 +243,20 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
         {cheer ? <Image source={SHARKY_ART.podium} style={[styles.podium, short && styles.podiumShort]} resizeMode="contain" /> : null}
       </View>
 
-      <Animated.View style={[styles.card, cardStyle]}>
-        <Animated.Text style={[styles.score, scoreStyle]}>{shown.toLocaleString()}</Animated.Text>
+      <Animated.View style={[styles.card, short && styles.cardShort, cardStyle]}>
+        {/* The shared card's order: stars (or the stamp), then the score, then NEW BEST. */}
+        {saved ? <SavedStamp reducedMotion={reducedMotion} delayMs={1450} /> : (
+          <View style={[styles.stars, short && styles.starsShort]}>
+            {[0, 1, 2].map((i) => <Star key={i} index={i} on={i < data.stars} delayMs={1450 + i * 220} reduced={reducedMotion} small={short} />)}
+          </View>
+        )}
+        <Animated.Text style={[styles.score, short && styles.scoreShort, scoreStyle]}>{shown.toLocaleString()}</Animated.Text>
         {newBest ? (
           <View style={styles.newBest}>
             <GameIcon name="crown" size={22} />
             <Text style={styles.newBestText}>NEW BEST!</Text>
           </View>
         ) : null}
-        {saved ? <SavedStamp reducedMotion={reducedMotion} delayMs={1450} /> : (
-          <View style={styles.stars}>
-            {[0, 1, 2].map((i) => <Star key={i} index={i} on={i < data.stars} delayMs={1450 + i * 220} reduced={reducedMotion} />)}
-          </View>
-        )}
         {feeling ? (
           <View style={[styles.feeling, ahead && styles.feelingGold]}>
             <Text style={styles.feelingText} numberOfLines={1} adjustsFontSizeToFit>{feeling}</Text>
@@ -264,7 +273,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
             a11yLabel={`${Math.round(gate * 100)} percent of the way to the Ride Gate`} delayMs={1500} reducedMotion={reducedMotion} tone="onWhite" />
         ) : null}
 
-        <Animated.View style={[styles.playWrap, btnStyle]}>
+        <Animated.View style={[styles.playWrap, short && styles.playWrapShort, btnStyle]}>
           <ResultPrimaryButton label={primaryLabel} icon={againFirst ? 'retry' : undefined} disabled={!tapReady} onPress={primary} style={styles.playBtn} />
         </Animated.View>
         {againFirst || challenge || playAgain ? (
@@ -278,9 +287,9 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
           </ResultButtonRow>
         ) : null}
 
-        {below ? (
-          <View style={styles.below}>
-            {data.newCard ? <Text style={styles.newCard}>{data.newCard.toUpperCase()}</Text> : null}
+        {hasBelow ? (
+          <Animated.View style={[styles.below, short && styles.belowShort, belowStyle]}>
+            {data.newCard ? <Text style={[styles.newCard, short && styles.newCardShort]}>{data.newCard.toUpperCase()}</Text> : null}
             {ahead && bars.length ? (
               <View style={styles.splitRow} accessible accessibilityLabel={`Ahead of your best at ${bars.length} gates`}>
                 {bars.map((d, i) => (
@@ -293,12 +302,12 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
             {/* Missions as picture plus bar: a kid who cannot read still sees each
                 goal and how full it is. The words are spoken only. */}
             {data.missions && !data.newCard ? (
-              <View style={styles.mRow}>
+              <View style={[styles.mRow, short && styles.mRowShort]}>
                 {data.missions.missions.map((m) => {
                   const icon = missionIcon(m.id);
                   const fill = Math.max(0, Math.min(1, m.progress / missionTarget(m.id)));
                   return (
-                    <View key={m.id} style={[styles.mCell, m.done && styles.mCellDone]} accessible
+                    <View key={m.id} style={[styles.mCell, short && styles.mCellShort, m.done && styles.mCellDone]} accessible
                       accessibilityLabel={`${missionText(m.id)}${m.done ? ', done' : `, ${m.progress} of ${missionTarget(m.id)}`}`}>
                       {icon.art ? <Image source={icon.art} style={styles.mArt} resizeMode="contain" /> : <GameIcon name={icon.name ?? 'star'} size={26} />}
                       {m.done ? <View style={styles.mCheck}><GameIcon name="check" size={16} /></View> : null}
@@ -314,8 +323,8 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
                 <Text style={styles.small}>{`${data.tokensAtRide}/9`}</Text>
               </View>
             ) : null}
-            {data.fullClear ? <Image source={SHARKY_ART.fullClear} style={styles.medal} resizeMode="contain" /> : null}
-          </View>
+            {data.fullClear ? <Image source={SHARKY_ART.fullClear} style={[styles.medal, short && styles.medalShort]} resizeMode="contain" /> : null}
+          </Animated.View>
         ) : null}
       </Animated.View>
       <FxStage ref={fx} width={box.w} height={box.h} reducedMotion={reducedMotion} style={StyleSheet.absoluteFill} />
@@ -328,16 +337,18 @@ const styles = StyleSheet.create({
   trim: { position: 'absolute', left: 0, right: 0, top: 0, height: 5, backgroundColor: REWARD },
   headline: { position: 'absolute', top: 50, left: 12, right: 12, zIndex: 2 },
   stage: { width: '100%', height: 210, alignItems: 'center', justifyContent: 'flex-end', marginTop: 118 },
-  stageShort: { height: 176, marginTop: 92 },
+  // Short phones (iPhone SE, 667 pt): a smaller stage and a tighter card, so
+  // the whole card (border, every row, both button rows) sits on screen at rest.
+  stageShort: { height: 140, marginTop: 96 },
   headlineShort: { top: 16 },
-  sharkWrapShort: { bottom: 56 },
-  sharkShort: { width: 108, height: 132 },
-  dizzyStarsShort: { width: 46, height: 30, top: -4 },
-  podiumShort: { width: 176, height: 92 },
+  sharkWrapShort: { bottom: 44 },
+  sharkShort: { width: 86, height: 106 },
+  dizzyStarsShort: { width: 40, height: 26, top: -4 },
+  podiumShort: { width: 140, height: 72 },
   sharkWrap: { position: 'absolute', bottom: 70, alignItems: 'center' },
   sharkWrapGround: { bottom: 18 },
   sharkSwim: { width: 190, height: 130 },
-  sharkSwimShort: { width: 160, height: 108 },
+  sharkSwimShort: { width: 140, height: 94 },
   shark: { width: 130, height: 160 },
   dizzyStars: { position: 'absolute', top: -6, width: 56, height: 36 },
   podium: { width: 210, height: 110 },
@@ -370,4 +381,14 @@ const styles = StyleSheet.create({
   tokens: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   tokenArt: { width: 24, height: 24 },
   medal: { width: 54, height: 54, marginTop: 4 },
+  cardShort: { paddingVertical: 10 },
+  starsShort: { marginVertical: 2 },
+  scoreShort: { fontSize: 44 },
+  playWrapShort: { marginTop: 8 },
+  // One row on a short phone: missions, tokens and the medal side by side.
+  belowShort: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', columnGap: 8, marginTop: 6 },
+  mRowShort: { width: undefined, marginVertical: 0, gap: 6 },
+  mCellShort: { minWidth: 58, paddingHorizontal: 6, paddingTop: 2, paddingBottom: 4 },
+  newCardShort: { fontSize: 16, paddingVertical: 4, marginBottom: 0 },
+  medalShort: { width: 40, height: 40, marginTop: 0 },
 });

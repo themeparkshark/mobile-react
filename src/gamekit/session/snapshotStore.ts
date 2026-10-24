@@ -7,7 +7,8 @@
  * session key; stale snapshots (30 min) are ignored.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../core/playerStorage';
 import { SNAPSHOT_TTL_MS, snapshotUsable, type SessionSnapshot } from '../core/session';
 
 const PREFIX = 'gamekit:snapshot:';

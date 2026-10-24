@@ -8,7 +8,8 @@
  */
 
 import type { GripPrefs } from '../core/grip';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../../gamekit/core/playerStorage';
 import { STAGE_ORDER, type StageId } from '../stages';
 
 const KEY = 'paradeBeat.progress.v1';

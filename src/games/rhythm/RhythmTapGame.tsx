@@ -926,10 +926,10 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     } : null;
     const win = plan.format === 'ride' && !plan.ftue ? sum.rideWin : sum.stars > 0;
     const stars = plan.format === 'ride' && !plan.ftue ? (sum.rideWin ? Math.max(1, sum.stars) : 0) : sum.stars;
-    if (reason !== 'stall') {
-      if (win) GameAudio.play(stars >= 2 ? 'rh_win' : 'rh_clear');
-      if (newPb && sum.score > 0) setTimeout(() => GameAudio.play('fx.purchase', { volume: 0.8 }), 900);
-    }
+    // One finish cue: the drum roll here (the shell then skips its own win
+    // sound), and the NEW BEST ding comes from the shared card when its badge lands.
+    const ownFinishSfx = reason === 'stall' || win;
+    if (reason !== 'stall' && win) GameAudio.play(stars >= 2 ? 'rh_win' : 'rh_clear');
     const topRival = rivals.current.slice().sort((x, y) => y.finalScore - x.finalScore)[0];
     const res: GameResult = {
       score: sum.score,
@@ -947,7 +947,8 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       // and a warming-up beat is no brag, so it is not a chip.
       stats: [
         ...(sum.steadinessLabel !== 'Warming up' ? [{ label: 'YOUR BEAT', value: sum.steadinessLabel.toUpperCase() }] : []),
-        ...(rivals.current.length ? [{ label: 'DRUM-OFF', value: placeText(sum.accuracy, rivals.current) }] : []),
+        // Only a Drum-Off win is a brag: no chip ever says the kid came 3rd or 4th.
+        ...(rivals.current.length && drumOffPlace(sum.accuracy, rivals.current) === 1 ? [{ label: 'DRUM-OFF', value: 'WON!' }] : []),
         ...(plan.format === 'queue' && !plan.ftue && sum.marchStars > 0 ? [{ label: 'MARCH STARS', value: `${sum.marchStars} of 3`, pips: [sum.marchStars, 3] as const }] : []),
       ],
       // The goal is in the bar's spoken label now (no text-only goals on a card).
@@ -968,6 +969,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         accuracy: sum.accuracy,
         rideWin: sum.rideWin,
         newPb,
+        ownFinishSfx,
         rhythmProof: proof,
       },
     };
@@ -1237,11 +1239,6 @@ function DeltaChip({ bar, myScore, ghost }: { bar: number; myScore: number; ghos
       <Text style={styles.deltaLbl}>{ghost.name}</Text>
     </View>
   );
-}
-
-function placeText(accuracy: number, rivals: Rival[]): string {
-  const place = drumOffPlace(accuracy, rivals);
-  return ['1ST', '2ND', '3RD', '4TH'][place - 1] ?? `${place}TH`;
 }
 
 function countInBeats(chart: Chart): number[] {

@@ -92,6 +92,10 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   // Keep this device's push token current once signed in, and open tapped pushes.
   useEffect(() => { if (player?.id) void refreshPushRegistration(); }, [player?.id]);
+  // Game saves (bests, ghosts, streaks) belong to the signed-in player, not the phone.
+  useEffect(() => {
+    try { require('../gamekit/core/playerStorage').setGameSavesPlayer(player?.id ?? null); } catch { /* not loaded */ }
+  }, [player?.id]);
   useEffect(() => listenForPushTaps(), []);
 
   useEffect(() => {

@@ -105,6 +105,8 @@ export interface ResultsCardProps {
   starGoal?: ResultStarGoal;
   /** The line ended the run (ride's up, left the line): no more play, so no next-star bar. */
   wrapUp?: boolean;
+  /** Why the line ended the run: a 0-point ending gets a happy send-off stamp instead of an empty scoreboard. */
+  wrapReason?: 'boarding' | 'left-queue' | 'session-ended' | null;
   /** Fired once when the NEW BEST badge slams in (the shell bursts confetti). */
   onNewBestLanded?: () => void;
 }
@@ -122,8 +124,11 @@ export function defaultMessage(stars: number, near: boolean, newBest = false): s
 
 export function ResultsCard({
   score, stars, message, thresholds, personalBest, maxCombo, stats, note, reducedMotion = false, onRevealed, rival,
-  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer, onNewBestLanded, wrapUp = false, starGoal,
+  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer, onNewBestLanded, wrapUp = false, starGoal, wrapReason = null,
 }: ResultsCardProps) {
+  // The ride came up (or the kid left the line) before any points: a happy
+  // send-off (HAVE FUN! stamp), never three empty stars and a big 0.
+  const sendOff = wrapUp && stars === 0 && !saved && !(score > 0);
   // A finished wait has nothing left to keep going on: no bar after the line ends the run.
   const goal = useMemo(() => {
     if (saved || wrapUp) return null;
@@ -192,8 +197,9 @@ export function ResultsCard({
     <View style={[styles.card, short && styles.cardShort]}>
       <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} />
 
-      {saved ? (
-        <SavedStamp reducedMotion={reducedMotion} delayMs={STAR_BASE_DELAY} />
+      {saved || sendOff ? (
+        <SavedStamp reducedMotion={reducedMotion} delayMs={STAR_BASE_DELAY}
+          label={sendOff ? (wrapReason === 'boarding' ? 'HAVE FUN!' : 'SEE YOU SOON!') : undefined} />
       ) : (
         <View style={styles.starRow}>
           {[1, 2, 3].map((n) => (
@@ -220,12 +226,14 @@ export function ResultsCard({
         </View>
       ) : null}
 
-      <Text style={styles.label}>SCORE</Text>
-      <CountUpText value={score} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
-        onTick={() => GameAudio.play('fx.coin', { volume: 0.35 })} style={[styles.score, short && styles.scoreShort]} />
+      {sendOff ? null : <>
+        <Text style={styles.label}>SCORE</Text>
+        <CountUpText value={score} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
+          onTick={() => GameAudio.play('fx.coin', { volume: 0.35 })} style={[styles.score, short && styles.scoreShort]} />
+      </>}
 
       {/* The row keeps its height only when something will land in it (no empty gap on a plain card). */}
-      {best.isNewBest || showBest ? <Animated.View style={[styles.bestRow, bestStyle]}>
+      {sendOff ? null : best.isNewBest || showBest ? <Animated.View style={[styles.bestRow, bestStyle]}>
         {best.isNewBest ? (
           <View style={styles.newBest}>
             <GameIcon name="crown" size={22} />
@@ -255,7 +263,7 @@ export function ResultsCard({
 
       {footer && !plain ? <View style={styles.footer}>{footer}</View> : null}
 
-      {note ? <Text style={styles.note}>{note}</Text> : null}
+      {note && !sendOff ? <Text style={styles.note}>{note}</Text> : null}
     </View>
   );
 }
@@ -263,7 +271,7 @@ export function ResultsCard({
 /** One brag chip (cream, navy ink), shared by every results card. */
 export function ResultChip({ label, value, pips }: ResultStat) {
   return (
-    <View style={styles.chip} accessible accessibilityLabel={pips ? `${pips[0]} of ${pips[1]} ${label}` : `${value} ${label}`}>
+    <View style={styles.chip} accessible accessibilityLabel={pips ? `${pips[0]} ${label}` : `${value} ${label}`}>
       {pips ? (
         <View style={styles.pips}>
           {Array.from({ length: pips[1] }, (_, i) => <View key={i} style={[styles.pip, i < pips[0] && styles.pipOn]} />)}

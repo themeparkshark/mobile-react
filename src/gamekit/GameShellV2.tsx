@@ -482,15 +482,22 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         stars: effectiveResult.stars,
         isNewBest: compareBest(effectiveResult.score ?? 0, personalBestRef.current).isNewBest,
         saved: effectiveResult.meta?.partial === true,
+        // Any line ending (ride's up, left the line), even at 0 points.
+        wrapped: wrap != null || effectiveResult.meta?.wrapUp != null,
       });
+      // A game that already played its own finish cue (Rhythm's drum roll)
+      // keeps it: the shell adds only the haptic, never a second sound.
+      const ownSfx = effectiveResult.meta?.ownFinishSfx === true;
       if (feel === 'win' || feel === 'best') {
         Haptic.success();
-        playSfx('win');
+        if (!ownSfx) playSfx('win');
       } else if (feel === 'try') {
         Haptic.failBuzz();
-        playSfx('lose');
+        if (!ownSfx) playSfx('lose');
       } else {
+        // Calm send-off: a soft tap and a small happy chime, never the lose sound.
         Haptic.hitSoft();
+        if (!ownSfx) playSfx('ui.confirm', 0.7);
       }
       clearCelebration();
       // The fade starts in the effect below, once the results view is on screen.
@@ -1027,6 +1034,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                     footer={resultCardFooter}
                     onNewBestLanded={stars === 0 ? burstBest : undefined}
                     wrapUp={wrap != null}
+                    wrapReason={wrap?.reason ?? null}
                     reducedMotion={reducedMotion}
                   />
                   {resultExtras ?? resultsExtra ?? null}
