@@ -894,7 +894,7 @@ test('the square prize card uses two columns: the dressed shark on the stage, th
 
 test('Whack and Memory story pictures show the player\'s own shark peeking over the card', () => {
   const frame = src('src/share/StoryShareFrame.tsx');
-  assert.match(frame, /<FlexShark inventory=\{player\?\.inventory\} height=\{PEEK\.h\} prop=\{null\} \/>/);
+  assert.match(frame, /<FlexShark inventory=\{player\?\.inventory\} height=\{peek\.shark\} prop=\{null\} \/>/);
   assert.match(frame, /paddingTop: SLOT_PAD \+ peek\.reserve/, 'the card gives up only the headroom the shark lacks');
   assert.match(src('src/games/whack/ui/ShareCard.tsx'), /campaign="whack" withShark>/);
   assert.equal(src('src/games/memory/MemoryExtras.tsx').match(/campaign="memory" withShark>/g).length, 2, 'preview and capture match');
@@ -1014,17 +1014,26 @@ test('the Memory story card stays big: the peeking shark is drawn outside its sc
   const { peekLayout, PEEK } = frameMod;
   // The slot: below the ribbon (80 + 48 pt) down to the footer (640 - 236 pt).
   const slotY = 128, slotH = 640 - 236 - 128;
-  const mem = peekLayout(slotY, slotH, 300, 268, true);
-  assert.ok(mem.scale >= 0.85, `Memory card scale ${mem.scale.toFixed(2)}`);
-  const whack = peekLayout(slotY, slotH, 205, 196, true);
-  assert.equal(whack.scale, 1);
-  for (const p of [mem, whack]) {
-    assert.ok(p.sharkTop + PEEK.h * 0.1 >= 80 - 0.5, 'the hat stays below the safe line (y 240 px)');
-    const right = p.sharkLeft + PEEK.h * 1353 / 1530 * 0.82;
-    assert.ok(right <= 340 + 0.5, 'the shark stays on the card');
-    assert.ok(p.sharkTop + PEEK.h * 0.82 > p.cardTop, 'its feet come over the card edge');
+  const ASPECT = 1353 / 1530;
+  for (const look of [lookBounds.BODY_EXTENT, lookBounds.lookExtent(GHOST)]) {
+    const mem = peekLayout(slotY, slotH, 300, 268, true, look);
+    assert.ok(mem.scale >= 0.85, `Memory card scale ${mem.scale.toFixed(2)}`);
+    const whack = peekLayout(slotY, slotH, 205, 196, true, look);
+    assert.equal(whack.scale, 1);
+    for (const p of [mem, whack]) {
+      const w = p.shark * ASPECT;
+      assert.ok(p.sharkTop + p.shark * 0.1 >= 80 - 0.5, 'the hat stays below the safe line (y 240 px)');
+      assert.ok(p.sharkLeft + w * look.left >= 20 + 188 + 6 - 0.5, 'the paint starts right of the ribbon (never over its words)');
+      assert.ok(p.sharkLeft + w * look.right <= 336 + 0.5, 'the shark stays on the card');
+      assert.ok(p.sharkLeft + w * look.right <= p.cardRight + 20 + 0.5, 'its paint ends just past the card corner, so its feet land on it');
+      assert.ok(p.sharkTop + p.shark * 0.82 > p.cardTop, 'its feet come over the card edge');
+      assert.ok(p.shark <= PEEK.h && p.shark >= 100, `shark ${p.shark}`);
+    }
   }
   assert.equal(peekLayout(slotY, slotH, 300, 268, false).reserve, 0);
+  const frameSrc = src('src/share/StoryShareFrame.tsx');
+  assert.match(frameSrc, /<View style=\{withShark && styles\.ribbonLeft\}><Ribbon/, 'with a shark the ribbon sits left');
+  assert.match(frameSrc, /peekLayout\(slot\.y, slot\.h, card\.w, card\.h, withShark, lookExtent\(player\?\.inventory\)\)/);
   const memSrc = src('src/games/memory/MemoryExtras.tsx');
   assert.match(memSrc, /storySide: \{ alignItems: 'center', paddingTop: 30, gap: 6 \}/, 'the card keeps its top-right corner clear for the shark');
 });
