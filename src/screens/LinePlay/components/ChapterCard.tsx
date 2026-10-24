@@ -114,9 +114,9 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
     <Animated.View key="play-now" entering={rise(compact ? 0 : 1)} style={compact && styles.playFirst}
       onLayout={event => { if (!compact) setLeadBottom(layoutBottom(event)); }}>
       <Pressable accessibilityRole="button"
-        accessibilityLabel={`${done === 3 ? 'Play' : 'Start'} ${nextName}`}
-        disabled={paused} onPress={() => onChooseMission(nextId)}
-        style={({ pressed }) => [styles.playNow, compact && styles.playNowCompact, paused && styles.missionPaused, pressed && styles.pressed]}>
+        accessibilityLabel={`${paused ? 'Resume and play' : done === 3 ? 'Play' : 'Start'} ${nextName}`}
+        onPress={() => onChooseMission(nextId)}
+        style={({ pressed }) => [styles.playNow, compact && styles.playNowCompact, paused && styles.playResting, pressed && styles.pressed]}>
         <View style={styles.playNowCopy}>
           {/* No count here: the numbered bubbles below own it (one count per screen). PLAY, the same
               word as the SE strip, so every phone size says one word for one idea. */}
@@ -146,9 +146,9 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
       <PageScroll fill={FRAME_FILL} contentStyle={[styles.contentStrip, withTrail && styles.contentStripTrail]}
         onLayout={measure} still>
         <Pressable accessibilityRole="button"
-          accessibilityLabel={`${done === 3 ? 'Play' : 'Start'} ${nextName}`}
-          disabled={paused} onPress={() => onChooseMission(nextId)}
-          style={({ pressed }) => [styles.playStrip, !withTrail && styles.playStripFill, paused && styles.missionPaused, pressed && styles.pressed]}>
+          accessibilityLabel={`${paused ? 'Resume and play' : done === 3 ? 'Play' : 'Start'} ${nextName}`}
+          onPress={() => onChooseMission(nextId)}
+          style={({ pressed }) => [styles.playStrip, !withTrail && styles.playStripFill, paused && styles.playResting, pressed && styles.pressed]}>
           <View style={styles.playStripCopy}>
             <Text style={styles.playStripText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
               <Text style={styles.playStripKicker}>{'PLAY  '}</Text>{nextName}
@@ -164,7 +164,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
             const current = index === nextMissionIndex;
             return <Pressable key={name} accessibilityRole="button"
               accessibilityLabel={`${complete ? 'Replay' : 'Open'} ${name}`}
-              disabled={paused} onPress={() => onChooseMission(missionIds[index])}
+              onPress={() => onChooseMission(missionIds[index])}
               style={({ pressed }) => [styles.step, styles.stepStrip, current && styles.stepCurrent, complete && styles.stepDone,
                 paused && styles.missionPaused, pressed && styles.pressed]}>
               <View style={[styles.stepBadge, styles.stepBadgeStrip, current && !complete && styles.stepBadgeCurrent, complete && styles.stepBadgeDone]}>
@@ -198,7 +198,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
           const current = index === nextMissionIndex;
           return <Pressable key={name} accessibilityRole="button"
             accessibilityLabel={`${complete ? 'Replay' : 'Open'} ${name}`}
-            disabled={paused} onPress={() => onChooseMission(missionIds[index])}
+            onPress={() => onChooseMission(missionIds[index])}
             style={({ pressed }) => [styles.step, compact && styles.stepCompact, current && styles.stepCurrent, complete && styles.stepDone,
               paused && styles.missionPaused, pressed && styles.pressed]}>
             <View style={[styles.stepBadge, current && !complete && styles.stepBadgeCurrent, complete && styles.stepBadgeDone]}>
@@ -212,7 +212,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
       <Animated.View entering={rise(3)} style={[styles.crewRow, { marginTop: foldGap(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP) }]}
         onLayout={event => setCrewHeight(Math.round(event.nativeEvent.layout.height))}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chapter.relay.title}`}
-          disabled={paused} onPress={() => onChooseMission(relayId)}
+          onPress={() => onChooseMission(relayId)}
           style={({ pressed }) => [styles.crewChip, paused && styles.missionPaused, pressed && styles.pressed]}>
           <GameIcon name={relayDone ? 'check' : 'shark'} size={30} />
           <View style={styles.crewChipCopy}>
@@ -221,7 +221,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
           </View>
         </Pressable>
         {signalAvailable && <Pressable accessibilityRole="button" accessibilityLabel="Open community Crew Route"
-          disabled={paused} onPress={() => onChooseMission('crew-signal')}
+          onPress={() => onChooseMission('crew-signal')}
           style={({ pressed }) => [styles.crewChip, styles.crewChipBlue, paused && styles.missionPaused, pressed && styles.pressed]}>
           <GameIcon name="map" size={30} />
           <View style={styles.crewChipCopy}>
@@ -255,7 +255,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
           : `${epilogue.prompt} Swipe past the relay to play the new round.`}</Text>
       </View>}
       <Pressable accessibilityRole="button" accessibilityLabel="Open Crew Prompts"
-        disabled={paused} onPress={() => onChooseMission(crewGridId)} style={styles.promptsLink}>
+        onPress={() => onChooseMission(crewGridId)} style={styles.promptsLink}>
         <GameIcon name={completedIds.has(crewGridId) ? 'check' : 'sparkle'} size={22} />
         <Text style={styles.promptsText}>Crew Prompts: nine talk-and-notice prompts for the end of your wait</Text>
       </Pressable>
@@ -353,6 +353,9 @@ const styles = StyleSheet.create({
   branchTitle: { color: '#143c67', fontFamily: 'Shark', fontSize: 17 },
   promptsLink: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, marginTop: spacing.md },
   promptsText: { flex: 1, color: BRAND.blue, fontFamily: 'Knockout', fontSize: 15, lineHeight: 19 },
-  missionPaused: { opacity: 0.45 },
+  // Paused: the clue buttons rest (still live: one tap runs the 3 2 1, then opens the page).
+  missionPaused: { opacity: 0.7 },
+  // Paused PLAY rests like the paused ARCADE: pale blue with a navy outline, never a faded olive gold.
+  playResting: { backgroundColor: '#e8f6ff', borderColor: '#0b4f8a' },
   footer: { color: '#376888', fontFamily: 'Knockout', fontSize: 13, lineHeight: 18, marginTop: spacing.md },
 });

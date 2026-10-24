@@ -230,6 +230,8 @@ export default function LinePlayScreen() {
   const [resuming, setResuming] = useState(false);
   // ARCADE tapped while paused: the resume countdown opens the arcade when it ends.
   const arcadeAfterResume = useRef(false);
+  // A chapter button tapped while paused: the resume countdown opens that page when it ends.
+  const pageAfterResume = useRef<number | null>(null);
   const [toast, setToast] = useState<QueueToastMessage | null>(null);
   const toastKey = useRef(0);
   const showToastRef = useRef<((message: Omit<QueueToastMessage, 'key'>) => void) | null>(null);
@@ -1100,7 +1102,7 @@ export default function LinePlayScreen() {
               onTogglePause={() => {
                 if (resuming) return;
                 if (snapshot.state === 'paused') setResuming(true);
-                else { arcadeAfterResume.current = false; session.pause('manual'); void Haptics.selectionAsync(); }
+                else { arcadeAfterResume.current = false; pageAfterResume.current = null; session.pause('manual'); void Haptics.selectionAsync(); }
               }}
               onPlayBonus={arcadeChoices.length ? () => {
                 // Paused: never a dead tap. The same 3 2 1 as the play button runs, then the arcade opens.
@@ -1308,6 +1310,14 @@ export default function LinePlayScreen() {
                       signalAvailable={sharedPages.length > 0}
                       onChooseMission={(id) => {
                         const index = activityPages.findIndex(page => page.id === id);
+                        // Paused: never a dead tap. The same 3 2 1 as the play button runs, then the page opens.
+                        if (snapshot.state === 'paused' || resuming) {
+                          pageAfterResume.current = index;
+                          if (!resuming) setResuming(true);
+                          void Haptics.selectionAsync();
+                          return;
+                        }
+                        if (snapshot.state !== 'active') return;
                         jumpToPage(index);
                       }} />
                   ) : item.kind === 'crew_relay' && snapshot.chapter && snapshot.crewRelay ? (
@@ -1496,6 +1506,9 @@ export default function LinePlayScreen() {
         setResuming(false);
         session.resume();
         if (arcadeAfterResume.current) { arcadeAfterResume.current = false; setArcadeOpen(true); }
+        const page = pageAfterResume.current;
+        pageAfterResume.current = null;
+        if (page != null) jumpToPage(page);
       }} />
 
       {/* End by hand: one branded sheet (header End, back, or a footer tab). */}

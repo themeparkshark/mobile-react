@@ -624,7 +624,7 @@ test('paused, ARCADE is never a dead tap: one tap runs the resume 3 2 1, then th
   const screen = read(SCREEN);
   assert.match(screen, /if \(snapshot\.state === 'paused' \|\| resuming\) \{\n\s+arcadeAfterResume\.current = true;\n\s+if \(!resuming\) setResuming\(true\);\n\s+void Haptics\.selectionAsync\(\);/);
   assert.match(screen, /session\.resume\(\);\n\s+if \(arcadeAfterResume\.current\) \{ arcadeAfterResume\.current = false; setArcadeOpen\(true\); \}/);
-  assert.match(screen, /arcadeAfterResume\.current = false; session\.pause\('manual'\)/, 'pausing again forgets the queued arcade');
+  assert.match(screen, /arcadeAfterResume\.current = false; pageAfterResume\.current = null; session\.pause\('manual'\)/, 'pausing again forgets the queued arcade');
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.doesNotMatch(card, /onPress=\{onPlayBonus\} disabled=\{paused\}/, 'no disabled ARCADE while paused');
 });
@@ -653,4 +653,17 @@ test('one word for one idea in VoiceOver: clues found everywhere, and the coin c
   assert.deepEqual([...new Set(nouns)], ['clues found']);
   const stage = read('src/screens/LinePlay/components/waitscreen/WaitCoinStage.tsx');
   assert.match(stage, /accessibilityLabel=\{showCount \? progress\.label : label\}/);
+});
+
+test('paused, the chapter PLAY and clue buttons are never a dead tap: one tap runs the 3 2 1, then that page opens', () => {
+  const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
+  assert.doesNotMatch(chapter, /disabled=\{paused\}/, 'no chapter button goes dead while paused');
+  assert.match(chapter, /paused && styles\.playResting/, 'the paused PLAY rests in pale blue, never a faded olive gold');
+  assert.match(chapter, /playResting: \{ backgroundColor: '#e8f6ff', borderColor: '#0b4f8a' \}/);
+  assert.match(chapter, /\$\{paused \? 'Resume and play' : done === 3 \? 'Play' : 'Start'\} \$\{nextName\}/);
+  const screen = read(SCREEN);
+  assert.match(screen, /pageAfterResume\.current = index;\n\s+if \(!resuming\) setResuming\(true\);/);
+  assert.match(screen, /if \(snapshot\.state !== 'active'\) return;\n\s+jumpToPage\(index\);/);
+  assert.match(screen, /const page = pageAfterResume\.current;\n\s+pageAfterResume\.current = null;\n\s+if \(page != null\) jumpToPage\(page\);/);
+  assert.match(screen, /pageAfterResume\.current = null; session\.pause\('manual'\)/, 'pausing again forgets the queued page');
 });
