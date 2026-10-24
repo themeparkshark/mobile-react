@@ -400,7 +400,12 @@ export function finalStampPose(t: number, isTime: boolean, isLast: boolean, redu
  * on DURATION.exit while the next card rises out of the rings (one clock, a cross-fade, no gap).
  */
 export const FINISH_HANDOFF_MS = 560;
-export const FINISH_BEAT_MS = FINISH_HANDOFF_MS + DURATION.exit + 60;
+/**
+ * r5: one shared exit. The label, the ray fan, the rings and the sparkles all leave together on this one
+ * ease-out (never rays alone after the label: the r4 ghost beat). Exits stay faster than entrances.
+ */
+export const FINISH_EXIT_MS = DURATION.slam;
+export const FINISH_BEAT_MS = FINISH_HANDOFF_MS + FINISH_EXIT_MS + 40;
 /** Coin sparkles per finish burst (motion PARTICLES.sparkles cap). */
 export const FINISH_SPARKLES_MAX = 12;
 /** The FINISH! ray fan is this share of GO's (GO is the start's money frame; the end is a close second). */
@@ -431,38 +436,46 @@ export interface FinishPose extends FinalStampPose {
 export function finishPose(t: number, reduced: boolean): FinishPose {
   'worklet';
   const base = finalStampPose(t, true, false, reduced);
-  const out = t <= FINISH_HANDOFF_MS ? 1 : 1 - clamp01((t - FINISH_HANDOFF_MS) / DURATION.exit);
-  const alpha = t < 0 ? 0 : reduced ? (t < DURATION.quick ? clamp01(t / DURATION.quick) : 1) * out : base.alpha * out;
-  if (t < 0 || reduced) return { ...base, alpha, ringR: 0, ringA: 0, ring2R: 0, ring2A: 0, flash: 0, gold: 0, bloom: 0 };
+  // One shared fade for every piece (easeOut: quick to start leaving, soft at the end).
+  const out = t <= FINISH_HANDOFF_MS ? 1 : 1 - easeOutCubic(clamp01((t - FINISH_HANDOFF_MS) / FINISH_EXIT_MS));
+  const alpha = t < 0 || t >= FINISH_HANDOFF_MS + FINISH_EXIT_MS ? 0
+    : reduced ? (t < DURATION.quick ? clamp01(t / DURATION.quick) : 1) * out : base.alpha * out;
+  if (t < 0 || reduced || alpha <= 0) return { ...base, alpha, ringR: 0, ringA: 0, ring2R: 0, ring2A: 0, flash: 0, gold: 0, bloom: 0 };
   const land = DURATION.slam;
   const p1 = clamp01((t - land) / 380);
   const p2 = clamp01((t - land - 60) / 420);
   const fp = (t - land) / 160;
   const bt = (t - land) / 320;
+  // The fan never outlives (or outshines) the label: it is capped by the label's own alpha.
+  const gold = Math.min(alpha, t < land ? 0.35 * clamp01(t / land) : Math.min(1, 0.35 + 0.65 * clamp01((t - land) / 80)) * out);
   return {
     ...base,
     alpha,
     ringR: t < land ? 0 : 40 + 170 * easeOutCubic(p1),
-    ringA: t < land ? 0 : 0.9 * (1 - p1),
+    ringA: t < land ? 0 : 0.9 * (1 - p1) * out,
     ring2R: t < land + 60 ? 0 : 30 + 150 * easeOutCubic(p2),
-    ring2A: t < land + 60 ? 0 : 0.7 * (1 - p2),
+    ring2A: t < land + 60 ? 0 : 0.7 * (1 - p2) * out,
     flash: fp < 0 || fp >= 1 ? 0 : 1 - easeOutCubic(fp),
-    gold: t < land ? 0.35 * clamp01(t / land) : Math.min(1, 0.35 + 0.65 * clamp01((t - land) / 80)) * out,
-    bloom: bt < 0 || bt >= 1 ? 0 : Math.sin(Math.PI * bt) * (1 - 0.4 * bt),
+    gold,
+    bloom: bt < 0 || bt >= 1 ? 0 : Math.sin(Math.PI * bt) * (1 - 0.4 * bt) * out,
   };
 }
 
-/** Coin sparkle k of n at `t` ms of the finish beat: out in a full ring from the landing, gravity, spin, fade by 900 ms after. */
+/**
+ * Coin sparkle k of n at `t` ms of the finish beat: out in a full ring from the landing, gravity, spin and a
+ * fade; r5: they leave with the label on the shared exit (finishPose), never after it.
+ */
 export function finishSparkle(k: number, n: number, t: number): { x: number; y: number; alpha: number; scale: number; rot: number } {
   'worklet';
   const p = clamp01((t - DURATION.slam) / 820);
-  if (t < DURATION.slam) return { x: 0, y: 0, alpha: 0, scale: 0, rot: 0 };
+  if (t < DURATION.slam || t >= FINISH_HANDOFF_MS + FINISH_EXIT_MS) return { x: 0, y: 0, alpha: 0, scale: 0, rot: 0 };
+  const out = t <= FINISH_HANDOFF_MS ? 1 : 1 - easeOutCubic(clamp01((t - FINISH_HANDOFF_MS) / FINISH_EXIT_MS));
   const ang = (k / Math.max(1, n)) * Math.PI * 2 - Math.PI / 2 + (k % 2 ? 0.26 : 0);
   const r = 60 + 150 * easeOutCubic(p) * (k % 2 ? 0.72 : 1);
   return {
     x: Math.cos(ang) * r,
     y: Math.sin(ang) * r + 90 * p * p,
-    alpha: p < 0.08 ? p / 0.08 : 1 - clamp01((p - 0.4) / 0.6),
+    alpha: (p < 0.08 ? p / 0.08 : 1 - clamp01((p - 0.4) / 0.6)) * out,
     scale: 0.6 + 0.7 * (1 - p),
     rot: p * 3 + k,
   };

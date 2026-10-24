@@ -34,6 +34,8 @@ export interface CountUpTextProps {
   durationMs?: number;
   /** Delay before counting (results cards stagger). */
   delayMs?: number;
+  /** Count up from this value on mount (a card that mounts with its final score still rolls). */
+  fromValue?: number;
   prefix?: string;
   suffix?: string;
   /** Punch scale on change (1 = none). */
@@ -61,13 +63,16 @@ export function shortCount(value: number): string {
 }
 
 export function CountUpText({
-  value, durationMs, delayMs = 0, prefix = '', suffix = '', punch = 1.12, tickEvery = 0,
+  value, durationMs, delayMs = 0, fromValue, prefix = '', suffix = '', punch = 1.12, tickEvery = 0,
   onTick, onDone, reducedMotion = false, format = 'full', style,
 }: CountUpTextProps) {
-  const shown = useSharedValue(value);
+  const first = reducedMotion || fromValue == null ? value : fromValue;
+  const shown = useSharedValue(first);
   const scale = useSharedValue(1);
-  const from = useRef(value);
-  const lastTick = useSharedValue(value);
+  const from = useRef(first);
+  /** The text on the first native frame: the count's start, not its end (a mounting card still rolls). */
+  const firstText = useRef(first).current;
+  const lastTick = useSharedValue(first);
 
   useEffect(() => {
     const start = from.current;
@@ -118,7 +123,7 @@ export function CountUpText({
       caretHidden
       pointerEvents="none"
       underlineColorAndroid="transparent"
-      defaultValue={prefix + (format === 'short' ? shortCount(value) : formatScore(value)) + suffix}
+      defaultValue={prefix + (format === 'short' ? shortCount(firstText) : formatScore(firstText)) + suffix}
       animatedProps={animatedProps}
       style={[styles.text, style, animatedStyle]}
     />

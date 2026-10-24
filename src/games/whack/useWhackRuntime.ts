@@ -120,7 +120,7 @@ export interface WhackRuntime {
    * Start a Burst on a fresh sim (JS thread). `logTaps` echoes every touch-down (live party rounds).
    * `scoreBase` is the Run's banked points so far (the header score adds the live sim score to it).
    */
-  start: (s: WhackSim, bot: boolean, logTaps?: boolean, scoreBase?: number) => void;
+  start: (s: WhackSim, bot: boolean, logTaps?: boolean, scoreBase?: number, curtainKind?: number) => void;
   /** New Run: the header score shows 0 until the first Burst starts. */
   resetScore: () => void;
   /** GO wakes the board: every well ripples in turn on the UI clock (STAGGER), no JS timers. */
@@ -390,14 +390,15 @@ export function useWhackRuntime(opts: {
 
   return useMemo<WhackRuntime>(() => ({
     sim, rs, an, tick, rt, liveScore, endTick, clock, gesture,
-    start: (s: WhackSim, bot: boolean, logTaps = false, scoreBase = 0) => {
-      runOnUI((next: WhackSim, b: boolean, lt: boolean, base: number) => {
+    start: (s: WhackSim, bot: boolean, logTaps = false, scoreBase = 0, curtainKind = 0) => {
+      runOnUI((next: WhackSim, b: boolean, lt: boolean, base: number, ck: number) => {
         'worklet';
         sim.value = next;
         const r = rt.value;
         r.scoreBase = base;
         r.scoreLive = true;
         an.value.curtainAt = -1;
+        an.value.curtainKind = ck;
         r.running = true;
         r.logTaps = lt;
         r.acc = 0;
@@ -417,7 +418,7 @@ export function useWhackRuntime(opts: {
           a.hitAt[i] = -99999;
           a.helmPopAt[i] = -99999;
         }
-      })(s, bot, logTaps, scoreBase);
+      })(s, bot, logTaps, scoreBase, curtainKind);
     },
     resetScore: () => {
       runOnUI(() => {

@@ -285,7 +285,7 @@ export const EMITTERS = {
    */
   impactSpray: {
     sprite: FX_SPRITE.starArt, count: [6, 8], speed: [240, 400], angle: -90, spread: 150,
-    life: [0.45, 0.6], size: [7, 10], sizeEnd: 0.4, gravity: 1100, drag: 1.1, spin: [-480, 480],
+    life: [0.45, 0.6], size: [12, 18], sizeEnd: 0.35, gravity: 1100, drag: 1.1, spin: [-480, 480],
     fadeIn: 0, fadeOut: 0.45, prio: PRIO.hit, colors: [TINT.gold, WHITE, TINT.gold], twos: true, jitter: 5,
   },
   /** Velocity-aligned sparks (crit, boss hits, electric). */

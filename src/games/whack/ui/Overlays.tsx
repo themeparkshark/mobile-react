@@ -11,12 +11,12 @@
 import React, { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { Canvas, Path, Skia, rect } from '@shopify/react-native-skia';
 import { CountUpText } from '../../../gamekit/fx/CountUpText';
 import GameIcon from '../../../ui/GameIcon';
-import { DURATION, SPRING } from '../../../ui/motion';
+import { COUNT, DURATION, SPRING } from '../../../ui/motion';
 import { EASE } from '../../../ui/motionEasing';
 import { ART, BOSS_ART, THEMED_SHARK_FRAMES, type WhackTheme } from '../assets';
 
@@ -88,8 +88,12 @@ export interface BreatherProps {
   incomingSplats: number;
   readyEnabled: boolean;
   goal: string | null;
-  /** The next star as a picture: how full (0..1) and its score. */
-  goalStar?: { progress: number; target: number; three: boolean } | null;
+  /** The next star as a picture: how full (0..1) and its score; `best` is where your best run was at this point (0..1 on the same bar). */
+  goalStar?: { progress: number; target: number; three: boolean; best?: number | null } | null;
+  /** The card's top edge (pt): below the game's HUD row, so the Burst ring and combo stay visible. */
+  top?: number;
+  /** Reduce Motion: the card and pads fade in, no pulse. */
+  reduced?: boolean;
   /** Show the Walk Boost row (random-seed solo Queue Runs only). */
   showWalk?: boolean;
   /** A banked fever: the pad splits into GO and GO FEVER. */
@@ -137,28 +141,47 @@ function NextPreview({ shape, theme, boss }: { shape?: string; theme: WhackTheme
 }
 
 export function Breather(p: BreatherProps) {
-  const pulse = useSharedValue(1);
+  const pad = useSharedValue(0);
   const enter = useSharedValue(0);
   useEffect(() => {
-    // The card rises out of the FINISH! rings: up from below, a touch small, settling with no wobble.
-    enter.value = withSpring(1, SPRING.settle);
-  }, [enter]);
+    // The card rises out of the FINISH! rings onto a calm board: up from below, settling with no wobble.
+    enter.value = p.reduced ? withTiming(1, { duration: DURATION.quick }) : withSpring(1, SPRING.settle);
+  }, [enter, p.reduced]);
   useEffect(() => {
-    if (p.readyEnabled) pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: 420 }), withTiming(1, { duration: 420 })), -1);
-    else pulse.value = 1;
-  }, [p.readyEnabled, pulse]);
-  const padStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
+    // r5: the pads are the last beat of the card stagger. They never sit ghosted: hidden until they can be
+    // pressed, then they pop in at full strength on SPRING.pop with one pulse to draw the eye (and one more
+    // after a quiet moment). Finite, so nothing loops while the card waits or the app is in the background.
+    if (!p.readyEnabled) { pad.value = 0; return; }
+    if (p.reduced) { pad.value = withTiming(1, { duration: DURATION.quick }); return; }
+    pad.value = 0.8;
+    pad.value = withSequence(
+      withSpring(1, SPRING.pop),
+      withDelay(2600, withTiming(1.06, { duration: 260, easing: EASE.out })),
+      withTiming(1, { duration: 260, easing: EASE.inOut }),
+    );
+  }, [p.readyEnabled, p.reduced, pad]);
+  const padStyle = useAnimatedStyle(() => ({
+    opacity: p.reduced ? pad.value : pad.value < 0.79 ? 0 : 1,
+    transform: [{ scale: p.reduced ? 1 : Math.max(0.8, pad.value) }],
+  }));
   const cardStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, enter.value * 1.6),
     transform: [{ translateY: (1 - enter.value) * 60 }, { scale: 0.9 + 0.1 * enter.value }],
   }));
+  const dimStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, enter.value * 1.6) }));
   const theme = p.theme ?? 'park';
   const tickEvery = Math.max(1, Math.round(p.burstScore / 10));
+  // At most 3 picture stats: the run total (only when it differs from this Burst) and two chips.
+  const showRun = p.runScore !== p.burstScore;
+  const chips = p.stats.filter((s) => STAT_ICON[s.label] && s.value !== '0').slice(0, showRun ? 2 : 3);
+  const walkOn = p.showWalk !== false && (p.walkPct > 0.01 || !!p.boostReady);
+  const best = p.goalStar && p.goalStar.best != null ? Math.max(0.02, Math.min(0.98, p.goalStar.best)) : null;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <View style={styles.dim} pointerEvents="none" />
+      {/* The veil fades in with the card on the same UI-thread spring (never a dim frame with no card). */}
+      <Animated.View style={[styles.dim, dimStyle]} pointerEvents="none" />
       {/* The animated layer carries only the motion; the bordered cream card is a plain view inside it. */}
-      <Animated.View style={cardStyle}>
+      <Animated.View style={[cardStyle, { marginTop: p.top ?? 14 }]}>
       <View style={styles.card} accessibilityLabel={`Burst ${p.burstNumber} of ${p.bursts} banked. ${p.burstScore} points.`}>
         {/* Bursts as pips: banked ones are gold with a check (no words). */}
         <View style={styles.pips}>
@@ -170,15 +193,17 @@ export function Breather(p: BreatherProps) {
         </View>
         <View style={styles.scoreRow}>
           <GameIcon name="coins" size={34} />
-          <CountUpText value={p.burstScore} prefix="+" delayMs={180} durationMs={650} tickEvery={tickEvery} onTick={p.onCountTick}
+          <CountUpText value={p.burstScore} fromValue={0} reducedMotion={p.reduced} prefix="+" delayMs={200} durationMs={COUNT.ms} tickEvery={tickEvery} onTick={p.onCountTick}
             style={styles.cardScore} />
         </View>
-        <View style={styles.runPill}>
-          <GameIcon name="trophy" size={18} />
-          <Text style={styles.cardRun}>{p.runScore.toLocaleString()}</Text>
-        </View>
         <View style={styles.chips}>
-          {p.stats.filter((s) => STAT_ICON[s.label]).map((s) => (
+          {showRun ? (
+            <View style={styles.chip} accessibilityLabel={`Run total ${p.runScore}`}>
+              <GameIcon name="trophy" size={18} />
+              <Text style={styles.chipValue}>{p.runScore.toLocaleString()}</Text>
+            </View>
+          ) : null}
+          {chips.map((s) => (
             <View key={s.label} style={styles.chip} accessibilityLabel={`${s.label} ${s.value}`}>
               <GameIcon name={STAT_ICON[s.label]} size={18} />
               <Text style={styles.chipValue}>{s.value}</Text>
@@ -186,31 +211,31 @@ export function Breather(p: BreatherProps) {
           ))}
         </View>
         {p.duelLine ? <Text style={styles.duelLine}>{p.duelLine}</Text> : null}
-        {p.split ? (
-          <View style={[styles.splitChip, { backgroundColor: p.split.ahead ? '#FFE79A' : '#fff8e4' }]} accessibilityLabel={p.split.text}>
-            <GameIcon name="fin" size={18} />
-            <Text style={[styles.splitText, { color: p.split.ahead ? '#5a3200' : '#05346e' }]}>
-              {p.split.ahead && p.split.delta != null ? `+${p.split.delta.toLocaleString()}` : p.split.best != null ? p.split.best.toLocaleString() : p.split.text}
-            </Text>
-          </View>
-        ) : null}
         {p.goalStar ? (
           <View style={styles.starRow} accessibilityLabel={p.goal ?? undefined}>
             <GameIcon name="star" size={24} />
-            <View style={styles.starTrack}>
-              <View style={[styles.starFill, { width: `${Math.round(Math.max(0.04, Math.min(1, p.goalStar.progress)) * 100)}%` }]} />
+            <View style={styles.starTrackWrap}>
+              <View style={styles.starTrack}>
+                <View style={[styles.starFill, { width: `${Math.round(Math.max(0.04, Math.min(1, p.goalStar.progress)) * 100)}%` }]} />
+              </View>
+              {/* Your best run at this point, as the ghost fin on the same bar (the chase, with no number). */}
+              {best != null ? (
+                <View style={[styles.bestMark, { left: `${Math.round(best * 100)}%` }]} accessibilityLabel={p.split?.text}>
+                  <GameIcon name="fin" size={16} />
+                </View>
+              ) : null}
             </View>
             {p.goalStar.three ? <GameIcon name="trophy" size={22} /> : <GameIcon name="star" size={18} />}
           </View>
         ) : p.goal ? <Text style={styles.goal}>{p.goal}</Text> : null}
-        {p.showWalk !== false ? (
+        {walkOn ? (
           <View style={styles.walkRow} accessibilityLabel={p.boostReady ? `Walk boost: ${p.boostReady}` : `Walk boost, ${Math.round(p.walkMeters)} meters`}>
             <View>
               <Ring pct={p.walkPct} size={46} />
               <View style={styles.ringIcon}><GameIcon name="queue" size={20} /></View>
             </View>
-            {p.boostReady ? <Image source={ART.golden} style={{ width: 34, height: 34, marginLeft: 8 }} resizeMode="contain" />
-              : <Text style={styles.walkTitle}>{`+${Math.round(p.walkMeters)}m`}</Text>}
+            {/* The ring fills as you walk; a full ring shows the golden shark it unlocks (no units to read). */}
+            {p.boostReady ? <Image source={ART.golden} style={{ width: 34, height: 34, marginLeft: 8 }} resizeMode="contain" /> : null}
           </View>
         ) : null}
         {p.incomingSplats > 0 ? (
@@ -224,32 +249,33 @@ export function Breather(p: BreatherProps) {
       </Animated.View>
       <View style={styles.thumbZone}>
         {p.feverReady && p.onFever ? (
-          <View style={styles.split}>
+          <Animated.View style={[styles.split, padStyle]}>
             <Pressable accessibilityRole="button" accessibilityLabel="Go and save the fever" onPress={p.readyEnabled ? p.onReady : undefined}
-              style={[styles.go, !p.readyEnabled && styles.readyOff]}>
+              style={styles.go}>
               <Text style={styles.goText}>GO</Text>
             </Pressable>
-            <Animated.View style={padStyle}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Go with fever, 7 seconds of double points" onPress={p.readyEnabled ? p.onFever : undefined}
-                style={[styles.goFever, !p.readyEnabled && styles.readyOff]}>
-                <GameIcon name="streak" size={40} />
-                <Text style={styles.goText}>GO</Text>
-                <View style={styles.multBadge}><Text style={styles.multText}>x2</Text></View>
-              </Pressable>
-            </Animated.View>
-          </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Go with fever, 7 seconds of double points" onPress={p.readyEnabled ? p.onFever : undefined}
+              style={styles.goFever}>
+              <GameIcon name="streak" size={40} />
+              <Text style={styles.goText}>GO</Text>
+              <View style={styles.multBadge}><Text style={styles.multText}>x2</Text></View>
+            </Pressable>
+          </Animated.View>
         ) : (
           <Animated.View style={padStyle}>
             <Pressable accessibilityRole="button" accessibilityLabel="Ready for the next Burst" onPress={p.readyEnabled ? p.onReady : undefined}
-              style={[styles.ready, !p.readyEnabled && styles.readyOff]}>
+              style={styles.ready}>
               <Text style={styles.readyText}>GO</Text>
             </Pressable>
           </Animated.View>
         )}
         {p.canBank ? (
-          <Pressable accessibilityRole="button" onPress={p.onBank} style={styles.bank} hitSlop={10}>
-            <Text style={styles.bankText}>BANK &amp; EXIT</Text>
-          </Pressable>
+          <Animated.View style={padStyle}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Keep your points and finish" onPress={p.onBank} style={styles.bank} hitSlop={10}>
+              <GameIcon name="trophy" size={22} />
+              <GameIcon name="check" size={20} />
+            </Pressable>
+          </Animated.View>
         ) : null}
       </View>
     </View>
@@ -307,7 +333,9 @@ const styles = StyleSheet.create({
   scoreRow: { flexDirection: 'row', alignItems: 'center' },
   runPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: NAVY, paddingHorizontal: 10, paddingVertical: 2 },
   starRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, alignSelf: 'stretch', paddingHorizontal: 18 },
-  starTrack: { flex: 1, height: 14, borderRadius: 7, borderWidth: 2.5, borderColor: NAVY, backgroundColor: '#ffffff', marginHorizontal: 8, overflow: 'hidden' },
+  starTrackWrap: { flex: 1, marginHorizontal: 8, justifyContent: 'center' },
+  bestMark: { position: 'absolute', top: -14, marginLeft: -8 },
+  starTrack: { height: 14, borderRadius: 7, borderWidth: 2.5, borderColor: NAVY, backgroundColor: '#ffffff', overflow: 'hidden' },
   starFill: { height: '100%', backgroundColor: GOLD },
   ringIcon: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   nextWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
@@ -320,7 +348,7 @@ const styles = StyleSheet.create({
   multText: { fontFamily: 'Shark', fontSize: 18, color: NAVY },
   dim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(191,229,255,0.35)' },
   card: {
-    marginTop: 14, marginHorizontal: 16, backgroundColor: CREAM, borderRadius: 22, borderWidth: 4, borderColor: NAVY,
+    marginHorizontal: 16, backgroundColor: CREAM, borderRadius: 22, borderWidth: 4, borderColor: NAVY,
     paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center',
   },
   cardKicker: { fontFamily: 'Knockout', fontSize: 15, letterSpacing: 1.5, color: BLUE },
@@ -356,10 +384,9 @@ const styles = StyleSheet.create({
     width: 240, height: 92, borderRadius: 46, backgroundColor: GOLD, borderWidth: 4, borderColor: NAVY,
     borderBottomWidth: 9, alignItems: 'center', justifyContent: 'center',
   },
-  readyOff: { opacity: 0.55 },
   readyText: { fontFamily: 'Shark', fontSize: 40, color: NAVY },
   readySub: { fontFamily: 'Knockout', fontSize: 13, color: NAVY, marginTop: -4 },
-  bank: { marginTop: 14, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 3, borderColor: NAVY },
+  bank: { marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 3, borderColor: NAVY },
   bankText: { fontFamily: 'Shark', fontSize: 17, color: NAVY },
   duel: { marginTop: 10, alignSelf: 'stretch', backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: NAVY, padding: 10, alignItems: 'center' },
   duelTitle: { fontFamily: 'Shark', fontSize: 22, color: NAVY },

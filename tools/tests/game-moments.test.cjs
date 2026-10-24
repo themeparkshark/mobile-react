@@ -285,8 +285,8 @@ test('round 2: the medallion draws the decimal as a dot (x2.5 never reads x25), 
   assert.match(board, /multDotX/);
   assert.match(board, /<Circle cx=\{multDotX\}/);
   const stamp = read('src/gamekit/fx/StampLayer.tsx');
-  assert.match(stamp, /\(width - 28\) \/ Math\.max\(1, raw \* 1\.22\)/, 'a long stamp shrinks to fit');
-  assert.match(stamp, /const half = w \* 0\.61 \+ 10;/, 'room for overshoot and tilt');
+  assert.match(stamp, /\(width - 28\) \/ Math\.max\(1, rawBox \* 1\.22\)/, 'a long stamp shrinks to fit (plate included)');
+  assert.match(stamp, /const half = rawBox \* k \* 0\.61 \+ 10;/, 'room for overshoot, tilt and the plate');
 });
 
 test('round 2 (r4 update): Whack hits hotter by tier (kick on every bonk, growing by tier; tier-up hit-stop, pitch climbs by tier); the last 5 only crosses to React on change', () => {
@@ -558,8 +558,8 @@ test('round 4: every bonk sprays small gold and white stars that fall and fade, 
 
 test('round 4: the last 5 ticks climb a semitone each second on the UI clock, and coin ticks never fan out on JS timers', () => {
   const whack = read('src/games/whack/WhackAShark.tsx');
-  assert.match(whack, /GameAudio\.play\(cues\.tick, \{ volume: 0\.6, pitch: 5 - sec \}\)/);
-  assert.match(whack, /if \(sec > 0 && sec !== prev\) runOnJS\(lastFiveTick\)\(sec\);/);
+  assert.match(whack, /GameAudio\.play\(cues\.tick, \{ volume: 0\.6, pitch: 5 - sec, delayMs \}\)/);
+  assert.match(whack, /runOnJS\(lastFiveTick\)\(sec, remainingMs\.value - sec \* 1000, Date\.now\(\)\);/, 'the UI clock hands JS the exact time to the crossing');
   assert.doesNotMatch(whack, /setTimeout\(\(\) => GameAudio\.playLadder\(cues\.coinTick/);
   assert.match(whack, /if \(now - c\.at < 30 \|\| n <= 0\) return;/, 'one coin tick per 30 ms at most');
   assert.match(whack, /runtime\.wake\(STAGGER\.stepMs\)/, 'the GO wake ripples on the UI clock');
@@ -586,4 +586,114 @@ test('round 4: the breather and the count read with zero words (pictures, a UI-t
   assert.equal(pose(0.4).check, 1);
   assert.equal(pose(0.6).cross, 0, 'the lure shakes no first');
   assert.equal(pose(0.8).cross, 1);
+});
+
+// ---------------------------------------------------------------------------
+// Round 5: no ghost beat, one celebration at a time, nothing over the HUD, no ghosted buttons.
+
+test('round 5: FINISH! leaves in one shared ease-out: the fan, rings and sparkles never outlive the label', () => {
+  const end = gm.FINISH_HANDOFF_MS + gm.FINISH_EXIT_MS;
+  assert.equal(gm.FINISH_EXIT_MS, motion.DURATION.slam, 'a 120 ms exit, faster than the entrance');
+  for (let t = 0; t <= gm.FINISH_BEAT_MS + 200; t += 5) {
+    const p = gm.finishPose(t, false);
+    assert.ok(p.gold <= p.alpha + 1e-9, `the fan is never brighter than the label at ${t} ms`);
+    if (t >= end) {
+      assert.equal(p.alpha, 0);
+      assert.equal(p.gold, 0, `no rays alone at ${t} ms`);
+      assert.equal(p.bloom, 0);
+      assert.equal(p.ringA + p.ring2A, 0);
+      for (let k = 0; k < 12; k++) assert.equal(gm.finishSparkle(k, 12, t).alpha, 0, 'sparkles leave with the label');
+    }
+  }
+  const fb = read('src/gamekit/fx/FinishBeat.tsx');
+  assert.match(fb, /\{!reduced && font && raysImg && softImg \? \(/, 'the fan only draws with its label');
+  assert.doesNotMatch(fb, /<GoldBurst/, 'the fan is drawn in the same Skia canvas as the label (never native views lagging behind it)');
+  assert.match(fb, /const FinishCanvas = React\.memo\(/, 'the canvas never re-renders mid-beat');
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /armed=\{phase === 'play' && secondsLeft != null && secondsLeft <= 2\}/, 'the FINISH! canvas mounts in the last 2 seconds only (idle, drawing nothing)');
+});
+
+test('round 5: the curtain call bows before the next card; Bursts 2 and up get a quick ripple, about 1 run in 8 a gold one', () => {
+  const rs = loadTs('src/games/whack/render/renderState.ts');
+  const full = rs.curtainEndMs(rs.CURTAIN_FULL);
+  const short = rs.curtainEndMs(rs.CURTAIN_SHORT);
+  assert.ok(full <= 1100, `the full wave is down by ${full} ms`);
+  assert.ok(short < 700, `the repeat ripple is under 700 ms (${short})`);
+  // The short ripple only uses the middle row.
+  for (const i of [0, 1, 2, 6, 7, 8]) assert.equal(rs.curtainPose(i, 200, 0, false, rs.CURTAIN_SHORT).rise, -1);
+  for (const i of [3, 4, 5]) assert.ok(rs.curtainPose(i, 200, 0, false, rs.CURTAIN_SHORT).rise > 0.9);
+  // Every shark is down at curtainEndMs (minus the lead), for every kind.
+  for (const k of [rs.CURTAIN_FULL, rs.CURTAIN_SHORT, rs.CURTAIN_GOLDEN]) {
+    const at = rs.curtainEndMs(k) - rs.CURTAIN_LEAD_MS + 1;
+    for (let i = 0; i < 9; i++) assert.equal(rs.curtainPose(i, at, 0, false, k).rise, -1, `kind ${k} well ${i} down`);
+  }
+  // The bow is a sink, not a blink: halfway through the duck the shark is still partly up.
+  const mid = rs.curtainPose(4, rs.CURTAIN_BOW_MS + rs.CURTAIN_DUCK_MS / 2, 0, false);
+  assert.ok(mid.rise > 0.5 && mid.rise < 1, `mid-bow rise ${mid.rise}`);
+  // Picker: first and last get the full wave, the middle Bursts the ripple, a gold one now and then.
+  let gold = 0;
+  for (let seed = 0; seed < 400; seed++) {
+    assert.equal(rs.curtainKindFor(1, 4, seed), rs.CURTAIN_SHORT);
+    assert.equal(rs.curtainKindFor(2, 4, seed), rs.CURTAIN_SHORT);
+    const k = rs.curtainKindFor(3, 4, seed);
+    assert.ok(k === rs.CURTAIN_FULL || k === rs.CURTAIN_GOLDEN);
+    if (k === rs.CURTAIN_GOLDEN) gold++;
+  }
+  assert.ok(gold > 20 && gold < 90, `rare gold curtain about 1 in 8 (${gold}/400)`);
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /Math\.max\(FINISH_HANDOFF_MS, curtainEndMs\(curtainKind\.current\)\)/, 'the next card waits for the last bow');
+  const src = read('src/games/whack/render/renderState.ts');
+  assert.match(src, /an\.curtainKind === CURTAIN_GOLDEN && i === 4 \? F_GOLDEN : F_POP/);
+});
+
+test('round 5: the breather sits below the HUD, shows at most 3 picture stats and never ghosts its buttons', () => {
+  const ov = read('src/games/whack/ui/Overlays.tsx');
+  assert.doesNotMatch(ov, /withRepeat/, 'no endless pulse while the card waits (or in the background)');
+  assert.doesNotMatch(ov, /readyOff/, 'no 55 percent ghost buttons');
+  assert.match(ov, /marginTop: p\.top \?\? 14/, 'the card starts below the HUD row');
+  assert.match(ov, /const showRun = p\.runScore !== p\.burstScore;/, 'no duplicate total on Burst 1');
+  assert.match(ov, /\.slice\(0, showRun \? 2 : 3\)/, 'at most 3 picture stats');
+  assert.doesNotMatch(ov, /`\+\$\{Math\.round\(p\.walkMeters\)\}m`/, 'no +0m unit to read');
+  assert.match(ov, /p\.walkPct > 0\.01 \|\| !!p\.boostReady/, 'the walk ring hides at zero');
+  assert.match(ov, /styles\.bestMark/, 'your best is a ghost fin on the star bar');
+  assert.match(ov, /<CountUpText value=\{p\.burstScore\} fromValue=\{0\}/, 'the +N rolls up from 0 on a card that mounts with its final score');
+  assert.match(read('src/gamekit/fx/CountUpText.tsx'), /const first = reducedMotion \|\| fromValue == null \? value : fromValue;/);
+  assert.doesNotMatch(ov, /BANK &amp; EXIT/, 'the exit pad is a picture, not a money word');
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /top=\{L \? L\.hudH \+ 6 : 14\}/);
+  assert.match(whack, /setTimeout\(\(\) => setReadyOn\(true\), 600\)/, 'the pads arrive as the last beat of the card');
+  assert.match(whack, /countdownPillFieldY=\{L \? L\.hudH \+ 8 : undefined\}/, 'the coach card sits below the HUD');
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /opacity: fieldIn\.value, transform: \[\{ scale: 1 \+ 0\.03 \* pillT\.value \}\]/, 'the pill arrives with the stage, never over a blank frame');
+});
+
+test('round 5: every bonk reads at arm\'s length (bigger stars, a contact ring), thinned by the power budget', () => {
+  const pt = read('src/gamekit/core/particles.ts');
+  assert.match(pt, /impactSpray: \{[^}]*size: \[12, 18\]/);
+  const juice = read('src/games/whack/useWhackJuice.ts');
+  assert.match(juice, /budgetedParticles\(want, budget\)/, 'Battery Saver thins the spray');
+  assert.match(juice, /reducedMotion \|\| !budget \? \(reducedMotion \? 0 : want\)/, 'Reduce Motion drops it');
+  assert.match(juice, /fx\.current\?\.ring\(p\.x, cy, \{ color: '#ffffff', from: 14, to: rank >= 2 \? 86 : 64, ms: 120 \}\)/);
+  assert.match(juice, /color: TINT\.gold, speed: rank >= 3 \? 1\.35 : 1\.18/, 'x3 and fever throw gold-only stars further');
+  const pp = loadTs('src/power/powerPolicy.ts');
+  assert.equal(pp.budgetedParticles(6, { particleScale: 0.5, animate: true }), 3, 'Battery Saver: 3 stars');
+  assert.match(juice, /combo: \{[^}]*plate: true \}/, 'combo slabs sit on a cream plate');
+  const stamp = read('src/gamekit/fx/StampLayer.tsx');
+  assert.match(stamp, /\{data\.plate \? \(/);
+});
+
+test('round 5: the last-5 ticks are queued ahead on the UI clock, so a late JS thread still lands on the stamp', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /const LAST5_LEAD_MS = 160;/);
+  assert.match(whack, /Math\.ceil\(\(rem - LAST5_LEAD_MS\) \/ 1000\)/);
+  assert.match(whack, /const delayMs = Math\.max\(0, Math\.round\(toCrossMs - lag\)\);/);
+  assert.match(whack, /\[wow-sync\]/, 'the dev beat log prints the measured lag');
+  assert.match(whack, /if \(Date\.now\(\) - preWhistle\.current > 600\) GameAudio\.play\(cues\.whistle/, 'one whistle, queued on the zero frame');
+});
+
+test('round 5: a shark that gets away blows a raspberry (tongue out, a wiggle), never with Reduce Motion', () => {
+  const src = read('src/games/whack/render/renderState.ts');
+  assert.match(src, /const cheeky = finnish && \(k === K_FINN \|\| k === K_TWIN \|\| k === K_SPRINTER\) && wob > 0;/);
+  assert.match(src, /const frame = cheeky \? F_TONGUE : finnish \? F_DUCK/);
+  assert.match(src, /if \(cheeky\) rs\.rot\[i\] = 7 \* Math\.sin\(t \* Math\.PI \* 3\);/);
 });

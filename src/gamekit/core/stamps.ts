@@ -107,6 +107,8 @@ export interface StampItem {
   priority: number;
   /** ms since epoch it was pushed (stale items are dropped). */
   pushedAt: number;
+  /** Draw a cream plate behind the words (fx/StampLayer). */
+  plate?: boolean;
 }
 
 export interface StampQueueConfig {

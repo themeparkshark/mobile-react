@@ -11,6 +11,9 @@
  *
  * Round 4: the house GoldBurst ray fan opens behind the label (0.8 of GO's), so the end is the
  * brightest frame of the run, and the beat hands off at FINISH_HANDOFF_MS (no dead hold).
+ * Round 5: the fan is drawn in this same Skia canvas (the house rays-gold-fade and soft-spot art,
+ * tinted like GoldBurst) from the same clock as the label, so it can never lag the label or show
+ * after it (the r4 ghost beat came from native image views updating a few frames behind the canvas).
  *
  * Two ways to fire. `fireKey` (JS) mounts the canvas for the beat. `trigger` (a shared value the game
  * bumps on the UI frame its clock hits zero) starts the clock on the UI thread with no JS round trip;
@@ -23,17 +26,20 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { BlurMask, Canvas, Circle, Group, Path, Skia, Text as SkText, rect } from '@shopify/react-native-skia';
+import { BlendColor, BlurMask, Canvas, Circle, Group, Image as SkImage, Path, Skia, Text as SkText, rect, useImage } from '@shopify/react-native-skia';
 import {
   cancelAnimation, Easing, ReduceMotion, runOnJS, useAnimatedReaction, useDerivedValue, useSharedValue, withSequence, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useDisplayFont } from './displayFont';
 import { FINISH_BEAT_MS, FINISH_FAN_OF_GO, FINISH_SPARKLES_MAX, finishPose, finishSparkle } from '../core/gameMoments';
 import { GOLD_FX } from '../../ui/motion';
-import { GoldBurst } from '../../ui/GoldBurst';
 
 /** Dev capture only: hold the beat on this time (ms) for 6 s so a screenshot shows an exact frame. */
 const HOLD_MS = __DEV__ ? Number(process.env.EXPO_PUBLIC_FINISH_HOLD_MS || -1) : -1;
+
+/** The house reveal art for the fan (no new art). */
+const RAYS_ART = require('../../../assets/images/reveal/rays-gold-fade.webp');
+const SOFT_ART = require('../../../assets/images/reveal/soft-spot.webp');
 
 /** The last-5 number size, so FINISH! lands with the same weight. */
 const LABEL_PX = 110;
@@ -124,7 +130,12 @@ export const FinishBeat = React.memo(function FinishBeat({
   return <FinishCanvas clock={clock} label={label} width={width} height={height} y={y} reduced={reduced} sparkles={sparkles} flash={flash} clipTop={clipTop} />;
 });
 
-function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash, clipTop }: {
+/**
+ * Memoized (r5): the fire re-renders FinishBeat (live) and the game (its callouts clear), and a Skia tree
+ * re-reconciled on a busy JS thread could drop the label for a few frames mid-beat. With stable props the
+ * canvas never re-renders once mounted; every frame of the beat comes from the UI-thread clock.
+ */
+const FinishCanvas = React.memo(function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash, clipTop }: {
   clock: SharedValue<number>; label: string; width: number; height: number; y: number; reduced: boolean; sparkles: number; flash: number; clipTop: number;
 }) {
   const clip = useMemo(() => rect(0, clipTop, width, Math.max(0, height - clipTop)), [clipTop, width, height]);
@@ -151,22 +162,41 @@ function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash
   const ring2R = useDerivedValue(() => pose.value.ring2R);
   const ring2A = useDerivedValue(() => pose.value.ring2A);
   const flashA = useDerivedValue(() => flash * pose.value.flash);
-  const gold = useDerivedValue(() => pose.value.gold);
-  const bloom = useDerivedValue(() => pose.value.bloom);
+  const raysImg = useImage(RAYS_ART);
+  const softImg = useImage(SOFT_ART);
+  // The fan, glow and core: GoldBurst's exact curves, on the canvas's own clock (always in step with the label).
+  const glowA = useDerivedValue(() => Math.min(1, 0.85 * pose.value.gold + 0.15 * pose.value.bloom));
+  const raysA = useDerivedValue(() => Math.min(1, 0.95 * pose.value.gold + 0.1 * pose.value.bloom));
+  const coreA = useDerivedValue(() => Math.min(1, 0.55 * pose.value.gold + 0.6 * pose.value.bloom));
+  const glowT = useDerivedValue(() => [{ translateX: cx }, { translateY: y }, { scale: 0.55 + 0.45 * pose.value.gold + 0.3 * pose.value.bloom }]);
+  const raysT = useDerivedValue(() => [{ translateX: cx }, { translateY: y }, { scale: 0.5 + 0.5 * pose.value.gold + 0.14 * pose.value.bloom }]);
+  const coreT = useDerivedValue(() => [{ translateX: cx }, { translateY: y }, { scale: 0.8 + 0.5 * pose.value.bloom }]);
   const n = reduced ? 0 : Math.max(0, Math.min(FINISH_SPARKLES_MAX, Math.round(sparkles)));
   // GO's fan is 1.3 screen widths; FINISH!'s is 0.8 of that, clipped below the HUD like the rings.
   const fan = Math.round(width * 1.3 * FINISH_FAN_OF_GO);
   return (
     <View style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
-    {reduced ? null : (
-      <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: clipTop, bottom: 0, overflow: 'hidden' }}>
-        <View style={{ position: 'absolute', left: cx - fan / 2, top: y - clipTop - fan / 2, width: fan, height: fan }}>
-          <GoldBurst size={fan} amount={gold as never} bloom={bloom as never} spin={false} reduced={reduced} />
-        </View>
-      </View>
-    )}
     <Canvas style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
       <Group clip={clip}>
+      {!reduced && font && raysImg && softImg ? (
+        <Group>
+          <Group transform={glowT} opacity={glowA}>
+            <SkImage image={softImg} x={-fan / 2} y={-fan / 2} width={fan} height={fan} fit="fill">
+              <BlendColor color={GOLD_FX.glow} mode="srcIn" />
+            </SkImage>
+          </Group>
+          <Group transform={raysT} opacity={raysA}>
+            <SkImage image={raysImg} x={-fan / 2} y={-fan / 2} width={fan} height={fan} fit="fill">
+              <BlendColor color={GOLD_FX.rays} mode="srcIn" />
+            </SkImage>
+          </Group>
+          <Group transform={coreT} opacity={coreA}>
+            <SkImage image={softImg} x={-fan * 0.21} y={-fan * 0.21} width={fan * 0.42} height={fan * 0.42} fit="fill">
+              <BlendColor color={GOLD_FX.core} mode="srcIn" />
+            </SkImage>
+          </Group>
+        </Group>
+      ) : null}
       {flash > 0 ? (
         <Circle cx={cx} cy={y} r={120} color="#ffffff" opacity={flashA}>
           <BlurMask blur={36} style="normal" />
@@ -191,7 +221,7 @@ function FinishCanvas({ clock, label, width, height, y, reduced, sparkles, flash
     </Canvas>
     </View>
   );
-}
+});
 
 function Spark({ k, n, clock, cx, cy, star }: {
   k: number; n: number; clock: SharedValue<number>; cx: number; cy: number; star: ReturnType<typeof Skia.Path.Make>;

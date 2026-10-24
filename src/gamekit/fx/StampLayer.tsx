@@ -18,7 +18,7 @@
 
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
-import { Canvas, Group, Text as SkText, useFont, type SkFont } from '@shopify/react-native-skia';
+import { Canvas, Group, RoundedRect, Text as SkText, useFont, type SkFont } from '@shopify/react-native-skia';
 import { useDerivedValue, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import {
   STAMP_STYLES,
@@ -36,6 +36,10 @@ import {
 const FONT_PX = 64;
 const INK = '#23384f';
 const MAX_SLOTS = 3;
+/** The cream plate behind a plated stamp (r5: combo slabs sit on a plate, like the Banner): side padding at FONT_PX. */
+const PLATE_PAD = 20;
+const PLATE_CREAM = '#fff8e4';
+const PLATE_NAVY = '#05346e';
 
 export interface StampOptions {
   x?: number;
@@ -46,6 +50,8 @@ export interface StampOptions {
   /** Cap height-ish size in pt (22 minimum, 34 default). */
   size?: number;
   priority?: number;
+  /** Sit the words on a cream plate with a navy ink edge (combo slabs), so they never float as bare text. */
+  plate?: boolean;
 }
 
 export interface StampLayerHandle {
@@ -67,6 +73,7 @@ export interface StampLayerProps {
 interface SlotData {
   text: string;
   color: string;
+  plate?: boolean;
 }
 
 export const StampLayer = React.memo(forwardRef<StampLayerHandle, StampLayerProps>(function StampLayer(
@@ -101,12 +108,14 @@ export const StampLayer = React.memo(forwardRef<StampLayerHandle, StampLayerProp
     // Never cut off: a long stamp shrinks to fit, and the clamp leaves room for the overshoot,
     // the tilt and the outline (a combo slab used to run off the right edge).
     const raw = measure(font, item.text);
-    const k = Math.min(Math.max(22, item.size) / FONT_PX * 1.35, (width - 28) / Math.max(1, raw * 1.22));
+    const plate = !!item.plate;
+    const rawBox = raw + (plate ? PLATE_PAD * 2 : 0);
+    const k = Math.min(Math.max(22, item.size) / FONT_PX * 1.35, (width - 28) / Math.max(1, rawBox * 1.22));
     const w = raw * k;
-    const half = w * 0.61 + 10;
+    const half = rawBox * k * 0.61 + 10;
     const x = width <= half * 2 ? width / 2 : Math.max(half, Math.min(width - half, item.x));
     const y = Math.max(minY + FONT_PX * k, Math.min(maxY ?? height - 20, item.y));
-    setSlots((prev) => prev.map((s, i) => (i === slot ? { text: item.text, color: item.color } : s)));
+    setSlots((prev) => prev.map((s, i) => (i === slot ? { text: item.text, color: item.color, plate } : s)));
     const startAt = clock.value;
     const next = slotsSv.value.map((row, i) => (i === slot ? [startAt, x, y, k, w] : row));
     const styles = stylesSv.value.map((st, i) => (i === slot ? style : st));
@@ -140,6 +149,7 @@ export const StampLayer = React.memo(forwardRef<StampLayerHandle, StampLayerProp
         color: opts.color ?? '#ffffff',
         size: opts.size ?? 34,
         priority: opts.priority ?? 0,
+        plate: !!opts.plate,
         pushedAt: Date.now(),
       });
       pump();
@@ -203,8 +213,16 @@ function StampSlot({ index, data, font, clock, slots, styles }: {
     ];
   });
   if (!font || !data.text) return null;
+  const raw = measure(font, data.text);
   return (
     <Group transform={transform} opacity={opacity}>
+      {data.plate ? (
+        <Group>
+          <RoundedRect x={-PLATE_PAD} y={-FONT_PX * 0.86 + 6} width={raw + PLATE_PAD * 2} height={FONT_PX * 1.14} r={FONT_PX * 0.36} color={PLATE_NAVY} opacity={0.4} />
+          <RoundedRect x={-PLATE_PAD} y={-FONT_PX * 0.86} width={raw + PLATE_PAD * 2} height={FONT_PX * 1.14} r={FONT_PX * 0.36} color={PLATE_CREAM} />
+          <RoundedRect x={-PLATE_PAD} y={-FONT_PX * 0.86} width={raw + PLATE_PAD * 2} height={FONT_PX * 1.14} r={FONT_PX * 0.36} color={PLATE_NAVY} style="stroke" strokeWidth={6} />
+        </Group>
+      ) : null}
       <SkText x={0} y={3} text={data.text} font={font} color={INK} style="stroke" strokeWidth={7} strokeJoin="round" opacity={0.55} />
       <SkText x={0} y={0} text={data.text} font={font} color={INK} style="stroke" strokeWidth={7} strokeJoin="round" />
       <SkText x={0} y={0} text={data.text} font={font} color={data.color} />

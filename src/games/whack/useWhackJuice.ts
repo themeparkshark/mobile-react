@@ -42,6 +42,8 @@ import type { BoardLayout } from './render/layout';
 import type { WhackRuntime } from './useWhackRuntime';
 import { calloutAdmit, comboTierRank, comboTierStyle, createCalloutGate } from '../../gamekit/core/gameMoments';
 import { KICK } from '../../ui/motion';
+import { budgetedParticles, type PowerBudget } from '../../power/powerPolicy';
+import { TINT } from '../../gamekit/core/particles';
 
 const GOLD = '#ffcf3b';
 const CORAL = '#ff6b5c';
@@ -139,6 +141,8 @@ export interface WhackJuiceOpts {
    * (hits keep their particles, sound and haptic), and a combo slab becomes a bump on the HUD medallion.
    */
   quiet?: MutableRefObject<boolean>;
+  /** The power budget: Battery Saver thins the hit spray (Reduce Motion drops it). */
+  budget?: Pick<PowerBudget, 'particleScale' | 'animate'>;
 }
 
 export interface WhackJuice {
@@ -159,7 +163,7 @@ export interface WhackJuice {
 }
 
 export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
-  const { fx, stamps, camera, cues, runtime, layout, width, reducedMotion, walking, party, quiet } = opts;
+  const { fx, stamps, camera, cues, runtime, layout, width, reducedMotion, walking, party, quiet, budget } = opts;
   const onFeverRef = useRef(opts.onFever);
   onFeverRef.current = opts.onFever;
   const onReadyRef = useRef(opts.onFeverReady);
@@ -231,7 +235,8 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     coinBubble: { sfx: cues.coinLayer, pattern: 'whackLate', priority: WHACK_PRIO.good, burst: [{ emitter: 'coins', count: 4, magnet: true }], flyUp: { size: 'sm', color: GOLD } },
     tellGolden: { pattern: 'goldenTell', priority: WHACK_PRIO.goldenTell, tell: true, burst: [{ emitter: 'sparkles', count: 6 }] },
     tellAngler: { pattern: 'purrTell', priority: WHACK_PRIO.decoy, tell: true },
-    combo: { sfx: cues.tally, volume: 0.85, stamp: { style: 'slab', color: GOLD, size: 30 } },
+    // r5: the combo slab sits on a cream plate with a navy edge (never bare tilted text over the board).
+    combo: { sfx: cues.tally, volume: 0.85, stamp: { style: 'slab', color: GOLD, size: 30, plate: true } },
   }), [cues, scoreAt]);
   // One governor per board (v5 8.7): counted flashes 334 ms apart, 3 per second, merged inside the window.
   const governor = useMemo(() => createFxGovernor({ ...GOVERNOR_PRESETS.whack, calm: reducedMotion || walking }), [reducedMotion, walking]);
@@ -276,10 +281,20 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     // KICK.ms at most; never while walking, with Reduce Motion or on a shared party board.
     // Every bonk lands (r4): a spray of small gold and white stars pops from the contact point and falls,
     // 6 on a light hit, 8 from QUICK up, thinned by the clutter governor when 3+ wells are busy.
+    // r5: bigger stars (12 to 18 pt) that read at arm's length, a white contact ring on the hit frame, and
+    // from x3 the spray turns gold-only and flies further. The power budget thins it (Battery Saver about
+    // half, 3 to 4 stars) and Reduce Motion drops the spray (the squash, sound and haptic stay).
     if (isBonk(name)) {
       const heavy = name !== 'late' && name !== 'good' && name !== 'goodLite' && name !== 'goodStars';
-      const n = busy.current.size >= 3 ? 4 : heavy ? 8 : 6;
-      fx.current?.burst('impactSpray', p.x, p.y + (layout.current?.spriteH[h] ?? 60) * 0.28, { count: n });
+      const want = busy.current.size >= 3 ? 4 : heavy ? 8 : 6;
+      const n = reducedMotion || !budget ? (reducedMotion ? 0 : want) : Math.min(want, budgetedParticles(want, budget));
+      const cy = p.y + (layout.current?.spriteH[h] ?? 60) * 0.28;
+      if (n > 0) {
+        fx.current?.burst('impactSpray', p.x, cy, rank >= 2
+          ? { count: n, color: TINT.gold, speed: rank >= 3 ? 1.35 : 1.18, size: rank >= 3 ? 1.15 : 1.05 }
+          : { count: n });
+        fx.current?.ring(p.x, cy, { color: '#ffffff', from: 14, to: rank >= 2 ? 86 : 64, ms: 120 });
+      }
     }
     // Hot hands hit harder (r4: from the first bonk): the board kicks 2 pt away from the touch at x1 and
     // x2, 3 pt at x3 and 4 pt (KICK.maxPt) in fever, one kick per KICK.ms at most; never while walking,

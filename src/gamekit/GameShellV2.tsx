@@ -182,6 +182,8 @@ interface GameShellV2Props {
    * 7-year-old reads it with zero words). The objective stays as the VoiceOver label.
    */
   countdownDemo?: React.ReactNode;
+  /** Seat the countdown pill this far below the top of the play field (pt), under the game's own HUD row. */
+  countdownPillFieldY?: number;
   /**
    * Whole seconds left on a timed round. From 5 down the clock turns gold, a
    * soft gold edge breathes and each second stamps in; 0 slams TIME! (the
@@ -297,6 +299,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       personalBest,
       objective,
       countdownDemo,
+      countdownPillFieldY,
       goal,
       result,
       starMultipliers = DEFAULT_STAR_MULT,
@@ -850,7 +853,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       pillT.value = withRepeat(withTiming(1, { duration: AMBIENT.breathMs / 2, easing: EASE.inOut }), -1, true);
       return () => cancelAnimation(pillT);
     }, [phase, visible, reducedMotion, pillT]);
-    const pillBreath = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.03 * pillT.value }] }));
+    // r5: the pill arrives with the stage (it fades in on the field's own fade), so a coach card never floats
+    // over an empty blue frame while the art loads.
+    const pillBreath = useAnimatedStyle(() => ({ opacity: fieldIn.value, transform: [{ scale: 1 + 0.03 * pillT.value }] }));
     // The walking chip pulses 1.0 to 1.08 every 1200 ms (still with Reduce Motion: it holds at 1).
     const walkT = useSharedValue(0);
     const walking = !!linePlayMovement?.moving && phase === 'playing';
@@ -957,7 +962,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               accessibilityRole="button"
               accessibilityLabel={`${objective ? `${objective} ` : ""}Starting in ${countText}. Tap to skip.`}
             >
-              <Animated.View style={[styles.cdPill, pillBreath]} pointerEvents="none">
+              <Animated.View style={[styles.cdPill, countdownPillFieldY != null && fieldY > 0 ? { top: Math.max(188, fieldY + countdownPillFieldY) } : null, pillBreath]} pointerEvents="none">
                 {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
                 {countdownDemo ?? (objective ? <Text style={styles.cdPillText} numberOfLines={2}>{objective}</Text> : null)}
                 {countdownDemo ? null : <Text style={styles.skipHint}>tap to skip</Text>}
