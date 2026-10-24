@@ -37,7 +37,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import GameIcon, { type GameIconName } from '../../ui/GameIcon';
-import { compareBest, formatScore, nextStarGoal, tallySchedule, tallyTickCount, type StarThresholds } from '../core/scoring';
+import { compareBest, formatScore, nextStarGoal, type StarThresholds } from '../core/scoring';
 import { nearMissLine } from '../core/nearMiss';
 import { CountUpText } from '../fx/CountUpText';
 import { bestAwareTitle, feelingChips, feelingLine, feelingTitle, nearBest, noteRun } from './feelings';
@@ -281,7 +281,7 @@ export function ResultsCard({
         {nBuckets && !reducedMotion ? (
           <View style={styles.buckets} pointerEvents="none" importantForAccessibility="no-hide-descendants">
             {buckets!.map((b, i) => (
-              <BucketTally key={b.label} label={b.label} text={b.value} value={bucketValues?.[i]}
+              <BucketTally key={b.label} index={i} label={b.label} text={b.value} value={bucketValues?.[i]}
                 delayMs={bucketStart + i * (BUCKET_MS + BUCKET_GAP)} foldAt={countDelay} reducedMotion={reducedMotion} />
             ))}
           </View>
@@ -385,7 +385,11 @@ function TallyFold({ foldAt, reducedMotion, children }: { foldAt: number; reduce
   return <Animated.View style={st}>{children}</Animated.View>;
 }
 
-function BucketTally({ label, text, value, delayMs, foldAt, reducedMotion }: {
+/** Pitch step between bucket ticks: POINTS, COMBO, BONUS climb one soft tick each. */
+export const BUCKET_TICK_STEP = 3;
+
+function BucketTally({ index, label, text, value, delayMs, foldAt, reducedMotion }: {
+  index: number;
   label: string;
   text: string;
   value?: number;
@@ -407,15 +411,15 @@ function BucketTally({ label, text, value, delayMs, foldAt, reducedMotion }: {
       withSpring(1, { damping: 10, stiffness: 300 }),
     ));
     fold.value = withDelay(foldAt, withTiming(1, { duration: TALLY_FOLD_MS, easing: Easing.in(Easing.quad) }));
-    const n = value !== undefined ? tallyTickCount(value) : 0;
-    const plan = tallySchedule(n, BUCKET_MS);
-    const timers = plan.at.map((t, k) => setTimeout(() => {
-      GameAudio.play(SCORE_TICK_CUE, { volume: 0.3, pitch: plan.pitch[k] * 0.5 });
-      if (k === n - 1) playHaptic('tick');
-    }, delayMs + t));
-    timers.push(setTimeout(() => setShown(value ?? 0), delayMs));
+    // One soft tick per bucket as it pops, each a step higher (never a full
+    // ramp per bucket: the one rising ramp belongs to the total's count-up).
+    const timers = [setTimeout(() => {
+      setShown(value ?? 0);
+      GameAudio.play(SCORE_TICK_CUE, { volume: 0.32, pitch: index * BUCKET_TICK_STEP });
+      playHaptic('tick');
+    }, delayMs)];
     return () => { timers.forEach(clearTimeout); cancelAnimation(pop); cancelAnimation(fold); };
-  }, [delayMs, foldAt, value, reducedMotion, pop, fold]);
+  }, [delayMs, foldAt, value, reducedMotion, pop, fold, index]);
   const style = useAnimatedStyle(() => ({
     transform: [{ scale: pop.value * (1 - fold.value * 0.7) }],
     opacity: pop.value > 0.02 ? 1 - fold.value : 0,

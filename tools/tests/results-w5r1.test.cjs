@@ -86,3 +86,11 @@ test('the shared card holds its star title until the last star stamps (no GREAT!
   assert.equal(titleDelayMs(3, 220, false), 260 + 440 + 140);
   assert.equal(titleDelayMs(3, 464, true), 0, 'Reduce Motion: in place');
 });
+
+test('the tally says each bucket with one soft rising tick; the only ramp is the total count-up', () => {
+  const card = read('src/gamekit/results/ResultsCard.tsx');
+  const bucket = card.slice(card.indexOf('function BucketTally'), card.indexOf('function BucketTally') + 1600);
+  assert.doesNotMatch(bucket, /tallySchedule|tallyTickCount|plan\.at\.map/);
+  assert.match(bucket, /GameAudio\.play\(SCORE_TICK_CUE, \{ volume: 0\.32, pitch: index \* BUCKET_TICK_STEP \}\);/);
+  assert.match(card, /export const BUCKET_TICK_STEP = 3;/);
+});
