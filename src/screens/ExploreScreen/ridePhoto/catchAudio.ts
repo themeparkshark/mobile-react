@@ -1,7 +1,6 @@
 import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { createSfxLimiter } from '../../../audio/sfxLimiter';
 import { queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
-import { AccessibilityInfo } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { playMoment, studioMoment, studioReady } from '../../../gamekit/audio/playMoment';
 import type { MomentName } from '../../../gamekit/audio/momentMap';
@@ -122,17 +121,21 @@ function trace(kind: string, name: string, extra = '') {
  * and the badge beats climb the counter ladder. Switch off: none of this runs and nothing changes.
  */
 const SESSION_IDLE_MS = 4000;
-let session: { until: number; wobbles: ReturnType<typeof setTimeout>[] } | null = null;
+/**
+ * `haptics` counts the catch's haptics before the burst: the first is the press, the next three are the
+ * wobble swings, and each wobble tick plays from that same call, so the tick and its buzz leave the JS
+ * thread together (a separate timer drifted 50 to 130 ms under load). No wobble haptics (Reduce Motion
+ * skips the wobble) means no ticks.
+ */
+let session: { until: number; wobbles: ReturnType<typeof setTimeout>[]; haptics: number; ticks: number; burst: boolean } | null = null;
+const WOBBLE_INTENTS = new Set<HapticIntent>(['tickSelection', 'tapLight', 'hitMedium']);
 let run: CatchRunState = EMPTY_RUN;
-let reduced = false;
 let primed = false;
 const DAY_KEY = 'tps.sound.lastCatchDay';
 
 function primeCatchState(): void {
   if (primed) return;
   primed = true;
-  void AccessibilityInfo.isReduceMotionEnabled().then((v) => { reduced = v; }).catch(() => undefined);
-  try { AccessibilityInfo.addEventListener('reduceMotionChanged', (v: boolean) => { reduced = v; }); } catch { /* optional */ }
   void AsyncStorage.getItem(DAY_KEY).then((day) => { if (day && run.dayKey === null) run = { ...run, dayKey: day }; }).catch(() => undefined);
 }
 
@@ -154,20 +157,15 @@ function onCatchMark(name: string): void {
     if (!studioReady('catch.tap')) return;
     primeCatchState();
     endSession();
-    session = { until: Date.now() + SESSION_IDLE_MS, wobbles: [] };
+    session = { until: Date.now() + SESSION_IDLE_MS, wobbles: [], haptics: 0, ticks: 0, burst: false };
     playMoment('catch.tap');
-    if (!reduced) {
-      // The held breath: three rising ticks on the wobble swings (the haptics fire on the same beats).
-      CATCH_WOBBLE_TICKS_MS.forEach((at, step) => {
-        session?.wobbles.push(setTimeout(() => { if (sessionOpen()) playMoment('catch.wobble', { step }); }, at));
-      });
-    }
     return;
   }
   if (!sessionOpen()) return;
   keepSession();
   if (name === 'burst') {
     session?.wobbles.forEach(clearTimeout);
+    if (session) session.burst = true;
     const next = burstMoment(run, Date.now());
     if (next.moment === 'catch.firstOfDay' && next.state.dayKey) void AsyncStorage.setItem(DAY_KEY, next.state.dayKey).catch(() => undefined);
     run = next.state;
@@ -177,6 +175,7 @@ function onCatchMark(name: string): void {
     playMoment('catch.fly');
   } else if (name === 'miss') {
     session?.wobbles.forEach(clearTimeout);
+    if (session) session.burst = true;
     playMoment('game.miss');
   } else if (name === 'done') {
     endSession();
@@ -193,7 +192,6 @@ export function catchMark(name: string): void {
 export function resetCatchSoundForTests(): void {
   endSession();
   run = EMPTY_RUN;
-  reduced = false;
   primed = true;
 }
 
@@ -214,7 +212,17 @@ function sessionSound(name: CatchSound, opts: { volume?: number; pitch?: number 
 export function catchHaptic(intent: HapticIntent, priority = 2): void {
   trace('haptic', intent);
   let lead = 0;
-  try { lead = sessionOpen() && studioReady('catch.tap') ? GameAudio.latencyMs : 0; } catch { lead = 0; }
+  try {
+    if (sessionOpen() && studioReady('catch.tap')) {
+      lead = GameAudio.latencyMs;
+      const s = session;
+      // The held breath: the three wobble haptics each bring a rising tick (one JS callback for both).
+      if (s && !s.burst) {
+        s.haptics += 1;
+        if (s.haptics > 1 && s.ticks < CATCH_WOBBLE_TICKS_MS.length && WOBBLE_INTENTS.has(intent)) playMoment('catch.wobble', { step: s.ticks++ });
+      }
+    }
+  } catch { lead = 0; }
   if (lead > 0) setTimeout(() => queueHaptic(intent, priority), lead);
   else queueHaptic(intent, priority);
 }
