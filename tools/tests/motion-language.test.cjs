@@ -564,3 +564,18 @@ test('wave 3 rerun round 2: Level Up! hides only once the charge bar covers it (
   assert.ok(!/ctaIn\.value = 0/.test(hide.slice(0, hide.indexOf('};'))), 'the tap itself does not hide the button');
   assert.ok(/if \(state !== 'leveling' \|\| ctaShown\.current\) return;\s*cancelUi\(ctaIn\); ctaIn\.value = 0;/.test(modal), 'it hides after the charge bar commit');
 });
+
+test('wave 5: a cold coin never leaves the summary with an empty face (the house coin stays until the art downloads)', () => {
+  const modal = read('src/components/PostWinRewardsModal.tsx');
+  assert.ok(/const HOUSE_COIN = require\('\.\.\/\.\.\/assets\/icons\/game\/coin\.png'\);/.test(modal), 'the same house coin the catch shows');
+  assert.ok(/<ShelfCoin coinUrl=\{coinSource\}[^>]*\/>\s*<Animated\.View pointerEvents="none" style=\{\[StyleSheet\.absoluteFill, houseCoinStyle\]\}>/.test(modal),
+    'the house coin sits over the real coin');
+  assert.ok(/onLoad=\{\(\) => setHeroArtUrl\(coinSource\)\}/.test(modal), 'it leaves once that exact art has loaded');
+  assert.ok(/const heroArtReady = !!taskCoinUrl && heroArtUrl === taskCoinUrl;/.test(modal), 'keyed by URL, so a reopened card never waits on a second load');
+  assert.ok(/houseCoin\.value = !heroArtReady \? 1 : reducedMotion \? 0 : withTiming\(0/.test(modal), 'faded on the UI thread, at once with Reduce Motion');
+  const reveal = read('src/components/CoinCatchReveal.tsx');
+  assert.ok(/placeholder=\{GENERIC_COIN\}/.test(reveal), 'the catch itself starts on the house coin and never waits');
+  const preview = read('src/screens/PostWinRewardsPreviewScreen.tsx');
+  assert.ok(/EXPO_PUBLIC_MOTION_CAPTURE_COIN_URL/.test(preview) && !/EXPO_PUBLIC_MOTION_CAPTURE_COIN_URL/.test(read('app.config.js')),
+    'the cold-coin capture flag lives only in the preview');
+});

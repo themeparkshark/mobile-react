@@ -52,6 +52,10 @@ import StarRideStamp from './liveEvents/StarRideStamp';
 
 const { width: SW } = Dimensions.get('window');
 const HERO = 150;
+/** The house coin the catch shows while a new coin's art downloads; the summary keeps it until the art arrives. */
+const HOUSE_COIN = require('../../assets/icons/game/coin.png');
+/** How long the house coin takes to fade off the real art once it has downloaded. */
+export const HOUSE_COIN_FADE_MS = 180;
 /** The goal note stays in the footer after its moment, dimmed to this opacity. */
 const GOAL_NOTE_SETTLED_OPACITY = 0.5;
 
@@ -265,7 +269,17 @@ export default function PostWinRewardsModal({
   const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
   const isNewCoin = coinTimesCollected === 1;
   const [coinArtFailed, setCoinArtFailed] = useState(false);
+  // The house coin covers the summary's coin until its real art has downloaded, then fades off it (UI thread), so a
+  // brand-new coin never shows an empty white face after the catch handed over the same house coin.
+  // Keyed by the URL that loaded (art once downloaded stays cached), so a reopened card never waits on a second load event.
+  const [heroArtUrl, setHeroArtUrl] = useState<string | null>(null);
+  const houseCoin = useSharedValue(1);
+  const houseCoinStyle = useAnimatedStyle(() => ({ opacity: houseCoin.value }));
   useEffect(() => { setCoinArtFailed(false); }, [taskCoinUrl, visible]);
+  const heroArtReady = !!taskCoinUrl && heroArtUrl === taskCoinUrl;
+  useEffect(() => {
+    houseCoin.value = !heroArtReady ? 1 : reducedMotion ? 0 : withTiming(0, { duration: HOUSE_COIN_FADE_MS });
+  }, [heroArtReady]);
   // Warm the coin art while the game is still being played (this modal is mounted, hidden, the whole time),
   // so the catch reveal of a brand-new coin shows its real art on time instead of waiting on the download.
   useEffect(() => {
@@ -454,12 +468,18 @@ export default function PostWinRewardsModal({
                 <View ref={heroRef} collapsable={false} onLayout={measureHero} style={{ width: HERO, height: HERO }}>
                   {hasCoin
                     ? coinSource
-                      ? <ShelfCoin coinUrl={coinSource} level={coinProgress?.current_level ?? 1} size={HERO} />
-                      : <Image source={require('../../assets/icons/game/coin.png')} style={{ width: HERO, height: HERO }} contentFit="contain" />
+                      ? <View style={{ width: HERO, height: HERO }}>
+                        <ShelfCoin coinUrl={coinSource} level={coinProgress?.current_level ?? 1} size={HERO} />
+                        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, houseCoinStyle]}>
+                          <Image source={HOUSE_COIN} style={{ width: HERO, height: HERO }} contentFit="contain" transition={0} />
+                        </Animated.View>
+                      </View>
+                      : <Image source={HOUSE_COIN} style={{ width: HERO, height: HERO }} contentFit="contain" />
                     : <View style={styles.heroCheck}><GameIcon name="check" size={96} /></View>}
                 </View>
               </Animated.View>
-              {coinSource && <Image source={coinSource} style={{ width: 1, height: 1, opacity: 0 }} onError={() => setCoinArtFailed(true)} />}
+              {coinSource && <Image source={coinSource} style={{ width: 1, height: 1, opacity: 0 }} onLoad={() => setHeroArtUrl(coinSource)}
+                onError={() => setCoinArtFailed(true)} />}
             </View>
 
             <Animated.View style={[{ alignItems: 'center' }, textStyle]}>
