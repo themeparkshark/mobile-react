@@ -249,10 +249,15 @@ export function ResultsCard({
       </Animated.View> : <View style={styles.bestGap} />}
 
       {showNear ? (
-        <Animated.View style={[styles.nearLine, feeling.tone === 'gold' && styles.nearWin, bestStyle]}>
-          <Text style={[styles.nearText, feeling.tone === 'gold' && styles.nearWinText]} numberOfLines={1} adjustsFontSizeToFit>
-            {feeling.text.toUpperCase()}
-          </Text>
+        // The pop rides a wrapper and the fill sits on a plain view inside it:
+        // scaled with its own background, the pill drew hollow (navy outline,
+        // no fill) on the current bundle, like the Duel banners did.
+        <Animated.View style={[styles.nearPop, bestStyle]}>
+          <View style={[styles.nearLine, feeling.tone === 'gold' && styles.nearWin]}>
+            <Text style={[styles.nearText, feeling.tone === 'gold' && styles.nearWinText]} numberOfLines={1} adjustsFontSizeToFit>
+              {feeling.text.toUpperCase()}
+            </Text>
+          </View>
         </Animated.View>
       ) : null}
 
@@ -425,8 +430,9 @@ const styles = StyleSheet.create({
   chipValue: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
   chipIcon: { marginTop: 1 },
   chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#3d5f8c', letterSpacing: 1 },
+  nearPop: { maxWidth: '100%', marginBottom: 4 },
   nearLine: { borderRadius: 999, borderWidth: 3, borderColor: '#05346e', backgroundColor: '#e4f7ff', paddingHorizontal: 14,
-    paddingVertical: 3, marginBottom: 4, maxWidth: '100%' },
+    paddingVertical: 3 },
   nearWin: { backgroundColor: '#ffcf3b' },
   nearText: { fontFamily: 'Knockout', fontSize: 16, color: '#05346e', letterSpacing: 1 },
   nearWinText: { color: '#05346e' },

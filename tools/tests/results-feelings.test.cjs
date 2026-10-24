@@ -1011,3 +1011,9 @@ test('the Duel board never freezes: every late Fin lock checks for the reveal', 
   assert.match(duel, /later\(ans, \(\) => \{ resolveOppShown\(buzzAt\); maybeReveal\(\); \}\);/);
   for (const line of duel.split('\n').filter((l) => /later\(.*resolveOppShown\(/.test(l))) assert.match(line, /maybeReveal\(\)/, line);
 });
+
+test('the shared feeling pill keeps its fill: the pop is on a wrapper, the fill on a plain view', () => {
+  const card = read('src/gamekit/results/ResultsCard.tsx');
+  assert.match(card, /<Animated\.View style=\{\[styles\.nearPop, bestStyle\]\}>\s*<View style=\{\[styles\.nearLine, feeling\.tone === 'gold' && styles\.nearWin\]\}>/);
+  assert.doesNotMatch(card, /styles\.nearLine, feeling\.tone === 'gold' && styles\.nearWin, bestStyle/);
+});
