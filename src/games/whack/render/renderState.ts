@@ -294,31 +294,6 @@ export function createHoleAnim(): HoleAnim {
   };
 }
 
-/** Curtain call timing: each well joins CURTAIN_STEP_MS after the one before it, rising over CURTAIN_RISE_MS. */
-export const CURTAIN_STEP_MS = 45;
-export const CURTAIN_RISE_MS = 150;
-/** Reading order from the centre out, so the wave starts where the eye already is. */
-export const CURTAIN_ORDER = [4, 1, 3, 5, 7, 0, 2, 6, 8];
-
-/**
- * Curtain-call pose for well `i` at fx time `now` (pure, unit-tested): rise 0..1 on an outBack pop, a wave
- * sway in degrees and a small hop. Returns rise -1 before the well's turn.
- */
-export function curtainPose(i: number, now: number, at: number, reduced: boolean): { rise: number; rot: number; hop: number } {
-  'worklet';
-  if (at < 0) return { rise: -1, rot: 0, hop: 0 };
-  let order = 0;
-  for (let k = 0; k < 9; k++) if (CURTAIN_ORDER[k] === i) order = k;
-  const c = now - at - order * CURTAIN_STEP_MS;
-  if (c < 0) return { rise: -1, rot: 0, hop: 0 };
-  if (reduced) return { rise: 1, rot: 0, hop: 0 };
-  const rise = c < CURTAIN_RISE_MS ? 0.3 + 0.7 * outBack(c / CURTAIN_RISE_MS, 1.8) : 1;
-  // Everyone waves together (1.6 Hz, alternate wells lean the other way) and hops on the beat.
-  const w = Math.sin((now - at) * 0.01005 + (i % 2) * Math.PI);
-  const hop = c > CURTAIN_RISE_MS ? Math.max(0, Math.sin((now - at) * 0.02010)) * 5 : 0;
-  return { rise, rot: 7 * w, hop };
-}
-
 function clamp01(v: number): number {
   'worklet';
   return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -414,6 +389,31 @@ function launchHat(an: HoleAnim, L: BoardLayout, i: number, seed: number, ox?: n
   an.hatFloor[slot] = L.rimY[i] + L.rimH[i] * 0.98;
   an.hatBounced[slot] = 0;
   an.hatSlid[slot] = 0;
+}
+
+/** Curtain call timing: each well joins CURTAIN_STEP_MS after the one before it, rising over CURTAIN_RISE_MS. */
+export const CURTAIN_STEP_MS = 45;
+export const CURTAIN_RISE_MS = 150;
+/** Reading order from the centre out, so the wave starts where the eye already is. */
+export const CURTAIN_ORDER = [4, 1, 3, 5, 7, 0, 2, 6, 8];
+
+/**
+ * Curtain-call pose for well `i` at fx time `now` (pure, unit-tested): rise 0..1 on an outBack pop, a wave
+ * sway in degrees and a small hop. Returns rise -1 before the well's turn.
+ */
+export function curtainPose(i: number, now: number, at: number, reduced: boolean): { rise: number; rot: number; hop: number } {
+  'worklet';
+  if (at < 0) return { rise: -1, rot: 0, hop: 0 };
+  let order = 0;
+  for (let k = 0; k < 9; k++) if (CURTAIN_ORDER[k] === i) order = k;
+  const c = now - at - order * CURTAIN_STEP_MS;
+  if (c < 0) return { rise: -1, rot: 0, hop: 0 };
+  if (reduced) return { rise: 1, rot: 0, hop: 0 };
+  const rise = c < CURTAIN_RISE_MS ? 0.3 + 0.7 * outBack(c / CURTAIN_RISE_MS, 1.8) : 1;
+  // Everyone waves together (1.6 Hz, alternate wells lean the other way) and hops on the beat.
+  const w = Math.sin((now - at) * 0.01005 + (i % 2) * Math.PI);
+  const hop = c > CURTAIN_RISE_MS ? Math.max(0, Math.sin((now - at) * 0.02010)) * 5 : 0;
+  return { rise, rot: 7 * w, hop };
 }
 
 /**
