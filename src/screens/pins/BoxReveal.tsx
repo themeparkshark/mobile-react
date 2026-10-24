@@ -884,11 +884,12 @@ const styles = StyleSheet.create({
   },
   ticketText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 3, flexShrink: 1 },
   backer: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center' },
-  backerGold: { backgroundColor: BRAND.gold, borderColor: BRAND.white, borderWidth: 5, justifyContent: 'space-between', paddingBottom: 8, overflow: 'hidden' },
+  // The chaser card is blue with a thick gold frame, so the gold pin stands out on it (gold on gold blended).
+  backerGold: { backgroundColor: BRAND.blue, borderColor: BRAND.gold, borderWidth: 6, justifyContent: 'space-between', paddingBottom: 8, overflow: 'hidden' },
   // A Golden Box pin sits on a cream card with a gold edge (the chaser's card is all gold).
   backerGolden: { borderColor: BRAND.gold, borderWidth: 5 },
   foilSheen: { position: 'absolute', left: 0, width: 26, backgroundColor: 'rgba(255,255,255,0.75)' },
-  backerFoilText: { fontFamily: FONT.display, fontSize: 14, color: '#5a3a08', letterSpacing: 1 },
+  backerFoilText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.gold, letterSpacing: 1 },
   backerHole: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#021a45', marginTop: 10 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 3, paddingHorizontal: 14, paddingVertical: 4 },
   tagNew: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
