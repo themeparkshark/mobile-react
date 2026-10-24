@@ -456,7 +456,7 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   // map's first cover all draw it, and all fill the same shared bar (it never restarts or jumps back).
   assert.match(read('src/screens/LoadingScreen.tsx'), /return <LaunchScene active=\{focused\} fact=\{fact\} \/>;/);
   assert.match(read('src/screens/LoadingScreen.tsx'), /moveLaunchBar\(\(progress \/ 100\) \* LAUNCH_HANDOFF_SHARE, 250\)/);
-  assert.match(read('src/screens/SplashScreen.tsx'), /moveLaunchBar\(SPLASH_ROUTE_SHARE, SPLASH_CREEP_MS\)/);
+  assert.match(read('src/screens/SplashScreen.tsx'), /withTiming\(SPLASH_ROUTE_SHARE, \{ duration: SPLASH_CREEP_MS/);
   const scene = read('src/components/launch/LaunchScene.tsx');
   assert.match(scene, /export const launchFill: SharedValue<number> = makeMutable\(0\);/);
   assert.match(scene, /if \(to <= launchFill\.value\) return;/, 'the launch bar never moves back');
@@ -1069,4 +1069,12 @@ test('launch cover covers a slow park pick: no lift onto a bare map, then a seco
   const store = read('src/components/map/mapCover.ts');
   assert.match(store, /launch: plan\.launch, mountedAt \}\);/);
   assert.equal((store.match(/mountedAt = now;/g) || []).length, 2);
+});
+
+test('splash bar keeps creeping through a slow sign-in, below the Loading screen share', () => {
+  const k = loadTs('src/constants/launchHandoff.ts');
+  assert.ok(k.SPLASH_LONG_SHARE > k.SPLASH_ROUTE_SHARE && k.SPLASH_LONG_SHARE < k.LAUNCH_HANDOFF_SHARE);
+  const splash = read('src/screens/SplashScreen.tsx');
+  assert.match(splash, /withTiming\(SPLASH_LONG_SHARE, \{ duration: SPLASH_LONG_CREEP_MS, easing: Easing\.linear \}\)/);
+  assert.match(splash, /if \(launchFill\.value >= SPLASH_ROUTE_SHARE\) return;/, 'never moves the bar back');
 });

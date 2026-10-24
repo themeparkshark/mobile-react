@@ -12,6 +12,9 @@ export const LAUNCH_HANDOFF_SHARE = 0.7;
 export const SPLASH_ROUTE_SHARE = 0.15;
 /** How long the Splash route's bar takes to creep to SPLASH_ROUTE_SHARE. */
 export const SPLASH_CREEP_MS = 2400;
+/** Then, while sign-in is still slow, the bar keeps creeping (linear) toward this share over this long. */
+export const SPLASH_LONG_SHARE = 0.45;
+export const SPLASH_LONG_CREEP_MS = 20000;
 /** A cover that starts later (walking into a park mid-session) starts its bar here. */
 export const LATER_COVER_SHARE = 0.2;
 /**

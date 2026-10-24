@@ -4,8 +4,9 @@ import { useEffectOnceWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import { CrumbContext } from '../context/CrumbProvider';
-import LaunchScene, { moveLaunchBar } from '../components/launch/LaunchScene';
-import { SPLASH_CREEP_MS, SPLASH_ROUTE_SHARE } from '../constants/launchHandoff';
+import { Easing, withSequence, withTiming } from 'react-native-reanimated';
+import LaunchScene, { launchFill } from '../components/launch/LaunchScene';
+import { SPLASH_CREEP_MS, SPLASH_LONG_CREEP_MS, SPLASH_LONG_SHARE, SPLASH_ROUTE_SHARE } from '../constants/launchHandoff';
 
 export default function SplashScreen() {
   const { isReady, player } = useContext(AuthContext);
@@ -32,7 +33,14 @@ export default function SplashScreen() {
 
   // The launch bar from this screen's first frame: it creeps while sign-in and the game's words
   // load, and the Loading screen and the map's cover keep filling the same bar (launchFill).
-  useEffect(() => { moveLaunchBar(SPLASH_ROUTE_SHARE, SPLASH_CREEP_MS); }, []);
+  // A slow sign-in (weak signal) never parks it: after its first step it keeps creeping, slower and
+  // slower in share but always moving, until the Loading screen moves it on with real work.
+  useEffect(() => {
+    if (launchFill.value >= SPLASH_ROUTE_SHARE) return;
+    launchFill.value = withSequence(
+      withTiming(SPLASH_ROUTE_SHARE, { duration: SPLASH_CREEP_MS, easing: Easing.out(Easing.quad) }),
+      withTiming(SPLASH_LONG_SHARE, { duration: SPLASH_LONG_CREEP_MS, easing: Easing.linear }));
+  }, []);
 
   // Same art, framing and blue as the native launch screen (the launch scene), so the hand-off is
   // seamless and the title never drops out.
