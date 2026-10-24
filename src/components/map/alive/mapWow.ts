@@ -206,7 +206,7 @@ export function beamAt(t: number, p: CatchPlan): { drop: number; fade: number } 
  * Round 4: the coins spray out past the gold rays' tips (130 pt) so the burst frame shows the find ringed by
  * readable coins, each 40 pt with Alex's ink rim, shrinking to about 25 pt as it lands in the counter.
  */
-export const COIN_STREAM = { max: 8, staggerMs: 40, sprayMs: 200, flightMs: 520, sprayPt: 130, arcPt: 70, sizePt: 40, landScale: 0.62 } as const;
+export const COIN_STREAM = { max: 8, staggerMs: 40, sprayMs: 200, flightMs: 520, sprayPt: 165, arcPt: 70, sizePt: 40, landScale: 0.62 } as const;
 
 /** `cap` thins the stream with the power budget (Battery Saver keeps 3 or 4 coins). */
 export function coinStreamPlan(coins: number, reduced: boolean, cap: number = COIN_STREAM.max): { readonly count: number; readonly landAt: readonly number[] } {
@@ -229,7 +229,7 @@ export function coinStreamAt(t: number, index: number, count: number, from: { x:
   if (local < 0) return null;
   // A fan pointing up and toward the counter, so the spray already leads the eye home.
   const spread = count > 1 ? index / (count - 1) - 0.5 : 0;
-  const angle = -Math.PI / 2 + spread * 2.2 + (to.x < from.x ? -0.35 : 0.35);
+  const angle = -Math.PI / 2 + spread * 2.6 + (to.x < from.x ? -0.3 : 0.3);
   const reach = COIN_STREAM.sprayPt * (index % 2 ? 0.84 : 1);
   const sx = from.x + Math.cos(angle) * reach;
   const sy = from.y + Math.sin(angle) * reach;

@@ -394,9 +394,13 @@ const CatchBadge = memo(function CatchBadge({ st, summary, photo, bonusXp, newRi
             </View>
             {summary?.setName && <Text style={styles.setName} numberOfLines={1}>{summary.complete ? `${summary.setName} complete!` : summary.setName}</Text>}
           </View>
-          {coinStamp != null && !photo && <Animated.View style={[styles.coinStamp, st.coinStamp]}>
-            <RNImage source={STREAM_COIN_ART} style={styles.coinStampIcon} resizeMode="contain" fadeDuration={0} />
-            <Text style={styles.coinStampText} numberOfLines={1}>+{coinStamp}</Text>
+          {/* The pill's fill and border sit on a plain view inside the animated one (an animated scale on a view with
+              its own background and border drew a stale oversized fill on Fabric). */}
+          {coinStamp != null && !photo && <Animated.View style={[styles.coinStampAt, st.coinStamp]}>
+            <View style={styles.coinStamp}>
+              <RNImage source={STREAM_COIN_ART} style={styles.coinStampIcon} resizeMode="contain" fadeDuration={0} />
+              <Text style={styles.coinStampText} numberOfLines={1}>+{coinStamp}</Text>
+            </View>
           </Animated.View>}
           {photo && <Animated.View style={[styles.gradeChip, { backgroundColor: GRADE_CHIP[photo.grade][0] }, st.grade]}>
             {Array.from({ length: GRADE_STARS[photo.grade] }, (_, i) => <GameIcon key={i} name="star" size={14} />)}
@@ -1746,7 +1750,8 @@ const styles = StyleSheet.create({
   beamSpark: { position: 'absolute', left: 0, top: 0, width: 18, height: 18 },
   splash: { position: 'absolute', left: 0, top: 0, width: 120, height: 120, borderRadius: 60, borderWidth: 6, borderColor: GOLD_FX.rays },
   oneMore: { position: 'absolute', right: 0, top: 0, bottom: 0, borderRadius: 4, backgroundColor: BRAND.goldLight },
-  coinStamp: { position: 'absolute', right: 10, top: -22, flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 3, paddingRight: 9, height: 28,
+  coinStampAt: { position: 'absolute', right: 10, top: -22 },
+  coinStamp: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 3, paddingRight: 9, height: 28,
     borderRadius: 14, backgroundColor: BRAND.white, borderWidth: 2.5, borderColor: BRAND.navy },
   coinStampIcon: { width: 22, height: 22 },
   coinStampText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 16 },

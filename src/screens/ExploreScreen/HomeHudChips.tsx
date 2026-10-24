@@ -86,7 +86,7 @@ function HomeHudChips({ top, onWidth, findsUntilTicket, ticketsCapped = false, o
                 ? <Animated.View key={i} style={[styles.pip, styles.pipNext, glowStyle]} />
                 : i === 3 - remaining - 1
                   ? <View key={i}>
-                      <Animated.View style={[styles.pip, styles.pipOn, stampPip]} />
+                      <Animated.View style={stampPip}><View style={[styles.pip, styles.pipOn]} /></Animated.View>
                       <Animated.View pointerEvents="none" style={[styles.pipRing, stampRing]} />
                     </View>
                   : <View key={i} style={[styles.pip, i < 3 - remaining && styles.pipOn]} />)}
