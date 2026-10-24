@@ -977,7 +977,7 @@ export default function CommunityCenterScreen() {
               style={[
                 styles.giftCountBadge,
                 // iPhone SE: a little lower, so the bubble clears the wallet pill above it.
-                SHORT_SCREEN && { top: 128 },
+                SHORT_SCREEN && { top: 136 },
                 {
                   opacity: entranceAnim,
                   transform: [{ 
