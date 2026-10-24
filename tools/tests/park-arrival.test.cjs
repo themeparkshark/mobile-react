@@ -106,8 +106,11 @@ test('the ribbon title always fits on one line', () => {
 
 test('the moment stays on the motion language, the power budget and kid-safe art', () => {
   const src = read('src/components/park/ParkArrivalMoment.tsx');
-  assert.match(src, /momentParticles\(ARRIVAL\.confetti/);
-  assert.match(src, /momentParticles\(ARRIVAL\.sparkles/);
+  assert.match(src, /momentParticles\(A\.confetti/);
+  assert.match(src, /momentParticles\(A\.sparkles/);
+  assert.match(src, /<ArrivalFxCanvas/, 'confetti, sparkles and trails draw in one Skia canvas');
+  assert.doesNotMatch(src, /function ConfettiPiece|<SparkleBurst/, 'no per-piece animated views');
+  assert.doesNotMatch(src, />LIMITED</, 'a picture tag, never a word that reads like a countdown');
   assert.match(src, /flashPeak\(isDimFlashingLightsEnabled\(\)/);
   assert.match(src, /useAmbientLoop/, 'the coin spin is an ambient loop');
   assert.match(src, /useReduceMotionPreference/, 'never starts before Reduce Motion is known');
@@ -126,7 +129,7 @@ test('the moment stays on the motion language, the power budget and kid-safe art
 
 test('the beat clock runs in real time under the system Reduce Motion (Reanimated would jump it and fire the handoff at once)', () => {
   const src = read('src/components/park/ParkArrivalMoment.tsx');
-  assert.match(src, /clock\.value = withTiming\(ARRIVAL\.clockMs, \{[^}]*reduceMotion: ReduceMotion\.Never/);
+  assert.match(src, /clock\.value = withTiming\(A\.clockMs, \{[^}]*reduceMotion: ReduceMotion\.Never/);
   const ribbon = read('src/components/park/FirstCoinRibbon.tsx');
   assert.match(ribbon, /reduceMotion: ReduceMotion\.Never/, 'the Reduce Motion fade is a real fade');
 });
@@ -139,4 +142,45 @@ test('the moment never re-renders React once it plays: stable props, card target
   assert.match(hook, /const onDone = useCallback\(/, 'a stable onDone');
   assert.match(hook, /const layer = useMemo\(/);
   assert.match(hook, /goal=\{playing\.goal\}/, 'the Daily 3 goal is fixed when the moment starts');
+});
+
+test('a second visit this week is the short hello: ribbon, name and cards, about 1.4 s, no confetti', () => {
+  const R = arrival.ARRIVAL_REPEAT;
+  assert.ok(R.handoffAt <= 1500 && R.handoffAt < arrival.ARRIVAL.handoffAt);
+  assert.equal(R.confetti + R.confettiSecond, 0);
+  assert.equal(R.burstAt - R.hitAt, 70, 'the same held frame');
+  assert.ok(R.lettersAt + R.letterSpanMs + 120 <= R.hitAt);
+  const delays = arrival.letterDelays(13, R);
+  assert.ok(delays[12] - delays[0] <= R.letterSpanMs);
+  same(arrival.arrivalCues(3, false, false, R).map(c => c.at), [R.hitAt, R.cardsAt + 120, R.cardsAt + R.cardStepMs + 120, R.cardsAt + 2 * R.cardStepMs + 120, R.handoffAt]);
+  let h = arrival.markArrivalHistory({}, 2, '2026-10-20');
+  assert.equal(arrival.arrivalIsRepeat(h, 2, '2026-10-20'), false, 'the same day is not a repeat');
+  assert.equal(arrival.arrivalIsRepeat(h, 2, '2026-10-24'), true, 'back four days later');
+  assert.equal(arrival.arrivalIsRepeat(h, 2, '2026-10-28'), false, 'a week later is a fresh party');
+  assert.equal(arrival.arrivalIsRepeat(h, 8, '2026-10-24'), false, 'another park');
+  h = arrival.markArrivalHistory(h, 8, '2026-10-29');
+  same(Object.keys(h), ['8'], 'old visits are dropped');
+});
+
+test('Finn says hello a few ways (fixed per park and day); the boss time is a clock face', () => {
+  const poses = new Set();
+  for (let d = 1; d <= 20; d += 1) poses.add(arrival.finnPose(2, `2026-10-${String(d).padStart(2, '0')}`));
+  assert.equal(poses.size, arrival.FINN_POSES);
+  assert.equal(arrival.finnPose(2, '2026-10-24'), arrival.finnPose(2, '2026-10-24'));
+  same(arrival.bossClockHands('2026-10-24T15:30:00-04:00'), { hour: 105, minute: 180, night: false });
+  same(arrival.bossClockHands('2026-10-24T21:00:00-04:00'), { hour: 270, minute: 0, night: true });
+  assert.equal(arrival.bossClockHands('soon'), null);
+});
+
+test('cards fly home on one arc shared with their gold trail', () => {
+  const start = arrival.flyPoint(100, 400, 360, 40, false, 0);
+  const end = arrival.flyPoint(100, 400, 360, 40, false, 1);
+  same(start, { x: 100, y: 400 });
+  same(end, { x: 360, y: 40 });
+  const mid = arrival.flyPoint(100, 400, 360, 40, false, 0.5);
+  assert.ok(mid.x > 230, 'bound for the HUD it swings right first');
+  const lob = arrival.flyPoint(100, 400, 300, 380, true, 0.5);
+  assert.ok(lob.y < 380, 'bound for a coin it lobs up');
+  const hook = read('src/components/park/useParkArrival.tsx');
+  assert.match(hook, /fresh \|\| \(!!playing && playing\.parkId === parkId\)/, 'the stack button is there while the cards fly and stays after');
 });

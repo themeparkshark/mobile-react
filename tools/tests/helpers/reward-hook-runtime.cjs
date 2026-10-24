@@ -106,6 +106,13 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
         const motion = loadMotion();
         return { ...motion, EASE: { out: native.Easing?.out, in: native.Easing?.in, inOut: native.Easing?.inOut, charge: native.Easing?.inOut } };
       }
+      // The park day moments' builders (src/components/park/momentTime.ts): Reanimated's own, no capture slow-mo.
+      if (/(^|\/)momentTime$/.test(name)) {
+        const r = sandbox.require('react-native-reanimated');
+        return { withTiming: r.withTiming, withSpring: r.withSpring, withDelay: r.withDelay, withSequence: r.withSequence,
+          momentMs: ms => ms, MOMENT_SLOW: 1 };
+      }
+      if (/(^|\/)momentPerf$/.test(name)) return { perfMark() {}, PERF_HUD: false, registerPerfSampler() {} };
       // iOS Dim Flashing Lights reads off unless a test stubs it.
       if (/(^|\/)modules\/flash-safety$/.test(name)) return { isDimFlashingLightsEnabled: () => false };
       if (/(^|\/)ui\/GoldBurst$/.test(name)) return { GoldBurst: 'GoldBurst', SparkleBurst: 'SparkleBurst', ShineSweep: 'ShineSweep' };

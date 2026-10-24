@@ -17,6 +17,13 @@ export const ARRIVAL_ART = {
   rays: require('../../../assets/images/reveal/rays-gold-fade.webp'),
 } as const;
 
+/** Finn's hello poses (existing art): the cheer, the fist pump and the cap wave. */
+export const FINN_ART = [
+  ARRIVAL_ART.finn,
+  require('../../assets/games/boss/shark_fist_pump.png'),
+  require('../../assets/games/current-quest/cq_shark_cheer.png'),
+] as const;
+
 let warmed = false;
 
 /** Decode every arrival image into memory once per app run (cheap, never throws). */
@@ -24,7 +31,7 @@ export function warmArrivalArt(): void {
   if (warmed) return;
   warmed = true;
   try {
-    const uris = Object.values(ARRIVAL_ART)
+    const uris = [...Object.values(ARRIVAL_ART), ...FINN_ART]
       .map(source => NativeImage.resolveAssetSource(source)?.uri)
       .filter((uri): uri is string => typeof uri === 'string' && uri.length > 0);
     void Image.prefetch(uris, 'memory').catch(() => { warmed = false; });

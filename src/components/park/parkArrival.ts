@@ -31,7 +31,7 @@ export interface ArrivalBoss {
 export type ArrivalCard =
   | { readonly kind: 'limited'; readonly taskId: number; readonly name: string; readonly count: number;
     readonly latitude: number; readonly longitude: number }
-  | { readonly kind: 'boss'; readonly time: string }
+  | { readonly kind: 'boss'; readonly time: string; readonly at?: string }
   | { readonly kind: 'new'; readonly count: number; readonly latitude: number | null; readonly longitude: number | null }
   | { readonly kind: 'coins'; readonly count: number };
 
@@ -118,7 +118,7 @@ export function arrivalCards({ tasks, nextBoss, parkNames, now }: {
   // Today only: a boss up to 18 hours away (never yesterday's, never next week's).
   const bossSoon = Number.isFinite(bossAt) && bossAt > nowMs - 30 * 60_000 && bossAt - nowMs < 18 * 3_600_000;
   const bossTime = nextBoss && bossHere && bossSoon ? bossTimeLabel(nextBoss.at) : null;
-  if (bossTime) cards.push({ kind: 'boss', time: bossTime });
+  if (bossTime && nextBoss) cards.push({ kind: 'boss', time: bossTime, at: nextBoss.at });
 
   const fresh = tasks.filter(task => {
     const from = parseLocal(task.active_from);
@@ -180,14 +180,93 @@ export const ARRIVAL = {
   armMs: 90,
   /** A tap before this is ignored (a kid mashing through the moment still sees the park name land). */
   minTapAt: 700,
-  flyMs: 560,
+  /** Each card flies home on a visible arc with a gold trail, one after another. */
+  flyMs: 720,
   flyStepMs: 90,
-  shrinkMs: 380,
+  shrinkMs: 460,
   confetti: 28,
   /** A second, smaller shower as the cards land. */
   confettiSecond: 12,
   sparkles: 12,
 } as const;
+
+export type ArrivalPlan = { readonly [K in keyof typeof ARRIVAL]: number };
+
+/**
+ * A second (or later) arrival at the same park within a week: the ribbon, the name and the cards only,
+ * about 1.4 s before the handoff, no confetti, no Finn wave, no micro-beat (it is a hello, not a party).
+ */
+export const ARRIVAL_REPEAT: ArrivalPlan = {
+  ...ARRIVAL,
+  ribbonMs: 180,
+  welcomeAt: 60,
+  lettersAt: 90,
+  letterStepMs: 16,
+  letterSpanMs: 180,
+  hitAt: 390,
+  burstAt: 460,
+  goldHold: 0.6,
+  finnAt: 470,
+  cardsAt: 480,
+  cardStepMs: 70,
+  confettiSecondAt: 99_999,
+  goalAt: 760,
+  pointAt: 1000,
+  handoffAt: 1400,
+  clockMs: 1800,
+  minTapAt: 500,
+  confetti: 0,
+  confettiSecond: 0,
+  sparkles: 8,
+};
+
+/** How many days a park visit counts as "recent" (a repeat arrival is the short one). */
+export const REPEAT_DAYS = 7;
+
+/** Last arrival day per park: { [parkId]: dayKey }, kept for REPEAT_DAYS. */
+export type ArrivalHistory = Readonly<Record<string, string>>;
+
+function dayNumber(day: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!match) return null;
+  return Math.round(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])) / 86_400_000);
+}
+
+/** This park had an arrival on an earlier day within the last week: play the short hello. */
+export function arrivalIsRepeat(history: ArrivalHistory | null | undefined, parkId: number, day: string): boolean {
+  const last = history?.[String(parkId)];
+  if (!last || last === day) return false;
+  const a = dayNumber(last), b = dayNumber(day);
+  return a !== null && b !== null && b > a && b - a < REPEAT_DAYS;
+}
+
+export function markArrivalHistory(history: ArrivalHistory | null | undefined, parkId: number, day: string): ArrivalHistory {
+  const today = dayNumber(day);
+  const next: Record<string, string> = {};
+  for (const [key, value] of Object.entries(history ?? {})) {
+    const n = dayNumber(value);
+    if (n !== null && today !== null && today - n < REPEAT_DAYS && today >= n) next[key] = value;
+  }
+  next[String(parkId)] = day;
+  return next;
+}
+
+/** Finn has a few ways to say hello; the pose for a park and day stays put (no flicker on a replay). */
+export const FINN_POSES = 3;
+export function finnPose(parkId: number, day: string): number {
+  let h = parkId * 31;
+  for (let i = 0; i < day.length; i += 1) h = (h * 33 + day.charCodeAt(i)) % 100_003;
+  return h % FINN_POSES;
+}
+
+/** The boss card's clock face: hour and minute hand angles (degrees from 12) for the park wall time. */
+export function bossClockHands(at: string): { readonly hour: number; readonly minute: number; readonly night: boolean } | null {
+  const match = /T(\d{2}):(\d{2})/.exec(at);
+  if (!match) return null;
+  const hour = Number(match[1]), minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour > 23 || minute > 59) return null;
+  return { hour: ((hour % 12) + minute / 60) * 30, minute: minute * 6, night: hour < 6 || hour >= 19 };
+}
 
 /** How long the Today chip stays in the map's HUD stack after the arrival (then the HUD is itself again). */
 export const TODAY_CHIP_MS = 30 * 60_000;
@@ -206,29 +285,42 @@ export interface ArrivalGoal {
 export type ArrivalCueKind = 'hit' | 'card' | 'goal' | 'handoff';
 
 /** The JS side of the beats (haptics, the sound, the handoff), fired from the stage's UI clock. */
-export function arrivalCues(cardCount: number, hasGoal: boolean, reduced: boolean): { readonly at: number; readonly kind: ArrivalCueKind }[] {
-  if (reduced) return [{ at: 1, kind: 'hit' }, { at: ARRIVAL.handoffAt, kind: 'handoff' }];
-  const cues: { at: number; kind: ArrivalCueKind }[] = [{ at: ARRIVAL.hitAt, kind: 'hit' }];
+export function arrivalCues(cardCount: number, hasGoal: boolean, reduced: boolean, plan: ArrivalPlan = ARRIVAL): { readonly at: number; readonly kind: ArrivalCueKind }[] {
+  if (reduced) return [{ at: 1, kind: 'hit' }, { at: plan.handoffAt, kind: 'handoff' }];
+  const cues: { at: number; kind: ArrivalCueKind }[] = [{ at: plan.hitAt, kind: 'hit' }];
   for (let i = 0; i < Math.max(0, Math.min(3, cardCount)); i += 1) {
     // The tick lands with the card (SPRING.land reaches the slot about 120 ms after it starts).
-    cues.push({ at: ARRIVAL.cardsAt + i * ARRIVAL.cardStepMs + 120, kind: 'card' });
+    cues.push({ at: plan.cardsAt + i * plan.cardStepMs + 120, kind: 'card' });
   }
-  if (hasGoal) cues.push({ at: ARRIVAL.goalAt + 80, kind: 'goal' });
-  cues.push({ at: ARRIVAL.handoffAt, kind: 'handoff' });
+  if (hasGoal) cues.push({ at: plan.goalAt + 80, kind: 'goal' });
+  cues.push({ at: plan.handoffAt, kind: 'handoff' });
   return cues;
 }
 
 /** When each letter of the park name stamps in: 25 ms apart, the whole name inside ARRIVAL.letterSpanMs. */
-export function letterDelays(count: number): number[] {
+export function letterDelays(count: number, plan: ArrivalPlan = ARRIVAL): number[] {
   const n = Math.max(0, Math.floor(count));
   if (n === 0) return [];
-  const step = n > 1 ? Math.min(ARRIVAL.letterStepMs, ARRIVAL.letterSpanMs / (n - 1)) : 0;
-  return Array.from({ length: n }, (_, i) => Math.round(ARRIVAL.lettersAt + i * step));
+  const step = n > 1 ? Math.min(plan.letterStepMs, plan.letterSpanMs / (n - 1)) : 0;
+  return Array.from({ length: n }, (_, i) => Math.round(plan.lettersAt + i * step));
 }
 
 /** When the moment has fully handed off (ms), for a handoff that starts at `handoffAt`. */
 export function arrivalEndsAt(cardCount: number, handoffAt: number = ARRIVAL.handoffAt): number {
-  return handoffAt + Math.max(ARRIVAL.shrinkMs, ARRIVAL.flyMs + Math.max(0, cardCount - 1) * ARRIVAL.flyStepMs);
+  return handoffAt + Math.max(ARRIVAL.shrinkMs + 140, ARRIVAL.flyMs + Math.max(0, cardCount - 1) * ARRIVAL.flyStepMs);
+}
+
+/**
+ * Where a flying card is at f (0..1): one smooth arc. Bound for the HUD stack button it swings out to the
+ * right first and climbs the right edge (never across the Ride Control or Adventure chips); bound for a map
+ * coin it lobs up and drops onto it. Shared by the card and its gold trail (a worklet).
+ */
+export function flyPoint(fromX: number, fromY: number, toX: number, toY: number, toCoin: boolean, f: number): { x: number; y: number } {
+  'worklet';
+  const cx = toCoin ? (fromX + toX) / 2 : toX;
+  const cy = toCoin ? Math.min(fromY, toY) - 90 : fromY - 30;
+  const u = 1 - f;
+  return { x: u * u * fromX + 2 * u * f * cx + f * f * toX, y: u * u * fromY + 2 * u * f * cy + f * f * toY };
 }
 
 /** The big line on the ribbon: the park's short name, upper case for the stamp font. */

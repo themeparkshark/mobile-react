@@ -58,3 +58,19 @@ test('the landing stays on the UI thread, the budget and the motion language', (
   assert.match(arrival, /runOnJS\(onDropDone\)/, 'the clink fires from the UI clock on the landing frame');
   assert.match(park, /RowShine/);
 });
+
+test('about one landing in ten is shiny, fixed per landing; a full row hops left to right under the light bar', () => {
+  let shiny = 0;
+  for (let i = 0; i < 2000; i += 1) if (L.shinyLanding(`33:8:${i}`)) shiny += 1;
+  assert.ok(shiny > 120 && shiny < 280, `${shiny} of 2000`);
+  assert.equal(L.shinyLanding('33:8:47'), L.shinyLanding('33:8:47'));
+  assert.equal(L.shinyLanding(null), false);
+  assert.ok(L.rowHopDelay(1) - L.rowHopDelay(0) === L.SHELF_LANDING.rowHopStepMs);
+  assert.ok(L.rowHopDelay(4) < L.SHELF_LANDING.shineAfterMs + L.SHELF_LANDING.shineMs + 200, 'the last hop lands while the bar is still there');
+  const src = read('src/components/CoinShelfArrival.tsx');
+  assert.match(src, /<BurstCanvas/, 'ring and stars in one Skia canvas');
+  assert.match(src, /scaleY: 1 - 0\.2 \* sq/, 'the coin slams flat for the hit-stop');
+  assert.doesNotMatch(src, /Math\.cos\(t \* Math\.PI \* 3\)/, 'never edge-on right before impact');
+  const fx = read('src/components/ShelfLandingFx.tsx');
+  assert.match(fx, /runOnJS\(rowTick\)\(index\)/, 'each hop ticks on its frame, climbing the ladder');
+});

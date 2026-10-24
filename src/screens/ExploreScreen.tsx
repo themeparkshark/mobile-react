@@ -124,6 +124,7 @@ import MapStatusStack, { TONES, type StatusEntry } from '../components/map/MapSt
 import { statusOrder, HUD_BOTTOM } from '../components/map/statusStack';
 import useParkArrival from '../components/park/useParkArrival';
 import useFirstCoinToday from '../components/park/useFirstCoinToday';
+import DevPerfHud from '../components/park/DevPerfHud';
 import { EventStatusChip, EventHomeChip, EventSheet, EventGainToast, FrenzyBanner, FrenzySweep, EventRecapCard, useRecapDue, useLiveEvent, useStarRides } from '../components/liveEvents';
 import { openableKeys } from '../services/liveEvents/model';
 import NextUpRail, { useNextUp } from '../components/nextUp/NextUpRail';
@@ -1507,6 +1508,7 @@ function ExploreScreen() {
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
         {arrival.layer}
         {firstCoin.layer}
+        <DevPerfHud />
         {/* The "what now" rail: one row in the suggestion slot, only while no suggestion card holds it. */}
         {railShowing && <View pointerEvents="box-none" style={{ position: 'absolute', top: slotTop, left: 12, right: 12, zIndex: 38 }}>
           <NextUpRail item={nextUp.item} onAction={handleNextUp} />

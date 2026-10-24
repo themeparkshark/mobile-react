@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { getLiveParks } from '../../api/endpoints/me/livePark';
 import { getDailyThree } from '../../api/endpoints/retention';
-import { loadRetentionFlags } from '../../services/retention/flags';
+import { loadRetentionFlagsFresh } from '../../services/retention/flags';
 import { doneCount } from '../../services/retention/logic';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { BRAND } from '../../ui/tokens';
@@ -25,11 +25,13 @@ import { TONES, type StatusEntry } from '../map/MapStatusStack';
 import ParkArrivalMoment from './ParkArrivalMoment';
 import { warmArrivalArt } from './arrivalArt';
 import {
-  TODAY_CHIP_MS, arrivalCards, arrivalSeenToday, markArrivalSeen, parkDayKey, todayChipFresh,
-  type ArrivalBoss, type ArrivalCard, type ArrivalGoal, type ArrivalSeen, type ArrivalTask,
+  TODAY_CHIP_MS, arrivalCards, arrivalIsRepeat, arrivalSeenToday, finnPose, markArrivalHistory, markArrivalSeen, parkDayKey,
+  todayChipFresh, type ArrivalBoss, type ArrivalCard, type ArrivalGoal, type ArrivalHistory, type ArrivalSeen, type ArrivalTask,
 } from './parkArrival';
 
 const KEY = (playerId: number) => `tps.parkArrival.v1:${playerId}`;
+/** Last arrival day per park (a week), so a second visit this week gets the short hello. */
+const HISTORY_KEY = (playerId: number) => `tps.parkArrival.history.v1:${playerId}`;
 /** How long the moment waits for the boss feed before playing without it. */
 const BOSS_WAIT_MS = 2200;
 /** The longest the map holds its other moments for an arrival that has not started. */
@@ -37,11 +39,19 @@ const PENDING_MAX_MS = 15_000;
 
 type Projector = (latitude: number, longitude: number) => Promise<{ x: number; y: number } | null>;
 
-let devReset: (() => void) | null = null;
+let devReset: ((keepHistory?: boolean) => void) | null = null;
 if (__DEV__) {
   // QA: replay today's arrival from the debugger (lane.sh eval 'globalThis.__tpsParkArrivalReset()').
   (globalThis as Record<string, unknown>).__tpsParkArrivalReset = () => { devReset?.(); return 'reset'; };
+  // QA: the short "back this week" hello (keeps the week's history, forgets today).
+  (globalThis as Record<string, unknown>).__tpsParkArrivalRepeat = (parkId: number, daysAgo = 2) => {
+    const d = new Date(Date.now() - daysAgo * 86_400_000);
+    pendingHistory = { parkId, day: parkDayKey(d) };
+    devReset?.(true);
+    return 'repeat';
+  };
 }
+let pendingHistory: { parkId: number; day: string } | null = null;
 
 export default function useParkArrival({ playerId, park, tasks, ready, projector }: {
   readonly playerId: number | null | undefined;
@@ -56,7 +66,9 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
   const parkName = (park?.display_name || park?.name || '').trim();
   const [seen, setSeen] = useState<ArrivalSeen | null>(null);
   const [boss, setBoss] = useState<{ parkId: number; value: ArrivalBoss | null; final: boolean } | null>(null);
-  const [playing, setPlaying] = useState<{ parkId: number; cards: ArrivalCard[]; goal: ArrivalGoal | null; replay: boolean } | null>(null);
+  const [playing, setPlaying] = useState<{ parkId: number; cards: ArrivalCard[]; goal: ArrivalGoal | null; replay: boolean;
+    repeat: boolean; pose: number } | null>(null);
+  const history = useRef<ArrivalHistory>({});
   // Today's Daily 3 read has answered (or given up): the arrival starts with what it knows, then never changes.
   const [goalSettled, setGoalSettled] = useState<string | null>(null);
   const [goal, setGoal] = useState<ArrivalGoal | null>(null);
@@ -71,18 +83,28 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
   useEffect(() => {
     if (!playerId) { setSeen(null); return; }
     let active = true;
-    void AsyncStorage.getItem(KEY(playerId)).then(raw => {
+    // History first, so the seen record (which unlocks the start) never lands before it.
+    void AsyncStorage.getItem(HISTORY_KEY(playerId)).then(raw => {
+      if (!active) return;
+      try { history.current = raw ? JSON.parse(raw) as ArrivalHistory : {}; } catch { history.current = {}; }
+      if (__DEV__ && pendingHistory) {
+        history.current = { ...history.current, [String(pendingHistory.parkId)]: pendingHistory.day };
+        pendingHistory = null;
+      }
+    }).catch(() => undefined).finally(() => AsyncStorage.getItem(KEY(playerId)).then(raw => {
       if (!active) return;
       try { setSeen(raw ? JSON.parse(raw) as ArrivalSeen : {}); } catch { setSeen({}); }
-    }).catch(() => { if (active) setSeen({}); });
+    }).catch(() => { if (active) setSeen({}); }));
     return () => { active = false; };
   }, [playerId, resetVersion]);
 
   useEffect(() => {
     if (!__DEV__ || !playerId) return undefined;
-    devReset = () => {
+    devReset = (keepHistory?: boolean) => {
       startedFor.current = null;
-      void AsyncStorage.removeItem(KEY(playerId)).then(() => { setSeen({}); setResetVersion(v => v + 1); });
+      if (!keepHistory) history.current = {};
+      void Promise.all([AsyncStorage.removeItem(KEY(playerId)), keepHistory ? null : AsyncStorage.removeItem(HISTORY_KEY(playerId))])
+        .then(() => { setSeen({}); setResetVersion(v => v + 1); });
     };
     return () => { devReset = null; };
   }, [playerId]);
@@ -109,7 +131,7 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     // Today's Daily 3 (only where the server has it on): one close goal under the cards and on the Today chip.
     const debug = __DEV__ && process.env.EXPO_PUBLIC_PARK_ARRIVAL_DEBUG === '1';
     const key = fetchKey;
-    void loadRetentionFlags().then(flags => {
+    void loadRetentionFlagsFresh().then(flags => {
       if (debug) console.log('[arrival] flags', JSON.stringify(flags));
       if (!flags?.dailyThree) return undefined;
       return getDailyThree(4000).then(state => {
@@ -147,7 +169,11 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     const next = markArrivalSeen(seen, parkId, day);
     setSeen(next);
     void AsyncStorage.setItem(KEY(playerId), JSON.stringify(next)).catch(() => undefined);
-    setPlaying({ parkId, cards: cardsFor(boss.value), goal, replay: false });
+    // A second visit this week is the short hello; the first is the full party.
+    const repeat = arrivalIsRepeat(history.current, parkId, day);
+    history.current = markArrivalHistory(history.current, parkId, day);
+    void AsyncStorage.setItem(HISTORY_KEY(playerId), JSON.stringify(history.current)).catch(() => undefined);
+    setPlaying({ parkId, cards: cardsFor(boss.value), goal, replay: false, repeat, pose: finnPose(parkId, day) });
   }, [due, ready, playing, parkId, tasks, boss, playerId, day, seen, cardsFor, always, goalSettled, fetchKey, goal]);
 
   // Leaving the park ends the moment at once.
@@ -157,8 +183,9 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
   const replay = useCallback(() => {
     if (parkId === null || playing) return;
     queueHaptic('tapLight');
-    setPlaying({ parkId, cards: cardsFor(boss?.parkId === parkId ? boss.value : null), goal, replay: true });
-  }, [parkId, playing, cardsFor, boss, goal]);
+    setPlaying({ parkId, cards: cardsFor(boss?.parkId === parkId ? boss.value : null), goal, replay: true, repeat: true,
+      pose: finnPose(parkId, day) });
+  }, [parkId, playing, cardsFor, boss, goal, day]);
 
   const todayCards = useMemo(() => (parkId !== null && seen && arrivalSeenToday(seen, parkId, day) ? cardsFor(boss?.parkId === parkId ? boss.value : null) : []),
     [parkId, seen, day, cardsFor, boss]);
@@ -170,7 +197,9 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     const timer = setTimeout(() => setTick(t => t + 1), Math.max(1000, endedAt.at + TODAY_CHIP_MS - Date.now() + 50));
     return () => clearTimeout(timer);
   }, [fresh, endedAt]);
-  const todayEntry: StatusEntry | null = todayCards.length > 0 && !playing && fresh ? {
+  // While the moment plays the stack button is already there (it is where the cards fly), and it stays
+  // after: the eye follows the cards into a button that does not vanish.
+  const todayEntry: StatusEntry | null = todayCards.length > 0 && (fresh || (!!playing && playing.parkId === parkId)) ? {
     key: 'today', label: `Today at ${parkName}`, tone: TONES.park, quiet: true,
     node: <TodayChip parkName={parkName} cards={todayCards} goal={goal} onPress={replay} />,
   } : null;
@@ -184,7 +213,8 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
   const layer = useMemo(() => (playing ? (
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 60 }]}>
       <ParkArrivalMoment key={`${playing.parkId}:${playing.replay ? 'r' : 'f'}`} parkName={parkName} cards={playing.cards}
-        goal={playing.goal} projector={projector} replay={playing.replay} onDone={onDone} />
+        goal={playing.goal} projector={projector} replay={playing.replay} repeat={playing.repeat} pose={playing.pose}
+        onDone={onDone} />
     </View>
   ) : null), [playing, parkName, projector, onDone]);
 

@@ -9,6 +9,7 @@ import { shareFlex } from '../share';
 import { parkDayFlexPayload } from '../share/parkDay';
 import * as RootNavigation from '../RootNavigation';
 import { RecapClosingStamp, RecapPolaroid, RecapSky, RecapStamp, RecapStat, RecapTomorrow, useRecapBuild } from '../components/park/ParkDayRecapBuild';
+import { recapStats } from '../components/park/recapBuildPlan';
 import useRecapTomorrow from '../components/park/useRecapTomorrow';
 import { RECAP_BUILD, bestCoin } from '../components/park/recapBuildPlan';
 
@@ -82,9 +83,11 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
     </View>
     {hasActivity ? <>
       <View style={styles.statStrip}>
-        <RecapStat build={build} index={0} icon="ride" value={recap.distinct_rides_won} label="RIDES WON" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
-        <RecapStat build={build} index={1} icon="coin" value={recap.new_coins} label="NEW COINS" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
-        <RecapStat build={build} index={2} icon="xp" value={recap.coin_upgrades} label="LEVEL UPS" valueStyle={styles.statValue} labelStyle={styles.statLabel} />
+        {/* Only what happened: a zero is left out (a day is never told what it did not do). */}
+        {recapStats(recap).map((stat, index) => (
+          <RecapStat key={stat.icon} build={build} index={index} icon={stat.icon} value={stat.value} label={stat.label}
+            valueStyle={styles.statValue} labelStyle={styles.statLabel} />
+        ))}
       </View>
       {!selectedDay && <RecapClosingStamp build={build} parkName={recap.park_name} />}
       {!selectedDay && <RecapTomorrow build={build} line={tomorrow} />}

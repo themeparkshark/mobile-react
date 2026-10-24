@@ -34,6 +34,7 @@ export default function QueueStampPreviewScreen() {
         onOpenPark={() => {}}
         parkAvailable
         onDone={() => {}}
+        endReason={process.env.EXPO_PUBLIC_QUEUE_PREVIEW_END === 'left' ? 'left_queue' : 'boarded'}
       />
     </View>
   </SafeAreaView>;

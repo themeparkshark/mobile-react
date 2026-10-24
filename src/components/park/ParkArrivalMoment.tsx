@@ -29,25 +29,28 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence,
-  withSpring, withTiming, Easing, ReduceMotion, type SharedValue,
+  cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withRepeat, Easing, ReduceMotion, type SharedValue,
 } from 'react-native-reanimated';
+import { withDelay, withSequence, withSpring, withTiming, momentMs } from './momentTime';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { playMoment } from '../../gamekit/audio/playMoment';
 import { playSfx } from '../../gamekit/SFX';
 import { useReduceMotionPreference } from '../../hooks/useReducedGameMotion';
 import { useAmbientLoop, usePowerBudget } from '../../power';
-import { GoldBurst, RadialFlash, ShineSweep, SparkleBurst } from '../../ui/GoldBurst';
+import { GoldBurst, RadialFlash, ShineSweep } from '../../ui/GoldBurst';
 import { DURATION, EASE, GOLD_FX, SPRING, flashPeak, momentParticles } from '../../ui/motionEasing';
 import { HUD_BUMP, SLAM_SQUASH } from '../../ui/motion';
 import { BRAND } from '../../ui/tokens';
 import GameIcon from '../../ui/GameIcon';
 import { HUD_ROW_HEIGHT, HUD_TOP } from '../map/statusStack';
 import {
-  ARRIVAL, arrivalCues, arrivalEndsAt, arrivalTitle, arrivalTitleSize, letterDelays, type ArrivalCard, type ArrivalGoal,
+  ARRIVAL, ARRIVAL_REPEAT, arrivalCues, arrivalTitle, arrivalTitleSize, bossClockHands, flyPoint, letterDelays,
+  type ArrivalCard, type ArrivalGoal,
 } from './parkArrival';
-import { ARRIVAL_ART, warmArrivalArt } from './arrivalArt';
+import { ARRIVAL_ART, FINN_ART, warmArrivalArt } from './arrivalArt';
+import ArrivalFxCanvas, { confettiPieces } from './ArrivalFxCanvas';
+import { perfMark } from './momentPerf';
 
 type Projector = (latitude: number, longitude: number) => Promise<{ x: number; y: number } | null>;
 type Point = { x: number; y: number };
@@ -61,6 +64,10 @@ export interface ParkArrivalMomentProps {
   readonly projector?: MutableRefObject<Projector | null>;
   /** A replay from the Today chip: no confetti, no first-time fanfare. */
   readonly replay?: boolean;
+  /** A second arrival at this park this week: the short hello (ribbon, name, cards, about 1.4 s). */
+  readonly repeat?: boolean;
+  /** Which of Finn's hello poses (fixed per park and day). */
+  readonly pose?: number;
   readonly onDone: () => void;
 }
 
@@ -71,29 +78,33 @@ function ParkArrivalMoment(props: ParkArrivalMomentProps) {
   return <ArrivalStage {...props} reduced={preference} />;
 }
 
-function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone, reduced }: ParkArrivalMomentProps & { readonly reduced: boolean }) {
+function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat = false, pose = 0, onDone, reduced }: ParkArrivalMomentProps & { readonly reduced: boolean }) {
   const { width, height } = useWindowDimensions();
   const budget = usePowerBudget();
   const rootRef = useRef<View>(null);
+  // The beat sheet: the full party the first time this week, the short hello after that (and on a replay).
+  const A = repeat || replay ? ARRIVAL_REPEAT : ARRIVAL;
   const title = arrivalTitle(parkName, parkName);
   const ribbonWidth = Math.min(width - 32, 380);
   const titleSize = arrivalTitleSize(title, ribbonWidth * 0.74);
-  const delays = useMemo(() => letterDelays(title.length), [title]);
-  const sparkles = momentParticles(ARRIVAL.sparkles, budget, reduced);
-  const confetti = replay ? 0 : momentParticles(ARRIVAL.confetti, budget, reduced);
-  const confetti2 = replay ? 0 : momentParticles(ARRIVAL.confettiSecond, budget, reduced);
+  const delays = useMemo(() => letterDelays(title.length, A), [title, A]);
+  const sparkles = momentParticles(A.sparkles, budget, reduced);
+  const confetti = replay ? 0 : momentParticles(A.confetti, budget, reduced);
+  const confetti2 = replay ? 0 : momentParticles(A.confettiSecond, budget, reduced);
+  // Confetti and sparkles never cover the header or the HUD row: the particle canvas starts below it.
+  const fxTop = HUD_TOP + HUD_ROW_HEIGHT + 8;
   const flashTop = flashPeak(isDimFlashingLightsEnabled(), reduced);
 
   // One "go" frame: everything below is scheduled from it, on the UI thread. While arming, the stage sits
   // at an invisible 1% (not 0: iOS skips drawing a fully transparent layer, so its images would decode on
   // the first real frame and drop the unfurl) with the gold already a hair above zero for the same reason.
-  const shown = useSharedValue<number>(ARRIVAL.armOpacity);
+  const shown = useSharedValue<number>(A.armOpacity);
   const clock = useSharedValue(-1);
   const scrim = useSharedValue(0);
   const ribbon = useSharedValue(0);
   const punch = useSharedValue(0);
   const banner = useSharedValue(0);
-  const gold = useSharedValue<number>(ARRIVAL.armOpacity);
+  const gold = useSharedValue<number>(A.armOpacity);
   const bloom = useSharedValue(0);
   const flash = useSharedValue(0);
   const burst = useSharedValue(0);
@@ -125,10 +136,16 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
   const ribbonCenterY = Math.max(150, height * 0.24);
   const cardWidth = Math.min(116, (width - 48) / 3);
   const cardsTop = ribbonCenterY + 92;
+  // Where each card sits (its centre), the start of its flight home and of its trail.
+  const froms = useMemo(() => cards.map((_, i) => ({ x: width / 2 + (i - (cards.length - 1) / 2) * (cardWidth + 10), y: cardsTop + 76 })),
+    [cards, width, cardWidth, cardsTop]);
+  const pieces = useMemo(() => confettiPieces(confetti, width, height - fxTop, 0), [confetti, width, height, fxTop]);
+  const pieces2 = useMemo(() => confettiPieces(confetti2, width, (height - fxTop) * 0.8, 7), [confetti2, width, height, fxTop]);
 
   const finish = useCallback(() => {
     if (phase.current === 'done') return;
     phase.current = 'done';
+    perfMark('arrival.done');
     doneRef.current();
   }, []);
   const startLeave = useCallback(() => {
@@ -140,23 +157,33 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
       leave.value = withTiming(1, { duration: DURATION.quick, reduceMotion: ReduceMotion.Never }, ok => { if (ok) runOnJS(finish)(); });
       return;
     }
+    perfMark('arrival.handoff');
     fly.forEach((v, i) => {
-      v.value = withDelay(i * ARRIVAL.flyStepMs, withTiming(1, { duration: ARRIVAL.flyMs, easing: Easing.linear }, ok => {
+      // One card at a time on a visible arc (EASE.inOut: a move between two points), a gold trail behind it.
+      v.value = withDelay(i * A.flyStepMs, withTiming(1, { duration: A.flyMs, easing: EASE.inOut }, ok => {
         // The stack (or the coin) catches it: a tick in the hand on the frame it lands.
         if (ok) runOnJS(queueHaptic)('tickSelection');
       }));
     });
     // A gold ring pings where a card lands: on its coin ("this is where it is") or on the stack button that caught it.
-    ping.forEach((v, i) => { v.value = withDelay(i * ARRIVAL.flyStepMs + ARRIVAL.flyMs - 40, withTiming(1, { duration: PING_MS, easing: EASE.out })); });
-    leave.value = withDelay(140, withTiming(1, { duration: ARRIVAL.shrinkMs, easing: EASE.in }));
+    const last = Math.max(0, cards.length - 1);
+    ping.forEach((v, i) => {
+      v.value = withDelay(i * A.flyStepMs + A.flyMs - 40, withTiming(1, { duration: PING_MS, easing: EASE.out }, ok => {
+        // The moment ends on the frame the last ping fades (the UI clock, not a JS timer).
+        if (ok && i === last) runOnJS(finish)();
+      }));
+    });
+    // The ribbon folds into the stack button behind the cards (the eye follows the cards first).
+    leave.value = withDelay(220, withTiming(1, { duration: A.shrinkMs, easing: EASE.in }));
     gold.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
-    timers.current.push(setTimeout(finish, arrivalEndsAt(cards.length, 0) + PING_MS - 80));
+    // Safety only: a dropped animation callback never leaves the stage up.
+    timers.current.push(setTimeout(finish, momentMs(last * A.flyStepMs + A.flyMs + PING_MS + 900)));
     // Shared values are stable refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduced, cards.length, finish]);
 
   // The JS side of each beat (haptic, sound, handoff), fired from the UI clock so it lands on its frame.
-  const cues = useMemo(() => arrivalCues(cards.length, !!goal, reduced), [cards.length, goal, reduced]);
+  const cues = useMemo(() => arrivalCues(cards.length, !!goal, reduced, A), [cards.length, goal, reduced, A]);
   const cueAt = useMemo(() => cues.map(cue => cue.at), [cues]);
   const fire = useCallback((index: number) => {
     const cue = cues[index];
@@ -182,11 +209,12 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
     if (phase.current !== 'arming') return;
     phase.current = 'in';
     startedAt.current = Date.now();
+    perfMark('arrival.start');
     shown.value = 1;
     clock.value = 0;
     // The beat clock always runs in real time: Reanimated would otherwise jump it to the end under the
     // system Reduce Motion setting and fire every cue (the handoff included) on the first frame.
-    clock.value = withTiming(ARRIVAL.clockMs, { duration: ARRIVAL.clockMs, easing: Easing.linear, reduceMotion: ReduceMotion.Never });
+    clock.value = withTiming(A.clockMs, { duration: A.clockMs, easing: Easing.linear, reduceMotion: ReduceMotion.Never });
     if (reduced) {
       // Reduce Motion: one 160 ms fade in, no travel.
       const fade = { duration: DURATION.quick, reduceMotion: ReduceMotion.Never };
@@ -195,43 +223,44 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
       banner.value = withTiming(1, fade);
       finn.value = withTiming(1, fade);
       goalIn.value = withTiming(1, fade);
+      // A soft static gold glow at half strength (no rays pasted behind a faded stage).
       gold.value = withTiming(0.5, fade);
       drop.forEach(v => { v.value = withTiming(1, fade); });
       return;
     }
     // 1. gather: the map recedes, the ribbon unfurls from the centre, the plaque stamps, the gold charges.
-    scrim.value = withTiming(1, { duration: ARRIVAL.scrimMs, easing: EASE.out });
-    ribbon.value = withSequence(withTiming(1.05, { duration: ARRIVAL.ribbonMs, easing: EASE.out }), withSpring(1, SPRING.stamp));
-    banner.value = withDelay(ARRIVAL.welcomeAt, withSpring(1, SPRING.stamp));
-    gold.value = withSequence(withDelay(120, withTiming(0.32, { duration: ARRIVAL.hitAt - 120, easing: EASE.charge })),
+    scrim.value = withTiming(1, { duration: A.scrimMs, easing: EASE.out });
+    ribbon.value = withSequence(withTiming(1.05, { duration: A.ribbonMs, easing: EASE.out }), withSpring(1, SPRING.stamp));
+    banner.value = withDelay(A.welcomeAt, withSpring(1, SPRING.stamp));
+    gold.value = withSequence(withDelay(120, withTiming(0.32, { duration: A.hitAt - 120, easing: EASE.charge })),
       // 3. burst: the wide fan blooms and keeps a slow turn while the cards land.
-      withDelay(ARRIVAL.burstAt - ARRIVAL.hitAt, withTiming(1, { duration: 180, easing: EASE.out })),
-      withTiming(ARRIVAL.goldHold, { duration: DURATION.bloom, easing: EASE.out }));
+      withDelay(A.burstAt - A.hitAt, withTiming(1, { duration: 180, easing: EASE.out })),
+      withTiming(A.goldHold, { duration: DURATION.bloom, easing: EASE.out }));
     // 2. hold: one held frame on the landed name, a capped flash, the ribbon squashes like a stamp.
-    flash.value = withDelay(ARRIVAL.hitAt, withSequence(
+    flash.value = withDelay(A.hitAt, withSequence(
       withTiming(flashTop, { duration: 40 }), withTiming(flashTop, { duration: DURATION.hitStop - 40 }),
       withTiming(0, { duration: DURATION.flash })));
-    punch.value = withDelay(ARRIVAL.hitAt, withSequence(withTiming(1, { duration: 50 }),
+    punch.value = withDelay(A.hitAt, withSequence(withTiming(1, { duration: 50 }),
       withTiming(1, { duration: DURATION.hitStop - 50 }), withSpring(0, SPRING.pop)));
-    bloom.value = withDelay(ARRIVAL.burstAt, withSequence(withTiming(1, { duration: 160, easing: EASE.out }),
+    bloom.value = withDelay(A.burstAt, withSequence(withTiming(1, { duration: 160, easing: EASE.out }),
       withTiming(0, { duration: DURATION.bloom, easing: EASE.out })));
-    burst.value = withDelay(ARRIVAL.burstAt, withTiming(1, { duration: DURATION.sparkle, easing: Easing.linear }));
-    rain.value = withDelay(ARRIVAL.burstAt, withTiming(1, { duration: ARRIVAL.rainMs, easing: Easing.linear }));
-    rain2.value = withDelay(ARRIVAL.confettiSecondAt, withTiming(1, { duration: ARRIVAL.rainMs - 300, easing: Easing.linear }));
+    burst.value = withDelay(A.burstAt, withTiming(1, { duration: DURATION.sparkle, easing: Easing.linear }));
+    rain.value = withDelay(A.burstAt, withTiming(1, { duration: A.rainMs, easing: Easing.linear }));
+    rain2.value = withDelay(A.confettiSecondAt, withTiming(1, { duration: A.rainMs - 300, easing: Easing.linear }));
     // 4. settle: Finn pops up and waves, the three cards land one by one and each catches a shine.
-    finn.value = withDelay(ARRIVAL.finnAt, withSpring(1, SPRING.pop));
-    wave.value = withDelay(ARRIVAL.finnAt + 240, withSequence(
+    finn.value = withDelay(A.finnAt, withSpring(1, SPRING.pop));
+    if (!repeat && !replay) wave.value = withDelay(A.finnAt + 240, withSequence(
       withTiming(1, { duration: 170 }), withTiming(-0.4, { duration: 170 }),
       withTiming(1, { duration: 170 }), withSpring(0, SPRING.settle)));
     drop.forEach((v, i) => {
-      const at = ARRIVAL.cardsAt + i * ARRIVAL.cardStepMs;
+      const at = A.cardsAt + i * A.cardStepMs;
       v.value = withDelay(at, withSpring(1, SPRING.land));
-      shine[i].value = withDelay(at + ARRIVAL.shineAfterMs, withTiming(1, { duration: ARRIVAL.shineMs, easing: EASE.inOut }));
+      shine[i].value = withDelay(at + A.shineAfterMs, withTiming(1, { duration: A.shineMs, easing: EASE.inOut }));
     });
     // The micro-beat while the kid looks: Finn points at today's limited coin and it flips once; the Daily 3 stamps in.
-    point.value = withDelay(ARRIVAL.pointAt, withSequence(withSpring(1, SPRING.stamp), withDelay(520, withSpring(0, SPRING.settle))));
-    flip.value = withDelay(ARRIVAL.pointAt + 120, withTiming(1, { duration: ARRIVAL.flipMs, easing: EASE.inOut }));
-    goalIn.value = withDelay(ARRIVAL.goalAt, withSpring(1, SPRING.stamp));
+    point.value = withDelay(A.pointAt, withSequence(withSpring(1, SPRING.stamp), withDelay(520, withSpring(0, SPRING.settle))));
+    flip.value = withDelay(A.pointAt + 120, withTiming(1, { duration: A.flipMs, easing: EASE.inOut }));
+    goalIn.value = withDelay(A.goalAt, withSpring(1, SPRING.stamp));
   };
 
   const armed = useRef(false);
@@ -240,12 +269,12 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
     armed.current = true;
     // A few frames after layout (drawn at 1%, so every layer is decoded and rasterized), the first visible
     // frame is the first frame of the moment.
-    timers.current.push(setTimeout(() => requestAnimationFrame(() => go()), ARRIVAL.armMs));
+    timers.current.push(setTimeout(() => requestAnimationFrame(() => go()), A.armMs));
   };
 
   useEffect(() => {
     // The art is preloaded while the arrival waits its turn (useParkArrival); never hold the moment on a slow decode.
-    timers.current.push(setTimeout(() => { artReady.current = true; tryStart(); }, ARRIVAL.artWaitMs));
+    timers.current.push(setTimeout(() => { artReady.current = true; tryStart(); }, A.artWaitMs));
     warmArrivalArt();
     return () => {
       timers.current.forEach(clearTimeout); timers.current = [];
@@ -282,12 +311,12 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
 
   const onTap = () => {
     // A kid mashing in still sees the name land; after that any tap hands off.
-    if (phase.current !== 'in' || Date.now() - startedAt.current < ARRIVAL.minTapAt) return;
+    if (phase.current !== 'in' || Date.now() - startedAt.current < A.minTapAt) return;
     startLeave();
   };
 
   const rootStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: Math.max(0.01, ARRIVAL.scrimOpacity * scrim.value) * (1 - leave.value) }));
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: Math.max(0.01, A.scrimOpacity * scrim.value) * (1 - leave.value) }));
   const stageStyle = useAnimatedStyle(() => {
     const t = leave.value;
     if (reduced) return { opacity: 1 - t };
@@ -331,15 +360,14 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
           <LinearGradient colors={SCRIM} locations={[0, 0.45, 1]} style={StyleSheet.absoluteFill} />
         </Animated.View>
       </Pressable>
-      {confetti > 0 && <ConfettiRain progress={rain} count={confetti} width={width} height={height} seed={0} />}
       <Animated.View pointerEvents="none" style={[styles.stage, { top: ribbonCenterY - 150, height: 300 }, stageStyle]}>
-        <GoldBurst size={Math.min(width * 1.85, 760)} amount={gold} bloom={bloom} reduced={reduced} style={styles.absCenter} />
+        {/* Reduce Motion: a soft static glow only (rays pasted behind a faded stage looked stuck on). */}
+        {!reduced && <GoldBurst size={Math.min(width * 1.85, 760)} amount={gold} bloom={bloom} reduced={reduced} style={styles.absCenter} />}
         <CoreBloom gold={gold} bloom={bloom} width={ribbonWidth} />
         <RadialFlash flash={flash} size={300} />
-        <View style={styles.origin}><SparkleBurst progress={burst} count={sparkles} radius={190} /></View>
         {/* Finn peeks over the ribbon's right end (drawn behind it, so the ribbon holds him up). */}
         <Animated.View style={[styles.finn, { right: Math.max(2, (width - ribbonWidth) / 2 - 6) }, finnStyle]}>
-          <Image source={ARRIVAL_ART.finn} style={{ width: 100, height: 125 }} contentFit="contain" transition={0} />
+          <Image source={FINN_ART[pose % FINN_ART.length]} style={{ width: 100, height: 125 }} contentFit="contain" transition={0} />
         </Animated.View>
         {/* The scale runs on a plain wrapper: iOS left the plaque's fill behind at its start size when the
             bordered view itself was scaled. */}
@@ -358,12 +386,15 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, onDone
           </View>
         </Animated.View>
       </Animated.View>
-      {confetti2 > 0 && <ConfettiRain progress={rain2} count={confetti2} width={width} height={height * 0.8} seed={7} />}
+      {!reduced && !(__DEV__ && (globalThis as { __tpsNoFxCanvas?: boolean }).__tpsNoFxCanvas) && <ArrivalFxCanvas width={width} height={height} top={fxTop} rain={rain} rain2={rain2}
+        pieces={pieces} pieces2={pieces2} burst={burst} sparkles={sparkles}
+        burstAt={{ x: width / 2, y: ribbonCenterY }} burstRadius={190}
+        fly={fly} targets={targets} froms={froms} stack={{ x: stackX, y: stackY }} />}
       <View pointerEvents="none" style={[styles.cards, { top: cardsTop }]}>
         {cards.map((card, i) => (
           <TodayCard key={card.kind} card={card} index={i} width={cardWidth} drop={drop[i]} fly={fly[i]} leave={leave}
             shine={shine[i]} flip={card.kind === 'limited' ? flip : undefined}
-            fromX={width / 2 + (i - (cards.length - 1) / 2) * (cardWidth + 10)} fromY={cardsTop + 80}
+            fromX={froms[i]?.x ?? width / 2} fromY={froms[i]?.y ?? cardsTop + 80}
             targets={targets} stackX={stackX} stackY={stackY} reduced={reduced} />
         ))}
       </View>
@@ -438,22 +469,20 @@ const TodayCard = memo(function TodayCard({ card, index, width, drop, fly, leave
     const target = targets.value[index] ?? null;
     const toCoin = target !== null;
     const to = target ?? { x: stackX, y: stackY };
-    const from = { x: fromX, y: fromY };
     const f = fly.value;
-    // Out to the right first, then up the right edge (x eases out, y eases in), so a card
-    // bound for the HUD never crosses the Ride Control or Adventure chips on its way.
-    const fx = toCoin ? f : 1 - Math.pow(1 - f, 2.2);
-    const fy = toCoin ? f : Math.pow(f, 1.8);
-    const dx = (to.x - from.x) * fx;
-    const dy = (to.y - from.y) * fy - (toCoin ? Math.sin(f * Math.PI) * 40 : 0);
+    // One arc home (flyPoint, shared with the gold trail): bound for the HUD it swings right and climbs the
+    // right edge (never across Ride Control or Adventure); bound for a coin it lobs up and drops onto it.
+    const at = flyPoint(fromX, fromY, to.x, to.y, toCoin, f);
+    // A little anticipation: the card lifts and leans back before it goes.
+    const lift = f > 0 && f < 0.12 ? Math.sin((f / 0.12) * Math.PI) * 6 : 0;
     return {
       // Never exactly 0 before it drops (a hair of opacity keeps its art decoded and ready).
-      opacity: Math.max(f > 0 ? 0 : 0.01, Math.min(1, drop.value * 2) * (f < 0.8 ? 1 : (1 - f) / 0.2)),
+      opacity: Math.max(f > 0 ? 0 : 0.01, Math.min(1, drop.value * 2) * (f < 0.86 ? 1 : (1 - f) / 0.14)),
       transform: [
-        { translateX: dx },
-        { translateY: -ARRIVAL.cardDrop * (1 - drop.value) + dy },
-        { rotate: `${(index - 1) * 3 * (1 - f) + (toCoin ? 0 : 16 * f)}deg` },
-        { scale: (0.9 + 0.1 * Math.min(1, drop.value)) * (1 - (toCoin ? 0.6 : 0.84) * f) },
+        { translateX: at.x - fromX },
+        { translateY: -ARRIVAL.cardDrop * (1 - drop.value) + at.y - fromY - lift },
+        { rotate: `${(index - 1) * 3 * (1 - f) + (toCoin ? -8 * Math.sin(f * Math.PI) : 18 * f)}deg` },
+        { scale: (0.9 + 0.1 * Math.min(1, drop.value)) * (1 - (toCoin ? 0.62 : 0.66) * f) },
       ],
     };
   });
@@ -463,6 +492,8 @@ const TodayCard = memo(function TodayCard({ card, index, width, drop, fly, leave
   });
   return (
     <Animated.View style={[styles.cardSlot, { width }, style]}>
+      {card.kind === 'limited' && <Image source={ARRIVAL_ART.soft} style={styles.cardGlow} contentFit="fill" transition={0} tintColor={GOLD_FX.glow} />}
+      <View style={styles.cardShadow} />
       <View style={[styles.card, card.kind === 'limited' && styles.cardGold]}>
         <CardFace card={card} flip={flip} shine={shine} />
         <View pointerEvents="none" style={styles.cardClip}>
@@ -478,11 +509,30 @@ const TodayCard = memo(function TodayCard({ card, index, width, drop, fly, leave
   );
 });
 
+/** Picture tags: a gold star for today's special coin (never a word that reads like a countdown), a NEW tag, a magnifier for coins to find. */
 function CardTag({ card }: { readonly card: ArrivalCard }) {
-  if (card.kind === 'limited') return <View style={styles.tag}><Text style={styles.tagText} allowFontScaling={false}>LIMITED</Text></View>;
+  if (card.kind === 'limited') return <View style={[styles.tag, styles.tagStar]}><GameIcon name="star" size={18} /><GameIcon name="sparkle" size={14} /></View>;
   if (card.kind === 'boss') return <View style={[styles.tag, styles.tagBlue]}><Text style={[styles.tagText, styles.tagTextLight]} allowFontScaling={false}>BOSS</Text></View>;
   if (card.kind === 'new') return <View style={[styles.tag, styles.tagNew]}><Text style={styles.tagText} allowFontScaling={false}>NEW</Text></View>;
-  return <View style={[styles.tag, styles.tagBlue]}><GameIcon name="map" size={16} /></View>;
+  return <View style={[styles.tag, styles.tagBlue]}><GameIcon name="search" size={16} /></View>;
+}
+
+/**
+ * The boss time as a picture: a clock face with the hands at the park's time (a kid matches it to any
+ * clock), a sun or a moon for day or night, and the time in small print for the grown-up.
+ */
+function BossClock({ card }: { readonly card: Extract<ArrivalCard, { kind: 'boss' }> }) {
+  const hands = card.at ? bossClockHands(card.at) : null;
+  return <View style={styles.bossArt}>
+    <Image source={ARRIVAL_ART.boss} style={styles.bossKraken} contentFit="contain" transition={0} />
+    {hands && <View style={styles.clock} accessible accessibilityLabel={`Boss at ${card.time}`}>
+      {[0, 90, 180, 270].map(deg => <View key={deg} style={[styles.clockTick, { transform: [{ rotate: `${deg}deg` }, { translateY: -15 }] }]} />)}
+      <View style={[styles.hand, styles.hourHand, { transform: [{ rotate: `${hands.hour}deg` }, { translateY: -5 }] }]} />
+      <View style={[styles.hand, styles.minuteHand, { transform: [{ rotate: `${hands.minute}deg` }, { translateY: -7.5 }] }]} />
+      <View style={styles.clockHub} />
+      {hands.night && <View style={styles.clockSky}><GameIcon name="moon" size={13} /></View>}
+    </View>}
+  </View>;
 }
 
 function CardFace({ card, flip, shine }: { readonly card: ArrivalCard; readonly flip?: SharedValue<number>; readonly shine: SharedValue<number> }) {
@@ -494,8 +544,8 @@ function CardFace({ card, flip, shine }: { readonly card: ArrivalCard; readonly 
   }
   if (card.kind === 'boss') {
     return <>
-      <Image source={ARRIVAL_ART.boss} style={styles.art} contentFit="contain" transition={0} />
-      <Text style={styles.cardBig} numberOfLines={1} adjustsFontSizeToFit allowFontScaling={false}>{card.time}</Text>
+      <BossClock card={card} />
+      <Text style={styles.cardSmall} numberOfLines={1} adjustsFontSizeToFit allowFontScaling={false}>{card.time}</Text>
     </>;
   }
   if (card.kind === 'new') {
@@ -507,17 +557,18 @@ function CardFace({ card, flip, shine }: { readonly card: ArrivalCard; readonly 
       <Text style={styles.cardBig} allowFontScaling={false}>{card.count}</Text>
     </>;
   }
-  // Coins still to find here: grey coins waiting with a "?", never the wallet's coin stack (that reads as a reward).
+  // Coins still to find here: empty coin spots (round, dashed, full coin shape) and a "?" coin in front;
+  // never the wallet's coin stack (that reads as a reward). The count sits in a gold pill.
   return <>
     <View style={styles.art}>
-      <Image source={ARRIVAL_ART.mapCoin} style={[styles.ghost, styles.ghostBack]} contentFit="contain" transition={0} tintColor="#a9c1d8" />
-      <Image source={ARRIVAL_ART.mapCoin} style={[styles.ghost, styles.ghostMid]} contentFit="contain" transition={0} tintColor="#bcd0e3" />
+      <View style={[styles.slotGhost, styles.ghostBack]} />
+      <View style={[styles.slotGhost, styles.ghostMid]} />
       <View style={[styles.ghost, styles.ghostFront]}>
-        <Image source={ARRIVAL_ART.mapCoin} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} tintColor="#dbe8f4" />
-        <Text style={styles.ask} allowFontScaling={false}>?</Text>
+        <Image source={ARRIVAL_ART.mapCoin} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+        <View style={styles.askDisc}><Text style={styles.ask} allowFontScaling={false}>?</Text></View>
       </View>
     </View>
-    <Text style={styles.cardBig} allowFontScaling={false}>{card.count}</Text>
+    <View style={styles.countPill}><Text style={styles.countPillText} allowFontScaling={false}>{card.count}</Text></View>
   </>;
 }
 
@@ -611,51 +662,6 @@ function SpinningCoin({ flip, shine }: { readonly flip?: SharedValue<number>; re
   </Animated.View>;
 }
 
-const CONFETTI_COLORS = [GOLD_FX.rays, BRAND.white, BRAND.blueBright, BRAND.gold, BRAND.sky, GOLD_FX.raysSoft];
-
-/** One shower of blue, white and gold confetti falling once from the top with a sideways drift. */
-function ConfettiRain({ progress, count, width, height, seed }: {
-  readonly progress: SharedValue<number>; readonly count: number; readonly width: number; readonly height: number; readonly seed: number;
-}) {
-  const pieces = useMemo(() => Array.from({ length: count }, (_, k) => {
-    const i = k + seed;
-    return {
-      x: ((i * 61) % 97) / 97 * width,
-      delay: ((i * 37) % 10) / 10 * 0.28,
-      fall: height * (0.55 + ((i * 23) % 40) / 100),
-      drift: (i % 2 ? 1 : -1) * (14 + ((i * 17) % 22)),
-      spin: (i % 2 ? 1 : -1) * (240 + ((i * 41) % 300)),
-      w: 13 + (i % 3) * 4,
-      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-    };
-  }), [count, width, height, seed]);
-  return <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-    {pieces.map((piece, i) => <ConfettiPiece key={i} piece={piece} progress={progress} />)}
-  </View>;
-}
-
-function ConfettiPiece({ piece, progress }: {
-  readonly piece: { x: number; delay: number; fall: number; drift: number; spin: number; w: number; color: string };
-  readonly progress: SharedValue<number>;
-}) {
-  const style = useAnimatedStyle(() => {
-    const t = Math.max(0, Math.min(1, (progress.value - piece.delay) / (1 - piece.delay)));
-    if (t <= 0 || t >= 1) return { opacity: 0 };
-    return {
-      opacity: t < 0.75 ? 1 : (1 - t) / 0.25,
-      transform: [
-        { translateX: piece.x + Math.sin(t * Math.PI * 3) * piece.drift },
-        // Gravity: slow at the top, faster as it falls.
-        { translateY: -20 + piece.fall * (0.35 * t + 0.65 * t * t) },
-        { rotate: `${piece.spin * t}deg` },
-        { scaleY: 0.4 + 0.6 * Math.abs(Math.cos(t * Math.PI * 4)) },
-      ],
-    };
-  });
-  return <Animated.View style={[{ position: 'absolute', top: 0, left: 0, width: piece.w, height: piece.w * 0.6,
-    borderRadius: 2, backgroundColor: piece.color, borderWidth: 0.5, borderColor: 'rgba(5,52,110,0.25)' }, style]} />;
-}
-
 const styles = StyleSheet.create({
   pingBox: { position: 'absolute', left: 0, top: 0, width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
   ring: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 5, borderColor: GOLD_FX.rays },
@@ -678,10 +684,11 @@ const styles = StyleSheet.create({
   cards: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 10 },
   cardSlot: { alignItems: 'center' },
   card: { alignSelf: 'stretch', alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 3, borderColor: BRAND.white,
-    paddingTop: 16, paddingBottom: 10, paddingHorizontal: 6, minHeight: 148,
-    shadowColor: '#05346e', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 5 } },
-  cardGold: { borderColor: BRAND.gold, borderWidth: 4, backgroundColor: '#fff6d6',
-    shadowColor: GOLD_FX.glow, shadowOpacity: 0.9, shadowRadius: 12, shadowOffset: { width: 0, height: 0 } },
+    paddingTop: 16, paddingBottom: 10, paddingHorizontal: 6, minHeight: 148 },
+  // A hard sticker shadow (no blurred shadow on a moving card: cheap for the GPU, and it reads hand-drawn).
+  cardShadow: { position: 'absolute', left: 2, right: -2, top: 6, bottom: -6, borderRadius: 18, backgroundColor: 'rgba(5,52,110,0.3)' },
+  cardGlow: { position: 'absolute', left: -26, right: -26, top: -26, bottom: -26 },
+  cardGold: { borderColor: BRAND.gold, borderWidth: 4, backgroundColor: '#fff6d6' },
   cardClip: { ...StyleSheet.absoluteFillObject, borderRadius: 15, overflow: 'hidden' },
   cardShine: { position: 'absolute', top: -30, bottom: -30 },
   tag: { position: 'absolute', top: -12, alignSelf: 'center', backgroundColor: BRAND.gold, borderRadius: 10,
@@ -689,6 +696,25 @@ const styles = StyleSheet.create({
   tagBlue: { backgroundColor: BRAND.blueBright, borderColor: BRAND.white },
   tagNew: { backgroundColor: BRAND.white, borderColor: BRAND.blueBright },
   tagText: { fontFamily: 'Shark', fontSize: 12, letterSpacing: 0.8, color: BRAND.navy },
+  tagStar: { flexDirection: 'row', alignItems: 'center', gap: 1, paddingHorizontal: 6 },
+  bossArt: { width: 72, height: 64, marginTop: 4 },
+  bossKraken: { position: 'absolute', left: -2, top: 0, width: 52, height: 52 },
+  clock: { position: 'absolute', right: -4, bottom: -2, width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.white,
+    borderWidth: 3, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  clockTick: { position: 'absolute', width: 2, height: 4, borderRadius: 1, backgroundColor: BRAND.navy },
+  hand: { position: 'absolute', borderRadius: 2, backgroundColor: BRAND.navy },
+  hourHand: { width: 3.5, height: 10 },
+  minuteHand: { width: 2.5, height: 15 },
+  clockHub: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: BRAND.gold },
+  clockSky: { position: 'absolute', top: -10, right: -10 },
+  cardSmall: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy, marginTop: 6 },
+  slotGhost: { position: 'absolute', width: 40, height: 40, borderRadius: 20, borderWidth: 2.5, borderStyle: 'dashed',
+    borderColor: BRAND.blueBright, backgroundColor: 'rgba(120,196,255,0.18)' },
+  askDisc: { position: 'absolute', width: 26, height: 26, borderRadius: 13, backgroundColor: BRAND.white,
+    borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  countPill: { marginTop: 6, minWidth: 44, paddingHorizontal: 10, borderRadius: 12, backgroundColor: BRAND.gold,
+    borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center' },
+  countPillText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
   tagTextLight: { color: BRAND.white },
   art: { width: 64, height: 64, marginTop: 4 },
   coinArt: { alignItems: 'center', justifyContent: 'center' },
@@ -697,13 +723,12 @@ const styles = StyleSheet.create({
   ghostBack: { left: -6, top: 2 },
   ghostMid: { right: -6, top: 2 },
   ghostFront: { left: 10, top: 16, alignItems: 'center', justifyContent: 'center' },
-  ask: { fontFamily: 'Shark', fontSize: 24, color: BRAND.navy, marginTop: 2 },
+  ask: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, marginTop: 1 },
   cardBig: { fontFamily: 'Shark', fontSize: 26, color: BRAND.navy, marginTop: 4 },
   cardName: { fontFamily: 'Knockout', fontSize: 13, lineHeight: 15, color: BRAND.navy, textAlign: 'center', marginTop: 6 },
   goalWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   goal: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.blue, borderRadius: 18, borderWidth: 3,
-    borderColor: BRAND.white, paddingHorizontal: 12, paddingVertical: 5,
-    shadowColor: '#05346e', shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
+    borderColor: BRAND.white, paddingHorizontal: 12, paddingVertical: 5, borderBottomWidth: 5, borderBottomColor: BRAND.navy },
   goalStreak: { fontFamily: 'Shark', fontSize: 18, color: BRAND.gold, marginRight: 4 },
   pips: { flexDirection: 'row', gap: 6 },
   pip: { width: 22, height: 22, borderRadius: 11, borderWidth: 3, borderColor: BRAND.white, backgroundColor: 'rgba(255,255,255,0.18)' },

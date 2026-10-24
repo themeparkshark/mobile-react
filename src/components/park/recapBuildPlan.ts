@@ -40,3 +40,14 @@ export function bestCoin<T extends { readonly new?: boolean; readonly coin_url?:
   const usable = (coins ?? []).filter(coin => !!coin.coin_url);
   return usable.find(coin => coin.new) ?? usable[0] ?? null;
 }
+
+/** The recap's picture stats, only the ones that happened (a zero is never shown), in a fixed order. */
+export function recapStats(recap: { readonly distinct_rides_won: number; readonly new_coins: number; readonly coin_upgrades: number }):
+  { readonly icon: 'ride' | 'coin' | 'xp'; readonly value: number; readonly label: string }[] {
+  const all = [
+    { icon: 'ride' as const, value: recap.distinct_rides_won, label: recap.distinct_rides_won === 1 ? 'RIDE WON' : 'RIDES WON' },
+    { icon: 'coin' as const, value: recap.new_coins, label: recap.new_coins === 1 ? 'NEW COIN' : 'NEW COINS' },
+    { icon: 'xp' as const, value: recap.coin_upgrades, label: recap.coin_upgrades === 1 ? 'LEVEL UP' : 'LEVEL UPS' },
+  ];
+  return all.filter(stat => stat.value > 0);
+}

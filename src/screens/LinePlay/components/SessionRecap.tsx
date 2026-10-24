@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
+import RideUpCelebration, { RIDE_UP } from './RideUpCelebration';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
 import { BRAND, GameButton, GameIcon, type GameIconName } from '../../../ui';
 import type { PredictionResolution } from '../../../services/lineplay/content';
@@ -58,11 +59,13 @@ export function playedSummary(names: readonly string[]): string {
   return Array.from(counts, ([name, count]) => count > 1 ? `${name} x${count}` : name).join(' · ');
 }
 
-function RecapStat({ icon, value, prefix = '', label, index, reducedMotion }: {
+function RecapStat({ icon, value, prefix = '', label, index, reducedMotion, after = 0 }: {
   icon: GameIconName; value: number; prefix?: string; label: string; index: number; reducedMotion: boolean;
+  /** "Your ride's up!" plays first: the chips stagger in under its burst. */
+  after?: number;
 }) {
-  const shown = useCountUp(value, 260 + index * 110, reducedMotion);
-  return <Animated.View entering={reducedMotion ? undefined : ZoomIn.delay(160 + index * 110).springify().damping(11)}
+  const shown = useCountUp(value, after + 260 + index * 90, reducedMotion);
+  return <Animated.View entering={reducedMotion ? undefined : ZoomIn.delay(after + 160 + index * 90).springify().damping(11)}
     style={styles.recapStat} accessible accessibilityLabel={`${prefix}${value} ${label}`}>
     <GameIcon name={icon} size={30} />
     <Text style={styles.recapStatValue}>{prefix}{shown}</Text>
@@ -172,8 +175,11 @@ export default function SessionRecap({
     (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy != null &&
     playerEnergy >= coin.energy_to_next_level;
   let stat = 0;
+  // The chips land under the celebration's burst (RIDE_UP.confettiAt), 90 ms apart.
+  const after = rideUp && !reducedMotion ? RIDE_UP.confettiAt - 160 : 0;
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recapCard}>
       <LinearGradient colors={['#13a8e9', '#0879ca', '#0768b9']} style={styles.recapHero}>
         <View style={styles.recapHeroCopy}>
@@ -215,12 +221,12 @@ export default function SessionRecap({
       <Text style={styles.recapSectionTitle}>{rewardsConfirmed ? 'WHAT YOU EARNED' : 'YOUR LINEPLAY ADVENTURE'}</Text>
       <View style={styles.recapStats}>
         <RecapStat icon="star" value={activityCount} label={activityCount === 1 ? 'activity' : 'activities'}
-          index={stat++} reducedMotion={reducedMotion} />
-        {rewardsConfirmed && <RecapStat icon="energy" value={earnedEnergy} prefix="+" label="energy" index={stat++} reducedMotion={reducedMotion} />}
-        {rewardsConfirmed && <RecapStat icon="xp" value={experience} prefix="+" label="xp" index={stat++} reducedMotion={reducedMotion} />}
-        {rewardsConfirmed && <RecapStat icon="parts" value={partsCount} label="parts" index={stat++} reducedMotion={reducedMotion} />}
+          index={stat++} reducedMotion={reducedMotion} after={after} />
+        {rewardsConfirmed && <RecapStat icon="energy" value={earnedEnergy} prefix="+" label="energy" index={stat++} reducedMotion={reducedMotion} after={after} />}
+        {rewardsConfirmed && <RecapStat icon="xp" value={experience} prefix="+" label="xp" index={stat++} reducedMotion={reducedMotion} after={after} />}
+        {rewardsConfirmed && <RecapStat icon="parts" value={partsCount} label="parts" index={stat++} reducedMotion={reducedMotion} after={after} />}
         {rewardsConfirmed && ticketsEarned > 0 && <RecapStat icon="ticket" value={ticketsEarned} prefix="+"
-          label={ticketsEarned === 1 ? 'ticket' : 'tickets'} index={stat++} reducedMotion={reducedMotion} />}
+          label={ticketsEarned === 1 ? 'ticket' : 'tickets'} index={stat++} reducedMotion={reducedMotion} after={after} />}
       </View>
 
       {rewardsConfirmed && queueStamp?.earned && onOpenStampBook && (
@@ -408,6 +414,9 @@ export default function SessionRecap({
       </View>}
       <GameButton label={doneLabel} onPress={onDone} fullWidth style={styles.recapBtn} />
     </ScrollView>
+    {/* "Your ride's up!": the app cheers you onto the ride, then gets out of the way. */}
+    {rideUp && <RideUpCelebration rideName={rideName} />}
+    </View>
   );
 }
 

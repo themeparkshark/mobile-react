@@ -50,8 +50,10 @@ test('picture stats: small days stamp, bigger days count; a gold sunset, a Tomor
   assert.match(src, /export function notifyRecapViewport/);
   assert.doesNotMatch(src, /setTimeout\(\(\) => \{\n\s+setShown/, 'stat ticks fire from the UI clock');
   const card = read('src/screens/ParkDayRecapCard.tsx');
-  assert.match(card, /icon="ride"/);
-  assert.match(card, /icon="coin"/);
+  assert.match(card, /recapStats\(recap\)\.map/, 'picture stats, only the ones that happened');
+  const plan = require('./helpers/ts-module.cjs').loadTs('src/components/park/recapBuildPlan.ts');
+  const stats = plan.recapStats({ distinct_rides_won: 1, new_coins: 1, coin_upgrades: 0 });
+  assert.equal(JSON.stringify(stats.map(s => [s.icon, s.label])), JSON.stringify([['ride', 'RIDE WON'], ['coin', 'NEW COIN']]), 'a zero is never shown');
   assert.match(card, /<RecapTomorrow build=\{build\} line=\{tomorrow\} \/>/);
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /onScroll=\{notifyRecapViewport\}/);

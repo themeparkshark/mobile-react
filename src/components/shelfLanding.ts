@@ -27,10 +27,32 @@ export const SHELF_LANDING = {
   hopPt: 4,
   /** The shelf plank kicks down this far under the landing coin and springs back. */
   kickPt: 2,
-  /** A full row: a white shine sweeps across it. */
+  /** A full row: a gold-and-white light bar sweeps across it. */
   shineAfterMs: 220,
   shineMs: 600,
+  /** ...and each coin hops as the bar passes it, left to right, with a tick that climbs the coin ladder. */
+  rowHopStepMs: 100,
+  rowHopPt: 10,
+  /** The plank glows gold for a beat, then the five-pip "row done" badge pops on its end. */
+  plankGlowMs: 700,
+  badgeAt: 900,
+  /** About one landing in ten is shiny (a second ring, gold rays, a brighter chime). */
+  shinyOneIn: 10,
 } as const;
+
+/** Whether a landing is the rare shiny one: fixed per landing (the same attempt never flips), about 1 in 10. */
+export function shinyLanding(key: string | number | null | undefined): boolean {
+  if (key === null || key === undefined) return false;
+  const text = String(key);
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i += 1) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h % SHELF_LANDING.shinyOneIn === 0;
+}
+
+/** When coin `index` of a completed row hops (the light bar reaches it). */
+export function rowHopDelay(index: number): number {
+  return SHELF_LANDING.shineAfterMs + 60 + Math.max(0, index) * SHELF_LANDING.rowHopStepMs;
+}
 
 /** When a neighbour `distance` slots away starts its jiggle (0 is the landing coin itself: none). */
 export function jiggleDelay(distance: number): number | null {

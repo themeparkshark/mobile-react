@@ -20,18 +20,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions, type StyleProp, type TextStyle } from 'react-native';
 import Animated, {
-  cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue,
 } from 'react-native-reanimated';
+import { withDelay, withSequence, withSpring, withTiming } from './momentTime';
 import { CountUpText } from '../../gamekit/fx/CountUpText';
 import { playHaptic, queueHaptic } from '../../gamekit/Haptics';
 import { playMoment } from '../../gamekit/audio/playMoment';
 import { useReduceMotionPreference } from '../../hooks/useReducedGameMotion';
 import { usePowerBudget } from '../../power';
-import { SparkleBurst } from '../../ui/GoldBurst';
 import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 import { DURATION, EASE, GOLD_FX, SPRING, momentParticles } from '../../ui/motionEasing';
 import { SLAM_SQUASH } from '../../ui/motion';
 import { BRAND } from '../../ui/tokens';
+import BurstCanvas from './BurstCanvas';
 import { RECAP_BUILD, recapStatAt, statStamps } from './recapBuildPlan';
 
 export interface RecapBuild {
@@ -260,7 +261,10 @@ export function RecapClosingStamp({ build, parkName }: { readonly build: RecapBu
         </View>
       </View>
     </RecapStamp>
-    <View style={styles.stampBurst}><SparkleBurst progress={burst} count={sparkles} radius={120} /></View>
+    {/* A gold ring and gold-and-white stars burst from behind the stamp as it lands. */}
+    <View pointerEvents="none" style={styles.stampBurst}>
+      <BurstCanvas progress={burst} count={sparkles} radius={130} ring={build.instant ? 0 : 60} starSize={12} x={0} y={0} />
+    </View>
   </View>;
 }
 
@@ -287,7 +291,7 @@ const styles = StyleSheet.create({
   statIconSlot: { width: 36, height: 34, alignItems: 'center', justifyContent: 'center' },
   flyCoin: { position: 'absolute', right: -2, top: 0 },
   polaroid: { position: 'absolute', right: 8, top: 8, width: 66, padding: 5, paddingBottom: 12, backgroundColor: BRAND.white,
-    borderRadius: 4, shadowColor: '#05346e', shadowOpacity: 0.3, shadowRadius: 5, shadowOffset: { width: 0, height: 3 } },
+    borderRadius: 4, borderBottomWidth: 3, borderRightWidth: 1, borderColor: 'rgba(5,52,110,0.25)' },
   photo: { height: 56, backgroundColor: BRAND.sky, alignItems: 'center', justifyContent: 'center' },
   coin: { width: 48, height: 48 },
   newTag: { position: 'absolute', bottom: -8, alignSelf: 'center', backgroundColor: BRAND.gold, borderRadius: 8,
@@ -295,7 +299,7 @@ const styles = StyleSheet.create({
   newText: { fontFamily: 'Shark', fontSize: 10, color: BRAND.navy },
   closing: { alignItems: 'center', marginTop: 8, marginBottom: 2 },
   stampRim: { borderRadius: 16, borderWidth: 3, borderColor: GOLD_FX.rays, padding: 2, transform: [{ rotate: '-3deg' }],
-    backgroundColor: BRAND.white, shadowColor: GOLD_FX.glow, shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
+    backgroundColor: BRAND.white },
   stampBody: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.gold, borderRadius: 12, borderWidth: 3,
     borderColor: BRAND.navy, paddingHorizontal: 14, paddingVertical: 6 },
   stampText: { fontFamily: 'Shark', fontSize: 21, color: BRAND.navy, flexShrink: 1 },

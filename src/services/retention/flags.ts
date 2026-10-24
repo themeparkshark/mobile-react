@@ -23,6 +23,21 @@ export function loadRetentionFlags(read: typeof getFeatureFlags = getFeatureFlag
   return pending;
 }
 
+/**
+ * A read that may still say "off" from before sign-in: the public flag read answers off for a player
+ * whose preview the server turns on only once it knows who is asking. Moments that show a retention hook
+ * (the park arrival's Daily 3, the recap's Tomorrow step) ask again once when the cache says off.
+ */
+export function loadRetentionFlagsFresh(read: typeof getFeatureFlags = getFeatureFlags): Promise<RetentionFlags | null> {
+  if (cached && !cached.dailyThree && !refreshed) {
+    refreshed = true;
+    cached = null;
+    pending = null;
+  }
+  return loadRetentionFlags(read);
+}
+let refreshed = false;
+
 /** The flags read this app run, or null before the first read finished. */
 export function retentionFlagsNow(): RetentionFlags | null {
   return cached;
@@ -43,4 +58,5 @@ export function streakOwner(flags: RetentionFlags | null): 'daily3' | 'chest' | 
 export function resetRetentionFlagsForTests(): void {
   cached = null;
   pending = null;
+  refreshed = false;
 }

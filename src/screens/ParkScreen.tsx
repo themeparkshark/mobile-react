@@ -13,7 +13,8 @@ import ParkTrophyModal from '../components/ParkTrophyModal';
 import ParkShelfArtwork from '../components/ParkShelfArtwork';
 import CoinShelfArrival from '../components/CoinShelfArrival';
 import { RowShine, ShelfJiggle, ShelfKick } from '../components/ShelfLandingFx';
-import { rowComplete } from '../components/shelfLanding';
+import { rowComplete, shinyLanding } from '../components/shelfLanding';
+import DevPerfHud from '../components/park/DevPerfHud';
 import useEarnedShelfArrival from '../hooks/useEarnedShelfArrival';
 import { isEarnedShelfArrival, resolveEarnedShelfSlot, type EarnedShelfArrival, type ShelfSection } from '../services/collection/earnedShelf';
 import TaskCoinModal from '../components/TaskCoinModal';
@@ -254,8 +255,14 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     let active = true;
     void (async () => {
       try {
+        // One quiet retry before the "could not update" banner: a single slow call under load must not
+        // cost a kid the coin landing they just earned.
+        const load = () => loadParkShelf(Number(park), Number(player));
         const { visitedPark, available, secret, completed, completedSecret, archived, completedArchived, limited } =
-          await loadParkShelf(Number(park), Number(player));
+          await load().catch(() => new Promise<void>(resolve => setTimeout(resolve, 1200)).then(() => {
+            if (!active) throw new Error('left');
+            return load();
+          }));
         if (!active) return;
         setCurrentPark(visitedPark);
         setTasks(available);
@@ -340,7 +347,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
             const hidden = arriving && landedKey !== requestKey && closedKey !== requestKey && !arrival.failed;
             const focused = focusSlot?.section === section && focusSlot.task.id === task.id;
             return <View key={task.id} style={{ paddingLeft: index === 0 ? 0 : 7 }}>
-              <ShelfJiggle landingKey={landingKey} distance={landingColumn >= 0 ? index - landingColumn : 0}>
+              <ShelfJiggle landingKey={landingKey} distance={landingColumn >= 0 ? index - landingColumn : 0}
+                rowWaveKey={shine} index={index}>
               {owned ? (
                 <View collapsable={false}
                   ref={arriving ? slotRef : focused ? focusSlotRef : undefined}
@@ -383,7 +391,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
           })}
         </View>
         {/* A full row gleams once, over its coins. */}
-        {shine && <RowShine landingKey={shine} width={width - 40} />}
+        {shine && <RowShine landingKey={shine} width={width - 40} slots={row.length} />}
       </View>
       </ShelfKick>
     </View>
@@ -668,6 +676,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
           {isFocused && arrival.target && arrivalSlot && earnedCoin && requestKey && closedKey !== requestKey && (
             <CoinShelfArrival key={requestKey} target={arrival.target} coinUrl={arrivalSlot.task.coin_url}
               rideName={arrivalSlot.task.name} firstCollection={earnedCoin.firstCollection}
+              shiny={(__DEV__ && (globalThis as { __tpsForceShiny?: boolean }).__tpsForceShiny === true) || shinyLanding(requestKey)}
               parkName={currentPark?.display_name ?? currentPark?.name}
               onLand={landArrival} onInspect={inspectArrival} onClose={closeArrival} />
           )}
@@ -683,6 +692,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                 <Text style={{ fontFamily: 'Knockout', color: '#DFF6FF', fontSize: 15 }}>Keep exploring this park</Text>
               </Pressable>
             </View>}
+          <DevPerfHud top={120} />
         </View>
       )}
     </Wrapper>

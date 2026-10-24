@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react';
 import { getDailyThree } from '../../api/endpoints/retention';
-import { loadRetentionFlags } from '../../services/retention/flags';
+import { loadRetentionFlagsFresh } from '../../services/retention/flags';
 import { tomorrowLine } from '../../services/retention/logic';
 
 export default function useRecapTomorrow(enabled: boolean): string | null {
@@ -14,7 +14,7 @@ export default function useRecapTomorrow(enabled: boolean): string | null {
   useEffect(() => {
     if (!enabled) { setLine(null); return undefined; }
     let active = true;
-    void loadRetentionFlags().then(flags => {
+    void loadRetentionFlagsFresh().then(flags => {
       if (!active || !flags?.dailyThree) return undefined;
       return getDailyThree(4000).then(state => { if (active && state.enabled) setLine(tomorrowLine(state)); });
     }).catch(() => undefined);
