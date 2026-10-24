@@ -25,7 +25,7 @@ const BOX = require('../../../assets/images/retention/mystery-box.png');
 const CHROME_KNOWN = 410;
 /** The rows area for this many small prize rows and hero cards (row heights plus gaps). */
 function rowsFor(small: number, big: number): number {
-  return small * 48 + big * 104 + 14;
+  return small * 51 + big * 108 + 24;
 }
 const FREEZE = require('../../../assets/images/retention/freeze.png');
 const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
