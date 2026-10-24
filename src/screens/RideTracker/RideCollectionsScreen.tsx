@@ -66,11 +66,7 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(({ collection, 
         )}
       </View>
 
-      {/* Rewards */}
-      <View style={styles.rewardsRow}>
-        <View style={styles.rewardItem}><GameIcon name="xp" size={20} /><Text style={styles.rewardText}>{collection.xp_reward} XP</Text></View>
-        <View style={styles.rewardItem}><GameIcon name="coins" size={20} /><Text style={styles.rewardText}>{collection.coin_reward} coins</Text></View>
-      </View>
+      {/* No coin or XP line: the server does not pay collection rewards yet, so the card never promises them. */}
     </Pressable>
   );
 });
@@ -134,7 +130,7 @@ export default function RideCollectionsScreen() {
               <CollectionCard key={c.id} collection={c} onPress={() => {
                 gameAlert(
                   c.name,
-                  `${c.description || 'Complete this collection to earn rewards!'}\n\nProgress: ${c.completed_items}/${c.total_items} rides`,
+                  `${c.description || 'Ride every ride in this set to finish it!'}\n\nProgress: ${c.completed_items}/${c.total_items} rides`,
                   undefined, { icon: serverIcon(c.icon, 'trophy') },
                 );
               }} />
@@ -229,9 +225,6 @@ const styles = StyleSheet.create({
   itemNameDone: { color: '#22c55e' },
   itemCheck: { color: '#22c55e', fontSize: 12, fontFamily: 'Knockout' },
   moreText: { color: '#94a3b8', fontSize: 11, fontFamily: 'Knockout', alignSelf: 'center' },
-  rewardsRow: { flexDirection: 'row', gap: 16, marginTop: 4 },
-  rewardItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  rewardText: { color: '#94a3b8', fontSize: 12, fontFamily: 'Knockout' },
   emptyContainer: { alignItems: 'center', paddingVertical: 60 },
   emptyEmoji: { fontSize: 60, fontFamily: 'Knockout' },
   emptyTitle: { 

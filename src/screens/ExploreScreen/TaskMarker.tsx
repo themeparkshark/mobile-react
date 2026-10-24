@@ -556,7 +556,7 @@ function TaskMarker({
             {[0, 1, 2].map(i => <SleepyZ key={i} i={i} seed={task.id} moving={!calm && withinBudget(aliveRank, alive.caps.sleepyRides)} />)}
           </View>}
           {down && <View style={styles.downChip}><GameIcon name="wrench" size={12} /><Text style={styles.downText}>DOWN</Text></View>}
-          {!down && restingUntil !== null && !isSelected && <View style={styles.restingSlot}><View style={styles.downChip}><Text style={styles.downText} numberOfLines={1}>{restingLabel(restingUntil).toUpperCase()}</Text></View></View>}
+          {!down && restingUntil !== null && !isSelected && <View style={[styles.restingSlot, near && styles.restingSlotNear]}><View style={styles.downChip}><Text style={styles.downText} numberOfLines={1}>{restingLabel(restingUntil).toUpperCase()}</Text></View></View>}
           <FoldBadge count={folded} style={styles.clusterBadge} />
         </Animated.View>
 
@@ -628,6 +628,8 @@ const styles = StyleSheet.create({
   downText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.white },
   // Wider than the island so "BACK 2:00 PM" never clips.
   restingSlot: { position: 'absolute', bottom: 2, left: -30, right: -30, alignItems: 'center' },
+  // Standing at the ride, the player's shark covers its base, so "BACK 2:00 PM" rides above the art.
+  restingSlotNear: { bottom: undefined, top: -4 },
   clusterBadge: { position: 'absolute', top: 16, left: -4, minWidth: 26, height: 22, borderRadius: 11, paddingHorizontal: 5,
     backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   rushBadge: { flexDirection: 'row', alignItems: 'center', gap: 3,

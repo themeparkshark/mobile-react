@@ -162,7 +162,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
     pages: [
       { key: 'code', hero: 'redeem_chest', headline: 'Redeem a code',
         points: [
-          { icon: 'edit', text: 'Type the code and tap Next.' },
+          { icon: 'edit', text: 'Type the code and tap Open the chest.' },
           { icon: 'gift', text: 'Get Coins, Tickets, Energy or a prize.' },
           { icon: 'timer', text: 'One use per player. Codes can expire.' },
         ] },

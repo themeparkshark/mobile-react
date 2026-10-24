@@ -37,7 +37,7 @@ export const OPENING_FACTS: readonly OpeningFact[] = [
     sourceUrl: 'https://disneyparksblog.com/wdw/peak-perfection-space-mountain-at-walt-disney-world-celebrates-50-years/' },
   { id: 'dl-space', keys: ['Space Mountain'], name: 'Disneyland’s Space Mountain', year: 1977, parkId: 8, category: 'Ride History', source: 'Disney Parks Blog',
     sourceUrl: 'https://disneyparksblog.com/wdw/peak-perfection-space-mountain-at-walt-disney-world-celebrates-50-years/' },
-  { id: 'ak-park', keys: ['Animal Kingdom'], name: 'Disney’s Animal Kingdom', year: 1998, parkId: 6, category: 'Park History', source: 'Disney Parks Blog',
+  { id: 'ak-park', keys: ['Animal Kingdom'], name: 'Disney’s Animal Kingdom', year: 1998, parkId: 5, category: 'Park History', source: 'Disney Parks Blog',
     sourceUrl: 'https://disneyparksblog.com/wdw/disney-world-facts-to-quiz-your-friends-on/' },
   { id: 'dca-park', keys: ['California Adventure'], name: 'Disney California Adventure', year: 2001, parkId: 13, category: 'Park History', source: 'Disney Parks Blog',
     sourceUrl: 'https://disneyparksblog.com/dlr/california-adventure-25th-anniversary-offerings/' },

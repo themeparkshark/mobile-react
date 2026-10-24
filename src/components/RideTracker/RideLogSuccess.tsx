@@ -12,6 +12,7 @@ import TopbarColumn from '../Topbar/TopbarColumn';
 import TopbarText from '../Topbar/TopbarText';
 import { SoundEffectContext, SoundEffectContextType } from '../../context/SoundEffectProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { rideLogWaitLine, type RideLogWaitReason } from '../../services/rideLogOutbox';
 
 const MILESTONES = [10, 25, 50, 100, 200, 500, 1000];
 const MILESTONE_MESSAGES: Record<number, string> = {
@@ -32,10 +33,14 @@ interface RideLogSuccessProps {
   newAchievements: Array<{ id: number; name: string; icon: string }>;
   onDone: () => void;
   onLogAnother?: () => void;
+  /** No signal: the ride is kept on the phone and sent later. */
+  queued?: boolean;
+  /** Why the kept ride waits: signal (default) or signing in again. */
+  queuedReason?: RideLogWaitReason;
 }
 
 const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
-  ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, onLogAnother,
+  ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, onLogAnother, queued = false, queuedReason = 'signal',
 }) => {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -123,8 +128,14 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
         <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
           <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
             style={styles.heroShark} contentFit="contain" />
-          <Text style={styles.successTitle}>Ride Logged!</Text>
-          {xpEarned > 0 ? (
+          <Text style={styles.successTitle}>{queued ? 'Ride Saved!' : 'Ride Logged!'}</Text>
+          {queued ? (
+            <View style={styles.queuedPill} accessible
+              accessibilityLabel={`Kept on your phone. ${rideLogWaitLine(queuedReason)}`}>
+              <Text style={styles.queuedTitle}>Kept on your phone</Text>
+              <Text style={styles.queuedText}>{rideLogWaitLine(queuedReason)}</Text>
+            </View>
+          ) : xpEarned > 0 ? (
             <Text style={styles.xpText}>+{xpEarned} XP</Text>
           ) : (
             <Text style={styles.journalText}>Saved to your ride journal</Text>
@@ -157,7 +168,7 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
         {/* Shareable Card */}
         {showCard && (
           <Animated.View style={[styles.cardContainer, { transform: [{ translateY: cardSlide }] }]}>
-            <ShareableRideCard ride={ride} rideCount={rideCount} />
+            <ShareableRideCard ride={ride} rideCount={rideCount} queued={queued} />
           </Animated.View>
         )}
 
@@ -179,7 +190,12 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   xpText: { color: '#7E5100', fontSize: 22, fontFamily: 'Shark', marginTop: 4 },
-  journalText: { color: '#315C7C', fontSize: 17, fontFamily: 'Knockout', marginTop: 5 },
+  journalText: { color: '#315C7C', fontSize: 17, fontFamily: 'Knockout', marginTop: 5, textAlign: 'center' },
+  // No signal: a soft cream pill under the title, centered so it reads at a glance.
+  queuedPill: { marginTop: 8, alignSelf: 'center', alignItems: 'center', maxWidth: 300, backgroundColor: '#FFF5D3',
+    borderRadius: 16, borderWidth: 2, borderColor: '#E3AE3E', paddingVertical: 8, paddingHorizontal: 16 },
+  queuedTitle: { color: '#103F75', fontSize: 17, fontFamily: 'Shark', textAlign: 'center' },
+  queuedText: { color: '#315C7C', fontSize: 15, fontFamily: 'Knockout', textAlign: 'center', marginTop: 2 },
   // Milestone
   milestoneCard: {
     backgroundColor: '#FFF5D3', borderRadius: 16, padding: 20, marginBottom: 20,

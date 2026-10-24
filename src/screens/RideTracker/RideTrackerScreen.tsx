@@ -15,7 +15,9 @@ import Topbar, { BackButton } from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { GameIcon } from '../../ui';
+import { clearLetGoRideLog, drainRideLogs, letGoRideLogs, onRideLogOutboxChange, pendingRideLogs, rideCountWords,
+  type LetGoRideLog, type QueuedRideLog } from '../../services/rideLogOutbox';
+import { GameIcon, showGameDialog } from '../../ui';
 
 // ─── Rider Levels (based on rides logged) ───
 const RIDER_LEVELS = [
@@ -161,8 +163,41 @@ export default function RideTrackerScreen() {
     }
   }, [preview]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); setRefreshing(false); }, [load]);
+  // Rides kept on the phone in a dead zone: show how many wait, send them, then reload.
+  const [waitingList, setWaitingList] = useState<QueuedRideLog[]>([]);
+  const waitingRides = waitingList.length;
+  // Kept rides that could not join (the server said no, or 30 days passed): shown, never silent.
+  const [letGoList, setLetGoList] = useState<LetGoRideLog[]>([]);
+  // "Not now" hides a row for this visit only; it comes back next time.
+  const [notNow, setNotNow] = useState<ReadonlySet<string>>(new Set());
+  const [showAllLetGo, setShowAllLetGo] = useState(false);
+  useFocusEffect(useCallback(() => () => { setNotNow(new Set()); setShowAllLetGo(false); }, []));
+  const shownLetGo = letGoList.filter(ride => !notNow.has(ride.id));
+  // Forgetting a ride for good always asks first, so one tap never erases a memory.
+  const forgetLetGo = useCallback(async (ride: LetGoRideLog) => {
+    // "Keep it" is the big yellow button; "Forget it" is the quiet one, so a fast tap keeps the ride.
+    const choice = await showGameDialog({
+      title: 'Forget this ride?', message: `${ride.ride_name} and its stars and note will be gone.`,
+      icon: 'ride', haptic: 'warning',
+      buttons: [{ text: 'Forget it', style: 'destructive', variant: 'ghost' }, { text: 'Keep it' }],
+    });
+    if (choice === 0) await clearLetGoRideLog(ride.id).catch(() => undefined);
+  }, []);
+  useEffect(() => onRideLogOutboxChange(() => {
+    void pendingRideLogs().then(setWaitingList);
+    void letGoRideLogs().then(setLetGoList);
+  }), []);
+  const sendWaiting = useCallback(async () => {
+    if (preview) return;
+    setWaitingList(await pendingRideLogs());
+    setLetGoList(await letGoRideLogs());
+    const sent = await drainRideLogs().catch(() => 0);
+    if (sent > 0) await load();
+  }, [preview, load]);
+  useFocusEffect(useCallback(() => { load(); void sendWaiting(); }, [load, sendWaiting]));
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true); await sendWaiting(); await load(); setRefreshing(false);
+  }, [load, sendWaiting]);
 
   const has = stats && stats.total_rides > 0;
   const lvl = stats ? getRiderLevel(stats.total_rides) : RIDER_LEVELS[0];
@@ -195,7 +230,12 @@ export default function RideTrackerScreen() {
               <Text style={s.heroEyebrow}>YOUR RIDE JOURNAL</Text>
               {has ? <CountUp to={stats.total_rides} style={s.heroNum} />
                 : <Text style={s.heroNum}>{loadUnavailable ? '-' : '0'}</Text>}
-              <Text style={s.heroLabel}>{loadUnavailable && !stats ? 'JOURNAL OFFLINE' : 'RIDES LOGGED'}</Text>
+              <Text style={s.heroLabel}>{loadUnavailable && !stats ? 'JOURNAL OFFLINE' : Number(stats?.total_rides) === 1 ? 'RIDE LOGGED' : 'RIDES LOGGED'}</Text>
+              {waitingRides > 0 && (
+                <View style={s.heroWaiting} accessibilityLabel={`${rideCountWords(waitingRides)} waiting on your phone`}>
+                  <Text style={s.heroWaitingText}>+{waitingRides} WAITING</Text>
+                </View>
+              )}
             </View>
             <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
               style={s.heroShark} contentFit="contain" accessibilityLabel="Theme Park Shark with a park ticket and coin" />
@@ -226,6 +266,70 @@ export default function RideTrackerScreen() {
               textAlign: 'center', marginBottom: 14 }}>
               Could not load your rides. Check your internet, then pull down to try again.
             </Text>
+          )}
+
+          {(showAllLetGo ? shownLetGo : shownLetGo.slice(0, 2)).map(ride => (
+            <View key={ride.id} style={s.waitingNote} accessible={false}>
+              <View style={s.waitingHead}>
+                <GameIcon name="ride" size={24} />
+                {/* Ride name on one line, then the status: the same two lines on every phone size. */}
+                <View style={{ flex: 1 }} accessible accessibilityRole="text" accessibilityLabel={`${ride.ride_name} did not save.`}>
+                  <Text style={s.waitingTitle} numberOfLines={1}>{ride.ride_name}</Text>
+                  <Text style={s.waitingText}>Did not save.</Text>
+                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Forget ${ride.ride_name}`} hitSlop={10}
+                  onPress={() => { void forgetLetGo(ride); }}
+                  style={({ pressed }) => [s.letGoClose, pressed && { opacity: 0.6 }]}>
+                  <GameIcon name="close" size={22} />
+                </Pressable>
+              </View>
+              <View style={s.letGoActions}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Not now. Keep ${ride.ride_name} for later`}
+                  onPress={() => setNotNow(prev => new Set(prev).add(ride.id))}
+                  style={({ pressed }) => [s.letGoQuiet, pressed && { opacity: 0.7 }]}>
+                  <Text style={s.letGoQuietText}>Not now</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Log ${ride.ride_name} again`}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    // push: always a fresh Ride Journal with this memory, never an old one left in the stack.
+                    nav.push('RideLog', {
+                      rideId: ride.payload.ride_id, rideName: ride.ride_name, parkId: ride.park_id ?? undefined,
+                      autoDetected: true, rodeAt: ride.payload.rode_at, again: { id: ride.id, payload: ride.payload },
+                    });
+                  }}
+                  style={({ pressed }) => [s.letGoButton, pressed && { transform: [{ scale: reducedMotion ? 1 : 0.97 }] }]}>
+                  <Text style={s.letGoButtonText}>Log it again</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+          {!showAllLetGo && shownLetGo.length > 2 && (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Show ${shownLetGo.length - 2} more rides that did not save`}
+              onPress={() => setShowAllLetGo(true)}
+              style={({ pressed }) => [s.letGoMore, pressed && { opacity: 0.7 }]}>
+              <Text style={s.letGoMoreText}>+{shownLetGo.length - 2} more</Text>
+            </Pressable>
+          )}
+
+          {waitingRides > 0 && (
+            <View style={s.waitingNote} accessible accessibilityLiveRegion="polite"
+              accessibilityLabel={`${rideCountWords(waitingRides)} saved on your phone: ${waitingList.map(r => r.ride_name).join(', ')}. ${waitingRides === 1 ? 'It joins' : 'They join'} your journal when you have signal.`}>
+              <View style={s.waitingHead}>
+                <GameIcon name="retry" size={24} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.waitingTitle}>{rideCountWords(waitingRides)} saved on your phone</Text>
+                  <Text style={s.waitingText}>{waitingRides === 1 ? 'It joins' : 'They join'} your journal when you have signal.</Text>
+                </View>
+              </View>
+              {waitingList.slice(0, 3).map(ride => (
+                <View key={ride.payload.source_detection_id} style={s.waitingRow}>
+                  <Text style={s.waitingRide} numberOfLines={1}>{ride.ride_name}</Text>
+                  <View style={s.waitingTag}><Text style={s.waitingTagText}>SAVING</Text></View>
+                </View>
+              ))}
+              {waitingRides > 3 && <Text style={s.waitingText}>and {rideCountWords(waitingRides - 3).toLowerCase()} more</Text>}
+            </View>
           )}
 
           {/* ── Log a Ride ── */}
@@ -346,7 +450,7 @@ export default function RideTrackerScreen() {
           )}
 
           {/* ── Empty State ── */}
-          {!has && !loadUnavailable && (
+          {!has && !loadUnavailable && waitingRides === 0 && (
             <FadeIn delay={200}>
               <View style={s.card}>
                 <View style={{ alignItems: 'center', paddingVertical: 24 }}>
@@ -458,6 +562,32 @@ const s = StyleSheet.create({
   menuRowBadge: { borderRadius: 10, minWidth: 22, height: 22, paddingHorizontal: 7,
     backgroundColor: '#0877CA', alignItems: 'center', justifyContent: 'center' },
   menuRowBadgeText: { color: '#fff', fontSize: 11, fontFamily: 'Knockout' },
+
+  waitingNote: {
+    gap: 8, backgroundColor: '#FFF5D3', borderRadius: 14,
+    borderWidth: 2, borderColor: '#E3AE3E', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 14,
+  },
+  waitingHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  waitingTitle: { fontSize: 17, fontFamily: 'Shark', color: '#103F75' },
+  waitingText: { fontSize: 15, fontFamily: 'Knockout', color: '#315C7C' },
+  waitingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 10,
+    paddingVertical: 7, paddingHorizontal: 10, borderWidth: 1.5, borderColor: '#F0D58C' },
+  waitingRide: { flex: 1, fontSize: 15, fontFamily: 'Knockout', color: '#103F75' },
+  waitingTag: { backgroundColor: '#FFCF3B', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1.5, borderColor: '#103F75' },
+  waitingTagText: { fontSize: 11, fontFamily: 'Shark', color: '#103F75' },
+  letGoActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 14 },
+  letGoQuiet: { minHeight: 44, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 12, borderWidth: 2,
+    borderColor: '#315C7C', backgroundColor: '#FFFFFF', justifyContent: 'center' },
+  letGoQuietText: { fontSize: 15, fontFamily: 'Knockout', color: '#315C7C' },
+  letGoClose: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
+  letGoMore: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: 16, marginTop: -6, marginBottom: 10 },
+  letGoMoreText: { fontSize: 16, fontFamily: 'Shark', color: '#103F75' },
+  letGoButton: { backgroundColor: '#FFCF3B', borderRadius: 12, borderWidth: 2, borderColor: '#103F75',
+    paddingVertical: 8, paddingHorizontal: 16, minHeight: 44, justifyContent: 'center' },
+  letGoButtonText: { fontSize: 16, fontFamily: 'Shark', color: '#103F75' },
+  heroWaiting: { alignSelf: 'flex-start', marginTop: 6, backgroundColor: '#FFCF3B', borderRadius: 10, borderWidth: 2,
+    borderColor: '#103F75', paddingHorizontal: 8, paddingVertical: 2 },
+  heroWaitingText: { fontSize: 13, fontFamily: 'Shark', color: '#103F75' },
 
   // Cards
   card: {
