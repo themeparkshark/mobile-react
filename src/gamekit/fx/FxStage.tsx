@@ -125,6 +125,8 @@ export interface FxState {
   flashCap: number;
   /** Stage width: fly-ups are clamped to stay fully on screen. */
   viewW: number;
+  /** Fly-ups never rise above this line (a game's HUD band ends here); 0 for none. */
+  textMinY: number;
 }
 
 export function createFxState(cap: number, layerBudget?: number[]): FxState {
@@ -150,6 +152,7 @@ export function createFxState(cap: number, layerBudget?: number[]): FxState {
     reduced: false,
     flashCap: 0.6,
     viewW: 0,
+    textMinY: 0,
   };
 }
 
@@ -187,7 +190,10 @@ export function fxFlyUpUI(
   // Keep the whole label on screen (edge holes, wide tallies).
   const half = (s.txtW[i] * scale * 1.15) / 2 + 8;
   s.txtX[i] = s.viewW > 0 ? Math.max(half, Math.min(s.viewW - half, x)) : x;
-  s.txtY[i] = y;
+  // Never over the HUD: the label (and its rise) stays below textMinY (fly-to-score labels rise 0 and
+  // pop at 1.3, so they keep room for the overshoot).
+  const halfH = FLY_FONT_PX * scale * 0.75;
+  s.txtY[i] = s.textMinY > 0 ? Math.max(s.textMinY + halfH + (s.reduced ? rise * 0.5 : rise), y) : y;
   s.txtT[i] = s.t;
   s.txtDur[i] = durMs;
   s.txtScale[i] = scale;
@@ -291,6 +297,8 @@ export interface FxStageHandle {
   vignette: (opts: { color?: string; peak?: number; inMs?: number; holdMs?: number; outMs?: number }) => void;
   flyUp: (text: string, x: number, y: number, opts?: FlyUpOptions) => void;
   clear: () => void;
+  /** Drop every live fly-up (a finish stamp clears the stage: one callout at a time). */
+  clearText: () => void;
   state: SharedValue<FxState>;
 }
 
@@ -311,6 +319,8 @@ export interface FxStageProps {
   flashCap?: number;
   /** Called with the number of magnetized coins that just arrived. */
   onArrive?: (count: number) => void;
+  /** Fly-ups stay below this y (pt): the bottom of the game's HUD band. */
+  textMinY?: number;
   /** Called when fly-to-score labels land (digit-roll the header score, tick). */
   onFlyUpArrive?: (count: number) => void;
   style?: StyleProp<ViewStyle>;
@@ -319,7 +329,7 @@ export interface FxStageProps {
 const SIZE_SCALE = { sm: 20 / FLY_FONT_PX, md: 26 / FLY_FONT_PX, lg: 30 / FLY_FONT_PX, xl: 40 / FLY_FONT_PX };
 
 export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(function FxStage(
-  { width, height, capacity = 200, layerBudget, timeScale, paused, atlasImage, reducedMotion = false, flashCap = 0.6, onArrive, onFlyUpArrive, style },
+  { width, height, capacity = 200, layerBudget, timeScale, paused, atlasImage, reducedMotion = false, flashCap = 0.6, onArrive, onFlyUpArrive, style, textMinY = 0 },
   ref,
 ) {
   const state = useSharedValue<FxState>(createFxState(capacity, layerBudget));
@@ -329,14 +339,15 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
   const vignette = useMemo(() => Shaders.vignette(), []);
 
   useEffect(() => {
-    runOnUI((reduced: boolean, cap: number, w: number) => {
+    runOnUI((reduced: boolean, cap: number, w: number, minY: number) => {
       'worklet';
       state.value.reduced = reduced;
       state.value.pool.twosOn = !reduced;
       state.value.flashCap = cap;
       state.value.viewW = w;
-    })(reducedMotion, flashCap, width);
-  }, [reducedMotion, flashCap, width, state]);
+      state.value.textMinY = minY;
+    })(reducedMotion, flashCap, width, textMinY);
+  }, [reducedMotion, flashCap, width, state, textMinY]);
 
   const notifyArrive = useMemo(() => (n: number) => onArrive?.(n), [onArrive]);
   const notifyFly = useMemo(() => (n: number) => onFlyUpArrive?.(n), [onFlyUpArrive]);
@@ -515,6 +526,11 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
       clear: () => runOnUI(() => {
         'worklet';
         clearParticles(state.value.pool);
+      })(),
+      clearText: () => runOnUI(() => {
+        'worklet';
+        const s = state.value;
+        for (let k = 0; k < TEXT_SLOTS; k++) s.txtAlive[k] = 0;
       })(),
     };
   }, [state, font]);

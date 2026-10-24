@@ -9,17 +9,24 @@
  * runs on the UI thread, frame-steps exactly in a clip, and the shell owns the
  * timing (sound, haptics and the frame play opens).
  *
+ * GO is the money frame (round 3): it pops to GO_PEAK over a gold ray fan
+ * (the house GoldBurst, 1.3 screen widths), holds one beat at full size with
+ * a capped white flash, then bursts: the fan blooms and the sparkles fly out
+ * toward the play field. A soft light sits behind each number instead of a
+ * dark wash, so the start stays bright.
+ *
  * Reduced motion: numbers fade in and out with the same timings, no travel,
- * no ring, no sparkles.
+ * no ring, no sparkles, no fan. The flash is zero with Dim Flashing Lights.
  */
 
 import React, { useMemo } from 'react';
-import { StyleSheet } from 'react-native';
-import { BlurMask, Canvas, Circle, Group, Path, RoundedRect, Skia, Text as SkText, type SkFont } from '@shopify/react-native-skia';
+import { StyleSheet, View } from 'react-native';
+import { BlurMask, Canvas, Circle, Group, Path, RadialGradient, RoundedRect, Skia, Text as SkText, vec, type SkFont } from '@shopify/react-native-skia';
 import { useDisplayFont } from './displayFont';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { CONFETTI_COLORS, COUNT_STEPS, PARTICLE_MAX_CONFETTI, RARE_GO_SPARKLES, countPose, goConfetti, goSparkle, type CountStep } from '../core/gameMoments';
 import { GOLD_FX } from '../../ui/motion';
+import { GoldBurst } from '../../ui/GoldBurst';
 
 const NUM_PX = 150;
 const GO_PX = 136;
@@ -40,6 +47,8 @@ export interface CountdownStageProps {
   rare?: boolean;
   /** Confetti pieces on a rare GO after the power budget. */
   confetti?: number;
+  /** The held-beat flash peak (flashPeak: 0 with Dim Flashing Lights or Reduce Motion). */
+  flash?: number;
 }
 
 /** A 4-point cartoon sparkle centred on 0,0 with radius 1 (scaled per sparkle). */
@@ -56,7 +65,7 @@ function sparklePath() {
   return p;
 }
 
-export const CountdownStage = React.memo(function CountdownStage({ clock, width, height, centerY, reduced, calm, sparkles = 8, rare = false, confetti = 0 }: CountdownStageProps) {
+export const CountdownStage = React.memo(function CountdownStage({ clock, width, height, centerY, reduced, calm, sparkles = 8, rare = false, confetti = 0, flash = 0 }: CountdownStageProps) {
   const numFont = useDisplayFont(NUM_PX);
   const goFont = useDisplayFont(GO_PX);
   const pose = useDerivedValue(() => countPose(clock.value, reduced, calm));
@@ -66,11 +75,32 @@ export const CountdownStage = React.memo(function CountdownStage({ clock, width,
   const nc = rare && !reduced ? Math.max(0, Math.min(PARTICLE_MAX_CONFETTI, Math.round(confetti))) : 0;
   const rareRingR = useDerivedValue(() => (pose.value.index === 3 ? GO_PX * 0.55 * (0.4 + 2.4 * Math.min(1, pose.value.sparkle * 1.4)) : 0));
   const rareRingA = useDerivedValue(() => (pose.value.index === 3 ? 0.8 * (1 - Math.min(1, pose.value.sparkle * 1.4)) : 0));
+  // A soft light behind each number (the scrim is a pale tint, never a dark wash).
+  const lightA = useDerivedValue(() => (pose.value.index >= 0 && pose.value.index < 3 ? 0.6 * pose.value.alpha : 0));
+  // GO's gold fan and its burst swell, on the UI thread from the same clock.
+  const gold = useDerivedValue(() => (pose.value.index === 3 ? pose.value.gold : 0));
+  const bloom = useDerivedValue(() => (pose.value.index === 3 ? pose.value.bloom : 0));
+  const flashA = useDerivedValue(() => (pose.value.index === 3 ? flash * pose.value.flash : 0));
+  const fan = Math.round(width * 1.3);
   return (
+    <View style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
+    {reduced ? null : (
+      <View pointerEvents="none" style={{ position: 'absolute', left: cx - fan / 2, top: centerY - fan / 2, width: fan, height: fan }}>
+        <GoldBurst size={fan} amount={gold as never} bloom={bloom as never} spin={false} reduced={reduced} />
+      </View>
+    )}
     <Canvas style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
+      <Circle cx={cx} cy={centerY} r={NUM_PX * 1.15} opacity={lightA}>
+        <RadialGradient c={vec(cx, centerY)} r={NUM_PX * 1.15} colors={['rgba(255,255,255,0.85)', 'rgba(220,242,255,0.35)', 'rgba(220,242,255,0)']} positions={[0, 0.55, 1]} />
+      </Circle>
+      {flash > 0 ? (
+        <Circle cx={cx} cy={centerY} r={GO_PX * 1.1} color="#ffffff" opacity={flashA}>
+          <BlurMask blur={34} style="normal" />
+        </Circle>
+      ) : null}
       {COUNT_STEPS.map((step, i) => (
         <CountGlyph key={step.label} step={step} index={i} font={i === 3 ? goFont : numFont} px={i === 3 ? GO_PX : NUM_PX}
-          pose={pose} cx={cx} cy={centerY} />
+          pose={pose} cx={cx} cy={centerY} glow={flash > 0} />
       ))}
       {rare && !reduced ? <Circle cx={cx} cy={centerY} r={rareRingR} color={GOLD_FX.rays} style="stroke" strokeWidth={6} opacity={rareRingA} /> : null}
       {Array.from({ length: nc }, (_, k) => (
@@ -80,12 +110,15 @@ export const CountdownStage = React.memo(function CountdownStage({ clock, width,
         <GoSparkle key={k} k={k} n={n} pose={pose} cx={cx} cy={centerY} star={star} />
       ))}
     </Canvas>
+    </View>
   );
 });
 
-function CountGlyph({ step, index, font, px, pose, cx, cy }: {
+function CountGlyph({ step, index, font, px, pose, cx, cy, glow }: {
   step: CountStep; index: number; font: SkFont | null; px: number;
   pose: SharedValue<ReturnType<typeof countPose>>; cx: number; cy: number;
+  /** The white-hot blurred core behind GO (off with Dim Flashing Lights or Reduce Motion). */
+  glow: boolean;
 }) {
   const w = useMemo(() => {
     if (!font) return px * 0.6 * step.label.length;
@@ -110,7 +143,7 @@ function CountGlyph({ step, index, font, px, pose, cx, cy }: {
   return (
     <Group>
       <Circle cx={cx} cy={cy} r={ringR} color={step.ring} style="stroke" strokeWidth={10} opacity={ringOpacity} />
-      {isGo ? (
+      {isGo && glow ? (
         <Circle cx={cx} cy={cy} r={px * 0.62} color={GOLD_FX.core} opacity={coreOpacity}>
           <BlurMask blur={28} style="normal" />
         </Circle>

@@ -68,8 +68,16 @@ export function springAt(ms: number, cfg: { readonly damping: number; readonly s
 export const COUNT_STEP_MS = 700;
 /** GO lands, play input opens on this frame. */
 export const GO_AT_MS = 2100;
-/** The GO tail (sparkles, fade) is gone. */
-export const COUNT_END_MS = 2600;
+/** The GO tail (held beat, burst, sparkles, fade) is gone. */
+export const COUNT_END_MS = 2700;
+/** GO lands at full size this long after GO_AT_MS (ease-out pop), then holds one beat. */
+export const GO_LAND_MS = 110;
+/** The held beat at full size (the hit-stop of the start), then the burst. */
+export const GO_HOLD_MS = 140;
+/** GO's peak scale (the money frame), inside the prize overshoot range 1.18 to 1.35. */
+export const GO_PEAK = 1.3;
+/** GO starts leaving here (ms after GO_AT_MS); the exit is faster than the entrance read. */
+const GO_EXIT_FROM = 480;
 /** A number starts leaving here (ms after it lands) and is gone at COUNT_STEP_MS. */
 const EXIT_FROM = 560;
 
@@ -150,9 +158,15 @@ export interface CountPose {
   readonly scrim: number;
   /** A hand-drawn wobble (radians): each number swings in tilted and rocks once as it lands. */
   readonly rot: number;
+  /** GO's gold ray fan behind it (GoldBurst amount, 0..1). */
+  readonly gold: number;
+  /** The swell on GO's burst frame (GoldBurst bloom, 0 to 1 to 0). */
+  readonly bloom: number;
+  /** The white flash on GO's held beat (0..1, scaled by flashPeak by the drawer). */
+  readonly flash: number;
 }
 
-const NONE: CountPose = { index: -1, scale: 1, sx: 1, sy: 1, alpha: 0, ringScale: 1, ringAlpha: 0, sparkle: 0, kick: 0, scrim: 0, rot: 0 };
+const NONE: CountPose = { index: -1, scale: 1, sx: 1, sy: 1, alpha: 0, ringScale: 1, ringAlpha: 0, sparkle: 0, kick: 0, scrim: 0, rot: 0, gold: 0, bloom: 0, flash: 0 };
 /** How far a number tilts as it swings in (radians, about 7 degrees); 3 and 1 lean left, 2 and GO right. */
 export const COUNT_TILT = 0.12;
 
@@ -174,7 +188,7 @@ export function countPose(t: number, reduced: boolean, calm: boolean): CountPose
   if (reduced) {
     const life = index === 3 ? COUNT_END_MS - GO_AT_MS : COUNT_STEP_MS;
     const a = Math.min(clamp01(local / DURATION.quick), clamp01((life - local) / DURATION.quick));
-    return { index, scale: 1, sx: 1, sy: 1, alpha: a, ringScale: 1, ringAlpha: 0, sparkle: 0, kick: 0, scrim, rot: 0 };
+    return { index, scale: 1, sx: 1, sy: 1, alpha: a, ringScale: 1, ringAlpha: 0, sparkle: 0, kick: 0, scrim, rot: 0, gold: 0, bloom: 0, flash: 0 };
   }
   const dir = index % 2 === 0 ? -1 : 1;
   if (index < 3) {
@@ -205,31 +219,52 @@ export function countPose(t: number, reduced: boolean, calm: boolean): CountPose
     const rot = local < DURATION.slam
       ? dir * COUNT_TILT * (1 - easeInCubic(local / DURATION.slam) * 0.6)
       : springAt(local - DURATION.slam, SPRING.pop, dir * COUNT_TILT * 0.4, 0);
-    return { index, scale, sx, sy, alpha, ringScale, ringAlpha, sparkle: 0, kick: 0, scrim, rot };
+    return { index, scale, sx, sy, alpha, ringScale, ringAlpha, sparkle: 0, kick: 0, scrim, rot, gold: 0, bloom: 0, flash: 0 };
   }
-  // GO.
-  const exitFrom = COUNT_END_MS - GO_AT_MS - 150;
-  let scale = springAt(local, SPRING.pop, 0, 0.95);
-  let alpha = clamp01(local / 60);
-  if (local >= exitFrom) {
-    const p = easeInCubic((local - exitFrom) / 150);
-    scale = scale + 0.25 * p;
+  // GO, the money frame, in four beats:
+  //   1 pop: 0.5 to GO_PEAK (1.3) in GO_LAND_MS on an ease-out, the gold fan gathering behind it;
+  //   2 held beat: GO_HOLD_MS at full size with the landing squash, the flash and the screen kick;
+  //   3 burst: the fan blooms, sparkles fly out toward the play field, GO springs to 1.0 (SPRING.pop);
+  //   4 exit: up and out in 120 ms (faster than the entrance read), gone by COUNT_END_MS.
+  const holdEnd = GO_LAND_MS + GO_HOLD_MS;
+  let scale: number;
+  let sx = 1;
+  let sy = 1;
+  if (local < GO_LAND_MS) scale = 0.5 + (GO_PEAK - 0.5) * easeOutCubic(local / GO_LAND_MS);
+  else if (local < holdEnd) {
+    scale = GO_PEAK;
+    const q = local - GO_LAND_MS;
+    const k = q < 50 ? 1 : 1 - easeOutCubic((q - 50) / 80);
+    sx = 1 + SLAM_SQUASH * k;
+    sy = 1 - SLAM_SQUASH * k;
+  } else scale = springAt(local - holdEnd, SPRING.pop, GO_PEAK, 1);
+  let alpha = clamp01(local / 50);
+  let gold = local < GO_LAND_MS ? 0.3 * (local / GO_LAND_MS) : local < holdEnd ? 0.3 + 0.7 * easeOutCubic((local - GO_LAND_MS) / GO_HOLD_MS) : 1;
+  if (local >= GO_EXIT_FROM) {
+    const p = easeInCubic((local - GO_EXIT_FROM) / (COUNT_END_MS - GO_AT_MS - GO_EXIT_FROM));
+    scale = scale + 0.2 * p;
     alpha = 1 - p;
+    gold = gold * (1 - p);
   }
-  const sparkle = clamp01(local / 500);
-  const kp = local / KICK.ms;
-  const kick = calm || kp >= 1 ? 0 : KICK.maxPt * Math.sin(Math.PI * clamp01(kp)) * (1 - clamp01(kp) * 0.5);
-  const rp = clamp01(local / 420);
+  const bp = (local - holdEnd) / 260;
+  const bloom = bp <= 0 || bp >= 1 ? 0 : Math.sin(Math.PI * bp);
+  const fp = (local - GO_LAND_MS) / GO_HOLD_MS;
+  const flash = fp < 0 || fp >= 1 ? 0 : 1 - easeOutCubic(fp);
+  const sparkle = clamp01((local - holdEnd) / (COUNT_END_MS - GO_AT_MS - holdEnd));
+  const kp = (local - GO_LAND_MS) / KICK.ms;
+  const kick = calm || kp < 0 || kp >= 1 ? 0 : KICK.maxPt * Math.sin(Math.PI * clamp01(kp)) * (1 - clamp01(kp) * 0.5);
+  const rp = clamp01((local - GO_LAND_MS) / 420);
   const rot = springAt(local, SPRING.pop, dir * COUNT_TILT, 0);
-  return { index, scale, sx: 1, sy: 1, alpha, ringScale: 0.6 + 1.6 * easeOutCubic(rp), ringAlpha: 0.9 * (1 - rp), sparkle, kick, scrim, rot };
+  return { index, scale, sx, sy, alpha, ringScale: 0.6 + 1.6 * easeOutCubic(rp), ringAlpha: local < GO_LAND_MS ? 0 : 0.9 * (1 - rp), sparkle, kick, scrim, rot, gold, bloom, flash };
 }
 
 /** Where sparkle k of n sits at progress p of GO's burst (offset from the GO centre, pt) and its opacity. */
 export function goSparkle(k: number, n: number, p: number): { x: number; y: number; alpha: number; scale: number } {
   'worklet';
-  const ang = (k / n) * Math.PI * 2 - Math.PI / 2 + (k % 2 ? 0.2 : 0);
-  const r = 46 + 120 * easeOutCubic(p) * (k % 2 ? 0.8 : 1);
-  const fall = 26 * p * p;
+  // A wide fan opening downward, toward the play field (234 degrees centred on straight down).
+  const ang = Math.PI / 2 + ((n > 1 ? k / (n - 1) : 0.5) - 0.5) * Math.PI * 1.3 + (k % 2 ? 0.12 : 0);
+  const r = 56 + 190 * easeOutCubic(p) * (k % 2 ? 0.78 : 1);
+  const fall = 40 * p * p;
   return {
     x: Math.cos(ang) * r,
     y: Math.sin(ang) * r + fall,
@@ -356,6 +391,65 @@ export function finalStampPose(t: number, isTime: boolean, isLast: boolean, redu
   return { scale, sx, sy, rot, alpha, ring };
 }
 
+// ---------------------------------------------------------------------------
+// The finish beat (FINISH!, TIME!): the climax of the last-5 drumroll.
+
+/** The whole finish beat; the label holds until 1100 then fades by 1400. */
+export const FINISH_BEAT_MS = 1500;
+/** Coin sparkles per finish burst (motion PARTICLES.sparkles cap). */
+export const FINISH_SPARKLES_MAX = 12;
+
+export interface FinishPose extends FinalStampPose {
+  /** Gold shockwave ring (pt) and its opacity. */
+  readonly ringR: number;
+  readonly ringA: number;
+  /** A thin white ring just behind it. */
+  readonly ring2R: number;
+  readonly ring2A: number;
+  /** Landing flash 0..1 (scaled by flashPeak). */
+  readonly flash: number;
+}
+
+/**
+ * The finish beat at `t` ms: the label slams from 1.8 (finalStampPose TIME!),
+ * lands at DURATION.slam with the squash; on that frame the gold ring rolls
+ * out 40 to 210 pt over 380 ms and fades, a white ring follows 60 ms later,
+ * and the flash peaks then fades over 160 ms. Reduced: the label fades, no rings, no flash.
+ */
+export function finishPose(t: number, reduced: boolean): FinishPose {
+  'worklet';
+  const base = finalStampPose(t, true, false, reduced);
+  if (t < 0 || reduced) return { ...base, ringR: 0, ringA: 0, ring2R: 0, ring2A: 0, flash: 0 };
+  const land = DURATION.slam;
+  const p1 = clamp01((t - land) / 380);
+  const p2 = clamp01((t - land - 60) / 420);
+  const fp = (t - land) / 160;
+  return {
+    ...base,
+    ringR: t < land ? 0 : 40 + 170 * easeOutCubic(p1),
+    ringA: t < land ? 0 : 0.9 * (1 - p1),
+    ring2R: t < land + 60 ? 0 : 30 + 150 * easeOutCubic(p2),
+    ring2A: t < land + 60 ? 0 : 0.7 * (1 - p2),
+    flash: fp < 0 || fp >= 1 ? 0 : 1 - easeOutCubic(fp),
+  };
+}
+
+/** Coin sparkle k of n at `t` ms of the finish beat: out in a full ring from the landing, gravity, spin, fade by 900 ms after. */
+export function finishSparkle(k: number, n: number, t: number): { x: number; y: number; alpha: number; scale: number; rot: number } {
+  'worklet';
+  const p = clamp01((t - DURATION.slam) / 820);
+  if (t < DURATION.slam) return { x: 0, y: 0, alpha: 0, scale: 0, rot: 0 };
+  const ang = (k / Math.max(1, n)) * Math.PI * 2 - Math.PI / 2 + (k % 2 ? 0.26 : 0);
+  const r = 60 + 150 * easeOutCubic(p) * (k % 2 ? 0.72 : 1);
+  return {
+    x: Math.cos(ang) * r,
+    y: Math.sin(ang) * r + 90 * p * p,
+    alpha: p < 0.08 ? p / 0.08 : 1 - clamp01((p - 0.4) / 0.6),
+    scale: 0.6 + 0.7 * (1 - p),
+    rot: p * 3 + k,
+  };
+}
+
 /** Final-seconds colour: white turns gold (never red). */
 export const FINAL_COLOR = { calm: '#ffffff', hot: GOLD_FX.rays, edge: GOLD_FX.glow } as const;
 
@@ -401,6 +495,24 @@ export function comboTierStyle(multiplier: number): ComboTierStyle {
 export function comboTierRank(multiplier: number): number {
   'worklet';
   return multiplier >= 5 ? 3 : multiplier >= 3 ? 2 : multiplier >= 2 ? 1 : 0;
+}
+
+/** Fly-up sizes in order (a combo tier steps the size up). */
+const FLY_SIZES = ['sm', 'md', 'lg', 'xl'] as const;
+export type FlySize = (typeof FLY_SIZES)[number];
+/** Score fly-up colour by combo tier: x1 white, x2 sky, x3 gold, x5 white-hot gold (never red). */
+export const TIER_TEXT = ['#ffffff', '#7fd6ff', '#ffcf3b', '#fff3b0'] as const;
+/** The fly-up look of a hit: the grade sets the base size; x3 steps it up one, x5 two, and the colour climbs from x2. */
+export function tierFlyLook(base: FlySize, rank: number): { flySize: FlySize; flyColor: string | undefined } {
+  const r = Math.max(0, Math.min(3, rank));
+  const i = Math.min(FLY_SIZES.length - 1, FLY_SIZES.indexOf(base) + (r >= 2 ? 1 : 0) + (r >= 3 ? 1 : 0));
+  return { flySize: FLY_SIZES[i], flyColor: r > 0 ? TIER_TEXT[r] : undefined };
+}
+
+/** The chase bead's offset from the ghost on a track of half-width `half` for a pace delta (+ is ahead), never past the ends. */
+export function chaseOffset(pace: number, half: number): number {
+  'worklet';
+  return Math.tanh(pace / 700) * Math.max(0, half);
 }
 
 /** The stamp a badge lands with: from 1.8 to its tier size. */

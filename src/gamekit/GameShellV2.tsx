@@ -82,7 +82,8 @@ import { playGameHaptic, playGameMoment } from './audio/gameMomentSound';
 import { CountdownStage } from './fx/CountdownStage';
 import { FinalSeconds } from './fx/FinalSeconds';
 import { COUNT_END_MS, GO_AT_MS, GO_SPARKLES, RARE_GO_SPARKLES, STAGE_READY_MAX_MS, countPose, countSteps, finalSecondsBeat, isRareGo, noteCountStart } from './core/gameMoments';
-import { AMBIENT, DURATION, momentParticles } from '../ui/motion';
+import { AMBIENT, DURATION, flashPeak, momentParticles } from '../ui/motion';
+import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 import { EASE } from '../ui/motionEasing';
 import { usePowerBudget } from '../power';
 
@@ -924,7 +925,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             <CountdownStage clock={cdClock} width={SCREEN_W} height={SCREEN_H} centerY={SCREEN_H * countdownY}
               reduced={reducedMotion} calm={calmMotion} rare={rareGo}
               sparkles={momentParticles(rareGo ? RARE_GO_SPARKLES : GO_SPARKLES, budget, reducedMotion)}
-              confetti={rareGo ? momentParticles(24, budget, reducedMotion) : 0} />
+              confetti={rareGo ? momentParticles(24, budget, reducedMotion) : 0}
+              flash={flashPeak(isDimFlashingLightsEnabled(), reducedMotion)} />
           ) : null}
           {phase === 'countdown' ? (
             <Pressable
@@ -1151,7 +1153,8 @@ const styles = StyleSheet.create({
   },
   // Inside the pill, never over the board (a Whack ring sat under the old bottom hint).
   skipHint: { color: '#0768b9', fontSize: 12, letterSpacing: 1, fontFamily: 'Knockout', marginTop: 2, opacity: 0.8 },
-  cdScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,56,128,0.38)' },
+  // A pale sky tint (round 3: the 38% navy wash dimmed the board); the light behind each number does the focus.
+  cdScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(36,140,224,0.2)' },
   cdTouch: { ...StyleSheet.absoluteFillObject },
   walkChip: { position: 'absolute', left: 12, bottom: 34, width: 36, height: 36, borderRadius: 18, backgroundColor: '#fff8e4',
     borderWidth: 2.5, borderColor: '#05346e', alignItems: 'center', justifyContent: 'center' },

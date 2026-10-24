@@ -12,12 +12,12 @@ const gm = loadTs('src/gamekit/core/gameMoments.ts');
 const plain = v => JSON.parse(JSON.stringify(v));
 const motion = loadTs('src/ui/motion.ts');
 
-test('3, 2, 1 land at 0, 700, 1400 ms; GO at 2100 opens play; the tail is gone by 2600', () => {
+test('3, 2, 1 land at 0, 700, 1400 ms; GO at 2100 opens play; the tail is gone by 2700', () => {
   assert.deepEqual(plain(gm.COUNT_STEPS.map(s => s.at)), [0, 700, 1400, 2100]);
   assert.equal(gm.GO_AT_MS, 2100);
-  assert.equal(gm.COUNT_END_MS, 2600);
+  assert.equal(gm.COUNT_END_MS, 2700);
   assert.equal(gm.countPose(-1, false, false).index, -1);
-  assert.equal(gm.countPose(2600, false, false).index, -1);
+  assert.equal(gm.countPose(2700, false, false).index, -1);
   assert.equal(gm.countPose(10, false, false).index, 0);
   assert.equal(gm.countPose(710, false, false).index, 1);
   assert.equal(gm.countPose(1410, false, false).index, 2);
@@ -65,7 +65,8 @@ test('GO pops past full size once (SPRING.pop), kicks the screen at most KICK.ma
   }
   assert.ok(peak >= 1.18 && peak <= 1.35, `GO overshoot in the prize range, got ${peak.toFixed(3)}`);
   assert.ok(kickPeak > 2 && kickPeak <= motion.KICK.maxPt + 1e-9, `kick ${kickPeak}`);
-  assert.equal(gm.countPose(2100 + motion.KICK.ms + 1, false, false).kick, 0, 'the kick is over inside KICK.ms');
+  assert.equal(gm.countPose(2100 + gm.GO_LAND_MS + motion.KICK.ms + 1, false, false).kick, 0, 'the kick is over inside KICK.ms of the landing');
+  assert.equal(gm.countPose(2100 + 10, false, false).kick, 0, 'no kick before GO lands');
   for (let t = 2100; t < 2600; t += 10) {
     assert.equal(gm.countPose(t, false, true).kick, 0, 'calm (walking) never kicks');
     assert.equal(gm.countPose(t, true, false).kick, 0, 'reduced never kicks');
@@ -315,4 +316,131 @@ test('round 2: Memory Play again waits for the new deal (a new board clears the 
   const mem = read('src/games/memory/MemoryGame.tsx');
   const nb = mem.slice(mem.indexOf('const newBoardView'), mem.indexOf('const newBoardView') + 600);
   assert.match(nb, /setStageDealt\(false\)/);
+});
+
+test('round 3: GO is the money frame (pop to 1.3, a held beat at full size, then the burst, the fan and the flash)', () => {
+  const at = (ms) => gm.countPose(2100 + ms, false, false);
+  assert.equal(gm.GO_PEAK, 1.3);
+  assert.ok(Math.abs(at(gm.GO_LAND_MS).scale - 1.3) < 1e-6, 'full size when it lands');
+  // The held beat: 120 to 160 ms at full size.
+  assert.ok(gm.GO_HOLD_MS >= 120 && gm.GO_HOLD_MS <= 160);
+  for (let t = gm.GO_LAND_MS; t < gm.GO_LAND_MS + gm.GO_HOLD_MS; t += 10) assert.equal(at(t).scale, 1.3, `held at ${t}`);
+  assert.ok(at(gm.GO_LAND_MS + 10).sx > 1, 'lands with the squash');
+  // The burst: sparkles start only after the hold; the fan is full and blooms.
+  assert.equal(at(gm.GO_LAND_MS + gm.GO_HOLD_MS - 1).sparkle, 0);
+  assert.ok(at(gm.GO_LAND_MS + gm.GO_HOLD_MS + 100).sparkle > 0);
+  assert.ok(at(gm.GO_LAND_MS + gm.GO_HOLD_MS + 130).bloom > 0.9, 'the fan swells on the burst');
+  assert.ok(at(300).gold > 0.95, 'the gold fan is full behind GO');
+  assert.ok(at(gm.GO_LAND_MS).flash > 0.95 && at(gm.GO_LAND_MS + gm.GO_HOLD_MS).flash === 0, 'the flash lives on the held beat only');
+  // The payoff lands inside 1.5 s of GO and everything has settled by the end of the tail.
+  assert.ok(gm.GO_LAND_MS + gm.GO_HOLD_MS < 1500);
+  let lo = 9;
+  for (let t = 250; t < 480; t += 5) lo = Math.min(lo, at(t).scale);
+  assert.ok(lo > 0.85 && lo < 1, `one visible overshoot below rest on the spring back, got ${lo}`);
+  assert.ok(at(599).alpha < 0.05 && at(599).gold < 0.05, 'gone by the end of the tail');
+  // Exit faster than the entrance read (120 ms).
+  assert.ok(2700 - 2100 - 480 <= 120);
+  // Reduced: no fan, no flash.
+  for (const t of [0, 120, 260, 400]) {
+    const r = gm.countPose(2100 + t, true, false);
+    assert.equal(r.gold, 0);
+    assert.equal(r.flash, 0);
+  }
+});
+
+test('round 3: GO sparkles fan out downward toward the play field', () => {
+  let down = 0;
+  for (let k = 0; k < 8; k++) if (gm.goSparkle(k, 8, 0.8).y > 0) down += 1;
+  assert.ok(down >= 6, `most sparkles fly toward the board, got ${down}/8`);
+});
+
+test('round 3: FINISH! lands at the last-5 size with a gold shockwave, a capped flash and a coin sparkle burst', () => {
+  const D = motion.DURATION.slam;
+  assert.ok(Math.abs(gm.finishPose(0, false).scale - 1.8) < 1e-6, 'slams from 1.8');
+  const land = gm.finishPose(D + 10, false);
+  assert.ok(land.sx > 1, 'squash on landing');
+  assert.ok(land.ringA > 0.5 && land.flash > 0.5);
+  const mid = gm.finishPose(D + 300, false);
+  assert.ok(mid.ringR > land.ringR && mid.ringA < land.ringA, 'the ring rolls out and fades');
+  assert.equal(gm.finishPose(D + 200, false).flash, 0, 'the flash is one short beat');
+  assert.ok(gm.finishPose(900, false).alpha === 1, 'holds so the kid reads it');
+  assert.ok(gm.finishPose(1450, false).alpha < 0.05, 'gone before the results card');
+  assert.ok(gm.FINISH_BEAT_MS <= 1500);
+  assert.ok(gm.FINISH_SPARKLES_MAX <= 12);
+  for (let k = 0; k < 12; k++) {
+    const a = gm.finishSparkle(k, 12, D + 100);
+    const b = gm.finishSparkle(k, 12, D + 500);
+    const end = gm.finishSparkle(k, 12, D + 820);
+    assert.ok(Math.hypot(b.x, b.y) > Math.hypot(a.x, a.y));
+    assert.ok(end.alpha <= 0.001, 'faded, never vanished at full');
+  }
+  const r = gm.finishPose(D + 10, true);
+  assert.equal(r.ringA, 0);
+  assert.equal(r.flash, 0);
+});
+
+test('round 3: the combo climb is monotonic (size, haptic rung, pitch, sparkles) at x1, x2, x3, x5', () => {
+  const RUNG = { tap: 1, goodHit: 2, crit: 3, feverStart: 4 };
+  const tiers = [1, 2, 3, 5].map((m) => gm.comboTierStyle(m));
+  for (let i = 1; i < tiers.length; i++) {
+    assert.ok(tiers[i].size > tiers[i - 1].size, 'size climbs');
+    assert.ok(RUNG[tiers[i].haptic] > RUNG[tiers[i - 1].haptic], 'haptic climbs a rung');
+    assert.ok(tiers[i].pitch > tiers[i - 1].pitch, 'pitch climbs');
+    assert.ok(tiers[i].sparkles >= tiers[i - 1].sparkles, 'sparkles climb');
+  }
+  // The Whack bonk ladder starts higher at each tier (rank * 2 semitone steps).
+  const juice = read('src/games/whack/useWhackJuice.ts');
+  assert.match(juice, /comboTierRank\(multNow\(\)\) \* 2\)/);
+  // The fly-up climbs too: x1 white, x2 sky, x3 gold, x5 white-hot gold, sizes step up.
+  const whackFlyLook = gm.tierFlyLook;
+  assert.deepEqual(plain(gm.TIER_TEXT), ['#ffffff', '#7fd6ff', '#ffcf3b', '#fff3b0']);
+  assert.match(juice, /tierFlyLook\(def\.flyUp\.size \?\? 'md', rank\)/);
+  const order = ['sm', 'md', 'lg', 'xl'];
+  let last = -1;
+  for (let r = 0; r <= 3; r++) {
+    const i = order.indexOf(whackFlyLook('md', r).flySize);
+    assert.ok(i >= last, 'size never drops with the tier');
+    last = i;
+  }
+  assert.equal(whackFlyLook('md', 3).flySize, 'xl');
+});
+
+test('round 3: callout traffic control in Whack (no words over the HUD, quiet sky band in the last 5 and FINISH!)', () => {
+  const juice = read('src/games/whack/useWhackJuice.ts');
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  const fx = read('src/gamekit/fx/FxStage.tsx');
+  assert.match(fx, /Math\.max\(s\.textMinY \+ halfH/, 'fly-ups are clamped below the HUD band');
+  assert.match(whack, /textMinY=\{L\.hudH \+ 6\}/);
+  assert.match(whack, /minY=\{L\.hudH \+ 8\}/, 'stamps stay below the HUD band');
+  assert.match(juice, /if \(quiet\?\.current && \(at\.text \|\| at\.stamp\) && name !== 'butter'\)/);
+  assert.match(juice, /if \(quiet\?\.current\) \{\n\s+\/\/ The sky band belongs/, 'a combo slab becomes a medallion bump while quiet');
+  assert.match(whack, /quietRef\.current = left <= 6;/);
+  assert.match(whack, /stamps\.current\?\.clear\(\);\n\s+fx\.current\?\.clearText\(\);/, 'FINISH! clears every floater first');
+  assert.doesNotMatch(juice, /`QUICK \+|`CRIT! \+|text: 'PERFECT'/, 'hits show a number, not a word');
+  assert.doesNotMatch(whack, /flash\('FINISH!'/, 'FINISH! is the FinishBeat stamp, not the small banner');
+});
+
+test('round 3: the last 5 canvas mounts only near the end and the edge obeys Dim Flashing Lights', () => {
+  const fs5 = read('src/gamekit/fx/FinalSeconds.tsx');
+  const stage = read('src/gamekit/fx/CountdownStage.tsx');
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(fs5, /remainingMs\.value <= FINAL_MOUNT_MS/);
+  assert.match(fs5, /if \(!active \|\| \(ui \? !near : !inWindowJs\)\) return null;/);
+  assert.match(fs5, /edgeOn && flashPeak\(isDimFlashingLightsEnabled\(\), reduced\) > 0/);
+  assert.match(fs5, /\{edgeDraws \? \(/, 'no gradient rect when the edge is off');
+  assert.match(stage, /\{isGo && glow \? \(/, 'the GO blur core obeys the flash rule');
+  assert.match(shell, /flash=\{flashPeak\(isDimFlashingLightsEnabled\(\), reducedMotion\)\}/);
+  assert.match(shell, /cdScrim: \{ \.\.\.StyleSheet\.absoluteFillObject, backgroundColor: 'rgba\(36,140,224,0\.2\)' \}/, 'a pale sky tint, not a navy wash');
+});
+
+test('round 3: the Whack chase is a picture (bead vs ghost fin, a star that fills and pops), never a digit', () => {
+  const board = read('src/games/whack/render/WhackBoard.tsx');
+  assert.equal(gm.chaseOffset(0, 50), 0, 'level with the ghost sits on it');
+  assert.ok(gm.chaseOffset(5000, 50) <= 50 && gm.chaseOffset(5000, 50) > 45, 'never past the end');
+  assert.ok(gm.chaseOffset(-300, 50) < 0, 'behind is to the left');
+  assert.match(board, /function ChaseTrack/);
+  assert.match(board, /showPace=\{showPace && !chase\}/, 'the old VS BEST pill gives way to the track');
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /chase=\{\{ star: chaseStar, starPop: chasePop, earned: chaseEarned/);
+  assert.match(whack, /GameAudio\.playLadder\(cues\.coinTick, 9/, 'a gold ding when the bead passes the ghost');
 });

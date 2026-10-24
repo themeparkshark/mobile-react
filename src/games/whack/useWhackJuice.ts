@@ -25,6 +25,7 @@ import type { CameraRig } from '../../gamekit/fx/useCamera';
 import type { StampLayerHandle } from '../../gamekit/fx/StampLayer';
 import { useFeel, type FeelDef } from '../../gamekit/feel';
 import { createFxGovernor, govHitStop, GOVERNOR_PRESETS } from '../../gamekit/core/fxGovernor';
+import { tierFlyLook } from '../../gamekit/core/gameMoments';
 import { whackLayerLevel } from '../../gamekit/core/beatLayers';
 import type { BeatLayerPlayer } from '../../gamekit/audio/BeatLayers';
 import { WHACK_PRIO } from '../../gamekit/core/hapticBus';
@@ -122,6 +123,11 @@ export interface WhackJuiceOpts {
   layers?: BeatLayerPlayer | null;
   onFever?: (on: boolean) => void;
   onFeverReady?: () => void;
+  /**
+   * True while a big stamp owns the sky band (the last 5 seconds, FINISH!): world words stay quiet
+   * (hits keep their particles, sound and haptic), and a combo slab becomes a bump on the HUD medallion.
+   */
+  quiet?: MutableRefObject<boolean>;
 }
 
 export interface WhackJuice {
@@ -142,7 +148,7 @@ export interface WhackJuice {
 }
 
 export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
-  const { fx, stamps, camera, cues, runtime, layout, width, reducedMotion, walking, party } = opts;
+  const { fx, stamps, camera, cues, runtime, layout, width, reducedMotion, walking, party, quiet } = opts;
   const onFeverRef = useRef(opts.onFever);
   onFeverRef.current = opts.onFever;
   const onReadyRef = useRef(opts.onFeverReady);
@@ -164,7 +170,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     goodLite: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackGood', priority: WHACK_PRIO.good, localStop: 50, burst: [{ emitter: 'splash', count: 2 }],
       ring: { from: 10, to: 60, ms: 180 } },
     quick: { prio: 1, sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackQuick', priority: WHACK_PRIO.quick, localStop: 80,
-      burst: [{ emitter: 'splash', count: 8 }], ring: { color: GOLD, from: 12, to: 80, ms: 200 },
+      burst: [{ emitter: 'splash', count: 8 }, { emitter: 'sparks', count: 4 }], ring: { color: GOLD, from: 12, to: 80, ms: 200 },
       bloom: { radius: 80, peak: 0.55, ms: 160 }, flyUp: { size: 'lg', color: GOLD, to: scoreAt } },
     quickLite: { prio: 1, sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackQuick', priority: WHACK_PRIO.quick, localStop: 80,
       burst: [{ emitter: 'splash', count: 3 }], ring: { color: GOLD, from: 12, to: 70, ms: 200 } },
@@ -181,7 +187,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
       burst: [{ emitter: 'speedLines', count: 12 }, { emitter: 'coins', count: 16, magnet: true }, { emitter: 'sparkles' }],
       vignette: { color: GOLD, peak: 0.35, inMs: 40, holdMs: 60, outMs: 260 }, flyUp: { size: 'xl', color: GOLD, to: scoreAt }, duckDb: 6 },
     // v5 PERFECT pip: a small gold word above the fly-up (accent on the 16th grid).
-    perfect: { flyUp: { size: 'sm', color: GOLD, dy: -52 } },
+    perfect: { burst: [{ emitter: 'sparkles', count: 5, color: 0xffffcf3b }] },
     ripeStage: { pattern: [{ t: 0, kind: 'transient', i: 0.3, s: 0.9 }], priority: WHACK_PRIO.goldenTell, tell: true, burst: [{ emitter: 'sparkles', count: 4 }] },
     ripeBolt: { sfx: cues.ripeBolt, volume: 0.8, pattern: [{ t: 0, kind: 'transient', i: 0.3, s: 0.1 }], priority: WHACK_PRIO.flow,
       burst: [{ emitter: 'splash', count: 8 }], flyUp: { size: 'md', color: '#ff9f1c' } },
@@ -222,7 +228,13 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
   layersRef.current = opts.layers;
   const feverOn = useRef(false);
   const syncLayers = () => layersRef.current?.setLevel(whackLayerLevel(TIER_MULT[tier.current] ?? 1, feverOn.current));
-  const feel = useFeel(table, { fx, camera, clock: null, width, calm: reducedMotion || walking, governor, stamps });
+  const feelRaw = useFeel(table, { fx, camera, clock: null, width, calm: reducedMotion || walking, governor, stamps });
+  // Callout traffic control: while a big stamp owns the sky band, world words stay quiet (the mash gag keeps
+  // its own soft word, at the hole, below the band).
+  const feel = useCallback((name: Extract<keyof typeof table, string>, at: Parameters<typeof feelRaw>[1] = {}) => {
+    if (quiet?.current && (at.text || at.stamp) && name !== 'butter') feelRaw(name, { ...at, text: undefined, stamp: undefined });
+    else feelRaw(name, at);
+  }, [feelRaw, quiet]) as typeof feelRaw;
   const liveScore = useRef(0);
   const streak = useRef(0);
   const tier = useRef(0);
@@ -245,10 +257,12 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     const p = holeXY(h);
     const clock = runtime.clock;
     const def = table[name];
-    feel(name as never, { ...p, slot: h, step, text, magnetTo: hud, dx: 0, dy: -1, input: true });
+    // One icon-plus-number per hit: the size steps up and the colour climbs with the combo tier.
+    const rank = comboTierRank(multNow());
+    const look = def?.flyUp ? tierFlyLook(def.flyUp.size ?? 'md', rank) : {};
+    feel(name as never, { ...p, slot: h, step, text, magnetTo: hud, dx: 0, dy: -1, input: true, ...look });
     // Hot hands hit harder: from x3 every bonk kicks the board down 2 pt (3 pt in fever), one kick per
     // KICK.ms at most; never while walking, with Reduce Motion or on a shared party board.
-    const rank = comboTierRank(multNow());
     const nowMs = Date.now();
     if (rank >= 2 && camera && !reducedMotion && !walking && !party && nowMs - lastKick.current >= KICK.ms) {
       lastKick.current = nowMs;
@@ -343,9 +357,9 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
             setTimeout(() => { camera.frame(1); camera.lean(0, 0); }, 420);
           }
         } else if (grade === G_CRIT) {
-          fireHit(poseHit ? 'crit' : 'critImpact', h, quiet ? undefined : `CRIT! +${pts}`, step);
+          fireHit(poseHit ? 'crit' : 'critImpact', h, quiet ? undefined : `+${pts}`, step);
           GameAudio.play(cues.bonk, { volume: 0.7 });
-        } else if (grade === G_QUICK) fireHit(crowded ? 'quickLite' : 'quick', h, quiet ? undefined : `QUICK +${pts}`, step);
+        } else if (grade === G_QUICK) fireHit(crowded ? 'quickLite' : 'quick', h, quiet ? undefined : `+${pts}`, step);
         else if (grade === G_GOOD) fireHit(crowded ? 'goodLite' : poseHit ? 'good' : 'goodStars', h, quiet ? undefined : `+${pts}`, step);
         else fireHit('late', h, quiet ? undefined : `+${pts}`, step);
         return true;
@@ -354,7 +368,8 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         // Accent on the grid (8.8): the ping snaps to the next 16th of the bed; the pip shows at once.
         liveScore.current += b;
         const xy = holeXY(a);
-        feel('perfect', { ...xy, text: 'PERFECT' });
+        // The PERFECT pip is a picture now: a little burst of gold stars over the number (no word).
+        feel('perfect', { ...xy });
         const step = Math.min(14, (Math.max(0, streak.current - TIER_AT[tier.current]) % 8) + 2);
         const asked = Date.now();
         void GameAudio.music.positionMs().then((pos) => {
@@ -504,12 +519,19 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
       if (flurryResolve(flurry.current, Date.now()) && hits >= 3) {
         const at = lastHit.current;
         const m = at.mult;
+        if (quiet?.current) {
+          // The sky band belongs to the last-5 stamp or FINISH!: the combo lands on the medallion instead.
+          GameAudio.play(cues.tally, { volume: 0.7 });
+          fx.current?.ring(width / 2, 34, { color: GOLD, from: 22, to: 48, ms: 220 });
+          fx.current?.burst('sparkles', width / 2, 34, { count: 6 });
+          return;
+        }
         // The bubble font has no decimal point (x1.5 read as x15): a half multiplier just says COMBO.
         feel('combo', { x: at.x, y: at.y - 20, stamp: m % 1 === 0 && m > 1 ? `x${m.toFixed(0)} COMBO +${pts}` : `COMBO +${pts}` });
       }
     }, 100);
     return () => clearInterval(iv);
-  }, [feel]);
+  }, [feel, quiet, cues.tally, fx, width]);
 
   const reset = useCallback((s: number) => {
     liveScore.current = 0;

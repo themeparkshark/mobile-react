@@ -30,7 +30,7 @@ import {
   F_GOLDEN_DAZED, F_HATOFF, F_PEEK, F_POP, F_PUFFED, F_PUFFER, F_SPIRAL, F_TONGUE, type RenderState,
 } from './renderState';
 import { TIER_MULT, MULT_CAP } from '../waves';
-import { comboTierRank, comboTierStyle, timerPulse } from '../../../gamekit/core/gameMoments';
+import { chaseOffset, comboTierRank, comboTierStyle, timerPulse } from '../../../gamekit/core/gameMoments';
 
 const NAVY = '#0b3a66';
 const GOLD = '#ffcf3b';
@@ -172,10 +172,25 @@ export interface WhackBoardProps {
   hudOutside?: boolean;
 }
 
+/**
+ * The picture-first chase (round 3): a little race track under the HUD where a gold "you" bead runs
+ * against a white ghost fin (your best, or a rival), plus one big star that fills toward the next star
+ * and pops when it lights. No digits: ahead reads as gold and to the right, behind as a calm gap.
+ */
+export interface WhackChase {
+  /** 0..1 progress to the next star this run. */
+  star: SharedValue<number>;
+  /** 0 to 1 to 0 when a star lights mid-burst (the pop). */
+  starPop: SharedValue<number>;
+  /** Stars already earned this run (0..3): the star shows gold once one is earned. */
+  earned: SharedValue<number>;
+  showStar: boolean;
+}
+
 /** The HUD plate and stage prompts in their own canvas, outside the camera transform (they never shake). */
-export const WhackHud = React.memo(function WhackHud({ L, sim, rs, tick, hud, pace, showPace, paceLabel }: {
+export const WhackHud = React.memo(function WhackHud({ L, sim, rs, tick, hud, pace, showPace, paceLabel, chase }: {
   L: BoardLayout; sim: SharedValue<WhackSim>; rs: SharedValue<RenderState>; tick: SharedValue<number>; hud: HudProps;
-  pace: SharedValue<number>; showPace: boolean; paceLabel?: string;
+  pace: SharedValue<number>; showPace: boolean; paceLabel?: string; chase?: WhackChase;
 }) {
   const fontS = useFont(FONT, 13);
   const fontM = useFont(FONT, 20);
@@ -183,10 +198,100 @@ export const WhackHud = React.memo(function WhackHud({ L, sim, rs, tick, hud, pa
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
       <HudPlate L={L} sim={sim} rs={rs} tick={tick} hud={hud} fontS={fontS} fontM={fontM} fontL={fontL} />
-      <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace} paceLabel={paceLabel ?? 'VS BEST'} />
+      {chase ? <ChaseTrack L={L} pace={pace} showPace={showPace} chase={chase} />
+        : null}
+      <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace && !chase} paceLabel={paceLabel ?? 'VS BEST'} />
     </Canvas>
   );
 });
+
+/** A five-point star path centred on 0,0 (outer radius 1). */
+function starPath() {
+  const p = Skia.Path.Make();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const r = i % 2 === 0 ? 1 : 0.46;
+    if (i === 0) p.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else p.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  p.close();
+  return p;
+}
+
+/** A small shark fin centred on its base (height 1). */
+function finPath() {
+  const p = Skia.Path.Make();
+  p.moveTo(-0.62, 0.42);
+  p.quadTo(-0.1, 0.2, 0.08, -0.62);
+  p.quadTo(0.32, -0.05, 0.62, 0.42);
+  p.close();
+  return p;
+}
+
+function ChaseTrack({ L, pace, showPace, chase }: { L: BoardLayout; pace: SharedValue<number>; showPace: boolean; chase: WhackChase }) {
+  const star = useMemo(starPath, []);
+  const fin = useMemo(finPath, []);
+  const y = L.hudH + 8;
+  const h = 24;
+  const tx = 10;
+  const tw = 116;
+  const cy = y + h / 2;
+  const gx = tx + tw / 2;
+  const half = tw / 2 - 13;
+  const bx = useDerivedValue(() => gx + chaseOffset(pace.value, half));
+  const ahead = useDerivedValue(() => (pace.value > 0 ? 1 : 0));
+  // The lead (gold, ghost to you) or the gap (pale, you to ghost).
+  const segX = useDerivedValue(() => Math.min(gx, bx.value));
+  const segW = useDerivedValue(() => Math.abs(bx.value - gx));
+  const segColor = useDerivedValue(() => (pace.value > 0 ? GOLD : '#cfe9fb'));
+  const beadGlow = useDerivedValue(() => 0.25 + 0.5 * ahead.value);
+  // The star: an outline that fills with gold from the centre as the next star gets close, and pops when it lights.
+  const sx = showPace ? tx + tw + 20 : tx + 18;
+  const sr = 15;
+  const fillT = useDerivedValue(() => {
+    const k = Math.max(0.12, Math.min(1, chase.star.value));
+    return [{ translateX: sx }, { translateY: cy }, { scale: sr * 0.78 * k }];
+  });
+  const fillA = useDerivedValue(() => 0.35 + 0.65 * Math.min(1, chase.star.value));
+  const starT = useDerivedValue(() => [{ translateX: sx }, { translateY: cy }, { scale: sr * (1 + 0.35 * chase.starPop.value) }]);
+  const shellColor = useDerivedValue(() => (chase.earned.value > 0 ? '#ffeeb8' : CREAM));
+  const popA = useDerivedValue(() => chase.starPop.value);
+  const popR = useDerivedValue(() => sr * (1.2 + 1.6 * (1 - chase.starPop.value)));
+  return (
+    <Group>
+      {showPace ? (
+        <Group>
+          <RoundedRect x={tx - 2.5} y={y - 2.5} width={tw + 5} height={h + 5} r={(h + 5) / 2} color={NAVY} />
+          <RoundedRect x={tx} y={y} width={tw} height={h} r={h / 2} color={CREAM} />
+          <RoundedRect x={segX} y={cy - 4} width={segW} height={8} r={4} color={segColor} />
+          {/* The ghost: a white fin on a soft disc (your best or the rival). */}
+          <Circle cx={gx} cy={cy} r={9} color="#ffffff" opacity={0.85} />
+          <Circle cx={gx} cy={cy} r={9} color={NAVY} style="stroke" strokeWidth={1.5} opacity={0.45} />
+          <Group transform={[{ translateX: gx }, { translateY: cy + 1 }, { scale: 9 }]}>
+            <Path path={fin} color={NAVY} opacity={0.45} />
+          </Group>
+          {/* You: a gold bead that glows brighter while ahead. */}
+          <Circle cx={bx} cy={cy} r={12} color={GOLD} opacity={beadGlow} />
+          <Circle cx={bx} cy={cy} r={8.5} color={NAVY} />
+          <Circle cx={bx} cy={cy} r={6.5} color={GOLD} />
+          <Circle cx={bx} cy={cy - 2} r={2.4} color="#fffbea" />
+        </Group>
+      ) : null}
+      {chase.showStar ? (
+        <Group>
+          <Circle cx={sx} cy={cy} r={popR} color={GOLD} style="stroke" strokeWidth={3} opacity={popA} />
+          <Group transform={starT}>
+            <Path path={star} color={NAVY} style="stroke" strokeWidth={0.32} strokeJoin="round" />
+            <Path path={star} color={shellColor} />
+          </Group>
+          <Group transform={fillT} opacity={fillA}>
+            <Path path={star} color={GOLD} />
+          </Group>
+        </Group>
+      ) : null}
+    </Group>
+  );
+}
 
 export const WhackBoard = React.memo(function WhackBoard({ L, sim, rs, tick, images, hud, theme = 'park', bossFx, pace, showPace, paceLabel, hudOutside }: WhackBoardProps) {
   const fontS = useFont(FONT, 13);

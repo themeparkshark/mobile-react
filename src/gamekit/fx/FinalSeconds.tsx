@@ -14,13 +14,17 @@
  * with no ambient budget) drops the breathing edge, keeps the numbers.
  */
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { Canvas, Circle, Group, Path, Rect, RadialGradient, Skia, Text as SkText, vec } from '@shopify/react-native-skia';
 import { useDisplayFont } from './displayFont';
-import { cancelAnimation, Easing, ReduceMotion, useDerivedValue, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import { cancelAnimation, Easing, ReduceMotion, runOnJS, useAnimatedReaction, useDerivedValue, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { FINAL_COLOR, FINAL_SECONDS, finalStampPose, finalVignette } from '../core/gameMoments';
-import { GOLD_FX } from '../../ui/motion';
+import { GOLD_FX, flashPeak } from '../../ui/motion';
+import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
+
+/** With a UI clock, the canvas mounts only this close to the end (one crossing to React, then nothing per frame before it). */
+export const FINAL_MOUNT_MS = 6000;
 
 const NUM_PX = 110;
 const TIME_PX = 104;
@@ -72,6 +76,15 @@ export const FinalSeconds = React.memo(function FinalSeconds({ secondsLeft, rema
   useEffect(() => () => cancelAnimation(ms), [ms]);
   const activeSv = useSharedValue(active ? 1 : 0);
   useEffect(() => { activeSv.value = active ? 1 : 0; }, [active, activeSv]);
+  // UI clock: stay unmounted (no canvas, no per-frame draw) until the round is inside FINAL_MOUNT_MS.
+  const [near, setNear] = useState(false);
+  useAnimatedReaction(
+    () => (remainingMs ? activeSv.value === 1 && remainingMs.value <= FINAL_MOUNT_MS && remainingMs.value > -1500 : false),
+    (on, was) => { if (on !== was) runOnJS(setNear)(on); },
+    [remainingMs],
+  );
+  // The breathing gold edge is a soft full-screen glow: off with Reduce Motion, Dim Flashing Lights or Battery Saver.
+  const edgeDraws = edgeOn && flashPeak(isDimFlashingLightsEnabled(), reduced) > 0;
 
   // The second on show and ms into it, from whichever clock drives this game (-1 when hidden).
   const beat = useDerivedValue(() => {
@@ -108,8 +121,8 @@ export const FinalSeconds = React.memo(function FinalSeconds({ secondsLeft, rema
   });
   const edge = useDerivedValue(() => {
     const b = beat.value;
-    if (!edgeOn || b.sec <= 0) return 0;
-    return reduced ? 0.08 : finalVignette(b.t, 0.12) / 0.12;
+    if (!edgeDraws || b.sec <= 0) return 0;
+    return finalVignette(b.t, 0.12) / 0.12;
   });
   const numText = useDerivedValue(() => (beat.value.sec > 0 ? `${beat.value.sec}` : ''));
   const numOpacity = useDerivedValue(() => (beat.value.sec > 0 ? pose.value.alpha : 0));
@@ -138,17 +151,19 @@ export const FinalSeconds = React.memo(function FinalSeconds({ secondsLeft, rema
     ];
   });
   const ringT = useMemo(() => [{ translateX: cx }, { translateY: stampY }, { rotate: -Math.PI / 2 }, { translateX: -cx }, { translateY: -stampY }], [cx, stampY]);
-  if (!active || (!ui && !inWindowJs)) return null;
+  if (!active || (ui ? !near : !inWindowJs)) return null;
   const r = Math.hypot(width, height) * 0.62;
   return (
     <Canvas style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
-      <Group opacity={edge}>
-        <Rect x={0} y={0} width={width} height={height}>
-          <RadialGradient c={vec(width / 2, height / 2)} r={r}
-            colors={['rgba(255,213,74,0)', 'rgba(255,213,74,0)', 'rgba(255,201,60,0.12)', 'rgba(255,201,60,0.34)']}
-            positions={[0, 0.55, 0.8, 1]} />
-        </Rect>
-      </Group>
+      {edgeDraws ? (
+        <Group opacity={edge}>
+          <Rect x={0} y={0} width={width} height={height}>
+            <RadialGradient c={vec(width / 2, height / 2)} r={r}
+              colors={['rgba(255,213,74,0)', 'rgba(255,213,74,0)', 'rgba(255,201,60,0.12)', 'rgba(255,201,60,0.34)']}
+              positions={[0, 0.55, 0.8, 1]} />
+          </Rect>
+        </Group>
+      ) : null}
       <Group opacity={ringOpacity}>
         <Circle cx={cx} cy={stampY} r={RING_R} color="rgba(5,52,110,0.28)" />
         <Circle cx={cx} cy={stampY} r={RING_R} color="#ffffff" style="stroke" strokeWidth={9} opacity={0.75} />

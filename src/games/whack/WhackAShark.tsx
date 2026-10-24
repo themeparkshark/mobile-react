@@ -23,7 +23,7 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { LogBox, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import Animated, { runOnUI, useDerivedValue, useSharedValue, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deckIdForRideName } from '../../services/rideTheme';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
@@ -40,7 +40,10 @@ import { THERMAL_NAMES, THERMAL_SCALES } from '../../gamekit/core/thermal';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { registerStudioAudio } from '../../gamekit/audio/studioLibrary';
 import { useGameMusic } from '../../gamekit/audio/useGameMusic';
-import { playPattern } from '../../gamekit/Haptics';
+import { playHaptic, playPattern } from '../../gamekit/Haptics';
+import { FinishBeat } from '../../gamekit/fx/FinishBeat';
+import { STAGGER, flashPeak } from '../../ui/motion';
+import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { WHACK_PRIO } from '../../gamekit/core/hapticBus';
 import { forEachEvent } from '../../gamekit/core/eventRing';
 import { starsFor, nextStarGoal } from '../../gamekit/core/scoring';
@@ -332,6 +335,14 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const runtime = useWhackRuntime({ geo, boxes, poseScale, themeFx, onEvents });
   const bossFx = useSharedValue({ rise: 0, flinch: 0, flash: 0, ghost: 1, sink: 0 });
   const pace = useSharedValue(0);
+  // The picture-first chase (round 3): the star fills toward the next star and pops when it lights.
+  const chaseStar = useSharedValue(0);
+  const chasePop = useSharedValue(0);
+  const chaseEarned = useSharedValue(0);
+  const chaseMem = useRef({ stars: 0, ahead: false });
+  // Callout traffic control: true while the last-5 stamps or FINISH! own the sky band.
+  const quietRef = useRef(false);
+  const [finishKey, setFinishKey] = useState(0);
   const finisher = useFinisher({
     clock: runtime.clock, camera, fx, stamps, width: field?.w ?? 390, height: field?.h ?? 700,
     stinger: ride ? cues.stingWin : cues.stingBoss, reducedMotion,
@@ -341,6 +352,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const layers = useBeatLayers('whack', visible && !result && phase === 'play');
   const juice = useWhackJuice({
     fx, stamps, camera, cues, runtime, layout: Lref, width: field?.w ?? 390, reducedMotion, walking: walk.walking, onFever: setFever, layers,
+    quiet: quietRef,
   });
   const feel = juice.fire;
   const HUD = juice.hud;
@@ -470,6 +482,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         // The shell draws the last 5 (gold edge, stamped seconds, TIME!); the game keeps its own ticks.
         // Only a change crosses to React (no state write on the other 249 ms ticks).
         const nextLeft = left <= 5 && left >= 0 ? left : null;
+        // One second early, so a floater already rising never meets the 5 stamp.
+        quietRef.current = left <= 6;
         if (nextLeft !== lastLeftRef.current) {
           lastLeftRef.current = nextLeft;
           setSecondsLeft(nextLeft);
@@ -483,7 +497,30 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         // Header score from the sim itself (exact; the board never re-renders for it).
         setShellScore(bankedRef.current.reduce((s, x) => s + x.score, 0) + m.score);
         const g = ghostRef.current;
-        if (g) pace.value = m.score - paceAt(g, m.t);
+        if (g) {
+          const d = m.score - paceAt(g, m.t);
+          pace.value = d;
+          // Passing the ghost: a gold ding and a sparkle on the bead (no digits).
+          const ahead = d > 0;
+          if (ahead && !chaseMem.current.ahead && m.t > 1500 && G) {
+            GameAudio.playLadder(cues.coinTick, 9, { volume: 0.7 });
+            fx.current?.burst('sparkles', 10 + 58 + 45 * Math.tanh(d / 700), G.hudH + 20, { count: 6 });
+            playHaptic('tick', { priority: WHACK_PRIO.flow });
+          }
+          chaseMem.current.ahead = ahead;
+        }
+        if (!ride && format !== 'raid' && format !== 'duel') {
+          const goal = nextStarGoal(bankedRef.current.reduce((s, x) => s + x.score, 0) + m.score, RUN_STARS[difficulty]);
+          chaseStar.value = goal.progress;
+          chaseEarned.value = goal.stars;
+          if (goal.stars > chaseMem.current.stars) {
+            chaseMem.current.stars = goal.stars;
+            chasePop.value = withSequence(withTiming(1, { duration: 90 }), withTiming(0, { duration: 560 }));
+            GameAudio.play(cues.tier, { volume: 0.8 });
+            if (G) fx.current?.burst('sparkles', ghostRef.current ? 10 + 116 + 20 : 28, G.hudH + 20, { count: 10 });
+            playHaptic('goodHit', { priority: WHACK_PRIO.flow });
+          }
+        }
         // Ghost fingers (12.1, GHOST PLAY): on shared seeds the PB ghost's tinted finger taps the wells
         // it hit, and Line of the Day rivals tap in their colours (mapped through mine o theirs^-1).
         // Hits due in the next poll window are scheduled at their game time.
@@ -514,7 +551,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       });
     }, 250);
     return () => clearInterval(iv);
-  }, [visible, phase, cues, pace, props.lineDay, busyRef, format, lineRun]);
+  }, [visible, phase, cues, pace, props.lineDay, busyRef, format, lineRun, ride, difficulty, chaseStar, chaseEarned, chasePop]);
 
   // ---------------------------------------------------------------- flow
   const flash = useCallback((text: string, sub: string | null = null, color = '#ffffff', ms = 1100) => {
@@ -532,6 +569,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     splatHint.current = false;
     ghostT.current = 0;
     winRef.current = null;
+    quietRef.current = false;
+    chaseMem.current.ahead = false;
     const sim = createSim(t, carryRef.current);
     juice.reset(carryRef.current.streak);
     setFever(t.feverStart || (carryRef.current.feverLeft > 0 && t.fever));
@@ -754,7 +793,14 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       return;
     }
     GameAudio.play(cues.whistle, { volume: 0.8 });
-    flash('FINISH!', null, GOLD, 900);
+    // The end beat: FINISH! slams at the last-5 size with a gold shockwave and a coin-sparkle burst.
+    // It clears the stage first, so it is the only callout up (no x4 COMBO slab riding on top).
+    quietRef.current = true;
+    stamps.current?.clear();
+    fx.current?.clearText();
+    setBanner((bn) => ({ ...bn, text: null, sub: null }));
+    setFinishKey((k) => k + 1);
+    playHaptic('finisher', { priority: WHACK_PRIO.golden });
     if (bankedEarly) {
       laterInRun(() => finishRun('banked'), 700);
       return;
@@ -857,9 +903,36 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     startWall.current = Date.now();
+    chaseMem.current.stars = 0;
+    chaseStar.value = 0;
+    chaseEarned.value = 0;
+    // GO wakes the board: each well splashes in turn (STAGGER), so the frame after GO is never an empty board.
+    const G0 = Lref.current;
+    if (G0) {
+      for (let h = 0; h < G0.cx.length; h++) {
+        setTimeout(() => {
+          fx.current?.burst('splash', G0.cx[h], G0.my[h] - 4, { count: 3, size: 0.8 });
+          fx.current?.ring(G0.cx[h], G0.my[h] - 4, { color: '#ffffff', from: 8, to: 34, ms: 260 });
+        }, Math.min(STAGGER.capMs, h * STAGGER.stepMs));
+      }
+    }
     if (autoplay) LogBox.ignoreAllLogs(true);
     void claimRunOfDay().finally(() => startBurst(0, runIndex, false));
-  }, [metersNow, autoplay, startBurst, runIndex, claimRunOfDay]);
+  }, [metersNow, autoplay, startBurst, runIndex, claimRunOfDay, chaseStar, chaseEarned]);
+
+  // The HUD timer shows this burst's length from the first frame of the count (12, not the empty sim's 30),
+  // so a kid never sees the number jump at GO.
+  const previewLen = useMemo(() => (format === 'duel' ? 15000 : buildTimeline(0, runIndex).lengthMs), [buildTimeline, runIndex, format]);
+  useEffect(() => {
+    // Before the first burst of a run (the shell's count), and after a run while the rematch count runs.
+    if (!visible || (tlRef.current && phase !== 'done')) return;
+    const len = previewLen;
+    runOnUI(() => {
+      'worklet';
+      if (runtime.rt.value.running) return;
+      runtime.sim.value = { ...runtime.sim.value, len, t: 0 };
+    })();
+  }, [visible, previewLen, runtime.rt, runtime.sim, phase]);
 
   const handlePause = useCallback((reason?: string) => {
     runtime.setRunning(false);
@@ -1014,11 +1087,14 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           ) : null}
           {L ? (
             <WhackHud L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} hud={hud} pace={pace}
-              showPace={!!ghostRef.current && !ride} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} />
+              showPace={!!ghostRef.current && !ride} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'}
+              chase={{ star: chaseStar, starPop: chasePop, earned: chaseEarned, showStar: !ride && format !== 'raid' && format !== 'duel' }} />
           ) : null}
-          {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={capacity}
+          {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={capacity} textMinY={L.hudH + 6}
             onArrive={(n) => { for (let k = 0; k < n; k++) setTimeout(() => GameAudio.playLadder(cues.coinTick, Math.min(12, k)), k * 20); }} /> : null}
-          {L ? <StampLayer ref={stamps} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} queue={{ maxLive: 1, spacingMs: 150 }} /> : null}
+          {L ? <StampLayer ref={stamps} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} queue={{ maxLive: 1, spacingMs: 150 }} minY={L.hudH + 8} /> : null}
+          {L ? <FinishBeat fireKey={finishKey} label="FINISH!" width={L.w} height={L.h} y={L.hudH + (L.deckTop - L.hudH) * 0.52}
+            reduced={reducedMotion} sparkles={reducedMotion ? 0 : 12} flash={flashPeak(isDimFlashingLightsEnabled(), reducedMotion)} /> : null}
           {L ? <Banner text={banner.text} sub={banner.sub} color={banner.color} stamp={banner.stamp} top={L.hudH + (L.deckTop - L.hudH) * 0.18} /> : null}
           {phase === 'breather' && breather ? (
             <Breather
