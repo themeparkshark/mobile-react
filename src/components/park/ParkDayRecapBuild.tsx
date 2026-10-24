@@ -53,6 +53,8 @@ if (__DEV__) {
   (globalThis as Record<string, unknown>).__tpsRecapReset = () => { played.clear(); return 'reset'; };
 }
 const VISIBLE_WAIT_MS = 120_000;
+/** The build starts once the card's top is above this fraction of the screen height. */
+const RECAP_SEEN_TOP = 0.55;
 
 /** Listeners that want to know when the shelf scrolled (the recap waits to be seen). */
 const viewportListeners = new Set<() => void>();
@@ -88,7 +90,9 @@ export function useRecapBuild(dayKey: string | null, cardRef?: RefObject<View | 
     function look() {
       if (!active) return;
       cardRef?.current?.measureInWindow((_x, y, _w, h) => {
-        if (active && Number.isFinite(y) && h > 0 && y < height - 140 && y + h > 120) start();
+        // The card's top has reached the upper part of the screen, so its stats are in view as the day adds up
+        // (a header only peeking above the footer is not "seen").
+        if (active && Number.isFinite(y) && h > 0 && y < height * RECAP_SEEN_TOP && y + h > 120) start();
       });
     }
     if (!cardRef) { start(); return undefined; }

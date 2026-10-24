@@ -20,7 +20,7 @@ export const RECAP_BUILD = {
   /** Each stat pops this much bigger than the one before (the day climbs). */
   climbStep: 0.08,
   /** The stamp's gold fan rests at this strength once it has bloomed (a still glow, never turning). */
-  fanRest: 0.3,
+  fanRest: 0.42,
   tomorrowAt: 600 + 3 * 280 + 420 + 480,
 } as const;
 
