@@ -16,7 +16,6 @@ import {
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SPLASH_VIDEO = require('../../assets/videos/splash-loop.mp4');
-const SPLASH_LOGO = require('../../assets/images/splash-logo.png');
 
 // Bubble that rises from bottom to top
 function Bubble({ delay, size, left, duration }: { delay: number; size: number; left: number; duration: number }) {

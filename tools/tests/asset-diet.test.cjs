@@ -69,3 +69,17 @@ test('map sprites are sized for their marker (3x the largest display size)', () 
     assert.ok(Math.max(...dims(file)) <= maxSide, `${file} is ${dims(file).join('x')}`);
   }
 });
+
+// app.config.js `icon` and `splash.image` are hashed into the runtime
+// fingerprint (@expo/fingerprint expoConfigAssets). Changing their bytes in an
+// OTA sends the update to a runtime no binary has, so new splash art ships as
+// a separate JS asset that fades in over the unchanged launch art.
+test('fingerprinted config art keeps the 1.7.3 binary bytes', () => {
+  const crypto = require('node:crypto');
+  const sha1 = file => crypto.createHash('sha1').update(fs.readFileSync(path.join(root, file))).digest('hex');
+  assert.equal(sha1('assets/images/splash-bg.png'), 'f5871f674fb979d5721e342eb7003a85fd0c2498', 'splash-bg.png is the native launch art: change it only with a new binary');
+  assert.equal(sha1('assets/icon.png'), '924255ffa6ebe1697ce3d1acaf23c942a82553e2', 'icon.png is native: change it only with a new binary');
+  const splash = read('src/screens/SplashScreen.tsx');
+  assert.match(splash, /assets\/images\/splash-art\.jpg/);
+  assert.match(splash, /useNativeDriver: true/);
+});

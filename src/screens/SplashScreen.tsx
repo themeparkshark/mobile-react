@@ -1,25 +1,53 @@
 import { Image } from 'expo-image';
-import { useContext, useRef } from 'react';
-import { Dimensions, View } from 'react-native';
+import { useContext, useEffect, useRef } from 'react';
+import { Animated, Dimensions, StyleSheet, View } from 'react-native';
 import { useEffectOnceWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import { CrumbContext } from '../context/CrumbProvider';
 
-const SPLASH_ART = require('../../assets/images/splash-bg.png');
+// The binary's launch art. app.config.js `splash.image` points at this file and
+// Expo hashes it into the runtime fingerprint, so its bytes must never change in
+// an OTA (a changed file sends the update to a runtime no binary has). It is
+// drawn first so the handoff from the native launch screen has no pop.
+const LAUNCH_ART = require('../../assets/images/splash-bg.png');
+// The current splash art. It cross-fades in over the launch art.
+const SPLASH_ART = require('../../assets/images/splash-art.jpg');
+
+export const SPLASH_FADE_MS = 250;
+const FADE_SAFETY_MS = 600;
 
 export default function SplashScreen() {
   const { theme } = useContext(ThemeContext);
   const { isReady, player } = useContext(AuthContext);
   const { crumbsLoaded } = useContext(CrumbContext);
   const hasNavigated = useRef(false);
+  const artOpacity = useRef(new Animated.Value(0)).current;
+  const faded = useRef(false);
+
+  const fadeIn = () => {
+    if (faded.current) return;
+    faded.current = true;
+    Animated.timing(artOpacity, {
+      toValue: 1,
+      duration: SPLASH_FADE_MS,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // If the art never reports a load, still fade so the screen never sticks.
+  useEffect(() => {
+    const t = setTimeout(fadeIn, FADE_SAFETY_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Use useEffectOnceWhen to navigate only once when ready
   useEffectOnceWhen(() => {
     if (hasNavigated.current) return;
     hasNavigated.current = true;
-    
+
     if (player) {
       // User is authenticated - go to loading screen
       RootNavigation.navigate('Loading');
@@ -29,21 +57,26 @@ export default function SplashScreen() {
     }
   }, Boolean(isReady && crumbsLoaded));
 
+  const size = {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+  };
+
   return (
     // Same art and blue as the native launch screen, so the handoff from the
-    // launch storyboard is seamless. A server theme splash fades in over it.
+    // launch storyboard is seamless. The current art (or a server theme
+    // splash) then fades in over it on the UI thread.
     <View style={{ flex: 1, backgroundColor: '#0768B9' }}>
-      <Image
-        source={theme?.splash_screen_url ? { uri: theme.splash_screen_url } : SPLASH_ART}
-        placeholder={SPLASH_ART}
-        placeholderContentFit="cover"
-        transition={theme?.splash_screen_url ? 250 : 0}
-        contentFit="cover"
-        style={{
-          width: Dimensions.get('window').width,
-          height: Dimensions.get('window').height,
-        }}
-      />
+      <Image source={LAUNCH_ART} contentFit="cover" style={size} />
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: artOpacity }]}>
+        <Image
+          source={theme?.splash_screen_url ? { uri: theme.splash_screen_url } : SPLASH_ART}
+          contentFit="cover"
+          transition={0}
+          onLoad={fadeIn}
+          style={size}
+        />
+      </Animated.View>
     </View>
   );
 }

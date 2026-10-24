@@ -787,7 +787,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
   if (!loading && gymData && !gymData.player) {
     return (
       <Animated.View style={[styles.container, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
-        <ImageBackground source={require('../../../assets/images/arena-bg.png')} style={styles.bgImage} resizeMode="cover">
+        <ImageBackground source={require('../../../assets/images/arena-bg.jpg')} style={styles.bgImage} resizeMode="cover">
           {particles.map((p) => <FloatingParticle key={p.id} delay={p.delay} startX={p.x} color={p.color} />)}
           {sparkles.map((s) => <Sparkle key={s.id} x={s.x} y={s.y} delay={s.delay} />)}
           
@@ -836,7 +836,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     const title = loadError && gymLink.phase === 'live' && !loading ? 'Arena Did Not Load' : 'Loading Arena...';
     return (
       <Animated.View style={[styles.container, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
-        <ImageBackground source={require('../../../assets/images/arena-bg.png')} style={styles.bgImage} resizeMode="cover">
+        <ImageBackground source={require('../../../assets/images/arena-bg.jpg')} style={styles.bgImage} resizeMode="cover">
           <View style={styles.loadingOverlay}>
             <Text style={styles.loadingText}>{title}</Text>
             <View style={styles.linkSlot}>
@@ -860,7 +860,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
 
   return (
     <Animated.View style={[styles.container, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
-      <ImageBackground source={require('../../../assets/images/arena-bg.png')} style={styles.bgImage} resizeMode="cover">
+      <ImageBackground source={require('../../../assets/images/arena-bg.jpg')} style={styles.bgImage} resizeMode="cover">
         
         {/* Floating particles */}
         {particles.map((p) => <FloatingParticle key={p.id} delay={p.delay} startX={p.x} color={p.color} />)}

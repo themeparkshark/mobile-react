@@ -26,7 +26,6 @@ import { copyrightLine } from '../../api/platform';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SPLASH_VIDEO = require('../../../assets/videos/splash-loop.mp4');
-const SPLASH_LOGO = require('../../../assets/images/splash-logo.png');
 const whooshSound = require('../../../assets/sounds/whoosh.mp3');
 // Floating bubble component
 function FloatingBubble({
