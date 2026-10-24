@@ -715,7 +715,9 @@ test('first seconds on the map: pins arrive in the cover fade, late pins land in
 
 test('buttons and the map on small and busy screens: GameButton art waits for its words, the SE shark fits, a gone map is never queried', () => {
   const button = read('src/ui/GameButton.tsx');
-  assert.match(button, /style=\{\{ width: '100%', aspectRatio: BUTTON\.aspectRatio, opacity: labelAreaHeight > 0 \? 1 : 0 \}\}>/);
+  assert.match(button, /style=\{\{ width: '100%', aspectRatio: BUTTON\.aspectRatio \}\}>/, 'the art is never hidden while its label waits for layout');
+  assert.doesNotMatch(button, /opacity: labelAreaHeight > 0/, 'no button goes missing on a busy phone');
+  assert.match(button, /const labelHeight = labelAreaHeight > 0 \? labelAreaHeight : guessedLabelHeight;/, 'the words have a size on the first frame');
   const detail = read('src/screens/RideTracker/RideDetailScreen.tsx');
   assert.match(detail, /const emptySharkSize = emptySharkFor\(screenHeight, emptyRoom, emptyWordsHeight\);/);
   assert.match(detail, /if \(screenHeight < 700 \|\| room <= 0 \|\| words <= 0\) return 0;/, 'no shark on the SE, and none before the room is measured');
