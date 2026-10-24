@@ -16,6 +16,9 @@ import {
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SPLASH_VIDEO = require('../../assets/videos/splash-loop.mp4');
+// First frame of the loop, drawn under the video so the screen opens on the
+// same art (no dark blue flash while the video starts).
+const SPLASH_POSTER = require('../../assets/images/splash-loop-poster.jpg');
 
 // Bubble that rises from bottom to top
 function Bubble({ delay, size, left, duration }: { delay: number; size: number; left: number; duration: number }) {
@@ -222,7 +225,13 @@ export default function LoadingScreen() {
   );
 
   return (
-    <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: '#09268f' }}>
+    <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: '#0768B9' }}>
+      <Image
+        source={SPLASH_POSTER}
+        contentFit="cover"
+        transition={0}
+        style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
+      />
       {/* Looping video background — exact screen dimensions */}
       <Video
         source={SPLASH_VIDEO}

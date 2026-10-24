@@ -32,3 +32,14 @@ test('the splash picks its art once and falls back to the bundled art', () => {
   assert.match(splash, /onError=\{\(\) => setArtSource\(SPLASH_ART\)\}/);
   assert.doesNotMatch(splash, /\{ uri: theme\.splash_screen_url \}/, 'the raw theme URL is never used directly');
 });
+
+// Splash to Loading flashed dark navy for about 0.2 s while the loop video
+// started. Loading and Login now draw the loop's first frame under the video.
+test('Loading and Login open on the loop art, never a dark flash', () => {
+  for (const file of ['src/screens/LoadingScreen.tsx', 'src/screens/Auth/LoginScreen.tsx']) {
+    const src = read(file);
+    assert.match(src, /images\/splash-loop-poster\.jpg/, file);
+    assert.doesNotMatch(src, /#09268f/, `${file} has no dark navy base`);
+    assert.ok(src.indexOf('source={SPLASH_POSTER}') < src.indexOf('<Video'), `${file} draws the poster under the video`);
+  }
+});
