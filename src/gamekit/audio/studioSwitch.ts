@@ -33,8 +33,8 @@ import { studioTraceOn } from './studioTrace';
 /** The feature-flags read (api/endpoints/platform/feature-flags), injected so the engine never imports the API client. */
 export type FlagReader = () => Promise<{ flags?: Record<string, boolean> } | null | undefined>;
 
-/** Key 1: flipped to true only after Dustin's yes. */
-export const STUDIO_SOUND_DEFAULT = false;
+/** Key 1: on. Dustin approved the whole listening pack by ear on Oct 24 2026 ("Seems cool I like it"). */
+export const STUDIO_SOUND_DEFAULT = true;
 
 const TTL_MS = 5 * 60_000;
 let flag: { on: boolean; at: number } | null = null;

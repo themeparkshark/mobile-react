@@ -180,11 +180,11 @@ function harness({ dev = false, sfx = true, muted = false, approved = false, nat
   return { calls, cues, haptics, sw, mm, pm };
 }
 
-test('the switch is off by default and needs every key', () => {
+test('the switch is on after Dustin\'s yes and still needs every other key', () => {
   const src = read('src/gamekit/audio/studioSwitch.ts');
-  assert.match(src, /export const STUDIO_SOUND_DEFAULT = false;/);
+  assert.match(src, /export const STUDIO_SOUND_DEFAULT = true;/);
   const h = harness();
-  assert.equal(h.sw.isStudioSoundOn(), false);
+  assert.equal(h.sw.isStudioSoundOn(), false, 'off until the server flag answers');
   h.sw.setStudioSoundOverride(true);
   assert.equal(h.sw.isStudioSoundOn(), false, 'the dev override is ignored in release builds');
   const d = harness({ dev: true });
@@ -195,12 +195,21 @@ test('the switch is off by default and needs every key', () => {
   assert.equal(muted.sw.isStudioSoundOn(), false, 'EXPO_PUBLIC_STUDIO_MUTE=1 keeps lane simulators off');
 });
 
-test('with key 1 off the flag is never even requested', async () => {
-  const h = harness();
+test('the server flag turns studio sound on and can pause it', async () => {
+  const on = harness();
   let asked = 0;
-  assert.equal(await h.sw.loadStudioSoundFlag(async () => { asked++; return { flags: { studio_sound: true } }; }), false);
-  assert.equal(asked, 0);
-  assert.equal(h.sw.isStudioSoundOn(), false, 'a true server flag alone cannot turn it on');
+  assert.equal(await on.sw.loadStudioSoundFlag(async () => { asked++; return { flags: { studio_sound: true } }; }), true);
+  assert.equal(asked, 1);
+  assert.equal(on.sw.isStudioSoundOn(), true, 'default on plus a true server flag');
+  const paused = harness();
+  assert.equal(await paused.sw.loadStudioSoundFlag(async () => ({ flags: { studio_sound: false } })), false);
+  assert.equal(paused.sw.isStudioSoundOn(), false, 'a false server flag pauses the rollout without a release');
+  const offline = harness();
+  assert.equal(await offline.sw.loadStudioSoundFlag(async () => { throw new Error('offline'); }), false);
+  assert.equal(offline.sw.isStudioSoundOn(), false, 'no answer reads as off');
+  const muted = harness({ muted: true });
+  await muted.sw.loadStudioSoundFlag(async () => ({ flags: { studio_sound: true } }));
+  assert.equal(muted.sw.isStudioSoundOn(), false, 'muted lane simulators stay off even with the flag on');
 });
 
 test('switch off: playMoment plays exactly the Chris fallback for every moment; studioMoment plays nothing', () => {
