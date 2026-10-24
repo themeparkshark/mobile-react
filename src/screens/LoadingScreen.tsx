@@ -222,12 +222,13 @@ export default function LoadingScreen() {
     isReady && hasUsername
   );
 
-  // Normal navigate when progress hits 100
+  // Normal navigate when progress hits 100, once the bar has visibly reached its share
+  // (Progress eases over 250 ms), so the map cover's bar picks up exactly where this one stopped.
   useTimeoutWhen(
     () => {
       safeNavigate();
     },
-    250,
+    400,
     progress === 100 && hasUsername
   );
 
