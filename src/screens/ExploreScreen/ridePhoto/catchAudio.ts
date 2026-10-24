@@ -1,10 +1,10 @@
 import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { createSfxLimiter } from '../../../audio/sfxLimiter';
-import { beatHaptic, queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
+import { beatHaptic, lastAppHapticAt, queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { momentSaver, playMoment, preloadMoments, studioMoment, studioReady } from '../../../gamekit/audio/playMoment';
 import type { MomentName } from '../../../gamekit/audio/momentMap';
-import { burstMoment, CATCH_WOBBLE_TICKS_MS, catchHeat, decodeDay, EMPTY_RUN, encodeDay, HEAT_MAX, heatTier, HOT_LAYER_HEAT, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
+import { burstMoment, CATCH_WOBBLE_INTENTS, CATCH_WOBBLE_TICKS_MS, catchHeat, COIN_TICK_GAP_MS, decodeDay, EMPTY_RUN, encodeDay, HEAT_MAX, heatTier, HOT_LAYER_HEAT, MIN_BEAT_GAP_MS, REPEAT_WOBBLE_INTENTS, REPEAT_WOBBLE_TICKS_MS, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
 import { traceEvent } from '../../../gamekit/audio/studioTrace';
 
 /**
@@ -128,27 +128,33 @@ function trace(kind: string, name: string, extra = '') {
 }
 /**
  * Studio sound for the map catch (wow-sound): the catch's beat marks drive the moment vocabulary, so
- * the sound sits on the same beat as the motion. 'tap' plays the pluck and the three rising wobble
- * ticks; 'burst' rings the burst for this catch (first of the day, a quick repeat, every 12th a lucky
- * shower, or the full bell); 'fly' slides up after the coin; 'miss' is the funny boing. While a catch
- * is open its own pop, chime and whoosh stay quiet (the marks already played them), the badge stamps
- * and the badge beats climb the counter ladder. Switch off: none of this runs and nothing changes.
+ * the sound sits on the same beat as the motion. 'tap' plays the pluck; the first wobble beat lays
+ * down the rising wobble ticks; 'beam' (every 10th catch) slams the gold beam in; 'burst' rings the
+ * burst the picture shows (the full show's bell or golden chord, the short show's sparkle, the grand
+ * 25th's shower); 'fly' slides up after the coin; 'miss' is the funny boing. While a catch is open its
+ * own pop, chime and whoosh stay quiet (the marks already played them), the badge stamps and each coin
+ * landing in the counter climbs the counter ladder. Switch off: none of this runs and nothing changes.
  */
 const SESSION_IDLE_MS = 4000;
 /** After 'done', counter ticks from coins still landing keep the studio ladder this long. */
 const DONE_TAIL_MS = 700;
 /**
- * `haptics` counts the catch's haptics before the burst: the first is the press, the next three are the
- * wobble swings, and each wobble tick plays from that same call, so the tick and its buzz leave the JS
- * thread together (a separate timer drifted 50 to 130 ms under load). No wobble haptics (Reduce Motion
- * skips the wobble) means no ticks.
+ * The studio catch while it is open. Round 5: the wobble ticks are scheduled on the audio clock from
+ * the first wobble beat, all at once (wobbleVoices), so a busy JS thread can never bunch them into a
+ * flam; the burst cancels any tick still waiting. Coin ticks are spaced on the audio clock too.
  */
 let session: {
-  until: number; wobbles: ReturnType<typeof setTimeout>[]; haptics: number; ticks: number; burst: boolean; heat: number; done?: boolean;
+  until: number; burst: boolean; heat: number; done?: boolean;
+  /** The short show (wow-map 'tap-repeat'). */
+  repeatPlan: boolean;
+  /** The gold beam dropped on this catch (wow-map 'beam' mark). */
+  beam: boolean;
+  /** Wobble ticks waiting on the audio clock: voice id and the time it starts. */
+  wobbleVoices: { id: number; at: number }[];
   /** Highest counter rung played so far (-1 before the first): the counter only ever climbs. */
   rung: number;
-  /** The roll after the stamp has played the rest of the ladder; later counter ticks are covered. */
-  rolled: boolean;
+  /** When the last coin tick into the counter starts (audio clock, ms): the next one waits COIN_TICK_GAP_MS. */
+  lastTickAt: number;
   /** The burst's own haptic (the first one after the burst mark) has fired. */
   burstBuzzed: boolean;
 } | null = null;
@@ -160,8 +166,10 @@ const DAY_KEY = 'tps.sound.lastCatchDay';
 const COUNTER_TOP = 12;
 /** Most rungs a quick run lifts the badge ticks. */
 const COUNTER_HEAT_MAX = 4;
+/** A tick with this pitch or higher is the progress bar's gold tick (wow-map), not the coin count. */
+const BAR_TICK_PITCH = 14;
 /**
- * The catch's own beats (tap, three wobbles, burst, success) own the haptic for this long after
+ * The catch's own beats (tap, wobbles, burst, success) own the haptic for this long after
  * the tap: they fire in the same call as their frame and sound (beatHaptic), never held behind the
  * shared 120 ms window, so a press buzz from the map a moment earlier cannot push them late.
  * Every player, switch on or off: it is a timing fix, not a new sound.
@@ -169,30 +177,42 @@ const COUNTER_HEAT_MAX = 4;
 const BEAT_WINDOW_MS = 1200;
 let beatUntil = 0;
 /**
+ * The catch's beat haptics, every player (switch on or off). Round 5: a JS stall delivered two wobble
+ * beats in the same millisecond (a flam you could hear and feel). Now the first wobble beat plans the
+ * others at the show's own spacing (timers), whichever comes first of the timer and wow-map's own beat
+ * fires each one once, two buzzes never land under MIN_BEAT_GAP_MS apart (a bunched one waits), and
+ * the hit-stop or burst drops any wobble buzz still waiting. A press echo (the map's own press buzz a
+ * moment before the tap) replaces the tap buzz instead of doubling it.
+ */
+let beats: {
+  /** Catch haptics since the tap (the first is the press). */
+  n: number;
+  offsets: readonly number[];
+  intents: readonly HapticIntent[];
+  /** Wobble beats wow-map has sent so far. */
+  seen: number;
+  fired: boolean[];
+  timers: ReturnType<typeof setTimeout>[];
+  /** The hit-stop or burst has come: no wobble buzz after it. */
+  closed: boolean;
+} | null = null;
+/**
  * The stamp is a beat too: the haptic that follows the badge sound in the same frame (wow-map's arrive()
  * plays catchSound('badge') then catchHaptic) fires with it, never held behind a coin-stream tick buzz
  * in the 120 ms window (the replay showed the stamp buzz 70 ms late). One pulse, every player.
  */
 const LAND_BEAT_MS = 40;
 let landBeatUntil = 0;
-/**
- * The counter roll (COUNT tokens in src/ui/motion.ts: at most 12 ticks, a final bump of 1.12): when the
- * coin stamps into the badge, the rest of the counter ladder rolls up in ROLL_TICKS_MAX quick ticks
- * ROLL_STEP_MS apart and lands on the top rung, so the count is over within 300 ms of the stamp. The
- * badge cascade's later ticks (and the bar tick) are then covered by it, so a slow phone can never
- * trickle ticks seconds after the catch has settled.
- */
-/** Three ticks: inside the counter tick's 3-voice cap, so none steals another before it is heard. */
-const ROLL_TICKS_MAX = 3;
-const ROLL_STEP_MS = 70;
-const ROLL_VOLUME = 0.7;
-const ROLL_FINAL_BUMP = 1.12;
 /** Heat of the catch in progress (or the last one), for every player: wow-map can scale its rays with it. */
 let heatNow = 0;
 /** Wobble buzzes climb with heat (tier 1: one rung, tier 2: two), capped below the burst's heavy. */
 const WOBBLE_LADDER: readonly HapticIntent[] = ['tickSelection', 'tapLight', 'hitMedium'];
 /** At heat tier 2 the burst lands a second, crisper thump this long after the heavy one. */
 const HOT_THUMP_MS = 90;
+/** The golden pair: the success pulse lands this long after the burst's heavy one (hapticGrammar 'golden'). */
+const GOLDEN_SUCCESS_MS = 180;
+/** When the burst's heavy buzz fired (every player), so a bunched success still lands GOLDEN_SUCCESS_MS after it. */
+let burstBuzzAt = -Infinity;
 
 function primeCatchState(): void {
   if (primed) return;
@@ -207,8 +227,29 @@ function sessionOpen(now = Date.now()): boolean {
   return !!session && now < session.until;
 }
 
+/** Stop the wobble ticks that have not started yet (the burst came early, or the catch ended). */
+function cutWobbles(): void {
+  const s = session;
+  if (!s) return;
+  const now = Date.now();
+  for (const v of s.wobbleVoices) {
+    if (v.at > now) {
+      try { GameAudio.stop(v.id); } catch { /* optional */ }
+      traceEvent('mark', 'catch-wobble-cut', `${v.at - now} ms early`);
+    }
+  }
+  s.wobbleVoices = [];
+}
+
+function closeBeats(): void {
+  if (!beats) return;
+  beats.closed = true;
+  beats.timers.forEach(clearTimeout);
+  beats.timers = [];
+}
+
 function endSession(): void {
-  session?.wobbles.forEach(clearTimeout);
+  cutWobbles();
   session = null;
 }
 
@@ -228,50 +269,68 @@ export function currentCatchHeat(): number {
 }
 
 function onCatchMark(name: string): void {
-  // 'tap-repeat': a later catch this session (wow-map's short repeat: two wobbles, burst at 450 ms).
+  // 'tap-repeat': a later catch this session (wow-map's short show: two wobbles, burst at 450 ms).
   if (name === 'tap' || name === 'tap-repeat') {
-    beatUntil = Date.now() + BEAT_WINDOW_MS;
     const now = Date.now();
+    const repeatPlan = name === 'tap-repeat';
+    beatUntil = now + BEAT_WINDOW_MS;
+    closeBeats();
+    beats = {
+      n: 0, seen: 0, fired: [], timers: [], closed: false,
+      offsets: repeatPlan ? REPEAT_WOBBLE_TICKS_MS : CATCH_WOBBLE_TICKS_MS,
+      intents: repeatPlan ? REPEAT_WOBBLE_INTENTS : CATCH_WOBBLE_INTENTS,
+    };
     heatNow = catchHeat(run, now);
     if (!studioReady('catch.tap')) { endSession(); return; }
     // The studio switch can turn on after the find appeared (the flag reads late): decode now at the latest.
     preloadCatchMoments();
     primeCatchState();
     endSession();
-    session = { until: now + SESSION_IDLE_MS, wobbles: [], haptics: 0, ticks: 0, burst: false, heat: heatNow, rung: -1, rolled: false, burstBuzzed: false };
+    session = { until: now + SESSION_IDLE_MS, burst: false, heat: heatNow, repeatPlan, beam: false, wobbleVoices: [], rung: -1, lastTickAt: -Infinity, burstBuzzed: false };
     if (session.heat > 0) traceEvent('mark', 'catch-heat', `+${session.heat}`);
     playMoment('catch.tap');
     return;
   }
+  if (name === 'hitstop' || name === 'burst' || name === 'miss' || name === 'skip' || name === 'beam') closeBeats();
   if (name === 'done' || name === 'miss') beatUntil = 0;
   if (name === 'burst' && !sessionOpen()) {
     // Switch off: the run still counts (heat for the visuals), nothing plays and nothing is stored.
-    run = burstMoment(run, Date.now()).state;
+    run = burstMoment(run, Date.now(), { repeatPlan: beats?.offsets === REPEAT_WOBBLE_TICKS_MS }).state;
     return;
   }
   if (!sessionOpen()) return;
   keepSession();
-  if (name === 'burst') {
-    session?.wobbles.forEach(clearTimeout);
-    if (session) session.burst = true;
-    const next = burstMoment(run, Date.now());
+  const s = session;
+  if (!s) return;
+  if (name === 'hitstop') {
+    // The held breath is silent: a tick still waiting would ring through it.
+    cutWobbles();
+  } else if (name === 'beam') {
+    // Every 10th catch the gold beam lands on the held frame: its own slam (wow-map buzzes the impact).
+    s.beam = true;
+    cutWobbles();
+    playMoment('catch.lucky');
+  } else if (name === 'burst') {
+    cutWobbles();
+    s.burst = true;
+    const next = burstMoment(run, Date.now(), { repeatPlan: s.repeatPlan, beam: s.beam });
     const stored = encodeDay(next.state);
     if (stored) void AsyncStorage.setItem(DAY_KEY, stored).catch(() => undefined);
     run = next.state;
     traceEvent('mark', 'catch-run', `#${run.count} -> ${next.moment}`);
     playMoment(next.moment);
     // A hot run (5 quick catches and up) adds a bright glockenspiel on the burst. Battery Saver: the burst alone.
-    if ((session?.heat ?? 0) >= HOT_LAYER_HEAT && !momentSaver()) playMoment('catch.hot', { delayMs: 60 });
+    if (s.heat >= HOT_LAYER_HEAT && !momentSaver()) playMoment('catch.hot', { delayMs: 60 });
   } else if (name === 'fly') {
     playMoment('catch.fly');
   } else if (name === 'miss') {
-    session?.wobbles.forEach(clearTimeout);
-    if (session) session.burst = true;
+    cutWobbles();
+    s.burst = true;
     playMoment('game.miss');
   } else if (name === 'done') {
     // The coin stream can still be landing in the counter: its ticks keep the ladder for a short tail.
-    session?.wobbles.forEach(clearTimeout);
-    if (session) { session.burst = true; session.done = true; session.until = Date.now() + DONE_TAIL_MS; }
+    cutWobbles();
+    s.burst = true; s.done = true; s.until = Date.now() + DONE_TAIL_MS;
   }
 }
 
@@ -284,12 +343,15 @@ export function catchMark(name: string): void {
 /** Tests only. */
 export function resetCatchSoundForTests(): void {
   endSession();
+  closeBeats();
+  beats = null;
   run = EMPTY_RUN;
   heatNow = 0;
   momentsReady = false;
   primed = true;
   beatUntil = 0;
   landBeatUntil = 0;
+  burstBuzzAt = -Infinity;
 }
 
 /** While a map catch is open (studio on): what the catch's own sounds become. */
@@ -300,82 +362,133 @@ function sessionSound(name: CatchSound, opts: { volume?: number; pitch?: number 
   const s = session;
   if (!s) return false;
   const lift = Math.round((s.heat * COUNTER_HEAT_MAX) / HEAT_MAX);
-  if (name === 'badge') {
-    const ok = studioMoment('catch.land', { volume: opts.volume });
-    if (ok && !s.rolled) rollCounter(s, lift);
-    return ok;
-  }
+  // The stamp is only the stamp: the counter already counted on the coins' own landings (round 5 drops
+  // round 4's roll after the stamp, which ticked while the digits had nearly stopped).
+  if (name === 'badge') return studioMoment('catch.land', { volume: opts.volume });
   if (name === 'tick') {
-    // After the roll the counter is already full: the cascade's later ticks are covered by it.
-    if (s.rolled) return true;
-    // One rolling ladder: the coin-stream ticks climb up to 4 rungs with the run and never step back or repeat.
     if (opts.pitch === undefined) return studioMoment('ui.counterTick', { volume: opts.volume });
+    // The progress bar's gold tick (a NEW find): its own top note, whatever the count reached.
+    if (opts.pitch >= BAR_TICK_PITCH) return studioMoment('ui.counterTick', { volume: opts.volume, step: COUNTER_TOP });
+    // A coin landing in the counter (wow-map plays one on every other coin, on the frame its digits
+    // move): one rolling ladder that climbs up to 4 rungs with the run, never steps back or repeats,
+    // and is spaced on the audio clock so a bunched beat cannot flam.
     if (s.rung >= COUNTER_TOP) return true;
+    const now = Date.now();
+    const at = Math.max(now, s.lastTickAt + COIN_TICK_GAP_MS);
+    // A bunched batch keeps at most three ticks in flight (the counter tick's voice cap, so none steals
+    // another before it is heard); a tick that would trail the digits by more than that is covered.
+    if (at - now > 2 * COIN_TICK_GAP_MS) return true;
     const step = Math.min(COUNTER_TOP, Math.max(opts.pitch + lift, s.rung + 1));
     s.rung = step;
-    return studioMoment('ui.counterTick', { volume: opts.volume, step });
+    s.lastTickAt = at;
+    return studioMoment('ui.counterTick', { volume: opts.volume, step, delayMs: at - now });
   }
   return false;
 }
 
+/** Fire a beat haptic, never under MIN_BEAT_GAP_MS after the last pulse (a bunched beat waits, unless the beats closed). */
+function spacedBeat(intent: HapticIntent, wobble: boolean): void {
+  const gap = Date.now() - lastAppHapticAt();
+  if (gap >= MIN_BEAT_GAP_MS) { beatHaptic(intent); return; }
+  const b = beats;
+  if (!b) { beatHaptic(intent); return; }
+  traceEvent('mark', 'catch-beat-spaced', `${intent} +${MIN_BEAT_GAP_MS - gap} ms`);
+  b.timers.push(setTimeout(() => { if (!(wobble && b.closed) && beats === b) beatHaptic(intent); }, MIN_BEAT_GAP_MS - gap));
+}
+
+/** Heat lifts a wobble buzz (studio on only; Battery Saver keeps the plain one). */
+function heated(intent: HapticIntent): HapticIntent {
+  const s = session;
+  if (!s || !sessionOpen() || !studioReady('catch.tap') || momentSaver()) return intent;
+  const tier = heatTier(s.heat);
+  const at = WOBBLE_LADDER.indexOf(intent);
+  return tier > 0 && at >= 0 ? WOBBLE_LADDER[Math.min(WOBBLE_LADDER.length - 1, at + tier)] : intent;
+}
+
+/** Wobble k's buzz: once, whichever comes first of its timer and wow-map's own beat. */
+function fireWobble(k: number, intent: HapticIntent): void {
+  const b = beats;
+  if (!b || b.closed || b.fired[k]) return;
+  b.fired[k] = true;
+  spacedBeat(heated(intent), true);
+}
+
 /**
- * The stamp starts the roll: the rest of the counter ladder in up to ROLL_TICKS_MAX ticks, ROLL_STEP_MS
- * apart, ending on the top rung a touch louder (the count's final bump). Each tick is scheduled on the
- * audio clock from this one call (delayMs), so a busy JS thread cannot spread them out. Battery Saver:
- * just the top tick.
+ * The first wobble beat plans the rest of the gather: the remaining buzzes as timers at the show's
+ * own spacing, and (studio on) every rising tick on the audio clock in one go, a rung higher in a
+ * quick run, so the ticks stay even however busy the JS thread is.
  */
-function rollCounter(s: NonNullable<typeof session>, lift: number): void {
-  s.rolled = true;
-  const from = Math.min(COUNTER_TOP, Math.max(s.rung + 1, 2 + lift));
-  const span = COUNTER_TOP - from;
-  const n = momentSaver() ? 1 : Math.min(ROLL_TICKS_MAX, span + 1);
-  const rungs: number[] = [];
-  for (let i = 0; i < n; i++) rungs.push(n === 1 ? COUNTER_TOP : Math.round(from + (span * i) / (n - 1)));
-  traceEvent('mark', 'catch-roll', rungs.join(' '));
-  rungs.forEach((step, i) => {
-    const last = i === rungs.length - 1;
-    studioMoment('ui.counterTick', { step, delayMs: (i + 1) * ROLL_STEP_MS, volume: last ? Math.min(1, ROLL_VOLUME * ROLL_FINAL_BUMP) : ROLL_VOLUME });
-  });
-  s.rung = COUNTER_TOP;
+function startWobbles(intent: HapticIntent): void {
+  const b = beats;
+  if (!b) return;
+  const base = b.offsets[0] ?? 0;
+  fireWobble(0, intent);
+  for (let k = 1; k < b.offsets.length; k++) {
+    const at = b.offsets[k] - base;
+    b.timers.push(setTimeout(() => fireWobble(k, b.intents[k] ?? intent), at));
+  }
+  const s = session;
+  if (s && sessionOpen() && studioReady('catch.tap') && !s.burst) {
+    const now = Date.now();
+    s.wobbleVoices = b.offsets.map((off, k) => {
+      const delayMs = off - base;
+      return { id: playMoment('catch.wobble', { step: s.heat + k, delayMs }), at: now + delayMs };
+    }).filter((v) => v.id > 0);
+  }
 }
 
 /**
  * A catch haptic. Inside the catch's beat window (tap to burst) it fires in this same call
  * (beatHaptic): no timer hop, no 120 ms gate, so the buzz leaves the JS thread with its frame and,
  * with the studio switch on, with its sound (audio-api output is about 20 ms, below what a hand can
- * tell). Each wobble haptic also plays its rising tick from this call (one JS callback for both).
- * Outside the window (the Ride Photo catch, the miss, late beats) it is the shared gate, as before.
+ * tell). The wobble beats are planned from the first one (startWobbles) and never flam. Outside the
+ * window (the Ride Photo catch, the miss, late beats) it is the shared gate, as before.
  */
 export function catchHaptic(intent: HapticIntent, priority = 2): void {
   trace('haptic', intent);
+  const now = Date.now();
   try {
-    if (sessionOpen() && studioReady('catch.tap')) {
-      const s = session;
-      const tier = s ? heatTier(s.heat) : 0;
-      // The held breath: the three wobble haptics each bring a rising tick, a rung higher in a quick run.
-      if (s && !s.burst) {
-        s.haptics += 1;
-        if (s.haptics > 1 && s.ticks < CATCH_WOBBLE_TICKS_MS.length && WOBBLE_INTENTS.has(intent)) {
-          playMoment('catch.wobble', { step: s.heat + s.ticks++ });
-          // Hotter runs buzz heavier too (light, then medium), never past the burst's heavy.
-          const at = WOBBLE_LADDER.indexOf(intent);
-          if (tier > 0 && at >= 0 && !momentSaver()) intent = WOBBLE_LADDER[Math.min(WOBBLE_LADDER.length - 1, at + tier)];
-        }
-      } else if (s && s.burst && !s.burstBuzzed && !s.done) {
-        // The burst's own buzz. At heat tier 2 a second, crisper thump follows it (Battery Saver: one pulse).
-        s.burstBuzzed = true;
-        if (tier >= 2 && Date.now() < beatUntil && !momentSaver()) {
-          traceEvent('mark', 'catch-thump', `+${s.heat}`);
-          setTimeout(() => { if (Date.now() < beatUntil) beatHaptic('hitRigid'); }, HOT_THUMP_MS);
-        }
-      } else if (s && s.rolled && intent === 'tickSelection') {
-        // The stamp's buzz carries the rolled count; a bar tick seconds later would buzz with no sound.
+    const b = beats;
+    if (b && now < beatUntil && !b.closed) {
+      b.n += 1;
+      if (b.n === 1) {
+        // The press: if the map's own press buzz just fired for this touch, that pulse is the tap.
+        if (now - lastAppHapticAt() < MIN_BEAT_GAP_MS) { traceEvent('mark', 'catch-press-echo', intent); return; }
+        beatHaptic(intent);
+        return;
+      }
+      if (WOBBLE_INTENTS.has(intent) && b.seen < b.offsets.length) {
+        const k = b.seen++;
+        if (k === 0) startWobbles(intent);
+        else fireWobble(k, intent);
         return;
       }
     }
+    if (sessionOpen() && studioReady('catch.tap')) {
+      const s = session;
+      if (s && s.burst && !s.burstBuzzed && !s.done) {
+        // The burst's own buzz. At heat tier 2 a second, crisper thump follows it (Battery Saver: one pulse).
+        s.burstBuzzed = true;
+        if (heatTier(s.heat) >= 2 && now < beatUntil && !momentSaver()) {
+          traceEvent('mark', 'catch-thump', `+${s.heat}`);
+          setTimeout(() => { if (Date.now() < beatUntil) beatHaptic('hitRigid'); }, HOT_THUMP_MS);
+        }
+      }
+    }
   } catch { /* sound is decoration */ }
-  const now = Date.now();
-  if (now < beatUntil) beatHaptic(intent);
+  if (now < beatUntil) {
+    const b = beats;
+    if (intent === 'comboHeavy' && b?.closed) burstBuzzAt = now;
+    // A stalled thread delivers the burst and its success together: the success still waits its 180 ms.
+    if (intent === 'success' && now - burstBuzzAt < GOLDEN_SUCCESS_MS - 30) {
+      const wait = GOLDEN_SUCCESS_MS - (now - burstBuzzAt);
+      traceEvent('mark', 'catch-beat-spaced', `success +${wait} ms`);
+      burstBuzzAt = -Infinity;
+      setTimeout(() => beatHaptic('success'), wait);
+      return;
+    }
+    beatHaptic(intent);
+  }
   else if (now < landBeatUntil) { landBeatUntil = 0; beatHaptic(intent); }
   else queueHaptic(intent, priority);
 }

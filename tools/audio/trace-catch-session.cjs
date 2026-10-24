@@ -3,17 +3,20 @@
 /**
  * A 50-catch map session through the real studio engine on the silent
  * TraceBackend (wow-sound lane, Oct 24 2026). Each catch replays the map
- * catch's own calls in order (HomeCatchMoment on claude/p23-wow-map: the
- * catchMark beats, catchSound and catchHaptic at their catchPlan times) on a
- * virtual clock, then the log is checked: which burst each catch got, that
- * the wobble ticks sit on the wobble haptics, that each burst sound starts on
- * the burst haptic, that repeats are shorter than firsts, round-robin never
- * repeats back to back, and the coin ladder resets after a pause.
+ * catch's own calls in order (HomeCatchMoment on claude/p23-wow-map cb614f50:
+ * the tap on the JS thread, then every beat of the UI-thread catch clock,
+ * through tools/audio/wowmap-catch-beats.cjs) on a virtual clock, then the log
+ * is checked: which burst each catch got (the picture's: full show, short show,
+ * the 10th catch's beam, the 25th's grand burst), that the wobble ticks sit on
+ * the wobble haptics, that each burst sound starts on the burst haptic, that
+ * every counter tick lands on a coin landing, round-robin never repeats back to
+ * back, and the coin ladder resets after a pause.
  *
  *   node tools/audio/trace-catch-session.cjs [out.txt]     (never plays audio)
  */
 const fs = require('node:fs');
 const { traceEngine } = require('../tests/helpers/studio-trace-harness.cjs');
+const { wowMapCatch, plan } = require('./wowmap-catch-beats.cjs');
 
 const flush = () => new Promise((r) => setImmediate(r));
 
@@ -22,7 +25,6 @@ async function run({ catches = 50 } = {}) {
   const e = traceEngine({ start: new Date(2026, 9, 24, 17, 0, 0).getTime() });
   e.Catch.resetCatchSoundForTests();
   await e.GameAudio.init();
-  // Exact: jump timer to timer (flushing promises after each), so no time is quantized.
   const advance = async (ms) => {
     const end = e.clock.now + ms;
     await flush();
@@ -37,29 +39,15 @@ async function run({ catches = 50 } = {}) {
   const gapFor = (i) => (i === 20 ? 6 * 60_000 : i === 35 ? 16 * 3600_000 : i % 7 === 0 ? 150_000 : 25_000);
   const catchesAt = [];
   for (let i = 1; i <= catches; i++) {
-    const t0 = e.clock.now;
-    catchesAt.push(t0);
-    const at = (ms) => advance(t0 + ms - e.clock.now);
-    // HomeCatchMoment (wow-map): tap mark, haptic plan, pop.
-    // The map's own press buzz lands just before the catch starts (the live trace's +107 ms tap case):
-    // the catch's beats must not wait behind it.
-    e.Haptics.queueHaptic('tapLight', 1);
-    e.Catch.catchMark('tap');
-    e.Catch.catchHaptic('tapLight', 3);
-    e.Catch.catchSound('pop');
-    await at(200); e.Catch.catchHaptic('tickSelection', 2);
-    await at(350); e.Catch.catchHaptic('tapLight', 2);
-    await at(480); e.Catch.catchHaptic('hitMedium', 2);
-    await at(600); e.Catch.catchMark('hitstop');
-    await at(670); e.Catch.catchMark('burst'); e.Catch.catchHaptic('comboHeavy', 3); e.Catch.catchSound('chime', { volume: 0.8 });
-    await at(850); e.Catch.catchHaptic('success', 3);
-    await at(900); e.Catch.catchMark('fly'); e.Catch.catchSound('whoosh', { volume: 0.6 });
-    await at(1500); e.Catch.catchSound('badge'); e.Catch.catchHaptic('success', 4);
-    for (let b = 0; b < 4; b++) { await at(1620 + b * 120); e.Catch.catchSound('tick', { pitch: 2 + b * 2, volume: 0.7 }); }
-    await at(2200); e.Catch.catchMark('done');
-    // The coins tick into the wallet (CurrencyFlyProvider: catch.count per landing coin, 110 ms apart).
-    for (let c = 0; c < 5; c++) { await at(2300 + c * 110); e.Moments.playMoment('catch.count'); }
-    await at(3200);
+    // wow-map burstVariant: the first catch of the session is the full show, every later one the short
+    // show; every 10th drops the gold beam, every 25th is the grand burst (the beam too).
+    const repeat = i > 1;
+    const beam = i % 10 === 0 || i % 25 === 0;
+    const r = await wowMapCatch(e, { repeat, beam, coins: 10, isNew: i % 3 !== 0, pressEcho: true });
+    catchesAt.push({ t0: r.t0, clock0: r.clock0, repeat, beam, plan: plan(repeat), lands: r.lands });
+    // The coins tick into the wallet elsewhere too (CurrencyFlyProvider: catch.count per landing coin, 110 ms apart).
+    for (let c = 0; c < 5; c++) { await advance(110); e.Moments.playMoment('catch.count'); }
+    await advance(1000);
     if (i < catches) e.clock.advance(gapFor(i));
   }
   // A whack run: 12 hits 180 ms apart (round-robin).
@@ -73,44 +61,46 @@ function analyse(e, catchesAt) {
   const sounds = ev.filter((x) => x.kind === 'sound');
   const marks = ev.filter((x) => x.kind === 'mark');
   const haptics = e.haptics;
-  const perCatch = catchesAt.map((t0, i) => {
-    const t1 = catchesAt[i + 1] ?? Infinity;
+  const perCatch = catchesAt.map((c, i) => {
+    const { t0, clock0, plan: p } = c;
+    const t1 = catchesAt[i + 1]?.t0 ?? Infinity;
     const inside = (x) => x.t >= t0 && x.t < t1;
+    const rel = (x) => x.t - clock0;
     const run = marks.find((m) => inside(m) && m.name === 'catch-run');
     const burst = run ? run.detail.split('-> ')[1] : null;
     const burstSound = sounds.find((s) => inside(s) && burst && s.name.startsWith(`moment:${burst}:primary`));
-    const burstHaptic = haptics.find((h) => h.t >= t0 + 660 && h.t < t0 + 700 && h.intent === 'comboHeavy');
+    const burstHaptic = haptics.find((h) => inside(h) && h.t >= clock0 + p.hitStopAt - 5 && h.intent === 'comboHeavy');
     const wobbleSounds = sounds.filter((s) => inside(s) && s.name.startsWith('moment:catch.wobble:'));
-    const wobbleHaptics = haptics.filter((h) => h.t > t0 + 100 && h.t < t0 + 600);
-    const catchSounds = sounds.filter((s) => inside(s) && s.t < t0 + 2250 && s.name.startsWith('moment:catch.'));
+    const wobbleHaptics = haptics.filter((h) => h.t > clock0 + 100 && h.t < clock0 + p.hitStopAt);
+    const land = sounds.find((s) => inside(s) && s.name.startsWith('moment:catch.land:'));
+    const counter = sounds.filter((s) => inside(s) && s.name.startsWith('moment:ui.counterTick:'));
     const end = Math.max(...sounds.filter((s) => inside(s) && s.name.startsWith(`moment:${burst}:`)).map((s) => s.t)) - (burstSound?.t ?? 0);
     return {
-      n: i + 1, burst,
-      burstSoundMs: burstSound ? burstSound.t - t0 : null,
-      burstHapticMs: burstHaptic ? burstHaptic.t - t0 : null,
-      wobbleSoundMs: wobbleSounds.map((s) => s.t - t0),
+      n: i + 1, burst, repeat: c.repeat, beam: c.beam,
+      lucky: sounds.some((s) => inside(s) && s.name.startsWith('moment:catch.lucky:primary')),
+      burstSoundMs: burstSound ? rel(burstSound) : null,
+      burstHapticMs: burstHaptic ? rel(burstHaptic) : null,
+      wobbleSoundMs: wobbleSounds.map(rel),
       wobbleRungs: wobbleSounds.map((s) => s.name.split('#')[1]),
       heat: Number((marks.find((m) => inside(m) && m.name === 'catch-heat')?.detail ?? '+0').slice(1)),
-      badgeRungs: sounds.filter((s) => inside(s) && s.name.startsWith('moment:ui.counterTick:')).map((s) => s.name.split('#')[1]),
-      wobbleHapticMs: wobbleHaptics.map((h) => h.t - t0),
+      counterRungs: counter.map((s) => s.name.split('#')[1]),
+      counterMs: counter.map(rel),
+      coinLandsMs: c.lands,
+      landMs: land ? rel(land) : null,
+      tapHaptics: haptics.filter((h) => h.t >= t0 - 5 && h.t < clock0 + 100).length,
+      wobbleHapticMs: wobbleHaptics.map(rel),
       wobbleIntents: wobbleHaptics.map((h) => h.intent),
-      thumpMs: (haptics.find((h) => h.t >= t0 + 700 && h.t < t0 + 850 && h.intent === 'hitRigid')?.t ?? t0 - 1) - t0,
+      thumpMs: (() => { const h = haptics.find((x) => inside(x) && x.intent === 'hitRigid'); return h ? rel(h) : -1; })(),
       hot: sounds.some((s) => inside(s) && s.name.startsWith('moment:catch.hot:')),
-      rollEndMs: (() => {
-        const land = sounds.find((s) => inside(s) && s.name.startsWith('moment:catch.land:'));
-        const ticks = sounds.filter((s) => inside(s) && s.name.startsWith('moment:ui.counterTick:'));
-        return land && ticks.length ? Math.max(...ticks.map((s) => s.t)) - land.t : null;
-      })(),
-      sounds: catchSounds.length,
+      sounds: sounds.filter((s) => inside(s) && s.name.startsWith('moment:catch.')).length,
       burstLayersSpanMs: Number.isFinite(end) ? end : 0,
-      legacy: sounds.filter((s) => inside(s) && s.t < t0 + 2250 && !s.name.startsWith('moment:')).map((s) => s.name),
+      legacy: sounds.filter((s) => inside(s) && s.t < clock0 + p.doneAt && !s.name.startsWith('moment:')).map((s) => s.name),
     };
   });
   const hits = sounds.filter((s) => s.name.startsWith('moment:game.hit:primary')).map((s) => s.name.split('#')[1]);
-  const ladderRuns = [];
-  catchesAt.forEach((t0, i) => {
-    const t1 = catchesAt[i + 1] ?? Infinity;
-    ladderRuns.push(sounds.filter((s) => s.t >= t0 + 2250 && s.t < t1 && s.name.startsWith('moment:catch.count:')).map((s) => s.name.split('#')[1]));
+  const ladderRuns = catchesAt.map((c, i) => {
+    const t1 = catchesAt[i + 1]?.t0 ?? Infinity;
+    return sounds.filter((s) => s.t >= c.t0 && s.t < t1 && s.name.startsWith('moment:catch.count:')).map((s) => s.name.split('#')[1]);
   });
   return { perCatch, hits, ladderRuns };
 }
@@ -121,8 +111,8 @@ async function main() {
   const out = process.argv[2];
   const lines = [
     '50-catch map session, real studio engine on the silent TraceBackend (virtual clock; nothing played).',
-    'Per catch: burst moment, heat | burst haptic and sound ms (thump = the hot second buzz, +hot = the bright layer) | wobble rungs, sound ms, haptic intents | the counter roll | legacy sounds',
-    ...a.perCatch.map((c) => `#${String(c.n).padStart(2)} ${c.burst.padEnd(17)} heat +${c.heat} | hap ${c.burstHapticMs} snd ${c.burstSoundMs}${c.thumpMs > 0 ? ` thump ${c.thumpMs}` : ''}${c.hot ? ' +hot' : ''} | wobble ${c.wobbleRungs.join(' ')} at ${c.wobbleSoundMs.join(',')} haps ${c.wobbleIntents.join(',')} | count roll ${c.badgeRungs.join(' ')} ends ${c.rollEndMs} ms after the stamp | legacy ${c.legacy.join(',') || 'none'}`),
+    'Per catch (ms on the catch clock): show (full / short, +beam), burst moment, heat | burst haptic and sound (thump = the hot second buzz, +hot = the bright layer) | wobble rungs, sound ms, haptic ms and intents | counter ticks (rung@ms) against coin landings | stamp | legacy sounds',
+    ...a.perCatch.map((c) => `#${String(c.n).padStart(2)} ${c.repeat ? 'short' : 'full '}${c.beam ? '+beam' : '     '} ${c.burst.padEnd(17)}${c.lucky ? ' +beam-slam' : ''} heat +${c.heat} | hap ${c.burstHapticMs} snd ${c.burstSoundMs}${c.thumpMs > 0 ? ` thump ${c.thumpMs}` : ''}${c.hot ? ' +hot' : ''} | wobble ${c.wobbleRungs.join(' ')} at ${c.wobbleSoundMs.join(',')} haps ${c.wobbleHapticMs.join(',')} ${c.wobbleIntents.join(',')} | counter ${c.counterRungs.map((r, k) => `${r}@${c.counterMs[k]}`).join(' ')} coins land ${c.coinLandsMs.join(',')} | stamp ${c.landMs} | legacy ${c.legacy.join(',') || 'none'}`),
     `whack hits round-robin: ${a.hits.join(' ')}`,
     `coin ladder per catch: ${a.ladderRuns.slice(0, 3).map((r) => r.join(',')).join(' | ')} ...`,
     '',

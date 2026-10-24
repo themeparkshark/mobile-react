@@ -79,14 +79,16 @@ const lastLadder = new Map<MomentName, { at: number; step: number }>();
 const lastRr = new Map<MomentName, number>();
 const registered = new Set<string>();
 
-/** Dev trace (Metro log + buffer): what each moment played, for beat logs and sync review. */
+/**
+ * Dev trace: what each moment played, for beat logs and sync review. Only a sound trace build
+ * (EXPO_PUBLIC_STUDIO_TRACE=1) writes it to Metro; an ordinary dev build keeps it in this buffer
+ * only (round 5: a console.log per moment is a bridge message the JS thread pays for mid-catch).
+ */
 export const momentTraceBuffer: string[] = [];
 function trace(line: string): void {
   if (typeof __DEV__ === 'undefined' || !__DEV__) return;
-  const out = `[moment] ${Date.now()} ${line}`;
   if (studioTraceOn()) traceEvent('moment', line);
-  else console.log(out);
-  if (momentTraceBuffer.length < 2000) momentTraceBuffer.push(out);
+  if (momentTraceBuffer.length < 2000) momentTraceBuffer.push(`[moment] ${Date.now()} ${line}`);
 }
 
 // Trace mode: every haptic pulse that actually fires is logged next to the sound starts.

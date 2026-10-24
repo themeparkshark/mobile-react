@@ -32,6 +32,8 @@ export function studioTraceOn(): boolean {
 const MAX_EVENTS = 4000;
 const events: TraceEvent[] = [];
 const listeners = new Set<(e: TraceEvent) => void>();
+/** Scheduled sounds taken back before they started (the HUD never lights for them). */
+const cancelled = new WeakSet<TraceEvent>();
 
 /**
  * Record one event. `at` defaults to now; a scheduled sound passes its start
@@ -45,9 +47,20 @@ export function traceEvent(kind: TraceKind, name: string, detail?: string, at?: 
   console.log(`[studio-trace] ${e.t} ${kind} ${name}${detail ? ` ${detail}` : ''}`);
   const wait = e.t - now;
   if (listeners.size === 0) return;
-  const tell = () => listeners.forEach((fn) => { try { fn(e); } catch { /* HUD is decoration */ } });
+  const tell = () => { if (!cancelled.has(e)) listeners.forEach((fn) => { try { fn(e); } catch { /* HUD is decoration */ } }); };
   if (wait > 4) setTimeout(tell, wait);
   else tell();
+}
+
+/**
+ * Take a scheduled sound back out (stopped before it started, so it is never heard). The Metro log
+ * gets a `cancel` line so an offline render drops it too; the HUD may already have it queued.
+ */
+export function cancelTraceEvent(kind: TraceKind, name: string, at: number): void {
+  if (!studioTraceOn()) return;
+  const i = events.findIndex((e) => e.kind === kind && e.name === name && e.t === at);
+  if (i >= 0) { cancelled.add(events[i]); events.splice(i, 1); }
+  console.log(`[studio-trace] ${at} cancel ${name}`);
 }
 
 /** Subscribe (the dev HUD). Returns an unsubscribe. */

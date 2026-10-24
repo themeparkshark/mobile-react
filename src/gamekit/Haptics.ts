@@ -191,6 +191,8 @@ export interface HapticGate {
   request(intent: HapticIntent, priority?: number): 'fired' | 'queued' | 'dropped';
   /** The intent waiting for the window, if any. */
   pending(): HapticIntent | null;
+  /** When the last pulse fired (ms, the gate's clock), or -Infinity. */
+  lastFiredAt(): number;
   /**
    * A choreographed beat (the catch's tap, wobbles and burst): fire now, never wait.
    * The window still restarts from here, so other callers keep their spacing after
@@ -243,6 +245,7 @@ export function createHapticGate(options: {
       return 'queued';
     },
     pending: () => waiting?.intent ?? null,
+    lastFiredAt: () => lastAt,
     force(intent) {
       if (waiting && waiting.priority <= HAPTIC_PRIORITY[intent]) waiting = null;
       fireNow(intent);
@@ -280,6 +283,11 @@ export function queueHaptic(intent: HapticIntent, priority?: number): void {
 export function beatHaptic(intent: HapticIntent): void {
   if (!enabled) return;
   appGate.force(intent);
+}
+
+/** When the app-wide gate last fired a pulse (ms), so a choreographed beat can avoid a flam. */
+export function lastAppHapticAt(): number {
+  return appGate.lastFiredAt();
 }
 // =============================================================================
 // Haptic grammar: patterns + priority scheduling (studio engine)

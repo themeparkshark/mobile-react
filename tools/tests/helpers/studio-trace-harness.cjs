@@ -32,6 +32,14 @@ function virtualClock(start) {
     /** The next timer's time (or Infinity). */
     nextAt() { return q.reduce((m, t) => Math.min(m, t.at), Infinity); },
     Date: FakeDate, setTimeout: setT, clearTimeout: clearT, setInterval: setI, clearInterval: clearI,
+    /**
+     * A JS stall of `ms`: time moves on but no timer runs; everything that fell due fires
+     * right after, in order (what a busy JS thread does to setTimeout and runOnJS calls).
+     */
+    stall(ms) {
+      now += Math.max(0, ms);
+      q.forEach((t) => { if (t.at < now) t.at = now; });
+    },
     /** Run every timer due in the next `ms`, in time order. */
     advance(ms) {
       const end = now + ms;
