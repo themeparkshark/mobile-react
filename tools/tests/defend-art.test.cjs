@@ -51,7 +51,7 @@ test('the Defend countdown ends on GO!, never a 0', () => {
 // plaque and bonus banner covered the shield.
 test('Gym towers and the Defend layout fit a short screen', () => {
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
-  assert.match(gym, /const maxWinner = \(SCREEN_H \* 0\.58 - 180\) \/ aspectRatio;/);
+  assert.match(gym, /const maxWinner = \(SCREEN_H \* 0\.58 - 190\) \/ aspectRatio;/);
   assert.match(gym, /Math\.min\(SCREEN_W \* 0\.32, winnerSize \* 0\.75\)/);
   const defend = read('src/components/GymBattle/DefendMiniGameModal.tsx');
   assert.match(defend, /const SHORT = SCREEN_H < 700;/);

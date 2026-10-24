@@ -154,7 +154,7 @@ const AnimatedPillar = ({
     // On short screens (iPhone SE) the winner tower grew up into the header
     // cards. Cap the tower height to the room between the header and the
     // tower bases (58% down), keeping the winner-to-side size ratio.
-    const maxWinner = (SCREEN_H * 0.58 - 180) / aspectRatio;
+    const maxWinner = (SCREEN_H * 0.58 - 190) / aspectRatio;
     const winnerSize = Math.min(SCREEN_W * 0.45, maxWinner);
     const baseSize = isWinner ? winnerSize : Math.min(SCREEN_W * 0.32, winnerSize * 0.75);
     
