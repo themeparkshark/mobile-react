@@ -99,7 +99,6 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
   const [chargeKey, setChargeKey] = useState(0);
   const [burst, setBurst] = useState<{ fx: LevelUpFx; key: number } | null>(null);
   const [igniteKey, setIgniteKey] = useState(0);
-  const [ribbon, setRibbon] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [crowningId, setCrowningId] = useState<string | null>(null);
   const crowning = usePresentationSlot(crowningId, 'crowning', 'coin_shelf');
@@ -127,11 +126,10 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
       playLimited('coin-level-up', { priority: SFX_PRIORITY.land, durationMs: 900 }, () => { playSound?.(LEVEL_SOUND); });
       setBurst(current => ({ fx: plan, key: (current?.key ?? 0) + 1 }));
       setIgniteKey(key => key + 1);
-      // The chip names the new look, with no level number: "LEVELED UP!" on the coin is the one level marker.
-      setRibbon(`${coinTier(target).name.toUpperCase()} COIN!`);
+      // "LEVELED UP!" on the coin is the one thing that says it: the chip under the coin goes straight
+      // back to its plain Parts count, so the event is said once (no tier name, no number).
       // Remembered only under a real wait id, so two waits can never share a mark.
       setLevelMark(waitKey != null ? rememberWaitLevel(waitKey, coin.id, target) : { level: target, partLanded: false });
-      timers.current.push(setTimeout(() => setRibbon(null), 2600));
       scale.value = reducedMotion ? 1 : withSequence(withTiming(0.86, { duration: 90 }), withSpring(1, { damping: 6, stiffness: 240 }));
       void AccessibilityInfo.announceForAccessibility(`Coin leveled up. ${levelRibbon(target)}.`);
       if (plan.crowning) setCrowningId(`crowning:wait:${coin.id}:${Date.now()}`);
@@ -156,9 +154,9 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
 
   const marker = coinLevelMarker(levelMark, progress.goalLevel);
   const label = !owned ? 'Win this ride to collect its coin'
-    : ribbon ?? error ?? (busy ? 'Leveling up…' : progress.chip);
+    : error ?? (busy ? 'Leveling up…' : progress.chip);
   /** The plain "2 of 4" count: the Parts gem beside it says what is counted. */
-  const showCount = owned && !ribbon && !error && !busy && !progress.ready && !progress.partsReady && !progress.maxed;
+  const showCount = owned && !error && !busy && !progress.ready && !progress.partsReady && !progress.maxed;
   const accessibility = owned
     ? `${coin?.rideName ?? 'Ride'} coin, Level ${level} ${tier.name}. ${leveledTo != null ? `You leveled it up to Level ${leveledTo} this wait. ` : ''}${progress.label}.`
     : 'This ride coin is not collected yet. Parts you earn here wait for it.';
@@ -210,14 +208,14 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
           </View>
         )}
       </Pressable>
-      <View style={[styles.labelChip, progress.ready && owned && styles.labelChipReady, (ribbon != null) && styles.labelChipRibbon]}>
-        {progress.ready && owned && !busy && !ribbon && <GameIcon name="sparkle" size={14} />}
+      <View style={[styles.labelChip, progress.ready && owned && styles.labelChipReady]}>
+        {progress.ready && owned && !busy && <GameIcon name="sparkle" size={14} />}
         {showCount && <GameIcon name="parts" size={17} />}
         {/* The count's digits use the flagged-1 font, so "1 of 6" never reads "I of 6". */}
         <KidText style={[styles.labelText, showCount && styles.labelTextCount,
-          ((progress.ready && owned) || ribbon != null) && styles.labelTextReady]} numberOfLines={1}
+          progress.ready && owned && styles.labelTextReady]} numberOfLines={1}
           adjustsFontSizeToFit minimumFontScale={0.8}>
-          {progress.ready && owned && !busy && !ribbon && !error ? 'TAP TO LEVEL UP' : label}
+          {progress.ready && owned && !busy && !error ? 'TAP TO LEVEL UP' : label}
         </KidText>
       </View>
       {crowningId && coin && (
@@ -241,7 +239,6 @@ const styles = StyleSheet.create({
   labelChip: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: -6, paddingHorizontal: 10, paddingVertical: 3,
     borderRadius: 12, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)', maxWidth: 190 },
   labelChipReady: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
-  labelChipRibbon: { backgroundColor: '#ffffff', borderColor: BRAND.gold },
   labelText: { fontFamily: 'Knockout', fontSize: 13, color: '#ffffff', letterSpacing: 0.3 },
   labelTextReady: { color: BRAND.navy },
   labelTextCount: { fontSize: 15, letterSpacing: 0.4 },

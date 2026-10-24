@@ -105,7 +105,7 @@ test('PLAY NOW is always whole: the page leads with it, shrinks it to one row, o
   const card = read('src/screens/LinePlay/components/ChapterCard.tsx');
   assert.match(card, /const fit = chapterPageFit\(viewHeight, shortScreen\);/);
   assert.match(card, /if \(fit === 'strip'\) \{/);
-  assert.match(card, /<PageScroll fill=\{FRAME_FILL\} contentStyle=\{styles\.contentStrip\} onLayout=\{measure\} still>/,
+  assert.match(card, /<PageScroll fill=\{FRAME_FILL\} contentStyle=\{\[styles\.contentStrip, withTrail && styles\.contentStripTrail\]\}\n\s*onLayout=\{measure\} still>/,
     'the strip never scrolls, fades or shows an arrow');
   assert.match(card, /<GameIcon name="play" size=\{40\} \/>/);
   assert.match(card, /const rise = riseFor\(useUiReducedMotion\(\) \|\| entered\.current\);/, 'a layout switch never replays the entrance');
@@ -136,7 +136,7 @@ test('Details opens smoothly: one commit, the crew row fades and the page window
   assert.doesNotMatch(card, /LayoutAnimation/, 'LayoutAnimation does not animate on the new architecture');
   assert.match(card, /setExpanded\(next\);\n\s*onDetailsChange\?\.\(next\);/, 'same event, same commit: no pop');
   assert.equal((card.match(/onPress=\{toggleDetails\}/g) ?? []).length, 2);
-  assert.match(card, /entering=\{reducedMotion \? undefined : FadeIn\.delay\(100\)\.duration\(180\)\}/);
+  assert.match(card, /entering=\{reducedMotion \? undefined : detailsEnter\}/);
   const screen = read(SCREEN);
   assert.match(screen, /exiting=\{reducedFx \|\| fit\.short \? undefined : FadeOut\.duration\(140\)\}\n\s*onLayout=\{event => setCrewRowHeight\(Math\.round\(event\.nativeEvent\.layout\.height\)\)\}>\{groupPlay\.strip\}<\/Reanimated\.View>/);
   // No glide through a square clip (it cut glyphs mid-move), and no blink: the window dips to 35%
@@ -292,8 +292,9 @@ test('an iPhone SE navigation page: the whole board fits BESIDE its header, no s
   assert.equal(m.navBoardLayout({ width: 337, height: 151 }, 62, false), 'beside');
   const side = m.boardBesideSide({ width: 337, height: 151 });
   assert.ok(side >= m.BESIDE_FLOOR, `board ${side}`);
-  assert.equal(side + 8 * 2 + (3 + 6) * 2, 151, 'the board plus its rims and padding is exactly the page: nothing to scroll');
-  assert.ok((side - 12) / 3 >= 30, 'tiles stay at least 30 pt');
+  assert.equal(side + m.BESIDE_V, 151, 'the board plus its rims and padding is exactly the page: nothing to scroll');
+  assert.ok(m.besideTileSide(side) >= 40, `SE tiles ${m.besideTileSide(side)} pt`);
+  assert.ok(m.besideTileSide(side) + m.BESIDE_TILE_GAP >= 44, 'each tile plus its half gaps is a 44 pt touch area');
   // 17 Pro reading Details: a playable board beside the header instead of a strip.
   assert.equal(m.navBoardLayout({ width: 366, height: 149 }, 60, true), 'beside');
   // SE reading Details: too short even beside, so the "Tap to play" strip.
@@ -381,7 +382,9 @@ test('the coin has no box: the halo canvas reaches past the ring and no plank sh
   assert.match(ring, /<Canvas style=\{\{ position: 'absolute', left: -pad, top: -pad, width: size \+ pad \* 2, height: size \+ pad \* 2 \}\}>/);
   const stage = read('src/screens/LinePlay/components/waitscreen/WaitCoinStage.tsx');
   assert.match(stage, /contactShadow=\{false\}/);
-  assert.match(stage, /setRibbon\(`\$\{coinTier\(target\)\.name\.toUpperCase\(\)\} COIN!`\);/, 'no level number beside LEVELED UP!');
+  // The level up is said once: "LEVELED UP!" on the coin, and the chip under it keeps its plain count.
+  assert.doesNotMatch(stage, /setRibbon|COIN!`|labelChipRibbon/, 'no second level-up line in the chip');
+  assert.match(stage, /: error \?\? \(busy \? 'Leveling up…' : progress\.chip\);/);
   const shelf = read('src/components/collection/ShelfCoin.tsx');
   assert.match(shelf, /\{contactShadow && <View style=\{\[styles\.contact,/);
 });
@@ -392,4 +395,87 @@ test('"more below" is decided from JS-side sizes, so a page that grew to fit dro
   assert.match(scroll, /if \(next === js\.current\.shown\) return;/);
   assert.match(scroll, /js\.current\.view = event\.nativeEvent\.layout\.height;/);
   assert.match(scroll, /js\.current\.content = height;/);
+});
+
+test('one name per activity: PLAY NOW, the rail and the board header say the same words', () => {
+  const m = layout();
+  const chapters = loadTs('src/services/lineplay/chapters.ts');
+  const ch = chapters.getLinePlayChapterById('mk-space-mountain');
+  assert.equal(ch.missionNames[0], 'Fix the signal');
+  const play = m.chapterPlayNow(ch, new Set());
+  assert.deepEqual([play.id, play.name, play.done], ['mk-space-mountain-trivia', 'Fix the signal', 0]);
+  assert.equal(m.chapterPlayNow(ch, new Set(['mk-space-mountain-trivia'])).id, 'mk-space-mountain-field-note');
+  const all3 = new Set(['mk-space-mountain-trivia', 'mk-space-mountain-field-note', 'mk-space-mountain-star-chart']);
+  assert.equal(m.chapterPlayNow(ch, all3).id, 'mk-space-mountain-crew-relay');
+  for (const id of ['mk-space-mountain-episode-1', 'mk-space-mountain-episode-2']) {
+    const flight = chapters.getLinePlayChapterById(id);
+    assert.ok(flight.missionNames[0].length <= 18, `${flight.missionNames[0]} is short enough for one header line`);
+  }
+  // The rail's Next on the chapter page skips what PLAY NOW opens; elsewhere it is the next page.
+  const pages = ['chapter', 'mk-space-mountain-trivia', 'mk-space-mountain-field-note', 'game'];
+  assert.equal(m.railNextIndex(pages, 0, 'mk-space-mountain-trivia'), 2);
+  assert.equal(m.railNextIndex(pages, 0, 'mk-space-mountain-field-note'), 1);
+  assert.equal(m.railNextIndex(pages, 1, null), 2);
+  assert.equal(m.railNextIndex(pages, 3, null), 0);
+  assert.equal(m.railNextIndex(['chapter', 'x'], 0, 'x'), 1, 'two pages: nothing else to point at');
+  const screen = read(SCREEN);
+  assert.match(screen, /const nextPageIndex = railNextIndex\(activityPages\.map\(page => page\.id\), visiblePageIndex, playNowId\);/);
+  assert.match(screen, /\? chapter\.missionNames\[0\] : 'Shark Trivia';/);
+  assert.match(screen, /navigationTitle=\{snapshot\.chapter\?\.navigationPanel \? snapshot\.chapter\.missionNames\[0\] : undefined\}/);
+  assert.match(screen, /'chapter_intro' \? 'CHAPTER' : 'FREE PLAY'/, 'CHAPTER, the same word as the Chapter button');
+  assert.doesNotMatch(screen, /'Navigation panel'|'STORY'/);
+  const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
+  assert.match(slot, /<NavigationPanelCard seed=\{item\.seed\} title=\{navigationTitle\}/);
+  const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
+  assert.match(card, /const look = missionTitle \? \{ \.\.\.baseLook, repairTitle: missionTitle \} : baseLook;/);
+  assert.match(read('src/screens/LinePlay/components/ChapterCard.tsx'), /chapterPlayNow\(chapter, completedIds\)/);
+});
+
+test('roomy beside boards put "Tap a tile to turn it." on its own line; the SE keeps every point for tiles', () => {
+  const m = layout();
+  assert.equal(m.besideStatusRow({ width: 337, height: 151 }), false, 'SE: height is short');
+  assert.equal(m.besideStatusRow({ width: 366, height: 227 }), true, '17 Pro');
+  assert.equal(m.besideStatusRow({ width: 404, height: 250 }), true, 'Pro Max');
+  const pro = m.boardBesideSide({ width: 366, height: 227 });
+  assert.ok(pro + m.BESIDE_V + m.BESIDE_STATUS_ROW <= 227, 'the status line and the whole board fit');
+  assert.ok(m.besideTileSide(pro) >= 50, `17 Pro tiles ${m.besideTileSide(pro)}`);
+  const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
+  assert.match(card, /const statusRow = beside && besideStatusRow\(viewport\);/);
+  assert.match(card, /\{statusRow && statusLine\}/);
+  assert.match(card, /const titleLines = besideTitle\.length <= 15 \? 1 : 2;/);
+  assert.match(card, /hitSlop=\{tileSlop\}/);
+  assert.match(card, /const tileSlop = gap \/ 2;/);
+});
+
+test('an SE board page sliding in shows no small board: it stays unseen until its final size, then fades in', () => {
+  const m = layout();
+  assert.equal(m.navBoardSettling('beside', { width: 337, height: 110 }, false), true, 'crew row room not here yet');
+  assert.equal(m.navBoardSettling('beside', { width: 337, height: 151 }, false), false, 'final size');
+  assert.equal(m.navBoardSettling('strip', { width: 337, height: 70 }, true), false, 'Details open is the strip');
+  assert.equal(m.navBoardSettling('beside', { width: 0, height: 0 }, false), false);
+  assert.ok(m.NAV_SETTLE_FADE_MS <= 150 && m.NAV_SETTLE_MAX_MS <= 400);
+  const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
+  assert.match(card, /const hideBoard = settling && !settleWaited;/);
+  assert.match(card, /<PageScroll ref=\{scroll\} fill=\{BRAND\.cream\} still=\{hideBoard\}/, 'no more-below arrow while it settles');
+  assert.match(card, /settleFade\.value = reducedMotion \? 1 : withTiming\(1, \{ duration: NAV_SETTLE_FADE_MS \}\);/);
+});
+
+test('Details: dip, layout and rise near 200 ms, and the lines are readable on the first frame', () => {
+  const m = layout();
+  assert.ok(m.PAGES_DIP_MS + 34 + m.PAGES_RISE_MS < 220, 'dip, two frames and rise');
+  assert.ok(m.PAGES_DIP_MS + m.PAGES_RISE_FALLBACK_MS + m.PAGES_RISE_MS < 240);
+  const card = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.match(card, /entering=\{reducedMotion \? undefined : detailsEnter\}/);
+  assert.match(card, /initialValues: \{ opacity: 0\.6 \}/);
+  assert.doesNotMatch(card, /FadeIn\.delay/, 'no delay: never an empty Details panel');
+});
+
+test('the closed SE chapter page fills its window: the 1 2 3 bubbles sit under the PLAY strip', () => {
+  const m = layout();
+  assert.equal(m.stripTrailFits(112), true, 'SE closed (about 110 to 120 pt)');
+  assert.equal(m.stripTrailFits(80), false, 'a shorter strip page keeps the strip alone');
+  const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
+  assert.match(chapter, /const withTrail = stripTrailFits\(viewHeight\);/);
+  assert.match(chapter, /\{withTrail && <View style=\{styles\.stripTrail\}/);
+  assert.match(chapter, /done === 3 \|\| withTrail \? 'PLAY' : 'CLUE '/, 'the bubbles own the count');
 });

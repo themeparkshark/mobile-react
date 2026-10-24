@@ -296,11 +296,11 @@ const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
   episodeLabel: 'FLIGHT 1 OF 3',
   parkLabel: 'MAGIC KINGDOM',
   title: 'The Lost Star Chart',
-  story: 'Your shark navigator lost three signals on the way to the stars. Repair the navigation panel, find a clue in your surroundings, then rebuild the chart together.',
+  story: 'Your shark navigator lost three signals on the way to the stars. Fix the signal, find a clue in your surroundings, then rebuild the chart together.',
   completedTitle: 'Star chart restored!',
   completedStory: 'Your shark has all three signals. Finish your wait with the crew challenge or another quick game. Your time near the ride still earns Ride Parts.',
   progressNoun: 'signals found',
-  missionNames: ['Repair the navigation panel', 'Find the missing signal', 'Rebuild the star chart'],
+  missionNames: ['Fix the signal', 'Find the missing signal', 'Rebuild the star chart'],
   finale: { idSuffix: 'star-chart', title: 'Rebuild the Star Chart',
     preview: 'Match space symbols to restore your shark’s missing chart. Race solo or let your crew call out the pairs.',
     memoryDeckId: 'space' },
@@ -388,10 +388,10 @@ type SpaceFlight = Pick<LinePlayChapter, 'title' | 'story' | 'completedTitle' | 
 const MK_SPACE_FLIGHTS: readonly SpaceFlight[] = [
   {
     title: 'The Strange Signal',
-    story: 'Last flight your chart came home, and something answered it. A strange signal is pulsing from deep space. Repair the relay, decode who is calling, then fly the chart to its source.',
+    story: 'Last flight your chart came home, and something answered it. A strange signal is pulsing from deep space. Fix the relay, decode who is calling, then fly the chart to its source.',
     completedTitle: 'Signal answered!',
     completedStory: 'Your shark crew found the source of the strange signal. Keep playing while your time near the ride earns Ride Parts.',
-    missionNames: ['Repair the signal relay', 'Decode the strange signal', 'Fly to the source'],
+    missionNames: ['Fix the relay', 'Decode the strange signal', 'Fly to the source'],
     finale: { title: 'Fly to the Source', preview: 'Match space symbols to lock your course onto the strange signal. Race solo or let your crew call out the pairs.' },
     relay: {
       firstTurnTitle: 'Decode the first pulse',
@@ -438,10 +438,10 @@ const MK_SPACE_FLIGHTS: readonly SpaceFlight[] = [
   },
   {
     title: 'The Comet Detour',
-    story: 'A comet just crossed your flight path and scrambled the course. Reroute the navigation panel, read the comet’s tail, then rebuild the chart before it passes.',
+    story: 'A comet just crossed your flight path and scrambled the course. Reroute the course, read the comet’s tail, then rebuild the chart before it passes.',
     completedTitle: 'Course rerouted!',
     completedStory: 'Your shark crew slipped past the comet with the chart in one piece. Keep playing while your time near the ride earns Ride Parts.',
-    missionNames: ['Reroute the navigation panel', 'Read the comet’s tail', 'Rebuild the chart'],
+    missionNames: ['Reroute the course', 'Read the comet’s tail', 'Rebuild the chart'],
     finale: { title: 'Rebuild the Chart', preview: 'Match space symbols before the comet’s tail passes. Race solo or let your crew call out the pairs.' },
     relay: {
       firstTurnTitle: 'Spot the comet',

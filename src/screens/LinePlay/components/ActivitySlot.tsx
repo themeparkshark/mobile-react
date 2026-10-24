@@ -54,6 +54,8 @@ export interface ActivitySlotProps {
   readonly onNavigationNext?: () => void;
   /** Details is open: a page too short for the whole board offers "Tap to play", which closes Details. */
   readonly onNavigationMakeRoom?: () => void;
+  /** The chapter's name for its board mission ("Fix the signal"), so PLAY NOW, the rail and the board say one phrase. */
+  readonly navigationTitle?: string;
   /** Ride-themed dressing for free-play circuit rounds. */
   readonly circuitTheme?: CircuitTheme;
   /** Name of the page after this one, for a circuit's next button. */
@@ -119,6 +121,7 @@ export default function ActivitySlot({
   onNavigationReplay,
   onNavigationNext,
   onNavigationMakeRoom,
+  navigationTitle,
   circuitTheme,
   nextLabel,
   bestStars,
@@ -134,7 +137,7 @@ export default function ActivitySlot({
         onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} onMakeRoom={onNavigationMakeRoom} />;
     case 'trivia':
       if (navigationPanel && item.id === `${chapterId}-trivia` && onNavigationTurn && onNavigationReplay && onNavigationNext)
-        return <NavigationPanelCard seed={item.seed} progress={navigationProgress} completed={completed} paused={paused}
+        return <NavigationPanelCard seed={item.seed} title={navigationTitle} progress={navigationProgress} completed={completed} paused={paused}
           onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} onMakeRoom={onNavigationMakeRoom} />;
       return <TriviaSlot rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed} completed={completed} paused={paused} onAnswered={() => onActivityCompleted(item.id)} />;
     case 'lore':

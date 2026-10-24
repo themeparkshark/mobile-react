@@ -17,7 +17,8 @@ import type { ChapterClue } from '../../../services/lineplay/chapterClue';
 import { chapterKicker, chapterPageKicker } from '../../../services/lineplay/labels';
 import { borderRadius, spacing } from '../../../design-system';
 import { BRAND, GameIcon } from '../../../ui';
-import { chapterPageFit, foldGap } from '../../../services/lineplay/lineLayout';
+import { chapterPageFit, chapterPlayNow, foldGap, STRIP_TRAIL_GAP as STRIP_TRAIL_GAP_PT, STRIP_TRAIL_ROW, stripTrailFits,
+} from '../../../services/lineplay/lineLayout';
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 import PageScroll from './PageScroll';
 import KidText from './KidText';
@@ -66,19 +67,13 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
   const rise = riseFor(useUiReducedMotion() || entered.current);
   const epilogue = crewRelay ? crewRelayEpilogue(crewRelay, chapter.relay.epilogues) : null;
   const epilogueDone = epilogue ? completedIds.has(`${chapter.id}-route-${epilogue.route}`) : false;
-  const missionIds = [
-    `${chapter.id}-trivia`,
-    `${chapter.id}-field-note`,
-    `${chapter.id}-${chapter.finale.idSuffix}`,
-  ];
-  const done = missionIds.filter((id) => completedIds.has(id)).length;
-  const nextMissionIndex = missionIds.findIndex((id) => !completedIds.has(id));
+  // The same pick the rail uses to skip this target, so its Next never opens what PLAY NOW opens.
+  const { id: nextId, name: nextName, done } = chapterPlayNow(chapter, completedIds);
+  const missionIds = [`${chapter.id}-trivia`, `${chapter.id}-field-note`, `${chapter.id}-${chapter.finale.idSuffix}`];
+  const nextMissionIndex = missionIds.indexOf(nextId);
   const relayId = `${chapter.id}-crew-relay`;
   const relayDone = completedIds.has(relayId);
   const crewGridId = `${chapter.id}-crew-grid`;
-  const nextId = nextMissionIndex >= 0 ? missionIds[nextMissionIndex] : relayDone ? crewGridId : relayId;
-  const nextName = nextMissionIndex >= 0 ? chapter.missionNames[nextMissionIndex]
-    : relayDone ? 'Crew Prompts' : chapter.relay.title;
 
   const header = (
     <Animated.View key="header" entering={rise(compact ? 1 : 0)} style={[styles.header, compact && styles.headerCompact]}
@@ -122,18 +117,37 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
 
   // A very short page (an iPhone SE with Details open): the page is just one PLAY NOW row that fits whole.
   if (fit === 'strip') {
+    // Room for the 1 2 3 bubbles under the strip (a closed iPhone SE page): they fill the window and
+    // own the count, so the strip just says PLAY. Too short for them: the strip alone, with its CLUE number.
+    const withTrail = stripTrailFits(viewHeight);
     return (
-      <PageScroll fill={FRAME_FILL} contentStyle={styles.contentStrip} onLayout={measure} still>
+      <PageScroll fill={FRAME_FILL} contentStyle={[styles.contentStrip, withTrail && styles.contentStripTrail]}
+        onLayout={measure} still>
         <Pressable accessibilityRole="button"
           accessibilityLabel={`${done === 3 ? 'Play' : 'Start'} ${nextName}`}
           disabled={paused} onPress={() => onChooseMission(nextId)}
           style={({ pressed }) => [styles.playStrip, paused && styles.missionPaused, pressed && styles.pressed]}>
           <Text style={styles.playStripText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-            <Text style={styles.playStripKicker}>{done === 3 ? 'PLAY' : 'CLUE '}{done === 3 ? null
+            <Text style={styles.playStripKicker}>{done === 3 || withTrail ? 'PLAY' : 'CLUE '}{done === 3 || withTrail ? null
               : <Text style={styles.playStripDigit}>{done + 1}</Text>}{'  '}</Text>{nextName}
           </Text>
           <GameIcon name="play" size={40} />
         </Pressable>
+        {withTrail && <View style={styles.stripTrail} accessibilityLabel={`${done} of 3 ${chapter.progressNoun}`}>
+          {chapter.missionNames.map((name, index) => {
+            const complete = completedIds.has(missionIds[index]);
+            const current = index === nextMissionIndex;
+            return <Pressable key={name} accessibilityRole="button"
+              accessibilityLabel={`${complete ? 'Replay' : 'Open'} ${name}`}
+              disabled={paused} onPress={() => onChooseMission(missionIds[index])}
+              style={({ pressed }) => [styles.step, styles.stepStrip, current && styles.stepCurrent, complete && styles.stepDone,
+                paused && styles.missionPaused, pressed && styles.pressed]}>
+              <View style={[styles.stepBadge, styles.stepBadgeStrip, complete && styles.stepBadgeDone]}>
+                {complete ? <GameIcon name="check" size={18} /> : <Text style={[styles.stepNumber, styles.stepNumberStrip]}>{index + 1}</Text>}
+              </View>
+            </Pressable>;
+          })}
+        </View>}
       </PageScroll>
     );
   }
@@ -233,6 +247,7 @@ const FRAME_FILL = '#bcecff';
 const CREW_ROW_GAP = spacing.md;
 const TRAIL_GAP = spacing.md;
 const TRAIL_GAP_COMPACT = spacing.sm;
+const STRIP_TRAIL_GAP = STRIP_TRAIL_GAP_PT;
 const layoutBottom = (event: { nativeEvent: { layout: { y: number; height: number } } }) =>
   Math.round(event.nativeEvent.layout.y + event.nativeEvent.layout.height);
 
@@ -259,6 +274,11 @@ const styles = StyleSheet.create({
   playStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingLeft: 12, paddingRight: 4,
     paddingVertical: 1, borderRadius: borderRadius.lg, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 5,
     backgroundColor: BRAND.gold },
+  contentStripTrail: { gap: STRIP_TRAIL_GAP },
+  stripTrail: { flexDirection: 'row', gap: 8 },
+  stepStrip: { minHeight: 0, height: STRIP_TRAIL_ROW, paddingVertical: 0, padding: 0, justifyContent: 'center' },
+  stepBadgeStrip: { width: 30, height: 30, borderRadius: 15 },
+  stepNumberStrip: { fontSize: 15 },
   playStripText: { flex: 1, color: BRAND.navy, fontFamily: 'Shark', fontSize: 19, lineHeight: 23 },
   playStripDigit: { fontFamily: 'Shark', fontSize: 15 },
   playStripKicker: { color: '#7c4200', fontFamily: 'Knockout', fontSize: 14, letterSpacing: 0.8 },

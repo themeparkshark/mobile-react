@@ -30,7 +30,9 @@ import { circuitThemeFor, type CircuitTheme } from '../../../services/lineplay/c
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 import PageScroll from './PageScroll';
 import KidText from './KidText';
-import { boardBesideDrawn, boardSideFor, boardTight, navBoardLayout, navStripHeader } from '../../../services/lineplay/lineLayout';
+import { BESIDE_CARD_PAD_V, BESIDE_PANEL_PAD_V, BESIDE_STATUS_ROW, BESIDE_TILE_GAP, BESIDE_V, besideStatusRow, boardBesideDrawn,
+  boardSideFor, boardTight, NAV_SETTLE_FADE_MS, NAV_SETTLE_MAX_MS, navBoardLayout, navBoardSettling, navStripHeader,
+} from '../../../services/lineplay/lineLayout';
 
 interface Props {
   readonly seed: number;
@@ -43,6 +45,8 @@ interface Props {
   /** 'mission' is the chapter's first story mission; 'free' is a free-play round. */
   readonly mode?: 'mission' | 'free';
   readonly theme?: CircuitTheme;
+  /** The mission's own name from the chapter (PLAY NOW says the same words); the theme's title otherwise. */
+  readonly title?: string;
   /** Label for the next action in free play, e.g. the next page's name. */
   readonly nextLabel?: string;
   /**
@@ -141,8 +145,9 @@ function TurnTileGlyph({ size = 22 }: { size?: number }) {
 
 /** A short original fiction puzzle; the server's verified wait still owns every reward. */
 export default function NavigationPanelCard({ seed, progress: saved, completed, paused, onTurn, onNewRound, onNext,
-  mode = 'mission', theme, nextLabel, onMakeRoom }: Props) {
-  const look = theme ?? circuitThemeFor(undefined, true);
+  mode = 'mission', theme, title: missionTitle, nextLabel, onMakeRoom }: Props) {
+  const baseLook = theme ?? circuitThemeFor(undefined, true);
+  const look = missionTitle ? { ...baseLook, repairTitle: missionTitle } : baseLook;
   const progress = useMemo(() => saved ?? createNavigationPanelProgress(seed, 0, completed), [seed, saved, completed]);
   const panel = useMemo(() => createNavigationPanel(seed, progress.round), [seed, progress.round]);
   const trace = useMemo(() => traceNavigationPanel(panel, progress.rotations), [panel, progress.rotations]);
@@ -241,6 +246,35 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   const statusOnTop = tight && !trace.solved;
   const kicker = statusOnTop ? status : kickerText;
   const firstTap = !paused && !trace.solved && hint == null && trace.signals === 0 && progress.taps === 0;
+  // A beside page has height to spare (a 17 Pro, a Pro Max): what to do gets its own line across the
+  // top, so the column only holds the title and neither one wraps.
+  const statusRow = beside && besideStatusRow(viewport);
+  // An iPhone SE sliding to this page: the crew row's room arrives a frame or two later. The board
+  // stays unseen until it has its final size, then fades in (no small board, no stale arrow).
+  const settling = navBoardSettling(layout, viewport, !!onMakeRoom);
+  const [settleWaited, setSettleWaited] = useState(false);
+  useEffect(() => {
+    if (!settling) return undefined;
+    const timer = setTimeout(() => setSettleWaited(true), NAV_SETTLE_MAX_MS);
+    return () => clearTimeout(timer);
+  }, [settling]);
+  const hideBoard = settling && !settleWaited;
+  const settleFade = useSharedValue(1);
+  const wasHidden = useRef(false);
+  useEffect(() => {
+    if (hideBoard) {
+      cancelAnimation(settleFade);
+      settleFade.value = 0;
+      wasHidden.current = true;
+    } else if (wasHidden.current) {
+      wasHidden.current = false;
+      settleFade.value = reducedMotion ? 1 : withTiming(1, { duration: NAV_SETTLE_FADE_MS });
+    }
+  }, [hideBoard, reducedMotion, settleFade]);
+  const settleStyle = useAnimatedStyle(() => ({ opacity: settleFade.value }));
+  const gap = beside ? BESIDE_TILE_GAP : 6;
+  // Each tile's touch area reaches into half the gap, so a finger between two tiles still turns one.
+  const tileSlop = gap / 2;
   const onLayout = (event: { nativeEvent: { layout: { width: number; height: number } } }) => {
     const { width, height } = event.nativeEvent.layout;
     if (width !== viewport.width || height !== viewport.height) setViewport({ width, height });
@@ -301,18 +335,18 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
 
   const board = (
     <Animated.View style={[styles.panel, tight && styles.panelTight, beside && styles.panelBeside, shakeStyle]}>
-      <View style={[styles.boardFrame, boardSide != null && { width: boardSide, maxWidth: boardSide }]}
+      <View style={[styles.boardFrame, { gap }, boardSide != null && { width: boardSide, maxWidth: boardSide }]}
         onLayout={event => setBoardWidth(event.nativeEvent.layout.width)}>
         <View style={[styles.port, styles.portIn, { top: `${(Math.floor(panel.entry / size) + 0.5) * (100 / size)}%` }]}
           accessible={false} />
         <View style={[styles.port, styles.portOut, trace.reachesExit && { backgroundColor: look.flow },
           { top: `${(Math.floor(panel.exit / size) + 0.5) * (100 / size)}%` }]} accessible={false} />
-        {Array.from({ length: size }, (_, row) => <View key={row} style={styles.row}>
+        {Array.from({ length: size }, (_, row) => <View key={row} style={[styles.row, { gap }]}>
           {Array.from({ length: size }, (_, column) => {
             const index = row * size + column;
             const active = trace.connected.includes(index), relay = panel.relays.includes(index);
             const ports = PORTS.filter(([bit]) => trace.masks[index] & bit);
-            return <Pressable key={index} onPress={() => turn(index)} disabled={locked}
+            return <Pressable key={index} onPress={() => turn(index)} disabled={locked} hitSlop={tileSlop}
               accessibilityRole="button" accessibilityState={{ disabled: locked }}
               accessibilityLabel={`Circuit tile row ${row + 1}, column ${column + 1}. ${ports.map(port => port[3]).join(' to ')}. ${active ? 'Glowing signal' : 'No signal'}${relay ? `, ${look.relayNoun.replace(/s$/, '')} relay` : ''}. Tap to rotate clockwise.`}
               style={({ pressed }) => [styles.tile, active && { backgroundColor: look.litTile, borderColor: look.flow },
@@ -355,24 +389,38 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   // of the column, the stars and the clue button at its foot. A solved board's payoff is below.
   if (beside) {
     // Centered: a page taller than the board keeps even room above and below it.
-    const besideTop = Math.max(8, Math.floor((viewport.height - (boardSide ?? 0) - 18 - 16) / 2) + 8);
-    return <PageScroll ref={scroll} fill={BRAND.cream} contentStyle={[styles.cardBeside, { paddingTop: besideTop }]} onLayout={onLayout}
+    const rowAbove = statusRow ? BESIDE_STATUS_ROW : 0;
+    const besideTop = Math.max(BESIDE_CARD_PAD_V,
+      Math.floor((viewport.height - rowAbove - (boardSide ?? 0) - BESIDE_V) / 2) + BESIDE_CARD_PAD_V);
+    const besideTitle = trace.solved ? look.solvedTitle : look.repairTitle;
+    // A short title ("Fix the signal") stays on one line; a long one may take two.
+    const titleLines = besideTitle.length <= 15 ? 1 : 2;
+    const statusLine = <View style={[styles.statusTop, statusRow && styles.statusRowAbove]} accessibilityLiveRegion="polite">
+      {firstTap && <TurnTileGlyph size={20} />}
+      <KidText style={[styles.kicker, styles.kickerStatus, styles.kickerBeside, statusRow && styles.kickerOnCream]}
+        numberOfLines={statusRow ? 1 : 2} adjustsFontSizeToFit={statusRow} minimumFontScale={0.85}>
+        {trace.solved ? kickerText : status}</KidText>
+    </View>;
+    return <PageScroll ref={scroll} fill={BRAND.cream} still={hideBoard}
+      contentStyle={[styles.cardBeside, { paddingTop: besideTop }]} onLayout={onLayout}
       onContentSizeChange={scrollPayoff}>
+      <View style={hideBoard && styles.unmeasured}>
+      <Animated.View style={settleStyle}>
+      {statusRow && statusLine}
       <View style={styles.besideRow}>
-        <LinearGradient colors={[BRAND.blueBright, BRAND.blue]} style={[styles.hero, styles.heroBeside]}>
-          <View style={styles.statusTop} accessibilityLiveRegion="polite">
-            {firstTap && <TurnTileGlyph size={20} />}
-            <KidText style={[styles.kicker, styles.kickerStatus, styles.kickerBeside]} numberOfLines={2}>
-              {trace.solved ? kickerText : status}</KidText>
-          </View>
-          <Text style={[styles.title, styles.titleCompact, styles.titleBeside]} numberOfLines={2}>
-            {trace.solved ? look.solvedTitle : look.repairTitle}</Text>
+        <LinearGradient colors={[BRAND.blueBright, BRAND.blue]} style={[styles.hero, styles.heroBeside,
+          statusRow && styles.heroBesideRoomy]}>
+          {!statusRow && statusLine}
+          <Text style={[styles.title, styles.titleCompact, styles.titleBeside]} numberOfLines={titleLines}
+            adjustsFontSizeToFit={titleLines === 1} minimumFontScale={0.75}>{besideTitle}</Text>
           <View style={styles.besideFoot}>
             {relayStars(18)}
             {!trace.solved && hintButton}
           </View>
         </LinearGradient>
         {board}
+      </View>
+      </Animated.View>
       </View>
       {trace.solved ? success : null}
     </PageScroll>;
@@ -459,7 +507,7 @@ const styles = StyleSheet.create({
   statusTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   kickerStatus: { flexShrink: 1, color: BRAND.white, fontSize: 14, letterSpacing: 0.2 },
   // Beside: the header is a column left of the board (a short page).
-  cardBeside: { padding: 8, paddingBottom: 8 },
+  cardBeside: { paddingHorizontal: 8, paddingBottom: BESIDE_CARD_PAD_V },
   besideRow: { flexDirection: 'row', alignItems: 'stretch', gap: 8 },
   heroBeside: { flex: 1, minHeight: 0, flexDirection: 'column', alignItems: 'stretch', justifyContent: 'space-between',
     paddingLeft: 10, paddingRight: 6, paddingVertical: 6 },
@@ -467,7 +515,11 @@ const styles = StyleSheet.create({
   kickerBeside: { fontSize: 14, lineHeight: 17 },
   titleBeside: { fontSize: 18, lineHeight: 21, marginTop: 2 },
   besideFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
-  panelBeside: { marginTop: 0, alignSelf: 'flex-start', justifyContent: 'center' },
+  panelBeside: { marginTop: 0, alignSelf: 'flex-start', justifyContent: 'center', paddingVertical: BESIDE_PANEL_PAD_V },
+  // The status line across the top of a roomy beside page: navy on the cream page, one line.
+  statusRowAbove: { height: BESIDE_STATUS_ROW, justifyContent: 'center', paddingHorizontal: 2 },
+  kickerOnCream: { color: BRAND.navy, fontSize: 15, lineHeight: 19 },
+  heroBesideRoomy: { justifyContent: 'center', gap: 10 },
   // The one-row "Tap to play" strip (Details open on a short page).
   contentStrip: { flexGrow: 1, justifyContent: 'center', padding: 5, paddingBottom: 5 },
   playStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingLeft: 12, paddingRight: 4,

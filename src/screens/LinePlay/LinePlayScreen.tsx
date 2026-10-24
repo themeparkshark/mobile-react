@@ -124,7 +124,7 @@ function playedActivityName(id: string, playlist: readonly ActivityItem[], chapt
   if (item?.kind === 'crew_grid') return 'Crew Prompts';
   if (item?.kind === 'circuit') return 'Signal Repair';
   if (item?.kind === 'trivia') return chapter?.navigationPanel && id === `${chapter.id}-trivia`
-    ? 'Starport navigation repair' : 'Ride trivia';
+    ? chapter.missionNames[0] : 'Ride trivia';
   if (item?.kind === 'lore') return chapter?.fieldNotes[item.seed % chapter.fieldNotes.length]?.title ?? 'Queue clue';
   if (item?.kind === 'prediction') return 'Wait guess';
   if (id.startsWith('pred-')) return 'Wait guess';
@@ -144,7 +144,8 @@ function pageName(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string }
     case 'crew_relay': return 'Crew Relay';
     case 'signal': return 'Crew Route';
     case 'puzzle': return 'Codebreaker';
-    case 'trivia': return chapter?.navigationPanel && item.id === `${chapter.id}-trivia` ? 'Navigation panel' : 'Shark Trivia';
+    // The board mission keeps the chapter's own name, so PLAY NOW, the rail and the board header match.
+    case 'trivia': return chapter?.navigationPanel && item.id === `${chapter.id}-trivia` ? chapter.missionNames[0] : 'Shark Trivia';
     case 'lore': return 'Field Note';
     case 'prediction': return 'Wait Guess';
     case 'minigame': return item.title ?? GAME_NAMES[item.gameId] ?? 'Arcade round';
@@ -160,7 +161,7 @@ import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLive
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { linePlayTipReady } from '../../services/help/tipGate';
-import { crewRowInBand, crewRowLent, lineScreenFit, pageRailMode, pageWindowShown, PAGES_DIP_MS, PAGES_DIP_OPACITY,
+import { chapterPlayNow, crewRowInBand, crewRowLent, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIP_MS, PAGES_DIP_OPACITY,
   PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
@@ -953,8 +954,11 @@ export default function LinePlayScreen() {
       : visibleActivityId === `${snapshot.chapter.id}-field-note` ? 2
         : visibleActivityId === `${snapshot.chapter.id}-${snapshot.chapter.finale.idSuffix}` ? 3 : null
     : null;
-  const nextPageIndex = visiblePageIndex + 1 < activityPages.length ? visiblePageIndex + 1 : 0;
   const visibleItem = activityPages[visiblePageIndex];
+  // On the chapter page the rail's Next skips whatever PLAY NOW opens (one game, one button, one name).
+  const playNowId = visibleItem?.kind === 'chapter_intro' && snapshot.chapter
+    ? chapterPlayNow(snapshot.chapter, completedActivityIds).id : null;
+  const nextPageIndex = railNextIndex(activityPages.map(page => page.id), visiblePageIndex, playNowId);
   /** The navigation board (the first story clue on a space ride, or a free-play circuit). */
   const boardPage = isBoardPage(visibleItem, snapshot.chapter);
   // A short phone lends the crew row to a board page (as it does to Details), so the whole puzzle fits.
@@ -1291,6 +1295,7 @@ export default function LinePlayScreen() {
                       onNavigationTurn={(index) => session.rotateNavigationPanel(item.id, index)}
                       onNavigationReplay={() => session.startNextNavigationRound(item.id)}
                       onNavigationMakeRoom={detailsOpen ? closeDetails : undefined}
+                      navigationTitle={snapshot.chapter?.navigationPanel ? snapshot.chapter.missionNames[0] : undefined}
                       onNavigationNext={() => item.kind === 'circuit'
                         ? jumpToPage(index + 1 < activityPages.length ? index + 1 : 0)
                         : jumpToPage(activityPages.findIndex(page => page.id === `${snapshot.chapter?.id}-field-note`))}
@@ -1325,10 +1330,11 @@ export default function LinePlayScreen() {
               mode={railMode} onShowPages={closeDetails} quiet={railQuiet}
               firstLabel={activityPages[0]?.kind === 'chapter_intro' ? 'Chapter' : 'First round'}
               progressText={storyStep ? `CLUE ${storyStep}/3`
-                : activityPages[visiblePageIndex]?.kind === 'chapter_intro' ? 'STORY' : 'FREE PLAY'}
+                // CHAPTER, the same word as the rail's Chapter button (one word for one idea).
+                : activityPages[visiblePageIndex]?.kind === 'chapter_intro' ? 'CHAPTER' : 'FREE PLAY'}
               progressAccessibilityLabel={storyStep ? `Story clue ${storyStep} of 3`
                 : activityPages[visiblePageIndex]?.kind === 'chapter_intro'
-                  ? 'Ride story. Choose a clue to begin.'
+                  ? 'Ride chapter. Choose a clue to begin.'
                   : 'Free play. Play any game you like.'}
               nextLabel={pageName(activityPages[nextPageIndex], snapshot.chapter)}
               onFirst={() => jumpToPage(0)} onNext={() => jumpToPage(nextPageIndex)}

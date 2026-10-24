@@ -85,6 +85,30 @@ export function experienceScore(player: { readonly total_experience?: number | n
   return Number(player.total_experience) || 0;
 }
 
+/**
+ * Whether this board's XP includes the VIP bonus, from the list's `meta.xp_includes_vip_bonus`.
+ * A server that does not send it ranks by total XP, which includes the VIP bonus (true).
+ */
+export function xpIncludesVipBonus(meta: unknown): boolean {
+  const flag = (meta as { xp_includes_vip_bonus?: unknown } | null | undefined)?.xp_includes_vip_bonus;
+  return flag === false || flag === 0 || flag === '0' || flag === 'false' ? false : true;
+}
+
+/** The plain line under the XP board's pills while VIP bonus XP counts and a VIP player is on it. */
+export const XP_VIP_NOTE = 'VIP players earn bonus XP. It counts here.';
+
+/**
+ * Honest standings: while the board ranks total XP (VIP members earn extra), say so in one kid line
+ * whenever a VIP player is on the board. No VIP on the board, or a board ranked without the bonus: no line.
+ */
+export function xpVipNote(players: readonly { readonly is_subscribed?: boolean | null; readonly flex?: unknown }[],
+  includesVipBonus: boolean): string | null {
+  if (!includesVipBonus) return null;
+  const vipHere = players.some(player => player.is_subscribed === true
+    || (player.flex as { vip?: unknown } | null | undefined)?.vip === true);
+  return vipHere ? XP_VIP_NOTE : null;
+}
+
 export type RideMetric = 'today' | 'collection' | 'mastery' | 'masters';
 
 /** Copy for the Rides tab: the line under the pills, the empty state and the score unit. */

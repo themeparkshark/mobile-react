@@ -94,3 +94,20 @@ test('Standings screens never wait on a bare spinner and use the brand icons', (
   const tabs = fs.readFileSync(path.join(root, 'src/screens/LeaderboardsScreen/homeHuntModel.ts'), 'utf8');
   assert.match(tabs, /icon: 'ride'/, 'Rides tab has its icon');
 });
+
+test('the XP board says plainly when VIP bonus XP counts in the ranking', () => {
+  assert.equal(model.xpIncludesVipBonus(undefined), true, 'a server that sends nothing ranks by total XP (VIP bonus in)');
+  assert.equal(model.xpIncludesVipBonus({ current_page: 1 }), true);
+  assert.equal(model.xpIncludesVipBonus({ xp_includes_vip_bonus: false }), false);
+  assert.equal(model.xpIncludesVipBonus({ xp_includes_vip_bonus: true }), true);
+  const vip = [{ is_subscribed: false }, { is_subscribed: true }];
+  assert.equal(model.xpVipNote(vip, true), model.XP_VIP_NOTE);
+  assert.equal(model.xpVipNote([{ is_subscribed: false }, { flex: { vip: true } }], true), model.XP_VIP_NOTE);
+  assert.equal(model.xpVipNote([{ is_subscribed: false }], true), null, 'no VIP on the board, no line');
+  assert.equal(model.xpVipNote(vip, false), null, 'a board ranked without the bonus needs no line');
+  assert.ok(model.XP_VIP_NOTE.split(' ').length <= 9, 'one short kid line');
+  assert.doesNotMatch(model.XP_VIP_NOTE, /—|bet|odds|hurry|now!/i);
+  const board = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/LeaderboardsScreen/Experience.tsx'), 'utf8');
+  assert.match(board, /cache\.vipBonus = xpIncludesVipBonus\(meta\);/);
+  assert.match(board, /const vipNote = xpVipNote\(players, cache\.vipBonus\);/);
+});

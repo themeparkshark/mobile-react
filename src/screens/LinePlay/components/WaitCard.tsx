@@ -7,7 +7,7 @@
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import KidText from './KidText';
-import Reanimated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Reanimated, { FadeOut, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
 import type { PauseReason, WaitSource, RewardConnectionIssue } from '../../../services/lineplay/LinePlaySession';
@@ -159,6 +159,15 @@ export function ticketHint(available: boolean, verifiedSeconds: number, interval
 /** What a wait mark means, in a few words beside it (a badge alone means nothing to a kid). */
 export function stampCaption(kind: WaitStamp['kind']): string {
   return kind === 'marathon' ? 'An hour in line!' : 'A night wait!';
+}
+
+/**
+ * Details lines are already readable on the frame the card grows (no delay, no empty panel):
+ * they start at 60% and settle to full over 100 ms on the UI thread.
+ */
+function detailsEnter() {
+  'worklet';
+  return { initialValues: { opacity: 0.6 }, animations: { opacity: withTiming(1, { duration: 100 }) } };
 }
 
 /** The picture in the Details icon column for a wait mark: a medal for an hour in line, the moon at night. */
@@ -445,7 +454,7 @@ export default function WaitCard({
           onPress={toggleDetails} style={[styles.detailsButton, compact && styles.compactDetails]} hitSlop={6}>
           <Text style={styles.detailsButtonText}>{expanded ? 'Hide details' : `${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m · details`}</Text>
         </Pressable>}
-        {expanded && hero && <Reanimated.View entering={reducedMotion ? undefined : FadeIn.delay(100).duration(180)}
+        {expanded && hero && <Reanimated.View entering={reducedMotion ? undefined : detailsEnter}
           exiting={reducedMotion ? undefined : FadeOut.duration(120)}><HeroDetails stamps={stamps} lines={heroDetailLines({
           // SIGN SAYS already prints the sign's number, so a plain sign gets no line here (said once on
           // screen). A fresh, different reading at the line is new, so it is said, written like SIGN SAYS.

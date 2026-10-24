@@ -63,6 +63,13 @@ export const CHAPTER_FULL_PAGE = 400;
 export const CHAPTER_COMPACT_PAGE = 130;
 /** The one-row strip: 40 pt play icon, borders and padding. */
 export const CHAPTER_STRIP = 54;
+/** The small 1 2 3 bubbles row under the strip (30 pt badges in a 40 pt row) and the gap above it. */
+export const STRIP_TRAIL_ROW = 40;
+export const STRIP_TRAIL_GAP = 6;
+/** The strip page has room for the bubbles under it (padding 5 top and bottom). */
+export function stripTrailFits(viewHeight: number): boolean {
+  return viewHeight >= 5 * 2 + CHAPTER_STRIP + STRIP_TRAIL_GAP + STRIP_TRAIL_ROW;
+}
 
 /**
  * The page window's smallest useful height: the strip plus the frame's rims,
@@ -91,13 +98,13 @@ export function pageRailMode(pagesShown: boolean): PageRailMode {
 /**
  * Details open or close: the page window dips to this opacity (never to 0, so
  * no frame shows an empty window), takes its new size, then fades back up.
- * Dip plus rise stays under 220 ms.
+ * Dip, the two-frame wait for the new layout and the rise stay near 200 ms.
  */
 export const PAGES_DIP_OPACITY = 0.35;
-export const PAGES_DIP_MS = 60;
-export const PAGES_RISE_MS = 140;
+export const PAGES_DIP_MS = 50;
+export const PAGES_RISE_MS = 120;
 /** If the window's size did not change (no onLayout), it rises after this. */
-export const PAGES_RISE_FALLBACK_MS = 90;
+export const PAGES_RISE_FALLBACK_MS = 60;
 
 export function chapterPageFit(viewHeight: number, shortScreen: boolean): ChapterPageFit {
   if (!(viewHeight > 0)) return shortScreen ? 'compact' : 'full';
@@ -187,21 +194,45 @@ export function boardFits(viewport: { width: number; height: number }, headerHei
  * A board BESIDE its header (an iPhone SE, or a 17 Pro reading Details): the
  * header becomes a column on the left and the board takes the page's whole
  * height on the right, so the whole puzzle and both ports are on screen with no
- * scrolling. Room around it: the card's padding (8 top and bottom) and the
- * panel's rims and padding (3 + 6, top and bottom).
+ * scrolling. Room around it is kept thin so the tiles get the height: the
+ * card's padding (4 top and bottom) and the panel's rims and padding (3 + 3).
  */
-const BESIDE_V = 8 * 2 + (3 + 6) * 2;
+export const BESIDE_CARD_PAD_V = 4;
+export const BESIDE_PANEL_PAD_V = 3;
+export const BESIDE_V = BESIDE_CARD_PAD_V * 2 + (3 + BESIDE_PANEL_PAD_V) * 2;
+/** Gap between beside tiles; each tile's touch area reaches half of it, so a finger in a gap still turns a tile. */
+export const BESIDE_TILE_GAP = 4;
 /** The panel's sides: rims plus padding wide enough for the ports (19 pt each side). */
 const BESIDE_PANEL_SIDES = (3 + 22) * 2;
-/** The header column ("Repair the signal", the stars and the clue button) needs this much width. */
+/** The header column ("Fix the signal", the stars and the clue button) needs this much width. */
 export const BESIDE_COLUMN = 128;
 /** The smallest board beside its header: 3 tiles of about 30 pt each. */
 export const BESIDE_FLOOR = 100;
+/** "Tap a tile to turn it." on one line across the page, above the board and its column. */
+export const BESIDE_STATUS_ROW = 24;
+
+function besideByWidth(viewport: { width: number }): number {
+  return viewport.width - 8 * 2 - 8 - BESIDE_COLUMN - BESIDE_PANEL_SIDES;
+}
+
+/**
+ * The status goes on its own line above the board when the page has height to spare (the board
+ * is held back by the width, a 17 Pro or a Pro Max), so the column only holds the title and
+ * nothing wraps. A short page (an iPhone SE) keeps every point for the tiles.
+ */
+export function besideStatusRow(viewport: { width: number; height: number }): boolean {
+  if (viewport.width <= 0 || viewport.height <= 0) return false;
+  return viewport.height - BESIDE_V - BESIDE_STATUS_ROW >= Math.min(300, besideByWidth(viewport));
+}
 
 export function boardBesideSide(viewport: { width: number; height: number }): number {
-  const byHeight = viewport.height - BESIDE_V;
-  const byWidth = viewport.width - 8 * 2 - 8 - BESIDE_COLUMN - BESIDE_PANEL_SIDES;
-  return Math.floor(Math.min(300, byHeight, byWidth));
+  const byHeight = viewport.height - BESIDE_V - (besideStatusRow(viewport) ? BESIDE_STATUS_ROW : 0);
+  return Math.floor(Math.min(300, byHeight, besideByWidth(viewport)));
+}
+
+/** A tile's side on a board of this side (3 tiles, two gaps). */
+export function besideTileSide(boardSide: number, size = 3): number {
+  return (boardSide - BESIDE_TILE_GAP * (size - 1)) / size;
 }
 
 /** The board side the beside layout draws: never under the floor (a page still growing just scrolls a little). */
@@ -232,6 +263,21 @@ export function navBoardLayout(viewport: { width: number; height: number }, head
 }
 
 /**
+ * The page is still growing into its room (on an iPhone SE the crew row's room arrives a frame or
+ * two after the board page slides in): too short for the beside board with Details closed. The
+ * board stays unseen until its final size, then fades in, so no small board or stale arrow shows.
+ */
+export function navBoardSettling(layout: NavBoardLayout, viewport: { width: number; height: number },
+  detailsOpen: boolean): boolean {
+  return layout === 'beside' && !detailsOpen && viewport.width > 0 && viewport.height > 0
+    && boardBesideSide(viewport) < BESIDE_FLOOR;
+}
+/** A page that never grows (no crew row to lend) shows its board after this anyway. */
+export const NAV_SETTLE_MAX_MS = 350;
+/** The board's fade in once it has its final size. */
+export const NAV_SETTLE_FADE_MS = 120;
+
+/**
  * The crew row ("Here with friends?") lends its room to a board page on a short
  * phone, as it does while Details is open, so the whole puzzle fits beside its
  * header with no scrolling. It is back on every other page.
@@ -259,4 +305,32 @@ export function foldGap(viewHeight: number, foldBottom: number, nextHeight: numb
   if (!(viewHeight > 0) || !(foldBottom > 0) || foldBottom > viewHeight) return normalGap;
   if (nextHeight > 0 && foldBottom + normalGap + nextHeight <= viewHeight - fadeHeight(viewHeight)) return normalGap;
   return Math.max(normalGap, Math.ceil(viewHeight - foldBottom) + 2);
+}
+
+/** What the chapter page's PLAY NOW opens: the first unplayed clue, then the crew relay, then Crew Prompts. */
+export function chapterPlayNow(chapter: {
+  readonly id: string; readonly missionNames: readonly string[];
+  readonly finale: { readonly idSuffix: string }; readonly relay: { readonly title: string };
+}, completedIds: ReadonlySet<string>): { readonly id: string; readonly name: string; readonly done: number } {
+  const missionIds = [`${chapter.id}-trivia`, `${chapter.id}-field-note`, `${chapter.id}-${chapter.finale.idSuffix}`];
+  const done = missionIds.filter(id => completedIds.has(id)).length;
+  const next = missionIds.findIndex(id => !completedIds.has(id));
+  if (next >= 0) return { id: missionIds[next], name: chapter.missionNames[next] ?? '', done };
+  const relayId = `${chapter.id}-crew-relay`;
+  return completedIds.has(relayId)
+    ? { id: `${chapter.id}-crew-grid`, name: 'Crew Prompts', done }
+    : { id: relayId, name: chapter.relay.title, done };
+}
+
+/**
+ * The rail's Next on the chapter page skips the page PLAY NOW opens, so two buttons on one
+ * screen never open the same game under two names. Elsewhere it is simply the next page.
+ */
+export function railNextIndex(pageIds: readonly string[], visibleIndex: number, playNowId: string | null): number {
+  const count = pageIds.length;
+  if (count === 0) return 0;
+  const step = (index: number) => (index + 1 < count ? index + 1 : 0);
+  const next = step(visibleIndex);
+  if (playNowId == null || count <= 2 || pageIds[next] !== playNowId) return next;
+  return step(next);
 }
