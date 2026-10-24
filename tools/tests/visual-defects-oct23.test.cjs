@@ -720,3 +720,9 @@ test('buttons and the map on small and busy screens: GameButton art waits for it
   assert.match(map, /findWater: async \(latitude: number, longitude: number, margin\?: number\) => \{\s*if \(!mapAlive\.current\) return null;/);
   assert.match(map, /if \(key === decoKey\.current \|\| !mapAlive\.current\) return;/);
 });
+
+test('launch bubbles move a plain layer: the drawn bubble (with its border) is a still child', () => {
+  const src = read('src/components/launch/LaunchScene.tsx');
+  assert.match(src, /<Animated\.View style=\{\[styles\.bubbleSlot, \{ left: `\$\{bubble\.left\}%`, width: bubble\.size, height: bubble\.size \}, style\]\}>\s*<View style=\{\[styles\.bubble, \{ borderRadius: bubble\.size \/ 2 \}\]\} \/>/);
+  assert.match(src, /bubbleSlot: \{ position: 'absolute', bottom: 20 \},/);
+});

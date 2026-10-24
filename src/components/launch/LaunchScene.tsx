@@ -133,10 +133,13 @@ function Bubble({ bubble, rise }: { readonly bubble: (typeof LAUNCH_BUBBLES)[num
       ],
     };
   });
+  // The moving view has no border: on the new architecture every animated prop update re-draws a
+  // bordered view's border image on the main thread (seen pinning the main thread at launch). The
+  // drawn bubble is a still child, so each frame only moves a plain layer.
   return (
-    <Animated.View style={[styles.bubble, {
-      left: `${bubble.left}%`, width: bubble.size, height: bubble.size, borderRadius: bubble.size / 2,
-    }, style]} />
+    <Animated.View style={[styles.bubbleSlot, { left: `${bubble.left}%`, width: bubble.size, height: bubble.size }, style]}>
+      <View style={[styles.bubble, { borderRadius: bubble.size / 2 }]} />
+    </Animated.View>
   );
 }
 
@@ -151,8 +154,9 @@ const styles = StyleSheet.create({
   rim: { borderRadius: 50, borderColor: 'white', borderWidth: 3 },
   bar: { width: '100%', height: 23, borderRadius: 10, borderWidth: 3, borderColor: config.primary, backgroundColor: 'white', overflow: 'hidden' },
   barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%', transformOrigin: 'left', backgroundColor: config.primary },
+  bubbleSlot: { position: 'absolute', bottom: 20 },
   bubble: {
-    position: 'absolute', bottom: 20,
+    flex: 1,
     backgroundColor: 'rgba(255,255,255,0.25)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)',
   },
 });
