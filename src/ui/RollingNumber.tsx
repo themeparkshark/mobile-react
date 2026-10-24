@@ -118,8 +118,10 @@ const STRIP = '01234567890123456789'.split('');
  * Where the strip sits for a rolling position p: whole digits hold, then slide quickly to the next
  * (an odometer tick). Pure worklet (unit tested): tickPos(3.2) is 3, tickPos(3.9) is between 3 and 4.
  */
-export function tickPos(p: number, hold: number = ROLL_LOOK.holdShare): number {
+const HOLD_SHARE: number = ROLL_LOOK.holdShare;
+export function tickPos(p: number, holdShare?: number): number {
   'worklet';
+  const hold = holdShare === undefined ? HOLD_SHARE : holdShare;
   const base = Math.floor(p);
   const f = p - base;
   if (f <= hold) return base;
@@ -127,8 +129,9 @@ export function tickPos(p: number, hold: number = ROLL_LOOK.holdShare): number {
   return base + u * u * (3 - 2 * u);
 }
 /** How fast the strip is sliding at p (0 holding, 1 mid-slide), for the speed stretch. Pure worklet. */
-export function tickSlide(p: number, hold: number = ROLL_LOOK.holdShare): number {
+export function tickSlide(p: number, holdShare?: number): number {
   'worklet';
+  const hold = holdShare === undefined ? HOLD_SHARE : holdShare;
   const f = p - Math.floor(p);
   if (f <= hold) return 0;
   const u = (f - hold) / (1 - hold);
