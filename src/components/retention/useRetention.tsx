@@ -131,6 +131,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   useEffect(() => () => { if (chainTimer.current) clearTimeout(chainTimer.current); }, []);
   const mounted = useRef(true);
   const viewRef = useRef<View_ | null>(null);
+  const buttonBox = useRef<View>(null);
   // Dev readout for the lane tools (debug()).
   const presentRef = useRef(false);
   const frontRef = useRef(false);
@@ -345,6 +346,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     }
     setView({ k: 'flying', legs });
     void Promise.resolve(refreshPlayer?.()).catch(() => undefined);
+    // The next card launches out of the Daily 3 button (where the flame lives), so the eye goes there with it.
+    launchFrom.current = null;
+    buttonBox.current?.measureInWindow((x, y, w, h) => {
+      if (Number.isFinite(x) && w > 0) launchFrom.current = { x: x + w / 2 - width / 2, y: y + h / 2 - height / 2 };
+    });
     const next = async () => {
       chainTimer.current = null;
       if (src !== 'daily') void refresh(true);
@@ -566,11 +572,17 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const cardT = useSharedValue(0);
   cardTRef.current = cardT;
   const cardUp = useRef(false);
+  /** Where the next card launches from (relative to the screen centre), set while the prizes fly home. */
+  const launchFrom = useRef<{ x: number; y: number } | null>(null);
+  const launch = useSharedValue({ x: 0, y: 0 });
   useEffect(() => {
     if (view) setPresent(true);
     if (showing) {
       if (!cardUp.current) {
         cardUp.current = true;
+        launch.value = !reducedMotion && launchFrom.current ? launchFrom.current : { x: 0, y: 0 };
+        launchFrom.current = null;
+        cardT.value = 0;
         cardT.value = reducedMotion ? withTiming(1, { duration: DURATION.quick }) : withSpring(1, SPRING.settle);
         dim.value = withTiming(0.55, { duration: DURATION.enter, easing: EASE.out });
       }
@@ -588,15 +600,23 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     }
   }, [showing, !!view]); // eslint-disable-line react-hooks/exhaustive-deps
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
-  const cardStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, cardT.value * 1.6), transform: [{ scale: 0.86 + 0.14 * cardT.value }] }));
+  const cardStyle = useAnimatedStyle(() => {
+    const t = cardT.value;
+    const far = launch.value.x !== 0 || launch.value.y !== 0;
+    // From the button: it grows out of it on the settle spring; otherwise a plain pop-in.
+    return { opacity: Math.min(1, t * (far ? 3 : 1.6)), transform: [{ translateX: launch.value.x * (1 - t) }, { translateY: launch.value.y * (1 - t) },
+      { scale: far ? 0.15 + 0.85 * t : 0.86 + 0.14 * t }] };
+  });
 
   let button: ReactNode | null = null;
   if (flags?.dailyThree && daily) {
     const b = buttonState(daily, new Date().getHours());
     button = (
+      <View ref={buttonBox} collapsable={false}>
       <Daily3MapButton pips={b.pips} streak={b.streak} attention={b.attention}
         active={o.mapFocused && !o.mapCovered && !visible} reducedMotion={reducedMotion} landing={landing} onFullSet={onFullSet}
         onPress={() => { playSfx('ui.tap'); openSheet(); }} />
+      </View>
     );
   }
 
