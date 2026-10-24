@@ -394,6 +394,9 @@ function launchHat(an: HoleAnim, L: BoardLayout, i: number, seed: number, ox?: n
 /** Curtain call timing: each well joins CURTAIN_STEP_MS after the one before it, rising over CURTAIN_RISE_MS. */
 export const CURTAIN_STEP_MS = 45;
 export const CURTAIN_RISE_MS = 150;
+/** The bow ends here (ms after the end frame): the sharks duck back, so the next card owns a calm board. */
+export const CURTAIN_BOW_MS = 1250;
+export const CURTAIN_DUCK_MS = 160;
 /** Reading order from the centre out, so the wave starts where the eye already is. */
 export const CURTAIN_ORDER = [4, 1, 3, 5, 7, 0, 2, 6, 8];
 
@@ -408,8 +411,12 @@ export function curtainPose(i: number, now: number, at: number, reduced: boolean
   for (let k = 0; k < 9; k++) if (CURTAIN_ORDER[k] === i) order = k;
   const c = now - at - order * CURTAIN_STEP_MS;
   if (c < 0) return { rise: -1, rot: 0, hop: 0 };
-  if (reduced) return { rise: 1, rot: 0, hop: 0 };
-  const rise = c < CURTAIN_RISE_MS ? 0.3 + 0.7 * outBack(c / CURTAIN_RISE_MS, 1.8) : 1;
+  // The bow: every shark ducks back in the same order (exits faster than entrances), then the well is calm.
+  const d = now - at - CURTAIN_BOW_MS - order * (CURTAIN_STEP_MS * 0.5);
+  if (d >= CURTAIN_DUCK_MS) return { rise: -1, rot: 0, hop: 0 };
+  if (reduced) return d > 0 ? { rise: -1, rot: 0, hop: 0 } : { rise: 1, rot: 0, hop: 0 };
+  const duck = d > 0 ? d / CURTAIN_DUCK_MS : 0;
+  const rise = (c < CURTAIN_RISE_MS ? 0.3 + 0.7 * outBack(c / CURTAIN_RISE_MS, 1.8) : 1) * (1 - duck * duck);
   // Everyone waves together (1.6 Hz, alternate wells lean the other way) and hops on the beat.
   const w = Math.sin((now - at) * 0.01005 + (i % 2) * Math.PI);
   const hop = c > CURTAIN_RISE_MS ? Math.max(0, Math.sin((now - at) * 0.02010)) * 5 : 0;

@@ -516,6 +516,9 @@ test('round 4: the curtain call pops every empty well from the centre out and th
   assert.ok(Math.abs(a) <= 7.001);
   assert.deepEqual(plain(rs.curtainPose(8, 10, 0, true)), { rise: -1, rot: 0, hop: 0 });
   assert.deepEqual(plain(rs.curtainPose(8, last, 0, true)), { rise: 1, rot: 0, hop: 0 });
+  assert.equal(rs.curtainPose(4, rs.CURTAIN_BOW_MS + 8 * rs.CURTAIN_STEP_MS + rs.CURTAIN_DUCK_MS + 1, 0, false).rise, -1, 'they duck back before the next card settles');
+  assert.ok(rs.CURTAIN_BOW_MS + 8 * rs.CURTAIN_STEP_MS * 0.5 + rs.CURTAIN_DUCK_MS <= 1700, 'the bow is over inside 1.7 s');
+  assert.ok(rs.CURTAIN_DUCK_MS < rs.CURTAIN_RISE_MS + 20, 'the duck is no slower than the pop');
   const rt = read('src/games/whack/useWhackRuntime.ts');
   assert.match(rt, /a\.curtainAt = a\.fxNow \+ 90;/, 'it starts on the UI frame the clock hits 0');
   assert.match(rt, /an\.value\.curtainAt = -1;/, 'a new burst clears it');
