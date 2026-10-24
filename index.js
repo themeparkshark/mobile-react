@@ -1,3 +1,5 @@
+// Must load first: silences every sound on test simulators (EXPO_PUBLIC_STUDIO_MUTE, lane tooling only).
+import './src/dev/studioMute';
 import { registerRootComponent } from 'expo';
 import { LogBox } from 'react-native';
 
