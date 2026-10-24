@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { parkDayLabel } from '../services/collection/parkDayLabel';
 import GameIcon from '../ui/GameIcon';
@@ -27,7 +27,8 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   const [retry, setRetry] = useState(0);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   // Today's story builds itself once (stat by stat); an earlier day just shows.
-  const build = useRecapBuild(recap && !selectedDay && recap.moments.length > 0 ? `${parkId}:${recap.park_day}` : null);
+  const cardRef = useRef<View>(null);
+  const build = useRecapBuild(recap && !selectedDay && recap.moments.length > 0 ? `${parkId}:${recap.park_day}` : null, cardRef);
   // The flex card (Share Studio): only coin counts and coin art cross over (parkDayFlexPayload).
   const shareDay = () => {
     if (recap) shareFlex('park_day', parkDayFlexPayload(recap), { surface: 'park_day' });
@@ -63,7 +64,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
 
   const polaroid = hasActivity ? bestCoin(recap.coins) : null;
   // A tap anywhere on a building card jumps to the finished card (buttons still work).
-  return <View style={styles.card} onTouchStart={build.instant ? undefined : build.skip}>
+  return <View ref={cardRef} collapsable={false} style={styles.card} onTouchStart={build.instant ? undefined : build.skip}>
     <View style={styles.header}>
       {hasActivity && <RecapSky build={build} />}
       <View style={styles.headerCopy}>

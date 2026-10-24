@@ -10,8 +10,8 @@
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { StyleSheet, Text, View, useWindowDimensions, type StyleProp, type TextStyle } from 'react-native';
 import Animated, {
   cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -29,25 +29,63 @@ export interface RecapBuild {
   readonly key: string | null;
   /** The kid tapped to skip, or Reduce Motion: show the end state. */
   readonly instant: boolean;
+  /** Waiting for the card to scroll into view: hold the first frame. */
+  readonly hold: boolean;
   readonly skip: () => void;
 }
 
 const played = new Set<string>();
+if (__DEV__) {
+  // QA: let the next recap card build again (lane.sh eval 'globalThis.__tpsRecapReset()').
+  (globalThis as Record<string, unknown>).__tpsRecapReset = () => { played.clear(); return 'reset'; };
+}
+const VISIBLE_POLL_MS = 350;
+const VISIBLE_WAIT_MS = 120_000;
 
-/** One build per park day per app run: coming back to the shelf shows the finished card. */
-export function useRecapBuild(dayKey: string | null): RecapBuild {
+/**
+ * One build per park day per app run: coming back to the shelf shows the finished card.
+ * The build waits until the card is actually on screen (the recap sits under the shelf), checking
+ * its place a few times a second only until then, and for at most VISIBLE_WAIT_MS.
+ */
+export function useRecapBuild(dayKey: string | null, cardRef?: RefObject<View | null>): RecapBuild {
   const preference = useReduceMotionPreference();
+  const { height } = useWindowDimensions();
   const [key, setKey] = useState<string | null>(null);
   const [skipped, setSkipped] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   useEffect(() => {
-    if (!dayKey || preference === null) return;
-    if (played.has(dayKey)) { setKey(null); return; }
-    played.add(dayKey);
-    setSkipped(false);
-    setKey(dayKey);
-  }, [dayKey, preference]);
+    if (!dayKey || preference === null) { setWaiting(false); return undefined; }
+    if (played.has(dayKey)) { setKey(null); setWaiting(false); return undefined; }
+    const start = () => {
+      if (timer) clearTimeout(timer);
+      active = false;
+      if (played.has(dayKey)) return;
+      played.add(dayKey);
+      setWaiting(false);
+      setSkipped(false);
+      setKey(dayKey);
+    };
+    if (!cardRef) { start(); return undefined; }
+    setWaiting(true);
+    let active = true;
+    const began = Date.now();
+    const check = () => {
+      if (!active) return;
+      if (Date.now() - began > VISIBLE_WAIT_MS) { setWaiting(false); return; }
+      // The next look is booked first, so a measure that never answers cannot stall the build.
+      timer = setTimeout(check, VISIBLE_POLL_MS);
+      cardRef.current?.measureInWindow((_x, y, _w, h) => {
+        if (__DEV__ && process.env.EXPO_PUBLIC_PARK_ARRIVAL_DEBUG === '1') console.log('[recap] seen?', y, h, height);
+        if (active && Number.isFinite(y) && h > 0 && y < height - 140 && y + h > 120) start();
+      });
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined = setTimeout(check, 120);
+    return () => { active = false; if (timer) clearTimeout(timer); };
+  }, [dayKey, preference, cardRef, height]);
   const skip = useCallback(() => setSkipped(true), []);
-  return { key, instant: preference === true || skipped || key === null, skip };
+  // While waiting to be seen, the card holds its starting frame (nothing counted yet); a tap still shows it all.
+  const hold = waiting && !skipped;
+  return { key, hold, instant: !hold && (preference === true || skipped || key === null), skip };
 }
 
 /** The header sky: day blue warming into a gold sunset. */
@@ -56,9 +94,10 @@ export function RecapSky({ build }: { readonly build: RecapBuild }) {
   useEffect(() => {
     if (build.instant) { cancelAnimation(t); t.value = 1; return undefined; }
     t.value = 0;
+    if (build.hold) return undefined;
     t.value = withTiming(1, { duration: RECAP_BUILD.skyMs, easing: EASE.inOut });
     return () => cancelAnimation(t);
-  }, [build.key, build.instant, t]);
+  }, [build.key, build.instant, build.hold, t]);
   const style = useAnimatedStyle(() => ({ opacity: 0.9 * t.value }));
   return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
     <LinearGradient colors={['#0875c9', '#3f8fd6', '#ffb347', GOLD_FX.rays]} locations={[0, 0.35, 0.8, 1]}
@@ -77,11 +116,12 @@ export function RecapStamp({ build, at, from = 1.6, children, onLand }: {
   useEffect(() => {
     if (build.instant) { cancelAnimation(p); p.value = 1; squash.value = 0; return undefined; }
     p.value = 0;
+    if (build.hold) return undefined;
     p.value = withDelay(at, withTiming(1, { duration: DURATION.slam, easing: EASE.in }));
     squash.value = withDelay(at + DURATION.slam, withSequence(withTiming(1, { duration: 40 }), withSpring(0, SPRING.stamp)));
     const timer = setTimeout(() => landRef.current?.(), at + DURATION.slam);
     return () => { clearTimeout(timer); cancelAnimation(p); cancelAnimation(squash); };
-  }, [build.key, build.instant, at, p, squash]);
+  }, [build.key, build.instant, build.hold, at, p, squash]);
   const style = useAnimatedStyle(() => ({
     opacity: Math.min(1, p.value * 3),
     transform: [{ scale: from - (from - 1) * p.value }, { scaleX: 1 + SLAM_SQUASH * squash.value }, { scaleY: 1 - SLAM_SQUASH * squash.value }],
@@ -101,6 +141,7 @@ export function RecapStat({ build, index, value, label, valueStyle, labelStyle }
     if (build.instant) { cancelAnimation(pop); pop.value = 1; setShown(value); return undefined; }
     pop.value = 0;
     setShown(0);
+    if (build.hold) return undefined;
     pop.value = withDelay(at, withSpring(1, SPRING.pop));
     const timer = setTimeout(() => {
       setShown(value);
@@ -108,7 +149,7 @@ export function RecapStat({ build, index, value, label, valueStyle, labelStyle }
       playSfx('fx.coin', 0.45);
     }, at + 60);
     return () => { clearTimeout(timer); cancelAnimation(pop); };
-  }, [build.key, build.instant, at, value, pop]);
+  }, [build.key, build.instant, build.hold, at, value, pop]);
   const style = useAnimatedStyle(() => ({
     opacity: Math.min(1, pop.value * 2),
     transform: [{ scale: Math.max(0, pop.value) }],
@@ -125,9 +166,10 @@ export function RecapPolaroid({ build, coinUrl, isNew }: { readonly build: Recap
   useEffect(() => {
     if (build.instant) { cancelAnimation(t); t.value = 1; return undefined; }
     t.value = 0;
+    if (build.hold) return undefined;
     t.value = withDelay(RECAP_BUILD.polaroidAt, withSpring(1, SPRING.land));
     return () => cancelAnimation(t);
-  }, [build.key, build.instant, t]);
+  }, [build.key, build.instant, build.hold, t]);
   const style = useAnimatedStyle(() => ({
     opacity: Math.min(1, t.value * 3),
     transform: [{ translateY: -46 * (1 - t.value) }, { rotate: `${-4 + 6 * t.value}deg` }, { scale: 0.7 + 0.3 * t.value }],

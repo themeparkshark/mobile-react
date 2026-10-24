@@ -55,7 +55,7 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
       // The puff and the ring burst start on the landing frame.
       puff.value = 0;
       puff.value = withTiming(1, { duration: SHELF_LANDING.puffMs, easing: Easing.linear });
-      glow.value = withTiming(0, { duration: 260, easing: EASE.in });
+      cancelAnimation(glow); glow.value = withTiming(0, { duration: 160, easing: EASE.in });
     }
   };
   useEffect(() => {
@@ -71,7 +71,9 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
       withTiming(1, { duration: SHELF_LANDING.pulseMs / 2 }), withTiming(0, { duration: SHELF_LANDING.pulseMs / 2 }));
     // 2. The coin pops in big over a soft gold glow, then 3. drops into the slot, turning on its edge.
     hover.value = withSpring(1, SPRING.pop);
-    glow.value = withTiming(firstCollection ? 0.45 : 0.25, { duration: 260, easing: EASE.out });
+    // The glow lives where the coin hovers and fades as it drops (it never trails behind on the shelf).
+    glow.value = withSequence(withTiming(firstCollection ? 0.45 : 0.25, { duration: 260, easing: EASE.out }),
+      withDelay(Math.max(0, plan.dropAt - 260), withTiming(0, { duration: plan.dropMs * 0.6, easing: EASE.in })));
     progress.value = withDelay(plan.dropAt, withTiming(1, { duration: plan.dropMs, easing: EASE.in },
       ok => { if (ok) runOnJS(finish)(); }));
     chip.value = withDelay(plan.dropAt + plan.dropMs, withSpring(1, SPRING.settle));
@@ -101,9 +103,6 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
       opacity: landed ? 0 : Math.min(1, hover.value * 2),
     };
   });
-  const glowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: dx * progress.value }, { translateY: dy * progress.value }, { scale: 1 - 0.55 * progress.value }],
-  }));
   const dimStyle = useAnimatedStyle(() => ({ opacity: 0.35 * (1 - progress.value) }));
   const slotStyle = useAnimatedStyle(() => ({
     opacity: 0.3 + 0.6 * pulse.value,
@@ -127,10 +126,10 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
     {!landed && !reduced && <Animated.View pointerEvents="none" style={[styles.slotRing, {
       left: target.x - 5, top: target.y - 5, width: target.width + 10, height: target.height + 10,
       borderRadius: (target.width + 10) / 2 }, slotStyle]} />}
-    {!reduced && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: startX + size / 2, top: startY + size / 2, width: 0, height: 0,
-      alignItems: 'center', justifyContent: 'center' }, glowStyle]}>
+    {!reduced && <View pointerEvents="none" style={[{ position: 'absolute', left: startX + size / 2, top: startY + size / 2, width: 0, height: 0,
+      alignItems: 'center', justifyContent: 'center' }]}>
       <GoldBurst size={size * 2.1} amount={glow} spin={false} reduced={reduced} />
-    </Animated.View>}
+    </View>}
     {!landed && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: startX, top: startY, width: size, height: size }, coinStyle]}>
       <Image source={coinUrl} contentFit="contain" onError={finish} style={{ width: size, height: size }} />
     </Animated.View>}

@@ -41,6 +41,8 @@ test('the landing stays on the UI thread, the budget and the motion language', (
   assert.match(arrival, /momentParticles\(SHELF_LANDING\.sparkles/);
   assert.match(arrival, /SPRING\.pop/);
   assert.match(arrival, /EASE\.in/);
+  assert.match(arrival, /useReduceMotionPreference/, 'never skips itself before iOS answers Reduce Motion');
+  assert.doesNotMatch(arrival, /glowStyle/, 'the hover glow stays put and fades; it never trails onto the shelf');
   const fx = read('src/components/ShelfLandingFx.tsx');
   assert.doesNotMatch(fx, /withRepeat/, 'one-shot only, nothing loops on the shelf');
   assert.match(fx, /useReducedGameMotion/);

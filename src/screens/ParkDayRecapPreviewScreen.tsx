@@ -34,6 +34,8 @@ const today: ParkDayRecap = {
 /** Development-only visual check of the real recap card and its day navigation. */
 export default function ParkDayRecapPreviewScreen() {
   const live = __DEV__ && process.env.EXPO_PUBLIC_PARK_DAY_RECAP_LIVE === '1';
+  // Live QA reads the signed-in player's real day at this park (default the sample park 1).
+  const liveParkId = Number(process.env.EXPO_PUBLIC_PARK_DAY_RECAP_PARK) || 1;
   const [atPark, setAtPark] = useState(true);
   const [busyToday, setBusyToday] = useState(true);
   const [version, setVersion] = useState(0);
@@ -50,8 +52,16 @@ export default function ParkDayRecapPreviewScreen() {
     </Topbar>
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={styles.context}>{live ? 'LOCAL PLAYER QA · confirmed park day' : 'Universal Studios Hollywood · sample park day'}</Text>
-      <ParkDayRecapCard parkId={1} atPark={atPark} refreshVersion={version}
+      <ParkDayRecapCard key={`card-${version}`} parkId={live ? liveParkId : 1} atPark={atPark} refreshVersion={version}
         loadRecap={loadRecap} initiallyExpanded={!live} />
+      {live && <View style={styles.toolbar}>
+        <Pressable accessibilityRole="button" onPress={() => {
+          (globalThis as { __tpsRecapReset?: () => void }).__tpsRecapReset?.();
+          setVersion(value => value + 1);
+        }}>
+          <Text style={styles.action}>Build again</Text>
+        </Pressable>
+      </View>}
       {!live && <View style={styles.toolbar}>
         <Pressable onPress={() => { setAtPark(value => !value); setVersion(value => value + 1); }}>
           <Text style={styles.action}>{atPark ? 'At park' : 'At home'}</Text>
