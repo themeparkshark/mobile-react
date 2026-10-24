@@ -163,7 +163,14 @@ test('one wait source of truth: "no sign time" never shows next to a SIGN SAYS n
       }
     }
   }
-  assert.equal(m.waitSourceHint({ postedMinutes: 60, waitSource: 'last_known' }), 'That is an older time from the ride sign.');
+  assert.equal(m.waitSourceHint({ postedMinutes: 60, waitSource: 'last_known' }), 'The ride sign said 1h 00m a while ago.');
+  assert.equal(m.waitSourceHint({ postedMinutes: 35, waitSource: 'posted' }), 'The ride sign said 35m when you got in line.',
+    'the Details line names the SIGN SAYS number, so it never reads as a dangling "That"');
+  for (const waitSource of ['posted', 'last_known']) {
+    const est = m.waitEstimate({ postedMinutes: 35, waitSource, ratio: null, elapsedSeconds: 600 });
+    assert.ok(m.waitSourceHint({ postedMinutes: 35, waitSource }).includes(est.kidValue), 'same number, same format as SIGN SAYS');
+    assert.ok(m.waitSourceHint({ postedMinutes: 35, waitSource }).split(/\s+/).length <= 12);
+  }
   // The card and its hero read the same sign time (the dev preview included).
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(card, /waitSourceHint\(\{ postedMinutes: postedWaitMinutes, waitSource \}\)/);
@@ -187,7 +194,7 @@ test('Details under the coin hero: two short lines at most, one Parts idea, the 
     '../../../services/lineplay/partCountdown': {}, '../../../services/lineplay/bonusRounds': {},
     '../../../services/lineplay/waitScreen': model(), './waitscreen/WaitStampBadge': {},
   });
-  const base = { signLine: 'That is the ride sign’s time when you got in line.', sublineInHeadline: true,
+  const base = { signLine: 'The ride sign said 35m when you got in line.', sublineInHeadline: true,
     subline: 'until your next Ride Part', rewardTrackingAvailable: true, atCap: false, intervalSeconds: 600 };
   assert.deepEqual(plain(card.heroDetailLines(base)), [base.signLine, '1 Ride Part every 10 min near the ride.']);
   // The status line could not hold its subline (checking, paused, at the cap): Details shows it instead of a second Parts idea.
@@ -228,9 +235,12 @@ test('the dev preview runs one clock for the card and its hero', () => {
   assert.deepEqual(plain(live), { elapsedSeconds: 65, verifiedEligibleSeconds: 30, verifiedPresenceAt: 5, creditedParts: 2 },
     'live sessions are untouched');
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.equal((screen.match(/elapsedSeconds=\{shownClock\(snapshot\)\.elapsedSeconds\}/g) ?? []).length, 2, 'card and hero share one clock');
-  assert.match(screen, /verifiedEligibleSeconds=\{shownClock\(snapshot\)\.verifiedEligibleSeconds\}/);
-  assert.match(screen, /verifiedPresenceAt=\{shownClock\(snapshot\)\.verifiedPresenceAt\}/);
-  assert.equal((screen.match(/creditedParts=\{shownClock\(snapshot\)\.creditedParts\}/g) ?? []).length, 2, 'and one Parts count');
+  // Read once per render, so the card and the hero cannot be a tick apart.
+  assert.equal((screen.match(/shownClock\(snapshot\)/g) ?? []).length, 1, 'one shownClock read per render');
+  assert.match(screen, /const clock = shownClock\(snapshot\);/);
+  assert.equal((screen.match(/elapsedSeconds=\{clock\.elapsedSeconds\}/g) ?? []).length, 2, 'card and hero share one clock');
+  assert.match(screen, /verifiedEligibleSeconds=\{clock\.verifiedEligibleSeconds\}/);
+  assert.match(screen, /verifiedPresenceAt=\{clock\.verifiedPresenceAt\}/);
+  assert.equal((screen.match(/creditedParts=\{clock\.creditedParts\}/g) ?? []).length, 2, 'and one Parts count');
   assert.doesNotMatch(read(DIR + 'WaitCoinHero.tsx'), /elapsedSeconds: \(20|creditedParts: 1 \+/, 'the hero never runs its own clock');
 });

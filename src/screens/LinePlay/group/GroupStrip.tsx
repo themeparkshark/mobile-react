@@ -16,19 +16,21 @@ export function stripLine(group: LineGroup): string {
   return `${crew} · Tied at the top`;
 }
 
-export default function GroupStrip({ group, onEdit }: {
+export default function GroupStrip({ group, onEdit, compact = false }: {
   readonly group: LineGroup | null;
   readonly onEdit: () => void;
+  /** Short phones: a slimmer row (still a 40 pt target with its hitSlop). */
+  readonly compact?: boolean;
 }) {
   if (!isPassAndPlay(group)) {
     return <Pressable accessibilityRole="button" accessibilityLabel="Add your crew for pass and play"
-      onPress={onEdit} hitSlop={6} style={({ pressed }) => [styles.soloChip, pressed && styles.pressed]}>
-      <GameIcon name="crown" size={20} />
-      <Text style={styles.soloText}>Here with friends? Add your crew!</Text>
+      onPress={onEdit} hitSlop={6} style={({ pressed }) => [styles.soloChip, compact && styles.compactChip, pressed && styles.pressed]}>
+      <GameIcon name="crown" size={compact ? 18 : 20} />
+      <Text style={[styles.soloText, compact && styles.compactText]}>Here with friends? Add your crew!</Text>
     </Pressable>;
   }
   return <Pressable accessibilityRole="button" accessibilityLabel={`${stripLine(group)}. Edit crew`}
-    onPress={onEdit} style={({ pressed }) => [styles.strip, pressed && styles.pressed]}>
+    onPress={onEdit} hitSlop={compact ? 4 : undefined} style={({ pressed }) => [styles.strip, compact && styles.compactChip, pressed && styles.pressed]}>
     <View style={styles.badges}>
       {group.players.map((player, index) => <View key={player.id} style={index > 0 ? styles.overlap : null}>
         <PlayerBadge name={player.name} index={index} size={28} kid={player.kid} />
@@ -51,5 +53,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, minHeight: 44, borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.55)',
     borderWidth: 2, borderColor: '#ffcf3b' },
   soloText: { color: '#ffffff', fontFamily: 'Shark', fontSize: 16 },
+  compactChip: { minHeight: 36, marginTop: 4 },
+  compactText: { fontSize: 14 },
   pressed: { opacity: 0.8 },
 });

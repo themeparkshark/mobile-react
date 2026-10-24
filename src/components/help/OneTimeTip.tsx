@@ -8,14 +8,17 @@ import { useOneTimeTip } from './HelpProvider';
  * Drop-in one-time tip. `ready` is the caller's "the player is free" signal:
  * false during a mini-game, a moving line, a dialog or a Finn lesson.
  */
-export default function OneTimeTip({ id, ready, style, compact }: {
+export default function OneTimeTip({ id, ready, style, compact, autoHideMs }: {
   readonly id: Exclude<TipId, `game:${string}`>;
   readonly ready: boolean;
   readonly style?: StyleProp<ViewStyle>;
   readonly compact?: boolean;
+  /** 0 keeps the tip up until it is tapped (CoachTip's default leaves after 9 s). */
+  readonly autoHideMs?: number;
 }) {
   const { visible, dismiss } = useOneTimeTip(id, ready);
   if (!visible) return null;
   const copy = TIP_COPY[id];
-  return <CoachTip title={copy.title} body={copy.body} onDismiss={dismiss} style={style} compact={compact} />;
+  return <CoachTip title={copy.title} body={copy.body} onDismiss={dismiss} style={style} compact={compact}
+    {...(autoHideMs != null ? { autoHideMs } : null)} />;
 }

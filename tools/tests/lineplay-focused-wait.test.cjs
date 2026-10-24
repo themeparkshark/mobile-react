@@ -29,7 +29,7 @@ test('focused queue status preserves pause, arcade and honest games-only details
   c.control('Show wait and reward details').props.onPress(); c.app.render();
   assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Ride Parts aren’t available at this ride right now.'));
   assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Playing 1:30 · posted wait 35m'));
-  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'That is the ride sign’s time when you got in line.'));
+  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'The ride sign said 35m when you got in line.'));
   assert.ok(!c.app.find(node => node.type === 'Text' && /No posted wait|no sign time/.test(String(node.props.children))));
   c.app.change({ paused: true, pauseReason: 'manual' });
   assert.ok(c.control('Resume queue games')); assert.equal(c.control('Open queue games').props.disabled, true);

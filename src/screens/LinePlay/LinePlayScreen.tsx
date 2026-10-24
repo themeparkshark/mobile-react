@@ -22,7 +22,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { openAppSettings } from '../../services/external';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, FlatList, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { Image } from 'expo-image';
@@ -105,6 +105,8 @@ import { personalizeChapterFinale, resolveChapterClue } from '../../services/lin
 import { useGroupPlay, type GroupTurnLaunch } from './group/useGroupPlay';
 
 const { width: SCREEN_W } = Dimensions.get('window');
+const DAY_BACKDROP = ['#0a7dd1', '#07569e', '#073e87'] as const;
+const NIGHT_BACKDROP = ['#3B2A6B', '#2B2350', '#1E1838'] as const;
 /** Returning after this long away gets a quick "welcome back" heads up. */
 const WELCOME_BACK_AFTER_MS = 20_000;
 const QUEUE_RECAP_SHARK = require('../../../assets/images/screens/lineplay/queue-recap-shark.png');
@@ -157,6 +159,7 @@ import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLive
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { linePlayTipReady } from '../../services/help/tipGate';
+import { lineScreenFit, PAGE_EDGE_FADE, pageEdgeFade } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
 
@@ -182,6 +185,14 @@ export default function LinePlayScreen() {
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [backgroundPermissionBusy, setBackgroundPermissionBusy] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
+  const insets = useSafeAreaInsets();
+  const [rootHeight, setRootHeight] = useState(0);
+  /** Short phones (iPhone SE) get a smaller coin and tighter gaps so the activity pages keep real room. */
+  const fit = lineScreenFit(rootHeight, insets.top, insets.bottom);
+  /** Where the activity pages end, as a fraction of the screen, so their fade matches the water behind. */
+  const [pagesEnd, setPagesEnd] = useState(0.8);
+  const pagesRef = useRef<View>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [arcadeOpen, setArcadeOpen] = useState(false);
   const queuedArcadeGame = useRef<Extract<ActivityItem, { kind: 'minigame' }> | null>(null);
   const activityListRef = useRef<FlatList<any>>(null);
@@ -724,6 +735,7 @@ export default function LinePlayScreen() {
     pages: activityPages,
     gameOpen: activeGame != null,
     openTurn: openGroupTurn,
+    compact: fit.short,
   });
   sheetOpenRef.current = groupPlay.sheetOpen;
   groupPlayRef.current = groupPlay;
@@ -782,9 +794,20 @@ export default function LinePlayScreen() {
   }, [savedNow]);
   const waitCardRef = useRef<View>(null);
   const [partTarget, setPartTarget] = useState<FlightPoint>({ x: 48, y: 140 });
+  /** The wait card's bottom edge: the welcome tip sits just under the card it explains, never on its Details button. */
+  const [waitCardBottom, setWaitCardBottom] = useState<number | null>(null);
   const measureWaitCard = useCallback(() => {
     waitCardRef.current?.measureInWindow((x, y, _width, height) => {
-      if (Number.isFinite(x) && Number.isFinite(y)) setPartTarget({ x: x + 44, y: y + height / 2 });
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        setPartTarget({ x: x + 44, y: y + height / 2 });
+        if (Number.isFinite(height)) setWaitCardBottom(Math.round(y + height));
+      }
+    });
+  }, []);
+  const measurePages = useCallback(() => {
+    pagesRef.current?.measureInWindow((_x, y, _width, height) => {
+      const screenH = Dimensions.get('window').height;
+      if (Number.isFinite(y) && Number.isFinite(height) && screenH > 0) setPagesEnd((y + height) / screenH);
     });
   }, []);
   const secondsToNextBonus = bonus ? nextBonusSeconds(bonus, snapshot.verifiedEligibleSeconds,
@@ -878,12 +901,15 @@ export default function LinePlayScreen() {
   const projectMission = snapshot.parkProject ? resolveProjectMission(snapshot.parkProject) : null;
   const circuitTheme = circuitThemeFor(ride.rideName, snapshot.chapter?.navigationPanel === true);
   const liveCrew = crewLivePrompt(snapshot.signal, completedActivityIds);
+  const backdrop = snapshot.chapter?.palette === 'night' ? NIGHT_BACKDROP : DAY_BACKDROP;
+  /** One clock per render (the dev preview reads Date.now), so the card and its coin can never be a tick apart. */
+  const clock = shownClock(snapshot);
 
   return (
-    <View onTouchStart={onAnyTouch} style={[styles.root, snapshot.chapter?.palette === 'night' && { backgroundColor: '#2B2350' }]}>
+    <View onTouchStart={onAnyTouch} onLayout={event => setRootHeight(event.nativeEvent.layout.height)}
+      style={[styles.root, snapshot.chapter?.palette === 'night' && { backgroundColor: '#2B2350' }]}>
       {/* Only a Fin-ister Nights haunt-line chapter gets the night palette; every other chapter stays bright. */}
-      <LinearGradient colors={snapshot.chapter?.palette === 'night' ? ['#3B2A6B', '#2B2350', '#1E1838'] : ['#0a7dd1', '#07569e', '#073e87']}
-        style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={backdrop} style={StyleSheet.absoluteFill} />
       {snapshot.chapter?.introLine && snapshot.state !== 'complete' && (
         <View pointerEvents="none" style={{ position: 'absolute', bottom: 96, left: 16, right: 16, zIndex: 5 }}>
           <Text style={{ textAlign: 'center', fontFamily: 'Knockout', fontSize: 15, color: '#E4DAFF' }}>{snapshot.chapter.introLine}</Text>
@@ -942,14 +968,14 @@ export default function LinePlayScreen() {
               entranceWaitMinutes={snapshot.entranceWaitMinutes}
               entranceWaitObservedAt={snapshot.entranceWaitObservedAt}
               entranceWaitChangeMinutes={snapshot.entranceWaitChangeMinutes}
-              elapsedSeconds={shownClock(snapshot).elapsedSeconds}
+              elapsedSeconds={clock.elapsedSeconds}
               rewardTrackingAvailable={shownRewards(snapshot, ride).tracking}
               rewardUnavailable={shownRewards(snapshot, ride).unavailable}
               rewardConnectionIssue={snapshot.rewardConnectionIssue}
               lineRewardsReady={shownRewards(snapshot, ride).ready}
-              verifiedEligibleSeconds={shownClock(snapshot).verifiedEligibleSeconds}
-              verifiedPresenceAt={shownClock(snapshot).verifiedPresenceAt}
-              creditedParts={shownClock(snapshot).creditedParts}
+              verifiedEligibleSeconds={clock.verifiedEligibleSeconds}
+              verifiedPresenceAt={clock.verifiedPresenceAt}
+              creditedParts={clock.creditedParts}
               partsRemainingToday={snapshot.partsRemainingToday}
               partIntervalSeconds={snapshot.partIntervalSeconds}
               sessionPartCap={snapshot.sessionPartCap}
@@ -971,12 +997,14 @@ export default function LinePlayScreen() {
               onPlayBonus={arcadeChoices.length ? () => setArcadeOpen(true) : undefined}
               bonus={snapshot.bonus}
               gameOpen={activeGame != null}
+              onDetailsChange={setDetailsOpen}
               hero={snapshot.state !== 'complete' ? <WaitCoinHero
                 rideId={ride.rideId}
+                coinSize={fit.coinSize}
                 waitScreen={snapshot.waitScreen}
-                creditedParts={shownClock(snapshot).creditedParts}
+                creditedParts={clock.creditedParts}
                 bonusParts={snapshot.bonus?.slots.filter(slot => slot.state === 'claimed').length ?? 0}
-                elapsedSeconds={shownClock(snapshot).elapsedSeconds}
+                elapsedSeconds={clock.elapsedSeconds}
                 plannedWaitMinutes={shownWait(snapshot).plannedWaitMinutes}
                 waitSource={shownWait(snapshot).waitSource}
                 playerEnergy={player?.energy ?? null}
@@ -1010,10 +1038,11 @@ export default function LinePlayScreen() {
           }}
           onOpenProject={() => setProjectOpen(true)} />}
 
-        {groupPlay.strip}
+        {/* A short phone reading Details lends the crew row's space to the activity page; it comes back on Hide. */}
+        {!(fit.short && detailsOpen) && groupPlay.strip}
 
         {/* Activity area (bottom) */}
-        <View style={styles.activityArea}>
+        <View style={[styles.activityArea, { marginTop: fit.activityGap }]}>
           {snapshot.state === 'complete' ? (
             <SessionRecap
               nextAdventure={ride ? nextAdaptiveStoryTitle(snapshot.chapter, ride.rideName) : null}
@@ -1096,6 +1125,8 @@ export default function LinePlayScreen() {
             <ActivitySkeleton />
           ) : (
             <>
+            {/* The pages end in a soft fade above the rail, so a long card never looks cut through a line of text. */}
+            <View ref={pagesRef} onLayout={measurePages} collapsable={false} style={styles.pages}>
             <FlatList
               ref={activityListRef}
               data={activityPages}
@@ -1186,6 +1217,9 @@ export default function LinePlayScreen() {
                 </View>
               )}
             />
+            <LinearGradient pointerEvents="none" colors={pageEdgeFade(backdrop, pagesEnd)}
+              style={styles.pageEdgeFade} />
+            </View>
             <ActivityPageRail index={visiblePageIndex} count={activityPages.length}
               firstLabel={activityPages[0]?.kind === 'chapter_intro' ? 'Chapter' : 'First round'}
               progressText={storyStep ? `CLUE ${storyStep}/3`
@@ -1299,8 +1333,11 @@ export default function LinePlayScreen() {
       {groupPlay.overlays}
 
       {/* One-time tips: what LinePlay is, then the first Ride Part. Only between games, never while the line moves. */}
-      <OneTimeTip id="lineplay_intro" ready={lineTipReady} style={styles.tip} />
-      <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending} style={styles.tip} />
+      {/* They stay until tapped (a kid reads at their own pace), so a tip never vanishes under a finger and lets the tap land on Details. */}
+      <OneTimeTip id="lineplay_intro" ready={lineTipReady} autoHideMs={0}
+        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} />
+      <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending} autoHideMs={0}
+        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} />
 
       <QueueToast message={toast} onDone={() => setToast(null)} />
 
@@ -1425,6 +1462,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 6 },
   queueTrackingButtonText: { color: '#073e79', fontFamily: 'Knockout', fontSize: 14 },
   activityArea: { flex: 1, marginTop: spacing.lg },
+  pages: { flex: 1 },
+  pageEdgeFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: PAGE_EDGE_FADE },
   page: {
     width: SCREEN_W,
     height: '100%',

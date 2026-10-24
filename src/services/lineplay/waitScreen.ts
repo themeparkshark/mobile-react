@@ -115,10 +115,13 @@ export function signMinutes(input: Pick<WaitEstimateInput, 'postedMinutes' | 'wa
  * the SIGN SAYS number: "no sign time" only when no SIGN SAYS shows.
  */
 export function waitSourceHint(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'>): string {
-  if (signMinutes(input) == null) return 'No sign time when you started. Games still work.';
+  const posted = signMinutes(input);
+  if (posted == null) return 'No sign time when you started. Games still work.';
+  // Names the number (same format as SIGN SAYS), so the line makes sense on its own.
+  const shown = inLineLabel(posted * 60);
   return input.waitSource === 'last_known'
-    ? 'That is an older time from the ride sign.'
-    : 'That is the ride sign’s time when you got in line.';
+    ? `The ride sign said ${shown} a while ago.`
+    : `The ride sign said ${shown} when you got in line.`;
 }
 
 export function waitEstimate(input: WaitEstimateInput): WaitEstimate {

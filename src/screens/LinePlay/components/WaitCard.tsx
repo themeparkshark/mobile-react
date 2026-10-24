@@ -70,6 +70,8 @@ export interface WaitCardProps {
   readonly bonus?: LineBonusSummary | null;
   /** A game is mounted: the ring's idle loops (bob, glint, pulse) rest. */
   readonly gameOpen?: boolean;
+  /** Details opened or closed (a short phone makes room for it). */
+  readonly onDetailsChange?: (open: boolean) => void;
   /**
    * The wait screen body (L2 WaitCoinHero): the ride's coin center stage with
    * the wait stats. Compact mode only; the Part gem and count move into it.
@@ -150,16 +152,35 @@ export function ticketHint(available: boolean, verifiedSeconds: number, interval
     : `Stay near the ride ${fmt(Math.max(0, intervalSeconds - verifiedSeconds))} more for a ticket.`;
 }
 
+/** What a wait mark means, in a few words beside it (a badge alone means nothing to a kid). */
+export function stampCaption(kind: WaitStamp['kind']): string {
+  return kind === 'marathon' ? '1 hour in line!' : 'A night wait!';
+}
+
+/** The picture beside each Details line: the ride car for the sign's time, the Parts gem for Parts. */
+export function heroDetailIcon(index: number): GameIconName {
+  return index === 0 ? 'ride' : 'parts';
+}
+
 function HeroDetails({ stamps, lines, ticket }: {
   stamps: readonly WaitStamp[]; lines: readonly string[]; ticket: string | null;
 }) {
   return <View style={styles.heroDetails}>
     {stamps.length > 0 && <View style={styles.stampRow} accessible accessibilityLabel={stamps.map(stamp => stamp.kind === 'marathon'
       ? 'Marathon wait: an hour or more in line.' : 'Night wait, after 8 PM.').join(' ')}>
-      {stamps.map(stamp => <WaitStampBadge key={stamp.kind} stamp={stamp} />)}
+      {stamps.map(stamp => <View key={stamp.kind} style={styles.stampItem}>
+        <WaitStampBadge stamp={stamp} />
+        <Text style={styles.stampCaption}>{stampCaption(stamp.kind)}</Text>
+      </View>)}
     </View>}
-    {lines.map(line => <Text key={line} style={styles.waitSourceHint}>{line}</Text>)}
-    {ticket && <HintLine icon="ticket">{ticket}</HintLine>}
+    {lines.map((line, index) => <View key={line} style={styles.detailLine}>
+      <GameIcon name={heroDetailIcon(index)} size={20} />
+      <Text style={styles.detailLineText}>{line}</Text>
+    </View>)}
+    {ticket && <View style={styles.detailLine}>
+      <GameIcon name="ticket" size={20} />
+      <Text style={styles.detailLineText}>{ticket}</Text>
+    </View>}
   </View>;
 }
 
@@ -196,9 +217,13 @@ export default function WaitCard({
   onPlayBonus,
   bonus = null,
   gameOpen = false,
+  onDetailsChange,
   hero = null,
 }: WaitCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const onDetailsChangeRef = useRef(onDetailsChange);
+  onDetailsChangeRef.current = onDetailsChange;
+  useEffect(() => { onDetailsChangeRef.current?.(expanded); }, [expanded]);
   const [reducedMotion, setReducedMotion] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -341,8 +366,15 @@ export default function WaitCard({
           </View>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
             accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
-            onPress={() => setExpanded(value => !value)} style={styles.compactDetails}>
-            <Text style={styles.detailsButtonText}>{expanded ? 'Hide' : 'Details'}</Text>
+            onPress={() => setExpanded(value => !value)} style={styles.compactDetails}
+            hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}>
+            <View style={styles.detailsPill}>
+              <Text style={styles.detailsButtonText}>{expanded ? 'Hide' : 'Details'}</Text>
+              {/* A small arrow so it reads as a button to a kid who can't read yet: down opens, up closes. */}
+              <View style={{ transform: [{ rotate: expanded ? '-90deg' : '90deg' }] }}>
+                <GameIcon name="arrow" size={14} />
+              </View>
+            </View>
           </Pressable>
         </View> : <View style={styles.meterRow}>
           <View style={[{ width: RING, height: RING }, outOfRange && styles.ringOutOfRange]}
@@ -459,8 +491,15 @@ export default function WaitCard({
 }
 
 const styles = StyleSheet.create({
-  heroDetails: { gap: 4, marginTop: 4 },
-  stampRow: { flexDirection: 'row', gap: 6, paddingVertical: 2 },
+  heroDetails: { gap: 6, marginTop: 6 },
+  stampRow: { flexDirection: 'row', gap: 12, paddingVertical: 2 },
+  stampItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  stampCaption: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 15,
+    textShadowColor: '#073e79', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
+  // Details reads like part of the card, not fine print: 15 pt white with the card's navy ink under it.
+  detailLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  detailLineText: { flexShrink: 1, color: '#ffffff', fontFamily: 'Knockout', fontSize: 15, lineHeight: 19,
+    textShadowColor: '#073e79', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
   compactNote: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 13, lineHeight: 16, marginTop: 1 },
   compactContent: { paddingTop: 6 },
   compactRideName: { fontSize: 19, lineHeight: 22, marginRight: 7 },
@@ -472,6 +511,8 @@ const styles = StyleSheet.create({
   compactArcade: { minHeight: 44, paddingHorizontal: 10, marginRight: 7, borderRadius: 12, backgroundColor: '#ffcf3b', borderBottomWidth: 3, borderBottomColor: '#d99a00', justifyContent: 'center' },
   compactArcadeText: { fontFamily: 'Knockout', fontSize: 15, color: '#075083' },
   compactDetails: { minHeight: 44, minWidth: 58, justifyContent: 'center', alignItems: 'center' },
+  detailsPill: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 999, backgroundColor: 'rgba(7,62,121,0.35)' },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   meterRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 14 },
   gemWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
@@ -541,7 +582,7 @@ const styles = StyleSheet.create({
   },
   partBurstText: { color: '#7dffb0', fontFamily: 'Shark', fontSize: 18, marginTop: 4 },
   detailsButton: { minHeight: 34, justifyContent: 'center', alignItems: 'center' },
-  detailsButtonText: { color: '#cdeaff', fontFamily: 'Knockout', fontSize: 14 },
+  detailsButtonText: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14 },
   pauseButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
   hintLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
   hintLineText: { marginTop: 0, flexShrink: 1 },
