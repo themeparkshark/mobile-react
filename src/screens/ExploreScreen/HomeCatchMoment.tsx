@@ -965,6 +965,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     cancelAnimation(holdWobble);
     holdWobble.value = 0;
   };
+  const onSkipAccepted = () => {
+    if (!runRef.current || skipped.current) return;
+    skipped.current = true;
+    catchMark('skip');
+  };
   /**
    * Tap after the burst (round 5): cut straight to the coin stream. The burst is gone on the next frame (the clock
    * jumps to the middle of its suck-back), then the rest plays in 380 ms, so the kid still sees the coins pour
@@ -974,6 +979,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     'worklet';
     if (!continued.value || cc.value < planSV.value.burstAt || skipSV.value) return;
     skipSV.value = 1;
+    runOnJS(onSkipAccepted)();
     const p = planSV.value;
     const cut = Math.max(cc.value, p.suckAt + p.suckMs * 0.6);
     cancelAnimation(cc);
@@ -1043,12 +1049,13 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     }
   });
 
-  /** Tap anywhere after the burst: the catch jumps to its end (the find home, the badge away). */
+  /**
+   * Tap anywhere after the burst: the catch jumps to its end (the find home, the badge away). Round 5: the UI
+   * thread decides (its clock is past the burst), so a busy JS thread that has not heard about the burst yet
+   * never swallows the tap; the haptics go quiet only once the skip is really taken.
+   */
   const onSkip = useCallback(() => {
-    const run = runRef.current;
-    if (!run?.burst || skipped.current) return;
-    skipped.current = true;
-    catchMark('skip');
+    if (!runRef.current || skipped.current) return;
     runOnUI(skipToEnd)();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -47,12 +47,12 @@ function CatchRays({ size }: { readonly size: number }) {
       {/* The light: warm and soft, white-hot at the centre, gone at the rim (never a hard disc). */}
       <Circle cx={c} cy={c} r={c}>
         <RadialGradient c={vec(c, c)} r={c}
-          colors={['rgba(255,251,234,0.95)', 'rgba(255,213,74,0.6)', 'rgba(255,201,60,0.22)', 'rgba(255,201,60,0)']}
+          colors={['rgba(255,251,234,1)', 'rgba(255,213,74,0.75)', 'rgba(255,201,60,0.3)', 'rgba(255,201,60,0)']}
           positions={[0, 0.2, 0.55, 1]} />
       </Circle>
       <Group>
         <Path path={rays}>
-          <RadialGradient c={vec(c, c)} r={c * 0.92} colors={[GOLD_FX.core, GOLD_FX.raysSoft, GOLD_FX.rays]} positions={[0.08, 0.4, 1]} />
+          <RadialGradient c={vec(c, c)} r={c * 0.92} colors={[GOLD_FX.core, GOLD_FX.rays, '#F2A91E']} positions={[0.08, 0.38, 1]} />
         </Path>
         <Path path={rays} style="stroke" strokeWidth={2.2 * (size / 320)} strokeJoin="round" color={INK} />
         <Path path={shine} style="stroke" strokeWidth={1.8 * (size / 320)} strokeCap="round" color="rgba(255,255,255,0.8)" />
