@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { borderRadius, spacing } from '../../../design-system';
 import { GameIcon } from '../../../ui';
+import KidText from './KidText';
 
 interface Props {
   readonly index: number;
@@ -34,12 +35,12 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
       disabled={arcadePaused} onPress={onArcade}
       style={[styles.arcade, arcadePaused && styles.disabled]}>
       <Text style={styles.arcadeText}>ARCADE</Text>
-      {progressText ? <Text style={styles.arcadeProgress} numberOfLines={1}
-        accessibilityLabel={progressAccessibilityLabel}>{progressText}</Text> : null}
-    </Pressable> : <Text style={styles.count}
+      {progressText ? <KidText style={styles.arcadeProgress} numberOfLines={1}
+        accessibilityLabel={progressAccessibilityLabel}>{progressText}</KidText> : null}
+    </Pressable> : <KidText style={styles.count}
       accessibilityLabel={progressAccessibilityLabel ?? `Activity ${index + 1} of ${count}`}>
       {progressText ?? `${index + 1}/${count}`}
-    </Text>}
+    </KidText>}
     <Pressable accessibilityRole="button"
       accessibilityLabel={showMore ? 'Add more queue activities' : wrapsToFirst ? `Return to ${firstLabel.toLowerCase()}` : `Next activity: ${nextLabel}`}
       disabled={showMore ? morePaused : count <= 1} onPress={showMore ? onMore : onNext}

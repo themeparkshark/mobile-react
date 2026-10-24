@@ -86,10 +86,12 @@ export function shownClock(
 
 /** 0, 1, 2, ... every PREVIEW_STEP_MS while the preview runs. */
 export function usePreviewStep(enabled: boolean): number {
-  const [step, setStep] = useState(0);
+  // Counted from the app run's start, so leaving LinePlay and coming back continues the same preview wait.
+  const now = () => Math.floor((Date.now() - PREVIEW_T0) / PREVIEW_STEP_MS);
+  const [step, setStep] = useState(now);
   useEffect(() => {
     if (!enabled) return undefined;
-    const id = setInterval(() => setStep(value => value + 1), PREVIEW_STEP_MS);
+    const id = setInterval(() => setStep(now()), PREVIEW_STEP_MS);
     return () => clearInterval(id);
   }, [enabled]);
   return step;

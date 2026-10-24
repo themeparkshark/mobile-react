@@ -129,21 +129,12 @@ export function signMinutes(input: Pick<WaitEstimateInput, 'postedMinutes' | 'wa
 export function waitSourceHint(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'>): string {
   const posted = signMinutes(input);
   if (posted == null) return 'No sign time when you started. Games still work.';
-  // Names the number, spelled the same way as every other time in Details ("10 min"),
-  // so one block never mixes "35m" and "10 min". The ride-car picture ties it to SIGN SAYS.
-  const shown = minutesWords(posted);
+  // Names the number exactly as SIGN SAYS writes it on the card ("35m", "1h 30m"), so one
+  // screen never shows the sign time two ways. The ride-car picture ties the two together.
+  const shown = inLineLabel(posted * 60);
   return input.waitSource === 'last_known'
     ? `The ride sign said ${shown} a while ago.`
     : `The ride sign said ${shown}.`;
-}
-
-/** Minutes in words for Details lines: "35 min", "1 hr", "1 hr 30 min". */
-export function minutesWords(minutes: number): string {
-  const total = Math.max(0, Math.round(minutes));
-  const hours = Math.floor(total / 60);
-  const rest = total % 60;
-  if (hours === 0) return `${rest} min`;
-  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
 }
 
 export function waitEstimate(input: WaitEstimateInput): WaitEstimate {

@@ -17,6 +17,9 @@ function card(initial = {}) {
     '../../../gamekit/Particles': { ParticleField: 'ParticleField' },
     '../../../ui': { BRAND: tokens.BRAND, GameButton: 'GameButton', GameIcon: 'GameIcon' },
     'react-native-svg': { default: 'Svg', Circle: 'Circle', Path: 'Path' },
+    '../../../services/lineplay/lineLayout': loadTs('src/services/lineplay/lineLayout.ts'),
+    // KidText is a Text whose numbers use the number font; here it renders as a plain Text.
+    './KidText': { default: 'Text' },
   }, { seed: 0, paused: false, completed: false,
     onTurn: index => turns.push(index), onNewRound() {}, onNext() {}, ...initial });
   app.native.AccessibilityInfo.announceForAccessibility = value => { announcements.push(value); return Promise.resolve(); };

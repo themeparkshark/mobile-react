@@ -29,6 +29,8 @@ import { createNavigationPanel, createNavigationPanelProgress, navigationPanelSt
 import { circuitThemeFor, type CircuitTheme } from '../../../services/lineplay/circuitTheme';
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 import PageScroll from './PageScroll';
+import KidText from './KidText';
+import { boardSideFor, boardTight } from '../../../services/lineplay/lineLayout';
 
 interface Props {
   readonly seed: number;
@@ -209,9 +211,10 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
 
   // One thumb, one glance: the whole board and both ports fit above the
   // chapter rail. Size the tiles from the height this page really has.
+  const tight = boardTight(viewport.height);
   const boardSide = boardSideFor(viewport, headerHeight);
 
-  return <PageScroll ref={scroll} fill={BRAND.cream} contentStyle={styles.card}
+  return <PageScroll ref={scroll} fill={BRAND.cream} contentStyle={[styles.card, tight && styles.cardTight]}
     onLayout={event => {
       const { width, height } = event.nativeEvent.layout;
       if (width !== viewport.width || height !== viewport.height) setViewport({ width, height });
@@ -225,7 +228,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
       <LinearGradient colors={[BRAND.blueBright, BRAND.blue]}
         style={[styles.hero, !trace.solved && styles.heroCompact]}>
         <View style={styles.heroCopy}>
-          <Text style={styles.kicker} numberOfLines={1}>{kicker}</Text>
+          <KidText style={styles.kicker} numberOfLines={1}>{kicker}</KidText>
           <View style={styles.titleRow}>
             <Text style={[styles.title, !trace.solved && styles.titleCompact]} numberOfLines={1}>
               {trace.solved ? look.solvedTitle : look.repairTitle}</Text>
@@ -250,7 +253,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
       </LinearGradient>
     </View>
 
-    <Animated.View style={[styles.panel, shakeStyle]}>
+    <Animated.View style={[styles.panel, tight && styles.panelTight, shakeStyle]}>
       <View style={[styles.boardFrame, boardSide != null && { width: boardSide, maxWidth: boardSide }]}
         onLayout={event => setBoardWidth(event.nativeEvent.layout.width)}>
         <View style={[styles.port, styles.portIn, { top: `${(Math.floor(panel.entry / size) + 0.5) * (100 / size)}%` }]}
@@ -275,7 +278,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
         </View>)}
         <ParticleField ref={particles} width={boardWidth} height={boardWidth} style={styles.particles} />
       </View>
-      <Text style={styles.panelStatus} accessibilityLiveRegion="polite">{status}</Text>
+      <Text style={[styles.panelStatus, tight && styles.panelStatusTight]} accessibilityLiveRegion="polite">{status}</Text>
     </Animated.View>
 
     {trace.solved ? <Animated.View style={[styles.success, revealStyle]}>
@@ -297,22 +300,10 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   </PageScroll>;
 }
 
-/** Room the card spends around the board: card and panel padding, borders, status line. */
-const BOARD_CHROME = 12 * 2 + 3 * 2 + 10 + 12 * 2 + 3 * 2 + 48;
-
-/**
- * The widest board that fits both the page width (ports stick out 19pt each
- * side) and the height left under the header, or null before layout.
- */
-export function boardSideFor(viewport: { width: number; height: number }, headerHeight: number): number | null {
-  if (viewport.width <= 0 || viewport.height <= 0) return null;
-  const byWidth = viewport.width - (12 + 3) * 2 - (22 + 3) * 2;
-  const byHeight = viewport.height - headerHeight - BOARD_CHROME;
-  return Math.max(150, Math.min(300, byWidth, byHeight));
-}
 
 const styles = StyleSheet.create({
   card: { padding: 12, paddingBottom: 12 },
+  cardTight: { padding: 8, paddingBottom: 10 },
   hero: { minHeight: 92, borderRadius: 16, flexDirection: 'row', alignItems: 'center', overflow: 'hidden',
     paddingLeft: 14, borderWidth: 3, borderColor: BRAND.navy },
   heroCompact: { minHeight: 0, paddingRight: 8 },
@@ -329,6 +320,7 @@ const styles = StyleSheet.create({
   hintButtonOn: { backgroundColor: BRAND.goldLight, borderBottomWidth: 3 },
   panel: { marginTop: 10, backgroundColor: BRAND.blueBright, borderRadius: 20, borderWidth: 3, borderColor: BRAND.navy,
     paddingVertical: 12, paddingHorizontal: 22 },
+  panelTight: { marginTop: 6, paddingVertical: 6 },
   boardFrame: { gap: 6, width: '100%', maxWidth: 300, alignSelf: 'center' },
   row: { flexDirection: 'row', gap: 6 },
   tile: { flex: 1, aspectRatio: 1, borderRadius: 14, overflow: 'hidden', borderWidth: 3, borderColor: BRAND.navy,
@@ -347,6 +339,7 @@ const styles = StyleSheet.create({
   particles: { position: 'absolute', left: 0, top: 0 },
   panelStatus: { fontFamily: 'Knockout', color: BRAND.white, fontSize: 15, lineHeight: 19, marginTop: 11,
     textAlign: 'center' },
+  panelStatusTight: { fontSize: 14, lineHeight: 17, marginTop: 6 },
   success: { marginTop: 12, padding: 12, borderWidth: 3, borderColor: BRAND.gold, borderRadius: 18,
     backgroundColor: BRAND.white, alignItems: 'center', gap: 4 },
   starsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, marginBottom: 2 },

@@ -7,7 +7,7 @@
  *
  * Blocks rise in with a short stagger (reduced motion: they are just there).
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import useUiReducedMotion from '../../../ui/useUiReducedMotion';
@@ -17,8 +17,10 @@ import type { ChapterClue } from '../../../services/lineplay/chapterClue';
 import { chapterKicker } from '../../../services/lineplay/labels';
 import { borderRadius, spacing } from '../../../design-system';
 import { BRAND, GameIcon } from '../../../ui';
+import { chapterPageFit } from '../../../services/lineplay/lineLayout';
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 import PageScroll from './PageScroll';
+import KidText from './KidText';
 
 interface Props {
   readonly chapter: LinePlayChapter;
@@ -41,9 +43,21 @@ interface Props {
 const riseFor = (reduced: boolean) => (index: number) => reduced ? undefined
   : FadeInDown.delay(60 + index * 70).springify().damping(15);
 
-export default function ChapterCard({ chapter, completedIds, crewRelay, chapterClue = null, paused, signalAvailable = false, onChooseMission, compact = false }: Props) {
+export default function ChapterCard({ chapter, completedIds, crewRelay, chapterClue = null, paused, signalAvailable = false, onChooseMission, compact: shortScreen = false }: Props) {
   const [storyOpen, setStoryOpen] = useState(false);
-  const rise = riseFor(useUiReducedMotion());
+  // The page's real height decides what leads (it shrinks while Details is open), so PLAY NOW
+  // is always whole: never a button cut by the frame's edge.
+  const [viewHeight, setViewHeight] = useState(0);
+  const fit = chapterPageFit(viewHeight, shortScreen);
+  const compact = fit !== 'full';
+  // Blocks rise in once, when the page first opens. A later layout switch (Details opening
+  // or closing changes what leads) just shows the blocks, never replays the entrance.
+  const entered = useRef(false);
+  useEffect(() => {
+    const timer = setTimeout(() => { entered.current = true; }, 900);
+    return () => clearTimeout(timer);
+  }, []);
+  const rise = riseFor(useUiReducedMotion() || entered.current);
   const epilogue = crewRelay ? crewRelayEpilogue(crewRelay, chapter.relay.epilogues) : null;
   const epilogueDone = epilogue ? completedIds.has(`${chapter.id}-route-${epilogue.route}`) : false;
   const missionIds = [
@@ -63,8 +77,8 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
   const header = (
     <Animated.View entering={rise(compact ? 1 : 0)} style={[styles.header, compact && styles.headerCompact]}>
       <View style={styles.headerCopy}>
-        <Text style={[styles.kicker, compact && styles.kickerCompact]} numberOfLines={1}
-          adjustsFontSizeToFit minimumFontScale={0.8}>{chapterKicker(chapter)}</Text>
+        <KidText style={[styles.kicker, compact && styles.kickerCompact]} numberOfLines={1}
+          adjustsFontSizeToFit minimumFontScale={0.8}>{chapterKicker(chapter)}</KidText>
         <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={compact ? 1 : undefined}
           adjustsFontSizeToFit={compact} minimumFontScale={0.8}>
           {done === 3 ? chapter.completedTitle : chapter.title}
@@ -83,7 +97,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
         disabled={paused} onPress={() => onChooseMission(nextId)}
         style={({ pressed }) => [styles.playNow, compact && styles.playNowCompact, paused && styles.missionPaused, pressed && styles.pressed]}>
         <View style={styles.playNowCopy}>
-          <Text style={styles.playNowKicker}>{done === 3 ? 'KEEP THE WAIT FUN' : `CLUE ${done + 1} OF 3 · PLAY NOW`}</Text>
+          <KidText style={styles.playNowKicker}>{done === 3 ? 'KEEP THE WAIT FUN' : `CLUE ${done + 1} OF 3 · PLAY NOW`}</KidText>
           <Text style={styles.playNowTitle}>{nextName}</Text>
           {!compact && <Text style={styles.playNowHint}>One phone · play solo or with your crew</Text>}
         </View>
@@ -92,8 +106,31 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
     </Animated.View>
   );
 
+  const measure = (event: { nativeEvent: { layout: { height: number } } }) => {
+    const height = Math.round(event.nativeEvent.layout.height);
+    if (height !== viewHeight) setViewHeight(height);
+  };
+
+  // A very short page (an iPhone SE with Details open): the page is just one PLAY NOW row that fits whole.
+  if (fit === 'strip') {
+    return (
+      <PageScroll fill={FRAME_FILL} contentStyle={styles.contentStrip} onLayout={measure} still>
+        <Pressable accessibilityRole="button"
+          accessibilityLabel={`${done === 3 ? 'Play' : 'Start'} ${nextName}`}
+          disabled={paused} onPress={() => onChooseMission(nextId)}
+          style={({ pressed }) => [styles.playStrip, paused && styles.missionPaused, pressed && styles.pressed]}>
+          <Text style={styles.playStripText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+            <Text style={styles.playStripKicker}>{done === 3 ? 'PLAY' : 'CLUE '}{done === 3 ? null
+              : <Text style={styles.playStripDigit}>{done + 1}</Text>}{'  '}</Text>{nextName}
+          </Text>
+          <GameIcon name="play" size={40} />
+        </Pressable>
+      </PageScroll>
+    );
+  }
+
   return (
-    <PageScroll fill={FRAME_FILL} contentStyle={compact && styles.contentCompact}>
+    <PageScroll fill={FRAME_FILL} contentStyle={compact && styles.contentCompact} onLayout={measure}>
       {/* A short phone (iPhone SE) puts the clue to play first, fully on screen; the mission header follows. */}
       {compact ? <>{playNow}{header}</> : <>{header}{playNow}</>}
       <Animated.View entering={rise(2)} style={styles.trail}
@@ -193,6 +230,14 @@ const styles = StyleSheet.create({
   playNowCompact: { minHeight: 64, marginTop: 0, paddingVertical: 6 },
   playFirst: { marginTop: 0, marginBottom: spacing.sm },
   contentCompact: { paddingTop: 6 },
+  // The strip sits in the middle of its frame, like a button on a tray, whatever room is left.
+  contentStrip: { flexGrow: 1, justifyContent: 'center', padding: 5, paddingBottom: 5 },
+  playStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingLeft: 12, paddingRight: 4,
+    paddingVertical: 1, borderRadius: borderRadius.lg, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 5,
+    backgroundColor: BRAND.gold },
+  playStripText: { flex: 1, color: BRAND.navy, fontFamily: 'Shark', fontSize: 19, lineHeight: 23 },
+  playStripDigit: { fontFamily: 'Shark', fontSize: 15 },
+  playStripKicker: { color: '#7c4200', fontFamily: 'Knockout', fontSize: 14, letterSpacing: 0.8 },
   playNowCopy: { flex: 1, paddingRight: spacing.sm },
   playNowKicker: { color: '#7c4200', fontFamily: 'Knockout', fontSize: 14, letterSpacing: 0.8 },
   playNowTitle: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 21, lineHeight: 25, marginTop: 3 },

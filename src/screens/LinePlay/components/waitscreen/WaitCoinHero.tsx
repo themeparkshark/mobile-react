@@ -46,6 +46,8 @@ export interface WaitCoinHeroProps {
   readonly rewardsOn: boolean;
   readonly onLeveled?: () => void;
   readonly coinSize?: number;
+  /** This wait (the session's start time): a level reached in it survives leaving LinePlay and coming back. */
+  readonly waitKey?: number | string | null;
 }
 
 /** True while the app is in the foreground. */
@@ -82,7 +84,7 @@ function WaitCoinHero(props: WaitCoinHeroProps) {
 }
 
 function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, elapsedSeconds, plannedWaitMinutes, waitSource,
-  playerEnergy, covered, rewardsOn, onLeveled, coinSize = 120, preview = false, previewAutoLevel = false }:
+  playerEnergy, covered, rewardsOn, onLeveled, coinSize = 120, waitKey = null, preview = false, previewAutoLevel = false }:
   WaitCoinHeroProps & { preview?: boolean; previewAutoLevel?: boolean }) {
   const appActive = useAppActive();
   const reducedMotion = useReducedGameMotion();
@@ -128,7 +130,7 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, elapsedSeconds, p
       </View>
       <WaitCoinStage size={coinSize} coin={wait.coin} owned={owned} progress={progress} partsBanked={wait.partsBanked}
         active={active} reducedMotion={reducedMotion} onLevelUp={wait.levelUp} onLeveled={onLeveled}
-        autoLevel={previewAutoLevel} />
+        autoLevel={previewAutoLevel} waitKey={waitKey} />
       <View style={[styles.side, styles.sideRight]}>
         {sharksStat}
       </View>

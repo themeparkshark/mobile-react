@@ -10,15 +10,16 @@
  * there is no fade at all.
  *
  * Cheap: the fade and arrow mount only while there is more to see, they fade
- * in and out on the UI thread, and the scroll check only flips one boolean.
+ * in and out on the UI thread, and scrolling is watched on the UI thread too:
+ * the JS thread hears about it only when "more below" flips.
  */
 import { forwardRef, useCallback, useRef, useState, type ReactNode } from 'react';
 import {
-  Pressable, ScrollView, StyleSheet, View,
-  type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle,
+  Pressable, StyleSheet, View,
+  type LayoutChangeEvent, type ScrollView, type StyleProp, type ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, runOnJS, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { borderRadius, shadows, spacing } from '../../../design-system';
 import { GameIcon } from '../../../ui';
 import { fadeHeight, frameFade, moreBelow } from '../../../services/lineplay/lineLayout';
@@ -34,19 +35,41 @@ export interface PageScrollProps {
   readonly onLayout?: (event: LayoutChangeEvent) => void;
   readonly onContentSizeChange?: (width: number, height: number) => void;
   readonly testID?: string;
+  /** The page is one row that always fits (the PLAY NOW strip): no scrolling, no fade, no arrow. */
+  readonly still?: boolean;
 }
 
 const PageScroll = forwardRef<ScrollView, PageScrollProps>(function PageScroll(
-  { fill, contentStyle, children, onLayout, onContentSizeChange, testID }, ref) {
+  { fill, contentStyle, children, onLayout, onContentSizeChange, testID, still = false }, ref) {
   const inner = useRef<ScrollView | null>(null);
-  const size = useRef({ view: 0, content: 0, y: 0 });
-  const [more, setMore] = useState(false);
+  const view = useSharedValue(0);
+  const content = useSharedValue(0);
+  const offset = useSharedValue(0);
+  const shownMore = useSharedValue(false);
+  // "More below" and whether its change should fade: a scroll fades it, a layout change
+  // (the page growing back after Details) just shows the final state.
+  const [{ more: moreBelowNow, fadeOut }, setMoreState] = useState({ more: false, fadeOut: true });
+  const more = moreBelowNow && !still;
+  const setMoreScrolled = useCallback((next: boolean) => setMoreState({ more: next, fadeOut: true }), []);
   const [viewHeight, setViewHeight] = useState(0);
   const fade = frameFade(fill);
+  // Layout and content size arrive on the JS thread; flip "more" only when it changes.
   const check = useCallback(() => {
-    const s = size.current;
-    setMore(moreBelow(s.content, s.view, s.y));
-  }, []);
+    const next = moreBelow(content.value, view.value, offset.value);
+    if (next === shownMore.value) return;
+    shownMore.value = next;
+    setMoreState({ more: next, fadeOut: false });
+  }, [content, view, offset, shownMore]);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      offset.value = event.contentOffset.y;
+      const next = moreBelow(content.value, view.value, event.contentOffset.y);
+      if (next !== shownMore.value) {
+        shownMore.value = next;
+        runOnJS(setMoreScrolled)(next);
+      }
+    },
+  });
   const setRef = useCallback((node: ScrollView | null) => {
     inner.current = node;
     if (typeof ref === 'function') ref(node);
@@ -56,37 +79,33 @@ const PageScroll = forwardRef<ScrollView, PageScrollProps>(function PageScroll(
   return (
     <View style={[styles.frame, { backgroundColor: fill }]} testID={testID}>
       <View style={styles.clip}>
-        <ScrollView ref={setRef} style={styles.scroll} contentContainerStyle={[styles.content, contentStyle]}
-          scrollEventThrottle={48}
-          onLayout={(event) => {
-            size.current.view = event.nativeEvent.layout.height;
+        <Animated.ScrollView ref={setRef as never} style={styles.scroll} contentContainerStyle={[styles.content, contentStyle]}
+          scrollEventThrottle={16} scrollEnabled={!still}
+          onScroll={onScroll}
+          onLayout={(event: LayoutChangeEvent) => {
+            view.value = event.nativeEvent.layout.height;
             setViewHeight(event.nativeEvent.layout.height);
             check();
             onLayout?.(event);
           }}
-          onContentSizeChange={(width, height) => {
-            size.current.content = height;
+          onContentSizeChange={(width: number, height: number) => {
+            content.value = height;
             check();
             onContentSizeChange?.(width, height);
-          }}
-          onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
-            size.current.y = event.nativeEvent.contentOffset.y;
-            check();
           }}>
           {children}
-        </ScrollView>
-        {more && <Animated.View pointerEvents="none" entering={FadeIn.duration(160)} exiting={FadeOut.duration(160)}
+        </Animated.ScrollView>
+        {more && <Animated.View pointerEvents="none" entering={FadeIn.duration(160)} exiting={fadeOut ? FadeOut.duration(160) : undefined}
           style={[styles.fade, { height: fadeHeight(viewHeight) }]}>
           <LinearGradient colors={fade.colors} locations={fade.locations} style={StyleSheet.absoluteFill} />
         </Animated.View>}
       </View>
       {/* "More below" sits ON the frame's bottom rim, like a tab, so it never covers a card's text or button. */}
-      {more && <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(160)} style={styles.moreWrap} pointerEvents="box-none">
+      {more && <Animated.View entering={FadeIn.duration(160)} exiting={fadeOut ? FadeOut.duration(160) : undefined} style={styles.moreWrap} pointerEvents="box-none">
         <Pressable accessibilityRole="button" accessibilityLabel="More below. Scroll down."
           hitSlop={{ top: 10, bottom: 6, left: 16, right: 16 }}
           onPress={() => {
-            const s = size.current;
-            inner.current?.scrollTo({ y: s.y + Math.max(80, s.view * 0.6), animated: true });
+            inner.current?.scrollTo({ y: offset.value + Math.max(80, view.value * 0.6), animated: true });
           }}
           style={styles.moreArrow}>
           <GameIcon name="arrow" size={ARROW} />

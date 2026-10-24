@@ -90,7 +90,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as RootNavigation from '../../RootNavigation';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Reanimated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
 import { MovementFxGate, MOVING_CHIP_LINGER_MS, nextBonusSeconds } from '../../services/lineplay/bonusRounds';
 import { playBonusCue, type BonusCue } from '../../services/lineplay/bonusCues';
 import type { CurrentTier } from '../../games/current-quest/v1/logic';
@@ -160,7 +160,7 @@ import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLive
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { linePlayTipReady } from '../../services/help/tipGate';
-import { lineScreenFit } from '../../services/lineplay/lineLayout';
+import { lineScreenFit, pageWindowShown } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
 
@@ -191,6 +191,10 @@ export default function LinePlayScreen() {
   /** Short phones (iPhone SE) get a smaller coin and tighter gaps so the activity pages keep real room. */
   const fit = lineScreenFit(rootHeight, insets.top, insets.bottom);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Too short for even the one-row PLAY NOW strip (an iPhone SE reading Details): the page
+  // window is not drawn (kept mounted, so its page and scroll spot stay put) until Hide.
+  const [pagesHeight, setPagesHeight] = useState(0);
+  const pagesShown = pageWindowShown(pagesHeight);
   const [arcadeOpen, setArcadeOpen] = useState(false);
   const queuedArcadeGame = useRef<Extract<ActivityItem, { kind: 'minigame' }> | null>(null);
   const activityListRef = useRef<FlatList<any>>(null);
@@ -747,6 +751,38 @@ export default function LinePlayScreen() {
   const bonus = snapshot.bonus?.enabled ? snapshot.bonus : null;
   const { playSound } = useContext(SoundEffectContext);
   const reducedFx = useReducedGameMotion();
+  // Details open or close: the page window takes its new size while it is see-through, then
+  // fades back in (UI thread). No frame ever shows a page sliced by a square edge mid-glide.
+  const pagesFade = useSharedValue(1);
+  const pagesFadeStyle = useAnimatedStyle(() => ({ opacity: pagesFade.value }));
+  // The fade back in starts once the window has its new size (its onLayout), so a frame
+  // never shows the old page squeezed into the new space. A timer covers a size that did not change.
+  const revealPending = useRef(false);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealPages = useCallback(() => {
+    if (!revealPending.current) return;
+    revealPending.current = false;
+    if (revealTimer.current) clearTimeout(revealTimer.current);
+    pagesFade.value = withDelay(30, withTiming(1, { duration: 200 }));
+  }, [pagesFade]);
+  const onDetailsChange = useCallback((open: boolean) => {
+    if (!reducedFx) {
+      pagesFade.value = 0;
+      revealPending.current = true;
+      if (revealTimer.current) clearTimeout(revealTimer.current);
+      revealTimer.current = setTimeout(revealPages, 220);
+    }
+    setDetailsOpen(open);
+  }, [reducedFx, pagesFade, revealPages]);
+  useEffect(() => () => { if (revealTimer.current) clearTimeout(revealTimer.current); }, []);
+  // The window coming back after Hide on a short phone fades in too, never pops.
+  const wasShown = useRef(pagesShown);
+  useEffect(() => {
+    if (pagesShown && !wasShown.current && !reducedFx) {
+      pagesFade.value = withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: 200 }));
+    }
+    wasShown.current = pagesShown;
+  }, [pagesShown, reducedFx, pagesFade]);
   const fxGate = useRef(new MovementFxGate<{ cue: BonusCue; slot?: number }>()).current;
   // While the line moves, haptics and stings wait (dropped if 3 s late).
   const fireCue = useCallback((cue: BonusCue, slot?: number) => {
@@ -991,10 +1027,11 @@ export default function LinePlayScreen() {
               onPlayBonus={arcadeChoices.length ? () => setArcadeOpen(true) : undefined}
               bonus={snapshot.bonus}
               gameOpen={activeGame != null}
-              onDetailsChange={setDetailsOpen}
+              onDetailsChange={onDetailsChange}
               hero={snapshot.state !== 'complete' ? <WaitCoinHero
                 rideId={ride.rideId}
                 coinSize={fit.coinSize}
+                waitKey={snapshot.startedAt}
                 waitScreen={snapshot.waitScreen}
                 creditedParts={clock.creditedParts}
                 bonusParts={snapshot.bonus?.slots.filter(slot => slot.state === 'claimed').length ?? 0}
@@ -1122,8 +1159,11 @@ export default function LinePlayScreen() {
           ) : (
             <>
             {/* Each page is a framed window (PageScroll) that stays put above the rail while its content scrolls.
-                When Details opens or closes, only this window glides (UI thread); the rail below never moves. */}
-            <Reanimated.View layout={reducedFx ? undefined : LinearTransition.duration(220)} style={styles.pages}>
+                When Details opens or closes, the window takes its new size unseen and fades back in; the rail never moves. */}
+            <Reanimated.View style={[styles.pages, pagesFadeStyle]} pointerEvents={pagesShown ? 'auto' : 'none'}
+              onLayout={event => { setPagesHeight(Math.round(event.nativeEvent.layout.height)); revealPages(); }}>
+            <View style={[styles.pagesInner, !pagesShown && styles.pagesHidden]}
+              accessibilityElementsHidden={!pagesShown} importantForAccessibility={pagesShown ? 'auto' : 'no-hide-descendants'}>
             <FlatList
               ref={activityListRef}
               data={activityPages}
@@ -1214,6 +1254,7 @@ export default function LinePlayScreen() {
                 </View>
               )}
             />
+            </View>
             </Reanimated.View>
             <ActivityPageRail index={visiblePageIndex} count={activityPages.length}
               firstLabel={activityPages[0]?.kind === 'chapter_intro' ? 'Chapter' : 'First round'}
@@ -1458,7 +1499,9 @@ const styles = StyleSheet.create({
   queueTrackingButtonText: { color: '#073e79', fontFamily: 'Knockout', fontSize: 14 },
   activityArea: { flex: 1, marginTop: spacing.lg },
   // Clipped, so while it glides (Details open/close) the page never slides under the rail.
-  pages: { flex: 1, overflow: 'hidden' },
+  pages: { flex: 1 },
+  pagesInner: { flex: 1 },
+  pagesHidden: { opacity: 0 },
   page: {
     width: SCREEN_W,
     height: '100%',

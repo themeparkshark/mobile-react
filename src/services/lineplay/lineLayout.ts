@@ -28,10 +28,50 @@ export function lineScreenFit(rootHeight: number, insetTop: number, insetBottom:
 /** Fade height at the bottom of a page's frame while more is below. */
 export const FRAME_FADE = 26;
 
-/** A short page (iPhone SE) gets a shorter fade, so it never pales the card a kid is about to tap. */
+/**
+ * The fade is at least about a third of a short page, so any row cut by the
+ * frame's bottom dissolves into the mist instead of ending on a hard edge. Tall
+ * pages keep the slim 26 pt fade.
+ */
 export function fadeHeight(viewHeight: number): number {
   if (!(viewHeight > 0)) return FRAME_FADE;
-  return Math.round(Math.max(10, Math.min(FRAME_FADE, viewHeight * 0.14)));
+  return Math.round(Math.max(12, Math.min(FRAME_FADE, viewHeight * 0.35)));
+}
+
+/**
+ * What the ride chapter's opening page leads with, from the height its frame
+ * really has (it shrinks while Details is open):
+ * - 'full': the mission header, then the big PLAY NOW card (tall pages).
+ * - 'compact': PLAY NOW first (64 pt), then a one-line header (short phones, or Details open).
+ * - 'strip': the page is only a one-row PLAY NOW strip that fits whole, so a
+ *   kid never sees a button cut in half.
+ * PLAY NOW is always fully on screen, above the fade.
+ */
+export type ChapterPageFit = 'full' | 'compact' | 'strip';
+/** Header (100) + gap + PLAY NOW with its hint line (about 112) + padding + the fade. */
+export const CHAPTER_FULL_PAGE = 262;
+/** The 64 pt PLAY NOW card + padding + the fade under it. */
+export const CHAPTER_COMPACT_PAGE = 112;
+/** The one-row strip: 40 pt play icon, borders and padding. */
+export const CHAPTER_STRIP = 54;
+
+/**
+ * The page window's smallest useful height: the strip plus the frame's rims,
+ * padding and the gap above the rail. Below this (an iPhone SE reading Details)
+ * the window is not drawn at all: a kid sees the Details lines and the STORY
+ * rail, never an empty sliver or a button cut in half. Hide brings it back.
+ */
+export const PAGE_WINDOW_MIN = CHAPTER_STRIP + 3 * 2 + 10 + 4;
+
+export function pageWindowShown(pagesHeight: number): boolean {
+  return !(pagesHeight > 0) || pagesHeight >= PAGE_WINDOW_MIN;
+}
+
+export function chapterPageFit(viewHeight: number, shortScreen: boolean): ChapterPageFit {
+  if (!(viewHeight > 0)) return shortScreen ? 'compact' : 'full';
+  if (viewHeight < CHAPTER_COMPACT_PAGE) return 'strip';
+  if (shortScreen || viewHeight < CHAPTER_FULL_PAGE) return 'compact';
+  return 'full';
 }
 
 function rgb(hex: string): [number, number, number] {
@@ -61,6 +101,33 @@ export const FRAME_MIST = 0.7;
 
 /** More content below the visible part of a page (a few points of slack, so a page that just fits shows no arrow). */
 export function moreBelow(contentHeight: number, viewHeight: number, scrollY: number): boolean {
+  'worklet';
   if (!(contentHeight > 0) || !(viewHeight > 0)) return false;
   return contentHeight - (Math.max(0, scrollY) + viewHeight) > 12;
+}
+
+/* Navigation panel board (NavigationPanelCard). */
+
+/** A page shorter than this (an iPhone 17 Pro, or any phone with Details open) packs the board tighter. */
+export const BOARD_TIGHT_PAGE = 340;
+export function boardTight(viewHeight: number): boolean {
+  return viewHeight > 0 && viewHeight < BOARD_TIGHT_PAGE;
+}
+/** Room above the board: card padding, the panel's gap, rim and padding (tight and roomy). */
+const ABOVE_BOARD = { tight: 8 + 6 + 3 + 6, roomy: 12 + 10 + 3 + 12 };
+
+/** The smallest board: on a short page (a 17 Pro, or Details open) the whole puzzle still fits without scrolling. */
+export const BOARD_FLOOR = 110;
+
+/**
+ * The widest board that fits both the page width (ports stick out 19pt each
+ * side) and the height left under the header, or null before layout.
+ */
+export function boardSideFor(viewport: { width: number; height: number }, headerHeight: number): number | null {
+  if (viewport.width <= 0 || viewport.height <= 0) return null;
+  const byWidth = viewport.width - (12 + 3) * 2 - (22 + 3) * 2;
+  // The whole board sits above the page's bottom fade, so its last row is never hidden.
+  const above = boardTight(viewport.height) ? ABOVE_BOARD.tight : ABOVE_BOARD.roomy;
+  const byHeight = viewport.height - fadeHeight(viewport.height) - headerHeight - above - 2;
+  return Math.max(BOARD_FLOOR, Math.min(300, byWidth, byHeight));
 }

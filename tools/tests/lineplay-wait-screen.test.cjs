@@ -169,16 +169,21 @@ test('one wait source of truth: "no sign time" never shows next to a SIGN SAYS n
       }
     }
   }
-  assert.equal(m.waitSourceHint({ postedMinutes: 60, waitSource: 'last_known' }), 'The ride sign said 1 hr a while ago.');
-  assert.equal(m.waitSourceHint({ postedMinutes: 35, waitSource: 'posted' }), 'The ride sign said 35 min.',
+  // Details names the sign time exactly as SIGN SAYS writes it on the same card ("35m", "1h 30m"):
+  // one screen, one way to write the sign time.
+  assert.equal(m.waitSourceHint({ postedMinutes: 60, waitSource: 'last_known' }), 'The ride sign said 1h 00m a while ago.');
+  assert.equal(m.waitSourceHint({ postedMinutes: 35, waitSource: 'posted' }), 'The ride sign said 35m.',
     'the Details line names the SIGN SAYS number, so it never reads as a dangling "That"');
-  assert.equal(m.waitSourceHint({ postedMinutes: 90, waitSource: 'posted' }), 'The ride sign said 1 hr 30 min.');
-  assert.equal(m.minutesWords(5), '5 min');
+  assert.equal(m.waitSourceHint({ postedMinutes: 90, waitSource: 'posted' }), 'The ride sign said 1h 30m.');
+  assert.equal(m.minutesWords, undefined, 'no second minute format');
   for (const waitSource of ['posted', 'last_known']) {
-    const hint = m.waitSourceHint({ postedMinutes: 35, waitSource });
-    assert.ok(hint.includes('35 min'), 'same number as SIGN SAYS, in the one Details minute format');
-    assert.doesNotMatch(hint, /\d+m\b/, 'never "35m" beside "10 min" in one Details block');
-    assert.ok(hint.split(/\s+/).length <= 12);
+    for (const posted of [5, 35, 60, 90, 125]) {
+      const hint = m.waitSourceHint({ postedMinutes: posted, waitSource });
+      const est = m.waitEstimate({ postedMinutes: posted, waitSource, ratio: null, elapsedSeconds: 0 });
+      assert.ok(hint.includes(`said ${est.kidValue}`), `${hint}: the same text as SIGN SAYS (${est.kidValue})`);
+      assert.doesNotMatch(hint, /\bmin\b|\bhr\b/, 'never "35 min" under a "35m" card');
+      assert.ok(hint.split(/\s+/).length <= 12);
+    }
   }
   // The card and its hero read the same sign time (the dev preview included).
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
@@ -206,9 +211,10 @@ test('Details under the coin hero: two short lines at most, one Parts idea, the 
     '../../../services/lineplay/partCountdown': {}, '../../../services/lineplay/bonusRounds': {},
     '../../../services/lineplay/waitScreen': model(), './waitscreen/WaitStampBadge': {},
   });
-  const base = { signLine: 'The ride sign said 35 min.', sublineInHeadline: true,
+  const base = { signLine: 'The ride sign said 35m.', sublineInHeadline: true,
     subline: 'until your next Ride Part', rewardTrackingAvailable: true, atCap: false, intervalSeconds: 600 };
-  assert.deepEqual(plain(card.heroDetailLines(base)), [base.signLine, '1 Ride Part every 10 min near the ride.']);
+  // One Parts idea with no second number: the countdown right above already says when the next Part lands.
+  assert.deepEqual(plain(card.heroDetailLines(base)), [base.signLine, 'Stay near the ride to earn more Parts.']);
   // The status line could not hold its subline (checking, paused, at the cap): Details shows it instead of a second Parts idea.
   const capped = card.heroDetailLines({ ...base, sublineInHeadline: false, atCap: true, subline: 'You got the most Parts for one wait. Great job!' });
   assert.deepEqual(plain(capped), [base.signLine, 'You got the most Parts for one wait. Great job!']);

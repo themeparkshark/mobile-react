@@ -6,6 +6,7 @@
 
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import KidText from './KidText';
 import Reanimated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
@@ -140,9 +141,8 @@ export function heroDetailLines(input: {
   readonly atCap: boolean;
   readonly intervalSeconds: number;
 }): readonly string[] {
-  const minutes = Math.max(1, Math.round(input.intervalSeconds / 60));
   const partsLine = !input.sublineInHeadline ? input.subline
-    : input.rewardTrackingAvailable && !input.atCap ? `1 Ride Part every ${minutes} min near the ride.` : null;
+    : input.rewardTrackingAvailable && !input.atCap ? 'Stay near the ride to earn more Parts.' : null;
   return partsLine ? [input.signLine, partsLine] : [input.signLine];
 }
 
@@ -155,7 +155,7 @@ export function ticketHint(available: boolean, verifiedSeconds: number, interval
 
 /** What a wait mark means, in a few words beside it (a badge alone means nothing to a kid). */
 export function stampCaption(kind: WaitStamp['kind']): string {
-  return kind === 'marathon' ? '1 hour in line!' : 'A night wait!';
+  return kind === 'marathon' ? 'An hour in line!' : 'A night wait!';
 }
 
 /** The picture in the Details icon column for a wait mark: a medal for an hour in line, the moon at night. */
@@ -176,17 +176,17 @@ function HeroDetails({ stamps, lines, ticket }: {
       ? 'Marathon wait: an hour or more in line.' : 'Night wait, after 8 PM.').join(' ')}>
       {stamps.map(stamp => <View key={stamp.kind} style={styles.detailLine}>
         <GameIcon name={stampIcon(stamp.kind)} size={20} />
-        <Text style={styles.detailLineText}>{stampCaption(stamp.kind)}</Text>
+        <KidText style={styles.detailLineText}>{stampCaption(stamp.kind)}</KidText>
         <WaitStampBadge stamp={stamp} />
       </View>)}
     </View>}
     {lines.map((line, index) => <View key={line} style={styles.detailLine}>
       <GameIcon name={heroDetailIcon(index)} size={20} />
-      <Text style={styles.detailLineText}>{line}</Text>
+      <KidText style={styles.detailLineText}>{line}</KidText>
     </View>)}
     {ticket && <View style={styles.detailLine}>
       <GameIcon name="ticket" size={20} />
-      <Text style={styles.detailLineText}>{ticket}</Text>
+      <KidText style={styles.detailLineText}>{ticket}</KidText>
     </View>}
   </View>;
 }
@@ -367,8 +367,8 @@ export default function WaitCard({
           {hero ? null : noPartsHere ? <GameIcon name="queue" size={34} />
             : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
           <View style={styles.compactCopy} accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}`}>
-            <Text style={styles.compactHeadline} numberOfLines={1}>{headline}{sublineInHeadline
-              ? ` ${subline}` : !hero && rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}</Text>
+            <KidText style={styles.compactHeadline} numberOfLines={1}>{`${headline}${sublineInHeadline
+              ? ` ${subline}` : !hero && rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}`}</KidText>
             {noPartsHere && <Text style={styles.compactNote} numberOfLines={1}>No Parts at this ride</Text>}
             {bonusOn && <View style={styles.bonusRow}>
               {bonusDone ? <Text style={styles.bonusDone} numberOfLines={1}>Bonus Parts done at this ride today</Text>
@@ -378,7 +378,7 @@ export default function WaitCard({
                   <GameIcon name="sparkle" size={14} /></View> : null}
               {outOfRange && <Text style={styles.compactNote} numberOfLines={1}>Step back into the line area</Text>}
             </View>}
-            {partBurst > 0 && <Text style={styles.compactBurst}>+{partBurst} RIDE PART{partBurst === 1 ? '' : 'S'}!</Text>}
+            {partBurst > 0 && <KidText style={styles.compactBurst}>{`+${partBurst} RIDE PART${partBurst === 1 ? '' : 'S'}!`}</KidText>}
           </View>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
             accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
