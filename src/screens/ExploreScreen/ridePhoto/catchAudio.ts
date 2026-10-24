@@ -209,6 +209,8 @@ let beats: {
   timers: ReturnType<typeof setTimeout>[];
   /** The hit-stop or burst has come: no wobble buzz after it. */
   closed: boolean;
+  /** When the tap came (ms): wobble beats count until the gather closes, up to PRE_BURST_MS after it. */
+  tapAt: number;
 } | null = null;
 /**
  * The stamp is a beat too: the haptic that follows the badge sound in the same frame (wow-map's arrive()
@@ -363,7 +365,7 @@ function onCatchMark(name: string): void {
     settledAt = -Infinity;
     closeBeats();
     beats = {
-      n: 0, seen: 0, fired: [], timers: [], closed: false,
+      n: 0, seen: 0, fired: [], timers: [], closed: false, tapAt: now,
       offsets: repeatPlan ? REPEAT_WOBBLE_TICKS_MS : CATCH_WOBBLE_TICKS_MS,
       intents: repeatPlan ? REPEAT_WOBBLE_INTENTS : CATCH_WOBBLE_INTENTS,
     };
@@ -504,6 +506,18 @@ function laneLast(): number {
 }
 
 /** Fire a beat haptic now, or at the lane's next free slot; `wobble` beats are dropped once the gather closes. */
+/**
+ * A buzz that a timer delivers this late is stale: the frame it belonged to is long gone (a starved JS
+ * thread fired the stamp's spaced buzz 750 ms late, after the catch had settled), so it is dropped.
+ */
+const STALE_BEAT_MS = 150;
+function stale(plannedAt: number, intent: HapticIntent): boolean {
+  const late = Date.now() - plannedAt;
+  if (late <= STALE_BEAT_MS) return false;
+  traceEvent('mark', 'catch-beat-stale', `${intent} ${late} ms late`);
+  return true;
+}
+
 function laneBeat(intent: HapticIntent, wobble = false): void {
   const now = Date.now();
   const gap = now - laneLast();
@@ -516,6 +530,7 @@ function laneBeat(intent: HapticIntent, wobble = false): void {
     if (wobble && (b?.closed || beats !== b)) return;
     // A coin pulse that waited its turn past the settle is covered by it (wave 4: nothing after 'done').
     if (afterSettle(intent, Date.now())) { traceEvent('mark', 'catch-pulse-after-done', intent); return; }
+    if (stale(at, intent)) return;
     beatHaptic(intent);
   }, at - now);
   if (wobble && b) b.timers.push(t);
@@ -554,7 +569,8 @@ function startWobbles(intent: HapticIntent): void {
   fireWobble(0, intent);
   for (let k = 1; k < b.offsets.length; k++) {
     const at = b.offsets[k] - base;
-    b.timers.push(setTimeout(() => fireWobble(k, b.intents[k] ?? intent), at));
+    const due = Date.now() + at;
+    b.timers.push(setTimeout(() => { if (!stale(due, b.intents[k] ?? intent)) fireWobble(k, b.intents[k] ?? intent); }, at));
   }
   const s = session;
   if (s && sessionOpen() && studioReady('catch.tap') && !s.burst) {
@@ -580,7 +596,11 @@ export function catchHaptic(intent: HapticIntent, priority = 2): void {
   if (afterSettle(intent, now)) { traceEvent('mark', 'catch-pulse-after-done', intent); return; }
   try {
     const b = beats;
-    if (b && now < beatUntil && !b.closed) {
+    // Wave 4: a frozen JS thread can deliver the wobble beats more than BEAT_WINDOW_MS after the tap (the live
+    // trace at load 265 got its first wobble at 1453 ms and lost every tick). They are the gather's beats until
+    // the hit-stop or burst closes it, however late they come.
+    const gathering = !!b && !b.closed && b.n >= 1 && b.seen < b.offsets.length && WOBBLE_INTENTS.has(intent) && now - b.tapAt < PRE_BURST_MS;
+    if (b && !b.closed && (now < beatUntil || gathering)) {
       b.n += 1;
       if (b.n === 1) {
         // The press: if the map's own press buzz just fired for this touch, that pulse is the tap.
@@ -602,7 +622,8 @@ export function catchHaptic(intent: HapticIntent, priority = 2): void {
         s.burstBuzzed = true;
         if (heatTier(s.heat) >= 2 && (now < beatUntil || now < burstBeatUntil) && !momentSaver()) {
           traceEvent('mark', 'catch-thump', `+${s.heat}`);
-          setTimeout(() => { if (Date.now() < Math.max(beatUntil, burstBeatUntil)) beatHaptic('hitRigid'); }, HOT_THUMP_MS);
+          const due = now + HOT_THUMP_MS;
+          setTimeout(() => { if (Date.now() < Math.max(beatUntil, burstBeatUntil) && !stale(due, 'hitRigid')) beatHaptic('hitRigid'); }, HOT_THUMP_MS);
         }
       }
     }
@@ -623,7 +644,7 @@ export function catchHaptic(intent: HapticIntent, priority = 2): void {
       traceEvent('mark', 'catch-beat-spaced', `success +${at - now} ms`);
       burstBuzzAt = -Infinity;
       beatLaneAt = Math.max(beatLaneAt, at);
-      setTimeout(() => beatHaptic('success'), at - now);
+      setTimeout(() => { if (!stale(at, 'success')) beatHaptic('success'); }, at - now);
       return;
     }
     laneBeat(intent);

@@ -145,3 +145,17 @@ test('pitch on a moment: the switch-off fallback is never re-pitched, a ladder i
   assert.equal(pitchOf(ev.find((s) => s.name.startsWith('moment:catch.repeat:primary'))), 3);
   assert.equal(pitchOf(ev.find((s) => s.name.startsWith('moment:catch.wobble:'))), 0, 'ladder rungs are pre-rendered');
 });
+
+test('live at load 265: wobble beats that come 1.4 s late still tick, the beam still slams, and a starved timer never buzzes after the settle', async () => {
+  const e = await engine();
+  // The JS thread is frozen from the clock start for 1.4 s: every wobble, the beam, the hit-stop and the burst land in one turn.
+  const r = await wowMapCatch(e, { beam: true, stalls: [{ at: 0, ms: 1400 }, { after: 'land', ms: 700 }] });
+  const v = view(e, r);
+  const got = Object.fromEntries(r.delivered.map((d) => [d.name, d.at]));
+  assert.ok(got.wobble1 >= 1400 && got.burst >= 1400, 'everything bunched like the live trace');
+  assert.ok(v.starts('moment:catch.wobble:').length >= 1, 'the gather still ticks (round 5 lost every tick past the 1.2 s window)');
+  assert.ok(v.starts('moment:catch.lucky:primary').length === 1, 'the beam slams');
+  assert.ok(v.haptics.some((h) => h.intent === 'comboHeavy'), 'with its heavy buzz');
+  const done = got.done;
+  assert.deepEqual(plain(v.haptics.filter((h) => h.t > done + 5)), [], 'nothing buzzes after done');
+});
