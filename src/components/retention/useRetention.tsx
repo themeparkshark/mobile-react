@@ -342,6 +342,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       }, 200);
       return () => clearTimeout(timer);
     }
+    // A welcome on its way goes first: the level chest, a saved flame or an ember wait for it (it tells them kindly).
+    if (welcomePending) return;
     if (view || !o.screenFree || !o.mapFocused || !o.enabled) return;
     if (!welcomeDone) return;
     if (pendingChest) {
@@ -367,7 +369,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       }, 700);
       return () => { live = false; clearTimeout(timer); };
     }
-  }, [pendingChest?.level, freezeSaved, daily?.streak.days, view, o.screenFree, welcomeFree, o.mapFocused, o.enabled, welcomeDone]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pendingChest?.level, freezeSaved, daily?.streak.days, view, o.screenFree, welcomeFree, o.mapFocused, o.enabled, welcomeDone, welcomePending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openSheet = () => {
     setView({ k: 'sheet' });
