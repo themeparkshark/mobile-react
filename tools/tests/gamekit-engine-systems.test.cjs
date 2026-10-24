@@ -318,3 +318,10 @@ test('the player\'s Music setting reaches the game audio engine, like Sound Effe
   assert.match(provider, /SFX\.setMusicEnabled\(!\(isReady && !player\?\.enabled_music\)\);/);
   assert.match(fs.readFileSync(path.join(root, 'src/gamekit/SFX.ts'), 'utf8'), /setMusicEnabled\(value: boolean\): void \{\s*GameAudio\.setMusicEnabled\(value\);/);
 });
+
+test('login music plays only for a player who is really signed out, never while a saved session loads', () => {
+  const music = fs.readFileSync(path.join(root, 'src/context/MusicProvider.tsx'), 'utf8');
+  assert.match(music, /const \{ player, isReady \} = useContext\(AuthContext\);/);
+  assert.match(music, /if \(!player\) \{[\s\S]{0,400}?if \(!isReady\) return;[\s\S]{0,200}?if \(loginMusicRef\.current\) return;/);
+  assert.match(music, /\}, \[player, player\?\.enabled_music, isReady\]\);/);
+});
