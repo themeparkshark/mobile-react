@@ -162,7 +162,7 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
       void Clipboard.setStringAsync(shareUrl(request.kind)).then(() => setLinkCopied(true)).catch(() => undefined);
       for (let i = 0; i < 30 && !readyRef.current; i++) await new Promise(r => setTimeout(r, 100));
       const uri = await captureFlex(cardRef, format);
-      const outcome = await openShareSheet(uri);
+      const outcome = await openShareSheet(uri, flexCopy(request.kind, request.payload).title);
       if (outcome.shared === false) event('dismissed');
       else {
         event('shared', outcome.activity);

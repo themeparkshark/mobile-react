@@ -325,3 +325,40 @@ test('login music plays only for a player who is really signed out, never while 
   assert.match(music, /if \(!player\) \{[\s\S]{0,400}?if \(!isReady\) return;[\s\S]{0,200}?if \(loginMusicRef\.current\) return;/);
   assert.match(music, /\}, \[player, player\?\.enabled_music, isReady\]\);/);
 });
+
+test('GameAudio: held until the player\'s sound settings are known, so a muted player never starts the engine before sign-in loads', async () => {
+  const { GameAudio, calls } = loadAudioEngine();
+  GameAudio.holdUntilSettings();
+  assert.equal(GameAudio.wantsAudio(), false, 'sound defaults to on, but nothing starts yet');
+  assert.equal(await GameAudio.preload(['fx.coin']), false, 'a preload in that moment reports nothing loaded');
+  GameAudio.play('fx.coin');
+  await GameAudio.init();
+  assert.equal(GameAudio.backend, null);
+  assert.deepEqual(calls.loads, []);
+  GameAudio.settingsKnown();
+  assert.equal(await GameAudio.preload(['fx.coin']), true, 'sound on: the engine starts and the preload loads');
+  assert.ok(GameAudio.backend);
+});
+
+test('screens that cache a preload drop it when nothing loaded (sound off), so turning Sound on preloads normally', () => {
+  const read = f => fs.readFileSync(path.join(root, f), 'utf8');
+  assert.match(read('src/screens/pins/BoxReveal.tsx'), /preloaded \?\?= GameAudio\.preload\(\[\.\.\.REVEAL_CUES\]\)\.then\(ok => \{ if \(!ok\) preloaded = null; \}/);
+  assert.match(read('src/screens/pinTrading/tradeAudio.ts'), /preloaded \?\?= GameAudio\.preload\(\[\.\.\.TRADE_CUES\]\)\.then\(ok => \{ if \(!ok\) preloaded = null; \}/);
+  assert.match(read('src/screens/ExploreScreen/ridePhoto/catchAudio.ts'), /\.then\(ok => \{ if \(!ok\) ready = null; \}/);
+  const provider = read('src/context/SoundEffectProvider.tsx');
+  assert.match(provider, /^SFX\.holdUntilSettings\(\);$/m, 'held from app start');
+  assert.match(provider, /if \(isReady\) SFX\.settingsKnown\(\);/);
+});
+
+test('SoundEffectProvider is the only writer of the Music setting into the game audio engine', () => {
+  const writers = [];
+  const walk = dir => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else if (/\.(ts|tsx)$/.test(entry.name) && /GameAudio\.setMusicEnabled\(/.test(fs.readFileSync(file, 'utf8'))) writers.push(path.relative(root, file));
+    }
+  };
+  walk(path.join(root, 'src'));
+  assert.deepEqual(writers.sort(), ['src/gamekit/SFX.ts'], 'only SFX.setMusicEnabled (called by SoundEffectProvider) writes it; games gate their own bed');
+});

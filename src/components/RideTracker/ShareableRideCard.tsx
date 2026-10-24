@@ -16,10 +16,14 @@ import { GameIcon, gameAlert } from '../../ui';
 interface ShareableRideCardProps {
   ride: PlayerRideType;
   rideCount?: number;
+  /** The share sheet came up and closed (shared or cancelled). The card stays open either way. */
   onShare?: () => void;
   /** Kept on the phone, not in the journal yet: no count to fetch and nothing to share yet. */
   queued?: boolean;
 }
+
+/** How long the "Shared!" check stays on the button. */
+export const SHARED_STAMP_MS = 2000;
 
 // The card itself (captured by ViewShot)
 const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = React.memo(({ ride, rideCount }) => {
@@ -116,6 +120,13 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
   const viewShotRef = useRef<ViewShot>(null);
   const busy = useRef(false);
   const [sharing, setSharing] = useState(false);
+  // A gold check and "Shared!" for a moment after the sheet closes; the card stays open.
+  const [shared, setShared] = useState(false);
+  useEffect(() => {
+    if (!shared) return undefined;
+    const t = setTimeout(() => setShared(false), SHARED_STAMP_MS);
+    return () => clearTimeout(t);
+  }, [shared]);
   const [loadingCount, setLoadingCount] = useState(rideCount == null);
   const [confirmedCount, setConfirmedCount] = useState(rideCount);
   const reducedMotion = useReducedGameMotion();
@@ -148,11 +159,15 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
       const uri = await viewShotRef.current?.capture?.();
       if (!uri) throw new Error('Card capture unavailable');
 
-      const closed = await shareFileExternal(uri, {
+      const outcome = await shareFileExternal(uri, {
         mimeType: 'image/png',
         dialogTitle: `My ${ride.ride_name} experience on Theme Park Shark!`,
       }, `${ride.ride_name} Ride Card`);
-      if (closed) onShare?.();
+      // Back on the card after the sheet (even a cancel): a kid who backs out lands on their card.
+      if (outcome === 'closed') {
+        setShared(true);
+        onShare?.();
+      }
     } catch {
       gameAlert('Could not make your card', 'Your ride is saved. Try sharing it again.');
     } finally {
@@ -179,8 +194,9 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
           {/* While the ride total loads, a small spinner sits inside the same button shape. */}
           <View style={cardStyles.shareBtnRow}>
             {loadingCount && <ButtonSpinner still={reducedMotion} />}
+            {shared && !sharing && <GameIcon name="check" size={20} />}
             <Text style={[cardStyles.shareBtnText, loadingCount && { opacity: 0.6 }]}>
-              {sharing ? 'Making your card…' : 'Share Ride Card'}</Text>
+              {sharing ? 'Making your card…' : shared ? 'Shared!' : 'Share Ride Card'}</Text>
           </View>
         </Pressable>
       )}

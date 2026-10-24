@@ -280,7 +280,7 @@ export default function RideHistoryScreen() {
           <Pressable style={styles.modalContent} onPress={() => {}} accessible={false}>
             {shareRide && (
               <>
-                <ShareableRideCard ride={shareRide} onShare={() => setShareRide(null)} />
+                <ShareableRideCard ride={shareRide} />
                 <Pressable onPress={() => setShareRide(null)} style={styles.modalClose} accessibilityRole="button" accessibilityLabel="Close">
                   <Text style={styles.modalCloseText}>Close</Text>
                 </Pressable>

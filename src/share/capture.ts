@@ -52,14 +52,15 @@ export function activityLabel(activity: string | null | undefined): string | nul
   return 'other';
 }
 
-export async function openShareSheet(uri: string): Promise<ShareOutcome> {
+/** `name` titles the file in the share sheet ("Golden Churro" becomes Golden-Churro.jpg), never a UUID. */
+export async function openShareSheet(uri: string, name?: string): Promise<ShareOutcome> {
   if (Platform.OS === 'ios') {
-    const result = await shareExternal({ url: uri });
+    const result = await shareExternal({ url: uri }, undefined, name);
     if (!result) return { shared: false, activity: null };
     if (result.action === Share.sharedAction) return { shared: true, activity: activityLabel(result.activityType) };
     return { shared: false, activity: null };
   }
   if (!await Sharing.isAvailableAsync()) throw new Error('share sheet unavailable');
-  if (!(await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share' }))) return { shared: false, activity: null };
+  if ((await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share' }, name)) === 'declined') return { shared: false, activity: null };
   return { shared: null, activity: null };
 }

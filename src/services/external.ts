@@ -58,15 +58,18 @@ export async function openExternal(url: string, via: 'browser' | 'system' = 'bro
 export const SHARE_SHEET_WAIT_MS = 30_000;
 
 /**
- * The system share sheet (text or a link) after the grown-up gate. Null when the
- * grown-up said no or the sheet never answered within SHARE_SHEET_WAIT_MS.
+ * The system share sheet (text, a link or a file url) after the grown-up gate. Null when the
+ * grown-up said no or the sheet never answered within SHARE_SHEET_WAIT_MS. `name` titles a
+ * file url in the sheet header ("Golden Churro" becomes Golden-Churro.jpg), like shareFileExternal.
  */
-export async function shareExternal(content: ShareContent, options?: ShareOptions) {
+export async function shareExternal(content: ShareContent, options?: ShareOptions, name?: string) {
   if (!(await askGrownUp(SHARE))) return null;
+  const url = 'url' in content && content.url ? content.url : null;
+  const named = url && name ? { ...content, url: await namedShareCopy(url, name) } : content;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      Share.share(content, options),
+      Share.share(named, options),
       new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), SHARE_SHEET_WAIT_MS); }),
     ]);
   } finally {
@@ -106,20 +109,28 @@ async function namedShareCopy(uri: string, name: string | undefined): Promise<st
 }
 
 /**
- * Shares a file (a share card image) after the grown-up gate. True once the share
- * sheet closes (shared or cancelled). False when declined, unavailable, or the sheet
- * never answered within SHARE_SHEET_WAIT_MS. Throws when the sheet fails to open.
- * `name` titles the file in the sheet ("Whack-a-Shark 460" becomes Whack-a-Shark-460.png).
+ * How a file share ended:
+ * - closed: the share sheet came up and closed again (shared or cancelled; iOS does not say which);
+ * - declined: the grown-up said no, or this phone cannot share;
+ * - timeout: the sheet never answered within SHARE_SHEET_WAIT_MS (it may still be up and
+ *   working), so the button comes back without counting it as a no.
  */
-export async function shareFileExternal(uri: string, options?: Sharing.SharingOptions, name?: string): Promise<boolean> {
-  if (!(await askGrownUp(SHARE))) return false;
-  if (!(await Sharing.isAvailableAsync())) return false;
+export type ShareFileOutcome = 'closed' | 'declined' | 'timeout';
+
+/**
+ * Shares a file (a share card image) after the grown-up gate. Throws when the sheet
+ * fails to open. `name` titles the file in the sheet ("Whack-a-Shark 460" becomes
+ * Whack-a-Shark-460.png).
+ */
+export async function shareFileExternal(uri: string, options?: Sharing.SharingOptions, name?: string): Promise<ShareFileOutcome> {
+  if (!(await askGrownUp(SHARE))) return 'declined';
+  if (!(await Sharing.isAvailableAsync())) return 'declined';
   const file = await namedShareCopy(uri, name);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      Sharing.shareAsync(file, options).then(() => true),
-      new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), SHARE_SHEET_WAIT_MS); }),
+      Sharing.shareAsync(file, options).then((): ShareFileOutcome => 'closed'),
+      new Promise<ShareFileOutcome>(resolve => { timer = setTimeout(() => resolve('timeout'), SHARE_SHEET_WAIT_MS); }),
     ]);
   } finally {
     clearTimeout(timer);
