@@ -227,12 +227,23 @@ export function ShareStoryCard({ daily }: { daily: DailySummary }) {
   const perfect = fairPerfectFor(daily.pairs);
   return (
     <View style={[styles.shareCard, styles.storyCard]} collapsable={false}>
-      <View style={styles.storyFaces}>
-        {[0, 1, 2].map((f) => <View key={f} style={{ marginLeft: f ? -14 : 0, transform: [{ rotateZ: `${(f - 1) * 8}deg` }] }}><FaceThumb face={faceFor(deck, f)} w={52} h={64} /></View>)}
+      {/* Score left, the deck and crowns right: one row, so the card stays big on the story picture.
+          The top-right corner stays clear for the kid's shark leaning over it. */}
+      <View style={styles.storyTop}>
+        <View style={styles.storyScore}>
+          <Text style={styles.storyDeck}>{`${deck.label} deck`}</Text>
+          <Text style={styles.storyBig}>{`${daily.recall}%`}</Text>
+          <Text style={styles.storyBigLabel}>RECALL</Text>
+        </View>
+        <View style={styles.storySide}>
+          <View style={styles.storyFaces}>
+            {[0, 1, 2].map((f) => <View key={f} style={{ marginLeft: f ? -12 : 0, transform: [{ rotateZ: `${(f - 1) * 8}deg` }] }}><FaceThumb face={faceFor(deck, f)} w={44} h={54} /></View>)}
+          </View>
+          <View style={styles.storyCrowns}>
+            {[0, 1, 2].map((i) => <Image key={i} source={CROWN} style={[styles.storyCrown, i >= daily.stars && { opacity: 0.25 }]} resizeMode="contain" />)}
+          </View>
+        </View>
       </View>
-      <Text style={styles.storyDeck}>{`${deck.label} deck`}</Text>
-      <Text style={styles.storyBig}>{`${daily.recall}%`}</Text>
-      <Text style={styles.storyBigLabel}>RECALL</Text>
       <View style={styles.gridWrap}>
         {rows.map((row, i) => (
           <View key={i} style={styles.gridRow}>
@@ -243,9 +254,6 @@ export function ShareStoryCard({ daily }: { daily: DailySummary }) {
             ))}
           </View>
         ))}
-      </View>
-      <View style={styles.storyCrowns}>
-        {[0, 1, 2].map((i) => <Image key={i} source={CROWN} style={[styles.storyCrown, i >= daily.stars && { opacity: 0.25 }]} resizeMode="contain" />)}
       </View>
       <Text style={styles.storyStat}>{daily.cleared ? `${daily.turns} TURNS · PERFECT ${perfect}` : `OUT AT ${daily.turns} TURNS`}</Text>
       {daily.streak > 0 ? (
@@ -476,14 +484,18 @@ const styles = StyleSheet.create({
   shareStars: { flexDirection: 'row', gap: 2 },
   shareCrown: { width: 22, height: 20 },
   shareStreak: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  storyCard: { alignItems: 'center', paddingVertical: 20, gap: 4 },
-  storyFaces: { flexDirection: 'row', marginBottom: 4 },
-  storyDeck: { fontFamily: 'Shark', fontSize: 24, color: MM.navyText },
-  storyBig: { fontFamily: 'Shark', fontSize: 64, lineHeight: 70, color: MM.navyText, marginTop: 2 },
-  storyBigLabel: { fontFamily: 'Knockout', fontSize: 18, letterSpacing: 1, color: MM.ink, marginBottom: 10 },
-  storyCrowns: { flexDirection: 'row', gap: 6, marginTop: 12 },
-  storyCrown: { width: 40, height: 36 },
-  storyStat: { fontFamily: 'Knockout', fontSize: 20, color: MM.navyText, marginTop: 4 },
+  storyCard: { alignItems: 'center', paddingVertical: 12, gap: 5 },
+  storyTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', alignSelf: 'stretch' },
+  storyScore: { alignItems: 'center' },
+  // paddingTop: the card's top-right corner is where the kid's shark leans in.
+  storySide: { alignItems: 'center', paddingTop: 30, gap: 6 },
+  storyFaces: { flexDirection: 'row' },
+  storyDeck: { fontFamily: 'Shark', fontSize: 22, color: MM.navyText },
+  storyBig: { fontFamily: 'Shark', fontSize: 58, lineHeight: 62, color: MM.navyText },
+  storyBigLabel: { fontFamily: 'Knockout', fontSize: 18, letterSpacing: 1, color: MM.ink },
+  storyCrowns: { flexDirection: 'row', gap: 4 },
+  storyCrown: { width: 32, height: 29 },
+  storyStat: { fontFamily: 'Knockout', fontSize: 20, color: MM.navyText, marginTop: 2 },
   tabs: { gap: 6, paddingVertical: 4 },
   tab: { backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: MM.ink, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center' },
   tabOn: { backgroundColor: MM.blue },

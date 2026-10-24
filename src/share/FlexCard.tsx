@@ -23,6 +23,12 @@ import { ArtReadinessProvider, FlexArtwork } from './FlexArtwork';
 import { FRAMES, RARITY_RAMP, type FlexFrame } from './frames';
 import { FlexHero, HERO_ART, Panel } from './FlexHero';
 import { FlexShark, SHARK_ASPECT } from './FlexShark';
+import { lookExtent } from './lookBounds';
+import {
+  SQUARE_PRIZE_COL, SQUARE_PRIZE_TILE, STORY_HERO, STORY_HERO_SOLO, STORY_ROW_PAD,
+  STORY_WORDS_LIFT, STORY_WORDS_LIFT_PIN, prizeSquareShark, squareStage, storyStage,
+} from './stage';
+
 import { FLEX_SIZE } from './formats';
 import { SHARE_LINK_DISPLAY } from './link';
 import { Outlined } from './Outlined';
@@ -32,6 +38,7 @@ import { QR_BY_KIND } from './qr';
 import type { FlexCopy, FlexFormat, FlexKind, FlexPayload, FlexPayloads, FlexRarity } from './types';
 
 export { FLEX_EXPORT, FLEX_SIZE } from './formats';
+export * from './stage';
 
 export const CARD_CHROME = {
   pattern: require('../../assets/images/shark_background.png'),
@@ -157,31 +164,6 @@ function LookHero({ payload, copy, frame, inventory, motion, sharkH, tile, maxTi
 }
 
 /**
- * Story: the dressed shark is the star. It is the biggest thing on the card, stands in front of the
- * hero tile (overlapping it by STORY_OVERLAP of its painted body), and its feet tuck behind the
- * kicker and title, which ride over the hero's lower edge (STORY_WORDS_LIFT). Alone (no shark) the
- * tile grows to STORY_HERO_SOLO.
- */
-export const STORY_HERO = 118;
-export const STORY_HERO_SOLO = 160;
-/** The biggest the story shark's paper gets (its painted body is about 0.7 of it). */
-export const STORY_SHARK_H = 290;
-export const STORY_OVERLAP = 30;
-/** How far the words ride over the hero's lower edge (and the shark's feet) on a shark card. */
-export const STORY_WORDS_LIFT = 36;
-/** A worn prize pin sits low on the belly: the words lift less, so they never cover the pin. */
-export const STORY_WORDS_LIFT_PIN = 18;
-const STORY_ROW_PAD = 8;
-/**
- * The shark paper (1353x1530): the painted body runs from about 0.18 to 0.82 of its height and
- * width, and a hat reaches up to about 0.1. So the paper may rise SHARK_RISE above the hero's top
- * (over the ribbon's clear lower edge) and its feet sit at SHARK_FEET.
- */
-const SHARK_RISE = 0.1;
-const SHARK_FEET = 0.82;
-const SHARK_SIDE = 0.18;
-
-/**
  * Sizes for a story hero without the tile-and-shark stage (a look card, or no shark). Never bigger
  * than the design sizes. Exported for tests.
  */
@@ -195,39 +177,12 @@ export function storyHeroSizes(room: number, showShark: boolean, look: boolean):
   };
 }
 
-/** Where the tile and the shark stand in the story hero (pt, relative to the hero box). */
-export interface StoryStage {
-  readonly tile: number; readonly tileLeft: number; readonly tileTop: number;
-  readonly shark: number; readonly sharkLeft: number; readonly sharkTop: number;
-}
-
-/**
- * The story stage for a hero box of room x width pt whose lower `lift` pt sit under the words.
- * The shark's feet land 4 pt above the box bottom (behind the words), its hat may rise over the
- * ribbon's clear edge, and its painted body overlaps the tile by STORY_OVERLAP. The tile sits fully
- * above the words. The pair is centered by what you see (tile + painted shark). Exported for tests.
- */
-export function storyStage(room: number, width: number, lift: number): StoryStage {
-  const r = room > 0 ? room : 190;
-  const w = width > 0 ? width : 320;
-  const shark = Math.max(150, Math.min(STORY_SHARK_H, Math.floor((r - 4) / (SHARK_FEET - SHARK_RISE))));
-  const sharkW = shark * SHARK_ASPECT;
-  const above = r - lift - STORY_ROW_PAD;
-  const tile = Math.max(80, Math.min(STORY_HERO, Math.round(above)));
-  const seen = tile + sharkW * (1 - 2 * SHARK_SIDE) - STORY_OVERLAP;
-  const tileLeft = Math.round(Math.max(0, (w - seen) / 2));
-  return {
-    tile, tileLeft, tileTop: Math.round(above - tile),
-    shark, sharkLeft: Math.round(tileLeft + tile - STORY_OVERLAP - sharkW * SHARK_SIDE), sharkTop: Math.round(r - 4 - shark * SHARK_FEET),
-  };
-}
-
 function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion, look, chestPin }: LayoutProps) {
   const [box, setBox] = useState({ h: 0, w: 0 });
   const size = storyHeroSizes(box.h, showShark, look);
   const staged = showShark && !look;
   const lift = staged ? (chestPin ? STORY_WORDS_LIFT_PIN : STORY_WORDS_LIFT) : 0;
-  const stage = staged ? storyStage(box.h, box.w, lift) : null;
+  const stage = staged ? storyStage(box.h, box.w, lift, lookExtent(inventory)) : null;
   const big = !!copy.big && <BigNumber copy={copy} frame={frame} size={56} width={200} text={motion.bigText}
     labelSide={LABEL_BESIDE.has(kind) ? 'right' : 'top'} style={[styles.storyBig, motion.bigStyle]} />;
   return (
@@ -368,12 +323,6 @@ function prizeOf(kind: FlexKind, payload: FlexPayload): 'pass' | 'member' | null
   return kind === 'find' ? (payload as FlexPayloads['find']).prize ?? null : null;
 }
 
-/** The square prize card's dressed shark (its paper; the painted body is about 0.7 of it). */
-export const SQUARE_PRIZE_SHARK_H = 250;
-/** The square prize card's tile and the shark's column width (pt). */
-export const SQUARE_PRIZE_TILE = 78;
-const SQUARE_PRIZE_COL = 136;
-
 /**
  * Square prize card, in two columns like the other squares: the kid's dressed shark wearing the prize
  * is the star of the left column (its hat may rise over the ribbon's clear edge); the right column
@@ -381,16 +330,15 @@ const SQUARE_PRIZE_COL = 136;
  */
 function PrizeSquare({ kind, payload, copy, frame, inventory, motion, chestPin, prize }: LayoutProps & { readonly prize: 'pass' | 'member' }) {
   const [room, setRoom] = useState(0);
-  const shark = room > 0 ? Math.max(150, Math.min(SQUARE_PRIZE_SHARK_H, Math.floor((room - 2) / (SHARK_FEET - SHARK_RISE)))) : SQUARE_PRIZE_SHARK_H;
-  const sharkW = Math.round(shark * SHARK_ASPECT);
+  const place = prizeSquareShark(room, lookExtent(inventory));
   return (
     <View style={styles.squareBody}>
       <Ribbon text={copy.ribbon} width={226} />
       <View style={styles.prizeRow}>
         <View style={styles.prizeRays}><Rays frame={frame} size={360} /></View>
         <View style={styles.prizeSharkCol} onLayout={e => setRoom(Math.round(e.nativeEvent.layout.height))}>
-          <Animated.View style={[styles.prizeShark, { top: room > 0 ? Math.round(room - 2 - shark * SHARK_FEET) : 0, left: Math.round((SQUARE_PRIZE_COL - sharkW) / 2) }, motion.sharkStyle]}>
-            <FlexShark inventory={inventory} height={shark} prop={null} pin={chestPin} />
+          <Animated.View style={[styles.prizeShark, { top: place.top, left: place.left }, motion.sharkStyle]}>
+            <FlexShark inventory={inventory} height={place.shark} prop={null} pin={chestPin} />
           </Animated.View>
         </View>
         <View style={styles.prizeWords}>
@@ -402,7 +350,7 @@ function PrizeSquare({ kind, payload, copy, frame, inventory, motion, chestPin, 
               <Text style={[styles.bigLabelText, { fontSize: 11 }]} numberOfLines={1}>{prize === 'member' ? 'MEMBER GIFT' : 'SHARK PASS'}</Text>
             </View>
           </View>
-          <Text style={[styles.kickerSmall, { color: frame.ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.kicker}</Text>
+          <Outlined text={copy.kicker} style={[styles.kickerSmall, { color: frame.ink }]} outline={kickerOutline(frame)} weight={2} lines={1} />
           <Outlined text={copy.title} style={[styles.squareTitle, titleSize(copy.title, 'square')]} outline={frame.outline} lines={1} />
           <StatPlate copy={copy} frame={frame} compact />
         </View>
@@ -418,31 +366,33 @@ function SquareLayout(props: LayoutProps) {
 }
 
 function PlainSquare({ kind, payload, copy, frame, showShark, inventory, motion, look, chestPin }: LayoutProps) {
-  // Square (Instagram feed): ribbon / the hero and the player's shark side by side (the shark is a
-  // co-star holding its prop, ~37% of the width) / the giant number beside the words / wordmark,
-  // CTA, link and QR. Nothing overlaps and nothing leaves the canvas.
-  // 112: the panel's lip and shadow hang below its box, so 124 touched the kicker under it.
-  const heroSize = 112;
+  // Square (Instagram feed): ribbon / the hero tile with the player's dressed shark standing in front
+  // of its edge (about a third of the card wide, the second thing you see after the big number) /
+  // the giant number beside the words / wordmark, CTA, link and QR. Sizes come from the measured
+  // stage (squareStage), so no tile, lip or shark ever touches the words.
   const big = !!copy.big;
-  // No giant number (a prize, a look): the words center under the stage like the look card, and the
-  // stage takes the spare room, so no dead band sits above the footer.
+  // No giant number (a prize, a look): the words center under the stage like the look card.
   const centered = look || !big;
+  const [box, setBox] = useState({ h: 0, w: 0 });
+  const place = squareStage(box.h, box.w, showShark, lookExtent(inventory));
   return (
     <View style={styles.squareBody}>
       <Ribbon text={copy.ribbon} width={226} />
-      <View style={[styles.squareStage, centered && styles.squareStageLook]}>
+      <View style={[styles.squareStage, look && styles.squareStageLook]}
+        onLayout={e => setBox({ h: Math.round(e.nativeEvent.layout.height), w: Math.round(e.nativeEvent.layout.width) })}>
         <Rays frame={frame} size={360} />
-        {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={SQUARE_LOOK_SHARK_H} tile={36} maxTiles={3} /> : (
-        <View style={[styles.squareStageRow, !showShark && { justifyContent: 'center' }]}>
-          <Animated.View style={[{ width: heroSize, height: heroSize }, motion.heroStyle]}>
-            <FlexHero kind={kind} payload={payload} frame={frame} size={heroSize} inventory={inventory} />
-          </Animated.View>
-          {showShark && (
-            <Animated.View style={[styles.squareShark, motion.sharkStyle]}>
-              <FlexShark inventory={inventory} height={SQUARE_SHARK_H} prop={chestPin ? null : copy.prop} pin={chestPin} />
+        {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={SQUARE_LOOK_SHARK_H} tile={36} maxTiles={3} /> : box.h > 0 && (
+          <>
+            <Animated.View style={[styles.stagePiece, { left: place.tileLeft, top: place.tileTop, width: place.tile, height: place.tile }, motion.heroStyle]}>
+              <FlexHero kind={kind} payload={payload} frame={frame} size={place.tile} inventory={inventory} />
             </Animated.View>
-          )}
-        </View>
+            {/* No prop on the square: the dressed shark is the co-star, big enough to read on a feed thumbnail. */}
+            {showShark && (
+              <Animated.View style={[styles.stagePiece, styles.storyShark, { left: place.sharkLeft, top: place.sharkTop }, motion.sharkStyle]}>
+                <FlexShark inventory={inventory} height={place.shark} prop={null} pin={chestPin} />
+              </Animated.View>
+            )}
+          </>
         )}
       </View>
       {/* The look: words centered under the dressed shark like Story; the 3/3 sticker already says "the
@@ -454,18 +404,17 @@ function PlainSquare({ kind, payload, copy, frame, showShark, inventory, motion,
           </View>
         )}
         <View style={centered ? styles.squareWordsLookCol : { flex: 1 }}>
-          <Text style={[styles.kickerSmall, { color: frame.ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.kicker}</Text>
+          {/* Outlined like every other kicker, so a red or navy kicker reads on any frame. */}
+          <Outlined text={copy.kicker} style={[styles.kickerSmall, { color: frame.ink }, centered && { textAlign: 'center' }]} outline={kickerOutline(frame)} weight={2} lines={1} />
           <Outlined text={copy.title} style={[styles.squareTitle, titleSize(copy.title, 'square')]} outline={frame.outline} lines={1} />
           {!look && <StatPlate copy={copy} frame={frame} compact center={centered} />}
         </View>
       </View>
-      <Footer kind={kind} payload={payload} copy={copy} frame={frame} logoWidth={104} qr={42} compact />
+      <Footer kind={kind} payload={payload} copy={copy} frame={frame} logoWidth={104} qr={42} compact tight={!look} />
     </View>
   );
 }
 
-/** The square card's shark: a co-star beside the hero (~37% of the width), holding its prop. */
-export const SQUARE_SHARK_H = 150;
 /** The square look card's dressed shark: the biggest thing on the card (about 42% of its width). */
 export const SQUARE_LOOK_SHARK_H = 196;
 
@@ -498,10 +447,12 @@ function BigNumber({ copy, frame, size, width, text, style, labelSide = 'top', i
 }
 
 /** Wordmark + CTA + the readable short link, and the per-kind QR. */
-const Footer = memo(function Footer({ kind, payload, copy, frame, logoWidth, qr, compact = false, story = false }: {
+const Footer = memo(function Footer({ kind, payload, copy, frame, logoWidth, qr, compact = false, story = false, tight = false }: {
   readonly kind: FlexKind; readonly payload: FlexPayload; readonly copy: FlexCopy; readonly frame: FlexFrame; readonly logoWidth: number; readonly qr: number; readonly compact?: boolean; readonly story?: boolean;
+  /** Square: the footer takes only its own height, so the stage above gets all the spare room. */
+  readonly tight?: boolean;
 }) {
-  return <CardFooter cta={copy.cta} qrArt={flexQr(kind, payload)} frame={frame} logoWidth={logoWidth} qr={qr} compact={compact} story={story} />;
+  return <CardFooter cta={copy.cta} qrArt={flexQr(kind, payload)} frame={frame} logoWidth={logoWidth} qr={qr} compact={compact} story={story} tight={tight} />;
 });
 
 /** The QR for a card: its kind's, or a prize's own campaign (Shark Pass, member pin), like flexShareUrl. */
@@ -514,13 +465,14 @@ export function flexQr(kind: FlexKind, payload: FlexPayload): number {
  * The one share footer every picture uses (Flex cards and the story frame): the TPS wordmark,
  * the CTA, the readable link, and a QR that scans to that link.
  */
-export const CardFooter = memo(function CardFooter({ cta, qrArt, frame, logoWidth, qr, compact = false, story = false }: {
+export const CardFooter = memo(function CardFooter({ cta, qrArt, frame, logoWidth, qr, compact = false, story = false, tight = false }: {
   readonly cta: string; readonly qrArt: number; readonly frame: FlexFrame; readonly logoWidth: number; readonly qr: number; readonly compact?: boolean;
+  readonly tight?: boolean;
   /** Story: no top margin (the body pads STORY_FOOTER_H above it) and the QR clear of TikTok's right rail. */
   readonly story?: boolean;
 }) {
   return (
-    <View style={[styles.footer, compact && styles.footerCompact, story && styles.footerStory]}>
+    <View style={[styles.footer, compact && styles.footerCompact, tight && styles.footerTight, story && styles.footerStory]}>
       <View style={{ flex: 1, alignItems: compact ? 'center' : 'flex-start' }}>
         <FlexArtwork art={CARD_CHROME.logo} fallback={CARD_CHROME.logo} style={{ width: logoWidth, height: Math.round(logoWidth / 4) }} />
         <Outlined text={cta} style={[compact ? styles.ctaSmall : styles.cta, { color: frame.cta }]} outline={frame.outline} lines={1} />
@@ -656,6 +608,7 @@ const styles = StyleSheet.create({
   // TikTok's right rail covers about the right 50 pt of a story from y 300 pt down: the QR stays left of it.
   footerStory: { marginTop: 0, paddingRight: STORY_RAIL_W },
   footerCompact: { flex: 1, marginTop: 0, gap: 6, alignItems: 'flex-end' },
+  footerTight: { flex: 0 },
   cta: { fontFamily: 'Shark', fontSize: 18, marginTop: 2 },
   ctaSmall: { fontFamily: 'Shark', fontSize: 15, textAlign: 'center' },
   link: { fontFamily: 'Knockout', fontSize: 13, marginTop: 1 },
@@ -675,9 +628,7 @@ const styles = StyleSheet.create({
 
   // 20 pt sides and 14 pt bottom: the QR sits 20 pt from the edge (never touching the frame).
   squareBody: { flex: 1, alignItems: 'center', paddingTop: 6, paddingBottom: 14, paddingHorizontal: 20 },
-  squareStage: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', paddingTop: 14 },
-  squareStageRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 10 },
-  squareShark: { marginRight: -14, marginTop: 6, marginBottom: -14 },
+  squareStage: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' },
   // flex 3: the compact footer is flex 1 too, so the shark's row takes most of the spare room.
   prizeRow: { flex: 3, flexDirection: 'row', width: '100%', marginBottom: 10 },
   prizeRays: { position: 'absolute', left: SQUARE_PRIZE_COL / 2, top: '50%', width: 0, height: 0 },
@@ -689,11 +640,11 @@ const styles = StyleSheet.create({
   prizeLabel: { marginLeft: -6, marginBottom: 8, marginTop: 0 },
   // marginBottom: at least 10 pt between the plate and the footer.
   squareWordsRow: { flexDirection: 'row', alignItems: 'center', width: '100%', gap: 8, marginTop: 8, marginBottom: 10 },
-  squareWordsLook: { justifyContent: 'center', marginTop: 12 },
+  squareWordsLook: { justifyContent: 'center' },
   // The look's stage takes most of the spare room (the footer shares it otherwise).
-  squareStageLook: { flex: 2.6 },
+  squareStageLook: { flex: 2.6, paddingTop: 14 },
   squareWordsLookCol: { flex: 1, alignItems: 'center' },
   squareBigCol: { width: 128, alignItems: 'flex-start' },
-  kickerSmall: { fontFamily: 'Shark', fontSize: 14, textShadowColor: 'rgba(3,20,48,0.35)', textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
+  kickerSmall: { fontFamily: 'Shark', fontSize: 15 },
   squareTitle: { fontFamily: 'Shark', fontSize: 20, lineHeight: 23, color: '#ffffff' },
 });

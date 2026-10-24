@@ -1,6 +1,7 @@
 /**
  * The player's real shark in its current outfit, still (no idle bob, no pin,
- * no backdrop): the same layers and order as Playercard and the server avatar
+ * no backdrop, no contact shadow: a flat shadow pill floated beside the words on
+ * staged cards and read as a rendering bug): the same layers and order as Playercard and the server avatar
  * (skin or Alex's Classic no-eye body, the eyes, then body, face, neck, hand,
  * head papers), all drawn full frame on the 1353x1530 paper canvas.
  *
@@ -81,8 +82,6 @@ export const FlexShark = memo(function FlexShark({ inventory, height, flip = fal
     <View pointerEvents="none" style={[{ width, height }, style]}>
       {spot?.behind && propView}
       <View style={[StyleSheet.absoluteFill, flip && styles.flip]}>
-        {/* Soft navy contact shadow so the shark sits on the card, not on top of it. */}
-        <View style={[styles.shadow, { width: width * 0.3, height: height * 0.035, left: width * 0.42, top: height * 0.8, borderRadius: height }]} />
         {layers.map((layer, index) => (
           <FlexArtwork key={`${index}:${String(layer)}`} id={`shark${index}`}
             art={typeof layer === 'object' ? layer.uri : layer} fallback={index === 0 ? CLASSIC_NO_EYE : TRANSPARENT}
@@ -106,7 +105,6 @@ const TRANSPARENT = require('../../assets/images/share/clear.png');
 
 const styles = StyleSheet.create({
   flip: { transform: [{ scaleX: -1 }] },
-  shadow: { position: 'absolute', backgroundColor: 'rgba(5,52,110,0.22)' },
   // White disc, gold ring and a soft gold glow: the pin reads as "worn" on any outfit color.
   badge: { position: 'absolute', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: '#ffcf3b',
     shadowColor: '#ffcf3b', shadowOpacity: 0.9, shadowRadius: 5, shadowOffset: { width: 0, height: 0 } },

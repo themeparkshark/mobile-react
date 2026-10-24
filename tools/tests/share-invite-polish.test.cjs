@@ -366,7 +366,7 @@ test('a tall card shrinks to fit between the ribbon and the footer, never grows'
   assert.equal(fitScale(300, 350), 300 / 350);
   assert.equal(fitScale(300, 200), 1);
   assert.equal(fitScale(0, 200), 1, 'before layout: no scale');
-  assert.match(src('src/share/StoryShareFrame.tsx'), /transform: \[\{ scale \}\]/);
+  assert.match(src('src/share/StoryShareFrame.tsx'), /transform: \[\{ scale: peek\.scale \}\]/);
 });
 
 /* ------------------------------------------------------------------ round 3 */
@@ -618,22 +618,22 @@ test('square look card: the dressed shark is the hero, at most 3 tiles, words ce
   assert.match(card, /\.slice\(0, maxTiles\)/);
   assert.match(card, /<View style=\{\[styles\.squareWordsRow, centered && styles\.squareWordsLook\]\}>/);
   assert.match(card, /const centered = look \|\| !big;/);
-  assert.match(card, /squareWordsLook: \{ justifyContent: 'center', marginTop: 12 \}/);
+  assert.match(card, /squareWordsLook: \{ justifyContent: 'center' \}/);
   assert.match(card, /\{!look && <StatPlate copy=\{copy\} frame=\{frame\} compact center=\{centered\} \/>\}/);
-  assert.match(card, /squareStageLook: \{ flex: 2\.6 \}/);
+  assert.match(card, /squareStageLook: \{ flex: 2\.6, paddingTop: 14 \}/);
   // Story: the hat clears the ribbon, and the plate's room goes to the shark.
   assert.match(card, /\{!look && <StatPlate copy=\{copy\} frame=\{frame\} compact=\{false\} \/>\}/);
   assert.match(card, /storyHeroLook: \{ paddingTop: 6 \}/);
-  // Square plate keeps one line, and the hero leaves room for the kicker.
+  // Square plate keeps one line, and the hero leaves room for the kicker (squareStage, wave 3 round 3).
   assert.match(card, /\{!!copy\.sub && !compact && <Text/);
-  assert.match(card, /const heroSize = 112;/);
+  assert.match(src('src/share/stage.ts'), /export const SQUARE_HERO = 112;/);
 });
 
 test('a worn prize pin shows on the share shark\'s chest', () => {
   const card = src('src/share/FlexCard.tsx');
   assert.match(card, /chestPin: kind === 'find' && !!payload\.inventory\?\.pin_item/);
   assert.match(card, /<FlexShark inventory=\{inventory\} height=\{stage\.shark\} prop=\{null\} pin=\{chestPin\} \/>/);
-  assert.match(card, /<FlexShark inventory=\{inventory\} height=\{shark\} prop=\{null\} pin=\{chestPin\} \/>/, 'the square prize shark wears it too');
+  assert.match(card, /<FlexShark inventory=\{inventory\} height=\{place\.shark\} prop=\{null\} pin=\{chestPin\} \/>/, 'the square sharks wear it too');
   const shark = src('src/share/FlexShark.tsx');
   assert.match(shark, /\{pin && !!inventory\?\.pin_item\?\.icon_url && \(/);
   const reward = src('src/components/money/WearFirstReward.tsx');
@@ -688,7 +688,7 @@ test('the ride story leads a first ride with FIRST RIDE!, and the Memory story h
   const cards = mem.slice(mem.indexOf('export function ShareCard('), mem.indexOf('export function ShareBack('));
   assert.doesNotMatch(cards, /daily\.day/, 'no date on any Memory share card');
   assert.match(mem, /<StoryShareFrame ref=\{storyRef\} ribbon="MEMORY MATCH!"[^>]*>\s*<ShareStoryCard daily=\{daily\} \/>/);
-  assert.match(mem, /storyBig: \{ fontFamily: 'Shark', fontSize: 64/);
+  assert.match(mem, /storyBig: \{ fontFamily: 'Shark', fontSize: 58/);
 });
 
 test('the coin level-up uses the same labeled Share pill, under its main button', () => {
@@ -794,7 +794,8 @@ test('the worn prize pin is a big badge drawn over every layer and prop', () => 
 
 test('story cards: nothing readable above y 230 px or below y 1440 px; the shark stands in front of the tile', () => {
   const card = src('src/share/FlexCard.tsx');
-  const num = name => Number((card.match(new RegExp(`export const ${name} = (\\d+);`)) || [])[1]);
+  const geo = card + src('src/share/stage.ts');
+  const num = name => Number((geo.match(new RegExp(`export const ${name} = (\\d+);`)) || [])[1]);
   const safe = card.match(/export const STORY_SAFE = \{ top: (\d+), bottom: (\d+) \} as const;/);
   assert.ok(safe, 'STORY_SAFE');
   const [top, bottom] = [Number(safe[1]), Number(safe[2])];
@@ -823,11 +824,7 @@ test('story cards: nothing readable above y 230 px or below y 1440 px; the shark
   assert.match(card, /storyShark: \{ zIndex: 2 \}/);
   assert.match(card, /storyBigOver: \{ zIndex: 3 \}/, 'the giant number reads over the shark');
   assert.match(card, /words: \{[^}]*zIndex: 4 \}/, 'the words ride over the shark feet');
-  const fn = card.slice(card.indexOf('export function storyStage'), card.indexOf('function StoryLayout'));
-  const consts = `const STORY_HERO = ${num('STORY_HERO')}, STORY_SHARK_H = ${num('STORY_SHARK_H')}, STORY_OVERLAP = ${num('STORY_OVERLAP')};
-    const STORY_ROW_PAD = 8, SHARK_RISE = 0.1, SHARK_FEET = 0.82, SHARK_SIDE = 0.18, SHARK_ASPECT = 1353 / 1530;`;
-  const js = fn.replace('export ', '').replace(/\(room: number, width: number, lift: number\): StoryStage/, '(room, width, lift)');
-  const stage = new Function(`${consts}\n${js}\nreturn storyStage;`)();
+  const stage = loadTs('src/share/stage.ts', { './lookBounds': loadTs('src/share/lookBounds.ts', {}) }).storyStage;
   const lift = num('STORY_WORDS_LIFT');
   for (const room of [150, 180, 200, 230]) {
     const z = stage(room, 320, lift);
@@ -836,7 +833,8 @@ test('story cards: nothing readable above y 230 px or below y 1440 px; the shark
     assert.ok(z.tileTop + z.tile + 8 <= room - lift, `room ${room}: the tile and its lip sit above the words`);
     assert.ok(z.sharkTop + z.shark * 0.1 >= -1, `room ${room}: the hat stays below the hero top (ribbon clear edge)`);
     assert.ok(Math.abs(z.sharkTop + z.shark * 0.82 - (room - 4)) <= 1, `room ${room}: feet tuck 4 pt above the bottom, behind the words`);
-    assert.ok(z.tileLeft + z.tile - (z.sharkLeft + w * 0.18) >= 29, `room ${room}: the painted shark overlaps the tile by 30 pt`);
+    const over = z.tileLeft + z.tile - (z.sharkLeft + w * 0.18);
+    assert.ok(over >= Math.min(30, Math.round(z.tile * 0.27)) - 1 && over <= z.tile * 0.27 + 1, `room ${room}: the painted shark overlaps the tile's edge (${over.toFixed(1)} pt)`);
     assert.ok(z.sharkLeft + w * 0.82 <= 320, `room ${room}: the painted shark stays inside the card`);
   }
   // A worn pin (low on the belly) is never under the words.
@@ -891,13 +889,13 @@ test('the square prize card uses two columns: the dressed shark on the stage, th
   const card = src('src/share/FlexCard.tsx');
   assert.match(card, /return prize \? <PrizeSquare \{\.\.\.props\} prize=\{prize\} \/> : <PlainSquare \{\.\.\.props\} \/>;/);
   assert.match(card, /\{prize === 'member' \? 'MEMBER GIFT' : 'SHARK PASS'\}/);
-  assert.ok(Number(card.match(/export const SQUARE_PRIZE_SHARK_H = (\d+);/)[1]) > Number(card.match(/export const SQUARE_SHARK_H = (\d+);/)[1]));
+  assert.match(src('src/share/stage.ts'), /export const SQUARE_PRIZE_SHARK_H = 250;/);
 });
 
 test('Whack and Memory story pictures show the player\'s own shark peeking over the card', () => {
   const frame = src('src/share/StoryShareFrame.tsx');
   assert.match(frame, /<FlexShark inventory=\{player\?\.inventory\} height=\{PEEK\.h\} prop=\{null\} \/>/);
-  assert.match(frame, /withShark && \{ paddingTop: PEEK\.above \}/, 'the frame keeps room for the shark, so the fit scale counts it');
+  assert.match(frame, /paddingTop: SLOT_PAD \+ peek\.reserve/, 'the card gives up only the headroom the shark lacks');
   assert.match(src('src/games/whack/ui/ShareCard.tsx'), /campaign="whack" withShark>/);
   assert.equal(src('src/games/memory/MemoryExtras.tsx').match(/campaign="memory" withShark>/g).length, 2, 'preview and capture match');
 });
@@ -914,4 +912,129 @@ test('the release share walk routes exist only behind EXPO_PUBLIC_SHARE_WALK, an
   assert.match(routes, /: process\.env\.EXPO_PUBLIC_SHARE_WALK === '1'\n\s*\? \[/);
   assert.match(routes, /process\.env\.EXPO_PUBLIC_SHARE_WALK === '1' \? 'SharePicturesPreview' : null;/);
   assert.match(src('src/screens/SharePicturesPreviewScreen.tsx'), /onDone=\{\(\) => navigation\.goBack\(\)\}/);
+});
+
+/* ------------------------------------------------------------- wave 3 round 3 */
+
+const lookBounds = loadTs('src/share/lookBounds.ts', {});
+const stageMod = loadTs('src/share/stage.ts', { './lookBounds': lookBounds });
+const PROD = 'https://assets.themeparkshark.com/mobile/production/assets';
+const GHOST = {
+  head_item: { paper_url: `${PROD}/oQi4oC4uE8tVRBP97LkCag19XCDCt4O6BLg04bwf.png` },
+  body_item: { paper_url: `${PROD}/sOubrLKHE8xVFwmWtG7xiHsd2IayiuZpzgnb3TQO.png` },
+  hand_item: { paper_url: `${PROD}/2IPHn8UVfl5hHN2wdayZWq8ZiqZTEmKwnMv5pkIn.png` },
+};
+const TEE = { body_item: { paper_url: `${PROD}/WwCOXJ7rMpwaUGjQwvG0TDNEW2EC4sdQwQZskaVC.png` } };
+
+test('no contact shadow pill on any share shark (it floated beside the words as a grey bar)', () => {
+  const shark = src('src/share/FlexShark.tsx');
+  assert.doesNotMatch(shark, /rgba\(5,52,110,0\.22\)/);
+  assert.doesNotMatch(shark, /styles\.shadow\b/);
+  assert.doesNotMatch(shark, /^\s*shadow: \{/m);
+});
+
+test('a dressed look knows how wide its paint reaches: the ghost costume and blaster are wide, a tee is not', () => {
+  const { lookExtent, BODY_EXTENT, paperKey, WIDE_PAPERS } = lookBounds;
+  assert.equal(paperKey(`${PROD}/sOubrLKHE8xVFwmWtG7xiHsd2IayiuZpzgnb3TQO.png?v=2`), 'sOubrLKHE8xVFwmWtG7xiHsd2IayiuZpzgnb3TQO');
+  const ghost = lookExtent(GHOST);
+  assert.equal(ghost.left, 0, 'the ghost sheet reaches the paper edge');
+  assert.ok(ghost.right >= 0.89, 'the blaster reaches past the tail');
+  assert.equal(lookExtent(TEE), BODY_EXTENT);
+  assert.equal(lookExtent(null), BODY_EXTENT);
+  assert.equal(lookExtent({ body_item: { paper_url: `${PROD}/not-in-the-table.png` } }), BODY_EXTENT);
+  for (const [key, [l, r]] of Object.entries(WIDE_PAPERS)) {
+    assert.match(key, /^[A-Za-z0-9]{40}$/);
+    assert.ok(l >= 0 && r <= 1 && l < r && (l < 0.17 || r > 0.83), `${key} is really wider than the body`);
+  }
+});
+
+test('the prize stays readable under any costume: the paint covers only the tile\'s edge band on Story', () => {
+  const { storyStage, PRIZE_EDGE } = stageMod;
+  assert.equal(PRIZE_EDGE, 0.27);
+  for (const look of [lookBounds.BODY_EXTENT, lookBounds.lookExtent(GHOST), { left: 0, right: 1 }]) {
+    for (const room of [150, 190, 230]) {
+      for (const lift of [18, 36]) {
+        const z = storyStage(room, 320, lift, look);
+        const w = z.shark * 1353 / 1530;
+        const paintL = z.sharkLeft + w * look.left;
+        const paintR = z.sharkLeft + w * look.right;
+        // The tile's art box is its middle 0.76: at least 80% of it stays clear of the paint.
+        const artL = z.tileLeft + z.tile * 0.12;
+        const artR = z.tileLeft + z.tile * 0.88;
+        const covered = Math.max(0, artR - Math.max(artL, paintL)) / (artR - artL);
+        assert.ok(covered <= 0.2 + 0.01, `look ${look.left}-${look.right} room ${room}: ${Math.round(covered * 100)}% of the prize art covered`);
+        assert.ok(paintL < z.tileLeft + z.tile, 'the shark still stands in front of the tile frame');
+        assert.ok(paintR <= 320 + 1, 'the whole look stays on the card');
+      }
+    }
+  }
+  assert.match(src('src/share/FlexCard.tsx'), /storyStage\(box\.h, box\.w, lift, lookExtent\(inventory\)\)/);
+});
+
+test('square cards: the kicker sits 8 pt or more below the tile on every square, and the shark is a third of the card', () => {
+  const { squareStage, prizeSquareShark, SQUARE_PRIZE_COL } = stageMod;
+  for (const h of [96, 110, 124, 140, 170]) {
+    for (const showShark of [true, false]) {
+      const z = squareStage(h, 320, showShark);
+      const lip = Math.ceil(z.tile * 0.04) + 1;
+      // The words row starts at the stage bottom plus its 8 pt margin.
+      assert.ok(h + 8 >= z.tileTop + z.tile + lip + 8, `h ${h}: kicker top ${h + 8} vs tile bottom ${z.tileTop + z.tile + lip}`);
+      assert.ok(z.tileTop >= 6, 'the tile clears the ribbon tails');
+    }
+  }
+  const z = squareStage(124, 320, true);
+  const painted = z.shark * 1353 / 1530 * 0.64;
+  assert.ok(painted / 360 >= 0.3, `the square shark's paint is ${Math.round(painted / 3.6)}% of the card`);
+  for (const look of [lookBounds.BODY_EXTENT, lookBounds.lookExtent(GHOST)]) {
+    const g = squareStage(124, 320, true, look);
+    const w = g.shark * 1353 / 1530;
+    assert.ok(g.sharkLeft + w * look.right <= 320 + 16, 'the tail stays inside the frame');
+    assert.ok(g.sharkLeft + w * look.left >= g.tileLeft + g.tile * (1 - 0.27) - 1, 'the square shark never covers the prize art');
+    // Prize square: the paint stays in its column (4 pt in from the card edge, 4 pt past the column).
+    const p = prizeSquareShark(180, look);
+    const pw = p.shark * 1353 / 1530;
+    assert.ok(p.left + pw * look.left >= -16 - 1, 'never off the card');
+    assert.ok(p.left + pw * look.right <= SQUARE_PRIZE_COL + 4 + 1, 'never over the prize tile');
+  }
+  // Every square kicker is outlined like the story kicker (red on beige read badly).
+  const card = src('src/share/FlexCard.tsx');
+  assert.equal((card.match(/<Outlined text=\{copy\.kicker\}[^>]*outline=\{kickerOutline\(frame\)\}/g) || []).length, 3, 'story, plain square and prize square');
+  assert.doesNotMatch(card, /<Text style=\{\[styles\.kickerSmall/);
+  assert.match(card, /prop=\{null\} pin=\{chestPin\} \/>\s*<\/Animated\.View>\s*\)\}\s*<\/>/, 'no prop on the square: the dressed shark is the co-star');
+});
+
+test('the Memory story card stays big: the peeking shark is drawn outside its scale and the hat stays below the safe line', () => {
+  const frameMod = loadTs('src/share/StoryShareFrame.tsx', {
+    react: { forwardRef: f => f, useState: v => [v, () => {}], useContext: () => ({}) }, 'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; } },
+    'react-native': { StyleSheet: { create: s => s }, View: 'View' }, './campaignQr': { QR_BY_CAMPAIGN: {} },
+    '../context/AuthProvider': { AuthContext: {} }, './FlexShark': { FlexShark: 'FlexShark', SHARK_ASPECT: 1353 / 1530 },
+    './FlexCard': { STORY_SAFE: { top: 80, bottom: 160 }, STORY_FOOTER_BOTTOM: 160, STORY_BODY_BOTTOM: 236, STORY_RIBBON_W: 188 },
+    './formats': { FLEX_SIZE: { story: { width: 360, height: 640 } } }, './frames': { FRAMES: { common: { bg: ['#1aa3f0', '#0768b9'] } } },
+  });
+  const { peekLayout, PEEK } = frameMod;
+  // The slot: below the ribbon (80 + 48 pt) down to the footer (640 - 236 pt).
+  const slotY = 128, slotH = 640 - 236 - 128;
+  const mem = peekLayout(slotY, slotH, 300, 268, true);
+  assert.ok(mem.scale >= 0.85, `Memory card scale ${mem.scale.toFixed(2)}`);
+  const whack = peekLayout(slotY, slotH, 205, 196, true);
+  assert.equal(whack.scale, 1);
+  for (const p of [mem, whack]) {
+    assert.ok(p.sharkTop + PEEK.h * 0.1 >= 80 - 0.5, 'the hat stays below the safe line (y 240 px)');
+    const right = p.sharkLeft + PEEK.h * 1353 / 1530 * 0.82;
+    assert.ok(right <= 340 + 0.5, 'the shark stays on the card');
+    assert.ok(p.sharkTop + PEEK.h * 0.82 > p.cardTop, 'its feet come over the card edge');
+  }
+  assert.equal(peekLayout(slotY, slotH, 300, 268, false).reserve, 0);
+  const memSrc = src('src/games/memory/MemoryExtras.tsx');
+  assert.match(memSrc, /storySide: \{ alignItems: 'center', paddingTop: 30, gap: 6 \}/, 'the card keeps its top-right corner clear for the shark');
+});
+
+test('the Shark Pass proof sample uses the real Snowflake Beanie art, and the ghost look renders on demand', () => {
+  const samples = src('src/share/samples.ts');
+  assert.match(samples, /const SNOWFLAKE_BEANIE = require\('\.\.\/\.\.\/assets\/images\/sharkpass\/snowflake-beanie\.webp'\)/);
+  assert.match(samples, /s\('find-sharkpass', 'find', \{ itemName: 'Snowflake Beanie', artUrl: SNOWFLAKE_BEANIE,[\s\S]{0,160}inventory: wearingPin\(SNOWFLAKE_BEANIE\)/);
+  assert.match(src('src/screens/ShareStudioPreviewScreen.tsx'), /process\.env\.EXPO_PUBLIC_SHARE_STUDIO_LOOK === 'ghost' \? GHOST_INVENTORY : SAMPLE_INVENTORY/);
+  for (const f of ['src/share/stage.ts', 'src/share/lookBounds.ts', 'src/share/StoryShareFrame.tsx', 'src/games/memory/MemoryExtras.tsx', 'src/share/samples.ts']) {
+    assert.doesNotMatch(src(f), new RegExp(String.fromCharCode(0x2014)), `${f}: no em dashes`);
+  }
 });

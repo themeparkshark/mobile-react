@@ -29,8 +29,21 @@ export const SAMPLE_INVENTORY = {
   neck_item: { id: 9003, name: 'Camera', paper_url: `${PROD}/EIbKxOUH3iQftK6iTkGzXaQtir5hOz94AqVqdaBp.png` },
 } as unknown as InventoryType;
 
-function wearingPin(iconUrl: string): InventoryType {
-  return { ...SAMPLE_INVENTORY, pin_item: { id: 9010, name: 'Prize pin', icon_url: iconUrl } } as unknown as InventoryType;
+/**
+ * The PolishShare player's real look (witch hat, ghost costume, ghost blaster: production papers),
+ * the widest look in the catalog. EXPO_PUBLIC_SHARE_STUDIO_LOOK=ghost renders every sample in it.
+ */
+export const GHOST_INVENTORY = {
+  head_item: { id: 27, name: 'Witch Hat', paper_url: `${PROD}/oQi4oC4uE8tVRBP97LkCag19XCDCt4O6BLg04bwf.png` },
+  body_item: { id: 219, name: 'Ghost Costume', paper_url: `${PROD}/sOubrLKHE8xVFwmWtG7xiHsd2IayiuZpzgnb3TQO.png` },
+  hand_item: { id: 434, name: 'Ghost Blaster', paper_url: `${PROD}/2IPHn8UVfl5hHN2wdayZWq8ZiqZTEmKwnMv5pkIn.png` },
+} as unknown as InventoryType;
+
+/** The real Snowflake Beanie (the Shark Pass reward art the reveal shows). */
+const SNOWFLAKE_BEANIE = require('../../assets/images/sharkpass/snowflake-beanie.webp') as number;
+
+function wearingPin(icon: string | number): InventoryType {
+  return { ...SAMPLE_INVENTORY, pin_item: { id: 9010, name: 'Prize pin', icon_url: icon } } as unknown as InventoryType;
 }
 
 export interface FlexSample<K extends FlexKind = FlexKind> {
@@ -48,8 +61,8 @@ export const FLEX_SAMPLES: readonly FlexSample[] = [
   s('find-epic', 'find', { itemName: 'Firework Rocket Toy', artUrl: art('firework-rocket.webp'), rarity: 4, setName: 'Night Glow', setFound: 3, setTotal: 8 }),
   // Earned prizes (Shark Pass step, member pin): own campaign link and QR, no rarity.
   // Worn right away (Wear it now): the prize shows on the shark's chest, like the real reveal.
-  s('find-sharkpass', 'find', { itemName: 'Snowflake Beanie', artUrl: art('firework-rocket.webp'), prize: 'pass', sourceLine: 'Earned at Step 12', sourceSub: 'Frosty Fun Winter Wonderland',
-    inventory: wearingPin(art('firework-rocket.webp')) }),
+  s('find-sharkpass', 'find', { itemName: 'Snowflake Beanie', artUrl: SNOWFLAKE_BEANIE, prize: 'pass', sourceLine: 'Earned at Step 12', sourceSub: 'Frosty Fun Winter Wonderland',
+    inventory: wearingPin(SNOWFLAKE_BEANIE) }),
   s('find-member', 'find', { itemName: 'Golden Fin Pin', artUrl: art('shooting-star.webp'), prize: 'member', sourceLine: 'This month\u2019s member pin',
     inventory: wearingPin(art('shooting-star.webp')) }),
   s('ride-photo', 'ride_photo', { itemName: 'Wishing Star', artUrl: art('shooting-star.webp'), rarity: 5, grade: 'frame_it' }),
