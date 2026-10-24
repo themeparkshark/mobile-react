@@ -25,12 +25,17 @@ interface Props {
    */
   readonly mode?: PageRailMode;
   readonly onShowPages?: () => void;
+  /**
+   * The page above has its own gold button (PLAY NOW, or the game itself): Next is a quiet white
+   * button, so a kid sees exactly one gold button to press.
+   */
+  readonly quiet?: boolean;
 }
 
 /** Keeps the next playable round visible after a player finishes a queue activity. */
 export default function ActivityPageRail({ index, count, nextLabel, firstLabel = 'Chapter',
   progressText, progressAccessibilityLabel, onFirst, onArcade, arcadePaused = false, onNext,
-  moreAvailable = false, morePaused = false, onMore, mode = 'pages', onShowPages }: Props) {
+  moreAvailable = false, morePaused = false, onMore, mode = 'pages', onShowPages, quiet = false }: Props) {
   if (mode === 'back' && onShowPages) {
     return <View style={styles.rail}>
       <Pressable accessibilityRole="button" accessibilityLabel="Back to the games. Hides the details."
@@ -42,6 +47,7 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
   }
   const wrapsToFirst = index + 1 >= count;
   const showMore = wrapsToFirst && moreAvailable && !!onMore;
+  const calm = quiet && !showMore;
   return <View style={styles.rail}>
     {/* On the first page there is nowhere to return to, so the button is gone, not faded. */}
     {index > 0 && <Pressable accessibilityRole="button" accessibilityLabel={`Return to ${firstLabel.toLowerCase()}`}
@@ -61,8 +67,8 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
     <Pressable accessibilityRole="button"
       accessibilityLabel={showMore ? 'Add more queue activities' : wrapsToFirst ? `Return to ${firstLabel.toLowerCase()}` : `Next activity: ${nextLabel}`}
       disabled={showMore ? morePaused : count <= 1} onPress={showMore ? onMore : onNext}
-      style={[styles.next, (showMore ? morePaused : count <= 1) && styles.disabled]}>
-      <Text style={styles.nextText} numberOfLines={1}>
+      style={[styles.next, calm && styles.nextQuiet, (showMore ? morePaused : count <= 1) && styles.disabled]}>
+      <Text style={[styles.nextText, calm && styles.nextTextQuiet]} numberOfLines={1}>
         {showMore ? morePaused ? 'Resume for more rounds' : 'More queue rounds'
           : count <= 1 ? 'Only activity' : wrapsToFirst ? `Back to ${firstLabel.toLowerCase()}` : `Next: ${nextLabel}`}
       </Text>
@@ -94,4 +100,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm, borderRadius: borderRadius.md, backgroundColor: '#ffca30',
     borderBottomWidth: 4, borderBottomColor: '#d99a00' },
   nextText: { flexShrink: 1, color: '#093d77', fontFamily: 'Knockout', fontSize: 17 },
+  // Quiet: white with a blue outline, same size and spot, so it still reads as a button.
+  nextQuiet: { backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#0875c9', borderBottomWidth: 4,
+    borderBottomColor: '#0875c9' },
+  nextTextQuiet: { color: '#075d9f' },
 });

@@ -178,3 +178,73 @@ export function boardFits(viewport: { width: number; height: number }, headerHei
   if (viewport.width <= 0 || viewport.height <= 0) return true;
   return boardByHeight(viewport, headerHeight) >= BOARD_FLOOR;
 }
+
+/**
+ * A board BESIDE its header (an iPhone SE, or a 17 Pro reading Details): the
+ * header becomes a column on the left and the board takes the page's whole
+ * height on the right, so the whole puzzle and both ports are on screen with no
+ * scrolling. Room around it: the card's padding (8 top and bottom) and the
+ * panel's rims and padding (3 + 6, top and bottom).
+ */
+const BESIDE_V = 8 * 2 + (3 + 6) * 2;
+/** The panel's sides: rims plus padding wide enough for the ports (19 pt each side). */
+const BESIDE_PANEL_SIDES = (3 + 22) * 2;
+/** The header column ("Repair the signal", the stars and the clue button) needs this much width. */
+export const BESIDE_COLUMN = 128;
+/** The smallest board beside its header: 3 tiles of about 30 pt each. */
+export const BESIDE_FLOOR = 100;
+
+export function boardBesideSide(viewport: { width: number; height: number }): number {
+  const byHeight = viewport.height - BESIDE_V;
+  const byWidth = viewport.width - 8 * 2 - 8 - BESIDE_COLUMN - BESIDE_PANEL_SIDES;
+  return Math.floor(Math.min(300, byHeight, byWidth));
+}
+
+/**
+ * How the navigation page lays out its board, from the room it really has. The
+ * layout with the bigger whole board wins (bigger tiles are easier to hit):
+ * - 'top': the header, then the whole board under it (roomy pages).
+ * - 'beside': the header is a column beside the board (short pages: an iPhone SE,
+ *   a 17 Pro, or any phone reading Details).
+ * - 'strip': Details is open and neither fits: one "Tap to play" strip.
+ * Before layout it assumes 'top', so nothing jumps.
+ */
+export type NavBoardLayout = 'top' | 'beside' | 'strip';
+export function navBoardLayout(viewport: { width: number; height: number }, headerHeight: number,
+  detailsOpen: boolean): NavBoardLayout {
+  if (viewport.width <= 0 || viewport.height <= 0) return 'top';
+  const top = boardFits(viewport, headerHeight) ? boardSideFor(viewport, headerHeight) ?? 0 : 0;
+  const beside = boardBesideSide(viewport);
+  if (beside < BESIDE_FLOOR) return top > 0 || !detailsOpen ? 'top' : 'strip';
+  return top >= beside ? 'top' : 'beside';
+}
+
+/**
+ * The crew row ("Here with friends?") lends its room to a board page on a short
+ * phone, as it does while Details is open, so the whole puzzle fits beside its
+ * header with no scrolling. It is back on every other page.
+ */
+export function crewRowLent(shortScreen: boolean, detailsOpen: boolean, boardPage: boolean): boolean {
+  return shortScreen && (detailsOpen || boardPage);
+}
+
+/**
+ * The page window stepped aside (Details open on a short phone): the rail stays
+ * at its usual bottom spot, so a thumb finds "Back to games" where Next was, and
+ * the crew row comes back into the space between Details and the rail when it fits.
+ */
+export function crewRowInBand(bandHeight: number, crewRowHeight: number): boolean {
+  return crewRowHeight > 0 && bandHeight >= crewRowHeight + 12;
+}
+
+/**
+ * The page's first screen ends on whole blocks: when the block after the fold
+ * would be cut by the window's bottom (a sliver peeking into the fade), it
+ * starts just below the window instead, and the "more below" arrow points at
+ * it. Returns that block's top margin.
+ */
+export function foldGap(viewHeight: number, foldBottom: number, nextHeight: number, normalGap: number): number {
+  if (!(viewHeight > 0) || !(foldBottom > 0) || foldBottom > viewHeight) return normalGap;
+  if (nextHeight > 0 && foldBottom + normalGap + nextHeight <= viewHeight - fadeHeight(viewHeight)) return normalGap;
+  return Math.max(normalGap, Math.ceil(viewHeight - foldBottom) + 2);
+}

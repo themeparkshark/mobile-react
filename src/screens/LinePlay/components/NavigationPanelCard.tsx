@@ -18,7 +18,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence,
   withSpring, withTiming } from 'react-native-reanimated';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Rect } from 'react-native-svg';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import HapticPatterns from '../../../helpers/hapticPatterns';
 import { playSfx } from '../../../gamekit/SFX';
@@ -30,7 +30,7 @@ import { circuitThemeFor, type CircuitTheme } from '../../../services/lineplay/c
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 import PageScroll from './PageScroll';
 import KidText from './KidText';
-import { boardFits, boardSideFor, boardTight, navStripHeader } from '../../../services/lineplay/lineLayout';
+import { boardBesideSide, boardSideFor, boardTight, navBoardLayout, navStripHeader } from '../../../services/lineplay/lineLayout';
 
 interface Props {
   readonly seed: number;
@@ -57,6 +57,8 @@ const TEACHER_SHARK = require('../../../../assets/images/tutorial/teacher-shark.
 const PORTS = [[1, 50, 0, 'north'], [2, 100, 50, 'east'],
   [4, 50, 100, 'south'], [8, 0, 50, 'west']] as const;
 const FLOW_STEP_MS = 55;
+/** The board page's header height before it is measured (a tight header is about 64 pt). */
+const HEADER_GUESS = 64;
 
 function pipePath(mask: number): string {
   const ports = PORTS.filter(([bit]) => mask & bit);
@@ -121,6 +123,20 @@ function TileArt({ mask, turns, lit, depth, relay, flow, reducedMotion }: {
       <GameIcon name="star" size={30} mono={lit ? undefined : '#9db7cf'} />
     </Animated.View> : <View style={[styles.hub, lit && { backgroundColor: flow }]} />}
   </View>;
+}
+
+/**
+ * "Turn this tile": a little board tile with a clockwise arrow hugging its corner. It says what a
+ * tap does without reading (the round "retry" arrow read as "start over").
+ */
+function TurnTileGlyph({ size = 22 }: { size?: number }) {
+  return <Svg width={size} height={size} viewBox="0 0 24 24" accessible={false}>
+    <Rect x={2.5} y={6.5} width={15} height={15} rx={4} fill={BRAND.white} stroke={BRAND.navy} strokeWidth={2.2} />
+    <Path d="M 10 21 L 10 14 L 17 14" stroke={BRAND.navy} strokeWidth={5.4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M 10 21 L 10 14 L 17 14" stroke={BRAND.sky} strokeWidth={2.6} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M 9 4 A 11 11 0 0 1 20.5 13" stroke={BRAND.gold} strokeWidth={2.8} fill="none" strokeLinecap="round" />
+    <Path d="M 17.6 11.6 L 20.7 14.6 L 22.6 10.8" stroke={BRAND.gold} strokeWidth={2.6} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>;
 }
 
 /** A short original fiction puzzle; the server's verified wait still owns every reward. */
@@ -203,9 +219,8 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   };
 
   const size = panel.size;
-  const kickerText = mode === 'mission'
-    ? `${look.place} · MISSION 1 OF 3`
-    : `${look.place} · SIGNAL REPAIR`;
+  // No count here: the STORY rail under the page owns "CLUE 1/3", so a kid sees each count once.
+  const kickerText = `${look.place} · SIGNAL REPAIR`;
   const status = paused ? 'Paused. Your circuit is saved right where you left it.'
     : trace.solved ? `3 / 3 ${look.relayNoun} linked · exit online`
       : hint != null ? 'Turn the gold-edged tile to reconnect the route.'
@@ -216,8 +231,11 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
 
   // One thumb, one glance: the whole board and both ports fit above the
   // chapter rail. Size the tiles from the height this page really has.
-  const tight = boardTight(viewport.height);
-  const boardSide = boardSideFor(viewport, headerHeight);
+  // Before the header is measured, assume its usual height, so the first frame already picks the right layout.
+  const layout = navBoardLayout(viewport, headerHeight || HEADER_GUESS, !!onMakeRoom);
+  const beside = layout === 'beside';
+  const tight = beside || boardTight(viewport.height);
+  const boardSide = beside ? boardBesideSide(viewport) : boardSideFor(viewport, headerHeight);
   // A tight page says what to do in the header's top line (the rail already counts the clue),
   // so nothing is left under the board for the fade to cut.
   const statusOnTop = tight && !trace.solved;
@@ -230,7 +248,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
 
   // Details open on a page too short for a whole board: the mission's header (when it fits) and one
   // "Tap to play" strip, like the chapter's PLAY NOW strip. The tap closes Details so the board has room.
-  if (onMakeRoom && !boardFits(viewport, headerHeight)) {
+  if (onMakeRoom && layout === 'strip') {
     const title = trace.solved ? look.solvedTitle : look.repairTitle;
     const withHeader = navStripHeader(viewport.height);
     return <PageScroll fill={BRAND.cream} contentStyle={[styles.contentStrip, withHeader && styles.contentStripHeader]}
@@ -265,47 +283,24 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
     </PageScroll>;
   }
 
-  return <PageScroll ref={scroll} fill={BRAND.cream} contentStyle={[styles.card, tight && styles.cardTight]}
-    onLayout={onLayout}
-    onContentSizeChange={() => {
-      if (!scrollToPayoff.current || !scroll.current) return;
-      scrollToPayoff.current = false;
-      scroll.current.scrollToEnd({ animated: !reducedMotion });
-    }}>
-    <View onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}>
-      <LinearGradient colors={[BRAND.blueBright, BRAND.blue]}
-        style={[styles.hero, !trace.solved && styles.heroCompact]}>
-        <View style={styles.heroCopy}>
-          {statusOnTop ? <View style={styles.statusTop} accessibilityLiveRegion="polite">
-            {firstTap && <GameIcon name="retry" size={16} />}
-            <KidText style={[styles.kicker, styles.kickerStatus]} numberOfLines={1} adjustsFontSizeToFit
-              minimumFontScale={0.8}>{kicker}</KidText>
-          </View> : <KidText style={styles.kicker} numberOfLines={1}>{kicker}</KidText>}
-          <View style={styles.titleRow}>
-            <Text style={[styles.title, !trace.solved && styles.titleCompact]} numberOfLines={1}>
-              {trace.solved ? look.solvedTitle : look.repairTitle}</Text>
-            <View style={styles.relayRow} accessible
-              accessibilityLabel={`${trace.signals} of 3 ${look.relayNoun} connected, ${panel.name}, ${size} by ${size}`}>
-              {[0, 1, 2].map(slot => <GameIcon key={slot} name="star" size={trace.solved ? 22 : 18}
-                mono={slot < trace.signals ? undefined : '#8fb9e0'} />)}
-            </View>
-          </View>
-        </View>
-        {trace.solved ? <Image source={space && !artFailed ? SPACE_SHARK : TEACHER_SHARK}
-          onError={() => setArtFailed(true)} style={styles.shark} contentFit="contain"
-          accessibilityLabel="Your shark cheers the repaired circuit" /> : (
-          <Pressable style={[styles.hintButton, showHint && styles.hintButtonOn]} disabled={locked}
-            onPress={() => setShowHint(value => !value)} accessibilityRole="button"
-            accessibilityLabel={showHint ? 'Hide the circuit clue' : 'Show a clue for this circuit'}
-            accessibilityHint={`Tap a tile to turn it. Link all three ${look.relayNoun} to the exit.`}
-            accessibilityState={{ disabled: locked, expanded: showHint }} hitSlop={6}>
-            <GameIcon name="search" size={24} />
-          </Pressable>
-        )}
-      </LinearGradient>
-    </View>
+  const success = <Animated.View style={[styles.success, revealStyle]}>
+      <View style={styles.starsRow} accessible accessibilityLabel={`${stars} of 3 stars`}>
+        {[1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={slot === 2 ? 44 : 36}
+          mono={slot <= stars ? undefined : '#cfd9e4'} />)}
+      </View>
+      <Text style={styles.successTitle}>{mode === 'mission' ? 'First signal found!' : 'Circuit repaired!'}</Text>
+      <Text style={styles.successCopy}>{stars === 3 ? 'Perfect repair: not a single wasted turn.'
+        : stars === 2 ? 'Clean work. A few extra turns, still a great repair.'
+          : 'Repaired! Try another circuit for a cleaner run.'}</Text>
+      <GameButton label={mode === 'mission' ? 'FIND THE NEXT SIGNAL' : (nextLabel ?? 'NEXT ROUND').toUpperCase()}
+        icon="arrow" onPress={onNext} disabled={paused} fullWidth
+        accessibilityLabel={mode === 'mission' ? 'Next mission: Find the missing signal' : `Next: ${nextLabel ?? 'next round'}`} />
+      <GameButton label="Try another circuit" variant="ghost" onPress={onNewRound} disabled={paused}
+        accessibilityLabel="Play another navigation circuit" />
+  </Animated.View>;
 
-    <Animated.View style={[styles.panel, tight && styles.panelTight, shakeStyle]}>
+  const board = (
+    <Animated.View style={[styles.panel, tight && styles.panelTight, beside && styles.panelBeside, shakeStyle]}>
       <View style={[styles.boardFrame, boardSide != null && { width: boardSide, maxWidth: boardSide }]}
         onLayout={event => setBoardWidth(event.nativeEvent.layout.width)}>
         <View style={[styles.port, styles.portIn, { top: `${(Math.floor(panel.entry / size) + 0.5) * (100 / size)}%` }]}
@@ -324,34 +319,93 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
                 hint === index && styles.tileHint, pressed && !reducedMotion && styles.pressed]}>
               <TileArt mask={panel.masks[index]} turns={progress.rotations[index] ?? 0} lit={active}
                 depth={trace.depth[index] ?? 0} relay={relay} flow={look.flow} reducedMotion={reducedMotion} />
-              {hint === index && <View style={styles.hintBadge}><GameIcon name="retry" size={16} /></View>}
+              {hint === index && <View style={styles.hintBadge}><TurnTileGlyph size={18} /></View>}
             </Pressable>;
           })}
         </View>)}
         <ParticleField ref={particles} width={boardWidth} height={boardWidth} style={styles.particles} />
       </View>
       {!statusOnTop && <View style={[styles.statusRow, tight && styles.statusRowTight]}>
-        {firstTap && <GameIcon name="retry" size={18} />}
+        {firstTap && <TurnTileGlyph />}
         <Text style={[styles.panelStatus, tight && styles.panelStatusTight]} accessibilityLiveRegion="polite">{status}</Text>
       </View>}
     </Animated.View>
+  );
 
-    {trace.solved ? <Animated.View style={[styles.success, revealStyle]}>
-      <View style={styles.starsRow} accessible accessibilityLabel={`${stars} of 3 stars`}>
-        {[1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={slot === 2 ? 44 : 36}
-          mono={slot <= stars ? undefined : '#cfd9e4'} />)}
+  const hintButton = <Pressable style={[styles.hintButton, beside && styles.hintButtonBeside, showHint && styles.hintButtonOn]} disabled={locked}
+    onPress={() => setShowHint(value => !value)} accessibilityRole="button"
+    accessibilityLabel={showHint ? 'Hide the circuit clue' : 'Show a clue for this circuit'}
+    accessibilityHint={`Tap a tile to turn it. Link all three ${look.relayNoun} to the exit.`}
+    accessibilityState={{ disabled: locked, expanded: showHint }} hitSlop={6}>
+    <GameIcon name="search" size={beside ? 20 : 24} />
+  </Pressable>;
+  const relayStars = (starSize: number) => <View style={styles.relayRow} accessible
+    accessibilityLabel={`${trace.signals} of 3 ${look.relayNoun} connected, ${panel.name}, ${size} by ${size}`}>
+    {[0, 1, 2].map(slot => <GameIcon key={slot} name="star" size={starSize}
+      mono={slot < trace.signals ? undefined : '#8fb9e0'} />)}
+  </View>;
+  const scrollPayoff = () => {
+    if (!scrollToPayoff.current || !scroll.current) return;
+    scrollToPayoff.current = false;
+    scroll.current.scrollToEnd({ animated: !reducedMotion });
+  };
+
+  // A short page (an iPhone SE, or a 17 Pro reading Details): the header is a column BESIDE the board,
+  // so the whole puzzle and both ports fit the page's height with no scrolling. What to do sits on top
+  // of the column, the stars and the clue button at its foot. A solved board's payoff is below.
+  if (beside) {
+    // Centered: a page taller than the board keeps even room above and below it.
+    const besideTop = Math.max(8, Math.floor((viewport.height - (boardSide ?? 0) - 18 - 16) / 2) + 8);
+    return <PageScroll ref={scroll} fill={BRAND.cream} contentStyle={[styles.cardBeside, { paddingTop: besideTop }]} onLayout={onLayout}
+      onContentSizeChange={scrollPayoff}>
+      <View style={styles.besideRow}>
+        <LinearGradient colors={[BRAND.blueBright, BRAND.blue]} style={[styles.hero, styles.heroBeside]}>
+          <View style={styles.statusTop} accessibilityLiveRegion="polite">
+            {firstTap && <TurnTileGlyph size={20} />}
+            <KidText style={[styles.kicker, styles.kickerStatus, styles.kickerBeside]} numberOfLines={2}>
+              {trace.solved ? kickerText : status}</KidText>
+          </View>
+          <Text style={[styles.title, styles.titleCompact, styles.titleBeside]} numberOfLines={2}>
+            {trace.solved ? look.solvedTitle : look.repairTitle}</Text>
+          <View style={styles.besideFoot}>
+            {relayStars(18)}
+            {!trace.solved && hintButton}
+          </View>
+        </LinearGradient>
+        {board}
       </View>
-      <Text style={styles.successTitle}>{mode === 'mission' ? 'First signal found!' : 'Circuit repaired!'}</Text>
-      <Text style={styles.successCopy}>{stars === 3 ? 'Perfect repair: not a single wasted turn.'
-        : stars === 2 ? 'Clean work. A few extra turns, still a great repair.'
-          : 'Repaired! Try another circuit for a cleaner run.'}</Text>
-      <GameButton label={mode === 'mission' ? 'FIND THE NEXT SIGNAL' : (nextLabel ?? 'NEXT ROUND').toUpperCase()}
-        icon="arrow" onPress={onNext} disabled={paused} fullWidth
-        accessibilityLabel={mode === 'mission' ? 'Next mission: Find the missing signal' : `Next: ${nextLabel ?? 'next round'}`} />
-      <GameButton label="Try another circuit" variant="ghost" onPress={onNewRound} disabled={paused}
-        accessibilityLabel="Play another navigation circuit" />
-    </Animated.View> : null}
-    <Text style={styles.footer}>Play solo or pass the phone. Keep walking with the line; your circuit stays saved.</Text>
+      {trace.solved ? success : null}
+    </PageScroll>;
+  }
+
+  return <PageScroll ref={scroll} fill={BRAND.cream} contentStyle={[styles.card, tight && styles.cardTight]}
+    onLayout={onLayout}
+    onContentSizeChange={scrollPayoff}>
+    <View onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}>
+      <LinearGradient colors={[BRAND.blueBright, BRAND.blue]}
+        style={[styles.hero, !trace.solved && styles.heroCompact]}>
+        <View style={styles.heroCopy}>
+          {statusOnTop ? <View style={styles.statusTop} accessibilityLiveRegion="polite">
+            {firstTap && <TurnTileGlyph size={20} />}
+            <KidText style={[styles.kicker, styles.kickerStatus]} numberOfLines={1} adjustsFontSizeToFit
+              minimumFontScale={0.8}>{kicker}</KidText>
+          </View> : <KidText style={styles.kicker} numberOfLines={1}>{kicker}</KidText>}
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, !trace.solved && styles.titleCompact]} numberOfLines={1}>
+              {trace.solved ? look.solvedTitle : look.repairTitle}</Text>
+            {relayStars(trace.solved ? 22 : 18)}
+          </View>
+        </View>
+        {trace.solved ? <Image source={space && !artFailed ? SPACE_SHARK : TEACHER_SHARK}
+          onError={() => setArtFailed(true)} style={styles.shark} contentFit="contain"
+          accessibilityLabel="Your shark cheers the repaired circuit" /> : hintButton}
+      </LinearGradient>
+    </View>
+
+    {board}
+
+    {trace.solved ? success : null}
+    {!tight && <Text style={styles.footer}>Play solo or pass the phone. Keep walking with the line; your circuit stays saved.</Text>}
   </PageScroll>;
 }
 
@@ -400,6 +454,16 @@ const styles = StyleSheet.create({
   // A tight page: the status takes the kicker's line in the header (white, easy to read).
   statusTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   kickerStatus: { flexShrink: 1, color: BRAND.white, fontSize: 14, letterSpacing: 0.2 },
+  // Beside: the header is a column left of the board (a short page).
+  cardBeside: { padding: 8, paddingBottom: 8 },
+  besideRow: { flexDirection: 'row', alignItems: 'stretch', gap: 8 },
+  heroBeside: { flex: 1, minHeight: 0, flexDirection: 'column', alignItems: 'stretch', justifyContent: 'space-between',
+    paddingLeft: 10, paddingRight: 6, paddingVertical: 6 },
+  hintButtonBeside: { width: 36, height: 36, borderRadius: 18, borderBottomWidth: 4 },
+  kickerBeside: { fontSize: 14, lineHeight: 17 },
+  titleBeside: { fontSize: 18, lineHeight: 21, marginTop: 2 },
+  besideFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
+  panelBeside: { marginTop: 0, alignSelf: 'flex-start', justifyContent: 'center' },
   // The one-row "Tap to play" strip (Details open on a short page).
   contentStrip: { flexGrow: 1, justifyContent: 'center', padding: 5, paddingBottom: 5 },
   playStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingLeft: 12, paddingRight: 4,

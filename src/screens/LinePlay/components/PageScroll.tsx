@@ -50,16 +50,23 @@ const PageScroll = forwardRef<ScrollView, PageScrollProps>(function PageScroll(
   // (the page growing back after Details) just shows the final state.
   const [{ more: moreBelowNow, fadeOut }, setMoreState] = useState({ more: false, fadeOut: true });
   const more = moreBelowNow && !still;
-  const setMoreScrolled = useCallback((next: boolean) => setMoreState({ more: next, fadeOut: true }), []);
+  // JS-side copies of the sizes: a shared value written on the JS thread can read back stale there,
+  // which left "more below" (fade and arrow) up on a page that had just grown to fit.
+  const js = useRef({ view: 0, content: 0, shown: false });
+  const setMoreScrolled = useCallback((next: boolean) => {
+    js.current.shown = next;
+    setMoreState({ more: next, fadeOut: true });
+  }, []);
   const [viewHeight, setViewHeight] = useState(0);
   const fade = frameFade(fill);
   // Layout and content size arrive on the JS thread; flip "more" only when it changes.
   const check = useCallback(() => {
-    const next = moreBelow(content.value, view.value, offset.value);
-    if (next === shownMore.value) return;
+    const next = moreBelow(js.current.content, js.current.view, offset.value);
+    if (next === js.current.shown) return;
+    js.current.shown = next;
     shownMore.value = next;
     setMoreState({ more: next, fadeOut: false });
-  }, [content, view, offset, shownMore]);
+  }, [offset, shownMore]);
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
       offset.value = event.contentOffset.y;
@@ -84,12 +91,14 @@ const PageScroll = forwardRef<ScrollView, PageScrollProps>(function PageScroll(
           onScroll={onScroll}
           onLayout={(event: LayoutChangeEvent) => {
             view.value = event.nativeEvent.layout.height;
+            js.current.view = event.nativeEvent.layout.height;
             setViewHeight(event.nativeEvent.layout.height);
             check();
             onLayout?.(event);
           }}
           onContentSizeChange={(width: number, height: number) => {
             content.value = height;
+            js.current.content = height;
             check();
             onContentSizeChange?.(width, height);
           }}>

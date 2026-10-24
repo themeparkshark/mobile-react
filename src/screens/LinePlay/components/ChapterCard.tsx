@@ -14,10 +14,10 @@ import useUiReducedMotion from '../../../ui/useUiReducedMotion';
 import type { LinePlayChapter } from '../../../services/lineplay/chapters';
 import { crewRelayEpilogue, type CrewRelayProgress } from '../../../services/lineplay/crewRelay';
 import type { ChapterClue } from '../../../services/lineplay/chapterClue';
-import { chapterKicker } from '../../../services/lineplay/labels';
+import { chapterKicker, chapterPageKicker } from '../../../services/lineplay/labels';
 import { borderRadius, spacing } from '../../../design-system';
 import { BRAND, GameIcon } from '../../../ui';
-import { chapterPageFit } from '../../../services/lineplay/lineLayout';
+import { chapterPageFit, foldGap } from '../../../services/lineplay/lineLayout';
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 import PageScroll from './PageScroll';
 import KidText from './KidText';
@@ -48,6 +48,9 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
   // The page's real height decides what leads (it shrinks while Details is open), so PLAY NOW
   // is always whole: never a button cut by the frame's edge.
   const [viewHeight, setViewHeight] = useState(0);
+  // The first screen ends on whole blocks: the crew row starts below the window when it would peek.
+  const [trailBottom, setTrailBottom] = useState(0);
+  const [crewHeight, setCrewHeight] = useState(0);
   const fit = chapterPageFit(viewHeight, shortScreen);
   const compact = fit !== 'full';
   // Blocks rise in once, when the page first opens. A later layout switch (Details opening
@@ -78,7 +81,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
     <Animated.View key="header" entering={rise(compact ? 1 : 0)} style={[styles.header, compact && styles.headerCompact]}>
       <View style={styles.headerCopy}>
         <KidText style={[styles.kicker, compact && styles.kickerCompact]} numberOfLines={1}
-          adjustsFontSizeToFit minimumFontScale={0.8}>{chapterKicker(chapter)}</KidText>
+          adjustsFontSizeToFit minimumFontScale={0.8} accessibilityLabel={chapterKicker(chapter)}>{chapterPageKicker(chapter)}</KidText>
         <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={compact ? 1 : undefined}
           adjustsFontSizeToFit={compact} minimumFontScale={0.8}>
           {done === 3 ? chapter.completedTitle : chapter.title}
@@ -97,7 +100,8 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
         disabled={paused} onPress={() => onChooseMission(nextId)}
         style={({ pressed }) => [styles.playNow, compact && styles.playNowCompact, paused && styles.missionPaused, pressed && styles.pressed]}>
         <View style={styles.playNowCopy}>
-          <KidText style={styles.playNowKicker}>{done === 3 ? 'KEEP THE WAIT FUN' : `CLUE ${done + 1} OF 3 · PLAY NOW`}</KidText>
+          {/* No count here: the numbered bubbles below own it (one count per screen). */}
+          <KidText style={styles.playNowKicker}>{done === 3 ? 'KEEP THE WAIT FUN' : 'PLAY NOW'}</KidText>
           <Text style={styles.playNowTitle}>{nextName}</Text>
           {!compact && <Text style={styles.playNowHint}>One phone · play solo or with your crew</Text>}
         </View>
@@ -138,6 +142,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
       {/* Compact: just the numbered bubbles (names stay in the spoken label), so the row ends whole
           above the fade instead of small labels dissolving into it. */}
       <Animated.View entering={rise(2)} style={[styles.trail, compact && styles.trailCompact]}
+        onLayout={event => setTrailBottom(Math.round(event.nativeEvent.layout.y + event.nativeEvent.layout.height))}
         accessibilityLabel={`${done} of 3 ${chapter.progressNoun}`}>
         {chapter.missionNames.map((name, index) => {
           const complete = completedIds.has(missionIds[index]);
@@ -155,7 +160,8 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
         })}
       </Animated.View>
 
-      <Animated.View entering={rise(3)} style={styles.crewRow}>
+      <Animated.View entering={rise(3)} style={[styles.crewRow, { marginTop: foldGap(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP) }]}
+        onLayout={event => setCrewHeight(Math.round(event.nativeEvent.layout.height))}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chapter.relay.title}`}
           disabled={paused} onPress={() => onChooseMission(relayId)}
           style={({ pressed }) => [styles.crewChip, paused && styles.missionPaused, pressed && styles.pressed]}>
@@ -215,6 +221,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
 
 /** The chapter page's light-blue frame (the fade above the rail ends in this color). */
 const FRAME_FILL = '#bcecff';
+const CREW_ROW_GAP = spacing.md;
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', minHeight: 100, alignItems: 'center', backgroundColor: BRAND.blueBright,

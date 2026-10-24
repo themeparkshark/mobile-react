@@ -127,7 +127,8 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
       playLimited('coin-level-up', { priority: SFX_PRIORITY.land, durationMs: 900 }, () => { playSound?.(LEVEL_SOUND); });
       setBurst(current => ({ fx: plan, key: (current?.key ?? 0) + 1 }));
       setIgniteKey(key => key + 1);
-      setRibbon(levelRibbon(target));
+      // The chip names the new look, with no level number: "LEVELED UP!" on the coin is the one level marker.
+      setRibbon(`${coinTier(target).name.toUpperCase()} COIN!`);
       // Remembered only under a real wait id, so two waits can never share a mark.
       setLevelMark(waitKey != null ? rememberWaitLevel(waitKey, coin.id, target) : { level: target, partLanded: false });
       timers.current.push(setTimeout(() => setRibbon(null), 2600));
@@ -175,7 +176,7 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
         </View>
         <Animated.View style={[{ width: coinSize, height: coinSize }, coinStyle]} pointerEvents="none">
           {owned && coin ? (
-            <ShelfCoin coinUrl={coin.coinUrl} level={level} size={coinSize} igniteKey={igniteKey} />
+            <ShelfCoin coinUrl={coin.coinUrl} level={level} size={coinSize} igniteKey={igniteKey} contactShadow={false} />
           ) : (
             <View style={[styles.ghost, { width: coinSize, height: coinSize, borderRadius: coinSize / 2 }]}>
               <GameIcon name="coin" size={coinSize * 0.5} />

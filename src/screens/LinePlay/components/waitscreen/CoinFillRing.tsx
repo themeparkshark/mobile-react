@@ -54,8 +54,11 @@ function CoinFillRing({ size, level, fill, notches, ready, maxed, landKey, charg
   const tier = coinTier(level);
   const stroke = Math.max(8, Math.round(size * 0.075));
   const ink = Math.max(2, Math.round(stroke * 0.32));
-  const cx = size / 2;
-  const cy = size / 2;
+  // The canvas reaches past the ring box on every side, so the blurred halo fades out to nothing
+  // instead of being cut off by the canvas edge (that cut read as a pale square behind the coin).
+  const pad = Math.ceil(stroke * 4.5);
+  const cx = size / 2 + pad;
+  const cy = size / 2 + pad;
   const r = size / 2 - stroke / 2 - ink - 6;
 
   const progress = useSharedValue(fill);
@@ -158,7 +161,7 @@ function CoinFillRing({ size, level, fill, notches, ready, maxed, landKey, charg
   }, [land, progress, cx, cy, r, stroke]);
 
   return (
-    <Canvas style={{ width: size, height: size }}>
+    <Canvas style={{ position: 'absolute', left: -pad, top: -pad, width: size + pad * 2, height: size + pad * 2 }}>
       <Circle cx={cx} cy={cy} r={haloRadius} color={tier.halo} opacity={ghost ? 0 : haloOpacity}>
         <Blur blur={stroke * 0.9} />
       </Circle>
