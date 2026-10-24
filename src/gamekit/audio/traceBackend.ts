@@ -10,8 +10,26 @@
  * latency of the backend the phone would use.
  */
 
-import { AV_ONLY_TYPES, assetType, type AudioBackend, type MusicArgs, type PlayArgs } from './backends';
+import { AV_ONLY_TYPES, assetMeta, assetType, type AudioBackend, type MusicArgs, type PlayArgs } from './backends';
 import { traceEvent } from './studioTrace';
+
+/**
+ * Where an asset lives in the repo (Metro's dev path, for example
+ * "src/assets/games/audio/shared/sh_ding.wav"), so a trace can be rendered
+ * offline into the soundtrack it describes. Metadata only, never the bytes.
+ */
+export function assetPath(src: unknown): string {
+  try {
+    const a = assetMeta(src as number);
+    if (!a?.name) return String(src);
+    // Metro dev: the folder is in httpServerLocation, or in the dev server URI (/assets/<repo path>/<file>?platform=...).
+    const fromUri = /^https?:\/\/[^/]+(\/assets\/[^?]*)\//.exec(a.uri ?? '')?.[1];
+    const dir = (a.httpServerLocation ?? fromUri ?? '').replace(/^\/assets\/?/, '').replace(/\?.*$/, '');
+    return `${dir ? `${dir}/` : ''}${a.name}.${a.type ?? ''}`;
+  } catch {
+    return String(src);
+  }
+}
 
 export class TraceBackend implements AudioBackend {
   readonly name = 'trace' as const;
@@ -39,6 +57,7 @@ export class TraceBackend implements AudioBackend {
   async load(key: string, src: number): Promise<boolean> {
     this.loaded.add(key);
     this.latency.set(key, this.hybrid && !AV_ONLY_TYPES.has(assetType(src)) ? 20 : 80);
+    traceEvent('legacy', 'file', `${key} ${assetPath(src)}`);
     return true;
   }
 

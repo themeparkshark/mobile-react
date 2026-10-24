@@ -68,7 +68,10 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
         playSound: async (pendingSound: any, options?: { volume?: number; rate?: number }) => {
           if (studioTraceOn()) {
             // Silent trace (dev lanes): log the legacy sound, never open an expo-av player.
-            traceEvent('legacy', 'playSound', `asset ${String(pendingSound)}${options?.volume !== undefined ? ` vol ${options.volume}` : ''}`);
+            // Lazy: the trace backend (and expo-asset) loads only in a dev trace build.
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { assetPath } = require('../gamekit/audio/traceBackend') as typeof import('../gamekit/audio/traceBackend');
+            traceEvent('legacy', 'playSound', `asset ${assetPath(pendingSound)}${options?.volume !== undefined ? ` vol ${options.volume}` : ''}`);
             return;
           }
           if (isReady && !player?.enabled_sound_effects) {

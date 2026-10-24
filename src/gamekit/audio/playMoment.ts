@@ -11,6 +11,10 @@
  * layers, ladder rung or round-robin file, trimmed to its loudness class,
  * capped at 3 voices, ducking the music on reveals and stings.
  *
+ * Battery Saver (and Low Power Mode, once a binary can read it: the same
+ * powerPolicy input) keeps every moment but makes it cheaper: the primary cue
+ * only (no layers), and one pulse on the beat instead of a shaped pattern.
+ *
  * Everything goes through GameAudio, so the player's Sound Effects setting,
  * the iOS silent switch (expo-av playsInSilentModeIOS false, audio-api
  * 'ambient' session) and the muted studio env all apply. Never throws.
@@ -44,6 +48,12 @@ import {
   type HapticStep,
 } from '../Haptics';
 import { studioTraceOn, traceEvent } from './studioTrace';
+import { isBatterySaverOn } from '../../power/batterySaver';
+
+/** Battery Saver: the primary sound and one pulse only. Never throws. */
+export function momentSaver(): boolean {
+  try { return isBatterySaverOn(); } catch { return false; }
+}
 
 export interface MomentOptions {
   /** 0..1 on top of the moment's trim. */
@@ -61,6 +71,9 @@ export interface MomentOptions {
   /** Audition the variant instead of the primary (dev tester, listening checks). */
   useVariant?: boolean;
 }
+
+/** Output latencies up to this (ms) fire the paired haptic in the same call as the sound. */
+export const HAPTIC_LEAD_FREE_MS = 30;
 
 const lastLadder = new Map<MomentName, { at: number; step: number }>();
 const lastRr = new Map<MomentName, number>();
@@ -149,9 +162,9 @@ const PRIMITIVE_INTENT: Record<HapticPrimitive, HapticIntent> = {
 
 /**
  * The paired haptic, landing with the sound:
- *  - app context: every pulse goes through the one shared gate, delayed by the
- *    moment's delayMs plus the cue's output latency (`leadMs`, 20 ms audio-api,
- *    80 ms expo-av), so the buzz is felt when the sound is heard, not before;
+ *  - app context: every pulse goes through the one shared gate, after the
+ *    moment's delayMs; a cue on the slow expo-av route (about 80 ms) also waits
+ *    its output latency, a fast audio-api cue (about 20 ms) does not (no timer);
  *  - game context: the in-game bus, after delayMs, with alignToAudio (the game
  *    sets the backend offset once with setHapticAudioOffsetMs);
  *  - Core Haptics: when the binary has the native player (NATIVE_QUEUE), a
@@ -163,9 +176,21 @@ function fireHaptic(name: MomentName, opts: MomentOptions, leadMs: number): void
   const pattern = momentHaptic(name, { walking: opts.walking });
   if (!pattern) return;
   const game = opts.context === 'game';
-  const wait = Math.max(0, (opts.delayMs ?? 0) + (game ? 0 : leadMs));
+  // An output latency at or under HAPTIC_LEAD_FREE_MS (audio-api, about 20 ms) is below what a hand
+  // can tell from the Taptic Engine's own start-up, so the buzz fires in this call: no timer hop that
+  // a busy JS thread could stretch. Only the slow expo-av route (about 80 ms) still waits.
+  const lead = game || leadMs <= HAPTIC_LEAD_FREE_MS ? 0 : leadMs;
+  const wait = Math.max(0, (opts.delayMs ?? 0) + lead);
   const later = (fn: () => void, at: number) => { if (at <= 0) fn(); else setTimeout(fn, at); };
   try {
+    // Battery Saver: one pulse on the beat (the pattern's first step), no shaped tail, no extra timers.
+    if (momentSaver()) {
+      const first = (HAPTIC_PATTERNS[pattern] as HapticStep[])[0];
+      if (!first) return;
+      trace(`haptic ${name} saver ${first.p} +${wait}ms`);
+      later(() => { if (game) playHaptic([{ ...first, at: 0 }], { alignToAudio: true }); else queueHaptic(PRIMITIVE_INTENT[first.p]); }, wait + (first.at ?? 0));
+      return;
+    }
     const shaped = def.ahap && !opts.walking && hasNativeHaptics() ? def.ahap : null;
     trace(`haptic ${name} ${shaped ? `ahap ${shaped}` : pattern} +${wait}ms`);
     if (shaped) {
@@ -225,7 +250,8 @@ function playSound(name: MomentName, def: MomentDef, opts: MomentOptions): { id:
     trace(`studio ${name} ${def.primary}`);
     id = GameAudio.play(k, { volume, delayMs });
   }
-  def.layers?.forEach((layer, i) => {
+  // Battery Saver: the primary alone carries the moment.
+  if (!momentSaver()) def.layers?.forEach((layer, i) => {
     if (!refPlayable(layer.ref)) return;
     const lk = ensureCue(name, `layer${i}`, layer.ref, layer.db ?? 0, false);
     if (!lk) return;

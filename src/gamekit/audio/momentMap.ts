@@ -130,10 +130,11 @@ export const MOMENTS = {
   'catch.wobble': m({
     group: 'catch', label: 'The coin wobbles three times', beat: 'anticipation',
     primary: 'shared/coin_tick', variant: 'shared/ui_tick', fallback: 'ui.select',
-    ladder: 3, mix: 'ui', gainDb: -0.5, measuredLufs: -19.5, variantGainDb: -1.4, maxVoices: 3,
+    // Rungs 0..9: a quick run starts each catch's three ticks one rung higher (catchHeat, up to 7).
+    ladder: 10, mix: 'ui', gainDb: -0.5, measuredLufs: -19.5, variantGainDb: -1.4, maxVoices: 3,
     haptic: 'tick', hapticOffsetMs: 0,
     today: 'nothing yet (the wobble is new in the wow-map lane)',
-    why: 'Three rising ticks are the held breath before the burst.',
+    why: 'Three rising ticks are the held breath before the burst, and they start a little higher on every quick catch in a row.',
   }),
   'catch.burst': m({
     group: 'catch', label: 'Gold burst: the coin is yours', beat: 'burst',
@@ -171,13 +172,30 @@ export const MOMENTS = {
     why: 'The first coin of the day gets a bigger golden chord, a small daily gift for opening the app.',
   }),
   'catch.lucky': m({
-    group: 'catch', label: 'Every 12th catch: a lucky shower', beat: 'burst',
+    group: 'catch', label: 'A lucky coin (every 10th to 14th of the day)', beat: 'burst',
     primary: 'shared/sh_coin_shower', variant: 'shared/sh_glock', fallback: 'fx.coin',
     layers: [{ ref: 'shared/sh_ding', delayMs: 0, db: -3 }, { ref: 'shared/sh_glock', delayMs: 120, db: -4 }],
     mix: 'fx', gainDb: 0, measuredLufs: -19.4, variantGainDb: 0, duck: DUCK_REVEAL, maxVoices: 1,
     haptic: 'golden', hapticOffsetMs: 0, ahap: 'momentCatch',
     today: 'same as catch.burst today',
-    why: 'Every twelfth catch rings a little coin shower, a small surprise that keeps the hundredth catch fresh.',
+    why: 'Now and then a catch rings a little coin shower, on a count that changes every day, so it stays a small surprise.',
+  }),
+  'catch.milestone': m({
+    group: 'catch', label: 'The 25th, 50th and 100th coin of the day', beat: 'burst',
+    primary: 'shared/sh_powerup', variant: 'shared/sh_tier_up', fallback: 'fx.coin',
+    layers: [{ ref: 'shared/sh_ding', delayMs: 0, db: -4 }, { ref: 'shared/sh_coin_shower', delayMs: 120, db: -2 }],
+    mix: 'fx', gainDb: -1.7, measuredLufs: -16.3, variantGainDb: 0, duck: DUCK_REVEAL, maxVoices: 1,
+    haptic: 'golden', hapticOffsetMs: 0, ahap: 'momentCatch',
+    today: 'same as catch.burst today',
+    why: 'A big day of catching gets a rare powered-up shower on the 25th, 50th and 100th coin, still as short as the bell.',
+  }),
+  'catch.hot': m({
+    group: 'catch', label: 'A hot run: the burst rings brighter', beat: 'burst',
+    primary: 'shared/sh_glock', variant: 'shared/sh_sparkle', fallback: 'fx.reveal',
+    mix: 'fx', gainDb: -4, measuredLufs: -19.0, variantGainDb: -3, maxVoices: 1, cooldownMs: 300,
+    haptic: null, hapticOffsetMs: 0,
+    today: 'nothing (heat is new in the wow-sound lane)',
+    why: 'From the fifth quick catch in a row a bright glockenspiel rides on the burst, so a hot streak sounds hot.',
   }),
   'catch.fly': m({
     group: 'catch', label: 'The coin flies home', beat: 'settle',

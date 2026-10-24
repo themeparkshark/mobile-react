@@ -34,7 +34,7 @@ export function rampParamValue(param: { value: number }, to: number, ms: number,
   if (prev) clearInterval(prev);
   rampTimers.delete(param);
   const from = param.value;
-  if (ms <= 16 || !Number.isFinite(from)) {
+  if (ms <= 16 || !Number.isFinite(from) || Math.abs(to - from) < 1e-4) {
     param.value = to;
     return;
   }
@@ -263,7 +263,7 @@ export class ExpoAvBackend implements AudioBackend {
     if (d.ramp) clearInterval(d.ramp);
     d.ramp = null;
     const from = d.gain;
-    if (rampMs <= AV_RAMP_STEP_MS) {
+    if (rampMs <= AV_RAMP_STEP_MS || Math.abs(gain - from) < 1e-4) {
       d.gain = gain;
       pushDeckVolume(d, gain * this.master);
       return;
@@ -589,6 +589,15 @@ export class AudioApiBackend implements AudioBackend {
 // =============================================================================
 
 export const AV_ONLY_TYPES = new Set(['m4a', 'aac', 'caf', 'mp4']);
+
+/** Metro's metadata for a bundled asset (name, type, dev folder or URI); never its bytes. */
+export function assetMeta(src: number): { name?: string; type?: string; httpServerLocation?: string; uri?: string } | null {
+  try {
+    return Asset.fromModule(src) as unknown as { name?: string; type?: string; httpServerLocation?: string; uri?: string };
+  } catch {
+    return null;
+  }
+}
 
 export function assetType(src: number): string {
   try {

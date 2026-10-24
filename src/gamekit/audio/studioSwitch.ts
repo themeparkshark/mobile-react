@@ -52,7 +52,9 @@ export function studioMuted(): boolean {
 
 /** True only when every key is turned. Cheap: safe to call on every play. */
 export function isStudioSoundOn(): boolean {
-  if (studioTraceOn()) return true; // dev only, and the engine is on the silent TraceBackend
+  // Dev trace only (the engine is on the silent TraceBackend): on, unless a capture flips it off
+  // to trace what today's app plays (globalThis.__studioTrace.setSwitch(false)).
+  if (studioTraceOn()) return override ?? true;
   if (studioMuted()) return false;
   if (override !== null && isDev()) return override;
   return STUDIO_SOUND_DEFAULT && (flag?.on ?? false);
@@ -87,4 +89,10 @@ export function resetStudioSwitchForTests(): void {
   flag = null;
   pending = null;
   override = null;
+}
+
+if (studioTraceOn()) {
+  // CDP for lane captures: trace today's sound (false) or the studio sound (true) on the same catch.
+  const g = globalThis as unknown as { __studioTrace?: Record<string, unknown> };
+  g.__studioTrace = { ...(g.__studioTrace ?? {}), setSwitch: (on: boolean | null) => { override = on; return isStudioSoundOn(); } };
 }
