@@ -10,6 +10,9 @@ import {
 import { AuthContext } from './AuthProvider';
 import { SFX } from '../gamekit/SFX';
 import { GameAudio } from '../gamekit/audio/GameAudio';
+import { loadStudioSoundFlag } from '../gamekit/audio/studioSwitch';
+import { studioTraceOn, traceEvent } from '../gamekit/audio/studioTrace';
+import getFeatureFlags from '../api/endpoints/platform/feature-flags';
 
 export interface SoundEffectContextType {
   readonly playSound: (pendingSound: any, options?: { volume?: number; rate?: number }) => void;
@@ -35,6 +38,12 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
     GameAudio.setMusicEnabled(isReady && !!player?.enabled_music);
   }, [isReady, player?.enabled_sound_effects, player?.enabled_music]);
 
+  // Studio sound switch (wow-sound): reads the `studio_sound` flag only once STUDIO_SOUND_DEFAULT is
+  // flipped after Dustin's yes; until then this resolves false without a request.
+  useEffect(() => {
+    if (isReady) void loadStudioSoundFlag(getFeatureFlags);
+  }, [isReady]);
+
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -57,6 +66,11 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
     <SoundEffectContext.Provider
       value={{
         playSound: async (pendingSound: any, options?: { volume?: number; rate?: number }) => {
+          if (studioTraceOn()) {
+            // Silent trace (dev lanes): log the legacy sound, never open an expo-av player.
+            traceEvent('legacy', 'playSound', `asset ${String(pendingSound)}${options?.volume !== undefined ? ` vol ${options.volume}` : ''}`);
+            return;
+          }
           if (isReady && !player?.enabled_sound_effects) {
             return;
           }

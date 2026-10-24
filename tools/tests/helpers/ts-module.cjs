@@ -38,6 +38,10 @@ exports.loadTs = function loadTs(file, stubs = {}, globals = {}) {
       if (Object.hasOwn(stubs, specifier)) return stubs[specifier];
       // Bundled art resolves to its path, as in reward-hook-runtime.
       if (/\.(png|jpe?g|gif|webp)$/i.test(specifier)) return specifier;
+      // Bundled audio: a numeric asset id when the test supplies a registry (globals.__assetId), else its path.
+      if (/\.(mp3|wav|m4a|aac|caf)$/i.test(specifier)) {
+        return typeof globals.__assetId === 'function' ? globals.__assetId(path.resolve(path.dirname(full), specifier)) : specifier;
+      }
       // JSON data (e.g. shared rule tables) loads as data, like Metro does.
       if (specifier.startsWith('.') && specifier.endsWith('.json')) return JSON.parse(fs.readFileSync(path.resolve(path.dirname(full), specifier), 'utf8'));
       if (specifier.startsWith('.')) return load(resolveFile(path.dirname(full), specifier));

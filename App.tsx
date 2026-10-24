@@ -81,6 +81,7 @@ import { LocationProvider } from './src/context/LocationProvider';
 import { MusicProvider } from './src/context/MusicProvider';
 import { NotificationProvider } from './src/context/NotificationProvider';
 import { SoundEffectProvider } from './src/context/SoundEffectProvider';
+import { studioTraceOn } from './src/gamekit/audio/studioTrace';
 import { ThemeProvider } from './src/context/ThemeProvider';
 import CurrencyFlyProvider from './src/context/CurrencyFlyProvider';
 import { TutorialProvider } from './src/components/Tutorial';
@@ -89,6 +90,13 @@ import LinePlayRewardRecovery from './src/services/lineplay/LinePlayRewardRecove
 import RideLogOutboxSync from './src/services/RideLogOutboxSync';
 import RemintNoticeModal from './src/components/RemintNoticeModal';
 import { PowerProvider } from './src/power';
+
+/** Dev only: required lazily so the trace HUD never loads unless trace mode is on. */
+function StudioTraceHudLazy() {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const Hud = require('./src/gamekit/audio/StudioTraceHud').default;
+  return <Hud />;
+}
 
 export default function App() {
   if (__DEV__ && process.env.EXPO_PUBLIC_ERROR_FALLBACK_PREVIEW === '1') {
@@ -121,6 +129,8 @@ export default function App() {
                                     </TrailProvider>
                                     {/* Progression v2: the one-time re-mint card, through the PresentationQueue. */}
                                     <RemintNoticeModal />
+                                    {/* Dev only: silent studio trace beat lights (EXPO_PUBLIC_STUDIO_TRACE=1). */}
+                                    {studioTraceOn() ? <StudioTraceHudLazy /> : null}
                                   </ToastProvider>
                                 </HelpProvider>
                               </TutorialProvider>

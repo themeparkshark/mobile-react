@@ -15,6 +15,8 @@ export type FeatureFlagName =
   | 'ride_coin_editions'
   | 'ride_boss'
   | 'ride_rescue_pass'
+  /** Studio sound (wow-sound lane): off until Dustin approves the listening pack. See gamekit/audio/studioSwitch.ts. */
+  | 'studio_sound'
   | 'vip_sync';
 
 export type FeatureFlagsPayload = {

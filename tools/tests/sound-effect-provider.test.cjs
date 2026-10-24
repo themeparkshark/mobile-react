@@ -54,6 +54,9 @@ function soundHarness(enabled = true) {
       if (name === './AuthProvider') return { AuthContext: {} };
       if (name === '../gamekit/SFX') return { SFX: { setEnabled() {} } };
       if (name === '../gamekit/audio/GameAudio') return { GameAudio: { setMusicEnabled() {} } };
+      if (name === '../gamekit/audio/studioSwitch') return { loadStudioSoundFlag: () => Promise.resolve(false) };
+      if (name === '../gamekit/audio/studioTrace') return { studioTraceOn: () => false, traceEvent: () => undefined };
+      if (name === '../api/endpoints/platform/feature-flags') return { default: async () => ({ flags: {} }) };
       throw new Error(`Unexpected dependency: ${name}`);
     },
   });

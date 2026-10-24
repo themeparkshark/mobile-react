@@ -1,6 +1,11 @@
 import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { createSfxLimiter } from '../../../audio/sfxLimiter';
 import { queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { playMoment, studioMoment, studioReady } from '../../../gamekit/audio/playMoment';
+import type { MomentName } from '../../../gamekit/audio/momentMap';
+import { burstMoment, CATCH_WOBBLE_TICKS_MS, EMPTY_RUN, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
+import { traceEvent } from '../../../gamekit/audio/studioTrace';
 
 /**
  * The catch's own audio channel: real camera sounds (licensed, Epidemic Sound),
@@ -68,6 +73,8 @@ const CUES: Record<string, { src: unknown; gainDb?: number; bus: 'sfx' | 'stinge
 /** Borrowed house cues for the small beats. */
 const HOUSE: Partial<Record<CatchSound, string>> = { tick: 'ui.select', chime: 'fx.coin', sparkle: 'fx.reveal', aww: 'fx.nopeShort', whoosh: 'fx.whoosh',
   riser: 'fx.whooshRev', coinTick: 'fx.coinTick', stamp: 'ui.confirm', reward: 'fx.reward', firework: 'fx.firework' };
+/** Studio sound on (wow-sound switch): the house beats speak the app's moment vocabulary. Off: unchanged. */
+const MOMENT: Partial<Record<CatchSound, MomentName>> = { chime: 'catch.burst', coinTick: 'catch.count', sparkle: 'reward.reveal', stamp: 'reward.stamp' };
 // The chime is the fanfare that rides with the crowd; only the long tails queue.
 const STINGERS = new Set<CatchSound>(['cheer', 'sparkle', 'reward']);
 const PRIORITY: Partial<Record<CatchSound, number>> = { shutter: 4, flash: 3, cheer: 3, badge: 3, chime: 3, sparkle: 3, reward: 3, stamp: 3, firework: 3, coinTick: 1 };
@@ -105,11 +112,119 @@ function trace(kind: string, name: string, extra = '') {
   console.log(line);
   if (catchTraceBuffer.length < 5000) catchTraceBuffer.push(line);
 }
-export function catchMark(name: string): void { trace('mark', name); }
+/**
+ * Studio sound for the map catch (wow-sound): the catch's beat marks drive the moment vocabulary, so
+ * the sound sits on the same beat as the motion. 'tap' plays the pluck and the three rising wobble
+ * ticks; 'burst' rings the burst for this catch (first of the day, a quick repeat, every 12th a lucky
+ * shower, or the full bell); 'fly' slides up after the coin; 'miss' is the funny boing. While a catch
+ * is open its own pop, chime and whoosh stay quiet (the marks already played them), the badge stamps
+ * and the badge beats climb the counter ladder. Switch off: none of this runs and nothing changes.
+ */
+const SESSION_IDLE_MS = 4000;
+/**
+ * `haptics` counts the catch's haptics before the burst: the first is the press, the next three are the
+ * wobble swings, and each wobble tick plays from that same call, so the tick and its buzz leave the JS
+ * thread together (a separate timer drifted 50 to 130 ms under load). No wobble haptics (Reduce Motion
+ * skips the wobble) means no ticks.
+ */
+let session: { until: number; wobbles: ReturnType<typeof setTimeout>[]; haptics: number; ticks: number; burst: boolean } | null = null;
+const WOBBLE_INTENTS = new Set<HapticIntent>(['tickSelection', 'tapLight', 'hitMedium']);
+let run: CatchRunState = EMPTY_RUN;
+let primed = false;
+const DAY_KEY = 'tps.sound.lastCatchDay';
 
+function primeCatchState(): void {
+  if (primed) return;
+  primed = true;
+  void AsyncStorage.getItem(DAY_KEY).then((day) => { if (day && run.dayKey === null) run = { ...run, dayKey: day }; }).catch(() => undefined);
+}
+
+function sessionOpen(now = Date.now()): boolean {
+  return !!session && now < session.until;
+}
+
+function endSession(): void {
+  session?.wobbles.forEach(clearTimeout);
+  session = null;
+}
+
+function keepSession(): void {
+  if (session) session.until = Date.now() + SESSION_IDLE_MS;
+}
+
+function onCatchMark(name: string): void {
+  if (name === 'tap') {
+    if (!studioReady('catch.tap')) return;
+    primeCatchState();
+    endSession();
+    session = { until: Date.now() + SESSION_IDLE_MS, wobbles: [], haptics: 0, ticks: 0, burst: false };
+    playMoment('catch.tap');
+    return;
+  }
+  if (!sessionOpen()) return;
+  keepSession();
+  if (name === 'burst') {
+    session?.wobbles.forEach(clearTimeout);
+    if (session) session.burst = true;
+    const next = burstMoment(run, Date.now());
+    if (next.moment === 'catch.firstOfDay' && next.state.dayKey) void AsyncStorage.setItem(DAY_KEY, next.state.dayKey).catch(() => undefined);
+    run = next.state;
+    traceEvent('mark', 'catch-run', `#${run.count} -> ${next.moment}`);
+    playMoment(next.moment);
+  } else if (name === 'fly') {
+    playMoment('catch.fly');
+  } else if (name === 'miss') {
+    session?.wobbles.forEach(clearTimeout);
+    if (session) session.burst = true;
+    playMoment('game.miss');
+  } else if (name === 'done') {
+    endSession();
+  }
+}
+
+export function catchMark(name: string): void {
+  trace('mark', name);
+  traceEvent('mark', `catch ${name}`);
+  try { onCatchMark(name); } catch { /* sound is decoration */ }
+}
+
+/** Tests only. */
+export function resetCatchSoundForTests(): void {
+  endSession();
+  run = EMPTY_RUN;
+  primed = true;
+}
+
+/** While a map catch is open (studio on): what the catch's own sounds become. */
+function sessionSound(name: CatchSound, opts: { volume?: number; pitch?: number }): boolean {
+  if (!sessionOpen() || !studioReady('catch.tap')) return false;
+  keepSession();
+  if (name === 'pop' || name === 'chime' || name === 'whoosh') return true; // the marks played these
+  if (name === 'badge') return studioMoment('catch.land', { volume: opts.volume });
+  if (name === 'tick') return studioMoment('ui.counterTick', { volume: opts.volume, step: opts.pitch });
+  return false;
+}
+
+/**
+ * While a studio-sound catch is open, every catch haptic waits for the audio output latency
+ * (20 ms on audio-api), so the buzz is felt on the same frame the sound is heard. Off: unchanged.
+ */
 export function catchHaptic(intent: HapticIntent, priority = 2): void {
   trace('haptic', intent);
-  queueHaptic(intent, priority);
+  let lead = 0;
+  try {
+    if (sessionOpen() && studioReady('catch.tap')) {
+      lead = GameAudio.latencyMs;
+      const s = session;
+      // The held breath: the three wobble haptics each bring a rising tick (one JS callback for both).
+      if (s && !s.burst) {
+        s.haptics += 1;
+        if (s.haptics > 1 && s.ticks < CATCH_WOBBLE_TICKS_MS.length && WOBBLE_INTENTS.has(intent)) playMoment('catch.wobble', { step: s.ticks++ });
+      }
+    }
+  } catch { lead = 0; }
+  if (lead > 0) setTimeout(() => queueHaptic(intent, priority), lead);
+  else queueHaptic(intent, priority);
 }
 
 export function catchSound(name: CatchSound, opts: { volume?: number; pitch?: number } = {}): void {
@@ -117,6 +232,7 @@ export function catchSound(name: CatchSound, opts: { volume?: number; pitch?: nu
 
   const fire = () => {
     trace('sound', name, opts.pitch ? ` pitch=${opts.pitch}` : '');
+    if (sessionSound(name, opts)) return;
     const def = CUES[cue];
     const id = limiter.request(name, { priority: PRIORITY[name] ?? 2, durationMs: def?.durationMs ?? 400 });
     if (id == null) return;
@@ -124,6 +240,8 @@ export function catchSound(name: CatchSound, opts: { volume?: number; pitch?: nu
       try {
         if (!registered) await preloadCatchAudio();
         if (!GameAudio.backend) await GameAudio.init();
+        const moment = MOMENT[name];
+        if (moment && studioMoment(moment, { volume: opts.volume })) return;
         GameAudio.play(cue, { volume: opts.volume, pitch: opts.pitch });
       } catch {
         // Sound is decoration; never break the catch.
