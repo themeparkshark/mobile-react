@@ -61,6 +61,8 @@ export const SHOW_WATCHDOG_MS = 1500;
  * covers Android (no onDismiss) and an onDismiss that never fires.
  */
 export const HANDOFF_MS = 600;
+/** After a grown-up "Not now": the gate's fade, then the Studio sheet presents again. */
+export const REOPEN_MS = 450;
 /** How long a held moment waits for its newest numbers before it shows what it has. */
 export const REFRESH_BUDGET_MS = 1500;
 /** Light sky rays on the blue Flex moment. */
@@ -190,6 +192,9 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
+    // A grown-up "Not now" (or a sheet that never opened) brings the Studio back, so the kid can
+    // try again or tap Nice!; only a real share, a closed share sheet or a failure ends it.
+    let reopen = false;
     try {
       // The link (with its per-kind or prize campaign, never a player id) goes on the clipboard,
       // so it can be pasted as an Instagram link sticker.
@@ -203,7 +208,8 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
         setTimeout(onDismiss, HANDOFF_MS);
       });
       const outcome = await openShareSheet(uri, shareMessage(flexShareUrl(request.kind, request.payload)));
-      if (outcome.shared === false) event('dismissed');
+      if (!outcome.opened) { reopen = true; event('dismissed'); }
+      else if (outcome.shared === false) event('dismissed');
       else {
         event('shared', outcome.activity);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType?.Success).catch(() => undefined);
@@ -214,8 +220,10 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
     } finally {
       busyRef.current = false;
       setBusy(false);
+      // The gate fades out first (REOPEN_MS), then the Studio presents again.
+      if (reopen) setTimeout(() => setStage('shown'), REOPEN_MS);
       // Done or failed, the sheet closes, so a waiting dialog (the retry note) can show.
-      finishFlex(request.id);
+      else finishFlex(request.id);
     }
   }, [event, format, request.id, request.kind, onDismiss]);
 

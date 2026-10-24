@@ -138,7 +138,10 @@ test('a Share Studio sheet fades out before the grown-up gate, and is a layer wh
     'the picture is made first, then the sheet leaves, then the gate and share sheet');
   assert.match(host, /useModalLayer\(stage !== 'gone', 'show'\)/, 'Root dialogs and the gate wait for the sheet');
   assert.equal((host.match(/visible=\{visible\} onShow=\{onShow\} onDismiss=\{onDismiss\}/g) || []).length, 2, 'sheet and moment both hand off');
-  assert.match(host, /finally \{[\s\S]{0,200}finishFlex\(request\.id\);/, 'done or failed, the sheet closes so the retry note can show');
+  assert.match(host, /finally \{[\s\S]{0,400}else finishFlex\(request\.id\);/, 'done or failed, the sheet closes so the retry note can show');
+  // A grown-up "Not now" (the share sheet never opened) brings the Studio back instead of closing it.
+  assert.match(host, /if \(!outcome\.opened\) \{ reopen = true; event\('dismissed'\); \}/);
+  assert.match(host, /if \(reopen\) setTimeout\(\(\) => setStage\('shown'\), REOPEN_MS\);/);
   assert.match(host, /if \(!dimFlash\) flash\.value/, 'the reveal flash respects Dim Flashing Lights');
   assert.doesNotMatch(host, /useState\(\(\) => registerFlexHost/, 'no host registers during render');
 });
