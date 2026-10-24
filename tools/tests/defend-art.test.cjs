@@ -39,6 +39,6 @@ test('Defend start and result screens are light cards, not dark scrims', () => {
   assert.equal((src.match(/<View style=\{styles\.lightCard\}>/g) || []).length, 2);
   assert.doesNotMatch(src, /rgba\(5, 52, 110, 0\.[56]\)/, 'no dark navy scrim');
   assert.match(src, /lightCard: \{[^}]*backgroundColor: '#FFF8E6'/);
-  assert.match(src, /for 25 seconds\./);
+  assert.match(src, /for 25\{'\\u00A0'\}seconds\. More taps, more points!/);
   assert.match(src, /totalPoints < 50 \? 'GOOD TRY!'/);
 });

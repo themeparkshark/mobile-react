@@ -388,8 +388,7 @@ export default function DefendMiniGameModal({
               />
               <Text style={styles.readyTitle}>DEFEND YOUR TEAM!</Text>
               <Text style={styles.readySubtitle}>
-                Tap the shield as fast as you can for 25 seconds.{'\n'}
-                More taps, more points!
+                Tap the shield as fast as you can for 25{'\u00A0'}seconds. More taps, more points!
               </Text>
               <TouchableOpacity style={styles.startButton} onPress={startGame}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name="swords" size={24} /><Text style={styles.startButtonText}>READY FOR BATTLE</Text></View>
