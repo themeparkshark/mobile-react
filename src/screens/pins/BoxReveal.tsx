@@ -287,6 +287,10 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const [wearFailed, setWearFailed] = useState(false);
   // The same as wearing, for a late save's callback (a new try in flight wins).
   const wearingRef = useRef(false);
+  // A first save that landed late while a retry was in flight (that pin is on, whatever the retry says).
+  const lateOn = useRef<{ id: number; removed: string | null } | null>(null);
+  // Done or Share was tapped: a save that lands after that shows the pin as worn, silently.
+  const leaving = useRef(false);
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   // Paid opens: the coins visibly go into the box (3 for one box, 5 for a bundle).
@@ -529,6 +533,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       if (!still) pulls.forEach((_, i) => later(120 + i * 110, () => play('fx.coinTick', { pitch: 1 + i * 0.1, volume: 0.7 })));
       return;
     }
+    leaving.current = true;
     onDone(pulls);
   }, [index, pulls, phase, onDone]);
 
@@ -611,20 +616,27 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     const putOn = (removed: string | null | undefined) => {
       setWearFailed(false);
       setSwappedOut(removed ?? null);
+      setWorn(w => new Set(w).add(id));
+      // Gone from this pin (Done, Share, the next box): no sound, haptic or flight for a screen that left.
+      if (leaving.current || phaseRef.current !== 'show') return;
       queueHaptic('success', 1); play('fx.whoosh', { volume: 0.6 }); later(380, () => play('fx.hit', { pitch: 1.4 }));
       // The pin flies up to your lanyard, then comes back to rest.
       if (!still) wearFly.value = withSequence(withTiming(1, { duration: 380, easing: Easing.in(Easing.quad) }), withDelay(250, withTiming(0, { duration: 1 })), withSpring(0));
-      setWorn(w => new Set(w).add(id));
     };
     // A save that lands after the timeout (Try again is showing) still puts it on: the screen never
     // says "That didn't work" for a pin that is on. Wearing again is safe too (the server keeps one copy).
     const late = (r: { ok: boolean; removed?: string | null }) => {
-      if (!live.current || !r.ok || wearingRef.current) return;
+      if (!live.current || !r.ok) return;
+      // A retry is still saving: remember that this pin is on, so a failed retry shows worn, not Try again.
+      if (wearingRef.current) { lateOn.current = { id, removed: r.removed ?? null }; return; }
       putOn(r.removed);
     };
     void withWearTimeout(onWear(pull, removeId), undefined, late).catch(() => ({ ok: false, removed: null })).then(({ ok, removed }) => {
       if (!live.current) return;
       setWearing(false); wearingRef.current = false;
+      const landed = lateOn.current?.id === id ? lateOn.current : null;
+      lateOn.current = null;
+      if (!ok && landed) { putOn(landed.removed); return; }
       if (!ok) { setWearFailed(true); queueHaptic('warning', 1); return; }
       putOn(removed);
     });
@@ -639,7 +651,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const wearFirst = phase === 'show' && pulls.length === 1 && brag(pull) && wearable && !kept.has(pull.item_id);
   const sharePull = phase === 'summary' ? pulls.find(p => p.is_chaser) ?? null
     : phase === 'show' && pulls.length === 1 && brag(pull) && (!wearable || kept.has(pull.item_id) || wearFailed) && !wearing ? pull : null;
-  const shareHandoff = async () => { await modal.handoff(); onDone(pulls); };
+  const shareHandoff = async () => { leaving.current = true; await modal.handoff(); onDone(pulls); };
 
   return (
     <Modal transparent visible={!hidden} animationType="fade" statusBarTranslucent onDismiss={modal.onDismiss}

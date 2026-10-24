@@ -257,7 +257,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
                 {stage && <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={CARD.shadow} liftRoom={CARD.box.top} style={CARD_STYLE} />}
               </Animated.View>
             </ShopStage>
-            {allCopy.wearing && (
+            {/* One signal per state: NOW WEARING while it saves; once it is all on, the All on! chip says it. */}
+            {allCopy.wearing && all !== 'done' && (
               <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.wearing}>
                 <Text style={styles.wearingText}>NOW WEARING</Text>
               </Animated.View>

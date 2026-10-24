@@ -50,7 +50,7 @@ export default function SharkPassRevealPreviewScreen({ route }: { route?: { para
       {open > 0 && (
         <WearFirstReward key={`${open}:${mode}`} title="New season pin!" caption="Snowflake Beanie"
           picture={<Image source={ART} style={{ width: 180, height: 180 }} contentFit="contain" />}
-          wornPicture={look?.skin_item ? <WornLook inventory={look} art={ART} /> : undefined}
+          wornPicture={look?.skin_item ? <WornLook inventory={look} art={null} /> : undefined}
           wear={wear}
           share={(worn: boolean) => <FlexShareButton kind="find" surface="sharkpass" size="reveal" handoff={handoff.handoff}
             payload={{ itemName: 'Snowflake Beanie', artUrl: ART, prize: 'pass', sourceLine: 'Earned at Step 12', sourceSub: 'Frosty Fun Winter Wonderland',

@@ -42,6 +42,9 @@ export const FLEX_SAMPLES: readonly FlexSample[] = [
   s('find-legendary', 'find', { itemName: 'Legendary Golden Churro', artUrl: art('golden-churro.webp'), rarity: 5, setName: 'Churro Cart', setFound: 4, setTotal: 9, ownedPct: 0.03 }),
   s('find-golden-hour', 'find', { itemName: 'Giant Dragon Plush', artUrl: art('dragon-plush.webp'), rarity: 5, goldenHour: true, setName: 'Souvenirs', setFound: 7, setTotal: 10 }),
   s('find-epic', 'find', { itemName: 'Firework Rocket Toy', artUrl: art('firework-rocket.webp'), rarity: 4, setName: 'Night Glow', setFound: 3, setTotal: 8 }),
+  // Earned prizes (Shark Pass step, member pin): own campaign link and QR, no rarity.
+  s('find-sharkpass', 'find', { itemName: 'Snowflake Beanie', artUrl: art('firework-rocket.webp'), prize: 'pass', sourceLine: 'Earned at Step 12', sourceSub: 'Frosty Fun Winter Wonderland' }),
+  s('find-member', 'find', { itemName: 'Golden Fin Pin', artUrl: art('shooting-star.webp'), prize: 'member', sourceLine: 'This month\u2019s member pin' }),
   s('ride-photo', 'ride_photo', { itemName: 'Wishing Star', artUrl: art('shooting-star.webp'), rarity: 5, grade: 'frame_it' }),
   s('set-complete', 'set_complete', {
     setName: 'Snack Stand', badgeUrl: art('snack-stand.webp'), found: 12, total: 12, title: 'Snack Boss', source: 'home_hunt',

@@ -457,7 +457,8 @@ export default function SharkPassScreen() {
   const landedWornPicture = !landed ? undefined
     : landed.reward.type === 'frame' ? <MemberFlex inventory={player?.inventory as InventoryType | undefined} frame={landed.reward.art} vip={!!player?.is_subscribed} size={190} still={reduced} />
     : wornLook?.skin_item && landed.reward.type === 'item'
-      ? <WornLook inventory={wornLook} art={SEASON_ART[landed.reward.art] ?? landed.reward.icon_url} still={reduced} />
+      // One signal: the pin on the shark's chest is the prize (no second copy of it as a disc beside it).
+      ? <WornLook inventory={wornLook} art={null} still={reduced} />
     : undefined;
   const landedChoice = landedCanShare && !!landedWear;
   const landedPicture = !landed ? null : landed.emblem ? <Image source={EMBLEM} style={{ width: 180, height: 180 }} contentFit="contain" />

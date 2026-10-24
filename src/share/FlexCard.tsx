@@ -13,7 +13,7 @@
  * name can reach the card (CONTRACT.md section 4).
  */
 import { LinearGradient } from 'expo-linear-gradient';
-import { forwardRef, memo, useMemo } from 'react';
+import { forwardRef, memo, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
@@ -39,15 +39,23 @@ export const CARD_CHROME = {
   ribbon: require('../../assets/images/ribbon.png'),
 };
 
-/** Instagram/TikTok Story chrome covers the top ~250 px and bottom ~340 px of 1920 (pt at 3x). */
-export const STORY_SAFE = { top: 84, bottom: 114 } as const;
 /**
- * The footer (wordmark, CTA, link, QR) is the one part that sits in the bottom band, this far from
- * the bottom edge: the brag (ribbon, hero, name, plate) stays in the safe zone and gets the room, and
- * the card reads full instead of ending in a quarter of empty rays. The link also goes on the
- * clipboard, and a QR is for a saved or shown picture, where no app chrome covers it.
+ * The story safe zone (pt at 3x): nothing readable above y 230 px or below y 1440 px of 1920,
+ * where Instagram's and TikTok's top bar, reply bar and right rail sit. Ribbon, hero, words, plate
+ * and the whole footer (wordmark, CTA, link, QR) live between them; the bands carry only
+ * decoration (rays, stars, bubbles).
  */
-export const STORY_FOOTER_BOTTOM = 34;
+export const STORY_SAFE = { top: 80, bottom: 160 } as const;
+/** The footer's bottom edge sits on the safe line (y 1440 px), never in the band. */
+export const STORY_FOOTER_BOTTOM = STORY_SAFE.bottom;
+/** The story footer's height (wordmark, CTA, link beside a 56 pt QR); the body pads above it. */
+export const STORY_FOOTER_H = 68;
+/** The body's bottom padding: the safe line, the footer and a small gap above it. */
+export const STORY_BODY_BOTTOM = STORY_FOOTER_BOTTOM + STORY_FOOTER_H + 8;
+/** The story ribbon: a touch smaller than the square's room allows, so the hero gets the space. */
+export const STORY_RIBBON_W = 212;
+/** TikTok's right rail (like, comment, share buttons) over the story's right edge, in pt. */
+export const STORY_RAIL_W = 40;
 
 /** Live-only hooks for the in-app Flex moment (never used for the exported image). */
 export interface FlexCardMotion {
@@ -112,7 +120,7 @@ export function isLookSet(kind: FlexKind, payload: FlexPayload): boolean {
  * The look card's shark: about half the card's width, the biggest thing on the card. The paper
  * canvas has empty space above and below the shark, so LOOK_BLEED of it may hang into the margins.
  */
-export const LOOK_SHARK_H = 274;
+export const LOOK_SHARK_H = 232;
 const LOOK_BLEED = 0.13;
 const LOOK_SIDE = 0.04;
 
@@ -128,8 +136,9 @@ function LookHero({ payload, copy, frame, inventory, motion, sharkH, tile, maxTi
   return (
     <View style={styles.lookRow}>
       <View style={[styles.lookTiles, { width: tile, gap: Math.round(tile * 0.15) }]}>
+        {/* Cream, not white: a white piece (a ghost sheet) still reads on it. */}
         {arts.map((art, i) => (
-          <Panel key={i} size={tile} colors={['#ffffff', '#fff6dc']} lip="#d9b25a" rim={frame.rim === '#ffffff' ? '#ffcf3b' : frame.rim} radius={tile * 0.22}>
+          <Panel key={i} size={tile} colors={['#fff1cc', '#ffe2a0']} lip="#d9b25a" rim={frame.rim === '#ffffff' ? '#ffcf3b' : frame.rim} radius={tile * 0.22}>
             <FlexArtwork id={`look${i}`} art={art} fallback={HERO_ART.gift} style={{ width: tile * 0.74, height: tile * 0.74 }} />
           </Panel>
         ))}
@@ -147,27 +156,57 @@ function LookHero({ payload, copy, frame, inventory, motion, sharkH, tile, maxTi
   );
 }
 
-/** Story: hero box, giant number and shark sizes (pt). The shark is ~47% of the card's width. */
-export const STORY_HERO = 160;
-export const STORY_SHARK_H = 190;
+/**
+ * Story: the dressed shark is the star. It stands in front of the hero tile, overlapping it
+ * (STORY_OVERLAP), and is taller than the tile. Alone (no shark) the tile grows to STORY_HERO_SOLO.
+ */
+export const STORY_HERO = 118;
+export const STORY_HERO_SOLO = 160;
+export const STORY_SHARK_H = 224;
+export const STORY_OVERLAP = 30;
+/** How far the shark's paper hangs below the row (marginBottom), and the row's room for the tile's lip. */
+const STORY_SHARK_HANG = 14;
+const STORY_ROW_PAD = 8;
+
+/**
+ * Story hero sizes for the room the hero actually has (its measured height), so a long title, a rarity
+ * chip or a two-line plate never pushes the tile's lip into the words. Never bigger than the design
+ * sizes. Exported for tests.
+ */
+export function storyHeroSizes(room: number, showShark: boolean, look: boolean): { tile: number; shark: number; look: number } {
+  if (!(room > 0)) return { tile: showShark ? STORY_HERO : STORY_HERO_SOLO, shark: STORY_SHARK_H, look: LOOK_SHARK_H };
+  const fit = room - STORY_ROW_PAD;
+  return {
+    // The tile's lip and shadow hang about 8 pt under its box. Beside the shark it gives way (0.8 of the room).
+    tile: Math.max(80, Math.min(showShark ? STORY_HERO : STORY_HERO_SOLO, Math.round(showShark ? fit * 0.8 : fit - 8))),
+    // The shark is the star: taller than the tile. Its paper's clear top (about a fifth) may rise above the row.
+    shark: Math.max(110, Math.min(STORY_SHARK_H, Math.round(fit * 1.2) + STORY_SHARK_HANG)),
+    // The look shark's paper bleeds LOOK_BLEED into the margins (LookHero), plus the hat room on top.
+    look: look ? Math.max(140, Math.min(LOOK_SHARK_H, Math.floor((room - 6) / (1 - LOOK_BLEED)))) : LOOK_SHARK_H,
+  };
+}
 
 function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion, look, chestPin }: LayoutProps) {
+  const [room, setRoom] = useState(0);
+  const size = storyHeroSizes(room, showShark, look);
   return (
     <>
       <StoryBands frame={frame} />
       <View style={styles.storyBody}>
-        <Ribbon text={copy.ribbon} width={256} />
-        <View style={[styles.storyHero, look && styles.storyHeroLook]}>
-          {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={LOOK_SHARK_H} tile={44} /> : (
-          <View style={[styles.storyHeroRow, !showShark && { justifyContent: 'center' }]}>
-            <Animated.View style={[{ width: STORY_HERO, height: STORY_HERO }, motion.heroStyle]}>
-              <FlexHero kind={kind} payload={payload} frame={frame} size={STORY_HERO} inventory={inventory} />
-              {!!copy.big && <BigNumber copy={copy} frame={frame} size={62} width={210} text={motion.bigText}
+        <Ribbon text={copy.ribbon} width={STORY_RIBBON_W} />
+        <View style={[styles.storyHero, look && styles.storyHeroLook]} onLayout={e => setRoom(Math.round(e.nativeEvent.layout.height))}>
+          {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={size.look} tile={40} /> : (
+          <View style={styles.storyHeroRow}>
+            <Animated.View style={[{ width: size.tile, height: size.tile }, motion.heroStyle]}>
+              <FlexHero kind={kind} payload={payload} frame={frame} size={size.tile} inventory={inventory} />
+              {!!copy.big && <BigNumber copy={copy} frame={frame} size={56} width={200} text={motion.bigText}
                 labelSide={LABEL_BESIDE.has(kind) ? 'right' : 'top'} style={[styles.storyBig, motion.bigStyle]} />}
             </Animated.View>
+            {/* In front of the tile and taller than it: the kid's shark wearing the prize is the star. It holds
+                no prop here: the prop would sit on the tile it overlaps (and a worn pin is the brag). */}
             {showShark && (
               <Animated.View style={[styles.storyShark, motion.sharkStyle]}>
-                <FlexShark inventory={inventory} height={STORY_SHARK_H} prop={copy.prop} pin={chestPin} />
+                <FlexShark inventory={inventory} height={size.shark} prop={null} pin={chestPin} />
               </Animated.View>
             )}
           </View>
@@ -182,7 +221,7 @@ function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion,
         {!look && <StatPlate copy={copy} frame={frame} compact={false} />}
       </View>
       <View style={styles.storyFooter}>
-        <Footer kind={kind} payload={payload} copy={copy} frame={frame} logoWidth={120} qr={56} />
+        <Footer kind={kind} payload={payload} copy={copy} frame={frame} logoWidth={108} qr={56} story />
       </View>
     </>
   );
@@ -192,16 +231,16 @@ function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion,
 const LABEL_BESIDE: ReadonlySet<FlexKind> = new Set<FlexKind>(['fright_night', 'park_day']);
 
 /**
- * Story chrome bands (y 0..252 and 1578..1920 px) sit under Instagram's UI, so
- * they carry only decoration: the rays run the full card from the hero, and a
- * few of Alex's stars and bubbles float in each band, so a saved or iMessage
- * copy never looks empty.
+ * Story chrome bands (y 0..240 and 1440..1920 px, STORY_SAFE) sit under Instagram's and
+ * TikTok's UI, so they carry only decoration: the rays run the full card from the hero, and
+ * Alex's stars and bubbles drift through each band, so a saved or iMessage copy never looks empty.
  */
 const StoryBands = memo(function StoryBands({ frame }: { readonly frame: FlexFrame }) {
   const stars = [
     { x: 30, y: 22, s: 22 }, { x: 300, y: 36, s: 18 }, { x: 196, y: 12, s: 12 }, { x: 96, y: 60, s: 12 },
-    // Bottom band: a thin row under the footer (it sits STORY_FOOTER_BOTTOM from the edge), never over it.
-    { x: 34, y: 614, s: 16 }, { x: 300, y: 616, s: 16 }, { x: 172, y: 620, s: 12 }, { x: 236, y: 614, s: 12 },
+    // Bottom band (under the footer, y 480..640 pt): a loose scatter that drifts down to the edge.
+    { x: 40, y: 506, s: 20 }, { x: 296, y: 500, s: 22 }, { x: 168, y: 528, s: 14 }, { x: 98, y: 566, s: 16 },
+    { x: 244, y: 560, s: 16 }, { x: 22, y: 608, s: 12 }, { x: 320, y: 600, s: 14 }, { x: 186, y: 612, s: 18 },
   ];
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -212,7 +251,8 @@ const StoryBands = memo(function StoryBands({ frame }: { readonly frame: FlexFra
         <FlexArtwork key={i} id={`band-star${i}`} art={BAND_STAR} fallback={BAND_STAR}
           style={{ position: 'absolute', left: star.x, top: star.y, width: star.s, height: star.s, opacity: 0.85, transform: [{ rotate: `${i % 2 ? 14 : -12}deg` }] }} />
       ))}
-      {[{ x: 250, y: 70, r: 7 }, { x: 128, y: 30, r: 4 }, { x: 104, y: 616, r: 5 }, { x: 330, y: 618, r: 4 }].map((b, i) => (
+      {[{ x: 250, y: 70, r: 7 }, { x: 128, y: 30, r: 4 }, { x: 214, y: 498, r: 6 }, { x: 70, y: 540, r: 8 }, { x: 330, y: 540, r: 5 },
+        { x: 136, y: 600, r: 6 }, { x: 278, y: 620, r: 4 }].map((b, i) => (
         <View key={`b${i}`} style={{ position: 'absolute', left: b.x, top: b.y, width: b.r * 2, height: b.r * 2, borderRadius: b.r,
           borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(255,255,255,0.15)' }} />
       ))}
@@ -237,14 +277,14 @@ function SquareLayout({ kind, payload, copy, frame, showShark, inventory, motion
       <Ribbon text={copy.ribbon} width={226} />
       <View style={[styles.squareStage, centered && styles.squareStageLook]}>
         <Rays frame={frame} size={360} />
-        {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={SQUARE_LOOK_SHARK_H} tile={30} maxTiles={3} /> : (
+        {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={SQUARE_LOOK_SHARK_H} tile={36} maxTiles={3} /> : (
         <View style={[styles.squareStageRow, !showShark && { justifyContent: 'center' }]}>
           <Animated.View style={[{ width: heroSize, height: heroSize }, motion.heroStyle]}>
             <FlexHero kind={kind} payload={payload} frame={frame} size={heroSize} inventory={inventory} />
           </Animated.View>
           {showShark && (
             <Animated.View style={[styles.squareShark, motion.sharkStyle]}>
-              <FlexShark inventory={inventory} height={SQUARE_SHARK_H} prop={copy.prop} pin={chestPin} />
+              <FlexShark inventory={inventory} height={SQUARE_SHARK_H} prop={chestPin ? null : copy.prop} pin={chestPin} />
             </Animated.View>
           )}
         </View>
@@ -303,10 +343,10 @@ function BigNumber({ copy, frame, size, width, text, style, labelSide = 'top', i
 }
 
 /** Wordmark + CTA + the readable short link, and the per-kind QR. */
-const Footer = memo(function Footer({ kind, payload, copy, frame, logoWidth, qr, compact = false }: {
-  readonly kind: FlexKind; readonly payload: FlexPayload; readonly copy: FlexCopy; readonly frame: FlexFrame; readonly logoWidth: number; readonly qr: number; readonly compact?: boolean;
+const Footer = memo(function Footer({ kind, payload, copy, frame, logoWidth, qr, compact = false, story = false }: {
+  readonly kind: FlexKind; readonly payload: FlexPayload; readonly copy: FlexCopy; readonly frame: FlexFrame; readonly logoWidth: number; readonly qr: number; readonly compact?: boolean; readonly story?: boolean;
 }) {
-  return <CardFooter cta={copy.cta} qrArt={flexQr(kind, payload)} frame={frame} logoWidth={logoWidth} qr={qr} compact={compact} />;
+  return <CardFooter cta={copy.cta} qrArt={flexQr(kind, payload)} frame={frame} logoWidth={logoWidth} qr={qr} compact={compact} story={story} />;
 });
 
 /** The QR for a card: its kind's, or a prize's own campaign (Shark Pass, member pin), like flexShareUrl. */
@@ -319,11 +359,13 @@ export function flexQr(kind: FlexKind, payload: FlexPayload): number {
  * The one share footer every picture uses (Flex cards and the story frame): the TPS wordmark,
  * the CTA, the readable link, and a QR that scans to that link.
  */
-export const CardFooter = memo(function CardFooter({ cta, qrArt, frame, logoWidth, qr, compact = false }: {
+export const CardFooter = memo(function CardFooter({ cta, qrArt, frame, logoWidth, qr, compact = false, story = false }: {
   readonly cta: string; readonly qrArt: number; readonly frame: FlexFrame; readonly logoWidth: number; readonly qr: number; readonly compact?: boolean;
+  /** Story: no top margin (the body pads STORY_FOOTER_H above it) and the QR clear of TikTok's right rail. */
+  readonly story?: boolean;
 }) {
   return (
-    <View style={[styles.footer, compact && styles.footerCompact]}>
+    <View style={[styles.footer, compact && styles.footerCompact, story && styles.footerStory]}>
       <View style={{ flex: 1, alignItems: compact ? 'center' : 'flex-start' }}>
         <FlexArtwork art={CARD_CHROME.logo} fallback={CARD_CHROME.logo} style={{ width: logoWidth, height: Math.round(logoWidth / 4) }} />
         <Outlined text={cta} style={[compact ? styles.ctaSmall : styles.cta, { color: frame.cta }]} outline={frame.outline} lines={1} />
@@ -344,7 +386,7 @@ export const StoryChrome = memo(function StoryChrome({ frame }: { readonly frame
 /** Title size by length, so long names wrap the same way in every outline copy. */
 export function titleSize(title: string, format: FlexFormat): { fontSize: number; lineHeight: number } {
   const n = title.length;
-  const size = format === 'story' ? (n <= 20 ? 32 : n <= 28 ? 28 : 24) : (n <= 14 ? 23 : n <= 24 ? 20 : 17);
+  const size = format === 'story' ? (n <= 20 ? 30 : n <= 28 ? 26 : 22) : (n <= 14 ? 23 : n <= 24 ? 20 : 17);
   return { fontSize: size, lineHeight: Math.round(size * 1.12) };
 }
 
@@ -432,16 +474,18 @@ const styles = StyleSheet.create({
   lookTiles: { alignItems: 'center' },
   lookBigCol: { alignItems: 'center', justifyContent: 'center' },
   lookBig: { transform: [{ rotate: '-8deg' }] },
-  storyBody: { flex: 1, alignItems: 'center', paddingTop: STORY_SAFE.top, paddingBottom: STORY_SAFE.bottom, paddingHorizontal: 20 },
+  storyBody: { flex: 1, alignItems: 'center', paddingTop: STORY_SAFE.top, paddingBottom: STORY_BODY_BOTTOM, paddingHorizontal: 20 },
   storyHero: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' },
   // The hat clears the ribbon: the dressed shark sits a little lower than the centre.
-  storyHeroLook: { paddingTop: 22 },
-  storyHeroRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', width: '100%', paddingLeft: 8 },
+  storyHeroLook: { paddingTop: 6 },
+  // paddingBottom: the tile's lip and shadow hang below its box, clear of the words.
+  storyHeroRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', width: '100%', paddingBottom: STORY_ROW_PAD },
   storyFooter: { position: 'absolute', left: 20, right: 20, bottom: STORY_FOOTER_BOTTOM },
-  storyShark: { marginRight: -18, marginBottom: -20 },
-  storyBig: { left: -24, bottom: -8, transform: [{ rotate: '-8deg' }] },
-  words: { alignItems: 'center', width: '100%', marginTop: 12 },
-  kicker: { fontFamily: 'Shark', fontSize: 18, textShadowColor: 'rgba(3,20,48,0.35)', textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
+  // The paper canvas has clear space under the shark, so it may hang a little below the tile's base.
+  storyShark: { marginLeft: -STORY_OVERLAP, marginBottom: -STORY_SHARK_HANG, zIndex: 2 },
+  storyBig: { left: -22, bottom: 2, transform: [{ rotate: '-8deg' }] },
+  words: { alignItems: 'center', width: '100%', marginTop: 4 },
+  kicker: { fontFamily: 'Shark', fontSize: 17, textShadowColor: 'rgba(3,20,48,0.35)', textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
   storyTitle: { fontFamily: 'Shark', fontSize: 32, lineHeight: 36, color: '#ffffff', textAlign: 'center' },
 
   bigWrap: { position: 'absolute', alignItems: 'flex-start' },
@@ -452,6 +496,8 @@ const styles = StyleSheet.create({
   bigLabelText: { fontFamily: 'Shark', color: '#ffffff', letterSpacing: 0.5 },
 
   footer: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 8, gap: 10 },
+  // TikTok's right rail covers about the right 50 pt of a story from y 300 pt down: the QR stays left of it.
+  footerStory: { marginTop: 0, paddingRight: STORY_RAIL_W },
   footerCompact: { flex: 1, marginTop: 0, gap: 6, alignItems: 'flex-end' },
   cta: { fontFamily: 'Shark', fontSize: 18, marginTop: 2 },
   ctaSmall: { fontFamily: 'Shark', fontSize: 15, textAlign: 'center' },
@@ -470,11 +516,13 @@ const styles = StyleSheet.create({
   statLineCompact: { fontSize: 14, lineHeight: 17 },
   subLine: { fontFamily: 'Knockout', fontSize: 14, marginTop: 1, opacity: 0.85 },
 
-  squareBody: { flex: 1, alignItems: 'center', paddingTop: 6, paddingBottom: 8, paddingHorizontal: 14 },
+  // 20 pt sides and 14 pt bottom: the QR sits 20 pt from the edge (never touching the frame).
+  squareBody: { flex: 1, alignItems: 'center', paddingTop: 6, paddingBottom: 14, paddingHorizontal: 20 },
   squareStage: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', paddingTop: 14 },
   squareStageRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 10 },
   squareShark: { marginRight: -14, marginTop: 6, marginBottom: -14 },
-  squareWordsRow: { flexDirection: 'row', alignItems: 'center', width: '100%', gap: 8, marginTop: 8 },
+  // marginBottom: at least 10 pt between the plate and the footer.
+  squareWordsRow: { flexDirection: 'row', alignItems: 'center', width: '100%', gap: 8, marginTop: 8, marginBottom: 10 },
   squareWordsLook: { justifyContent: 'center', marginTop: 12 },
   // The look's stage takes most of the spare room (the footer shares it otherwise).
   squareStageLook: { flex: 2.6 },

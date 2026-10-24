@@ -46,7 +46,7 @@ test('a shared ride card never prints the typed note, and is story size with the
   assert.match(frame, /\.\.\.FLEX_SIZE\.story/, '9:16');
   // One share family: the Flex card's background, ribbon and footer (logo, CTA, link, QR).
   assert.match(frame, /<StoryChrome frame=\{FRAME\} \/>/);
-  assert.match(frame, /<Ribbon text=\{ribbon\} width=\{256\} \/>/);
+  assert.match(frame, /<Ribbon text=\{ribbon\} width=\{STORY_RIBBON_W\} \/>/);
   assert.match(frame, /<CardFooter cta=\{cta\} qrArt=\{QR_BY_CAMPAIGN\[campaign\]\}/);
   const flexCard = src('src/share/FlexCard.tsx');
   assert.match(flexCard, /\{SHARE_LINK_DISPLAY\}/);
@@ -383,7 +383,7 @@ test('Set Complete and the box reveal offer Share only after the wear choice, an
   assert.match(box, /brag\(pull\) && \(!wearable \|\| kept\.has\(pull\.item_id\) \|\| wearFailed\) && !wearing \? pull : null;/, 'a wearable pin waits for Wear it or Not now');
   assert.match(box, /setChoosing\(false\); setKept\(k => new Set\(k\)\.add\(pull\.item_id\)\);/);
   assert.match(box, /<Modal transparent visible=\{!hidden\} animationType="fade" statusBarTranslucent onDismiss=\{modal\.onDismiss\}/);
-  assert.match(box, /const shareHandoff = async \(\) => \{ await modal\.handoff\(\); onDone\(pulls\); \};/);
+  assert.match(box, /const shareHandoff = async \(\) => \{ leaving\.current = true; await modal\.handoff\(\); onDone\(pulls\); \};/);
   // One placement: directly under the main button.
   assert.match(box, /icon=\{index < pulls\.length - 1 \? 'gift' : 'check'\} onPress=\{next\} \/>\s*\)\}\s*\{sharePull && !choosing && \(\s*<FlexShareButton kind="find"[^>]*size="reveal"/);
 });
@@ -610,7 +610,7 @@ test('every wear choice uses one look: yellow primary, quiet ghost secondary', (
 test('square look card: the dressed shark is the hero, at most 3 tiles, words centered', () => {
   const card = src('src/share/FlexCard.tsx');
   assert.match(card, /export const SQUARE_LOOK_SHARK_H = 196;/);
-  assert.match(card, /sharkH=\{SQUARE_LOOK_SHARK_H\} tile=\{30\} maxTiles=\{3\}/);
+  assert.match(card, /sharkH=\{SQUARE_LOOK_SHARK_H\} tile=\{36\} maxTiles=\{3\}/);
   assert.match(card, /\.slice\(0, maxTiles\)/);
   assert.match(card, /<View style=\{\[styles\.squareWordsRow, centered && styles\.squareWordsLook\]\}>/);
   assert.match(card, /const centered = look \|\| !big;/);
@@ -619,7 +619,7 @@ test('square look card: the dressed shark is the hero, at most 3 tiles, words ce
   assert.match(card, /squareStageLook: \{ flex: 2\.6 \}/);
   // Story: the hat clears the ribbon, and the plate's room goes to the shark.
   assert.match(card, /\{!look && <StatPlate copy=\{copy\} frame=\{frame\} compact=\{false\} \/>\}/);
-  assert.match(card, /storyHeroLook: \{ paddingTop: 22 \}/);
+  assert.match(card, /storyHeroLook: \{ paddingTop: 6 \}/);
   // Square plate keeps one line, and the hero leaves room for the kicker.
   assert.match(card, /\{!!copy\.sub && !compact && <Text/);
   assert.match(card, /const heroSize = 112;/);
@@ -628,12 +628,12 @@ test('square look card: the dressed shark is the hero, at most 3 tiles, words ce
 test('a worn prize pin shows on the share shark\'s chest', () => {
   const card = src('src/share/FlexCard.tsx');
   assert.match(card, /chestPin: kind === 'find' && !!payload\.inventory\?\.pin_item/);
-  assert.match(card, /<FlexShark inventory=\{inventory\} height=\{STORY_SHARK_H\} prop=\{copy\.prop\} pin=\{chestPin\} \/>/);
+  assert.match(card, /<FlexShark inventory=\{inventory\} height=\{size\.shark\} prop=\{null\} pin=\{chestPin\} \/>/);
   const shark = src('src/share/FlexShark.tsx');
   assert.match(shark, /\{pin && !!inventory\?\.pin_item\?\.icon_url && \(/);
   const reward = src('src/components/money/WearFirstReward.tsx');
   assert.match(reward, /export function WornLook\(/);
-  assert.match(src('src/screens/SharkPassScreen.tsx'), /<WornLook inventory=\{wornLook\} art=\{SEASON_ART\[landed\.reward\.art\] \?\? landed\.reward\.icon_url\} still=\{reduced\} \/>/);
+  assert.match(src('src/screens/SharkPassScreen.tsx'), /<WornLook inventory=\{wornLook\} art=\{null\} still=\{reduced\} \/>/);
 });
 
 test('the Memory share sheet hint matches the picture', () => {
@@ -726,9 +726,9 @@ test('one share order on every reveal: the yellow button, Share right under it, 
 test('the shop set picture is the dressed shark, no prop and no medallion', () => {
   const card = src('src/share/FlexCard.tsx');
   assert.match(card, /look: isLookSet\(kind, payload\) && !!shark\?\.skin_item/);
-  assert.match(card, /export const LOOK_SHARK_H = 274;/);
+  assert.match(card, /export const LOOK_SHARK_H = 232;/);
   assert.match(card, /<FlexShark inventory=\{inventory\} height=\{sharkH\} prop=\{null\} \/>/);
-  assert.match(card, /\{look \? <LookHero[^\n]*sharkH=\{LOOK_SHARK_H\}/);
+  assert.match(card, /\{look \? <LookHero[^\n]*sharkH=\{size\.look\}/);
   const { flexCopy } = loadTs('src/share/copy.ts', {});
   const set = flexCopy('set_complete', { setName: 'Spooky Squad', badgeUrl: 'x', found: 3, total: 3, source: 'shop' });
   assert.equal(set.prop, null, 'no treasure chest beside the look');
@@ -756,7 +756,12 @@ test('a wear that saves after the timeout turns Try again into worn', async () =
   await new Promise(r => setTimeout(r, 80));
   assert.equal(never, 0, 'a late failure stays failed');
   const box = src('src/screens/pins/BoxReveal.tsx');
-  assert.match(box, /if \(!live\.current \|\| !r\.ok \|\| wearingRef\.current\) return;\s*putOn\(r\.removed\);/);
+  assert.match(box, /if \(!live\.current \|\| !r\.ok\) return;[\s\S]{0,200}if \(wearingRef\.current\) \{ lateOn\.current = \{ id, removed: r\.removed \?\? null \}; return; \}\s*putOn\(r\.removed\);/);
+  // A late first save while a retry is saving: a failed retry shows worn, never Try again.
+  assert.match(box, /if \(!ok && landed\) \{ putOn\(landed\.removed\); return; \}/);
+  // After Done or Share, a late save is silent (no whoosh, hit or haptic for a closed screen).
+  assert.match(box, /setWorn\(w => new Set\(w\)\.add\(id\)\);\s*\/\/[^\n]*\n\s*if \(leaving\.current \|\| phaseRef\.current !== 'show'\) return;\s*queueHaptic\('success', 1\);/);
+  assert.match(box, /leaving\.current = true;\s*onDone\(pulls\);/);
 });
 
 test('Shark Pass and member prize cards have their own campaign link and QR', () => {
@@ -782,14 +787,45 @@ test('the worn prize pin is a big badge drawn over every layer and prop', () => 
   assert.match(shark, /badge: \{[^}]*borderColor: '#ffcf3b'/);
 });
 
-test('story cards: the footer sits in the bottom band, so the card reads full', () => {
+test('story cards: nothing readable above y 230 px or below y 1440 px; the shark stands in front of the tile', () => {
   const card = src('src/share/FlexCard.tsx');
-  assert.match(card, /export const STORY_FOOTER_BOTTOM = 34;/);
+  const num = name => Number((card.match(new RegExp(`export const ${name} = (\\d+);`)) || [])[1]);
+  const safe = card.match(/export const STORY_SAFE = \{ top: (\d+), bottom: (\d+) \} as const;/);
+  assert.ok(safe, 'STORY_SAFE');
+  const [top, bottom] = [Number(safe[1]), Number(safe[2])];
+  // 3x export: 1080x1920 px from 360x640 pt.
+  assert.ok(top * 3 >= 230, `top band ${top * 3} px`);
+  assert.ok((640 - bottom) * 3 <= 1440, `bottom line ${(640 - bottom) * 3} px`);
+  assert.match(card, /export const STORY_FOOTER_BOTTOM = STORY_SAFE\.bottom;/, 'the footer ends on the safe line');
   assert.match(card, /storyFooter: \{ position: 'absolute', left: 20, right: 20, bottom: STORY_FOOTER_BOTTOM \}/);
-  assert.match(card, /export const STORY_HERO = 160;/);
-  assert.match(card, /export const STORY_SHARK_H = 190;/);
-  // The brag stays in the safe zone: the body still pads the bottom band.
-  assert.match(card, /storyBody: \{[^}]*paddingBottom: STORY_SAFE\.bottom/);
+  assert.match(card, /export const STORY_BODY_BOTTOM = STORY_FOOTER_BOTTOM \+ STORY_FOOTER_H \+ 8;/);
+  assert.match(card, /storyBody: \{[^}]*paddingBottom: STORY_BODY_BOTTOM/);
+  // The QR stays left of TikTok's right rail.
+  assert.match(card, /footerStory: \{ marginTop: 0, paddingRight: STORY_RAIL_W \}/);
+  const frame = src('src/share/StoryShareFrame.tsx');
+  assert.match(frame, /body: \{[^}]*paddingBottom: STORY_BODY_BOTTOM/);
+  assert.match(frame, /footer: \{ position: 'absolute', left: 20, right: 20, bottom: STORY_FOOTER_BOTTOM \}/);
+  assert.match(frame, /logoWidth=\{108\} qr=\{56\} story \/>/);
+  // Band decoration only: every band star sits in y 0..STORY_SAFE.top or below the safe line.
+  const bands = card.slice(card.indexOf('const StoryBands'), card.indexOf('const BAND_STAR'));
+  for (const m of bands.matchAll(/\{ x: \d+, y: (\d+), s: \d+ \}/g)) {
+    const y = Number(m[1]);
+    assert.ok(y < top || y >= 640 - bottom, `band star at y ${y}`);
+  }
+  // The shark is the star: in front of the tile (zIndex, overlap), taller than it, sized to the room.
+  assert.ok(num('STORY_SHARK_H') > num('STORY_HERO'));
+  assert.match(card, /storyShark: \{ marginLeft: -STORY_OVERLAP, marginBottom: -STORY_SHARK_HANG, zIndex: 2 \}/);
+  const fn = card.slice(card.indexOf('export function storyHeroSizes'), card.indexOf('function StoryLayout'));
+  const consts = `const STORY_HERO = ${num('STORY_HERO')}, STORY_HERO_SOLO = ${num('STORY_HERO_SOLO')}, STORY_SHARK_H = ${num('STORY_SHARK_H')}, LOOK_SHARK_H = ${num('LOOK_SHARK_H')};
+    const STORY_SHARK_HANG = 14, STORY_ROW_PAD = 8, LOOK_BLEED = 0.13;`;
+  const js = fn.replace('export ', '').replace(/\(room: number, showShark: boolean, look: boolean\): \{[^}]*\}/, '(room, showShark, look)');
+  const sizes = new Function(`${consts}\n${js}\nreturn storyHeroSizes;`)();
+  for (const room of [120, 140, 160, 200]) {
+    const z = sizes(room, true, false);
+    assert.ok(z.shark > z.tile, `room ${room}: shark ${z.shark} taller than tile ${z.tile}`);
+    assert.ok(z.tile + 8 <= room, `room ${room}: the tile and its lip fit`);
+  }
+  assert.deepEqual(JSON.parse(JSON.stringify(sizes(0, true, false))), { tile: num('STORY_HERO'), shark: num('STORY_SHARK_H'), look: num('LOOK_SHARK_H') });
 });
 
 test('one wear choice on every reveal: same words, same icons that say "put it on", no #12 twice', () => {
