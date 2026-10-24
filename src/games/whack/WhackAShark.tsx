@@ -1189,7 +1189,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
               split={breather.split}
             />
           ) : null}
-          {__DEV__ && process.env.EXPO_PUBLIC_WHACK_PERF === '1' ? <PerfOverlay probe={perf} /> : null}
+          {/* Dev frame graph in the bottom corner, clear of the GO and FINISH! sky band. */}
+          {__DEV__ && process.env.EXPO_PUBLIC_WHACK_PERF === '1' ? <PerfOverlay probe={perf} style={{ top: undefined, bottom: 6, right: 6 }} /> : null}
           {phase === 'breather' && reveal && reveal.me && reveal.rival ? (
             <View style={styles.revealWrap} pointerEvents="box-none">
               <DuelCard me={reveal.me.score} rival={reveal.rival.score} rivalName={duel?.rival.name ?? 'Captain Fin'} winner={reveal.winner}
