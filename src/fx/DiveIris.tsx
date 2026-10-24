@@ -6,8 +6,9 @@
  *
  * Beat 1 (gather): a water circle grows out of the spot you tapped and fills the screen
  * (DIVE.closeMs, EASE.in) with a white rim, while six bubbles start rising from the bottom edge.
- * Beat 2 (hold): the screen is all water for a held breath while the game screen mounts under it;
- * the haptic (tap) lands on the cover.
+ * Beat 2 (hold): the screen is all water for a held breath while the game screen mounts under it,
+ * and the TPS shark dives through it head first (so a kid reads "we are going in"); the haptic
+ * (tap) lands on the cover.
  * Beat 3 (burst): the iris opens from the middle of the screen to its corners (DIVE.openMs,
  * EASE.inOut) and the game appears inside it, bubbles still rising.
  * Beat 4 (settle): the water is gone; nothing stays on screen.
@@ -17,6 +18,9 @@
  */
 import { useEffect, useState } from 'react';
 import { Dimensions, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Image } from 'expo-image';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { SHARK_ART } from '../ui/SharkRefresh';
 import { Canvas, Circle, FillType, Group, LinearGradient, Path, Skia, vec, type SkPath } from '@shopify/react-native-skia';
 import { runOnJS, useDerivedValue, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import { queueHaptic } from '../gamekit/Haptics';
@@ -141,6 +145,21 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
   const rimOpacity = useDerivedValue(() => (reduced ? 0 : open.value > 0 ? 0.9 * (1 - open.value * 0.6) : close.value < 1 ? 0.9 : 0));
   const opacity = useDerivedValue(() => fade.value);
   const bubbles = Array.from({ length: DIVE.bubbles }, (_, i) => diveBubble(i, DIVE.bubbles, w));
+  // The shark dives in from the tap's side, down through the middle, and is gone as the iris opens.
+  const sharkStyle = useAnimatedStyle(() => {
+    if (reduced) return { opacity: 0 };
+    const t = Math.min(1, close.value * 0.55 + open.value * 0.45);
+    const fromLeft = dive.x < w / 2;
+    const x0 = (fromLeft ? -0.25 : 1.25) * w;
+    const x1 = w / 2 + (fromLeft ? 0.15 : -0.15) * w;
+    const x = x0 + (x1 - x0) * t;
+    const y = h * 0.62 - h * 0.16 * Math.sin(t * Math.PI) + h * 0.3 * t * t;
+    return {
+      opacity: close.value < 0.35 ? 0 : open.value > 0.35 ? Math.max(0, 1 - (open.value - 0.35) / 0.3) : 1,
+      transform: [{ translateX: x - SHARK_PT / 2 }, { translateY: y - SHARK_PT / 2 }, { rotate: `${(fromLeft ? 1 : -1) * (20 + 40 * t)}deg` },
+        { scaleX: fromLeft ? -1 : 1 }],
+    };
+  });
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -157,9 +176,14 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
           {!reduced && bubbles.map((b, i) => <Bubble key={i} b={b} h={h} close={close} open={open} />)}
         </Group>
       </Canvas>
+      <Animated.View style={[{ position: 'absolute', left: 0, top: 0, width: SHARK_PT, height: SHARK_PT }, sharkStyle]}>
+        <Image source={SHARK_ART} style={{ width: SHARK_PT, height: SHARK_PT }} contentFit="contain" cachePolicy="memory-disk" />
+      </Animated.View>
     </View>
   );
 }
+
+const SHARK_PT = 150;
 
 function Bubble({ b, h, close, open }: {
   readonly b: { x: number; r: number; lag: number }; readonly h: number;

@@ -324,9 +324,9 @@ export default function App() {
       <RideDetectionOverlay />
       <SharkDropHandler />
     </NavigationContainer>
+    <OfflineBanner />
     {/* The game dive: a water iris from the tapped button into a game (src/fx/DiveIris.tsx). */}
     <DiveIrisHost />
-    <OfflineBanner />
     {/* Share Studio: Flex moments and share sheets (share-studio/CONTRACT.md). */}
     <ShareStudioHost />
     {/* The one app-wide host for gameAlert / confirmGame (WS0 kit). */}

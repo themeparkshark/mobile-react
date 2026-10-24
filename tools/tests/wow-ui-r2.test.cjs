@@ -80,6 +80,7 @@ test('game dive: grows from a fresh tap, else the middle; payoff inside 1.5 s; b
   const { diveOrigin, diveBubble, DIVE } = loadTs('src/fx/DiveIris.tsx', {
     react: {}, 'react/jsx-runtime': {}, 'react-native': rn, '@shopify/react-native-skia': {}, 'react-native-reanimated': reanimated,
     '../gamekit/Haptics': {}, '../RootNavigation': {}, '../ui/motionEasing': easing, '../ui/useUiReducedMotion': {},
+    'expo-image': {}, '../ui/SharkRefresh': { SHARK_ART: 1 },
   });
   assert.deepEqual({ ...diveOrigin({ x: 50, y: 700, at: 1000 }, 1500, 402, 874) }, { x: 50, y: 700 });
   assert.deepEqual({ ...diveOrigin({ x: 50, y: 700, at: 1000 }, 9000, 402, 874) }, { x: 201, y: 437 }, 'an old tap is not the origin');
