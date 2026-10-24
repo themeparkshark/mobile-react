@@ -36,7 +36,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import GameIcon from '../../ui/GameIcon';
+import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 import { compareBest, formatScore, nextStarGoal, tallySchedule, tallyTickCount, type StarThresholds } from '../core/scoring';
 import { nearMissLine } from '../core/nearMiss';
 import { CountUpText } from '../fx/CountUpText';
@@ -53,6 +53,8 @@ export interface ResultStat {
   value: string;
   /** Draw filled dots instead of the value (BURSTS 3 of 4). */
   pips?: readonly [number, number];
+  /** A picture under the value in place of the label word (the label is still read aloud). */
+  icon?: GameIconName;
 }
 
 /** A next-star bar a game works out itself (stars that are not points). */
@@ -271,7 +273,7 @@ export function ResultsCard({
 }
 
 /** One brag chip (cream, navy ink), shared by every results card. */
-export function ResultChip({ label, value, pips }: ResultStat) {
+export function ResultChip({ label, value, pips, icon }: ResultStat) {
   return (
     <View style={styles.chip} accessible accessibilityLabel={pips ? `${pips[0]} ${label}` : `${value} ${label}`}>
       {pips ? (
@@ -279,7 +281,7 @@ export function ResultChip({ label, value, pips }: ResultStat) {
           {Array.from({ length: pips[1] }, (_, i) => <View key={i} style={[styles.pip, i < pips[0] && styles.pipOn]} />)}
         </View>
       ) : <Text style={styles.chipValue}>{value}</Text>}
-      <Text style={styles.chipLabel}>{label}</Text>
+      {icon ? <GameIcon name={icon} size={20} style={styles.chipIcon} /> : <Text style={styles.chipLabel}>{label}</Text>}
     </View>
   );
 }
@@ -421,6 +423,7 @@ const styles = StyleSheet.create({
   chip: { backgroundColor: '#fff8e4', borderRadius: 14, borderWidth: 3, borderColor: '#05346e', paddingHorizontal: 12,
     paddingVertical: 4, margin: 4, alignItems: 'center', minWidth: 86 },
   chipValue: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
+  chipIcon: { marginTop: 1 },
   chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#3d5f8c', letterSpacing: 1 },
   nearLine: { borderRadius: 999, borderWidth: 3, borderColor: '#05346e', backgroundColor: '#e4f7ff', paddingHorizontal: 14,
     paddingVertical: 3, marginBottom: 4, maxWidth: '100%' },

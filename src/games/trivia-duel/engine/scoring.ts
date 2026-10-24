@@ -221,9 +221,20 @@ export function suggestWager(me: number, opp: number, m: number): WagerSuggestio
   return { index: 0, reason: 'Keeps the lead if they miss.', kind: 'keep' };
 }
 
-/** Final: correct = question points + stake; wrong/timeout = -stake. Score never drops below 0. */
+/**
+ * What a missed Big Final takes away: half the chip, never the whole score.
+ * GO BIG doubles your points when right, but a miss keeps at least half of
+ * them, so no chip on a kids' quiz is ever "all or nothing".
+ */
+export const MISS_SHARE = 0.5;
+export function missLoss(stake: number): number {
+  const s = Math.max(0, Math.floor(stake));
+  return Math.min(s, round5(s * MISS_SHARE));
+}
+
+/** Final: correct = question points + chip; wrong/timeout = minus half the chip (missLoss). Score never drops below 0. */
 export function applyFinal(score: number, correct: boolean, questionPts: number, stake: number): number {
-  return Math.max(0, correct ? score + questionPts + stake : score - stake);
+  return Math.max(0, correct ? score + questionPts + stake : score - missLoss(stake));
 }
 
 /** 4.2 duel stars: loss 0; win 1; win by 150+ or 4+ correct 2; all 5 correct 3. */

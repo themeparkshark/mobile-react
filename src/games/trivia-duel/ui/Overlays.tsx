@@ -15,6 +15,7 @@ import Animated, {
 import { ART, C, FIN_POSES, SHARKS, type SharkLook } from '../art';
 import { babble, type BabbleVoice } from '../audio';
 import GameIcon from '../../../ui/GameIcon';
+import { missLoss } from '../engine/scoring';
 
 const OUTLINE = { textShadowColor: C.ink, textShadowRadius: 0.01 };
 Animated.addWhitelistedNativeProps({ text: true });
@@ -222,9 +223,10 @@ export function Ribbon({ text, holdMs, ribbonKey, reducedMotion }: { text: strin
  * points a miss takes away (a red arrow down, never a betting word: this is
  * a kids' quiz, not a bet). The suggested chip glows gold; doing nothing
  * takes it. The topic is in the white question card above (never drawn over
- * the marquee bulbs), and the hint under the chips is a picture line: a check
- * mark and WIN!, a fin and STAY AHEAD!, or lightning and GO BIG!, with the
- * seconds on a clock. The full reason is spoken.
+ * the marquee bulbs). The hint is a picture badge pinned on the glowing chip
+ * itself (a check mark, a fin, or lightning), so a kid who cannot read
+ * connects the hint to one chip; no word in it can read as "you won". Under
+ * the chips there is only the clock. The full reason is spoken.
  */
 export function WagerChips({ stakes, labels, picked, suggested, reason, kind, ifRight, onPick, secondsLeft, category, height }: {
   stakes: number[]; labels: readonly string[]; picked: number; suggested: number; reason: string; kind: WagerHintKind; ifRight: number[];
@@ -236,32 +238,31 @@ export function WagerChips({ stakes, labels, picked, suggested, reason, kind, if
       <View style={styles.wagerRail} />
       <View style={styles.chipRow}>
         {stakes.map((s, i) => (
-          <Chip key={i} i={i} label={labels[i]} stake={s} ifRight={ifRight[i]} picked={picked === i} suggested={suggested === i} onPick={onPick} />
+          <Chip key={i} i={i} label={labels[i]} stake={s} ifRight={ifRight[i]} picked={picked === i} suggested={suggested === i} hint={suggested === i ? kind : null} onPick={onPick} />
         ))}
       </View>
-      <WagerHint kind={kind} reason={reason} secondsLeft={secondsLeft} />
+      <WagerHint reason={reason} secondsLeft={secondsLeft} />
     </View>
   );
 }
 
 export type WagerHintKind = 'win' | 'stay' | 'keep' | 'go';
 
-/** The words each hint picture carries: two at most, big, for a kid who barely reads. */
-export const WAGER_HINT: Record<WagerHintKind, { icon: 'check' | 'fin' | 'rush'; word: string }> = {
-  win: { icon: 'check', word: 'WIN!' },
-  stay: { icon: 'fin', word: 'STAY AHEAD!' },
-  keep: { icon: 'fin', word: 'STAY AHEAD!' },
-  go: { icon: 'rush', word: 'GO BIG!' },
+/**
+ * The hint picture pinned on the suggested chip: a check (that chip wins it),
+ * a fin (stay ahead of Fin), lightning (go big to catch up). Pictures only.
+ */
+export const WAGER_HINT: Record<WagerHintKind, 'check' | 'fin' | 'rush'> = {
+  win: 'check',
+  stay: 'fin',
+  keep: 'fin',
+  go: 'rush',
 };
 
-function WagerHint({ kind, reason, secondsLeft }: { kind: WagerHintKind; reason: string; secondsLeft: number }) {
-  const h = WAGER_HINT[kind] ?? WAGER_HINT.keep;
+/** Under the chips: only the clock (the reason is spoken). */
+function WagerHint({ reason, secondsLeft }: { reason: string; secondsLeft: number }) {
   return (
     <View style={styles.hint} accessible accessibilityLabel={`${reason} ${secondsLeft} seconds`}>
-      <View style={styles.hintPill}>
-        <GameIcon name={h.icon} size={20} />
-        <Text style={styles.hintWord}>{h.word}</Text>
-      </View>
       <View style={styles.hintPill}>
         <GameIcon name="timer" size={18} />
         <Text style={styles.hintWord}>{secondsLeft}</Text>
@@ -270,7 +271,7 @@ function WagerHint({ kind, reason, secondsLeft }: { kind: WagerHintKind; reason:
   );
 }
 
-function Chip({ i, label, stake, ifRight, picked, suggested, onPick }: { i: number; label: string; stake: number; ifRight: number; picked: boolean; suggested: boolean; onPick: (i: number) => void }) {
+function Chip({ i, label, stake, ifRight, picked, suggested, hint, onPick }: { i: number; label: string; stake: number; ifRight: number; picked: boolean; suggested: boolean; hint: WagerHintKind | null; onPick: (i: number) => void }) {
   const s = useSharedValue(0);
   const glow = useSharedValue(0);
   useEffect(() => {
@@ -284,20 +285,28 @@ function Chip({ i, label, stake, ifRight, picked, suggested, onPick }: { i: numb
   }, [picked, s]);
   const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
   const glowSt = useAnimatedStyle(() => ({ opacity: glow.value }));
+  // A miss takes half the chip (missLoss), never the whole score.
+  const miss = missLoss(stake);
   const colors = [C.cream, '#bfe8ff', '#ffe58a'];
   return (
     <Animated.View style={[styles.chipCell, st]}>
       <Animated.View pointerEvents="none" style={[styles.chipGlow, glowSt]} />
-      <Pressable onPress={() => onPick(i)} style={[styles.chip, { backgroundColor: colors[i] ?? C.cream }, picked && styles.chipPicked]} accessibilityRole="button" accessibilityLabel={stake === 0 ? `${label}. ${ifRight} if right, nothing taken away if wrong` : `${label}. ${ifRight} if right, ${stake} points taken away if wrong`}>
+      <Pressable onPress={() => onPick(i)} style={[styles.chip, { backgroundColor: colors[i] ?? C.cream }, picked && styles.chipPicked]} accessibilityRole="button" accessibilityLabel={miss === 0 ? `${label}. ${ifRight} if right, nothing taken away if wrong` : `${label}. ${ifRight} if right, ${miss} points taken away if wrong`}>
         <Text style={styles.chipLabel}>{label}</Text>
         <Text style={[styles.chipIfRight, suggested && styles.chipIfRightBig]}>{ifRight}</Text>
-        {stake === 0 ? <Text style={styles.chipStake}>KEEP ALL</Text> : (
+        {miss === 0 ? <Text style={styles.chipStake}>KEEP ALL</Text> : (
           <View style={styles.chipMiss}>
             <GameIcon name="arrow" size={14} style={styles.chipMissArrow} />
-            <Text style={styles.chipMissText}>{stake}</Text>
+            <Text style={styles.chipMissText}>{miss}</Text>
           </View>
         )}
       </Pressable>
+      {/* The hint rides the glowing chip (a picture badge on its corner). */}
+      {hint ? (
+        <View style={styles.chipHint} pointerEvents="none" importantForAccessibility="no-hide-descendants">
+          <GameIcon name={WAGER_HINT[hint] ?? 'fin'} size={22} />
+        </View>
+      ) : null}
     </Animated.View>
   );
 }
@@ -473,6 +482,8 @@ const styles = StyleSheet.create({
   wagerRail: { height: 26 },
   hint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   hintPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 8, paddingVertical: 1 },
+  chipHint: { position: 'absolute', top: -10, right: -6, width: 34, height: 34, borderRadius: 17, backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: C.ink,
+    alignItems: 'center', justifyContent: 'center' },
   hintWord: { fontFamily: 'Shark', fontSize: 16, color: C.navy },
   chipRow: { flexDirection: 'row', alignSelf: 'stretch', justifyContent: 'space-between' },
   chipCell: { flex: 1, marginHorizontal: 4 },

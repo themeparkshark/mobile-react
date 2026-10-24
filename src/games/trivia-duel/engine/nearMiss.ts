@@ -9,7 +9,7 @@
  */
 import { POINTS } from './config';
 import type { MatchPlan, MatchTally, RoundResult } from './match';
-import { streakMult } from './scoring';
+import { missLoss, streakMult } from './scoring';
 
 export interface NearMiss {
   gap: number;
@@ -79,5 +79,5 @@ export function rideNearMiss(results: readonly { me: { correct: boolean } }[], n
 export function finalPointsLost(plan: { rounds: readonly { spec: { type: string } }[] }, results: readonly { me: { correct: boolean; stake?: number } }[]): number {
   const fi = plan.rounds.findIndex((r) => r.spec.type === 'final');
   const fr = fi >= 0 ? results[fi] : undefined;
-  return fr && !fr.me.correct && (fr.me.stake ?? 0) > 0 ? Math.round(fr.me.stake ?? 0) : 0;
+  return fr && !fr.me.correct && (fr.me.stake ?? 0) > 0 ? missLoss(fr.me.stake ?? 0) : 0;
 }

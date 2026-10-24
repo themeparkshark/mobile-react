@@ -138,8 +138,14 @@ test('Big Final chips (rev 7, S0-3): SAFE / HALF / GO BIG, always a share of wha
   assert.equal(cfg.WAGER.fixed, undefined);
   assert.equal(cfg.WAGER.fixedBelow, undefined);
   assert.equal(sc.applyFinal(800, true, 250, 400), 1450);
-  assert.equal(sc.applyFinal(800, false, 0, 400), 400);
-  assert.equal(sc.applyFinal(150, false, 0, 150), 0, 'score floor 0');
+  assert.equal(sc.applyFinal(800, false, 0, 400), 600, 'a miss takes half the chip');
+  assert.equal(sc.applyFinal(150, false, 0, 150), 75, 'GO BIG never takes everything');
+  assert.equal(sc.applyFinal(0, false, 0, 0), 0, 'score floor 0');
+  for (let s = 0; s < 3000; s += 37) {
+    const go = sc.wagerStakes(s)[2];
+    assert.ok(sc.applyFinal(s, false, 0, go) >= Math.floor(s / 2) - 5, `GO BIG miss at ${s} keeps about half`);
+    assert.ok(sc.missLoss(go) <= go);
+  }
 });
 
 test('suggestWager: every branch of 5.5', () => {
@@ -442,13 +448,13 @@ test('resolveRound: nobody buzzes -> open phase flat 50', () => {
   assert.equal(res.opp.points, 0);
 });
 
-test('resolveRound: final wager adds or removes the stake, floor 0', () => {
+test('resolveRound: the Big Final adds the chip when right, takes half when missed', () => {
   const t = match.createTally();
   t.me.score = 400; t.opp.score = 500;
   const r = quickRound('final');
   const res = match.resolveRound('queue', r, { choice: 2, lockMs: 0, stake: 400 }, { choice: 0, lockMs: 3000, stake: 500 }, t);
   assert.equal(t.me.score, 400 + 200 + 400);
-  assert.equal(t.opp.score, 0);
+  assert.equal(t.opp.score, 250, 'a missed GO BIG keeps half');
   assert.equal(res.decisive, true);
 });
 

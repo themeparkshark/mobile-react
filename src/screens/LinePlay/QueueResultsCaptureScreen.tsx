@@ -54,7 +54,7 @@ import { lostTryCopy, lostTryHasRetry } from '../../components/rewards/lostTryCa
 import { DuelResults, type ResultsModel } from '../../games/trivia-duel/ui/DuelResults';
 
 type Run = {
-  game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel' | 'duelWin' | 'rideMiss'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number;
+  game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel' | 'duelWin' | 'duelPart' | 'rideMiss'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number;
   /** RIDE MISS: what the server said about the lost try (a ticket and coin fixture). */
   miss?: { ticketBack: boolean; ticketCost: number };
 };
@@ -76,6 +76,8 @@ const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'TRIVIA DUEL, BEAT THE BUZZER', run: { game: 'duel', groupTurn: false, rideUpAfterMs: null } },
   // The real duel on its real stage, every answer right and fast: the won card in release JS.
   { label: 'LINE TRIVIA, AUTOPLAY WIN', run: { game: 'duelWin', groupTurn: false, rideUpAfterMs: null } },
+  // Two right answers, then misses and a missed GO BIG: the partial-score loss card (navy gap bar, half-chip arrow).
+  { label: 'LINE TRIVIA, PARTIAL LOSS', run: { game: 'duelPart', groupTurn: false, rideUpAfterMs: null } },
   // The map's ride challenge, played and missed (no taps): 1 Ticket spent and no retry,
   // so the game's own card is the only card and DONE goes back to the map.
   { label: 'RIDE MISS, NO RETRY', run: { game: 'rideMiss', groupTurn: false, rideUpAfterMs: null, miss: { ticketBack: false, ticketCost: 1 } } },
@@ -331,6 +333,9 @@ export default function QueueResultsCaptureScreen() {
         {run && common && run.game === 'trivia' ? (
           <TriviaGame key={run.key} visible title="Line Trivia" seed={run.key}
             source={createLinePlayTriviaSource({ parkId: 8, seed: run.key })} onClose={common.onClose} onComplete={common.onComplete} />
+        ) : null}
+        {run && common && run.game === 'duelPart' ? (
+          <TriviaDuel key={run.key} visible mode="queue" title="Trivia Duel" seed={run.key} parkId={8} captureAutoplay="partial" onClose={common.onClose} onComplete={common.onComplete} />
         ) : null}
         {run && common && run.game === 'duelWin' ? (
           <TriviaDuel key={run.key} visible mode="queue" title="Trivia Duel" seed={run.key} parkId={8} captureAutoplay="win" onClose={common.onClose} onComplete={common.onComplete} />

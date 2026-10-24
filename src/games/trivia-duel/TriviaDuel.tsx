@@ -61,7 +61,7 @@ import {
 } from './engine/match';
 import { finalPointsLost, nearMiss, rideNearMiss } from './engine/nearMiss';
 import {
-  bellValue, duelStars, flameTier, rideStars, rideWon, speedPoints, streakMult, suggestWager, wagerStakes, type WagerSuggestion,
+  bellValue, duelStars, flameTier, missLoss, rideStars, rideWon, speedPoints, streakMult, suggestWager, wagerStakes, type WagerSuggestion,
 } from './engine/scoring';
 import { ART, C, FIN_POSE_ORDER, type FinPose, type SharkLook } from './art';
 import {
@@ -78,6 +78,7 @@ import { BOARD_H, QuestionCard, ROPE_H } from './ui/Card';
 import { TILE_COMPACT_CHARS, Tile, type TileState } from './ui/Tile';
 import { Bark, BuzzBell, CategoryPick, ClosestSlider, LifelineButton, OutlinedText, Stamp, VsIntro, WagerChips, type StampSpec } from './ui/Overlays';
 import { DuelResults, type ResultsModel } from './ui/DuelResults';
+import { takeoverDrop } from './engine/takeover';
 import { DeskFront } from './ui/DeskFront';
 import { RideCoinCrate } from './ui/RideCoinCrate';
 
@@ -164,7 +165,7 @@ export interface TriviaDuelProps {
    * card can be checked on the real stage in release-like JS. Ignored unless
    * __DEV__ or a capture build (EXPO_PUBLIC_PERF_CAPTURE=1); store builds never set it.
    */
-  captureAutoplay?: 'win';
+  captureAutoplay?: 'win' | 'partial';
   ghost?: GhostRecord | null;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
@@ -197,7 +198,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const myName = (auth?.player?.username ?? 'You').slice(0, 12);
   const isRide = mode === 'ride';
   const autoWin = CAPTURE_OK && props.captureAutoplay === 'win';
-  const auto = AUTOPLAY || autoWin;
+  // Capture only: two right answers, then misses and a missed GO BIG (a partial-score loss card).
+  const autoPart = CAPTURE_OK && props.captureAutoplay === 'partial';
+  const auto = AUTOPLAY || autoWin || autoPart;
   const shell = useRef<GameShellV2Handle>(null);
   const fx = useRef<FxStageHandle>(null);
   const backFx = useRef<FxStageHandle>(null);
@@ -224,8 +227,16 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const STAGE_BAND = Math.max(130, BOARD_TOP + ROPE_H * 0.5 - STAGE_TOP);
   const STAGE_FULL = H - STAGE_TOP;
   const RESULTS_H = Math.round(H * 0.5);
-  // Takeover: the scene drops just enough that the podiums sit above the half-height results card.
+  // VS takeover: the scene drops just enough that the podiums sit above the middle of the screen.
   const DROP_PX = Math.max(0, Math.min(STAGE_FULL - STAGE_BAND, (H - RESULTS_H - 28) - (STAGE_TOP + STAGE_BAND * 0.7)));
+  /**
+   * Results takeover: the scene drops until the bottom of its band tucks just
+   * under the top of the real results card (measured, the card hugs its
+   * content), so the podiums stand right on the card and no wood, railing or
+   * flat sky shows between them. The sky above the dropped scene is the
+   * backdrop's own sky (Stage), so rail to card reads as one picture.
+   */
+  const resultsDrop = useCallback((cardH: number) => takeoverDrop({ H, cardH, stageTop: STAGE_TOP, band: STAGE_BAND, full: STAGE_FULL }), [H, STAGE_TOP, STAGE_BAND, STAGE_FULL]);
   const railScore = { x: 92, y: 46 };
 
   // -- Match state ------------------------------------------------------------------
@@ -370,6 +381,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const podOpp = useSharedValue(0);
   const takeover = useSharedValue(0);
   const retract = useSharedValue(0);
+  /** How far a takeover drops the scene (UI thread, eased when the card measures itself). */
+  const dropSv = useSharedValue(0);
+  /** 1 = the camera-locked set (railing, marquee strip, desk) has stepped away for the results. */
+  const fgHide = useSharedValue(0);
+  const lastCardH = useRef(0);
   const crown = useSharedValue(0);
   useEffect(() => {
     const target = streakView.streak >= 5 ? 2 : streakView.streak >= 3 ? 1 : 0;
@@ -725,6 +741,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setCrate(null);
     retract.value = withTiming(0, { duration: 200 });
     takeover.value = withTiming(0, { duration: 200 });
+    fgHide.value = withTiming(0, { duration: 200 });
     const mem = await loadMemory();
     if (!poolRef.current.length) poolRef.current = props.pool ?? await loadPool({ rideId, parkId, chapterId });
     // Queue and practice vary per play even from a fixed base seed; ride and daily keep the issued seed.
@@ -774,6 +791,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       setPhase('intro');
       setVs({ ms: vsMs });
       if (vsMs >= CEREMONY.vsFirstMs && !reducedMotion) {
+        dropSv.value = DROP_PX;
         retract.value = withTiming(1, { duration: beatMs(), easing: Easing.out(Easing.cubic) });
         takeover.value = withTiming(1, { duration: beatMs(), easing: Easing.out(Easing.cubic) });
       }
@@ -1276,7 +1294,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
     } else if (q.slider) {
       stamp(String(q.slider.truth), C.gold, 0.4, W / 2, BOARD_TOP + ROPE_H + 20, res.me.bullseye ? 'BULLSEYE!' : `You: ${meIn.current.guess ?? '-'}`);
     }
-    setStakes(final ? { me: `${res.me.stake}`, opp: isRide ? null : `${res.opp.stake}` } : { me: null, opp: null });
+    // The rail pill shows what the Big Final really did: plus what it added, or minus the half chip a miss takes.
+    const finalPill = (r: { correct: boolean; points: number; stake: number }) => (r.correct ? `+${r.points + r.stake}` : missLoss(r.stake) > 0 ? `-${missLoss(r.stake)}` : null);
+    setStakes(final ? { me: finalPill(res.me), opp: isRide ? null : finalPill(res.opp) } : { me: null, opp: null });
 
     const meOK = res.me.correct;
     const tier = res.me.tier;
@@ -1445,8 +1465,19 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const takeoverOn = useCallback((on: boolean) => {
     const d = reducedMotion ? 300 : beatMs();
     retract.value = withTiming(on ? 1 : 0, { duration: d, easing: Easing.out(Easing.cubic) });
+    // Until the card has measured itself, drop for a typical card; it eases to the real one.
+    if (on) dropSv.value = resultsDrop(lastCardH.current || Math.round(H * 0.42));
     takeover.value = withTiming(on ? 1 : 0, { duration: d, easing: Easing.out(Easing.cubic) });
-  }, [retract, takeover, reducedMotion]);
+    // The railing, marquee strip and desk front step away with the board, so
+    // the dropped scene never shows a cut where the set used to sit.
+    fgHide.value = withTiming(on ? 1 : 0, { duration: d });
+  }, [retract, takeover, dropSv, fgHide, resultsDrop, H, reducedMotion]);
+  const onCardLayout = useCallback((cardH: number) => {
+    lastCardH.current = cardH;
+    const to = resultsDrop(cardH);
+    dropSv.value = reducedMotion ? to : withTiming(to, { duration: 240, easing: Easing.out(Easing.cubic) });
+  }, [resultsDrop, dropSv, reducedMotion]);
+  const fgStyle = useAnimatedStyle(() => ({ opacity: 1 - fgHide.value }));
 
   const finishMatch = useCallback(async () => {
     const p = plan;
@@ -1635,7 +1666,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const autoplayOn = (ev: number, r: PlannedRound) => {
     const q = r.question;
     const k = (autoN.current += 1);
-    const skill = autoWin ? 0 : (mixSeed(seedRef.current, k) % 100) / 100;
+    const skill = autoWin ? 0 : autoPart ? (k <= 2 ? 0 : 0.99) : (mixSeed(seedRef.current, k) % 100) / 100;
     const pick = skill < 0.78 ? q.correctIndex : (q.correctIndex + 1) % Math.max(2, q.choices.length);
     const tapAt = (i: number, ms: number) => later(ms, () => {
       const alive = tilesRef.current.map((t, kk) => (t !== 'removed' ? kk : -1)).filter((kk) => kk >= 0);
@@ -1643,9 +1674,10 @@ export function TriviaDuel(props: TriviaDuelProps) {
       runOnUI((y: number) => { 'worklet'; onTapUI(y); })(x);
     });
     if (ev === EV_UNLOCK) {
-      const ms = autoWin ? 650 : 900 + skill * 2200;
+      const ms = autoWin ? 650 : autoPart ? 1500 : 900 + skill * 2200;
       if (r.spec.type === 'buzz') {
         const fb = oppIn.current.buzzMs ?? -1;
+        if (autoPart) return;
         if (autoWin || playsRef.current % 2 === 0 || fb < 0) later(Math.min(ms * 0.6, fb >= 0 ? fb - 150 : 99999), onBuzzUI);
       } else if (q.format === 'closest' && q.slider) {
         const guess = q.slider.truth + (skill < 0.7 ? 0 : 3);
@@ -1661,10 +1693,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
   };
   useEffect(() => {
     if (!auto) return;
-    if (phase === 'wager' && wager) later(1600, () => pickWager(autoWin || (mixSeed(seedRef.current, 77) % 10) < 7 ? wager.suggested : (wager.suggested + 1) % 3));
+    if (phase === 'wager' && wager && autoPart) later(1600, () => pickWager(2));
+    else if (phase === 'wager' && wager) later(1600, () => pickWager(autoWin || (mixSeed(seedRef.current, 77) % 10) < 7 ? wager.suggested : (wager.suggested + 1) % 3));
     if (phase === 'category' && catPick?.picker === 'me') later(900, () => pickCategory(1));
     // A capture win stays on its card (the capture taps DONE itself).
-    if (phase === 'results' && results && !isRide && !autoWin) later(6500, () => (playsRef.current < 3 ? onRematch() : playsRef.current === 3 && !ghost ? void onPassToCrew() : onContinue()));
+    if (phase === 'results' && results && !isRide && !autoWin && !autoPart) later(6500, () => (playsRef.current < 3 ? onRematch() : playsRef.current === 3 && !ghost ? void onPassToCrew() : onContinue()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, results]);
 
@@ -1847,7 +1880,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       renderResults={isRide ? (args) => (
         <View style={{ width: '100%', height: Dimensions.get('window').height }} pointerEvents="box-none">
           {results ? (
-            <DuelResults model={{ ...results, stars: args.stars }} beatMs={beatMs()} onContinue={args.claim} reducedMotion={args.reducedMotion} height={RESULTS_H} />
+            <DuelResults model={{ ...results, stars: args.stars }} beatMs={beatMs()} onContinue={args.claim} reducedMotion={args.reducedMotion} height={RESULTS_H} onCardLayout={onCardLayout} />
           ) : null}
         </View>
       ) : undefined}
@@ -1865,6 +1898,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
               height={STAGE_FULL}
               bandH={STAGE_BAND}
               dropPx={DROP_PX}
+              dropSv={dropSv}
               actors={actors}
               opponent={opponentLook}
               ghost={!!ghost}
@@ -1876,12 +1910,15 @@ export function TriviaDuel(props: TriviaDuelProps) {
           {/* Bloom lives BEHIND the board and tiles (rev 7 H7): never Plus over cream. */}
           <FxStage ref={backFx} width={W} height={H} timeScale={clock.fxScale} reducedMotion={reducedMotion} flashCap={0} style={StyleSheet.absoluteFill} />
 
-          {/* Camera-locked foreground set: railing, marquee header strip, board, desk front. */}
-          <Image source={ART.railing} style={[styles.railing, { top: BOARD_TOP + ROPE_H + BOARD_H * 0.35 - (W / 390) * 130, width: W, height: (W / 390) * 130 }]} resizeMode="stretch" />
-          <View style={[styles.deskWrap, { top: DESK_TOP }]} pointerEvents="none">
-            <DeskFront width={W} height={H - DESK_TOP + 6} />
-          </View>
-          <MarqueeStrip width={W} top={BOARD_TOP - 6} />
+          {/* Camera-locked foreground set: railing, marquee header strip, board, desk front.
+              The set steps away for the results takeover (fgHide). */}
+          <Animated.View style={[StyleSheet.absoluteFill, fgStyle]} pointerEvents="none">
+            <Image source={ART.railing} style={[styles.railing, { top: BOARD_TOP + ROPE_H + BOARD_H * 0.35 - (W / 390) * 130, width: W, height: (W / 390) * 130 }]} resizeMode="stretch" />
+            <View style={[styles.deskWrap, { top: DESK_TOP }]} pointerEvents="none">
+              <DeskFront width={W} height={H - DESK_TOP + 6} />
+            </View>
+            <MarqueeStrip width={W} top={BOARD_TOP - 6} />
+          </Animated.View>
 
           {showBoard ? (
             <View style={[styles.boardWrap, { top: BOARD_TOP }]} pointerEvents="box-none">
@@ -2046,7 +2083,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
           {crate ? (
             <RideCoinCrate
               key={crate.key}
-              podium={{ x: W * 0.22, y: STAGE_TOP + STAGE_BAND * 0.7 - 6 + DROP_PX }}
+              podium={{ x: W * 0.22, y: STAGE_TOP + STAGE_BAND * 0.7 - 6 + resultsDrop(lastCardH.current || Math.round(H * 0.42)) }}
               counter={{ x: 40, y: 10 }}
               width={W}
               height={H}
@@ -2085,6 +2122,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
               onContinue={onContinue}
               reducedMotion={reducedMotion}
               height={RESULTS_H}
+              onCardLayout={onCardLayout}
             />
           ) : null}
           {/* Stamps draw above the board and the countdown preview. */}

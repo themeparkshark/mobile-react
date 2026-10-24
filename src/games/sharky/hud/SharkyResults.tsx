@@ -10,9 +10,9 @@
  *           shared button rule: PLAY AGAIN leads unless a win's reward is
  *           still waiting (playAgainFirst false), then the claim leads.
  *           DONE sits right under it as a white button, never a text link
- *   300ms   hero stat 1 (under the stars, like the shared card): the score counts up over 1100ms on the UI thread (CountUpText), the last
+ *   300ms   hero stat 1 (under the stars, like the shared card): the score counts up over 600ms on the UI thread (CountUpText), the last
  *           digit slams 1.3 to 1.0 with impact Medium; NEW BEST adds a burst
- *   1450ms  stars slam one at a time, 220ms apart, bass hit +0/+3/+7 st,
+ *   950ms   stars slam one at a time, 220ms apart, bass hit +0/+3/+7 st,
  *           Medium, Medium, Heavy
  *           hero stat 2: "Best chain x4 · 9 Close Skims"; the shared
  *           next-star bar (NextStarBar), same as every other game
@@ -98,7 +98,8 @@ export interface SharkyResultsProps {
 /** Hops of the cheering shark, then it stands still. */
 export const CHEER_HOPS = 8;
 /** When the first star stamps, and the gap between stamps (ms). */
-export const STAR_AT = 1450;
+/** A kid in a moving line hears the result word within about 1.3 s of the card (950 ms, then 220 ms per star). */
+export const STAR_AT = 950;
 export const STAR_GAP = 220;
 
 /** When the ribbon title slams: just after the last star lands (or as the stars would start). */
@@ -256,14 +257,14 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
 
       <Animated.View style={[styles.card, short && styles.cardShort, { marginBottom: bottomPad }, cardStyle]}>
         {/* The shared card's order: stars (or the stamp), then the score, then NEW BEST. */}
-        {saved ? <SavedStamp reducedMotion={reducedMotion} delayMs={1450} /> : (
+        {saved ? <SavedStamp reducedMotion={reducedMotion} delayMs={STAR_AT} /> : (
           <View style={[styles.stars, short && styles.starsShort]}>
             {[0, 1, 2].map((i) => <Star key={i} index={i} on={i < data.stars} delayMs={STAR_AT + i * STAR_GAP} reduced={reducedMotion} small={short} />)}
           </View>
         )}
         {/* The score counts up on the UI thread (no re-render of this card per step). */}
         <Animated.View style={[styles.scoreWrap, scoreStyle]}>
-          <CountUpText value={data.score} from={0} delayMs={300} durationMs={1100} punch={1} reducedMotion={reducedMotion}
+          <CountUpText value={data.score} from={0} delayMs={300} durationMs={600} punch={1} reducedMotion={reducedMotion}
             style={[styles.score, short && styles.scoreShort]} />
         </Animated.View>
         {newBest ? (
@@ -282,10 +283,10 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
             {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} />)}
           </View>
         ) : null}
-        {goal && !(short && goal.nextStar === 0) ? <NextStarBar goal={goal} delayMs={1500} reducedMotion={reducedMotion} /> : null}
+        {goal && !(short && goal.nextStar === 0) ? <NextStarBar goal={goal} delayMs={STAR_AT + 50} reducedMotion={reducedMotion} /> : null}
         {gate !== null ? (
           <NextStarBar goal={{ nextStar: 1, progress: gate, near: gate >= 0.85, remaining: 0 }} word={sharkyGateWord(gate)}
-            a11yLabel={`${Math.round(gate * 100)} percent of the way to the Ride Gate`} delayMs={1500} reducedMotion={reducedMotion} />
+            a11yLabel={`${Math.round(gate * 100)} percent of the way to the Ride Gate`} delayMs={STAR_AT + 50} reducedMotion={reducedMotion} />
         ) : null}
 
         <Animated.View style={[styles.playWrap, short && styles.playWrapShort, btnStyle]}>

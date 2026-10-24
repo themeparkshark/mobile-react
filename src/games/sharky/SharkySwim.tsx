@@ -132,6 +132,8 @@ function gateProgress(s: SimState, mode: number): number | null {
 
 /** TIME! in a moving line holds this long before the card (ride and rally finishes keep their longer beat). */
 export const QUEUE_FINISH_HOLD_MS = 650;
+/** One frame or two for the finish word to paint before the replay takes the JS thread. */
+export const FINISH_PAINT_MS = 34;
 
 /**
  * How long the finish word (TIME!, RIDE GATE!, FINISH!) holds before the
@@ -265,87 +267,94 @@ export function SharkySwim({
     if (endedRef.current) return;
     endedRef.current = true;
     const entries = engine.log.current.slice();
+    // The replay (the run's proof) runs under the finish word, not after it:
+    // TIME! holds its beat while the card is worked out, so a moving line
+    // gets the card at the end of the hold, never hold + replay time.
+    const holdMs = finishHoldMs(reason, cfg.mode);
+    const endedAt = Date.now();
     setTimeout(() => {
       const s = replay(cfg, entries, 60 * 60 * 20);
       const elapsed = Date.now() - startedAt.current;
       const proof = buildSwimProof(cfg, entries, s, elapsed);
-      const m = cfg.mode;
-      const stars = m === MODE_RIDE ? rideStars(s) : m === MODE_RALLY ? (s.endReason === END_FINISH ? 1 : 0) : starsFor(s.score, QUEUE_STARS);
-      const before = prog.runs;
-      const key = runMode;
-      const best = prog.best[key] ?? 0;
-      const isBest = s.score > best;
-      const next: SharkyProgress = {
-        ...prog,
-        runs: m === MODE_RALLY ? before : before + 1,
-        best: { ...prog.best },
-        recentStars: [...prog.recentStars, stars].slice(-5),
-        ghosts: { ...prog.ghosts },
-        rideTokens: { ...prog.rideTokens },
-      };
-      if (isBest) next.best[key] = s.score;
-      if (isBest || !prog.ghosts[key]) {
-        next.ghosts[key] = {
-          seed: cfg.seed, mode: cfg.mode, tier: cfg.tier, difficulty: cfg.difficulty, runs: cfg.runs,
-          score: s.score, finishStep: s.finishStep || s.step, inputs: encodeInputs(entries), name: 'Your best', at: Date.now(),
-          splits: s.splitScores.slice(0, Math.max(1, s.gates)),
+      setTimeout(() => {
+        const m = cfg.mode;
+        const stars = m === MODE_RIDE ? rideStars(s) : m === MODE_RALLY ? (s.endReason === END_FINISH ? 1 : 0) : starsFor(s.score, QUEUE_STARS);
+        const before = prog.runs;
+        const key = runMode;
+        const best = prog.best[key] ?? 0;
+        const isBest = s.score > best;
+        const next: SharkyProgress = {
+          ...prog,
+          runs: m === MODE_RALLY ? before : before + 1,
+          best: { ...prog.best },
+          recentStars: [...prog.recentStars, stars].slice(-5),
+          ghosts: { ...prog.ghosts },
+          rideTokens: { ...prog.rideTokens },
         };
-      }
-      if (rideId != null) next.rideTokens[String(rideId)] = (prog.rideTokens[String(rideId)] ?? 0) + s.tokens;
-      let mu: (MissionUpdate & { rankCount: number }) | null = null;
-      if (before >= 3 && m !== MODE_RIDE && m !== MODE_RALLY) {
-        mu = applyRun(prog.missions, prog.rank, prog.rankCount ?? 0, cfg.tier, {
-          skims: s.stSkims, closeSkims: s.stCloseSkims, perfects: s.stPerfects, frenzies: s.stFrenzies, tokens: s.tokens,
-          chomps: s.stChomps, score: s.score, gates: s.gates, coins: s.stCoins, overdrives: s.stOverdrives, hits: s.stHits,
-        }, cfg.seed);
-        next.missions = mu.missions.filter((x) => !x.done);
-        next.rank = mu.rank;
-        next.rankCount = mu.rankCount;
-      }
-      setMissionView(mu);
-      const card = m === MODE_QUEUE ? unlockCard(before, before + 1) : null;
-      setProgress(next);
-      void saveProgress(next);
-      if (liveRally && round && rally.transport) {
-        // Server-authoritative: the room replays this proof; the podium waits for it.
-        rally.transport.submit(round.roundId, proof);
-        setRallyDone(true);
-        return;
-      }
-      const ghostSp = ghostSplits.current;
-      const splits = s.splitScores.slice(0, s.gates).map((v, i) => (ghostSp[i] !== undefined ? v - ghostSp[i] : 0)).filter((_, i) => ghostSp[i] !== undefined);
-      setResultsData({
-        score: s.score,
-        stars,
-        won: m === MODE_RIDE ? stars > 0 : true,
-        wipeout: s.hearts <= 0,
-        newBest: isBest && best > 0,
-        bestChainMult: Math.min(4, Math.floor(Math.min(s.maxChain, 9) / 3) + 1),
-        closeSkims: s.stCloseSkims,
-        nearMiss: nearMissLine(s, m, best),
-        gateProgress: gateProgress(s, m),
-        splits,
-        ghostGates: ghostSp.length,
-        missions: mu,
-        newCard: card,
-        tokensAtRide: rideId != null ? next.rideTokens[String(rideId)] % 9 || (next.rideTokens[String(rideId)] ? 9 : 0) : null,
-        fullClear: s.tokens >= 3,
-        headline: sharkyHeadline(reason, m, s.score, stars),
-        thresholds: m === MODE_RIDE ? null : QUEUE_STARS,
-      });
-      setResult({
-        score: s.score,
-        stars,
-        message: sharkyHeadline(reason, m, s.score, stars),
-        maxCombo: s.maxChain,
-        thresholds: m === MODE_RIDE ? RIDE_STARS : QUEUE_STARS,
-        meta: {
-          game: 'shark', score: s.score, seed: cfg.seed, mode: runMode, stars, reason,
-          maxCombo: s.maxChain, closeSkims: s.stCloseSkims, tokens: s.tokens, hearts: s.hearts, distance: s.dist >> 8,
-          duration: elapsed, swimProof: proof, walking: walk.walking, fps_p5: perf.summary().fpsP5,
-        },
-      });
-    }, finishHoldMs(reason, cfg.mode));
+        if (isBest) next.best[key] = s.score;
+        if (isBest || !prog.ghosts[key]) {
+          next.ghosts[key] = {
+            seed: cfg.seed, mode: cfg.mode, tier: cfg.tier, difficulty: cfg.difficulty, runs: cfg.runs,
+            score: s.score, finishStep: s.finishStep || s.step, inputs: encodeInputs(entries), name: 'Your best', at: Date.now(),
+            splits: s.splitScores.slice(0, Math.max(1, s.gates)),
+          };
+        }
+        if (rideId != null) next.rideTokens[String(rideId)] = (prog.rideTokens[String(rideId)] ?? 0) + s.tokens;
+        let mu: (MissionUpdate & { rankCount: number }) | null = null;
+        if (before >= 3 && m !== MODE_RIDE && m !== MODE_RALLY) {
+          mu = applyRun(prog.missions, prog.rank, prog.rankCount ?? 0, cfg.tier, {
+            skims: s.stSkims, closeSkims: s.stCloseSkims, perfects: s.stPerfects, frenzies: s.stFrenzies, tokens: s.tokens,
+            chomps: s.stChomps, score: s.score, gates: s.gates, coins: s.stCoins, overdrives: s.stOverdrives, hits: s.stHits,
+          }, cfg.seed);
+          next.missions = mu.missions.filter((x) => !x.done);
+          next.rank = mu.rank;
+          next.rankCount = mu.rankCount;
+        }
+        setMissionView(mu);
+        const card = m === MODE_QUEUE ? unlockCard(before, before + 1) : null;
+        setProgress(next);
+        void saveProgress(next);
+        if (liveRally && round && rally.transport) {
+          // Server-authoritative: the room replays this proof; the podium waits for it.
+          rally.transport.submit(round.roundId, proof);
+          setRallyDone(true);
+          return;
+        }
+        const ghostSp = ghostSplits.current;
+        const splits = s.splitScores.slice(0, s.gates).map((v, i) => (ghostSp[i] !== undefined ? v - ghostSp[i] : 0)).filter((_, i) => ghostSp[i] !== undefined);
+        setResultsData({
+          score: s.score,
+          stars,
+          won: m === MODE_RIDE ? stars > 0 : true,
+          wipeout: s.hearts <= 0,
+          newBest: isBest && best > 0,
+          bestChainMult: Math.min(4, Math.floor(Math.min(s.maxChain, 9) / 3) + 1),
+          closeSkims: s.stCloseSkims,
+          nearMiss: nearMissLine(s, m, best),
+          gateProgress: gateProgress(s, m),
+          splits,
+          ghostGates: ghostSp.length,
+          missions: mu,
+          newCard: card,
+          tokensAtRide: rideId != null ? next.rideTokens[String(rideId)] % 9 || (next.rideTokens[String(rideId)] ? 9 : 0) : null,
+          fullClear: s.tokens >= 3,
+          headline: sharkyHeadline(reason, m, s.score, stars),
+          thresholds: m === MODE_RIDE ? null : QUEUE_STARS,
+        });
+        setResult({
+          score: s.score,
+          stars,
+          message: sharkyHeadline(reason, m, s.score, stars),
+          maxCombo: s.maxChain,
+          thresholds: m === MODE_RIDE ? RIDE_STARS : QUEUE_STARS,
+          meta: {
+            game: 'shark', score: s.score, seed: cfg.seed, mode: runMode, stars, reason,
+            maxCombo: s.maxChain, closeSkims: s.stCloseSkims, tokens: s.tokens, hearts: s.hearts, distance: s.dist >> 8,
+            duration: elapsed, swimProof: proof, walking: walk.walking, fps_p5: perf.summary().fpsP5,
+          },
+        });
+      }, Math.max(0, holdMs - (Date.now() - endedAt)));
+    }, FINISH_PAINT_MS);
   }, [engine.log, cfg, prog, runMode, rideId, walk.walking, perf, liveRally, round, rally.transport]);
 
   const scoreAt = useCallback(() => ({ x: 40, y: Math.max(6, Math.min(12, layoutRef.current.skyH * 0.05)) + 20 }), []);

@@ -18,7 +18,7 @@ import type { FactCard } from '../store';
 import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
 import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { feelingChips, type FeelingStat } from '../../../gamekit/results/feelings';
-import GameIcon from '../../../ui/GameIcon';
+import GameIcon, { type GameIconName } from '../../../ui/GameIcon';
 
 /** The shared results card blue (ResultsCard): one surface on every results card. */
 const CARD_BLUE = '#0768b9';
@@ -49,6 +49,25 @@ export function duelChips(rows: { label: string; value: string }[]): FeelingStat
     }
   }
   return feelingChips(stats);
+}
+
+/** Pictures for the duel's chips (the dots and the word already say it; the label is read aloud). */
+const CHIP_ICONS: Record<string, GameIconName> = { 'RIGHT ANSWERS': 'check', 'BEST ANSWER': 'rush', 'IN A ROW': 'streak' };
+export function duelChipIcon(label: string): GameIconName | undefined {
+  return CHIP_ICONS[label];
+}
+
+/** Ride card star stamps: star k (1..3) pops at STAR_AT + k x STAR_GAP. */
+export const RIDE_STAR_AT = 500;
+export const RIDE_STAR_GAP = 220;
+/**
+ * When the ride card's title lands: right after its last earned star (the
+ * same rule as Sharky and Boss), so GOOD TRY! or RIDE COIN! never gives the
+ * star count away before the stars do. No stars, no wait.
+ */
+export function rideRibbonDelay(stars: number, reducedMotion: boolean): number {
+  if (reducedMotion || stars <= 0) return 0;
+  return RIDE_STAR_AT + Math.min(3, stars) * RIDE_STAR_GAP + 120;
 }
 
 /** The loss gap pulse plays this many beats, then rests. */
@@ -85,9 +104,11 @@ interface Props {
   reducedMotion: boolean;
   /** Height of the card (the bottom 45% of the screen). */
   height: number;
+  /** The card's real height once laid out (it hugs its content): the stage drops to stand on it. */
+  onCardLayout?: (cardH: number) => void;
 }
 
-export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, reducedMotion, height }: Props) {
+export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, reducedMotion, height, onCardLayout }: Props) {
   const cardY = useSharedValue(reducedMotion ? 0 : height + 40);
   const cardO = useSharedValue(reducedMotion ? 0 : 1);
   const pulse = useSharedValue(1);
@@ -143,9 +164,10 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
       {/* The card hugs what it shows, anchored at the bottom like Sharky and
           Boss, so the stage acts above it (a fixed full height left an empty
           blue band under DONE on a loss). */}
-      <Animated.View style={[styles.card, cardStyle]}>
-        {/* The one results title every game shares: Alex's ribbon over the card's top edge. */}
-        <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} />
+      <Animated.View style={[styles.card, cardStyle]} onLayout={onCardLayout ? (e) => onCardLayout(Math.round(e.nativeEvent.layout.height)) : undefined}>
+        {/* The one results title every game shares: Alex's ribbon over the card's top edge.
+            On the ride card it waits for the last star, like Sharky and Boss. */}
+        <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} delayMs={model.ride ? rideRibbonDelay(model.stars, reducedMotion) : 0} />
         <View style={styles.head}>
           <View style={styles.scoreRow}>
             <Text style={styles.scoreMe}>{model.myScore}</Text>
@@ -182,7 +204,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
           ) : null}
         {chips.length ? (
           <View style={styles.rows}>
-            {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} pips={c.pips} />)}
+            {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} pips={c.pips} icon={duelChipIcon(c.label)} />)}
           </View>
         ) : null}
         {/* Fin's rank, only after a win (a loss makes no rank progress, so it
@@ -239,7 +261,7 @@ function StarPip({ on, i, reducedMotion }: { on: boolean; i: number; reducedMoti
   const s = useSharedValue(reducedMotion || !on ? 1 : 0);
   useEffect(() => {
     if (!on || reducedMotion) return;
-    s.value = withDelay(500 + i * 220, withSequence(withTiming(1.35, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 300 })));
+    s.value = withDelay(RIDE_STAR_AT + i * RIDE_STAR_GAP, withSequence(withTiming(1.35, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 300 })));
   }, [on, i, s, reducedMotion]);
   const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
   // The same star every results card draws: pale blue until it is earned.
@@ -289,9 +311,10 @@ function GoalDot({ on, k, reducedMotion }: { on: boolean; k: number; reducedMoti
  * winning toward is bigger and sits on a gold badge, so "that one is better"
  * reads with zero words.
  */
-function RankHat({ stripes, big = false }: { stripes: number; big?: boolean }) {
+function RankHat({ stripes, big = false, dim = false, star = false }: { stripes: number; big?: boolean; dim?: boolean; star?: boolean }) {
   return (
-    <View style={[styles.rankHat, big && styles.rankHatBig]}>
+    <View style={[styles.rankHat, big && styles.rankHatBig, dim && styles.rankHatDim]}>
+      {star ? <View style={styles.rankHatStar} pointerEvents="none"><GameIcon name="star" size={22} /></View> : null}
       <Image source={ART.hat} style={big ? styles.rankHatImgBig : styles.rankHatImg} resizeMode="contain" />
       <View style={styles.rankStripes}>
         {Array.from({ length: Math.max(0, Math.min(3, stripes)) }, (_, k) => <View key={k} style={[styles.rankStripe, big && styles.rankStripeBig]} />)}
@@ -327,10 +350,11 @@ function GoalPop({ k, reducedMotion, children }: { k: number; reducedMotion: boo
 }
 
 /**
- * RANK UP, as a picture: the old hat, an arrow, and the new hat big on its
- * gold badge. The new hat pops in (gold) with a sparkle once the banners have
- * landed, so the biggest moment on the card is the one that moves. The fins
- * toward the next hat start again on the next win's card.
+ * RANK UP, as a picture a 7-year-old can point at: two badges the same size,
+ * side by side in the middle of the card. The old one is pale (grey border,
+ * fewer gold stripes); the new one is bright on a gold border with more gold
+ * stripes and a gold star on its corner. The new badge pops in with sparkles
+ * once the banners have landed, so the change itself is what moves.
  */
 function RankUpRow({ from, to, label, reducedMotion }: { from: number; to: number; label: string; reducedMotion: boolean }) {
   const pop = useSharedValue(reducedMotion ? 1 : 0);
@@ -343,13 +367,13 @@ function RankUpRow({ from, to, label, reducedMotion }: { from: number; to: numbe
   const popSt = useAnimatedStyle(() => ({ opacity: pop.value > 0.02 ? 1 : 0, transform: [{ scale: pop.value }] }));
   const sparkSt = useAnimatedStyle(() => ({ opacity: spark.value, transform: [{ scale: 0.6 + spark.value * 0.4 }] }));
   return (
-    <View style={styles.rankRow} accessible accessibilityLabel={`Rank up! Fin is now ${label}`}>
-      <View style={styles.rankUpOld}><RankHat stripes={from} /></View>
-      <View style={styles.rankPips}>
+    <View style={[styles.rankRow, styles.rankUpRow]} accessible accessibilityLabel={`Rank up! Fin is now ${label}`}>
+      <RankHat stripes={from} big dim />
+      <View style={styles.rankUpArrow}>
         <GameIcon name="arrow" size={30} />
       </View>
       <Animated.View style={popSt}>
-        <RankHat stripes={to} big />
+        <RankHat stripes={to} big star />
         <Animated.View style={[styles.rankSparkL, sparkSt]} pointerEvents="none"><GameIcon name="sparkle" size={24} /></Animated.View>
         <Animated.View style={[styles.rankSparkR, sparkSt]} pointerEvents="none"><GameIcon name="sparkle" size={18} /></Animated.View>
       </Animated.View>
@@ -405,8 +429,23 @@ function Banner({ text, i, reducedMotion }: { text: string; i: number; reducedMo
   );
 }
 
-/** One Fact Card row (15pt) with Read on TPS (in-app browser, UTM tagged). */
+/**
+ * The Fact Card, folded: an info picture and FACT (NEW FACT the first time)
+ * that opens the full sentence on a tap, so the card a kid reads is the
+ * result, not a paragraph. The fact is read aloud either way, and Read on TPS
+ * shows once it is open (in-app browser, UTM tagged).
+ */
 function FactRow({ card }: { card: FactCard & { isNew: boolean } }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <Pressable style={[styles.fact, styles.factFolded]} onPress={() => setOpen(true)} accessibilityRole="button"
+        accessibilityLabel={`${card.isNew ? 'New fact' : 'Fact'}: ${card.fact}`} hitSlop={6}>
+        <GameIcon name="info" size={22} />
+        <Text style={styles.factTag}>{card.isNew ? 'NEW FACT' : 'FACT'}</Text>
+      </Pressable>
+    );
+  }
   return (
     <View style={styles.fact}>
       {/* Wraps to as many lines as it needs (shrinking a little first): a fact is never cut mid-word. */}
@@ -450,10 +489,15 @@ const styles = StyleSheet.create({
   rankPips: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, marginHorizontal: 4 },
   rankPip: { width: 30, height: 30, borderRadius: 15, borderWidth: 2.5, borderColor: '#05346e', backgroundColor: '#3d9be6', alignItems: 'center', justifyContent: 'center' },
   rankPipOn: { backgroundColor: '#ffffff' },
-  rankUpOld: { opacity: 0.6 },
+  rankUpRow: { justifyContent: 'center' },
+  rankUpArrow: { marginHorizontal: 12 },
+  rankHatDim: { borderColor: '#9cc9ec', backgroundColor: '#cfe3f5', opacity: 0.6 },
+  rankHatStar: { position: 'absolute', right: -11, top: -11, zIndex: 2 },
   rankSparkL: { position: 'absolute', left: -14, top: -10 },
   rankSparkR: { position: 'absolute', right: -10, bottom: -6 },
   fact: { flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 10, paddingVertical: 6 },
+  factFolded: { alignSelf: 'center', gap: 6, paddingVertical: 4, paddingHorizontal: 12 },
+  factTag: { fontFamily: 'Shark', fontSize: 16, color: C.navy },
   factText: { flex: 1, fontSize: 15, fontWeight: '700', color: C.navy },
   factLong: { fontSize: 14 },
   starPip: { marginHorizontal: 3, justifyContent: 'flex-end' },

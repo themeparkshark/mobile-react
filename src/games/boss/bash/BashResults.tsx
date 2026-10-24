@@ -173,7 +173,10 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
             face is all it has left (red is HP only, never a reward). What got
             knocked out is light: your swords sit on your chunk (white) and a
             shark on the team's earlier chunk (sky). */}
-        {!won && <View style={styles.hpRow} importantForAccessibility="no-hide-descendants">
+        {/* The bar is the whole raid read: minutes left and sharks fighting are
+            spoken on it, not drawn (about six numbers on the card, never ten). */}
+        {!won && <View style={styles.hpRow} accessible
+          accessibilityLabel={`${hpAfter.toLocaleString()} HP left${left ? `, ${left} minutes left` : ''}${fighters > 0 ? `, ${fighters} sharks fighting` : ''}`}>
           <Image source={portrait ?? BOSS_ART[boss]} style={styles.hpBoss} contentFit="contain" />
           <View style={styles.hpWrap}>
             {!noHits && startHp > hpAfter ? <View style={[styles.hpMark, { left: pct((startHp + hpAfter) / 2) }]}>
@@ -188,32 +191,29 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
             </View>
           </View>
         </View>}
-        {/* Pictures, not a sentence: the bar is the HP, then a clock and a fin
-            for the sharks still fighting (swords mean your attacks). The
-            numbers are spoken in full. */}
-        {won ? <Text style={styles.raidLine} numberOfLines={1}>Boss down!</Text> : (
-          <View style={styles.raidIcons} accessible
-            accessibilityLabel={`${hpAfter.toLocaleString()} HP left${left ? `, ${left} minutes left` : ''}${fighters > 0 ? `, ${fighters} sharks fighting` : ''}`}>
-            {left ? <View style={styles.raidIcon}><GameIcon name="timer" size={20} /><Text style={styles.raidNum}>{left}</Text><Text style={styles.raidUnit}>MIN</Text></View> : null}
-            {fighters > 0 ? <View style={styles.raidIcon}><GameIcon name="shark" size={20} /><Text style={styles.raidNum}>{fighters}</Text></View> : null}
-          </View>
-        )}
+        {won ? <Text style={styles.raidLine} numberOfLines={1}>Boss down!</Text> : null}
       </View>
 
-      {rewards && <View style={styles.loot} accessible accessibilityLabel={`If your team beats it you get ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`}>
-        {won && <ChestPop reduced={reduced} />}
-        {/* "If the team wins" as a labelled tag (a trophy and WIN), then an
-            equals sign: every icon in the strip has a number or a word. The
-            open chest is "it is yours". */}
+      {rewards && <View style={styles.loot} accessible accessibilityLabel={won ? `Yours: ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`
+        : `If your team knocks it out you get ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`}>
+        {/* Not won yet: the KO crown (the same mark as the finisher's star
+            slot), an equals sign, then the prizes pale with a lock, so the
+            strip reads "knock it out = these", never "you won these". Won: the
+            prizes are bright and count up, and the open chest sits in its own
+            slot at the end of the row (it never covers a count). */}
         <View style={styles.lootRow}>
           {won ? null : <View style={styles.lootIf} importantForAccessibility="no-hide-descendants">
-            <View style={styles.lootWin}><GameIcon name="trophy" size={20} /><Text style={styles.lootWinText} maxFontSizeMultiplier={1.2}>WIN</Text></View>
+            <View style={styles.lootKo}><GameIcon name="crown" size={24} /><Text style={styles.koTag} maxFontSizeMultiplier={1}>KO</Text></View>
             <Text style={styles.lootEq}>=</Text>
           </View>}
-          <Loot icon="coins" n={rewards.coins} count={won} reduced={reduced} />
-          <Loot icon="xp" n={rewards.xp} count={won} reduced={reduced} />
-          <Loot icon="energy" n={rewards.energy} count={won} reduced={reduced} />
-          {rewards.parts > 0 && <Loot icon="parts" n={rewards.parts} count={won} reduced={reduced} />}
+          <View style={[styles.lootItems, rewards.parts > 0 && styles.lootItemsTight, !won && styles.lootLocked]}>
+            <Loot icon="coins" n={rewards.coins} count={won} reduced={reduced} small={rewards.parts > 0} />
+            <Loot icon="xp" n={rewards.xp} count={won} reduced={reduced} small={rewards.parts > 0} />
+            <Loot icon="energy" n={rewards.energy} count={won} reduced={reduced} small={rewards.parts > 0} />
+            {rewards.parts > 0 && <Loot icon="parts" n={rewards.parts} count={won} reduced={reduced} small />}
+          </View>
+          {/* Four prizes fill the row: the pale prizes say "not yet" without the lock. */}
+          {won ? <ChestPop reduced={reduced} /> : rewards.parts > 0 ? null : <GameIcon name="lock" size={20} />}
         </View>
       </View>}
 
@@ -225,7 +225,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       {/* Brags only on a new best (the card stays a one-glance read): the
           shared chips, two at most, a zero is never a chip. */}
       {best && chips.length ? <View style={styles.chips}>
-        {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} />)}
+        {chips.slice(0, 1).map((c) => <ResultChip key={c.label} label={c.label} value={c.value} />)}
       </View> : null}
 
       {!won && !noHits && n.can && onAgain && warmNext && <View style={styles.warm} accessible accessibilityLabel="Head start earned: your next attack starts with a free fin">
@@ -253,13 +253,14 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   );
 }
 
-function Loot({ icon, n, count = false, reduced = false }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: number; count?: boolean; reduced?: boolean }) {
+function Loot({ icon, n, count = false, reduced = false, small = false }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: number; count?: boolean; reduced?: boolean; small?: boolean }) {
   // The icon says what it is (the XP badge, the parts picture): a number only.
   const word = '';
   // Team win: the loot counts up after the chest opens.
-  return <View style={styles.lootItem}><GameIcon name={icon} size={26} />
-    {count ? <CountUpText value={n} delayMs={reduced ? 0 : 1000} durationMs={reduced ? 1 : 650} suffix={word} reducedMotion={reduced} style={styles.lootNum} />
-      : <Text style={styles.lootNum}>{n}{word}</Text>}</View>;
+  const numStyle = small ? [styles.lootNum, styles.lootNumSmall] : styles.lootNum;
+  return <View style={styles.lootItem}><GameIcon name={icon} size={small ? 22 : 26} />
+    {count ? <CountUpText value={n} delayMs={reduced ? 0 : 1000} durationMs={reduced ? 1 : 650} suffix={word} reducedMotion={reduced} style={numStyle} />
+      : <Text style={numStyle}>{n}{word}</Text>}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -268,10 +269,6 @@ const styles = StyleSheet.create({
     shadowColor: BRAND.navy, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 18 },
   ribbonWrap: { position: 'absolute', top: -36, left: -14, right: -14 },
   kept: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  raidIcons: { flexDirection: 'row', justifyContent: 'center', gap: 18, marginTop: 6 },
-  raidIcon: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  raidNum: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white },
-  raidUnit: { fontFamily: 'Shark', fontSize: 12, color: '#cdeaff', marginLeft: 1, marginTop: 4 },
   newBest: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: BRAND.gold, borderRadius: 999, borderWidth: 3,
     borderColor: BRAND.navy, paddingHorizontal: 10, paddingVertical: 1, marginTop: 2 },
   newBestText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginLeft: 5 },
@@ -303,14 +300,18 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: BRAND.navy, backgroundColor: BRAND.gold },
   warmText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
   againFin: { width: 26, height: 26, marginRight: 6 },
-  chest: { position: 'absolute', right: 4, top: -16, width: 52, height: 52 },
-  lootRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  // In the row's flow (never absolute over the last count).
+  chest: { width: 44, height: 44, marginVertical: -8 },
+  lootRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'nowrap' },
+  lootItems: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  lootItemsTight: { gap: 8 },
+  lootLocked: { opacity: 0.55 },
+  lootKo: { width: 30, height: 34, alignItems: 'center', justifyContent: 'center' },
   lootItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  lootIf: { flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: -8 },
-  lootWin: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: BRAND.gold, borderRadius: 10, borderWidth: 2, borderColor: BRAND.navy, paddingLeft: 3, paddingRight: 6, paddingVertical: 1 },
-  lootWinText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
+  lootIf: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   lootEq: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy },
   lootNum: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy },
+  lootNumSmall: { fontSize: 17 },
   receipt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8 },
   receiptErr: { backgroundColor: '#ffe3df', borderRadius: 10, padding: 4 },
   receiptText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, flexShrink: 1, textAlign: 'center' },
