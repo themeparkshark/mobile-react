@@ -638,7 +638,7 @@ test('PLAY RIDE is one piece: the pill, its label and the ride chip appear toget
   // The label never draws before the pill art (words with no button).
   assert.match(button, /opacity: labelAreaHeight > 0 && artReady \? 1 : 0,/);
   assert.match(button, /onLoadEnd=\{markArtReady\}/);
-  assert.match(button, /if \(reported\.current\) return;/, 'reports once');
+  assert.match(button, /if \(reported\.current \|\| !artReady \|\| labelAreaHeight <= 0\) return;/, 'reports once, only when the art drew and the label has its size');
   assert.match(button, /setTimeout\(markArtReady, pillArtSeen \? 120 : 800\)/, 'a safety if the image never reports');
   const redeem = read('src/components/RedeemModal.tsx');
   // The whole group (pill, label, chip) stays hidden and only slides up once the art is ready.

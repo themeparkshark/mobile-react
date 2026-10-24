@@ -25,13 +25,9 @@ export default function YellowButton({
   // The label never draws on its own: it waits for the pill art, so a kid never sees words with no button.
   const [artReady, setArtReady] = useState(false);
   const readyRef = useRef(onArtReady); readyRef.current = onArtReady;
-  const reported = useRef(false);
   const markArtReady = () => {
-    if (reported.current) return;
-    reported.current = true;
     pillArtSeen = true;
     setArtReady(true);
-    readyRef.current?.();
   };
   // A safety: if the image never reports (an old cache), show the button anyway after a beat.
   useEffect(() => {
@@ -39,10 +35,14 @@ export default function YellowButton({
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // The caller hears "ready" once the art has drawn AND the label has its size, so the pill and its
+  // words can never show one without the other (whichever of the two events lands first).
+  const reported = useRef(false);
   useEffect(() => {
-    if (disabled || reducedMotion) { animated.stopAnimation(); animated.setValue(1); }
-    return () => animated.stopAnimation();
-  }, [animated, disabled, reducedMotion]);
+    if (reported.current || !artReady || labelAreaHeight <= 0) return;
+    reported.current = true;
+    readyRef.current?.();
+  }, [artReady, labelAreaHeight]);
   const zoomOut = () => {
     if (disabled || reducedMotion) {
       return;
