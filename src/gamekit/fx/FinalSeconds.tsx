@@ -90,7 +90,10 @@ export const FinalSeconds = React.memo(function FinalSeconds({ secondsLeft, rema
   const beat = useDerivedValue(() => {
     if (remainingMs) {
       const rem = remainingMs.value;
-      if (!activeSv.value || rem > FINAL_SECONDS * 1000 || rem <= -1400 || (rem <= 0 && !timeStamp)) return { sec: -1, t: -1 };
+      if (!activeSv.value || rem > FINAL_SECONDS * 1000 || rem <= -1400) return { sec: -1, t: -1 };
+      // A game that ends on its own stamp (Whack's FINISH!): the 1 holds, ring closed, until the game
+      // leaves play in the same commit its stamp mounts, so the sky is never empty between them.
+      if (rem <= 0 && !timeStamp) return { sec: 1, t: 999 };
       if (rem <= 0) return { sec: 0, t: -rem };
       const sec = Math.ceil(rem / 1000);
       return { sec, t: sec * 1000 - rem };

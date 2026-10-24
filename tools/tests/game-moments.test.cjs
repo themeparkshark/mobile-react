@@ -473,3 +473,11 @@ test('round 3: Whack FINISH! fires on the frame the clock hits 0, before the ban
   assert.match(body, /setFinishKey\(\(k\) => k \+ 1\);/);
   assert.match(body, /fx\.current\?\.clearText\(\);/);
 });
+
+test('round 3: with a game-owned end stamp, the 1 holds at 0 until the game leaves play (no empty sky before FINISH!)', () => {
+  const fs5 = read('src/gamekit/fx/FinalSeconds.tsx');
+  assert.match(fs5, /if \(rem <= 0 && !timeStamp\) return \{ sec: 1, t: 999 \};/);
+  const p = gm.finalStampPose(999, false, true, false);
+  assert.equal(p.alpha, 1, 'the 1 is at full strength');
+  assert.ok(p.ring < 0.01, 'its ring has closed');
+});
