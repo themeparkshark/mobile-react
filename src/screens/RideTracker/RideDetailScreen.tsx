@@ -14,6 +14,7 @@ import { getCommunityStats, CommunityStats } from '../../api/endpoints/rides/com
 import { toggleWishlist, getWishlist } from '../../api/endpoints/rides/wishlist';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
+import { GrownUpGateSlot } from '../../components/GrownUpGate';
 import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 import { Modal } from 'react-native';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
@@ -337,6 +338,8 @@ export default function RideDetailScreen() {
             )}
           </Pressable>
         </Pressable>
+        {/* The grown-up gate for Share shows above this sheet. */}
+        <GrownUpGateSlot />
       </Modal>
 
       {/* Favorite toast */}

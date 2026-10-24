@@ -148,11 +148,11 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
       const uri = await viewShotRef.current?.capture?.();
       if (!uri) throw new Error('Card capture unavailable');
 
-      await shareFileExternal(uri, {
+      const closed = await shareFileExternal(uri, {
         mimeType: 'image/png',
         dialogTitle: `My ${ride.ride_name} experience on Theme Park Shark!`,
       });
-      onShare?.();
+      if (closed) onShare?.();
     } catch {
       gameAlert('Could not make your card', 'Your ride is saved. Try sharing it again.');
     } finally {

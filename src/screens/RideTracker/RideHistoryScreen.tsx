@@ -14,6 +14,7 @@ import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides
 import { getWishlist, WishlistRide } from '../../api/endpoints/rides/wishlist';
 import RideCard from '../../components/RideTracker/RideCard';
 import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
+import { GrownUpGateSlot } from '../../components/GrownUpGate';
 import { colors } from '../../design-system';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { Modal } from 'react-native';
@@ -286,6 +287,8 @@ export default function RideHistoryScreen() {
             )}
           </Pressable>
         </Pressable>
+        {/* The grown-up gate for Share shows above this sheet. */}
+        <GrownUpGateSlot />
       </Modal>
     </SafeAreaView>
   );

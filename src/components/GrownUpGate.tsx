@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameIconName } from '../ui/iconNames';
 import RealMoneyMark from './RealMoneyMark';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
@@ -58,8 +58,21 @@ let vipMember = false;
 const REST_KEY = 'grown-up-gate:rest-until';
 let gateRestUntil = 0;
 type GateRequest = { resolve: (ok: boolean) => void; seed: number; reason?: GateReason | null; devOffer?: GateReason };
-let showGate: ((r: GateRequest | null) => void) | null = null;
+type ShowGate = (r: GateRequest) => void;
+/**
+ * Every mounted gate host, oldest first. The root host sits at the bottom; a slot
+ * inside a sheet or game <Modal> (GrownUpGateSlot) goes on top while it is up.
+ * iOS presents a <Modal> from the view controller that holds it, so only a host
+ * inside the top-most modal can show above it: askGrownUp always uses the top one.
+ */
+let hosts: { show: ShowGate }[] = [];
+let showGate: ShowGate | null = null;
+function syncShowGate() { showGate = hosts.length ? hosts[hosts.length - 1].show : null; }
 let open: Promise<boolean> | null = null;
+/** iOS shows nothing new while a modal is still sliding away: the answer waits for the gate to be gone. */
+export const GATE_DISMISS_FALLBACK_MS = 1000;
+/** A gate that iOS refused to present (another modal was in the way) closes as a no, never hangs. */
+export const GATE_SHOW_WATCHDOG_MS = 3000;
 
 /** The 30 s rest survives a force-quit. */
 async function loadRest() {
@@ -280,24 +293,82 @@ function MoreForGrownUps() {
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'] as const;
 const MAX_FONT = 1.3;
 
-/** The gate's dialog. Mounted once, at the root. */
-export function GrownUpGateHost() {
+/**
+ * The gate inside a sheet's or game's own <Modal>, so it shows above that modal
+ * (the game results Share, a ride card sheet). Put it last inside the <Modal>.
+ */
+export function GrownUpGateSlot() {
+  return <GrownUpGateHost nested />;
+}
+
+/**
+ * The gate's dialog. Mounted once at the root, plus a GrownUpGateSlot inside any
+ * modal that can share or leave the game. The answer is given only after the
+ * gate has fully gone, so the share sheet or browser that follows can present.
+ */
+export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean } = {}) {
   const [req, setReq] = useState<GateRequest | null>(null);
   const [typed, setTyped] = useState('');
   // After a right answer: the offer card (price, trial, renewal terms) for the grown-up only.
   const [details, setDetails] = useState<{ head: string; lines: string[] } | null>(null);
   const [more, setMore] = useState(false);
-  useEffect(() => {
-    showGate = r => { setTyped(''); setDetails(r?.devOffer ? gateDetails(r.devOffer) : null); setMore(false); setReq(r); };
-    return () => { showGate = null; };
+  // The answer while the gate fades out; null while it is up.
+  const [closing, setClosing] = useState<boolean | null>(null);
+  const reqRef = useRef<GateRequest | null>(null);
+  const answerRef = useRef<boolean | null>(null);
+  const shownRef = useRef(false);
+  const finish = useCallback(() => {
+    const done = reqRef.current;
+    if (!done) return;
+    reqRef.current = null;
+    const ok = answerRef.current === true;
+    answerRef.current = null;
+    setReq(null); setDetails(null); setClosing(null);
+    done.resolve(ok);
   }, []);
-  // Waits behind any open sheet instead of stacking a second <Modal> (ui/modalLayers.ts).
-  const front = useModalLayer(!!req, 'wait');
+  const close = useCallback((ok: boolean) => {
+    if (!reqRef.current || answerRef.current !== null) return;
+    answerRef.current = ok;
+    setClosing(ok);
+  }, []);
+  useEffect(() => {
+    const host = {
+      show: (r: GateRequest) => {
+        reqRef.current?.resolve(false);
+        reqRef.current = r; answerRef.current = null; shownRef.current = false;
+        setTyped(''); setDetails(r.devOffer ? gateDetails(r.devOffer) : null); setMore(false); setClosing(null); setReq(r);
+      },
+    };
+    hosts = nested ? [...hosts, host] : [host, ...hosts];
+    syncShowGate();
+    return () => {
+      hosts = hosts.filter(h => h !== host);
+      syncShowGate();
+      // The modal holding it went away: the ask ends as a no, so no button waits forever.
+      const left = reqRef.current;
+      reqRef.current = null;
+      left?.resolve(false);
+    };
+  }, [nested]);
+  // The root gate waits behind any open sheet instead of stacking a second <Modal> (ui/modalLayers.ts).
+  // A slot is already inside the top modal, so it shows at once.
+  const layerFront = useModalLayer(!!req && !nested, 'wait');
+  const front = nested ? !!req : layerFront;
+  const presenting = !!req && front && closing === null;
+  useEffect(() => {
+    if (!presenting) return undefined;
+    const t = setTimeout(() => { if (!shownRef.current) close(false); }, GATE_SHOW_WATCHDOG_MS);
+    return () => clearTimeout(t);
+  }, [presenting, req, close]);
+  useEffect(() => {
+    if (closing === null) return undefined;
+    const t = setTimeout(finish, GATE_DISMISS_FALLBACK_MS);
+    return () => clearTimeout(t);
+  }, [closing, finish]);
   if (!req || !front) return null;
   const resting = req.seed < 0;
   const q = resting ? null : grownUpQuestion(req.seed);
   const why = resting ? null : gateReasonLines(req.reason);
-  const close = (ok: boolean) => { req.resolve(ok); setReq(null); setDetails(null); };
   const press = (k: typeof KEYS[number]) => {
     if (k === 'del') { setTyped(t => t.slice(0, -1)); return; }
     if (k === 'ok') {
@@ -309,7 +380,8 @@ export function GrownUpGateHost() {
     setTyped(t => (t.length < 3 ? t + k : t));
   };
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent>
+    <Modal visible={closing === null} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
+      onShow={() => { shownRef.current = true; }} onDismiss={finish}>
       <View style={styles.scrim}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>

@@ -24,6 +24,7 @@ import { CLOSE_X, itemArt, RIBBON, StarBurst } from './DexParts';
 import { RarityGems, rarityLook } from './dexLook';
 import { caughtLine, spawnIcon, type DexItem, type DexSet } from './dexModel';
 import { Offscreen, RidePhoto, RidePhotoShareCard } from './RidePhoto';
+import { GrownUpGateSlot } from '../../components/GrownUpGate';
 
 export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = null }: {
   readonly item: DexItem | null; readonly set: DexSet | null;
@@ -175,6 +176,8 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
           </Animated.View>
         )}
       </View>
+      {/* The grown-up gate for Share shows above this card. */}
+      {item != null && <GrownUpGateSlot />}
     </Modal>
   );
 }

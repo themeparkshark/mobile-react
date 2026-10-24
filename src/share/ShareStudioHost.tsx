@@ -44,6 +44,7 @@ import {
 import { BURST, countSteps, countTarget, revealIntensity } from './reveal';
 import { useDevAutoPress } from './devDrive';
 import { trackShare } from './track';
+import { GrownUpGateSlot } from '../components/GrownUpGate';
 import type { FlexFormat, FlexPayload, FlexRequest } from './types';
 
 export const REVEAL_TAP_GUARD_MS = 900;
@@ -230,6 +231,8 @@ function FlexSheet({ request }: { readonly request: FlexRequest }) {
           <GameButton label={CLOSE_WORD} variant="ghost" tone="onBlue" onPress={close} />
         </View>
       </View>
+      {/* The grown-up gate for Share shows above this sheet. */}
+      <GrownUpGateSlot />
     </Modal>
   );
 }
@@ -391,6 +394,8 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
           <GameButton label={CLOSE_WORD} variant="ghost" tone="onBlue" onPress={() => finishFlex(request.id)} />
         </Animated.View>
       </View>
+      {/* The grown-up gate for Share shows above this moment. */}
+      <GrownUpGateSlot />
     </Modal>
   );
 }
