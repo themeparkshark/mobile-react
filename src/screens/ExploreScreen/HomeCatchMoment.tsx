@@ -165,7 +165,7 @@ const WATER_RING = require('../../../assets/fx/waterring.webp');
 const MINI_STAR = require('../../../assets/fx/mini-star.webp');
 const COIN_FALLBACK = require('../../../assets/images/coingold.png');
 const STREAM_COIN = 30;
-const INK_SIZE = 210;
+const INK_SIZE = 240;
 const WATER_W = 150;
 const WATER_H = 85;
 const VIGNETTE_TOP = ['rgba(7,104,185,0.28)', 'rgba(7,104,185,0)'] as const;
@@ -762,7 +762,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         burstFx.value = 0;
         burstFx.value = withTiming(1, { duration: DURATION.sparkle, easing: Easing.linear });
         ink.value = 0;
-        ink.value = withTiming(1, { duration: plan.repeat ? 460 : DURATION.bloom + 80, easing: Easing.linear });
+        ink.value = withTiming(1, { duration: plan.repeat ? 620 : DURATION.sparkle, easing: Easing.linear });
         const hold = plan.repeat ? 140 : 360;
         gold.value = withSequence(withTiming(1, { duration: 120, easing: EASE.out }), withDelay(hold, withTiming(0, { duration: plan.repeat ? 300 : 480, easing: EASE.in })));
         goldBloom.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: DURATION.bloom - 140 }));
@@ -1038,9 +1038,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   // Alex's inked gold burst: snaps out past full size on the burst, then fades (the hand-drawn frame of the moment).
   const inkStyle = useAnimatedStyle(() => {
     const p = ink.value;
-    const grow = p < 0.3 ? p / 0.3 : 1;
+    // Snaps out in the first fifth, holds full size (the screenshot frame), then fades in the last third.
+    const grow = p < 0.2 ? p / 0.2 : 1;
     return {
-      opacity: p <= 0 || p >= 1 ? 0 : p < 0.45 ? 1 : 1 - (p - 0.45) / 0.55,
+      opacity: p <= 0 || p >= 1 ? 0 : p < 0.66 ? 1 : 1 - (p - 0.66) / 0.34,
       transform: [{ translateX: from.x - INK_SIZE / 2 }, { translateY: from.y - CATCH_RISE_PT - INK_SIZE / 2 },
         { scale: 0.35 + 0.85 * (1 - (1 - grow) * (1 - grow)) + 0.08 * p }, { rotate: `${12 * p}deg` }],
     };

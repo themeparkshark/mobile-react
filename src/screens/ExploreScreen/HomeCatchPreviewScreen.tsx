@@ -17,7 +17,7 @@ import QuickAccessMenu from '../../components/QuickAccessMenu';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import HomeFindMarker from './HomeFindMarker';
 import type { FingerSide } from './PrepItem';
-import HomeCatchMoment, { resetRideHintForPreview, type BookItem, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
+import HomeCatchMoment, { resetCatchSessionForPreview, resetRideHintForPreview, type BookItem, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import { resetRevealSeenForPreview } from './ridePhoto/CatchReveal';
 import HomeHuntChip, { chipWidthFor, type HuntChipMessage } from './HomeHuntChip';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
@@ -62,6 +62,8 @@ const FIXTURES: Fixture[] = [
 if (__DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1') LogBox.ignoreAllLogs(true);
 // The preview is the Ride Photo harness: the server's switch (player_stats.ride_photo_enabled) is on here.
 if (__DEV__) setRidePhotoServerEnabled(true);
+// Captures: `lane.sh eval '__wowResetCatch()'` makes the next catch the first of a session again (the full show).
+if (__DEV__) (globalThis as { __wowResetCatch?: () => void }).__wowResetCatch = resetCatchSessionForPreview;
 
 type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean; reduced?: boolean; skip?: boolean;
   /** The server's Legendary roll says no: the find rides by (409). */ escape?: boolean;
