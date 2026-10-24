@@ -15,13 +15,6 @@ import { themeSplashUri } from '../utils/splashArt';
 const LAUNCH_ART = require('../../assets/images/splash-bg.png');
 // The current splash art. It cross-fades in over the launch art.
 const SPLASH_ART = require('../../assets/images/splash-art.jpg');
-// Loading and Login open on these two. Drawing them here, hidden under the
-// launch art, decodes them ahead so the next screen paints its art on its
-// first frame instead of a bare blue one.
-const NEXT_SCREEN_ART = [
-  require('../../assets/images/splash-loop-poster.jpg'),
-  require('../../assets/images/screens/login/logo.png'),
-];
 
 export const SPLASH_FADE_MS = 250;
 const FADE_SAFETY_MS = 600;
@@ -82,10 +75,7 @@ export default function SplashScreen() {
     // launch storyboard is seamless. The current art (or an allowed server
     // theme splash) then fades in over it on the UI thread.
     <View style={{ flex: 1, backgroundColor: '#0768B9' }}>
-      {NEXT_SCREEN_ART.map((art, i) => (
-        <Image key={i} source={art} contentFit="cover" style={[StyleSheet.absoluteFill, size]} />
-      ))}
-      <Image source={LAUNCH_ART} contentFit="cover" style={[StyleSheet.absoluteFill, size]} />
+      <Image source={LAUNCH_ART} contentFit="cover" style={size} />
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: artOpacity }]}>
         <Image
           source={artSource}
