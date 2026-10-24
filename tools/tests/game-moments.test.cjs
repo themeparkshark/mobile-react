@@ -747,7 +747,8 @@ test('r6: an idle card is a still frame (board at rest, no per-frame writes when
   assert.match(rt, /r\.running = true;\n\s+r\.rest = false;/, 'every Burst start wakes the board');
   assert.match(rt, /rt\.value\.rest = false;\n\s+const a = an\.value;\n\s+a\.curtainAt = -1;/, 'GO wakes the board');
   const whack = read('src/games/whack/WhackAShark.tsx');
-  assert.match(whack, /if \(runToken\.current === token && !finishing\.current\) runtime\.setRest\(true\);/);
+  assert.match(whack, /if \(runToken\.current === token && !finishing\.current && !NO_REST\) runtime\.setRest\(true\);/);
+  assert.match(whack, /const NO_REST = \(__DEV__ \|\| WHACK_CAPTURE\) && process\.env\.EXPO_PUBLIC_WHACK_NO_REST === '1';/, 'the A\/B switch exists only in dev and the capture');
   assert.match(whack, /if \(phase !== 'breather' \|\| finishing\.current\) return;\n\s+clearRest\(\);/, 'GO cancels a pending rest');
   assert.match(whack, /runtime\.setRest\(false\);/, 'the rematch count plays over a live board');
   // Clock and layers only write shared values when something changed.

@@ -155,6 +155,8 @@ const repeatBurst = (curtain: number) => curtain === CURTAIN_SHORT;
 const finishHandoff = (curtain: number) => (repeatBurst(curtain) ? FINISH_HANDOFF_SHORT_MS : FINISH_HANDOFF_MS);
 /** The pads pop in this long after the card lands (the repeat card is quicker). */
 const padsAfter = (curtain: number) => (repeatBurst(curtain) ? 380 : 600);
+/** Capture A/B only (EXPO_PUBLIC_WHACK_NO_REST=1, dev or the Whack capture): keep the board drawing under the card. */
+const NO_REST = (__DEV__ || WHACK_CAPTURE) && process.env.EXPO_PUBLIC_WHACK_NO_REST === '1';
 /** Autoplay presses GO this long after the card lands (captures can hold the idle card longer). */
 const AUTO_GO_MS = (__DEV__ || WHACK_CAPTURE) && Number(process.env.EXPO_PUBLIC_WHACK_AUTO_GO_MS) > 0 ? Number(process.env.EXPO_PUBLIC_WHACK_AUTO_GO_MS) : 3500;
 const LIFETIME_KEY = '@whack/lifetime_bursts';
@@ -984,7 +986,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       const token = runToken.current;
       restTimer.current = setTimeout(() => {
         restTimer.current = null;
-        if (runToken.current === token && !finishing.current) runtime.setRest(true);
+        if (runToken.current === token && !finishing.current && !NO_REST) runtime.setRest(true);
       }, landIn + CARD_SETTLE_MS);
       // Autoplay saves a banked fever for the finale (the expert line).
       if (autoplay) setTimeout(() => onReadyRef.current(feverReady && next === totalBursts - 1), landIn + AUTO_GO_MS);
