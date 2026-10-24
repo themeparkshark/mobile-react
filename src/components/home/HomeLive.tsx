@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { cheerRide, getLiveParks, type HomeCheerTarget, type LiveParks, type LiveParkSummary } from '../../api/endpoints/me/livePark';
 import { BOSS_NAMES } from '../../api/endpoints/parks/raid';
-import { applyTeamNames, TEAM_ORDER, TEAMS, teamName, teamShortName } from '../../constants/teams';
+import { applyTeamNames, TEAM_ORDER, TEAMS, teamChipColor, teamName, teamShortName } from '../../constants/teams';
 import { AuthContext } from '../../context/AuthProvider';
 import { WhackAShark } from '../../games/whack';
 import * as RootNavigation from '../../RootNavigation';
@@ -16,6 +16,7 @@ import PushSoftAsk from '../PushSoftAsk';
 import useLivePoll from '../../hooks/useLivePoll';
 import { useAppActive } from '../../hooks/appActive';
 import { homeLiveBar } from './homeLiveBar';
+import TeamBadge from '../TeamBadge';
 
 const ORDER = TEAM_ORDER;
 
@@ -123,8 +124,8 @@ export default function HomeLive({ top = 12, onBarChange }: {
             </Text>
             <View style={styles.chips}>
               {ORDER.map(team => (
-                <View key={team} style={[styles.chip, { backgroundColor: TEAMS[team].color }, yours === team && styles.chipYours]}>
-                  <Image source={TEAMS[team].badge} style={styles.chipBadge} contentFit="contain" />
+                <View key={team} style={[styles.chip, { backgroundColor: teamChipColor(team) }, yours === team && styles.chipYours]}>
+                  <TeamBadge team={team} style={styles.chipBadge} />
                   <Text style={styles.chipCount}>{live.totals[team]}</Text>
                 </View>
               ))}
@@ -157,7 +158,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
           <View style={styles.standings}>
             {ORDER.map(team => (
               <View key={team} style={styles.standing}>
-                <Image source={TEAMS[team].badge} style={styles.standingBadge} contentFit="contain" />
+                <TeamBadge team={team} style={styles.standingBadge} />
                 <Text style={[styles.standingCount, { color: TEAMS[team].color }]}>{live.totals[team]}</Text>
                 <Text style={styles.standingLabel}>{teamShortName(team, names)}{yours === team ? ' (you)' : ''}</Text>
               </View>
@@ -191,7 +192,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
                   <View style={styles.miniChips}>
                     {ORDER.map(team => (
                       <View key={team} style={styles.miniChipRow}>
-                        <Image source={TEAMS[team].badge} style={styles.miniBadge} contentFit="contain" />
+                        <TeamBadge team={team} style={styles.miniBadge} />
                         <Text style={[styles.miniChip, { color: TEAMS[team].color }]}>{park.rides_held[team]}</Text>
                       </View>
                     ))}
@@ -218,7 +219,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
                     disabled={live.cheers_left <= 0}
                     onPress={() => { pending.current = () => setCheer({ park, target, seed: Date.now() % 100000 }); setOpen(false); }}>
                     <View style={[styles.flag, { backgroundColor: TEAMS[target.controller].color }]}>
-                      <Image source={TEAMS[target.controller].badge} style={styles.flagBadge} contentFit="contain" />
+                      <TeamBadge team={target.controller} style={styles.flagBadge} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.cheerRide} numberOfLines={1}>{target.ride_name}</Text>

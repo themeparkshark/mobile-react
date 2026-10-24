@@ -87,7 +87,7 @@ export default function RideStatsScreen() {
         <View style={styles.statGrid}>
           <StatCard label="Total Rides" value={stats.total_rides} icon="shark" />
           <StatCard label="Unique Rides" value={stats.unique_rides} icon="star" />
-          <StatCard label="Day Streak" value={stats.current_streak} icon="streak" />
+          <StatCard label="Park days in a row" value={stats.current_streak} icon="ride" />
         </View>
 
         {/* Per Park */}

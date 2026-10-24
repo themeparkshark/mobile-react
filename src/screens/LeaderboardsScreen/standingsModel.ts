@@ -73,25 +73,15 @@ export function formatParkDay(parkDay: string | null | undefined): string {
 }
 
 /**
- * VIP-neutral Experience standings (Dustin decides; see WS7). Off by default,
- * which keeps today's behaviour: rank by total_experience. When the flag is on
- * and the server sends base_total_experience (XP before the VIP multiplier),
- * that is the number shown.
+ * The XP number shown on the Experience board is always the number the list
+ * is ranked by, so the order on screen can never disagree with the numbers
+ * (rank 1 at 600 above rank 2 at 700). PlayerController@index orders by its
+ * ranking column and sends that column as total_experience: total XP today,
+ * XP without the VIP bonus once ECONOMY_VIP_NEUTRAL_STANDINGS is on (server
+ * switch, BACKEND_NEEDS). The app never swaps in base_total_experience on its
+ * own, because the server would still be ranking by the total.
  */
-export const VIP_NEUTRAL_STANDINGS_DEFAULT = false;
-
-export function vipNeutralStandingsEnabled(env: Record<string, string | undefined> | undefined): boolean {
-  const value = env?.EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS;
-  if (value === '1' || value === 'true') return true;
-  if (value === '0' || value === 'false') return false;
-  return VIP_NEUTRAL_STANDINGS_DEFAULT;
-}
-
-export function experienceScore(
-  player: { readonly total_experience?: number | null; readonly base_total_experience?: number | null },
-  vipNeutral: boolean,
-): number {
-  if (vipNeutral && typeof player.base_total_experience === 'number') return player.base_total_experience;
+export function experienceScore(player: { readonly total_experience?: number | null }): number {
   return Number(player.total_experience) || 0;
 }
 

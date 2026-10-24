@@ -14,6 +14,7 @@ import Animated, {
 import type { GymData } from '../../api/endpoints/gym-battle';
 import { useMapAlive } from '../map/alive/MapAliveContext';
 import { TEAMS, type TeamId } from '../../constants/teams';
+import TeamBadge from '../TeamBadge';
 
 const TEAM_COLORS: Record<TeamId, string> = { mouse: TEAMS.mouse.color, globe: TEAMS.globe.color, shark: TEAMS.shark.color };
 
@@ -106,7 +107,7 @@ export default function GymMarker({ leader, latitude, longitude, onPress, hidden
         {/* Leader indicator badge */}
         {leader && (
           <View style={[styles.leaderBadge, { backgroundColor: leaderColor }]}>
-            <Image source={TEAMS[leader].badge} style={{ width: 18, height: 18 }} contentFit="contain" />
+            <TeamBadge team={leader} style={{ width: 18, height: 18 }} />
           </View>
         )}
       </View>

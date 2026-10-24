@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { borderRadius, spacing } from '../../../design-system';
 import { GameIcon } from '../../../ui';
+import KidText from './KidText';
+import type { PageRailMode } from '../../../services/lineplay/lineLayout';
 
 interface Props {
   readonly index: number;
@@ -16,14 +18,36 @@ interface Props {
   readonly moreAvailable?: boolean;
   readonly morePaused?: boolean;
   readonly onMore?: () => void;
+  /**
+   * 'back' while the page window has stepped aside (an iPhone SE reading Details):
+   * the page buttons would act on a page nobody can see, so the rail is one
+   * "Back to games" button that closes Details.
+   */
+  readonly mode?: PageRailMode;
+  readonly onShowPages?: () => void;
+  /**
+   * The page above has its own gold button (PLAY NOW, or the game itself): Next is a quiet white
+   * button, so a kid sees exactly one gold button to press.
+   */
+  readonly quiet?: boolean;
 }
 
 /** Keeps the next playable round visible after a player finishes a queue activity. */
 export default function ActivityPageRail({ index, count, nextLabel, firstLabel = 'Chapter',
   progressText, progressAccessibilityLabel, onFirst, onArcade, arcadePaused = false, onNext,
-  moreAvailable = false, morePaused = false, onMore }: Props) {
+  moreAvailable = false, morePaused = false, onMore, mode = 'pages', onShowPages, quiet = false }: Props) {
+  if (mode === 'back' && onShowPages) {
+    return <View style={styles.rail}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back to the games. Hides the details."
+        onPress={onShowPages} style={({ pressed }) => [styles.next, pressed && styles.pressed]}>
+        <GameIcon name="play" size={26} />
+        <Text style={styles.nextText} numberOfLines={1}>Back to games</Text>
+      </Pressable>
+    </View>;
+  }
   const wrapsToFirst = index + 1 >= count;
   const showMore = wrapsToFirst && moreAvailable && !!onMore;
+  const calm = quiet && !showMore;
   return <View style={styles.rail}>
     {/* On the first page there is nowhere to return to, so the button is gone, not faded. */}
     {index > 0 && <Pressable accessibilityRole="button" accessibilityLabel={`Return to ${firstLabel.toLowerCase()}`}
@@ -34,17 +58,17 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
       disabled={arcadePaused} onPress={onArcade}
       style={[styles.arcade, arcadePaused && styles.disabled]}>
       <Text style={styles.arcadeText}>ARCADE</Text>
-      {progressText ? <Text style={styles.arcadeProgress} numberOfLines={1}
-        accessibilityLabel={progressAccessibilityLabel}>{progressText}</Text> : null}
-    </Pressable> : <Text style={styles.count}
+      {progressText ? <KidText style={styles.arcadeProgress} numberOfLines={1}
+        accessibilityLabel={progressAccessibilityLabel}>{progressText}</KidText> : null}
+    </Pressable> : <KidText style={styles.count}
       accessibilityLabel={progressAccessibilityLabel ?? `Activity ${index + 1} of ${count}`}>
       {progressText ?? `${index + 1}/${count}`}
-    </Text>}
+    </KidText>}
     <Pressable accessibilityRole="button"
       accessibilityLabel={showMore ? 'Add more queue activities' : wrapsToFirst ? `Return to ${firstLabel.toLowerCase()}` : `Next activity: ${nextLabel}`}
       disabled={showMore ? morePaused : count <= 1} onPress={showMore ? onMore : onNext}
-      style={[styles.next, (showMore ? morePaused : count <= 1) && styles.disabled]}>
-      <Text style={styles.nextText} numberOfLines={1}>
+      style={[styles.next, calm && styles.nextQuiet, (showMore ? morePaused : count <= 1) && styles.disabled]}>
+      <Text style={[styles.nextText, calm && styles.nextTextQuiet]} numberOfLines={1}>
         {showMore ? morePaused ? 'Resume for more rounds' : 'More queue rounds'
           : count <= 1 ? 'Only activity' : wrapsToFirst ? `Back to ${firstLabel.toLowerCase()}` : `Next: ${nextLabel}`}
       </Text>
@@ -63,6 +87,7 @@ const styles = StyleSheet.create({
   chapter: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.md,
     borderRadius: borderRadius.md, backgroundColor: '#0875c9' },
   disabled: { opacity: 0.45 },
+  pressed: { transform: [{ scale: 0.97 }] },
   chapterText: { color: '#fff', fontFamily: 'Knockout', fontSize: 15 },
   count: { color: '#075d9f', fontFamily: 'Knockout', fontSize: 14, minWidth: 35,
     textAlign: 'center' },
@@ -75,4 +100,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm, borderRadius: borderRadius.md, backgroundColor: '#ffca30',
     borderBottomWidth: 4, borderBottomColor: '#d99a00' },
   nextText: { flexShrink: 1, color: '#093d77', fontFamily: 'Knockout', fontSize: 17 },
+  // Quiet: white with a blue outline, same size and spot, so it still reads as a button.
+  nextQuiet: { backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#0875c9', borderBottomWidth: 4,
+    borderBottomColor: '#0875c9' },
+  nextTextQuiet: { color: '#075d9f' },
 });

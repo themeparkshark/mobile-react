@@ -370,7 +370,7 @@ export default function RideTrackerScreen() {
                 </View>
                 <View style={s.statPill}>
                   <Text style={s.statVal}>{stats.current_streak}</Text>
-                  <Text style={s.statLabel}>Day streak</Text>
+                  <Text style={s.statLabel}>Park days in a row</Text>
                 </View>
               </View>
             </FadeIn>
@@ -528,7 +528,7 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
   statVal: { fontSize: 24, fontFamily: 'Shark', color: '#1a1a2e' },
-  statLabel: { fontSize: 12, fontFamily: 'Knockout', color: '#64748b', marginTop: 2 },
+  statLabel: { fontSize: 12, fontFamily: 'Knockout', color: '#64748b', marginTop: 2, textAlign: 'center' },
 
   // Top Ride
   topRide: {

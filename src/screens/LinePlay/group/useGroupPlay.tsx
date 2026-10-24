@@ -53,7 +53,7 @@ export function nextGroupGame(pages: readonly { id: string; kind: string }[], af
   return games[(at + 1) % games.length] ?? null;
 }
 
-export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, gameOpen, openTurn }: {
+export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, gameOpen, openTurn, compact = false }: {
   readonly session: LinePlaySession;
   readonly snapshot: SessionSnapshot;
   readonly playerId: number | null;
@@ -62,6 +62,8 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
   /** Any game (solo or a turn) covers the screen. */
   readonly gameOpen: boolean;
   readonly openTurn: (launch: GroupTurnLaunch) => void;
+  /** A short phone: the crew strip is one size smaller so the activity pages keep their room. */
+  readonly compact?: boolean;
 }) {
   const waitKey = snapshot.ride && snapshot.startedAt != null
     ? lineGroupWaitKey(snapshot.ride.rideId, snapshot.startedAt) : null;
@@ -181,7 +183,7 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
   </>;
 
   const strip: ReactNode = live && crew.loaded && crew.chosen
-    ? <GroupStrip group={group} onEdit={() => { if (!group?.active) setEditing(true); }} />
+    ? <GroupStrip group={group} compact={compact} onEdit={() => { if (!group?.active) setEditing(true); }} />
     : null;
 
   const recapSlot = (args: {

@@ -1,5 +1,5 @@
 /**
- * ActivitySlot — renders one item from the LinePlay activity playlist.
+ * ActivitySlot: renders one item from the LinePlay activity playlist.
  *
  * A 'minigame' item launches a real GameKit round. trivia/lore/prediction items
  * render real (lightweight) interactive content sourced from the content
@@ -7,7 +7,7 @@
  */
 
 import { useContext, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   spacing,
   borderRadius,
@@ -25,6 +25,7 @@ import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import { studioMoment } from '../../../gamekit/audio/playMoment';
 import HapticPatterns from '../../../helpers/hapticPatterns';
 import NavigationPanelCard from './NavigationPanelCard';
+import PageScroll from './PageScroll';
 import type { NavigationPanelProgress } from '../../../services/lineplay/navigationPanel';
 import type { CircuitTheme } from '../../../services/lineplay/circuitTheme';
 import { factSourceLine } from '../../../services/lineplay/labels';
@@ -52,6 +53,8 @@ export interface ActivitySlotProps {
   readonly onNavigationTurn?: (index: number) => void;
   readonly onNavigationReplay?: () => void;
   readonly onNavigationNext?: () => void;
+  /** Details is open: a page too short for the whole board offers "Tap to play", which closes Details. */
+  readonly onNavigationMakeRoom?: () => void;
   /** Ride-themed dressing for free-play circuit rounds. */
   readonly circuitTheme?: CircuitTheme;
   /** Name of the page after this one, for a circuit's next button. */
@@ -116,6 +119,7 @@ export default function ActivitySlot({
   onNavigationTurn,
   onNavigationReplay,
   onNavigationNext,
+  onNavigationMakeRoom,
   circuitTheme,
   nextLabel,
   bestStars,
@@ -128,11 +132,11 @@ export default function ActivitySlot({
       if (!onNavigationTurn || !onNavigationReplay || !onNavigationNext) return null;
       return <NavigationPanelCard mode="free" theme={circuitTheme} nextLabel={nextLabel} seed={item.seed}
         progress={navigationProgress} completed={completed} paused={paused}
-        onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} />;
+        onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} onMakeRoom={onNavigationMakeRoom} />;
     case 'trivia':
       if (navigationPanel && item.id === `${chapterId}-trivia` && onNavigationTurn && onNavigationReplay && onNavigationNext)
         return <NavigationPanelCard seed={item.seed} progress={navigationProgress} completed={completed} paused={paused}
-          onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} />;
+          onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} onMakeRoom={onNavigationMakeRoom} />;
       return <TriviaSlot rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed} completed={completed} paused={paused} onAnswered={() => onActivityCompleted(item.id)} />;
     case 'lore':
       return <LoreSlot navigator={navigationPanel && item.id === `${chapterId}-field-note`} rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed}
@@ -168,7 +172,7 @@ function MiniGameSlot({
   const isStarChart = item.id.endsWith('-star-chart');
   const label = item.title ?? (isStarChart ? 'Rebuild the Star Chart' : GAME_LABELS[item.gameId] ?? item.gameId);
   return (
-    <View style={styles.card}>
+    <PageScroll fill={CARD_FILL}>
       <ActivityHero kicker={navigator ? 'STARPORT · MISSION 3 OF 3' : 'QUEUE ARCADE'} title={label} navigator={navigator} />
       <View style={styles.bestRow} accessible
         accessibilityLabel={bestStars == null ? 'New game this wait' : `Best this wait: ${bestStars} of 3 stars`}>
@@ -196,7 +200,7 @@ function MiniGameSlot({
               : 'Finish this once. You can get a bonus Part after 10 minutes in line.'}
         </Text>
       )}
-    </View>
+    </PageScroll>
   );
 }
 
@@ -266,7 +270,7 @@ function TriviaSlot({
   const revealed = picked != null || completed;
 
   return (
-    <ScrollView style={styles.cardScroll} contentContainerStyle={styles.card}>
+    <PageScroll fill={CARD_FILL}>
       <ActivityHero kicker={chapterId ? 'RIDE MISSION' : 'PARK CHALLENGE'} title="Shark Trivia" teacher />
       <Text style={styles.question}>{q.question}</Text>
       {picked != null && <Animated.Text style={[styles.answerFeedback,
@@ -314,7 +318,7 @@ function TriviaSlot({
         </View>
       )}
       {completed && picked == null ? <Text style={styles.note}>You already answered this one</Text> : null}
-    </ScrollView>
+    </PageScroll>
   );
 }
 
@@ -358,7 +362,7 @@ function LoreSlot({
   if (!lore) return <SkeletonCard label="QUEUE PROMPT" />;
 
   return (
-    <ScrollView style={styles.cardScroll} contentContainerStyle={styles.card}>
+    <PageScroll fill={CARD_FILL}>
       <ActivityHero kicker={navigator ? 'STARPORT · MISSION 2 OF 3' : 'QUEUE QUEST'} title={navigator ? 'Find the signal' : 'Field Note'} navigator={navigator} />
       <Text style={styles.loreTitle}>{lore.title}</Text>
       <Text style={styles.loreBody}>{lore.body}</Text>
@@ -399,7 +403,7 @@ function LoreSlot({
           <Text style={styles.primaryBtnText}>{completed ? 'Clue logged' : 'Clue explored'}</Text>
         </Pressable>
       )}
-    </ScrollView>
+    </PageScroll>
   );
 }
 
@@ -429,7 +433,7 @@ function PredictionSlot({
   };
 
   return (
-    <View style={styles.card}>
+    <PageScroll fill={CARD_FILL}>
       <ActivityHero kicker="MAKE YOUR GUESS" title="Wait Guess" />
       <Text style={styles.question}>{card.prompt}</Text>
       <View style={styles.predictRow}>
@@ -465,7 +469,7 @@ function PredictionSlot({
       {lockedGuess ? (
         <Text style={styles.predictHint}>Locked in. You find out when your wait ends.</Text>
       ) : null}
-    </View>
+    </PageScroll>
   );
 }
 
@@ -473,27 +477,17 @@ function PredictionSlot({
 
 function SkeletonCard({ label }: { label: string }) {
   return (
-    <View style={[styles.card, styles.skeleton]}>
+    <PageScroll fill={CARD_FILL}>
       <ActivityHero kicker="LOADING THE NEXT ROUND" title={label} />
       <SharkLoader compact message="Dealing your next round" />
-    </View>
+    </PageScroll>
   );
 }
 
+/** Every activity card's light frame (PageScroll fades into exactly this color above the rail). */
+const CARD_FILL = '#d9f4ff';
+
 const styles = StyleSheet.create({
-  cardScroll: { flex: 1 },
-  card: {
-    backgroundColor: '#d9f4ff',
-    borderRadius: borderRadius.xxl,
-    borderWidth: 3,
-    borderColor: '#fff',
-    padding: spacing.md,
-    ...shadows.lg,
-    minHeight: 220,
-  },
-  skeleton: {
-    justifyContent: 'flex-start',
-  },
   hero: { height: 110, flexDirection: 'row', alignItems: 'center', overflow: 'hidden',
     margin: -6, marginBottom: spacing.md, borderRadius: 16, paddingLeft: 14, backgroundColor: '#0875c9' },
   heroCopy: { flex: 1, zIndex: 1 },

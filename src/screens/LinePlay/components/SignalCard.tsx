@@ -1,6 +1,7 @@
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { LineSignalSummary } from '../../../api/endpoints/me/inline-timer/types';
 import { borderRadius, shadows, spacing } from '../../../design-system';
+import PageScroll from './PageScroll';
 import { BRAND, GameButton, GameIcon } from '../../../ui';
 
 interface Props {
@@ -21,7 +22,7 @@ export default function SignalCard({ signal, pending, paused, error, onChoose, o
   const shared = signal.unlocked_route;
   const active = shared ?? signal.solo_route;
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.card}>
+    <PageScroll fill="#d8f4ff">
       <View style={styles.hero}>
         <View style={styles.heroCopy}>
           <Text style={styles.kicker}>FANS CHANGE THE WAIT</Text>
@@ -89,14 +90,11 @@ export default function SignalCard({ signal, pending, paused, error, onChoose, o
       )}
       {paused && <Text style={styles.note}>Paused. Tap play on the wait card to jump back in.</Text>}
       {error && <Text style={styles.error}>{error}</Text>}
-    </ScrollView>
+    </PageScroll>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: '#80d4fb' },
-  card: { margin: spacing.md, padding: spacing.md, borderRadius: borderRadius.xxl,
-    borderWidth: 3, borderColor: '#fff', backgroundColor: '#d8f4ff', ...shadows.lg },
   hero: { height: 112, flexDirection: 'row', alignItems: 'center', backgroundColor: '#0875c9',
     borderRadius: 16, margin: -6, marginBottom: spacing.md, overflow: 'hidden', paddingLeft: 14 },
   heroCopy: { flex: 1, zIndex: 1 },

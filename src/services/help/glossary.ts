@@ -14,7 +14,7 @@ export type GlossaryKey =
   | 'lineplay' | 'ride_passport' | 'coin_guide' | 'adventure_ticket' | 'park_goal'
   | 'stamps' | 'sets' | 'pins' | 'home_finds' | 'crew' | 'standings' | 'daily_chest'
   | 'day_streak' | 'travel_mode' | 'ride_control' | 'vip' | 'supplies' | 'bonus_ads'
-  | 'map_spin';
+  | 'map_spin' | 'daily3_streak';
 
 export interface GlossaryTerm {
   readonly key: GlossaryKey;
@@ -112,8 +112,12 @@ const TERMS: readonly GlossaryTerm[] = [
     what: 'A free chest every day. Day 7 has a Ticket inside.',
     earn: 'It opens on the home map once a day.' },
   { key: 'day_streak', label: 'Day streak', icon: 'streak', topic: 'basics',
-    what: 'How many days in a row you have played.',
-    earn: 'Open the game every day to keep it growing.' },
+    what: 'How many days in a row you opened your Daily Chest.',
+    earn: 'Open your Daily Chest every day to keep it growing.' },
+  // While Daily 3 is on, the flame counts Daily 3 days instead (one flame number in the game).
+  { key: 'daily3_streak', label: 'Day streak', icon: 'streak', topic: 'basics',
+    what: 'How many days in a row you finished your Daily 3.',
+    earn: 'Finish your Daily 3 every day to keep it growing.' },
   { key: 'travel_mode', label: 'Home Hunt', icon: 'map', topic: 'home',
     what: 'You are away from a park. Snacks and souvenirs pop up nearby.',
     earn: 'Hunt home finds to stock up Tickets and Energy for park day.' },
@@ -121,7 +125,7 @@ const TERMS: readonly GlossaryTerm[] = [
     what: 'Three teams race to control the rides at each park.',
     earn: 'Pick a team. Your ride wins claim rides for it.' },
   { key: 'vip', label: 'VIP', icon: 'member', topic: 'shop',
-    what: 'A monthly plan a grown-up buys. Bigger rewards, no bonus ads.',
+    what: 'A plan a grown-up buys. Bigger rewards at home and the park.',
     earn: 'Tap Member on the Social screen to see what VIP gives you.' },
   { key: 'supplies', label: 'Supplies', icon: 'gift', topic: 'shop',
     what: 'Packs of Tickets, Coins and Energy. A grown-up pays real money.',

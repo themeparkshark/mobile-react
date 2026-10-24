@@ -78,9 +78,11 @@ export interface ShelfCoinProps {
   /** Change it to play the ignite once (after an upgrade or a landing). */
   readonly igniteKey?: number | string;
   readonly dimmed?: boolean;
+  /** The navy contact shadow that rests the coin on a shelf plank. Off where there is no plank (the LinePlay ring). */
+  readonly contactShadow?: boolean;
 }
 
-function ShelfCoin({ coinUrl, level, size, phase = 0, igniteKey, dimmed = false }: ShelfCoinProps) {
+function ShelfCoin({ coinUrl, level, size, phase = 0, igniteKey, dimmed = false, contactShadow = true }: ShelfCoinProps) {
   const reduced = useReducedGameMotion();
   const tier = coinTier(level);
   const border = Math.max(2, Math.round(tier.ringWidth * size / 60));
@@ -130,8 +132,8 @@ function ShelfCoin({ coinUrl, level, size, phase = 0, igniteKey, dimmed = false 
     <View style={{ width: size, height: size }} pointerEvents="none">
       {/* Progression v2: Lv6+ stand under the coin (stand, shadow, rim, art, crown). */}
       <CoinStand level={tier.level} size={size} layer="stand" />
-      <View style={[styles.contact, { width: size * 0.74, height: size * 0.16, left: size * 0.13, bottom: -size * 0.07,
-        borderRadius: size }]} />
+      {contactShadow && <View style={[styles.contact, { width: size * 0.74, height: size * 0.16, left: size * 0.13, bottom: -size * 0.07,
+        borderRadius: size }]} />}
       <Animated.View style={[StyleSheet.absoluteFill, { borderRadius: size }, pulseStyle,
         { borderWidth: Math.max(3, border), borderColor: tier.ring }]} />
       <Animated.View style={[!dimmed && styles.lift, { width: size, height: size, borderRadius: size / 2,

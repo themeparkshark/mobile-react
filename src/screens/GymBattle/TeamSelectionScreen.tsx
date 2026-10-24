@@ -12,25 +12,23 @@ import Animated, {
   Easing, FadeIn, FadeInDown, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue,
   withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getLiveParks } from '../../api/endpoints/me/livePark';
 import { joinTeam } from '../../api/endpoints/gym-battle';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
+import TeamBadge from '../../components/TeamBadge';
 import { GameIcon } from '../../ui';
 import { QUESTION_BANK } from './teamQuiz';
 
 const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
-const BIG_BADGE: Record<TeamId, number> = {
-  mouse: require('../../../assets/images/team-mouse-badge.png'),
-  globe: require('../../../assets/images/team-globe-badge.png'),
-  shark: require('../../../assets/images/team-shark-badge.png'),
-};
 const VIBE: Record<TeamId, { tag: string; line: string }> = {
-  mouse: { tag: 'THE PLANNERS', line: 'Rope drop, perfect routes, every ride in order.' },
+  mouse: { tag: 'THE PLANNERS', line: 'First in line, with a plan for every ride.' },
   globe: { tag: 'THE EXPLORERS', line: 'Every land, every snack, every hidden detail.' },
   shark: { tag: 'THE THRILL CREW', line: 'Biggest drops first. Go all in, all day.' },
 };
 const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
+/** Background height as a share of the screen; the extra sits off the top. */
+const BG_TALL = '145%';
 
 type Stage = 'pick' | 'quiz' | 'confirm' | 'joining' | 'done' | 'error';
 
@@ -44,6 +42,7 @@ function drawQuestions() {
 }
 
 export default function TeamSelectionScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   const [stage, setStage] = useState<Stage>('pick');
   const [team, setTeam] = useState<TeamId | null>(null);
   const [suggested, setSuggested] = useState<TeamId | null>(null);
@@ -108,11 +107,15 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
 
   return (
     <View style={s.root}>
-      <Image source={require('../../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      {/* IP safety: the top of water_background has a globe and castle skyline.
+          The art is drawn 145% tall and pinned to the bottom, so that top band
+          (about the first 31% of the picture) sits above the screen at every
+          phone size. Swap for Dustin's new team-pick art when it lands. */}
+      <Image source={require('../../../assets/images/water_background.png')} style={s.bg} contentFit="cover" contentPosition="bottom" />
       <View style={[StyleSheet.absoluteFill, s.tint]} />
       <SafeAreaView style={s.safe}>
         {stage !== 'done' && (
-          <Pressable style={s.close} onPress={() => navigation?.goBack()} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
+          <Pressable style={[s.close, { top: insets.top + CLOSE_GAP }]} onPress={() => navigation?.goBack()} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
             <GameIcon name="close" size={36} />
           </Pressable>
         )}
@@ -167,7 +170,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
           <View style={s.page}>
             {suggested === team && <Animated.Text entering={FadeInDown} style={s.finnSays}>Finn thinks you’re a…</Animated.Text>}
             <Animated.View entering={ZoomIn.springify().damping(11)}>
-              <Image source={BIG_BADGE[team]} style={s.bigBadge} contentFit="contain" />
+              <TeamBadge team={team} kind="big" size={190} />
             </Animated.View>
             <Text style={[s.teamName, { color: TEAMS[team].color }]}>{teamName(team).toUpperCase()}</Text>
             <Text style={s.tag}>{VIBE[team].tag}</Text>
@@ -199,7 +202,7 @@ function TeamCard({ team, held, leader, underdog, onPress }: {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${teamName(team)}. ${VIBE[team].line}`}
       style={({ pressed }) => [s.card, { borderColor: TEAMS[team].color }, pressed && s.cardPressed]}>
-      <Image source={BIG_BADGE[team]} style={s.cardBadge} contentFit="contain" />
+      <TeamBadge team={team} kind="big" size={76} />
       <View style={{ flex: 1 }}>
         <Text style={[s.cardName, { color: TEAMS[team].color }]}>{teamName(team)}</Text>
         <Text style={s.cardTag}>{VIBE[team].tag}</Text>
@@ -231,7 +234,7 @@ function Welcome({ team, onGo }: { team: TeamId; onGo: () => void }) {
       <View style={s.welcomeStage}>
         <Animated.View style={[s.ring, { backgroundColor: TEAMS[team].color }, ring]} />
         <Animated.View style={badge}>
-          <Image source={BIG_BADGE[team]} style={s.welcomeBadge} contentFit="contain" />
+          <TeamBadge team={team} kind="big" size={220} />
         </Animated.View>
       </View>
       <Animated.Text entering={FadeInUp.delay(300)} style={[s.welcomeName, { color: TEAMS[team].color }]}>
@@ -249,11 +252,19 @@ function Welcome({ team, onGo }: { team: TeamId; onGo: () => void }) {
   );
 }
 
+/**
+ * The close X sits just under the status bar (safe-area top + 4), so on a
+ * small phone (iPhone SE, 20pt inset) it clears PICK YOUR TEAM by 12pt or
+ * more instead of crowding the end of the title.
+ */
+const CLOSE_GAP = 4;
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0768b9' },
   tint: { backgroundColor: 'rgba(3, 38, 92, 0.45)' },
+  bg: { position: 'absolute', left: 0, right: 0, bottom: 0, height: BG_TALL },
   safe: { flex: 1 },
-  close: { position: 'absolute', top: 54, right: 18, zIndex: 5, width: 36, height: 36, borderRadius: 18,
+  close: { position: 'absolute', right: 18, zIndex: 5, width: 36, height: 36, borderRadius: 18,
     backgroundColor: 'rgba(5,52,110,0.3)', alignItems: 'center', justifyContent: 'center' },
   closeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
   page: { flex: 1, paddingHorizontal: 18, paddingTop: 28, alignItems: 'center', justifyContent: 'center' },
@@ -264,7 +275,6 @@ const s = StyleSheet.create({
   card: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 22, borderWidth: 4,
     padding: 12, shadowColor: '#021e45', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
   cardPressed: { transform: [{ scale: 0.97 }] },
-  cardBadge: { width: 76, height: 76 },
   cardName: { fontFamily: 'Shark', fontSize: 24 },
   cardTag: { fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1.2, color: '#64748b' },
   cardLine: { fontFamily: 'Knockout', fontSize: 15, color: '#1e3a5f', marginTop: 2 },
@@ -284,7 +294,6 @@ const s = StyleSheet.create({
   answerText: { fontFamily: 'Knockout', fontSize: 18, color: '#09268f', textAlign: 'center' },
   back: { fontFamily: 'Knockout', fontSize: 15, color: '#cdeaff', marginTop: 16 },
   finnSays: { fontFamily: 'Shark', fontSize: 20, color: '#ffcf3b', marginBottom: 4 },
-  bigBadge: { width: 190, height: 190 },
   teamName: { fontFamily: 'Shark', fontSize: 40, marginTop: 4, textShadowColor: '#021e45', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   tag: { fontFamily: 'Knockout', fontSize: 14, letterSpacing: 2, color: '#cdeaff' },
   line: { fontFamily: 'Knockout', fontSize: 18, color: '#fff', textAlign: 'center', marginTop: 8, lineHeight: 23, paddingHorizontal: 8 },
@@ -296,6 +305,5 @@ const s = StyleSheet.create({
   welcomeKicker: { fontFamily: 'Shark', fontSize: 22, color: '#fff' },
   welcomeStage: { width: 260, height: 260, alignItems: 'center', justifyContent: 'center' },
   ring: { position: 'absolute', width: 240, height: 240, borderRadius: 120 },
-  welcomeBadge: { width: 220, height: 220 },
   welcomeName: { fontFamily: 'Shark', fontSize: 42, textShadowColor: '#021e45', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
 });

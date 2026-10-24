@@ -45,7 +45,7 @@ function fixtureRaid(boss: BossId, over: Partial<BossRaid> = {}): BossRaid {
   return { id: 900000 + boss.length, task_id: 900109, boss, ride_name: 'Practice space attraction',
     latitude: RIDE.latitude, longitude: RIDE.longitude, hp_max: 6100, hp_left: 3480, status: 'active', starts_at: stamp,
     ends_at: new Date(Date.now() + 18 * 60000).toISOString(), fighters: 6, teams: { mouse: 1240, globe: 860, shark: 520 },
-    team_names: { mouse: 'Team Mouse', globe: 'Team Globe', shark: 'Team Shark' },
+    team_names: { mouse: 'Team Gold', globe: 'Team Green', shark: 'Team Shark' },
     feed: [], top: [{ username: 'finnfan22', damage: 1480, you: false, team: 'mouse' }, { username: 'sharkbait_sam', damage: 1144, you: true, team: 'shark' },
       { username: 'coasterkid', damage: 640, you: false, team: 'globe' }],
     mvp_is_you: false, ride_control: null, energy_cost: 10, reach_meters: 90, max_attacks: 5,

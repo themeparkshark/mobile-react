@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Animated, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { borderRadius, shadows, spacing } from '../../../design-system';
+import PageScroll from './PageScroll';
 import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import HapticPatterns from '../../../helpers/hapticPatterns';
 import type { LinePlayChapter } from '../../../services/lineplay/chapters';
@@ -108,7 +109,7 @@ export default function CrewRelayCard({ chapter, progress, paused, onChange }: P
   );
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.card}>
+    <PageScroll fill="#d9f4ff">
       <ImageBackground source={require('../../../../assets/images/screens/lineplay/crew-relay-hero-v1.png')}
         resizeMode="cover" style={styles.hero} imageStyle={styles.heroImage}>
         <View style={styles.heroCopy}>
@@ -225,14 +226,11 @@ export default function CrewRelayCard({ chapter, progress, paused, onChange }: P
             option(label, () => onChange(chooseCrewRoute(progress, value as CrewRoute)), value))}
         </View>
       )}
-    </ScrollView>
+    </PageScroll>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: '#83d5f9' },
-  card: { margin: spacing.md, padding: spacing.md, borderRadius: borderRadius.xxl,
-    borderWidth: 3, borderColor: '#fff', backgroundColor: '#d9f4ff', ...shadows.lg },
   hero: { height: 110, justifyContent: 'center', overflow: 'hidden',
     margin: -6, marginBottom: spacing.md, borderRadius: 16, paddingLeft: 14, backgroundColor: '#0875c9' },
   heroImage: { borderRadius: 16 },

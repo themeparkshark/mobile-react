@@ -12,7 +12,7 @@
  */
 import { memo, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, ZoomIn, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import ShelfCoin from '../../../../components/collection/ShelfCoin';
 import LevelUpBurst from '../../../../components/coin/LevelUpBurst';
 import Crowning from '../../../../components/coin/Crowning';
@@ -24,10 +24,11 @@ import { usePresentationSlot } from '../../../../hooks/usePresentationQueue';
 import { SoundEffectContext } from '../../../../context/SoundEffectProvider';
 import { GameIcon } from '../../../../ui';
 import { BRAND } from '../../../../ui/tokens';
-import type { WaitCoinProgress, WaitStamp } from '../../../../services/lineplay/waitScreen';
+import type { WaitCoinProgress } from '../../../../services/lineplay/waitScreen';
 import type { WaitCoin } from './useWaitScreenCoin';
 import CoinFillRing from './CoinFillRing';
-import WaitStampBadge from './WaitStampBadge';
+import KidText from '../KidText';
+import { coinLevelMarker, markWaitPartLanded, rememberWaitLevel, waitLevelMark, type WaitKey } from '../../../../services/lineplay/waitLevelMemory';
 import { isDimFlashingLightsEnabled } from '../../../../../modules/flash-safety';
 
 export interface WaitCoinStageProps {
@@ -37,7 +38,6 @@ export interface WaitCoinStageProps {
   readonly owned: boolean;
   readonly progress: WaitCoinProgress;
   readonly partsBanked: number;
-  readonly stamps: readonly WaitStamp[];
   readonly active: boolean;
   readonly reducedMotion: boolean;
   readonly onLevelUp: () => Promise<{ success: boolean; unlocks?: unknown; xp?: number }>;
@@ -45,19 +45,31 @@ export interface WaitCoinStageProps {
   readonly onLeveled?: () => void;
   /** Dev preview only: level up once, untouched, when ready. */
   readonly autoLevel?: boolean;
+  /** This wait (the session's start time): a level reached in it survives leaving and coming back. */
+  readonly waitKey?: WaitKey | null;
 }
 
 const LEVEL_SOUND = require('../../../../../assets/sounds/reward.mp3');
 
-function WaitCoinStage({ size, coin, owned, progress, partsBanked, stamps, active, reducedMotion, onLevelUp,
-  onLeveled, autoLevel = false }: WaitCoinStageProps) {
+function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reducedMotion, onLevelUp,
+  onLeveled, autoLevel = false, waitKey = null }: WaitCoinStageProps) {
   const { playSound } = useContext(SoundEffectContext);
   const level = coin?.level ?? 1;
   const tier = coinTier(level);
   const coinSize = Math.round(size * 0.6);
 
+  // A level reached this wait stays on the coin for the rest of the wait (kept outside this
+  // component, so leaving LinePlay and coming back still shows it): after the Parts are spent
+  // an empty ring never looks like "nothing earned in 90 minutes".
+  const coinId = coin?.id ?? null;
+  const [levelMark, setLevelMark] = useState(() => waitLevelMark(waitKey, coinId));
+  useEffect(() => { setLevelMark(waitLevelMark(waitKey, coinId)); }, [waitKey, coinId]);
+  const leveledTo = levelMark?.level ?? null;
+
   // A Part landed: spark the ring.
   const [landKey, setLandKey] = useState(0);
+  /** The goal pip just took the ribbon's place (this visit): it fades in, never pops. */
+  const [pipSwapped, setPipSwapped] = useState(false);
   const lastBanked = useRef<number | null>(null);
   useEffect(() => {
     const previous = lastBanked.current;
@@ -65,6 +77,12 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, stamps, activ
     if (previous == null || partsBanked <= previous) return;
     // The WaitCard already chimes and taps for a credited Part; the coin only sparks.
     setLandKey(key => key + 1);
+    // The first new Part after a level up: the coin swaps "LEVELED UP!" for its next goal.
+    if (levelMark && !levelMark.partLanded) {
+      // No wait id (never expected): the swap still happens on screen, it is just not remembered.
+      setLevelMark(markWaitPartLanded(waitKey, coinId) ?? { ...levelMark, partLanded: true });
+      setPipSwapped(true);
+    }
   }, [partsBanked]);
 
   // Ready to level: one Medium tap the moment it fills, never on every render.
@@ -109,7 +127,10 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, stamps, activ
       playLimited('coin-level-up', { priority: SFX_PRIORITY.land, durationMs: 900 }, () => { playSound?.(LEVEL_SOUND); });
       setBurst(current => ({ fx: plan, key: (current?.key ?? 0) + 1 }));
       setIgniteKey(key => key + 1);
-      setRibbon(levelRibbon(target));
+      // The chip names the new look, with no level number: "LEVELED UP!" on the coin is the one level marker.
+      setRibbon(`${coinTier(target).name.toUpperCase()} COIN!`);
+      // Remembered only under a real wait id, so two waits can never share a mark.
+      setLevelMark(waitKey != null ? rememberWaitLevel(waitKey, coin.id, target) : { level: target, partLanded: false });
       timers.current.push(setTimeout(() => setRibbon(null), 2600));
       scale.value = reducedMotion ? 1 : withSequence(withTiming(0.86, { duration: 90 }), withSpring(1, { damping: 6, stiffness: 240 }));
       void AccessibilityInfo.announceForAccessibility(`Coin leveled up. ${levelRibbon(target)}.`);
@@ -124,7 +145,7 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, stamps, activ
     } finally {
       setBusy(false);
     }
-  }, [coin, progress.ready, busy, reducedMotion, onLevelUp, onLeveled, playSound, scale]);
+  }, [coin, progress.ready, busy, reducedMotion, onLevelUp, onLeveled, playSound, scale, waitKey]);
 
   const autoLeveled = useRef(false);
   useEffect(() => {
@@ -133,10 +154,13 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, stamps, activ
     void levelUp();
   }, [autoLevel, progress.ready]);
 
+  const marker = coinLevelMarker(levelMark, progress.goalLevel);
   const label = !owned ? 'Win this ride to collect its coin'
-    : ribbon ?? error ?? (busy ? 'Leveling up…' : progress.label);
+    : ribbon ?? error ?? (busy ? 'Leveling up…' : progress.chip);
+  /** The plain "2 of 4" count: the Parts gem beside it says what is counted. */
+  const showCount = owned && !ribbon && !error && !busy && !progress.ready && !progress.partsReady && !progress.maxed;
   const accessibility = owned
-    ? `${coin?.rideName ?? 'Ride'} coin, Level ${level} ${tier.name}. ${progress.label}.`
+    ? `${coin?.rideName ?? 'Ride'} coin, Level ${level} ${tier.name}. ${leveledTo != null ? `You leveled it up to Level ${leveledTo} this wait. ` : ''}${progress.label}.`
     : 'This ride coin is not collected yet. Parts you earn here wait for it.';
 
   return (
@@ -152,7 +176,7 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, stamps, activ
         </View>
         <Animated.View style={[{ width: coinSize, height: coinSize }, coinStyle]} pointerEvents="none">
           {owned && coin ? (
-            <ShelfCoin coinUrl={coin.coinUrl} level={level} size={coinSize} igniteKey={igniteKey} />
+            <ShelfCoin coinUrl={coin.coinUrl} level={level} size={coinSize} igniteKey={igniteKey} contactShadow={false} />
           ) : (
             <View style={[styles.ghost, { width: coinSize, height: coinSize, borderRadius: coinSize / 2 }]}>
               <GameIcon name="coin" size={coinSize * 0.5} />
@@ -160,23 +184,41 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, stamps, activ
           )}
           {burst && <LevelUpBurst fx={burst.fx} size={coinSize} playKey={burst.key} />}
         </Animated.View>
-        {owned && (
-          <View style={[styles.levelPip, { borderColor: tier.ringDeep }]} pointerEvents="none">
-            {level >= 10 ? <GameIcon name="crown" size={16} /> : <Text style={styles.levelPipText}>{level}</Text>}
-          </View>
+        {/* One level marker at a time. The ring's goal (a gold up arrow, no number: the closed card keeps
+            its numbers to four) says this fill levels the coin up, so the chip under the coin only has to
+            say "2 of 4"; the spoken label names the level. Right after a level up the coin wears
+            "LEVELED UP!" instead until the next Part lands. Max level shows the crown there. */}
+        {owned && marker === 'goal' && progress.goalLevel != null && (
+          <Animated.View entering={reducedMotion || !pipSwapped ? undefined : FadeIn.delay(120).duration(260)}
+            style={styles.goalPip} pointerEvents="none" testID="coin-goal-pip">
+            <View style={styles.goalArrow}><GameIcon name="arrow" size={14} /></View>
+          </Animated.View>
         )}
-        {stamps.length > 0 && (
-          <View style={styles.stamps} pointerEvents="none">
-            {stamps.map(stamp => <WaitStampBadge key={stamp.kind} stamp={stamp} />)}
+        {/* "LEVELED UP!" with no number: the closed card keeps its numbers to four, and the
+            spoken label still says the level. */}
+        {owned && marker === 'ribbon' && leveledTo != null && (
+          <Animated.View entering={reducedMotion ? undefined : ZoomIn.springify().damping(12)}
+            exiting={reducedMotion ? undefined : FadeOut.duration(180)} style={styles.leveledRibbon}
+            pointerEvents="none">
+            <GameIcon name="star" size={13} />
+            <Text style={styles.leveledText}>LEVELED UP!</Text>
+          </Animated.View>
+        )}
+        {owned && level >= 10 && (
+          <View style={[styles.levelPip, { borderColor: tier.ringDeep }]} pointerEvents="none">
+            <GameIcon name="crown" size={16} />
           </View>
         )}
       </Pressable>
       <View style={[styles.labelChip, progress.ready && owned && styles.labelChipReady, (ribbon != null) && styles.labelChipRibbon]}>
         {progress.ready && owned && !busy && !ribbon && <GameIcon name="sparkle" size={14} />}
-        <Text style={[styles.labelText, ((progress.ready && owned) || ribbon != null) && styles.labelTextReady]} numberOfLines={1}
+        {showCount && <GameIcon name="parts" size={17} />}
+        {/* The count's digits use the flagged-1 font, so "1 of 6" never reads "I of 6". */}
+        <KidText style={[styles.labelText, showCount && styles.labelTextCount,
+          ((progress.ready && owned) || ribbon != null) && styles.labelTextReady]} numberOfLines={1}
           adjustsFontSizeToFit minimumFontScale={0.8}>
           {progress.ready && owned && !busy && !ribbon && !error ? 'TAP TO LEVEL UP' : label}
-        </Text>
+        </KidText>
       </View>
       {crowningId && coin && (
         <Modal visible={crowning.visible} transparent animationType="fade" onRequestClose={() => { crowning.done(); setCrowningId(null); }}>
@@ -196,14 +238,19 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(5,52,110,0.25)' },
   levelPip: { position: 'absolute', right: '12%', bottom: '12%', minWidth: 26, height: 26, borderRadius: 13,
     paddingHorizontal: 5, backgroundColor: BRAND.white, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
-  levelPipText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 1 },
-  stamps: { position: 'absolute', left: -14, top: 2, gap: 3, alignItems: 'flex-start' },
   labelChip: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: -6, paddingHorizontal: 10, paddingVertical: 3,
     borderRadius: 12, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)', maxWidth: 190 },
   labelChipReady: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
   labelChipRibbon: { backgroundColor: '#ffffff', borderColor: BRAND.gold },
   labelText: { fontFamily: 'Knockout', fontSize: 13, color: '#ffffff', letterSpacing: 0.3 },
   labelTextReady: { color: BRAND.navy },
+  labelTextCount: { fontSize: 15, letterSpacing: 0.4 },
+  goalPip: { position: 'absolute', right: 0, bottom: '9%', alignItems: 'center', justifyContent: 'center',
+    width: 22, height: 22, borderRadius: 11, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy },
+  goalArrow: { transform: [{ rotate: '-90deg' }] },
+  leveledRibbon: { position: 'absolute', top: -9, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 7, height: 20, borderRadius: 10, backgroundColor: '#ffffff', borderWidth: 2, borderColor: BRAND.gold },
+  leveledText: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.navy, letterSpacing: 0.3 },
   crowningWrap: { flex: 1, padding: 18, justifyContent: 'center', backgroundColor: 'rgba(5,52,110,0.35)' },
 });
 

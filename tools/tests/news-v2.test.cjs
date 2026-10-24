@@ -278,3 +278,115 @@ test('game press never changes its footprint: the face gives up the visible lip,
   assert.match(src, /useAnimatedStyle\(\(\) => \(\{ transform: \[\{ translateY: down\.value \* drop \}\] \}\)\)/);
   assert.doesNotMatch(src, /marginBottom: down/);
 });
+
+test('kid filter: horror nights, bars and drinks never reach the News tab (Oct 23 2026)', () => {
+  const hide = [
+    'Halloween Horror Nights 2026 Opens at Universal Orlando', 'Howl-O-Scream San Diego Reveals Six Haunted Houses for 2026',
+    'Knott’s Scary Farm 2026 Tickets Now on Sale', 'Six Flags Magic Mountain Reveals 2026 Fright Fest',
+    'Universal Orlando Refreshes Its Guide to the Best Cocktails', 'Universal CityWalk Adds Wicked Fan Event and Traitors Bar',
+    'Disney’s Lakeshore Lodge Reveals Branch & Brush Lounge', '600 Block Speakeasy Returns to Universal CityWalk',
+    'Terror Tram Starring Art the Clown Announced', 'HHN 2026 Scare Zones Have Guest Triggers',
+    'Cedar Point Casting The Conjuring: Beyond Fear', 'Violent Night 2 Trailer: In Theaters December 4',
+  ];
+  for (const title of hide) assert.equal(model.isGrownUpStory({ ...entry(1, ''), title }), true, title);
+  const keep = [
+    'Mickey’s Not-So-Scary Halloween Party 2026 Merch Guide', 'Disney Wine & Dine Half Marathon Weekend 2026: What’s New',
+    'EPCOT International Food & Wine Festival Booths Revealed', 'New Mickey Premium Bar Flavor at Magic Kingdom',
+    'Twilight Zone Tower of Terror Gets a New Drop Sequence', 'Haunted Mansion Holiday Returns to Disneyland',
+    'Butterbeer Season Returns to Universal Orlando', 'Pixar Place Hotel Debuts Monsters, Inc. Halloween Wallpapers',
+    'Big Thunder Mountain Adds New Lap Bars',
+  ];
+  for (const title of keep) assert.equal(model.isGrownUpStory({ ...entry(2, ''), title }), false, title);
+  // Exact WordPress categories: Halloween Horror Nights (71) and Howl-O-Scream (74).
+  assert.equal(model.isGrownUpStory({ ...entry(3, ''), title: 'New lineup revealed', categories: [47, 56, 71] }), true);
+  assert.equal(model.isGrownUpStory({ ...entry(4, ''), title: 'Tickets on sale', categories: [59, 74] }), true);
+  // The opening lines count for horror events (a title that hides the event name).
+  assert.equal(model.isGrownUpStory({ ...entry(5, ''), title: 'Dead, Deader, Deadest 2026', content: '<p>Halloween Horror Nights at Universal Studios Hollywood adds a new house this fall.</p>' }), true);
+  // A family land whose opening line says "horror" keeps its story; only event names count there.
+  assert.equal(model.isGrownUpStory({ ...entry(12, ''), title: 'Monsters Unchained Adds a New Scene', content: '<p>Dark Universe brings classic horror films to life at Epic Universe.</p>' }), false);
+  // Every list path drops them.
+  assert.equal(model.matchesFilter({ ...entry(6, ''), title: 'Halloween Horror Nights adds a house' }, 'all'), false);
+  assert.equal(model.matchesFilter({ ...entry(6, ''), title: 'Halloween Horror Nights adds a house', categories: [56, 71] }, 'universal'), false);
+  assert.deepEqual([...model.kidSafe([{ ...entry(7, ''), title: 'HHN merch' }, entry(8, '')]).map(e => e.id)], [8]);
+  const related = model.relatedFor(entry(9, ''), [{ ...entry(10, ''), title: 'Universal Horror Unleashed adds a maze' }, entry(11, '')], 3);
+  assert.deepEqual([...related.map(e => e.id)], [11]);
+  assert.equal(model.NEWS_FILTERS.find(f => f.key === 'universal').parks.some(p => p.key === 'hhn'), false, 'no Horror Nights chip');
+  // A link inside a story to a grown-up story never opens in the kids reader.
+  const html = model.prepareArticleHtml('<p><a href="https://themeparkshark.com/2026/09/01/hhn-35-houses-revealed/">x</a> <a href="https://themeparkshark.com/2026/09/01/space-mountain-news/">y</a></p>');
+  assert.match(html, /class="out-link" href="https:\/\/themeparkshark\.com\/2026\/09\/01\/hhn-35/);
+  assert.match(html, /class="tps-link" href="https:\/\/themeparkshark\.com\/2026\/09\/01\/space-mountain/);
+  const feed = read('src/screens/NewsScreen/newsFeed.ts');
+  assert.match(feed, /entries: kidSafe\(page\.entries\)/, 'every fetched page is filtered');
+  assert.match(feed, /kidSafe\(mergeEntries\(list\)\)/, 'the saved copy is filtered too');
+});
+
+test('the Next pill shows our shark, never a round crop of the next story photo', () => {
+  const reader = read('src/screens/ArticleScreen.tsx');
+  assert.doesNotMatch(reader, /next\.featured_image/);
+  assert.match(reader, /<GameIcon name="shark" size=\{30\} \/>/);
+});
+
+test('a link inside a story to a grown-up story never opens in the kids reader (round 2)', async () => {
+  const hhn = 'https://themeparkshark.com/2026/09/01/hhn-35-houses-revealed/';
+  const plain = 'https://themeparkshark.com/2026/09/02/new-lineup-revealed/';
+  const fine = 'https://themeparkshark.com/2026/09/03/space-mountain-news/';
+  let fetched = 0;
+  const none = () => undefined;
+  // The slug names a horror event: no fetch, straight to the grown-up gate.
+  const a = await model.storyLinkTarget(hhn, none, async () => { fetched += 1; return entry(1, ''); });
+  assert.equal(a.kind, 'outside');
+  assert.equal(fetched, 0);
+  // A harmless slug whose fetched copy is filed under Horror Nights (71).
+  const b = await model.storyLinkTarget(plain, none, async () => ({ ...entry(2, ''), title: 'New lineup revealed', categories: [47, 56, 71] }));
+  assert.equal(b.kind, 'outside');
+  // The saved copy says grown-up.
+  const c = await model.storyLinkTarget(plain, () => ({ ...entry(3, ''), title: 'Howl-O-Scream tickets', categories: [59] }), async () => null);
+  assert.equal(c.kind, 'outside');
+  // A failed fetch goes outside; a kid-safe story opens in the reader.
+  assert.equal((await model.storyLinkTarget(fine, none, async () => { throw new Error('offline'); })).kind, 'outside');
+  const d = await model.storyLinkTarget(fine, none, async () => entry(4, ''));
+  assert.equal(d.kind, 'story');
+  assert.equal(d.entry.id, 4);
+  // The reader's own paths use it, and every way into the reader refuses grown-up stories.
+  const reader = read('src/screens/ArticleScreen.tsx');
+  assert.match(reader, /storyLinkTarget\(href, findBySlug, fetchBySlug\)/);
+  assert.match(reader, /if \(isGrownUpStory\(target\)\) \{ tap\(\); void openExternal\(target\.url\); return; \}/);
+  assert.doesNotMatch(reader, /fetchBySlug\(slug\)\s*\.then/);
+  const feed = read('src/screens/NewsScreen/newsFeed.ts');
+  assert.match(feed, /return entry && !isGrownUpStory\(entry\) \? entry : null;/, 'a fetched grown-up story never comes back');
+  assert.match(feed, /if \(isGrownUpStory\(entry\)\) continue;/, 'the reader cache never holds one');
+});
+
+test('the reader never shows a grown-up story handed in as params.entry (round 3)', () => {
+  const hhn = { ...entry(7, ''), title: 'HHN 35 houses revealed', categories: [71] };
+  const kid = entry(8, '');
+  const remembered = [];
+  const remember = list => remembered.push(...list);
+  const none = () => undefined;
+  // The fallback list never holds a grown-up entry, and it is never cached.
+  assert.deepEqual([...model.kidReaderList({ entry: hhn }, none, remember)], []);
+  assert.equal(remembered.length, 0);
+  // Cached ids drop grown-up stories too; a kid-safe entry still opens.
+  const cache = { 7: hhn, 8: kid };
+  assert.deepEqual([...model.kidReaderList({ ids: [7, 8] }, id => cache[id], remember)].map(e => e.id), [8]);
+  assert.deepEqual([...model.kidReaderList({ entry: kid }, none, remember)].map(e => e.id), [8]);
+  assert.deepEqual(remembered.map(e => e.id), [8]);
+  // The screen builds its list only through it, and sends a grown-up params.entry out through the gate.
+  const reader = read('src/screens/ArticleScreen.tsx');
+  assert.match(reader, /useState<NewsEntry\[\]>\(\(\) => kidReaderList\(params, getEntry, rememberEntries\)\)/);
+  assert.doesNotMatch(reader, /params\.entry \? \[params\.entry\]/);
+  // Round 4: one effect, in order: close the reader, then open the gate after the transition (over News).
+  assert.match(reader, /if \(entry \|\| sentOut\.current\) return;\s*sentOut\.current = true;\s*const grownUpUrl = params\.entry && isGrownUpStory\(params\.entry\) \? params\.entry\.url : null;\s*navigation\.goBack\(\);\s*if \(grownUpUrl\) InteractionManager\.runAfterInteractions\(\(\) => \{ void openExternal\(grownUpUrl\); \}\);/,
+    'an empty list closes the reader, then the gate opens on top of News');
+  assert.equal((reader.match(/navigation\.goBack\(\)/g) ?? []).length, 2, 'the Back button and the empty-list close, nothing else');
+});
+
+test('kid filter keeps Disney Channel ZOMBIES stories (round 2)', () => {
+  const keep = [
+    'Disney’s ZOMBIES 4 Cast Visits Disneyland', 'Disney Channel ZOMBIES Dance Party Comes to Hollywood Studios',
+    'ZOMBIES: The Re-Animated Series Premieres on Disney+', 'Disney+ ZOMBIES Meet and Greet Announced',
+  ];
+  for (const title of keep) assert.equal(model.isGrownUpStory({ ...entry(1, ''), title }), false, title);
+  assert.equal(model.isGrownUpStory({ ...entry(2, ''), title: 'Zombies Take Over the New Scare Zone' }), true);
+  assert.equal(model.isGrownUpStory({ ...entry(3, ''), title: 'The Walking Dead Zombies Return' }), true);
+});

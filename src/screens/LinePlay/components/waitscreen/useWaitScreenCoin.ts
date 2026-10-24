@@ -64,6 +64,9 @@ export interface UseWaitScreenCoin {
   readonly levelUp: () => Promise<LevelUpResult>;
 }
 
+/** Dev preview only: the fixture coin's level and spent Parts for this app run. */
+const previewCoinState: { coin: WaitCoin; spent: number } = { coin: PREVIEW_WAIT_COIN, spent: 0 };
+
 export default function useWaitScreenCoin(input: {
   readonly rideId: number | null;
   readonly waitScreen: LineWaitScreenSummary | null | undefined;
@@ -72,8 +75,10 @@ export default function useWaitScreenCoin(input: {
   /** Dev preview only: a fixture coin, no network. */
   readonly preview?: boolean;
 }): UseWaitScreenCoin {
-  const [previewCoin, setPreviewCoin] = useState<WaitCoin>(PREVIEW_WAIT_COIN);
-  const [previewSpent, setPreviewSpent] = useState(0);
+  // Dev preview: the fixture coin lives for the app run, like a real coin, so leaving
+  // LinePlay and coming back finds it where it was.
+  const [previewCoin, setPreviewCoin] = useState<WaitCoin>(() => previewCoinState.coin);
+  const [previewSpent, setPreviewSpent] = useState(() => previewCoinState.spent);
   const { rideId, waitScreen, enabled } = input;
   const credited = input.creditedParts ?? 0;
   const [cache, setCache] = useState<CachedWaitCoin | null>(null);
@@ -162,8 +167,11 @@ export default function useWaitScreenCoin(input: {
       status: 'owned', coin: previewCoin, partsBanked: Math.max(0, (waitScreen?.parts_banked ?? 0) - previewSpent),
       waitRatio: waitScreen?.wait_ratio ?? null, inLineNow: waitScreen?.in_line_now ?? null,
       levelUp: async () => {
+        const leveled = { ...previewCoin, level: previewCoin.level + 1, partsToNext: 6, energyToNext: 30, nextTierName: 'Prismatic' };
+        previewCoinState.spent = previewCoin.partsToNext;
+        previewCoinState.coin = leveled;
         setPreviewSpent(previewCoin.partsToNext);
-        setPreviewCoin(coin => ({ ...coin, level: coin.level + 1, partsToNext: 6, energyToNext: 30, nextTierName: 'Prismatic' }));
+        setPreviewCoin(leveled);
         return { success: true, ride_coin: {} as never, spent: { energy: 20, ride_parts: 4 } };
       },
     };

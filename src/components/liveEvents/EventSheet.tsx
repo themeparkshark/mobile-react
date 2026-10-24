@@ -16,6 +16,7 @@ import ChestReveal from './ChestReveal';
 import ChestTrack from './ChestTrack';
 import PrizeIcon from './PrizeIcon';
 import { eventArt, type EventArt } from './eventArt';
+import TeamBadge from '../TeamBadge';
 
 type Opened = { key: string; rewards: EventReward | null; already?: boolean; failed?: 'not_ready' | 'network' | false };
 
@@ -119,7 +120,7 @@ function TeamRace({ event }: { readonly event: LiveEvent }) {
         return (
           <View key={team} style={[styles.teamRow, mine && styles.teamMine]} accessible
             accessibilityLabel={`${TEAMS[team].name}${mine ? ', your team' : ''}${leads ? ', in the lead' : ''}`}>
-            <Image source={TEAMS[team].badge} style={styles.crest} contentFit="contain" />
+            <TeamBadge team={team} style={styles.crest} />
             <View style={styles.teamTrack}>
               <View style={[styles.teamFill, { width: `${Math.max(3, (score / max) * 100)}%`, backgroundColor: TEAMS[team].color }]} />
             </View>

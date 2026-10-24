@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, Text, View, StyleSheet } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
+import { DailyGiftContext } from '../context/DailyGiftProvider';
 import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import Avatar from './Avatar';
 import Button from './Button';
@@ -10,6 +11,7 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { ws7Preview } from '../dev/ws7Preview';
 import { useHelp } from './help/HelpProvider';
 import type { GlossaryKey } from '../services/help/glossary';
+import useFlameStreak from '../services/retention/useFlameStreak';
 
 /** The one Energy sentence (docs/economy-glossary.md, GET /api/economy). */
 export const ENERGY_RULE = 'Energy powers boss raids and coin upgrades. It never runs out on a timer.';
@@ -72,8 +74,12 @@ function StatItem({ icon, label, value, index, visible, onPress }: StatItemProps
 
 export default function RadialStatsMenu() {
   const { player } = useContext(AuthContext);
+  const { dailyGift } = useContext(DailyGiftContext);
   const { explain } = useHelp();
   const [isOpen, setIsOpen] = useState(false);
+  // One flame number in the whole game: the Daily 3 streak while Daily 3 is on, else the
+  // Daily Chest's (the same number the chest shows). Unknown means the row waits.
+  const { owner: streakFrom, streak } = useFlameStreak(dailyGift?.streak, isOpen);
   // Dev visual QA only.
   useEffect(() => {
     if (ws7Preview() !== 'hud') return;
@@ -122,7 +128,6 @@ export default function RadialStatsMenu() {
 
   const energy = player.energy ?? 0;
   const tickets = player.tickets ?? 0;
-  const streak = player.current_streak ?? 0;
   
   // Format large numbers with commas (like Stardust in Pokemon GO)
   const formatNumber = (n: number) => n.toLocaleString();
@@ -153,7 +158,8 @@ export default function RadialStatsMenu() {
   const items = [
     { icon: 'energy' as const, label: 'Energy', value: formatNumber(energy), onPress: () => explainStat('energy', energy) },
     { icon: 'ticket' as const, label: 'Tickets', value: formatNumber(tickets), onPress: () => explainStat('tickets', tickets) },
-    { icon: 'streak' as const, label: 'Day streak', value: String(streak), onPress: () => explainStat('day_streak', streak) },
+    ...(streak != null && streak > 0
+      ? [{ icon: 'streak' as const, label: 'Day streak', value: String(streak), onPress: () => explainStat(streakFrom === 'daily3' ? 'daily3_streak' : 'day_streak', streak) }] : []),
   ];
 
   return (

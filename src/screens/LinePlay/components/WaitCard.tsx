@@ -6,6 +6,8 @@
 
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import KidText from './KidText';
+import Reanimated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
 import type { PauseReason, WaitSource, RewardConnectionIssue } from '../../../services/lineplay/LinePlaySession';
@@ -17,6 +19,8 @@ import { GameIcon, type GameIconName } from '../../../ui';
 import type { LineBonusSummary } from '../../../api/endpoints/me/inline-timer/types';
 import { bonusDoneToday, nextBonusSeconds, ringInfoCopy, ringPill, visiblePips,
   type PipState } from '../../../services/lineplay/bonusRounds';
+import { heroSignDetail, waitSourceHint, waitStamps, type WaitStamp } from '../../../services/lineplay/waitScreen';
+import WaitStampBadge from './waitscreen/WaitStampBadge';
 
 /** A detail line with its art, never an emoji. */
 function HintLine({ icon, children }: { icon: GameIconName; children: string }) {
@@ -68,6 +72,10 @@ export interface WaitCardProps {
   readonly bonus?: LineBonusSummary | null;
   /** A game is mounted: the ring's idle loops (bob, glint, pulse) rest. */
   readonly gameOpen?: boolean;
+  /** Details opened or closed (a short phone makes room for it). */
+  readonly onDetailsChange?: (open: boolean) => void;
+  /** The screen can close Details too ("Back to games"); when given, this is the truth. */
+  readonly detailsOpen?: boolean;
   /**
    * The wait screen body (L2 WaitCoinHero): the ride's coin center stage with
    * the wait stats. Compact mode only; the Part gem and count move into it.
@@ -121,6 +129,71 @@ function fmt(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Details under the coin hero: at most two short lines (where the wait number
+ * came from, then one Parts idea), the Marathon and Night marks as badges, and
+ * a ticket line only while a ticket is in play. The per-wait cap is never
+ * listed ahead of time; the status line says so once a kid reaches it.
+ */
+export function heroDetailLines(input: {
+  /** Null when SIGN SAYS already prints the sign's number (a plain posted sign). */
+  readonly signLine: string | null;
+  readonly sublineInHeadline: boolean;
+  readonly subline: string;
+  readonly rewardTrackingAvailable: boolean;
+  readonly atCap: boolean;
+  readonly intervalSeconds: number;
+}): readonly string[] {
+  const partsLine = !input.sublineInHeadline ? input.subline
+    : input.rewardTrackingAvailable && !input.atCap ? 'Stay near the ride to earn more Parts.' : null;
+  return [input.signLine, partsLine].filter((line): line is string => line != null);
+}
+
+/** One short ticket line, in kid words. */
+export function ticketHint(available: boolean, verifiedSeconds: number, intervalSeconds: number): string {
+  if (!available) return 'You got today’s ticket for this ride.';
+  return verifiedSeconds >= intervalSeconds ? 'You get a ticket when this wait ends.'
+    : `Stay near the ride ${fmt(Math.max(0, intervalSeconds - verifiedSeconds))} more for a ticket.`;
+}
+
+/** What a wait mark means, in a few words beside it (a badge alone means nothing to a kid). */
+export function stampCaption(kind: WaitStamp['kind']): string {
+  return kind === 'marathon' ? 'An hour in line!' : 'A night wait!';
+}
+
+/** The picture in the Details icon column for a wait mark: a medal for an hour in line, the moon at night. */
+export function stampIcon(kind: WaitStamp['kind']): GameIconName {
+  return kind === 'marathon' ? 'medal1' : 'moon';
+}
+
+/** The picture beside each Details line: the ride car for the sign's time, the Parts gem for Parts. */
+export function heroDetailIcon(line: string): GameIconName {
+  return /ride sign|sign time/i.test(line) ? 'ride' : 'parts';
+}
+
+function HeroDetails({ stamps, lines, ticket }: {
+  stamps: readonly WaitStamp[]; lines: readonly string[]; ticket: string | null;
+}) {
+  return <View style={styles.heroDetails}>
+    {stamps.length > 0 && <View style={styles.stampRow} accessible accessibilityLabel={stamps.map(stamp => stamp.kind === 'marathon'
+      ? 'Marathon wait: an hour or more in line.' : 'Night wait, after 8 PM.').join(' ')}>
+      {/* One picture and one short caption per mark: the medal or the moon says it once. */}
+      {stamps.map(stamp => <View key={stamp.kind} style={styles.detailLine}>
+        <GameIcon name={stampIcon(stamp.kind)} size={20} />
+        <KidText style={styles.detailLineText}>{stampCaption(stamp.kind)}</KidText>
+      </View>)}
+    </View>}
+    {lines.map(line => <View key={line} style={styles.detailLine}>
+      <GameIcon name={heroDetailIcon(line)} size={20} />
+      <KidText style={styles.detailLineText}>{line}</KidText>
+    </View>)}
+    {ticket && <View style={styles.detailLine}>
+      <GameIcon name="ticket" size={20} />
+      <KidText style={styles.detailLineText}>{ticket}</KidText>
+    </View>}
+  </View>;
+}
+
 export default function WaitCard({
   rideName,
   compact = false,
@@ -154,10 +227,25 @@ export default function WaitCard({
   onPlayBonus,
   bonus = null,
   gameOpen = false,
+  onDetailsChange,
+  detailsOpen,
   hero = null,
 }: WaitCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expandedState, setExpanded] = useState(false);
+  const expanded = detailsOpen ?? expandedState;
   const [reducedMotion, setReducedMotion] = useState(false);
+  // Details opens and closes in ONE commit: the screen hears about it right here, not in a
+  // later effect, so on a short phone the crew row fades out while the lines fade in and the
+  // pages glide (Reanimated layout animations on the UI thread). Reduce Motion: it just switches.
+  const toggleDetails = () => {
+    const next = !expanded;
+    setExpanded(next);
+    onDetailsChange?.(next);
+  };
+  const onDetailsChangeRef = useRef(onDetailsChange);
+  onDetailsChangeRef.current = onDetailsChange;
+  // If the card goes away while open, the screen gets its crew row back.
+  useEffect(() => () => onDetailsChangeRef.current?.(false), []);
   useEffect(() => {
     let alive = true;
     void AccessibilityInfo.isReduceMotionEnabled().then(value => { if (alive) setReducedMotion(value); })
@@ -207,6 +295,8 @@ export default function WaitCard({
   const ringProgress = !rewardTrackingAvailable ? 0
     : atCap ? 1 : Math.max(0, Math.min(1, countdown.progressSeconds / interval));
   const earned = creditedParts ?? 0;
+  // Marathon and Night marks live in Details, not on the coin. Only worked out while Details is open.
+  const stamps = expanded && !completed ? waitStamps(elapsedSeconds, new Date().getHours()) : [];
   const bonusOn = Boolean(bonus?.enabled) && rewardTrackingAvailable && !completed;
   const pips = bonusOn ? visiblePips(bonus) : [];
   const bonusDone = bonusOn && bonusDoneToday(bonus);
@@ -245,6 +335,10 @@ export default function WaitCard({
           : countdown.checking ? 'Keep playing. It shows up soon.'
           : earned === 0 ? 'until your first Ride Part' : 'until your next Ride Part';
 
+  // With the coin hero the status line reads "4:12 until your next Ride Part", so Details never repeats it.
+  const sublineInHeadline = Boolean(hero) && rewardTrackingAvailable && !atCap && !countdown.needsCheck
+    && !countdown.checking && !paused;
+
   return (
     <View style={styles.wrap}>
       <View style={styles.artWrap}>
@@ -278,8 +372,8 @@ export default function WaitCard({
           {hero ? null : noPartsHere ? <GameIcon name="queue" size={34} />
             : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
           <View style={styles.compactCopy} accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}`}>
-            <Text style={styles.compactHeadline} numberOfLines={1}>{headline}{hero && rewardTrackingAvailable && !atCap && !countdown.needsCheck && !countdown.checking && !paused
-              ? ` ${subline}` : !hero && rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}</Text>
+            <KidText style={styles.compactHeadline} numberOfLines={1}>{`${headline}${sublineInHeadline
+              ? ` ${subline}` : !hero && rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}`}</KidText>
             {noPartsHere && <Text style={styles.compactNote} numberOfLines={1}>No Parts at this ride</Text>}
             {bonusOn && <View style={styles.bonusRow}>
               {bonusDone ? <Text style={styles.bonusDone} numberOfLines={1}>Bonus Parts done at this ride today</Text>
@@ -289,12 +383,19 @@ export default function WaitCard({
                   <GameIcon name="sparkle" size={14} /></View> : null}
               {outOfRange && <Text style={styles.compactNote} numberOfLines={1}>Step back into the line area</Text>}
             </View>}
-            {partBurst > 0 && <Text style={styles.compactBurst}>+{partBurst} RIDE PART{partBurst === 1 ? '' : 'S'}!</Text>}
+            {partBurst > 0 && <KidText style={styles.compactBurst}>{`+${partBurst} RIDE PART${partBurst === 1 ? '' : 'S'}!`}</KidText>}
           </View>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
             accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
-            onPress={() => setExpanded(value => !value)} style={styles.compactDetails}>
-            <Text style={styles.detailsButtonText}>{expanded ? 'Hide' : 'Details'}</Text>
+            onPress={toggleDetails} style={styles.compactDetails}
+            hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}>
+            <View style={styles.detailsPill}>
+              <Text style={styles.detailsButtonText}>{expanded ? 'Hide' : 'Details'}</Text>
+              {/* A small arrow so it reads as a button to a kid who can't read yet: down opens, up closes. */}
+              <View style={{ transform: [{ rotate: expanded ? '-90deg' : '90deg' }] }}>
+                <GameIcon name="arrow" size={14} />
+              </View>
+            </View>
           </Pressable>
         </View> : <View style={styles.meterRow}>
           <View style={[{ width: RING, height: RING }, outOfRange && styles.ringOutOfRange]}
@@ -341,19 +442,32 @@ export default function WaitCard({
         )}
 
         {!compact && <Pressable accessibilityRole="button" accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
-          onPress={() => setExpanded(value => !value)} style={[styles.detailsButton, compact && styles.compactDetails]} hitSlop={6}>
+          onPress={toggleDetails} style={[styles.detailsButton, compact && styles.compactDetails]} hitSlop={6}>
           <Text style={styles.detailsButtonText}>{expanded ? 'Hide details' : `${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m · details`}</Text>
         </Pressable>}
-        {expanded && <>
+        {expanded && hero && <Reanimated.View entering={reducedMotion ? undefined : FadeIn.delay(100).duration(180)}
+          exiting={reducedMotion ? undefined : FadeOut.duration(120)}><HeroDetails stamps={stamps} lines={heroDetailLines({
+          // SIGN SAYS already prints the sign's number, so a plain sign gets no line here (said once on
+          // screen). A fresh, different reading at the line is new, so it is said, written like SIGN SAYS.
+          signLine: heroSignDetail({ postedMinutes: postedWaitMinutes, waitSource,
+            freshReadingMinutes: entranceFresh ? entranceWaitMinutes : null }),
+          sublineInHeadline, subline, rewardTrackingAvailable, atCap, intervalSeconds: interval,
+        })} ticket={rewardTrackingAvailable && ticketAvailable !== null
+          ? ticketHint(ticketAvailable, verifiedEligibleSeconds, ticketIntervalSeconds) : null} /></Reanimated.View>}
+        {expanded && !hero && <>
           {compact && <>
             <Text style={styles.meterSub}>{subline}</Text>
-            <Text style={styles.waitSourceHint}>{`${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m`}</Text>
+            {/* With the coin hero, IN LINE and SIGN SAYS are already on the card: no second copy here. */}
+            {!hero && <Text style={styles.waitSourceHint}>{`${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m`}</Text>}
           </>}
-          <Text style={styles.waitSourceHint}>
-            {waitSource === 'posted' ? 'Games are planned from the posted wait when you started.' :
-              waitSource === 'last_known' ? 'Games are planned from an older posted wait.' :
-                'No posted wait was found. Games are planned anyway.'}
-          </Text>
+          {/* One wait source of truth: the same rule (signMinutes) decides SIGN SAYS and this line. */}
+          <Text style={styles.waitSourceHint}>{waitSourceHint({ postedMinutes: postedWaitMinutes, waitSource })}</Text>
+          {stamps.map(stamp => <View key={stamp.kind} style={styles.hintLine}>
+            <WaitStampBadge stamp={stamp} />
+            <Text style={[styles.waitSourceHint, styles.hintLineText]}>
+              {stamp.kind === 'marathon' ? 'An hour or more in line. That is a marathon wait!' : 'A night wait, after 8 PM.'}
+            </Text>
+          </View>)}
           {entranceWaitMinutes != null && entranceWaitObservedAt != null && (
             <Text style={styles.entranceHint}>
               {entranceFresh ? `The sign at the line says ${entranceWaitMinutes}m` :
@@ -398,6 +512,12 @@ export default function WaitCard({
 }
 
 const styles = StyleSheet.create({
+  heroDetails: { gap: 6, marginTop: 6 },
+  stampRow: { gap: 6 },
+  // Details reads like part of the card, not fine print: 15 pt white with the card's navy ink under it.
+  detailLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  detailLineText: { flexShrink: 1, color: '#ffffff', fontFamily: 'Knockout', fontSize: 15, lineHeight: 19,
+    textShadowColor: '#073e79', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
   compactNote: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 13, lineHeight: 16, marginTop: 1 },
   compactContent: { paddingTop: 6 },
   compactRideName: { fontSize: 19, lineHeight: 22, marginRight: 7 },
@@ -409,6 +529,8 @@ const styles = StyleSheet.create({
   compactArcade: { minHeight: 44, paddingHorizontal: 10, marginRight: 7, borderRadius: 12, backgroundColor: '#ffcf3b', borderBottomWidth: 3, borderBottomColor: '#d99a00', justifyContent: 'center' },
   compactArcadeText: { fontFamily: 'Knockout', fontSize: 15, color: '#075083' },
   compactDetails: { minHeight: 44, minWidth: 58, justifyContent: 'center', alignItems: 'center' },
+  detailsPill: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 999, backgroundColor: 'rgba(7,62,121,0.35)' },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   meterRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 14 },
   gemWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
@@ -478,7 +600,7 @@ const styles = StyleSheet.create({
   },
   partBurstText: { color: '#7dffb0', fontFamily: 'Shark', fontSize: 18, marginTop: 4 },
   detailsButton: { minHeight: 34, justifyContent: 'center', alignItems: 'center' },
-  detailsButtonText: { color: '#cdeaff', fontFamily: 'Knockout', fontSize: 14 },
+  detailsButtonText: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14 },
   pauseButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
   hintLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
   hintLineText: { marginTop: 0, flexShrink: 1 },

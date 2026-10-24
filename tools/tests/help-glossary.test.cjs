@@ -146,5 +146,77 @@ test('the Supplies shop and ad offers are explained: optional, what is sold, nev
   assert.equal(shop.id, 'shop');
   const shopText = shop.pages.flatMap(page => page.points.map(point => point.text)).join(' ');
   assert.match(shopText, /grown-up/);
-  assert.match(shopText, /skip it/);
+  // No ad talk while no player can see an ad (round 2).
+  assert.doesNotMatch(shopText, /\bads?\b/i);
+  assert.match(shopText, /never need them to win a ride coin/);
+});
+
+test('no help text mentions ads or a monthly plan while nobody can see an ad (round 2)', () => {
+  assert.equal(topics.ADS_IN_HELP, false);
+  const shop = topics.helpTopic('shop');
+  assert.doesNotMatch(shop.title + ' ' + shop.lines.join(' '), /\bads?\b/i);
+  assert.equal(shop.terms.includes('bonus_ads'), false, 'the Bonus ads term is hidden');
+  const vip = glossary.LOCAL_GLOSSARY.vip.what;
+  assert.doesNotMatch(vip, /\bads?\b|monthly/i);
+  assert.match(vip, /grown-up/);
+  for (const topic of topics.HELP_TOPICS) {
+    for (const key of topic.terms) assert.doesNotMatch(glossary.LOCAL_GLOSSARY[key].what + glossary.LOCAL_GLOSSARY[key].earn, /\bads?\b/i, key);
+  }
+});
+
+test('one streak number: the stats menu shows the Daily Chest streak, and the help says that rule', () => {
+  const fs2 = require('node:fs');
+  const p2 = require('node:path');
+  const radial = fs2.readFileSync(p2.join(__dirname, '../../src/components/RadialStatsMenu.tsx'), 'utf8');
+  assert.doesNotMatch(radial, /current_streak/, 'not the hidden home-find streak (a second number)');
+  assert.match(radial, /useFlameStreak\(dailyGift\?\.streak, isOpen\)/, 'the chest number, or Daily 3 while it owns the flame');
+  const chest = fs2.readFileSync(p2.join(__dirname, '../../src/components/DailyGiftModal.tsx'), 'utf8');
+  assert.match(chest, /displayedGift\.streak/, 'the chest shows the same number');
+  assert.match(glossary.LOCAL_GLOSSARY.day_streak.earn, /Daily Chest/);
+});
+
+test('one flame number: Daily 3 owns the flame while it is on, and ride days never use it (round 2)', () => {
+  const fs2 = require('node:fs');
+  const p2 = require('node:path');
+  const readSrc = f => fs2.readFileSync(p2.join(__dirname, '../../', f), 'utf8');
+  const flags = loadTs('src/services/retention/flags.ts', { '../../api/endpoints/platform/feature-flags': { default: async () => ({ flags: {} }) } });
+  assert.equal(flags.streakOwner(null), null);
+  assert.equal(flags.streakOwner({ dailyThree: true, levelChests: false }), 'daily3');
+  assert.equal(flags.streakOwner({ dailyThree: false, levelChests: false }), 'chest');
+  const flame = loadTs('src/services/retention/useFlameStreak.ts', {
+    react: { useEffect() {}, useState: v => [typeof v === 'function' ? v() : v, () => {}] },
+    '../../api/endpoints/retention': { getDailyThree: async () => null },
+    './flags': flags,
+    './useOwnStreak': { ownStreakOf: () => null },
+  });
+  assert.equal(flame.flameStreak('chest', 4, 9), 4);
+  assert.equal(flame.flameStreak('daily3', 4, 9), 9);
+  assert.equal(flame.flameStreak('daily3', 4, null), null, 'waits for the Daily 3 number, never shows the chest one');
+  assert.equal(flame.flameStreak(null, 4, 9), null);
+  // Round 3: the flags warm when the map mounts (menu closed), so the row never appears after the menu opens.
+  let reads = 0;
+  const ref = { current: false };
+  const warm = loadTs('src/services/retention/useFlameStreak.ts', {
+    react: { useEffect: fn => { fn(); }, useRef: () => ref, useState: v => [typeof v === 'function' ? v() : v, () => {}] },
+    '../../api/endpoints/retention': { getDailyThree: async () => null },
+    './flags': { ...flags, loadRetentionFlags: async () => { reads += 1; return null; } },
+    './useOwnStreak': { ownStreakOf: () => null },
+  });
+  warm.default(4, false);
+  assert.equal(reads, 1, 'reads once on mount, before the first open');
+  warm.default(4, false);
+  assert.equal(reads, 1, 'closing or re-rendering closed reads nothing more');
+  warm.default(4, true);
+  assert.equal(reads, 2, 'each open refreshes');
+  const radial = readSrc('src/components/RadialStatsMenu.tsx');
+  assert.match(radial, /useFlameStreak\(dailyGift\?\.streak, isOpen\)/);
+  assert.match(radial, /streakFrom === 'daily3' \? 'daily3_streak' : 'day_streak'/);
+  assert.match(readSrc('src/components/DailyGiftModal.tsx'), /\{chestOwnsFlame && \(displayedGift\.streak/);
+  assert.match(glossary.LOCAL_GLOSSARY.daily3_streak.what, /Daily 3/);
+  // Ride days in a row are their own number: never the flame icon, never "Day Streak".
+  for (const f of ['src/screens/RideTracker/RideStatsScreen.tsx', 'src/screens/RideTracker/RideTrackerScreen.tsx', 'src/screens/RideTracker/RideWrappedScreen.tsx']) {
+    const text = readSrc(f);
+    assert.doesNotMatch(text, /Day Streak|Day streak|day streak/, f);
+  }
+  assert.doesNotMatch(readSrc('src/screens/RideTracker/RideStatsScreen.tsx'), /current_streak\} icon="streak"/);
 });

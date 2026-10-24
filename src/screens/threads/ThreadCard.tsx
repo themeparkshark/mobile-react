@@ -11,6 +11,7 @@ import Avatar from '../../components/Avatar';
 import RichText from '../../components/RichText';
 import { AuthContext } from '../../context/AuthProvider';
 import { isTeam, TEAMS } from '../../constants/teams';
+import TeamBadge from '../../components/TeamBadge';
 import type { ThreadType } from '../../models/thread-type';
 import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
@@ -65,7 +66,7 @@ function ThreadCard({
               )}
               {team && (
                 <View style={[styles.flag, { backgroundColor: `${team.color}22`, borderColor: team.color }]}>
-                  <Image source={team.badge} style={{ width: 16, height: 16 }} contentFit="contain" />
+                  <TeamBadge team={team.id} size={16} />
                   <Text style={styles.flagText}>{team.name} only</Text>
                 </View>
               )}

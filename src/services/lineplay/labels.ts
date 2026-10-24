@@ -33,6 +33,17 @@ export function factSourceLine(source: string | undefined | null,
 }
 
 /** The small caps kicker over a ride chapter title. */
+/**
+ * The kicker ON the chapter page: just the place (MAGIC KINGDOM). The page's
+ * numbered bubbles already count the clues, so a second count ("FLIGHT 1 OF 3")
+ * is left to the spoken label.
+ */
+export function chapterPageKicker(chapter: Pick<LinePlayChapter, 'parkLabel' | 'episodeLabel'>,
+  overrides: LinePlayLabelOverrides = LINEPLAY_LABEL_OVERRIDES): string {
+  const park = chapter.parkLabel?.trim();
+  return overrides.hideParkInKicker || !park ? 'SHARK FAN MISSION' : park;
+}
+
 export function chapterKicker(chapter: Pick<LinePlayChapter, 'parkLabel' | 'episodeLabel'>,
   overrides: LinePlayLabelOverrides = LINEPLAY_LABEL_OVERRIDES): string {
   const park = chapter.parkLabel?.trim();

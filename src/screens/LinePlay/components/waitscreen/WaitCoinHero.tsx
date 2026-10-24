@@ -2,10 +2,16 @@
  * WaitCoinHero: the body of the LinePlay wait screen (stream L2). The ride's
  * own coin sits center stage between two quiet stat columns:
  *
- *   SIGN SAYS 60          (coin, filling)         12
- *   You're tracking ~42                           SHARKS IN LINE
- *   IN LINE 23m                                   +3 PARTS
- *                                                 this wait
+ *   60m  SIGN SAYS        (coin, filling)    (shark pictures) SHARKS HERE
+ *   23m  IN LINE          "2 of 4 Parts"
+ *
+ * Picture first for a 7-year-old: one wait number (the ride sign's, the one
+ * they can see at the line) under the ride car, their own time under the
+ * stopwatch, both written the same way ("60m", "23m"), one short word under
+ * each number, one Parts idea
+ * (the ring and its "2 of 4 Parts" chip; a new Part flies in as "+1 RIDE
+ * PART!" above), and no fine print until Details is tapped. The real-waits
+ * guess stays in the spoken label as "about 42".
  *
  * Everything here works offline: time in line runs on the phone clock, Parts
  * this wait come from the session, and the coin and wait ratio are the last
@@ -20,8 +26,7 @@ import { GameIcon } from '../../../../ui';
 import useReducedGameMotion from '../../../../hooks/useReducedGameMotion';
 import type { LineWaitScreenSummary } from '../../../../api/endpoints/me/inline-timer/types';
 import type { WaitSource } from '../../../../services/lineplay/LinePlaySession';
-import { inLineLabel, partsThisWait, sharksInLine, waitCoinProgress, waitEstimate, waitHeroLayout,
-  waitStamps } from '../../../../services/lineplay/waitScreen';
+import { inLineLabel, sharksInLine, waitCoinProgress, waitEstimate, waitHeroLayout } from '../../../../services/lineplay/waitScreen';
 import useWaitScreenCoin from './useWaitScreenCoin';
 import WaitCoinStage from './WaitCoinStage';
 import { previewWaitScreen, usePreviewStep, waitScreenPreviewEnabled } from './waitScreenPreview';
@@ -41,6 +46,8 @@ export interface WaitCoinHeroProps {
   readonly rewardsOn: boolean;
   readonly onLeveled?: () => void;
   readonly coinSize?: number;
+  /** This wait (the session's start time): a level reached in it survives leaving LinePlay and coming back. */
+  readonly waitKey?: number | string | null;
 }
 
 /** True while the app is in the foreground. */
@@ -54,7 +61,7 @@ function useAppActive(): boolean {
 }
 
 function Stat({ value, label, align, accessibilityLabel, icon }: {
-  value: string; label: string; align: 'left' | 'right'; accessibilityLabel: string; icon?: 'timer' | 'parts' | 'queue';
+  value: string; label: string; align: 'left' | 'right'; accessibilityLabel: string; icon?: 'timer' | 'parts' | 'ride' | 'shark';
 }) {
   return (
     <View style={[styles.stat, align === 'right' && styles.statRight]} accessible accessibilityLabel={accessibilityLabel}>
@@ -67,18 +74,37 @@ function Stat({ value, label, align, accessibilityLabel, icon }: {
   );
 }
 
+/**
+ * How busy the line is, as 1 to 3 shark pictures and a word, never a number: the
+ * closed card keeps its numbers to the wait, the clock, the Parts count and the
+ * countdown. The exact count is in the spoken label.
+ */
+function CrowdStat({ sharks, label, accessibilityLabel, align }: {
+  sharks: 1 | 2 | 3; label: string; accessibilityLabel: string; align: 'left' | 'right';
+}) {
+  return (
+    <View style={[styles.stat, align === 'right' && styles.statRight]} accessible accessibilityLabel={accessibilityLabel}>
+      <View style={[styles.crowdRow, align === 'right' && styles.crowdRowRight]}>
+        {Array.from({ length: sharks }, (_, index) => <View key={index} style={index > 0 && styles.crowdOverlap}>
+          <GameIcon name="shark" size={index === 0 ? 24 : 20} />
+        </View>)}
+      </View>
+      <Text style={[styles.statLabel, align === 'right' && styles.textRight]} numberOfLines={2}>{label}</Text>
+    </View>
+  );
+}
+
 function WaitCoinHero(props: WaitCoinHeroProps) {
   const preview = waitScreenPreviewEnabled();
   const step = usePreviewStep(preview);
-  // Dev preview: a wait at a posted 60 that grows 10 minutes a step, with a filling Level 2 coin.
-  const p: WaitCoinHeroProps = preview ? { ...props, waitScreen: previewWaitScreen(step), creditedParts: 1 + Math.min(3, step),
-    elapsedSeconds: (20 + step * 12) * 60 + (props.elapsedSeconds % 60), plannedWaitMinutes: 60, waitSource: 'posted', playerEnergy: 120,
-    rewardsOn: true } : props;
+  // Dev preview: a filling Level 2 coin. The sign time, the clock, the Parts and "earns Parts" come from the
+  // screen (shownWait, shownClock, shownRewards), so the card and this body always agree.
+  const p: WaitCoinHeroProps = preview ? { ...props, waitScreen: previewWaitScreen(step), playerEnergy: 120 } : props;
   return <WaitCoinHeroBody {...p} preview={preview} previewAutoLevel={preview && step >= 5} />;
 }
 
-function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, elapsedSeconds, plannedWaitMinutes, waitSource,
-  playerEnergy, covered, rewardsOn, onLeveled, coinSize = 120, preview = false, previewAutoLevel = false }:
+function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, elapsedSeconds, plannedWaitMinutes, waitSource,
+  playerEnergy, covered, rewardsOn, onLeveled, coinSize = 120, waitKey = null, preview = false, previewAutoLevel = false }:
   WaitCoinHeroProps & { preview?: boolean; previewAutoLevel?: boolean }) {
   const appActive = useAppActive();
   const reducedMotion = useReducedGameMotion();
@@ -96,27 +122,20 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, e
   }), [wait.coin, wait.partsBanked, playerEnergy]);
   const estimate = waitEstimate({ postedMinutes: plannedWaitMinutes, waitSource, ratio: wait.waitRatio, elapsedSeconds });
   const sharks = sharksInLine(wait.inLineNow);
-  const earned = partsThisWait(creditedParts, bonusParts);
-  // The hour only changes the Night mark; read it once a minute, not per frame.
-  const minute = Math.floor(elapsedSeconds / 60);
-  const stamps = useMemo(() => waitStamps(elapsedSeconds, new Date().getHours()), [minute]);
 
-  const signStat = <Stat align="left" value={estimate.posted != null ? String(estimate.posted) : '--'}
-    label={estimate.posted != null ? 'SIGN SAYS (MIN)' : 'NO SIGN TIME'}
-    accessibilityLabel={estimate.accessibilityLabel} icon="queue" />;
-  const trackingLine = estimate.posted != null
-    ? <Text style={styles.tracking} numberOfLines={2}>{estimate.detail}</Text> : null;
+  // One wait number, or nothing when the ride has no sign time (time in line still shows).
+  const signStat = estimate.kidValue != null ? <Stat align="left" value={estimate.kidValue} label="SIGN SAYS"
+    accessibilityLabel={estimate.accessibilityLabel} icon="ride" /> : null;
   const inLineStat = <Stat align="left" value={inLineLabel(elapsedSeconds)} label="IN LINE"
     accessibilityLabel={`In line ${inLineLabel(elapsedSeconds)}.`} icon="timer" />;
-  const sharksStat = sharks ? <Stat align="right" value={sharks.value} label={sharks.label}
-    accessibilityLabel={sharks.accessibilityLabel} icon="queue" /> : null;
+  const sharksStat = sharks ? <CrowdStat align="right" sharks={sharks.sharks} label={sharks.label}
+    accessibilityLabel={sharks.accessibilityLabel} /> : null;
 
   // No server rewards: no coin, so no hole for one. One short row of stats.
   if (waitHeroLayout(rewardsOn) === 'strip') {
     return (
       <View style={styles.strip} testID="wait-hero-strip">
-        <View style={styles.stripCell}>{signStat}{estimate.posted != null &&
-          <Text style={[styles.tracking, styles.trackingStrip]} numberOfLines={1}>{estimate.detail}</Text>}</View>
+        {signStat && <View style={styles.stripCell}>{signStat}</View>}
         <View style={styles.stripCell}>{inLineStat}</View>
         {sharksStat && <View style={[styles.stripCell, styles.sideRight]}>{sharksStat}</View>}
       </View>
@@ -127,16 +146,13 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, e
     <View style={styles.row}>
       <View style={styles.side}>
         {signStat}
-        {trackingLine}
         {inLineStat}
       </View>
       <WaitCoinStage size={coinSize} coin={wait.coin} owned={owned} progress={progress} partsBanked={wait.partsBanked}
-        stamps={stamps} active={active} reducedMotion={reducedMotion} onLevelUp={wait.levelUp} onLeveled={onLeveled}
-        autoLevel={previewAutoLevel} />
+        active={active} reducedMotion={reducedMotion} onLevelUp={wait.levelUp} onLeveled={onLeveled}
+        autoLevel={previewAutoLevel} waitKey={waitKey} />
       <View style={[styles.side, styles.sideRight]}>
-        {sharksStat ?? <View style={styles.statSpacer} />}
-        <Stat align="right" value={`+${earned}`} label={earned === 1 ? 'PART THIS WAIT' : 'PARTS THIS WAIT'}
-          accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned this wait.`} icon="parts" />
+        {sharksStat}
       </View>
     </View>
   );
@@ -146,7 +162,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
   strip: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginTop: 6, marginBottom: 2 },
   stripCell: { flexShrink: 1, minWidth: 0 },
-  trackingStrip: { marginTop: 2 },
   side: { flex: 1, minWidth: 0, gap: 6 },
   sideRight: { alignItems: 'flex-end' },
   stat: { minWidth: 0 },
@@ -155,10 +170,11 @@ const styles = StyleSheet.create({
   statValueRowRight: { flexDirection: 'row-reverse' },
   statValue: { fontFamily: 'Shark', fontSize: 22, lineHeight: 26, color: '#ffffff', flexShrink: 1,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  statLabel: { fontFamily: 'Knockout', fontSize: 11, color: '#cdeaff', letterSpacing: 0.4, marginTop: -1 },
+  statLabel: { fontFamily: 'Knockout', fontSize: 13, color: '#cdeaff', letterSpacing: 0.4, marginTop: -1 },
   textRight: { textAlign: 'right' },
-  tracking: { fontFamily: 'Knockout', fontSize: 13, lineHeight: 15, color: '#ffdf75', marginTop: -4 },
-  statSpacer: { height: 36 },
+  crowdRow: { flexDirection: 'row', alignItems: 'flex-end', height: 26 },
+  crowdRowRight: { justifyContent: 'flex-end' },
+  crowdOverlap: { marginLeft: -6 },
 });
 
 export default memo(WaitCoinHero);

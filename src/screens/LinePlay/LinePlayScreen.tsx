@@ -22,7 +22,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { openAppSettings } from '../../services/external';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, FlatList, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { Image } from 'expo-image';
@@ -72,6 +72,7 @@ import ResumeCountdown from './components/ResumeCountdown';
 import { LINEPLAY_TOUR_STEP_MS, linePlayTourEnabled, linePlayTourSteps } from './devTour';
 import WaitCard from './components/WaitCard';
 import WaitCoinHero from './components/waitscreen/WaitCoinHero';
+import { shownClock, shownRewards, shownWait } from './components/waitscreen/waitScreenPreview';
 import NewRoundsBanner from './components/NewRoundsBanner';
 import ActivitySlot from './components/ActivitySlot';
 import ActivityPageRail from './components/ActivityPageRail';
@@ -89,6 +90,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as RootNavigation from '../../RootNavigation';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import Reanimated, { FadeIn, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { MovementFxGate, MOVING_CHIP_LINGER_MS, nextBonusSeconds } from '../../services/lineplay/bonusRounds';
 import { playBonusCue, type BonusCue } from '../../services/lineplay/bonusCues';
 import type { CurrentTier } from '../../games/current-quest/v1/logic';
@@ -104,6 +106,8 @@ import { personalizeChapterFinale, resolveChapterClue } from '../../services/lin
 import { useGroupPlay, type GroupTurnLaunch } from './group/useGroupPlay';
 
 const { width: SCREEN_W } = Dimensions.get('window');
+const DAY_BACKDROP = ['#0a7dd1', '#07569e', '#073e87'] as const;
+const NIGHT_BACKDROP = ['#3B2A6B', '#2B2350', '#1E1838'] as const;
 /** Returning after this long away gets a quick "welcome back" heads up. */
 const WELCOME_BACK_AFTER_MS = 20_000;
 const QUEUE_RECAP_SHARK = require('../../../assets/images/screens/lineplay/queue-recap-shark.png');
@@ -156,8 +160,17 @@ import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLive
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { linePlayTipReady } from '../../services/help/tipGate';
+import { crewRowInBand, crewRowLent, lineScreenFit, pageRailMode, pageWindowShown, PAGES_DIP_MS, PAGES_DIP_OPACITY,
+  PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
+
+/** The navigation board's page: the first story clue on a space ride, or a free-play circuit. */
+function isBoardPage(item: { kind: string; id: string } | undefined,
+  chapter: { id: string; navigationPanel?: unknown } | null | undefined): boolean {
+  if (!item) return false;
+  return item.kind === 'circuit' || (!!chapter?.navigationPanel && item.kind === 'trivia' && item.id === `${chapter.id}-trivia`);
+}
 
 export default function LinePlayScreen() {
   const navigation = useNavigation();
@@ -181,6 +194,21 @@ export default function LinePlayScreen() {
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [backgroundPermissionBusy, setBackgroundPermissionBusy] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
+  const insets = useSafeAreaInsets();
+  const [rootHeight, setRootHeight] = useState(0);
+  /** Short phones (iPhone SE) get a smaller coin and tighter gaps so the activity pages keep real room. */
+  const fit = lineScreenFit(rootHeight, insets.top, insets.bottom);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  // Too short for even the one-row PLAY NOW strip (an iPhone SE reading Details): the page
+  // window is not drawn (kept mounted, so its page and scroll spot stay put) and the rail
+  // becomes one "Back to games" button, so no button ever acts on a page nobody can see.
+  const [pagesHeight, setPagesHeight] = useState(0);
+  const pagesShown = pageWindowShown(pagesHeight, detailsOpen);
+  const railMode = pageRailMode(pagesShown);
+  /** The rail's height with its bottom margin: a stepped-aside window sits under it, out of the way. */
+  const [railBlock, setRailBlock] = useState(0);
+  /** The crew row's measured height: while the window steps aside it comes back into the free band if it fits. */
+  const [crewRowHeight, setCrewRowHeight] = useState(0);
   const [arcadeOpen, setArcadeOpen] = useState(false);
   const queuedArcadeGame = useRef<Extract<ActivityItem, { kind: 'minigame' }> | null>(null);
   const activityListRef = useRef<FlatList<any>>(null);
@@ -723,6 +751,7 @@ export default function LinePlayScreen() {
     pages: activityPages,
     gameOpen: activeGame != null,
     openTurn: openGroupTurn,
+    compact: fit.short,
   });
   sheetOpenRef.current = groupPlay.sheetOpen;
   groupPlayRef.current = groupPlay;
@@ -736,6 +765,65 @@ export default function LinePlayScreen() {
   const bonus = snapshot.bonus?.enabled ? snapshot.bonus : null;
   const { playSound } = useContext(SoundEffectContext);
   const reducedFx = useReducedGameMotion();
+  // Details open or close: the page window dips to a soft 35% (never empty), takes its new size
+  // inside its own rounded frame, then rises back (UI thread, under 220 ms in all).
+  const pagesFade = useSharedValue(1);
+  const pagesFadeStyle = useAnimatedStyle(() => ({ opacity: pagesFade.value }));
+  // The rise starts once the window has its new size (its onLayout). A timer covers a size that did not change.
+  const revealPending = useRef(false);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rise = useCallback(() => {
+    if (!revealPending.current) return;
+    revealPending.current = false;
+    if (revealTimer.current) clearTimeout(revealTimer.current);
+    pagesFade.value = withTiming(1, { duration: PAGES_RISE_MS });
+  }, [pagesFade]);
+  // The window has its new size; the page inside measures it and switches its content on the next
+  // frame or two (a board becomes "Tap to play"), so the rise waits two frames: no squeezed old page.
+  const revealPages = useCallback(() => {
+    if (!revealPending.current) return;
+    requestAnimationFrame(() => requestAnimationFrame(rise));
+  }, [rise]);
+  /**
+   * Dip the window, THEN change its size while it is dim (Details, or the crew row lent to a board);
+   * it rises once the page inside has switched. Changes asked for during one dip share it.
+   */
+  const dipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingChanges = useRef<Array<() => void>>([]);
+  const dipPages = useCallback((change: () => void) => {
+    if (reducedFx) { change(); return; }
+    pendingChanges.current.push(change);
+    if (dipTimer.current) return;
+    pagesFade.value = withTiming(PAGES_DIP_OPACITY, { duration: PAGES_DIP_MS });
+    dipTimer.current = setTimeout(() => {
+      dipTimer.current = null;
+      const changes = pendingChanges.current;
+      pendingChanges.current = [];
+      revealPending.current = true;
+      changes.forEach(apply => apply());
+      if (revealTimer.current) clearTimeout(revealTimer.current);
+      revealTimer.current = setTimeout(rise, PAGES_RISE_FALLBACK_MS);
+    }, PAGES_DIP_MS);
+  }, [reducedFx, pagesFade, rise]);
+  const onDetailsChange = useCallback((open: boolean) => {
+    dipPages(() => setDetailsOpen(open));
+  }, [dipPages]);
+  /** The crew row is lent to the board page on a short phone (see crewRowLent). */
+  const [boardLent, setBoardLent] = useState(false);
+  /** "Back to games" and "Tap to play": Details closes so the pages get their room back. */
+  const closeDetails = useCallback(() => onDetailsChange(false), [onDetailsChange]);
+  useEffect(() => () => {
+    if (revealTimer.current) clearTimeout(revealTimer.current);
+    if (dipTimer.current) clearTimeout(dipTimer.current);
+  }, []);
+  // The window coming back after Hide on a short phone fades in too, never pops.
+  const wasShown = useRef(pagesShown);
+  useEffect(() => {
+    if (pagesShown && !wasShown.current && !reducedFx) {
+      pagesFade.value = withSequence(withTiming(PAGES_DIP_OPACITY, { duration: 0 }), withTiming(1, { duration: PAGES_RISE_MS }));
+    }
+    wasShown.current = pagesShown;
+  }, [pagesShown, reducedFx, pagesFade]);
   const fxGate = useRef(new MovementFxGate<{ cue: BonusCue; slot?: number }>()).current;
   // While the line moves, haptics and stings wait (dropped if 3 s late).
   const fireCue = useCallback((cue: BonusCue, slot?: number) => {
@@ -781,9 +869,14 @@ export default function LinePlayScreen() {
   }, [savedNow]);
   const waitCardRef = useRef<View>(null);
   const [partTarget, setPartTarget] = useState<FlightPoint>({ x: 48, y: 140 });
+  /** The wait card's bottom edge: the welcome tip sits just under the card it explains, never on its Details button. */
+  const [waitCardBottom, setWaitCardBottom] = useState<number | null>(null);
   const measureWaitCard = useCallback(() => {
     waitCardRef.current?.measureInWindow((x, y, _width, height) => {
-      if (Number.isFinite(x) && Number.isFinite(y)) setPartTarget({ x: x + 44, y: y + height / 2 });
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        setPartTarget({ x: x + 44, y: y + height / 2 });
+        if (Number.isFinite(height)) setWaitCardBottom(Math.round(y + height));
+      }
     });
   }, []);
   const secondsToNextBonus = bonus ? nextBonusSeconds(bonus, snapshot.verifiedEligibleSeconds,
@@ -832,6 +925,21 @@ export default function LinePlayScreen() {
   }, [snapshot.playlist.length]);
 
 
+  // A short phone lends the crew row to the navigation board's page (crewRowLent): set when the dip lands.
+  const wantBoardLent = fit.short
+    && isBoardPage(activityPages[Math.min(pageIndex, Math.max(0, activityPages.length - 1))], snapshot.chapter);
+  const wantBoardLentRef = useRef(wantBoardLent);
+  wantBoardLentRef.current = wantBoardLent;
+  const lendPending = useRef(false);
+  useEffect(() => {
+    if (wantBoardLent === boardLent && !lendPending.current) return;
+    // Applied when the dip lands, with the latest wish (a quick swipe back and forth never sticks).
+    const apply = () => { lendPending.current = false; setBoardLent(wantBoardLentRef.current); };
+    lendPending.current = true;
+    // Details already lends the row: just follow along without a second dip.
+    if (detailsOpen) apply(); else dipPages(apply);
+  }, [wantBoardLent]);
+
   if (!ride) {
     return (
       <SafeAreaView style={styles.centered}>
@@ -862,6 +970,15 @@ export default function LinePlayScreen() {
         : visibleActivityId === `${snapshot.chapter.id}-${snapshot.chapter.finale.idSuffix}` ? 3 : null
     : null;
   const nextPageIndex = visiblePageIndex + 1 < activityPages.length ? visiblePageIndex + 1 : 0;
+  const visibleItem = activityPages[visiblePageIndex];
+  /** The navigation board (the first story clue on a space ride, or a free-play circuit). */
+  const boardPage = isBoardPage(visibleItem, snapshot.chapter);
+  // A short phone lends the crew row to a board page (as it does to Details), so the whole puzzle fits.
+  // The window dips while it grows, like Details (the effect below), so the page never jumps.
+  const crewLent = crewRowLent(fit.short, detailsOpen, boardLent);
+  // One gold button per screen: the chapter page has PLAY NOW and the board page is the game itself
+  // (its "Tap to play" and "Next signal" are gold), so there the rail's Next is a quiet white button.
+  const railQuiet = visibleItem?.kind === 'chapter_intro' || boardPage;
   const jumpToPage = (index: number) => {
     if (index < 0 || index >= activityPages.length) return;
     setPageIndex(index);
@@ -877,12 +994,17 @@ export default function LinePlayScreen() {
   const projectMission = snapshot.parkProject ? resolveProjectMission(snapshot.parkProject) : null;
   const circuitTheme = circuitThemeFor(ride.rideName, snapshot.chapter?.navigationPanel === true);
   const liveCrew = crewLivePrompt(snapshot.signal, completedActivityIds);
+  const backdrop = snapshot.chapter?.palette === 'night' ? NIGHT_BACKDROP : DAY_BACKDROP;
+  /** One clock per render (the dev preview reads Date.now), so the card and its coin can never be a tick apart. */
+  const clock = shownClock(snapshot);
+  const wait = shownWait(snapshot);
+  const rewards = shownRewards(snapshot, ride);
 
   return (
-    <View onTouchStart={onAnyTouch} style={[styles.root, snapshot.chapter?.palette === 'night' && { backgroundColor: '#2B2350' }]}>
+    <View onTouchStart={onAnyTouch} onLayout={event => setRootHeight(event.nativeEvent.layout.height)}
+      style={[styles.root, snapshot.chapter?.palette === 'night' && { backgroundColor: '#2B2350' }]}>
       {/* Only a Fin-ister Nights haunt-line chapter gets the night palette; every other chapter stays bright. */}
-      <LinearGradient colors={snapshot.chapter?.palette === 'night' ? ['#3B2A6B', '#2B2350', '#1E1838'] : ['#0a7dd1', '#07569e', '#073e87']}
-        style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={backdrop} style={StyleSheet.absoluteFill} />
       {snapshot.chapter?.introLine && snapshot.state !== 'complete' && (
         <View pointerEvents="none" style={{ position: 'absolute', bottom: 96, left: 16, right: 16, zIndex: 5 }}>
           <Text style={{ textAlign: 'center', fontFamily: 'Knockout', fontSize: 15, color: '#E4DAFF' }}>{snapshot.chapter.introLine}</Text>
@@ -928,7 +1050,7 @@ export default function LinePlayScreen() {
             </View>
           )}
 
-        {/* Wait card (top) */}
+        {/* Wait card (top). One sign time and one clock feed both the card and its hero, so SIGN SAYS, IN LINE and the details agree. */}
         <View style={styles.waitWrap} ref={waitCardRef} onLayout={measureWaitCard} collapsable={false}>
           {snapshot.startedAt == null ? (
             <WaitCardSkeleton rideName={ride.rideName} />
@@ -936,19 +1058,19 @@ export default function LinePlayScreen() {
             <WaitCard
               compact={snapshot.state !== 'complete'}
               rideName={ride.rideName}
-              postedWaitMinutes={snapshot.plannedWaitMinutes}
-              waitSource={snapshot.waitSource}
+              postedWaitMinutes={wait.plannedWaitMinutes}
+              waitSource={wait.waitSource}
               entranceWaitMinutes={snapshot.entranceWaitMinutes}
               entranceWaitObservedAt={snapshot.entranceWaitObservedAt}
               entranceWaitChangeMinutes={snapshot.entranceWaitChangeMinutes}
-              elapsedSeconds={snapshot.elapsedSeconds}
-              rewardTrackingAvailable={snapshot.serverSessionId != null}
-              rewardUnavailable={snapshot.rewardUnavailable}
+              elapsedSeconds={clock.elapsedSeconds}
+              rewardTrackingAvailable={rewards.tracking}
+              rewardUnavailable={rewards.unavailable}
               rewardConnectionIssue={snapshot.rewardConnectionIssue}
-              lineRewardsReady={ride.lineRewardsReady}
-              verifiedEligibleSeconds={snapshot.verifiedEligibleSeconds}
-              verifiedPresenceAt={snapshot.verifiedPresenceAt}
-              creditedParts={snapshot.creditedParts}
+              lineRewardsReady={rewards.ready}
+              verifiedEligibleSeconds={clock.verifiedEligibleSeconds}
+              verifiedPresenceAt={clock.verifiedPresenceAt}
+              creditedParts={clock.creditedParts}
               partsRemainingToday={snapshot.partsRemainingToday}
               partIntervalSeconds={snapshot.partIntervalSeconds}
               sessionPartCap={snapshot.sessionPartCap}
@@ -970,17 +1092,21 @@ export default function LinePlayScreen() {
               onPlayBonus={arcadeChoices.length ? () => setArcadeOpen(true) : undefined}
               bonus={snapshot.bonus}
               gameOpen={activeGame != null}
+              detailsOpen={detailsOpen}
+              onDetailsChange={onDetailsChange}
               hero={snapshot.state !== 'complete' ? <WaitCoinHero
                 rideId={ride.rideId}
+                coinSize={fit.coinSize}
+                waitKey={snapshot.startedAt}
                 waitScreen={snapshot.waitScreen}
-                creditedParts={snapshot.creditedParts}
+                creditedParts={clock.creditedParts}
                 bonusParts={snapshot.bonus?.slots.filter(slot => slot.state === 'claimed').length ?? 0}
-                elapsedSeconds={snapshot.elapsedSeconds}
-                plannedWaitMinutes={snapshot.plannedWaitMinutes}
-                waitSource={snapshot.waitSource}
+                elapsedSeconds={clock.elapsedSeconds}
+                plannedWaitMinutes={wait.plannedWaitMinutes}
+                waitSource={wait.waitSource}
                 playerEnergy={player?.energy ?? null}
                 covered={activeGame != null || arcadeOpen || projectOpen}
-                rewardsOn={snapshot.serverSessionId != null && !snapshot.rewardUnavailable}
+                rewardsOn={rewards.tracking && !rewards.unavailable}
                 onLeveled={() => void refreshPlayer().catch(() => undefined)}
               /> : null}
             />
@@ -1009,10 +1135,14 @@ export default function LinePlayScreen() {
           }}
           onOpenProject={() => setProjectOpen(true)} />}
 
-        {groupPlay.strip}
+        {/* A short phone reading Details lends the crew row's space to the activity page; it comes back on Hide.
+            The row fades and the pages glide (Reanimated layout animations, UI thread), so nothing pops. */}
+        {!crewLent && <Reanimated.View entering={reducedFx ? undefined : FadeIn.duration(200)}
+          exiting={reducedFx ? undefined : FadeOut.duration(140)}
+          onLayout={event => setCrewRowHeight(Math.round(event.nativeEvent.layout.height))}>{groupPlay.strip}</Reanimated.View>}
 
         {/* Activity area (bottom) */}
-        <View style={styles.activityArea}>
+        <View style={[styles.activityArea, { marginTop: fit.activityGap }, !pagesShown && styles.activityAreaAside]}>
           {snapshot.state === 'complete' ? (
             <SessionRecap
               nextAdventure={ride ? nextAdaptiveStoryTitle(snapshot.chapter, ride.rideName) : null}
@@ -1095,6 +1225,13 @@ export default function LinePlayScreen() {
             <ActivitySkeleton />
           ) : (
             <>
+            {/* Each page is a framed window (PageScroll) that stays put above the rail while its content scrolls.
+                When Details opens or closes, the window takes its new size unseen and fades back in; the rail never moves. */}
+            <Reanimated.View style={[styles.pages, pagesFadeStyle, !pagesShown && [styles.pagesAside, { bottom: railBlock }]]}
+              pointerEvents={pagesShown ? 'auto' : 'none'}
+              onLayout={event => { setPagesHeight(Math.round(event.nativeEvent.layout.height)); revealPages(); }}>
+            <View style={[styles.pagesInner, !pagesShown && styles.pagesHidden]}
+              accessibilityElementsHidden={!pagesShown} importantForAccessibility={pagesShown ? 'auto' : 'no-hide-descendants'}>
             <FlatList
               ref={activityListRef}
               data={activityPages}
@@ -1135,7 +1272,7 @@ export default function LinePlayScreen() {
                       onGuess={(symbols) => void session.guessPuzzle(symbols)}
                     />
                   ) : item.kind === 'chapter_intro' && snapshot.chapter ? (
-                    <ChapterCard chapter={snapshot.chapter} completedIds={completedActivityIds}
+                    <ChapterCard chapter={snapshot.chapter} completedIds={completedActivityIds} compact={fit.short}
                       crewRelay={snapshot.crewRelay} paused={snapshot.state !== 'active'}
                       chapterClue={chapterClue}
                       signalAvailable={sharedPages.length > 0}
@@ -1165,6 +1302,7 @@ export default function LinePlayScreen() {
                       navigationProgress={snapshot.navigationPanels?.[item.id]}
                       onNavigationTurn={(index) => session.rotateNavigationPanel(item.id, index)}
                       onNavigationReplay={() => session.startNextNavigationRound(item.id)}
+                      onNavigationMakeRoom={detailsOpen ? closeDetails : undefined}
                       onNavigationNext={() => item.kind === 'circuit'
                         ? jumpToPage(index + 1 < activityPages.length ? index + 1 : 0)
                         : jumpToPage(activityPages.findIndex(page => page.id === `${snapshot.chapter?.id}-field-note`))}
@@ -1185,7 +1323,18 @@ export default function LinePlayScreen() {
                 </View>
               )}
             />
+            </View>
+            </Reanimated.View>
+            {/* The window stepped aside: the crew row comes back into the free band above the rail when it fits. */}
+            {!pagesShown && crewLent && groupPlay.strip != null && crewRowInBand(pagesHeight, crewRowHeight) && (
+              <Reanimated.View entering={reducedFx ? undefined : FadeIn.duration(200)} style={[styles.crewBand, { bottom: railBlock }]}
+                pointerEvents="box-none">{groupPlay.strip}</Reanimated.View>
+            )}
+            {/* The rail stays at its usual bottom spot in every state, so a thumb finds it in the same place. */}
+            <Reanimated.View layout={reducedFx ? undefined : LinearTransition.duration(180)}
+              onLayout={event => setRailBlock(Math.round(event.nativeEvent.layout.height))}>
             <ActivityPageRail index={visiblePageIndex} count={activityPages.length}
+              mode={railMode} onShowPages={closeDetails} quiet={railQuiet}
               firstLabel={activityPages[0]?.kind === 'chapter_intro' ? 'Chapter' : 'First round'}
               progressText={storyStep ? `CLUE ${storyStep}/3`
                 : activityPages[visiblePageIndex]?.kind === 'chapter_intro' ? 'STORY' : 'FREE PLAY'}
@@ -1203,6 +1352,7 @@ export default function LinePlayScreen() {
                 pendingEncoreId.current = session.addMoreRounds();
                 if (!pendingEncoreId.current) manualEncoreRequested.current = false;
               }} />
+            </Reanimated.View>
             </>
           )}
         </View>
@@ -1298,8 +1448,12 @@ export default function LinePlayScreen() {
       {groupPlay.overlays}
 
       {/* One-time tips: what LinePlay is, then the first Ride Part. Only between games, never while the line moves. */}
-      <OneTimeTip id="lineplay_intro" ready={lineTipReady} style={styles.tip} />
-      <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending} style={styles.tip} />
+      {/* They stay until tapped (a kid reads at their own pace), so a tip never vanishes under a finger and lets the tap land on Details. */}
+      {/* Never shown before the card is measured, so not one frame sits at a guessed spot over Details. */}
+      <OneTimeTip id="lineplay_intro" ready={lineTipReady && waitCardBottom != null} autoHideMs={0}
+        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} />
+      <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending && waitCardBottom != null} autoHideMs={0}
+        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} />
 
       <QueueToast message={toast} onDone={() => setToast(null)} />
 
@@ -1424,6 +1578,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 6 },
   queueTrackingButtonText: { color: '#073e79', fontFamily: 'Knockout', fontSize: 14 },
   activityArea: { flex: 1, marginTop: spacing.lg },
+  // Clipped, so while it glides (Details open/close) the page never slides under the rail.
+  pages: { flex: 1 },
+  pagesInner: { flex: 1 },
+  pagesHidden: { opacity: 0 },
+  // A stepped-aside window leaves the flow but keeps its size; the rail stays at the bottom.
+  pagesAside: { position: 'absolute', left: 0, right: 0, top: 0 },
+  activityAreaAside: { justifyContent: 'flex-end' },
+  crewBand: { position: 'absolute', left: 0, right: 0, top: 0, justifyContent: 'center' },
   page: {
     width: SCREEN_W,
     height: '100%',
