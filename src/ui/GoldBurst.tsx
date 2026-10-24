@@ -188,6 +188,45 @@ export function ShineSweep({ progress, size }: { readonly progress: SharedValue<
   );
 }
 
+/**
+ * Gold rings closing in on a prize while it charges: each ring starts wide and faint and tightens onto the
+ * prize, brightening as it lands. One shared `progress` drives them on the UI thread: every whole step of
+ * progress brings one ring in (so a value that speeds up brings rings in faster), and `count` rings overlap.
+ * Nothing shows at 0, so the caller hides them by setting progress back to 0. Plain views only (no shadow).
+ */
+export function GatherRings({ progress, size, count = 2, color = GOLD_FX.rays, width = 5 }: {
+  readonly progress: SharedValue<number>;
+  /** The diameter a ring lands at (the prize's size). */
+  readonly size: number;
+  readonly count?: number;
+  readonly color?: string;
+  readonly width?: number;
+}) {
+  const n = Math.max(1, Math.min(3, count));
+  return (
+    <View pointerEvents="none" style={styles.origin}>
+      {Array.from({ length: n }, (_, i) => <GatherRing key={i} offset={i / n} progress={progress} size={size} color={color} width={width} />)}
+    </View>
+  );
+}
+
+function GatherRing({ offset, progress, size, color, width }: {
+  readonly offset: number; readonly progress: SharedValue<number>; readonly size: number; readonly color: string; readonly width: number;
+}) {
+  const style = useAnimatedStyle(() => {
+    const local = progress.value - offset;
+    if (progress.value <= 0 || local <= 0) return { opacity: 0, transform: [{ scale: 2 }] };
+    const t = local % 1;
+    // Wide and faint, tightening (faster at the end) and brightening onto the prize, then gone.
+    const close = t * t;
+    return { opacity: t < 0.85 ? 0.25 + 0.7 * (t / 0.85) : 0.95 * (1 - (t - 0.85) / 0.15), transform: [{ scale: 2.1 - 1.1 * close }] };
+  });
+  return (
+    <Animated.View style={[{ position: 'absolute', left: -size / 2, top: -size / 2, width: size, height: size,
+      borderRadius: size / 2, borderWidth: width, borderColor: color }, style]} />
+  );
+}
+
 /** Where the resting twinkles sit around a gold pin: fixed, so they never wander (angle in degrees, distance as a share of `radius`, size). */
 const TWINKLE_SPOTS = [
   { a: -50, r: 1, s: 30, d: 0 }, { a: 35, r: 0.92, s: 22, d: 0.3 }, { a: 150, r: 1.02, s: 26, d: 0.55 }, { a: 235, r: 0.9, s: 20, d: 0.8 },

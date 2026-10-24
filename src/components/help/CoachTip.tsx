@@ -11,7 +11,7 @@ const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
  * A one-time Finn tip. Never a modal: it floats where the caller puts it, the
  * rest of the screen keeps working, a tap closes it, and it leaves on its own.
  */
-export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9000, compact = false }: {
+export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9000, compact = false, instantExit = false }: {
   readonly title: string;
   readonly body: string;
   readonly onDismiss: () => void;
@@ -19,6 +19,12 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
   readonly autoHideMs?: number;
   /** No Finn art, for tips inside cards and sheets. */
   readonly compact?: boolean;
+  /**
+   * No layout animation at all (it appears and leaves at once): for a tip inside a card whose layout changes as
+   * it leaves. A layout-animated view removed while its siblings reflow was drawn at a stale spot on iOS (a
+   * cream pill shrinking over the charging coin).
+   */
+  readonly instantExit?: boolean;
 }) {
   const reduced = useReducedGameMotion();
   useEffect(() => {
@@ -30,8 +36,8 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <Animated.View pointerEvents="box-none" entering={reduced ? undefined : FadeIn.duration(220)}
-      exiting={reduced ? undefined : FadeOut.duration(150)} style={style}>
+    <Animated.View pointerEvents="box-none" entering={reduced || instantExit ? undefined : FadeIn.duration(220)}
+      exiting={reduced || instantExit ? undefined : FadeOut.duration(150)} style={style}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${body}`} accessibilityHint="Closes the tip"
         onPress={onDismiss} style={[styles.card, compact && styles.compactCard]}>
         {!compact && <Image source={FINN} style={styles.finn} contentFit="contain" />}

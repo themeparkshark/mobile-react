@@ -197,18 +197,34 @@ export function raysMayTurn(budget: { readonly ambient: boolean; readonly animat
 /** A slow server: the level-up label switches to "Almost there!" this long after the tap (the charge ends at 0.9 s). */
 export const SLOW_SERVER_LABEL_MS = 1600;
 
+/** How full the level-up charge bar is when the charge ends (the server's yes fills the rest). */
+export const CHARGE_REACH = 0.9;
+
 /**
- * The level-up charge bar: how full it looks at `elapsed` ms. It eases to 85 percent over the charge,
- * then creeps toward 97 percent while a slow server answers (never stuck, never fake-complete).
+ * The level-up charge bar: how full it looks at `elapsed` ms. It fills at a steady pace to CHARGE_REACH over
+ * the charge (every frame visibly fuller, no early rush then a flat hold), then creeps toward 97 percent while
+ * a slow server answers (never stuck, never fake-complete).
  */
 export function chargeFill(elapsed: number, chargeMs: number): number {
   if (elapsed <= 0) return 0;
-  if (elapsed < chargeMs) {
-    const t = elapsed / chargeMs;
-    return 0.85 * (1 - Math.pow(1 - t, 2));
-  }
+  if (elapsed < chargeMs) return CHARGE_REACH * (elapsed / chargeMs);
   const extra = elapsed - chargeMs;
-  return Math.min(0.97, 0.85 + 0.12 * (1 - Math.exp(-extra / 1500)));
+  return Math.min(0.97, CHARGE_REACH + (0.97 - CHARGE_REACH) * (1 - Math.exp(-extra / 1500)));
+}
+
+/**
+ * The wind-up wobble of a prize that is charging, at `w` (0 to 1 through a charge of `ms`): it starts small
+ * and slow and grows bigger and faster toward the burst (about 5 swings a second at the start, 15 at the
+ * end), so every frame of the charge looks further along than the one before. Points (or degrees). Runs as
+ * a worklet on the UI thread; 0 before and after the charge.
+ */
+export function windupWobble(w: number, ms: number, from = 1.5, to = 6): number {
+  'worklet';
+  if (w <= 0 || w >= 1) return 0;
+  const total = ms / 1000;
+  const s = w * total;
+  const turns = 5 * s + ((15 - 5) / (2 * total)) * s * s;
+  return (from + (to - from) * w * w) * Math.sin(2 * Math.PI * turns);
 }
 
 export interface LevelUpPayoff {
