@@ -151,7 +151,7 @@ test('Core Haptics: a binary with the TpsCoreHaptics module turns the shaped pat
   }
 });
 
-test('later catches (wow-map tap-repeat) open the studio catch too, and coin ticks just after done keep the ladder', () => {
+test('later catches (wow-map tap-repeat) open the studio catch too, and a coin tick just after done is covered by the settle (wave 4)', () => {
   const e = traceEngine();
   e.Catch.resetCatchSoundForTests();
   e.Catch.catchMark('tap');
@@ -172,5 +172,8 @@ test('later catches (wow-map tap-repeat) open the studio catch too, and coin tic
   assert.equal(moments.filter((m) => m === 'catch.wobble').length, 2, 'two wobble ticks for the two-wobble repeat');
   assert.ok(moments.includes('catch.repeat'), 'and rings the short repeat');
   const ticks = e.Trace.traceEvents().filter((x) => x.kind === 'moment' && x.name.includes('ui.counterTick'));
-  assert.equal(ticks.length, 1, 'a coin tick 300 ms after done keeps the studio ladder; one 1.1 s later is back to the shared sound');
+  // Wave 4 (fix 5): nothing after the settle. A coin tick 300 ms after done is covered by the settle (no
+  // studio tick and no shared sound); one 1.1 s later, after the catch, is back to the shared sound.
+  assert.equal(ticks.length, 0, 'no studio counter tick after done');
+  assert.ok(e.Trace.traceEvents().some((x) => x.kind === 'mark' && x.name === 'catch-tick-after-done'), 'the late tick is covered by the settle');
 });

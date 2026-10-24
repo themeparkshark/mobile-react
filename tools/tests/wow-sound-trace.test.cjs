@@ -47,14 +47,15 @@ test('50 catches: the golden chord on the full show, the short sparkle after, th
   assert.deepEqual(milestones, [25, 50], 'the grand burst (every 25th catch) rings the shower');
   const slams = a.perCatch.filter((c) => c.lucky).map((c) => c.n);
   assert.deepEqual(slams, [10, 20, 25, 30, 40, 50], 'the beam lands with its slam only when the beam drops');
-  for (const c of a.perCatch.slice(1)) if (c.burst !== 'catch.milestone') assert.equal(c.burst, 'catch.repeat', `#${c.n}: the short show gets the short sparkle`);
+  // Round 5 (wow-map 00100bd0): the 10th catches are the full show with the beam, so they ring the full bell.
+  for (const c of a.perCatch.slice(1)) if (c.burst !== 'catch.milestone') assert.equal(c.burst, c.beam ? 'catch.burst' : 'catch.repeat', `#${c.n}: the short show gets the short sparkle, the beam's full show the bell`);
   for (const c of a.perCatch) assert.deepEqual(plain(c.legacy), [], `#${c.n}: the catch's own pop, chime and whoosh stay quiet (no double sounds)`);
 });
 
 test('sync: every catch haptic fires on its own beat, with its sound inside the audio-api output latency', async () => {
   const { a } = await fiftyCatches();
   for (const c of a.perCatch) {
-    const p = c.repeat ? { burst: 450, wob: [150, 290] } : { burst: 670, wob: [200, 350, 480] };
+    const p = c.repeat ? { burst: 430, wob: [150, 290] } : { burst: 670, wob: [200, 350, 480] };
     assert.ok(c.burstSoundMs !== null && c.burstHapticMs !== null, `#${c.n} has a burst sound and haptic`);
     if (!c.beam) assert.equal(c.burstHapticMs, p.burst, `#${c.n} the burst buzz is on the visual burst frame`);
     const lag = c.burstSoundMs - p.burst;
@@ -83,7 +84,7 @@ test('a quick run gets hotter: the wobble and counter ticks climb one rung per q
   assert.ok(Number(c(7).counterRungs[0].slice(1)) > Number(c(2).counterRungs[0].slice(1)) - 1, 'the counter ticks climb with the run too');
   for (const x of a.perCatch) assert.equal(new Set(x.counterRungs).size, x.counterRungs.length, `#${x.n} counter ticks never repeat a rung (${x.counterRungs.join(' ')})`);
   assert.equal(c(7).sounds, c(2).sounds + 1, 'hotter: the 7th quick catch adds only the bright hot layer');
-  assert.ok(450 + 60 + 540 < 1140, 'and it ends before the coin lands in the short show (burst 450 + 60 ms + 540 ms glock)');
+  assert.ok(430 + 40 + 540 < 1020, 'and it ends before the coin lands in the short show (burst 430 + 40 ms + 540 ms glock, stamp 1020)');
 });
 
 test('the grand burst (every 25th catch) rings the rare milestone shower, never longer than the bell', async () => {

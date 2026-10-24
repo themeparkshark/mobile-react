@@ -130,3 +130,32 @@ export function burstMoment(state: CatchRunState, now: number, visual: CatchVisu
   if (newDay) return { moment: 'catch.firstOfDay', state: next };
   return { moment: 'catch.burst', state: next };
 }
+
+/**
+ * Wave 4: the burst never sounds the same twice in a row, and a hot run sounds hotter.
+ * Four round-robin voicings of the burst (a small tuning nudge and a touch of level), rotated by the
+ * session's catch count so neighbours always differ, plus one semitone per heat rung (capped), so the
+ * 10th quick catch rings higher than the 2nd and the 50th still lands a little differently. The
+ * nudges stay under half a semitone, so up to the cap the heat climb always wins: a hotter catch rings higher.
+ */
+export const BURST_VOICINGS: readonly { readonly semis: number; readonly volume: number }[] = [
+  { semis: 0, volume: 1 },
+  { semis: 0.4, volume: 0.92 },
+  { semis: -0.3, volume: 0.96 },
+  { semis: 0.2, volume: 0.88 },
+];
+/** Most semitones heat lifts the burst (a major third: bright, never chipmunk). */
+export const BURST_HEAT_SEMIS_MAX = 4;
+
+/** The burst's voicing for catch number `count` (1 = the first of the session) at `heat`. */
+export function burstVoicing(count: number, heat: number): { readonly semis: number; readonly volume: number; readonly rr: number } {
+  const rr = ((Math.max(1, Math.floor(count)) - 1) % BURST_VOICINGS.length + BURST_VOICINGS.length) % BURST_VOICINGS.length;
+  const v = BURST_VOICINGS[rr];
+  const lift = Math.max(0, Math.min(BURST_HEAT_SEMIS_MAX, Math.floor(heat)));
+  return { semis: Math.round((v.semis + lift) * 100) / 100, volume: v.volume, rr };
+}
+
+/** Bursts that get the voicing: the everyday ones. The golden chord and the grand shower stay exactly as written. */
+export function burstTakesVoicing(moment: MomentName): boolean {
+  return moment === 'catch.burst' || moment === 'catch.repeat';
+}

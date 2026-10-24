@@ -70,6 +70,11 @@ export interface MomentOptions {
   walking?: boolean;
   /** Audition the variant instead of the primary (dev tester, listening checks). */
   useVariant?: boolean;
+  /**
+   * Semitones on a one-shot (primary, round-robin and its layers, so they stay in tune). Ignored by
+   * ladder rungs (pre-rendered) and by the switch-off fallback (today's sound is never re-pitched).
+   */
+  pitch?: number;
 }
 
 /** Output latencies up to this (ms) fire the paired haptic in the same call as the sound. */
@@ -221,6 +226,7 @@ function playSound(name: MomentName, def: MomentDef, opts: MomentOptions): { id:
   if (step !== undefined) lastLadder.set(name, { at: now, step });
   const volume = opts.volume;
   const delayMs = opts.delayMs ?? 0;
+  const pitch = opts.pitch !== undefined && Number.isFinite(opts.pitch) ? Math.max(-12, Math.min(12, opts.pitch)) : undefined;
 
   if (!studioReady(name, opts.useVariant)) {
     // Switch off (or not approved yet): Chris's sound, with the ladder as a pitch climb.
@@ -246,11 +252,11 @@ function playSound(name: MomentName, def: MomentDef, opts: MomentOptions): { id:
     const pool = (GameAudio.cue(k)?.variants?.length ?? 0) + 1;
     const rr = nextRoundRobin(pool, lastRr.get(name));
     lastRr.set(name, rr);
-    trace(`studio ${name} ${def.primary} rr=${rr}`);
-    id = GameAudio.play(k, { volume, delayMs, variant: rr });
+    trace(`studio ${name} ${def.primary} rr=${rr}${pitch ? ` pitch=${pitch}` : ''}`);
+    id = GameAudio.play(k, { volume, delayMs, variant: rr, pitch });
   } else {
-    trace(`studio ${name} ${def.primary}`);
-    id = GameAudio.play(k, { volume, delayMs });
+    trace(`studio ${name} ${def.primary}${pitch ? ` pitch=${pitch}` : ''}`);
+    id = GameAudio.play(k, { volume, delayMs, pitch });
   }
   // Battery Saver: the primary alone carries the moment.
   if (!momentSaver()) def.layers?.forEach((layer, i) => {
@@ -258,7 +264,7 @@ function playSound(name: MomentName, def: MomentDef, opts: MomentOptions): { id:
     const lk = ensureCue(name, `layer${i}`, layer.ref, layer.db ?? 0, false);
     if (!lk) return;
     if (layer.step !== undefined) GameAudio.playLadder(lk, layer.step, { volume, delayMs: delayMs + layer.delayMs });
-    else GameAudio.play(lk, { volume, delayMs: delayMs + layer.delayMs });
+    else GameAudio.play(lk, { volume, delayMs: delayMs + layer.delayMs, pitch });
   });
   return { id, cue: k };
 }

@@ -1,7 +1,7 @@
 'use strict';
 /**
  * The map catch's calls into catchAudio, exactly as HomeCatchMoment on claude/p23-wow-map
- * (cb614f50, round 4) makes them: the tap's mark, buzz and pop on the JS thread, then every
+ * (00100bd0, round 5, with the wave 4 beam fix: the beam beat and the burst read a JS const) makes them: the tap's mark, buzz and pop on the JS thread, then every
  * beat of the UI-thread clock (mapWow.catchPlan, catchHaptics, coinStreamPlan) delivered to JS
  * with runOnJS (wow-sound lane, Oct 24 2026). `stalls` freeze the JS thread for a while at a
  * clock time: beats and timers that fall due inside a stall all run right after it, in order,
@@ -12,12 +12,16 @@
 
 const flush = () => new Promise((r) => setImmediate(r));
 
-/** mapWow.catchPlan (round 4) beat times, ms on the catch clock. */
+/**
+ * mapWow.catchPlan beat times, ms on the catch clock (claude/p23-wow-map 00100bd0, round 5): the snappier
+ * repeat (hit-stop 360, burst 430, done 1290) and the full show (done 2580). The 10th and 25th catches
+ * (milestones) play the full show with the beam.
+ */
 function plan(repeat) {
   if (repeat) {
-    return { wobbles: [[150, 'tickSelection'], [290, 'hitMedium']], hitStopAt: 380, burstAt: 450, flyAt: 780, landAt: 1140, tickAt: 1280, doneAt: 1440, coinsAt: 450 };
+    return { wobbles: [[150, 'tickSelection'], [290, 'hitMedium']], hitStopAt: 360, burstAt: 430, flyAt: 690, landAt: 1020, tickAt: 1150, doneAt: 1290, coinsAt: 430 };
   }
-  return { wobbles: [[200, 'tickSelection'], [350, 'tapLight'], [480, 'hitMedium']], hitStopAt: 600, burstAt: 670, flyAt: 1210, landAt: 1750, tickAt: 2110, doneAt: 2450, coinsAt: 670 };
+  return { wobbles: [[200, 'tickSelection'], [350, 'tapLight'], [480, 'hitMedium']], hitStopAt: 600, burstAt: 670, flyAt: 1210, landAt: 1750, tickAt: 2110, doneAt: 2580, coinsAt: 670 };
 }
 
 /** coinStreamPlan: one coin per coin won (at most 8), landing 720 ms after the burst, 40 ms apart. */
@@ -66,8 +70,9 @@ async function wowMapCatch(e, opts = {}) {
   }));
   add(p.landAt, 'land', () => { C.catchMark('land'); C.catchSound('badge'); C.catchHaptic('tapLight', 2); });
   if (isNew) add(p.tickAt, 'bar', () => { C.catchHaptic('tickSelection', 2); C.catchSound('tick', { pitch: 14, volume: 0.6 }); });
-  const doneAt = lands.length ? Math.max(p.doneAt, lands[lands.length - 1] + 650 + 400) : p.doneAt;
-  add(doneAt, 'done', () => C.catchMark('done'));
+  // wow-map's BEAT.done is on plan.doneAt (the clock itself runs on to endAt for the counter's roll), so on the
+  // short show the last coins land after 'done'.
+  add(p.doneAt, 'done', () => C.catchMark('done'));
   beats.sort((a, b) => a.at - b.at);
 
   // The tap (JS): the map's press buzz, the mark, the press buzz, the pop.

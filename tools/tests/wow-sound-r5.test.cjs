@@ -44,11 +44,12 @@ test('fix 2: a stalled JS thread can no longer flam the wobble (round 4 live: tw
   assert.equal(got.wobble3, 839, 'wobble 3 in the same ms as wobble 2 (the round 4 flam)');
   assert.equal(got.burst, 1064, 'burst at 1064 like the live trace');
   const ticks = v.starts('moment:catch.wobble:').map((s) => s.t);
-  for (let i = 1; i < ticks.length; i++) assert.ok(ticks[i] - ticks[i - 1] >= 120, `wobble ticks stay apart (${ticks.join(', ')})`);
-  assert.ok(ticks.length >= 2, `at least two rising ticks are heard (${ticks.join(', ')})`);
+  // Wave 4: the hit-stop pulls a late tick in (100 ms after the one before) instead of cutting it.
+  for (let i = 1; i < ticks.length; i++) assert.ok(ticks[i] - ticks[i - 1] >= 100, `wobble ticks stay apart (${ticks.join(', ')})`);
+  assert.equal(ticks.length, 3, `all three rising ticks are heard (${ticks.join(', ')})`);
   const hitstop = got.hitstop;
-  assert.ok(ticks.every((t) => t <= hitstop + 25), 'no tick rings through the held breath (later ones are cut)');
-  assert.ok(v.marks.some((m) => m.name === 'catch-wobble-cut'), 'the tick that would have rung late was cut');
+  assert.ok(ticks.every((t) => t <= hitstop + 20 + 70), 'every tick starts inside the held breath at the latest');
+  assert.ok(v.marks.some((m) => m.name === 'catch-wobble-pulled'), 'the tick that would have rung late was pulled in');
   const beforeBurst = v.haptics.filter((h) => h.t < got.burst - 1);
   for (let i = 1; i < beforeBurst.length; i++) {
     assert.ok(beforeBurst[i].t - beforeBurst[i - 1].t >= 90, `no two catch buzzes under 90 ms apart before the burst (${beforeBurst.map((h) => `${h.intent}@${h.t}`).join(' ')})`);
@@ -75,14 +76,14 @@ test('fix 2: an unstalled first catch: three even ticks on 200 / 350 / 480, each
   assert.ok(!v.sounds.some((s) => s.t > 510 && s.t < 690), 'nothing starts in the hold');
 });
 
-test('fix 2: the short show (later catches) gets two ticks on 150 / 290 and the short sparkle on 450', async () => {
+test('fix 2: the short show (later catches) gets two ticks on 150 / 290 and the short sparkle on 430', async () => {
   const e = await engine();
   await wowMapCatch(e, {});
   e.clock.advance(20_000);
   const r = await wowMapCatch(e, { repeat: true });
   const v = view(e, r);
   assert.deepEqual(plain(v.starts('moment:catch.wobble:').map((s) => s.t)), [170, 310]);
-  assert.equal(v.starts('moment:catch.repeat:primary')[0].t, 470);
+  assert.equal(v.starts('moment:catch.repeat:primary')[0].t, 450, 'the burst at 430 plus the 20 ms output');
   assert.ok(!v.starts('moment:catch.burst:').length && !v.starts('moment:catch.firstOfDay:').length, 'no full bell squeezed into the short show');
 });
 

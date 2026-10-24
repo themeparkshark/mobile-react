@@ -48,13 +48,13 @@ async function liveLikeCatch(e, { slow = 1 } = {}) {
 test('fix 4: heat climbs in the hand: wobble buzzes go one rung heavier at heat 2 and two at heat 4, plus a second thump', async () => {
   const { a } = await fiftyCatches();
   const c = (n) => a.perCatch[n - 1];
-  // Round 5: catch 1 is wow-map's full show (three wobbles), later catches its short show (two wobbles, burst at 450).
+  // Round 5: catch 1 is wow-map's full show (three wobbles), later catches its short show (two wobbles, burst at 430 since wow-map 00100bd0).
   assert.deepEqual(plain(c(1).wobbleIntents), ['tickSelection', 'tapLight', 'hitMedium'], 'a calm catch buzzes exactly as wow-map planned');
   assert.deepEqual(plain(c(2).wobbleIntents), ['tickSelection', 'hitMedium'], 'heat 1 is still calm');
   assert.deepEqual(plain(c(3).wobbleIntents), ['tapLight', 'hitMedium'], 'heat 2: one rung heavier, never past medium');
   assert.deepEqual(plain(c(5).wobbleIntents), ['hitMedium', 'hitMedium'], 'heat 4: medium all the way');
   for (const n of [1, 2, 3, 4]) assert.ok(c(n).thumpMs < 0, `#${n} has no second thump`);
-  for (const n of [5, 6, 7]) assert.equal(c(n).thumpMs, 540, `#${n} lands a crisp second thump 90 ms after the 450 ms burst`);
+  for (const n of [5, 6, 7]) assert.equal(c(n).thumpMs, 520, `#${n} lands a crisp second thump 90 ms after the 430 ms burst`);
   assert.deepEqual(plain(c(8).wobbleIntents), ['tickSelection', 'hitMedium'], 'a walk cools it back down');
 });
 test('fix 4: heat brightens the burst from heat 5 (a glockenspiel layer), and wow-map can read the same number', async () => {
@@ -154,6 +154,11 @@ test('the stamp buzz lands with the stamp, never held behind a coin-stream tick 
     // Round 5: while the catch is open a pulse on top of a beat is dropped (it would buzz 120 ms later on nothing).
     assert.equal(after.length, 0, 'the tick bunched onto the stamp is dropped, not held');
     e.Catch.catchMark('done');
+    // Wave 4: a coin buzz right after done is covered by the settle (nothing after the last frame).
+    e.Catch.catchHaptic('tickSelection', 1);
+    e.clock.advance(10);
+    assert.equal(e.haptics.filter((h) => h.t > t + 300 && h.intent === 'tickSelection').length, 0, 'no coin buzz after the settle');
+    e.clock.advance(800);
     e.Catch.catchHaptic('tickSelection', 1);
     e.Catch.catchHaptic('tickSelection', 1);
     e.clock.advance(300);
