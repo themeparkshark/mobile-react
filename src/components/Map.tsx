@@ -1,6 +1,6 @@
 import { openExternal } from '../services/external';
 import MapLaunchCover from './map/MapLaunchCover';
-import TileWaitSheet from './map/TileWaitSheet';
+import TileWaitSheet, { TILE_WAIT_MAX_MS } from './map/TileWaitSheet';
 import { beginMapCover, mapCoverDrawn, releaseMapCover, useMapCovered } from './map/mapCover';
 import { Image } from 'expo-image';
 import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -364,6 +364,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // Tiles drawn at least once: until then a light sheet hides the bare lawn if the cover lifted early.
   const [tilesDrawn, setTilesDrawn] = useState(false);
   const revealMap = () => { mapCoverDrawn(coverToken.current); if (!tilesDrawn) setTilesDrawn(true); };
+  // A JS backstop for the sheet's own UI-thread fade: whatever happens, it is gone shortly after its cap.
+  const [tileWaitOver, setTileWaitOver] = useState(false);
+  useEffect(() => {
+    if (covered || tilesDrawn || tileWaitOver) return;
+    const timer = setTimeout(() => setTileWaitOver(true), TILE_WAIT_MAX_MS + 500);
+    return () => clearTimeout(timer);
+  }, [covered, tilesDrawn, tileWaitOver]);
   // A layout effect, so the cover is up before this map's first frame paints (a park map that
   // replaces the home map never shows a blank blue frame).
   useLayoutEffect(() => {
@@ -977,7 +984,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}
       </MapView>
       </DeclutterContext.Provider>
-      {!covered && <TileWaitSheet drawn={tilesDrawn} />}
+      {!covered && !tileWaitOver && <TileWaitSheet drawn={tilesDrawn} />}
       {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}
       {viewSize && <MapLightOverlay width={viewSize.width} height={viewSize.height} />}
       {viewSize && <MapSkyOverlay width={viewSize.width} height={viewSize.height} />}

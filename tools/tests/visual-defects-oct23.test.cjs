@@ -703,7 +703,8 @@ test('first seconds on the map: pins arrive in the cover fade, late pins land in
   assert.match(explore, /const MAP_CALM_MS = 5000;/);
   assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && mapTipReady\(\{/);
   const map = read('src/components/Map.tsx');
-  assert.match(map, /\{!covered && <TileWaitSheet drawn=\{tilesDrawn\} \/>\}/);
+  assert.match(map, /\{!covered && !tileWaitOver && <TileWaitSheet drawn=\{tilesDrawn\} \/>\}/);
+  assert.match(map, /setTimeout\(\(\) => setTileWaitOver\(true\), TILE_WAIT_MAX_MS \+ 500\)/);
   assert.match(map, /onDidFinishRenderingFrameFully=\{covered \|\| !tilesDrawn \? revealMap : undefined\}/);
   const sheet = read('src/components/map/TileWaitSheet.tsx');
   assert.match(sheet, /pointerEvents="none"/);
