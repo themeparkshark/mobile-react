@@ -382,12 +382,6 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const finishWall = useRef(-1);
   // Dev capture (EXPO_PUBLIC_FINISH_HOLD_MS): the next card waits out the held FINISH! frame.
   const captureHold = __DEV__ && process.env.EXPO_PUBLIC_FINISH_HOLD_MS ? Number(process.env.EXPO_PUBLIC_DEV_HOLD_FOR_MS || 6000) : 0;
-  /**
-   * FINISH! stays mounted from the last 2 s until its beat is over (a latch). r6: arming on secondsLeft alone let
-   * the end event's `secondsLeft = null` unmount the canvas just before it fired, so it remounted late and the
-   * label showed only its tail (seen in dev at load 280).
-   */
-  const finishArmed = useRef(false);
   /** This Burst's curtain call (full, short ripple or the rare gold one): the next card waits for its bow. */
   const curtainKind = useRef(0);
   // r5: one celebration at a time. The next card waits for FINISH! to hand off AND for the last shark to bow.
@@ -573,7 +567,6 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         const nextLeft = left <= 5 && left >= 0 ? left : null;
         // One second early, so a floater already rising never meets the 5 stamp.
         quietRef.current = left <= 6;
-        if (nextLeft != null && nextLeft <= 2) finishArmed.current = true;
         if (nextLeft !== lastLeftRef.current) {
           lastLeftRef.current = nextLeft;
           setSecondsLeft(nextLeft);
@@ -654,7 +647,6 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const startBurst = useCallback((bi: number, runIdx: number, withSlam: boolean, feverFired = false) => {
     if (feverFired) carryRef.current = { ...carryRef.current, feverReady: false, meter: 0 };
     const t = buildTimeline(bi, runIdx, feverFired);
-    finishArmed.current = false;
     if (bi === 0) tilesRef.current = [];
     tlRef.current = t;
     setTl(t);
@@ -1273,7 +1265,10 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={capacity} textMinY={L.hudH + 6}
             flyArrived={flyArrived} onArrive={onCoinsArrive} /> : null}
           {L ? <StampLayer ref={stamps} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} queue={{ maxLive: 1, spacingMs: 150 }} minY={L.hudH + 8} /> : null}
-          {L && !ride ? <FinishBeat trigger={runtime.endTick} armed={phase === 'finish' || (phase === 'play' && (finishArmed.current || (secondsLeft != null && secondsLeft <= 2)))} onFire={onFinishFire}
+          {/* r6: FINISH! stays mounted for the whole Run (idle it draws nothing and never redraws: its clock is
+              still), so the beat never depends on JS. Arming it from JS (the last 2 s) failed under load: a stalled
+              JS thread mounted the canvas after the beat was over and FINISH! never showed. */}
+          {L && !ride ? <FinishBeat trigger={runtime.endTick} armed={phase !== 'done'} onFire={onFinishFire}
             label="FINISH!" width={L.w} height={L.h} y={L.hudH + (L.deckTop - L.hudH) * 0.52}
             reduced={reducedMotion} sparkles={momentParticles(FINISH_SPARKLES_MAX, budget, reducedMotion)}
             flash={flashPeak(isDimFlashingLightsEnabled(), reducedMotion)} clipTop={L.hudH + 4} handoffMs={finishHandoff(curtainKind.current)} /> : null}
