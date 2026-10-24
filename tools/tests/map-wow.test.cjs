@@ -535,7 +535,11 @@ test('wave 4: the burst lives in one Skia canvas on the clock, never an animated
   assert.doesNotMatch(burst, /useState\([^)]*\)[\s\S]*setInk\([^)]*\)[\s\S]*useAnimatedStyle/, 'no animated view styles in the burst');
   assert.doesNotMatch(burst, /useAnimatedStyle/);
   assert.match(burst, /Skia\.Image\.MakeImageFromEncoded/, 'the ink art is decoded once for the app');
-  assert.match(src, /useEffect\(\(\) => \{ void loadBurstInk\(\); \}, \[\]\)/, 'and preloaded when the map mounts');
+  assert.match(src, /useEffect\(\(\) => \{ void loadBurstInk\(\)\.then\(setBurstInk\); \}, \[\]\)/, 'and preloaded when the map mounts');
+  assert.match(src, /warmStep === 0 && !reducedMotion && <Canvas[\s\S]{0,200}<CatchRaysArt size=\{goldSize\} \/>/, 'and drawn once, tiny, at launch (no first-catch compile)');
+  // The server answer's commit lands before the burst plays, never inside its hold.
+  assert.match(src, /caughtPending\.current = token;\s*setTimeout\(\(\) => releaseCaught\(token\), 150\);/);
+  assert.match(src, /useLayoutEffect\(\(\) => \{ if \(caughtPending\.current\) releaseCaught\(caughtPending\.current\); \}\);/);
 });
 
 test('wave 4: the 10th-catch beam is set from a JS flag on the tap (JS never reads back a value it just wrote)', () => {

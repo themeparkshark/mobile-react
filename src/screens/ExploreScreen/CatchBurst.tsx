@@ -56,7 +56,7 @@ export interface BurstValues {
 
 /** One confetti piece: a small inked card that pops out and flutters down (UI thread, no React). */
 function Confetto({ index, count, v }: { readonly index: number; readonly count: number; readonly v: BurstValues }) {
-  const w = index % 3 === 0 ? 14 : 10, h = index % 3 === 0 ? 8 : 12;
+  const w = index % 3 === 0 ? 20 : 14, h = index % 3 === 0 ? 11 : 17;
   const transform = useDerivedValue(() => {
     const c = v.on.value && v.grand.value ? confettiAt(v.clock.value, v.plan.value, index, count) : null;
     if (!c) return HIDE;
@@ -124,7 +124,9 @@ function CatchBurst({ v, goldSize, confetti }: { readonly v: BurstValues; readon
     const grow = Math.min(1, b / 140);
     const suck = v.frame.value.suck;
     const pull = 1 - suck * suck * suck;
-    const s = v.inkScale.value * 0.78 * (0.35 + 0.85 * (1 - (1 - grow) * (1 - grow)) + 0.08 * p) * (1 + 0.025 * Math.sin(b / 70)) * pull;
+    // The ink grows with the tier only up to 1.25x (the grand's extra size goes to the rays and bloom, so it reads
+    // as a bigger sunburst, never a heavier mace).
+    const s = Math.min(1.25, v.inkScale.value) * 0.78 * (0.35 + 0.85 * (1 - (1 - grow) * (1 - grow)) + 0.08 * p) * (1 + 0.025 * Math.sin(b / 70)) * pull;
     return [{ translateX: v.sx.value }, { translateY: v.sy.value }, { scale: s },
       { rotate: (v.inkTurn.value + 12 * p - 40 * suck) * Math.PI / 180 }];
   });

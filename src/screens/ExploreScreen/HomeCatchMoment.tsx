@@ -26,6 +26,7 @@ import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
 import CatchBurst, { loadBurstInk, type BurstValues } from './CatchBurst';
+import { CatchRaysArt } from './CatchRays';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { DURATION, EASE, SPRING, flashPeak, momentParticles } from '../../ui/motionEasing';
 import { GOLD_FX, PARTICLES } from '../../ui/motion';
@@ -643,7 +644,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   /** Round 5: every commit of this moment re-sends its styles for a moment (commitHeal): no stale first-render frames. */
   const heal = useCommitHeal();
   // The burst's ink art is decoded once (Skia), long before the first catch.
-  useEffect(() => { void loadBurstInk(); }, []);
+  const [burstInk, setBurstInk] = useState<SkImage | null>(null);
+  useEffect(() => { void loadBurstInk().then(setBurstInk); }, []);
   const planSV = useSharedValue<CatchPlan>(catchPlan({ reduced: false }));
   /** 1 while a common's clock drives the badge (the Ride Photo path drives it with the values above). */
   const clockOn = useSharedValue(0);
@@ -704,6 +706,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   /** Starts the clock (once the copy has drawn, or after 280 ms). */
   const startRef = useRef<(() => void) | null>(null);
   const onCopyShown = useCallback(() => startRef.current?.(), []);
+  /** Wave 4: the catch whose server answer is waiting for its commit before the burst plays. */
+  const caughtPending = useRef(0);
+  const releaseCaught = (token: number) => {
+    if (caughtPending.current !== token) return;
+    caughtPending.current = 0;
+    runOnUI(markCaught)();
+  };
+  useLayoutEffect(() => { if (caughtPending.current) releaseCaught(caughtPending.current); });
   const skipped = useRef(false);
   const skipWake = useRef<(() => void) | null>(null);
   /** A wait a skip can cut short (the Ride Photo hand-off). */
@@ -1250,7 +1260,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         catchHaptic('comboHeavy', 3);
         setTimeout(() => { if (alive()) catchHaptic('success', 3); }, 180);
       }
-      runOnUI(markCaught)();
+      // Wave 4: the clock runs on into the burst only once this answer's React commit (summary, badge, next goal,
+      // the parent's cascade) has landed, so its mount never lands inside the burst's hold (the r5 frame gaps).
+      caughtPending.current = token;
+      setTimeout(() => releaseCaught(token), 150);
     })();
   // A new request (or a retry of the same find) starts a fresh moment.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1787,6 +1800,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         <View style={StyleSheet.absoluteFill} accessible accessibilityRole="button" accessibilityLabel="Skip" onAccessibilityTap={onSkip} />
       </GestureDetector>}
 
+      {/* Wave 4: the burst's gradients, rays and ink drawn once, tiny, at launch, so the first catch never compiles them mid-burst. */}
+      {warmStep === 0 && !reducedMotion && <Canvas pointerEvents="none" style={styles.warmCanvas}>
+        <Group transform={WARM_SCALE}><CatchRaysArt size={goldSize} /></Group>
+        {burstInk && <SkImageNode image={burstInk} x={0} y={0} width={2} height={2} fit="contain" />}
+      </Canvas>}
       {warming && warmPics && <Canvas pointerEvents="none" style={styles.warmCanvas}>
         <Group transform={WARM_SCALE}>
           <Picture picture={warmPics.backdrop} />

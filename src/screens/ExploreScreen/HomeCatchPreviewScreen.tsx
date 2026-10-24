@@ -33,6 +33,7 @@ import { chromeHeal, useCommitHeal } from '../../components/map/alive/commitHeal
 import type { RideKind, Sky } from './ridePhoto/rides';
 import { resetRideMemoryForPreview } from './ridePhoto/rides/rideMemory';
 import { catchTraceBuffer } from './ridePhoto/catchAudio';
+import { hudClock } from '../../components/Topbar/hudPulse';
 import * as FileSystem from 'expo-file-system';
 import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 
@@ -360,9 +361,12 @@ function HomeCatchPreview() {
     console.log(line);
     catchTraceBuffer.push(line);
   };
+  // Wave 4: every slow frame (over 34 ms) with the catch clock it landed on, so a hitch can be placed on a beat.
+  const logSlow = (dt: number, clock: number) => { catchTraceBuffer.push(`[slow] ${Date.now()} dt=${dt.toFixed(1)}ms clock=${Math.round(clock)}`); };
   useFrameCallback(info => {
     const dt = info.timeSincePreviousFrame;
     if (dt == null) return;
+    if (dt > 34) runOnJS(logSlow)(dt, hudClock.value);
     frameCount.value += 1; frameSum.value += dt;
     if (dt > 25) frameSlow.value += 1;
     if (dt > frameWorst.value) frameWorst.value = dt;
