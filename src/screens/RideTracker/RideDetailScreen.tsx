@@ -113,13 +113,14 @@ const SPARKS = [0, 1, 2, 3, 4, 5].map(i => {
 });
 /** How long one save's burst lasts (the stars fly out and fade). */
 export const STAR_BURST_MS = 680;
-const FavoriteStar: React.FC<{ on: boolean; size: number }> = React.memo(({ on, size }) => {
+const FavoriteStar: React.FC<{ on: boolean; size: number; taps: number }> = React.memo(({ on, size, taps }) => {
   const pop = useRef(new Animated.Value(1)).current;
   const burst = useRef(new Animated.Value(0)).current;
   const reducedMotion = useReducedGameMotion();
-  const first = useRef(true);
+  // Only a kid's own tap pops the star (taps counts them): the favorites list arriving after the
+  // page opens just shows the gold star, with no burst nobody asked for.
   useEffect(() => {
-    if (first.current) { first.current = false; return; }
+    if (taps === 0) return;
     if (reducedMotion) return;
     pop.setValue(on ? 0.6 : 1.15);
     burst.setValue(0);
@@ -129,7 +130,8 @@ const FavoriteStar: React.FC<{ on: boolean; size: number }> = React.memo(({ on, 
     ]);
     anim.start();
     return () => anim.stop();
-  }, [on, reducedMotion, pop, burst]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taps]);
   const inner = Math.round(size * 0.56);
   const spark = Math.round(size * 0.42);
   const reach = size * 1.2;
@@ -226,6 +228,7 @@ export default function RideDetailScreen() {
   const [totalRides, setTotalRides] = useState(0);
   const [community, setCommunity] = useState<CommunityStats | null>(null);
   const [wishlisted, setWishlisted] = useState(false);
+  const [starTaps, setStarTaps] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [shareEntry, setShareEntry] = useState<PlayerRideType | null>(null);
@@ -267,6 +270,7 @@ export default function RideDetailScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const result = await toggleWishlist(rideId);
       setWishlisted(result.wishlisted);
+      setStarTaps(n => n + 1);
       // The star's pop and burst say it on screen; VoiceOver hears it in words.
       AccessibilityInfo.announceForAccessibility(result.wishlisted ? 'Saved to favorites' : 'Taken off favorites');
     } catch (e) {
@@ -308,7 +312,7 @@ export default function RideDetailScreen() {
   const starButton = (
     <Pressable onPress={handleWishlistToggle} hitSlop={12} style={s.starBtn} accessibilityRole="button"
       accessibilityLabel={wishlisted ? 'Remove from favorites' : 'Add to favorites'}>
-      <FavoriteStar on={wishlisted} size={34} />
+      <FavoriteStar on={wishlisted} size={34} taps={starTaps} />
     </Pressable>
   );
   const meta = ride?.metadata;

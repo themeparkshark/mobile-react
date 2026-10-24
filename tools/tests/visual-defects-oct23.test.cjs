@@ -1106,3 +1106,10 @@ test('favorite star: both looks stay mounted and swap opacity, so a toggle never
   assert.match(detail, /<View style=\{\{ opacity: on \? 1 : 0 \}\}><GameIcon name="star" size=\{size\} \/><\/View>/);
   assert.doesNotMatch(detail, /\{on \? <GameIcon name="star"/);
 });
+
+test('favorite star bursts only on a tap, never when the favorites list arrives after the page opens', () => {
+  const detail = read('src/screens/RideTracker/RideDetailScreen.tsx');
+  assert.match(detail, /if \(taps === 0\) return;/);
+  assert.match(detail, /setWishlisted\(result\.wishlisted\);\s*setStarTaps\(n => n \+ 1\);/);
+  assert.match(detail, /<FavoriteStar on=\{wishlisted\} size=\{34\} taps=\{starTaps\} \/>/);
+});
