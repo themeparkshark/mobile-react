@@ -184,3 +184,13 @@ test('cards fly home on one arc shared with their gold trail', () => {
   const hook = read('src/components/park/useParkArrival.tsx');
   assert.match(hook, /fresh \|\| \(!!playing && playing\.parkId === parkId\)/, 'the stack button is there while the cards fly and stays after');
 });
+
+test('capture aids are dev only: slow-mo is 1 outside dev, the frame HUD renders nothing without its env', () => {
+  const time = read('src/components/park/momentTime.ts');
+  assert.match(time, /const raw = __DEV__ \? Number\(process\.env\.EXPO_PUBLIC_MOMENT_SLOWMO \?\? '1'\) : 1;/);
+  assert.match(time, /if \(MOMENT_SLOW === 1\) return rWithTiming\(to, config, callback\);/, 'a plain pass-through in every real build');
+  const perf = read('src/components/park/momentPerf.ts');
+  assert.match(perf, /export const PERF_HUD = __DEV__ && process\.env\.EXPO_PUBLIC_PERF_HUD === '1';/);
+  const hud = read('src/components/park/DevPerfHud.tsx');
+  assert.match(hud, /if \(!PERF_HUD\) return null;/);
+});
