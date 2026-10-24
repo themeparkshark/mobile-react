@@ -502,9 +502,10 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               <View style={styles.prizeRow} accessible accessibilityLabel={`+${amount} ${prizeLabel(kind, amount)}`}>
                 <CountUpText value={Math.max(shown, countStart(amount))} prefix="+"
                   durationMs={DURATION.count} punch={1.08} reducedMotion={reducedMotion}
-                  style={[styles.prizeText, { minWidth: countWidth(amount), textAlign: 'right' }]}
+                  style={[styles.prizeText, { width: countWidth(amount), flexShrink: 0, textAlign: 'right' }]}
                   onDone={countedUp} />
-                <Text style={styles.prizeText}>{` ${prizeLabel(kind, amount)}`}</Text>
+                {/* Never squeezed: a text field can report a wider size than it draws while its digits change. */}
+                <Text style={[styles.prizeText, { flexShrink: 0 }]}>{` ${prizeLabel(kind, amount)}`}</Text>
               </View>
               {extras.map(k => (
                 <Text key={k} style={styles.prizeExtra}>+{amounts[k]} {prizeLabel(k, amounts[k])}</Text>
