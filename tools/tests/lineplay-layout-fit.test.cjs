@@ -590,3 +590,9 @@ test('a space clue page says its own mission name and no second count (the rail 
   const rail = read('src/screens/LinePlay/components/ActivityPageRail.tsx');
   assert.match(rail, /numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}>/, 'a long next name shrinks a little, never cut');
 });
+
+test('the board page "Tap to play" strip with no header fills its window (no cream band on an SE)', () => {
+  const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
+  assert.match(card, /\[styles\.playStrip, !withHeader && styles\.playStripFill, pressed && !reducedMotion && styles\.pressed\]/);
+  assert.match(card, /playStripFill: \{ flexGrow: 1, maxHeight: 112 \}/);
+});

@@ -313,7 +313,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
       </LinearGradient>}
       <Pressable accessibilityRole="button" onPress={onMakeRoom}
         accessibilityLabel={`${title}. Tap to play. Hides the details.`}
-        style={({ pressed }) => [styles.playStrip, pressed && !reducedMotion && styles.pressed]}>
+        style={({ pressed }) => [styles.playStrip, !withHeader && styles.playStripFill, pressed && !reducedMotion && styles.pressed]}>
         {withHeader ? <Text style={[styles.playStripTitle, styles.playStripCtaBig]}>TAP TO PLAY</Text> : <>
           <View style={styles.playStripCopy}>
             <Text style={styles.playStripTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{title}</Text>
@@ -541,6 +541,8 @@ const styles = StyleSheet.create({
     paddingVertical: 1, borderRadius: 16, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 5,
     backgroundColor: BRAND.gold },
   playStripCopy: { flex: 1 },
+  // No header above it (an iPhone SE reading Details): the strip fills its window, no empty cream band.
+  playStripFill: { flexGrow: 1, maxHeight: 112 },
   contentStripHeader: { gap: 8, padding: 8, paddingBottom: 8 },
   heroStrip: { minHeight: 0 },
   playStripCtaBig: { flex: 1, fontSize: 20 },
