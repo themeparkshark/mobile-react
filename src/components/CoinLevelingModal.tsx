@@ -27,6 +27,7 @@ import { playLimited, SFX_PRIORITY } from '../audio/sfxLimiter';
 import { usePresentationSlot } from '../hooks/usePresentationQueue';
 import type { LevelUpResult } from '../api/endpoints/me/ride-coins/level-up';
 import CoinStand from './coin/CoinStand';
+import TierPlate from './coin/TierPlate';
 import Crowning from './coin/Crowning';
 import LevelUpBurst from './coin/LevelUpBurst';
 import PerkTrack from './coin/PerkTrack';
@@ -59,6 +60,16 @@ const SUCCESS_CTA_WIDTH = (SCREEN_W - 48) * 0.95 - 28;
 const CTA_HEIGHT = SUCCESS_CTA_WIDTH / 3.8;
 /** How long the coin charges before the burst (the burst waits for the server too). */
 const CHARGE_MS = LEVEL_UP_ACTS.charge.end;
+/** The new coin settles this much bigger on the success card (120 pt art to about 142 pt), and this far lower. */
+export const SUCCESS_COIN_SCALE = 1.18;
+const SUCCESS_COIN_DROP = 14;
+/** On success the line under the coin (and the blue band) move down this far, clear of the bigger coin and its plate. */
+const SUCCESS_TEXT_DROP = 22;
+/** Vertical padding of the success box, the breathing gap it keeps after fitting, and when and how fast it fits. */
+const SUCCESS_BOX_PAD = 10;
+export const SUCCESS_SNUG_GAP = 12;
+const SUCCESS_SNUG_AFTER_MS = 950;
+export const SUCCESS_SNUG_MS = 280;
 
 interface Props {
   visible: boolean;
@@ -135,9 +146,14 @@ export default function CoinLevelingModal({
   // 0 to 1 through the charge (linear): the coin's wobble grows bigger and faster from it (windupWobble).
   const windup = useSharedValue(0);
   const successIn = useSharedValue(0);
+  // 0 to 1 on success: the new coin settles bigger and a little lower, on its tier plate (no relayout of the coin).
+  const grow = useSharedValue(0);
+  // 0 to 1 on success: the tier plate behind the coin (a metal disc, or rays from Prismatic up) springs out.
+  const plate = useSharedValue(0);
   const coinStyle = useAnimatedStyle(() => {
     const x = windupWobble(windup.value, CHARGE_MS, 1.5, 6);
-    return { transform: [{ scale: coinPop.value }, { translateX: x }, { rotate: `${x * 0.9}deg` }] };
+    return { transform: [{ translateY: SUCCESS_COIN_DROP * grow.value }, { scale: coinPop.value * (1 + (SUCCESS_COIN_SCALE - 1) * grow.value) },
+      { translateX: x }, { rotate: `${x * 0.9}deg` }] };
   });
   // The success content is on screen from its very first frame (never a blank card while a spring starts
   // from zero): it stamps in from a little small and a little tilted, overshoots and settles.
@@ -161,7 +177,16 @@ export default function CoinLevelingModal({
   const contentHeight = useRef(0);
   // The card's visible height: the held height never passes it, so the success card's button is always on screen.
   const viewportHeight = useRef(0);
-  const [lockedHeight, setLockedHeight] = useState(0);
+  // The held minimum height, on the UI thread: after the success settles it eases down to the success content
+  // (about 280 ms), so the payoff never floats in a hollow card.
+  const held = useSharedValue(0);
+  const heldTarget = useRef(0);
+  const heldStyle = useAnimatedStyle(() => ({ minHeight: held.value }));
+  const lockHeight = (value: number) => { cancelUi(held); held.value = value; heldTarget.current = value; };
+  // The success content's measured heights (the box that grows, and what is inside it), and whether it has settled.
+  const successBox = useRef({ outer: 0, inner: 0 });
+  const successSettled = useRef(false);
+  const snugBusy = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The level-up show, on the UI thread: the charge bar, the gold gathering behind the coin,
   // the burst bloom, sparkles and one shine across the new coin (ui/motion.ts language).
@@ -225,7 +250,8 @@ export default function CoinLevelingModal({
       setBurstKey(0); // 0 never plays: the burst waits for this card's own success
       setUnlocks(null); setLevelXp(0); setSlowServer(false);
       stopUiShow(); charge.value = 0; gold.value = 0; bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0; bloomOut.value = 0; ringPulse.value = 0;
-      windup.value = 0; gatherRing.value = 0; setAnchor(null); setLockedHeight(0);
+      windup.value = 0; gatherRing.value = 0; setAnchor(null); lockHeight(0);
+      cancelUi(grow); cancelUi(plate); grow.value = 0; plate.value = 0;
       setFanScale(levelUpPayoff(Math.min(rideCoin.current_level + 1, rideCoin.max_level)).fanScale);
       const isMax = rideCoin.current_level >= rideCoin.max_level;
       setState(isMax ? 'maxed' : 'preview');
@@ -262,25 +288,51 @@ export default function CoinLevelingModal({
   // started earlier can finish on the UI thread before a busy JS thread mounts the card, which then mounts
   // with the stale small scale and sits there (seen for over a second in release JS under load).
   useEffect(() => {
-    if (state !== 'success') return;
+    successSettled.current = false;
+    if (snugBusy.current) { clearTimeout(snugBusy.current); snugBusy.current = null; }
+    if (state !== 'success') return undefined;
+    // Once the punch and the stamp have settled (and a first-time tip has had its moment to appear), the card
+    // eases down to fit the payoff. Reduced motion fits it at once.
+    const settle = setTimeout(() => { successSettled.current = true; snugRef.current(); }, reducedMotionRef.current ? 0 : SUCCESS_SNUG_AFTER_MS);
     cancelUi(successIn);
-    if (reducedMotionRef.current) { successIn.value = 1; return; }
+    if (reducedMotionRef.current) { successIn.value = 1; return () => clearTimeout(settle); }
     successIn.value = 0;
     successIn.value = uiSpring(1, SPRING.stamp);
+    return () => clearTimeout(settle);
   }, [state]);
+  useEffect(() => () => { if (snugBusy.current) clearTimeout(snugBusy.current); }, []);
 
   useEffect(() => {
     if (!reducedMotion) return;
     stopUpgradeEffects();
-    cancelUi(coinPop); cancelUi(successIn);
+    cancelUi(coinPop); cancelUi(successIn); cancelUi(grow); cancelUi(plate);
     windup.value = 0; gatherRing.value = 0; coinPop.value = 1; successIn.value = 1;
+    grow.value = state === 'success' ? 1 : 0; plate.value = state === 'success' ? 1 : 0;
   }, [reducedMotion]);
 
   // Dev-only evidence driver (no-op in release builds). Every hook runs before the
   // `!rideCoin` return: TaskCoinModal mounts this sheet with no coin, so a hook after the
   // return ran only once a coin loaded ("Rendered more hooks", a fatal crash on coin tap).
   const levelUpPress = useRef<() => void>(() => undefined);
+  const snugRef = useRef<() => void>(() => undefined);
   useDevAutoPress(visible ? 'level_up' : 'level_up_off', () => levelUpPress.current(), 2500);
+
+  // Fit the held height to the success content: the spare space in the growing success box (beyond a small
+  // breathing gap) comes off the held minimum. Layout events while it eases are ignored, then it checks once more.
+  const snug = () => {
+    if (!successSettled.current || snugBusy.current) return;
+    const { outer, inner } = successBox.current;
+    if (outer <= 0 || inner <= 0 || heldTarget.current <= 0) return;
+    const spare = outer - inner - SUCCESS_BOX_PAD * 2 - SUCCESS_SNUG_GAP;
+    if (spare <= 2) return;
+    const target = Math.max(0, heldTarget.current - spare);
+    heldTarget.current = target;
+    cancelUi(held);
+    if (reducedMotionRef.current) { held.value = target; return; }
+    held.value = uiTiming(target, { duration: SUCCESS_SNUG_MS, easing: EASE.inOut });
+    snugBusy.current = setTimeout(() => { snugBusy.current = null; snugRef.current(); }, SUCCESS_SNUG_MS + 40);
+  };
+  snugRef.current = snug;
 
   if (!rideCoin) return null;
 
@@ -322,7 +374,7 @@ export default function CoinLevelingModal({
     // bigger and faster (windupWobble), the coin swells faster and faster, the bar fills at a steady pace,
     // the gold gathers behind it and gold rings tighten onto it, coming in quicker toward the burst.
     // Then, if the server is slow, it hums (a breathing coin, a pulsing glow, a ring every 0.65 s), never a still bar.
-    setLockedHeight(viewportHeight.current > 0 ? Math.min(contentHeight.current, viewportHeight.current - 14) : contentHeight.current);
+    lockHeight(viewportHeight.current > 0 ? Math.min(contentHeight.current, viewportHeight.current - 14) : contentHeight.current);
     setSlowServer(false);
     stopUiShow(); bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0;
     charge.value = 0;
@@ -407,10 +459,15 @@ export default function CoinLevelingModal({
 
         setState('success');
 
+        cancelUi(grow); cancelUi(plate);
         if (reducedMotionRef.current) {
-          coinPop.value = 1; successIn.value = 1;
+          coinPop.value = 1; successIn.value = 1; grow.value = 1; plate.value = 1;
         } else {
           coinPop.value = uiSequence(uiTiming(1.35, { duration: 140, easing: EASE.out }), uiSpring(1, SPRING.pop));
+          // The new coin settles bigger, on its tier plate: the plate flares out from behind it a beat after the punch.
+          grow.value = uiDelay(140, uiSpring(1, SPRING.pop));
+          plate.value = 0;
+          plate.value = uiDelay(90, uiSequence(uiTiming(1.12, { duration: 160, easing: EASE.out }), uiSpring(1, SPRING.pop)));
           // The success card springs in from an effect once it is mounted (see the state effect), never before.
         }
 
@@ -428,7 +485,8 @@ export default function CoinLevelingModal({
         ? 'This coin changed. Close its detail and reopen it to refresh your level.'
         : 'Your upgrade could not be confirmed. Check your connection and try again.');
       setState('preview');
-      cancelUi(coinPop); windup.value = 0; gatherRing.value = 0; coinPop.value = 1; setLockedHeight(0);
+      cancelUi(coinPop); windup.value = 0; gatherRing.value = 0; coinPop.value = 1; lockHeight(0);
+      cancelUi(grow); cancelUi(plate); grow.value = 0; plate.value = 0;
       progressAnim.setValue(0);
       charge.value = 0; gold.value = 0; bloomOut.value = 0; setSlowServer(false);
       queueHaptic('failBuzz');
@@ -451,8 +509,9 @@ export default function CoinLevelingModal({
       if (!finished || !mounted.current) return;
       setState('preview');
       cancelUi(coinPop); cancelUi(successIn); coinPop.value = 1; successIn.value = 0;
+      cancelUi(grow); cancelUi(plate); grow.value = 0; plate.value = 0;
       progressAnim.setValue(0);
-      charge.value = 0; gold.value = 0; bloomOut.value = 0; setLockedHeight(0);
+      charge.value = 0; gold.value = 0; bloomOut.value = 0; lockHeight(0);
       onClose();
     });
   };
@@ -563,7 +622,7 @@ export default function CoinLevelingModal({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 14 }}
           >
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 185,
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: state === 'success' ? 185 + SUCCESS_TEXT_DROP : 185,
               backgroundColor: '#168AD7', borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }} />
             <View style={{ position: 'absolute', top: 16, left: 20, width: 15, height: 15,
               borderRadius: 8, borderWidth: 2, borderColor: '#FFFFFF88' }} />
@@ -571,10 +630,9 @@ export default function CoinLevelingModal({
               borderRadius: 11, borderWidth: 2, borderColor: '#FFFFFF88' }} />
             <View style={{ position: 'absolute', top: 132, left: 40, width: 8, height: 8,
               borderRadius: 4, backgroundColor: '#FFFFFF88' }} />
-              <View pointerEvents={state === 'leveling' ? 'none' : 'auto'}
+              <Reanimated.View pointerEvents={state === 'leveling' ? 'none' : 'auto'}
                 onLayout={event => { if (state === 'preview' || state === 'confirm') contentHeight.current = event.nativeEvent.layout.height; }}
-                style={{ paddingTop: 6, paddingHorizontal: 14, paddingBottom: 4, alignItems: 'center',
-                  minHeight: (state === 'leveling' || state === 'success') && lockedHeight > 0 ? lockedHeight : undefined }}>
+                style={[{ paddingTop: 6, paddingHorizontal: 14, paddingBottom: 4, alignItems: 'center' }, heldStyle]}>
 
                 {/* ── Coin Display with CoinUpgradeDemo ── */}
                 <Reanimated.View style={[{ marginBottom: 0 }, coinStyle]}>
@@ -590,6 +648,9 @@ export default function CoinLevelingModal({
                           <GoldBurst size={250} amount={gold} bloom={bloom} reduced={reducedMotion} />
                         </View>
                       )}
+                      {/* The new tier's plate (mounted with the card, hidden at 0): a metal disc for Silver and Gold,
+                          rays for Prismatic, a blazing sunburst for Legendary, so each tier looks different at a glance. */}
+                      {!isMaxLevel && <TierPlate level={nextLevel} size={120} progress={plate} />}
                       <CoinStand level={state === 'success' ? nextLevel : currentLevel} size={120} layer="stand" />
                       {/* The coin at its current tier, and the next tier already mounted under it (still and hidden) from
                           the moment the card opens: the success frame only swaps which one shows, so the Legendary and
@@ -641,6 +702,7 @@ export default function CoinLevelingModal({
                   textTransform: 'uppercase',
                   textAlign: 'center',
                   marginBottom: 2,
+                  marginTop: state === 'success' ? SUCCESS_TEXT_DROP : 0,
                 }}>
                   {state === 'success' ? 'YOUR COIN LEVELED UP'
                     : state === 'maxed' ? 'MAX LEVEL REACHED' : 'LEVEL UP YOUR COIN'}
@@ -995,7 +1057,10 @@ export default function CoinLevelingModal({
                 {/* Mounted with its content on the very first success frame (successStyle never scales it to nothing),
                     centred in the height the card already had, so the card neither empties nor jumps. */}
                 {state === 'success' && (
-                  <Reanimated.View style={[{ alignItems: 'center', justifyContent: 'center', paddingVertical: 10, flexGrow: 1, alignSelf: 'stretch' }, successStyle]}>
+                  <Reanimated.View onLayout={event => { successBox.current.outer = event.nativeEvent.layout.height; snug(); }}
+                    style={[{ alignItems: 'center', justifyContent: 'center', paddingVertical: SUCCESS_BOX_PAD, flexGrow: 1, alignSelf: 'stretch' }, successStyle]}>
+                    <View onLayout={event => { successBox.current.inner = event.nativeEvent.layout.height; snug(); }}
+                      style={{ alignSelf: 'stretch', alignItems: 'center' }}>
                     {/* New tier announcement */}
                     <View style={{
                       backgroundColor: '#FFF5D6',
@@ -1061,6 +1126,10 @@ export default function CoinLevelingModal({
                           })}
                         </View>
                       )}
+                    </View>
+                    {/* The very first level-up's tip sits inside the card, above the button (never over it). */}
+                    <OneTimeTip id="first_level_up" ready={visible && state === 'success'} compact instantExit
+                      style={{ alignSelf: 'stretch', marginBottom: 10 }} />
                     </View>
 
                   </Reanimated.View>
@@ -1235,17 +1304,11 @@ export default function CoinLevelingModal({
                       textDecorationLine: 'underline' }}>Waiting here? Play in Line</Text>
                   </TouchableOpacity>}
 
-              </View>
+              </Reanimated.View>
           </ScrollView>
         </View>
       </Animated.View>
 
-      {/* The first level-up tip floats under the card (never inside it), so the card never jumps when it appears. */}
-      {state === 'success' && (
-        <View pointerEvents="box-none" style={{ position: 'absolute', left: 16, right: 16, bottom: 18 }}>
-          <OneTimeTip id="first_level_up" ready={visible && state === 'success'} compact />
-        </View>
-      )}
 
       {crowningSlot.visible && (
         <Crowning rideName={rideCoin.ride_name} coinUrl={rideCoin.coin_url} boss={rideCoin.boss ?? null}
