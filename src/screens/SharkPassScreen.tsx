@@ -950,6 +950,9 @@ const TierColumn = memo(function TierColumn({ tier, current, premium, busy, puls
     if (!fill || reducedMotion) { pour.value = 1; setLit(true); return undefined; }
     const wait = Math.max(0, fill.at - Date.now());
     if (wait + fill.ms <= 0) { pour.value = 1; setLit(true); return undefined; }
+    // The climb arrived after this column first drew: it goes back to unlit and pours in on its beat.
+    setLit(false);
+    pour.value = 0;
     pour.value = withDelay(wait, withTiming(1, { duration: fill.ms, easing: EASE.out }));
     const end = wait + fill.ms;
     reach.value = withDelay(end, withSequence(withTiming(1, { duration: 110, easing: EASE.out }), withSpring(0, SPRING.pop)));
