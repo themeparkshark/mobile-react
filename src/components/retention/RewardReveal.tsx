@@ -518,7 +518,7 @@ function RollNumber({ target, run, instant, ms }: { readonly target: number; rea
   return (
     <AnimatedInput editable={false} caretHidden underlineColorAndroid="transparent" pointerEvents="none" allowFontScaling={false}
       defaultValue={first} animatedProps={props}
-      style={[styles.rowAmount, styles.rollInput, { width: 14 * (String(target).length + 1) + 6 }]} />
+      style={[styles.rowAmount, styles.rollInput, { width: 13 * (String(target).length + 1) + 4 }]} />
   );
 }
 

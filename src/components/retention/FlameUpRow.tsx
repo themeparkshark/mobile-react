@@ -62,7 +62,7 @@ export default function FlameUpRow({ from, to, grow, reducedMotion }: {
       </View>
       <Animated.View style={[styles.words, textStyle]}>
         <Text style={styles.big} numberOfLines={1} adjustsFontSizeToFit>{to === 1 ? 'Your flame is lit!' : `${to} days in a row!`}</Text>
-        {line ? <NextFlameGoal days={to} size={20} textStyle={styles.small} /> : null}
+        {line ? <NextFlameGoal days={to} size={22} short textStyle={styles.small} /> : null}
       </Animated.View>
     </View>
   );

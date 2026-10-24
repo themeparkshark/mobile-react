@@ -113,13 +113,16 @@ export default function FlameArt({ days, size, reducedMotion, still = false, boo
  * tier's flame as a white silhouette (bigger, so the goal reads with zero
  * words), then "N more days" for readers. Past 100 it shows the crown flame.
  */
-export function NextFlameGoal({ days, size = 30, textStyle }: {
+export function NextFlameGoal({ days, size = 30, textStyle, short = false }: {
   readonly days: number; readonly size?: number; readonly textStyle?: StyleProp<TextStyle>;
+  /** Just "N more days" (the picture already shows which flame). */
+  readonly short?: boolean;
 }) {
   const next = nextFlameSize(days);
-  const line = nextFlameLine(days);
+  const full = nextFlameLine(days);
+  const line = short && next ? (next.away === 1 ? '1 more day!' : `${next.away} more days`) : full;
   return (
-    <View style={styles.goal} accessible accessibilityLabel={line ?? undefined}>
+    <View style={styles.goal} accessible accessibilityLabel={full ?? undefined}>
       <FlameArt days={days} size={size} reducedMotion still />
       {next && <Text style={styles.arrow} allowFontScaling={false}>{'>'}</Text>}
       {next && (

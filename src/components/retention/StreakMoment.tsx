@@ -44,7 +44,10 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
   const boost = useSharedValue(reducedMotion ? 0 : big ? 0 : -0.35);
   const whoosh = useSharedValue(reducedMotion ? 1 : big ? 0.7 : 0.6);
   // Frame 1 is never empty: a milestone opens on a charged flame (0.7) with its gold already glowing.
-  const gold = useSharedValue(big && !reducedMotion ? 0.3 : 0);
+  const gold = useSharedValue(big && !reducedMotion ? 0.45 : 0);
+  // The charge: sparks pull in toward the flame and a ring tightens around it (never a still, empty card).
+  const gatherP = useSharedValue(big && !reducedMotion ? 0.98 : 0);
+  const ring = useSharedValue(0);
   const plusText = useSharedValue(reducedMotion || big ? 1 : 0);
   const bloom = useSharedValue(0);
   const flash = useSharedValue(0);
@@ -90,9 +93,11 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
     // Milestone: charge (the flame grows in the centre), hit-stop, burst, slam, badge, Finn.
     const burst = beats.burstAt;
     whoosh.value = withTiming(1, { duration: beats.anticipation, easing: EASE.charge });
+    gatherP.value = withSequence(withTiming(0.04, { duration: beats.anticipation, easing: EASE.charge }), withTiming(0, { duration: 0 }));
+    ring.value = withTiming(1, { duration: beats.anticipation, easing: EASE.charge });
     boost.value = withSequence(withTiming(0.55, { duration: beats.anticipation, easing: EASE.charge }),
       withDelay(DURATION.hitStop, withSequence(withTiming(0.8, { duration: 90 }), withSpring(0, SPRING.pop))));
-    gold.value = withSequence(withTiming(0.5, { duration: beats.anticipation, easing: EASE.charge }),
+    gold.value = withSequence(withTiming(0.62, { duration: beats.anticipation, easing: EASE.charge }),
       withDelay(DURATION.hitStop, withTiming(1, { duration: 160, easing: EASE.out })));
     flash.value = withDelay(burst, withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 40 }),
       withTiming(0, { duration: DURATION.flash - 40 })));
@@ -112,6 +117,9 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flameStyle = useAnimatedStyle(() => ({ transform: [{ scale: whoosh.value }] }));
+  const ringStyle = useAnimatedStyle(() => ({ opacity: ring.value <= 0 || ring.value >= 1 ? 0 : 0.7 * ring.value,
+    transform: [{ scale: 1.7 - 0.8 * ring.value }] }));
+  const gatherCount = big && !reducedMotion ? sparks : 0;
   // The slam: from 1.8 down to 1 (accelerating), a squash on impact, then the stamp spring to rest.
   const numberStyle = useAnimatedStyle(() => {
     const s = slam.value;
@@ -138,6 +146,8 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
           <FlameArt days={to} size={big ? 168 : 156} reducedMotion={reducedMotion} boost={boost} />
         </Animated.View>
         <View style={styles.center}><SparkleBurst progress={sparkle} count={sparks} radius={big ? 140 : 90} /></View>
+        {gatherCount > 0 && <View style={styles.center} pointerEvents="none"><SparkleBurst progress={gatherP} count={Math.min(8, gatherCount)} radius={150} /></View>}
+        {big && !reducedMotion && <Animated.View pointerEvents="none" style={[styles.chargeRing, ringStyle]} />}
         {big && !reducedMotion && budget.animate && budget.particleScale >= 0.5 && (
           <View style={styles.center} pointerEvents="none"><RewardBurst progress={confetti} x={0} y={-20} /></View>
         )}
@@ -227,6 +237,7 @@ const styles = StyleSheet.create({
     paddingTop: 16, paddingBottom: 14, paddingHorizontal: 14, alignItems: 'center', overflow: 'hidden' },
   stage: { width: '100%', height: 230, alignItems: 'center', justifyContent: 'center' },
   stageBig: { height: 270 },
+  chargeRing: { position: 'absolute', width: 170, height: 170, borderRadius: 85, borderWidth: 5, borderColor: '#FFE07A' },
   abs: { position: 'absolute' },
   center: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
   bigNumWrap: { position: 'absolute', bottom: 2 },

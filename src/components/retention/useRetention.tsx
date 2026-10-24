@@ -131,6 +131,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   useEffect(() => () => { if (chainTimer.current) clearTimeout(chainTimer.current); }, []);
   const mounted = useRef(true);
   const viewRef = useRef<View_ | null>(null);
+  // Dev readout for the lane tools (debug()).
+  const presentRef = useRef(false);
+  const frontRef = useRef(false);
+  const cardTRef = useRef<{ value: number } | null>(null);
   viewRef.current = view;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
@@ -534,7 +538,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       forgetFlame: () => { void AsyncStorage.removeItem(seenKey); },
       setSeen: (n: number) => writeSeen(n),
       debug: () => ({ enabled: o.enabled, focused: o.mapFocused, flags, daily: daily ? { done: doneCount(daily.goals), streak: daily.streak.days } : null,
-        view: view?.k ?? null }),
+        view: view?.k ?? null, present: presentRef.current, front: frontRef.current, cardT: cardTRef.current?.value ?? null }),
       reloadFlags: () => { void loadRetentionFlags(undefined, player?.id ?? '', Date.now() + 120_000).then(f => { if (mounted.current && f) setFlags(f); }); },
     };
   });
@@ -557,8 +561,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const visible = !!view || present;
   const front = useModalLayer(visible, 'wait');
   const showing = !!view && view.k !== 'flying' && front;
+  presentRef.current = present; frontRef.current = front;
   const dim = useSharedValue(0);
   const cardT = useSharedValue(0);
+  cardTRef.current = cardT;
   const cardUp = useRef(false);
   useEffect(() => {
     if (view) setPresent(true);
