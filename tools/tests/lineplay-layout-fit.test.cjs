@@ -298,6 +298,9 @@ test('an iPhone SE navigation page: the whole board fits BESIDE its header, no s
   assert.equal(m.navBoardLayout({ width: 366, height: 149 }, 60, true), 'beside');
   // SE reading Details: too short even beside, so the "Tap to play" strip.
   assert.equal(m.navBoardLayout({ width: 337, height: 70 }, 60, true), 'strip');
+  // The page sliding in before the crew row's room arrives: still beside (the board at its floor, then it grows).
+  assert.equal(m.navBoardLayout({ width: 337, height: 110 }, 60, false), 'beside');
+  assert.equal(m.boardBesideDrawn({ width: 337, height: 110 }), m.BESIDE_FLOOR);
   // 17 Pro, Details closed: the top board would be the 110 floor, beside gives bigger tiles.
   assert.equal(m.navBoardLayout({ width: 366, height: 227 }, 66, false), 'beside');
   assert.ok(m.boardBesideSide({ width: 366, height: 227 }) > m.boardSideFor({ width: 366, height: 227 }, 66));

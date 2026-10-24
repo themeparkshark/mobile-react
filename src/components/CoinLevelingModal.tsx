@@ -159,6 +159,8 @@ export default function CoinLevelingModal({
   // The card keeps its height from the tap through the success card (no collapse into a short card): the
   // content's height is tracked while the preview shows and held as a minimum once the charge starts.
   const contentHeight = useRef(0);
+  // The card's visible height: the held height never passes it, so the success card's button is always on screen.
+  const viewportHeight = useRef(0);
   const [lockedHeight, setLockedHeight] = useState(0);
 
   // The level-up show, on the UI thread: the charge bar, the gold gathering behind the coin,
@@ -215,9 +217,16 @@ export default function CoinLevelingModal({
       setShowEditions(false);
       setFeatureError(false);
       setUpgradeError(null);
-      setFx(null); setUnlocks(null); setLevelXp(0); setSlowServer(false);
+      // The burst's plan is known when the card opens, so its views are mounted (idle) before the tap.
+      const opening = Math.min(rideCoin.current_level + 1, rideCoin.max_level);
+      setFx(rideCoin.current_level < rideCoin.max_level
+        ? levelUpFx(opening, rideCoin.parts_to_next_level, { reducedMotion: reducedMotionRef.current, dimFlashingLights: isDimFlashingLightsEnabled() })
+        : null);
+      setBurstKey(0); // 0 never plays: the burst waits for this card's own success
+      setUnlocks(null); setLevelXp(0); setSlowServer(false);
       stopUiShow(); charge.value = 0; gold.value = 0; bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0; bloomOut.value = 0; ringPulse.value = 0;
       windup.value = 0; gatherRing.value = 0; setAnchor(null); setLockedHeight(0);
+      setFanScale(levelUpPayoff(Math.min(rideCoin.current_level + 1, rideCoin.max_level)).fanScale);
       const isMax = rideCoin.current_level >= rideCoin.max_level;
       setState(isMax ? 'maxed' : 'preview');
     }
@@ -313,7 +322,7 @@ export default function CoinLevelingModal({
     // bigger and faster (windupWobble), the coin swells faster and faster, the bar fills at a steady pace,
     // the gold gathers behind it and gold rings tighten onto it, coming in quicker toward the burst.
     // Then, if the server is slow, it hums (a breathing coin, a pulsing glow, a ring every 0.65 s), never a still bar.
-    setLockedHeight(contentHeight.current);
+    setLockedHeight(viewportHeight.current > 0 ? Math.min(contentHeight.current, viewportHeight.current - 14) : contentHeight.current);
     setSlowServer(false);
     stopUiShow(); bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0;
     charge.value = 0;
@@ -496,9 +505,11 @@ export default function CoinLevelingModal({
         alignItems: 'center',
       }}>
         {/* Behind the card: the big gold fan reaches past its edges on the success beat. */}
-        {anchor && (state === 'leveling' || state === 'success') && (
+        {/* Mounted as soon as the coin is measured (hidden at 0): iOS reuses native views, and a view created on the
+            tap could inherit a just-closed card's fill and border drawn over the coin. Nothing new mounts on the tap. */}
+        {anchor && (
           <View pointerEvents="none" style={{ position: 'absolute', left: anchor.x - SCREEN_W * fanScale / 2, top: anchor.y - SCREEN_W * fanScale / 2,
-            width: SCREEN_W * fanScale, height: SCREEN_W * fanScale, alignItems: 'center', justifyContent: 'center', zIndex: 5 }}>
+            width: SCREEN_W * fanScale, height: SCREEN_W * fanScale, alignItems: 'center', justifyContent: 'center', zIndex: 5, ...BARE }}>
             {/* Never turns: a card left open must not spin a screen-sized layer (the small fan on the coin does).
                 Its size grows with the tier, so Legendary throws rays well past the card while the kid reads it. */}
             <GoldBurst size={SCREEN_W * fanScale} amount={bloomOut} bloom={bloom} spin={false} reduced={reducedMotion} />
@@ -506,9 +517,9 @@ export default function CoinLevelingModal({
         )}
         {/* Above the card: sparkles fly out over its edges and the new tier's ring pulses outward. */}
         {/* Mounted from the start of the charge (hidden until the burst), so the success frame mounts nothing heavy. */}
-        {anchor && (state === 'leveling' || state === 'success') && !reducedMotion && (
+        {anchor && !reducedMotion && (
           <View pointerEvents="none" style={{ position: 'absolute', left: anchor.x, top: anchor.y, width: 0, height: 0,
-            alignItems: 'center', justifyContent: 'center', zIndex: 30 }}>
+            alignItems: 'center', justifyContent: 'center', zIndex: 30, ...BARE }}>
             <Reanimated.View style={[{ position: 'absolute', width: 132, height: 132, borderRadius: 66, borderWidth: nextPayoff.ringWidth,
               borderColor: coinTier(nextLevel).ring }, ringPulseStyle]} />
             <SparkleBurst progress={sparkle} radius={SCREEN_W * 0.46} count={momentParticles(nextPayoff.sparkles, budget, reducedMotion)} />
@@ -547,6 +558,7 @@ export default function CoinLevelingModal({
           overflow: 'hidden',
         }}>
           <ScrollView
+            onLayout={event => { viewportHeight.current = event.nativeEvent.layout.height; }}
             bounces={false}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 14 }}
@@ -570,9 +582,10 @@ export default function CoinLevelingModal({
                     activeOpacity={0.8}
                     onPress={() => state !== 'leveling' && setHoloVisible(true)}
                   >
-                    <View ref={coinRef} collapsable={false} style={{ alignItems: 'center', justifyContent: 'center', marginTop: (state === 'success' ? nextLevel : currentLevel) >= 10 ? 26 : 0,
+                    <View ref={coinRef} collapsable={false} onLayout={() => { if (!anchor) measureAnchor(); }} style={{ alignItems: 'center', justifyContent: 'center', marginTop: (state === 'success' ? nextLevel : currentLevel) >= 10 ? 26 : 0,
                       marginBottom: (state === 'success' ? nextLevel : currentLevel) >= 6 ? 14 : 0 }}>
-                      {(state === 'leveling' || state === 'success') && (
+                      {/* Mounted with the card (hidden at 0), like every burst layer: nothing new mounts on the tap. */}
+                      {state !== 'maxed' && (
                         <View pointerEvents="none" style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>
                           <GoldBurst size={250} amount={gold} bloom={bloom} reduced={reducedMotion} />
                         </View>
@@ -605,12 +618,14 @@ export default function CoinLevelingModal({
                       <TierRim level={state === 'success' ? nextLevel : currentLevel} size={120} />
                       <CoinStand level={state === 'success' ? nextLevel : currentLevel} size={120} layer="crown" />
                       <LevelUpBurst fx={fx} size={120} playKey={burstKey} />
-                      {(state === 'leveling' || state === 'success') && !reducedMotion && (
+                      {/* Mounted with the card (hidden at 0), so nothing new mounts on the tap. */}
+                      {!reducedMotion && <GatherRings progress={gatherRing} size={128} count={2} color={coinTier(nextLevel).ring} width={5} />}
+                      {/* Mounted with the card (all hidden at 0), so the tap and the burst frame mount nothing. */}
+                      {!reducedMotion && (
                         <>
                           <View pointerEvents="none" style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>
                             <ShineSweep progress={shine} size={104} />
                           </View>
-                          <GatherRings progress={gatherRing} size={128} count={2} color={coinTier(nextLevel).ring} width={5} />
                           <SparkleBurst progress={sparkle} radius={110} count={momentParticles(nextPayoff.sparkles, budget, reducedMotion)} />
                         </>
                       )}
@@ -1270,3 +1285,9 @@ function TierRim({ level, size }: { readonly level: number; readonly size: numbe
 }
 
 const LABEL_STYLE = { fontFamily: 'Shark', fontSize: 22, color: '#05346e', textTransform: 'uppercase' } as const;
+/**
+ * Explicitly bare (no fill, no border) for the layers that mount on the tap: iOS reuses native views, and a reused
+ * view kept a closed tip card's cream fill and gold border, drawn shrinking over the coin. A value that equals the
+ * default is skipped as "no change", so these are clear white and a 0 width, which always get written.
+ */
+const BARE = { backgroundColor: 'rgba(255,255,255,0)', borderWidth: 0, borderColor: 'rgba(255,255,255,0)' } as const;
