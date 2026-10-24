@@ -11,25 +11,34 @@
  *   - GROUP TURN: one try, the card shows only DONE.
  *   - SHARKY IN LINE: Sharky's own results card.
  *   - RHYTHM / CURRENT QUEST IN LINE: the other queue games' cards.
+ *   - LINE TRIVIA / TRIVIA DUEL: the duel's own results card.
+ *   - SHORT PHONE: makes the window report 375 x 667 (iPhone SE) so cards
+ *     that size themselves from the window lay out as on an SE. Capture only.
  * The log line shows what LinePlay would count ("Counted: 0 stars, saved").
  * It is always silent: master game volume is 0 while it is open, so a
- * capture never plays through the speakers, signed in or not.
+ * capture never plays through the speakers, signed in or not. Instead the
+ * log names the last sounds and haptics each run asked for ("End: ui.confirm,
+ * hitSoft"), so a muted capture still proves which finish cue played.
  *
  * Reached through the dev route list, or in release JS with
  * EXPO_PUBLIC_PERF_CAPTURE=1 and EXPO_PUBLIC_PERF_CAPTURE_ROUTE=QueueResultsCapture.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinePlayMovementContext, type LinePlayMovement } from '../../gamekit/LinePlayMovementContext';
 import type { WrapUpReason } from '../../gamekit/core/session';
 import { SFX } from '../../gamekit/SFX';
+import { GameAudio } from '../../gamekit/audio/GameAudio';
+import { Haptic } from '../../gamekit/Haptics';
 import { WhackAShark } from '../../games/whack';
 import { SharkySwim } from '../../games/sharky';
 import { RhythmTapGame } from '../../games/rhythm';
 import { CurrentQuestQueueGame } from '../../games/current-quest';
+import { TriviaGame, createLinePlayTriviaSource } from '../../games/trivia';
+import { TriviaDuel } from '../../games/trivia-duel';
 
-type Run = { game: 'tap' | 'shark' | 'timing' | 'current'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number };
+type Run = { game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number };
 
 const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'WHACK IN LINE', run: { game: 'tap', groupTurn: false, rideUpAfterMs: null } },
@@ -39,11 +48,17 @@ const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'WHACK GROUP TURN', run: { game: 'tap', groupTurn: true, rideUpAfterMs: null } },
   { label: 'SHARKY IN LINE', run: { game: 'shark', groupTurn: false, rideUpAfterMs: null } },
   { label: 'SHARKY, RIDE UP IN 6 S', run: { game: 'shark', groupTurn: false, rideUpAfterMs: 6000 } },
+  { label: 'SHARKY, RIDE UP AT 1 S', run: { game: 'shark', groupTurn: false, rideUpAfterMs: 1000 } },
   { label: 'SHARKY GROUP TURN', run: { game: 'shark', groupTurn: true, rideUpAfterMs: null } },
   { label: 'RHYTHM IN LINE', run: { game: 'timing', groupTurn: false, rideUpAfterMs: null } },
   { label: 'CURRENT QUEST IN LINE', run: { game: 'current', groupTurn: false, rideUpAfterMs: null } },
   { label: 'CURRENT QUEST, RIDE UP IN 6 S', run: { game: 'current', groupTurn: false, rideUpAfterMs: 6000 } },
+  { label: 'LINE TRIVIA', run: { game: 'trivia', groupTurn: false, rideUpAfterMs: null } },
+  { label: 'TRIVIA DUEL, BEAT THE BUZZER', run: { game: 'duel', groupTurn: false, rideUpAfterMs: null } },
 ];
+
+/** iPhone SE window, for the SHORT PHONE toggle. */
+const SE_WINDOW = { width: 375, height: 667, scale: 2, fontScale: 1 };
 
 export default function QueueResultsCaptureScreen() {
   const [run, setRun] = useState<Run | null>(null);
@@ -52,10 +67,36 @@ export default function QueueResultsCaptureScreen() {
   const note = (line: string) => setLog((l) => [line, ...l].slice(0, 6));
   const runRef = useRef(run);
   runRef.current = run;
+  const [shortPhone, setShortPhone] = useState(false);
+  const realWindow = useRef(Dimensions.get('window'));
 
+  // SHORT PHONE: the window reports an SE size (cards read it through
+  // useWindowDimensions); the real size comes back when it is turned off or
+  // the screen closes.
+  useEffect(() => {
+    const real = realWindow.current;
+    Dimensions.set({ window: shortPhone ? SE_WINDOW : real, screen: shortPhone ? SE_WINDOW : Dimensions.get('screen') });
+    return () => { if (shortPhone) Dimensions.set({ window: real, screen: real }); };
+  }, [shortPhone]);
+
+  // What the run asked to hear and feel (names only; the volume stays at 0).
+  const cues = useRef<string[]>([]);
   useEffect(() => {
     SFX.setMasterVolume(0);
-    return () => SFX.setMasterVolume(1);
+    const play = GameAudio.play;
+    GameAudio.play = (name, opts) => {
+      cues.current = [...cues.current, name].slice(-12);
+      return play.call(GameAudio, name, opts);
+    };
+    const feel = { ...Haptic };
+    (['success', 'failBuzz', 'hitSoft'] as const).forEach((k) => {
+      Haptic[k] = () => { cues.current = [...cues.current, `haptic ${k}`].slice(-12); feel[k](); };
+    });
+    return () => {
+      SFX.setMasterVolume(1);
+      GameAudio.play = play;
+      Object.assign(Haptic, feel);
+    };
   }, []);
 
   useEffect(() => {
@@ -79,6 +120,8 @@ export default function QueueResultsCaptureScreen() {
   }), [queueEnded, run?.groupTurn]);
 
   const end = (line: string) => {
+    // The last few cues are the finish: what the results card sounded like.
+    note(`End: ${cues.current.slice(-5).join(', ') || 'silent'}`);
     note(line);
     setRun(null);
     setQueueEnded(null);
@@ -94,9 +137,12 @@ export default function QueueResultsCaptureScreen() {
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>QUEUE RESULTS CHECK</Text>
+        <TouchableOpacity accessibilityRole="button" style={[styles.btn, shortPhone && styles.btnOn]} onPress={() => setShortPhone((v) => !v)}>
+          <Text style={styles.btnText}>{shortPhone ? 'SHORT PHONE: ON (SE)' : 'SHORT PHONE: OFF'}</Text>
+        </TouchableOpacity>
         {CHOICES.map((c, i) => (
           <TouchableOpacity key={c.label} accessibilityRole="button" style={styles.btn}
-            onPress={() => { setQueueEnded(null); setRun({ ...c.run, key: Date.now() % 100000 + i }); }}>
+            onPress={() => { cues.current = []; setQueueEnded(null); setRun({ ...c.run, key: Date.now() % 100000 + i }); }}>
             <Text style={styles.btnText}>{c.label}</Text>
           </TouchableOpacity>
         ))}
@@ -109,6 +155,13 @@ export default function QueueResultsCaptureScreen() {
         {run && common && run.game === 'shark' ? <SharkySwim key={run.key} {...common} difficulty={2} /> : null}
         {run && common && run.game === 'timing' ? <RhythmTapGame key={run.key} {...common} /> : null}
         {run && common && run.game === 'current' ? <CurrentQuestQueueGame key={run.key} {...common} taskName="Space Mountain" /> : null}
+        {run && common && run.game === 'trivia' ? (
+          <TriviaGame key={run.key} visible title="Line Trivia" seed={run.key}
+            source={createLinePlayTriviaSource({ parkId: 8, seed: run.key })} onClose={common.onClose} onComplete={common.onComplete} />
+        ) : null}
+        {run && common && run.game === 'duel' ? (
+          <TriviaDuel key={run.key} visible mode="ride" seed={run.key} parkId={8} onClose={common.onClose} onComplete={common.onComplete} />
+        ) : null}
       </LinePlayMovementContext.Provider>
     </SafeAreaView>
   );
@@ -120,6 +173,7 @@ const styles = StyleSheet.create({
   title: { fontFamily: 'Shark', fontSize: 26, color: '#05346e', textAlign: 'center', marginBottom: 12 },
   btn: { backgroundColor: '#ffcf3b', borderRadius: 16, borderWidth: 3, borderColor: '#05346e', paddingVertical: 12, marginVertical: 5, alignItems: 'center' },
   btnText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
+  btnOn: { backgroundColor: '#ffffff' },
   log: { marginTop: 12 },
   logText: { fontFamily: 'Knockout', fontSize: 17, color: '#05346e', textAlign: 'center', marginVertical: 2 },
 });

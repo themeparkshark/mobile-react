@@ -465,8 +465,10 @@ test('Sharky results fit a short phone: smaller stage, tight card, the bottom ro
   const sharky = read('src/games/sharky/hud/SharkyResults.tsx');
   assert.doesNotMatch(sharky, /setBelow\(true\)/, 'the below rows never pop in and push the card off screen');
   assert.match(sharky, /belowIn\.value = withDelay\(2400, withTiming\(1/);
-  assert.match(sharky, /stageShort: \{ height: 140, marginTop: 96 \}/);
-  assert.match(sharky, /belowShort: \{ flexDirection: 'row'/);
+  assert.match(sharky, /stage: \{ width: '100%', flex: 1, minHeight: 0,/, 'the stage flexes into the room the card leaves');
+  assert.match(sharky, /setK\(Math\.max\(0\.4, Math\.min\(1, h \/ STAGE_POSE_PT\)\)\)/, 'shark and podium scale to the stage');
+  assert.match(sharky, /marginBottom: bottomPad/, 'the card clears the home bar');
+  assert.match(sharky, /below: \{ width: '100%', flexDirection: 'row'/);
   assert.doesNotMatch(sharky, /requestAnimationFrame/, 'the count-up no longer re-renders every frame');
   assert.match(sharky, /COUNT_STEP_MS = 80/);
   assert.match(sharky, /useCountUp\(data\.score, 300, 1100, reducedMotion\)/);
@@ -512,4 +514,22 @@ test("game saves belong to the signed-in player, so a brother never sees his sis
   assert.match(read('src/context/AuthProvider.tsx'), /setGameSavesPlayer\(player\?\.id \?\? null\)/);
   assert.match(read('src/games/trivia-duel/store.ts'), /if \(cache && cacheOwner === savesOwner\(\)\) return cache;/);
   assert.match(read('src/games/current-quest/progress.ts'), /if \(cache && cacheOwner === savesOwner\(\)\) return cache;/);
+});
+
+test('Trivia Duel ends on the shared ribbon and brag chips: dots for right answers, no seconds', () => {
+  const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
+  assert.match(duel, /<ResultsRibbon title=\{title\}/);
+  assert.doesNotMatch(duel, /OutlinedText text=\{title\}/);
+  assert.doesNotMatch(duel, /model\.rows\.map/, 'no raw stat rows (Fastest 1.4s) on the card');
+  assert.match(duel, /onRematch \? styles\.secondary : styles\.primary/, 'a lone CONTINUE is the gold button');
+  assert.doesNotMatch(duel, /withTiming\(-112/, 'the polaroid never parks over the card words');
+  const src = duel.slice(duel.indexOf('export function duelChips'), duel.indexOf('/** The loss gap pulse'));
+  const ts = require(require('node:path').join(__dirname, '../../node_modules/typescript'));
+  const js = ts.transpileModule(`const feelingChips = (s) => s.slice(0, 2);\n${src}\nmodule.exports = { duelChips };`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const m = { exports: {} };
+  new Function('module', 'exports', js)(m, m.exports);
+  const chips = m.exports.duelChips([{ label: 'Correct', value: '3/5' }, { label: 'Fastest', value: '1.4s' }, { label: 'Fastest answer', value: 'GREAT' }, { label: 'Streak', value: '2' }]);
+  assert.deepEqual(chips.map((c) => c.label), ['RIGHT ANSWERS', 'BEST ANSWER']);
+  assert.deepEqual([...chips[0].pips], [3, 3], 'only the earned dots');
+  assert.equal(m.exports.duelChips([{ label: 'Correct', value: '0/5' }, { label: 'Fastest answer', value: 'NONE' }]).length, 0);
 });

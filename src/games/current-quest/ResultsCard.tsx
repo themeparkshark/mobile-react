@@ -18,7 +18,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, ZoomIn,
+  FadeIn, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, ZoomIn,
 } from 'react-native-reanimated';
 import { Canvas, Circle, Group, Path, Rect, RoundedRect, Skia } from '@shopify/react-native-skia';
 import { CQ } from './theme';
@@ -296,11 +296,15 @@ export function ResultsVeil() {
   return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.veil, st]} />;
 }
 
-/** A soft gold pulse used by the stake card's coin stacks. */
+/** Pulses before the stake card's coins rest (a card left open costs no frames). */
+export const STAKE_PULSES = 4;
+
+/** A soft gold pulse used by the stake card's coin stacks: a few beats, then still. */
 export function usePulse(on: boolean) {
   const p = useSharedValue(1);
   useEffect(() => {
-    if (on) p.value = withRepeat(withSequence(withTiming(1.06, { duration: 380 }), withTiming(1, { duration: 380 })), -1, true);
+    if (on) p.value = withRepeat(withSequence(withTiming(1.06, { duration: 380 }), withTiming(1, { duration: 380 })), STAKE_PULSES);
+    return () => cancelAnimation(p);
   }, [on, p]);
   return useAnimatedStyle(() => ({ transform: [{ scale: p.value }] }));
 }

@@ -15,8 +15,32 @@ import Animated, {
 } from 'react-native-reanimated';
 import { ART, C } from '../art';
 import type { FactCard } from '../store';
-import { OutlinedText } from './Overlays';
+import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
+import { ResultChip } from '../../../gamekit/results/ResultsCard';
+import { feelingChips, type FeelingStat } from '../../../gamekit/results/feelings';
 import Svg, { Path as SvgPath } from 'react-native-svg';
+
+/**
+ * The duel's stat rows as the shared brag chips: right answers as gold dots
+ * (only the ones earned), the best answer speed as a word, a real streak.
+ * Seconds ("Fastest 1.4s") stay off the card: a kid reads dots, not timings.
+ */
+export function duelChips(rows: { label: string; value: string }[]): FeelingStat[] {
+  const stats: FeelingStat[] = [];
+  for (const r of rows) {
+    const label = r.label.trim().toUpperCase();
+    if (label === 'CORRECT') {
+      const n = parseInt(r.value, 10) || 0;
+      if (n > 0) stats.push({ label: 'RIGHT ANSWERS', value: String(n), pips: [n, n] });
+    } else if (label === 'FASTEST ANSWER') {
+      if (r.value && r.value !== 'NONE') stats.push({ label: 'BEST ANSWER', value: r.value.toUpperCase() });
+    } else if (label === 'STREAK') {
+      const n = parseInt(r.value, 10) || 0;
+      if (n >= 3) stats.push({ label: 'IN A ROW', value: `x${n}` });
+    }
+  }
+  return feelingChips(stats);
+}
 
 /** The loss gap pulse plays this many beats, then rests. */
 export const GAP_BEATS = 4;
@@ -71,12 +95,11 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
     if (model.best && !reducedMotion) {
       polY.value = withDelay(beatMs * 2, withSequence(
         withSpring(0, { damping: 10, stiffness: 220 }),
-        withDelay(1500, withTiming(-112, { duration: 320, easing: Easing.inOut(Easing.cubic) })),
       ));
-      polS.value = withDelay(beatMs * 2 + 1500, withTiming(0.42, { duration: 320 }));
+      // Then it pops away instead of tucking over the card's words.
+      polS.value = withDelay(beatMs * 2 + 1500, withTiming(0, { duration: 260, easing: Easing.in(Easing.quad) }));
     } else {
-      polY.value = -112;
-      polS.value = 0.42;
+      polS.value = 0;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -84,8 +107,9 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const cardStyle = useAnimatedStyle(() => ({ opacity: cardO.value, transform: [{ translateY: cardY.value }] }));
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   const gapStyle = useAnimatedStyle(() => ({ backgroundColor: gap.value > 0.5 ? C.gold : C.coral }));
-  // Drops in centre for 1.5s, then tucks into the card's top-right corner (clear of the banners).
-  const polStyle = useAnimatedStyle(() => ({ transform: [{ translateY: polY.value }, { translateX: ((1 - polS.value) / 0.58) * 128 }, { scale: polS.value }, { rotate: '-6deg' }] }));
+  // Drops in centre for 1.5s, then pops away (never parked over the card's words).
+  const polStyle = useAnimatedStyle(() => ({ opacity: polS.value > 0.02 ? 1 : 0, transform: [{ translateY: polY.value }, { scale: polS.value }, { rotate: '-6deg' }] }));
+  const chips = duelChips(model.rows);
 
   const total = Math.max(1, model.myScore + model.oppScore);
   const fact = model.facts[0];
@@ -94,8 +118,9 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   return (
     <View style={[styles.root, { height }]} pointerEvents="box-none">
       <Animated.View style={[styles.card, { minHeight: model.ride ? undefined : height - 8 }, cardStyle]}>
+        {/* The one results title every game shares: Alex's ribbon over the card's top edge. */}
+        <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} />
         <View style={styles.head}>
-          <OutlinedText text={title} size={30} color={model.won ? C.gold : '#ffffff'} width={2.5} />
           <View style={styles.scoreRow}>
             <Text style={styles.scoreMe}>{model.myScore}</Text>
             <Text style={styles.scoreVs}>vs</Text>
@@ -119,15 +144,14 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             {model.banners.map((b, i) => <Banner key={b} text={b} i={i} reducedMotion={reducedMotion} />)}
           </View>
         ) : null}
-        {(model.ride ? !model.ride.won : !model.won) && model.nearMiss ? <Text style={styles.near}>{model.nearMiss}</Text> : null}
-        <View style={styles.rows}>
-          {model.rows.map((r) => (
-            <View key={r.label} style={styles.rowItem}>
-              <Text style={styles.rowVal}>{r.value}</Text>
-              <Text style={styles.rowLabel}>{r.label}</Text>
-            </View>
-          ))}
-        </View>
+        {(model.ride ? !model.ride.won : !model.won) && model.nearMiss ? (
+          <Text style={styles.near} numberOfLines={1} adjustsFontSizeToFit>{model.nearMiss}</Text>
+        ) : null}
+        {chips.length ? (
+          <View style={styles.rows}>
+            {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} pips={c.pips} />)}
+          </View>
+        ) : null}
         {model.rank ? (
           <View style={styles.rankRow}>
             <Text style={styles.rankLabel}>{model.rank.label}</Text>
@@ -150,8 +174,9 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
                 <Text style={styles.secondaryText}>PASS TO CREW</Text>
               </Pressable>
             ) : null}
-            <Pressable style={[styles.btn, styles.secondary, onGhost ? styles.half : styles.full]} onPress={onContinue} accessibilityRole="button">
-              <Text style={styles.secondaryText}>CONTINUE</Text>
+            {/* The only way on (a ride challenge) is the big gold button, like every card. */}
+            <Pressable style={[styles.btn, onRematch ? styles.secondary : styles.primary, onGhost ? styles.half : styles.full]} onPress={onContinue} accessibilityRole="button">
+              <Text style={onRematch ? styles.secondaryText : styles.primaryText}>CONTINUE</Text>
             </Pressable>
           </View>
         </View>
@@ -230,8 +255,9 @@ function FactRow({ card }: { card: FactCard & { isNew: boolean } }) {
 
 const styles = StyleSheet.create({
   root: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', paddingHorizontal: 10, paddingBottom: 10 },
-  card: { backgroundColor: C.cream, borderRadius: 24, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 7, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10 },
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  card: { backgroundColor: C.cream, borderRadius: 24, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 7, paddingHorizontal: 14, paddingTop: 42, paddingBottom: 10, marginTop: 34 },
+  ribbonWrap: { position: 'absolute', top: -36, left: -14, right: -14 },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   scoreRow: { flexDirection: 'row', alignItems: 'baseline' },
   scoreMe: { fontFamily: 'Shark', fontSize: 30, color: C.navy },
   scoreVs: { fontFamily: 'Knockout', fontSize: 15, color: C.navy, opacity: 0.6, marginHorizontal: 8 },
@@ -243,11 +269,8 @@ const styles = StyleSheet.create({
   banner: { backgroundColor: C.gold, borderWidth: 2.5, borderColor: C.ink, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2, margin: 3 },
   bannerText: { fontFamily: 'Shark', fontSize: 18, color: C.navy },
   near: { fontFamily: 'Knockout', fontSize: 18, color: C.navy, textAlign: 'center', marginTop: 6 },
-  rows: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 8 },
+  rows: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 },
   starRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 4 },
-  rowItem: { alignItems: 'center', minWidth: 70 },
-  rowVal: { fontFamily: 'Shark', fontSize: 22, color: C.navy },
-  rowLabel: { fontFamily: 'Knockout', fontSize: 13, color: C.navy, opacity: 0.6 },
   rankRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   rankLabel: { fontFamily: 'Knockout', fontSize: 15, color: C.navy, width: 110 },
   rankTrack: { flex: 1, height: 12, borderRadius: 6, borderWidth: 2.5, borderColor: C.ink, backgroundColor: '#ffffff', overflow: 'hidden' },

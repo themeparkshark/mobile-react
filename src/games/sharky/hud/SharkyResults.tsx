@@ -29,6 +29,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { initialWindowMetrics } from 'react-native-safe-area-context';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -94,6 +95,9 @@ export interface SharkyResultsProps {
 export const CHEER_HOPS = 8;
 /** PLAY AGAIN pulses this many times, then rests. */
 export const PLAY_PULSES = 3;
+
+/** Height of the full shark-on-podium pose (podium step at 70 pt + a 160 pt shark). */
+const STAGE_POSE_PT = 230;
 
 /** One count-up step every this many ms (about 14 steps, not 66 re-renders). */
 const COUNT_STEP_MS = 80;
@@ -166,6 +170,14 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   const cheer = data.stars > 0 || newBest;
   const pose = cheer ? 'cheer' : data.wipeout ? 'dizzy' : 'swim';
   const short = win.height < 740;
+  // Room under the card for the home bar (none on an SE).
+  const bottomPad = Math.max(10, initialWindowMetrics?.insets.bottom ?? 0) + 4;
+  // Shark and podium scale with the stage they get: 1 = the full 230 pt pose.
+  const [k, setK] = useState(0);
+  const onStageLayout = (e: LayoutChangeEvent) => {
+    const h = e.nativeEvent.layout.height;
+    setK(Math.max(0.4, Math.min(1, h / STAGE_POSE_PT)));
+  };
 
   useEffect(() => {
     card.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) });
@@ -223,10 +235,14 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   const feeling = ahead ? 'AHEAD OF YOUR BEST!' : data.nearMiss ? data.nearMiss.toUpperCase() : '';
   const gate = data.gateProgress != null && !saved && !wrapTitle ? data.gateProgress : null;
   const splitMax = useMemo(() => Math.max(1, ...bars), [bars]);
-  const hasBelow = !!data.newCard || (ahead && bars.length > 0) || (!!data.missions && !data.newCard) || data.tokensAtRide !== null || data.fullClear;
+  const showMissions = !!data.missions && !data.newCard;
+  const hasBelow = !!data.newCard || (ahead && bars.length > 0) || showMissions || data.tokensAtRide !== null || data.fullClear;
+  // Short phones (SE) keep the shark on stage by dropping two repeats: a full
+  // ALL 3 STARS! bar under three lit stars, and the brag chips when the
+  // picture missions are showing (pictures read without words).
 
   return (
-    <View style={[styles.root, { height: win.height }]} onLayout={onLayout}>
+    <View style={[styles.root, { width: win.width, height: win.height }]} onLayout={onLayout}>
       <LinearGradient colors={['#dff3ff', NEUTRAL]} style={StyleSheet.absoluteFill} />
       <View style={styles.trim} />
       <ResultsRibbon title={title} reducedMotion={reducedMotion} style={[styles.headline, short && styles.headlineShort]} />
@@ -235,15 +251,20 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
       {/* Tall phones give the title room above the shark. Short phones (SE) get a
           smaller stage under a higher title, so the title never sits on the
           shark's head and more of the card stays on screen. */}
-      <View style={[styles.stage, short && styles.stageShort]}>
-        <Animated.View style={[styles.sharkWrap, short && styles.sharkWrapShort, !cheer && styles.sharkWrapGround, sharkStyle]}>
-          <Image source={SHARKY_ART[pose]} style={[pose === 'swim' ? styles.sharkSwim : styles.shark, short && (pose === 'swim' ? styles.sharkSwimShort : styles.sharkShort)]} resizeMode="contain" />
-          {pose === 'dizzy' ? <Image source={SHARKY_ART.dizzyStar} style={[styles.dizzyStars, short && styles.dizzyStarsShort]} resizeMode="contain" /> : null}
-        </Animated.View>
-        {cheer ? <Image source={SHARKY_ART.podium} style={[styles.podium, short && styles.podiumShort]} resizeMode="contain" /> : null}
+      {/* The stage takes whatever height the card leaves (it flexes), and the
+          shark and podium scale to fit it, so on any phone the card sits whole
+          above the home bar and the shark never reaches the title. */}
+      <View style={[styles.stage, short && styles.stageShort]} onLayout={onStageLayout}>
+        {k > 0 ? <>
+          <Animated.View style={[styles.sharkWrap, { bottom: (cheer ? 70 : 18) * k }, sharkStyle]}>
+            <Image source={SHARKY_ART[pose]} style={pose === 'swim' ? { width: 190 * k, height: 130 * k } : { width: 130 * k, height: 160 * k }} resizeMode="contain" />
+            {pose === 'dizzy' ? <Image source={SHARKY_ART.dizzyStar} style={[styles.dizzyStars, { width: 56 * k, height: 36 * k }]} resizeMode="contain" /> : null}
+          </Animated.View>
+          {cheer ? <Image source={SHARKY_ART.podium} style={{ width: 210 * k, height: 110 * k }} resizeMode="contain" /> : null}
+        </> : null}
       </View>
 
-      <Animated.View style={[styles.card, short && styles.cardShort, cardStyle]}>
+      <Animated.View style={[styles.card, short && styles.cardShort, { marginBottom: bottomPad }, cardStyle]}>
         {/* The shared card's order: stars (or the stamp), then the score, then NEW BEST. */}
         {saved ? <SavedStamp reducedMotion={reducedMotion} delayMs={1450} /> : (
           <View style={[styles.stars, short && styles.starsShort]}>
@@ -262,12 +283,12 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
             <Text style={styles.feelingText} numberOfLines={1} adjustsFontSizeToFit>{feeling}</Text>
           </View>
         ) : null}
-        {chips.length ? (
+        {chips.length && !(short && showMissions) ? (
           <View style={styles.chips} accessible accessibilityLabel={brag}>
             {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} />)}
           </View>
         ) : null}
-        {goal ? <NextStarBar goal={goal} delayMs={1500} reducedMotion={reducedMotion} tone="onWhite" /> : null}
+        {goal && !(short && goal.nextStar === 0) ? <NextStarBar goal={goal} delayMs={1500} reducedMotion={reducedMotion} tone="onWhite" /> : null}
         {gate !== null ? (
           <NextStarBar goal={{ nextStar: 1, progress: gate, near: gate >= 0.85, remaining: 0 }} word={sharkyGateWord(gate)}
             a11yLabel={`${Math.round(gate * 100)} percent of the way to the Ride Gate`} delayMs={1500} reducedMotion={reducedMotion} tone="onWhite" />
@@ -288,7 +309,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
         ) : null}
 
         {hasBelow ? (
-          <Animated.View style={[styles.below, short && styles.belowShort, belowStyle]}>
+          <Animated.View style={[styles.below, belowStyle]}>
             {data.newCard ? <Text style={[styles.newCard, short && styles.newCardShort]}>{data.newCard.toUpperCase()}</Text> : null}
             {ahead && bars.length ? (
               <View style={styles.splitRow} accessible accessibilityLabel={`Ahead of your best at ${bars.length} gates`}>
@@ -301,13 +322,13 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
             ) : null}
             {/* Missions as picture plus bar: a kid who cannot read still sees each
                 goal and how full it is. The words are spoken only. */}
-            {data.missions && !data.newCard ? (
-              <View style={[styles.mRow, short && styles.mRowShort]}>
+            {showMissions && data.missions ? (
+              <View style={styles.mRow}>
                 {data.missions.missions.map((m) => {
                   const icon = missionIcon(m.id);
                   const fill = Math.max(0, Math.min(1, m.progress / missionTarget(m.id)));
                   return (
-                    <View key={m.id} style={[styles.mCell, short && styles.mCellShort, m.done && styles.mCellDone]} accessible
+                    <View key={m.id} style={[styles.mCell, m.done && styles.mCellDone]} accessible
                       accessibilityLabel={`${missionText(m.id)}${m.done ? ', done' : `, ${m.progress} of ${missionTarget(m.id)}`}`}>
                       {icon.art ? <Image source={icon.art} style={styles.mArt} resizeMode="contain" /> : <GameIcon name={icon.name ?? 'star'} size={26} />}
                       {m.done ? <View style={styles.mCheck}><GameIcon name="check" size={16} /></View> : null}
@@ -333,25 +354,16 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
 }
 
 const styles = StyleSheet.create({
-  root: { width: '100%', alignItems: 'center', overflow: 'hidden' },
+  root: { alignItems: 'center', overflow: 'hidden' },
   trim: { position: 'absolute', left: 0, right: 0, top: 0, height: 5, backgroundColor: REWARD },
   headline: { position: 'absolute', top: 50, left: 12, right: 12, zIndex: 2 },
-  stage: { width: '100%', height: 210, alignItems: 'center', justifyContent: 'flex-end', marginTop: 118 },
-  // Short phones (iPhone SE, 667 pt): a smaller stage and a tighter card, so
-  // the whole card (border, every row, both button rows) sits on screen at rest.
-  stageShort: { height: 140, marginTop: 96 },
+  // The stage starts under the title and flexes into the space the card leaves.
+  stage: { width: '100%', flex: 1, minHeight: 0, alignItems: 'center', justifyContent: 'flex-end', marginTop: 124 },
+  // Short phones (iPhone SE, 667 pt): the title sits higher and the card is tighter.
+  stageShort: { marginTop: 88 },
   headlineShort: { top: 16 },
-  sharkWrapShort: { bottom: 44 },
-  sharkShort: { width: 86, height: 106 },
-  dizzyStarsShort: { width: 40, height: 26, top: -4 },
-  podiumShort: { width: 140, height: 72 },
-  sharkWrap: { position: 'absolute', bottom: 70, alignItems: 'center' },
-  sharkWrapGround: { bottom: 18 },
-  sharkSwim: { width: 190, height: 130 },
-  sharkSwimShort: { width: 140, height: 94 },
-  shark: { width: 130, height: 160 },
-  dizzyStars: { position: 'absolute', top: -6, width: 56, height: 36 },
-  podium: { width: 210, height: 110 },
+  sharkWrap: { position: 'absolute', alignItems: 'center' },
+  dizzyStars: { position: 'absolute', top: -6 },
   card: { width: '92%', backgroundColor: NEUTRAL, borderRadius: 26, borderWidth: 4, borderColor: INK, padding: 14, alignItems: 'center', marginTop: -6 },
   score: { fontFamily: 'Shark', fontSize: 54, color: REWARD, textShadowColor: INK, textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 0 },
   newBest: { flexDirection: 'row', alignItems: 'center', backgroundColor: REWARD, borderRadius: 999, borderWidth: 3, borderColor: INK, paddingHorizontal: 12, paddingVertical: 2, marginTop: 2 },
@@ -365,30 +377,27 @@ const styles = StyleSheet.create({
   feelingText: { fontFamily: 'Knockout', fontSize: 16, color: INK, letterSpacing: 1 },
   playWrap: { width: '100%', marginTop: 12 },
   playBtn: { marginTop: 0 },
-  below: { width: '100%', alignItems: 'center', marginTop: 10 },
+  // One row under the buttons: missions, tokens and the medal side by side.
+  below: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', columnGap: 8, marginTop: 8 },
   newCard: { fontFamily: 'Shark', fontSize: 18, color: INK, backgroundColor: REWARD, borderRadius: 12, overflow: 'hidden', paddingHorizontal: 14, paddingVertical: 6, marginBottom: 6 },
   splitRow: { flexDirection: 'row', alignItems: 'flex-end', marginVertical: 4 },
   splitCell: { alignItems: 'center', marginHorizontal: 8 },
   splitBar: { width: 22, borderRadius: 6, borderWidth: 2, borderColor: INK, backgroundColor: '#3ccf6b' },
-  mRow: { flexDirection: 'row', justifyContent: 'center', width: '100%', marginVertical: 4, gap: 10 },
-  mCell: { alignItems: 'center', backgroundColor: '#e4f7ff', borderRadius: 14, borderWidth: 3, borderColor: INK, paddingHorizontal: 8, paddingTop: 4, paddingBottom: 6, minWidth: 74 },
+  mRow: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  mCell: { alignItems: 'center', backgroundColor: '#e4f7ff', borderRadius: 14, borderWidth: 3, borderColor: INK, paddingHorizontal: 6, paddingTop: 2, paddingBottom: 4, minWidth: 56 },
   mCellDone: { backgroundColor: REWARD_PALE },
   mArt: { width: 30, height: 30 },
   mCheck: { position: 'absolute', top: -8, right: -8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: INK, padding: 1 },
-  mTrack: { width: 56, height: 10, marginTop: 4, borderRadius: 5, backgroundColor: '#cfe6fb', borderWidth: 2, borderColor: INK, overflow: 'hidden' },
+  mTrack: { width: 40, height: 10, marginTop: 4, borderRadius: 5, backgroundColor: '#cfe6fb', borderWidth: 2, borderColor: INK, overflow: 'hidden' },
   mFill: { height: '100%', backgroundColor: REWARD },
   small: { fontFamily: 'Shark', fontSize: 16, color: INK, marginLeft: 4 },
-  tokens: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  tokens: { flexDirection: 'row', alignItems: 'center' },
   tokenArt: { width: 24, height: 24 },
-  medal: { width: 54, height: 54, marginTop: 4 },
+  medal: { width: 46, height: 46 },
   cardShort: { paddingVertical: 10 },
   starsShort: { marginVertical: 2 },
   scoreShort: { fontSize: 44 },
   playWrapShort: { marginTop: 8 },
-  // One row on a short phone: missions, tokens and the medal side by side.
-  belowShort: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', columnGap: 8, marginTop: 6 },
-  mRowShort: { width: undefined, marginVertical: 0, gap: 6 },
-  mCellShort: { minWidth: 58, paddingHorizontal: 6, paddingTop: 2, paddingBottom: 4 },
   newCardShort: { fontSize: 16, paddingVertical: 4, marginBottom: 0 },
-  medalShort: { width: 40, height: 40, marginTop: 0 },
+  medalShort: { width: 40, height: 40 },
 });
