@@ -13,15 +13,26 @@ const pull = (over: Partial<RevealPull>): RevealPull => ({
   id: 1, item_id: 1, pin_id: 1, name: 'Rocket Ride Pin', icon_url: ART, is_chaser: false, by_pity: false, serial: null, duplicate: false, ...over,
 });
 
-const KINDS: Record<string, { tone: BoxTone; golden: boolean; pulls: RevealPull[] }> = {
+type Kind = {
+  tone: BoxTone; golden: boolean; pulls: RevealPull[]; variant?: 'box' | 'catch' | 'pick';
+  tag?: () => { text: string; tone: 'gold' | 'new' }; subtitle?: () => string;
+};
+/** The same shapes PinsScreen builds for each moment (pick with extras, the series Completer, an in-person catch). */
+const KINDS: Record<string, Kind> = {
   box: { tone: 'blue', golden: false, pulls: [pull({})] },
   golden: { tone: 'gold', golden: true, pulls: [pull({ id: 2, golden: true })] },
   chaser: { tone: 'blue', golden: false, pulls: [pull({ id: 3, is_chaser: true, serial: 3, name: 'Gold Rocket Pin' })] },
+  pick: { tone: 'blue', golden: false, variant: 'pick', pulls: [pull({ id: 4, pin_id: 0 })],
+    tag: () => ({ text: 'Picked with extras!', tone: 'new' }), subtitle: () => 'Space Series' },
+  completer: { tone: 'blue', golden: false, variant: 'pick', pulls: [pull({ id: 5, pin_id: 0, rare: true, name: 'Space Series Completer' })],
+    tag: () => ({ text: 'Series done!', tone: 'gold' }), subtitle: () => 'Space Series' },
+  catch: { tone: 'blue', golden: false, variant: 'catch', pulls: [pull({ id: 6, pin_id: 0, rare: true, name: 'Tomorrowland Pin' })],
+    tag: () => ({ text: '+50 coins', tone: 'gold' }), subtitle: () => 'Tomorrowland set done!' },
 };
 
 /** Release-like capture (EXPO_PUBLIC_MOTION_CAPTURE): the boxes open one after another on their own, over any screen. */
 const CAPTURE = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'BoxRevealPreview';
-const ORDER = ['chaser', 'golden', 'box'];
+const ORDER = (process.env.EXPO_PUBLIC_MOTION_CAPTURE_ORDER || 'chaser,golden,box').split(',').filter((name: string) => name in KINDS);
 
 export default function BoxRevealPreviewScreen() {
   const [kind, setKind] = useState<string | null>(null);
@@ -47,7 +58,7 @@ export default function BoxRevealPreviewScreen() {
         </Pressable>
       ))}
       {open && <BoxReveal key={run} pulls={open.pulls} tone={open.tone} golden={open.golden} still={false}
-        onDone={done} />}
+        variant={open.variant} tagFor={open.tag} subtitleFor={open.subtitle} onDone={done} />}
     </View>
   );
 }
