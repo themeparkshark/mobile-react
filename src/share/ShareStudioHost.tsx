@@ -216,6 +216,8 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
       // The card's title names the file in the share sheet ("Golden-Churro.jpg"), never a UUID.
       const outcome = await openShareSheet(uri, shareMessage(flexShareUrl(request.kind, request.payload)), flexCopy(request.kind, request.payload).title);
       if (!outcome.opened) { reopen = true; event('dismissed'); }
+      // A sheet that never answered (it may still be up) is neither a cancel nor a share: record nothing.
+      else if (outcome.timedOut) return;
       else if (outcome.shared === false) event('dismissed');
       else {
         event('shared', outcome.activity);

@@ -57,17 +57,25 @@ export async function openExternal(url: string, via: 'browser' | 'system' = 'bro
  */
 export const SHARE_SHEET_WAIT_MS = 30_000;
 
+/** The share sheet never answered within SHARE_SHEET_WAIT_MS (it may still be up): not a share, not a cancel. */
+export const SHARE_TIMED_OUT = 'timeout' as const;
+
 /**
  * The system share sheet (text, a link or a file url) after the grown-up gate. Null when the
- * grown-up said no or the sheet never answered within SHARE_SHEET_WAIT_MS. `name` titles a
- * file url in the sheet header ("Golden Churro" becomes Golden-Churro.jpg), like shareFileExternal.
+ * grown-up said no, SHARE_TIMED_OUT when the sheet never answered within SHARE_SHEET_WAIT_MS.
+ * `name` titles a file url in the sheet header ("Golden Churro" becomes Golden-Churro.jpg),
+ * like shareFileExternal. The named copy is made while the grown-up answers.
  */
 export async function shareExternal(content: ShareContent, options?: ShareOptions, name?: string) {
-  if (!(await askGrownUp(SHARE))) return null;
   const url = 'url' in content && content.url ? content.url : null;
-  const copy = url && name ? await namedShareCopy(url, name) : { file: url ?? '', release: () => undefined };
-  const named = url && name ? { ...content, url: copy.file } : content;
-  return waitForSheet<Awaited<ReturnType<typeof Share.share>> | null>(Share.share(named, options), copy, null);
+  const copying = url && name ? namedShareCopy(url, name) : null;
+  if (!(await askGrownUp(SHARE))) {
+    void copying?.then(copy => copy.release());
+    return null;
+  }
+  const copy = copying ? await copying : { file: url ?? '', release: () => undefined };
+  const named = copying ? { ...content, url: copy.file } : content;
+  return waitForSheet<Awaited<ReturnType<typeof Share.share>> | typeof SHARE_TIMED_OUT>(Share.share(named, options), copy, SHARE_TIMED_OUT);
 }
 
 /**
@@ -91,9 +99,9 @@ interface ShareCopy { readonly file: string; readonly release: () => void }
 
 /**
  * The capture copied under a readable name, in its own subfolder. Older copies are
- * cleared first, except any a sheet still holds open (a sheet can outlive the
- * SHARE_SHEET_WAIT_MS timeout), so copies never pile up and an open sheet never
- * loses its file. The original uri when the copy cannot be made.
+ * cleared after this one is made (off the share's path), except any a sheet still holds
+ * open (a sheet can outlive the SHARE_SHEET_WAIT_MS timeout), so copies never pile up
+ * and an open sheet never loses its file. The original uri when the copy cannot be made.
  */
 async function namedShareCopy(uri: string, name: string | undefined): Promise<ShareCopy> {
   const cache = FileSystem.cacheDirectory;
@@ -105,18 +113,26 @@ async function namedShareCopy(uri: string, name: string | undefined): Promise<Sh
   const root = `${cache}${SHARE_DIR}`;
   const slot = `${Date.now().toString(36)}-${(shareSeq += 1)}`;
   const dir = `${root}${slot}/`;
+  // Held from the start, so a sweep from another share never clears it half made.
+  liveShareDirs.add(slot);
+  const release = () => { liveShareDirs.delete(slot); };
   try {
-    const old = await FileSystem.readDirectoryAsync(root).catch(() => [] as string[]);
-    await Promise.all(old.filter(entry => !liveShareDirs.has(entry))
-      .map(entry => FileSystem.deleteAsync(`${root}${entry}`, { idempotent: true }).catch(() => undefined)));
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
     const to = `${dir}${shareFileName(name, ext)}`;
     await FileSystem.copyAsync({ from, to });
-    liveShareDirs.add(slot);
-    return { file: to, release: () => { liveShareDirs.delete(slot); } };
+    void sweepShareCopies(root);
+    return { file: to, release };
   } catch {
+    release();
     return unnamed;
   }
+}
+
+/** Deletes every share copy no open sheet holds. Runs in the background, never on a share's path. */
+async function sweepShareCopies(root: string): Promise<void> {
+  const old = await FileSystem.readDirectoryAsync(root).catch(() => [] as string[]);
+  await Promise.all(old.filter(entry => !liveShareDirs.has(entry))
+    .map(entry => FileSystem.deleteAsync(`${root}${entry}`, { idempotent: true }).catch(() => undefined)));
 }
 
 /** Races a sheet against SHARE_SHEET_WAIT_MS; the copy is released only when the sheet itself settles. */
@@ -151,16 +167,19 @@ export type ShareFileOutcome = 'shared' | 'closed' | 'declined' | 'timeout';
  * which tells a real share apart from a cancel.
  */
 export async function shareFileExternal(uri: string, options?: Sharing.SharingOptions, name?: string): Promise<ShareFileOutcome> {
-  if (!(await askGrownUp(SHARE))) return 'declined';
+  // The named copy is made while the grown-up answers, so the sheet opens right after OK.
+  const copying = namedShareCopy(uri, name);
+  const drop = (outcome: ShareFileOutcome) => { void copying.then(copy => copy.release()); return outcome; };
+  if (!(await askGrownUp(SHARE))) return drop('declined');
   if (Platform.OS === 'ios') {
-    const copy = await namedShareCopy(uri, name);
+    const copy = await copying;
     const file = copy.file.startsWith('/') ? `file://${copy.file}` : copy.file;
     const sheet = Share.share({ url: file }).then((result): ShareFileOutcome => (
       result.action === Share.sharedAction ? 'shared' : 'closed'));
     return waitForSheet(sheet, copy, 'timeout');
   }
-  if (!(await Sharing.isAvailableAsync())) return 'declined';
-  const copy = await namedShareCopy(uri, name);
+  if (!(await Sharing.isAvailableAsync())) return drop('declined');
+  const copy = await copying;
   return waitForSheet(Sharing.shareAsync(copy.file, options).then((): ShareFileOutcome => 'closed'), copy, 'timeout');
 }
 

@@ -156,7 +156,10 @@ test('nothing leaves the app without a grown-up: one helper, an exact allowlist'
   const external = read('src/services/external.ts');
   assert.doesNotMatch(external, /export \{ Share \}/, 'no re-export of the raw share API');
   for (const fn of ['openExternal', 'shareExternal', 'shareFileExternal']) {
-    assert.match(external, new RegExp(`export async function ${fn}\\([^)]*\\)[^{]*\\{\\s*if \\((!url \\|\\| )?!\\(await askGrownUp\\((exitReason\\(url\\)|SHARE)\\)\\)\\)`), `${fn} asks a grown-up first`);
+    // Only the local named copy (a cache file, nothing leaves the phone) may start before the gate.
+    const m = new RegExp(`export async function ${fn}\\([^)]*\\)[^{]*\\{((?:\\s*(?://[^\\n]*|const (?:url|copying|drop) = [^\\n]*))*)\\s*if \\((!url \\|\\| )?!\\(await askGrownUp\\((exitReason\\(url\\)|SHARE)\\)\\)\\)`).exec(external);
+    assert.ok(m, `${fn} asks a grown-up first`);
+    assert.doesNotMatch(m[1], /Share\.share|shareAsync|openURL|openBrowserAsync|waitForSheet/, `${fn}: nothing opens before the gate`);
   }
   // Mail goes out only through the two support builders, and only into openExternal.
   assert.deepEqual(where(/['"`]mailto:/).sort(), ['src/screens/Settings/accountDeletion.ts', 'src/screens/threads/SocialHelp.tsx', 'src/services/accountRecovery/model.ts']);
@@ -274,7 +277,7 @@ test('the gate answers only after it has faded out, so the share sheet can prese
   assert.match(ext, /new Promise<T>\(resolve => \{ timer = setTimeout\(\(\) => resolve\(onTimeout\), SHARE_SHEET_WAIT_MS\); \}\)/);
   assert.match(ext, /waitForSheet\(Sharing\.shareAsync\(copy\.file, options\)\.then\(\(\): ShareFileOutcome => 'closed'\), copy, 'timeout'\)/);
   assert.match(ext, /result\.action === Share\.sharedAction \? 'shared' : 'closed'/, 'iOS tells a share from a cancel');
-  assert.match(ext, /\(Share\.share\(named, options\), copy, null\)/);
+  assert.match(ext, /\(Share\.share\(named, options\), copy, SHARE_TIMED_OUT\)/, 'a text or flex sheet that never answers is a timeout, not a cancel');
   assert.match(read('src/components/RideTracker/ShareableRideCard.tsx'), /if \(outcome === 'shared'\) setShared\(true\);\s*if \(outcome === 'shared' \|\| outcome === 'closed'\) onShare\?\.\(\);/, 'after the sheet the card stays open; the Shared! check only when it went');
 });
 

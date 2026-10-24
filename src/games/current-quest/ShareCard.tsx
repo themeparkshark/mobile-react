@@ -6,7 +6,7 @@
  * app never posts or sends anything itself.
  */
 
-import { shareExternal, shareFileExternal } from '../../services/external';
+import { SHARE_TIMED_OUT, shareExternal, shareFileExternal } from '../../services/external';
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Image, Share, StyleSheet, Text, View } from 'react-native';
 import ViewShot from 'react-native-view-shot';
@@ -40,9 +40,11 @@ export const ShareCard = forwardRef<ShareCardHandle, { data: ShareCardData }>(fu
       try {
         const uri = await shot.current?.capture?.();
         if (uri && (await Sharing.isAvailableAsync())) {
-          return (await shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: message }, 'Current Quest')) !== 'declined';
+          // True only when it really went: a cancel, a timeout or Android's unknown is never a share.
+          return (await shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: message }, 'Current Quest')) === 'shared';
         }
-        return (await shareExternal({ message })) !== null;
+        const result = await shareExternal({ message });
+        return result !== null && result !== SHARE_TIMED_OUT && result.action === Share.sharedAction;
       } catch {
         return false;
       }

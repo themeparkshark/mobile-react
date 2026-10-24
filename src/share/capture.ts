@@ -2,7 +2,7 @@
  * Capture a flex card and hand it to the OS share sheet. The OS sheet is the
  * only way out: no in-app posting, no account linking (kid safety).
  */
-import { SHARE_SHEET_WAIT_MS, shareExternal, shareFileExternal, type ShareFileOutcome } from '../services/external';
+import { SHARE_TIMED_OUT, shareExternal, shareFileExternal, type ShareFileOutcome } from '../services/external';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
 import type { RefObject } from 'react';
@@ -30,10 +30,12 @@ export async function captureFlex(ref: RefObject<View | null>, format: FlexForma
 export interface ShareOutcome {
   /** How it ended, in the hotfix's words: shared, closed (a cancel on iOS), declined or timeout. */
   readonly ended: ShareFileOutcome;
-  /** true once the share sheet opened and closed; false when the grown-up said no or it never opened. */
+  /** true once the share sheet opened (and closed or timed out); false when the grown-up said no. */
   readonly opened: boolean;
-  /** true shared, false closed without sharing, null unknown (Android). */
+  /** true shared, false closed without sharing, null unknown (Android, or the sheet never answered). */
   readonly shared: boolean | null;
+  /** The sheet never answered in time (it may still be up): neither a share nor a cancel. */
+  readonly timedOut?: boolean;
   /** iOS destination activity type, e.g. com.burbn.instagram.shareextension. */
   readonly activity: string | null;
 }
@@ -68,15 +70,11 @@ export const SHARE_FILE_NAME = 'Theme Park Shark';
  */
 export async function openShareSheet(uri: string, message?: string, name: string = SHARE_FILE_NAME): Promise<ShareOutcome> {
   if (Platform.OS === 'ios') {
-    const asked = Date.now();
     const result = await shareExternal(message ? { url: uri, message } : { url: uri }, undefined, name);
-    // Null is a grown-up no, or a sheet that never answered in SHARE_SHEET_WAIT_MS (it may still be
-    // up): only the second one takes that long, and it counts as opened so nothing presents over it.
-    if (!result) {
-      return Date.now() - asked >= SHARE_SHEET_WAIT_MS
-        ? { ended: 'timeout', opened: true, shared: null, activity: null }
-        : { ended: 'declined', opened: false, shared: false, activity: null };
-    }
+    if (!result) return { ended: 'declined', opened: false, shared: false, activity: null };
+    // A sheet that never answered in time (it may still be up): opened, so nothing presents over it,
+    // and neither a share nor a cancel.
+    if (result === SHARE_TIMED_OUT) return { ended: 'timeout', opened: true, shared: null, timedOut: true, activity: null };
     if (result.action === Share.sharedAction) return { ended: 'shared', opened: true, shared: true, activity: activityLabel(result.activityType) };
     return { ended: 'closed', opened: true, shared: false, activity: null };
   }
@@ -88,7 +86,7 @@ export async function openShareSheet(uri: string, message?: string, name: string
   const ended = await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: androidShareTitle(message) }, name);
   // A timeout may still have the sheet up: count it as opened, so nothing presents over it.
   if (ended === 'declined') return { ended, opened: false, shared: false, activity: null };
-  return { ended, opened: true, shared: null, activity: null };
+  return { ended, opened: true, shared: null, timedOut: ended === 'timeout', activity: null };
 }
 
 /** The Android share sheet's title: tells the grown-up the link is ready to paste. Exported for tests. */
