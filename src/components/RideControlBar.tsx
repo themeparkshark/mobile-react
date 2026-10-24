@@ -14,6 +14,8 @@ import { BRAND, GameButton, GameIcon } from '../ui';
 
 /** The bar's title before any team holds a ride (never a ride-status claim). */
 export const NO_LEADER_HEADLINE = 'NO TEAM HAS A RIDE YET';
+/** How long the bar's title stays blank waiting for today's standings before it says RIDE CONTROL. */
+const STANDINGS_WAIT_MS = 4000;
 
 /** One team's ride count: pops when it goes up, wears the crown while leading. */
 export function TeamChip({ team, count, yours, leading }: {
@@ -85,10 +87,17 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
     : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : hideAllOpen ? 'RIDE CONTROL' : NO_LEADER_HEADLINE;
   // Until today's standings load, the title stays blank (its space kept) and then fades in,
   // so the launch never shows one title and swaps it for another a second later.
+  // If the standings never come (offline), the plain RIDE CONTROL title fades in after a few seconds.
   const titleIn = useSharedValue(control ? 1 : 0);
+  const [waitedOut, setWaitedOut] = useState(false);
   useEffect(() => {
-    if (control) titleIn.value = withTiming(1, { duration: 220 });
-  }, [control, titleIn]);
+    if (control) return;
+    const timer = setTimeout(() => setWaitedOut(true), STANDINGS_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [control]);
+  useEffect(() => {
+    if (control || waitedOut) titleIn.value = withTiming(1, { duration: 220 });
+  }, [control, waitedOut, titleIn]);
   const titleStyle = useAnimatedStyle(() => ({ opacity: titleIn.value }));
 
   return (
