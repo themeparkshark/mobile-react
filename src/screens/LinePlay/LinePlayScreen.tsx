@@ -90,7 +90,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as RootNavigation from '../../RootNavigation';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import Reanimated, { FadeIn, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import Reanimated, { FadeIn, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming,
+} from 'react-native-reanimated';
 import { MovementFxGate, MOVING_CHIP_LINGER_MS, nextBonusSeconds } from '../../services/lineplay/bonusRounds';
 import { playBonusCue, type BonusCue } from '../../services/lineplay/bonusCues';
 import type { CurrentTier } from '../../games/current-quest/v1/logic';
@@ -161,7 +162,7 @@ import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLive
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { linePlayTipReady } from '../../services/help/tipGate';
-import { chapterPlayNow, crewRowInBand, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIP_MS, PAGES_DIP_OPACITY,
+import { chapterPlayNow, crewRowInBand, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIM_HOLD_MAX_MS, PAGES_DIP_MS, PAGES_DIP_OPACITY,
   PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
@@ -789,25 +790,18 @@ export default function LinePlayScreen() {
     requestAnimationFrame(() => requestAnimationFrame(rise));
   }, [rise]);
   /**
-   * Dip the window, THEN change its size while it is dim (Details, or the crew row lent to a board);
-   * it rises once the page inside has switched. Changes asked for during one dip share it.
+   * Dip the window on the UI thread and change its size at once (Details): JS needs a frame or two to
+   * lay the new size out, and by then the window is already dim. It rises once the page inside has
+   * switched, and the UI thread caps the dim too, so a busy JS thread never holds it dim for long.
    */
-  const dipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingChanges = useRef<Array<() => void>>([]);
   const dipPages = useCallback((change: () => void) => {
     if (reducedFx) { change(); return; }
-    pendingChanges.current.push(change);
-    if (dipTimer.current) return;
-    pagesFade.value = withTiming(PAGES_DIP_OPACITY, { duration: PAGES_DIP_MS });
-    dipTimer.current = setTimeout(() => {
-      dipTimer.current = null;
-      const changes = pendingChanges.current;
-      pendingChanges.current = [];
-      revealPending.current = true;
-      changes.forEach(apply => apply());
-      if (revealTimer.current) clearTimeout(revealTimer.current);
-      revealTimer.current = setTimeout(rise, PAGES_RISE_FALLBACK_MS);
-    }, PAGES_DIP_MS);
+    pagesFade.value = withSequence(withTiming(PAGES_DIP_OPACITY, { duration: PAGES_DIP_MS }),
+      withDelay(PAGES_DIM_HOLD_MAX_MS, withTiming(1, { duration: PAGES_RISE_MS })));
+    revealPending.current = true;
+    change();
+    if (revealTimer.current) clearTimeout(revealTimer.current);
+    revealTimer.current = setTimeout(rise, PAGES_DIP_MS + PAGES_RISE_FALLBACK_MS);
   }, [reducedFx, pagesFade, rise]);
   const onDetailsChange = useCallback((open: boolean) => {
     dipPages(() => setDetailsOpen(open));
@@ -817,7 +811,6 @@ export default function LinePlayScreen() {
   const closeDetails = useCallback(() => onDetailsChange(false), [onDetailsChange]);
   useEffect(() => () => {
     if (revealTimer.current) clearTimeout(revealTimer.current);
-    if (dipTimer.current) clearTimeout(dipTimer.current);
   }, []);
   // The window coming back after Hide on a short phone fades in too, never pops.
   const wasShown = useRef(pagesShown);

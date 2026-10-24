@@ -143,9 +143,10 @@ test('Details opens smoothly: one commit, the crew row fades and the page window
   // (never 0), takes its new size inside its own rounded frame, then rises once it has its new size.
   assert.equal((screen.match(/LinearTransition/g) ?? []).length, 2, 'only the rail glides (import + one use)');
   assert.match(screen, /<Reanimated\.View style=\{\[styles\.pages, pagesFadeStyle, !pagesShown && \[styles\.pagesAside, \{ bottom: railBlock \}\]\]\}/);
-  // Dip first with the old layout, THEN change the size while dim, then rise two frames after the new layout.
-  assert.match(screen, /pagesFade\.value = withTiming\(PAGES_DIP_OPACITY, \{ duration: PAGES_DIP_MS \}\);\n\s*dipTimer\.current = setTimeout\(\(\) => \{/);
-  assert.match(screen, /revealPending\.current = true;\n\s*changes\.forEach\(apply => apply\(\)\);/);
+  // Dim on the UI thread and change at once (the new layout lands while dim), rise two frames after
+  // the new layout, and the UI thread caps the dim so a busy JS thread never holds it.
+  assert.match(screen, /pagesFade\.value = withSequence\(withTiming\(PAGES_DIP_OPACITY, \{ duration: PAGES_DIP_MS \}\),\n\s*withDelay\(PAGES_DIM_HOLD_MAX_MS, withTiming\(1, \{ duration: PAGES_RISE_MS \}\)\)\);\n\s*revealPending\.current = true;\n\s*change\(\);/);
+  assert.doesNotMatch(screen, /dipTimer/);
   assert.match(screen, /requestAnimationFrame\(\(\) => requestAnimationFrame\(rise\)\);/);
   assert.match(screen, /dipPages\(\(\) => setDetailsOpen\(open\)\);/);
   assert.doesNotMatch(screen, /pagesFade\.value = 0/, 'never an empty window');
@@ -464,6 +465,7 @@ test('Details: dip, layout and rise near 200 ms, and the lines are readable on t
   const m = layout();
   assert.ok(m.PAGES_DIP_MS + 34 + m.PAGES_RISE_MS < 220, 'dip, two frames and rise');
   assert.ok(m.PAGES_DIP_MS + m.PAGES_RISE_FALLBACK_MS + m.PAGES_RISE_MS < 240);
+  assert.ok(m.PAGES_DIP_MS + m.PAGES_DIM_HOLD_MAX_MS + m.PAGES_RISE_MS <= 300, 'never dim longer than 300 ms in all, even with a busy JS thread');
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(card, /entering=\{reducedMotion \? undefined : detailsEnter\}/);
   assert.match(card, /initialValues: \{ opacity: 0\.6 \}/);

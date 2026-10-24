@@ -105,6 +105,8 @@ export const PAGES_DIP_MS = 50;
 export const PAGES_RISE_MS = 120;
 /** If the window's size did not change (no onLayout), it rises after this. */
 export const PAGES_RISE_FALLBACK_MS = 60;
+/** The UI thread starts the rise after at most this long at the dim, whatever the JS thread is doing. */
+export const PAGES_DIM_HOLD_MAX_MS = 130;
 
 export function chapterPageFit(viewHeight: number, shortScreen: boolean): ChapterPageFit {
   if (!(viewHeight > 0)) return shortScreen ? 'compact' : 'full';
