@@ -12,8 +12,9 @@
  * plain Shark-font text action for "Cancel" and "Not now".
  *
  * Extras over YellowButton: an optional GameIcon before the label, a loading
- * state, a light haptic, and the press scale on the UI thread. Reduced motion
- * keeps presses instant.
+ * state, and the shared squishy press (src/ui/PressableScale: squash, sink,
+ * spring back, a light haptic on touch-down; a disabled tap shakes). Reduced
+ * motion dims on press instead of moving.
  */
 import { useEffect, useState } from 'react';
 import { Image, ImageBackground, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -27,7 +28,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import useUiReducedMotion from './useUiReducedMotion';
-import { haptic } from '../gamekit/Haptics';
+import { usePressScale } from './PressableScale';
 import { artButtonFontSize } from './artButtonText';
 import GameIcon from './GameIcon';
 import type { GameIconName } from './iconNames';
@@ -103,11 +104,12 @@ export default function GameButton({
   style,
 }: GameButtonProps) {
   const reducedMotion = useUiReducedMotion();
-  const scale = useSharedValue(1);
   const pulse = useSharedValue(1);
   const [labelAreaHeight, setLabelAreaHeight] = useState(0);
   const inactive = disabled || loading;
   const look = buttonLook(variant, size);
+  // No squash on a button with nothing to do (busy or display-only).
+  const press = usePressScale({ disabled: inactive || !onPress, haptic: haptics ? 'tapLight' : false });
 
   useEffect(() => {
     cancelAnimation(pulse);
@@ -122,14 +124,7 @@ export default function GameButton({
     return () => cancelAnimation(pulse);
   }, [loading, reducedMotion, pulse]);
 
-  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const labelStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
-
-  const press = (down: boolean) => {
-    // No press-scale on a button with nothing to do (busy or display-only).
-    if (inactive || reducedMotion || !onPress) return;
-    scale.value = withTiming(down ? BUTTON.pressScale : 1, { duration: down ? BUTTON.pressInMs : BUTTON.pressOutMs });
-  };
 
   const fontSize = look.art ? artButtonFontSize(labelAreaHeight) : size === 'compact' ? 16 : 18;
   const iconSize = Math.round(fontSize * 1.25);
@@ -163,18 +158,19 @@ export default function GameButton({
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: inactive, busy: loading }}
-      disabled={inactive}
+      disabled={loading || !onPress}
       hitSlop={HIT_SLOP}
-      onPressIn={() => press(true)}
-      onPressOut={() => press(false)}
+      onPressIn={press.pressIn}
+      onPressOut={press.pressOut}
       onPress={() => {
+        // A greyed-out button says no with a little shake (no haptic, nothing fires).
+        if (disabled) { press.rejected(); return; }
         if (inactive || !onPress) return;
-        if (haptics) haptic('tapLight');
         onPress?.();
       }}
       style={[{ width: fullWidth ? '100%' : undefined, maxWidth: look.maxWidth, alignSelf: 'center' }, style]}
     >
-      <Animated.View style={[{ opacity: disabled ? 0.5 : 1 }, pressStyle]}>
+      <Animated.View style={press.style}><View style={{ opacity: disabled ? 0.5 : 1 }}>
         {look.art
           ? <ImageBackground source={BUTTON_ART[look.art]} resizeMode="contain"
             style={{ width: '100%', aspectRatio: BUTTON.aspectRatio }}>
@@ -185,7 +181,7 @@ export default function GameButton({
             </View>
           </ImageBackground>
           : <View style={{ minHeight: BUTTON.ghostMinHeight, justifyContent: 'center', paddingHorizontal: 12 }}>{content}</View>}
-      </Animated.View>
+      </View></Animated.View>
     </Pressable>
   );
 }

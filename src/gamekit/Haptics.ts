@@ -99,7 +99,15 @@ export function areHapticsEnabled(): boolean {
   return enabled;
 }
 
+/** Dev only: the last haptics fired (intent and time), read over the debugger to prove one buzz per press. */
+const devLog: { intent: HapticIntent; at: number }[] = [];
+if (typeof __DEV__ !== 'undefined' && __DEV__) (globalThis as { __hapticLog?: typeof devLog }).__hapticLog = devLog;
+
 function run(intent: HapticIntent): void {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    devLog.push({ intent, at: Date.now() });
+    if (devLog.length > 60) devLog.shift();
+  }
   switch (intent) {
     case 'tapLight':
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

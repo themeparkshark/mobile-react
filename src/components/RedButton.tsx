@@ -1,4 +1,6 @@
-import { Animated, ImageBackground, Pressable, Text, View } from 'react-native';
+import { ImageBackground, Pressable, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { usePressScale } from '../ui/PressableScale';
 
 export default function RedButton({
   large,
@@ -9,33 +11,13 @@ export default function RedButton({
   readonly text: string;
   readonly onPress?: () => void;
 }) {
-  const animated = new Animated.Value(1);
-  const zoomOut = () => {
-    Animated.timing(animated, {
-      toValue: 0.95,
-      duration: 25,
-      useNativeDriver: true,
-    }).start();
-  };
-  const zoomIn = () => {
-    Animated.timing(animated, {
-      toValue: 1,
-      duration: 25,
-      useNativeDriver: true,
-    }).start();
-  };
+  // The shared squishy press (src/ui/PressableScale), the same as every yellow button.
+  const press = usePressScale();
 
   return (
-    <Pressable onPress={onPress} onPressIn={zoomOut} onPressOut={zoomIn}>
-      <Animated.View
-        style={{
-          transform: [
-            {
-              scale: animated,
-            },
-          ],
-        }}
-      >
+    <Pressable accessibilityRole="button" accessibilityLabel={text} onPress={onPress}
+      onPressIn={press.pressIn} onPressOut={press.pressOut}>
+      <Animated.View style={press.style}>
         <ImageBackground
           source={require('../../assets/images/red_button.png')}
           style={{

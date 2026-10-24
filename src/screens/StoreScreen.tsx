@@ -28,6 +28,7 @@ import { useWishCount } from './StoreScreen/wishStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Reanimated, { type SharedValue, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 import { clockOffset, formatCoins } from '../helpers/shopShelves';
+import RollingNumber from '../ui/RollingNumber';
 import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -290,7 +291,8 @@ function ShopTabs({ tab, onChange, coins, onWishlist, withBack = false }: {
         </Pressable>
         <View style={tabStyles.coins} accessible accessibilityLabel={`${formatCoins(coins)} coins`}>
           <GameIcon name="coins" size={20} />
-          <Text maxFontSizeMultiplier={1.3} style={tabStyles.coinsText}>{formatCoins(coins)}</Text>
+          {/* The balance rolls to its new number (a buy rolls down, a gift rolls up). */}
+          <RollingNumber value={coins} format={formatCoins} style={tabStyles.coinsText} />
         </View>
       </>
     )}

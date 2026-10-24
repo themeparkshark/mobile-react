@@ -12,7 +12,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -40,6 +40,7 @@ import { GrownUpGate } from './social/GrownUpGate';
 import { Burst } from './social/SocialFx';
 import { effectiveStatus, initialTab, mergePage, searchHint, type FriendStatus, type FriendsTab } from './social/socialModel';
 import { SurfaceContext, clearStatus, setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
+import { staggerIn } from '../ui/stagger';
 
 const CREST = require('../../assets/images/screens/friends/noti.png');
 // The shark-and-envelope cut off its square tile (same art as the bell's request badge), so it sits in the tab like the heart.
@@ -203,7 +204,7 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, 
             <PlayerRow player={item.player} status={item.leaving ?? effectiveStatus(item.player, overrides, item.fallback)} />
           </LeavingRow>
         );
-        return <Animated.View entering={first.current && !reduced && index < 8 ? FadeInDown.delay(index * 40).springify().damping(16) : undefined}>{row}</Animated.View>;
+        return <Animated.View entering={first.current ? staggerIn(index, { reduced }) : undefined}>{row}</Animated.View>;
       }}
     />
   );

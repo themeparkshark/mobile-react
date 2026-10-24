@@ -19,6 +19,7 @@ import GameIcon from './GameIcon';
 import GameRichText from './GameRichText';
 import GameText from './GameText';
 import SharkLoader from './SharkLoader';
+import RollingNumber from './RollingNumber';
 import { GENERATED_ICON_NAMES, ORIGINAL_ICON_NAMES, type GameIconName } from './iconNames';
 import { TEXT_PRESET_NAMES } from './TextPresets';
 import { BRAND, OUTLINE, RADIUS, SPACE } from './tokens';
@@ -95,6 +96,7 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
   const [controlled, setControlled] = useState(false);
   const [loaderState, setLoaderState] = useState<'loading' | 'empty' | 'error'>('loading');
   const [busy, setBusy] = useState(false);
+  const [wallet, setWallet] = useState(350);
 
   const pageColor = section === 'dialogs' && backdrop === 'blue' ? BRAND.blueBright : BRAND.cream;
 
@@ -183,6 +185,18 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
       </>}
 
       {section === 'text' && <>
+        <Panel title="Rolling numbers" blue>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'center',
+            backgroundColor: BRAND.blueLip, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 8, borderWidth: 2, borderColor: BRAND.white }}>
+            <GameIcon name="coins" size={34} />
+            <RollingNumber value={wallet} style={{ fontFamily: 'Shark', fontSize: 34, color: BRAND.white }} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <View style={{ flex: 1 }}><GameButton label="+25" size="compact" onPress={() => setWallet(v => v + 25)} /></View>
+            <View style={{ flex: 1 }}><GameButton label="+480" size="compact" onPress={() => setWallet(v => v + 480)} /></View>
+            <View style={{ flex: 1 }}><GameButton label="-140" size="compact" variant="danger" onPress={() => setWallet(v => Math.max(0, v - 140))} /></View>
+          </View>
+        </Panel>
         <Panel title="Text presets">
           {TEXT_PRESET_NAMES.map(name => <GameText key={name} preset={name}>{name} Park Coins 42</GameText>)}
         </Panel>

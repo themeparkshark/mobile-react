@@ -1,6 +1,9 @@
 import { Image } from 'expo-image';
 import { ReactNode, useContext, useState } from 'react';
-import { Animated, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { usePressScale } from '../ui/PressableScale';
+import type { HapticIntent } from '../gamekit/Haptics';
 import {
   SoundEffectContext,
   SoundEffectContextType,
@@ -13,6 +16,7 @@ export default function Button({
   onPressSound,
   showRedCircle,
   accessibilityLabel,
+  pressHaptic = 'tapLight',
 }: {
   children: ReactNode;
   hasPermission?: boolean;
@@ -20,24 +24,13 @@ export default function Button({
   onPressSound?: any;
   showRedCircle?: boolean;
   accessibilityLabel?: string;
+  /** The touch-down haptic (the footer tabs use a selection tick). */
+  pressHaptic?: HapticIntent | false;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
-  const animated = new Animated.Value(1);
+  // The shared squishy press (src/ui/PressableScale): squash, sink, spring back, a light haptic on touch-down.
+  const press = usePressScale({ haptic: pressHaptic });
   const [hasPressed, setHasPressed] = useState<boolean>(false);
-  const zoomOut = () => {
-    Animated.timing(animated, {
-      toValue: 0.95,
-      duration: 25,
-      useNativeDriver: true,
-    }).start();
-  };
-  const zoomIn = () => {
-    Animated.timing(animated, {
-      toValue: 1,
-      duration: 25,
-      useNativeDriver: true,
-    }).start();
-  };
 
   return (
     <Pressable
@@ -55,8 +48,8 @@ export default function Button({
         await onPress();
         setHasPressed(false);
       }}
-      onPressIn={zoomOut}
-      onPressOut={zoomIn}
+      onPressIn={press.pressIn}
+      onPressOut={press.pressOut}
     >
       <View
         style={{
@@ -99,15 +92,7 @@ export default function Button({
             }}
           />
         )}
-        <Animated.View
-          style={{
-            transform: [
-              {
-                scale: animated,
-              },
-            ],
-          }}
-        >
+        <Animated.View style={press.style}>
           {children}
         </Animated.View>
       </View>

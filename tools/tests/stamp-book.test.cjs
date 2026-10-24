@@ -179,10 +179,10 @@ test('claim cascade: instant feedback, rising pitch, per-landing count-up, fresh
   // Pending stays yellow: the button is not disabled while the claim is in flight.
   assert.match(src, /loading=\{phase === 'claiming'\} disabled=\{!action \|\| phase === 'cascading' \|\| phase === 'gotIt'\}/);
   const btn = read('src/ui/GameButton.tsx');
-  assert.match(btn, /<Animated\.View style=\{\[\{ opacity: disabled \? 0\.5 : 1 \}/, 'loading must not dim the button');
+  assert.match(btn, /<View style=\{\{ opacity: disabled \? 0\.5 : 1 \}\}>/, 'loading must not dim the button');
   assert.match(btn, /accessibilityState=\{\{ disabled: inactive, busy: loading \}\}/);
   assert.match(btn, /if \(inactive \|\| !onPress\) return;/);
-  assert.match(btn, /if \(inactive \|\| reducedMotion \|\| !onPress\) return;/);
+  assert.match(btn, /usePressScale\(\{ disabled: inactive \|\| !onPress/, 'no squash while busy or display-only');
 });
 
 test('clocks truly rest: JS-kicked sweeps, per-tile gate, tags mounted only where needed, stable open', () => {

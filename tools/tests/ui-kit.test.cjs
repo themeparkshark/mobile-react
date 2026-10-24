@@ -216,14 +216,18 @@ const artText = loadTs('src/ui/artButtonText.ts');
 
 function buttonView(props, reduced = false) {
   const hapticCalls = [];
+  const pressCalls = [];
   const view = runtime('src/ui/GameButton.tsx', {
     './useUiReducedMotion': { default: () => reduced },
-    '../gamekit/Haptics': { haptic: intent => hapticCalls.push(intent) },
+    // The shared squishy press (src/ui/PressableScale, tested on its own): record what the button asks of it.
+    './PressableScale': { usePressScale: ({ disabled, haptic }) => ({ style: { press: true }, reduced,
+      pressIn: () => { pressCalls.push(disabled ? 'in-ignored' : 'in'); if (!disabled && haptic) hapticCalls.push(haptic); },
+      pressOut: () => pressCalls.push('out'), pressed() {}, rejected: () => pressCalls.push('shake') }) },
     './GameIcon': { default: 'GameIcon' },
     './artButtonText': artText,
     './tokens': tokens,
   }, props);
-  return { view, hapticCalls, pressable: () => view.tree };
+  return { view, hapticCalls, pressCalls, pressable: () => view.tree };
 }
 const face = view => view.find(n => n.props && n.props.source && n.props.resizeMode === 'contain');
 const labelArea = view => view.find(n => n.props && typeof n.props.onLayout === 'function');
@@ -231,18 +235,21 @@ const label = view => view.find(n => n.type === 'Text');
 
 test('GameButton: press gives a light haptic and fires once; disabled and loading ignore presses', () => {
   let presses = 0;
-  const { view, hapticCalls, pressable } = buttonView({ label: 'Play ride', onPress: () => { presses += 1; } });
+  const { view, hapticCalls, pressCalls, pressable } = buttonView({ label: 'Play ride', onPress: () => { presses += 1; } });
   assert.equal(pressable().type, 'Pressable');
   assert.equal(pressable().props.accessibilityLabel, 'Play ride');
   pressable().props.onPressIn(); pressable().props.onPress(); pressable().props.onPressOut();
   assert.equal(presses, 1);
-  assert.deepEqual(hapticCalls, ['tapLight']);
-  assert.ok(view.motions.includes('timing'), 'press scale animates');
+  assert.deepEqual(hapticCalls, ['tapLight'], 'one light haptic on touch-down');
+  assert.deepEqual(pressCalls, ['in', 'out'], 'the shared press squashes and springs back');
+  assert.ok(view.find(n => n.props && n.props.style && n.props.style.press), 'the face moves with the shared press style');
   assert.ok(view.find(n => n.type === 'Text' && n.props.children === 'Play ride'));
 
   view.change({ disabled: true });
   pressable().props.onPress();
   assert.equal(presses, 1);
+  assert.equal(pressCalls.at(-1), 'shake', 'a greyed-out button shakes no');
+  assert.equal(hapticCalls.length, 1, 'no haptic on a disabled tap');
   assert.equal(pressable().props.accessibilityState.disabled, true);
   view.change({ disabled: false, loading: true });
   pressable().props.onPress();
@@ -265,9 +272,6 @@ test("GameButton: Dustin's own button art and YellowButton's label, sized from t
   assert.equal(labelArea(view).props.style.opacity, 1);
   const outer = [].concat(pressable().props.style).find(entry => entry && entry.maxWidth);
   assert.equal(outer.maxWidth, 320);
-  const before = view.motions.length;
-  pressable().props.onPressIn(); pressable().props.onPressOut();
-  assert.equal(view.motions.length, before, 'no tween under reduced motion');
 
   assert.equal(face(buttonView({ label: 'Leave', variant: 'danger' }).view).props.source, '../../assets/images/red_button.png');
   const secondary = buttonView({ label: 'Later', variant: 'secondary' });
@@ -341,10 +345,11 @@ test('useUiReducedMotion knows the preference on the first render', () => {
   assert.equal(hook(true).tree, true);
 });
 
+const dialogHaptics = [];
 function dialogView(props, reduced = false) {
   return runtime('src/ui/GameDialog.tsx', {
     './useUiReducedMotion': { default: () => reduced },
-    '../gamekit/Haptics': { haptic() {} },
+    '../gamekit/Haptics': { haptic: kind => dialogHaptics.push(kind), queueHaptic: kind => dialogHaptics.push(kind) },
     './GameButton': { default: 'GameButton' },
     './GameIcon': { default: 'GameIcon' },
     './GameText': { default: 'GameText' },
@@ -359,8 +364,10 @@ function dialogView(props, reduced = false) {
 }
 
 test('GameDialog: mounting open springs when motion is on, fades under reduced motion', () => {
+  dialogHaptics.length = 0;
   const open = dialogView({});
   assert.ok(open.motions.includes('spring'), 'a host-mounted dialog (visible on mount) gets the spring pop');
+  assert.deepEqual(dialogHaptics, ['tickSelection'], 'a selection tick when it opens');
   assert.equal(open.find(n => n.type === 'BlurView').props.tint, 'light', 'the backdrop is a light blur, never dark');
   const reduced = dialogView({}, true);
   assert.ok(!reduced.motions.includes('spring'), 'reduced motion never springs');
@@ -399,7 +406,7 @@ test("YellowButton keeps Dustin's original art and label style; only the size ru
   for (const needle of [
     "require('../../assets/images/yellow_button.png')", 'aspectRatio: 3.8', 'aspectRatio: 4.4', "resizeMode=\"contain\"",
     "color: 'white'", "fontFamily: 'Shark'", "textTransform: 'uppercase'", "textShadowColor: 'rgba(0, 0, 0, .5)'",
-    'textShadowRadius: 0', 'paddingLeft: 24', 'paddingRight: 24', 'toValue: 0.97', 'opacity: disabled ? 0.5 : 1',
+    'textShadowRadius: 0', 'paddingLeft: 24', 'paddingRight: 24', 'usePressScale({ disabled })', 'opacity: disabled ? 0.5 : 1',
     'adjustsFontSizeToFit={true}', 'fontSize: artButtonFontSize(labelAreaHeight)',
   ]) assert.ok(source.includes(needle), `YellowButton lost: ${needle}`);
   assert.ok(!source.includes('fontSize: 72'), 'the fixed 72pt start size is gone');

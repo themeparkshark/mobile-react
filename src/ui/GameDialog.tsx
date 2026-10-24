@@ -17,7 +17,10 @@
  * Titles up to RIBBON_TITLE_MAX characters sit in the ribbon; a longer title
  * becomes a wrapping heading on the card (and warns in dev) so it never
  * shrinks to an unreadable size.
- * Motion: scrim fade plus a spring pop on the UI thread; reduced motion fades.
+ * Motion (src/ui/motion.ts): the scrim fades in over DURATION.base, the card pops from 0.86 with
+ * one overshoot (SPRING.pop) while it fades in over DURATION.quick, and its parts (ribbon, body,
+ * buttons) arrive STAGGER.stepMs apart. It leaves quicker than it came: scale 0.94 and fade over
+ * DURATION.exit on EASE.in. A selection tick on open. Reduced motion fades.
  * The preference is known on the first render (useUiReducedMotion), so a
  * dialog that mounts already open still springs.
  */
@@ -26,7 +29,6 @@ import { modalLayers, useModalLayer } from './modalLayers';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, {
-  Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -34,7 +36,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import useUiReducedMotion from './useUiReducedMotion';
-import { haptic } from '../gamekit/Haptics';
+import { haptic, queueHaptic } from '../gamekit/Haptics';
+import { DURATION, EASE, SPRING, STAGGER } from './motionEasing';
 import GameButton from './GameButton';
 import GameIcon from './GameIcon';
 import GameText from './GameText';
@@ -58,6 +61,19 @@ export const DIALOG_CARD = {
   borderWidth: 2.5,
   borderColor: '#ffffff',
 } as const;
+/** The card pops in from this scale and leaves to CARD_EXIT. */
+const CARD_FROM = 0.86;
+const CARD_EXIT = 0.94;
+/** Each part (ribbon, body, buttons) fades and rises over PART_MS, STAGGER.stepMs after the one above. */
+const PART_MS = DURATION.base;
+const PARTS_MS = PART_MS + 2 * STAGGER.stepMs;
+/** Part i of the card at time `clock` (ms): fades and rises 8 pt into place. */
+function partStyle(clock: number, i: number, reduced: boolean) {
+  'worklet';
+  if (reduced) return {};
+  const t = Math.min(1, Math.max(0, (clock - i * STAGGER.stepMs) / PART_MS));
+  return { opacity: t, transform: [{ translateY: (1 - t) * 8 }] };
+}
 /** Backdrop blur under the navy scrim (iOS; Android shows the scrim alone). */
 const SCRIM_BLUR = 18;
 /** Message copy on the card, as in UnfoundCoinModal. */
@@ -147,6 +163,9 @@ export function GameDialog({
   const chosen = useRef<number | null>(null);
   const scrim = useSharedValue(0);
   const pop = useSharedValue(0);
+  const fade = useSharedValue(0);
+  const exit = useSharedValue(0);
+  const parts = useSharedValue(0);
   const actions = layoutActions(buttons, equalChoices);
   const request = { title, message, icon, buttons, dismissible };
   const titleLayout = dialogTitleLayout(title);
@@ -161,11 +180,13 @@ export function GameDialog({
       closing.current = false;
       chosen.current = null;
       setMounted(true);
-      scrim.value = withTiming(1, { duration: MOTION.fadeMs });
-      pop.value = reducedMotion
-        ? withTiming(1, { duration: MOTION.fadeMs })
-        : withSpring(1, MOTION.popSpring);
+      exit.value = 0;
+      scrim.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : DURATION.base, easing: EASE.out });
+      fade.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : DURATION.quick, easing: EASE.out });
+      pop.value = reducedMotion ? 1 : withSpring(1, SPRING.pop);
+      parts.value = reducedMotion ? PARTS_MS : withTiming(PARTS_MS, { duration: PARTS_MS });
       if (hapticKind !== 'none') haptic(hapticKind);
+      else queueHaptic('tickSelection');
     }
     // Opening only depends on visibility; haptic kind and motion are read at open time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -183,8 +204,8 @@ export function GameDialog({
     if (closing.current) return;
     closing.current = true;
     chosen.current = index;
-    scrim.value = withTiming(0, { duration: MOTION.dialogOutMs });
-    pop.value = withTiming(0, { duration: MOTION.dialogOutMs, easing: Easing.in(Easing.quad) }, done => {
+    scrim.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
+    exit.value = withTiming(1, { duration: DURATION.exit, easing: EASE.in }, done => {
       if (done) runOnJS(finish)();
     });
   };
@@ -196,12 +217,15 @@ export function GameDialog({
 
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.value }));
   const cardStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, pop.value * 1.6),
+    opacity: fade.value * (1 - exit.value),
     transform: reducedMotion ? [] : [
-      { translateY: (1 - pop.value) * 18 },
-      { scale: 0.9 + pop.value * 0.1 },
+      { scale: (CARD_FROM + (1 - CARD_FROM) * pop.value) * (1 - (1 - CARD_EXIT) * exit.value) },
     ],
   }));
+  // Each part reads the shared clock directly (a shared value read only inside a nested worklet is not tracked).
+  const ribbonStyle = useAnimatedStyle(() => partStyle(parts.value, 0, reducedMotion));
+  const bodyStyle = useAnimatedStyle(() => partStyle(parts.value, 1, reducedMotion));
+  const buttonsStyle = useAnimatedStyle(() => partStyle(parts.value, 2, reducedMotion));
 
   if (!mounted) return null;
   const dismiss = dismissAction(request);
@@ -221,9 +245,9 @@ export function GameDialog({
         <Animated.View accessibilityViewIsModal accessibilityRole="alert"
           style={[{ width: '85%', maxWidth: 380, alignItems: 'center' }, cardStyle]}>
           {titleLayout.placement === 'ribbon' && (
-            <View accessible accessibilityRole="header" accessibilityLabel={title} style={{ width: '100%', zIndex: 2 }}>
+            <Animated.View accessible accessibilityRole="header" accessibilityLabel={title} style={[{ width: '100%', zIndex: 2 }, ribbonStyle]}>
               <Ribbon text={titleLayout.text} />
-            </View>
+            </Animated.View>
           )}
           <View style={{
             ...DIALOG_CARD,
@@ -235,6 +259,7 @@ export function GameDialog({
             alignItems: 'center',
             gap: SPACE.md,
           }}>
+            <Animated.View style={[{ alignSelf: 'stretch', alignItems: 'center', gap: SPACE.md }, bodyStyle]}>
             {titleLayout.placement === 'card' && (
               <GameText preset="title" tone="onBlue" align="center" accessibilityRole="header"
                 style={{ textTransform: 'uppercase' }}>{titleLayout.text}</GameText>
@@ -242,12 +267,13 @@ export function GameDialog({
             {icon && <GameIcon name={icon} size={72} />}
             {!!message && <GameText preset="body" tone="onBlue" align="center" style={{ color: DIALOG_COPY }}>{message}</GameText>}
             {children}
-            <View style={{ alignSelf: 'stretch', gap: SPACE.xs, marginTop: SPACE.xs }}>
+            </Animated.View>
+            <Animated.View style={[{ alignSelf: 'stretch', gap: SPACE.xs, marginTop: SPACE.xs }, buttonsStyle]}>
               {actions.map(action => (
                 <GameButton key={action.index} label={action.text} variant={action.variant} tone="onBlue" icon={action.icon} image={action.image}
                   onPress={() => close(action.index)} />
               ))}
-            </View>
+            </Animated.View>
           </View>
         </Animated.View>
       </KeyboardAvoidingView>

@@ -36,6 +36,7 @@ import { actorOf, isUnread, kindOf, mergePage, resolveRoute, sectionize, type In
 import { LeavingRow, Pill, SectionHeader, SocialError } from './social/SocialKit';
 import CleanScreenBackground, { CLEAN_SCREEN_ACCENT, CLEAN_SCREEN_INK, CLEAN_SCREEN_INK_SOFT } from '../components/CleanScreenBackground';
 import { SurfaceContext, useFriendOverrides } from './social/socialStore';
+import { staggerIn } from '../ui/stagger';
 
 /** Mark-all-read only makes sense when something is unread. */
 export function showMarkAllRead(notifications: readonly { read_at?: string | null; id?: string }[], readIds?: ReadonlySet<string>): boolean {
@@ -227,7 +228,7 @@ export default function NotificationsScreen() {
       </LeavingRow>
     );
     // Always the same wrapper, so a row never remounts (and reloads its shark) when the entrance window ends.
-    return <Reanimated.View entering={firstPaint.current && !reduced && index < 7 ? FadeInDown.delay(index * 45).springify().damping(16) : undefined}>{row}</Reanimated.View>;
+    return <Reanimated.View entering={firstPaint.current ? staggerIn(index, { reduced }) : undefined}>{row}</Reanimated.View>;
   // Stable: read and answer state come through refs; extraData re-runs it, and memoized rows skip unchanged items.
   }, [open, clear, answered, reduced, readAll, markingAll, firstHeader, dropActor]);
 

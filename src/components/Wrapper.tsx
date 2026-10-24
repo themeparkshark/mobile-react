@@ -1,7 +1,10 @@
 import { Image } from 'expo-image';
-import { ReactNode, useContext, useEffect } from 'react';
+import { ReactNode, useContext, useEffect, useRef } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { interpolate, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { COMPASS_INDEX, footerIndex, footerMotion, playFooterTap } from './footerMotion';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { GOLD_FX } from '../ui/motion';
 import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 import * as RootNavigation from '../RootNavigation';
 import { NotificationContext } from '../context/NotificationProvider';
@@ -42,6 +45,19 @@ export default function Wrapper({
   const { notificationCount } = useContext(NotificationContext);
   // A catch moment owns the whole screen: the tab bar slides away on the UI thread (no re-render).
   const barSlide = useAnimatedStyle(() => ({ transform: [{ translateY: 160 * catchShown.value }] }));
+  const reducedMotion = useUiReducedMotion();
+  // Tab centers (x in the row), measured once, so the gold glow can slide between them.
+  const centers = useSharedValue<number[]>([]);
+  const measured = useRef<(number | undefined)[]>([undefined, undefined, undefined, undefined, undefined]);
+  const glowStyle = useAnimatedStyle(() => {
+    const c = centers.value;
+    const m = footerMotion;
+    if (c.length !== 5) return { opacity: 0 };
+    const x = interpolate(m.glowX.value, [0, 1, 2, 3, 4], c);
+    // Bigger behind the big compass.
+    const size = interpolate(Math.abs(m.glowX.value - COMPASS_INDEX), [0, 1], [1.7, 1], 'clamp');
+    return { opacity: m.glowOpacity.value, transform: [{ translateX: x - 32 }, { scale: size }] };
+  });
 
   const items = [
     {
@@ -116,9 +132,19 @@ export default function Wrapper({
               justifyContent: 'space-between',
             }}
           >
+            {/* A soft gold glow that slides to the picked tab and fades (never lit at rest). */}
+            <Animated.View pointerEvents="none" style={[{
+              position: 'absolute', left: 0, top: -7, width: 64, height: 64, borderRadius: 32,
+              backgroundColor: 'rgba(255, 213, 74, 0.55)', shadowColor: GOLD_FX.glow, shadowOpacity: 1,
+              shadowRadius: 14, shadowOffset: { width: 0, height: 0 },
+            }, glowStyle]} />
             {items.map((item, key) => {
               return (
-                <View key={key}>
+                <View key={key} onLayout={event => {
+                  const { x, width } = event.nativeEvent.layout;
+                  measured.current[key] = x + width / 2;
+                  if (measured.current.every(c => c !== undefined)) centers.value = measured.current.slice() as number[];
+                }}>
                   <View
                     style={{
                       top: item.size === 'normal' ? 0 : -45,
@@ -133,8 +159,11 @@ export default function Wrapper({
                           ? hasPermission(item.permission)
                           : true
                       }
+                      pressHaptic="tickSelection"
                       onPress={() => {
                         if (isCatchShown()) return;
+                        if (!previewMode) playFooterTap(footerIndex(RootNavigation.navigationRef.getCurrentRoute()?.name),
+                          key, reducedMotion);
                         // Already here: the screen scrolls back to its top (News).
                         if (!onNavigate && RootNavigation.navigationRef.getCurrentRoute()?.name === item.screen
                           && emitTabReselect(item.screen)) return;
@@ -150,18 +179,20 @@ export default function Wrapper({
                       }}
                       onPressSound={item.sound}
                     >
-                      <Image
-                        style={{
-                          width: item.size === 'normal' ? 50 : 100,
-                          height: item.size === 'normal' ? 50 : 100,
-                          alignSelf: 'center',
-                        }}
-                        source={item.icon}
-                        contentFit="contain"
-                      />
+                      <FooterIcon index={key}>
+                        <Image
+                          style={{
+                            width: item.size === 'normal' ? 50 : 100,
+                            height: item.size === 'normal' ? 50 : 100,
+                            alignSelf: 'center',
+                          }}
+                          source={item.icon}
+                          contentFit="contain"
+                        />
+                      </FooterIcon>
                     </Button>
                     {/* Capped: past 1.2x the five labels run into each other ("NEWSSTANDINGS") and over the page. */}
-                    <Text
+                    <FooterLabel index={key}><Text
                       maxFontSizeMultiplier={1.2}
                       numberOfLines={1}
                       style={{
@@ -180,7 +211,7 @@ export default function Wrapper({
                       }}
                     >
                       {item.text}
-                    </Text>
+                    </Text></FooterLabel>
                   </View>
                 </View>
               );
@@ -190,4 +221,45 @@ export default function Wrapper({
       </Animated.View>
     </View>
   );
+}
+
+/** One footer icon: hops and pops when picked, dips when left, wiggles on a re-tap; the compass spins. */
+function FooterIcon({ index, children }: { readonly index: number; readonly children: ReactNode }) {
+  const compass = index === COMPASS_INDEX;
+  const style = useAnimatedStyle(() => {
+    const m = footerMotion;
+    const picked = m.hopIndex.value === index;
+    const left = m.sinkIndex.value === index && !picked;
+    return {
+      transform: [
+        { translateY: picked ? m.hopY.value : 0 },
+        { scale: picked ? m.hopScale.value : left ? m.sinkScale.value : 1 },
+        { rotate: `${(picked ? m.hopRotate.value : 0) + (compass ? m.compassSpin.value : 0)}deg` },
+      ],
+    };
+  });
+  const glint = useAnimatedStyle(() => {
+    const g = footerMotion.glint.value;
+    return { opacity: g > 0 && g < 1 ? 0.75 : 0, transform: [{ translateX: -70 + 140 * g }, { rotate: '20deg' }] };
+  });
+  return (
+    <Animated.View style={style}>
+      {children}
+      {compass && <View pointerEvents="none" style={{ position: 'absolute', left: 10, top: 10, width: 80, height: 80,
+        borderRadius: 40, overflow: 'hidden' }}>
+        <Animated.View style={[{ position: 'absolute', top: -20, left: 30, width: 16, height: 120,
+          backgroundColor: 'rgba(255, 255, 255, 0.85)', borderRadius: 8 }, glint]} />
+      </View>}
+    </Animated.View>
+  );
+}
+
+/** A footer label: lifts 2 pt into place and fades up when its tab is picked. */
+function FooterLabel({ index, children }: { readonly index: number; readonly children: ReactNode }) {
+  const style = useAnimatedStyle(() => {
+    const m = footerMotion;
+    const picked = m.hopIndex.value === index;
+    return { opacity: picked ? m.labelOpacity.value : 1, transform: [{ translateY: picked ? m.labelLift.value : 0 }] };
+  });
+  return <Animated.View style={style}>{children}</Animated.View>;
 }

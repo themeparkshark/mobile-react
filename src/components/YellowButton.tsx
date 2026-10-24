@@ -1,7 +1,8 @@
-import { Animated, ImageBackground, Pressable, Text, View } from 'react-native';
-import { useEffect, useRef, useState } from 'react';
-import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { ImageBackground, Pressable, Text, View } from 'react-native';
+import { useState } from 'react';
+import Animated from 'react-native-reanimated';
 import { artButtonFontSize } from '../ui/artButtonText';
+import { usePressScale } from '../ui/PressableScale';
 
 /** The label area's width / height inside the button art. */
 const LABEL_AREA_ASPECT = 4.4;
@@ -22,63 +23,30 @@ export default function YellowButton({
    */
   readonly estimatedWidth?: number;
 }) {
-  const animated = useRef(new Animated.Value(1)).current;
-  const reducedMotion = useReducedGameMotion();
+  // The shared squishy press (src/ui/PressableScale): squash, sink, spring back, a light haptic on touch-down.
+  const press = usePressScale({ disabled });
   // Label size follows the button's height so every label on this button matches (was a fixed 72pt shrink-to-fit).
   const [labelAreaHeight, setLabelAreaHeight] = useState(() =>
     estimatedWidth && estimatedWidth > 0 ? estimatedWidth / LABEL_AREA_ASPECT : 0);
-  useEffect(() => {
-    if (disabled || reducedMotion) { animated.stopAnimation(); animated.setValue(1); }
-    return () => animated.stopAnimation();
-  }, [animated, disabled, reducedMotion]);
-  const zoomOut = () => {
-    if (disabled || reducedMotion) {
-      return;
-    }
-
-    Animated.timing(animated, {
-      toValue: 0.97,
-      duration: 65,
-      useNativeDriver: true,
-    }).start();
-  };
-  const zoomIn = () => {
-    if (disabled || reducedMotion) {
-      return;
-    }
-
-    Animated.timing(animated, {
-      toValue: 1,
-      duration: 95,
-      useNativeDriver: true,
-    }).start();
-  };
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={text}
       accessibilityState={{ disabled }}
-      disabled={disabled}
       onPress={() => {
         if (disabled) {
+          // A greyed-out button says no with a little shake (no haptic, nothing fires).
+          press.rejected();
           return;
         }
 
         onPress?.();
       }}
-      onPressIn={zoomOut}
-      onPressOut={zoomIn}
+      onPressIn={press.pressIn}
+      onPressOut={press.pressOut}
     >
-      <Animated.View
-        style={{
-          transform: [
-            {
-              scale: animated,
-            },
-          ],
-        }}
-      >
+      <Animated.View style={press.style}>
         <ImageBackground
           source={require('../../assets/images/yellow_button.png')}
           style={{
