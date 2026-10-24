@@ -605,12 +605,14 @@ export default function CoinLevelingModal({
                       <TierRim level={state === 'success' ? nextLevel : currentLevel} size={120} />
                       <CoinStand level={state === 'success' ? nextLevel : currentLevel} size={120} layer="crown" />
                       <LevelUpBurst fx={fx} size={120} playKey={burstKey} />
-                      {(state === 'leveling' || state === 'success') && !reducedMotion && (
+                      {/* Mounted with the card (hidden at 0), so nothing new mounts on the tap. */}
+                      {!reducedMotion && <GatherRings progress={gatherRing} size={128} count={2} color={coinTier(nextLevel).ring} width={5} />}
+                      {/* Mounted with the card (all hidden at 0), so the tap and the burst frame mount nothing. */}
+                      {!reducedMotion && (
                         <>
                           <View pointerEvents="none" style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>
                             <ShineSweep progress={shine} size={104} />
                           </View>
-                          <GatherRings progress={gatherRing} size={128} count={2} color={coinTier(nextLevel).ring} width={5} />
                           <SparkleBurst progress={sparkle} radius={110} count={momentParticles(nextPayoff.sparkles, budget, reducedMotion)} />
                         </>
                       )}
