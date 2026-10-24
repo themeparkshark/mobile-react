@@ -51,6 +51,7 @@ import Animated, {
   Easing,
   cancelAnimation,
   runOnJS,
+  ReduceMotion,
 } from 'react-native-reanimated';
 import { GAME_COLORS, COUNTDOWN, JUICE, LINE_MOVING_TOAST } from './theme';
 import { ScoreDisplay } from './ScoreDisplay';
@@ -245,6 +246,9 @@ interface GameShellV2Props {
 
 const DEFAULT_STAR_MULT: Record<number, number> = { 0: 0, 1: 1, 2: 1.5, 3: 2 };
 const RESUME_STEP_MS = 300;
+// The count clock always runs: Reduce Motion is handled by the drawing (fades, no travel), and
+// Reanimated's own reduce-motion jump would end the clock at once and hide the numbers.
+const CLOCK_ALWAYS = ReduceMotion ? ReduceMotion.Never : undefined;
 // One frame later (requestAnimationFrame where the platform has it; a 16 ms timer otherwise).
 const nextFrame = (fn: () => void): unknown => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : setTimeout(fn, 16));
 const cancelFrame = (id: unknown): void => {
@@ -415,7 +419,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const runCountStage = useCallback((fromMs: number) => {
       cancelAnimation(cdClock);
       cdClock.value = fromMs;
-      cdClock.value = withTiming(COUNT_END_MS, { duration: COUNT_END_MS - fromMs, easing: Easing.linear }, (finished) => {
+      cdClock.value = withTiming(COUNT_END_MS, { duration: COUNT_END_MS - fromMs, easing: Easing.linear, reduceMotion: CLOCK_ALWAYS }, (finished) => {
         'worklet';
         if (finished) runOnJS(endCountStage)();
       });

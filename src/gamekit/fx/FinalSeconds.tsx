@@ -15,7 +15,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { Canvas, Group, Rect, RadialGradient, Text as SkText, vec } from '@shopify/react-native-skia';
 import { useDisplayFont } from './displayFont';
-import { cancelAnimation, Easing, useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
+import { cancelAnimation, Easing, ReduceMotion, useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
 import { FINAL_COLOR, FINAL_SECONDS, clamp01, finalVignette, springAt } from '../core/gameMoments';
 import { GOLD_FX, SLAM_SQUASH, SPRING } from '../../ui/motion';
 
@@ -49,7 +49,8 @@ export const FinalSeconds = React.memo(function FinalSeconds({ secondsLeft, widt
     setLabel(s === 0 ? 'TIME!' : `${s}`);
     cancelAnimation(ms);
     ms.value = 0;
-    ms.value = withTiming(s === 0 ? 1400 : 1000, { duration: s === 0 ? 1400 : 1000, easing: Easing.linear });
+    // Always run the clock: Reduce Motion is handled in the drawing (no breathing, no stamp travel).
+    ms.value = withTiming(s === 0 ? 1400 : 1000, { duration: s === 0 ? 1400 : 1000, easing: Easing.linear, reduceMotion: ReduceMotion.Never });
   }, [inWindow, s, ms]);
   useEffect(() => () => cancelAnimation(ms), [ms]);
 

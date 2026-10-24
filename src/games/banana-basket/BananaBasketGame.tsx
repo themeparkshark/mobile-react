@@ -987,6 +987,7 @@ function BananaRun({
       onWrapUp={onWrapUp}
       secondsLeft={finalLeft}
       finalSecondsFeedback={false}
+      countdownY={0.4}
       resumeStyle="countdown"
       countdownStyle={mode === 'heat' ? 'none' : undefined}
       resultExtras={extras ? <ResultsRows x={extras} /> : undefined}

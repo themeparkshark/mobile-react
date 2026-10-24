@@ -171,6 +171,8 @@ test('the shell wires the countdown, the GO frame and the last 5 seconds', () =>
   assert.match(shell, /runCountStage\(GO_AT_MS\)/, 'tap skips straight to GO');
   assert.match(shell, /secondsLeft\?: number \| null/);
   assert.match(shell, /cdPill/, 'the instruction sits in a pill, the number in clear space');
+  assert.match(shell, /reduceMotion: CLOCK_ALWAYS/, 'Reduce Motion fades the numbers; the clock itself never jumps to the end');
+  assert.match(read('src/gamekit/fx/FinalSeconds.tsx'), /reduceMotion: ReduceMotion\.Never/);
   const stage = read('src/gamekit/fx/CountdownStage.tsx');
   assert.match(stage, /useDerivedValue\(\(\) => countPose\(clock\.value/, 'one UI-thread clock');
   assert.doesNotMatch(stage, /setState|useState/, 'no per-frame React state');

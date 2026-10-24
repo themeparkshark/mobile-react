@@ -438,9 +438,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           break;
         }
         case E_END:
-          // TIME! slams as the burst ends (the shell's last-5 layer), then clears for the breather.
-          setSecondsLeft(0);
-          setTimeout(() => setSecondsLeft((v) => (v === 0 ? null : v)), 1400);
+          // Whack's own gold FINISH! is the end beat (one callout at a time): the shell's last-5 layer clears.
+          setSecondsLeft(null);
           void onBurstEnd(a === 1);
           break;
         default:
