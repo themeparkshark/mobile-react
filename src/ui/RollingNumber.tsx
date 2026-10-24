@@ -40,6 +40,8 @@ export interface RollingNumberProps {
   readonly celebrate?: boolean;
   /** Keep the last number on screen until this turns false, then roll. */
   readonly hold?: boolean;
+  /** Wait this long (ms, on the UI thread) before the digits start rolling, e.g. while coins fly in. */
+  readonly startDelayMs?: number;
 }
 
 /** Rolling digit look: the clip is the glyph height, the rolling strip stretches a little with speed. */
@@ -103,7 +105,7 @@ export function planRoll(fromText: string, toText: string, rising: boolean, bigJ
 const STRIP = '01234567890123456789'.split('');
 
 function RollingNumber({ value: incoming, format = defaultFormat, style, maxFontSizeMultiplier = 1.3, bump = true, onLanded,
-  celebrate = false, hold = false }: RollingNumberProps) {
+  celebrate = false, hold = false, startDelayMs = 0 }: RollingNumberProps) {
   const reduced = useUiReducedMotion();
   // While held, the last number stays put; the roll plays when the hold lifts.
   const heldValue = useRef(incoming);
@@ -129,7 +131,8 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
     const big = Math.abs(value - previous.current.value) > 10_000;
     plan.current = reduced
       ? [...text].map(char => ({ char, from: isDigit(char) ? Number(char) : null, to: isDigit(char) ? Number(char) : null, delay: 0 }))
-      : planRoll(previous.current.text, text, rising.current, big);
+      : planRoll(previous.current.text, text, rising.current, big)
+        .map(col => (col.from !== null && col.from !== col.to ? { ...col, delay: col.delay + startDelayMs } : col));
     rollId.current += 1;
   }
 
@@ -145,8 +148,8 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
     }
     if (celebrate) {
       cancelAnimation(flash);
-      flash.value = withSequence(withTiming(1, { duration: 120, easing: EASE.out }),
-        withDelay(longest - 120, withTiming(0, { duration: 360, easing: EASE.in })));
+      flash.value = withDelay(startDelayMs, withSequence(withTiming(1, { duration: 120, easing: EASE.out }),
+        withDelay(Math.max(0, longest - startDelayMs - 120), withTiming(0, { duration: 360, easing: EASE.in }))));
     }
     const gain = rising.current;
     const t = setTimeout(() => {
@@ -155,6 +158,7 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
       onLanded?.();
     }, longest);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, value, reduced, bump, onLanded, scale, celebrate, flash]);
 
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));

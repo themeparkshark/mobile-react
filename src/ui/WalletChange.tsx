@@ -12,7 +12,7 @@
  * whole beat plays where the kid can see it.
  * Coins go through momentParticles (power budget; none with Reduce Motion), at most 6.
  */
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
   type SharedValue } from 'react-native-reanimated';
@@ -85,31 +85,29 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
   const reduced = useUiReducedMotion();
   const budget = usePowerBudget();
   const n = Math.min(6, momentParticles(WALLET_FX.coins, budget, reduced));
-  // The value the coins last answered. A new value waits (held number) until its coins have started.
+  // While held, nothing moves. When the hold lifts (or the value changes in view) the coins go first
+  // and the digits follow WALLET_FX.rollAfterMs later, all timed on the UI thread (no JS timers).
   const shown = useRef(value);
   const wasHeld = useRef(hold);
-  const [rolling, setRolling] = useState(false);
-  const pending = value !== shown.current;
+  const lead = useRef<number>(WALLET_FX.rollAfterMs);
+  if (!hold && value !== shown.current) lead.current = (wasHeld.current ? WALLET_FX.afterHoldMs : 0) + WALLET_FX.rollAfterMs;
   const fly = useSharedValue(0);
   const bump = useSharedValue(1);
   const spendRef = useRef(true);
 
   useEffect(() => {
-    if (hold) { wasHeld.current = true; return undefined; }
-    if (value === shown.current) { wasHeld.current = false; return undefined; }
+    if (hold) { wasHeld.current = true; return; }
+    if (value === shown.current) { wasHeld.current = false; return; }
     spendRef.current = value < shown.current;
     shown.current = value;
     const wait = wasHeld.current ? WALLET_FX.afterHoldMs : 0;
     wasHeld.current = false;
-    setRolling(true);
     cancelAnimation(fly); cancelAnimation(bump);
     fly.value = 0;
     fly.value = withDelay(wait, withTiming(1, { duration: WALLET_FX.flyMs + 5 * 45, easing: EASE.out }));
     // The chip bumps as the coins leave (or as the first one lands).
     bump.value = withDelay(wait + (spendRef.current ? 40 : WALLET_FX.flyMs * 0.6),
       withSequence(withTiming(HUD_BUMP.peak, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring)));
-    const t = setTimeout(() => setRolling(false), wait + WALLET_FX.rollAfterMs);
-    return () => clearTimeout(t);
   }, [value, hold, fly, bump]);
 
   const chipStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
@@ -120,7 +118,7 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
         <GameIcon name="coins" size={iconSize} />
         {Array.from({ length: n }, (_, i) => <Coin key={`${spend ? 's' : 'g'}${i}`} progress={fly} i={i} n={n} spend={spend} />)}
       </View>
-      <RollingNumber value={value} format={format} style={textStyle} hold={hold || pending || rolling} celebrate />
+      <RollingNumber value={value} format={format} style={textStyle} hold={hold} startDelayMs={lead.current} celebrate />
     </Animated.View>
   );
 }

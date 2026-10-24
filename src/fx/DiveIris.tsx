@@ -114,22 +114,25 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
       return undefined;
     }
     // The shark swims on its own clock through the whole dive, so the held breath is never still.
-    swim.value = withTiming(1, { duration: DIVE.closeMs + DIVE.holdMs + DIVE.openMs, easing: EASE.inOut });
+    swim.value = withTiming(1, { duration: DIVE.closeMs + DIVE.maxWaitMs + DIVE.openMs, easing: EASE.inOut });
     let coveredAt = 0;
     let opened = false;
+    const openNow = (delay: number) => {
+      'worklet';
+      open.value = withDelay(delay, withTiming(1, { duration: DIVE.openMs, easing: EASE.inOut }, done => {
+        if (done) runOnJS(finishDive)();
+      }));
+    };
     const startOpen = () => {
       if (!alive || opened) return;
       opened = true;
-      const wait = Math.max(0, DIVE.holdMs - (Date.now() - coveredAt));
-      open.value = withDelay(wait, withTiming(1, { duration: DIVE.openMs, easing: EASE.inOut }, done => {
-        if (done) runOnJS(finishDive)();
-      }));
-      // A safety net: never leave water over the app if a frame callback is lost.
-      timers.push(setTimeout(finishDive, wait + DIVE.openMs + 1200));
+      // Only if the UI-thread fallback has not already begun to open.
+      if (open.value === 0) openNow(Math.max(0, DIVE.holdMs - (Date.now() - coveredAt)));
     };
     // The iris opens only once the game screen is really there (its navigation landed and two
-    // frames drew), so the hole never shows the screen you just left. A slow mount waits at most
-    // DIVE.maxWaitMs, while the shark keeps swimming and the bubbles keep rising.
+    // frames drew), so the hole never shows the screen you just left. The fallback lives on the UI
+    // thread (scheduled when the water covers the screen), so even a JS thread busy mounting a big
+    // game screen can never leave the water up: it opens after DIVE.maxWaitMs at the latest.
     const onCovered = () => {
       if (!alive) return;
       coveredAt = Date.now();
@@ -137,10 +140,16 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
         unsubscribe();
         requestAnimationFrame(() => requestAnimationFrame(startOpen));
       });
-      timers.push(setTimeout(() => { unsubscribe(); startOpen(); }, DIVE.maxWaitMs));
+      timers.push(setTimeout(unsubscribe, DIVE.maxWaitMs + 2000));
+      // A last safety net for a lost frame callback.
+      timers.push(setTimeout(finishDive, DIVE.maxWaitMs + DIVE.openMs + 2500));
       dive.go();
     };
-    close.value = withTiming(1, { duration: DIVE.closeMs, easing: EASE.in }, done => { if (done) runOnJS(onCovered)(); });
+    close.value = withTiming(1, { duration: DIVE.closeMs, easing: EASE.in }, done => {
+      if (!done) return;
+      openNow(DIVE.maxWaitMs);
+      runOnJS(onCovered)();
+    });
     return () => { alive = false; timers.forEach(clearTimeout); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
