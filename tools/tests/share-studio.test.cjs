@@ -228,6 +228,12 @@ test('Park Day shares only coin counts and coin art: never park, day, rides, mom
   assert.match(card, /ArtImage\.prefetch\(urls, 'memory-disk'\)/);
 });
 
+test('the Ride Wrapped file name matches its card: month or year', () => {
+  const code = fs.readFileSync(pathMod.join(repo, 'src/screens/RideTracker/RideWrappedScreen.tsx'), 'utf8');
+  assert.match(code, /period === 'monthly' \? 'My Ride Month' : 'My Ride Year'/);
+  assert.match(code, /YOUR \{period === 'monthly' \? 'MONTH' : 'YEAR'\} IN RIDES/);
+});
+
 test('the Current Quest share card says true only when the share really went', () => {
   const code = fs.readFileSync(pathMod.join(repo, 'src/games/current-quest/ShareCard.tsx'), 'utf8');
   assert.match(code, /'Current Quest'\)\) === 'shared';/);
