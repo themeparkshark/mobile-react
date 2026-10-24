@@ -21,9 +21,11 @@ import { traceEvent } from './studioTrace';
  */
 export function assetPath(src: unknown): string {
   try {
-    const a = Asset.fromModule(src as number) as { name?: string; type?: string; httpServerLocation?: string };
+    const a = Asset.fromModule(src as number) as { name?: string; type?: string; httpServerLocation?: string; uri?: string };
     if (!a?.name) return String(src);
-    const dir = (a.httpServerLocation ?? '').replace(/^\/assets\/?/, '').replace(/\?.*$/, '');
+    // Metro dev: the folder is in httpServerLocation, or in the dev server URI (/assets/<repo path>/<file>?platform=...).
+    const fromUri = /^https?:\/\/[^/]+(\/assets\/[^?]*)\//.exec(a.uri ?? '')?.[1];
+    const dir = (a.httpServerLocation ?? fromUri ?? '').replace(/^\/assets\/?/, '').replace(/\?.*$/, '');
     return `${dir ? `${dir}/` : ''}${a.name}.${a.type ?? ''}`;
   } catch {
     return String(src);

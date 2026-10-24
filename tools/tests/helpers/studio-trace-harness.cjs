@@ -56,9 +56,18 @@ function traceEngine({ start = Date.UTC(2026, 9, 24, 17, 0, 0), hybrid = true, t
   const clock = virtualClock(start);
   const ids = new Map();
   const exts = new Map();
+  const files = new Map();
   const __assetId = (file) => {
-    if (!ids.has(file)) { ids.set(file, ids.size + 1); exts.set(ids.size, path.extname(file).slice(1).toLowerCase()); }
+    if (!ids.has(file)) { ids.set(file, ids.size + 1); exts.set(ids.size, path.extname(file).slice(1).toLowerCase()); files.set(ids.size, file); }
     return ids.get(file);
+  };
+  const repoRoot = path.resolve(__dirname, '../../..');
+  // Like Metro in dev: name, type and the server folder, so the trace can name each file.
+  const assetMeta = (src) => {
+    const f = files.get(src);
+    if (!f) return { type: exts.get(src) ?? 'wav' };
+    const ext = path.extname(f);
+    return { type: ext.slice(1).toLowerCase(), name: path.basename(f, ext), httpServerLocation: `/assets/${path.relative(repoRoot, path.dirname(f))}` };
   };
   const quiet = { log: () => undefined, warn: () => undefined, error: console.error, info: () => undefined };
   const haptics = [];
@@ -69,7 +78,7 @@ function traceEngine({ start = Date.UTC(2026, 9, 24, 17, 0, 0), hybrid = true, t
     // Any attempt to open a real player fails the test (audio.touched counts it).
     'expo-av': { Audio: { Sound: class { constructor() { audio.touched++; } static async createAsync() { audio.touched++; throw new Error('no audio in tests'); } },
       setAudioModeAsync: async () => { audio.touched++; } }, InterruptionModeIOS: {}, InterruptionModeAndroid: {} },
-    'expo-asset': { Asset: { fromModule: (src) => ({ type: exts.get(src) ?? 'wav' }) } },
+    'expo-asset': { Asset: { fromModule: (src) => assetMeta(src) } },
     'expo-haptics': new Proxy({}, { get: (_t, k) => (typeof k === 'string' && /Async$/.test(k) ? async () => undefined : {}) }),
     'react-native': {
       AccessibilityInfo: { isReduceMotionEnabled: async () => false, addEventListener: () => ({ remove() {} }) },

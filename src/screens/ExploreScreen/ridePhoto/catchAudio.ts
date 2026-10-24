@@ -121,6 +121,8 @@ function trace(kind: string, name: string, extra = '') {
  * and the badge beats climb the counter ladder. Switch off: none of this runs and nothing changes.
  */
 const SESSION_IDLE_MS = 4000;
+/** After 'done', counter ticks from coins still landing keep the studio ladder this long. */
+const DONE_TAIL_MS = 700;
 /**
  * `haptics` counts the catch's haptics before the burst: the first is the press, the next three are the
  * wobble swings, and each wobble tick plays from that same call, so the tick and its buzz leave the JS
@@ -168,7 +170,8 @@ function keepSession(): void {
 }
 
 function onCatchMark(name: string): void {
-  if (name === 'tap') {
+  // 'tap-repeat': a later catch this session (wow-map's short repeat: two wobbles, burst at 450 ms).
+  if (name === 'tap' || name === 'tap-repeat') {
     beatUntil = Date.now() + BEAT_WINDOW_MS;
     if (!studioReady('catch.tap')) return;
     primeCatchState();
@@ -198,7 +201,9 @@ function onCatchMark(name: string): void {
     if (session) session.burst = true;
     playMoment('game.miss');
   } else if (name === 'done') {
-    endSession();
+    // The coin stream can still be landing in the counter: its ticks keep the ladder for a short tail.
+    session?.wobbles.forEach(clearTimeout);
+    if (session) { session.burst = true; session.until = Date.now() + DONE_TAIL_MS; }
   }
 }
 
