@@ -1,11 +1,14 @@
-import { useContext, useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import { useEffectOnceWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import { CrumbContext } from '../context/CrumbProvider';
 import { Easing, withSequence, withTiming } from 'react-native-reanimated';
-import LaunchScene, { launchFill } from '../components/launch/LaunchScene';
+import { sample } from 'lodash';
+import LaunchScene, { launchFill, setLaunchFact } from '../components/launch/LaunchScene';
+import useCrumbs from '../hooks/useCrumbs';
+import DEFAULT_CRUMBS from '../api/defaults/crumbs.json';
 import { SPLASH_CREEP_MS, SPLASH_LONG_CREEP_MS, SPLASH_LONG_SHARE, SPLASH_ROUTE_SHARE } from '../constants/launchHandoff';
 
 export default function SplashScreen() {
@@ -13,6 +16,11 @@ export default function SplashScreen() {
   const { crumbsLoaded } = useContext(CrumbContext);
   const hasNavigated = useRef(false);
   const focused = useIsFocused();
+  const { labels } = useCrumbs();
+  // The fun fact shows with the bar from the scene's first frame: picked here, once per launch (the
+  // game's words if they are already here, else the facts that ship with the app), so the Loading
+  // screen and the map's cover keep the same one and the banner never swaps.
+  useState(() => { setLaunchFact(launchFactFrom(labels.splash_screen_facts)); return 0; });
 
   // Use useEffectOnceWhen to navigate only once when ready. Only while this screen is on top: the
   // sign-in (AuthProvider) often moves to Loading first, and Loading may already have opened the
@@ -45,4 +53,11 @@ export default function SplashScreen() {
   // Same art, framing and blue as the native launch screen (the launch scene), so the hand-off is
   // seamless and the title never drops out.
   return <LaunchScene active={focused} />;
+}
+
+/** One fact for this launch: the server's list when it is here, else the shipped list (never a "right now" line out of date). */
+export function launchFactFrom(facts: readonly string[] | undefined): string | null {
+  const list = facts && facts.length > 0 ? facts
+    : (DEFAULT_CRUMBS.labels.splash_screen_facts as string[]).filter(f => !/right now/i.test(f));
+  return sample(list) ?? null;
 }
