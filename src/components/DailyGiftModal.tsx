@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Modal from 'react-native-modal';
 import Animated, {
@@ -145,6 +145,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const prize = useSharedValue(0);
   const stamp = useSharedValue(0);
   const burst = useSharedValue(0);
+  // 1 once the lid pops: the "Opening your chest" words fade on the UI thread before React swaps in the prize.
+  const hintOut = useSharedValue(0);
   const punch = useSharedValue(0);
   const cardShake = useSharedValue(0);
   const spark = useSharedValue(0);
@@ -289,6 +291,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       withTiming(0, { duration: DURATION.bloom, easing: EASE.out }));
     burst.value = 0;
     burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) });
+    hintOut.value = withTiming(1, { duration: 90 });
     prize.value = withDelay(120, withSpring(1, { damping: 9, stiffness: 150 }));
     stamp.value = withDelay(650, withSpring(1, { damping: 8, stiffness: 220 }));
     if (isTicket) {
@@ -319,20 +322,11 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     playSfx('win'); playSfx('coin', 0.9);
   };
 
-  const pendingCelebrate = useRef<boolean | null>(null);
-  const celebrateRef = useRef(celebrate);
-  celebrateRef.current = celebrate;
-  useLayoutEffect(() => {
-    if (phase !== 'open' || pendingCelebrate.current === null) return;
-    const isTicket = pendingCelebrate.current;
-    pendingCelebrate.current = null;
-    celebrateRef.current(isTicket);
-  }, [phase]);
-
   const open = async () => {
     if (claiming.current || phase !== 'closed') return;
     claiming.current = true;
     walletBefore.current = player?.coins ?? null;
+    cancelAnimation(hintOut); hintOut.value = 0;
     setPhase('opening');
     const startedAt = Date.now();
     if (!reducedMotion) {
@@ -364,10 +358,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       const isTicket = mainKind(chestAmounts(confirmed, confirmedToday)) === 'tickets';
       revealTimer.current = setTimeout(() => {
         if (!mounted.current) return;
-        // The pop starts once the open card is committed (useLayoutEffect below), so the lid never bursts over
-        // "Opening your chest" and the light, the prize and Awesome! share its first frame.
-        pendingCelebrate.current = isTicket;
         setPhase('open');
+        celebrate(isTicket);
       }, reducedMotion ? 0 : Math.max(0, 440 - (Date.now() - startedAt)));
     } catch {
       // A previous successful claim can outlive this screen. Reconcile before retrying.
@@ -408,6 +400,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     opacity: prize.value, transform: [{ translateY: (1 - prize.value) * -36 }, { scale: 0.5 + prize.value * 0.5 }],
   }));
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }] }));
+  const hintStyle = useAnimatedStyle(() => ({ opacity: 1 - hintOut.value }));
   // Light pours out of the open chest with the lid pop (bright over the pile on a non-coin day).
   const mouthStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, prize.value * 1.4) * (kind === 'coins' ? 0.55 : 0.9),
@@ -569,7 +562,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               {milestone && <Text style={styles.milestone}>{`${milestone.label} bonus!`}</Text>}
             </Animated.View>
           ) : (
-            <Text style={styles.hint}>{phase === 'opening' ? 'Opening your chest…' : 'Tap the chest to open it!'}</Text>
+            // "Opening your chest" fades on the UI thread the moment the lid pops (the burst starts before React swaps
+            // in the prize), so the words never sit under the burst.
+            <Animated.Text style={[styles.hint, hintStyle]}>{phase === 'opening' ? 'Opening your chest…' : 'Tap the chest to open it!'}</Animated.Text>
           )}
           </View>
 

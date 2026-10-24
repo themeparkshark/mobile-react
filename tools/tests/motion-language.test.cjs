@@ -519,8 +519,11 @@ test('wave 3 rerun round 2: the daily chest card keeps one height from the tap t
   assert.ok(!/\{phase === 'open' && \(\s*<Pressable onPress=\{dismiss\}/.test(chest), 'no button mounts at the payoff');
 });
 
-test('wave 3 rerun round 2: the chest pops once the open card is committed, never over "Opening your chest"', () => {
+test('wave 3 rerun round 2: "Opening your chest" fades on the UI thread as the lid pops', () => {
   const chest = read('src/components/DailyGiftModal.tsx');
-  assert.ok(/pendingCelebrate\.current = isTicket;\s*setPhase\('open'\);/.test(chest), 'the reveal only marks the pop as pending');
-  assert.ok(/useLayoutEffect\(\(\) => \{\s*if \(phase !== 'open' \|\| pendingCelebrate\.current === null\) return;[\s\S]*?celebrateRef\.current\(isTicket\);\s*\}, \[phase\]\);/.test(chest), 'it starts on the committed open card');
+  assert.ok(/<Animated\.Text style=\{\[styles\.hint, hintStyle\]\}>/.test(chest), 'the hint is driven by a shared value');
+  const celebrate = chest.slice(chest.indexOf('const celebrate = '), chest.indexOf('const open = async'));
+  assert.ok(/hintOut\.value = withTiming\(1, \{ duration: 90 \}\);/.test(celebrate), 'it fades with the pop');
+  assert.ok(/cancelAnimation\(hintOut\); hintOut\.value = 0;\s*setPhase\('opening'\);/.test(chest), 'every claim starts with the words showing');
+  assert.ok(!/useLayoutEffect/.test(chest), 'the pop still starts at once on the UI thread');
 });
