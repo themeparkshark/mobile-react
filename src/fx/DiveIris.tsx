@@ -33,6 +33,8 @@ export const DIVE = {
   closeMs: 260,
   holdMs: 140,
   openMs: 420,
+  /** The longest the water waits for a slow game screen before it opens anyway (ms). */
+  maxWaitMs: 800,
   /** The stack fade the game screens use, in and out. */
   screenFadeMs: DURATION.exit,
   bubbles: 6,
@@ -99,21 +101,47 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
   const open = useSharedValue(0);
   const fade = useSharedValue(reduced ? 0 : 1);
 
+  const swim = useSharedValue(0);
+
   useEffect(() => {
     queueHaptic('tapLight');
+    let alive = true;
+    const timers: ReturnType<typeof setTimeout>[] = [];
     if (reduced) {
       fade.value = withSequence(withTiming(1, { duration: DURATION.quick }, done => { if (done) runOnJS(dive.go)(); }),
         withDelay(DIVE.holdMs, withTiming(0, { duration: DURATION.quick }, done => { if (done) runOnJS(finishDive)(); })));
       close.value = 1;
-      return;
+      return undefined;
     }
-    close.value = withTiming(1, { duration: DIVE.closeMs, easing: EASE.in }, done => { if (done) runOnJS(dive.go)(); });
-    open.value = withDelay(DIVE.closeMs + DIVE.holdMs, withTiming(1, { duration: DIVE.openMs, easing: EASE.inOut }, done => {
-      if (done) runOnJS(finishDive)();
-    }));
-    // A safety net: never leave water over the app if a frame callback is lost.
-    const t = setTimeout(finishDive, DIVE.closeMs + DIVE.holdMs + DIVE.openMs + 1200);
-    return () => clearTimeout(t);
+    // The shark swims on its own clock through the whole dive, so the held breath is never still.
+    swim.value = withTiming(1, { duration: DIVE.closeMs + DIVE.holdMs + DIVE.openMs, easing: EASE.inOut });
+    let coveredAt = 0;
+    let opened = false;
+    const startOpen = () => {
+      if (!alive || opened) return;
+      opened = true;
+      const wait = Math.max(0, DIVE.holdMs - (Date.now() - coveredAt));
+      open.value = withDelay(wait, withTiming(1, { duration: DIVE.openMs, easing: EASE.inOut }, done => {
+        if (done) runOnJS(finishDive)();
+      }));
+      // A safety net: never leave water over the app if a frame callback is lost.
+      timers.push(setTimeout(finishDive, wait + DIVE.openMs + 1200));
+    };
+    // The iris opens only once the game screen is really there (its navigation landed and two
+    // frames drew), so the hole never shows the screen you just left. A slow mount waits at most
+    // DIVE.maxWaitMs, while the shark keeps swimming and the bubbles keep rising.
+    const onCovered = () => {
+      if (!alive) return;
+      coveredAt = Date.now();
+      const unsubscribe = RootNavigation.navigationRef.addListener('state', () => {
+        unsubscribe();
+        requestAnimationFrame(() => requestAnimationFrame(startOpen));
+      });
+      timers.push(setTimeout(() => { unsubscribe(); startOpen(); }, DIVE.maxWaitMs));
+      dive.go();
+    };
+    close.value = withTiming(1, { duration: DIVE.closeMs, easing: EASE.in }, done => { if (done) runOnJS(onCovered)(); });
+    return () => { alive = false; timers.forEach(clearTimeout); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -148,7 +176,7 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
   // The shark dives in from the tap's side, down through the middle, and is gone as the iris opens.
   const sharkStyle = useAnimatedStyle(() => {
     if (reduced) return { opacity: 0 };
-    const t = Math.min(1, close.value * 0.55 + open.value * 0.45);
+    const t = swim.value;
     const fromLeft = dive.x < w / 2;
     const x0 = (fromLeft ? -0.25 : 1.25) * w;
     const x1 = w / 2 + (fromLeft ? 0.15 : -0.15) * w;

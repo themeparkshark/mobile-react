@@ -34,7 +34,7 @@ export const PULL_SHOW = {
   /** Pull this far (pt) and the shark flips: let go to refresh. */
   thresholdPt: 70,
   /** The shark's size at full pull (pt). */
-  artPt: 58,
+  artPt: 72,
   /** Smallest size as it dives in (share of artPt). */
   fromScale: 0.6,
   /** Where the shark rests while the list reloads (the native refresh gap is about 60 pt). */

@@ -11,8 +11,8 @@
  * The first value on screen never rolls (a screen load is silent and still).
  * Each column clips to the digit's own height (no neighbour digits peeking above or below a pill),
  * and the rolling digits stretch a little with speed, like a real odometer wheel.
- * `celebrate`: a gain the player just earned flashes a warm cream light behind the number and lands
- * with a selection tick; a loss flashes a calm sky blue (never red) and lands quietly.
+ * `celebrate`: the rolling digits of a gain the player just earned glow gold and land with a selection
+ * tick; a loss glows a calm sky blue (never red) and lands quietly. Digits only: no box behind them.
  * `hold`: keep showing the last number (for example while a sheet covers the wallet); when the
  * hold lifts, it rolls to the new number where the kid can see it.
  * Reduce Motion: the new number is simply there.
@@ -20,7 +20,7 @@
  */
 import { memo, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring,
+import Animated, { cancelAnimation, interpolateColor, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring,
   withTiming } from 'react-native-reanimated';
 import { queueHaptic } from '../gamekit/Haptics';
 import { COUNT, EASE, GOLD_FX, HUD_BUMP } from './motionEasing';
@@ -50,9 +50,9 @@ export const ROLL_LOOK = {
   cellGap: 0.3,
   /** How much the rolling digits stretch at full speed. */
   stretch: 0.16,
-  /** The flash behind the number at its peak. */
-  flashPeak: 0.55,
-  gainFlash: GOLD_FX.raysSoft,
+  /** The digit glow at its peak (share of the way to the flash colour). */
+  flashPeak: 1,
+  gainFlash: GOLD_FX.glow,
   lossFlash: '#bfe5ff',
 } as const;
 
@@ -158,25 +158,27 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
   }, [text, value, reduced, bump, onLanded, scale, celebrate, flash]);
 
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value * ROLL_LOOK.flashPeak }));
+  const baseColor = typeof flat.color === 'string' ? flat.color : '#ffffff';
+  const flashColor = rising.current ? ROLL_LOOK.gainFlash : ROLL_LOOK.lossFlash;
+  // One animated colour shared by every digit (the commas stay put).
+  const glow = useAnimatedStyle(() => ({ color: interpolateColor(flash.value * ROLL_LOOK.flashPeak, [0, 1], [baseColor, flashColor]) }),
+    [baseColor, flashColor]);
   const textStyle: StyleProp<TextStyle> = [style, { lineHeight, includeFontPadding: false }];
 
   return (
     <Animated.View style={[{ flexDirection: 'row', alignItems: 'center' }, bumpStyle]}
       accessible accessibilityRole="text" accessibilityLabel={text}>
-      {celebrate && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: -6, right: -6, top: -2, bottom: -2,
-        borderRadius: 10, backgroundColor: rising.current ? ROLL_LOOK.gainFlash : ROLL_LOOK.lossFlash }, flashStyle]} />}
       {plan.current.map((col, i) => col.from === null || col.to === null
         ? <Text key={`c${plan.current.length - i}`} maxFontSizeMultiplier={maxFontSizeMultiplier} style={textStyle}>{col.char}</Text>
         : <DigitColumn key={`d${plan.current.length - i}`} col={col} rollId={rollId.current} lineHeight={lineHeight}
-          fontSize={fontSize} textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />)}
+          fontSize={fontSize} textStyle={textStyle} glow={celebrate ? (glow as StyleProp<TextStyle>) : undefined} maxFontSizeMultiplier={maxFontSizeMultiplier} />)}
     </Animated.View>
   );
 }
 
-function DigitColumn({ col, rollId, lineHeight, fontSize, textStyle, maxFontSizeMultiplier }: {
+function DigitColumn({ col, rollId, lineHeight, fontSize, textStyle, glow, maxFontSizeMultiplier }: {
   readonly col: RollColumn; readonly rollId: number; readonly lineHeight: number; readonly fontSize: number;
-  readonly textStyle: StyleProp<TextStyle>; readonly maxFontSizeMultiplier: number;
+  readonly textStyle: StyleProp<TextStyle>; readonly glow?: StyleProp<TextStyle>; readonly maxFontSizeMultiplier: number;
 }) {
   const pos = useSharedValue(col.from ?? 0);
   const speed = useSharedValue(0);
@@ -210,7 +212,8 @@ function DigitColumn({ col, rollId, lineHeight, fontSize, textStyle, maxFontSize
       <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: inset, height: clipH, overflow: 'hidden' }, stretch]}>
         <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0 }, strip]}>
           {STRIP.map((d, i) => <View key={i} style={{ height: cell, justifyContent: 'center' }}>
-            <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, { textAlign: 'center', height: lineHeight }]}>{d}</Text>
+            <Animated.Text maxFontSizeMultiplier={maxFontSizeMultiplier}
+              style={[textStyle, { textAlign: 'center', height: lineHeight }, glow]}>{d}</Animated.Text>
           </View>)}
         </Animated.View>
       </Animated.View>
