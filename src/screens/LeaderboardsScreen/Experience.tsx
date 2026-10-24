@@ -86,12 +86,14 @@ export default function Experience() {
         scoreIcon="xp"
         meId={player?.id}
         playKey={`xp:${slots.podium.map(p => p?.id ?? 0).join(',')}`}
-        header={<View style={{ height: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-          {vipNote && <>
+        header={<View style={{ height: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+          {/* A soft navy pill keeps the white line readable over the podium's bright light rays. */}
+          {vipNote && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '94%', height: 24,
+            paddingLeft: 4, paddingRight: 10, borderRadius: 12, backgroundColor: 'rgba(7, 61, 119, 0.72)' }}>
             <GameIcon name="member" size={16} />
             <Text accessibilityRole="text" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}
               style={{ fontFamily: 'Knockout', fontSize: 14, color: BRAND.white, flexShrink: 1 }}>{vipNote}</Text>
-          </>}
+          </View>}
         </View>}
       />
       <StandingsListCard>

@@ -115,3 +115,8 @@ test('the XP board says plainly when VIP bonus XP counts in the ranking', () => 
   assert.match(board, /const \{ players: next, meta \} = await allWithMeta\(cache\.page \+ 1\);\n\s*cache\.vipBonus = xpIncludesVipBonus\(meta\);/);
   assert.equal(model.xpVipNote([{ is_subscribed: false }, { is_subscribed: false }, { is_subscribed: true }], true), model.XP_VIP_NOTE, 'page 1 plus page 2');
 });
+
+test('the XP VIP line sits on a soft navy pill, readable over the podium light rays', () => {
+  const board = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/LeaderboardsScreen/Experience.tsx'), 'utf8');
+  require('node:assert/strict').match(board, /backgroundColor: 'rgba\(7, 61, 119, 0\.72\)'/);
+});
