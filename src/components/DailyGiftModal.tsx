@@ -154,7 +154,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   // The chest hops on the tap and keeps rattling (little hops) while the server answers; the lid seam glows on the pop.
   const hop = useSharedValue(0);
   const seam = useSharedValue(0);
-  // 0 shut, 1 open: on a non-coin day the lid (a clipped band of the same chest art) hinges back on the pop.
+  // 0 shut, 1 popped: on a non-coin day the lid (a clipped band of the same chest art) jumps up on the pop and
+  // slams back shut. At rest (0) the chest is drawn as one whole picture, so no cut edge ever shows.
   const lid = useSharedValue(0);
 
   useEffect(() => {
@@ -178,8 +179,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     if (!reducedMotion) return;
     [shake, pop, prize, stamp, burst, punch, cardShake, spark, hop, seam, lid].forEach(cancelAnimation);
     shake.value = 0; pop.value = 1; burst.value = 0; cardShake.value = 0; spark.value = 0; hop.value = 0;
-    seam.value = phase === 'open' ? 0.7 : 0;
-    lid.value = phase === 'open' ? 1 : 0;
+    seam.value = 0;
+    lid.value = 0;
     cancelAnimation(gold); cancelAnimation(goldBloom); goldBloom.value = 0;
     gold.value = phase === 'open' ? 0.8 : 0;
     prize.value = phase === 'open' ? 1 : 0;
@@ -262,7 +263,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
 
   const celebrate = (isTicket: boolean) => {
     if (reducedMotionRef.current) {
-      shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1; gold.value = 0.8; hop.value = 0; seam.value = 0.7; lid.value = 1;
+      shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1; gold.value = 0.8; hop.value = 0; seam.value = 0; lid.value = 0;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       playSfx('win');
       return;
@@ -273,10 +274,15 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     cancelAnimation(hop);
     hop.value = withSequence(withTiming(-26, { duration: 150, easing: EASE.out }), withTiming(0, { duration: 140, easing: EASE.in }),
       withTiming(4, { duration: 50 }), withSpring(0, SPRING.settle));
-    seam.value = withSequence(withTiming(1, { duration: 120, easing: EASE.out }), withTiming(0.7, { duration: 700, easing: EASE.out }));
-    // The lid flies open past its rest, then settles open (it stays open: the settled card shows an opened chest).
+    // Light blazes out of the gap while the lid is up, then goes back inside with it.
+    seam.value = withSequence(withTiming(1, { duration: 110, easing: EASE.out }), withTiming(1, { duration: LID_POP_HOLD }),
+      withTiming(0, { duration: 260, easing: EASE.in }));
+    // The lid pops: it jumps up and back (the light and the prize burst out of the gap), slams shut, then a small
+    // bounce and it lands closed. The settled chest is the whole hand-drawn picture again.
     cancelAnimation(lid); lid.value = 0;
-    lid.value = withSequence(withTiming(1.18, { duration: 130, easing: EASE.out }), withSpring(1, SPRING.pop));
+    lid.value = withSequence(withTiming(1, { duration: 110, easing: EASE.out }), withTiming(1, { duration: LID_POP_HOLD }),
+      withTiming(0, { duration: 120, easing: EASE.in }), withTiming(LID_BOUNCE, { duration: 80, easing: EASE.out }),
+      withTiming(0, { duration: 90, easing: EASE.in }));
     pop.value = withSequence(withTiming(1.25, { duration: 110 }), withTiming(0.9, { duration: 120 }), withSpring(1, SPRING.pop));
     gold.value = withTiming(1, { duration: 200, easing: EASE.out });
     goldBloom.value = withSequence(withTiming(1, { duration: 140, easing: EASE.out }),
@@ -395,14 +401,18 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     opacity: Math.min(1, prize.value * 1.4) * (kind === 'coins' ? 0.55 : 0.9),
     transform: [{ scaleY: 0.6 + Math.min(1.1, prize.value) * 0.4 }],
   }));
-  // Light pouring out of the lid seam (a non-coin day keeps the closed art: the light says it opened).
+  // Light pouring out of the gap while the lid is up (it covers the gap, so no inside of the chest is ever drawn).
   const seamStyle = useAnimatedStyle(() => ({ opacity: seam.value, transform: [{ scaleX: 0.6 + 0.5 * Math.min(1, seam.value) }, { scaleY: 0.7 + 0.5 * seam.value }] }));
   // The lid hinges back at its top edge and lifts, opening a gap at the seam that the light pours out of.
   const lidStyle = useAnimatedStyle(() => ({
+    opacity: lid.value > LID_AT_REST ? 1 : 0,
     transform: [{ translateY: -lidLift * lid.value }, { perspective: 600 },
       { rotateX: `${LID_HINGE_DEG * lid.value}deg` }, { rotate: `${-LID_TILT_DEG * lid.value}deg` }],
   }));
   // The prize climbs out of the chest mouth with a springy overshoot, then rests just above it.
+  // The cut copies show only while the lid is off its rest; at rest the chest is one whole picture (no seam line).
+  const wholeChestStyle = useAnimatedStyle(() => ({ opacity: lid.value > LID_AT_REST ? 0 : 1 }));
+  const bodyBandStyle = useAnimatedStyle(() => ({ opacity: lid.value > LID_AT_REST ? 1 : 0 }));
   const riseStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, prize.value * 2),
     transform: [{ translateY: (1 - prize.value) * 40 }, { scale: 0.4 + prize.value * 0.6 }],
@@ -478,26 +488,24 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               {phase === 'open' && coinDay
                 ? <Image source={CHEST_OPEN} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
                 : (
-                  // The same chest art cut into its body and its lid (two clipped copies, no new art), so on a non-coin
-                  // day the lid really opens: it hinges back on the pop and light pours out of the gap.
+                  // A non-coin day never shows coins it did not pay, so the chest stays Alex's whole closed picture. On the
+                  // pop its lid (a clipped copy of the same art, drawn only while it is up) jumps open, light and the
+                  // prize burst out of the gap, and it slams shut again: the settled chest has no cut edge.
                   <View style={{ width: chestSize, height: chestSize }}>
-                    {phase === 'open' && (
-                      // The dark inside of the chest, behind the body: only the part in the open gap shows (a mouth, not a sticker).
-                      <View pointerEvents="none" style={[styles.chestInside, { left: chestSize * 0.07, width: chestSize * 0.86,
-                        top: chestSize * (LID_CUT - 0.1), height: chestSize * 0.16, borderRadius: chestSize * 0.03 }]} />
-                    )}
-                    <View style={[styles.chestBand, { top: chestSize * LID_CUT, width: chestSize, height: chestSize * (1 - LID_CUT) }]}>
+                    <Animated.View style={[StyleSheet.absoluteFill, wholeChestStyle]}>
+                      <Image source={CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" transition={0} />
+                    </Animated.View>
+                    <Animated.View style={[styles.chestBand, { top: chestSize * LID_CUT, width: chestSize, height: chestSize * (1 - LID_CUT) },
+                      bodyBandStyle]}>
                       <Image source={CHEST_CLOSED} style={{ position: 'absolute', top: -chestSize * LID_CUT, width: chestSize, height: chestSize }}
                         contentFit="contain" transition={0} />
-                    </View>
+                    </Animated.View>
                     {phase === 'open' && (
-                      <>
-                        {/* The seam blazes on the pop and keeps glowing: light pours out of the open chest. */}
-                        <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 1.05, height: chestSize * 0.34,
-                          left: -chestSize * 0.025, top: chestSize * (LID_CUT - 0.2) }, seamStyle]}>
-                          <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff7cf" />
-                        </Animated.View>
-                      </>
+                      // The light fills the open gap while the lid is up (it hides the cut), then goes back in.
+                      <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 1.05, height: chestSize * 0.34,
+                        left: -chestSize * 0.025, top: chestSize * (LID_CUT - 0.2) }, seamStyle]}>
+                        <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff7cf" />
+                      </Animated.View>
                     )}
                     <Animated.View style={[styles.chestBand, { top: 0, width: chestSize, height: chestSize * LID_CUT,
                       transformOrigin: 'top' }, lidStyle]}>
@@ -587,8 +595,13 @@ export function walletCoins(amount: number): number {
 
 /** Where the chest art is cut into lid and body (a share of its height, through the gold band and the lock). */
 export const LID_CUT = 0.46;
-/** How far the lid hinges back (degrees around its top edge), lifts (chest sizes) and tilts when it opens. */
+/** How far the lid hinges back (degrees around its top edge), lifts (chest sizes) and tilts when it pops. */
 export const LID_HINGE_DEG = 25;
+/** How long the popped lid hangs open (ms) before it slams shut, and the little bounce it lands with. */
+export const LID_POP_HOLD = 260;
+const LID_BOUNCE = 0.14;
+/** Below this the lid counts as shut, and the whole chest picture is drawn instead of the two cut copies. */
+const LID_AT_REST = 0.004;
 const LID_LIFT = 0.1;
 const LID_TILT_DEG = 5;
 /** The chest gold fan, as a multiple of the chest art (rays visible to about 0.74 x half of this). */
@@ -730,7 +743,6 @@ const styles = StyleSheet.create({
   goldWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   mouthGlow: { position: 'absolute' },
   chestBand: { position: 'absolute', left: 0, overflow: 'hidden' },
-  chestInside: { position: 'absolute', backgroundColor: '#0b3a66' },
   risePrize: { position: 'absolute', alignSelf: 'center', alignItems: 'center' },
   walletCoin: { position: 'absolute', left: 0, top: 0 },
   walletBump: { position: 'absolute', width: 80, height: 80 },

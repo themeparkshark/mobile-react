@@ -93,12 +93,11 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
               borderWidth: 2.5,
               borderColor: '#ffb400',
               opacity: 0.7,
-              ...Platform.select({
-                ios: { shadowColor: '#ffb400', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 12 },
-                android: { elevation: 8 },
-              }),
             }, plasmaStyle]}
-          />
+          >
+            {/* Its glow is a wide soft ring, not an iOS shadow (a shadow on a spinning, pulsing ring re-blurs every frame). */}
+            <View style={[s.softRing, { borderColor: 'rgba(255,180,0,0.32)' }]} />
+          </Reanimated.View>
         )}
 
         {/* ── Lv4: Prismatic animated border ring ── */}
@@ -112,12 +111,10 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
               borderRadius: ringSize / 2,
               borderWidth: 2.5,
               borderColor: cfg.borderColor,
-              ...Platform.select({
-                ios: { shadowColor: '#5fd0ff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 10 },
-                android: { elevation: 6 },
-              }),
             }, pulseStyle]}
-          />
+          >
+            <View style={[s.softRing, { borderColor: 'rgba(95,208,255,0.3)' }]} />
+          </Reanimated.View>
         )}
 
         {/* ── Lv2-3: Glow aura ── */}
@@ -380,6 +377,8 @@ export function CoinUpgradeDemoScreen() {
 }
 
 const s = StyleSheet.create({
+  // A soft halo just outside a ring (drawn, never a shadow): sits over the ring's own border and spills past it.
+  softRing: { position: 'absolute', top: -7, left: -7, right: -7, bottom: -7, borderRadius: 999, borderWidth: 7 },
   container: {
     alignItems: 'center',
     justifyContent: 'center',

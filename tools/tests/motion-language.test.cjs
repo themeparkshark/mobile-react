@@ -359,7 +359,7 @@ test('wave 3 round 2: the level-up card never empties, collapses or mounts the n
   const modal = read('src/components/CoinLevelingModal.tsx');
   assert.ok(!/scale: Math\.max\(0, successIn\.value\)/.test(modal), 'the success content is never scaled to nothing on its first frame');
   assert.ok(modal.includes('scale: 0.84 + 0.16 * successIn.value'), 'it stamps in from a little small, already visible');
-  assert.ok(modal.includes("<View style={{ alignSelf: 'stretch', height: CTA_HEIGHT, justifyContent: 'center' }}>"), 'the charge bar takes the Level Up button\'s own spot');
+  assert.ok(modal.includes("<View style={{ alignSelf: 'stretch', height: CTA_HEIGHT, justifyContent: 'center', marginHorizontal: 14, marginBottom: 14 }}>"), 'the charge bar takes the Level Up button\'s own spot');
   assert.equal((modal.match(/<YellowButton/g) || []).length, 2, 'one CTA from Level Up! to Awesome! (never remounted), plus the max-level Nice!');
   assert.ok(modal.includes("(state === 'preview' || state === 'confirm' || state === 'leveling') && !isMaxLevel"), 'the card body stays during the charge');
   assert.ok(!modal.includes('LEVELING STATE'), 'no separate short charging card');
@@ -401,12 +401,12 @@ test('wave 3 round 3: the first level-up tip never covers Awesome!, and the succ
   const modal = read('src/components/CoinLevelingModal.tsx');
   const success = modal.slice(modal.indexOf('── SUCCESS STATE ──'), modal.indexOf('── The one CTA ──'));
   assert.ok(success.includes('<OneTimeTip id="first_level_up"'), 'the tip is inside the success content, above the button');
-  assert.equal((modal.match(/<OneTimeTip id="first_level_up"/g) || []).length, 1, 'and nowhere else (never absolute over the CTA)');
+  assert.equal((modal.match(/<OneTimeTip id="first_level_up"/g) || []).length, 2, 'on the success card, or once on the next coin card (never absolute over the CTA)');
   assert.ok(/successBox\.current\.outer = event\.nativeEvent\.layout\.height/.test(modal) && /successBox\.current\.inner = event\.nativeEvent\.layout\.height/.test(modal), 'the spare room in the success box is measured');
-  assert.ok(/held\.value = uiTiming\(target, \{ duration: SUCCESS_SNUG_MS, easing: EASE\.inOut \}\)/.test(modal), 'the card eases down to the payoff on the UI thread');
+  assert.ok(/held\.value = uiTiming\(target, \{ duration: SUCCESS_SNUG_MS, easing: EASE\.out \}\)/.test(modal), 'the card eases down to the payoff on the UI thread');
   const LV = 'src/components/CoinLevelingModal.tsx';
   assert.ok(constFrom(LV, 'SUCCESS_SNUG_GAP') <= 24, 'no empty band over 24 pt is left');
-  assert.ok(constFrom(LV, 'SUCCESS_SNUG_MS') >= 200 && constFrom(LV, 'SUCCESS_SNUG_MS') <= 320, 'about 260 to 300 ms');
+  assert.ok(constFrom(LV, 'SUCCESS_SNUG_MS') >= 120 && constFrom(LV, 'SUCCESS_SNUG_MS') <= 220, 'fits while the content stamps in, before Awesome! shows');
 });
 
 test('wave 3 round 3: Gold, Prismatic and Legendary success coins look different without text', () => {
@@ -436,7 +436,7 @@ test('wave 3 round 3: the TAP! pill draws whole, the title leaves before the sum
 
 test('wave 3 round 3: the non-coin chest really opens, and the count box follows Dynamic Type', () => {
   const chest = read('src/components/DailyGiftModal.tsx');
-  assert.equal((chest.match(/source=\{CHEST_CLOSED\}/g) || []).length, 2, 'the same art, clipped into body and lid (no new art)');
+  assert.equal((chest.match(/source=\{CHEST_CLOSED\}/g) || []).length, 3, 'the same art: whole at rest, clipped into body and lid only while the lid is up (no new art)');
   assert.ok(/rotateX: `\$\{LID_HINGE_DEG \* lid\.value\}deg`/.test(chest) && chest.includes("transformOrigin: 'top'"), 'the lid hinges back at its top edge');
   const DG = 'src/components/DailyGiftModal.tsx';
   const hinge = constFrom(DG, 'LID_HINGE_DEG');
@@ -456,6 +456,50 @@ test('wave 3 round 3: on a short phone the success card keeps Awesome! on screen
   const modal = read('src/components/CoinLevelingModal.tsx');
   assert.ok(modal.includes('export const SHORT_PHONE = SCREEN_H < 740;'), 'an SE-height phone gets the tight success card');
   assert.ok(/ready=\{visible && state === 'success' && tipRoom\}/.test(modal), 'the first-time tip shows only when the card has room for it');
-  assert.ok(/setTipRoom\(outer - inner - SUCCESS_BOX_PAD \* 2 >= TIP_ROOM\)/.test(modal), 'room is measured from the success box');
+  assert.ok(/const room = outer - inner - SUCCESS_BOX_PAD \* 2;/.test(modal) && /room >= TIP_ROOM/.test(modal), 'room is measured from the success box');
   assert.ok(modal.includes("display: state === 'success' && SHORT_PHONE ? 'none' : 'flex'"), 'the extra line is dropped on a short phone');
+});
+
+test('wave 3 round 4: the energy-day chest pops its lid and lands shut, whole art at rest (no cut edge, no slab)', () => {
+  const chest = read('src/components/DailyGiftModal.tsx');
+  assert.ok(!/chestInside/.test(chest), 'no flat dark inside slab');
+  assert.ok(/const wholeChestStyle = useAnimatedStyle\(\(\) => \(\{ opacity: lid\.value > LID_AT_REST \? 0 : 1 \}\)\)/.test(chest), 'at rest the chest is one whole picture');
+  assert.ok(/opacity: lid\.value > LID_AT_REST \? 1 : 0,\s*transform:/.test(chest), 'the cut lid shows only while it is up');
+  const celebrate = chest.slice(chest.indexOf('const celebrate = '), chest.indexOf('const open = async'));
+  const lidLine = celebrate.slice(celebrate.indexOf('lid.value = withSequence('), celebrate.indexOf('pop.value = withSequence('));
+  assert.ok(/withTiming\(0, \{ duration: 90, easing: EASE\.in \}\)\);\s*$/.test(lidLine), 'the lid lands shut (its last step ends at 0)');
+  assert.ok(/seam\.value = withSequence\([\s\S]*withTiming\(0, \{ duration: 260/.test(celebrate), 'the light goes back in with the lid');
+  assert.ok(/seam\.value = 0; lid\.value = 0;/.test(chest), 'reduced motion: a whole shut chest');
+});
+
+test('wave 3 round 4: Awesome! never moves after it shows, and the CTA is pinned under the scrolling card', () => {
+  const modal = read('src/components/CoinLevelingModal.tsx');
+  const scrollEnd = modal.indexOf('</ScrollView>');
+  assert.ok(modal.indexOf('── The one CTA ──') > scrollEnd, 'the one CTA sits outside the ScrollView (an iPhone SE sees Level Up! on the first frame)');
+  assert.ok(/<Reanimated\.View style=\{ctaStyle\} pointerEvents=\{state === 'leveling' \|\| \(state === 'success' && !ctaLive\) \? 'none' : 'auto'\}>/.test(modal), 'not tappable until it has landed');
+  const snug = modal.slice(modal.indexOf('  const snug = () => {'), modal.indexOf('  if (!rideCoin) return null;'));
+  assert.ok(/if \(snugDone\.current \|\| outer <= 0 \|\| inner <= 0\) return;/.test(snug), 'it fits once, on the first measure');
+  assert.ok(snug.indexOf('held.value = uiTiming(') < snug.indexOf('revealCta(SUCCESS_SNUG_MS)'), 'Awesome! pops in once the card has its final height');
+  assert.ok(!/SUCCESS_SNUG_AFTER_MS/.test(modal), 'no hollow hold before the fit');
+  assert.ok(/hideCta\(\);/.test(modal.slice(modal.indexOf('const handleLevelUp'), modal.indexOf('const plan = levelUpFx'))), 'hidden under the charge bar from the tap');
+  assert.ok(/flexShrink: 1,\s*\}\}>\s*<ScrollView/.test(modal), 'the card shrinks to the screen, the scroll area gives way, the CTA stays');
+  assert.ok(/<OneTimeTip id="first_level_up" ready=\{visible && \(state === 'preview' \|\| state === 'leveling'\) && currentLevel >= 2\}/.test(modal), 'a kid who missed the tip sees it once on the next coin card');
+});
+
+test('wave 3 round 4: tier plates have ink edges, Prismatic has a few long rays, rings glow without shadows', () => {
+  const tierPlateLook = pureFrom('src/components/coin/TierPlate.tsx', 'tierPlateLook', { coinTier: loadTs('src/constants/coinTiers.ts').coinTier });
+  const prism = tierPlateLook(4), legend = tierPlateLook(5);
+  assert.ok(prism.rays <= 8 && prism.reach >= 1.38, 'Prismatic: 8 chunky rays, not a gear edge');
+  assert.ok(legend.rays > prism.rays && legend.reach > prism.reach, 'Legendary is still the biggest sunburst');
+  const plate = read('src/components/coin/TierPlate.tsx');
+  assert.ok(/borderBottomColor: PLATE_INK/.test(plate), 'every ray has an ink edge behind it');
+  assert.ok(/backgroundColor: PLATE_INK/.test(plate), 'the disc has an ink outline');
+  const demo = read('src/components/CoinUpgradeDemo.tsx');
+  assert.ok(!/shadowRadius: 1[0-2]\b/.test(demo), 'the pulsing and spinning rings have no iOS shadow');
+  assert.equal((demo.match(/<View style=\{\[s\.softRing/g) || []).length, 2, 'they glow with a soft drawn ring instead');
+});
+
+test('wave 3 round 4: the queued or recovered Set Complete times like the inline one', () => {
+  const reveal = read('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  assert.ok(reveal.includes('entering={still || bridged ? undefined : FadeIn.duration(DURATION.base)}'), 'one cross-fade time for both paths');
 });

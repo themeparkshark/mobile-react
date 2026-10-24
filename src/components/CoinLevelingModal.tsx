@@ -47,6 +47,7 @@ function ridDay(iso: string): string {
 }
 import * as RootNavigation from '../RootNavigation';
 import OneTimeTip from './help/OneTimeTip';
+import { useHelp } from './help/HelpProvider';
 import CoinTopUpOffer from './money/CoinTopUpOffer';
 import { storeAvailable } from '../services/purchases';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
@@ -78,8 +79,10 @@ const TIP_ROOM = 96;
 /** Prize chips: smaller on a short phone so two fit on one row. */
 const CHIP = SHORT_PHONE ? { icon: 22, font: 17, padX: 8 } : { icon: 26, font: 20, padX: 10 };
 export const SUCCESS_SNUG_GAP = 12;
-const SUCCESS_SNUG_AFTER_MS = 950;
-export const SUCCESS_SNUG_MS = 280;
+/** The card fits its payoff while the success content stamps in (the button is not on screen yet), then Awesome! pops in. */
+export const SUCCESS_SNUG_MS = 180;
+/** If the success content is never measured (a starved layout pass), Awesome! still shows by then. */
+const SUCCESS_CTA_FALLBACK_MS = 600;
 
 interface Props {
   visible: boolean;
@@ -193,13 +196,36 @@ export default function CoinLevelingModal({
   const heldTarget = useRef(0);
   const heldStyle = useAnimatedStyle(() => ({ minHeight: held.value }));
   const lockHeight = (value: number) => { cancelUi(held); held.value = value; heldTarget.current = value; };
-  // The success content's measured heights (the box that grows, and what is inside it), and whether it has settled.
+  // The success content's measured heights (the box that grows, and what is inside it).
   const successBox = useRef({ outer: 0, inner: 0 });
-  const successSettled = useRef(false);
   // Whether the success card had room for the first-time tip (decided once per success, from its spare space).
   const [tipRoom, setTipRoom] = useState(false);
-  const tipRoomDecided = useRef(false);
-  const snugBusy = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The card fits its payoff once per success, on the first measure, before Awesome! is on screen.
+  const snugDone = useRef(false);
+  const { tipsReady, hasSeenTip } = useHelp();
+  // Awesome! pops in only once the card has its final height, so the button never moves after it shows.
+  const ctaIn = useSharedValue(1);
+  const [ctaLive, setCtaLive] = useState(true);
+  const ctaShown = useRef(true);
+  const ctaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ctaStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, ctaIn.value * 1.6), transform: [{ scale: 0.72 + 0.28 * ctaIn.value }] }));
+  const hideCta = () => {
+    if (ctaTimer.current) { clearTimeout(ctaTimer.current); ctaTimer.current = null; }
+    ctaShown.current = false; cancelUi(ctaIn); ctaIn.value = 0; setCtaLive(false);
+  };
+  const showCtaNow = () => {
+    if (ctaTimer.current) { clearTimeout(ctaTimer.current); ctaTimer.current = null; }
+    ctaShown.current = true; cancelUi(ctaIn); ctaIn.value = 1; setCtaLive(true);
+  };
+  const revealCta = (after: number) => {
+    if (ctaShown.current) return;
+    ctaShown.current = true;
+    if (ctaTimer.current) { clearTimeout(ctaTimer.current); ctaTimer.current = null; }
+    cancelUi(ctaIn);
+    if (reducedMotionRef.current) { ctaIn.value = 1; setCtaLive(true); return; }
+    ctaIn.value = uiDelay(after, uiSpring(1, SPRING.pop));
+    ctaTimer.current = setTimeout(() => { ctaTimer.current = null; if (mounted.current) setCtaLive(true); }, after);
+  };
 
   // The level-up show, on the UI thread: the charge bar, the gold gathering behind the coin,
   // the burst bloom, sparkles and one shine across the new coin (ui/motion.ts language).
@@ -263,7 +289,7 @@ export default function CoinLevelingModal({
       setBurstKey(0); // 0 never plays: the burst waits for this card's own success
       setUnlocks(null); setLevelXp(0); setSlowServer(false);
       stopUiShow(); charge.value = 0; gold.value = 0; bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0; bloomOut.value = 0; ringPulse.value = 0;
-      windup.value = 0; gatherRing.value = 0; setAnchor(null); lockHeight(0);
+      windup.value = 0; gatherRing.value = 0; setAnchor(null); lockHeight(0); showCtaNow();
       cancelUi(grow); cancelUi(plate); grow.value = 0; plate.value = 0;
       setFanScale(levelUpPayoff(Math.min(rideCoin.current_level + 1, rideCoin.max_level)).fanScale);
       const isMax = rideCoin.current_level >= rideCoin.max_level;
@@ -301,20 +327,16 @@ export default function CoinLevelingModal({
   // started earlier can finish on the UI thread before a busy JS thread mounts the card, which then mounts
   // with the stale small scale and sits there (seen for over a second in release JS under load).
   useEffect(() => {
-    successSettled.current = false;
-    if (state !== 'success') { tipRoomDecided.current = false; setTipRoom(false); }
-    if (snugBusy.current) { clearTimeout(snugBusy.current); snugBusy.current = null; }
-    if (state !== 'success') return undefined;
-    // Once the punch and the stamp have settled (and a first-time tip has had its moment to appear), the card
-    // eases down to fit the payoff. Reduced motion fits it at once.
-    const settle = setTimeout(() => { successSettled.current = true; snugRef.current(); }, reducedMotionRef.current ? 0 : SUCCESS_SNUG_AFTER_MS);
+    if (state !== 'success') { snugDone.current = false; setTipRoom(false); return undefined; }
+    // The card fits the payoff on its first measure (snug), then Awesome! pops in. This only backs that up.
+    const fallback = setTimeout(() => revealCtaRef.current(0), SUCCESS_CTA_FALLBACK_MS);
     cancelUi(successIn);
-    if (reducedMotionRef.current) { successIn.value = 1; return () => clearTimeout(settle); }
+    if (reducedMotionRef.current) { successIn.value = 1; return () => clearTimeout(fallback); }
     successIn.value = 0;
     successIn.value = uiSpring(1, SPRING.stamp);
-    return () => clearTimeout(settle);
+    return () => clearTimeout(fallback);
   }, [state]);
-  useEffect(() => () => { if (snugBusy.current) clearTimeout(snugBusy.current); }, []);
+  useEffect(() => () => { if (ctaTimer.current) clearTimeout(ctaTimer.current); }, []);
 
   useEffect(() => {
     if (!reducedMotion) return;
@@ -328,29 +350,29 @@ export default function CoinLevelingModal({
   // `!rideCoin` return: TaskCoinModal mounts this sheet with no coin, so a hook after the
   // return ran only once a coin loaded ("Rendered more hooks", a fatal crash on coin tap).
   const levelUpPress = useRef<() => void>(() => undefined);
-  const snugRef = useRef<() => void>(() => undefined);
+  const revealCtaRef = useRef<(after: number) => void>(() => undefined);
+  revealCtaRef.current = revealCta;
   useDevAutoPress(visible ? 'level_up' : 'level_up_off', () => levelUpPress.current(), 2500);
 
-  // Fit the held height to the success content: the spare space in the growing success box (beyond a small
-  // breathing gap) comes off the held minimum. Layout events while it eases are ignored, then it checks once more.
+  // Fit the held height to the success content, once, on its first measure: the spare space in the success box
+  // (beyond a small breathing gap) comes off the held minimum while the content stamps in, then Awesome! pops in at
+  // its final spot. On the first-ever level-up with room for the tip, the card keeps that room (the tip fills it).
   const snug = () => {
     const { outer, inner } = successBox.current;
-    if (!tipRoomDecided.current && outer > 0 && inner > 0) {
-      tipRoomDecided.current = true;
-      setTipRoom(outer - inner - SUCCESS_BOX_PAD * 2 >= TIP_ROOM);
-    }
-    if (!successSettled.current || snugBusy.current) return;
-    if (outer <= 0 || inner <= 0 || heldTarget.current <= 0) return;
-    const spare = outer - inner - SUCCESS_BOX_PAD * 2 - SUCCESS_SNUG_GAP;
-    if (spare <= 2) return;
+    if (snugDone.current || outer <= 0 || inner <= 0) return;
+    snugDone.current = true;
+    const room = outer - inner - SUCCESS_BOX_PAD * 2;
+    const showTip = tipsReady && !hasSeenTip('first_level_up') && room >= TIP_ROOM;
+    setTipRoom(showTip);
+    const spare = room - SUCCESS_SNUG_GAP;
+    if (showTip || spare <= 2 || heldTarget.current <= 0) { revealCta(0); return; }
     const target = Math.max(0, heldTarget.current - spare);
     heldTarget.current = target;
     cancelUi(held);
-    if (reducedMotionRef.current) { held.value = target; return; }
-    held.value = uiTiming(target, { duration: SUCCESS_SNUG_MS, easing: EASE.inOut });
-    snugBusy.current = setTimeout(() => { snugBusy.current = null; snugRef.current(); }, SUCCESS_SNUG_MS + 40);
+    if (reducedMotionRef.current) { held.value = target; revealCta(0); return; }
+    held.value = uiTiming(target, { duration: SUCCESS_SNUG_MS, easing: EASE.out });
+    revealCta(SUCCESS_SNUG_MS);
   };
-  snugRef.current = snug;
 
   if (!rideCoin) return null;
 
@@ -367,6 +389,7 @@ export default function CoinLevelingModal({
   const reveal = state === 'success' ? revealCard(unlocks, levelXp) : null;
   const hasEnergy = playerEnergy >= rideCoin.energy_to_next_level;
   const hasParts = playerParts >= rideCoin.parts_to_next_level;
+  const ctaPinned = (state === 'success' || (!showEditions && !isMaxLevel && (state === 'preview' || state === 'confirm' || state === 'leveling')));
   const canLevelUp = !isMaxLevel && rideCoin.is_unlocked && hasEnergy && hasParts;
   const yourRides = (rideCoin as CollectedRideCoin).your_rides ?? null;
   const missingAction = rideCoin.is_unlocked && !isMaxLevel
@@ -381,6 +404,8 @@ export default function CoinLevelingModal({
 
     setState('leveling');
     measureAnchor();
+    // Under the charge bar the button waits hidden; Awesome! pops in once the success card has its final height.
+    hideCta();
     setUnlocks(null);
     setLevelXp(0);
     const plan = levelUpFx(nextLevel, rideCoin.parts_to_next_level, { reducedMotion, dimFlashingLights: isDimFlashingLightsEnabled() });
@@ -503,7 +528,7 @@ export default function CoinLevelingModal({
         ? 'This coin changed. Close its detail and reopen it to refresh your level.'
         : 'Your upgrade could not be confirmed. Check your connection and try again.');
       setState('preview');
-      cancelUi(coinPop); windup.value = 0; gatherRing.value = 0; coinPop.value = 1; lockHeight(0);
+      cancelUi(coinPop); windup.value = 0; gatherRing.value = 0; coinPop.value = 1; lockHeight(0); showCtaNow();
       cancelUi(grow); cancelUi(plate); grow.value = 0; plate.value = 0;
       progressAnim.setValue(0);
       charge.value = 0; gold.value = 0; bloomOut.value = 0; setSlowServer(false);
@@ -529,7 +554,7 @@ export default function CoinLevelingModal({
       cancelUi(coinPop); cancelUi(successIn); coinPop.value = 1; successIn.value = 0;
       cancelUi(grow); cancelUi(plate); grow.value = 0; plate.value = 0;
       progressAnim.setValue(0);
-      charge.value = 0; gold.value = 0; bloomOut.value = 0; lockHeight(0);
+      charge.value = 0; gold.value = 0; bloomOut.value = 0; lockHeight(0); showCtaNow();
       onClose();
     });
   };
@@ -633,12 +658,13 @@ export default function CoinLevelingModal({
           shadowOpacity: 0.3,
           shadowRadius: 16,
           overflow: 'hidden',
+          flexShrink: 1,
         }}>
           <ScrollView
             onLayout={event => { viewportHeight.current = event.nativeEvent.layout.height; }}
             bounces={false}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 14 }}
+            contentContainerStyle={{ paddingBottom: ctaPinned ? 4 : 14 }}
           >
             <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: state === 'success' ? 185 + SUCCESS_TEXT_DROP : 185,
               backgroundColor: '#168AD7', borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }} />
@@ -1067,6 +1093,10 @@ export default function CoinLevelingModal({
                     <View style={{ alignSelf: 'stretch', opacity: state === 'leveling' ? 0 : 1 }}>
                       <OneTimeTip id="coin_card" ready={visible && (state === 'preview' || state === 'leveling')} compact instantExit
                         style={{ alignSelf: 'stretch', marginBottom: 8 }} />
+                      {/* A kid whose first success card had no room for its tip (a short phone, or a quick close)
+                          sees it here once, on the next coin card after a level-up. */}
+                      <OneTimeTip id="first_level_up" ready={visible && (state === 'preview' || state === 'leveling') && currentLevel >= 2}
+                        compact instantExit style={{ alignSelf: 'stretch', marginBottom: 8 }} />
                     </View>
                   </>
                 )}
@@ -1155,59 +1185,6 @@ export default function CoinLevelingModal({
                     </View>
 
                   </Reanimated.View>
-                )}
-
-                {/* ── The one CTA ── Level Up!, then the charge bar in its spot, then Awesome!: one button that never
-                    remounts (a new button's art decoded a few frames late on the success card) and one height, so
-                    nothing in the card moves from the tap to the settled card. */}
-                {(state === 'success' || (!showEditions && !isMaxLevel && (state === 'preview' || state === 'confirm' || state === 'leveling'))) && (
-                  <View style={{ alignSelf: 'stretch', height: CTA_HEIGHT, justifyContent: 'center' }}>
-                    {/* Never hidden: the charge bar covers it instead (an iOS image under a hidden parent drew late once shown again). */}
-                    <View pointerEvents={state === 'leveling' ? 'none' : 'auto'}>
-                      <YellowButton
-                        estimatedWidth={SUCCESS_CTA_WIDTH}
-                        text={state === 'success' ? 'Awesome!' : canLevelUp || !missingAction ? 'Level Up!' : missingAction.label}
-                        disabled={state !== 'success' && !canLevelUp && !missingAction}
-                        onPress={() => {
-                          if (state === 'success') { handleClose(); return; }
-                          if (canLevelUp || !missingAction) return handleLevelUp();
-                          if (missingAction.kind === 'parts' && onPlayInLine) {
-                            pendingLinePlayRef.current = true; handleClose();
-                          } else if (missingAction.kind === 'energy') {
-                            pendingExploreRef.current = true; handleClose();
-                          } else {
-                            setShowPartsHelp(true);
-                          }
-                        }}
-                      />
-                    </View>
-                    {state === 'leveling' && (
-                      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center',
-                        backgroundColor: '#D9F5FF' }}
-                        accessible accessibilityLiveRegion="polite"
-                        accessibilityLabel={slowServer ? 'Almost there' : 'Powering up your coin'}>
-                        {/* A dark track with a bright gold fill: easy to see on the pale card. */}
-                        <View style={{
-                          width: '86%', height: 24, borderRadius: 12,
-                          backgroundColor: '#0b3a66', borderWidth: 3, borderColor: '#ffffff',
-                          overflow: 'hidden', marginBottom: 8,
-                        }}>
-                          <Reanimated.View style={[{
-                            position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%',
-                            backgroundColor: '#ffcf3b', transformOrigin: 'left',
-                          }, chargeStyle]}>
-                            <View style={{ position: 'absolute', left: 0, right: 0, top: 2, height: 5, borderRadius: 3,
-                              backgroundColor: '#fff2b0' }} />
-                          </Reanimated.View>
-                        </View>
-                        {/* The label swaps on the UI thread (a starved JS thread can't hold it on Powering up!). */}
-                        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                          <Reanimated.Text style={[LABEL_STYLE, poweringStyle]}>Powering up!</Reanimated.Text>
-                          <Reanimated.Text style={[LABEL_STYLE, { position: 'absolute' }, almostStyle]}>Almost there!</Reanimated.Text>
-                        </View>
-                      </View>
-                    )}
-                  </View>
                 )}
 
                 {!showEditions && !isMaxLevel && (state === 'preview' || state === 'confirm' || state === 'leveling') && (
@@ -1328,6 +1305,59 @@ export default function CoinLevelingModal({
 
               </Reanimated.View>
           </ScrollView>
+          {/* ── The one CTA ── pinned under the scrolling card, so a short phone shows it on the first frame. Level Up!, then the charge bar in its spot, then Awesome!: one button that never
+              remounts (a new button's art decoded a few frames late on the success card) and one height, so
+              nothing in the card moves from the tap to the settled card. */}
+          {ctaPinned && (
+            <View style={{ alignSelf: 'stretch', height: CTA_HEIGHT, justifyContent: 'center', marginHorizontal: 14, marginBottom: 14 }}>
+              {/* Never unmounted: the charge bar covers it instead (an iOS image under a hidden parent drew late once shown
+                  again). On success it pops in once the card has its final height, so it never moves after it shows. */}
+              <Reanimated.View style={ctaStyle} pointerEvents={state === 'leveling' || (state === 'success' && !ctaLive) ? 'none' : 'auto'}>
+                <YellowButton
+                  estimatedWidth={SUCCESS_CTA_WIDTH}
+                  text={state === 'success' ? 'Awesome!' : canLevelUp || !missingAction ? 'Level Up!' : missingAction.label}
+                  disabled={state !== 'success' && !canLevelUp && !missingAction}
+                  onPress={() => {
+                    if (state === 'success') { handleClose(); return; }
+                    if (canLevelUp || !missingAction) return handleLevelUp();
+                    if (missingAction.kind === 'parts' && onPlayInLine) {
+                      pendingLinePlayRef.current = true; handleClose();
+                    } else if (missingAction.kind === 'energy') {
+                      pendingExploreRef.current = true; handleClose();
+                    } else {
+                      setShowPartsHelp(true);
+                    }
+                  }}
+                />
+              </Reanimated.View>
+              {state === 'leveling' && (
+                <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: '#D9F5FF' }}
+                  accessible accessibilityLiveRegion="polite"
+                  accessibilityLabel={slowServer ? 'Almost there' : 'Powering up your coin'}>
+                  {/* A dark track with a bright gold fill: easy to see on the pale card. */}
+                  <View style={{
+                    width: '86%', height: 24, borderRadius: 12,
+                    backgroundColor: '#0b3a66', borderWidth: 3, borderColor: '#ffffff',
+                    overflow: 'hidden', marginBottom: 8,
+                  }}>
+                    <Reanimated.View style={[{
+                      position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%',
+                      backgroundColor: '#ffcf3b', transformOrigin: 'left',
+                    }, chargeStyle]}>
+                      <View style={{ position: 'absolute', left: 0, right: 0, top: 2, height: 5, borderRadius: 3,
+                        backgroundColor: '#fff2b0' }} />
+                    </Reanimated.View>
+                  </View>
+                  {/* The label swaps on the UI thread (a starved JS thread can't hold it on Powering up!). */}
+                  <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                    <Reanimated.Text style={[LABEL_STYLE, poweringStyle]}>Powering up!</Reanimated.Text>
+                    <Reanimated.Text style={[LABEL_STYLE, { position: 'absolute' }, almostStyle]}>Almost there!</Reanimated.Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       </Animated.View>
 

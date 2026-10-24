@@ -2,11 +2,18 @@ import { View } from 'react-native';
 import Reanimated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { coinTier } from '../../constants/coinTiers';
 
+/** The dark ink every ray and the disc are outlined in (Alex's style: every shape has an ink edge). */
+export const PLATE_INK = '#05346e';
+/** How far the ink shows past a ray's sides and its tip (pt). */
+const INK_SIDE = 2.5;
+const INK_TIP = 4;
+
 /** How each tier's plate looks: a disc only (Silver, Gold), or rays (count, reach in coin radii, two colours). */
 export function tierPlateLook(level: number): { readonly rays: number; readonly reach: number; readonly colors: readonly [string, string] } {
   const tier = coinTier(level);
-  if (tier.fx === 'starburst') return { rays: 16, reach: 1.42, colors: [tier.ring, '#ffe27a'] };
-  if (tier.fx === 'rays') return { rays: 12, reach: 1.32, colors: [tier.ring, '#ffffff'] };
+  if (tier.fx === 'starburst') return { rays: 16, reach: 1.5, colors: [tier.ring, '#ffe27a'] };
+  // Prismatic: a few long, chunky rays (a hand-drawn badge), never a fine gear edge.
+  if (tier.fx === 'rays') return { rays: 8, reach: 1.4, colors: [tier.ring, '#ffffff'] };
   if (tier.level >= 6) return { rays: 10, reach: 1.3, colors: [tier.ring, tier.ringDeep] };
   return { rays: 0, reach: 1.22, colors: [tier.ring, tier.ringDeep] };
 }
@@ -36,10 +43,16 @@ export default function TierPlate({ level, size, progress }: {
       {Array.from({ length: look.rays }, (_, i) => (
         <View key={i} style={{ position: 'absolute', width: reach * 2, height: reach * 2, alignItems: 'center',
           transform: [{ rotate: `${(360 / look.rays) * i}deg` }] }}>
+          {/* The ink edge: the same ray a little bigger, behind it. */}
+          <View style={{ position: 'absolute', top: -INK_TIP, width: 0, height: 0, borderLeftWidth: rayHalf + INK_SIDE,
+            borderRightWidth: rayHalf + INK_SIDE, borderBottomWidth: rayLen + INK_TIP,
+            borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: PLATE_INK }} />
           <View style={{ width: 0, height: 0, borderLeftWidth: rayHalf, borderRightWidth: rayHalf, borderBottomWidth: rayLen,
             borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: look.colors[i % 2] }} />
         </View>
       ))}
+      <View style={{ position: 'absolute', width: disc * 2 + 5, height: disc * 2 + 5, borderRadius: disc + 2.5,
+        backgroundColor: PLATE_INK }} />
       <View style={{ position: 'absolute', width: disc * 2, height: disc * 2, borderRadius: disc, backgroundColor: tier.halo,
         borderWidth: 4, borderColor: tier.ring }} />
     </Reanimated.View>

@@ -13,6 +13,7 @@ const progressionStubs = {
   '../gamekit/Haptics': { queueHaptic() {} },
   '../audio/sfxLimiter': { playLimited: (_name, _request, play) => { play(); return true; }, SFX_PRIORITY: { whoosh: 1, tap: 2, land: 3 } },
   '../hooks/usePresentationQueue': { usePresentationSlot: () => ({ visible: false, done() {} }) },
+  './help/HelpProvider': { useHelp: () => ({ tipsReady: false, hasSeenTip: () => true }) },
 };
 function recoveredWin() {
   const navigation = [], prefetches = [], milestoneReads = [];

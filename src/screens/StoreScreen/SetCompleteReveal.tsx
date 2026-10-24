@@ -262,8 +262,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   return (
     <RevealLayer inline={inline} onClose={() => leave(false)} onShown={onShown}>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
-      {/* Inline (over the try-on): a quick cross-fade across the sheet. Bridged (over the navy cover): at once. */}
-      <Animated.View entering={still || bridged ? undefined : FadeIn.duration(inline ? DURATION.base : 260)} style={styles.fill} {...swipe.panHandlers}>
+      {/* Inline (over the try-on) and queued or recovered (over the shop): the same quick cross-fade. Bridged (over the navy cover): at once. */}
+      <Animated.View entering={still || bridged ? undefined : FadeIn.duration(DURATION.base)} style={styles.fill} {...swipe.panHandlers}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
         <Pressable onPress={() => leave(false)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close"
           style={[styles.close, { top: insets.top + 10 }]}>
