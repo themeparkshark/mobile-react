@@ -10,6 +10,7 @@ import { BOTTOM_BAR_OVERHANG } from '../../components/Wrapper';
 import YellowButton from '../../components/YellowButton';
 import { LocationStatusContext } from '../../context/LocationProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useReduceMotionPreference } from '../../hooks/useReducedGameMotion';
 
 /** "Not now" is a real choice: games and the ride coins to win, with location one tap away. */
 export const NOT_NOW_COPY = {
@@ -42,7 +43,7 @@ const FINDS = [
 ];
 
 /** One find floating on the backdrop, bobbing out of step with the others. */
-function Find({ source, i }: { source: number; i: number }) {
+function Find({ source, i, reduced }: { source: number; i: number; reduced: boolean }) {
   const p = useSharedValue(0);
   useEffect(() => {
     p.value = withDelay(i * 300, withRepeat(withTiming(1, { duration: 1800 + i * 200, easing: Easing.inOut(Easing.sin) }), -1, true));
@@ -50,7 +51,7 @@ function Find({ source, i }: { source: number; i: number }) {
   }, [p, i]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: -p.value * 8 }, { rotate: `${(i % 2 ? 1 : -1) * (6 - p.value * 12)}deg` }] }));
   return (
-    <Animated.View entering={ZoomIn.delay(350 + i * 120).springify().damping(10)} style={styles.find}>
+    <Animated.View entering={reduced ? undefined : ZoomIn.delay(350 + i * 120).springify().damping(10)} style={styles.find}>
       <Animated.View style={style}>
         <Image source={source} style={styles.findImg} contentFit="contain" />
       </Animated.View>
@@ -77,18 +78,24 @@ export default function PermissionsNotGranted() {
   const compact = useWindowDimensions().height < 700;
   // Finn's cap rises above the card: the card layer starts below the status bar, plus his overhang.
   const top = useSafeAreaInsets().top;
-  if (playing) return <NotNowPlay asking={asking} onTurnOn={turnOn} arcadeOpen={arcadeOpen} setArcadeOpen={setArcadeOpen} compact={compact} top={top} />;
+  // Reduce Motion: no entering animations at all. With the system setting on, a
+  // layout animation can leave its view at its first frame (opacity 0): the card would never show.
+  // Null until iOS answers (a frame or two): the card waits for it, so motion-on players still get the entrance.
+  const preference = useReduceMotionPreference();
+  const reduced = preference !== false;
+  if (preference === null) return <><Backdrop /><View style={styles.wrap}><FullBackdrop /></View></>;
+  if (playing) return <NotNowPlay reduced={reduced} asking={asking} onTurnOn={turnOn} arcadeOpen={arcadeOpen} setArcadeOpen={setArcadeOpen} compact={compact} top={top} />;
 
   return (
     <>
     <Backdrop />
     <View style={[styles.wrap, { paddingTop: top + 8 + (compact ? FINN_OVERHANG_COMPACT : FINN_OVERHANG) }]}>
       <FullBackdrop />
-      <Animated.View entering={FadeInUp.duration(450).springify().damping(14)} style={styles.card}>
+      <Animated.View entering={reduced ? undefined : FadeInUp.duration(450).springify().damping(14)} style={styles.card}>
         <Image source={FINN} style={[styles.shark, compact && styles.sharkCompact]} contentFit="contain" accessibilityLabel="Finn the shark" />
         <Text style={[styles.title, compact && styles.titleCompact]}>Let’s find your first treasures!</Text>
         <View style={[styles.finds, compact && styles.findsCompact]}>
-          {FINDS.map((source, i) => <Find key={i} source={source} i={i} />)}
+          {FINDS.map((source, i) => <Find key={i} source={source} i={i} reduced={reduced} />)}
         </View>
         {/* Two short lines a 7-year-old can read; the pictures above carry the rest. */}
         <Text style={styles.body}>Treasures pop up near you, even at home!</Text>
@@ -108,15 +115,15 @@ export default function PermissionsNotGranted() {
 }
 
 /** The "Not now" card: two big picture buttons, then location and News as quiet options. */
-function NotNowPlay({ asking, onTurnOn, arcadeOpen, setArcadeOpen, compact, top }: {
-  asking: boolean; onTurnOn: () => void; arcadeOpen: boolean; setArcadeOpen: (open: boolean) => void; compact: boolean; top: number;
+function NotNowPlay({ reduced, asking, onTurnOn, arcadeOpen, setArcadeOpen, compact, top }: {
+  reduced: boolean; asking: boolean; onTurnOn: () => void; arcadeOpen: boolean; setArcadeOpen: (open: boolean) => void; compact: boolean; top: number;
 }) {
   return (
     <>
     <Backdrop />
     <View style={[styles.wrap, { paddingTop: top + 8 + (compact ? FINN_OVERHANG_COMPACT : FINN_OVERHANG) }]}>
       <FullBackdrop />
-      <Animated.View entering={FadeInUp.duration(380).springify().damping(14)} style={styles.card}>
+      <Animated.View entering={reduced ? undefined : FadeInUp.duration(380).springify().damping(14)} style={styles.card}>
         <Image source={FINN} style={[styles.shark, compact && styles.sharkCompact]} contentFit="contain" accessibilityLabel="Finn the shark" />
         <Text style={[styles.title, compact && styles.titleCompact]}>{NOT_NOW_COPY.title}</Text>
         <View style={styles.tiles}>

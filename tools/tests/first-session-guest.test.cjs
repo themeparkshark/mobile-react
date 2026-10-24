@@ -515,3 +515,16 @@ test('shelf hand-off: the shelf is mounted hidden during the game, and the card 
   const card = taste.slice(taste.indexOf('function SaveCard'), taste.indexOf('function ProgressDots'));
   assert.doesNotMatch(card, /<Text style=\{styles\.body\}>/, 'title and one line above the button');
 });
+
+test('Reduce Motion: the sign-in card and the location primer never use an entering animation (it left them invisible)', () => {
+  const taste = read('src/screens/ExploreScreen/GuestTaste.tsx');
+  const card = taste.slice(taste.indexOf('function SaveCard'), taste.indexOf('function ProgressDots'));
+  assert.match(card, /entering=\{reduced \? undefined : FadeIn\.duration\(260\)\}/);
+  assert.match(taste, /<SaveCard reduced=\{reduced\}/);
+  const primer = read('src/screens/ExploreScreen/PermissionsNotGranted.tsx');
+  assert.doesNotMatch(primer, /entering=\{(FadeInUp|ZoomIn)/, 'every entering is guarded');
+  assert.match(primer, /if \(preference === null\) return/);
+  for (const file of ['src/screens/ExploreScreen/GuestTaste.tsx', 'src/screens/ExploreScreen/PermissionsNotGranted.tsx']) {
+    for (const m of read(file).matchAll(/entering=\{([^}]*)\}/g)) assert.match(m[1], /^(reduced|undefined)/, `${file}: ${m[1]}`);
+  }
+});
