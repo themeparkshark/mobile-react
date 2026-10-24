@@ -57,10 +57,13 @@ type Run = {
   game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel' | 'duelWin' | 'duelPart' | 'rideMiss'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number;
   /** RIDE MISS: what the server said about the lost try (a ticket and coin fixture). */
   miss?: { ticketBack: boolean; ticketCost: number };
+  /** Whack plays itself (the game's own scripted player), so a release check can show a star run and a win streak. */
+  autoplay?: boolean;
 };
 
 const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'WHACK IN LINE', run: { game: 'tap', groupTurn: false, rideUpAfterMs: null } },
+  { label: 'WHACK IN LINE, AUTOPLAY', run: { game: 'tap', groupTurn: false, rideUpAfterMs: null, autoplay: true } },
   { label: 'WHACK, RIDE UP IN 8 S', run: { game: 'tap', groupTurn: false, rideUpAfterMs: 8000 } },
   { label: 'WHACK, LEFT LINE IN 8 S', run: { game: 'tap', groupTurn: false, rideUpAfterMs: 8000, endReason: 'left-queue' } },
   { label: 'WHACK, RIDE UP AT 1 S', run: { game: 'tap', groupTurn: false, rideUpAfterMs: 1000 } },
@@ -326,7 +329,7 @@ export default function QueueResultsCaptureScreen() {
       {/* SHORT PHONE: the game shell is drawn at the SE's exact 375 x 667 points, not just told the size. */}
       <ShellFrameContext.Provider value={shortPhone ? SE_FRAME : null}>
       <LinePlayMovementContext.Provider value={movement}>
-        {run && common && run.game === 'tap' ? <WhackAShark key={run.key} {...common} difficulty={2} taskName="Space Mountain" /> : null}
+        {run && common && run.game === 'tap' ? <WhackAShark key={run.key} {...common} difficulty={2} taskName="Space Mountain" autoplay={run.autoplay} /> : null}
         {run && common && run.game === 'shark' ? <SharkySwim key={run.key} {...common} difficulty={2} /> : null}
         {run && common && run.game === 'timing' ? <RhythmTapGame key={run.key} {...common} /> : null}
         {run && common && run.game === 'current' ? <CurrentQuestQueueGame key={run.key} {...common} taskName="Space Mountain" /> : null}
