@@ -322,3 +322,29 @@ test('the studio converter limits AAC overshoot instead of clipping it', () => {
   assert.match(src, /alimiter=limit=0\.84:attack=1:release=20:level=false:latency=true/);
   assert.match(src, /'-af', ONE_SHOT_LIMITER/);
 });
+
+test('music follows the moment: duck envelope and bar-line layer timing', () => {
+  const mix = loadTs('src/gamekit/core/audioMix.ts');
+  const d = map.MUSIC_RULES.duck;
+  const db = (g) => 20 * Math.log10(g);
+  assert.ok(Math.abs(db(mix.duckGainAt(d.attackMs, d.db, d.attackMs, d.holdMs, d.releaseMs)) + 6) < 0.01, '-6 dB at the end of the 60 ms attack');
+  assert.ok(Math.abs(db(mix.duckGainAt(d.attackMs + d.holdMs, d.db, d.attackMs, d.holdMs, d.releaseMs)) + 6) < 0.01, 'held for 400 ms');
+  assert.equal(mix.duckGainAt(d.attackMs + d.holdMs + d.releaseMs, d.db, d.attackMs, d.holdMs, d.releaseMs), 1, 'back to full over 400 ms');
+  // MusicDirector.switchTo('bar', fade): the crossfade is centred on the next bar line (>= 40 ms lead).
+  const text = read('src/assets/games/audio/studio.dev.generated.ts');
+  for (const [game, layers] of Object.entries(map.BED_LAYERS)) {
+    const m = new RegExp(`'${layers.base}': \\{[^}]*bpm: ([\\d.]+), beatsPerBar: (\\d+), offsetMs: (\\d+)`).exec(text);
+    if (!m) continue; // beds without a measured grid switch on the beat map instead
+    const clock = { bpm: +m[1], beatsPerBar: +m[2], offsetMs: +m[3] };
+    const bar = mix.barMs(clock);
+    for (const pos of [0, 333, bar - 30, bar * 3.5]) {
+      const target = mix.nextBarMs(clock, pos, 40);
+      const start = target - map.MUSIC_RULES.layerCrossfadeMs / 2;
+      assert.ok(target - pos >= 40, `${game}: lead`);
+      assert.ok(Math.abs(((target - clock.offsetMs) / bar) - Math.round((target - clock.offsetMs) / bar)) < 1e-6, `${game}: lands on a bar line`);
+      assert.ok(start < target && start + map.MUSIC_RULES.layerCrossfadeMs > target, `${game}: the 200 ms crossfade straddles the bar`);
+    }
+  }
+  const gameAudio = read('src/gamekit/audio/GameAudio.ts');
+  assert.match(gameAudio, /const wait = Math\.max\(0, target - pos - fadeMs \/ 2\);/, 'switchTo centres the fade on the grid point');
+});

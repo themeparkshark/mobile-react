@@ -332,7 +332,7 @@ export const MOMENTS = {
   }),
   'game.finish': m({
     group: 'win', label: 'Game over, nice try', beat: 'settle',
-    primary: 'shared/sh_clap', variant: 'shared/sting_lose', fallback: 'fx.reveal',
+    primary: 'shared/sh_clap', variant: 'line-party/sting_runner_up', fallback: 'fx.reveal',
     layers: [{ ref: 'shared/sh_sparkle', delayMs: 120, db: -4 }],
     mix: 'fx', gainDb: -1.6, measuredLufs: -16.4, variantGainDb: -2, maxVoices: 1,
     haptic: 'tap', hapticOffsetMs: 0,
