@@ -1,9 +1,9 @@
 import { Image, type ImageSource } from 'expo-image';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, useAnimatedProps, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
-  type SharedValue,
+  cancelAnimation, Easing, runOnJS, useAnimatedProps, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat,
+  withSequence, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import type { PaidRewards } from '../../api/endpoints/retention';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
@@ -21,6 +21,7 @@ import { COUNT, DURATION, PARTICLES, SPRING, flashPeak, momentBeats, momentParti
 import { EASE } from '../../ui/motionEasing';
 import RewardBurst from '../RewardBurst';
 import { useAmbient } from './power';
+import { NOT_YET, withDelayAfter } from './delayUntil';
 
 const BOX = require('../../../assets/images/retention/mystery-box.png');
 /** Everything around the chest and rows on a known-prize card (safe areas, ribbon, header, flame row, button, padding). */
@@ -41,6 +42,8 @@ export interface PrizeOrigin extends Point { readonly kind: RewardRow['kind']; r
 
 /** After this long the shake settles into a calm "Still opening..." (the request has its own 6 s timeout). */
 const STALL_MS = 6000;
+/** The strong gather shake never runs longer than this (then a calm glow and bob while a slow server answers). */
+export const GATHER_CAP_MS = 1500;
 
 /**
  * A chest you open, on the chest beats (momentBeats('chest')):
@@ -60,7 +63,7 @@ const STALL_MS = 6000;
  */
 export default function RewardReveal({ subtitle, closedArt, openArt, rewards, opening, onOpen, onDone, onWear, onPins,
   reducedMotion, doneLabel, footer, dropIn = false, autoOpen = false, expectRows, preview, fullSet = false, repeat = false, rare = false, onArrive,
-  gatherMs, delayMs: delayProp = 0 }: {
+  gatherMs, entered: enteredProp }: {
   readonly subtitle: string;
   readonly closedArt: ImageSource | number;
   readonly openArt: ImageSource | number;
@@ -95,18 +98,41 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   /** The lid's beat after the open starts (ms): the gather before the hit-stop. Defaults per chest (lidDelay). */
   readonly gatherMs?: number;
   /**
-   * The card is mounted early and enters this much later (the full set mounts its card while the check is still
-   * flying, so a busy JS thread never leaves a hold on the map): every beat waits for it on the UI thread.
+   * When the card really started entering (epoch ms; NOT_YET until then), written on the UI thread by the card's
+   * host. Every beat here (checks, gather, lid, burst, rows, button) is scheduled once and waits on the UI thread
+   * for this mark plus its own offset, so the full set's card can mount early and hidden, and no JS delay can ever
+   * put a beat before its card. Without it the card counts as entered when it mounts.
    */
-  readonly delayMs?: number;
+  readonly entered?: SharedValue<number>;
 }) {
   const ambient = useAmbient();
   const budget = usePowerBudget();
   const { width, height } = useWindowDimensions();
   const beats = momentBeats('chest', { reduced: reducedMotion });
-  // Frozen at mount: the entrance mark never moves on a later render.
-  const delayMs = useRef(delayProp).current;
-  const gatherFor = (gatherMs ?? lidDelay({ dropIn, autoOpen, repeat })) + delayMs;
+  const localEntered = useSharedValue(NOT_YET);
+  const entered = enteredProp ?? localEntered;
+  const mountedAt = useRef(Date.now());
+  /** The JS copy of the entrance (for haptics, sounds and the skip guard), learned from the UI thread. */
+  const enteredJs = useRef<number | null>(null);
+  const waitingEnter = useRef<((e: number) => void)[]>([]);
+  const learnEntered = (e: number) => {
+    // A mark left from an earlier card is never this card's entrance.
+    if (enteredJs.current !== null || e < mountedAt.current - 2000) return;
+    enteredJs.current = e;
+    const q = waitingEnter.current; waitingEnter.current = [];
+    q.forEach(f => f(e));
+  };
+  /** Runs `fn` with the entrance mark once the card has really started entering (at once if it has). */
+  const whenEntered = (fn: (e: number) => void) => {
+    if (enteredJs.current !== null) fn(enteredJs.current); else waitingEnter.current.push(fn);
+  };
+  useAnimatedReaction(() => entered.value, v => { if (v < NOT_YET / 2) runOnJS(learnEntered)(v); });
+  useLayoutEffect(() => { if (!enteredProp) localEntered.value = Date.now(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /** A JS timer at `offset` ms after the entrance (sounds and haptics follow the UI-thread beats). */
+  const afterEnter = (offset: number, fn: () => void) => whenEntered(e => later(fn, Math.max(0, e + offset - Date.now())));
+  /** How far into the card we are now (0 before it has entered). */
+  const sinceEnter = () => (enteredJs.current === null ? 0 : Math.max(0, Date.now() - enteredJs.current));
+  const gatherFor = gatherMs ?? lidDelay({ dropIn, autoOpen, repeat });
   // The chest never resizes at the reveal (no jump); the rows area takes the rest of the screen.
   // Small phones (SE) get a compact layout so every prize shows without scrolling.
   const compact = height < 720;
@@ -139,6 +165,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const sparkle = useSharedValue(0);
   const leak = useSharedValue(0);
   const lift = useSharedValue(reducedMotion ? 0 : 1);
+  /** A slow server: after the strong gather the chest settles into a calm glow and bob (never a frantic stuck chest). */
+  const calm = useSharedValue(0);
   const beam = useSharedValue(0);
   const tapRing = useSharedValue(0);
   /** The lid: 0 closed art, 1 open art (swapped on the UI thread on the hit-stop frame, never by a render). */
@@ -155,8 +183,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   /** When the lid pops (epoch ms), once the reveal is scheduled. */
   const lidAt = useRef(Number.MAX_SAFE_INTEGER);
   const openedAt = useRef(0);
-  /** When the open was asked for (tap, auto-open or the full-set hand-off): the lid pops gatherFor after this. */
-  const askedAt = useRef(0);
+  /** When the open was asked for, as ms after the entrance (0 for a chest that opens itself as it enters). */
+  const askedOff = useRef<number | null>(null);
   /** When the button takes taps (a tap before then skips the show). */
   const readyAt = useRef(Number.MAX_SAFE_INTEGER);
   const [stage, setStage] = useState<{ x: number; y: number } | null>(null);
@@ -189,7 +217,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const requestOpen = () => {
     if (asked.current || revealed) return;
     asked.current = true;
-    askedAt.current = Date.now();
+    // The lid's beat counts from the card's entrance (a full set asks while it is still hidden: offset 0).
+    askedOff.current = sinceEnter();
     onOpen();
   };
   const sparks = useMemo(() => momentParticles(PARTICLES.sparkles, budget, reducedMotion), [budget, reducedMotion]);
@@ -198,18 +227,18 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     REVEAL_ROWS.hold, repeat ? REPEAT_CHEST.first : REVEAL_ROWS.first),
     [rows, dropIn, repeat]);
   /**
-   * The whole reveal, planned once in the render that first sees the answer (epoch ms): the lid keeps its beat
-   * (gatherFor after the open was asked for, or at once if the answer came late), then every row's landing
-   * and the button. No state changes after this render until AWESOME.
+   * The whole reveal, planned once in the render that first sees the answer, as ms after the card's entrance:
+   * the lid keeps its beat (gatherFor after the open was asked for, or at once if the answer came late), then
+   * every row's landing and the button. No state changes after this render until AWESOME.
    */
   const plan = useRef<{ lid: number; pop: number; hold: number; rows: number[]; ready: number } | null>(null);
   if (revealed && !plan.current) {
-    const now = Date.now();
+    const now = sinceEnter();
     if (reducedMotion) {
       const rowsAt = rows.map((_, i) => now + 120 * (i + 1));
       plan.current = { lid: now, pop: now, hold: 0, rows: rowsAt, ready: now + 120 * rows.length + 300 };
     } else {
-      const lidAt_ = now + Math.max(0, (askedAt.current || now) + gatherFor - now);
+      const lidAt_ = Math.max(now, (askedOff.current ?? now) + gatherFor);
       const pop_ = lidAt_ + DURATION.hitStop;
       // The open chest holds big on its rays, then the first prize lands as it glides into its slot.
       const hold_ = repeat ? REPEAT_CHEST.heroHold : REVEAL_ROWS.heroHold;
@@ -242,8 +271,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     later(() => requestOpen(), LEVEL_CHEST.autoOpenAt);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The full set hands straight into the chest: it starts opening on the first frame.
-  useEffect(() => { if (autoOpen && !revealed && !opening) requestOpen(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The full set hands straight into the chest: it starts opening (its claim is already on the way) at once.
+  useLayoutEffect(() => { if (autoOpen && !revealed && !opening) requestOpen(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Idle: a gentle bob, so it asks to be tapped (a level chest rattles instead).
   const gathering = opening || autoOpen || revealed;
@@ -261,47 +290,52 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   // Gather: the shake builds and gold light grows behind the chest until the lid's mark (however soon the
   // server answers), with rising ticks (never a static line); it settles calmly if the server is slow.
   const gatherOn = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!gathering || gatherOn.current) return;
     gatherOn.current = true;
-    if (!askedAt.current) askedAt.current = Date.now();
+    if (askedOff.current === null) askedOff.current = sinceEnter();
     cancelAnimation(tapRing); tapRing.value = withTiming(0, { duration: 120 });
     const stall = setTimeout(() => { if (!rewardsRef.current) { setStalled(true); amp.value = withTiming(0, { duration: 200 }); } }, STALL_MS);
+    /** The gather starts when it is asked for: with the card's entrance for a chest that opens itself (UI-thread mark). */
+    const E = askedOff.current ?? 0;
+    const at = <T,>(off: number, a: T) => withDelayAfter(entered, E + off, a as never) as T;
     if (!reducedMotion) {
-      const D = delayMs;
-      shake.value = withDelay(D, withSequence(
+      // The strong shake builds for at most GATHER_CAP_MS (a quick server pops the lid well before), then a slow
+      // server sees a calm glow and bob, never a frantic chest that looks stuck.
+      const cycles = Math.max(1, Math.round((GATHER_CAP_MS - 330) / 110));
+      shake.value = at(0, withSequence(
         ...[4, -4, 7, -7, 10, -10].map(v => withTiming(v, { duration: 55 })),
-        withRepeat(withSequence(withTiming(12, { duration: 55 }), withTiming(-12, { duration: 55 })), 60, true),
+        withRepeat(withSequence(withTiming(12, { duration: 55 }), withTiming(-12, { duration: 55 })), cycles, true),
+        withTiming(0, { duration: 160, easing: EASE.out }),
       ));
-      gold.value = withDelay(D, withSequence(withTiming(0.42, { duration: repeat ? REPEAT_CHEST.gatherMs : beats.anticipation, easing: EASE.charge }),
+      calm.value = at(GATHER_CAP_MS, withRepeat(withSequence(
+        withTiming(-6, { duration: 700, easing: Easing.inOut(Easing.sin) }), withTiming(0, { duration: 700, easing: Easing.inOut(Easing.sin) })), -1));
+      gold.value = at(0, withSequence(withTiming(0.42, { duration: repeat ? REPEAT_CHEST.gatherMs : beats.anticipation, easing: EASE.charge }),
         withRepeat(withSequence(withTiming(0.55, { duration: 320 }), withTiming(0.42, { duration: 320 })), 12)));
-      squash.value = withDelay(D, withTiming(0.94, { duration: beats.anticipation, easing: EASE.charge }));
+      squash.value = at(0, withTiming(0.94, { duration: beats.anticipation, easing: EASE.charge }));
       // Rising ticks while it gathers (at most 8, each a step higher), only until the lid pops.
       for (let i = 0; i < 8; i++) {
-        const at = D + (i < 3 ? i * 140 : 420 + (i - 3) * 260);
-        later(() => {
+        afterEnter(E + (i < 3 ? i * 140 : 420 + (i - 3) * 260), () => {
           if (Date.now() >= lidAt.current) return;
           queueHaptic(i < 2 ? 'tickSelection' : 'tapLight'); playSfx('fx.coinTick', 0.35 + Math.min(0.5, i * 0.07));
-        }, at);
+        });
       }
     }
-    later(() => playSfx('fx.redeemOpen', 0.8), delayMs);
+    afterEnter(E, () => playSfx('fx.redeemOpen', 0.8));
     return () => { clearTimeout(stall); };
   }, [gathering]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hold, burst, settle, scheduled once on the UI thread from the lid's mark.
   const revealRan = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!revealed || revealRan.current) return;
     revealRan.current = true;
     const pl = plan.current;
     if (!pl) return;
-    const now = Date.now();
-    const since = (epoch: number) => Math.max(0, epoch - now);
-    const d = since(pl.lid);
-    lidAt.current = pl.lid;
-    openedAt.current = pl.pop;
-    readyAt.current = pl.ready;
+    // The plan is in ms after the card's entrance: the UI-thread beats wait for that mark; the JS refs and timers
+    // (skip guard, haptics, sounds) learn it from the UI thread.
+    whenEntered(e => { lidAt.current = e + pl.lid; openedAt.current = e + pl.pop; readyAt.current = e + pl.ready; });
+    const later_ = (off: number, fn: () => void) => afterEnter(off, fn);
     if (reducedMotion) {
       cancelAnimation(shake); shake.value = 0;
       lid.value = 1;
@@ -309,58 +343,63 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
       gold.value = withTiming(0.6, { duration: DURATION.quick });
       hintOut.value = withTiming(1, { duration: DURATION.quick });
       haptic('success'); playSfx('fx.reward');
-      rows.forEach((row, i) => later(() => {
+      rows.forEach((row, i) => later_(pl.rows[i], () => {
         haptic(isBigReward(row.kind) ? 'comboHeavy' : 'tickSelection');
         if (isBigReward(row.kind) && (!known || overflowRef.current)) scroll.current?.scrollToEnd({ animated: false });
-      }, since(pl.rows[i])));
-      doneIn.value = withDelay(since(pl.ready), withTiming(1, { duration: DURATION.quick }));
+      }));
+      doneIn.value = withDelayAfter(entered, pl.ready, withTiming(1, { duration: DURATION.quick }));
       return;
     }
     const H = DURATION.hitStop;
-    const P = since(pl.pop);
+    // Every beat below sits on a mark after the card's entrance (lid, pop, glide), read on the UI thread, so a late
+    // hand-over never reorders them against the card.
+    const atLid = <T,>(a: T) => withDelayAfter(entered, pl.lid, a as never) as T;
+    const atPop = <T,>(a: T) => withDelayAfter(entered, pl.pop, a as never) as T;
     // Gather keeps going right up to the mark: the shake stops, the squash finishes charging.
-    amp.value = withDelay(d, withTiming(0, { duration: 40 }));
-    squash.value = withSequence(withTiming(0.92, { duration: Math.max(1, d), easing: EASE.charge }),
+    amp.value = atLid(withTiming(0, { duration: 40 }));
+    squash.value = atLid(withSequence(withTiming(0.92, { duration: 1 }),
       // Hold: one frame held still and squashed.
-      withTiming(0.86, { duration: H, easing: EASE.in }), withSpring(1, { damping: 6, stiffness: 240 }));
+      withTiming(0.86, { duration: H, easing: EASE.in }), withSpring(1, { damping: 6, stiffness: 240 })));
     // A soft flash (capped; none brighter with Dim Flashing Lights).
-    flash.value = withDelay(d, withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 50 }),
+    flash.value = atLid(withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 50 }),
       withTiming(0, { duration: DURATION.flash })));
-    leak.value = withDelay(d, withTiming(0, { duration: 200 }));
+    leak.value = atLid(withTiming(0, { duration: 200 }));
     // The lid swaps to the open art on the hit-stop frame (UI thread).
-    lid.value = withDelay(P, withTiming(1, { duration: 0 }));
+    lid.value = atPop(withTiming(1, { duration: 0 }));
     // Burst: the lid pops past full size on the pop spring, rays bloom, coins fountain out, sparkles fly.
-    pop.value = withDelay(P, withSequence(withTiming(1.26, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
-    boost.value = withDelay(P, withSequence(withTiming(1, { duration: 160, easing: EASE.out }),
-      withDelay(pl.hold + 500, withTiming(0.75, { duration: 600 }))));
-    bloom.value = withDelay(P, withSequence(withTiming(1, { duration: DURATION.bloom * 0.35 }), withTiming(0, { duration: DURATION.bloom * 0.65 })));
+    pop.value = atPop(withSequence(withTiming(1.26, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
+    boost.value = atPop(withSequence(withTiming(1, { duration: 160, easing: EASE.out }),
+      withDelay(Math.max(0, pl.hold - 160), withTiming(0.7, { duration: REVEAL_ROWS.glideMs, easing: EASE.out }))));
+    bloom.value = atPop(withSequence(withTiming(1, { duration: DURATION.bloom * 0.35 }), withTiming(0, { duration: DURATION.bloom * 0.65 })));
     burst.value = 0;
-    burst.value = withDelay(P, withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }));
+    burst.value = atPop(withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }));
     sparkle.value = 0;
-    sparkle.value = withDelay(P, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
-    later(() => { playHaptic('golden'); playSfx('fx.reward'); }, P);
-    later(() => { cancelAnimation(shake); shake.value = 0; }, d + 60);
-    // Settle: the open chest holds big and centred on its rays, then glides up into its slot as the first prize lands.
-    lift.value = withDelay(P + pl.hold, withSpring(0, SPRING.settle));
-    hintOut.value = withDelay(P + Math.max(0, pl.hold - 60), withTiming(1, { duration: DURATION.quick, easing: EASE.in }));
+    sparkle.value = atPop(withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
+    later_(pl.pop, () => { playHaptic('golden'); playSfx('fx.reward'); });
+    later_(pl.lid + 60, () => { cancelAnimation(shake); shake.value = 0; });
+    cancelAnimation(calm); calm.value = withTiming(0, { duration: 120 });
+    // Settle: the open chest holds big and centred on its rays, then glides up into its slot (eased, the rays riding
+    // along and receding) as the first prize lands under it.
+    lift.value = withDelayAfter(entered, pl.pop + pl.hold, withTiming(0, { duration: REVEAL_ROWS.glideMs, easing: EASE.out }));
+    hintOut.value = withDelayAfter(entered, pl.pop + Math.max(0, pl.hold - 60), withTiming(1, { duration: DURATION.quick, easing: EASE.in }));
     // A rare chest: a gold beam rises out of the lid and lingers while the rows land.
-    if (rare) beam.value = withDelay(P, withSequence(withTiming(1, { duration: 180, easing: EASE.out }), withDelay(700, withTiming(0, { duration: 700 }))));
-    const at = pl.rows.map(since);
+    if (rare) beam.value = atPop(withSequence(withTiming(1, { duration: 180, easing: EASE.out }), withDelay(700, withTiming(0, { duration: 700 }))));
+    const at = pl.rows;
     // The chest glow flares again as each hero card lands.
     const heroes = at.filter((_, i) => isBigReward(rows[i].kind));
     if (heroes.length) {
-      heroGlow.value = withSequence(...heroes.map((ms, i) => withDelay(i === 0 ? ms : ms - heroes[i - 1] - 520,
-        withSequence(withTiming(0.8, { duration: 120 }), withTiming(0, { duration: 400 })))));
+      heroGlow.value = withDelayAfter(entered, heroes[0], withSequence(...heroes.map((ms, i) => withDelay(i === 0 ? 0 : ms - heroes[i - 1] - 520,
+        withSequence(withTiming(0.8, { duration: 120 }), withTiming(0, { duration: 400 }))))));
     }
-    doneIn.value = withDelay(since(pl.ready), withTiming(1, { duration: 200, easing: EASE.out }));
-    rows.forEach((row, i) => later(() => {
+    doneIn.value = withDelayAfter(entered, pl.ready, withTiming(1, { duration: 200, easing: EASE.out }));
+    rows.forEach((row, i) => later_(at[i], () => {
       const big = isBigReward(row.kind);
       // On a small phone the rows scroll: the hero cards (always last) slide into view as they land.
       // (A card sized to its prizes never scrolls: every row stays in view.)
       if (big && (!known || overflowRef.current)) later(() => scroll.current?.scrollToEnd({ animated: true }), 40);
       queueHaptic(big ? 'comboHeavy' : 'tickSelection');
       playSfx(big ? 'fx.firework' : row.kind === 'coins' || row.kind === 'bonus_coins' ? 'fx.coin' : 'fx.coinTick', big ? 1 : 0.6 + i * 0.08);
-    }, at[i]));
+    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealed]);
 
@@ -372,7 +411,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const beamStyle = useAnimatedStyle(() => ({ opacity: beam.value, transform: [{ scaleY: 0.4 + 0.6 * beam.value }] }));
   const chestStyle = useAnimatedStyle(() => ({
     // The drop starts just above the stage (always in sight inside the card), never from off the card.
-    transform: [{ translateY: bob.value - drop.value * 70 }, { rotate: `${shake.value * amp.value}deg` }, { scale: pop.value },
+    transform: [{ translateY: bob.value + calm.value - drop.value * 70 }, { rotate: `${shake.value * amp.value}deg` }, { scale: pop.value },
       { scaleY: squash.value }, { scaleX: 2 - squash.value }],
   }));
   const closedStyle = useAnimatedStyle(() => ({ opacity: 1 - lid.value }));
@@ -429,7 +468,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   return (
     <View style={styles.card}>
       <CardSurface />
-      {fullSet ? <FullSetChecks reducedMotion={reducedMotion} diveY={stageH / 2 + heroDY} delayMs={delayMs} /> : <Text style={styles.subtitle}>{subtitle}</Text>}
+      {fullSet ? <FullSetChecks reducedMotion={reducedMotion} diveY={stageH / 2 + heroDY} entered={entered} afterEnter={afterEnter} /> : <Text style={styles.subtitle}>{subtitle}</Text>}
       <Pressable onPress={onStage} disabled={opening && !revealed} accessibilityRole="button"
         accessibilityLabel={revealed ? 'Opened' : 'Tap to open'} style={[styles.stage, { height: stageH }]}
         onLayout={e => { if (!stage) setStage({ x: e.nativeEvent.layout.x + e.nativeEvent.layout.width / 2, y: e.nativeEvent.layout.y + e.nativeEvent.layout.height / 2 }); }}>
@@ -472,7 +511,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
             <ScrollView ref={scroll} style={{ height: rowsArea }} contentContainerStyle={styles.rows} scrollEnabled={overflow || !known}
               showsVerticalScrollIndicator={false}>
               {rows.map((row, i) => (
-                <Row key={row.kind} iconRef={r => { rowRefs.current[i] = r; }} row={row} at={plan.current?.rows[i] ?? 0} reducedMotion={reducedMotion} compact={compact}
+                <Row key={row.kind} iconRef={r => { rowRefs.current[i] = r; }} row={row} entered={entered} at={plan.current?.rows[i] ?? 0} reducedMotion={reducedMotion} compact={compact}
                   countMs={rowCountMs(schedule[i] ?? 0, COUNT.ms)} register={f => { rowFinish.current[i] = f; }}
                   onWear={row.kind === 'item' ? onWear : undefined} onPins={row.kind === 'mystery_boxes' ? onPins : undefined} />
               ))}
@@ -480,7 +519,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
           )}
           <Animated.View pointerEvents="none" style={[styles.hintLayer, { height: rowsHeight }, hintStyle]}>
             <View style={[styles.hintBox, { height: rowsHeight - 8 }, !hint && !reducedMotion && { justifyContent: 'flex-start', paddingTop: previewTop }]}>
-              {hint ? <Text style={styles.hint}>{hint}</Text> : preview && !stalledNow ? <PreviewIn delayMs={delayMs}>{preview}</PreviewIn> : null}
+              {hint ? <Text style={styles.hint}>{hint}</Text> : preview && !stalledNow ? <PreviewIn entered={entered}>{preview}</PreviewIn> : null}
             </View>
           </Animated.View>
         </View>
@@ -496,23 +535,26 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
  * The full set's three gold checks: they bounce one after another (120 ms apart, rising ticks), then
  * dive into the chest as it starts to gather (the goals you finished charge the chest).
  */
-function FullSetChecks({ reducedMotion, diveY, delayMs = 0 }: { readonly reducedMotion: boolean; readonly diveY: number; readonly delayMs?: number }) {
+function FullSetChecks({ reducedMotion, diveY, entered, afterEnter }: {
+  readonly reducedMotion: boolean; readonly diveY: number; readonly entered: SharedValue<number>;
+  readonly afterEnter: (offset: number, fn: () => void) => void;
+}) {
   const a = useSharedValue(reducedMotion ? 1 : 0);
   const b = useSharedValue(reducedMotion ? 1 : 0);
   const c = useSharedValue(reducedMotion ? 1 : 0);
   const dive = useSharedValue(0);
   const vals = [a, b, c];
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (reducedMotion) return;
+    // From the card's real entrance (UI-thread mark), so they always bounce after the card is in.
     vals.forEach((v, i) => {
-      v.value = withDelay(delayMs + FULL_SET.checksAt + i * FULL_SET.checkStep, withSequence(withTiming(1.35, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
+      v.value = withDelayAfter(entered, FULL_SET.checksAt + i * FULL_SET.checkStep, withSequence(withTiming(1.35, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
     });
-    dive.value = withDelay(delayMs + FULL_SET.chestAt, withTiming(1, { duration: 300, easing: EASE.in }));
-    const timers = FULL_SET.tickSteps.map((step, i) => setTimeout(() => {
+    dive.value = withDelayAfter(entered, FULL_SET.chestAt, withTiming(1, { duration: 300, easing: EASE.in }));
+    FULL_SET.tickSteps.forEach((step, i) => afterEnter(FULL_SET.checksAt + i * FULL_SET.checkStep, () => {
       queueHaptic('tickSelection');
       playSfx(LOOP_CUES.checkBounce.fallback, 0.5 + step / 16);
-    }, delayMs + FULL_SET.checksAt + i * FULL_SET.checkStep));
-    return () => timers.forEach(clearTimeout);
+    }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={styles.checks} accessibilityLabel="All three goals done">
@@ -530,12 +572,12 @@ function DivingCheck({ v, dive, index, diveY }: { readonly v: SharedValue<number
 }
 
 /** The preview of what is inside rises in softly while the chest gathers (mounted at rest, so it never flickers). */
-function PreviewIn({ children, delayMs = 0 }: { readonly children: React.ReactNode; readonly delayMs?: number }) {
+function PreviewIn({ children, entered }: { readonly children: React.ReactNode; readonly entered: SharedValue<number> }) {
   // It mounts at rest (a later render of the card can never draw a frame of it hidden) and gives a small rise.
   const a = useSharedValue(1);
-  useEffect(() => {
-    a.value = withDelay(delayMs, withSequence(withTiming(0.85, { duration: 1 }), withTiming(1, { duration: DURATION.enter, easing: EASE.out })));
-  }, [a]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    a.value = withDelayAfter(entered, 0, withSequence(withTiming(0.85, { duration: 1 }), withTiming(1, { duration: DURATION.enter, easing: EASE.out })));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const style = useAnimatedStyle(() => ({ opacity: 0.9, transform: [{ translateY: (1 - a.value) * 40 }] }));
   return <Animated.View style={[{ alignItems: 'center', gap: 6 }, style]}>{children}</Animated.View>;
 }
@@ -595,10 +637,18 @@ function rowIcon(row: RewardRow) {
     case 'xp': return <GameIcon name="xp" size={40} />;
     case 'freezes': return <Image source={FREEZE} style={{ width: 64, height: 64 }} contentFit="contain" />;
     case 'mystery_boxes': return <Image source={BOX} style={{ width: 72, height: 72 }} contentFit="contain" />;
-    case 'item': return row.image
-      ? <Image source={{ uri: row.image }} style={{ width: 80, height: 80 }} contentFit="contain" />
-      : <GameIcon name="shark" size={64} />;
+    case 'item': return <GearArt uri={row.image ?? null} />;
   }
+}
+
+/**
+ * The gear's own picture. With no art from the server (or art that fails to load) it is a gold gift, never a bare
+ * shark, so a non-reader always sees "a present for my shark" rather than a picture of themselves.
+ */
+function GearArt({ uri }: { readonly uri: string | null }) {
+  const [failed, setFailed] = useState(false);
+  if (!uri || failed) return <GameIcon name="gift" size={66} />;
+  return <Image source={{ uri }} style={{ width: 80, height: 80 }} contentFit="contain" onError={() => setFailed(true)} />;
 }
 
 
@@ -624,9 +674,10 @@ function RollNumber({ v, target }: { readonly v: SharedValue<number>; readonly t
  * cards slam past rest, hold a beat and spring back; small prizes stamp in and their number rolls, then
  * bumps. A skip (register) lands it at once.
  */
-function Row({ row, at, reducedMotion, onWear, onPins, compact = false, countMs, iconRef, register }: {
+function Row({ row, at, entered, reducedMotion, onWear, onPins, compact = false, countMs, iconRef, register }: {
   readonly iconRef?: (v: View | null) => void;
-  readonly row: RewardRow; readonly at: number; readonly reducedMotion: boolean; readonly compact?: boolean;
+  /** When it lands: ms after the card's entrance (`entered`, a UI-thread mark). */
+  readonly row: RewardRow; readonly at: number; readonly entered: SharedValue<number>; readonly reducedMotion: boolean; readonly compact?: boolean;
   readonly countMs: number;
   readonly register: (finish: (slam: boolean) => void) => void;
   readonly onWear?: () => void; readonly onPins?: () => void;
@@ -636,21 +687,22 @@ function Row({ row, at, reducedMotion, onWear, onPins, compact = false, countMs,
   const beam = useSharedValue(0);
   const bump = useSharedValue(1);
   const num = useSharedValue(countStart(row.amount));
-  useEffect(() => {
-    const d = Math.max(0, at - Date.now());
+  // Scheduled in the commit that mounts the row (a layout effect), on its absolute mark.
+  useLayoutEffect(() => {
+    const after = <T,>(off: number, a: T) => withDelayAfter(entered, off, a as never) as T;
     if (reducedMotion) {
-      t.value = withDelay(d, withTiming(1, { duration: 150 }));
+      t.value = after(at, withTiming(1, { duration: 150 }));
       num.value = row.amount;
     } else {
-      t.value = withDelay(d, big
+      t.value = after(at, big
         ? withSequence(withTiming(1.114, { duration: 120, easing: Easing.in(Easing.quad) }), withDelay(90, withSpring(1, { damping: 7, stiffness: 260 })))
         : withSpring(1, SPRING.stamp));
-      if (big) beam.value = withDelay(d, withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: 900 })));
+      if (big) beam.value = after(at, withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: 900 })));
       else {
-        if (row.amount > 1) num.value = withDelay(d, withTiming(row.amount, { duration: countMs, easing: Easing.out(Easing.cubic) }));
+        if (row.amount > 1) num.value = after(at, withTiming(row.amount, { duration: countMs, easing: Easing.out(Easing.cubic) }));
         else num.value = row.amount;
         // The number lands with a little bump when its roll ends.
-        bump.value = withDelay(d + countMs, withSequence(withTiming(COUNT.finalBump, { duration: 70 }), withSpring(1, SPRING.stamp)));
+        bump.value = after(at + countMs, withSequence(withTiming(COUNT.finalBump, { duration: 70 }), withSpring(1, SPRING.stamp)));
       }
     }
     register(slam => {

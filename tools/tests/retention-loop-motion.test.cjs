@@ -167,10 +167,10 @@ test('prizes fly home from their own rows: coins first, then tickets, then energ
   assert.ok(plan[0].icons >= 6 && plan[0].icons <= 8);
   assert.ok(plan.every(l => l.icons <= L.PRIZE_FLIGHT.maxIcons));
   assert.deepEqual(plan.map(l => l.delay), [30, 110, 190]);
-  // Every icon lands inside about 1 s, and the next card starts 300 ms after the last landing.
+  // Every icon lands inside about 1 s, and the next card starts 140 ms after the last landing (no still map).
   const done = L.flightDoneMs(plan);
-  assert.ok(done <= 1300, `next card at ${done}`);
-  assert.equal(done, Math.max(...plan.map(l => l.lastLand)) + 300);
+  assert.ok(done <= 1150, `next card at ${done}`);
+  assert.equal(done, Math.max(...plan.map(l => l.lastLand)) + 140);
   // A counter that is not on screen gets no flight; nothing to fly hands off right after the exit.
   assert.deepEqual(plain(L.flightPlan(rows, t => t !== 'tickets')).map(l => l.target), ['coins', 'energy']);
   assert.ok(L.flightDoneMs([]) <= 400);
@@ -243,15 +243,27 @@ test('the full set flows into the chest, prizes fly home in sight, then the big 
   assert.match(hook, /src: 'daily', claimDate: daily\.claimable_date, rewards: null, opening: false, auto: true/);
   // The modal steps aside while prizes fly into the HUD, then the chain continues one card at a time.
   assert.match(hook, /setView\(\{ k: 'flying', legs \}\)/);
-  assert.match(hook, /<PrizeFlight legs=\{view\.legs\}/);
-  // The next card never waits on the balance read (no 1.4 s hold): it starts 300 ms after the last landing.
+  assert.match(hook, /setLegs\(legs\);/);
+  // The next card is mounted early, hidden, in a second host and grows in on the UI thread the frame the last prize
+  // lands (PrizeFlight writes `landed`), so mounting never stutters the flight and the map never sits still.
+  assert.match(hook, /useAnimatedReaction\(\(\) => flightLanded\.value/);
+  assert.match(hook, /setPreNext\(\{ step: chain\[0\] \}\)/);
+  assert.match(read('src/components/retention/PrizeFlight.tsx'), /if \(landed\) landed\.value = Date\.now\(\);/);
+  assert.match(read('src/components/retention/LoopStage.tsx'), /<NextBody store=\{store\} \/>/);
+  // Worklet helpers are declared before the worklets that call them (a later declaration is undefined on the UI thread).
+  const du = read('src/components/retention/delayUntil.ts');
+  assert.ok(du.indexOf('function delayed') < du.indexOf('export function withDelayUntil'));
+  assert.match(read('src/components/retention/LoopStage.tsx'), /<PrizeFlight legs=\{s\.legs\}/);
+  // The next card never waits on the balance read (no 1.4 s hold): it starts 140 ms after the last landing.
   assert.doesNotMatch(hook, /setTimeout\(r, 1400\)/);
   assert.match(hook, /flightDoneMs\(plan\)/);
   // The last card stays mounted through its exit (no lone default ribbon), and the card leaves faster than it came.
   assert.match(hook, /lastCard\.current/);
   assert.match(hook, /PRIZE_FLIGHT\.exitMs, easing: EASE\.in/);
-  assert.match(hook, /setView\(\{ k: 'flame', moment: flameRef\.current \}\)/);
-  assert.match(hook, /setView\(\{ k: 'tomorrow' \}\)/);
+  assert.match(hook, /setView\(\{ k: 'flame', moment: flameRef\.current, enterAt \}\)/);
+  assert.match(hook, /setView\(\{ k: 'tomorrow', enterAt \}\)/);
+  assert.match(read('src/components/retention/StreakMoment.tsx'), /withDelayUntil\(startAt, a as never\)/);
+  assert.match(read('src/components/retention/TomorrowCard.tsx'), /withDelayUntil\(startAt, x as never\)/);
   assert.match(hook, /dailyChain\(/);
   // The +1 lives inside the chest card.
   assert.match(hook, /<FlameUpRow /);
@@ -271,9 +283,14 @@ test('done checks are gold and the map ring flash is a capped gold glow (never a
   assert.doesNotMatch(sheet, /styles\.strike/);
   const btn = read('src/components/retention/Daily3MapButton.tsx');
   assert.doesNotMatch(btn, /\? 1 : 0\.25/);
-  // The full set's card is mounted while the check flies and enters on its own UI-thread mark (no map hold).
-  assert.match(btn, /onFullSet\?\.\(center\.current \?\? undefined, Math\.max\(0, CHECK\.fly \+ CHECK\.fullRing/);
-  assert.match(read('src/components/retention/useRetention.tsx'), /withDelay\(wait, withSpring\(1, SPRING\.settle\)\)/);
+  // The full set's card mounts first, hidden; the check flies once it is mounted, and the card grows out of the
+  // button on the UI thread the frame the ring completes (ringDone), so no JS delay can reorder them.
+  assert.match(btn, /if \(finished && full && ringDone\) ringDone\.value = Date\.now\(\)/);
+  assert.match(btn, /if \(!landing \|\| landing\.armed \|\| landed\.current === landing\.key\) return;/);
+  const hook2 = read('src/components/retention/useRetention.tsx');
+  assert.match(hook2, /useAnimatedReaction\(\(\) => ringDone\.value/);
+  assert.match(hook2, /onShow=\{\(\) => goFullSetRef\.current\?\.\(\)\}/);
+  assert.match(hook2, /withDelayUntil\(at, withSpring\(1, SPRING\.settle\)\)/);
   // Finn never covers words: he stands beside the button.
   assert.match(read('src/components/retention/StreakMoment.tsx'), /finn: \{ width: 72, height: 72 \}/);
 });
@@ -354,10 +371,14 @@ test('one chest reveal, no strobe: one render starts it, the lid and every row r
   assert.match(reveal, /if \(revealed && !plan\.current\)/);
   assert.match(reveal, /if \(!revealed \|\| revealRan\.current\) return;/);
   // The lid swaps on the UI thread on the hit-stop frame (both arts mounted).
-  assert.match(reveal, /lid\.value = withDelay\(P, withTiming\(1, \{ duration: 0 \}\)\)/);
+  assert.match(reveal, /lid\.value = atPop\(withTiming\(1, \{ duration: 0 \}\)\)/);
   // The open chest holds big on its rays for at least 300 ms before it glides into its slot.
   assert.ok(L.REVEAL_ROWS.heroHold >= 300);
-  assert.match(reveal, /lift\.value = withDelay\(P \+ pl\.hold, withSpring\(0, SPRING\.settle\)\)/);
+  // Then it glides (eased, 280 to 350 ms) with its rays receding, and the first prize lands as it passes 60 percent.
+  assert.match(reveal, /lift\.value = withDelayAfter\(entered, pl\.pop \+ pl\.hold, withTiming\(0, \{ duration: REVEAL_ROWS\.glideMs, easing: EASE\.out \}\)\)/);
+  assert.ok(L.REVEAL_ROWS.glideMs >= 280 && L.REVEAL_ROWS.glideMs <= 350);
+  const eased = 1 - Math.pow(1 - L.REVEAL_ROWS.firstAfterGlide / L.REVEAL_ROWS.glideMs, 3);
+  assert.ok(eased >= 0.6, `first row lands at ${eased.toFixed(2)} of the glide`);
   // The answer goes straight to the card (no second JS wait before the burst); the chest keeps its own lid beat.
   const ret = read('src/components/retention/useRetention.tsx');
   assert.doesNotMatch(ret, /const wait = reducedMotion/);
@@ -370,4 +391,58 @@ test('a waiting layer knows its own id before listeners hear it (no one-frame fl
   const layers = read('src/ui/modalLayers.ts');
   assert.match(layers, /add\(claim\?: \(id: number\) => void\): number \{\s*const id = nextId\+\+;\s*claim\?\.\(id\);/);
   assert.match(layers, /const me = id \?\? mineRef\.current;/);
+});
+
+test('round 5: every beat of a loop card counts from the moment the card really enters (UI-thread mark)', () => {
+  const delay = read('src/components/retention/delayUntil.ts');
+  // Absolute marks read on the UI thread each frame (never a relative delay that a late hand-over stretches).
+  assert.match(delay, /Date\.now\(\) >= when\(\)/);
+  assert.match(delay, /export function withDelayAfter/);
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  assert.match(reveal, /useAnimatedReaction\(\(\) => entered\.value/);
+  for (const sv of ['amp', 'flash', 'leak']) assert.match(reveal, new RegExp(`${sv}\\.value = atLid\\(`));
+  for (const sv of ['pop', 'bloom', 'burst', 'sparkle']) assert.match(reveal, new RegExp(`${sv}\\.value = atPop\\(`));
+  assert.match(reveal, /withDelayAfter\(entered, FULL_SET\.checksAt/);
+  assert.match(reveal, /doneIn\.value = withDelayAfter\(entered, pl\.ready/);
+  // Rows, checks, preview and the gather are scheduled in the commit that mounts them (layout effects).
+  assert.ok((reveal.match(/useLayoutEffect\(/g) || []).length >= 5);
+});
+
+test('round 5: the loop card host never re-renders (no first-frame style can blink the card out)', () => {
+  const stage = read('src/components/retention/LoopStage.tsx');
+  assert.match(stage, /const LoopStage = memo\(/);
+  assert.match(stage, /useSyncExternalStore/);
+  assert.match(stage, /collapsable=\{false\}/);
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /useLayoutEffect\(\(\) => \{ stage\.set\(stageState\); \}\)/);
+  assert.match(hook, /<LoopStage store=\{stage\} dimStyle=\{dimLayer\} cardStyle=\{cardLayer\}/);
+  // AWESOME: the card fades and settles to 0.96 while the prizes lift off (never a one-frame cut).
+  assert.match(hook, /\(1 - 0\.04 \* o\)/);
+  assert.match(hook, /out\.value = withTiming\(1, \{ duration: reducedMotion \? DURATION\.quick : PRIZE_FLIGHT\.exitMs, easing: EASE\.in \}\)/);
+});
+
+test('round 5: a slow server never shakes the chest frantically (strong gather capped, then a calm glow and bob)', () => {
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  assert.match(reveal, /export const GATHER_CAP_MS = 1500;/);
+  assert.match(reveal, /calm\.value = at\(GATHER_CAP_MS, withRepeat\(/);
+  assert.doesNotMatch(reveal, /\), 60, true\)/);
+});
+
+test('round 5: kid clarity: gear without art is a gift (never a bare shark), the welcome flame reads as days', () => {
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  assert.match(reveal, /if \(!uri \|\| failed\) return <GameIcon name="gift"/);
+  assert.doesNotMatch(reveal, /: <GameIcon name="shark" size=\{64\} \/>/);
+  const goals = [{ key: 'chest', kind: 'chest', done: false }];
+  const saved = plain(L.welcomeCards({ goals, streak: { days: 6, freeze_saved: 1 } }));
+  assert.equal(saved.find(c => c.kind === 'saved').freezes, 1);
+  const welcome = read('src/components/retention/WelcomeBack.tsx');
+  assert.match(welcome, /<GameIcon name="streak" size=\{18\} \/>/);
+  // Finn says hello at once; tiles wait (bobbing) while today's goals load, never a still map.
+  assert.match(welcome, /WaitingTile/);
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /setView\(\{ k: 'welcome', cards \}\);/);
+  // The flame cards lead with tomorrow (one more day plus its prize), the far ladder small under it.
+  assert.match(read('src/components/retention/FlameArt.tsx'), /export function TomorrowGoal/);
+  assert.match(read('src/components/retention/StreakMoment.tsx'), /<TomorrowGoal days=\{to\} prize=\{prize\}/);
+  assert.match(read('src/components/retention/FlameUpRow.tsx'), /<TomorrowGoal days=\{to\} prize=\{prize\}/);
 });

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue,
@@ -9,7 +9,7 @@ import { playHaptic, queueHaptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { usePowerBudget } from '../../power';
 import { LOOP_CUES, WELCOME_FX, welcomeTileLabel, type WelcomeCard } from '../../services/retention/loopMotion';
-import { BRAND, ICON_SOURCES } from '../../ui';
+import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 import { GoldBurst, SparkleBurst } from '../../ui/GoldBurst';
 import { AMBIENT, DURATION, SPRING, momentParticles } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
@@ -30,8 +30,9 @@ const DAILY_CHEST = require('../../../assets/images/daily/chest-closed.png');
  * gift: it flares and its number pops. Tap anywhere and it is gone in 200 ms.
  * Never a guilt trip: no missed-day counts, no loss words, no timers.
  */
-export default function WelcomeBack({ cards, reducedMotion, onDone }: {
-  readonly cards: readonly WelcomeCard[];
+export default function WelcomeBack({ cards: cardsIn, reducedMotion, onDone }: {
+  /** Null while today's goals are still being read: Finn says hello at once and three soft tiles wait, bobbing. */
+  readonly cards: readonly WelcomeCard[] | null;
   readonly reducedMotion: boolean;
   readonly onDone: () => void;
 }) {
@@ -45,8 +46,10 @@ export default function WelcomeBack({ cards, reducedMotion, onDone }: {
   const sparkle = useSharedValue(0);
   const drops = [useSharedValue(reducedMotion ? 1 : 0), useSharedValue(reducedMotion ? 1 : 0), useSharedValue(reducedMotion ? 1 : 0)];
   const sparks = useMemo(() => momentParticles(8, budget, reducedMotion), [budget, reducedMotion]);
+  const cards = cardsIn ?? [];
   const shown = cards.slice(0, 3);
   const giftIndex = shown.findIndex(c => c.kind === 'flame' || c.kind === 'saved');
+  const mountedAt = useRef(Date.now());
   useEffect(() => {
     playHaptic('win');
     playSfx(WELCOME_FX.cue, 0.8);
@@ -55,15 +58,21 @@ export default function WelcomeBack({ cards, reducedMotion, onDone }: {
     finn.value = withSpring(1, SPRING.pop);
     gold.value = withSequence(withTiming(0.7, { duration: 260, easing: EASE.out }), withTiming(0.45, { duration: 700 }));
     sparkle.value = withDelay(120, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
-    drops.forEach((d, i) => { d.value = withDelay(WELCOME_FX.cardsAt + i * WELCOME_FX.cardStep, withSpring(1, SPRING.land)); });
-    const timers = shown.map((_, i) => setTimeout(() => queueHaptic('tickSelection'), WELCOME_FX.cardsAt + i * WELCOME_FX.cardStep + 120));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The tiles drop in once today's goals are known (on their beat when they were known at once).
+  const ready = cardsIn !== null;
+  useEffect(() => {
+    if (!ready || reducedMotion) return;
+    const base = Math.max(0, WELCOME_FX.cardsAt - (Date.now() - mountedAt.current));
+    drops.forEach((d, i) => { d.value = withDelay(base + i * WELCOME_FX.cardStep, withSpring(1, SPRING.land)); });
+    const timers = shown.map((_, i) => setTimeout(() => queueHaptic('tickSelection'), base + i * WELCOME_FX.cardStep + 120));
     if (giftIndex >= 0) {
-      const at = WELCOME_FX.cardsAt + giftIndex * WELCOME_FX.cardStep + WELCOME_FX.giftAt;
+      const at = base + giftIndex * WELCOME_FX.cardStep + WELCOME_FX.giftAt;
       gift.value = withDelay(at, withSequence(withTiming(1, { duration: 140, easing: EASE.out }), withSpring(0, SPRING.pop)));
       timers.push(setTimeout(() => { queueHaptic('hitMedium'); playSfx(LOOP_CUES.flameUp.fallback, 0.7); }, at));
     }
     return () => timers.forEach(clearTimeout);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
   const dismiss = () => {
     if (reducedMotion) { onDone(); return; }
     out.value = withTiming(1, { duration: DURATION.exit, easing: EASE.in });
@@ -94,16 +103,26 @@ export default function WelcomeBack({ cards, reducedMotion, onDone }: {
           <View style={styles.center} pointerEvents="none"><SparkleBurst progress={sparkle} count={sparks} radius={110} /></View>
         </View>
         <View style={styles.tiles}>
-          {shown.map((c, i) => (
+          {ready ? shown.map((c, i) => (
             <Drop key={c.kind} v={drops[i]}>
               <Tile card={c} gift={i === giftIndex ? gift : null} reducedMotion={reducedMotion} />
             </Drop>
-          ))}
+          )) : [0, 1, 2].map(i => <WaitingTile key={i} index={i} reducedMotion={reducedMotion} />)}
         </View>
         <Text style={styles.tap}>Tap to play!</Text>
       </Animated.View>
     </Pressable>
   );
+}
+
+/** A soft tile waiting for today's goals: it bobs on the ambient budget (never a frozen empty card). */
+function WaitingTile({ index, reducedMotion }: { readonly index: number; readonly reducedMotion: boolean }) {
+  const b = useSharedValue(0);
+  useAmbientLoop(() => {
+    b.value = withDelay(index * 140, withRepeat(withTiming(1, { duration: 520, easing: Easing.inOut(Easing.sin) }), -1, true));
+  }, () => { cancelAnimation(b); b.value = 0; }, !reducedMotion);
+  const style = useAnimatedStyle(() => ({ opacity: 0.35 + 0.25 * b.value, transform: [{ translateY: -6 * b.value }] }));
+  return <Animated.View style={[styles.tile, styles.waiting, style]} />;
 }
 
 function Drop({ v, children }: { readonly v: SharedValue<number>; readonly children: React.ReactNode }) {
@@ -121,6 +140,8 @@ function Tile({ card, gift, reducedMotion }: { readonly card: WelcomeCard; reado
         <TilePicture card={card} reducedMotion={reducedMotion} />
       </Animated.View>
       <View style={[styles.chip, (card.kind === 'flame' || card.kind === 'saved') && styles.chipGold]}>
+        {/* The flame's number always sits beside a little flame, so it reads as days of flame (never freezes). */}
+        {(card.kind === 'flame' || card.kind === 'saved') && <GameIcon name="streak" size={18} />}
         <Text style={[styles.chipText, (card.kind === 'flame' || card.kind === 'saved') && styles.chipTextGold]} numberOfLines={1}
           adjustsFontSizeToFit allowFontScaling={false}>{label}</Text>
       </View>
@@ -134,9 +155,14 @@ function TilePicture({ card, reducedMotion }: { readonly card: WelcomeCard; read
     case 'flame': return <FlameArt days={card.n} size={74} reducedMotion={reducedMotion} />;
     case 'ember': return <FlameArt days={0} size={74} reducedMotion={reducedMotion} />;
     case 'saved': return (
-      <View style={{ width: 74, height: 74 }}>
-        <FlameArt days={card.n} size={74} reducedMotion={reducedMotion} />
-        <Image source={FREEZE} style={styles.savedBadge} contentFit="contain" />
+      // The flame, kept safe: one small ice shield per freeze that kept it, side by side under it (pictures, no number).
+      <View style={{ width: 78, height: 78, alignItems: 'center' }}>
+        <FlameArt days={card.n} size={60} reducedMotion={reducedMotion} />
+        <View style={styles.shields}>
+          {Array.from({ length: Math.max(1, card.freezes) }, (_, k) => (
+            <Image key={k} source={FREEZE} style={styles.shield} contentFit="contain" />
+          ))}
+        </View>
       </View>
     );
     case 'chest': return <Image source={DAILY_CHEST} style={{ width: 68, height: 68 }} contentFit="contain" />;
@@ -168,11 +194,14 @@ const styles = StyleSheet.create({
   tile: { alignItems: 'center', gap: 6, backgroundColor: BRAND.white, borderRadius: 18, paddingTop: 10, paddingBottom: 10,
     borderBottomWidth: 4, borderBottomColor: '#a9cdea' },
   pic: { width: 78, height: 78, alignItems: 'center', justifyContent: 'center' },
-  chip: { minWidth: 56, maxWidth: '90%', backgroundColor: BRAND.navy, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3, alignItems: 'center' },
+  chip: { minWidth: 56, maxWidth: '90%', backgroundColor: BRAND.navy, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3, alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'center', gap: 3 },
   chipGold: { backgroundColor: BRAND.gold },
   chipText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white, marginTop: 2 },
   chipTextGold: { color: BRAND.navy },
-  savedBadge: { position: 'absolute', right: -6, bottom: -4, width: 34, height: 34 },
+  shields: { flexDirection: 'row', gap: 2, marginTop: -6 },
+  shield: { width: 24, height: 24 },
+  waiting: { flex: 1, maxWidth: 150, height: 128, backgroundColor: 'rgba(255,255,255,0.5)', borderBottomColor: 'rgba(169,205,234,0.6)' },
   ring: { width: 76, height: 76, borderRadius: 38, backgroundColor: BRAND.sky, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 0 },
   dot: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   dotMid: { marginTop: -14 },

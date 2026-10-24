@@ -12,6 +12,8 @@ const FLAME = require('../../../assets/icons/game/streak.png');
 const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
 const SPARK = require('../../../assets/fx/spark.webp');
 const CROWN = require('../../assets/games/banana-basket/v2/crown.png');
+const DAILY_CHEST = require('../../../assets/images/daily/chest-closed.png');
+const GIFT = require('../../../assets/icons/game/gift.png');
 
 /**
  * Alex's flame, grown by the streak so a kid can read it from across the room,
@@ -139,6 +141,41 @@ export function NextFlameGoal({ days, size = 30, textStyle, short = false }: {
   );
 }
 
+/**
+ * The close goal: tomorrow. Today's flame, an arrow, tomorrow's flame (a white ghost with its day), a plus, and
+ * tomorrow's real prize as a picture (the Daily 3 chest, or a gift when gear is next). A non-reader sees
+ * "one more day, a bigger number and a chest". The far flame ladder sits under it, small.
+ */
+export function TomorrowGoal({ days, prize, size = 30, far = true, textStyle }: {
+  readonly days: number;
+  /** Tomorrow's prize: 'chest' (the Daily 3 chest), 'gear' (a gift) or 'flame' (the flame alone). */
+  readonly prize: 'chest' | 'gear' | 'flame';
+  readonly size?: number;
+  /** Show the far flame ladder under it. */
+  readonly far?: boolean;
+  readonly textStyle?: StyleProp<TextStyle>;
+}) {
+  const next = Math.max(1, days + 1);
+  return (
+    <View style={styles.tomorrowCol} accessible accessibilityLabel={`Tomorrow: day ${next}${prize === 'gear' ? ' and new gear' : prize === 'chest' ? ' and a chest' : ''}`}>
+      <View style={styles.goal}>
+        <FlameArt days={days} size={size} reducedMotion still />
+        <Text style={styles.arrow} allowFontScaling={false}>{'>'}</Text>
+        <View style={styles.ghostWrap}>
+          <FlameArt days={next} size={size * 1.15} reducedMotion still ghost />
+          <View style={styles.ghostDay}><Text style={styles.ghostDayText} allowFontScaling={false}>{next}</Text></View>
+        </View>
+        {prize !== 'flame' && <Text style={styles.plus} allowFontScaling={false}>+</Text>}
+        {prize !== 'flame' && (
+          <Image source={prize === 'gear' ? GIFT : DAILY_CHEST} style={{ width: size * 1.2, height: size * 1.2 }} contentFit="contain" transition={0} />
+        )}
+        <Text style={[styles.goalText, textStyle, styles.goalMin]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>Tomorrow!</Text>
+      </View>
+      {far && nextFlameSize(next) ? <View style={styles.farRow}><NextFlameGoal days={days} size={Math.round(size * 0.6)} short textStyle={styles.farText} /></View> : null}
+    </View>
+  );
+}
+
 /** Drifting sparks over a big flame: one shared clock, each spark on its own phase (at most 5). */
 function Sparks({ clock, count, size }: { readonly clock: SharedValue<number>; readonly count: number; readonly size: number }) {
   const sparks = useMemo(() => Array.from({ length: Math.min(5, count) }, (_, i) => ({
@@ -177,6 +214,10 @@ const styles = StyleSheet.create({
   ember: { opacity: 0.92 },
   ring: { borderWidth: 3, borderColor: GOLD_FX.rays, borderStyle: 'dashed' },
   goal: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1 },
+  tomorrowCol: { gap: 2, flexShrink: 1 },
+  plus: { fontFamily: 'Shark', fontSize: 18, color: GOLD_FX.rays, marginTop: 2 },
+  farRow: { opacity: 0.8, transform: [{ scale: 0.92 }], alignSelf: 'flex-start' },
+  farText: { fontSize: 12, color: '#e4f7ff' },
   arrow: { fontFamily: 'Shark', fontSize: 18, color: GOLD_FX.rays, marginHorizontal: 1, marginTop: 2 },
   ghostWrap: { alignItems: 'center', justifyContent: 'center' },
   ghostDay: { position: 'absolute', bottom: -2, right: -4, minWidth: 22, height: 20, borderRadius: 10, paddingHorizontal: 3,

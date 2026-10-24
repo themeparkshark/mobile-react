@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
@@ -13,6 +13,7 @@ import { GOLD_FX, SPRING } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import FlameArt from './FlameArt';
 import CardSurface from './CardSurface';
+import { useMarkTimers, withDelayAfter, withDelayUntil } from './delayUntil';
 
 const FINN_WAVE = require('../../assets/games/banana-basket/v2/shark_cheer.png');
 const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
@@ -24,7 +25,11 @@ const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
  * when gear is really next), its real reward chips, tomorrow's flame as a white
  * silhouette with its number, and Finn waving goodbye.
  */
-export default function TomorrowCard({ prize, reducedMotion, onDone }: {
+export default function TomorrowCard({ prize, reducedMotion, onDone, startAt, entered }: {
+  /** The card enters at this time (epoch ms): its beats wait for it on the UI thread (mounted while prizes fly). */
+  readonly startAt?: number;
+  /** Mounted early and hidden: its beats wait for this UI-thread entrance mark. */
+  readonly entered?: SharedValue<number>;
   readonly prize: TomorrowPrize;
   readonly reducedMotion: boolean;
   readonly onDone: () => void;
@@ -35,13 +40,18 @@ export default function TomorrowCard({ prize, reducedMotion, onDone }: {
   const wave = useSharedValue(0);
   const twinkle = useSharedValue(0);
   const press = useSharedValue(1);
+  const afterMark = useMarkTimers(entered);
   useEffect(() => {
-    queueHaptic('tickSelection');
-    playSfx(LOOP_CUES.tomorrow.fallback, 0.8);
-    if (reducedMotion) return;
-    enter.value = withSpring(1, SPRING.settle);
-    moon.value = withDelay(180, withTiming(1, { duration: 900, easing: EASE.out }));
-    wave.value = withDelay(350, withRepeat(withSequence(withTiming(1, { duration: 220 }), withTiming(-1, { duration: 220 })), 4, true));
+    const wait = Math.max(0, (startAt ?? 0) - Date.now());
+    let t: ReturnType<typeof setTimeout> | undefined;
+    if (entered) afterMark(0, () => { queueHaptic('tickSelection'); playSfx(LOOP_CUES.tomorrow.fallback, 0.8); });
+    else t = setTimeout(() => { queueHaptic('tickSelection'); playSfx(LOOP_CUES.tomorrow.fallback, 0.8); }, wait);
+    if (reducedMotion) return () => { if (t) clearTimeout(t); };
+    const W = <T,>(x: T): T => (entered ? (withDelayAfter(entered, 0, x as never) as T) : startAt ? (withDelayUntil(startAt, x as never) as T) : x);
+    enter.value = W(withSpring(1, SPRING.settle));
+    moon.value = W(withDelay(180, withTiming(1, { duration: 900, easing: EASE.out })));
+    wave.value = W(withDelay(350, withRepeat(withSequence(withTiming(1, { duration: 220 }), withTiming(-1, { duration: 220 })), 4, true)));
+    return () => { if (t) clearTimeout(t); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // The prize wiggles 6 degrees, twice, every 3 s and the stars twinkle (ambient: rests when idle or reduced).
   useAmbientLoop(() => {

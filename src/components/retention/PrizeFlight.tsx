@@ -1,5 +1,6 @@
 import { Image, type ImageSource } from 'expo-image';
 import { useEffect, useMemo } from 'react';
+import { withDelayUntil } from './delayUntil';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, type SharedValue,
@@ -33,8 +34,13 @@ const ICON_SIZE = 34;
  * UI thread from the first frame (withDelay); JS timers only fire the haptics
  * and sounds. The layer never takes touches.
  */
-export default function PrizeFlight({ legs, origin, reducedMotion }: {
+export default function PrizeFlight({ legs, origin, reducedMotion, startAt, landed }: {
   readonly legs: readonly FlightSpec[];
+  /** Written on the UI thread (epoch ms) the frame the last icon lands: the next card grows in from here. */
+  readonly landed?: SharedValue<number>;
+  /** When the flight starts (epoch ms, UI thread): the icons keep their marks however late this mounts, so the next
+   * card (entering on the same clock) never overlaps or lags the landings. */
+  readonly startAt?: number;
   /** The layer's own window origin (subtracted from every point). */
   readonly origin: Point;
   readonly reducedMotion: boolean;
@@ -43,10 +49,12 @@ export default function PrizeFlight({ legs, origin, reducedMotion }: {
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     let step = 0;
+    // Time already gone since the flight's mark (a late mount catches up instead of shifting every landing).
+    const gone = startAt ? Math.max(0, Date.now() - startAt) : 0;
     // Each HUD counter steps up as its icons land (never a jump after the flight).
     legs.forEach(leg => {
       const landings = reducedMotion ? [160]
-        : Array.from({ length: leg.icons }, (_, i) => leg.delay + i * PRIZE_FLIGHT.stepMs + PRIZE_FLIGHT.flyMs);
+        : Array.from({ length: leg.icons }, (_, i) => Math.max(0, leg.delay + i * PRIZE_FLIGHT.stepMs + PRIZE_FLIGHT.flyMs - gone));
       counterTicks.plan(leg.target, { amount: leg.amount, landings });
     });
     legs.forEach(leg => {
@@ -56,20 +64,27 @@ export default function PrizeFlight({ legs, origin, reducedMotion }: {
         timers.push(setTimeout(() => {
           queueHaptic(i === leg.icons - 1 ? 'hitMedium' : 'tapLight');
           playSfx(leg.target === 'coins' ? 'fx.coinTick' : 'ui.select', 0.45 + Math.min(0.5, n * 0.04));
-        }, at));
+        }, Math.max(0, at - gone)));
         if (reducedMotion) break;
       }
     });
     return () => timers.forEach(clearTimeout);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const lastLeg = legs.reduce<FlightSpec | null>((m, l) => (!m || l.lastLand >= m.lastLand ? l : m), null);
+  // Reduce Motion (no icons fly): the counters tick at once and the next card follows right away.
+  useEffect(() => { if (reducedMotion && landed) landed.value = Date.now() + 160; }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {legs.map(leg => <Leg key={leg.target} leg={leg} origin={origin} reducedMotion={reducedMotion} />)}
+      {legs.map(leg => <Leg key={leg.target} leg={leg} origin={origin} reducedMotion={reducedMotion} startAt={startAt}
+        landed={leg === lastLeg ? landed : undefined} />)}
     </View>
   );
 }
 
-function Leg({ leg, origin, reducedMotion }: { readonly leg: FlightSpec; readonly origin: Point; readonly reducedMotion: boolean }) {
+function Leg({ leg, origin, reducedMotion, startAt, landed }: {
+  readonly leg: FlightSpec; readonly origin: Point; readonly reducedMotion: boolean; readonly startAt?: number; readonly landed?: SharedValue<number>;
+}) {
+  const at = <T,>(ms: number, a: T): T => (startAt ? (withDelayUntil(startAt + ms, a as never) as T) : (withDelay(ms, a as never) as T));
   const from = { x: leg.from.x - origin.x, y: leg.from.y - origin.y };
   const to = { x: leg.to.x - origin.x, y: leg.to.y - origin.y };
   const firstLand = leg.delay + PRIZE_FLIGHT.flyMs;
@@ -83,12 +98,12 @@ function Leg({ leg, origin, reducedMotion }: { readonly leg: FlightSpec; readonl
     }
     // One ring flash per landing, the counter bumps on each (HUD_BUMP), the "+N" pops on the first.
     const span = (leg.icons - 1) * PRIZE_FLIGHT.stepMs;
-    ring.value = withDelay(firstLand, withTiming(1, { duration: span + 360, easing: EASE.out }));
-    bump.value = withDelay(firstLand, withSequence(
+    ring.value = at(firstLand, withTiming(1, { duration: span + 360, easing: EASE.out }));
+    bump.value = at(firstLand, withSequence(
       ...Array.from({ length: Math.min(leg.icons, 4) }, () => withSequence(
         withTiming(HUD_BUMP.peak, { duration: 50 }), withTiming(1.04, { duration: Math.max(40, span / 4) }))),
       withSpring(1, SPRING.stamp)));
-    plus.value = withDelay(firstLand, withSequence(withSpring(1, SPRING.pop), withDelay(420, withTiming(0, { duration: 220, easing: EASE.in }))));
+    plus.value = at(firstLand, withSequence(withSpring(1, SPRING.pop), withDelay(420, withTiming(0, { duration: 220, easing: EASE.in }))));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const icons = useMemo(() => Array.from({ length: reducedMotion ? 0 : leg.icons }, (_, i) => {
     // A small spread around the row icon, so they peel off like a handful, not a single file.
@@ -110,7 +125,7 @@ function Leg({ leg, origin, reducedMotion }: { readonly leg: FlightSpec; readonl
     <>
       {icons.map(p => (
         <FlyingIcon key={p.i} source={ICON[leg.target]} from={{ x: from.x + p.dx, y: from.y + p.dy }} to={to} lift={p.lift}
-          delay={leg.delay + p.i * PRIZE_FLIGHT.stepMs} />
+          delay={leg.delay + p.i * PRIZE_FLIGHT.stepMs} startAt={startAt} landed={p.i === icons.length - 1 ? landed : undefined} />
       ))}
       <Animated.View style={[styles.at, { left: to.x - 30, top: to.y - 30 }, glowStyle]}>
         <View style={styles.glow} />
@@ -125,12 +140,19 @@ function Leg({ leg, origin, reducedMotion }: { readonly leg: FlightSpec; readonl
   );
 }
 
-function FlyingIcon({ source, from, to, lift, delay }: {
-  readonly source: ImageSource | number; readonly from: Point; readonly to: Point; readonly lift: number; readonly delay: number;
+function FlyingIcon({ source, from, to, lift, delay, startAt, landed }: {
+  readonly source: ImageSource | number; readonly from: Point; readonly to: Point; readonly lift: number; readonly delay: number; readonly startAt?: number;
+  readonly landed?: SharedValue<number>;
 }) {
   const t = useSharedValue(0);
   useEffect(() => {
-    t.value = withDelay(delay, withTiming(1, { duration: PRIZE_FLIGHT.flyMs, easing: EASE.inOut }));
+    // From the flight's mark (worked out now): a late mount starts at once rather than shifting every icon.
+    const d = startAt ? Math.max(0, startAt + delay - Date.now()) : delay;
+    t.value = withDelay(d, withTiming(1, { duration: PRIZE_FLIGHT.flyMs, easing: EASE.inOut }, finished => {
+      'worklet';
+      // The last icon home: the next card's cue (on the UI thread, whatever the JS thread is doing).
+      if (landed) landed.value = Date.now();
+    }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const style = useAnimatedStyle(() => fly(t, from, to, lift));
   return (

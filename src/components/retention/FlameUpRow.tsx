@@ -9,7 +9,7 @@ import { BRAND } from '../../ui';
 import { SparkleBurst } from '../../ui/GoldBurst';
 import { DURATION, SPRING, momentParticles } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
-import FlameArt, { NextFlameGoal } from './FlameArt';
+import FlameArt, { TomorrowGoal } from './FlameArt';
 
 /**
  * The daily +1, inside the chest card (no extra card on a normal day): the
@@ -18,7 +18,9 @@ import FlameArt, { NextFlameGoal } from './FlameArt';
  * roll has landed) and the next flame size to grow toward.
  * `grow` false shows today's flame at rest (already celebrated on this phone).
  */
-export default function FlameUpRow({ from, to, grow, reducedMotion }: {
+export default function FlameUpRow({ from, to, grow, reducedMotion, prize = 'chest' }: {
+  /** Tomorrow's prize (the close goal shown under the words). */
+  readonly prize?: 'chest' | 'gear' | 'flame';
   readonly from: number;
   readonly to: number;
   readonly grow: boolean;
@@ -62,7 +64,7 @@ export default function FlameUpRow({ from, to, grow, reducedMotion }: {
       </View>
       <Animated.View style={[styles.words, textStyle]}>
         <Text style={styles.big} numberOfLines={1} adjustsFontSizeToFit>{to === 1 ? 'Your flame is lit!' : `${to} days in a row!`}</Text>
-        {line ? <NextFlameGoal days={to} size={22} short textStyle={styles.small} /> : null}
+        <TomorrowGoal days={to} prize={prize} size={22} far={!!line} textStyle={styles.small} />
       </Animated.View>
     </View>
   );

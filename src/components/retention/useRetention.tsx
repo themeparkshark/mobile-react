@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Asset } from 'expo-asset';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { NOT_YET, withDelayUntil } from './delayUntil';
 import {
   buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
   type DailyThreeState, type LevelChest, type PaidRewards,
@@ -23,12 +24,12 @@ import {
 } from '../../services/retention/loopMotion';
 import { DURATION, SPRING } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
-import PrizeFlight, { type FlightSpec } from './PrizeFlight';
+import { type FlightSpec } from './PrizeFlight';
 import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
 import { useModalLayer } from '../../ui/modalLayers';
 import Daily3MapButton, { type CheckLanding } from './Daily3MapButton';
-import StampRibbon from './StampRibbon';
+import LoopStage, { createStageStore, stageStyles, type StageState } from './LoopStage';
 import StreakMoment from './StreakMoment';
 import TomorrowCard from './TomorrowCard';
 import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
@@ -36,7 +37,7 @@ import FlameUpRow from './FlameUpRow';
 import { EmberCard, FreezeSavedCard } from './FreezeMoments';
 import WelcomeBack from './WelcomeBack';
 import RewardReveal, { type PrizeOrigin } from './RewardReveal';
-import LoopPerf, { loopPerfOn } from './LoopPerf';
+import { loopPerfOn } from './LoopPerf';
 import CardSurface from './CardSurface';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
@@ -52,6 +53,10 @@ const ART = [LEVEL_CHEST, LEVEL_CHEST_OPEN, WEEKLY, WEEKLY_OPEN, FREEZE, BOX,
 
 /** Reads are cheap but not free: focus and app-resume reads wait at least 15 s; real events read at once. */
 const MIN_REFRESH_MS = 15000;
+/** The armed full-set card flies its check by this long even if the modal never says it has shown. */
+const ARM_FALLBACK_MS = 600;
+/** The chain's next card mounts (hidden) this long after the chest's answer, once its prizes have landed. */
+const PREMOUNT_MS = 2400;
 const COACH_KEY = 'tps.retention.coach.v1';
 /** The last streak number this phone celebrated (per player), so a flame moment plays once. */
 const FLAME_SEEN_KEY = 'tps.retention.flameSeen.v1';
@@ -64,12 +69,17 @@ const LAST_OPEN_KEY = 'tps.retention.lastOpen.v1';
 
 type View_ =
   | { k: 'sheet'; all?: boolean; freezeArrive?: number }
-  | { k: 'flame'; moment: Exclude<FlameMoment, { kind: 'none' }> }
-  | { k: 'tomorrow' }
+  /** enterAt: the card enters at this time (epoch ms, UI thread): mounted while the prizes still fly home. */
+  /** slot 'B': the card was mounted early, hidden, in the second host and grows in the frame the last prize lands. */
+  | { k: 'flame'; moment: Exclude<FlameMoment, { kind: 'none' }>; enterAt?: number; slot?: 'B' }
+  | { k: 'tomorrow'; enterAt?: number; slot?: 'B' }
   | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean;
       auto?: boolean; state?: DailyThreeState | null; moment?: FlameMoment; repeat?: boolean; rare?: boolean;
-      /** The card enters at this time (epoch ms): mounted early while the check still flies, shown on the UI thread. */
-      enterAt?: number }
+      /**
+       * The card enters at this time (epoch ms): mounted early while the check still flies, shown on the UI thread.
+       * Null: armed (the full set's card is mounting, hidden; the check flies and this is set once it is mounted).
+       */
+      enterAt?: number | null }
   /** Between cards: the card steps aside and the prizes fly from their rows into the HUD where the kid can see them land. */
   | { k: 'flying'; legs: readonly FlightSpec[] }
   | { k: 'freeze' }
@@ -77,7 +87,8 @@ type View_ =
   /** The streak ended: the flame settles into a warm ember, once. */
   | { k: 'ember'; was: number }
   /** Back after 3 or more days: Finn and what is new (real data only), once. */
-  | { k: 'welcome'; cards: readonly WelcomeCard[] }
+  /** Cards null while today's goals are still being read (Finn says hello at once; the tiles drop in when known). */
+  | { k: 'welcome'; cards: readonly WelcomeCard[] | null }
   | { k: 'push' };
 
 export interface RetentionOptions {
@@ -112,6 +123,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const { triggerFly, getTarget } = useCurrencyFly();
   const reducedMotion = useReducedGameMotion();
   const { width, height } = useWindowDimensions();
+  useEffect(() => () => { if (armTimer.current) clearTimeout(armTimer.current); }, []);
   const [flags, setFlags] = useState<RetentionFlags | null>(null);
   const [daily, setDaily] = useState<DailyThreeState | null>(null);
   const [chests, setChests] = useState<readonly LevelChest[]>([]);
@@ -145,12 +157,17 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const buttonBox = useRef<View>(null);
   /** The Daily 3 button's centre on screen (window points), kept fresh so the full-set card can grow out of it. */
   const buttonCenter = useRef<{ x: number; y: number } | null>(null);
-  const fullSetRef = useRef<((at?: { readonly x: number; readonly y: number }, enterInMs?: number, state?: DailyThreeState | null) => void) | null>(null);
+  const fullSetRef = useRef<((at?: { readonly x: number; readonly y: number }, enterInMs?: number, state?: DailyThreeState | null, armed?: boolean) => void) | null>(null);
+  /** The armed full set: the check's flight starts when the card has mounted (or after ARM_FALLBACK_MS). */
+  const goFullSetRef = useRef<(() => void) | null>(null);
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reducedRef = useRef(false);
   // Dev readout for the lane tools (debug()).
   const presentRef = useRef(false);
   const frontRef = useRef(false);
   const cardTRef = useRef<{ value: number } | null>(null);
   viewRef.current = view;
+  reducedRef.current = reducedMotion;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   // Read the switches; a failed read (offline, slow server) is retried on the next map focus.
@@ -214,11 +231,18 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       const index = next.goals.findIndex(g => g.key === fresh[fresh.length - 1]);
       setCelebrate(c => [...new Set([...c, ...fresh])]);
       if (!viewRef.current) {
-        setLanding(l => ({ index, done: doneCount(next.goals), key: (l?.key ?? 0) + 1 }));
-        // The third goal: the chest card mounts now, in the same render as the check's flight, and enters on the
-        // UI thread the moment the ring completes (a busy JS thread can never leave a hold on the map).
-        if (doneCount(next.goals) >= 3 && next.claimable) {
-          fullSetRef.current?.(buttonCenter.current ?? undefined, CHECK.fly + CHECK.fullRing + 40, next);
+        const done = doneCount(next.goals);
+        if (done >= 3 && next.claimable && !reducedRef.current) {
+          // The third goal: the chest card mounts first, hidden (mounting a whole card can hold the screen for a few
+          // frames), and the check flies the moment it is mounted (the modal's onShow), so the flight never stutters;
+          // the card then enters on the UI thread the moment the ring completes.
+          setLanding(l => ({ index, done, key: (l?.key ?? 0) + 1, armed: true }));
+          fullSetRef.current?.(buttonCenter.current ?? undefined, 0, next, true);
+          if (armTimer.current) clearTimeout(armTimer.current);
+          armTimer.current = setTimeout(() => goFullSetRef.current?.(), ARM_FALLBACK_MS);
+        } else {
+          setLanding(l => ({ index, done, key: (l?.key ?? 0) + 1 }));
+          if (done >= 3 && next.claimable) fullSetRef.current?.(buttonCenter.current ?? undefined, CHECK.fly + CHECK.fullRing + 40, next);
         }
       }
     }
@@ -285,7 +309,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const [reopen, setReopen] = useState(0);
   useEffect(() => {
     const sub = AppState.addEventListener('change', st => {
-      if (st === 'active') { welcomeChecked.current = false; awayDays.current = null; setWelcomeDone(false); setReopen(n => n + 1); }
+      if (st === 'active') { welcomeChecked.current = false; welcomeShown.current = false; awayDays.current = null; setWelcomeDone(false); setReopen(n => n + 1); }
     });
     return () => sub.remove();
   }, []);
@@ -330,13 +354,32 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   }, [daily, o.enabled, player?.id, awayKnown, freshDaily]); // eslint-disable-line react-hooks/exhaustive-deps
   const welcomeCards_ = useRef<WelcomeCard[] | null>(null);
   const welcomeFree = o.welcomeFree ?? o.screenFree;
+  /** The welcome has said hello this app open. */
+  const welcomeShown = useRef(false);
+  // Back after a few days: Finn says hello the moment the map is free (never a held, still map while today's goals
+  // load); the tiles drop in as soon as the fresh read lands.
+  useEffect(() => {
+    if (!welcomePending || welcomeShown.current || view || !welcomeFree || !o.mapFocused || !o.enabled) return;
+    welcomeShown.current = true;
+    const cards = welcomeDone ? welcomeCards_.current : null;
+    if (welcomeDone) welcomeCards_.current = null;
+    setView({ k: 'welcome', cards });
+    setWelcomePending(false);
+  }, [welcomePending, view, welcomeFree, o.mapFocused, o.enabled, welcomeDone]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!welcomeDone || view?.k !== 'welcome' || view.cards !== null) return;
+    const cards = welcomeCards_.current ?? [];
+    welcomeCards_.current = null;
+    setView(v => (v && v.k === 'welcome' && v.cards === null ? { ...v, cards } : v));
+  }, [welcomeDone, view]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Back after a few days: the welcome goes first, before the map's tips and the daily gift (they wait for it),
     // and tells the flame and the chest kindly, once.
-    if (!view && welcomeFree && o.mapFocused && o.enabled && welcomeDone && welcomeCards_.current?.length) {
+    if (!view && !welcomeShown.current && welcomeFree && o.mapFocused && o.enabled && welcomeDone && welcomeCards_.current?.length) {
       const cards = welcomeCards_.current;
       const timer = setTimeout(() => {
         welcomeCards_.current = null;
+        welcomeShown.current = true;
         setView(v => v ?? { k: 'welcome', cards });
         setWelcomePending(false);
       }, 200);
@@ -425,13 +468,43 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       const row = origins.find(o => flightTarget(o.kind) === leg.target);
       legs.push({ ...leg, from: row ?? fallback, to });
     }
+    // The next card mounts while the prizes are still flying and enters on the UI thread the moment they have landed
+    // (an absolute mark shared with the flight), so a busy JS thread never leaves the kid on a still map between cards.
+    const t0 = Date.now() + 60;
     setView({ k: 'flying', legs });
+    setLegs(legs);
+    setLegsAt(t0);
+    const doneAt = t0 + (reducedMotion ? 420 : flightDoneMs(plan));
+    if (legsTimer.current) clearTimeout(legsTimer.current);
+    legsTimer.current = setTimeout(() => setLegs(null), Math.max(0, doneAt - Date.now()) + 200);
     void Promise.resolve(refreshPlayer?.()).catch(() => undefined);
     // The next card launches out of the Daily 3 button (where the flame lives), so the eye goes there with it.
     launchFrom.current = null;
     buttonBox.current?.measureInWindow((x, y, w, h) => {
       if (Number.isFinite(x) && w > 0) launchFrom.current = { x: x + w / 2 - width / 2, y: y + h / 2 - height / 2 };
     });
+    // The next card is already mounted, hidden, in the second host: it grows out of the Daily 3 button the frame the
+    // last prize lands (UI thread), and JS only has to say which card is up once the chest card has gone.
+    const pre = preNextRef.current;
+    if (src === 'daily' && pre && !reducedMotion) {
+      chainRef.current = preChainRef.current.slice(1);
+      enterBOnFlight.value = 1;
+      launchB.value = launchFrom.current ?? { x: 0, y: 0 };
+      buttonBox.current?.measureInWindow((x, y, w, h) => {
+        if (Number.isFinite(x) && w > 0) launchB.value = { x: x + w / 2 - width / 2, y: y + h / 2 - height / 2 };
+      });
+      if (!legs.length) flightLanded.value = Date.now() + PRIZE_FLIGHT.exitMs;
+      // If the last landing never reports (a cut-short flight), the card still comes in.
+      const fallbackAt = Math.max(0, doneAt - Date.now()) + 700;
+      chainTimer.current = setTimeout(() => {
+        chainTimer.current = null;
+        if (!mounted.current) return;
+        if (enteredB.value >= NOT_YET / 2) flightLanded.value = Date.now();
+        setView(pre.step === 'flame' && flameRef.current ? { k: 'flame', moment: flameRef.current, slot: 'B' } : { k: 'tomorrow', slot: 'B' });
+        if (pre.step === 'tomorrow') { tomorrowSeen.current = true; void AsyncStorage.setItem(tomorrowKey, '1').catch(() => undefined); }
+      }, Math.min(fallbackAt, PRIZE_FLIGHT.exitMs + 80));
+      return;
+    }
     const next = async () => {
       chainTimer.current = null;
       if (src !== 'daily') void refresh(true);
@@ -446,32 +519,69 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       }
       chainRef.current = chain;
       if (chain.length) { showChain(); return; }
+      // Nothing more to show: the modal stays up until the prizes have landed.
+      const wait = Math.max(0, doneAt - Date.now());
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      if (!mounted.current) return;
       // A freeze from the Weekly Box flies into its slot beside the flame.
       if (src === 'weekly' && paid && (paid.freezes ?? 0) > 0) { setView({ k: 'sheet', freezeArrive: paid.freezes }); return; }
       if (src !== 'daily' && await mayAskForPush()) { setView({ k: 'push' }); return; }
       if (src === 'daily' && mayAskAfterChain(chain) && await mayAskForPush()) { setView({ k: 'push' }); return; }
       setView(null);
     };
+    // Not mounted ahead (a very quick tap): the next card mounts once the prizes have landed, so mounting it never
+    // stutters the flight.
     chainTimer.current = setTimeout(() => { void next(); }, reducedMotion ? 420 : flightDoneMs(plan));
   };
 
   /** The rest of the daily chain, one card at a time. */
   const chainRef = useRef<('flame' | 'tomorrow')[]>([]);
   const flameRef = useRef<Exclude<FlameMoment, { kind: 'none' }> | null>(null);
-  const showChain = () => {
+  const showChain = (enterAt?: number) => {
     const step = chainRef.current.shift();
-    if (step === 'flame' && flameRef.current) { setView({ k: 'flame', moment: flameRef.current }); return; }
+    if (step === 'flame' && flameRef.current) { setView({ k: 'flame', moment: flameRef.current, enterAt }); return; }
     if (step === 'tomorrow') {
       tomorrowSeen.current = true;
       void AsyncStorage.setItem(tomorrowKey, '1').catch(() => undefined);
-      setView({ k: 'tomorrow' }); return;
+      setView({ k: 'tomorrow', enterAt }); return;
     }
-    if (step === 'flame') { showChain(); return; }
+    if (step === 'flame') { showChain(enterAt); return; }
     setView(null);
   };
 
   const afterFlame = () => { showChain(); };
   const afterTomorrow = () => { showChain(); };
+  const afterFlameRef = useRef(afterFlame);
+  afterFlameRef.current = afterFlame;
+  const afterTomorrowRef = useRef(afterTomorrow);
+  afterTomorrowRef.current = afterTomorrow;
+  /**
+   * The next card of the daily chain (the big flame, or tomorrow's card), mounted early and hidden in the second host
+   * while the chest card is still up (after its prizes have landed, when nothing on screen is moving much).
+   */
+  const [preNext, setPreNext] = useState<{ step: 'flame' | 'tomorrow' } | null>(null);
+  const preNextRef = useRef<{ step: 'flame' | 'tomorrow' } | null>(null);
+  preNextRef.current = preNext;
+  const preChainRef = useRef<('flame' | 'tomorrow')[]>([]);
+  const revealKey = view?.k === 'reveal' && view.src === 'daily' && view.rewards && view.state ? `${view.claimDate ?? ''}` : '';
+  useEffect(() => {
+    if (!revealKey || reducedMotion || view?.k !== 'reveal' || !view.state) return;
+    const st = view.state;
+    const chain = dailyChain({ moment: view.moment ?? { kind: 'none' }, prize: tomorrowPrize(st), tomorrowSeen: !!tomorrowSeen.current,
+      milestoneAway: st.streak.next_milestone?.days_away ?? null });
+    if (!chain.length || (chain[0] === 'flame' && !flameRef.current)) return;
+    preChainRef.current = chain;
+    const t = setTimeout(() => {
+      cardB.value = 0; outB.value = 0; enteredB.value = NOT_YET; enterBOnFlight.value = 0;
+      setPreNext({ step: chain[0] });
+    }, PREMOUNT_MS);
+    return () => clearTimeout(t);
+  }, [revealKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Prizes flying home from their rows (kept apart from the card, so the next card can mount while they fly). */
+  const [legs, setLegs] = useState<readonly FlightSpec[] | null>(null);
+  const [legsAt, setLegsAt] = useState<number | undefined>(undefined);
+  const legsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (legsTimer.current) clearTimeout(legsTimer.current); }, []);
 
   /** A claim whose answer was lost: read back what the server paid for that exact chest. */
   const recoverPaid = async (src: 'daily' | 'weekly' | 'level', level_: number, claimDate: string | null | undefined, timeoutMs = 6000):
@@ -594,7 +704,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   };
 
   // The third check landed on the map: open the card in full-set mode (checks bounce, ribbon stamps, chest opens by itself).
-  const onFullSet = (at?: { readonly x: number; readonly y: number }, enterInMs = 0, state: DailyThreeState | null = daily) => {
+  const onFullSet = (at?: { readonly x: number; readonly y: number }, enterInMs = 0, state: DailyThreeState | null = daily, armed = false) => {
     const daily = state;
     if (viewRef.current || !daily?.claimable) return;
     viewRef.current = { k: 'reveal', src: 'daily', rewards: null, opening: false };
@@ -606,9 +716,20 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     // Straight into the chest card (one card, no sheet in between): the checks bounce, dive in, the lid pops.
     setCelebrate([]);
     setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false, auto: true,
-      enterAt: reducedMotion ? undefined : Date.now() + enterInMs, ...dailyFlavor(daily.claimable_date) });
+      enterAt: reducedMotion ? undefined : armed ? null : Date.now() + enterInMs, ...dailyFlavor(daily.claimable_date) });
   };
   fullSetRef.current = onFullSet;
+  // The armed card is mounted: the check flies now and the card enters as the ring completes.
+  goFullSetRef.current = () => {
+    if (armTimer.current) { clearTimeout(armTimer.current); armTimer.current = null; }
+    const v = viewRef.current;
+    if (!v || v.k !== 'reveal' || v.enterAt !== null) return;
+    // The check flies now; the card enters on the UI thread the frame the ring completes (the button writes
+    // ringDone). If the ring is ever cut short (the map was covered), the card still comes in.
+    setLanding(l => (l && l.armed ? { ...l, armed: false } : l));
+    if (armTimer.current) clearTimeout(armTimer.current);
+    armTimer.current = setTimeout(() => { if (enteredAt.value >= NOT_YET / 2) ringDone.value = Date.now(); }, CHECK.fly + CHECK.fullRing + 900);
+  };
   /** The repeat version after three chests on this phone, and about one rare chest in ten (stable per claim date). */
   const dailyFlavor = (claimDate: string | null | undefined) => ({
     repeat: isRepeatChest(chestOpens.current), rare: isRareChest(claimDate, player?.id ?? 0),
@@ -643,22 +764,28 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     if (view?.k === 'sheet' && view.all) return;
     if (view?.k === 'sheet') setCelebrate([]);
     if (view?.k === 'push') void notePushAsked();
-    if (view?.k === 'freezeSaved' || (view?.k === 'welcome' && view.cards.some(c => c.kind === 'saved'))) {
+    if (view?.k === 'freezeSaved' || (view?.k === 'welcome' && !!view.cards?.some(c => c.kind === 'saved'))) {
       void markFreezeSeen().then(r => applyDaily(r.state)).catch(() => undefined);
     }
     // The welcome already told an ended flame kindly: no second ember card.
-    if (view?.k === 'welcome' && view.cards.some(c => c.kind === 'ember')) writeSeen(0);
+    if (view?.k === 'welcome' && view.cards?.some(c => c.kind === 'ember')) writeSeen(0);
     setView(null);
   };
 
   // The modal stays up through a card's exit and the prize flight (the map shows through), then closes.
+  // The modal lingers only while the last card leaves (no extra map render when a card opens).
   const [present, setPresent] = useState(false);
-  const visible = !!view || present;
+  const wasUp = useRef(false);
+  if (view) wasUp.current = true;
+  const lingering = !view && wasUp.current;
+  const visible = !!view || present || lingering;
   const front = useModalLayer(visible, 'wait');
-  const showing = !!view && view.k !== 'flying' && front;
+  const showing = !!view && view.k !== 'flying' && !((view.k === 'flame' || view.k === 'tomorrow') && view.slot === 'B') && front;
   presentRef.current = present; frontRef.current = front;
   const dim = useSharedValue(0);
   const cardT = useSharedValue(0);
+  /** The exit: the card fades and settles back a touch (0.96) while the prizes lift off its rows. */
+  const out = useSharedValue(0);
   cardTRef.current = cardT;
   const cardUp = useRef(false);
   /** Where the next card launches from (relative to the screen centre), set while the prizes fly home. */
@@ -666,42 +793,125 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   /** The goals as they were when the chest card opened (its preview and size stay put through the claim). */
   const revealDaily = useRef<DailyThreeState | null>(null);
   const launch = useSharedValue({ x: 0, y: 0 });
-  useEffect(() => {
-    if (view) setPresent(true);
+  /** When the card really started entering (epoch ms, UI thread): every beat on the card waits for it. */
+  const enteredAt = useSharedValue(NOT_YET);
+  /** The Daily 3 ring's third segment completed (epoch ms, written on the UI thread by the map button). */
+  const ringDone = useSharedValue(0);
+  /** The armed full-set card enters on the next ringDone. */
+  const enterOnRing = useSharedValue(0);
+  /** The second host (the next card, mounted early): its own entrance, exit, launch point and entrance mark. */
+  const cardB = useSharedValue(0);
+  const outB = useSharedValue(0);
+  const launchB = useSharedValue({ x: 0, y: 0 });
+  const enteredB = useSharedValue(NOT_YET);
+  const enterBOnFlight = useSharedValue(0);
+  /** The last prize landed in the HUD (epoch ms, UI thread). */
+  const flightLanded = useSharedValue(0);
+  /** An armed full-set card (mounting, hidden) has no entrance mark yet. */
+  const enterMark = view?.k === 'reveal' || view?.k === 'flame' || view?.k === 'tomorrow' ? view.enterAt : undefined;
+  const armed = enterMark === null;
+  // A layout effect: the entrance is scheduled in the same JS task as the commit that mounted the card (never a
+  // passive-effect hop later), on an absolute mark, so a busy JS thread never shifts it against the card's own beats.
+  useLayoutEffect(() => {
     if (showing) {
       if (!cardUp.current) {
         cardUp.current = true;
         launch.value = !reducedMotion && launchFrom.current ? launchFrom.current : { x: 0, y: 0 };
         launchFrom.current = null;
-        // A card mounted early (the full set) enters on its own mark, on the UI thread.
-        const wait = view?.k === 'reveal' && view.enterAt ? Math.max(0, view.enterAt - Date.now()) : 0;
+        out.value = 0;
         cardT.value = 0;
-        cardT.value = reducedMotion ? withTiming(1, { duration: DURATION.quick }) : withDelay(wait, withSpring(1, SPRING.settle));
-        dim.value = withDelay(wait, withTiming(0.55, { duration: DURATION.enter, easing: EASE.out }));
+        enteredAt.value = NOT_YET;
+        if (armed && !reducedMotion) {
+          // The full set: mounted now, hidden; it grows out of the button the frame its ring completes (UI thread).
+          enterOnRing.value = 1;
+          return;
+        }
+        // An absolute mark read on the UI thread (the card's own beats count from the same mark).
+        const at = typeof enterMark === 'number' ? Math.max(enterMark, Date.now()) : Date.now();
+        enteredAt.value = at;
+        cardT.value = reducedMotion ? withTiming(1, { duration: DURATION.quick }) : withDelayUntil(at, withSpring(1, SPRING.settle));
+        dim.value = withDelayUntil(at, withTiming(0.55, { duration: DURATION.enter, easing: EASE.out }));
       }
       return;
     }
+    enterOnRing.value = 0;
     if (cardUp.current) {
-      // Exits are faster than entrances: the card and its ribbon leave together, the map comes back into view.
+      // Exits are faster than entrances: the card fades and settles back a touch while the prizes lift off its rows
+      // (the eye follows the prizes to the HUD), then the map comes back into view.
       cardUp.current = false;
-      cardT.value = withTiming(0, { duration: reducedMotion ? DURATION.quick : PRIZE_FLIGHT.exitMs, easing: EASE.in });
+      out.value = withTiming(1, { duration: reducedMotion ? DURATION.quick : PRIZE_FLIGHT.exitMs, easing: EASE.in });
       dim.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
     }
-    if (!view) {
-      const t = setTimeout(() => { if (!viewRef.current) setPresent(false); }, DURATION.exit + 40);
+    if (!view && wasUp.current) {
+      // Keep the modal up through the exit, then let it go (one render to close, none to open).
+      setPresent(true);
+      const t = setTimeout(() => { if (!viewRef.current) { wasUp.current = false; setPresent(false); } }, DURATION.exit + 40);
       return () => clearTimeout(t);
     }
   }, [showing, !!view]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A card swapped in place (the sheet to its chest, one chain card to the next): it enters now.
+  const cardKey = view ? `${view.k}:${view.k === 'reveal' ? `${view.src}:${view.level ?? ''}:${view.claimDate ?? ''}` : ''}` : '';
+  const lastKey = useRef('');
+  useLayoutEffect(() => {
+    const prev = lastKey.current;
+    lastKey.current = cardKey;
+    if (!cardKey || !prev || prev === cardKey || !cardUp.current || enterOnRing.value === 1) return;
+    enteredAt.value = Date.now();
+  }, [cardKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The last prize landed: the next card (already mounted in the second host) grows out of the Daily 3 button.
+  useAnimatedReaction(() => flightLanded.value, (v, p) => {
+    if (v === p || v <= 0 || enterBOnFlight.value !== 1) return;
+    enterBOnFlight.value = 0;
+    const at = v + PRIZE_FLIGHT.nextAfterMs;
+    enteredB.value = at;
+    outB.value = 0;
+    cardB.value = withDelayUntil(at, withSpring(1, SPRING.settle));
+    dim.value = withDelayUntil(at, withTiming(0.55, { duration: DURATION.enter, easing: EASE.out }));
+  });
+  // The second host's card leaves when its moment is done (faster than it came); the dim goes if nothing follows.
+  const slotB = (view?.k === 'flame' || view?.k === 'tomorrow') && view.slot === 'B';
+  const wasSlotB = useRef(false);
+  useLayoutEffect(() => {
+    if (slotB) { wasSlotB.current = true; return; }
+    if (!wasSlotB.current) return;
+    wasSlotB.current = false;
+    outB.value = withTiming(1, { duration: reducedMotion ? DURATION.quick : PRIZE_FLIGHT.exitMs, easing: EASE.in });
+    if (!view) dim.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
+    const t = setTimeout(() => setPreNext(null), PRIZE_FLIGHT.exitMs + 80);
+    return () => clearTimeout(t);
+  }, [slotB]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A chest closed without its chain (or the overlay went away): the hidden card is let go.
+  useEffect(() => { if (!view && preNext && !slotB) { const t = setTimeout(() => setPreNext(null), 300); return () => clearTimeout(t); } }, [!!view]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nextStyle = useAnimatedStyle(() => {
+    const t = cardB.value;
+    const o = outB.value;
+    const far = launchB.value.x !== 0 || launchB.value.y !== 0;
+    return { opacity: Math.min(1, t * (far ? 3 : 1.6)) * (1 - o), transform: [{ translateX: launchB.value.x * (1 - t) }, { translateY: launchB.value.y * (1 - t) },
+      { scale: (far ? 0.15 + 0.85 * t : 0.86 + 0.14 * t) * (1 - 0.04 * o) }] };
+  });
+  const nextLayer = useMemo(() => [stageStyles.wrap, nextStyle], [nextStyle]);
+  // The ring completed on the map: the armed card grows out of the button now, on the UI thread (no JS hop).
+  useAnimatedReaction(() => ringDone.value, (v, p) => {
+    if (v === p || v <= 0 || enterOnRing.value !== 1) return;
+    enterOnRing.value = 0;
+    enteredAt.value = v;
+    cardT.value = withSpring(1, SPRING.settle);
+    dim.value = withTiming(0.55, { duration: DURATION.enter, easing: EASE.out });
+  });
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
-  const dimLayer = useMemo(() => [StyleSheet.absoluteFill, styles.dim, dimStyle], [dimStyle]);
+  const dimLayer = useMemo(() => [StyleSheet.absoluteFill, stageStyles.dim, dimStyle], [dimStyle]);
   const cardStyle = useAnimatedStyle(() => {
     const t = cardT.value;
+    const o = out.value;
     const far = launch.value.x !== 0 || launch.value.y !== 0;
-    // From the button: it grows out of it on the settle spring; otherwise a plain pop-in.
-    return { opacity: Math.min(1, t * (far ? 3 : 1.6)), transform: [{ translateX: launch.value.x * (1 - t) }, { translateY: launch.value.y * (1 - t) },
-      { scale: far ? 0.15 + 0.85 * t : 0.86 + 0.14 * t }] };
+    // From the button: it grows out of it on the settle spring; otherwise a plain pop-in. The exit fades and settles to 0.96.
+    return { opacity: Math.min(1, t * (far ? 3 : 1.6)) * (1 - o), transform: [{ translateX: launch.value.x * (1 - t) }, { translateY: launch.value.y * (1 - t) },
+      { scale: (far ? 0.15 + 0.85 * t : 0.86 + 0.14 * t) * (1 - 0.04 * o) }] };
   });
-  const cardLayer = useMemo(() => [styles.wrap, cardStyle], [cardStyle]);
+  const cardLayer = useMemo(() => [stageStyles.wrap, cardStyle], [cardStyle]);
+  const stage = useMemo(() => createStageStore(), []);
+  const backdropRef = useRef<() => void>(() => undefined);
+  const onBackdrop = useCallback(() => backdropRef.current(), []);
 
   let button: ReactNode | null = null;
   if (flags?.dailyThree && daily) {
@@ -710,7 +920,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       <View ref={buttonBox} collapsable={false} onLayout={() => {
         buttonBox.current?.measureInWindow((x, y, w, h) => { if (Number.isFinite(x) && w > 0) buttonCenter.current = { x: x + w / 2, y: y + h / 2 }; });
       }}>
-      <Daily3MapButton pips={b.pips} streak={b.streak} attention={b.attention}
+      <Daily3MapButton ringDone={ringDone} pips={b.pips} streak={b.streak} attention={b.attention}
         active={o.mapFocused && !o.mapCovered && !visible} reducedMotion={reducedMotion} landing={landing} onFullSet={onFullSet}
         onPress={() => { playSfx('ui.tap'); openSheet(); }} />
       </View>
@@ -776,7 +986,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       )
       : r.state ? (
         <FlameUpRow from={r.moment && r.moment.kind !== 'none' ? Math.max(0, r.state.streak.days - 1) : r.state.streak.days}
-          to={r.state.streak.days} grow={!!r.moment && r.moment.kind !== 'none'} reducedMotion={reducedMotion} />
+          to={r.state.streak.days} grow={!!r.moment && r.moment.kind !== 'none'} reducedMotion={reducedMotion}
+          prize={tomorrowPrize(r.state).kind} />
       ) : daily ? (
         <View style={styles.nextRow}>
           <GameIcon name="streak" size={26} />
@@ -790,7 +1001,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? WEEKLY : ICON_SOURCES.chest}
         openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? WEEKLY_OPEN : ICON_SOURCES.chestOpen}
         autoOpen={!!r.auto} fullSet={!!r.auto} repeat={!!r.repeat} rare={!!r.rare}
-        delayMs={r.enterAt ? Math.max(0, r.enterAt - Date.now()) : 0}
+        entered={enteredAt}
         gatherMs={lidDelay({ dropIn: r.src === 'level', autoOpen: !!r.auto, repeat: !!r.repeat, weekly: r.src === 'weekly' })}
         onArrive={r.src === 'level' ? () => {
           // The level chest's claim starts as it lands, so its lid pops on the beat even on a slow server.
@@ -806,12 +1017,17 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         onPins={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('PinCollections'); }}
         onOpen={() => { void openReveal(); }} onDone={origins => finishReveal(r.rewards, r.src, r.state ?? null, r.moment, origins)} />
     );
+  } else if (view?.k === 'flame' && view.slot === 'B') {
+    title = view.moment.kind === 'milestone' ? 'Big flame!' : 'Flame up!';
+  } else if (view?.k === 'tomorrow' && view.slot === 'B') {
+    title = 'See you tomorrow';
   } else if (view?.k === 'flame') {
     title = view.moment.kind === 'milestone' ? 'Big flame!' : 'Flame up!';
-    content = <StreakMoment key={JSON.stringify(view.moment)} moment={view.moment} reducedMotion={reducedMotion} onDone={afterFlame} />;
+    content = <StreakMoment key={JSON.stringify(view.moment)} moment={view.moment} reducedMotion={reducedMotion} onDone={afterFlame}
+      prize={tomorrowPrize(daily).kind} startAt={view.enterAt} />;
   } else if (view?.k === 'tomorrow') {
     title = 'See you tomorrow';
-    content = <TomorrowCard prize={tomorrowPrize(daily)} reducedMotion={reducedMotion} onDone={afterTomorrow} />;
+    content = <TomorrowCard prize={tomorrowPrize(daily)} reducedMotion={reducedMotion} onDone={afterTomorrow} startAt={view.enterAt} />;
   } else if (view?.k === 'freeze' && daily) {
     title = 'Streak Freeze';
     content = (
@@ -862,35 +1078,42 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
 
   // Moments that must finish (a chest mid-open, the flame) ignore backdrop taps; their button moves on.
   const revealing = view?.k === 'reveal' || view?.k === 'flame' || view?.k === 'flying' || (view?.k === 'sheet' && !!view.all);
-  // The last card stays mounted (same title, same content) while it shrinks away, so the ribbon never shows
+  // The last card stays mounted (same title, same content) while it fades away, so the ribbon never shows
   // another word and the card never vanishes in one frame.
   const lastCard = useRef<{ title: string; content: ReactNode } | null>(null);
   if (content && view && view.k !== 'flying') lastCard.current = { title, content };
   const shownTitle = showing || !lastCard.current ? title : lastCard.current.title;
   const shownContent = showing ? content : lastCard.current?.content ?? null;
-  if (!view && !present) lastCard.current = null;
+  if (!view && !present && !lingering) lastCard.current = null;
+  backdropRef.current = () => { if (!revealing && (showing || slotB)) close(); };
+  // The second host's card: built once per pre-mount (same element while it waits, enters and plays).
+  const nextKind = preNext?.step ?? null;
+  const nextMoment = flameRef.current;
+  const nextCard = useMemo(() => {
+    if (!nextKind) return null;
+    if (nextKind === 'flame' && nextMoment) {
+      return { title: nextMoment.kind === 'milestone' ? 'Big flame!' : 'Flame up!', live: false,
+        content: <StreakMoment key={`B:${JSON.stringify(nextMoment)}`} moment={nextMoment} reducedMotion={reducedMotion}
+          onDone={() => afterFlameRef.current()} prize={tomorrowPrize(daily).kind} entered={enteredB} /> };
+    }
+    return { title: 'See you tomorrow', live: false,
+      content: <TomorrowCard prize={tomorrowPrize(daily)} reducedMotion={reducedMotion} onDone={() => afterTomorrowRef.current()} entered={enteredB} /> };
+  }, [nextKind]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nextLive = useMemo(() => (nextCard ? { ...nextCard, live: slotB } : null), [nextCard, slotB]);
+  const stageState: StageState = {
+    title: shownTitle, content: shownContent, showing, closable: !revealing && showing, reducedMotion,
+    legs, legsAt, landed: flightLanded, perf: perfOn,
+    next: nextLive,
+  };
+  // The card host never re-renders: what it shows goes through the stage store, in the same commit (layout effect).
+  useLayoutEffect(() => { stage.set(stageState); });
   const overlay = (
     // A plain RN Modal: visible is declarative (no inner open/close state machine that can miss a quick re-open);
-    // every entrance and exit is our own UI-thread animation inside it.
+    // every entrance and exit is our own UI-thread animation inside it. onShow: an armed full-set card has mounted.
     <Modal visible={visible && front} transparent animationType="none" statusBarTranslucent
+      onShow={() => goFullSetRef.current?.()}
       onRequestClose={revealing ? () => undefined : close}>
-      <View style={StyleSheet.absoluteFill}>
-        <Animated.View style={dimLayer}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={revealing || !showing ? undefined : close} accessible={false} />
-        </Animated.View>
-        <View style={[StyleSheet.absoluteFill, styles.center, { paddingHorizontal: width * 0.05 }]} pointerEvents="box-none">
-          {/* The animated wrapper keeps the same props on every render (a changed prop on an animating view can draw
-              one frame of its first style); taps are switched on a plain inner view. */}
-          <Animated.View style={cardLayer}>
-            <View pointerEvents={showing ? 'box-none' : 'none'} style={styles.wrapInner}>
-              <StampRibbon text={shownTitle} reducedMotion={reducedMotion} />
-              {shownContent}
-            </View>
-          </Animated.View>
-        </View>
-        {view?.k === 'flying' && view.legs.length > 0 && <PrizeFlight legs={view.legs} origin={{ x: 0, y: 0 }} reducedMotion={reducedMotion} />}
-        {perfOn && <LoopPerf />}
-      </View>
+      <LoopStage store={stage} dimStyle={dimLayer} cardStyle={cardLayer} nextStyle={nextLayer} gutter={width * 0.05} onBackdrop={onBackdrop} />
     </Modal>
   );
 

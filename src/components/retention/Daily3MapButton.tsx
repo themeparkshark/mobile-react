@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   cancelAnimation, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { haptic, playHaptic, queueHaptic } from '../../gamekit/Haptics';
@@ -54,6 +55,8 @@ export interface CheckLanding {
   readonly done: number;
   /** Replays whenever this changes. */
   readonly key: number;
+  /** The full set's card is still mounting: the ring waits, then the check flies when this turns false. */
+  readonly armed?: boolean;
 }
 
 /**
@@ -68,7 +71,9 @@ export interface CheckLanding {
  * celebration (`onFullSet`). Every frame runs on the UI thread; ambient loops
  * stop when the map is covered, in the background, idle or with Reduce Motion.
  */
-export default function Daily3MapButton({ pips, streak, attention, onPress, landing, onFullSet, active, reducedMotion }: {
+export default function Daily3MapButton({ pips, streak, attention, onPress, landing, onFullSet, active, reducedMotion, ringDone }: {
+  /** Written on the UI thread (epoch ms) the frame the third segment completes: the full-set card grows from here. */
+  readonly ringDone?: SharedValue<number>;
   readonly pips: readonly boolean[];
   readonly streak: number;
   readonly attention: ButtonAttention;
@@ -143,8 +148,9 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
   }, [running, reducedMotion, ready, bounce]);
 
   // The check-off: fly, fill, draw, stamp, bubble (and the full-set flash on the third).
+  const landingArmed = !!landing?.armed;
   useEffect(() => {
-    if (!landing || landed.current === landing.key) return;
+    if (!landing || landing.armed || landed.current === landing.key) return;
     landed.current = landing.key;
     timers.current.forEach(clearTimeout); timers.current = [];
     const i = Math.max(0, Math.min(2, landing.index));
@@ -192,7 +198,10 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
       segs[i].value = 0;
       // The third segment's fill hands off to the full set the frame it completes (UI-thread clock, not a JS timer),
       // so the card opens with the flash, never after a pause on the map.
-      segs[i].value = withDelay(F, withTiming(1, { duration: full ? CHECK.fullRing : CHECK.ring, easing: EASE.out }));
+      segs[i].value = withDelay(F, withTiming(1, { duration: full ? CHECK.fullRing : CHECK.ring, easing: EASE.out }, finished => {
+        'worklet';
+        if (finished && full && ringDone) ringDone.value = Date.now();
+      }));
       draw.value = 0;
       draw.value = withDelay(F, withTiming(1, { duration: CHECK.draw, easing: EASE.out }));
       stamp.value = 1;
@@ -219,7 +228,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
     playSfx(LOOP_CUES.checkFly.fallback, 0.35);
     later(() => { queueHaptic('hitMedium'); playSfx(cue.fallback, 0.9); }, F);
     if (full) later(() => { playHaptic('golden'); playSfx(LOOP_CUES.fullSet.fallback, 0.9); }, F + CHECK.fullRing);
-  }, [landingKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [landingKey, landingArmed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const buttonStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bounce.value }, { scale: press.value * pop.value }] }));
   const flyStyle = useAnimatedStyle(() => {
@@ -245,6 +254,16 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
     opacity: bubbleA.value,
     transform: [{ translateX: (1 - bubble.value) * 14 }, { scale: 0.6 + 0.4 * bubble.value }],
   }));
+  // While a check is on its way (armed or flying), the button keeps its flame; the chest shows once it has landed.
+  const [landingNow, setLandingNow] = useState(false);
+  useEffect(() => {
+    if (!landing) return;
+    setLandingNow(true);
+    if (landing.armed) return;
+    const t = setTimeout(() => setLandingNow(false), CHECK.fly + CHECK.fullRing);
+    return () => clearTimeout(t);
+  }, [landingKey, landingArmed]); // eslint-disable-line react-hooks/exhaustive-deps
+  const showReady = ready && !landingNow;
   const done = pips.filter(Boolean).length;
   const label = ready ? 'Daily 3: a reward is ready to open'
     : `Daily 3: ${done} of 3 done${streak > 0 ? `, ${streak} day streak` : ''}`;
@@ -255,11 +274,14 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
         <Pressable onPress={() => { haptic('tapLight'); onPress(); }} accessibilityRole="button" accessibilityLabel={label} hitSlop={6}
           onPressIn={() => { press.value = withTiming(PRESS.scale, { duration: PRESS.inMs }); }}
           onPressOut={() => { press.value = withSpring(1, PRESS.spring); }}
-          style={[styles.button, ready && styles.buttonReady]}>
-          {attention === 'weekly'
+          style={[styles.button, showReady && styles.buttonReady]}>
+          {/* The chest and the flame both stay mounted (the chest is decoded before it is needed), so a goal that
+              turns the button ready never draws an empty blue circle while the chest art loads. While a landing
+              plays, the flame stays up until the check lands. */}
+          <View style={[styles.icon, !(showReady && attention !== 'weekly') && styles.hidden]}><GameIcon name="chest" size={34} /></View>
+          {attention === 'weekly' && showReady
             ? <Image source={WEEKLY} style={{ width: 36, height: 36 }} contentFit="contain" />
-            : ready ? <GameIcon name="chest" size={34} />
-              : <FlameArt days={streak} size={44} reducedMotion={reducedMotion} still={!running} />}
+            : <View style={showReady ? styles.hidden : undefined}><FlameArt days={streak} size={44} reducedMotion={reducedMotion} still={!running} /></View>}
           <Animated.View pointerEvents="none" style={[styles.stamp, stampStyle]}>
             <Canvas style={{ width: 40, height: 40 }}>
               <Circle cx={20} cy={20} r={18} color={BRAND.gold} />
@@ -282,12 +304,12 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
             <Circle cx={RING / 2} cy={RING / 2} r={RING_R} color={BRAND.white} style="stroke" strokeWidth={RING_W + 1} opacity={flashOpacity} />
           </Canvas>
         </View>
-        {streak > 0 && !ready && (
+        {streak > 0 && !showReady && (
           <View style={styles.badge} pointerEvents="none">
             <Text style={styles.badgeText} allowFontScaling={false}>{streak}</Text>
           </View>
         )}
-        {ready && <View style={styles.dot} pointerEvents="none" />}
+        {showReady && <View style={styles.dot} pointerEvents="none" />}
       </Animated.View>
       <View pointerEvents="none" style={styles.center}>
         <SparkleBurst progress={sparkle} count={sparkCount} radius={46} />
@@ -316,6 +338,8 @@ const styles = StyleSheet.create({
   button: { width: SIZE, height: SIZE, borderRadius: SIZE / 2, alignItems: 'center', justifyContent: 'center',
     backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },
   buttonReady: { borderColor: BRAND.gold },
+  icon: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  hidden: { opacity: 0 },
   ring: { position: 'absolute', left: (SIZE - RING) / 2, top: (SIZE - RING) / 2, width: RING, height: RING },
   stamp: { position: 'absolute', width: 40, height: 40 },
   center: { position: 'absolute', left: SIZE / 2, top: SIZE / 2, width: 0, height: 0 },

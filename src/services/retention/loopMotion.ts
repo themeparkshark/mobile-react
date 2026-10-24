@@ -247,7 +247,8 @@ export type WelcomeCard =
   | { readonly kind: 'goals'; readonly text: string; readonly open: number; readonly done: number }
   | { readonly kind: 'chest'; readonly text: string }
   | { readonly kind: 'levelChest'; readonly text: string; readonly level: number }
-  | { readonly kind: 'saved'; readonly text: string; readonly n: number }
+  /** The flame (n days) kept by `freezes` freezes: drawn as the flame with its day number and one ice shield per freeze. */
+  | { readonly kind: 'saved'; readonly text: string; readonly n: number; readonly freezes: number }
   | { readonly kind: 'flame'; readonly n: number; readonly text: string }
   | { readonly kind: 'ember'; readonly text: string };
 
@@ -283,7 +284,8 @@ export function welcomeCards(s: Pick<DailyThreeState, 'goals' | 'streak'> | null
   const open = s.goals.filter(g => !g.done).length;
   if (open > 0) out.push({ kind: 'goals', open, done: s.goals.length - open, text: open === 3 ? '3 new goals for today!' : `${open} goals left today!` });
   const days = Math.max(0, Number(s.streak?.days) || 0);
-  if ((s.streak?.freeze_saved ?? 0) > 0 && days > 0) out.push({ kind: 'saved', n: days, text: `A freeze kept your ${days}-day flame!` });
+  const kept = Math.max(0, Number(s.streak?.freeze_saved) || 0);
+  if (kept > 0 && days > 0) out.push({ kind: 'saved', n: days, freezes: Math.min(2, kept), text: `A freeze kept your ${days}-day flame!` });
   else if (days > 0) out.push({ kind: 'flame', n: days, text: `Your flame is at ${days}. Keep it growing!` });
   else out.push({ kind: 'ember', text: 'Light a new flame today!' });
   if (extra.levelChest) out.push({ kind: 'levelChest', level: extra.levelChest, text: `Your Level ${extra.levelChest} chest is waiting!` });
@@ -303,8 +305,10 @@ export const REVEAL_ROWS = {
   first: 240, beat: 150, hold: 380, finishBy: 1200,
   /** The open chest stays big and centred on its full rays this long after the lid pops (the burst frame is the biggest). */
   heroHold: 300,
-  /** The first prize lands this long after the chest starts gliding up into its slot. */
-  firstAfterGlide: 200,
+  /** The open chest glides up into its slot over this long (EASE.out), its rays riding along and receding. */
+  glideMs: 320,
+  /** The first prize lands this long after the glide starts (the chest is past 60 percent of the way by then). */
+  firstAfterGlide: 110,
 } as const;
 
 /**
@@ -372,8 +376,8 @@ export const PRIZE_FLIGHT = {
   stepMs: 45,
   /** Coins first, then tickets, then energy. */
   kindGapMs: 80,
-  /** The next card starts this long after the last icon lands. */
-  nextAfterMs: 300,
+  /** The next card starts this long after the last icon lands (it grows out of the Daily 3 button as the counters settle). */
+  nextAfterMs: 140,
   maxIcons: 8,
 } as const;
 

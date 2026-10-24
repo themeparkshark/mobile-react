@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { playHaptic, queueHaptic } from '../../gamekit/Haptics';
@@ -17,7 +17,8 @@ import { DURATION, PARTICLES, SLAM_SQUASH, SPRING, flashPeak, momentBeats, momen
 import { EASE } from '../../ui/motionEasing';
 import RewardBurst from '../RewardBurst';
 import CardSurface from './CardSurface';
-import FlameArt, { NextFlameGoal } from './FlameArt';
+import FlameArt, { TomorrowGoal } from './FlameArt';
+import { useMarkTimers, withDelayAfter, withDelayUntil } from './delayUntil';
 
 const FINN_WAVE = require('../../assets/games/banana-basket/v2/shark_cheer.png');
 
@@ -31,8 +32,17 @@ const FINN_WAVE = require('../../assets/games/banana-basket/v2/shark_cheer.png')
  *   stamps in with that many flames (zero reading), and Finn waves.
  * Reduce Motion: the end state with a short fade; the haptic and sound stay.
  */
-export default function StreakMoment({ moment, reducedMotion, onDone }: {
+export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'chest', startAt, entered }: {
+  /** The card enters at this time (epoch ms): every beat waits for it on the UI thread (mounted while prizes fly). */
+  readonly startAt?: number;
+  /**
+   * The card was mounted early and hidden (behind the chest card): every beat waits for this UI-thread mark (set the
+   * frame the card starts to enter), sounds and haptics too.
+   */
+  readonly entered?: SharedValue<number>;
   readonly moment: Exclude<FlameMoment, { kind: 'none' }>;
+  /** Tomorrow's prize (the close goal under the flame). */
+  readonly prize?: 'chest' | 'gear' | 'flame';
   readonly reducedMotion: boolean;
   readonly onDone: () => void;
 }) {
@@ -62,8 +72,14 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
   const [ready, setReady] = useState(reducedMotion);
   const [sparks, setSparks] = useState(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
+  const afterMark = useMarkTimers(entered);
+  const later = (fn: () => void, ms: number) => {
+    if (entered) { afterMark(ms, fn); return; }
+    timers.current.push(setTimeout(fn, ms + Math.max(0, (startAt ?? 0) - Date.now())));
+  };
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
+  /** Starts a beat on the card's entrance mark (UI thread), never while the card is still hidden. */
+  const W = <T,>(a: T): T => (entered ? (withDelayAfter(entered, 0, a as never) as T) : startAt ? (withDelayUntil(startAt, a as never) as T) : a);
 
   useEffect(() => {
     const cue = big ? LOOP_CUES.milestone : LOOP_CUES.flameUp;
@@ -79,37 +95,37 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
     if (!big) {
       // +1: the ember glows (300 ms), then the flame whooshes up on the pop spring and the number rolls.
       const at = 300;
-      boost.value = withSequence(withTiming(0.25, { duration: at, easing: EASE.charge }), withSpring(0, SPRING.pop));
-      whoosh.value = withDelay(at, withSequence(withTiming(1.2, { duration: 140, easing: EASE.out }), withSpring(1, SPRING.pop)));
-      roll.value = withDelay(at, withTiming(1, { duration: DURATION.base, easing: EASE.out }));
+      boost.value = W(withSequence(withTiming(0.25, { duration: at, easing: EASE.charge }), withSpring(0, SPRING.pop)));
+      whoosh.value = W(withDelay(at, withSequence(withTiming(1.2, { duration: 140, easing: EASE.out }), withSpring(1, SPRING.pop))));
+      roll.value = W(withDelay(at, withTiming(1, { duration: DURATION.base, easing: EASE.out })));
       // "N days in a row!" waits for the roll to land (it never says 12 while the number still reads 11).
-      plusText.value = withDelay(at + DURATION.base, withSpring(1, SPRING.stamp));
-      sparkle.value = withDelay(at, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
-      gold.value = withDelay(at, withSequence(withTiming(0.55, { duration: 160 }), withTiming(0.3, { duration: 600 })));
+      plusText.value = W(withDelay(at + DURATION.base, withSpring(1, SPRING.stamp)));
+      sparkle.value = W(withDelay(at, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out })));
+      gold.value = W(withDelay(at, withSequence(withTiming(0.55, { duration: 160 }), withTiming(0.3, { duration: 600 }))));
       later(() => { playHaptic('tierUp'); playSfx(cue.fallback); }, at);
       later(() => setReady(true), at + 420);
       return;
     }
     // Milestone: charge (the flame grows in the centre), hit-stop, burst, slam, badge, Finn.
     const burst = beats.burstAt;
-    whoosh.value = withTiming(1, { duration: beats.anticipation, easing: EASE.charge });
-    gatherP.value = withSequence(withTiming(0.04, { duration: beats.anticipation, easing: EASE.charge }), withTiming(0, { duration: 0 }));
-    ring.value = withTiming(1, { duration: beats.anticipation, easing: EASE.charge });
-    boost.value = withSequence(withTiming(0.55, { duration: beats.anticipation, easing: EASE.charge }),
-      withDelay(DURATION.hitStop, withSequence(withTiming(0.8, { duration: 90 }), withSpring(0, SPRING.pop))));
-    gold.value = withSequence(withTiming(0.62, { duration: beats.anticipation, easing: EASE.charge }),
-      withDelay(DURATION.hitStop, withTiming(1, { duration: 160, easing: EASE.out })));
-    flash.value = withDelay(burst, withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 40 }),
-      withTiming(0, { duration: DURATION.flash - 40 })));
-    bloom.value = withDelay(burst, withSequence(withTiming(1, { duration: DURATION.bloom * 0.35 }), withTiming(0, { duration: DURATION.bloom * 0.65 })));
-    sparkle.value = withDelay(burst, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
-    confetti.value = withDelay(burst, withTiming(1, { duration: 1100, easing: EASE.out }));
-    slam.value = withDelay(burst, withTiming(1, { duration: DURATION.slam, easing: EASE.in }));
-    squash.value = withDelay(burst + DURATION.slam, withSequence(withTiming(1 - SLAM_SQUASH, { duration: 50, easing: EASE.out }),
-      withSpring(1, SPRING.stamp)));
-    badge.value = withDelay(beats.labelAt, withSpring(1, SPRING.stamp));
-    finn.value = withDelay(beats.labelAt + 260, withSpring(1, SPRING.land));
-    wave.value = withDelay(beats.labelAt + 460, withRepeat(withSequence(withTiming(1, { duration: 220 }), withTiming(-1, { duration: 220 })), 3, true));
+    whoosh.value = W(withTiming(1, { duration: beats.anticipation, easing: EASE.charge }));
+    gatherP.value = W(withSequence(withTiming(0.04, { duration: beats.anticipation, easing: EASE.charge }), withTiming(0, { duration: 0 })));
+    ring.value = W(withTiming(1, { duration: beats.anticipation, easing: EASE.charge }));
+    boost.value = W(withSequence(withTiming(0.55, { duration: beats.anticipation, easing: EASE.charge }),
+      withDelay(DURATION.hitStop, withSequence(withTiming(0.8, { duration: 90 }), withSpring(0, SPRING.pop)))));
+    gold.value = W(withSequence(withTiming(0.62, { duration: beats.anticipation, easing: EASE.charge }),
+      withDelay(DURATION.hitStop, withTiming(1, { duration: 160, easing: EASE.out }))));
+    flash.value = W(withDelay(burst, withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 40 }),
+      withTiming(0, { duration: DURATION.flash - 40 }))));
+    bloom.value = W(withDelay(burst, withSequence(withTiming(1, { duration: DURATION.bloom * 0.35 }), withTiming(0, { duration: DURATION.bloom * 0.65 }))));
+    sparkle.value = W(withDelay(burst, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out })));
+    confetti.value = W(withDelay(burst, withTiming(1, { duration: 1100, easing: EASE.out })));
+    slam.value = W(withDelay(burst, withTiming(1, { duration: DURATION.slam, easing: EASE.in })));
+    squash.value = W(withDelay(burst + DURATION.slam, withSequence(withTiming(1 - SLAM_SQUASH, { duration: 50, easing: EASE.out }),
+      withSpring(1, SPRING.stamp))));
+    badge.value = W(withDelay(beats.labelAt, withSpring(1, SPRING.stamp)));
+    finn.value = W(withDelay(beats.labelAt + 260, withSpring(1, SPRING.land)));
+    wave.value = W(withDelay(beats.labelAt + 460, withRepeat(withSequence(withTiming(1, { duration: 220 }), withTiming(-1, { duration: 220 })), 3, true)));
     [0, 400, 800].forEach(ms => later(() => queueHaptic('tickSelection'), ms));
     later(() => { playHaptic(milestoneHaptic(to)); playSfx(cue.fallback); }, burst);
     later(() => playSfx('ui.confirm', 0.6), beats.labelAt);
@@ -182,7 +198,8 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
       ) : (
         <Animated.Text style={[styles.plusText, plusTextStyle]}>{to === 1 ? 'Your flame is lit!' : `${to} days in a row!`}</Animated.Text>
       )}
-      {line ? <View style={styles.next}><NextFlameGoal days={to} size={26} /></View> : null}
+      {/* The close goal first (tomorrow: one more day and its prize), the far flame ladder small under it. */}
+      <View style={styles.next}><TomorrowGoal days={to} prize={prize} size={26} far={!!line} /></View>
       {/* Finn stands beside the button, never over the words. */}
       <View style={styles.bottom}>
         {big && (
@@ -192,7 +209,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
         )}
         <View style={{ flex: 1 }}>
           <DoneButton label={big ? 'YAY!' : 'NICE!'} onPress={ready ? onDone : undefined} reducedMotion={reducedMotion}
-            delay={big ? beats.settledAt : 300 + 420} />
+            delay={big ? beats.settledAt : 300 + 420} startAt={startAt} entered={entered} />
         </View>
       </View>
     </Pressable>
@@ -214,12 +231,17 @@ function FlameDot({ index, show, small }: { readonly index: number; readonly sho
  * The button fades and rises in when the moment settles (never a dead hold). The fade is scheduled on the
  * UI thread from the first frame, so a busy JS thread never makes it late; taps count once it is in.
  */
-function DoneButton({ label, onPress, reducedMotion, delay }: {
-  readonly label: string; readonly onPress?: () => void; readonly reducedMotion: boolean; readonly delay: number;
+function DoneButton({ label, onPress, reducedMotion, delay, startAt, entered }: {
+  readonly label: string; readonly onPress?: () => void; readonly reducedMotion: boolean; readonly delay: number; readonly startAt?: number;
+  readonly entered?: SharedValue<number>;
 }) {
   const a = useSharedValue(reducedMotion ? 1 : 0);
   const press = useSharedValue(1);
-  useEffect(() => { if (!reducedMotion) a.value = withDelay(delay, withTiming(1, { duration: DURATION.base, easing: EASE.out })); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (reducedMotion) return;
+    const anim = withDelay(delay, withTiming(1, { duration: DURATION.base, easing: EASE.out }));
+    a.value = entered ? withDelayAfter(entered, 0, anim) : startAt ? withDelayUntil(startAt, anim) : anim;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const style = useAnimatedStyle(() => ({ opacity: a.value, transform: [{ translateY: (1 - a.value) * 10 }, { scale: press.value }] }));
   return (
     <Animated.View style={[styles.buttonWrap, style]}>
