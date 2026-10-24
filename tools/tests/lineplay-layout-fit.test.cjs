@@ -277,8 +277,8 @@ test('the chapter page in compact mode ends on whole trail bubbles, no small lab
 
 test('the Welcome tip never shows before the wait card is measured', () => {
   const screen = read(SCREEN);
-  assert.match(screen, /<OneTimeTip id="lineplay_intro" ready=\{lineTipReady && waitCardBottom != null\}/);
-  assert.match(screen, /<OneTimeTip id="first_ride_part" ready=\{lineTipReady && partTipPending && waitCardBottom != null\}/);
+  assert.match(screen, /<OneTimeTip id="lineplay_intro" ready=\{lineTipReady && pagesShown && waitCardBottom != null\}/);
+  assert.match(screen, /<OneTimeTip id="first_ride_part" ready=\{lineTipReady && partTipPending && pagesShown && waitCardBottom != null\}/);
 });
 
 test('the chapter page blocks are keyed, so the order switch after the first layout never leaves a half-faded header', () => {
@@ -679,4 +679,10 @@ test('one name per clue on every chapter: PLAY, the bubble, the rail, the page h
   assert.match(slot, /title=\{title \?\? 'Shark Trivia'\} teacher \/>/);
   assert.match(slot, /<LoreSlot title=\{missionTitle\}/);
   assert.match(slot, /title=\{title \?\? \(navigator \? 'Spot the clue' : 'Field Note'\)\}/);
+});
+
+test('a one-time tip waits while the page window has stepped aside, so it never sits over the rail\'s one button', () => {
+  const screen = read(SCREEN);
+  assert.match(screen, /<OneTimeTip id="lineplay_intro" ready=\{lineTipReady && pagesShown && waitCardBottom != null\}/);
+  assert.match(screen, /<OneTimeTip id="first_ride_part" ready=\{lineTipReady && partTipPending && pagesShown && waitCardBottom != null\}/);
 });

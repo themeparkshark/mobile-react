@@ -1504,9 +1504,10 @@ export default function LinePlayScreen() {
       {/* One-time tips: what LinePlay is, then the first Ride Part. Only between games, never while the line moves. */}
       {/* They stay until tapped (a kid reads at their own pace), so a tip never vanishes under a finger and lets the tap land on Details. */}
       {/* Never shown before the card is measured, so not one frame sits at a guessed spot over Details. */}
-      <OneTimeTip id="lineplay_intro" ready={lineTipReady && waitCardBottom != null} autoHideMs={0}
+      {/* While the page window has stepped aside (an iPhone SE reading long Details), a tip waits: it would sit over the rail's one button. */}
+      <OneTimeTip id="lineplay_intro" ready={lineTipReady && pagesShown && waitCardBottom != null} autoHideMs={0}
         style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} />
-      <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending && waitCardBottom != null} autoHideMs={0}
+      <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending && pagesShown && waitCardBottom != null} autoHideMs={0}
         style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} />
 
       <QueueToast message={toast} onDone={() => setToast(null)} />
