@@ -339,13 +339,19 @@ test('Ride Detail star: a drawn white-rim star when off, the full gold star when
 test('Ride Detail title fits by measured width; scores read as numbers with a shark, not a count', () => {
   const m = loadTs('src/screens/RideTracker/rideDetailModel.ts');
   // iPhone SE (375 pt) leaves 256 pt for the title; 17 Pro (402 pt) leaves 283 pt.
-  assert.equal(m.titleFitsHeader(290, 375), true, 'a name that shrinks a little stays in the header');
-  assert.equal(m.titleFitsHeader(320, 375), false, 'a wide name moves into the card on an SE');
-  assert.equal(m.titleFitsHeader(320, 402), true);
+  // Every header title is full size: a name fits at full size or moves into the card.
+  assert.equal(m.HEADER_MIN_SCALE, 1);
+  assert.equal(m.titleFitsHeader(250, 375), true);
+  assert.equal(m.titleFitsHeader(290, 375), false, 'a name that would need shrinking moves into the card');
+  assert.equal(m.titleFitsHeader(283, 402), true);
+  assert.equal(m.titleFitsHeader(320, 402), false);
   assert.equal(m.scoreText(4.666), '4.7');
   assert.equal(m.scoreText(5), '5');
-  assert.equal(m.scoreText(0), '--');
-  assert.equal(m.scoreText(null), '--');
+  // No typographic '--' placeholder: a faded shark and a '?' a non-reader gets.
+  assert.equal(m.scoreText(0), '?');
+  assert.equal(m.scoreText(null), '?');
+  assert.equal(m.riderWords(1), 'from 1 rider');
+  assert.equal(m.riderWords(5), 'from 5 riders');
   const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
   assert.match(src, /onTextLayout=\{e => \{ const w = e\.nativeEvent\.lines\[0\]\?\.width; if \(w\) setTitleWidth\(w\); \}\}/);
   assert.doesNotMatch(src, />Community</);
@@ -354,7 +360,15 @@ test('Ride Detail title fits by measured width; scores read as numbers with a sh
   for (const key of ['statVal', 'ratingBarLabel', 'ratingBarCount', 'topReactionItem']) {
     assert.match(src, new RegExp(`${key}: \\{[^}]*fontFamily: NUMBER_FONT`), key);
   }
-  assert.match(src, /withNumberFont\(`\$\{community\.total_logs\}/);
+  assert.match(src, /withNumberFont\(riderWords\(community\.unique_riders\)\)/);
+  // No first-frame flip: before the probe measures, the header is blank and the card holds no name.
+  assert.match(src, /const shortName = measured \? titleFitsHeader\(titleWidth, screenWidth\) : true;/);
+  assert.match(src, /const headerTitle = !measured \? '' : shortName \? name : 'Ride';/);
+  // One heading face app-wide (navy Shark, like Settings), one tile icon treatment, the game's own toast.
+  assert.match(src, /sectionTitle: \{[^}]*color: B\.navy, fontSize: 17,[^}]*fontFamily: 'Shark'/s);
+  assert.equal((src.match(/<View style=\{\[?s\.statIcon/g) || []).length, 3);
+  assert.match(src, /toast: \{[^}]*backgroundColor: B\.white,[^}]*borderColor: B\.navy/s);
+  assert.match(src, /'SAVED TO FAVORITES' : 'TAKEN OFF FAVORITES'/);
   assert.match(src, /withNumberFont\(date\.toLocaleDateString/);
 });
 
@@ -377,10 +391,11 @@ test('withNumberFont draws digit runs in the number face and leaves words alone'
 
 test('Ride Detail on an SE: a small community count is one row and the empty line sits close under the button', () => {
   const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
-  assert.match(src, /community\.total_logs >= COMPACT_COMMUNITY_LOGS && \[5, 4, 3, 2, 1\]\.map/);
+  // A log or two: no community card (the Rider sharks tile says "from 1 rider"); the chart once there are enough.
+  assert.match(src, /\{community && community\.total_logs >= COMPACT_COMMUNITY_LOGS && \(/);
+  assert.match(src, /<GameIcon name="shark" size=\{110\} \/>/, 'the empty page has the shark, not a blank sheet');
   assert.match(src, /emptyWrap: \{ alignItems: 'center', paddingTop: 4, paddingBottom: 12 \}/);
   assert.match(src, /\{history\.length > 0 && <Text style=\{s\.sectionTitle\}>YOUR RIDE HISTORY<\/Text>\}/);
-  assert.match(src, /community\.total_logs >= COMPACT_COMMUNITY_LOGS && community\.top_reactions\.length > 0/);
   assert.equal(loadTs('src/screens/RideTracker/rideDetailModel.ts').COMPACT_COMMUNITY_LOGS, 3);
   // The ride card matches the stat tiles: no light-blue border.
   assert.doesNotMatch(src, /#abd9f1/);
@@ -429,5 +444,8 @@ test('Settings and How to Play row titles are UpperText, and Ride Stats headings
 test('the Splash route keeps the launch art and framing (no server splash fading in with the title cut off)', () => {
   const src = read('src/screens/SplashScreen.tsx');
   assert.doesNotMatch(src, /splash_screen_url/);
+  // Decided: the bundled splash is permanent, so the dead theme field is gone from the app model too.
+  assert.doesNotMatch(read('src/models/theme-type.ts'), /readonly splash_screen_url/);
+  assert.doesNotMatch(read('src/api/defaults/theme.json'), /splash_screen_url/);
   assert.match(src, /source=\{SPLASH_ART\}/);
 });

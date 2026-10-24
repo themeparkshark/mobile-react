@@ -20,7 +20,7 @@ import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { GameButton, GameIcon, gameAlert, SharkLoader } from '../../ui';
 import { withNumberFont, NUMBER_FONT } from '../../ui/numberText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { HEADER_TITLE_MAX, titleFitsHeader, scoreText, COMPACT_COMMUNITY_LOGS } from './rideDetailModel';
+import { titleFitsHeader, scoreText, riderWords, COMPACT_COMMUNITY_LOGS } from './rideDetailModel';
 
 export { HEADER_TITLE_MAX, titleFitsHeader, scoreText, COMPACT_COMMUNITY_LOGS } from './rideDetailModel';
 
@@ -200,7 +200,7 @@ export default function RideDetailScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const result = await toggleWishlist(rideId);
       setWishlisted(result.wishlisted);
-      showToast(result.wishlisted ? 'Added to Favorites' : 'Removed from Favorites');
+      showToast(result.wishlisted ? 'SAVED TO FAVORITES' : 'TAKEN OFF FAVORITES');
     } catch (e) {
       gameAlert("Couldn't update your wishlist", 'Check your connection and try again.');
     }
@@ -216,7 +216,10 @@ export default function RideDetailScreen() {
   const { width: screenWidth } = useWindowDimensions();
   // Measured in the header's own font: wide letters (WEB SLINGERS) move to the card instead of shrinking tiny.
   const [titleWidth, setTitleWidth] = useState<number | null>(null);
-  const shortName = titleWidth == null ? name.length <= HEADER_TITLE_MAX : titleFitsHeader(titleWidth, screenWidth);
+  // Until the probe measures it (one frame), the header title stays blank and the card holds no
+  // name, so a long name never shows in the header and then jumps to the card.
+  const measured = titleWidth != null;
+  const shortName = measured ? titleFitsHeader(titleWidth, screenWidth) : true;
   const titleProbe = (
     <Text style={s.titleProbe} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
       maxFontSizeMultiplier={1.2}
@@ -224,7 +227,7 @@ export default function RideDetailScreen() {
       {name.toUpperCase()}
     </Text>
   );
-  const headerTitle = shortName ? name : 'Ride';
+  const headerTitle = !measured ? '' : shortName ? name : 'Ride';
 
   if (loading || loadError) {
     return (
@@ -286,40 +289,41 @@ export default function RideDetailScreen() {
             <View style={s.statsRow}>
               <View style={s.statCard} accessible accessibilityLabel={`Your rides: ${totalRides}`}>
                 <View style={s.statValRow}>
-                  <GameIcon name="ride" size={22} />
+                  <View style={s.statIcon}><GameIcon name="ride" size={20} /></View>
                   <Text style={s.statVal}>{totalRides}</Text>
                 </View>
                 <Text style={s.statLabel}>Your rides</Text>
               </View>
-              <View style={s.statCard} accessible accessibilityLabel={`Your sharks: ${scoreText(avgRating)}`}>
+              <View style={s.statCard} accessible
+                accessibilityLabel={avgRating > 0 ? `Your sharks: ${scoreText(avgRating)}` : 'Your sharks: none yet'}>
                 <View style={s.statValRow}>
-                  <GameIcon name="shark" size={22} />
-                  <Text style={s.statVal}>{scoreText(avgRating)}</Text>
+                  <View style={[s.statIcon, !(avgRating > 0) && s.statIconEmpty]}><GameIcon name="shark" size={20} /></View>
+                  <Text style={[s.statVal, !(avgRating > 0) && s.statValEmpty]}>{scoreText(avgRating)}</Text>
                 </View>
                 <Text style={s.statLabel}>Your sharks</Text>
               </View>
               {community?.avg_rating != null && (
-                <View style={s.statCard} accessible accessibilityLabel={`Rider sharks: ${scoreText(community.avg_rating)}`}>
+                <View style={s.statCard} accessible
+                  accessibilityLabel={`Rider sharks: ${scoreText(community.avg_rating)}, ${riderWords(community.unique_riders)}`}>
                   <View style={s.statValRow}>
-                    <GameIcon name="shark" size={22} />
+                    <View style={s.statIcon}><GameIcon name="shark" size={20} /></View>
                     <Text style={s.statVal}>{scoreText(community.avg_rating)}</Text>
                   </View>
                   <Text style={s.statLabel}>Rider sharks</Text>
+                  <Text style={s.statCaption}>{withNumberFont(riderWords(community.unique_riders))}</Text>
                 </View>
               )}
             </View>
 
             {/* Community ratings: one row for a few logs, the five-bar chart once there are enough */}
-            {community && community.total_logs > 0 && (
+            {/* With only a log or two, the Rider sharks tile says it all ("from 1 rider"): no card for one line. */}
+            {community && community.total_logs >= COMPACT_COMMUNITY_LOGS && (
               <View style={s.card}>
                 <Text style={[s.sectionTitle, s.cardTitle]}>WHAT RIDERS SAY</Text>
-                <Text style={[s.communitySubtitle, community.total_logs < COMPACT_COMMUNITY_LOGS && s.communitySubtitleCompact]}>
-                  {withNumberFont(`${community.total_logs} ${community.total_logs === 1 ? 'log' : 'logs'} from ${community.unique_riders} ${community.unique_riders === 1 ? 'rider' : 'riders'}`)}
-                </Text>
-                {community.total_logs >= COMPACT_COMMUNITY_LOGS && [5, 4, 3, 2, 1].map(r => (
+                {[5, 4, 3, 2, 1].map(r => (
                   <RatingBar key={r} rating={r} count={community.rating_distribution[r] || 0} maxCount={maxDistCount} />
                 ))}
-                {community.total_logs >= COMPACT_COMMUNITY_LOGS && community.top_reactions.length > 0 && (
+                {community.top_reactions.length > 0 && (
                   <View style={s.topReactions}>
                     <Text style={s.topReactionsLabel}>Top reactions:</Text>
                     {community.top_reactions.slice(0, 3).map(r => (
@@ -343,6 +347,8 @@ export default function RideDetailScreen() {
         ListEmptyComponent={
           <View style={s.emptyWrap}>
             <Text style={s.emptyTitle}>You haven't ridden this yet!</Text>
+            {/* The shark waits by the ride, so the empty page is not a blank sheet. */}
+            <View style={s.emptyArt} accessible={false}><GameIcon name="shark" size={110} /></View>
           </View>
         }
       />
@@ -366,6 +372,7 @@ export default function RideDetailScreen() {
         pointerEvents="none"
         style={[s.toast, { opacity: toastOpacity, transform: [{ translateY: toastY }] }]}
       >
+        <GameIcon name="star" size={22} />
         <Text style={s.toastText}>{toastText}</Text>
       </Animated.View>
     </RideTrackerFrame>
@@ -420,6 +427,11 @@ const s = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
   },
   statValRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // Both tile icons sit on the same light sky badge, so the red ride car and the shark read as one set.
+  statIcon: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#dcefff', alignItems: 'center', justifyContent: 'center' },
+  statIconEmpty: { opacity: 0.4 },
+  statValEmpty: { color: B.textLight },
+  statCaption: { color: B.textMid, fontSize: 11, fontFamily: 'Knockout' },
   statVal: { color: B.navy, fontSize: 26, fontFamily: NUMBER_FONT },
   statLabel: { color: B.textMid, fontSize: 11, fontFamily: 'Knockout', marginTop: 2 },
 
@@ -431,13 +443,12 @@ const s = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
   sectionTitle: {
-    color: B.textDark, fontSize: 13,
-    letterSpacing: 1.5, fontFamily: 'Knockout',
+    // The app's one section heading: navy Shark, like Settings ('GENERAL', 'AUDIO').
+    color: B.navy, fontSize: 17,
+    letterSpacing: 0.5, fontFamily: 'Shark',
     marginBottom: 10, marginHorizontal: 16,
   },
   cardTitle: { marginHorizontal: 0 },
-  communitySubtitle: { color: '#2c5a85', fontSize: 13, fontFamily: 'Knockout', marginBottom: 12 },
-  communitySubtitleCompact: { marginBottom: 0 },
 
   // ─── Rating bars ───
   ratingBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
@@ -475,6 +486,7 @@ const s = StyleSheet.create({
 
   // ─── Empty ───
   emptyWrap: { alignItems: 'center', paddingTop: 4, paddingBottom: 12 },
+  emptyArt: { marginTop: 18, opacity: 0.9 },
   emptyTitle: { color: '#05346e', fontSize: 18, fontFamily: 'Shark' },
 
   // ─── Share modal ───
@@ -487,15 +499,21 @@ const s = StyleSheet.create({
     position: 'absolute',
     bottom: FOOTER_CLEARANCE,
     alignSelf: 'center',
-    backgroundColor: B.navy,
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    // The game's own toast: a white card with a navy rim, a gold star and navy Shark words.
+    backgroundColor: B.white,
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: B.navy,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 6,
   },
-  toastText: { color: '#fff', fontSize: 14, fontFamily: 'Knockout' },
+  toastText: { color: B.navy, fontSize: 16, fontFamily: 'Shark' },
 });
