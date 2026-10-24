@@ -284,13 +284,13 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
       <View style={styles.storyPreview} accessible accessibilityRole="image"
         accessibilityLabel={`Your share picture: ${daily.recall}% recall`}>
         <View style={styles.storyPreviewInner} pointerEvents="none">
-          <StoryShareFrame ribbon="MEMORY MATCH!" cta="Play today's deck with me!" campaign="memory">
+          <StoryShareFrame ribbon="MEMORY MATCH!" cta="Play today's deck with me!" campaign="memory" withShark>
             <ShareStoryCard daily={daily} />
           </StoryShareFrame>
         </View>
       </View>
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <StoryShareFrame ref={storyRef} ribbon="MEMORY MATCH!" cta="Play today's deck with me!" campaign="memory">
+        <StoryShareFrame ref={storyRef} ribbon="MEMORY MATCH!" cta="Play today's deck with me!" campaign="memory" withShark>
           <ShareStoryCard daily={daily} />
         </StoryShareFrame>
       </View>

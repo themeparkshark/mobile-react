@@ -62,14 +62,22 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
   // so this branch folds away like the dev list.
   : process.env.EXPO_PUBLIC_PERF_CAPTURE === '1'
     ? [{ name: 'BossMapPreview', getComponent: () => require('./screens/BossMapPreviewScreen').default }]
-    : [];
+    // Release-like share walks only (EXPO_PUBLIC_SHARE_WALK=1 with `expo start --no-dev`): the real reveals and
+    // the grown-up gate in release JS, with stub saves. Store builds never set it, so this folds away too.
+    : process.env.EXPO_PUBLIC_SHARE_WALK === '1'
+      ? [
+        { name: 'SharePicturesPreview', getComponent: () => require('./screens/SharePicturesPreviewScreen').default },
+        { name: 'SharkPassRevealPreview', getComponent: () => require('./screens/SharkPassRevealPreviewScreen').default },
+        { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
+      ]
+      : [];
 
 /**
  * First matching EXPO_PUBLIC_*_PREVIEW flag wins; order matches the original
  * Root chain. Each flag is a literal process.env access so Expo inlines it.
  */
 export function devInitialRoute(): string | null {
-  if (!__DEV__) return process.env.EXPO_PUBLIC_PERF_CAPTURE === '1' ? 'BossMapPreview' : null;
+  if (!__DEV__) return process.env.EXPO_PUBLIC_PERF_CAPTURE === '1' ? 'BossMapPreview' : process.env.EXPO_PUBLIC_SHARE_WALK === '1' ? 'SharePicturesPreview' : null;
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
     [!!process.env.EXPO_PUBLIC_SHOP_TABS_PREVIEW, 'ShopTabsPreview'],

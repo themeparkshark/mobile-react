@@ -355,8 +355,9 @@ test('Invite and Closet look share story pictures with their own QR; no unused Q
 
 test('a tall card shrinks to fit between the ribbon and the footer, never grows', () => {
   const { fitScale } = loadTs('src/share/StoryShareFrame.tsx', {
-    react: { forwardRef: f => f, useState: v => [v, () => {}] }, 'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; } },
+    react: { forwardRef: f => f, useState: v => [v, () => {}], useContext: () => ({}) }, 'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; } },
     'react-native': { StyleSheet: { create: s => s }, View: 'View' }, './campaignQr': { QR_BY_CAMPAIGN: {} },
+    '../context/AuthProvider': { AuthContext: {} }, './FlexShark': { FlexShark: 'FlexShark' },
     './FlexCard': { STORY_SAFE: { top: 84, bottom: 114 }, STORY_FOOTER_BOTTOM: 34 }, './formats': { FLEX_SIZE: { story: { width: 360, height: 640 } } }, './frames': { FRAMES: { common: { bg: ['#1aa3f0', '#0768b9'] } } },
   });
   assert.equal(fitScale(300, 350), 300 / 350);
@@ -628,7 +629,8 @@ test('square look card: the dressed shark is the hero, at most 3 tiles, words ce
 test('a worn prize pin shows on the share shark\'s chest', () => {
   const card = src('src/share/FlexCard.tsx');
   assert.match(card, /chestPin: kind === 'find' && !!payload\.inventory\?\.pin_item/);
-  assert.match(card, /<FlexShark inventory=\{inventory\} height=\{size\.shark\} prop=\{null\} pin=\{chestPin\} \/>/);
+  assert.match(card, /<FlexShark inventory=\{inventory\} height=\{stage\.shark\} prop=\{null\} pin=\{chestPin\} \/>/);
+  assert.match(card, /<FlexShark inventory=\{inventory\} height=\{shark\} prop=\{null\} pin=\{chestPin\} \/>/, 'the square prize shark wears it too');
   const shark = src('src/share/FlexShark.tsx');
   assert.match(shark, /\{pin && !!inventory\?\.pin_item\?\.icon_url && \(/);
   const reward = src('src/components/money/WearFirstReward.tsx');
@@ -812,20 +814,30 @@ test('story cards: nothing readable above y 230 px or below y 1440 px; the shark
     const y = Number(m[1]);
     assert.ok(y < top || y >= 640 - bottom, `band star at y ${y}`);
   }
-  // The shark is the star: in front of the tile (zIndex, overlap), taller than it, sized to the room.
-  assert.ok(num('STORY_SHARK_H') > num('STORY_HERO'));
-  assert.match(card, /storyShark: \{ marginLeft: -STORY_OVERLAP, marginBottom: -STORY_SHARK_HANG, zIndex: 2 \}/);
-  const fn = card.slice(card.indexOf('export function storyHeroSizes'), card.indexOf('function StoryLayout'));
-  const consts = `const STORY_HERO = ${num('STORY_HERO')}, STORY_HERO_SOLO = ${num('STORY_HERO_SOLO')}, STORY_SHARK_H = ${num('STORY_SHARK_H')}, LOOK_SHARK_H = ${num('LOOK_SHARK_H')};
-    const STORY_SHARK_HANG = 14, STORY_ROW_PAD = 8, LOOK_BLEED = 0.13;`;
-  const js = fn.replace('export ', '').replace(/\(room: number, showShark: boolean, look: boolean\): \{[^}]*\}/, '(room, showShark, look)');
-  const sizes = new Function(`${consts}\n${js}\nreturn storyHeroSizes;`)();
-  for (const room of [120, 140, 160, 200]) {
-    const z = sizes(room, true, false);
-    assert.ok(z.shark > z.tile, `room ${room}: shark ${z.shark} taller than tile ${z.tile}`);
-    assert.ok(z.tile + 8 <= room, `room ${room}: the tile and its lip fit`);
+  // The shark is the star: the biggest thing on the card, in front of the tile (zIndex, overlap of its
+  // painted body), its feet behind the words, and the tile fully above the words.
+  assert.ok(num('STORY_SHARK_H') > num('STORY_HERO') * 2);
+  assert.match(card, /storyShark: \{ zIndex: 2 \}/);
+  assert.match(card, /storyBigOver: \{ zIndex: 3 \}/, 'the giant number reads over the shark');
+  assert.match(card, /words: \{[^}]*zIndex: 4 \}/, 'the words ride over the shark feet');
+  const fn = card.slice(card.indexOf('export function storyStage'), card.indexOf('function StoryLayout'));
+  const consts = `const STORY_HERO = ${num('STORY_HERO')}, STORY_SHARK_H = ${num('STORY_SHARK_H')}, STORY_OVERLAP = ${num('STORY_OVERLAP')};
+    const STORY_ROW_PAD = 8, SHARK_RISE = 0.1, SHARK_FEET = 0.82, SHARK_SIDE = 0.18, SHARK_ASPECT = 1353 / 1530;`;
+  const js = fn.replace('export ', '').replace(/\(room: number, width: number, lift: number\): StoryStage/, '(room, width, lift)');
+  const stage = new Function(`${consts}\n${js}\nreturn storyStage;`)();
+  const lift = num('STORY_WORDS_LIFT');
+  for (const room of [150, 180, 200, 230]) {
+    const z = stage(room, 320, lift);
+    const w = z.shark * 1353 / 1530;
+    assert.ok(z.shark * 0.64 > z.tile * 1.15, `room ${room}: painted shark ${Math.round(z.shark * 0.64)} beats the tile ${z.tile}`);
+    assert.ok(z.tileTop + z.tile + 8 <= room - lift, `room ${room}: the tile and its lip sit above the words`);
+    assert.ok(z.sharkTop + z.shark * 0.1 >= -1, `room ${room}: the hat stays below the hero top (ribbon clear edge)`);
+    assert.ok(Math.abs(z.sharkTop + z.shark * 0.82 - (room - 4)) <= 1, `room ${room}: feet tuck 4 pt above the bottom, behind the words`);
+    assert.ok(z.tileLeft + z.tile - (z.sharkLeft + w * 0.18) >= 29, `room ${room}: the painted shark overlaps the tile by 30 pt`);
+    assert.ok(z.sharkLeft + w * 0.82 <= 320, `room ${room}: the painted shark stays inside the card`);
   }
-  assert.deepEqual(JSON.parse(JSON.stringify(sizes(0, true, false))), { tile: num('STORY_HERO'), shark: num('STORY_SHARK_H'), look: num('LOOK_SHARK_H') });
+  // A worn pin (low on the belly) is never under the words.
+  assert.ok(num('STORY_WORDS_LIFT_PIN') <= 18);
 });
 
 test('one wear choice on every reveal: same words, same icons that say "put it on", no #12 twice', () => {
@@ -844,4 +856,59 @@ test('one wear choice on every reveal: same words, same icons that say "put it o
   for (const f of ['src/screens/pins/BoxReveal.tsx', 'src/components/money/WearFirstReward.tsx', 'src/screens/StoreScreen/SetCompleteReveal.tsx', 'src/share/FlexCard.tsx', 'src/share/FlexShark.tsx']) {
     assert.doesNotMatch(src(f), new RegExp(String.fromCharCode(0x2014)), `${f}: no em dashes`);
   }
+});
+
+/* ------------------------------------------------------------- wave 3 round 2 */
+
+test('a standings card prints one percentage: a tier name with its own number never reaches the ribbon', () => {
+  const { flexCopy } = loadTs('src/share/copy.ts', {});
+  const c = flexCopy('standings', { tierLabel: 'Top 25%', percentile: 18, points: 960 });
+  const pcts = new Set([c.ribbon, c.title, c.big, c.bigLabel, c.stat].filter(Boolean).join(' ').match(/\d+%/g));
+  assert.deepEqual([...pcts], ['18%']);
+  assert.equal(c.ribbon, 'TOP HUNTER!');
+  // A plain tier name still leads the ribbon, and the podium is unchanged.
+  assert.equal(flexCopy('standings', { tierLabel: 'Hunter', percentile: 30, points: 10 }).ribbon, 'HUNTER!');
+  assert.equal(flexCopy('standings', { tierLabel: 'Top 25%', percentile: 80, points: 10 }).ribbon, 'TOP 25%!');
+  assert.equal(flexCopy('standings', { tierLabel: 'Podium', rank: 2, percentile: 1, points: 1840 }).ribbon, 'PODIUM!');
+});
+
+test('the story bottom band is a sea floor of shipped art and flat shapes, with no words or QR', () => {
+  const card = src('src/share/FlexCard.tsx');
+  const sea = card.slice(card.indexOf('export const SEA ='), card.indexOf('function Bubble'));
+  assert.match(card, /export const SEA = \{ back: (\d+), front: (\d+), sand: (\d+) \} as const;/);
+  const [, back] = card.match(/export const SEA = \{ back: (\d+)/);
+  assert.ok(Number(back) * 3 > 1440, 'the water starts below the safe line');
+  assert.doesNotMatch(sea, /<Text|Outlined|qr/i);
+  assert.match(sea, /share\/props\/coin-pile\.webp/);
+  assert.match(sea, /share\/props\/treasure\.webp/);
+  for (const m of sea.matchAll(/top: (\d+)/g)) assert.ok(Number(m[1]) * 3 >= 1440, `sea piece at y ${m[1]} pt`);
+});
+
+test('the square prize card uses two columns: the dressed shark on the stage, the tile with its label beside the words', () => {
+  const card = src('src/share/FlexCard.tsx');
+  assert.match(card, /return prize \? <PrizeSquare \{\.\.\.props\} prize=\{prize\} \/> : <PlainSquare \{\.\.\.props\} \/>;/);
+  assert.match(card, /\{prize === 'member' \? 'MEMBER GIFT' : 'SHARK PASS'\}/);
+  assert.ok(Number(card.match(/export const SQUARE_PRIZE_SHARK_H = (\d+);/)[1]) > Number(card.match(/export const SQUARE_SHARK_H = (\d+);/)[1]));
+});
+
+test('Whack and Memory story pictures show the player\'s own shark peeking over the card', () => {
+  const frame = src('src/share/StoryShareFrame.tsx');
+  assert.match(frame, /<FlexShark inventory=\{player\?\.inventory\} height=\{PEEK\.h\} prop=\{null\} \/>/);
+  assert.match(frame, /withShark && \{ paddingTop: PEEK\.above \}/, 'the frame keeps room for the shark, so the fit scale counts it');
+  assert.match(src('src/games/whack/ui/ShareCard.tsx'), /campaign="whack" withShark>/);
+  assert.equal(src('src/games/memory/MemoryExtras.tsx').match(/campaign="memory" withShark>/g).length, 2, 'preview and capture match');
+});
+
+test('Android shares put the line with the link on the clipboard and say so on the sheet', () => {
+  const cap = src('src/share/capture.ts');
+  assert.match(cap, /if \(message\) await Clipboard\.setStringAsync\(message\)\.catch\(\(\) => undefined\);/);
+  assert.match(cap, /dialogTitle: androidShareTitle\(message\)/);
+  assert.match(cap, /return message \? 'Share \(the link is copied too\)' : 'Share';/);
+});
+
+test('the release share walk routes exist only behind EXPO_PUBLIC_SHARE_WALK, and the box preview closes', () => {
+  const routes = src('src/devRoutes.tsx');
+  assert.match(routes, /: process\.env\.EXPO_PUBLIC_SHARE_WALK === '1'\n\s*\? \[/);
+  assert.match(routes, /process\.env\.EXPO_PUBLIC_SHARE_WALK === '1' \? 'SharePicturesPreview' : null;/);
+  assert.match(src('src/screens/SharePicturesPreviewScreen.tsx'), /onDone=\{\(\) => navigation\.goBack\(\)\}/);
 });

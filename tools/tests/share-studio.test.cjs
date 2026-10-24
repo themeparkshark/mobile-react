@@ -17,7 +17,9 @@ const track = loadTs('src/share/track.ts', {
 
 const shared = { result: { action: 'sharedAction', activityType: 'com.burbn.instagram.shareextension' } };
 const fsCalls = [];
+const clipboardCalls = [];
 const capture = loadTs('src/share/capture.ts', {
+  'expo-clipboard': { setStringAsync: async (s) => { clipboardCalls.push(s); } },
   'expo-file-system': {
     cacheDirectory: 'file:///cache/',
     makeDirectoryAsync: async (...a) => { fsCalls.push(['mkdir', ...a]); },

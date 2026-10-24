@@ -271,8 +271,11 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
     const rank = count(p.rank);
     const pct = p.percentile != null && Number.isFinite(p.percentile) ? Math.max(1, Math.round(p.percentile)) : null;
     const podium = rank >= 1 && rank <= 3;
+    const showPct = !podium && pct != null && pct <= 50;
     return {
-      ribbon: podium ? 'PODIUM!' : `${tier.toUpperCase()}!`,
+      // One percentage per card: when the exact percentile shows, a tier name with its own number
+      // ("Top 25%") never reaches the ribbon.
+      ribbon: podium ? 'PODIUM!' : showPct && /\d/.test(tier) ? 'TOP HUNTER!' : `${tier.toUpperCase()}!`,
       kicker: 'My Home Hunt Week',
       title: podium ? `${ordinal(rank)} Place!` : pct && pct <= 50 ? `Top ${pct}%` : tier,
       big: podium ? `#${rank}` : pct && pct <= 50 ? `TOP ${pct}%` : null,

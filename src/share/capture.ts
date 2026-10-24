@@ -3,6 +3,7 @@
  * only way out: no in-app posting, no account linking (kid safety).
  */
 import { shareExternal, shareFileExternal, shareFileName } from '../services/external';
+import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import type { RefObject } from 'react';
@@ -91,6 +92,15 @@ export async function openShareSheet(uri: string, message?: string, name?: strin
     return { opened: true, shared: false, activity: null };
   }
   if (!await Sharing.isAvailableAsync()) throw new Error('share sheet unavailable');
-  if (!(await shareFileExternal(file, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share' }))) return { opened: false, shared: false, activity: null };
+  // Android's file share carries the picture only (expo-sharing sends no text; a native share with
+  // the text is in the native queue). The picture's QR already scans to the link; the line with the
+  // link also goes on the clipboard, and the sheet's title says so.
+  if (message) await Clipboard.setStringAsync(message).catch(() => undefined);
+  if (!(await shareFileExternal(file, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: androidShareTitle(message) }))) return { opened: false, shared: false, activity: null };
   return { opened: true, shared: null, activity: null };
+}
+
+/** The Android share sheet's title: tells the grown-up the link is ready to paste. Exported for tests. */
+export function androidShareTitle(message?: string): string {
+  return message ? 'Share (the link is copied too)' : 'Share';
 }

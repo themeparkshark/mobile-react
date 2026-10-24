@@ -65,7 +65,7 @@ export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; ride
       </TouchableOpacity>
       {/* Off-screen card (captured on demand). */}
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <StoryShareFrame ref={ref} ribbon="WHACK-A-SHARK!" cta="Can you beat my score?" campaign="whack">
+        <StoryShareFrame ref={ref} ribbon="WHACK-A-SHARK!" cta="Can you beat my score?" campaign="whack" withShark>
         <View style={styles.card}>
           {/* The ribbon already says WHACK-A-SHARK: the card leads with the run itself. */}
           <Text style={styles.title}>MY RUN</Text>

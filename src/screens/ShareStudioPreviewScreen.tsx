@@ -19,7 +19,7 @@ const PROBE = process.env.EXPO_PUBLIC_SHARE_STUDIO_RENDER === 'probe';
 const OPEN = process.env.EXPO_PUBLIC_SHARE_STUDIO_OPEN ?? '';
 
 function open(sample: FlexSample, mode: 'sheet' | 'reveal', format: FlexFormat = 'story') {
-  const payload = { ...sample.payload, inventory: SAMPLE_INVENTORY } as typeof sample.payload;
+  const payload = { ...sample.payload, inventory: sample.payload.inventory ?? SAMPLE_INVENTORY } as typeof sample.payload;
   if (mode === 'reveal') flexReveal(sample.kind, payload, { surface: 'dev' });
   else shareFlex(sample.kind, payload, { surface: 'dev', format });
 }

@@ -29,6 +29,10 @@ export const SAMPLE_INVENTORY = {
   neck_item: { id: 9003, name: 'Camera', paper_url: `${PROD}/EIbKxOUH3iQftK6iTkGzXaQtir5hOz94AqVqdaBp.png` },
 } as unknown as InventoryType;
 
+function wearingPin(iconUrl: string): InventoryType {
+  return { ...SAMPLE_INVENTORY, pin_item: { id: 9010, name: 'Prize pin', icon_url: iconUrl } } as unknown as InventoryType;
+}
+
 export interface FlexSample<K extends FlexKind = FlexKind> {
   readonly name: string;
   readonly kind: K;
@@ -43,8 +47,11 @@ export const FLEX_SAMPLES: readonly FlexSample[] = [
   s('find-golden-hour', 'find', { itemName: 'Giant Dragon Plush', artUrl: art('dragon-plush.webp'), rarity: 5, goldenHour: true, setName: 'Souvenirs', setFound: 7, setTotal: 10 }),
   s('find-epic', 'find', { itemName: 'Firework Rocket Toy', artUrl: art('firework-rocket.webp'), rarity: 4, setName: 'Night Glow', setFound: 3, setTotal: 8 }),
   // Earned prizes (Shark Pass step, member pin): own campaign link and QR, no rarity.
-  s('find-sharkpass', 'find', { itemName: 'Snowflake Beanie', artUrl: art('firework-rocket.webp'), prize: 'pass', sourceLine: 'Earned at Step 12', sourceSub: 'Frosty Fun Winter Wonderland' }),
-  s('find-member', 'find', { itemName: 'Golden Fin Pin', artUrl: art('shooting-star.webp'), prize: 'member', sourceLine: 'This month\u2019s member pin' }),
+  // Worn right away (Wear it now): the prize shows on the shark's chest, like the real reveal.
+  s('find-sharkpass', 'find', { itemName: 'Snowflake Beanie', artUrl: art('firework-rocket.webp'), prize: 'pass', sourceLine: 'Earned at Step 12', sourceSub: 'Frosty Fun Winter Wonderland',
+    inventory: wearingPin(art('firework-rocket.webp')) }),
+  s('find-member', 'find', { itemName: 'Golden Fin Pin', artUrl: art('shooting-star.webp'), prize: 'member', sourceLine: 'This month\u2019s member pin',
+    inventory: wearingPin(art('shooting-star.webp')) }),
   s('ride-photo', 'ride_photo', { itemName: 'Wishing Star', artUrl: art('shooting-star.webp'), rarity: 5, grade: 'frame_it' }),
   s('set-complete', 'set_complete', {
     setName: 'Snack Stand', badgeUrl: art('snack-stand.webp'), found: 12, total: 12, title: 'Snack Boss', source: 'home_hunt',
