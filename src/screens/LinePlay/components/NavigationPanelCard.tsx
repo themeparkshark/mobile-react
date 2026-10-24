@@ -30,7 +30,7 @@ import { circuitThemeFor, type CircuitTheme } from '../../../services/lineplay/c
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 import PageScroll from './PageScroll';
 import KidText from './KidText';
-import { boardBesideSide, boardSideFor, boardTight, navBoardLayout, navStripHeader } from '../../../services/lineplay/lineLayout';
+import { boardBesideDrawn, boardSideFor, boardTight, navBoardLayout, navStripHeader } from '../../../services/lineplay/lineLayout';
 
 interface Props {
   readonly seed: number;
@@ -235,7 +235,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   const layout = navBoardLayout(viewport, headerHeight || HEADER_GUESS, !!onMakeRoom);
   const beside = layout === 'beside';
   const tight = beside || boardTight(viewport.height);
-  const boardSide = beside ? boardBesideSide(viewport) : boardSideFor(viewport, headerHeight);
+  const boardSide = beside ? boardBesideDrawn(viewport) : boardSideFor(viewport, headerHeight);
   // A tight page says what to do in the header's top line (the rail already counts the clue),
   // so nothing is left under the board for the fade to cut.
   const statusOnTop = tight && !trace.solved;

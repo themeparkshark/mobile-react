@@ -204,6 +204,11 @@ export function boardBesideSide(viewport: { width: number; height: number }): nu
   return Math.floor(Math.min(300, byHeight, byWidth));
 }
 
+/** The board side the beside layout draws: never under the floor (a page still growing just scrolls a little). */
+export function boardBesideDrawn(viewport: { width: number; height: number }): number {
+  return Math.max(BESIDE_FLOOR, boardBesideSide(viewport));
+}
+
 /**
  * How the navigation page lays out its board, from the room it really has. The
  * layout with the bigger whole board wins (bigger tiles are easier to hit):
@@ -219,7 +224,10 @@ export function navBoardLayout(viewport: { width: number; height: number }, head
   if (viewport.width <= 0 || viewport.height <= 0) return 'top';
   const top = boardFits(viewport, headerHeight) ? boardSideFor(viewport, headerHeight) ?? 0 : 0;
   const beside = boardBesideSide(viewport);
-  if (beside < BESIDE_FLOOR) return top > 0 || !detailsOpen ? 'top' : 'strip';
+  // Too short for both: with Details open, the "Tap to play" strip. With Details closed this is only
+  // the moment the page slides in before the crew row's room arrives: keep the beside layout (the
+  // board at its floor) so it just grows, never a one-row board in the wrong layout.
+  if (beside < BESIDE_FLOOR) return top > 0 ? 'top' : detailsOpen ? 'strip' : 'beside';
   return top >= beside ? 'top' : 'beside';
 }
 
