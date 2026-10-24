@@ -43,3 +43,10 @@ test('Loading and Login open on the loop art, never a dark flash', () => {
     assert.ok(src.indexOf('source={SPLASH_POSTER}') < src.indexOf('<Video'), `${file} draws the poster under the video`);
   }
 });
+
+test('Loading and Login fade in from the splash', () => {
+  const root = read('src/Root.tsx');
+  for (const name of ['Loading', 'Login']) {
+    assert.match(root, new RegExp(`name="${name}"\\s*component=\\{${name}Screen\\}\\s*options=\\{\\{[^}]*animation: 'fade',\\s*animationDuration: 220,`), name);
+  }
+});

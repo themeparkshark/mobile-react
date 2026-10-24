@@ -202,7 +202,10 @@ export default function App() {
           name="Loading"
           component={LoadingScreen}
           options={{
-            animation: 'none',
+            // A short fade from the splash: the loop video's first frame
+            // never shows as a bare blue screen.
+            animation: 'fade',
+            animationDuration: 220,
             gestureEnabled: false,
           }}
         />
@@ -210,7 +213,10 @@ export default function App() {
           name="Login"
           component={LoginScreen}
           options={{
-            animation: 'none',
+            // A short fade from the splash: the loop video's first frame
+            // never shows as a bare blue screen.
+            animation: 'fade',
+            animationDuration: 220,
             gestureEnabled: false,
           }}
         />
