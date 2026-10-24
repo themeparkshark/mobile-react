@@ -242,3 +242,98 @@ export function levelUpPayoff(level: number): LevelUpPayoff {
     sparkles: Math.round(PARTICLES.sparkles * (0.5 + 0.125 * Math.min(lv, 6))),
   };
 }
+
+/* ---------------------------------------------------------------------------
+ * App-wide small moments (wow-ui, Oct 24). Shared by every wow lane: buttons,
+ * tabs, lists, ambient loops, HUD counters, screen kicks and rolling numbers.
+ * Small moments are two beats: press, then the release spring.
+ * ------------------------------------------------------------------------- */
+
+/** One squishy press for every tappable thing. */
+export const PRESS = {
+  /** How small a button gets under the finger. */
+  scale: 0.94,
+  /** The subtle press for long lists and big cards (no travel). */
+  subtleScale: 0.97,
+  /** Press-in time (ms), eased out so it answers on the next frame. */
+  inMs: 70,
+  /** How far the button sinks into its shadow (pt). */
+  sinkPt: 1.5,
+  /** The release spring: one small overshoot (about 1.03) and rest. */
+  spring: { damping: 12, stiffness: 420, mass: 0.8 },
+  /** The overshoot the release spring shows past rest. */
+  overshoot: 1.03,
+  /** A disabled tap shakes side to side this far (pt) over shakeMs. */
+  shakePt: 3,
+  shakeMs: 200,
+  /** Reduce Motion: no scale, a dim on press instead. */
+  reducedOpacity: 0.85,
+} as const;
+
+/** Lists arriving one row after another, only the first time. */
+export const STAGGER = {
+  /** Gap between rows (ms). */
+  stepMs: 35,
+  /** Only this many rows animate; the rest are simply there. */
+  maxItems: 8,
+  /** The whole stagger never runs longer than this (ms). */
+  capMs: 400,
+  /** How far each row rises into place (pt). */
+  risePt: 12,
+} as const;
+
+/** Ambient life: breathing, bobbing, shimmers and glints. Always through the power budget. */
+export const AMBIENT = {
+  /** One breath in and out (ms). */
+  breathMs: 2400,
+  /** One bob up and down (ms). */
+  bobMs: 3200,
+  /** A shimmer sweep waits a random time inside this range (ms). */
+  shimmerEveryMs: [8000, 12000] as const,
+  /** One glint sweep (ms). */
+  glintMs: 3000,
+  /** Ambient sprites on screen at once, before particleScale. */
+  maxSprites: 12,
+} as const;
+
+/** A HUD counter bumping when something lands in it. */
+export const HUD_BUMP = {
+  peak: 1.22,
+  spring: SPRING.stamp,
+} as const;
+
+/** The screen kick on a hit. None while walking, in calm power or with Reduce Motion. */
+export const KICK = {
+  maxPt: 4,
+  ms: 120,
+} as const;
+
+/** Numbers rolling up instead of jumping. */
+export const COUNT = {
+  ms: DURATION.count,
+  /** At most this many tick sounds in one roll. */
+  maxTicks: 12,
+  /** The last digit lands with this bump. */
+  finalBump: 1.12,
+  /** Each digit column starts this much after the one to its right (ms). */
+  digitStaggerMs: 30,
+} as const;
+
+/**
+ * When row `index` of `count` starts in a first-mount stagger (ms), or null when it should simply be there.
+ * The step shrinks for long lists so the last animated row still finishes inside STAGGER.capMs.
+ */
+export function staggerDelay(index: number, count: number = STAGGER.maxItems): number | null {
+  if (!Number.isFinite(index) || index < 0 || index >= STAGGER.maxItems) return null;
+  const animated = Math.max(1, Math.min(STAGGER.maxItems, Math.floor(count)));
+  if (index >= animated) return null;
+  const room = STAGGER.capMs - DURATION.base;
+  const step = animated > 1 ? Math.min(STAGGER.stepMs, room / (animated - 1)) : 0;
+  return Math.round(Math.floor(index) * step);
+}
+
+/** How many tick sounds a roll from `from` to `to` plays: one per step up to the cap, none when it goes down. */
+export function countTicks(from: number, to: number): number {
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return 0;
+  return Math.min(COUNT.maxTicks, Math.max(1, Math.round(to - from)));
+}
